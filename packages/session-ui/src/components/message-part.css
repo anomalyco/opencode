@@ -2087,6 +2087,14 @@
     }
   }
 
+  /* Inter centers capitals on the line, so lowercase reads about 1px low against the bar. Lift one-line quotes and
+     file labels half a pixel, between the two; wrapped quotes already sit evenly between the bar's ends. */
+  [data-slot="user-message-quote-text"][data-single-line],
+  [data-slot="user-message-quote-reference-label"],
+  [data-slot="user-message-quote-reference-detail"] {
+    translate: 0 -0.5px;
+  }
+
   /* A source's icon leads the quote like a file's. It sits inline, so wrapped lines return to the bar. */
   [data-slot="user-message-quote-icon"] {
     display: inline-flex;

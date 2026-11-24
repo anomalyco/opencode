@@ -26,6 +26,7 @@ export function UserMessageQuotes(props: { comments: SessionUserComment[] }) {
 function UserMessageQuote(props: { quote: Quote }) {
   const [open, setOpen] = createSignal(false)
   const [clamped, setClamped] = createSignal(false)
+  const [single, setSingle] = createSignal(false)
   // Blank lines around a selection carry nothing, and a quote of only whitespace shows just its comment.
   const text = () => props.quote.text.trim()
   const expandable = () => clamped() || open()
@@ -45,13 +46,17 @@ function UserMessageQuote(props: { quote: Quote }) {
           <div
             data-slot="user-message-quote-text"
             data-open={open() ? "" : undefined}
+            data-single-line={single() ? "" : undefined}
             data-expandable={expandable() ? "" : undefined}
             role={expandable() ? "button" : undefined}
             tabIndex={expandable() ? 0 : undefined}
             aria-expanded={expandable() ? open() : undefined}
             ref={(element) =>
               onMount(() => {
-                const measure = () => setClamped(element.scrollHeight > element.clientHeight + 1)
+                const measure = () => {
+                  setClamped(element.scrollHeight > element.clientHeight + 1)
+                  setSingle(element.clientHeight <= parseFloat(getComputedStyle(element).lineHeight) + 1)
+                }
 
                 const observer = new ResizeObserver(measure)
 
