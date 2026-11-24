@@ -37,6 +37,7 @@ import { WebSearch } from "../websearch.js"
 import { Worktree } from "../worktree.js"
 import { WorktreeStrategies } from "../worktree/strategies.js"
 import { Generate } from "../generate.js"
+import { Instance } from "../instance/service.js"
 import { Permission } from "../permission.js"
 import { PluginHooks } from "./hooks.js"
 import type { Interface } from "../plugin.js"
@@ -57,6 +58,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
   const agents = yield* Agent.Service
   const artifacts = yield* Artifact.Service
   const automations = yield* Automation.Service
+  const instances = yield* Instance.Service
   const aisdk = yield* AISDK.Service
   const providers = yield* Provider.Service
   const models = yield* Model.Service
@@ -323,7 +325,11 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
       },
       automation: {
         // A plugin has no UI listener to answer an interactive ask, so asks settle unattended, as they do over HTTP.
-        create: (input) => automations.create(input).pipe(Effect.provideService(Permission.Unattended, [])),
+        // This instance's selector serves its own Sessions while it boots; the host's would wait on that boot.
+        create: (input) =>
+          automations
+            .create(input)
+            .pipe(Effect.provideService(Permission.Unattended, []), Effect.provideService(Instance.Service, instances)),
         list: (input) => automations.list(input),
         delete: (input) => automations.remove(input.automationID),
       },
@@ -646,6 +652,7 @@ export const requirements = LayerNode.group([
   Artifact.node,
   AISDK.node,
   Automation.node,
+  Instance.node,
   Provider.node,
   Model.node,
   Command.node,

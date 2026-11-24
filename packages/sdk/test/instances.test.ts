@@ -145,6 +145,37 @@ test("Promise instances are lazy, share by key and Location, and stay isolated b
   expect(cleanups.toSorted()).toEqual(setups.toSorted())
 }, 20_000)
 
+test("a cold instance plugin can create a shell automation for its Session during setup", async () => {
+  await using directory = await tmpdir("opencode-instance-shell-automation-")
+  const sessionID = Session.ID.create()
+  const created: string[] = []
+  await using opencode = await OpenCode.create({
+    ...hostOptions(directory.path),
+    instances: {
+      key: () => "one",
+      configure: () => ({
+        plugins: [
+          {
+            id: "shell-automation",
+            async setup(ctx) {
+              const automation = await ctx.experimental.automation.create({
+                sessionID,
+                name: "hourly",
+                trigger: { type: "every", every: "1 hour" },
+                action: { type: "shell", command: "echo ok" },
+              })
+              created.push(automation.name)
+            },
+          },
+        ],
+      }),
+    },
+  })
+  await opencode.sessions.create({ id: sessionID, location: { directory: directory.path } })
+  expect(await opencode.permission.list({ sessionID })).toEqual([])
+  expect(created).toEqual(["hourly"])
+})
+
 test("a throwing fork hook still returns the saved fork", async () => {
   await using directory = await tmpdir("opencode-fork-hook-")
   const seen: string[] = []

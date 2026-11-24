@@ -1084,8 +1084,10 @@ const layer = Layer.effect(
       }
       if (action.type === "shell") {
         if (!owner) return yield* new InvalidError({ reason: "A shell action needs a session" })
+        // A plugin provides its instance's selector, which can serve the instance while it is still booting.
+        const selector = Option.getOrElse(yield* Effect.serviceOption(Instance.Service), () => instances)
         yield* AutomationShell.authorize(owner, input.name, trigger, action, invocation).pipe(
-          instances.provide(owner),
+          selector.provide(owner),
           Effect.mapError((error) => (typeof error === "string" ? new InvalidError({ reason: error }) : error)),
         )
         return action
