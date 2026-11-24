@@ -747,9 +747,10 @@
     background: var(--stats-layer-2);
   }
 
-  /* Chosen, the icon darkens on its grey square. */
+  /* Chosen (No music): a black square with the icon in a light blue, clearer than grey on the light blue row. */
   [data-slot="track"][aria-checked="true"] [data-slot="track-icon"] {
-    color: var(--stats-text);
+    color: color-mix(in srgb, var(--stats-accent) 55%, white);
+    background: #000;
   }
 
   /* A track's single cover fills its square; on the chosen track the play state sits over a darkened cover. */
