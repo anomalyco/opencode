@@ -1133,8 +1133,15 @@ for (const timeline of [
     const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
     const end = scroller.getByText("The end of the transcript.", { exact: true })
     await expect(end).toBeInViewport()
-    // The pointer stays off the timeline: rows that pass under it change hover state, which dirties style by itself.
-    await scroller.evaluate((element) => (element.scrollTop -= 1500))
+    // A cold timeline scrolls itself to the end while it mounts, which undoes a scroll made before it is done.
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    await waitForVisualSettle(page, ["[data-timeline-virtual-content]"])
+    // Leave the end as a reader does, with a page key from the composer, which holds the focus: a scripted scroll is no
+    // reader input, so the timeline may go back to the end it follows. The pointer stays off the timeline: rows that
+    // pass under it change hover state, which dirties style by itself.
+    const editor = page.locator('[data-component="composer-editor"]')
+    await editor.press("PageUp")
+    await editor.press("PageUp")
     await expect(end).not.toBeInViewport()
     await waitForVisualSettle(page, ["[data-timeline-virtual-content]"])
 
