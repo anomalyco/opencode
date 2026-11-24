@@ -995,40 +995,47 @@ function Chevron() {
   )
 }
 
-// A track's cover, or the muted speaker for No music; with `state`, the play state over it (the bar's chosen track).
+// A track's cover, with `state` the play state over it (the bar's chosen track); for No music, a plain speaker icon
+// drawn like the bar's other icons.
 function MusicCover(props: { cover?: string; state?: "playing" | "paused" }) {
   return (
-    <i data-slot="music-cover" aria-hidden="true">
-      <Show
-        when={props.cover}
-        fallback={
-          <svg width="14" height="14" viewBox="0 0 16 16">
-            <path d="M1 6h2.5L7 3v10L3.5 10H1Z" fill="currentColor" />
-            <path d="m10.5 6 4 4m0-4-4 4" stroke="currentColor" stroke-width="1.5" stroke-linecap="square" />
-          </svg>
-        }
-      >
-        {(cover) => <img src={cover()} alt="" width="24" height="24" />}
-      </Show>
-      <Show when={props.state}>
-        <span data-slot="music-state">
-          <Show
-            when={props.state === "playing"}
-            fallback={
-              <svg width="10" height="10" viewBox="0 0 16 16">
-                <path d="M5 3.5v9l7-4.5-7-4.5Z" fill="currentColor" />
-              </svg>
-            }
-          >
-            <span data-slot="eq">
-              <b />
-              <b />
-              <b />
+    <Show
+      when={props.cover}
+      fallback={
+        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+          <path
+            d="M1.75 6h2.5l3.25-2.75v9.5L4.25 10h-2.5zM10.25 6l4 4m0-4-4 4"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.5"
+          />
+        </svg>
+      }
+    >
+      {(cover) => (
+        <i data-slot="music-cover" aria-hidden="true">
+          <img src={cover()} alt="" width="24" height="24" />
+          <Show when={props.state}>
+            <span data-slot="music-state">
+              <Show
+                when={props.state === "playing"}
+                fallback={
+                  <svg width="10" height="10" viewBox="0 0 16 16">
+                    <path d="M5 3.5v9l7-4.5-7-4.5Z" fill="currentColor" />
+                  </svg>
+                }
+              >
+                <span data-slot="eq">
+                  <b />
+                  <b />
+                  <b />
+                </span>
+              </Show>
             </span>
           </Show>
-        </span>
-      </Show>
-    </i>
+        </i>
+      )}
+    </Show>
   )
 }
 

@@ -1,8 +1,8 @@
-/* OpenMono Condensed Bold, cut down to the letters of the Explicit badge (OpenMono 1.000, OFL: asset/fonts). */
+/* OpenMono Condensed Medium, cut down to the letters of the Explicit badge (OpenMono 1.000, OFL: asset/fonts). */
 @font-face {
   font-family: "OpenMono Condensed";
-  src: url("../asset/fonts/openmono-condensed-bold-explicit.woff2") format("woff2");
-  font-weight: 700;
+  src: url("../asset/fonts/openmono-condensed-medium-explicit.woff2") format("woff2");
+  font-weight: 500;
   font-style: normal;
   font-display: swap;
 }
@@ -792,14 +792,14 @@
   /* The explicit-lyrics badge, on the right of its track: solid black with bold white capitals, like the label on a
      CD sleeve. A hairline keeps its edge on a dark page. */
   /* grey-ok: the Explicit badge is white on black on purpose, like the label on a CD sleeve */
-  /* In OpenMono's condensed bold, a step under the track names, so the word stays short. */
+  /* In OpenMono's condensed medium, a step under the track names, so the word stays short. */
   [data-slot="explicit"] {
     flex: none;
-    padding: 2px 5px;
+    padding: 4px 5px;
     font-family: "OpenMono Condensed", "OpenMono", ui-monospace, monospace;
     font-size: 11px;
     font-style: normal;
-    font-weight: 700;
+    font-weight: 500;
     line-height: 1;
     letter-spacing: 0.04em;
     text-transform: uppercase;
@@ -1206,8 +1206,8 @@
     }
   }
 
-  /* A cover's box is the cover's size, so it sits centred rather than hanging out of the 20px icon box. */
-  [data-slot="tool-icon"]:has([data-slot="music-cover"]) {
+  /* The music's icon boxes are a cover's size, so covers sit centred and No music's speaker lines up with them. */
+  [data-component="dropdown"][data-id="music"] [data-slot="tool-icon"] {
     width: 24px;
     height: 24px;
   }
@@ -1220,10 +1220,6 @@
     width: 24px;
     height: 24px;
     overflow: hidden;
-    color: var(--stats-faint);
-    /* Light grey behind No music's speaker; a track's cover fills it. */
-    background: var(--stats-layer-2);
-
     img {
       width: 100%;
       height: 100%;
