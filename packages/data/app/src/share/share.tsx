@@ -1216,10 +1216,17 @@ function Dropdown<T extends string>(props: {
       () => props.roll,
       () => {
         if (matchMedia("(prefers-reduced-motion: reduce)").matches) return
-        const others = props.options.filter((item) => item.value !== props.value)
-        if (others.length === 0) return
-        const turns = Array.from({ length: 9 }, () => others[Math.floor(Math.random() * others.length)]!.value)
-        setReel([...turns, props.value])
+        if (props.options.length < 2) return
+        // Built back from the value, each row a different choice from the one after it, so the reel visibly turns
+        // even with only two choices, flipping between them.
+        const turns = Array.from({ length: 9 }).reduce<T[]>(
+          (list) => {
+            const others = props.options.filter((item) => item.value !== list[0])
+            return [others[Math.floor(Math.random() * others.length)]!.value, ...list]
+          },
+          [props.value],
+        )
+        setReel(turns)
       },
       { defer: true },
     ),
@@ -1276,8 +1283,10 @@ function Dropdown<T extends string>(props: {
         aria-expanded={open() ? "true" : "false"}
         onClick={() => props.onOpen(open() ? undefined : props.id)}
       >
+        {/* Keyed, so a Shuffle while a reel still turns starts it over. */}
         <Show
           when={reel()}
+          keyed
           fallback={
             <>
               <Show when={props.trigger ?? current()?.icon}>
@@ -1299,7 +1308,7 @@ function Dropdown<T extends string>(props: {
                 style={{ "animation-delay": `${props.rollDelay ?? 0}ms` }}
                 onAnimationEnd={() => setReel(undefined)}
               >
-                <For each={items()}>
+                <For each={items}>
                   {(value) => (
                     <span data-slot="reel-row">
                       <Show when={show() !== "value"}>
