@@ -3,7 +3,7 @@ import fuzzysort from "fuzzysort"
 import { mkdir } from "node:fs/promises"
 import os from "os"
 import path from "path"
-import { Context, Deferred, Effect, Exit, Fiber, Layer, Scope } from "effect"
+import { Context, Deferred, Effect, Exit, Fiber, Layer, Scheduler, Scope } from "effect"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { FileSystem } from "@opencode/core/filesystem"
@@ -68,7 +68,7 @@ const fakeFff = () => {
 
 const buildSearch = (layer: Layer.Layer<FileSystemSearch.Service>) =>
   Effect.gen(function* () {
-    const scope = yield* Scope.make()
+    const scope = yield* Effect.acquireRelease(Scope.make(), (scope) => Scope.close(scope, Exit.void))
     const context = yield* Layer.buildWithScope(layer, scope)
     return { scope, search: Context.get(context, FileSystemSearch.Service) }
   })
@@ -76,7 +76,207 @@ const buildSearch = (layer: Layer.Layer<FileSystemSearch.Service>) =>
 const findFiles = (search: FileSystemSearch.Interface) =>
   search.find({ query: "src", type: "file" }).pipe(Effect.map((entries) => entries.map((entry) => entry.path)))
 
+const ripgrepSearch = (find: Ripgrep.Interface["find"]) =>
+  AppNodeBuilder.build(FileSystemSearch.configured({ fff: false }), [
+    Location.node.replace(
+      Layer.succeed(
+        Location.Service,
+        Location.Service.of(
+          location(
+            { directory: AbsolutePath.make(path.join(os.tmpdir(), "opencode-search-budget")) },
+            { vcs: { type: "git", store: AbsolutePath.make(path.join(os.tmpdir(), "opencode-search-budget/.git")) } },
+          ),
+        ),
+      ),
+    ),
+    Ripgrep.node.replace(
+      Layer.succeed(
+        Ripgrep.Service,
+        Ripgrep.Service.of({ find, glob: () => Effect.succeed([]), grep: () => Effect.succeed([]) }),
+      ),
+    ),
+  ])
+
+const emit = (input: Ripgrep.FindInput, file: string) =>
+  input.onEntry?.(FileSystem.Entry.make({ path: RelativePath.make(file), type: "file" })) ?? Effect.void
+
 describe("FileSystemSearch", () => {
+  it.effect("returns partial cold ripgrep results within budget while the index keeps growing", () =>
+    Effect.gen(function* () {
+      const release = yield* Deferred.make<void>()
+      const started = yield* Deferred.make<void>()
+      let scans = 0
+      const layer = ripgrepSearch((input) =>
+        Effect.gen(function* () {
+          scans++
+          yield* emit(input, "src/first.ts")
+          yield* Deferred.succeed(started, undefined)
+          yield* Deferred.await(release)
+          yield* emit(input, "src/second.ts")
+          return []
+        }),
+      )
+      const { search } = yield* buildSearch(layer)
+      const pending = yield* Effect.forkChild(findFiles(search))
+      yield* Deferred.await(started)
+      yield* TestClock.adjust("50 millis")
+      const concurrent = yield* Effect.forkChild(findFiles(search))
+      yield* TestClock.adjust("50 millis")
+      expect(pending.pollUnsafe()).toBeDefined()
+      expect(concurrent.pollUnsafe()).toBeDefined()
+      expect(yield* Fiber.join(pending)).toEqual([RelativePath.make("src/first.ts")])
+      expect(yield* Fiber.join(concurrent)).toEqual([RelativePath.make("src/first.ts")])
+
+      // Subsequent keystrokes use the live partial index without another wait.
+      expect(yield* findFiles(search)).toEqual([RelativePath.make("src/first.ts")])
+      yield* TestClock.adjust("10 seconds")
+      yield* Deferred.succeed(release, undefined)
+      yield* TestClock.adjust("1 millis")
+      expect(yield* findFiles(search)).toEqual([RelativePath.make("src/first.ts"), RelativePath.make("src/second.ts")])
+      expect(scans).toBe(1)
+    }),
+  )
+
+  it.effect("finishes a slow shared scan after request cancellation without capping git repositories", () =>
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>()
+      const release = yield* Deferred.make<void>()
+      let scans = 0
+      let finalized = 0
+      const layer = ripgrepSearch((input) =>
+        Effect.gen(function* () {
+          scans++
+          expect(input.limit).toBe(Number.MAX_SAFE_INTEGER)
+          yield* emit(input, scans === 1 ? "src/partial.ts" : "src/refreshed.ts")
+          if (scans > 1) return []
+          yield* Deferred.succeed(started, undefined)
+          yield* Deferred.await(release)
+          yield* emit(input, "src/late.ts")
+          return []
+        }).pipe(Effect.ensuring(Effect.sync(() => finalized++))),
+      )
+      const { search } = yield* buildSearch(layer)
+      const cancelled = yield* Effect.forkChild(findFiles(search))
+      yield* Deferred.await(started)
+      const waiting = yield* Effect.forkChild(findFiles(search))
+      yield* Fiber.interrupt(cancelled)
+      expect(finalized).toBe(0)
+      yield* TestClock.adjust("100 millis")
+      expect(waiting.pollUnsafe()).toBeDefined()
+      expect(yield* Fiber.join(waiting)).toEqual([RelativePath.make("src/partial.ts")])
+      expect(scans).toBe(1)
+
+      yield* TestClock.adjust("10 seconds")
+      expect(finalized).toBe(0)
+      expect(yield* findFiles(search)).toEqual([RelativePath.make("src/partial.ts")])
+      expect(scans).toBe(1)
+      yield* Deferred.succeed(release, undefined)
+      yield* TestClock.adjust("1 millis")
+      expect(finalized).toBe(1)
+      expect(yield* findFiles(search)).toEqual([RelativePath.make("src/late.ts"), RelativePath.make("src/partial.ts")])
+      yield* TestClock.adjust("10 seconds")
+      yield* findFiles(search)
+      yield* TestClock.adjust("1 millis")
+      expect(yield* findFiles(search)).toEqual([RelativePath.make("src/refreshed.ts")])
+      expect(scans).toBe(2)
+    }),
+  )
+
+  it.effect("interrupts an in-flight scan when its location closes", () =>
+    Effect.gen(function* () {
+      const started = yield* Deferred.make<void>()
+      let finalized = false
+      const layer = ripgrepSearch(() =>
+        Deferred.succeed(started, undefined).pipe(
+          Effect.andThen(Effect.never),
+          Effect.ensuring(
+            Effect.sync(() => {
+              finalized = true
+            }),
+          ),
+        ),
+      )
+      const { scope, search } = yield* buildSearch(layer)
+      const pending = yield* Effect.forkChild(findFiles(search))
+      yield* Deferred.await(started)
+      yield* Scope.close(scope, Exit.void)
+      expect(finalized).toBe(true)
+      expect(Exit.isFailure(yield* Fiber.await(pending))).toBe(true)
+    }),
+  )
+
+  it.effect("retains warm ranked results when a refresh times out and replaces them on success", () =>
+    Effect.gen(function* () {
+      let scans = 0
+      let finalized = 0
+      const layer = ripgrepSearch((input) =>
+        Effect.gen(function* () {
+          scans++
+          if (scans === 1) {
+            yield* emit(input, "src/search-other.ts")
+            yield* emit(input, "src/search.ts")
+            return []
+          }
+          yield* emit(input, "src/search-new.ts")
+          if (scans === 2) return yield* Effect.never
+          return []
+        }).pipe(Effect.ensuring(Effect.sync(() => finalized++))),
+      )
+      const { search } = yield* buildSearch(layer)
+      const ranked = () => search.find({ query: "search.ts", type: "file" })
+      expect((yield* ranked())[0]?.path).toBe(RelativePath.make("src/search.ts"))
+      expect((yield* search.find({ query: "src", type: "directory" })).map((entry) => entry.path)).toEqual([
+        RelativePath.make(`src${path.sep}`),
+      ])
+
+      yield* TestClock.adjust("10 seconds")
+      expect((yield* ranked())[0]?.path).toBe(RelativePath.make("src/search.ts"))
+      yield* TestClock.adjust("5 seconds")
+      expect(scans).toBe(2)
+      expect(finalized).toBe(2)
+      expect((yield* ranked())[0]?.path).toBe(RelativePath.make("src/search.ts"))
+
+      yield* TestClock.adjust("10 seconds")
+      yield* ranked()
+      yield* TestClock.adjust("1 millis")
+      expect((yield* ranked()).map((entry) => entry.path)).toEqual([RelativePath.make("src/search-new.ts")])
+      expect(scans).toBe(3)
+    }),
+  )
+
+  it.live("yields to the event loop while preparing a buffered file stream", () =>
+    Effect.gen(function* () {
+      let prepared = 0
+      let observed = 0
+      const layer = ripgrepSearch((input) =>
+        Effect.gen(function* () {
+          const heartbeat = yield* Effect.forkChild(
+            Effect.callback<void>((resume) => {
+              const timer = setImmediate(() => {
+                observed = prepared
+                resume(Effect.void)
+              })
+              return Effect.sync(() => clearImmediate(timer))
+            }),
+            { startImmediately: true },
+          )
+          for (let i = 0; i < 1_024; i++) {
+            yield* emit(input, `src/entry-${i}.ts`)
+            prepared++
+          }
+          yield* Fiber.join(heartbeat)
+          return []
+        }).pipe(Effect.provideService(Scheduler.MaxOpsBeforeYield, Number.POSITIVE_INFINITY)),
+      )
+      yield* Effect.gen(function* () {
+        const search = yield* FileSystemSearch.Service
+        yield* findFiles(search)
+        expect(observed).toBeGreaterThan(0)
+        expect(observed).toBeLessThan(128)
+      }).pipe(Effect.provide(layer))
+    }),
+  )
+
   it.effect("creates the fff picker on first search and waits for its initial scan", () =>
     Effect.gen(function* () {
       const fff = fakeFff()
