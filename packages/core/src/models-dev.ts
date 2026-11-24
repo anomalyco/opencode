@@ -495,7 +495,7 @@ function modeCost(model: SourceModel, base: Model.Info["cost"], name: string, mo
   if (mode.cost) return [cost(mode.cost)[0], ...baseTiers]
   const tier = mode.service_tier ?? name
   // A tier's multiplier may only hold for some dates (an introductory price); the one for today is used.
-  const today = utcDay()
+  const today = new Date().toISOString().slice(0, 10)
   const factor = model.cost?.multipliers?.find((multiplier) => {
     if (!Object.keys(multiplier.when).every((key) => key === "service_tier" || key === "date")) return false
     if (Option.getOrUndefined(decodeServiceTier(multiplier.when.service_tier))?.equals !== tier) return false
@@ -548,11 +548,6 @@ function tierPrices(source: SourceCost | undefined, base: Model.Info["cost"][num
     output: output?.price ?? base.output,
     cache: { read: input?.cache?.read ?? base.cache.read, write: cacheWrite(input?.cache) ?? base.cache.write },
   }
-}
-
-// Prices are dated by the UTC day, so normalized models are only good until it changes.
-function utcDay() {
-  return new Date().toISOString().slice(0, 10)
 }
 
 const decodeServiceTier = Schema.decodeUnknownOption(Schema.Struct({ equals: Schema.optional(Schema.String) }))
@@ -694,19 +689,18 @@ export const decodeSnapshot = (text: string, recommended = false, speeds = false
 // packages/core/src/models-dev/snapshot.txt and refreshed via
 // `bun run script/update-models-snapshot.ts`. Release builds bundle the live
 // catalog in its place when it can be fetched. Decoded and normalized once per
-// flag value per isolate and day: the snapshot is a multi-MB module-level constant and one isolate can
+// flag value per isolate: the snapshot is a multi-MB module-level constant and one isolate can
 // host many runtimes (Cloudflare colocates Durable Object instances), so
 // per-runtime decoding would multiply the cost.
-const bundledCache = new Map<string, { readonly day: string; readonly snapshot: readonly Snapshot[] }>()
+const bundledCache = new Map<string, readonly Snapshot[]>()
 const bundledSnapshot = (recommended: boolean, speeds: boolean) =>
   Effect.suspend(() => {
     const key = `${recommended}:${speeds}`
-    const day = utcDay()
     const cached = bundledCache.get(key)
-    return cached?.day === day
-      ? Effect.succeed(cached.snapshot)
+    return cached
+      ? Effect.succeed(cached)
       : decodeSnapshot(snapshotText, recommended, speeds).pipe(
-          Effect.tap((snapshot) => Effect.sync(() => bundledCache.set(key, { day, snapshot }))),
+          Effect.tap((snapshot) => Effect.sync(() => bundledCache.set(key, snapshot))),
         )
   })
 
@@ -852,13 +846,6 @@ export const layer = (options?: Options) =>
         ([recommended, speeds]) => Effect.cachedInvalidateWithTTL(populate(recommended, speeds), Duration.infinity),
       )
       const get = (recommended = false, speeds = false) => caches[Number(recommended) * 2 + Number(speeds)][0]
-      // The UTC day the cached models were priced for.
-      const priced = { day: utcDay() }
-      const invalidate = Effect.gen(function* () {
-        priced.day = utcDay()
-        yield* Effect.forEach(caches, ([, invalidate]) => invalidate, { discard: true })
-        yield* bus.publish(ModelsDev.Event.Refreshed, {}, { global: true })
-      })
 
       const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
         yield* lock
@@ -880,15 +867,14 @@ export const layer = (options?: Options) =>
               if (!response) return
               yield* decodeCatalog(response.text)
               yield* writeCache(response.text, response.etag, digest)
-              yield* invalidate
+              yield* Effect.forEach(caches, ([, invalidate]) => invalidate, { discard: true })
+              yield* bus.publish(ModelsDev.Event.Refreshed, {}, { global: true })
             }),
           )
           .pipe(
             Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause: cause })),
             Effect.ignore,
           )
-        // An unchanged or unreachable catalog can still hold a price that started or ended today.
-        if (priced.day !== utcDay()) yield* invalidate
       })
 
       if (fetch && !process.argv.includes("--get-yargs-completions")) {
