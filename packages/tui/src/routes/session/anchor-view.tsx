@@ -1,7 +1,7 @@
 import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js"
 import type { BoxRenderable } from "@opentui/core"
 import type { JSX } from "@opentui/solid"
-import type { SessionEntry, SessionNode } from "./grouping/session"
+import type { GroupKind, SessionEntry, SessionNode } from "./grouping/session"
 import { entryRef } from "./anchors"
 import { use } from "./render-context"
 
@@ -36,14 +36,25 @@ export function EntryAnchor(props: { entry: SessionEntry; children: JSX.Element;
   )
 }
 
-export function GroupAnchor(props: { groupID: string | undefined; active: boolean; children: JSX.Element }) {
+export function GroupAnchor(props: {
+  groupID: string | undefined
+  kind: GroupKind
+  level: number
+  active: boolean
+  children: JSX.Element
+}) {
   const ctx = use()
   const [node, setNode] = createSignal<BoxRenderable>()
   createEffect(() => {
     const target = node()
     const groupID = props.groupID
     if (!target || !groupID || !props.active) return
-    onCleanup(ctx.anchors.register({ target: { type: "group", groupID }, node: target }))
+    onCleanup(
+      ctx.anchors.register({
+        target: { type: "group", groupID, kind: props.kind, level: props.level },
+        node: target,
+      }),
+    )
   })
   return (
     <box ref={setNode} flexDirection="column" flexShrink={0}>

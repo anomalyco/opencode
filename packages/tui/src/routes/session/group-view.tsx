@@ -133,6 +133,8 @@ function GroupContent(props: GroupProps) {
   return (
     <GroupAnchor
       groupID={id()}
+      kind={props.node.kind}
+      level={props.level}
       active={grouped() && (props.node.kind === "reasoning" ? thoughts().length > 0 : tools().length > 0)}
     >
       <Show
@@ -205,7 +207,12 @@ function ActivityGroup(props: GroupProps) {
   const entries = createMemo(() => descendants(props.node))
   const summary = createMemo(() => summarizeActivity(props.node, props.message, props.pending, props.completed))
   return (
-    <GroupAnchor groupID={disclosure.id()} active={summary().label !== ""}>
+    <GroupAnchor
+      groupID={disclosure.id()}
+      kind={props.node.kind}
+      level={props.level}
+      active={summary().label !== ""}
+    >
       <Show when={summary().label}>
         <InlineToolRow
           icon={disclosure.expanded() ? "−" : "+"}
@@ -244,7 +251,7 @@ function InstructionsGroup(props: GroupProps) {
       ).size,
   )
   return (
-    <GroupAnchor groupID={disclosure.id()} active={files() > 0}>
+    <GroupAnchor groupID={disclosure.id()} kind={props.node.kind} level={props.level} active={files() > 0}>
       <InlineToolRow
         icon="◈"
         color={hover() ? theme.text.base : theme.text.muted}

@@ -1,7 +1,9 @@
 import type { Renderable } from "@opentui/core"
-import type { PartRef, SessionEntry, SessionNode } from "./grouping/session"
+import type { GroupKind, PartRef, SessionEntry, SessionNode } from "./grouping/session"
 
-export type AnchorTarget = { type: "part"; ref: PartRef } | { type: "group"; groupID: string }
+export type AnchorTarget =
+  | { type: "part"; ref: PartRef }
+  | { type: "group"; groupID: string; kind?: GroupKind; level?: number }
 
 type Anchor = {
   target: AnchorTarget
