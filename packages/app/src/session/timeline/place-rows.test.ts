@@ -5,9 +5,11 @@ import { placeRows } from "./place-rows"
 // document, the DOM operations it took, and which rows that stay were taken out of the document on the way.
 function place(from: readonly string[], to: readonly string[]) {
   const layer = document.createElement("div")
+
   const rows = new Map(
     [...from, ...to].map((name) => [name, Object.assign(document.createElement("div"), { textContent: name })]),
   )
+
   placeRows(
     layer,
     from.map((name) => rows.get(name)!),
@@ -55,8 +57,8 @@ test.each([
     to: ["second", "third"],
     operations: 2,
   },
-])("a row that stays is never taken out of the document: $name", (shape) => {
-  expect(place(shape.from, shape.to)).toEqual({ order: [...shape.to], operations: shape.operations, takenOut: [] })
+])("a row that stays is never taken out of the document: $name", (update) => {
+  expect(place(update.from, update.to)).toEqual({ order: [...update.to], operations: update.operations, takenOut: [] })
 })
 
 test("rows that change places end in the order listed", () => {
