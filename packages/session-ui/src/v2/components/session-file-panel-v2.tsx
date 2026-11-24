@@ -14,7 +14,7 @@ export function SessionFilePanelV2(props: {
   sidebarCollapsed?: boolean
   /** Defaults to `start`. */
   sidebarSide?: SessionFilePanelV2SidebarSide
-  /** Offers "Move file tree" on right-click of the sidebar and its toggle. */
+  /** Offers "Sidebar position" on right-click of the sidebar and its toggle. */
   onSidebarSideChange?: (side: SessionFilePanelV2SidebarSide) => void
   toolbar: boolean
   toolbarStart?: JSX.Element
@@ -70,8 +70,9 @@ function SessionFilePanelV2SideMenu(
 ) {
   const i18n = useI18n()
   const locale = useLocale()
-  const target = (): SessionFilePanelV2SidebarSide => (props.side === "start" ? "end" : "start")
-  const right = () => (target() === "end") === (locale.direction() !== "rtl")
+  const rtl = () => locale.direction() === "rtl"
+  const physical = () => ((props.side === "end") !== rtl() ? "right" : "left")
+  const logical = (value: string): SessionFilePanelV2SidebarSide => ((value === "right") !== rtl() ? "end" : "start")
 
   return (
     <Show when={props.onChange} fallback={props.children}>
@@ -96,9 +97,21 @@ function SessionFilePanelV2SideMenu(
           </Menu.Context.Trigger>
           <Menu.Context.Portal>
             <Menu.Context.Content>
-              <Menu.Item onSelect={() => onChange()(target())}>
-                {i18n.t(right() ? "ui.sessionReviewV2.moveSidebarRight" : "ui.sessionReviewV2.moveSidebarLeft")}
-              </Menu.Item>
+              <Menu.Sub gutter={4} overflowPadding={24}>
+                <Menu.SubTrigger>{i18n.t("ui.sessionReviewV2.sidebarPosition")}</Menu.SubTrigger>
+                <Menu.Portal>
+                  <Menu.SubContent>
+                    <Menu.RadioGroup value={physical()} onChange={(value) => onChange()(logical(value))}>
+                      <Menu.RadioItem value="left" closeOnSelect>
+                        {i18n.t("ui.sessionReviewV2.sidebarPosition.left")}
+                      </Menu.RadioItem>
+                      <Menu.RadioItem value="right" closeOnSelect>
+                        {i18n.t("ui.sessionReviewV2.sidebarPosition.right")}
+                      </Menu.RadioItem>
+                    </Menu.RadioGroup>
+                  </Menu.SubContent>
+                </Menu.Portal>
+              </Menu.Sub>
             </Menu.Context.Content>
           </Menu.Context.Portal>
         </Menu.Context>
