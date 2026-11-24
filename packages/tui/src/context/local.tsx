@@ -161,7 +161,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         speed: {},
       })
       const [selectionState, setSelectionState] = createStore<{
-        newSessionModelByLocationAgent: Record<string, ModelPreferenceModel | undefined>
+        newSessionModelByLocationAgent: Record<string, ModelSelection | undefined>
         selectionBySessionAgent: Record<string, Record<string, ModelSelection | undefined> | undefined>
       }>({
         newSessionModelByLocationAgent: {},
@@ -262,7 +262,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         return `${JSON.stringify([ref.directory, ref.workspaceID])}:${agentID}`
       }
 
-      function preferredSelection(model: ModelPreferenceModel): ModelSelection {
+      function preferredSelection(model: ModelSelection): ModelSelection {
         const configured = agent.current()?.model
         const fallback = configuredModel()
         // A model's speeds share its variant. Preferences saved before then may name one of its speeds instead.
@@ -270,11 +270,13 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         const preferred = [standard, model, ...speeds(standard).map((item) => ({ providerID: item.providerID, modelID: item.id }))]
           .map((item) => preferences.variant[modelPreferenceKey(item)])
           .find((value) => value !== undefined)
+        // An explicit choice wins, then the agent's own variant for its model, then the remembered one.
         const variant = normalizeModelVariant(
-          preferred ??
+          model.variant ??
             (configured?.providerID === model.providerID && configured.id === model.modelID
               ? configured.variant
               : undefined) ??
+            preferred ??
             (fallback?.providerID === model.providerID && fallback.modelID === model.modelID
               ? fallback.variant
               : undefined),
@@ -533,11 +535,20 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           set(value: string | undefined) {
             const m = currentSelection()
             if (!m) return
-            if (route.data.type === "session") {
-              setSessionDraft(route.data.sessionID, { ...m, variant: normalizeModelVariant(value) })
-            }
             // A model's speeds share its variant.
             const standard = standardModel(m)
+            if (route.data.type === "session") {
+              setSessionDraft(route.data.sessionID, { ...m, variant: normalizeModelVariant(value) })
+            } else {
+              // Keep the choice for this agent's new session; it outranks the agent's configured variant.
+              // The draft names the standard model so the new session follows the remembered speed.
+              const current = agent.current()
+              if (current)
+                setSelectionState("newSessionModelByLocationAgent", locationAgentKey(current.id), {
+                  ...standard,
+                  variant: value ?? "default",
+                })
+            }
             setPreferences("variant", modelPreferenceKey(standard), value ?? "default")
             void repository.saveVariant(standard, value).catch(() => undefined)
           },
@@ -586,7 +597,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               if (route.data.type === "session") return setSessionDraft(route.data.sessionID, { ...m, modelID: target })
               // A new session starts on the model, which runs at the speed just saved for it.
               const current = agent.current()
-              if (current) setSelectionState("newSessionModelByLocationAgent", locationAgentKey(current.id), standard)
+              if (current) {
+                const key = locationAgentKey(current.id)
+                const variant = selectionState.newSessionModelByLocationAgent[key]?.variant
+                setSelectionState("newSessionModelByLocationAgent", key, { ...standard, variant })
+              }
             })
           },
           cycle() {
