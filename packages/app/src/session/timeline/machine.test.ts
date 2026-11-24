@@ -191,6 +191,44 @@ test.each<{ name: string; events: FollowEvent[]; following: boolean }>([
     following: false,
   },
   {
+    // A link to the newest prompt ends at the end when its reply is short, and a size correction can move a view
+    // onto the end of a range that is not measured yet. Either counted as the reader's return to the end, so the
+    // timeline followed again and dropped the link.
+    name: "stays where navigation sent the view when a scroll that is not the reader's ends at the end",
+    events: [{ type: "detach" }, scroll(1000, 400, 1000, 1000, 0)],
+    following: false,
+  },
+  {
+    name: "stays where navigation sent the view when a scroll that is not the reader's ends at the zoomed end",
+    events: [{ type: "detach" }, scroll(997, 400, 1000, 1000, 0), { type: "scroll.settled", atReachableEnd: true }],
+    following: false,
+  },
+  {
+    // The scrollbar and autoscroll send no intent and hold no pointer the timeline sees. The view kept its
+    // navigation state, so a clamp that brought the reader to the end did not follow again.
+    name: "is the reader's own again once any scroll of the reader's moves a view that navigation sent somewhere",
+    events: [{ type: "detach" }, scroll(940, 1000), scroll(900, 940, 900, 1000, 0)],
+    following: true,
+  },
+  {
+    name: "stays where navigation sent the view through movement too small to tell from a zoomed range's rounding",
+    events: [{ type: "detach" }, scroll(984, 987, 1380, 1380), scroll(980, 984, 980, 1380, 0)],
+    following: false,
+  },
+  {
+    // A message link from a tool that a notice had revealed: the held tool ignored the link's `detach`, so the view
+    // counted as the reader's own, and a clamp dropped the link.
+    name: "stays where a message link sent the view from a revealed tool",
+    events: [{ type: "anchor", anchor }, { type: "detach" }, { type: "release" }, scroll(987, 1380, 987, 1380, 0)],
+    following: false,
+  },
+  {
+    // The scrollbar, autoscroll and a touch send no intent, only the movement.
+    name: "resumes when the reader's own scroll takes a view that navigation sent somewhere to the end",
+    events: [{ type: "detach" }, scroll(1000, 400)],
+    following: true,
+  },
+  {
     // At the end a wheel toward it scrolls nothing, so a reader the clamp left detached there had no way back.
     name: "resumes when a shrinking scroll range clamps a reader who scrolled away to the end",
     events: [
@@ -222,9 +260,16 @@ test.each<{ name: string; events: FollowEvent[]; following: boolean }>([
     following: true,
   },
   {
-    name: "resumes when the content shrinks to fit",
-    events: [{ type: "detach" }, scroll(0, 300, 0, 300, 0)],
+    name: "resumes when the content shrinks to fit under a reader who scrolled away",
+    events: [{ type: "scroll.intent", upward: true, overflow: true }, scroll(300, 500, 500), scroll(0, 300, 0, 500, 0)],
     following: true,
+  },
+  {
+    // The range shrinks to nothing, so the offset drops to 0 by itself. The view is still where navigation sent it:
+    // content that grows again must not scroll its target away.
+    name: "stays where navigation sent the view when the content shrinks to fit",
+    events: [{ type: "detach" }, scroll(0, 300, 0, 300, 0)],
+    following: false,
   },
   {
     name: "keeps a revealed tool when reaching it lands at the end",
@@ -399,7 +444,12 @@ test.each<{ name: string; state: FollowState }>([
 
 test.each<{ name: string; state: FollowState; event: FollowEvent }>([
   { name: "following", state: createFollowState(), event: scroll(1000, 990) },
-  { name: "detached", state: replay([{ type: "detach" }]), event: scroll(200, 300) },
+  {
+    name: "detached",
+    state: replay([{ type: "scroll.intent", upward: true, overflow: true }]),
+    event: scroll(200, 300),
+  },
+  { name: "navigated", state: replay([{ type: "detach" }]), event: scroll(200, 300, 1000, 1000, 0) },
   { name: "anchored", state: replay([{ type: "anchor", anchor }]), event: scroll(200, 300) },
   { name: "settled following", state: createFollowState(), event: { type: "scroll.settled", atReachableEnd: false } },
 ])("a steady $name scroll returns the same state", (input) => {

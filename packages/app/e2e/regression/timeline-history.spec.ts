@@ -1034,6 +1034,54 @@ test.describe("timeline history", () => {
     ).toBe(0)
   })
 
+  // The newest prompt has a short reply, so its place below the header is past the end of the scroll range, and the
+  // link's own scroll ends at the end. That counted as the reader's return to the latest message: the timeline
+  // followed again and dropped the link, and the reply that streamed next scrolled the prompt away. When the prompt's
+  // row is mounted, the browser goes to the link's fragment itself before the timeline does.
+  test("a link to the newest prompt keeps the prompt in place while its reply streams", async ({ page }) => {
+    const before = "msg_0999_link_before_a_user"
+
+    const messages = validateTimelineMessages([
+      ...historyMessages(20),
+      // About a window tall: its prompt can rest below the header while the newest prompt is still mounted.
+      userMessage(undefined, { id: before, created: 1695000000000 }),
+      assistantMessage(
+        [textPart("prt_link_before", Array.from({ length: 22 }, (_, index) => `Paragraph ${index}.`).join("\n\n"))],
+        { id: "msg_0999_link_before_b_assistant", parentID: before, created: 1695000001000 },
+      ),
+      userMessage(),
+      assistantMessage([textPart("prt_link_tail", "Short answer")], { completed: false }),
+    ])
+
+    const selector = (id: string) => `[data-timeline-row="UserMessage"][data-message-id="${id}"]`
+    const scroller = timelineScroller(page)
+    const top = () => page.locator(selector(userID)).evaluate((element) => element.getBoundingClientRect().top)
+    const timeline = await setupTimeline(page, { sessionMessages: messages })
+    await expect(page.getByText("Short answer", { exact: true })).toBeInViewport()
+
+    // Away from the end first, so the link has somewhere to scroll from. The newest prompt's row stays mounted.
+    await page.evaluate((id) => (location.hash = `#message-${id}`), before)
+    await waitForVisualSettle(page, [selector(before)], 6)
+    await expect
+      .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+      .toBeGreaterThan(100)
+
+    await expect(page.locator(selector(userID))).toBeAttached()
+    await page.evaluate((id) => (location.hash = `#message-${id}`), userID)
+    await expect(page.locator(selector(userID))).toBeInViewport()
+    await waitForVisualSettle(page, [selector(userID)], 6)
+    expect(await page.evaluate(() => location.hash)).toBe(`#message-${userID}`)
+    const place = await top()
+    const height = await scroller.evaluate((element) => element.scrollHeight)
+
+    const streamed = Array.from({ length: 40 }, (_, index) => `Streamed ${index}.`).join("\n\n")
+    await timeline.send(partDelta("prt_link_tail", `\n\n${streamed}`))
+    // The streamed lines are measured, which is when a timeline that follows scrolls to its end.
+    await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
+    expect(await top()).toBe(place)
+    expect(await page.evaluate(() => location.hash)).toBe(`#message-${userID}`)
+  })
+
   // The timeline scrolls to a row by its index, for up to five seconds. A page of history that arrived above in that
   // time gave the index to another row, and the timeline went there.
   test("Find reaches its match when an older page arrives while the timeline scrolls to it", async ({ page }) => {

@@ -1159,6 +1159,70 @@ for (const { input, when } of [
   })
 }
 
+test("a wheel with no vertical distance leaves Find's seek to reach its match", async ({ page }) => {
+  // A sideways wheel, over a wide code block for example, moves nothing in the timeline. It counted as the reader
+  // scrolling, which ends a seek, so Find stopped short of its match.
+  const history = historyMessages(40)
+  const prompt = "msg_00009_sideways_a_user"
+  await page.clock.install({ time: 1_700_000_000_000 })
+  await setupTimeline(page, {
+    sessionMessages: validateTimelineMessages([
+      ...history.slice(0, 20),
+      userMessage([userText("The needle rests in this prompt.", { id: "prt_sideways_seek" })], {
+        id: prompt,
+        created: 1690000095000,
+      }),
+      assistantMessage([textPart("prt_sideways_reply", "A short reply.")], {
+        id: "msg_00009_sideways_b_assistant",
+        parentID: prompt,
+        created: 1690000096000,
+      }),
+      ...history.slice(20),
+      userMessage(),
+      assistantMessage([textPart("prt_sideways_tail", "The newest answer.")]),
+    ]),
+  })
+  await expect(page.getByText("The newest answer.", { exact: true })).toBeVisible()
+
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+
+  // How far the active match is from the middle of what the timeline shows.
+  const offCentre = () =>
+    page.evaluate(() => {
+      const match = [...(CSS.highlights.get("timeline-search-hit-active") ?? [])][0]
+
+      if (!(match instanceof Range)) return Number.POSITIVE_INFINITY
+      const rect = match.getBoundingClientRect()
+      const header = document.querySelector("[data-session-title]")!.getBoundingClientRect()
+      const visible = document.querySelector('[data-slot="session-timeline-visible"]')!.getBoundingClientRect()
+
+      return rect.height
+        ? Math.abs((rect.top + rect.bottom - header.bottom - visible.bottom) / 2)
+        : Number.POSITIVE_INFINITY
+    })
+
+  await page.keyboard.press("ControlOrMeta+f")
+  const search = page.locator('[data-component="timeline-search-bar"] input')
+  await expect(search).toBeFocused()
+
+  // The frames are the test's from here: the seek is under way, and Find has not scrolled to its match yet.
+  await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000)
+  await search.fill("needle rests")
+  await scroller.hover()
+  await page.mouse.wheel(120, 0)
+  await expect
+    .poll(
+      async () => {
+        await page.clock.runFor(16)
+
+        return offCentre()
+      },
+      { intervals: [100] },
+    )
+    .toBeLessThanOrEqual(16)
+  await expect(page.locator('[data-slot="timeline-search-count"]')).toHaveText("1/1")
+})
+
 test("groups consecutive sent prompts under the last one's meta line, with each bubble's actions beside it", async ({
   page,
 }) => {

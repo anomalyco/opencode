@@ -120,6 +120,8 @@ type TimelineSearchInput = {
   revealMessage: (id: string, partID?: string) => void
   /** Ends the scroll `revealMessage` started. */
   stopReveal: () => void
+  /** Scrolls the timeline as one of its own writes, so the scroll does not count as the reader's. */
+  scrollTo: (top: number, behavior: ScrollBehavior) => void
   pauseAutoScroll: () => void
   /** Hands the timeline Find's seek, which the reader's scroll ends: it calls `stop` while a seek is `active`. */
   registerSeek: (seek: { readonly active: () => boolean; readonly stop: () => void }) => void
@@ -298,7 +300,7 @@ export function createTranscriptSearch(
       // The reveal scrolls to the middle of the match's row and keeps at it for up to five seconds. Find goes to the
       // match itself, so that scroll would only move the view away again.
       input.stopReveal()
-      input.scrollRef()?.scrollTo({ top: effect.top, behavior: "auto" })
+      input.scrollTo(effect.top, "auto")
 
       return
     }
