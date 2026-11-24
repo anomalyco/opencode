@@ -243,6 +243,10 @@ test("keeps a file diff anchored while it expands and collapses", async ({ page 
 
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
   await expect.poll(measured).toBeLessThanOrEqual(1)
+  // A click that finds its header still on the move is retried, and a retry scrolls the header to another place in
+  // the view. That is a scroll of the reader's, which stops following. So the timeline rests at its end first.
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(1)
+  await expect.poll(bottom).toBeLessThanOrEqual(1)
 
   // Pinned to the tail, toggling the diff keeps the view at the bottom.
   for (const visible of [true, false]) {

@@ -40,6 +40,7 @@ import { TimelineSeparator } from "../components/timeline-separator"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
+import { holdScroll } from "@opencode/ui/hold-scroll"
 import { Icon } from "@opencode/ui/icon"
 import { Button } from "@opencode/ui/button"
 import { TextReveal } from "@opencode/ui/text-reveal"
@@ -792,7 +793,8 @@ function UserMessageFold(props: {
     if (opening || !above || before === undefined || !toggle || !scroller) return
     const moved = before - toggle.getBoundingClientRect().top
 
-    if (moved > 1) scroller.scrollTop -= moved
+    // Through `holdScroll`, so a timeline that follows its end does not take the scroll for the reader leaving it.
+    if (moved > 1) holdScroll(scroller, () => (scroller.scrollTop -= moved))
   }
 
   return (

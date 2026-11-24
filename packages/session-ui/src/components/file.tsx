@@ -1,3 +1,4 @@
+import { holdScroll } from "@opencode/ui/hold-scroll"
 import { sampledChecksum } from "@opencode/util/encode"
 import {
   areOptionsEqual,
@@ -671,7 +672,7 @@ function preserve(viewer: Viewer) {
     const next = viewer.wrapper.getBoundingClientRect().top - root.getBoundingClientRect().top
     const delta = next - top
 
-    if (delta) root.scrollTop += delta
+    if (delta) holdScroll(root, () => (root.scrollTop += delta))
   }
 }
 

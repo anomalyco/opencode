@@ -2,6 +2,7 @@ import type { SessionMessageAssistantTool } from "@opencode/client/promise"
 import { AnimatedNumber } from "@opencode/ui/animated-number"
 import { Badge } from "@opencode/ui/badge"
 import { type UiI18n, useI18n } from "@opencode/ui/context/i18n"
+import { holdScroll } from "@opencode/ui/hold-scroll"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { createMemo, For, Index, Match, Show, Switch } from "solid-js"
 import { BasicTool } from "../../components/basic-tool"
@@ -130,8 +131,10 @@ export function ContextGroup(props: {
     // Scroll before collapsing because the shorter content would clamp the scroll position first.
     const trigger = root?.querySelector(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
     const stuck = !open && root && trigger ? trigger.getBoundingClientRect().top - root.getBoundingClientRect().top : 0
+    const scroller = stuck > 0 && root ? scrollParent(root) : undefined
 
-    if (stuck > 0 && root) scrollParent(root)?.scrollBy({ top: -stuck, behavior: "instant" })
+    // Through `holdScroll`, so a timeline that follows its end does not take the scroll for the reader leaving it.
+    if (scroller) holdScroll(scroller, () => scroller.scrollBy({ top: -stuck, behavior: "instant" }))
     props.onOpenChange(open)
     props.onSizeChange?.()
   }
