@@ -14,7 +14,9 @@
 
 /* A neutral button, as tall as the Daily and Weekly toggle beside it. Scoped to a section heading's actions or the
    leaderboard's toolbar so it outranks the page's reset for buttons in [data-component="content"] (routes/index.css). */
-[data-page="stats"] :is([data-slot="section-actions"], [data-slot="leaderboard-period"]) [data-component="share-button"] {
+[data-page="stats"]
+  :is([data-slot="section-actions"], [data-slot="leaderboard-period"])
+  [data-component="share-button"] {
   position: relative;
   display: flex;
   align-items: center;

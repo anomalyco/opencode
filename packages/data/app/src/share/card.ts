@@ -232,7 +232,19 @@ export function shareDuration(card: ShareCard, options: ShareOptions, timing = f
 // The card's own part of the video, before the closing slides: with music it runs to the track's drop. Embeds play
 // only this part.
 export function mainLength(card: ShareCard, options: ShareOptions, timing = freeTiming) {
-  return timing.length ?? timing.start + highlights(card, options).length * timing.rounds * timing.step + hold
+  const intro = card.chart.kind === "podium" ? (podiumSlides(options, timing)?.end ?? 0) : 0
+  return timing.length ?? intro + timing.start + highlights(card, options).length * timing.rounds * timing.step + hold
+}
+
+// The leaderboard's slides: the headline until the first cut, then first, second and third place for a bar each with
+// music (the cuts on the track's strong beats, where its highlights would fall) or 1.6 s each without. The Build motion
+// keeps the card alone.
+function podiumSlides(options: ShareOptions, timing: ShareTiming) {
+  if (options.motion === "build") return undefined
+  const length = timing.beat ? timing.beat * 4 : 1.6
+  const grid = timing.beat ? timing.start % length : 0
+  const first = grid + length * Math.max(1, Math.ceil((1.4 - grid) / length))
+  return { first, length, end: first + length * 3 }
 }
 
 // The closing slides, cut on the beat: the lockup large for 4 beats, the line for 3, then the address for 3. At 96 BPM
@@ -247,7 +259,7 @@ export function drawShareCard(
   ctx: CanvasRenderingContext2D,
   input: ShareCard,
   options: ShareOptions,
-  time: number,
+  at: number,
   timing = freeTiming,
 ) {
   const [width, height] = shareSizes[options.size]
@@ -262,14 +274,23 @@ export function drawShareCard(
   const total = shareDuration(card, options, timing)
   // The equaliser waits for the chart to finish building, then eases in over a beat, and plays on through the slides.
   const level =
-    timing.beat && time >= timing.build && time < total
-      ? scaled(meter(time, timing.beat, timing.spectrum), settle(time, timing.build, timing.beat))
+    timing.beat && at >= timing.build && at < total
+      ? scaled(meter(at, timing.beat, timing.spectrum), settle(at, timing.build, timing.beat))
       : undefined
-  if (time >= main && time < total) {
-    drawOutro(ctx, options, colors, width, height, time - main, timing.beat ?? freeBeat, level)
+  if (at >= main && at < total) {
+    drawOutro(ctx, options, colors, width, height, at - main, timing.beat ?? freeBeat, level)
     ctx.restore()
     return
   }
+  // The leaderboard opens with slides (podiumSlides): its headline, then each of the top three on its own. The card
+  // proper follows, its own clock starting when they end.
+  const slides = card.chart.kind === "podium" ? podiumSlides(options, timing) : undefined
+  if (slides && card.chart.kind === "podium" && at < slides.end) {
+    drawPodiumSlide(ctx, card, card.chart, options, colors, width, height, at, slides)
+    ctx.restore()
+    return
+  }
+  const time = slides ? at - slides.end : at
 
   // The footer's baseline sits as far from the bottom as its text from the side; the rule is 56px above its type.
   const footer = height - pad
@@ -437,14 +458,11 @@ function highlightsEnd(card: ShareCard, options: ShareOptions, timing: ShareTimi
 }
 
 function highlights(card: ShareCard, options: ShareOptions) {
-  if (options.motion === "build") return []
+  // The leaderboard has shown each place on its own slide already.
+  if (options.motion === "build" || card.chart.kind === "podium") return []
   const chart = card.chart
   const count =
-    chart.kind === "stacked"
-      ? chart.series.filter((item) => item.key !== "other").length
-      : chart.kind === "podium"
-        ? chart.entries.length
-        : chart.rows.length
+    chart.kind === "stacked" ? chart.series.filter((item) => item.key !== "other").length : chart.rows.length
   const most = chart.kind === "stacked" || chart.kind === "versus" ? 5 : 3
   return Array.from({ length: Math.min(most, count) }, (_, index) => index)
 }
@@ -965,6 +983,148 @@ function drawRanked(
 }
 
 // How many rows fit, how tall each is and the type size.
+// One of the leaderboard's slides: before the first cut its headline, large; then a place alone on a tile the size of
+// the chart, its logo large and faint at the right, punching in on the cut.
+function drawPodiumSlide(
+  ctx: CanvasRenderingContext2D,
+  card: ShareCard,
+  chart: Extract<ShareChart, { kind: "podium" }>,
+  options: ShareOptions,
+  colors: Palette,
+  width: number,
+  height: number,
+  time: number,
+  slides: { first: number; length: number },
+) {
+  drawBackground(
+    ctx,
+    options.background,
+    colors,
+    width,
+    height,
+    { center: width / 2, pitch: 24 },
+    height * 0.55,
+    height,
+  )
+  const zoom = height > 1350 ? 1.5 : 1
+  drawLogo(ctx, options.logo, colors, pad, pad, zoom)
+  const footer = height - pad
+  const rule = footer - 26 - 56
+  drawFooter(ctx, card, colors, width, footer, rule)
+  const box = { x: pad, y: pad + 88 + 48 * zoom, width: width - pad * 2, height: rule - 64 - (pad + 88 + 48 * zoom) }
+  const index =
+    time < slides.first ? -1 : Math.min(chart.entries.length - 1, Math.floor((time - slides.first) / slides.length))
+  const since = index < 0 ? time : time - slides.first - index * slides.length
+  const entry = chart.entries[index]
+  ctx.textBaseline = "alphabetic"
+
+  if (!entry) {
+    // The headline, as large as fits in five lines, set in the middle of the space, under its eyebrow.
+    const sizes = width > height ? [96, 84, 72, 64] : [104, 92, 80, 72, 64, 56]
+    const size =
+      sizes.find((value) => {
+        ctx.font = `400 ${value}px ${font}`
+        return wrap(ctx, card.headline, box.width).length <= 5
+      }) ?? 56
+    ctx.font = `400 ${size}px ${font}`
+    const lines = balance(ctx, card.headline, box.width).slice(0, 5)
+    const leading = size * 1.15
+    const block = 44 + lines.length * leading
+    const top = box.y + (box.height - block) / 2
+    rise(ctx, since, 0.05, top + 22, 28, () => {
+      ctx.font = `400 28px ${font}`
+      ctx.fillStyle = colors.faint
+      spaced(ctx, `${card.title} · ${card.range}`.toUpperCase(), pad, top + 22, 28 * 0.12)
+    })
+    lines.forEach((line, row) =>
+      rise(ctx, since, 0.15 + row * 0.08, top + 44 + size * 0.8 + row * leading, size, () => {
+        ctx.font = `400 ${size}px ${font}`
+        ctx.fillStyle = colors.text
+        ctx.fillText(line, pad - 2, top + 44 + size * 0.8 + row * leading)
+      }),
+    )
+    return
+  }
+
+  const punch = 1 + 0.04 * (1 - settle(since, 0, 0.4))
+  const dark = colors.background !== palettes.light.background
+  ctx.save()
+  ctx.translate(box.x + box.width / 2, box.y + box.height / 2)
+  ctx.scale(punch, punch)
+  ctx.translate(-(box.x + box.width / 2), -(box.y + box.height / 2))
+  ctx.globalAlpha = 0.55
+  ctx.fillStyle = colors.track
+  ctx.fillRect(box.x, box.y, box.width, box.height)
+  ctx.globalAlpha = 1
+  ctx.strokeStyle = colors.line
+  ctx.lineWidth = 2
+  ctx.strokeRect(box.x + 1, box.y + 1, box.width - 2, box.height - 2)
+  ctx.beginPath()
+  ctx.rect(box.x, box.y, box.width, box.height)
+  ctx.clip()
+  const logo = shareLogo(entry.logo, dark)
+  if (logo) {
+    const size = Math.min(box.height * 0.95, box.width * 0.9)
+    ctx.globalAlpha = dark ? 0.08 : 0.07
+    ctx.drawImage(logo, box.x + box.width - size * 0.72, box.y + (box.height - size) / 2, size, size)
+    ctx.globalAlpha = 1
+  }
+  // Bottom up: the change beside the tokens on their baseline (under them when there's no room), the tokens' caption
+  // over them, the provider with its logo, the name; the place large and faint in the top corner.
+  const inset = 64
+  const left = box.x + inset
+  const room = box.width - inset * 2
+  const bottom = box.y + box.height - inset
+  const place = Math.min(200, box.height * 0.22)
+  const number = Math.min(220, box.height * 0.24, fit(ctx, entry.value, room * 0.62, 220, 400))
+  ctx.font = `400 ${number}px ${font}`
+  const numberWidth = ctx.measureText(entry.value).width
+  const change = Math.round(number * 0.34)
+  ctx.font = `400 ${change}px ${font}`
+  const beside = numberWidth + 40 + ctx.measureText(entry.change).width <= room
+  const numberY = beside ? bottom : bottom - change - 24
+  const captionY = numberY - number * 0.78 - 32
+  const providerY = captionY - 24 - 64
+  const name = Math.min(96, fit(ctx, entry.label, room, 96, 700))
+  const nameY = providerY - 40 - 28
+  rise(ctx, since, 0.04, box.y + inset + place * 0.78, place, () => {
+    ctx.font = `400 ${place}px ${font}`
+    ctx.fillStyle = colors.mark
+    ctx.fillText(entry.place, left - place * 0.06, box.y + inset + place * 0.78)
+  })
+  rise(ctx, since, 0.12, nameY, name, () => {
+    ctx.font = `700 ${name}px ${font}`
+    ctx.fillStyle = colors.text
+    ctx.fillText(entry.label, left - 2, nameY)
+  })
+  rise(ctx, since, 0.18, providerY, 40, () => {
+    const mark = shareLogo(entry.logo, dark)
+    const shift = mark && entry.provider ? 56 : 0
+    if (mark && entry.provider) ctx.drawImage(mark, left, providerY - 36, 40, 40)
+    ctx.font = `400 40px ${font}`
+    ctx.fillStyle = colors.muted
+    ctx.fillText(entry.provider, left + shift, providerY)
+  })
+  rise(ctx, since, 0.24, captionY, 24, () => {
+    ctx.font = `400 24px ${font}`
+    ctx.fillStyle = colors.faint
+    spaced(ctx, `TOKENS · ${card.range}`.toUpperCase(), left, captionY, 24 * 0.14)
+  })
+  rise(ctx, since, 0.3, numberY, number, () => {
+    ctx.font = `400 ${number}px ${font}`
+    ctx.fillStyle = colors.text
+    ctx.fillText(entry.value, left - number * 0.04, numberY)
+  })
+  const changeX = beside ? left + numberWidth + 40 : left
+  const changeY = beside ? numberY : bottom
+  rise(ctx, since, 0.4, changeY, change, () => {
+    ctx.font = `400 ${change}px ${font}`
+    ctx.fillStyle = entry.tone === "down" ? colors.down : entry.tone === "flat" ? colors.faint : colors.up
+    ctx.fillText(entry.change, changeX, changeY)
+  })
+  ctx.restore()
+}
+
 // The top three as tiles: stacked on the tall cards, side by side on the wide one. Each rises in in turn, its
 // provider's logo large and faint, cropped by the tile's right edge; a highlighted tile keeps its colour while the
 // others fade back.
