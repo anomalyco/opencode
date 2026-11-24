@@ -245,6 +245,24 @@
     justify-content: center;
     width: 100%;
     min-height: 0;
+    /* Room either side for the section arrows. */
+    padding-inline: 56px;
+  }
+
+  /* The arrows either side of the card: step to the previous or next section on the page, round and round. */
+  [data-slot="icon-button"][data-variant="step"] {
+    position: absolute;
+    top: 50%;
+    z-index: 1;
+    translate: 0 -50%;
+
+    &[data-side="previous"] {
+      left: 0;
+    }
+
+    &[data-side="next"] {
+      right: 0;
+    }
   }
 
   [data-slot="share-preview"] {
@@ -778,6 +796,10 @@
       flex: 1;
       gap: 10px;
       padding: calc(48px + env(safe-area-inset-top, 0px)) 16px 8px;
+    }
+
+    [data-slot="editor-canvas"] {
+      padding-inline: 40px;
     }
 
     /* Below the notch, still on a dot. */

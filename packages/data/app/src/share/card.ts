@@ -293,10 +293,6 @@ export function drawShareCard(
       )
     }
   }
-  if (card.chart.kind === "ranked" && level && options.background !== "plain") {
-    const span = rankedSpan(card.chart, { x: pad, y: top, width: width - pad * 2, height: chartBottom - top })
-    drawSideMeter(ctx, colors, width, dotGrid(card.chart, width), baseline, span.from, span.to, level)
-  }
   if (card.chart.kind === "ranked")
     drawRanked(
       ctx,
@@ -447,32 +443,6 @@ function dotLayout(width: number, grid: { center: number; pitch: number }, end: 
   const pitch = (end - dot - inset) / rows
   const playing = columns.filter((x) => x >= pad && x + dot <= width - pad)
   return { dot, inset, columns, rows, pitch, playing }
-}
-
-// The equaliser for a ranked chart, on its side: each dot row from the first bar to the last is a band of the track
-// (bass at the top), its lit dots running from the chart's left edge to the right. Drawn over the grid after the
-// intro, so it can find the rows, and under the chart.
-function drawSideMeter(
-  ctx: CanvasRenderingContext2D,
-  colors: Palette,
-  width: number,
-  grid: { center: number; pitch: number },
-  end: number,
-  from: number,
-  to: number,
-  level: (band: number, bands: number) => number,
-) {
-  const { dot, inset, rows, pitch, playing } = dotLayout(width, grid, end)
-  const lines = Array.from({ length: rows + 1 }, (_, row) => inset + row * pitch).filter(
-    (y) => y + dot >= from && y <= to,
-  )
-  ctx.globalAlpha = 0.35
-  ctx.fillStyle = colors.meter
-  lines.forEach((y, band) => {
-    const lit = Math.round(level(band, lines.length) * playing.length * 0.85)
-    playing.slice(0, lit).forEach((x) => ctx.fillRect(x, y, dot, dot))
-  })
-  ctx.globalAlpha = 1
 }
 
 // A highlighted series' colour: its own, or in the Top style white for every series but the winner, whose grey would
@@ -913,13 +883,6 @@ function rankedRows(chart: Extract<ShareChart, { kind: "ranked" }>, box: Box) {
   const rows = chart.rows.slice(0, Math.max(1, Math.floor(box.height / 72)))
   const row = Math.min(112, box.height / Math.max(1, rows.length))
   return { rows, row, size: row >= 96 ? 30 : 26 }
-}
-
-// From the top of the first bar to the bottom of the last.
-function rankedSpan(chart: Extract<ShareChart, { kind: "ranked" }>, box: Box) {
-  const layout = rankedRows(chart, box)
-  const bar = box.y + layout.size + 18
-  return { from: bar, to: bar + (layout.rows.length - 1) * layout.row + 10 }
 }
 
 function drawFooter(

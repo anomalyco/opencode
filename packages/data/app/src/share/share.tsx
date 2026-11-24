@@ -19,11 +19,35 @@ export type ShareDraft = Omit<ShareCard, "updatedAt" | "url">
 
 const [request, setRequest] = createSignal<ShareDraft>()
 let opener: HTMLElement | undefined
+// Every share button on the page, so the editor's arrows can step from one section to the next.
+const sections = new Set<{ element: HTMLElement; card: () => ShareDraft | undefined }>()
+
+// The next section along in page order, wrapping round at either end, skipping any with nothing to share yet.
+function step(direction: 1 | -1) {
+  const order = [...sections]
+    .filter((item) => item.element.isConnected)
+    .toSorted((a, b) => (a.element.compareDocumentPosition(b.element) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1))
+  const current = order.findIndex((item) => item.element === opener)
+  const next = order
+    .map((_, offset) => order[(current + direction * (offset + 1) + order.length * 2) % order.length]!)
+    .find((item) => item.card())
+  if (!next) return
+  opener = next.element
+  setRequest(next.card())
+}
 
 /** The share icon in a section's heading. `card` reads the section's current view when it's pressed. */
 export function ShareButton(props: { card: () => ShareDraft | undefined; label: string }) {
+  let element: HTMLButtonElement | undefined
+  onMount(() => {
+    if (!element) return
+    const entry = { element, card: () => props.card() }
+    sections.add(entry)
+    onCleanup(() => sections.delete(entry))
+  })
   return (
     <button
+      ref={element}
       type="button"
       data-component="share-button"
       aria-label={props.label}
@@ -115,6 +139,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     if (!value) return
     clearTimeout(closing)
     setNotice(undefined)
+    // Stepping to another section keeps the editor open, its music and its options.
+    if (dialog?.open) return
     setTrack("none")
     dialog?.showModal()
     void loadShareFonts().then(() => setReady(true))
@@ -288,6 +314,30 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 </div>
               </Show>
               <div data-slot="editor-canvas">
+                <button
+                  type="button"
+                  data-slot="icon-button"
+                  data-variant="step"
+                  data-side="previous"
+                  aria-label="Previous section"
+                  onClick={() => step(-1)}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
+                  </svg>
+                </button>
+                <button
+                  type="button"
+                  data-slot="icon-button"
+                  data-variant="step"
+                  data-side="next"
+                  aria-label="Next section"
+                  onClick={() => step(1)}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
+                  </svg>
+                </button>
                 <canvas
                   ref={preview}
                   data-slot="share-preview"
@@ -304,7 +354,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
               </div>
               <div data-slot="editor-toolbar">
                 <span data-slot="editor-meta" role="status" aria-live="polite">
-                  {notice() ?? `${size()[0]} × ${size()[1]}`}
+                  {notice() ?? `${value().title} · ${size()[0]} × ${size()[1]}`}
                 </span>
               </div>
             </div>
