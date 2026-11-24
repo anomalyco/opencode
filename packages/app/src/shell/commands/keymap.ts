@@ -207,19 +207,31 @@ function normalizeKey(key: string) {
   return key.toLowerCase()
 }
 
+const PHYSICAL_KEYS = new Map([
+  ["BracketLeft", "["],
+  ["BracketRight", "]"],
+  ["Period", "."],
+  ["Comma", ","],
+  ["Backquote", "`"],
+  ["Quote", "'"],
+  ["Semicolon", ";"],
+  ["Slash", "/"],
+  ["Backslash", "\\"],
+  ["Minus", "-"],
+  ["Equal", "="],
+])
+
 // ⇧[ types { and ⌥. types ≥ on US layouts. Keep ASCII layout mappings; non-ASCII falls back to the physical key.
 function physicalKey(event: Pick<KeyboardEvent, "key" | "code">) {
   if (event.key === "{" || event.key === "}") return event.key === "{" ? "[" : "]"
 
   if (!/^[^\x00-\x7f]$/u.test(event.key)) return event.key
 
-  if (event.code === "BracketLeft") return "["
+  if (event.code.startsWith("Key") && event.code.length === 4) return event.code.slice(3).toLowerCase()
 
-  if (event.code === "BracketRight") return "]"
+  if (event.code.startsWith("Digit") && event.code.length === 6) return event.code.slice(5)
 
-  if (event.code === "Period") return "."
-
-  return event.key
+  return PHYSICAL_KEYS.get(event.code) ?? event.key
 }
 
 // The HTML host, except that it drops keys while an IME composes, while command keybinds are blocked or while the

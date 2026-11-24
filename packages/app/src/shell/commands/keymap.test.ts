@@ -209,6 +209,13 @@ test.each([
   { keybind: "alt+arrowup", init: { key: "ArrowUp", altKey: true } },
   { keybind: "mod+comma", init: { key: ",", ctrlKey: true } },
   { keybind: "shift+enter", init: { key: "Enter", shiftKey: true } },
+  { keybind: "mod+f", init: { key: "а", code: "KeyF", ctrlKey: true } },
+  { keybind: "mod+shift+f", init: { key: "А", code: "KeyF", ctrlKey: true, shiftKey: true } },
+  { keybind: "mod+comma", init: { key: "б", code: "Comma", ctrlKey: true } },
+  { keybind: "ctrl+`", init: { key: "ё", code: "Backquote", ctrlKey: true } },
+  { keybind: "mod+1", init: { key: "١", code: "Digit1", ctrlKey: true } },
+  // Latin alternate layouts (e.g. Dvorak) keep their ASCII logical key rather than physical code.
+  { keybind: "mod+f", init: { key: "f", code: "KeyY", ctrlKey: true } },
 ])("$keybind matches the key the layout types", (row) => {
   const ran: string[] = []
   setup([command("run", row.keybind, ran)])
