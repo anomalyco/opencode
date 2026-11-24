@@ -10,10 +10,28 @@ pub struct ServerInfoPaths {
     pub tmp: String,
 }
 
+literal_enum! {
+/// `Push.Level`
+PushLevel {
+    All => "all",
+    Attention => "attention",
+    None => "none",
+}
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PushCapability {
+    pub version: i64,
+    pub relays: Vec<String>,
+    pub levels: Vec<PushLevel>,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ServerInfoCapabilities {
     #[serde(rename = "persistentPty", default, skip_serializing_if = "Option::is_none")]
     pub persistent_pty: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub push: Option<PushCapability>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -8722,6 +8740,22 @@ pub struct WebsearchUpdated {
 }
 
 /// Any value but `null`.
+pub type PushUpdatedData = crate::de::NotNull;
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PushUpdated {
+    pub id: EventID,
+    #[serde(serialize_with = "crate::ser::number")]
+    pub created: f64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub metadata: Option<IndexMap<String, serde_json::Value>>,
+    pub r#type: tag::PushUpdated,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub location: Option<LocationRef>,
+    pub data: PushUpdatedData,
+}
+
+/// Any value but `null`.
 pub type ArtifactUpdatedData = crate::de::NotNull;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -9147,6 +9181,7 @@ pub enum V2Event {
     FormReplied(FormReplied),
     FormCancelled(FormCancelled),
     WebsearchUpdated(WebsearchUpdated),
+    PushUpdated(PushUpdated),
     ArtifactUpdated(ArtifactUpdated),
     SessionStatus(SessionStatusUpdated),
     SessionIdle(SessionIdle),
@@ -9261,6 +9296,7 @@ impl V2Event {
             Some("form.replied") => raw.variant().map(Self::FormReplied),
             Some("form.cancelled") => raw.variant().map(Self::FormCancelled),
             Some("websearch.updated") => raw.variant().map(Self::WebsearchUpdated),
+            Some("push.updated") => raw.variant().map(Self::PushUpdated),
             Some("artifact.updated") => raw.variant().map(Self::ArtifactUpdated),
             Some("session.status") => raw.variant().map(Self::SessionStatus),
             Some("session.idle") => raw.variant().map(Self::SessionIdle),
@@ -9371,6 +9407,7 @@ impl V2Event {
             Self::FormReplied(value) => value.r#type.as_str(),
             Self::FormCancelled(value) => value.r#type.as_str(),
             Self::WebsearchUpdated(value) => value.r#type.as_str(),
+            Self::PushUpdated(value) => value.r#type.as_str(),
             Self::ArtifactUpdated(value) => value.r#type.as_str(),
             Self::SessionStatus(value) => value.r#type.as_str(),
             Self::SessionIdle(value) => value.r#type.as_str(),
@@ -9479,6 +9516,7 @@ impl V2Event {
             Self::FormReplied(value) => value.id.as_str(),
             Self::FormCancelled(value) => value.id.as_str(),
             Self::WebsearchUpdated(value) => value.id.as_str(),
+            Self::PushUpdated(value) => value.id.as_str(),
             Self::ArtifactUpdated(value) => value.id.as_str(),
             Self::SessionStatus(value) => value.id.as_str(),
             Self::SessionIdle(value) => value.id.as_str(),
@@ -9587,6 +9625,7 @@ impl V2Event {
             Self::FormReplied(value) => Some(value.created),
             Self::FormCancelled(value) => Some(value.created),
             Self::WebsearchUpdated(value) => Some(value.created),
+            Self::PushUpdated(value) => Some(value.created),
             Self::ArtifactUpdated(value) => Some(value.created),
             Self::SessionStatus(value) => Some(value.created),
             Self::SessionIdle(value) => Some(value.created),
@@ -9694,6 +9733,7 @@ impl V2Event {
             Self::FormReplied(value) => value.metadata.as_ref(),
             Self::FormCancelled(value) => value.metadata.as_ref(),
             Self::WebsearchUpdated(value) => value.metadata.as_ref(),
+            Self::PushUpdated(value) => value.metadata.as_ref(),
             Self::ArtifactUpdated(value) => value.metadata.as_ref(),
             Self::SessionStatus(value) => value.metadata.as_ref(),
             Self::SessionIdle(value) => value.metadata.as_ref(),
@@ -9802,6 +9842,7 @@ impl V2Event {
             | Self::FormReplied(_)
             | Self::FormCancelled(_)
             | Self::WebsearchUpdated(_)
+            | Self::PushUpdated(_)
             | Self::ArtifactUpdated(_)
             | Self::SessionStatus(_)
             | Self::SessionIdle(_)
@@ -9910,6 +9951,7 @@ impl V2Event {
             | Self::FormReplied(_)
             | Self::FormCancelled(_)
             | Self::WebsearchUpdated(_)
+            | Self::PushUpdated(_)
             | Self::ArtifactUpdated(_)
             | Self::SessionStatus(_)
             | Self::SessionIdle(_)
@@ -10018,6 +10060,7 @@ impl V2Event {
             | Self::FormReplied(_)
             | Self::FormCancelled(_)
             | Self::WebsearchUpdated(_)
+            | Self::PushUpdated(_)
             | Self::ArtifactUpdated(_)
             | Self::SessionStatus(_)
             | Self::SessionIdle(_)
@@ -10128,6 +10171,7 @@ pub enum EventKind {
     FormReplied,
     FormCancelled,
     WebsearchUpdated,
+    PushUpdated,
     ArtifactUpdated,
     SessionStatus,
     SessionIdle,
@@ -10148,7 +10192,7 @@ pub enum EventKind {
 
 impl EventKind {
     /// How many kinds there are, `Unknown` included.
-    pub const COUNT: usize = 102;
+    pub const COUNT: usize = 103;
 
     /// The kind an event whose `type` is `tag` decodes to.
     pub fn from_tag(tag: &str) -> Self {
@@ -10239,6 +10283,7 @@ impl EventKind {
             "form.replied" => Self::FormReplied,
             "form.cancelled" => Self::FormCancelled,
             "websearch.updated" => Self::WebsearchUpdated,
+            "push.updated" => Self::PushUpdated,
             "artifact.updated" => Self::ArtifactUpdated,
             "session.status" => Self::SessionStatus,
             "session.idle" => Self::SessionIdle,
@@ -10354,6 +10399,7 @@ impl V2Event {
             Self::FormReplied(_) => EventKind::FormReplied,
             Self::FormCancelled(_) => EventKind::FormCancelled,
             Self::WebsearchUpdated(_) => EventKind::WebsearchUpdated,
+            Self::PushUpdated(_) => EventKind::PushUpdated,
             Self::ArtifactUpdated(_) => EventKind::ArtifactUpdated,
             Self::SessionStatus(_) => EventKind::SessionStatus,
             Self::SessionIdle(_) => EventKind::SessionIdle,
@@ -11250,6 +11296,91 @@ pub type ExperimentalMachineAddOutput = MachineInvite;
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalMachineRemoveInput {
     pub name: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PushSettings {
+    pub paused: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until: Option<i64>,
+}
+
+string_type!(PushDeviceID, "`Push.DeviceID`");
+
+literal_enum! {
+/// `Push.Platform`
+PushPlatform {
+    Android => "android",
+    Ios => "ios",
+}
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PushDeviceSettings {
+    pub default: PushLevel,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PushBell {
+    pub level: PushLevel,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub until: Option<i64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PushDeviceTime {
+    pub created: i64,
+    pub updated: i64,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct PushDevice {
+    pub id: PushDeviceID,
+    pub name: String,
+    pub platform: PushPlatform,
+    #[serde(rename = "expiresAt")]
+    pub expires_at: i64,
+    pub settings: PushDeviceSettings,
+    pub paused: bool,
+    pub sessions: IndexMap<String, PushBell>,
+    pub time: PushDeviceTime,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PushInfo {
+    pub settings: PushSettings,
+    pub devices: Vec<PushDevice>,
+    pub sessions: IndexMap<String, PushBell>,
+}
+
+/// Output of `Client::experimental_push_get`.
+pub type ExperimentalPushGetOutput = PushInfo;
+
+/// Input of `Client::experimental_push_device_register`.
+#[derive(Debug, Clone, PartialEq)]
+pub struct ExperimentalPushDeviceRegisterInput {
+    pub id: PushDeviceID,
+    pub callback_url: String,
+    pub expires_at: i64,
+    pub public_key: String,
+    pub platform: PushPlatform,
+    pub name: String,
+    pub settings: Option<PushDeviceSettings>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PushRegistered {
+    #[serde(rename = "publicKey")]
+    pub public_key: String,
+}
+
+/// Output of `Client::experimental_push_device_register`.
+pub type ExperimentalPushDeviceRegisterOutput = PushRegistered;
+
+/// Input of `Client::experimental_push_device_remove`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalPushDeviceRemoveInput {
+    pub id: PushDeviceID,
 }
 
 /// Input of `Client::shell_list`.
@@ -12264,6 +12395,12 @@ impl ConfigEntryDocumentInfoWebsearch {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ConfigEntryDocumentInfoPush {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub relays: Option<Vec<String>>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConfigEntryDocumentInfoPluginsItemObject {
     pub package: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -12639,6 +12776,8 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sqlite_fts: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub push: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub video_generate: Option<ConfigEntryDocumentInfoExperimentalVideoGenerate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub part_rows: Option<bool>,
@@ -12706,6 +12845,8 @@ pub struct ConfigEntryDocumentInfo {
     pub references: Option<IndexMap<String, ConfigEntryDocumentInfoReferencesValue>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub websearch: Option<ConfigEntryDocumentInfoWebsearch>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub push: Option<ConfigEntryDocumentInfoPush>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plugins: Option<Vec<ConfigEntryDocumentInfoPluginsItem>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -13344,6 +13485,17 @@ impl crate::TaggedError for MachineNotFoundError {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct PushNotFoundError {
+    #[serde(rename = "_tag")]
+    pub tag: String,
+    pub message: String,
+}
+
+impl crate::TaggedError for PushNotFoundError {
+    const TAG: &'static str = "PushNotFoundError";
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ShellNotFoundError {
     #[serde(rename = "_tag")]
     pub tag: String,
@@ -13586,13 +13738,13 @@ pub mod tag {
         PersistentPtyUpdated = "persistent-pty.updated", PluginUpdated = "plugin.updated", Predicate = "predicate",
         ProjectUpdated = "project.updated", Prompt = "prompt", ProviderUpdated = "provider.updated",
         PtyCreated = "pty.created", PtyDeleted = "pty.deleted", PtyExited = "pty.exited", PtyUpdated = "pty.updated",
-        Reasoning = "reasoning", ReferenceUpdated = "reference.updated", Remote = "remote", Retry = "retry",
-        Running = "running", Score = "score", Sdk = "sdk", ServerConnected = "server.connected",
-        SessionAgentSelected = "session.agent.selected", SessionArchived = "session.archived",
-        SessionCompactionDelta = "session.compaction.delta", SessionCompactionEnded = "session.compaction.ended",
-        SessionCompactionFailed = "session.compaction.failed", SessionCompactionStarted = "session.compaction.started",
-        SessionCreated = "session.created", SessionDeleted = "session.deleted",
-        SessionExecutionFailed = "session.execution.failed",
+        PushUpdated = "push.updated", Reasoning = "reasoning", ReferenceUpdated = "reference.updated",
+        Remote = "remote", Retry = "retry", Running = "running", Score = "score", Sdk = "sdk",
+        ServerConnected = "server.connected", SessionAgentSelected = "session.agent.selected",
+        SessionArchived = "session.archived", SessionCompactionDelta = "session.compaction.delta",
+        SessionCompactionEnded = "session.compaction.ended", SessionCompactionFailed = "session.compaction.failed",
+        SessionCompactionStarted = "session.compaction.started", SessionCreated = "session.created",
+        SessionDeleted = "session.deleted", SessionExecutionFailed = "session.execution.failed",
         SessionExecutionInterrupted = "session.execution.interrupted",
         SessionExecutionStarted = "session.execution.started",
         SessionExecutionSucceeded = "session.execution.succeeded", SessionForked = "session.forked",

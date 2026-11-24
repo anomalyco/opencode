@@ -1,13 +1,6 @@
 export type JsonValue = null | boolean | number | string | Array<JsonValue> | { [key: string]: JsonValue }
 
-export type ServerInfo = {
-  version: string
-  pid: number
-  hostname?: string | undefined
-  urls: Array<string>
-  paths: { tmp: string }
-  capabilities?: { persistentPty?: boolean | undefined } | undefined
-}
+export type PushLevel = "all" | "attention" | "none"
 
 export type PairingCode = { code: string; expires_in: number }
 
@@ -368,6 +361,14 @@ export type MachineInfo = {
 
 export type MachineReach = { type: "url"; url: string }
 
+export type PushSettings = { paused: boolean; until?: number }
+
+export type PushDeviceID = string
+
+export type PushPlatform = "android" | "ios"
+
+export type PushRegistered = { publicKey: string }
+
 export type ReferenceGitSource = { type: "git"; repository: string; branch?: string }
 
 export type VcsBranch = { current?: string; default?: string }
@@ -400,6 +401,12 @@ export type ConfigModelReasoning =
   | { supported: true; toggle?: boolean; effort?: Array<string>; budget?: { min?: number; max?: number } }
 
 export type ConfigShellOption = { path: string; name: string; acceptable: boolean }
+
+export type PushCapability = { version: 1; relays: Array<string>; levels: Array<PushLevel> }
+
+export type PushDeviceSettings = { default: PushLevel }
+
+export type PushBell = { level: PushLevel; until?: number }
 
 export type LocationPublicRef = { directory: AbsolutePath }
 
@@ -1057,6 +1064,26 @@ export type ConfigModelCapabilities = {
   output?: Array<string>
   temperature?: boolean
   reasoning?: ConfigModelReasoning
+}
+
+export type ServerInfo = {
+  version: string
+  pid: number
+  hostname?: string | undefined
+  urls: Array<string>
+  paths: { tmp: string }
+  capabilities?: { persistentPty?: boolean | undefined; push?: PushCapability | undefined } | undefined
+}
+
+export type PushDevice = {
+  id: PushDeviceID
+  name: string
+  platform: PushPlatform
+  expiresAt: number
+  settings: PushDeviceSettings
+  paused: boolean
+  sessions: { [x: string]: PushBell }
+  time: { created: number; updated: number }
 }
 
 export type SessionMessageLocationSwitched = {
@@ -2054,6 +2081,15 @@ export type WebsearchUpdated = {
   data: {}
 }
 
+export type PushUpdated = {
+  id: EventID
+  created: number
+  metadata?: { [x: string]: any }
+  type: "push.updated"
+  location?: LocationRef
+  data: {}
+}
+
 export type ArtifactUpdated = {
   id: EventID
   created: number
@@ -2344,6 +2380,8 @@ export type AutomationTrigger =
 
 export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
 
+export type PushInfo = { settings: PushSettings; devices: Array<PushDevice>; sessions: { [x: string]: PushBell } }
+
 export type SessionInboxMove = {
   id: SessionMessageID
   sessionID: SessionID
@@ -2609,6 +2647,7 @@ export type ConfigEntry =
             | { path: string; description?: string; hidden?: boolean }
         }
         websearch?: false | { provider: "random" | WebSearchID }
+        push?: { relays?: Array<string> }
         plugins?: Array<string | { package: string; options?: { [x: string]: JsonValue } }>
         worktree?: ConfigWorktree
         warming?: boolean | { prompt?: string; interval?: "auto" | (string & {}); duration?: string }
@@ -2677,6 +2716,7 @@ export type ConfigEntry =
           opencode_api?: boolean
           mcp_skills?: boolean
           sqlite_fts?: boolean
+          push?: boolean
           video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
@@ -3072,6 +3112,7 @@ export type V2Event =
   | FormReplied
   | FormCancelled
   | WebsearchUpdated
+  | PushUpdated
   | ArtifactUpdated
   | SessionStatusUpdated
   | SessionIdle
@@ -3413,6 +3454,10 @@ export type MachineNotFoundError = {
 }
 export const isMachineNotFoundError = (value: unknown): value is MachineNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "MachineNotFoundError"
+
+export type PushNotFoundError = { readonly _tag: "PushNotFoundError"; readonly message: string }
+export const isPushNotFoundError = (value: unknown): value is PushNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PushNotFoundError"
 
 export type ShellNotFoundError = { readonly _tag: "ShellNotFoundError"; readonly id: string; readonly message: string }
 export const isShellNotFoundError = (value: unknown): value is ShellNotFoundError =>
@@ -4628,6 +4673,7 @@ export type EventSubscribeInput = {
         | "form.replied"
         | "form.cancelled"
         | "websearch.updated"
+        | "push.updated"
         | "artifact.updated"
         | "session.status"
         | "session.idle"
@@ -4890,6 +4936,24 @@ export type ExperimentalMachineAddOutput = { data: MachineInvite }["data"]
 export type ExperimentalMachineRemoveInput = { readonly name: string }
 
 export type ExperimentalMachineRemoveOutput = void
+
+export type ExperimentalPushGetOutput = PushInfo
+
+export type ExperimentalPushDeviceRegisterInput = {
+  readonly id: string
+  readonly callbackURL: string
+  readonly expiresAt: number
+  readonly publicKey: string
+  readonly platform: "android" | "ios"
+  readonly name: string
+  readonly settings?: { readonly default: "all" | "attention" | "none" } | undefined
+}
+
+export type ExperimentalPushDeviceRegisterOutput = PushRegistered
+
+export type ExperimentalPushDeviceRemoveInput = { readonly id: string }
+
+export type ExperimentalPushDeviceRemoveOutput = void
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 

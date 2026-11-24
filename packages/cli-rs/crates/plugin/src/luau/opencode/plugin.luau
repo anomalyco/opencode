@@ -1974,6 +1974,9 @@ export type ConfigInfoEncoded = {
     instructions: { string }?,
     references: { [string]: (string | ConfigReferenceGitEncoded | ConfigReferenceLocalEncoded) }?,
     websearch: (false | ConfigWebSearchInfoEncoded)?,
+    push: {
+        relays: { string }?,
+    }?,
     plugins: { (string | ConfigPluginEntryEncoded) }?,
     worktree: ConfigWorktree?,
     warming: (boolean | ConfigWarmingEncoded)?,
@@ -1994,6 +1997,7 @@ export type ConfigInfoEncoded = {
         project_overlay: boolean?,
         opencode_api: boolean?,
         sqlite_fts: boolean?,
+        push: boolean?,
         video_generate: (boolean | {
             model: (string | {
                 providerID: string,
@@ -3481,6 +3485,59 @@ export type PtyUpdated = _Event1<"pty.updated", {
     info: Pty,
 }>
 
+export type PushBell = {
+    level: PushLevel,
+    ["until"]: number?,
+}
+
+export type PushCapability = {
+    version: number,
+    relays: { string },
+    levels: { PushLevel },
+}
+
+export type PushDevice = {
+    id: PushDeviceID,
+    name: string,
+    platform: PushPlatform,
+    expiresAt: number,
+    settings: PushDeviceSettings,
+    paused: boolean,
+    sessions: { [string]: PushBell },
+    time: {
+        created: number,
+        updated: number,
+    },
+}
+
+--- A lowercase canonical UUID chosen by the phone
+export type PushDeviceID = string
+
+export type PushDeviceSettings = {
+    default: PushLevel,
+}
+
+export type PushInfo = {
+    settings: PushSettings,
+    devices: { PushDevice },
+    sessions: { [string]: PushBell },
+}
+
+export type PushLevel = ("all" | "attention" | "none")
+
+export type PushPlatform = ("android" | "ios")
+
+export type PushRegistered = {
+    publicKey: string,
+}
+
+export type PushSettings = {
+    paused: boolean,
+    ["until"]: number?,
+}
+
+export type PushUpdated = _Event1<"push.updated", any>
+
 export type ReferenceGitSource = {
     type: "git",
     repository: string,
@@ -3520,6 +3577,7 @@ export type ServerInfo = {
     },
     capabilities: {
         persistentPty: boolean?,
+        push: PushCapability?,
     }?,
 }
 
@@ -4518,7 +4576,7 @@ export type UsageLimitsMeter = {
     resetsAt: number,
 }
 
-export type V2Event = (LocationShutdown | ModelsDevRefreshed | CredentialUpdated | CredentialSwitched | IntegrationUpdated | ProviderUpdated | ModelUpdated | AgentUpdated | SessionCreated | SessionAgentSelected | SessionModelSelected | SessionMoved | SessionRenamed | SessionMetadataUpdated | SessionPermissions | SessionViewed | SessionArchived | SessionUnarchived | SessionUsageUpdated | SessionDeleted | SessionForked | SessionInboxDelivered | SessionInboxEnqueued | SessionInboxCancelled | SessionInboxDeliveryChanged | SessionExecutionStarted | SessionExecutionSucceeded | SessionExecutionFailed | SessionExecutionInterrupted | SessionInstructionsUpdated | SessionSynthetic | SessionSkillActivated | SessionShellStarted | SessionShellEnded | SessionStepStarted | SessionStepFirstToken | SessionStepStreamed | SessionStepEnded | SessionStepFailed | SessionTextStarted | SessionTextDelta | SessionTextEnded | SessionReasoningStarted | SessionReasoningDelta | SessionReasoningEnded | SessionToolInputStarted | SessionToolInputDelta | SessionToolInputEnded | SessionToolCalled | SessionToolProgress | SessionToolSuccess | SessionToolFailed | SessionRetryScheduled | SessionCompactionStarted | SessionCompactionDelta | SessionCompactionEnded | SessionCompactionFailed | SessionRevertStaged | SessionRevertCleared | SessionRevertCommitted | FilesystemChanged | ReferenceUpdated | PermissionAsked | PermissionReplied | PluginUpdated | ProjectUpdated | WorktreeUpdated | WorktreeResolved | CommandUpdated | ConfigUpdated | SkillUpdated | PtyCreated | PtyUpdated | PtyExited | PtyDeleted | PersistentPtyAdded | PersistentPtyRemoved | PersistentPtyUpdated | ShellCreated | ShellExited | ShellDeleted | ExperimentalJobUpdated | FormCreated | FormReplied | FormCancelled | WebsearchUpdated | ArtifactUpdated | SessionStatusUpdated | SessionIdle | TuiPromptAppend | TuiCommandExecute | TuiToastShow | TuiSessionSelect | InstallationUpdated | InstallationUpdateAvailable | VcsBranchUpdated | McpStatusChanged | McpResourcesChanged | ExperimentalMcpEvent | V2EventRpc | V2EventServerConnected)
+export type V2Event = (LocationShutdown | ModelsDevRefreshed | CredentialUpdated | CredentialSwitched | IntegrationUpdated | ProviderUpdated | ModelUpdated | AgentUpdated | SessionCreated | SessionAgentSelected | SessionModelSelected | SessionMoved | SessionRenamed | SessionMetadataUpdated | SessionPermissions | SessionViewed | SessionArchived | SessionUnarchived | SessionUsageUpdated | SessionDeleted | SessionForked | SessionInboxDelivered | SessionInboxEnqueued | SessionInboxCancelled | SessionInboxDeliveryChanged | SessionExecutionStarted | SessionExecutionSucceeded | SessionExecutionFailed | SessionExecutionInterrupted | SessionInstructionsUpdated | SessionSynthetic | SessionSkillActivated | SessionShellStarted | SessionShellEnded | SessionStepStarted | SessionStepFirstToken | SessionStepStreamed | SessionStepEnded | SessionStepFailed | SessionTextStarted | SessionTextDelta | SessionTextEnded | SessionReasoningStarted | SessionReasoningDelta | SessionReasoningEnded | SessionToolInputStarted | SessionToolInputDelta | SessionToolInputEnded | SessionToolCalled | SessionToolProgress | SessionToolSuccess | SessionToolFailed | SessionRetryScheduled | SessionCompactionStarted | SessionCompactionDelta | SessionCompactionEnded | SessionCompactionFailed | SessionRevertStaged | SessionRevertCleared | SessionRevertCommitted | FilesystemChanged | ReferenceUpdated | PermissionAsked | PermissionReplied | PluginUpdated | ProjectUpdated | WorktreeUpdated | WorktreeResolved | CommandUpdated | ConfigUpdated | SkillUpdated | PtyCreated | PtyUpdated | PtyExited | PtyDeleted | PersistentPtyAdded | PersistentPtyRemoved | PersistentPtyUpdated | ShellCreated | ShellExited | ShellDeleted | ExperimentalJobUpdated | FormCreated | FormReplied | FormCancelled | WebsearchUpdated | PushUpdated | ArtifactUpdated | SessionStatusUpdated | SessionIdle | TuiPromptAppend | TuiCommandExecute | TuiToastShow | TuiSessionSelect | InstallationUpdated | InstallationUpdateAvailable | VcsBranchUpdated | McpStatusChanged | McpResourcesChanged | ExperimentalMcpEvent | V2EventRpc | V2EventServerConnected)
 
 export type V2EventRpc = {
     id: EventID,
@@ -5001,7 +5059,7 @@ export type Client = {
     },
     event: {
         subscribe: (input: {
-            types: { (("location.shutdown" | "models-dev.refreshed" | "credential.updated" | "credential.switched" | "integration.updated" | "provider.updated" | "model.updated" | "agent.updated" | "session.created" | "session.agent.selected" | "session.model.selected" | "session.moved" | "session.renamed" | "session.metadata.updated" | "session.permissions" | "session.viewed" | "session.archived" | "session.unarchived" | "session.usage.updated" | "session.deleted" | "session.forked" | "session.inbox.delivered" | "session.inbox.enqueued" | "session.inbox.cancelled" | "session.inbox.delivery.changed" | "session.execution.started" | "session.execution.succeeded" | "session.execution.failed" | "session.execution.interrupted" | "session.instructions.updated" | "session.synthetic" | "session.skill.activated" | "session.shell.started" | "session.shell.ended" | "session.step.started" | "session.step.first-token" | "session.step.streamed" | "session.step.ended" | "session.step.failed" | "session.text.started" | "session.text.delta" | "session.text.ended" | "session.reasoning.started" | "session.reasoning.delta" | "session.reasoning.ended" | "session.tool.input.started" | "session.tool.input.delta" | "session.tool.input.ended" | "session.tool.called" | "session.tool.progress" | "session.tool.success" | "session.tool.failed" | "session.retry.scheduled" | "session.compaction.started" | "session.compaction.delta" | "session.compaction.ended" | "session.compaction.failed" | "session.revert.staged" | "session.revert.cleared" | "session.revert.committed" | "filesystem.changed" | "reference.updated" | "permission.asked" | "permission.replied" | "plugin.updated" | "project.updated" | "worktree.updated" | "worktree.resolved" | "command.updated" | "config.updated" | "skill.updated" | "pty.created" | "pty.updated" | "pty.exited" | "pty.deleted" | "persistent-pty.added" | "persistent-pty.removed" | "persistent-pty.updated" | "shell.created" | "shell.exited" | "shell.deleted" | "experimental.job.updated" | "form.created" | "form.replied" | "form.cancelled" | "websearch.updated" | "artifact.updated" | "session.status" | "session.idle" | "tui.prompt.append" | "tui.command.execute" | "tui.toast.show" | "tui.session.select" | "installation.updated" | "installation.update-available" | "vcs.branch.updated" | "mcp.status.changed" | "mcp.resources.changed" | "experimental.mcp.event") | string) }?,
+            types: { (("location.shutdown" | "models-dev.refreshed" | "credential.updated" | "credential.switched" | "integration.updated" | "provider.updated" | "model.updated" | "agent.updated" | "session.created" | "session.agent.selected" | "session.model.selected" | "session.moved" | "session.renamed" | "session.metadata.updated" | "session.permissions" | "session.viewed" | "session.archived" | "session.unarchived" | "session.usage.updated" | "session.deleted" | "session.forked" | "session.inbox.delivered" | "session.inbox.enqueued" | "session.inbox.cancelled" | "session.inbox.delivery.changed" | "session.execution.started" | "session.execution.succeeded" | "session.execution.failed" | "session.execution.interrupted" | "session.instructions.updated" | "session.synthetic" | "session.skill.activated" | "session.shell.started" | "session.shell.ended" | "session.step.started" | "session.step.first-token" | "session.step.streamed" | "session.step.ended" | "session.step.failed" | "session.text.started" | "session.text.delta" | "session.text.ended" | "session.reasoning.started" | "session.reasoning.delta" | "session.reasoning.ended" | "session.tool.input.started" | "session.tool.input.delta" | "session.tool.input.ended" | "session.tool.called" | "session.tool.progress" | "session.tool.success" | "session.tool.failed" | "session.retry.scheduled" | "session.compaction.started" | "session.compaction.delta" | "session.compaction.ended" | "session.compaction.failed" | "session.revert.staged" | "session.revert.cleared" | "session.revert.committed" | "filesystem.changed" | "reference.updated" | "permission.asked" | "permission.replied" | "plugin.updated" | "project.updated" | "worktree.updated" | "worktree.resolved" | "command.updated" | "config.updated" | "skill.updated" | "pty.created" | "pty.updated" | "pty.exited" | "pty.deleted" | "persistent-pty.added" | "persistent-pty.removed" | "persistent-pty.updated" | "shell.created" | "shell.exited" | "shell.deleted" | "experimental.job.updated" | "form.created" | "form.replied" | "form.cancelled" | "websearch.updated" | "push.updated" | "artifact.updated" | "session.status" | "session.idle" | "tui.prompt.append" | "tui.command.execute" | "tui.toast.show" | "tui.session.select" | "installation.updated" | "installation.update-available" | "vcs.branch.updated" | "mcp.status.changed" | "mcp.resources.changed" | "experimental.mcp.event") | string) }?,
         }?) -> (nil, string?),
     },
     experimental: {
@@ -5277,6 +5335,23 @@ export type Client = {
                 }?,
                 title: string?,
             }) -> (PersistentPtyInfo?, string?),
+        },
+        push: {
+            device: {
+                register: (input: {
+                    id: string,
+                    callbackURL: string,
+                    expiresAt: number,
+                    publicKey: string,
+                    platform: PushPlatform,
+                    name: string,
+                    settings: PushDeviceSettings?,
+                }) -> (PushRegistered?, string?),
+                remove: (input: {
+                    id: string,
+                }) -> (nil, string?),
+            },
+            get: (input: {}?) -> (PushInfo?, string?),
         },
         session: {
             export: (input: {

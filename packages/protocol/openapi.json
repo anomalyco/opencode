@@ -10581,6 +10581,7 @@
                     "form.replied",
                     "form.cancelled",
                     "websearch.updated",
+                    "push.updated",
                     "artifact.updated",
                     "session.status",
                     "session.idle",
@@ -10693,6 +10694,7 @@
                           "form.replied",
                           "form.cancelled",
                           "websearch.updated",
+                          "push.updated",
                           "artifact.updated",
                           "session.status",
                           "session.idle",
@@ -14306,6 +14308,181 @@
         },
         "description": "Forget a machine by name, closing any live link and revoking its key. Behind the machines flag. Experimental: may change without compatibility guarantees.",
         "summary": "Remove a machine"
+      }
+    },
+    "/api/experimental/push": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.get",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Push.Info",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Push.Info"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PushNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List the registered phones with their choices, bells and pauses, the server-wide pause and the shared session bells. Never returns callback URLs or keys. Behind the push flag. Experimental: may change without compatibility guarantees.",
+        "summary": "Get push settings"
+      }
+    },
+    "/api/experimental/push/device/{id}": {
+      "put": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.register",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Push.Registered",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Push.Registered"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PushNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Register or renew a phone's relay callback URL and public key, and answer with the server's public key for it. Keeps the phone's pause and session bells. Behind the push flag. Experimental: may change without compatibility guarantees.",
+        "summary": "Register a phone",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.Register"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.remove",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PushNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Stop sending notifications to a phone. Behind the push flag. Experimental: may change without compatibility guarantees.",
+        "summary": "Remove a phone"
       }
     },
     "/api/shell": {
@@ -17935,6 +18112,18 @@
               }
             ]
           },
+          "push": {
+            "type": "object",
+            "properties": {
+              "relays": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            },
+            "additionalProperties": false
+          },
           "plugins": {
             "type": "array",
             "items": {
@@ -18016,6 +18205,9 @@
                 "type": "boolean"
               },
               "sqlite_fts": {
+                "type": "boolean"
+              },
+              "push": {
                 "type": "boolean"
               },
               "video_generate": {
@@ -23993,6 +24185,210 @@
         "required": ["ticket", "expires_in"],
         "additionalProperties": false
       },
+      "Push.Bell": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "$ref": "#/components/schemas/Push.Level"
+          },
+          "until": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch"
+          }
+        },
+        "required": ["level"],
+        "additionalProperties": false
+      },
+      "Push.Capability": {
+        "type": "object",
+        "properties": {
+          "version": {
+            "type": "number",
+            "enum": [1]
+          },
+          "relays": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "levels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Push.Level"
+            }
+          }
+        },
+        "required": ["version", "relays", "levels"],
+        "additionalProperties": false
+      },
+      "Push.Device": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Push.DeviceID"
+          },
+          "name": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Push.Platform"
+          },
+          "expiresAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Push.DeviceSettings"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "sessions": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Push.Bell"
+            }
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Milliseconds since the Unix epoch"
+              },
+              "updated": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Milliseconds since the Unix epoch"
+              }
+            },
+            "required": ["created", "updated"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "name", "platform", "expiresAt", "settings", "paused", "sessions", "time"],
+        "additionalProperties": false
+      },
+      "Push.DeviceID": {
+        "type": "string",
+        "description": "A lowercase canonical UUID chosen by the phone"
+      },
+      "Push.DeviceSettings": {
+        "type": "object",
+        "properties": {
+          "default": {
+            "$ref": "#/components/schemas/Push.Level"
+          }
+        },
+        "required": ["default"],
+        "additionalProperties": false
+      },
+      "Push.Info": {
+        "type": "object",
+        "properties": {
+          "settings": {
+            "$ref": "#/components/schemas/Push.Settings"
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Push.Device"
+            }
+          },
+          "sessions": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Push.Bell"
+            }
+          }
+        },
+        "required": ["settings", "devices", "sessions"],
+        "additionalProperties": false
+      },
+      "Push.Level": {
+        "type": "string",
+        "enum": ["all", "attention", "none"]
+      },
+      "Push.Platform": {
+        "type": "string",
+        "enum": ["android", "ios"]
+      },
+      "Push.Register": {
+        "type": "object",
+        "properties": {
+          "callbackURL": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch"
+          },
+          "publicKey": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Push.Platform"
+          },
+          "name": {
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Push.DeviceSettings"
+          }
+        },
+        "required": ["callbackURL", "expiresAt", "publicKey", "platform", "name"],
+        "additionalProperties": false
+      },
+      "Push.Registered": {
+        "type": "object",
+        "properties": {
+          "publicKey": {
+            "type": "string"
+          }
+        },
+        "required": ["publicKey"],
+        "additionalProperties": false
+      },
+      "Push.Settings": {
+        "type": "object",
+        "properties": {
+          "paused": {
+            "type": "boolean"
+          },
+          "until": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch"
+          }
+        },
+        "required": ["paused"],
+        "additionalProperties": false
+      },
+      "PushNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["PushNotFoundError"]
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "message"],
+        "additionalProperties": false
+      },
       "Reference.GitSource": {
         "type": "object",
         "properties": {
@@ -24170,6 +24566,16 @@
                     "anyOf": [
                       {
                         "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "push": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Push.Capability"
                       },
                       {
                         "type": "null"
@@ -26981,6 +27387,9 @@
             "$ref": "#/components/schemas/websearch.updated"
           },
           {
+            "$ref": "#/components/schemas/push.updated"
+          },
+          {
             "$ref": "#/components/schemas/artifact.updated"
           },
           {
@@ -28694,6 +29103,34 @@
             },
             "required": ["info"],
             "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "push.updated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["push.updated"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "not": {
+              "type": "null"
+            }
           }
         },
         "required": ["id", "created", "type", "data"],

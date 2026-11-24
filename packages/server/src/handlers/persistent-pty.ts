@@ -23,6 +23,7 @@ import { makeAutomation } from "./automation"
 import { makeJob } from "./job"
 import { makeMachine, makeMachineLink } from "./machine"
 import { makeMediaGet } from "./media"
+import { makePush } from "./push"
 import { type Outbound, runPtySocket } from "./pty-socket"
 
 export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experimental", (handlers) =>
@@ -37,6 +38,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const automation = yield* makeAutomation
     const machine = yield* makeMachine
     const machineLink = yield* makeMachineLink
+    const push = yield* makePush
 
     return handlers
       .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
@@ -47,6 +49,9 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
       .handle("machine.list", () => machine.list())
       .handle("machine.add", (ctx) => machine.add(ctx.payload))
       .handle("machine.remove", (ctx) => machine.remove(ctx.params.name))
+      .handle("push.get", () => push.get())
+      .handle("push.device.register", (ctx) => push.register(ctx.params.id, ctx.payload))
+      .handle("push.device.remove", (ctx) => push.remove(ctx.params.id))
       .handle("artifacts.providers", (ctx) => artifact.providers(ctx.query, ctx.request))
       .handle("artifacts.list", (ctx) => artifact.list(ctx.query, ctx.request))
       .handle("artifacts.create", (ctx) => artifact.create(ctx.query, ctx.payload, ctx.request))

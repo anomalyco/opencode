@@ -280,6 +280,11 @@ import type {
   ExperimentalMachineAddOutput,
   ExperimentalMachineRemoveInput,
   ExperimentalMachineRemoveOutput,
+  ExperimentalPushGetOutput,
+  ExperimentalPushDeviceRegisterInput,
+  ExperimentalPushDeviceRegisterOutput,
+  ExperimentalPushDeviceRemoveInput,
+  ExperimentalPushDeviceRemoveOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1786,6 +1791,31 @@ const EndpointExperimentalMachineRemove =
       raw["machine.remove"]({ params: { name: input["name"] } }).pipe(Effect.mapError(mapClientError)),
     )
 
+const EndpointExperimentalPushGet = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalPushGetOutput>()(raw["push.get"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointExperimentalPushDeviceRegister =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceRegisterInput) =>
+    preserveEffect<ExperimentalPushDeviceRegisterOutput>()(
+      raw["push.device.register"]({
+        params: { id: input["id"] },
+        payload: {
+          callbackURL: input["callbackURL"],
+          expiresAt: input["expiresAt"],
+          publicKey: input["publicKey"],
+          platform: input["platform"],
+          name: input["name"],
+          settings: input["settings"],
+        },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalPushDeviceRemove =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceRemoveInput) =>
+    preserveEffect<ExperimentalPushDeviceRemoveOutput>()(
+      raw["push.device.remove"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   persistentPty: {
     read: EndpointExperimentalPersistentPtyRead(raw),
@@ -1820,6 +1850,13 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     list: EndpointExperimentalMachineList(raw),
     add: EndpointExperimentalMachineAdd(raw),
     remove: EndpointExperimentalMachineRemove(raw),
+  },
+  push: {
+    get: EndpointExperimentalPushGet(raw),
+    device: {
+      register: EndpointExperimentalPushDeviceRegister(raw),
+      remove: EndpointExperimentalPushDeviceRemove(raw),
+    },
   },
 })
 

@@ -286,6 +286,11 @@ import type {
   ExperimentalMachineAddOutput,
   ExperimentalMachineRemoveInput,
   ExperimentalMachineRemoveOutput,
+  ExperimentalPushGetOutput,
+  ExperimentalPushDeviceRegisterInput,
+  ExperimentalPushDeviceRegisterOutput,
+  ExperimentalPushDeviceRemoveInput,
+  ExperimentalPushDeviceRemoveOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1826,6 +1831,51 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ),
+      },
+      push: {
+        get: (requestOptions?: RequestOptions) =>
+          request<ExperimentalPushGetOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/push`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+        device: {
+          register: (input: ExperimentalPushDeviceRegisterInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalPushDeviceRegisterOutput>(
+              {
+                method: "PUT",
+                path: `/api/experimental/push/device/${encodeURIComponent(input.id)}`,
+                body: {
+                  callbackURL: input["callbackURL"],
+                  expiresAt: input["expiresAt"],
+                  publicKey: input["publicKey"],
+                  platform: input["platform"],
+                  name: input["name"],
+                  settings: input["settings"],
+                },
+                successStatus: 200,
+                declaredStatuses: [400, 401, 404],
+                empty: false,
+              },
+              requestOptions,
+            ),
+          remove: (input: ExperimentalPushDeviceRemoveInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalPushDeviceRemoveOutput>(
+              {
+                method: "DELETE",
+                path: `/api/experimental/push/device/${encodeURIComponent(input.id)}`,
+                successStatus: 204,
+                declaredStatuses: [400, 401, 404],
+                empty: true,
+              },
+              requestOptions,
+            ),
+        },
       },
       migration: {
         v1: {

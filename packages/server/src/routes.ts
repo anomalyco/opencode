@@ -41,6 +41,7 @@ import { Automation } from "@opencode/core/automation"
 import { PluginUpdate } from "@opencode/core/plugin/update"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { WellKnown } from "@opencode/core/wellknown"
+import { PushList } from "@opencode/core/push/list"
 import { Workspace } from "@opencode/core/workspace"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { FileWatch } from "@opencode/core/filesystem/file-watch"
@@ -107,6 +108,7 @@ const applicationServiceNodes = [
   // The home's key, which the link's handshake signs with.
   Identity.node,
   FileWatch.node,
+  PushList.node,
 ] as const
 const applicationServices = LayerNode.group(applicationServiceNodes)
 

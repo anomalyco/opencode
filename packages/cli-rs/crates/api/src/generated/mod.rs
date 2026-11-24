@@ -7,4 +7,4 @@ pub use opencode_api_types::types;
 pub use types::*;
 
 /// Endpoints in the generated client.
-pub const ENDPOINTS: usize = 173;
+pub const ENDPOINTS: usize = 176;

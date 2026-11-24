@@ -191,6 +191,15 @@ impl Client {
     );
     endpoint!(" `POST /api/experimental/machine` (`machine.add`)", experimental_machine_add, experimental_machine_add_call, data, ExperimentalMachineAddOutput, input: ExperimentalMachineAddInput);
     endpoint!(" `DELETE /api/experimental/machine/:name` (`machine.remove`)", experimental_machine_remove, experimental_machine_remove_call, empty, (), input: ExperimentalMachineRemoveInput);
+    endpoint!(
+        " `GET /api/experimental/push` (`push.get`)",
+        experimental_push_get,
+        experimental_push_get_call,
+        json,
+        ExperimentalPushGetOutput
+    );
+    endpoint!(" `PUT /api/experimental/push/device/:id` (`push.device.register`)", experimental_push_device_register, experimental_push_device_register_call, json, ExperimentalPushDeviceRegisterOutput, input: ExperimentalPushDeviceRegisterInput);
+    endpoint!(" `DELETE /api/experimental/push/device/:id` (`push.device.remove`)", experimental_push_device_remove, experimental_push_device_remove_call, empty, (), input: ExperimentalPushDeviceRemoveInput);
     endpoint!(" `GET /api/shell` (`list`)", shell_list, shell_list_call, json, ShellListOutput, input: ShellListInput);
     endpoint!(" `POST /api/shell` (`create`)", shell_create, shell_create_call, json, ShellCreateOutput, input: ShellCreateInput);
     endpoint!(" `GET /api/shell/:id` (`get`)", shell_get, shell_get_call, json, ShellGetOutput, input: ShellGetInput);

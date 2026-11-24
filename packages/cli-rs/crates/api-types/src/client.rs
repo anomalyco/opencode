@@ -1784,6 +1784,36 @@ pub fn experimental_machine_remove(input: &ExperimentalMachineRemoveInput) -> Ca
     call
 }
 
+/// `GET /api/experimental/push` (`push.get`)
+pub fn experimental_push_get() -> Call<ExperimentalPushGetOutput> {
+    Call::new("GET", "/api/experimental/push".to_owned(), Reply::Json, 200, &[400, 401, 404])
+}
+
+/// `PUT /api/experimental/push/device/:id` (`push.device.register`)
+pub fn experimental_push_device_register(
+    input: &ExperimentalPushDeviceRegisterInput,
+) -> Call<ExperimentalPushDeviceRegisterOutput> {
+    let mut call = Call::new("PUT", String::new(), Reply::Json, 200, &[400, 401, 404]);
+    call.path = format!("/api/experimental/push/device/{}", call.param(&input.id));
+    call.object();
+    call.field("callbackURL", &input.callback_url);
+    call.field("expiresAt", &input.expires_at);
+    call.field("publicKey", &input.public_key);
+    call.field("platform", &input.platform);
+    call.field("name", &input.name);
+    if let Some(value) = &input.settings {
+        call.field("settings", value);
+    }
+    call
+}
+
+/// `DELETE /api/experimental/push/device/:id` (`push.device.remove`)
+pub fn experimental_push_device_remove(input: &ExperimentalPushDeviceRemoveInput) -> Call<()> {
+    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401, 404]);
+    call.path = format!("/api/experimental/push/device/{}", call.param(&input.id));
+    call
+}
+
 /// `GET /api/shell` (`list`)
 pub fn shell_list(input: &ShellListInput) -> Call<ShellListOutput> {
     let mut call = Call::new("GET", "/api/shell".to_owned(), Reply::Json, 200, &[400, 401, 404]);
@@ -2981,6 +3011,22 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
         })()),
         "experimental.machine.remove" => Some((|| {
             Ok(experimental_machine_remove(&ExperimentalMachineRemoveInput { name: field(input, "name")? }).cast())
+        })()),
+        "experimental.push.get" => Some((|| Ok(experimental_push_get().cast()))()),
+        "experimental.push.device.register" => Some((|| {
+            Ok(experimental_push_device_register(&ExperimentalPushDeviceRegisterInput {
+                id: field(input, "id")?,
+                callback_url: field(input, "callbackURL")?,
+                expires_at: field(input, "expiresAt")?,
+                public_key: field(input, "publicKey")?,
+                platform: field(input, "platform")?,
+                name: field(input, "name")?,
+                settings: field(input, "settings")?,
+            })
+            .cast())
+        })()),
+        "experimental.push.device.remove" => Some((|| {
+            Ok(experimental_push_device_remove(&ExperimentalPushDeviceRemoveInput { id: field(input, "id")? }).cast())
         })()),
         "shell.list" => Some((|| Ok(shell_list(&ShellListInput { location: field(input, "location")? }).cast()))()),
         "shell.create" => Some((|| {

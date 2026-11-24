@@ -1,0 +1,33 @@
+export * as PushCrypto from "./crypto.js"
+
+import { createECDH, hkdfSync, type ECDH } from "node:crypto"
+import { Effect, Option } from "effect"
+
+export const context = "OpenCode mobile notifications v2"
+
+export interface Agreement {
+  readonly serverKey: string
+  readonly secret: string
+}
+
+/** Works out the key shared with a phone, or nothing when its public key is not a P-256 point. */
+export const agree = (server: ECDH, phoneKey: string, id: string) => {
+  const phone = Buffer.from(phoneKey, "base64")
+  if (phone.toString("base64") !== phoneKey) return Effect.succeed(Option.none<Agreement>())
+  if (phone.length !== 65 || phone[0] !== 4) return Effect.succeed(Option.none<Agreement>())
+  return Effect.try(() => server.computeSecret(phone)).pipe(
+    Effect.map((shared) =>
+      Option.some<Agreement>({
+        serverKey: server.getPublicKey("base64"),
+        secret: Buffer.from(hkdfSync("sha256", shared, Buffer.from(id, "utf8"), context, 32)).toString("base64"),
+      }),
+    ),
+    Effect.orElseSucceed(() => Option.none<Agreement>()),
+  )
+}
+
+export const newServerKey = () => {
+  const server = createECDH("prime256v1")
+  server.generateKeys()
+  return server
+}

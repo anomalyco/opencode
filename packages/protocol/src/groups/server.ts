@@ -1,4 +1,5 @@
 import { Schema } from "effect"
+import { Push } from "@opencode/schema/push"
 import { HttpApiEndpoint, HttpApiGroup, OpenApi } from "effect/http-api"
 import { UnauthorizedError } from "../errors.js"
 
@@ -16,6 +17,7 @@ export const ServerInfo = Schema.Struct({
   capabilities: Schema.optional(
     Schema.Struct({
       persistentPty: Schema.optional(Schema.Boolean),
+      push: Schema.optional(Push.Capability),
     }),
   ),
 }).annotate({ identifier: "ServerInfo" })

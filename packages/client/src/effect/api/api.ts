@@ -53,7 +53,18 @@ export type ServerInfoOutput = {
   readonly hostname?: string | undefined
   readonly urls: ReadonlyArray<string>
   readonly paths: { readonly tmp: string }
-  readonly capabilities?: { readonly persistentPty?: boolean | undefined } | undefined
+  readonly capabilities?:
+    | {
+        readonly persistentPty?: boolean | undefined
+        readonly push?:
+          | {
+              readonly version: 1
+              readonly relays: ReadonlyArray<string>
+              readonly levels: ReadonlyArray<"all" | "attention" | "none">
+            }
+          | undefined
+      }
+    | undefined
 }
 export type ServerInfoOperation<E = never> = () => Effect.Effect<ServerInfoOutput, E>
 
@@ -2182,6 +2193,7 @@ export type EventSubscribeInput = {
         | "form.replied"
         | "form.cancelled"
         | "websearch.updated"
+        | "push.updated"
         | "artifact.updated"
         | "session.status"
         | "session.idle"
@@ -2598,6 +2610,46 @@ export type ExperimentalMachineRemoveOperation<E = never> = (
   input: ExperimentalMachineRemoveInput,
 ) => Effect.Effect<ExperimentalMachineRemoveOutput, E>
 
+export type ExperimentalPushGetOutput = {
+  readonly settings: { readonly paused: boolean; readonly until?: number | undefined }
+  readonly devices: ReadonlyArray<{
+    readonly id: string
+    readonly name: string
+    readonly platform: "android" | "ios"
+    readonly expiresAt: number
+    readonly settings: { readonly default: "all" | "attention" | "none" }
+    readonly paused: boolean
+    readonly sessions: {
+      readonly [x: string]: { readonly level: "all" | "attention" | "none"; readonly until?: number | undefined }
+    }
+    readonly time: { readonly created: number; readonly updated: number }
+  }>
+  readonly sessions: {
+    readonly [x: string]: { readonly level: "all" | "attention" | "none"; readonly until?: number | undefined }
+  }
+}
+export type ExperimentalPushGetOperation<E = never> = () => Effect.Effect<ExperimentalPushGetOutput, E>
+
+export type ExperimentalPushDeviceRegisterInput = {
+  readonly id: string
+  readonly callbackURL: string
+  readonly expiresAt: number
+  readonly publicKey: string
+  readonly platform: "android" | "ios"
+  readonly name: string
+  readonly settings?: { readonly default: "all" | "attention" | "none" } | undefined
+}
+export type ExperimentalPushDeviceRegisterOutput = { readonly publicKey: string }
+export type ExperimentalPushDeviceRegisterOperation<E = never> = (
+  input: ExperimentalPushDeviceRegisterInput,
+) => Effect.Effect<ExperimentalPushDeviceRegisterOutput, E>
+
+export type ExperimentalPushDeviceRemoveInput = { readonly id: string }
+export type ExperimentalPushDeviceRemoveOutput = void
+export type ExperimentalPushDeviceRemoveOperation<E = never> = (
+  input: ExperimentalPushDeviceRemoveInput,
+) => Effect.Effect<ExperimentalPushDeviceRemoveOutput, E>
+
 export interface ExperimentalApi<E = never> {
   readonly persistentPty: {
     readonly read: ExperimentalPersistentPtyReadOperation<E>
@@ -2632,6 +2684,13 @@ export interface ExperimentalApi<E = never> {
     readonly list: ExperimentalMachineListOperation<E>
     readonly add: ExperimentalMachineAddOperation<E>
     readonly remove: ExperimentalMachineRemoveOperation<E>
+  }
+  readonly push: {
+    readonly get: ExperimentalPushGetOperation<E>
+    readonly device: {
+      readonly register: ExperimentalPushDeviceRegisterOperation<E>
+      readonly remove: ExperimentalPushDeviceRemoveOperation<E>
+    }
   }
 }
 
