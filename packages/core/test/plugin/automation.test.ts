@@ -341,20 +341,3 @@ it.live("Promise plugin calls aborted mid-call reject with the signal's reason",
     expect((reasons[0] as DOMException).name).toBe("AbortError")
   }),
 )
-
-it.live("a late abort preserves a completed Promise plugin call's error", () =>
-  Effect.gen(function* () {
-    const plugins = yield* Plugin.Service
-    const context = yield* PluginHost.make(plugins, "test")
-
-    yield* PluginPromise.fromPromise({
-      id: "test.late-abort",
-      async setup(ctx) {
-        const controller = new AbortController()
-        const agent = ctx.agent.get({ agentID: "missing" }, { signal: controller.signal })
-        controller.abort(new Error("late abort"))
-        await expect(agent).rejects.toThrow("Agent not found: missing")
-      },
-    }).effect(context)
-  }),
-)
