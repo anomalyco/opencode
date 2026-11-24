@@ -12,7 +12,6 @@ import { Shell } from "../shell.js"
 import { ShellPermissions } from "../shell/permissions.js"
 import { ShellSelect } from "../shell/select.js"
 import { type Invocation, matchesAuthor } from "./author.js"
-import { AutomationCode } from "./code.js"
 
 export const authorize = Effect.fnUntraced(function* (
   owner: SessionSchema.Info,
@@ -21,7 +20,7 @@ export const authorize = Effect.fnUntraced(function* (
   action: Automation.ShellAction,
   invocation?: Invocation,
 ) {
-  if (invocation || (yield* AutomationCode.FromPlugin)) yield* AutomationCode.awaitPlugins
+  if (invocation) yield* Plugin.awaitActivation
   const agents = yield* Agent.Service
   const agent = yield* agents.select(owner.agent)
   if (invocation && !matchesAuthor(owner, agent.info, invocation))

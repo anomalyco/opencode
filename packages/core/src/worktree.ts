@@ -217,23 +217,20 @@ const layer = Layer.effect(
         worktreeDirectory = AbsolutePath.make(path.join(directory, `${name}-${suffix}`))
       }
 
-      const result = yield* Effect.uninterruptibleMask((restore) =>
-        Effect.gen(function* () {
-          const checkout = selected
-            .create({
-              directory: worktreeDirectory,
-              sourceDirectory,
-              branch: input.branch,
-            })
-            .pipe(Effect.mapError((error) => operationError(selected.id, "create", error)))
-          // Git can write the checkout before returning. Plugin strategies must still receive cancellation.
-          const created = yield* selected === settings.builtinGit ? checkout : restore(checkout)
-          const directory = yield* canonical(fs, created.directory)
-          yield* changed(
-            input.projectID,
-            yield* ops.create(input.projectID, { directory, strategy: selected.id, replace: true }),
-          )
-          return { directory }
+      const created = yield* selected
+        .create({
+          directory: worktreeDirectory,
+          sourceDirectory,
+          branch: input.branch,
+        })
+        .pipe(Effect.mapError((error) => operationError(selected.id, "create", error)))
+      const result = { directory: yield* canonical(fs, created.directory) }
+      yield* changed(
+        input.projectID,
+        yield* ops.create(input.projectID, {
+          directory: result.directory,
+          strategy: selected.id,
+          replace: true,
         }),
       )
       const command = row.commands?.start?.trim()
