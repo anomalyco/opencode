@@ -15,7 +15,7 @@ fn command(args: &[&str]) -> String {
     String::from_utf8(output.stdout).unwrap().trim().to_owned()
 }
 
-#[tokio::test(flavor = "multi_thread")]
+#[tokio::test(flavor = "local")]
 async fn live_store_reads_locations_and_resolves_a_session() {
     if std::env::var("OPENCODE_LIVE").as_deref() != Ok("1") {
         return;
@@ -23,7 +23,7 @@ async fn live_store_reads_locations_and_resolves_a_session() {
     let server = command(&["service", "status"]);
     let client = Client::new(&server).unwrap().auth(Auth::password(command(&["service", "get", "password"])));
     let directory = std::env::current_dir().unwrap().display().to_string();
-    let data = Data::new(client.clone(), Options { directory, ..Default::default() });
+    let data = Data::local(client.clone(), Options { directory, ..Default::default() });
     data.on_error(|error| eprintln!("live: refresh failed: {error}"));
     let (connection, _task) = opencode_store::connection::connect(&data, events::Options::default());
     let mut state = connection.watch();
@@ -61,15 +61,15 @@ async fn live_store_reads_locations_and_resolves_a_session() {
         let count = |items: Option<usize>| items.map_or("-".to_owned(), |n| n.to_string());
         println!(
             "live: agents {} commands {} integrations {} mcp {} resources {} models {} providers {} references {} skills {} shells {} global forms {}",
-            count(location.agent.as_ref().map(Vec::len)),
-            count(location.command.as_ref().map(Vec::len)),
-            count(location.integration.as_ref().map(Vec::len)),
-            count(location.mcp_server.as_ref().map(Vec::len)),
-            count(location.mcp_resource.as_ref().map(Vec::len)),
-            count(location.model.as_ref().map(Vec::len)),
-            count(location.provider.as_ref().map(Vec::len)),
-            count(location.reference.as_ref().map(Vec::len)),
-            count(location.skill.as_ref().map(Vec::len)),
+            count(location.agent.as_deref().map(<[_]>::len)),
+            count(location.command.as_deref().map(<[_]>::len)),
+            count(location.integration.as_deref().map(<[_]>::len)),
+            count(location.mcp_server.as_deref().map(<[_]>::len)),
+            count(location.mcp_resource.as_deref().map(<[_]>::len)),
+            count(location.model.as_deref().map(<[_]>::len)),
+            count(location.provider.as_deref().map(<[_]>::len)),
+            count(location.reference.as_deref().map(<[_]>::len)),
+            count(location.skill.as_deref().map(<[_]>::len)),
             state.shells(None).len(),
             count(
                 state

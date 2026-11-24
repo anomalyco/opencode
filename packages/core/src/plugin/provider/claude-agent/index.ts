@@ -9,9 +9,8 @@ import { ClaudeInstructions } from "./instructions.js"
 import { ClaudeIntegration } from "./integration.js"
 import { ClaudeProvider } from "./provider.js"
 import { ClaudeSessionHooks } from "./session.js"
+import { ClaudeWebSearchProvider } from "./websearch.js"
 import { Environment } from "../../../environment/index.js"
-import { EnvironmentUnavailable } from "../../../environment/unavailable.js"
-import { Location } from "../../../location.js"
 import type { PluginInternal } from "../../internal.js"
 
 export const ID = "opencode.provider.claude-agent"
@@ -24,9 +23,8 @@ export const make = (io: ClaudeIO.Interface, registry = ClaudeSessions.registry(
     effect: Effect.fn("ClaudeAgent.Plugin")(function* (ctx) {
       // Claude Agent runs the local `claude` binary, so skip it where opencode cannot start local processes.
       const environment = yield* Effect.serviceOption(Environment.Service)
-      const location = yield* Effect.serviceOption(Location.Service)
-      if (Option.isSome(location) && location.value.workspaceID !== undefined) return
-      if (Option.isSome(environment) && environment.value.spawner === EnvironmentUnavailable.spawner) return
+      const remote = Option.isSome(environment) && !environment.value.hostsServer
+      if (remote) return
 
       const status = yield* ClaudeStatus.make(
         io,
@@ -58,6 +56,7 @@ export const make = (io: ClaudeIO.Interface, registry = ClaudeSessions.registry(
       yield* ClaudeAISDK.register(ctx, sessions)
       yield* ClaudeSessionHooks.register(ctx)
       yield* ClaudeInstructions.register(ctx)
+      yield* ClaudeWebSearchProvider.register(ctx, io)
     }),
   } satisfies PluginInternal.InternalPlugin)
 

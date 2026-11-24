@@ -3325,17 +3325,24 @@ fn a_fetch_the_host_does_not_take_fails_over_the_pipe() {
     let lines = || std::fs::read_to_string(&log).unwrap_or_default();
     h.tui.keymap.dispatch("chain.fan", None);
     // The fan fills the queue of effects to its bound, where a fetch finds no room: wait for the bound itself, not for
-    // a number of frames (a frame runs a budget, and the chain adds a little back as it runs).
-    let begun = Instant::now();
-    while opencode_plugin::effects_waiting() < opencode_plugin::EFFECTS_BOUND {
-        assert!(
-            begun.elapsed() < Duration::from_secs(30),
-            "{} effects wait, under the queue's bound of {}",
-            opencode_plugin::effects_waiting(),
-            opencode_plugin::EFFECTS_BOUND
-        );
+    // a number of frames or a time. A frame runs a budget and the chain adds two back for each effect it runs, so a
+    // frame at a time reaches the bound; a frame that adds nothing means the fan stopped. A loaded machine only makes
+    // each frame slower (pipe-flakes: the 30 s deadline raced 15 frames of 2 s under the lane's load).
+    let mut waiting = opencode_plugin::effects_waiting();
+    for _ in 0..(opencode_plugin::EFFECTS_BOUND.div_ceil(opencode_plugin::FRAME_EFFECTS) + 2) {
+        if waiting >= opencode_plugin::EFFECTS_BOUND {
+            break;
+        }
         h.app.render();
+        let after = opencode_plugin::effects_waiting();
+        assert!(after > waiting, "{after} effects wait after a frame began with {waiting}");
+        waiting = after;
     }
+    assert!(
+        waiting >= opencode_plugin::EFFECTS_BOUND,
+        "{waiting} effects wait, under the queue's bound of {}",
+        opencode_plugin::EFFECTS_BOUND
+    );
     h.tui.keymap.dispatch("refused.fetch", None);
     until(h, "the refused fetch ended", || lines().ends_with('\n'));
     assert_eq!(lines(), "Err\n");

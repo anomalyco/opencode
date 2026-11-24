@@ -92,7 +92,7 @@ impl Catalogs {
     }
 
     async fn follow(self: &Arc<Self>, connected: &watch::Sender<bool>) {
-        let mut stream = subscribe(&self.client);
+        let mut stream = subscribe::<Value>(&self.client);
         while let Some(event) = stream.next().await {
             let event = match event {
                 Ok(event) => event,

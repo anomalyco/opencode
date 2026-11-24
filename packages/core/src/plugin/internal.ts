@@ -87,6 +87,7 @@ import { GlobTool } from "../tool/plugin/glob.js"
 import { GrepTool } from "../tool/plugin/grep.js"
 import { ImageGenerateTool } from "../tool/plugin/image-generate.js"
 import { VideoGenerateTool } from "../tool/plugin/video-generate.js"
+import { CdTool } from "../tool/plugin/cd.js"
 import { MachineTools } from "../tool/plugin/machine.js"
 import { McpEventTools } from "../tool/plugin/mcp-events.js"
 import { McpResourceTools } from "../tool/plugin/mcp-resource.js"
@@ -95,6 +96,7 @@ import { QuestionTool } from "../tool/plugin/question.js"
 import { ReadTool } from "../tool/plugin/read.js"
 import { ArtifactTools } from "../tool/plugin/artifact.js"
 import { AutomationTools } from "../tool/plugin/automation.js"
+import { SessionInterruptTool } from "../tool/plugin/session-interrupt.js"
 import { SessionSearchTools } from "../tool/plugin/session-search.js"
 import { ShellTool } from "../tool/plugin/shell.js"
 import { SkillTool } from "../tool/plugin/skill.js"
@@ -295,7 +297,9 @@ const pre = [
   ReadTool.Plugin,
   ArtifactTools.Plugin,
   AutomationTools.Plugin,
+  CdTool.Plugin,
   MachineTools.Plugin,
+  SessionInterruptTool.Plugin,
   SessionSearchTools.Plugin,
   ShellTool.Plugin,
   SkillTool.Plugin,

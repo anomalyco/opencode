@@ -49,7 +49,7 @@ export class Types {
   private readonly taggedKeys = new Map<string, string>()
   // The fields of every generated struct, the target of every `pub type` alias, the string newtypes, and
   // `Copy` scalars with their aliases (`EventSeq`), so a tagged enum can read the fields its members share.
-  private readonly structs = new Map<string, Array<{ key: string; ident: string; type: string }>>()
+  private readonly structs = new Map<string, Array<{ key: string; ident: string; type: string; attrs: Array<string> }>>()
   private readonly aliases = new Map<string, string>()
   private readonly strings = new Set<string>()
   private readonly scalars = new Map<string, string>([
@@ -59,6 +59,11 @@ export class Types {
   ])
   // The common-field accessors of every generated tagged enum, so an outer enum can delegate to an inner one.
   private readonly accessors = new Map<string, Map<string, Accessor>>()
+  // Where each struct's item is, each tagged enum's member types and the literals of the tag types, so a union can
+  // retype its members' tags.
+  private readonly structItems = new Map<string, number>()
+  private readonly members = new Map<string, Array<string>>()
+  private readonly tags = new Set<string>()
 
   constructor(private readonly references: SchemaRepresentation.References) {}
 
@@ -211,7 +216,7 @@ export class Types {
       return `IndexMap<String, ${value}>`
     }
     const used = new Set<string>()
-    const record: Array<{ key: string; ident: string; type: string }> = []
+    const record: Array<{ key: string; ident: string; type: string; attrs: Array<string> }> = []
     const fields = r.propertySignatures.flatMap((property) => {
       const key = String(property.name)
       const field = this.field(property.type, property.isOptional, `${hint}${pascal(key)}`)
@@ -219,9 +224,11 @@ export class Types {
       let ident = snake(key)
       for (let i = 2; used.has(ident); i++) ident = `${snake(key)}_${i}`
       used.add(ident)
-      record.push({ key, ident, type: field.type })
       const plain = ident.replace(/^r#/, "")
-      const attrs = [plain === key ? undefined : `rename = ${JSON.stringify(key)}`, ...field.attrs].filter(Boolean)
+      const attrs = [plain === key ? undefined : `rename = ${JSON.stringify(key)}`, ...field.attrs].filter(
+        (attr) => attr !== undefined,
+      )
+      record.push({ key, ident, type: field.type, attrs })
       const doc = docOf(property.annotations)
       return [
         `${doc}${attrs.length ? `    #[serde(${attrs.join(", ")})]\n` : ""}    pub ${ident}: ${field.type},`,
@@ -237,6 +244,7 @@ export class Types {
     const defaults = types.every((type) => this.isDefault(type) || type === "IndexMap")
     if (defaults) this.defaultable.add(name)
     this.structs.set(name, record)
+    this.structItems.set(name, this.items.length)
     this.items.push(
       `#[derive(Debug, Clone, PartialEq, Serialize, Deserialize${defaults ? ", Default" : ""})]\npub struct ${name} {\n${lines.join("\n")}\n}`,
     )
@@ -483,6 +491,12 @@ export class Types {
       if (member._tag === "Reference") return this.type(member, `${name}${variants[index]}`)
       return this.objects(resolved as Objects, this.name(`${name}${variants[index]}`), `${name}${variants[index]}`)
     })
+    tag.values.forEach((value, index) => {
+      const literal = value.exact[0]
+      if (value.exact.length === 1 && value.prefixes.length === 0 && typeof literal === "string")
+        this.staticTag(types[index], tag.key, literal)
+    })
+    this.members.set(name, types)
     const kind = typeof tag.values.find((value) => value.exact.length > 0)?.exact[0]
     const access = kind === "boolean" ? "as_bool" : "as_str"
     const arms = tag.values.flatMap((value, index) => [
@@ -524,9 +538,86 @@ export class Types {
     const tagMethod = methods.length === 0 ? "" : `\n\nimpl ${name} {\n${methods.join("\n\n")}\n}`
     const doc = ref === undefined ? "" : `/// \`${ref}\`, tagged by \`${tag.key}\`.\n`
     this.items.push(
-      `${doc}#[derive(Debug, Clone, PartialEq, Serialize)]\n#[serde(untagged)]\npub enum ${name} {\n${variants.map((variant, index) => `    ${variant}(${types[index]}),`).join("\n")}\n    /// A member this client does not know, kept as it arrived.\n    Unknown(serde_json::Value),\n}\n\nimpl<'de> Deserialize<'de> for ${name} {\n    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {\n        crate::de::union(deserializer, Self::from_raw)\n    }\n}\n\nimpl ${name} {\n    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {\n        match raw.field(${JSON.stringify(tag.key)}).${access}() {\n${ordered.join("\n")}\n            _ => raw.unknown().map(Self::Unknown),\n        }\n    }\n}${tagMethod}`,
+      `${doc}#[derive(Debug, Clone, PartialEq, Serialize)]\n#[serde(untagged)]\npub enum ${name} {\n${variants.map((variant, index) => `    ${variant}(${types[index]}),`).join("\n")}\n    /// A member this client does not know, kept as it arrived.\n    Unknown(serde_json::Value),\n}\n\nimpl<'de> Deserialize<'de> for ${name} {\n    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {\n        crate::de::union(deserializer, Self::from_raw)\n    }\n}\n\nimpl ${name} {\n    pub fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {\n        match raw.field(${JSON.stringify(tag.key)}).${access}() {\n${ordered.join("\n")}\n            _ => raw.unknown().map(Self::Unknown),\n        }\n    }\n}${tagMethod}`,
     )
+    if (name === "V2Event") this.items.push(eventKind(variants, tag.values))
     return name
+  }
+
+  /**
+   * Retypes the `key` field of a member struct, or of every struct of a nested union, from `String` to the zero-sized
+   * type of its one literal. The union has read the tag already, so the member keeps it without an allocation.
+   */
+  private staticTag(type: string, key: string, literal: string) {
+    const nested = this.members.get(type)
+    if (nested !== undefined) return nested.forEach((member) => this.staticTag(member, key, literal))
+    const field = this.structs.get(type)?.find((field) => field.key === key)
+    if (field === undefined || field.type !== "String") return
+    // Two literals with one name would define the type twice, which the Rust build rejects.
+    this.tags.add(literal)
+    field.type = `tag::${pascal(literal)}`
+    this.strings.add(field.type)
+    const at = this.structItems.get(type)!
+    this.items[at] = this.items[at].replace(`    pub ${field.ident}: String,`, `    pub ${field.ident}: ${field.type},`)
+  }
+
+  /** The tag types' module: each serializes as its literal and decodes from any string. */
+  tagModule() {
+    const lines = [...this.tags]
+      .map((literal) => `${pascal(literal)} = ${JSON.stringify(literal)},`)
+      .sort()
+      .reduce<Array<string>>((lines, pair) => {
+        if (lines.length > 0 && lines[lines.length - 1].length + pair.length < 112) lines[lines.length - 1] += ` ${pair}`
+        else lines.push(pair)
+        return lines
+      }, [])
+    return `/// Union members' tags. Each serializes as its literal and decodes from any string, since the union has picked the member.\npub mod tag {\n    tags! {\n${lines.map((line) => `        ${line}`).join("\n")}\n    }\n}`
+  }
+
+  /**
+   * Emits a view of each struct in `names` that decodes what the struct decodes, field for field, but borrows its
+   * strings from the JSON (`de::Str`), and of each struct with strings it reaches through a field. For events that
+   * are applied and dropped, whose strings nothing keeps.
+   */
+  views(names: Array<string>) {
+    const made = new Map<string, string | undefined>()
+    const fieldView = (type: string): string => {
+      const option = /^Option<(.*)>$/.exec(type)
+      if (option !== null) return `Option<${fieldView(option[1])}>`
+      if (type === "String" || (this.strings.has(type) && !type.startsWith("tag::"))) return "crate::de::Str<'a>"
+      const struct = this.aliases.get(type) ?? type
+      if (!this.structs.has(struct)) return type
+      const view = structView(struct)
+      return view === undefined ? type : `${view}<'a>`
+    }
+    const structView = (struct: string): string | undefined => {
+      if (made.has(struct)) return made.get(struct)
+      made.set(struct, undefined)
+      const fields = this.structs.get(struct)!.map((field) => ({ ...field, view: fieldView(field.type) }))
+      if (fields.every((field) => !field.view.includes("'a"))) return undefined
+      const name = this.name(`${struct}View`)
+      made.set(struct, name)
+      const lines = fields.map((field) => {
+        const attrs = [
+          ...(field.view.includes("'a") ? ["borrow"] : []),
+          ...field.attrs.filter((attr) => !/^(serialize_with|skip_serializing_if)\b/.test(attr)),
+        ]
+        return `${attrs.length ? `    #[serde(${attrs.join(", ")})]\n` : ""}    pub ${field.ident}: ${field.view},`
+      })
+      const borrowed = fields
+        .filter((field) => field.view.includes("'a"))
+        .map((field) => {
+          const inner = /^Option<(.*)>$/.exec(field.view)?.[1]
+          const check = (view: string) => `${view.replace("<'a>", "")}::borrowed`
+          if (inner !== undefined) return `self.${field.ident}.as_ref().is_none_or(${check(inner)})`
+          return `${check(field.view)}(&self.${field.ident})`
+        })
+      this.items.push(
+        `/// [\`${struct}\`], with its strings borrowed from the JSON.\n#[derive(Debug, Deserialize)]\npub struct ${name}<'a> {\n${lines.join("\n")}\n}\n\nimpl ${name}<'_> {\n    /// Whether every string borrows from the JSON, none having had an escape to decode.\n    pub fn borrowed(&self) -> bool {\n        ${borrowed.join("\n            && ")}\n    }\n}`,
+      )
+      return name
+    }
+    for (const name of names) if (structView(name) === undefined) throw new Error(`${name} has no strings to borrow`)
   }
 
   /**
@@ -737,6 +828,50 @@ function literalType(literal: unknown) {
   if (typeof literal === "boolean") return "bool"
   if (typeof literal === "number") return Number.isInteger(literal) ? "i64" : "f64"
   return "serde_json::Value"
+}
+
+/** `EventKind`: which member of `V2Event` an event is, as a `u8`, so that listeners are counted in an array. */
+function eventKind(variants: Array<string>, values: Array<{ exact: Array<string | boolean>; prefixes: Array<string> }>) {
+  const arms = values.flatMap((value, index) => [
+    ...(value.exact.length === 0 ? [] : [`${value.exact.map((item) => JSON.stringify(item)).join(" | ")}`]),
+    ...value.prefixes.map((prefix) => `tag if tag.starts_with(${JSON.stringify(prefix)})`),
+  ].map((pattern) => `            ${pattern} => Self::${variants[index]},`))
+  const named = variants.filter((_, index) => values[index].prefixes.length > 0 || values[index].exact.length > 1)
+  return `/// Which member of [\`V2Event\`] an event is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum EventKind {
+${variants.map((variant) => `    ${variant},`).join("\n")}
+    Unknown,
+}
+
+impl EventKind {
+    /// How many kinds there are, \`Unknown\` included.
+    pub const COUNT: usize = ${variants.length + 1};
+
+    /// The kind an event whose \`type\` is \`tag\` decodes to.
+    pub fn from_tag(tag: &str) -> Self {
+        match tag {
+${[...arms.filter((arm) => !arm.includes("starts_with")), ...arms.filter((arm) => arm.includes("starts_with"))].join("\n")}
+            _ => Self::Unknown,
+        }
+    }
+
+    /// Whether the events of this kind differ in their \`type\`, so that a listener names the ones it wants.
+    pub fn named(self) -> bool {
+        matches!(self, ${[...named, "Unknown"].map((variant) => `Self::${variant}`).join(" | ")})
+    }
+}
+
+impl V2Event {
+    /// Which member this is.
+    pub fn kind(&self) -> EventKind {
+        match self {
+${variants.map((variant) => `            Self::${variant}(_) => EventKind::${variant},`).join("\n")}
+            Self::Unknown(_) => EventKind::Unknown,
+        }
+    }
+}`
 }
 
 function newtype(name: string, ref: string) {

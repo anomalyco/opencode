@@ -111,9 +111,11 @@ translates. See [Base URLs](/console/harnesses#base-urls) for the full set.
 | Kimi K2.6                   | kimi-k2.6                   | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Kimi K2.7 Code              | kimi-k2.7-code              | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Kimi K3                     | kimi-k3                     | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Kimi K3.1 Pro               | kimi-k3.1-pro               | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Mistral Large 4             | mistral-large-4             | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | GPT 6 Luna Decision         | gpt-6-luna-decision         | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
 | Gemini Decision 1           | gemini-decision-1           | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
+| Jev 1.14                    | jev-1.14                    | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
 | Jev 1.13                    | jev-1.13                    | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
 | Jev 1.13 Free               | jev-1.13-free               | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
 | GPT Image 2.5 Sunburst      | gpt-image-2.5-sunburst      | `https://opencode.ai/inference/openai/v1/images/generations`                                | `@ai-sdk/openai`            |
@@ -137,7 +139,6 @@ translates. See [Base URLs](/console/harnesses#base-urls) for the full set.
 | DeepSeek V4.1 Flash Free    | deepseek-v4.1-flash-free    | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Beam Free                   | beam-free                   | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Flint 40B Free              | flint-40b-free              | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
-| LongCat 2.5 Free            | longcat-2.5-free            | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Hy4 flash Free              | hy4-flash-free              | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | MiMo-V2.6-Flash Free        | mimo-v2.6-flash-free        | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Nemotron 3.5 Lightning Free | nemotron-3.5-lightning-free | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
@@ -177,7 +178,7 @@ curl https://opencode.ai/inference/systemone/v1/systemone \
   -H "Authorization: Bearer $OPENCODE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "jev-1.13",
+    "model": "jev-1.14",
     "state": "My payments have failed for three days and I am losing sales. Please help now.",
     "questions": {
       "is_urgent": {
@@ -195,7 +196,7 @@ curl https://opencode.ai/inference/systemone/v1/systemone \
   -H "Authorization: Bearer $OPENCODE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "jev-1.13",
+    "model": "jev-1.14",
     "state": "My order arrived late and the item is damaged. I want a refund.",
     "questions": {
       "department": {
@@ -216,7 +217,7 @@ curl https://opencode.ai/inference/systemone/v1/systemone \
   }'
 ```
 
-Use `jev-1.13-free` instead of `jev-1.13` to use the limited-time free model. See the [TypeSafe AI documentation](https://docs.typesafe.ai/) for details about question types and response fields.
+Use `jev-1.13-free` to use the limited-time free model, which runs Jev 1.13. See the [TypeSafe AI documentation](https://docs.typesafe.ai/) for details about question types and response fields.
 
 ### GPT 6 Luna Decision and Gemini Decision 1
 
@@ -242,7 +243,7 @@ curl https://opencode.ai/inference/systemone/v1/systemone \
 
 `gpt-image-2.5-sunburst`, `gemini-nano-banana-2.1`, and `grok-imagine-image-2.0` generate and edit images. They aren't chat models, so they never appear in `/models` or the models endpoint,
 and `opencode/<model-id>` doesn't select them. Call them on their native API with a Console key, or let OpenCode's
-[`experimental_image_generate`](/tools#image-generate) tool use an image model by setting
+[`generate_image`](/tools#image-generate) tool use an image model by setting
 `experimental.image_generate.model`, for example `opencode/gpt-image-2.5-sunburst`.
 
 ```bash
@@ -262,8 +263,8 @@ Google takes its native `contents` and `generationConfig`, and xAI its native op
 ### Embedding models
 
 `text-embedding-3-small`, `qwen3-embedding-8b`, and the other embedding models in the table above turn text into
-vectors. OpenCode doesn't use them for chat, so they never appear in `/models`, and Go and the free tier don't include
-them. Call them on OpenAI's Embeddings API with a Console key.
+vectors. OpenCode doesn't use them for chat, so they never appear in `/models`, and the free tier doesn't include them.
+[Go](/console/go#embedding-models) includes some of them. Call them on OpenAI's Embeddings API with a Console key.
 
 ```bash
 curl https://opencode.ai/inference/openai/v1/embeddings \
@@ -299,12 +300,12 @@ noted.
 | DeepSeek V4.1 Flash Free            | Free            | Free              | Free               | -            |
 | Beam Free                           | Free            | Free              | Free               | -            |
 | Flint 40B Free                      | Free            | Free              | Free               | -            |
-| LongCat 2.5 Free                    | Free            | Free              | Free               | -            |
 | Hy4 flash Free                      | Free            | Free              | Free               | -            |
 | MiMo-V2.6-Flash Free                | Free            | Free              | Free               | -            |
 | Nemotron 3.5 Lightning Free         | Free            | Free              | Free               | -            |
 | Nemotron 3.5 Super VL Free          | Free            | Free              | Free               | -            |
 | Jev 1.13 Free                       | Free            | Free              | -                  | -            |
+| Jev 1.14                            | $0.042          | Free              | -                  | -            |
 | Jev 1.13                            | $0.042          | Free              | -                  | -            |
 | Gemini Decision 1                   | $0.10           | Free              | -                  | -            |
 | GPT 6 Luna Decision (≤ 272K tokens) | $0.10           | Free              | $0.01              | $0.125       |
@@ -315,6 +316,7 @@ noted.
 | GLM 5.3 Flash                       | $0.15           | $0.50             | $0.03              | -            |
 | GLM 5.3 (60% off)                   | ~~$1.40~~ $0.56 | ~~$4.40~~ $1.76   | ~~$0.26~~ $0.104   | -            |
 | Kimi K2.7 Code                      | $0.95           | $4.00             | $0.19              | -            |
+| Kimi K3.1 Pro                       | $2.00           | $10.00            | $0.20              | $2.00        |
 | Kimi K3                             | $3.00           | $15.00            | $0.30              | $3.00        |
 | Kimi K2.6                           | $0.95           | $4.00             | $0.16              | -            |
 | Kimi K2.5                           | $0.60           | $3.00             | $0.10              | -            |
@@ -452,7 +454,6 @@ Embedding models charge for input tokens only. Prices are **per 1M tokens**.
 - Iceman Free is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Beam Free is free on OpenCode for a limited time. Its provider does not use your data for model training and retains it for 30 days for safety reasons. It's not available in Angola, Belarus, Cambodia, China (including Hong Kong and Macau), Cuba, the Democratic Republic of the Congo, Equatorial Guinea, Iran, Iraq, Laos, Libya, Nigeria, North Korea, Russia, Syria, Turkmenistan, Uzbekistan, Venezuela, or the Crimea, Donetsk, and Luhansk regions of Ukraine.
 - Flint 40B Free is free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
-- LongCat 2.5 Free is free on OpenCode for a limited time, with a limit of 100 requests per day. Its provider follows a zero-retention policy and does not use your data for model training. It's hosted in China.
 - Hy4 flash Free is free on OpenCode for a limited time. Its provider follows a zero-retention policy and does not use your data for model training.
 - Jev 1.13 Free is available on OpenCode for a limited time.
 
@@ -469,15 +470,11 @@ To hide free models in OpenCode, set `OPENCODE_DISABLE_FREE_MODELS=1`. See [free
 
 | Model                   | Deprecation date  |
 | ----------------------- | ----------------- |
-| Inkling 2 Small Free    | November 19, 2026 |
+| LongCat-2.0             | November 22, 2026 |
 | GLM 5.2                 | November 19, 2026 |
 | GLM 5.1                 | November 19, 2026 |
-| GLM-5.3-Flash Free      | November 18, 2026 |
 | Gemini 3.1 Pro          | November 17, 2026 |
 | Gemini 3 Flash          | November 17, 2026 |
-| MiniMax M3.1 Flash Free | November 17, 2026 |
-| Crouton Alpha Free      | November 9, 2026  |
-| Pulse Alpha Free        | November 6, 2026  |
 | DeepSeek V4 Flash       | October 26, 2026  |
 | GPT 5.2 Codex           | July 23, 2026     |
 | GPT 5.1 Codex           | July 23, 2026     |
@@ -514,7 +511,6 @@ All our models are hosted in the US and EU. Our providers follow a zero-retentio
 - Google APIs: Requests are retained for up to 55 days for abuse monitoring in accordance with [Google's Gemini API Terms](https://ai.google.dev/gemini-api/terms).
 - xAI APIs: Requests are retained for 30 days in accordance with [xAI's Privacy Policy](https://x.ai/legal/privacy-policy).
 - Beam Free: Prompts and other inputs are not used for training. Data is retained for 30 days for safety reasons.
-- LongCat 2.5 Free: Hosted in China. Prompts and other inputs are not used for training or retained.
 
 For subscription models, see [Go privacy](/console/go#privacy).
 

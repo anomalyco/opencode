@@ -1,11 +1,20 @@
 import { Keymap, type KeymapHost } from "@opentui/keymap"
-import { registerDefaultBindingParser } from "@opentui/keymap/addons"
+import {
+  registerBackspacePopsPendingSequence,
+  registerDefaultBindingParser,
+  registerEscapeClearsPendingSequence,
+} from "@opentui/keymap/addons"
 import { createHtmlKeymapHost, type HtmlKeymapEvent } from "@opentui/keymap/html"
 import type { CommandOption } from "./command"
 
 export const IS_MAC = typeof navigator !== "undefined" && /(Mac|iPod|iPhone|iPad)/.test(navigator.platform)
 
 export type AppKeymap = Keymap<HTMLElement, HtmlKeymapEvent>
+
+/** Splits one combo of a keybind into its chord strokes: `mod+k mod+c` into two. */
+export function chordStrokes(combo: string) {
+  return combo.trim().split(/\s+/).filter(Boolean)
+}
 
 /**
  * The keymap behind every command keybind. It reads keys in the capture phase on the document root, before the
@@ -14,12 +23,12 @@ export type AppKeymap = Keymap<HTMLElement, HtmlKeymapEvent>
 export function createAppKeymap(input: { blocked: () => boolean; editable: (target: EventTarget | null) => boolean }) {
   const host = createAppKeymapHost(document.documentElement, input.blocked)
   const keymap: AppKeymap = new Keymap(host.host)
-  // Every binding is written by `keymapKey`: one `+`-joined combo.
+  // Every binding is written by `keymapKey`: strokes separated by spaces, each a `+`-joined combo.
   keymap.prependBindingParser((ctx) => {
     if (ctx.index !== 0) return
 
     return {
-      parts: [ctx.parseObjectKey(strokeInput(ctx.input.trim()), { display: ctx.input })],
+      parts: chordStrokes(ctx.input).map((stroke) => ctx.parseObjectKey(strokeInput(stroke), { display: stroke })),
       nextIndex: ctx.input.length,
     }
   })
@@ -48,12 +57,14 @@ export function createAppKeymap(input: { blocked: () => boolean; editable: (targ
         : []),
     ])
   })
-  // A binding whose key types a character stays out of text fields, so typing in them is never taken.
+  // A binding whose first key types a character stays out of text fields, so typing never starts a sequence.
   keymap.registerBindingFields({
     outsideText(value, ctx) {
       if (value === true) ctx.activeWhen(() => !input.editable(document.activeElement))
     },
   })
+  registerEscapeClearsPendingSequence(keymap)
+  registerBackspacePopsPendingSequence(keymap)
 
   return { keymap, destroy: host.destroy }
 }
@@ -111,21 +122,24 @@ export function registerCommandLayers(keymap: AppKeymap, options: CommandOption[
   return () => disposers.forEach((dispose) => dispose())
 }
 
-/** Translates one combo of the app's keybind syntax (`mod+shift+arrowup`) into the keymap's. */
+/** Translates one combo of the app's keybind syntax (`mod+shift+arrowup`, `mod+k mod+c`) into the keymap's. */
 export function keymapKey(combo: string) {
-  return combo
-    .trim()
-    .split("+")
-    .map((part) => {
-      const lower = part.toLowerCase()
+  return chordStrokes(combo)
+    .map((stroke) =>
+      stroke
+        .split("+")
+        .map((part) => {
+          const lower = part.toLowerCase()
 
-      if (lower === "mod") return IS_MAC ? "super" : "ctrl"
+          if (lower === "mod") return IS_MAC ? "super" : "ctrl"
 
-      if (lower === "meta" || lower === "cmd" || lower === "command") return "super"
+          if (lower === "meta" || lower === "cmd" || lower === "command") return "super"
 
-      return MODIFIER_PARTS.has(lower) ? lower : keymapKeyName(lower)
-    })
-    .join("+")
+          return MODIFIER_PARTS.has(lower) ? lower : keymapKeyName(lower)
+        })
+        .join("+"),
+    )
+    .join(" ")
 }
 
 // One stroke as `keymapKey` writes it, such as `super+shift+[`.
@@ -143,7 +157,7 @@ function strokeInput(stroke: string) {
   }
 }
 
-/** Whether a keymap key types a character, so it should stay out of text fields. */
+/** Whether the first key of a keymap sequence types a character, so it should stay out of text fields. */
 export function typesCharacter(keymap: AppKeymap, key: string) {
   const first = keymap.parseKeySequence(key)[0]?.stroke
 

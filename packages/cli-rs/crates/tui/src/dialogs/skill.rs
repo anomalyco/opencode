@@ -39,7 +39,7 @@ pub fn show(tui: &Tui, location: Option<Location>, on_select: OnSelect) {
 
 enum Load {
     Loading,
-    Loaded(Vec<SkillInfo>),
+    Loaded(std::sync::Arc<[SkillInfo]>),
     Failed(String),
 }
 

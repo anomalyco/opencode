@@ -1,5 +1,5 @@
-//! Event names that client code matches as raw strings, outside the typed [`V2Event`]: ACP's translation, the
-//! TUI's event table and plugins, mini, and the example plugins. If the protocol renames an event, such code still
+//! Event names that client code matches as raw strings, outside the typed [`V2Event`]: ACP's catalog and selection
+//! followers, the TUI's plugins, and mini. If the protocol renames an event, such code still
 //! compiles and its handler goes quiet. This test reads those sources and requires every name it finds in an
 //! event position (a match arm, a comparison, or an `on_event` list) to be a member of the generated union.
 
@@ -7,13 +7,18 @@ use std::path::{Path, PathBuf};
 
 use opencode_api_types::types::V2Event;
 
-const SOURCES: &[&str] =
-    &["acp/src", "mini/src", "tui/src/features/events.rs", "tui/src/plugins", "plugin/examples", "plugin-abi/src"];
+const SOURCES: &[&str] = &["acp/src", "mini/src", "tui/src/plugins"];
 
 /// Dotted names in the same positions that are session error types (`error.type`), not events. TS keeps them as
 /// plain strings too, so there is no generated list to check them against.
-const ERROR_TYPES: &[&str] =
-    &["compaction.interrupted", "provider.auth", "provider.content-filter", "provider.free-limit", "provider.go-limit"];
+const ERROR_TYPES: &[&str] = &[
+    "compaction.failed",
+    "compaction.interrupted",
+    "provider.auth",
+    "provider.content-filter",
+    "provider.free-limit",
+    "provider.go-limit",
+];
 
 #[test]
 fn every_raw_event_name_is_in_the_generated_union() {
@@ -31,7 +36,7 @@ fn every_raw_event_name_is_in_the_generated_union() {
         .collect();
     names.sort();
     names.dedup();
-    assert!(names.len() > 30, "the scan found only {} names: {names:?}", names.len());
+    assert!(names.len() > 12, "the scan found only {} names: {names:?}", names.len());
     let unknown: Vec<_> =
         names.iter().filter(|(_, name)| !known(name) && !ERROR_TYPES.contains(&name.as_str())).collect();
     assert!(unknown.is_empty(), "event names outside the generated union: {unknown:?}");

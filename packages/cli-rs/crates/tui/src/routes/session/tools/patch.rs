@@ -248,7 +248,7 @@ fn shown(cx: &Context<'_>, props: &Props<'_>) -> Shown {
         return Shown::Applied { applied, common };
     }
     Shown::Pending {
-        targets: targets(props.input_str("patchText").unwrap_or_default()),
+        targets: targets(opencode_ui::tool_info::PatchInput(props.input).patch_text().text()),
         status: props.status(),
         error: props.error().map(str::to_owned),
         common,

@@ -324,7 +324,6 @@ pub fn content_width(dialog_width: u32) -> u32 {
 }
 
 struct State<T> {
-    options: Vec<SelectOption<T>>,
     filter: String,
     selected: usize,
     selection: Option<(T, Option<String>)>,
@@ -451,7 +450,6 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
         cx: cx.clone(),
         props,
         state: RefCell::new(State {
-            options: Vec::new(),
             filter: String::new(),
             selected: 0,
             selection: None,
@@ -480,8 +478,7 @@ pub fn select<T: Clone + PartialEq + 'static>(cx: &Rc<DialogCx>, props: SelectPr
     let owner = inner.clone();
     cx.on_close(opentui::keymap::Disposer::new(move || drop(owner)));
     let handle = Select(inner);
-    handle.0.state.borrow_mut().options = (handle.0.props.options)("");
-    handle.recompute();
+    handle.recompute((handle.0.props.options)(""));
     handle.focus_initial();
     handle.register_layer();
     let weak = Rc::downgrade(&handle.0);
@@ -666,12 +663,8 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
                 input.set_cursor_offset(kept.cursor);
             }
             let options = (self.props().options)(&kept.filter);
-            {
-                let mut state = self.0.state.borrow_mut();
-                state.filter = kept.filter;
-                state.options = options;
-            }
-            self.recompute();
+            self.0.state.borrow_mut().filter = kept.filter;
+            self.recompute(options);
         }
         if let Some(index) = kept.selected.and_then(|value| self.index_of(&value)) {
             self.0.state.borrow_mut().selected = index;
@@ -683,8 +676,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
 
     /// Replaces the options, keeping the selection on the same value where it can (the TS options effect).
     pub fn set_options(&self, options: Vec<SelectOption<T>>) {
-        self.0.state.borrow_mut().options = options;
-        self.recompute();
+        self.recompute(options);
         self.options_changed();
         self.render();
     }
@@ -702,19 +694,19 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         self.0.state.borrow().flat.len()
     }
 
-    // `filtered`, `grouped`, and `flat`.
-    fn recompute(&self) {
+    // `filtered`, `grouped`, and `flat` from the options for the current filter.
+    fn recompute(&self, options: Vec<SelectOption<T>>) {
         let props = self.props();
         let mut state = self.0.state.borrow_mut();
         let filter = state.filter.clone();
         let filtered: Vec<SelectOption<T>> = match &props.search {
             Some(search) => search(&filter).into_iter().filter(|x| !x.disabled).collect(),
             None => {
-                let options: Vec<&SelectOption<T>> = state.options.iter().filter(|x| !x.disabled).collect();
                 let needle = filter.to_lowercase();
                 if props.skip_filter || !props.render_filter || needle.is_empty() {
-                    options.into_iter().cloned().collect()
+                    options.into_iter().filter(|x| !x.disabled).collect()
                 } else {
+                    let options: Vec<&SelectOption<T>> = options.iter().filter(|x| !x.disabled).collect();
                     fuzzy::go_cached(
                         &mut self.0.prepared.borrow_mut(),
                         &needle,
@@ -784,15 +776,11 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
 
     fn filter_changed(&self, value: String) {
         let options = (self.props().options)(&value);
-        {
-            let mut state = self.0.state.borrow_mut();
-            state.filter = value.clone();
-            state.options = options;
-        }
+        self.0.state.borrow_mut().filter = value.clone();
         if let Some(on_filter) = &self.props().on_filter {
             on_filter(&value);
         }
-        self.recompute();
+        self.recompute(options);
         if self.props().search.is_some() {
             self.search_changed(true, false);
             self.render();

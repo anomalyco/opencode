@@ -82,12 +82,14 @@ pub struct SessionForms {
     host: Host,
     session: SessionID,
     read: RefCell<(Vec<String>, Option<Location>)>,
+    /// The form the last read found first, shown unless `blocked`.
+    head: RefCell<Option<Form>>,
 }
 
 impl SessionForms {
     pub fn new(tui: &Tui, session: &SessionID) -> Self {
-        let region = View::new(&tui.app).column().shrink(0.0).visible(false);
-        Self { host: Host::new(tui, region), session: session.clone(), read: RefCell::default() }
+        let host = Host::new(tui, View::new(&tui.app).column().shrink(0.0).visible(false));
+        Self { host, session: session.clone(), read: RefCell::default(), head: RefCell::default() }
     }
 
     pub fn root(&self) -> &View {
@@ -108,6 +110,14 @@ impl SessionForms {
 
     /// `blocked`: a permission request shows instead.
     pub fn sync(&self, tui: &Tui, changes: &Changes, blocked: bool) {
+        // The family's info and forms, and the global forms of its location.
+        let reads = Touched::INFO | Touched::FORMS;
+        let stale = changes.forms(GLOBAL)
+            || changes.has(&self.session, reads)
+            || self.read.borrow().0.iter().any(|id| changes.has(id, reads));
+        if !stale {
+            return self.host.show(self.head.borrow().as_ref().filter(|_| !blocked));
+        }
         let (owners, location, head) = tui.data.read(|state| {
             let session = state.session(&self.session);
             let location = session.map(|info| Location::from(&info.location));
@@ -123,8 +133,9 @@ impl SessionForms {
             (owners, location, head)
         });
         let read = (owners, location);
-        let session = changes.session(&self.session) || read.0.iter().any(|id| changes.session(&SessionID(id.clone())));
-        if changes.all || session || *self.read.borrow() != read {
+        let session =
+            changes.has(&self.session, Touched::INFO) || read.0.iter().any(|id| changes.has(id, Touched::INFO));
+        if changes.all() || session || *self.read.borrow() != read {
             for owner in &read.0 {
                 quiet(tui, tui.data.form_sync(owner, None));
             }
@@ -134,6 +145,7 @@ impl SessionForms {
             *self.read.borrow_mut() = read;
         }
         self.host.show(head.as_ref().filter(|_| !blocked));
+        *self.head.borrow_mut() = head;
     }
 }
 
@@ -439,7 +451,6 @@ impl Inner {
 
     fn reply(self: &Rc<Self>, answer: IndexMap<String, FormValue>) {
         let Some(tui) = self.tui.upgrade() else { return };
-        let data = tui.data.clone();
         let location = self.form.location.clone();
         let input = SessionFormReplyInput {
             session_id: self.form.info.session_id.clone(),
@@ -447,7 +458,7 @@ impl Inner {
             answer,
         };
         tui.app.spawn(
-            async move { data.form_reply(input, location.as_ref()).await },
+            tui.data.form_reply(input, location.as_ref()),
             bind!(self, |inner, _, result| if let Err(error) = result {
                 inner.set_error(error.to_string());
                 inner.render();
@@ -457,7 +468,6 @@ impl Inner {
 
     fn cancel(self: &Rc<Self>) {
         let Some(tui) = self.tui.upgrade() else { return };
-        let data = tui.data.clone();
         let location = self.form.location.clone();
         let input = SessionFormCancelInput {
             session_id: self.form.info.session_id.clone(),
@@ -465,7 +475,7 @@ impl Inner {
             message: None,
         };
         tui.app.spawn(
-            async move { data.form_cancel(input, location.as_ref()).await },
+            tui.data.form_cancel(input, location.as_ref()),
             bind!(self, |inner, _, result| if let Err(error) = result {
                 inner.set_error(error.to_string());
                 inner.render();

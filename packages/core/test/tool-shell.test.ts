@@ -3,7 +3,7 @@ import { realpathSync, watch } from "node:fs"
 import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, Stream, Tracer } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Schedule, Scope, Stream, Tracer } from "effect"
 import { TestClock } from "effect/testing"
 import { Money } from "@opencode/schema/money"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -25,6 +25,7 @@ import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Agent } from "@opencode/core/agent"
+import { Automation } from "@opencode/schema/automation"
 import { Job } from "@opencode/core/job"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
@@ -151,6 +152,7 @@ const shellPluginSupervisor = makeLocationNode({
     Shell.node,
     Shell.daemonNode,
     ShellSelect.node,
+    Bus.node,
     Tool.node,
   ],
 })
@@ -1445,6 +1447,7 @@ describe("ShellTool", () => {
             Shell.node,
             Shell.daemonNode,
             ShellSelect.node,
+            Bus.node,
             Tool.node,
           ],
         })
@@ -1746,6 +1749,80 @@ describe("ShellTool", () => {
           const id = ID.make(String(result.metadata?.shellID))
           const shell = yield* Shell.Service
           expect((yield* shell.wait(id)).status).toBe("timeout")
+        }),
+      )
+    }),
+  )
+
+  // Runs a program the way an automation does: no model, and the automation named on each tool call.
+  const runAutomationCode = (registry: Tool.Interface, code: string) =>
+    Effect.gen(function* () {
+      yield* registry.transform((editor) =>
+        editor.update("shell", (tool) => {
+          tool.options = { ...tool.options, codemode: true }
+        }),
+      )
+      return yield* registry.check({
+        code,
+        tools: ["shell"],
+        bindings: {},
+        policy: Permission.Policy.fromRules([{ action: "*", resource: "*", effect: "allow" }]),
+        limits: { timeoutMs: 30_000, maxOutputBytes: 32 * 1024 },
+        context: {
+          sessionID,
+          ...toolIdentity,
+          progress: () => Effect.void,
+          automation: { id: Automation.ID.make("aut_shell_test") },
+        },
+      })
+    })
+
+  it.live("stops an automation's command at its timeout and fails the call", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const result = yield* runAutomationCode(
+            registry,
+            `try { await tools.shell({ command: ${JSON.stringify(idleCommand)}, timeout: 50 }); return "finished" }
+             catch (error) { return error.message }`,
+          )
+          expect(result).toMatchObject({
+            ok: true,
+            value: expect.stringMatching(
+              new RegExp(`Command timed out after 0\\.05 seconds\\. [^\\n]+\\nExit code: ${timedOutExit}`),
+            ),
+          })
+          const shell = yield* Shell.Service
+          expect(yield* shell.list()).toEqual([])
+        }),
+      )
+    }),
+  )
+
+  it.live("keeps an automation's command out of reach of the session's move to the background", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const command = JSON.stringify(progressOverflowCommand(0, "release"))
+          const running = yield* runAutomationCode(
+            registry,
+            `return await tools.shell({ command: ${command}, timeout: 10000 })`,
+          ).pipe(Effect.forkScoped({ startImmediately: true }))
+          const shell = yield* Shell.Service
+          const [started] = yield* shell
+            .list()
+            .pipe(
+              Effect.repeat({ until: (shells) => shells.length > 0, schedule: Schedule.spaced("10 millis") }),
+              Effect.timeout("10 seconds"),
+            )
+          const jobs = yield* Job.Service
+          expect(yield* jobs.backgroundAll({ sessionID })).toEqual([])
+          yield* Effect.promise(() => Bun.write(path.join(tmp.path, "release"), ""))
+          expect(yield* Fiber.join(running)).toMatchObject({ ok: true, value: { exitCode: 0 } })
+          // A finished job stays listed, so this proves the command never had one for the session to take.
+          expect(yield* jobs.get(started!.id)).toBeUndefined()
         }),
       )
     }),

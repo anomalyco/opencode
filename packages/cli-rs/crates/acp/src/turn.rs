@@ -9,6 +9,7 @@ use std::time::Duration;
 use futures_util::StreamExt;
 use futures_util::future::BoxFuture;
 use opencode_api::client::Client;
+use opencode_api::events::CONNECTED;
 use opencode_api::generated::{
     PromptInputFileAttachment, SessionCommandInput, SessionCompactInput, SessionGetInput, SessionID,
     SessionInboxDelivery, SessionInterruptInput, SessionMessageID, SessionPromptInput, SessionSyntheticInput,
@@ -21,7 +22,7 @@ use tokio_util::sync::CancellationToken;
 use crate::capabilities::Capabilities;
 use crate::catalog::{Catalogs, find_model};
 use crate::child;
-use crate::client::{check, classify, decode_session_id, event_type, subscribe};
+use crate::client::{check, classify, decode_session_id, subscribe};
 use crate::config_option::current_model;
 use crate::connection::{Connection, Responded};
 use crate::elicitation;
@@ -34,7 +35,7 @@ use crate::translate::{self, Output, StartKind, Terminal, TurnContext, TurnState
 /// Core acknowledges an interrupt before its cleanup settles, and its shell tool waits 3 s before SIGKILL.
 pub const CANCEL_DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
 
-type Event = Result<Value, opencode_api::error::Error>;
+type Event = Result<translate::Event, opencode_api::error::Error>;
 type Job = BoxFuture<'static, ()>;
 
 struct Subscription {
@@ -301,10 +302,10 @@ impl Turns {
         };
         match first {
             Err(failure) => return Exit::Failed(failure),
-            Ok(event) if event_type(&event) != "server.connected" => {
+            Ok(event) if event.event.tag() != CONNECTED => {
                 return Exit::Failed(Failure::Defect {
                     name: Some("Error".to_owned()),
-                    detail: format!("expected server.connected, got {}", event_type(&event)),
+                    detail: format!("expected server.connected, got {}", event.event.tag()),
                 });
             }
             Ok(_) => {}
@@ -553,7 +554,7 @@ impl Turns {
             check(self.client.session_get(&SessionGetInput { session_id: SessionID(attached.id.clone()) }).await)?;
         self.connection.session_update(
             &attached.id,
-            json!({
+            &json!({
                 "sessionUpdate": "usage_update",
                 "used": translate::number(used),
                 "size": size,
@@ -598,34 +599,27 @@ impl Turns {
         }
     }
 
-    async fn interpret(self: &Arc<Self>, turn: &Turn, output: Output) -> Result<(), Failure> {
+    async fn interpret(self: &Arc<Self>, turn: &Turn, output: Output<'_>) -> Result<(), Failure> {
         match output {
-            Output::SessionUpdate { update, diff } => {
-                let update = permission::with_completed_diffs(update, diff.as_ref(), &turn.ctx.cwd).await;
-                self.connection.session_update(&turn.ctx.session_id, update)
+            Output::SessionUpdate { mut update, diff } => {
+                permission::add_completed_diffs(&mut update, diff.as_ref(), &turn.ctx.cwd).await;
+                self.connection.session_update(&turn.ctx.session_id, &update)
             }
             Output::ChildUpdate { mut update, diff } => {
-                if update.get("type").and_then(Value::as_str) == Some("update")
-                    && let Some(inner) = update.get("update").cloned()
-                {
-                    let enriched = permission::with_completed_diffs(inner, diff.as_ref(), &turn.ctx.cwd).await;
-                    if let Some(object) = update.as_object_mut() {
-                        object.insert("update".to_owned(), enriched);
-                    }
+                if let child::Event::Update(update) = &mut update.event {
+                    permission::add_completed_diffs(update, diff.as_ref(), &turn.ctx.cwd).await;
                 }
-                if let Err(failure) = self.connection.notify(child::UPDATE_METHOD, update) {
+                if let Err(failure) = self.connection.notify(child::UPDATE_METHOD, &update) {
                     log::warn!(cause = failure.tag(); "ACP child session update failed");
                 }
                 Ok(())
             }
-            Output::PermissionAsk { event, tool, child } => {
-                let data = event.get("data").cloned().unwrap_or(Value::Null);
-                let id = data.get("id").and_then(Value::as_str).unwrap_or_default().to_owned();
+            Output::PermissionAsk { ask, tool, child } => {
+                let id = ask.id.0.clone();
                 let input = Arc::new(permission::Input {
                     client: self.client.clone(),
                     connection: self.connection.clone(),
-                    session_id: data.get("sessionID").and_then(Value::as_str).unwrap_or_default().to_owned(),
-                    event,
+                    ask,
                     client_session_id: turn.ctx.session_id.clone(),
                     cwd: turn.ctx.cwd.clone(),
                     tool,
@@ -642,13 +636,15 @@ impl Turns {
                 Ok(())
             }
             Output::FormAsk { form, child } => {
+                // The form becomes a JSON Schema, which elicitation builds from its JSON.
+                let form = serde_json::to_value(&form).unwrap_or_default();
                 let capabilities = *lock(&self.capabilities);
                 let Some(requested_schema) = elicitation::requested_schema(&form, &capabilities) else {
                     elicitation::cancel_unshown(&self.client, &form).await;
                     return Ok(());
                 };
                 let id = form.get("id").and_then(Value::as_str).unwrap_or_default().to_owned();
-                let tool_call_sent = child.as_ref().is_none_or(|child| translate::project_child(&turn.ctx, child));
+                let tool_call_sent = child.as_deref().is_none_or(|child| translate::project_child(&turn.ctx, child));
                 let input = Arc::new(elicitation::Input {
                     client: self.client.clone(),
                     connection: self.connection.clone(),
@@ -669,7 +665,7 @@ impl Turns {
                 Ok(())
             }
             Output::AskSettled { id } => {
-                if let Some(settled) = lock(&turn.subscription.settled).remove(&id) {
+                if let Some(settled) = lock(&turn.subscription.settled).remove(id) {
                     let _ = settled.send(());
                 }
                 Ok(())
@@ -693,7 +689,7 @@ async fn join(result: &mut watch::Receiver<Option<Result<Terminal, Failure>>>) -
     }
 }
 
-async fn take(subscription: &Subscription) -> Result<Value, Failure> {
+async fn take(subscription: &Subscription) -> Result<translate::Event, Failure> {
     match subscription.events.lock().await.recv().await {
         Some(Ok(event)) => Ok(event),
         Some(Err(error)) => Err(classify(&error)),

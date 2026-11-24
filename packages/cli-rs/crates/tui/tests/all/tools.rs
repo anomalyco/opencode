@@ -517,7 +517,7 @@ fn a_running_shell_the_store_lists_reads_its_output_every_second() {
         });
         serde_json::from_value::<opencode_api::generated::V2Event>(event).unwrap()
     };
-    h.tui.data.apply(&[event(
+    h.tui.data.apply(vec![event(
         "shell.created",
         json!({ "info": {
             "id": "sh_1", "status": "running", "command": "npm run dev", "cwd": "/project",
@@ -533,7 +533,7 @@ fn a_running_shell_the_store_lists_reads_its_output_every_second() {
 
     // Once the shell exits, one last read drains it and the polling stops.
     let running = reads();
-    h.tui.data.apply(&[event("shell.exited", json!({ "id": "sh_1", "exit": 0, "status": "completed" }))]);
+    h.tui.data.apply(vec![event("shell.exited", json!({ "id": "sh_1", "exit": 0, "status": "completed" }))]);
     h.app.advance(Duration::from_millis(10));
     h.wait("the last read", || reads() > running);
     let stopped = reads();
@@ -656,7 +656,7 @@ fn a_subagent_row_opens_its_child_session() {
     assert!(!screen.contains("Background"), "{screen}");
 
     h.click("Check the docs");
-    let found = h.app.wait_until(WAIT, || h.tui.route() == Route::Session { id: SessionID("ses_child".into()) });
+    let found = h.app.wait_until(WAIT, || *h.tui.route() == Route::Session { id: SessionID("ses_child".into()) });
     assert!(found, "still on {:?}", h.tui.route());
     h.wait_for("Child work");
     let read = h
@@ -779,7 +779,7 @@ fn execute_shows_the_files_its_script_changed_below_it() {
     ]);
     let ids = json!({ "sessionID": "ses_t", "assistantMessageID": "msg_2", "id": "c1" });
     let progress = support::merge(ids, json!({ "metadata": { "toolCalls": calls, "files": files } }));
-    h.tui.data.apply(&[support::event("ses_t", "session.tool.progress", 1, progress)]);
+    h.tui.data.apply(vec![support::event("ses_t", "session.tool.progress", 1, progress)]);
     let screen = h.wait_for_all(&["+2 lines", "# Created copy.txt", "# Deleted gone.bin", "-40 lines", "+5 -1 lines"]);
     let lines: Vec<&str> = screen.lines().collect();
     let row = |text: &str| lines.iter().position(|line| line.contains(text)).unwrap();

@@ -13,6 +13,7 @@ export const MAX_READ_LINES = 2_000
 export const MAX_READ_BYTES = 50 * 1024
 export const MAX_MEDIA_INGEST_BYTES = 20 * 1024 * 1024
 const FIRST_CHUNK = 256 * 1024
+const MAX_SCAN_CHUNK = 4 * 1024 * 1024
 const TAIL_LINES = 100
 const MAX_LINE_LENGTH = 2_000
 // Enough UTF-8 bytes for the clamped prefix, including a BOM and a partial code point at the end.
@@ -278,7 +279,12 @@ const textPage = Effect.fnUntraced(function* (
     if (next === undefined && (entries.length >= limit || size >= MAX_READ_BYTES) && consumed < byte)
       next = requested + entries.length
     if (next !== undefined || byte >= first.info.size) break
-    const more = yield* range(byte, FIRST_CHUNK)
+    // Grow only while skipping lines; keep page reads (including an unfinished selected line) small.
+    const length =
+      entries.length > 0 || (requested > 0 && total >= requested - 1)
+        ? FIRST_CHUNK
+        : Math.max(FIRST_CHUNK, Math.min(chunk.length * 4, MAX_SCAN_CHUNK))
+    const more = yield* range(byte, Math.min(length, first.info.size - byte))
     if (more.bytes.length === 0) break
     chunk = more.bytes
   }

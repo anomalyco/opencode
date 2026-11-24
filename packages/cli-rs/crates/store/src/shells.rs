@@ -3,8 +3,14 @@
 use indexmap::IndexMap;
 use opencode_api::generated::*;
 
+use crate::changes::Parts;
+use crate::core::{Effect, Shells, Ticket};
 use crate::location::{Catalog, Location};
-use crate::state::{Data, Error, Overlay, State, Task};
+use crate::reads::{Read, ReadKey};
+use crate::state::{Overlay, State};
+
+/// What a change of the shells changes of their location.
+const SHELLS: Parts = Parts::catalogs(&[Catalog::Shell]);
 
 /// A running shell and the location that reported it.
 #[derive(Debug, Clone, PartialEq)]
@@ -45,7 +51,7 @@ impl State {
     pub(crate) fn on_shell_created(&mut self, info: &ShellInfo, location: &Location) {
         let shell = Shell { info: info.clone(), location: location.clone() };
         self.record_shell(location, &info.id, Some(shell.clone()));
-        self.location_mut(location).shell.get_or_insert_default().insert(info.id.clone(), shell);
+        self.location_mut(location, SHELLS).shell.get_or_insert_default().insert(info.id.clone(), shell);
     }
 
     pub(crate) fn remove_shell(&mut self, id: &ShellID, location: &Location) {
@@ -58,7 +64,7 @@ impl State {
         if !present {
             return;
         }
-        if let Some(shells) = self.location_mut(location).shell.as_mut() {
+        if let Some(shells) = self.location_mut(location, SHELLS).shell.as_mut() {
             shells.shift_remove(id);
         }
     }
@@ -70,19 +76,25 @@ impl State {
         }
     }
 
-    /// Starts a shell read of `location` with an empty overlay; the returned ticket alone may publish it.
-    fn begin_shell_read(&mut self, location: &Location) -> u64 {
-        let ticket = self.token();
-        self.locations.entry(location.clone()).or_default().shell_read = Some(Overlay::new(ticket));
-        ticket
+    /// Begins a shell read of `location` with an empty overlay; its ticket alone may publish it. Shell creation and
+    /// exit events received during the read take precedence over its answer.
+    pub(crate) fn begin_shells(&mut self, ticket: Ticket) -> Shells {
+        let ReadKey::Catalog(Catalog::Shell, at) = ticket.key else { unreachable!("a shell read") };
+        let location = self.read_location(at);
+        let read = self.token();
+        self.locations.entry(location.clone()).or_default().shell_read = Some(Overlay::new(read));
+        Shells { ticket, location, read }
     }
 
-    /// Publishes the list read `ticket` started, with its overlay applied. True when the overlay overflowed: the
-    /// list is published alone and the read is invalidated, so the caller reads again.
-    fn publish_shells(&mut self, location: &Location, ticket: u64, response: ShellListOutput) -> bool {
-        let read =
-            self.locations.get_mut(location).and_then(|data| data.shell_read.take_if(|read| read.ticket() == ticket));
-        let Some(read) = read else { return false };
+    /// Publishes the list read `read` began, with its overlay applied. An overflowed overlay publishes the list alone
+    /// and invalidates the read, which reads again.
+    pub(crate) fn complete_shells(&mut self, shells: Shells, response: ShellListOutput, effects: &mut Vec<Effect>) {
+        let location = shells.location;
+        let read = self
+            .locations
+            .get_mut(&location)
+            .and_then(|data| data.shell_read.take_if(|read| read.ticket() == shells.read));
+        let Some(read) = read else { return };
         let at = Location::from(&response.location);
         let mut shells: IndexMap<ShellID, Shell> = response
             .data
@@ -105,43 +117,18 @@ impl State {
             }
         }
         if overflowed {
-            self.syncs.invalidate(&Catalog::Shell.key(location));
+            self.invalidate(Read::Catalog(Catalog::Shell, &location));
         }
-        self.location_mut(&at).shell = Some(shells);
-        overflowed
+        self.location_mut(&at, SHELLS).shell = Some(shells);
+        if overflowed {
+            effects.push(Effect::Catalogs(vec![Catalog::Shell], location));
+        }
     }
 }
 
 /// Shells created or exited during an in-flight read. An overflowed overlay still publishes the list and triggers
 /// another read.
 pub(crate) type ShellRead = Overlay<Shell>;
-
-impl Data {
-    /// Reads a location's running shells once per invalidation.
-    pub fn shell_sync(&self, location: Option<&Location>) -> Task<()> {
-        self.catalog_sync(Catalog::Shell, location)
-    }
-
-    /// Shell creation and exit events received during a list read take precedence over the snapshot.
-    pub(crate) fn shell_read(&self, location: Location) -> Task<()> {
-        let begin = location.clone();
-        self.sync_start(
-            Catalog::Shell.key(&location),
-            move |state| state.begin_shell_read(&begin),
-            move |data, ticket| async move {
-                let response = data
-                    .client()
-                    .shell_list(&ShellListInput { location: location.query() })
-                    .await
-                    .map_err(Error::new)?;
-                if data.write(|state| state.publish_shells(&location, ticket, response)) {
-                    data.refresh_catalogs(vec![Catalog::Shell], location);
-                }
-                Ok(())
-            },
-        )
-    }
-}
 
 /// The list read's shell type has the same fields as the event's.
 pub(crate) fn from_list(info: ShellInfo) -> ShellInfo {

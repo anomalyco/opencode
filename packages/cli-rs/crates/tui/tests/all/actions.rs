@@ -246,7 +246,7 @@ fn fork_forks_the_whole_session_or_before_a_prompt_and_opens_it() {
     kit.app.press("return");
     assert_eq!(kit.wait_writes(1), ["POST /api/session/ses_a/fork {}"]);
     kit.wait_for("Forked session");
-    kit.wait("the fork to open", || kit.tui.route() == Route::Session { id: SessionID("ses_fork".into()) });
+    kit.wait("the fork to open", || *kit.tui.route() == Route::Session { id: SessionID("ses_fork".into()) });
 
     let kit = Kit::new(session("ses_a", json!({})), turns(), vec![]);
     kit.ready();
@@ -284,7 +284,7 @@ fn fork_before_a_prompt_keeps_its_attachments_and_opens_the_returned_session() {
     kit.app.press("down");
     kit.app.press("return");
     let fork = SessionID("ses_fork".into());
-    let opened = kit.app.wait_until(WAIT, || kit.tui.route() == Route::Session { id: fork.clone() });
+    let opened = kit.app.wait_until(WAIT, || *kit.tui.route() == Route::Session { id: fork.clone() });
     assert!(opened, "{:?}", kit.tui.route());
     let known = kit.tui.data.read(|state| state.session(&fork).and_then(|info| info.title.clone()));
     assert_eq!(known.as_deref(), Some("Forked"));
@@ -490,7 +490,7 @@ fn copies_and_the_parent_report_their_outcome() {
     assert_eq!(kit.reads("/api/experimental/session/ses_a/export"), 1);
     assert!(kit.writes().is_empty(), "{:?}", kit.writes());
     kit.tui.keymap.dispatch("session.parent", None);
-    assert_eq!(kit.tui.route(), Route::Session { id: SessionID("ses_p".into()) });
+    assert_eq!(*kit.tui.route(), Route::Session { id: SessionID("ses_p".into()) });
 
     let kit = Kit::new(session("ses_a", json!({})), vec![user("msg_01", 1_772_539_200_000, "Hello")], vec![]);
     kit.wait_for("Hello");

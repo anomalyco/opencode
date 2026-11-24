@@ -49,7 +49,10 @@ export const Plugin = {
       .transform((editor) =>
         editor.add({
           name,
-          options: { codemode: flags.resolve(loaded.entries).full_codemode.enabled },
+          // Pinned so quick questions call it without searching the catalog first.
+          options: flags.resolve(loaded.entries).full_codemode.enabled
+            ? { codemode: { pinned: true } }
+            : { codemode: false },
           description,
           input: Input,
           output: Output,

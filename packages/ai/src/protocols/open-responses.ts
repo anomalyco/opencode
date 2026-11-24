@@ -496,11 +496,11 @@ export const lowerTool = Effect.fnUntraced(function* (protocolName: string, tool
 })
 
 export const lowerCustomTool = (tool: ToolDefinition, custom: OpenAIFreeform.Custom) => {
-  const grammar = OpenAIFreeform.grammar(custom.format)
+  const grammar = OpenAIFreeform.grammar(custom)
   return {
     type: "custom" as const,
     name: tool.name,
-    description: tool.description,
+    description: OpenAIFreeform.description(tool, custom),
     format: grammar ? { type: "grammar" as const, ...grammar } : { type: "text" as const },
   }
 }
@@ -560,7 +560,7 @@ const lowerToolCall = (
       ...(id === undefined ? {} : { id }),
       call_id: part.id,
       name: part.name,
-      input: OpenAIFreeform.toRaw(custom, part.input),
+      input: OpenAIFreeform.toRaw(custom, part.input, part.providerMetadata?.[providerMetadataKey]?.header),
     }
   return {
     type: "function_call",
@@ -886,23 +886,25 @@ export const allowedToolChoice = (
   }
 }
 
+/** Expects tool namespaces already flattened, as `protocol.body.from` passes it; otherwise run `ProviderShared.flattenRequest` first. */
 export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAdapter")(function* (
   request: LLMRequest,
   adapter: ProviderAdapter,
 ) {
-  const projected = ProviderShared.flattenToolRequest(request)
+  const definitions = ProviderShared.flattenTools(request.tools)
   const options = OpenResponsesOptions.resolve(request)
   const custom = OpenAIFreeform.tools(request)
   return {
-    ...(yield* lowerConversation(projected.request, adapter)),
+    ...(yield* lowerConversation(request, adapter)),
     ...lowerGeneration(request, options),
-    tools: projected.tools.length === 0 ? undefined : yield* lowerTools(projected.tools, adapter, custom),
+    tools: definitions.length === 0 ? undefined : yield* lowerTools(definitions, adapter, custom),
     tool_choice:
       allowedToolChoice(options, custom) ??
       (request.toolChoice ? yield* lowerToolChoice(adapter.name, request.toolChoice, custom) : undefined),
   }
 })
 
+/** Expects tool namespaces already flattened, as `protocol.body.from` passes it; otherwise run `ProviderShared.flattenRequest` first. */
 export const fromRequest = (request: LLMRequest) => fromRequestWithAdapter(request, BASE_ADAPTER)
 
 // =============================================================================
@@ -1335,19 +1337,25 @@ const onOutputItemDone = Effect.fnUntraced(function* (state: ParserState, item: 
     if (!item.call_id || !item.name) return [state, NO_EVENTS] satisfies StepResult
     const custom = item.type === "custom_tool_call"
     const metadata = providerMetadata(state, OpenAIFreeform.metadata(item.id, custom))
-    const final = { custom: state.custom.get(item.name), raw: rawInput(item) }
-    const input = custom ? OpenAIFreeform.fromRaw(final.custom, final.raw) : item.arguments
     const registered = state.tools[item.id] !== undefined
-    const closed = custom ? OpenAIFreeform.close(state.tools, [item.id], final) : undefined
-    const tools = registered
-      ? (closed?.tools ?? state.tools)
+    const started = registered
+      ? state.tools
       : ToolStream.start(state.tools, item.id, {
           id: item.call_id,
           name: item.name,
           namespace: item.namespace,
           providerMetadata: metadata,
         })
-    const result = yield* ToolStream.finish(state.id, tools, item.id, input)
+    // A custom call's final raw text sets its input, so it finishes without an override.
+    const closed = custom
+      ? OpenAIFreeform.close(started, [item.id], state.custom, state.providerMetadataKey, rawInput(item))
+      : undefined
+    const result = yield* ToolStream.finish(
+      state.id,
+      closed?.tools ?? started,
+      item.id,
+      custom ? undefined : item.arguments,
+    )
     const events: LLMEvent[] = []
     const finished = [...(closed?.events ?? []), ...(result.events ?? [])]
     // A done-only call never streamed a start event, so open its lifecycle here.
@@ -1439,7 +1447,16 @@ const onResponseFinish = Effect.fnUntraced(function* (state: ParserState, event:
       events.push(...emitted)
     }
     // Some compatible providers omit output_item.done even after completing the response.
-    const pending = yield* ToolStream.finishAll(current.id, current.tools)
+    const open = OpenAIFreeform.close(
+      current.tools,
+      Object.keys(current.tools).filter(
+        (key) => current.tools[key]?.providerMetadata?.[current.providerMetadataKey]?.custom === true,
+      ),
+      current.custom,
+      current.providerMetadataKey,
+    )
+    events.push(...open.events)
+    const pending = yield* ToolStream.finishAll(current.id, open.tools)
     current = {
       ...current,
       tools: pending.tools,

@@ -190,6 +190,8 @@ export type ModelMediaInput = "assets" | "state" | "root"
 
 export type ToolFreeformFormat = "text" | "regex" | "lark"
 
+export type ModelSpeed = { base: string; id: string; faster: boolean }
+
 export type MoneyUSDPerMillionTokens = number
 
 export type GenerateTextResponse = { data: { text: string } }
@@ -2413,6 +2415,7 @@ export type ModelInfo = {
   body?: { [x: string]: any }
   capabilities: ModelCapabilities
   variants: Array<ModelVariant>
+  experimental?: { speed?: ModelSpeed }
   time: { released: number }
   cost: Array<ModelCost>
   status: "alpha" | "beta" | "deprecated" | "active"
@@ -2664,14 +2667,16 @@ export type ConfigEntry =
           todo?: boolean
           media_blob?: boolean
           artifacts?: boolean
-          video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           console_watches?: boolean
           recommended_api?: boolean
+          model_speeds?: boolean
           full_codemode?: boolean
           machines?: boolean
           home_memory?: boolean
           project_overlay?: boolean
+          opencode_api?: boolean
           sqlite_fts?: boolean
+          video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
@@ -2783,6 +2788,7 @@ export type AgentInfo = {
   model?: ModelRef
   request: ProviderRequest
   system?: string
+  instructions?: string | { selected: string; unselected: string }
   description?: string
   mode: "subagent" | "primary" | "all"
   hidden: boolean
@@ -3267,10 +3273,6 @@ export type ProviderRequestError = {
 export const isProviderRequestError = (value: unknown): value is ProviderRequestError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ProviderRequestError"
 
-export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
-export const isForbiddenError = (value: unknown): value is ForbiddenError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
-
 export type VideoNotFoundError = {
   readonly _tag: "VideoNotFoundError"
   readonly videoID: string
@@ -3312,6 +3314,10 @@ export type McpServerNotFoundError = {
 }
 export const isMcpServerNotFoundError = (value: unknown): value is McpServerNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "McpServerNotFoundError"
+
+export type ForbiddenError = { readonly _tag: "ForbiddenError"; readonly message: string }
+export const isForbiddenError = (value: unknown): value is ForbiddenError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ForbiddenError"
 
 export type ProjectNotFoundError = {
   readonly _tag: "ProjectNotFoundError"

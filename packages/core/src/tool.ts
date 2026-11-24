@@ -3,7 +3,7 @@ export { CallID, Content, Error, FileContent, TextContent } from "@opencode/sche
 export type { Context, Info, Metadata, Namespace, Options, Result } from "@opencode/schema/tool"
 
 import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
-import { toolExpression, type CodeMode } from "@opencode/codemode"
+import type { CodeMode } from "@opencode/codemode"
 import { Tool } from "@opencode/schema/tool"
 import { isRecord } from "@opencode/util/record"
 import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Types } from "effect"
@@ -15,6 +15,7 @@ import { CodeModeTool } from "./codemode/tool.js"
 import { Flag } from "./flag.js"
 import { Image } from "./image.js"
 import { Permission } from "./permission.js"
+import { PermissionPolicy } from "./permission/policy.js"
 import { PluginHooks } from "./plugin/hooks.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
@@ -27,7 +28,6 @@ import {
   normalizedName,
   normalizeContent,
 } from "./tool/runtime.js"
-import { Wildcard } from "./util/wildcard.js"
 
 export class RegistrationError extends Schema.TaggedError<RegistrationError>()("Tool.RegistrationError", {
   name: Schema.String,
@@ -71,13 +71,15 @@ export interface SnapshotOptions {
    * session's Location and file services.
    */
   readonly services?: Context.Context<CodeModeTool.Services>
+  /** What `opencode://` fetch sends requests through; see the `opencode_api` flag. */
+  readonly api?: Context.Context<CodeModeTool.Api>
   readonly tools?: Policy
 }
 
 export interface Interface extends State.Transformable<Editor> {
   readonly list: () => Effect.Effect<ReadonlyArray<RegisteredTool>>
   readonly codeModeTools: (paths: ReadonlyArray<string>) => Effect.Effect<ReadonlyMap<string, RegisteredTool>>
-  readonly snapshot: (permissions?: Permission.Ruleset, options?: SnapshotOptions) => Effect.Effect<Snapshot>
+  readonly snapshot: (policy?: PermissionPolicy.Policy, options?: SnapshotOptions) => Effect.Effect<Snapshot>
   /**
    * Runs a Code Mode program with no model step over only the Code Mode tools named in `tools` (still subject to
    * whole-tool permission filtering and each tool's own executor policy).
@@ -89,7 +91,7 @@ export interface CheckInput {
   readonly code: string
   readonly tools: ReadonlyArray<string>
   readonly bindings: Readonly<Record<string, CodeMode.DataValue>>
-  readonly permissions: Permission.Ruleset
+  readonly policy: PermissionPolicy.Policy
   readonly limits: CodeMode.ExecutionLimits
   readonly services?: Context.Context<CodeModeTool.Services>
   readonly context: Omit<Tool.Context, "id">
@@ -114,11 +116,6 @@ export interface Snapshot {
     /** Surviving request definitions, keyed by the names advertised after session context hooks. */
     readonly definitions?: ReadonlyMap<string, ToolDefinition>
   }) => Effect.Effect<NormalizedResult, Tool.Error>
-  /**
-   * The expression a Code Mode program calls a tool by (`tools.opencode.session.search`), when `name` is the path or
-   * registry ID of one of this snapshot's Code Mode tools.
-   */
-  readonly codeModeExpression?: (name: string) => string | undefined
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Tool") {}
@@ -310,11 +307,11 @@ const layer = Layer.effect(
       reload: state.reload,
       list: () => Effect.sync(() => Array.from(state.get().tools.values())),
       codeModeTools: (paths) => Effect.sync(() => new Map(codeModeTools(state.get().tools, paths))),
-      snapshot: Effect.fn("Tool.snapshot")((permissions, options) =>
+      snapshot: Effect.fn("Tool.snapshot")((input, options) =>
         Effect.gen(function* () {
-          const rules = permissions ?? []
+          const policy = input ?? PermissionPolicy.empty
           // Without Code Mode its tools would be unreachable, so expose them as direct tools instead.
-          const codeModeEnabled = codeModeAvailable(rules)
+          const codeModeEnabled = codeModeAvailable(policy)
           const full = codeModeEnabled && options?.services !== undefined && (yield* flags.enabled("full_codemode"))
           const data = state.get()
           if (catalogData !== data) {
@@ -327,7 +324,7 @@ const layer = Layer.effect(
           const codemodeEntries: Array<[string, Tool.Info]> = []
           for (const [name, tool] of data.tools) {
             if (hidden?.has(name)) continue
-            if (whollyDisabled(tool.options?.permission ?? name, rules)) continue
+            if (PermissionPolicy.isActionDenied(policy, tool.options?.permission ?? name)) continue
             if (codeModeEnabled && defaultCodeMode(tool) && !keepDirect?.has(name)) {
               codemodeEntries.push([name, tool])
               continue
@@ -355,6 +352,7 @@ const layer = Layer.effect(
                   (name, item, input, context) => run(inventory.tools, item, name, input, context),
                   permission,
                   full ? options.services : undefined,
+                  options?.api,
                 )
                 const entry = cached ?? {
                   inventory,
@@ -371,15 +369,7 @@ const layer = Layer.effect(
                 return { tool, inventory, catalog: entry.value, definition: entry.definition }
               })()
           return {
-            ...(codemode === undefined
-              ? {}
-              : {
-                  codeModeCatalog: codemode.catalog,
-                  codeModeExpression: (name: string) => {
-                    const found = CodeModeTool.find(codemode.inventory, name)
-                    return found && toolExpression(CodeModeTool.qualifiedName(found.registration))
-                  },
-                }),
+            ...(codemode === undefined ? {} : { codeModeCatalog: codemode.catalog }),
             definitions: [
               ...Array.from(direct)
                 .sort(([left], [right]) => (left < right ? -1 : left > right ? 1 : 0))
@@ -403,11 +393,24 @@ const layer = Layer.effect(
               if (!requested && input.definitions && (direct.has(event.tool) || codemode?.tool.name === event.tool))
                 return yield* new Tool.Error({ message: `Tool is not available for this request: ${event.tool}` })
               const name = requested?.name ?? event.tool
-              if (name === "execute" && codemode) {
-                const run = (ctx: Tool.Context) => executeTool(codemode.tool, name, event.input, ctx)
+              // A tool this request only offers inside Code Mode, called by the model at the top level or renamed there by
+              // a plugin, runs as a Code Mode call when the request offered execute.
+              const found =
+                codemode &&
+                name !== "execute" &&
+                !direct.has(name) &&
+                (!input.definitions || Array.from(input.definitions.values()).some((item) => item.name === "execute"))
+                  ? CodeModeTool.find(codemode.inventory, name)
+                  : undefined
+              if (codemode && (name === "execute" || found)) {
+                // Like an execute program, it moves to the background when it runs long.
+                const run = (ctx: Tool.Context) =>
+                  found
+                    ? executeTool(found.registration, found.id, event.input, { ...ctx, codemode: true })
+                    : executeTool(codemode.tool, name, event.input, ctx)
                 const background = yield* CodeModeJob.Current
                 return yield* background
-                  ? background(context, run, full ? executeOptions(event.input) : undefined)
+                  ? background(context, run, full && !found ? executeOptions(event.input) : undefined)
                   : run(context)
               }
               const tool = direct.get(name)
@@ -420,7 +423,7 @@ const layer = Layer.effect(
         }),
       ),
       check: Effect.fn("Tool.check")(function* (input) {
-        if (whollyDisabled("execute", input.permissions)) {
+        if (PermissionPolicy.isActionDenied(input.policy, "execute")) {
           return {
             ok: false,
             error: { kind: "ExecutionFailure", message: "Code Mode is disabled for this agent" },
@@ -430,7 +433,7 @@ const layer = Layer.effect(
         const data = state.get()
         const tools = new Map(
           codeModeTools(data.tools, input.tools)
-            .filter(([, tool]) => !whollyDisabled(tool.options?.permission ?? tool.id, input.permissions))
+            .filter(([, tool]) => !PermissionPolicy.isActionDenied(input.policy, tool.options?.permission ?? tool.id))
             .map(([, tool]) => [tool.id, tool] as const),
         )
         const callSeq = yield* Ref.make(0)
@@ -494,13 +497,9 @@ function* codeModeTools(registered: Data["tools"], paths: ReadonlyArray<string>)
   }
 }
 
-const whollyDisabled = (action: string, rules: Permission.Ruleset) => {
-  const rule = rules.findLast((rule) => Wildcard.match(action, rule.action))
-  return rule?.resource === "*" && rule.effect === "deny"
-}
-
-/** Whether the rules leave Code Mode's `execute` reachable, as `snapshot` decides it. */
-export const codeModeAvailable = (rules: Permission.Ruleset) => !whollyDisabled("execute", rules)
+/** Whether the policy leaves Code Mode's `execute` reachable, as `snapshot` decides it. */
+export const codeModeAvailable = (policy: PermissionPolicy.Policy) =>
+  !PermissionPolicy.isActionDenied(policy, "execute")
 
 const CATALOG_CACHE_LIMIT = 5
 

@@ -94,7 +94,7 @@ fn tab_and_shift_tab_cycle_tabs_only_while_tabs_are_on() {
     let h = mount("off");
     for key in [&b"\t"[..], b"\x1b[Z"] {
         h.app.feed(key);
-        assert_eq!(h.tui.route(), support::session_route("ses_b"));
+        assert_eq!(*h.tui.route(), support::session_route("ses_b"));
     }
     assert!(h.tui.tabs.tabs(&h.tui).is_empty());
 
@@ -111,10 +111,10 @@ fn tab_and_shift_tab_cycle_tabs_only_while_tabs_are_on() {
     ];
     for (key, target) in steps {
         h.app.feed(key);
-        let moved = h.app.wait_until(WAIT, || h.tui.route() == support::session_route(target));
+        let moved = h.app.wait_until(WAIT, || *h.tui.route() == support::session_route(target));
         assert!(moved, "{key:?}: {:?}", h.tui.route());
     }
-    let ids: Vec<String> = h.tui.tabs.tabs(&h.tui).into_iter().map(|tab| tab.session_id).collect();
+    let ids: Vec<String> = h.tui.tabs.tabs(&h.tui).iter().map(|tab| tab.session_id.clone()).collect();
     assert_eq!(ids, ["ses_a"]);
 }
 
@@ -135,13 +135,13 @@ fn turning_tabs_on_in_settings_shows_a_rail_that_keys_and_clicks_drive() {
     assert!(both, "{}", h.app.text());
 
     h.app.feed(b"\t");
-    assert!(h.app.wait_until(WAIT, || h.tui.route() == support::session_route("ses_b")));
+    assert!(h.app.wait_until(WAIT, || *h.tui.route() == support::session_route("ses_b")));
 
     let text = h.app.text();
     assert!(text.contains("+ New session"), "no vertical rail:\n{text}");
     let (row, line) = text.lines().enumerate().find(|(_, line)| line.contains("Fix the parser")).unwrap();
     let column = line[..line.find("Fix the parser").unwrap()].chars().count();
     h.app.click(column as u16 + 2, row as u16);
-    let selected = h.app.wait_until(WAIT, || h.tui.route() == support::session_route("ses_a"));
+    let selected = h.app.wait_until(WAIT, || *h.tui.route() == support::session_route("ses_a"));
     assert!(selected, "{:?}:\n{}", h.tui.route(), h.app.text());
 }

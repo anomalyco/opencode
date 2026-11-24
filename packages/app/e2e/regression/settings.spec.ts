@@ -6,6 +6,7 @@ import { mockRemoteServer, mockWorkspace, openSession, openSettings, type Worksp
 import { CONSOLE_URL, consoleGateway, consoleSignIn } from "../utils/console"
 import { recordNotifications } from "../utils/notifications"
 import { installSseTransport } from "../utils/sse-transport"
+import { APP_READY_TIMEOUT } from "../utils/waits"
 import { dict as ar } from "../../src/runtime/i18n/ar"
 import { dict as en } from "../../src/runtime/i18n/en"
 
@@ -1137,6 +1138,18 @@ test("single extension rows stay aligned when switching tabs", async ({ page }) 
   }
 })
 
+test("a settings page takes focus from a click on its text without a ring around the whole page", async ({ page }) => {
+  const { settings } = await open(page)
+
+  const panel = settings.getByRole("tabpanel").filter({ has: page.getByRole("heading", { name: "Preferences" }) })
+
+  await panel.getByRole("heading", { name: "Preferences", exact: true }).click()
+  // Chromium matches :focus-visible on the focused page once a key is pressed; the controls inside show focus instead.
+  await page.keyboard.press("ArrowDown")
+  await expect(panel).toBeFocused()
+  await expect(panel).toHaveCSS("outline-style", "none")
+})
+
 test.describe("pages open before slow data", () => {
   test("worktrees", async ({ page }) => {
     const { settings } = await open(page)
@@ -1805,6 +1818,8 @@ for (const row of [
     // Anthropic only exists in the integration fixture, so its row proves the integration list has loaded.
     await expect(settings.getByText("Anthropic", { exact: true })).toBeVisible()
     await expect(settings.getByText("OpenCode Console", { exact: true })).toHaveCount(row.console ? 1 : 0)
+    // OpenCode Go connects through OpenCode, so it isn't offered without a saved Go key.
+    await expect(settings.getByText("OpenCode Go", { exact: true })).toHaveCount(0)
   })
 }
 
@@ -1855,7 +1870,16 @@ test("providers: OpenCode Go connects with its own methods, not the Console sign
   const attempts: string[] = []
 
   const { settings } = await open(page, {
-    integrations: consoleIntegrations,
+    // Settings lists OpenCode Go only for people who already saved a Go key.
+    integrations: [
+      ...consoleIntegrations.filter((integration) => integration.id !== "opencode-go"),
+      {
+        id: "opencode-go",
+        name: "OpenCode Go",
+        methods: [{ type: "key" }],
+        connections: [{ type: "credential", id: "cred_go", label: "Go key", method: "key" }],
+      },
+    ],
     onIntegrationOAuth: (input) => {
       attempts.push(input.integrationID)
 
@@ -2745,6 +2769,36 @@ test("the Side tabs interface mode switches to vertical tabs and survives reload
   await expect(layout.getByRole("radio", { name: "Side tabs", exact: true })).toBeChecked()
   await expect(page.locator('[data-slot="vertical-tabs-sidebar"]')).toBeVisible()
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
+})
+
+test("settings lines its sidebar and content up with Home's columns", async ({ page }) => {
+  await mockWorkspace(page, { name: "SettingsAlign", sessions: [] })
+  await page.goto("/")
+
+  const entry = page
+    .getByRole("complementary", { name: "Projects" })
+    .getByRole("button", { name: "Settings", exact: true })
+
+  await expect(entry).toBeVisible()
+  const field = await page.locator('[data-slot="home-session-search-field"]').boundingBox()
+  const item = await entry.boundingBox()
+  await entry.click()
+  const settings = page.getByTestId("settings-screen")
+  await expect(settings).toBeFocused({ timeout: APP_READY_TIMEOUT })
+
+  const tab = await settings.getByRole("tab", { name: "Preferences", exact: true }).boundingBox()
+
+  // The panel keeps 4px on each side for card shadows; its content box is what lines up with the search field.
+  const content = await settings.locator(".settings-content > .settings-panel:visible").evaluate((panel) => {
+    const box = panel.getBoundingClientRect()
+    const style = getComputedStyle(panel)
+    const start = parseFloat(style.paddingLeft)
+
+    return { x: box.x + start, width: box.width - start - parseFloat(style.paddingRight) }
+  })
+
+  expect({ x: tab?.x, width: tab?.width }).toEqual({ x: item?.x, width: item?.width })
+  expect(content).toEqual({ x: field?.x, width: field?.width })
 })
 
 for (const viewport of [

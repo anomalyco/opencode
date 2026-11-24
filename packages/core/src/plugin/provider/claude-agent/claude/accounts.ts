@@ -14,7 +14,7 @@ export interface Interface {
   readonly run: (request: ClaudeSessions.Request, configDirs: readonly string[]) => Effect.Effect<void, Error>
 }
 
-const LAST = "last-account"
+export const LAST = "last-account"
 export const key = (sessionID: string) => `accounts/${sessionID}`
 
 export function make(input: { readonly sessions: ClaudeSessions.Interface; readonly storage: Storage }) {

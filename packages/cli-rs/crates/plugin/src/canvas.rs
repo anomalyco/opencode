@@ -161,11 +161,17 @@ struct State {
     frame: Cell<Option<Duration>>,
     /// The part of the canvas the last paint showed, in screen cells.
     visible: Cell<(i32, i32, u32, u32)>,
-    driving: Cell<bool>,
-    /// The driver stopped because something covered the canvas: it starts again once nothing does.
-    rested: Cell<bool>,
+    drive: Cell<Drive>,
     /// The canvas's widget, for its coverage: given up when the widget goes, so it holds no cycle past it.
     widget: RefCell<Option<AnyWidget>>,
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum Drive {
+    Stopped,
+    Running,
+    /// Stopped because something covered the canvas: it starts again once nothing does.
+    Covered,
 }
 
 enum Shown {
@@ -231,8 +237,7 @@ impl Canvas {
             animate: Cell::new(animate),
             frame: Cell::new(None),
             visible: Cell::new((0, 0, 0, 0)),
-            driving: Cell::new(false),
-            rested: Cell::new(false),
+            drive: Cell::new(Drive::Stopped),
             widget: RefCell::new(None),
         });
         book(|ledger| ledger.canvases += 1);
@@ -341,8 +346,9 @@ impl State {
         hold(&drawer.owner, kept - old, i64::from(kept > 0) - i64::from(old > 0));
     }
 
-    fn set_driving(&self, on: bool) {
-        if self.driving.replace(on) != on {
+    fn set_drive(&self, drive: Drive) {
+        let on = drive == Drive::Running;
+        if (self.drive.replace(drive) == Drive::Running) != on {
             book(|ledger| ledger.driving += if on { 1 } else { -1 });
         }
     }
@@ -387,7 +393,7 @@ fn hold(owner: &Rc<str>, bytes: i64, lists: i64) {
 /// Runs a canvas's animation: a frame for its paint to draw, until the last frame did not show it, it stops animating,
 /// or the `animations` switch is off. Its time is the time between its ticks, less what follows a [`handover`].
 fn drive(state: &Rc<State>) {
-    state.set_driving(true);
+    state.set_drive(Drive::Running);
     let weak = Rc::downgrade(state);
     let mut last = state.app.now();
     state.app.animate(move |cx, _| {
@@ -395,13 +401,12 @@ fn drive(state: &Rc<State>) {
         let app = cx.app();
         // A frame left waiting is not drawn: the paint draws one only while the canvas animates.
         if !state.animate.get() || !opencode_ui::motion::running() {
-            state.set_driving(false);
+            state.set_drive(Drive::Stopped);
             return false;
         }
         if state.covered(state.visible.get()) {
             state.frame.set(None);
-            state.rested.set(true);
-            state.set_driving(false);
+            state.set_drive(Drive::Covered);
             return false;
         }
         let now = app.now();
@@ -417,19 +422,14 @@ fn drive(state: &Rc<State>) {
 /// a paint reads is the last frame's, so a covered canvas reads it again once this frame is presented, and asks for a
 /// frame only when nothing covers it then: a covered canvas asks for no frame.
 fn resume(state: &Rc<State>) {
-    if !state.rested.get() {
-        drive(state);
-        return;
-    }
-    if !state.covered(state.visible.get()) {
-        state.rested.set(false);
+    if state.drive.get() != Drive::Covered || !state.covered(state.visible.get()) {
         drive(state);
         return;
     }
     let weak = Rc::downgrade(state);
     state.app.defer(move |cx| {
         if let Some(state) = weak.upgrade()
-            && state.rested.get()
+            && state.drive.get() == Drive::Covered
             && !state.covered(state.visible.get())
         {
             cx.request_redraw();
@@ -446,7 +446,7 @@ impl Drop for State {
         if let Some(drawer) = &self.drawer {
             hold(&drawer.owner, -bytes, -i64::from(bytes > 0));
         }
-        let driving = self.driving.get();
+        let driving = self.drive.get() == Drive::Running;
         book(|ledger| {
             ledger.canvases -= 1;
             if driving {
@@ -472,7 +472,7 @@ impl Component for Board {
             let (left, top) =
                 origin.map_or((0, 0), |rect| (rect.screen_x.floor() as i32, rect.screen_y.floor() as i32));
             state.visible.set((left + visible.0, top + visible.1, visible.2, visible.3));
-            if state.animate.get() && !state.driving.get() && opencode_ui::motion::running() {
+            if state.animate.get() && state.drive.get() != Drive::Running && opencode_ui::motion::running() {
                 resume(state);
             }
         }

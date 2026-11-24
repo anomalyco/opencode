@@ -2,8 +2,6 @@
 // event. Inside a focus scope ([data-focus-scope]: a list, a tab strip, a chip row), move it to the next item, or to the
 // previous one when the last item went, and widen to the enclosing scope when the inner one has nothing left.
 
-import { focusField } from "./field-focus"
-
 const FOCUSABLE = [
   'a[href]:not([tabindex="-1"])',
   'button:not(:disabled):not([tabindex="-1"])',
@@ -14,8 +12,9 @@ const FOCUSABLE = [
   '[contenteditable="plaintext-only"]',
   '[contenteditable=""]',
   '[tabindex]:not([tabindex="-1"])',
-  // Roving focus: only one tree item is a Tab stop, but focus may land on any of them.
+  // Roving focus: only one item is a Tab stop, but focus may land on any of them.
   '[role="treeitem"]',
+  "[data-roving]",
 ].join(",")
 
 const SCOPE = "[data-focus-scope]"
@@ -58,7 +57,12 @@ export function installFocusRescue() {
   }
 }
 
-const useKeyboard = () => {
+// A rescued control shows its ring only while the keyboard is moving focus. Typing, shortcuts and a key pressed on a
+// control the pointer focused are not that.
+const NAVIGATION = new Set(["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"])
+
+const useKeyboard = (event: KeyboardEvent) => {
+  if (event.ctrlKey || event.altKey || event.metaKey || !NAVIGATION.has(event.key)) return
   keyboard = true
 }
 
@@ -145,15 +149,14 @@ function rescue() {
     if (!entry.spot) return
     const target = pick(entry.spot)
 
-    // Fields such as the composer draw their own ring.
-    if (target) return focusField(target, ring, { focusVisible: ring })
+    if (target) return target.focus({ focusVisible: ring })
 
     if (target === undefined) continue
 
     // A scope left with nothing to focus, such as the last toast, hands focus back to what had it before.
     const previous = entries.slice(index + 1).find((item) => !item.spot && usable(item.element))
 
-    if (previous) focusField(previous.element, ring, { focusVisible: ring })
+    if (previous) previous.element.focus({ focusVisible: ring })
 
     return
   }

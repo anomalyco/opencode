@@ -8,10 +8,12 @@ use opencode_api::generated::{
 };
 use opencode_local::cli_config::{Grouping, Info, Verbosity};
 use opencode_ui::motion::Spinner;
-use opencode_ui::tool_info::{canonical_tool_name, tool_display_metadata};
+use opencode_ui::tool_info::{ToolKind, canonical_tool_name, tool_display_metadata};
 use opentui::widget::Markdown;
 
-use super::messages::list::{Context, Part, Row, Spec};
+use opencode_store::MessageKey;
+
+use super::messages::list::{Context, Events, Messages, Part, Row, RowEvent, Spec};
 use super::messages::reasoning;
 use opencode_ui::locale::duration;
 
@@ -54,7 +56,7 @@ pub struct Group {
 
 impl Group {
     /// `groupID`: the first leaf's message and part, the kind, and the nesting level.
-    pub fn id(&self, level: usize) -> Option<GroupId<'_>> {
+    pub fn id(&self, level: usize) -> Option<GroupId> {
         let (message, part) = first_ref(&self.children)?;
         Some(GroupId { message, part, kind: self.kind, level })
     }
@@ -62,65 +64,61 @@ impl Group {
     /// The rows below, depth first (`descendants`).
     pub fn entries(&self) -> Vec<&Spec> {
         let mut entries = Vec::new();
-        visit(&self.children, &mut entries);
+        self.each_entry(&mut |spec| entries.push(spec));
         entries
     }
-}
 
-fn visit<'a>(nodes: &'a [Node], entries: &mut Vec<&'a Spec>) {
-    for node in nodes {
-        match node {
-            Node::Entry(spec) => entries.push(spec),
-            Node::Group(group) => visit(&group.children, entries),
-        }
-    }
-}
-
-/// A group's ID, formatted only where a string key is needed: `<message>␟<part>␟<kind>␟<level>`.
-#[derive(Clone, Copy, Debug, PartialEq)]
-pub struct GroupId<'a> {
-    message: &'a str,
-    part: Option<&'a Part>,
-    kind: Kind,
-    level: usize,
-}
-
-impl GroupId<'_> {
-    pub fn matches(&self, id: &str) -> bool {
-        struct Rest<'a>(&'a str);
-        impl std::fmt::Write for Rest<'_> {
-            fn write_str(&mut self, text: &str) -> std::fmt::Result {
-                self.0 = self.0.strip_prefix(text).ok_or(std::fmt::Error)?;
-                Ok(())
+    /// [`Self::entries`] one at a time.
+    pub fn each_entry<'a>(&'a self, each: &mut dyn FnMut(&'a Spec)) {
+        for node in &self.children {
+            match node {
+                Node::Entry(spec) => each(spec),
+                Node::Group(group) => group.each_entry(each),
             }
         }
-        let mut rest = Rest(id);
-        std::fmt::Write::write_fmt(&mut rest, format_args!("{self}")).is_ok() && rest.0.is_empty()
     }
 }
 
-impl std::fmt::Display for GroupId<'_> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}\u{1f}", self.message)?;
+/// A group's identity: its first leaf, its kind and its nesting level.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct GroupId {
+    pub message: MessageKey,
+    pub part: Option<Part>,
+    pub kind: Kind,
+    pub level: usize,
+}
+
+impl GroupId {
+    /// The ID the expanded groups are kept under: `<message>␟<part>␟<kind>␟<level>`.
+    pub fn name(self, messages: &Messages<'_>) -> String {
+        let message = messages.get(self.message);
+        let mut name = format!("{}\u{1f}", message.map_or("", SessionMessageInfo::id));
         match self.part {
-            Some(Part::Text(ordinal)) => write!(f, "text:{ordinal}")?,
-            Some(Part::Reasoning(ordinal)) => write!(f, "reasoning:{ordinal}")?,
-            Some(Part::Tool(id)) => f.write_str(id)?,
-            None => f.write_str("message")?,
+            Some(Part::Text(ordinal)) => name.push_str(&format!("text:{ordinal}")),
+            Some(Part::Reasoning(ordinal)) => name.push_str(&format!("reasoning:{ordinal}")),
+            Some(part @ Part::Tool(_)) => {
+                if let Some(SessionMessageInfo::Assistant(assistant)) = message
+                    && let Some(SessionMessageAssistantContentItem::Tool(tool)) = part.resolve(assistant)
+                {
+                    name.push_str(&tool.id);
+                }
+            }
+            None => name.push_str("message"),
         }
-        write!(f, "\u{1f}{}\u{1f}{}", self.kind.name(), self.level)
+        name.push_str(&format!("\u{1f}{}\u{1f}{}", self.kind.name(), self.level));
+        name
     }
 }
 
-fn entry_ref(spec: &Spec) -> Option<(&str, Option<&Part>)> {
+fn entry_ref(spec: &Spec) -> Option<(MessageKey, Option<Part>)> {
     match spec {
-        Spec::Part { message, part } => Some((message, Some(part))),
-        Spec::Message(id) => Some((id, None)),
+        Spec::Part { message, part } => Some((*message, Some(*part))),
+        Spec::Message(key) => Some((*key, None)),
         _ => None,
     }
 }
 
-fn first_ref(nodes: &[Node]) -> Option<(&str, Option<&Part>)> {
+fn first_ref(nodes: &[Node]) -> Option<(MessageKey, Option<Part>)> {
     nodes.iter().find_map(|node| match node {
         Node::Entry(spec) => entry_ref(spec),
         Node::Group(group) => first_ref(&group.children),
@@ -133,8 +131,6 @@ pub struct Settings {
     pub grouping: Cell<bool>,
     pub verbosity: Cell<Verbosity>,
     pub expanded: RefCell<HashMap<String, bool>>,
-    /// Re-renders the transcript after a header click.
-    pub refresh: RefCell<Option<Rc<dyn Fn()>>>,
 }
 
 impl Settings {
@@ -143,7 +139,6 @@ impl Settings {
             grouping: Cell::new(true),
             verbosity: Cell::new(DEFAULT_VERBOSITY),
             expanded: RefCell::default(),
-            refresh: RefCell::default(),
         });
         settings.read(info);
         settings
@@ -164,12 +159,12 @@ impl Settings {
         )
     }
 
-    /// [`Self::expanded`] for a group ID, formatted only when the reader opened or closed some group.
-    pub fn group_expanded(&self, id: &GroupId<'_>) -> bool {
+    /// [`Self::expanded`] for a group ID, named only when the reader opened or closed some group.
+    pub fn group_expanded(&self, id: GroupId, messages: &Messages<'_>) -> bool {
         if self.expanded.borrow().is_empty() {
             return self.expanded("", id.kind);
         }
-        self.expanded(&id.to_string(), id.kind)
+        self.expanded(&id.name(messages), id.kind)
     }
 
     /// `groupedKind`: reasoning groups while thinking is hidden, exploration unless grouping is off.
@@ -182,24 +177,24 @@ impl Settings {
     }
 
     /// `rowWeight`: the entries a row renders. A closed group renders its header only.
-    pub fn weight(&self, spec: &Spec, hide_thinking: bool) -> usize {
+    pub fn weight(&self, spec: &Spec, hide_thinking: bool, messages: &Messages<'_>) -> usize {
         let Spec::Group(group) = spec else { return 1 };
-        self.group_weight(group, 0, hide_thinking)
+        self.group_weight(group, 0, hide_thinking, messages)
     }
 
-    fn group_weight(&self, group: &Group, level: usize, hide_thinking: bool) -> usize {
+    fn group_weight(&self, group: &Group, level: usize, hide_thinking: bool, messages: &Messages<'_>) -> usize {
         if !self.grouped(group.kind, hide_thinking) {
             return group.size;
         }
         let Some(id) = group.id(level) else { return 1 };
-        if !self.group_expanded(&id) {
+        if !self.group_expanded(id, messages) {
             return 1;
         }
         1 + group
             .children
             .iter()
             .map(|child| match child {
-                Node::Group(child) => self.group_weight(child, level + 1, hide_thinking),
+                Node::Group(child) => self.group_weight(child, level + 1, hide_thinking, messages),
                 Node::Entry(_) => 1,
             })
             .sum::<usize>()
@@ -226,13 +221,10 @@ pub fn rows_after(weights: &[usize], start: usize, budget: usize) -> usize {
     index
 }
 
-const EXPLORATION_TOOLS: [&str; 5] = ["read", "glob", "grep", "webfetch", "websearch"];
-
-pub fn project(rows: Vec<Spec>, messages: &[SessionMessageInfo], verbosity: Verbosity) -> Vec<Spec> {
-    let index: HashMap<&str, &SessionMessageInfo> = messages.iter().map(|message| (message.id(), message)).collect();
+pub fn project(rows: Vec<Spec>, index: Messages<'_>, verbosity: Verbosity) -> Vec<Spec> {
     let mut nodes: Vec<(Node, bool)> = Vec::new();
     for spec in rows {
-        let (path, closes) = path(&spec, &index, verbosity);
+        let (path, closes) = path(&spec, index, verbosity);
         append(&mut nodes, spec, path, closes);
     }
     let count = nodes.len();
@@ -248,7 +240,7 @@ pub fn project(rows: Vec<Spec>, messages: &[SessionMessageInfo], verbosity: Verb
                         && group
                             .children
                             .iter()
-                            .all(|child| matches!(child, Node::Entry(spec) if reasoning_done(spec, &index))));
+                            .all(|child| matches!(child, Node::Entry(spec) if reasoning_done(spec, index))));
                 out.push(Spec::Group(group));
             }
         }
@@ -258,9 +250,11 @@ pub fn project(rows: Vec<Spec>, messages: &[SessionMessageInfo], verbosity: Verb
 
 /// `partitionPending`: moves the exploration tools waiting on a permission request (by tool call ID) to the end
 /// of their group, keeping the order otherwise, and records the waiting rows of exploration and activity groups.
-pub fn partition_pending(specs: &mut [Spec], pending: &HashSet<&str>) {
-    let blocked =
-        |spec: &Spec| matches!(spec, Spec::Part { part: Part::Tool(id), .. } if pending.contains(id.as_str()));
+pub fn partition_pending(specs: &mut [Spec], pending: &HashSet<&str>, index: Messages<'_>) {
+    let blocked = |spec: &Spec| {
+        matches!(spec, Spec::Part { message, part: part @ Part::Tool(_) }
+            if tool(index, *message, part).is_some_and(|tool| pending.contains(tool.id.as_str())))
+    };
     for spec in specs {
         let Spec::Group(group) = spec else { continue };
         if !matches!(group.kind, Kind::Exploration | Kind::Activity) {
@@ -311,11 +305,11 @@ fn append_child(nodes: &mut Vec<Node>, spec: Spec, path: &[Kind]) {
 }
 
 /// A row's grouping path (`partPath`, `messagePath`) and whether it closes the group before it.
-fn path(spec: &Spec, index: &HashMap<&str, &SessionMessageInfo>, verbosity: Verbosity) -> (&'static [Kind], bool) {
+fn path(spec: &Spec, index: Messages<'_>, verbosity: Verbosity) -> (&'static [Kind], bool) {
     let low = verbosity == Verbosity::Low;
     match spec {
-        Spec::Message(id) => {
-            let message = index.get(id.as_str()).copied();
+        Spec::Message(key) => {
+            let message = index.get(*key);
             // A running compaction is pending and leaves the group before it open.
             let running = matches!(message, Some(SessionMessageInfo::Compaction(SessionMessageCompaction::Running(_))));
             let path: &[Kind] = if instruction_paths(message).is_empty() {
@@ -328,14 +322,17 @@ fn path(spec: &Spec, index: &HashMap<&str, &SessionMessageInfo>, verbosity: Verb
             (path, !running)
         }
         Spec::Part { message, part } => {
-            let name = match part {
-                Part::Tool(_) => tool(index, message, part).map_or("", |tool| tool.name.as_str()),
-                _ => "",
+            let kind = match part {
+                Part::Tool(_) => tool(index, *message, part).map(|tool| ToolKind::of_ignore_ascii_case(&tool.name)),
+                _ => None,
             };
-            let exploration = EXPLORATION_TOOLS.iter().any(|tool| name.eq_ignore_ascii_case(tool));
+            let exploration = matches!(
+                kind,
+                Some(ToolKind::Read | ToolKind::Glob | ToolKind::Grep | ToolKind::WebFetch | ToolKind::WebSearch)
+            );
             let path: &[Kind] = match part {
                 Part::Text(_) => &[],
-                Part::Tool(_) if name.eq_ignore_ascii_case("question") => &[],
+                Part::Tool(_) if kind == Some(ToolKind::Question) => &[],
                 Part::Reasoning(_) if low => &[Kind::Activity, Kind::Reasoning],
                 Part::Reasoning(_) => &[Kind::Reasoning],
                 Part::Tool(_) if exploration && low => &[Kind::Activity, Kind::Exploration],
@@ -349,27 +346,16 @@ fn path(spec: &Spec, index: &HashMap<&str, &SessionMessageInfo>, verbosity: Verb
     }
 }
 
-fn assistant<'a>(index: &HashMap<&str, &'a SessionMessageInfo>, id: &str) -> Option<&'a SessionMessageAssistant> {
-    match index.get(id)? {
-        SessionMessageInfo::Assistant(message) => Some(message),
-        _ => None,
-    }
-}
-
-fn tool<'a>(
-    index: &HashMap<&str, &'a SessionMessageInfo>,
-    message: &str,
-    part: &Part,
-) -> Option<&'a SessionMessageAssistantTool> {
-    match part.resolve(assistant(index, message)?)? {
+fn tool<'a>(index: Messages<'a>, message: MessageKey, part: &Part) -> Option<&'a SessionMessageAssistantTool> {
+    match part.resolve(index.assistant(message)?)? {
         SessionMessageAssistantContentItem::Tool(tool) => Some(tool),
         _ => None,
     }
 }
 
-fn reasoning_done(spec: &Spec, index: &HashMap<&str, &SessionMessageInfo>) -> bool {
+fn reasoning_done(spec: &Spec, index: Messages<'_>) -> bool {
     let Spec::Part { message, part } = spec else { return false };
-    let Some(assistant) = assistant(index, message) else { return false };
+    let Some(assistant) = index.assistant(*message) else { return false };
     matches!(
         part.resolve(assistant),
         Some(SessionMessageAssistantContentItem::Reasoning(reasoning))
@@ -394,10 +380,11 @@ pub fn instruction_paths(message: Option<&SessionMessageInfo>) -> Vec<String> {
 pub fn exploration_label(tools: &[&SessionMessageAssistantTool], completed: bool) -> String {
     let mut counts: Vec<(&str, usize)> = Vec::new();
     for tool in tools {
-        let name = match canonical_tool_name(&tool.name) {
-            "grep" | "glob" | "websearch" => "search",
-            "webfetch" => "fetch",
-            name @ ("shell" | "read") => name,
+        let name = match ToolKind::of(&tool.name) {
+            ToolKind::Grep | ToolKind::Glob | ToolKind::WebSearch => "search",
+            ToolKind::WebFetch => "fetch",
+            ToolKind::Shell => "shell",
+            ToolKind::Read => "read",
             _ => "generic",
         };
         match counts.iter_mut().find(|(other, _)| *other == name) {
@@ -456,11 +443,11 @@ pub fn activity_summary(items: &[Activity<'_>], instructions: usize, closed: boo
                 }
             }
             Activity::Tool(tool) => {
-                let name = canonical_tool_name(&tool.name);
-                if name == "execute" {
+                let kind = ToolKind::of(&tool.name);
+                if kind == ToolKind::Execute {
                     let calls = execute_calls(tool);
                     for call in &calls {
-                        add(if canonical_tool_name(call) == "read" { "read" } else { "tool" });
+                        add(if ToolKind::of(call) == ToolKind::Read { "read" } else { "tool" });
                     }
                     if calls.is_empty() && !active {
                         add("tool");
@@ -470,10 +457,10 @@ pub fn activity_summary(items: &[Activity<'_>], instructions: usize, closed: boo
                 if active {
                     continue;
                 }
-                add(match name {
-                    "shell" => "command",
-                    "read" => "read",
-                    "edit" | "write" | "patch" => "edit",
+                add(match kind {
+                    ToolKind::Shell => "command",
+                    ToolKind::Read => "read",
+                    ToolKind::Edit | ToolKind::Write | ToolKind::Patch => "edit",
                     _ => "tool",
                 });
             }
@@ -495,11 +482,10 @@ pub fn activity_summary(items: &[Activity<'_>], instructions: usize, closed: boo
 
 fn busy_label(item: &Activity<'_>) -> String {
     let Activity::Tool(tool) = item else { return "Thinking…".to_owned() };
-    let name = canonical_tool_name(&tool.name);
-    let noun = match name {
-        "shell" => "command",
-        "execute" => "code",
-        name => name,
+    let noun = match ToolKind::of(&tool.name) {
+        ToolKind::Shell => "command",
+        ToolKind::Execute => "code",
+        _ => canonical_tool_name(&tool.name),
     };
     let verb = match tool.state {
         SessionMessageAssistantToolState::Streaming(_) => "Preparing",
@@ -535,13 +521,15 @@ struct Inner {
     app: App,
     theme: Live,
     settings: Rc<Settings>,
+    events: Events,
     root: View,
     header: View,
     body: View,
     /// The root group's permission-blocked rows, below it even when it is closed (`PendingEntries`).
     outside: View,
     level: usize,
-    id: RefCell<Option<String>>,
+    /// The group shown, and its name for the expanded groups.
+    id: RefCell<Option<(GroupId, String)>>,
     kind: Cell<Option<Kind>>,
     hover: Cell<bool>,
     /// The header that is mounted, so a hover only recolors it.
@@ -575,29 +563,17 @@ enum Painted {
     Spinner(Spinner),
 }
 
+#[derive(Clone, Copy, PartialEq)]
 enum ChildKey {
-    Entry(Mode, String, Option<Part>),
-    Group(String),
+    Entry(Mode, MessageKey, Option<Part>),
+    Group(GroupId),
 }
 
 impl ChildKey {
     fn new(node: &Node, mode: Mode, level: usize) -> Option<Self> {
         match node {
-            Node::Entry(spec) => {
-                entry_ref(spec).map(|(message, part)| Self::Entry(mode, message.to_owned(), part.cloned()))
-            }
-            Node::Group(group) => group.id(level).map(|id| Self::Group(id.to_string())),
-        }
-    }
-
-    /// Whether `node` has this identity, without building its key.
-    fn is(&self, node: &Node, mode: Mode, level: usize) -> bool {
-        match (self, node) {
-            (Self::Entry(own, message, part), Node::Entry(spec)) => {
-                *own == mode && entry_ref(spec) == Some((message.as_str(), part.as_ref()))
-            }
-            (Self::Group(id), Node::Group(group)) => group.id(level).is_some_and(|other| other.matches(id)),
-            _ => false,
+            Node::Entry(spec) => entry_ref(spec).map(|(message, part)| Self::Entry(mode, message, part)),
+            Node::Group(group) => group.id(level).map(Self::Group),
         }
     }
 }
@@ -609,7 +585,7 @@ enum Child {
 }
 
 impl GroupView {
-    pub fn new(cx: &Context<'_>, settings: &Rc<Settings>, level: usize) -> Self {
+    pub fn new(cx: &Context<'_>, level: usize) -> Self {
         let header = View::new(cx.app).padding_edge(Edge::Left, 3);
         let body = View::new(cx.app).column().shrink(0.0);
         let outside = View::new(cx.app).column().shrink(0.0);
@@ -617,7 +593,8 @@ impl GroupView {
         let inner = Rc::new(Inner {
             app: cx.app.clone(),
             theme: cx.tui.live_theme(),
-            settings: settings.clone(),
+            settings: cx.groups.clone(),
+            events: cx.events.clone(),
             root,
             header,
             body,
@@ -635,13 +612,10 @@ impl GroupView {
             if cx.app().selected_text().is_some_and(|text| !text.is_empty()) {
                 return;
             }
-            let (Some(id), Some(kind)) = (inner.id.borrow().clone(), inner.kind.get()) else { return };
+            let (Some((_, id)), Some(kind)) = (inner.id.borrow().clone(), inner.kind.get()) else { return };
             let open = inner.settings.expanded(&id, kind);
             inner.settings.expanded.borrow_mut().insert(id, !open);
-            let refresh = inner.settings.refresh.borrow().clone();
-            if let Some(refresh) = refresh {
-                refresh();
-            }
+            inner.events.send(RowEvent::Toggled);
         }));
         inner.header.on_hover(bind!(inner, |inner, _, hovered| {
             inner.hover.set(hovered);
@@ -677,13 +651,9 @@ impl GroupView {
         let inner = &self.0;
         let id = group.id(inner.level);
         inner.kind.set(Some(group.kind));
-        let expanded = id.as_ref().is_some_and(|id| inner.settings.group_expanded(id));
-        let same = match (inner.id.borrow().as_deref(), &id) {
-            (Some(old), Some(id)) => id.matches(old),
-            (old, id) => old.is_none() && id.is_none(),
-        };
-        if !same {
-            *inner.id.borrow_mut() = id.map(|id| id.to_string());
+        let expanded = id.is_some_and(|id| inner.settings.group_expanded(id, &cx.lookup));
+        if inner.id.borrow().as_ref().map(|(shown, _)| *shown) != id {
+            *inner.id.borrow_mut() = id.map(|id| (id, id.name(&cx.lookup)));
         }
         let grouped = inner.settings.grouped(group.kind, cx.hide_thinking);
         let (header, mode) = match group.kind {
@@ -786,7 +756,7 @@ impl GroupView {
             .into_iter()
             .filter(|spec| !pending.contains(spec))
             .filter_map(|spec| match spec {
-                Spec::Part { message, part } => match part.resolve(cx.assistant(message)?)? {
+                Spec::Part { message, part } => match part.resolve(cx.assistant(*message)?)? {
                     SessionMessageAssistantContentItem::Tool(tool) => Some(tool),
                     _ => None,
                 },
@@ -820,7 +790,7 @@ impl GroupView {
             .filter(|spec| !pending.contains(spec))
             .filter_map(|spec| {
                 let Spec::Part { message, part } = spec else { return None };
-                let assistant = cx.assistant(message)?;
+                let assistant = cx.assistant(*message)?;
                 match part.resolve(assistant)? {
                     SessionMessageAssistantContentItem::Reasoning(part) => Some(Activity::Thought(assistant, part)),
                     SessionMessageAssistantContentItem::Tool(tool) => Some(Activity::Tool(tool)),
@@ -852,15 +822,13 @@ impl GroupView {
         (Some(header), expanded.then_some(Mode::Normal))
     }
 
-    pub fn anchors(&self, out: &mut Vec<(String, f64)>) {
+    pub fn anchors(&self, out: &mut Vec<(MessageKey, f64)>) {
         let (children, outside) = (self.0.children.borrow(), self.0.outside_children.borrow());
         for (key, child) in children.iter().chain(outside.iter()) {
             match (key, child) {
-                (ChildKey::Entry(_, message, _), Child::Row(row)) => {
-                    out.push((message.clone(), row.wrapper.rect().screen_y))
-                }
+                (ChildKey::Entry(_, message, _), Child::Row(row)) => out.push((*message, row.wrapper.rect().screen_y)),
                 (ChildKey::Entry(_, message, _), Child::Thought(thought)) => {
-                    out.push((message.clone(), thought.root.rect().screen_y))
+                    out.push((*message, thought.root.rect().screen_y))
                 }
                 (_, Child::Group(group)) => group.anchors(out),
                 _ => {}
@@ -874,7 +842,7 @@ fn thought<'a>(
     spec: &Spec,
 ) -> Option<(&'a SessionMessageAssistant, &'a SessionMessageAssistantReasoning)> {
     let Spec::Part { message, part } = spec else { return None };
-    let assistant = cx.assistant(message)?;
+    let assistant = cx.assistant(*message)?;
     match part.resolve(assistant)? {
         SessionMessageAssistantContentItem::Reasoning(part) => Some((assistant, part)),
         _ => None,
@@ -885,7 +853,7 @@ fn instruction_files(cx: &Context<'_>, entries: &[&Spec]) -> usize {
     let mut files: Vec<String> = entries
         .iter()
         .filter_map(|spec| match spec {
-            Spec::Message(id) => Some(instruction_paths(cx.message(id))),
+            Spec::Message(key) => Some(instruction_paths(cx.message(*key))),
             _ => None,
         })
         .flatten()
@@ -966,10 +934,10 @@ impl Inner {
                 continue;
             }
             let level = self.level + 1;
-            let (key, child) = match old.iter().position(|(other, _)| other.is(node, mode, level)) {
+            let Some(key) = ChildKey::new(node, mode, level) else { continue };
+            let (key, child) = match old.iter().position(|(other, _)| *other == key) {
                 Some(position) => old.remove(position),
                 None => {
-                    let Some(key) = ChildKey::new(node, mode, level) else { continue };
                     let child = match node {
                         Node::Entry(_) if mode == Mode::Thought => Child::Thought(Thought::new(cx)),
                         Node::Entry(spec) => {
@@ -977,7 +945,7 @@ impl Inner {
                             row.wrapper.margin_edge(Edge::Top, 0);
                             Child::Row(Box::new(row))
                         }
-                        Node::Group(_) => Child::Group(GroupView::new(cx, &self.settings, level)),
+                        Node::Group(_) => Child::Group(GroupView::new(cx, level)),
                     };
                     (key, child)
                 }
@@ -1090,8 +1058,18 @@ mod tests {
         })
     }
 
-    fn part(message: &str, part: Part) -> Spec {
-        Spec::Part { message: message.into(), part }
+    /// Messages outside the store are keyed by their positions.
+    fn part(message: u32, part: Part) -> Spec {
+        Spec::Part { message: MessageKey(message), part }
+    }
+
+    /// One assistant message with a tool call for each ID.
+    fn calls(ids: &[&str]) -> Vec<SessionMessageInfo> {
+        let content: Vec<_> = ids.iter().map(|id| tool(id, "read")).collect();
+        messages(json!([{
+            "id": "msg_1", "type": "assistant", "agent": "build",
+            "model": { "providerID": "p", "id": "m" }, "time": { "created": 1 }, "content": content,
+        }]))
     }
 
     #[test]
@@ -1110,15 +1088,15 @@ mod tests {
             },
         ]));
         let rows = vec![
-            Spec::Message("msg_1".into()),
-            part("msg_2", Part::Reasoning(0)),
-            part("msg_2", Part::Reasoning(1)),
-            part("msg_2", Part::Tool("call_1".into())),
-            part("msg_2", Part::Tool("call_2".into())),
-            part("msg_2", Part::Tool("call_3".into())),
-            part("msg_2", Part::Text(0)),
+            Spec::Message(MessageKey(0)),
+            part(1, Part::Reasoning(0)),
+            part(1, Part::Reasoning(1)),
+            part(1, Part::Tool(2)),
+            part(1, Part::Tool(3)),
+            part(1, Part::Tool(4)),
+            part(1, Part::Text(0)),
         ];
-        let medium = project(rows.clone(), &list, Verbosity::Medium);
+        let medium = project(rows.clone(), Messages::of(&list), Verbosity::Medium);
         let kinds: Vec<_> = medium
             .iter()
             .map(|spec| match spec {
@@ -1130,10 +1108,9 @@ mod tests {
         let Spec::Group(reasoning) = &medium[1] else { unreachable!() };
         assert!(reasoning.completed);
         let id = reasoning.id(0).unwrap();
-        assert_eq!(id.to_string(), "msg_2\u{1f}reasoning:0\u{1f}reasoning\u{1f}0");
-        assert!(id.matches(&id.to_string()) && !id.matches("msg_2\u{1f}reasoning:0") && !id.matches(&format!("{id}0")));
+        assert_eq!(id.name(&Messages::of(&list)), "msg_2\u{1f}reasoning:0\u{1f}reasoning\u{1f}0");
 
-        let low = project(rows, &list, Verbosity::Low);
+        let low = project(rows, Messages::of(&list), Verbosity::Low);
         assert_eq!(low.len(), 3);
         let Spec::Group(activity) = &low[1] else { unreachable!() };
         assert_eq!((activity.kind, activity.size), (Kind::Activity, 5));
@@ -1144,22 +1121,21 @@ mod tests {
     #[test]
     fn closed_groups_weigh_one_and_open_ones_their_children() {
         let settings = Settings::new(&Info::default());
+        let list = calls(&["a", "b"]);
+        let lookup = Messages::of(&list);
         let group = Spec::Group(Group {
             kind: Kind::Exploration,
-            children: vec![
-                Node::Entry(part("msg_1", Part::Tool("a".into()))),
-                Node::Entry(part("msg_1", Part::Tool("b".into()))),
-            ],
+            children: vec![Node::Entry(part(0, Part::Tool(0))), Node::Entry(part(0, Part::Tool(1)))],
             size: 2,
             completed: true,
             pending: Vec::new(),
         });
-        assert_eq!(settings.weight(&group, true), 1);
+        assert_eq!(settings.weight(&group, true, &lookup), 1);
         let Spec::Group(inner) = &group else { unreachable!() };
-        settings.expanded.borrow_mut().insert(inner.id(0).unwrap().to_string(), true);
-        assert_eq!(settings.weight(&group, true), 3);
+        settings.expanded.borrow_mut().insert(inner.id(0).unwrap().name(&lookup), true);
+        assert_eq!(settings.weight(&group, true, &lookup), 3);
         settings.grouping.set(false);
-        assert_eq!(settings.weight(&group, true), 2);
+        assert_eq!(settings.weight(&group, true, &lookup), 2);
         assert_eq!(rows_before(&[1, 3, 1, 1], 4, 4), 1);
         assert_eq!(rows_before(&[1, 3, 1, 1], 4, 40), 0);
     }
@@ -1180,25 +1156,26 @@ mod tests {
 
     #[test]
     fn pending_tools_go_last_in_exploration_and_are_recorded_in_activity() {
-        let entry = |id: &str| Node::Entry(part("msg_1", Part::Tool(id.into())));
-        let group = |kind, ids: &[&str]| {
+        let list = calls(&["a", "b", "c"]);
+        let entry = |index: usize| Node::Entry(part(0, Part::Tool(index)));
+        let group = |kind| {
             Spec::Group(Group {
                 kind,
-                children: ids.iter().map(|id| entry(id)).collect(),
-                size: ids.len(),
+                children: (0..3).map(entry).collect(),
+                size: 3,
                 completed: false,
                 pending: Vec::new(),
             })
         };
-        let mut specs = vec![group(Kind::Exploration, &["a", "b", "c"]), group(Kind::Activity, &["a", "b", "c"])];
-        partition_pending(&mut specs, &HashSet::from(["a", "b"]));
+        let mut specs = vec![group(Kind::Exploration), group(Kind::Activity)];
+        partition_pending(&mut specs, &HashSet::from(["a", "b"]), Messages::of(&list));
         let Spec::Group(exploration) = &specs[0] else { unreachable!() };
-        assert_eq!(exploration.children, [entry("c"), entry("a"), entry("b")]);
-        let pending = vec![part("msg_1", Part::Tool("a".into())), part("msg_1", Part::Tool("b".into()))];
+        assert_eq!(exploration.children, [entry(2), entry(0), entry(1)]);
+        let pending = vec![part(0, Part::Tool(0)), part(0, Part::Tool(1))];
         assert_eq!(exploration.pending, pending);
         // Activity groups keep their order.
         let Spec::Group(activity) = &specs[1] else { unreachable!() };
-        assert_eq!(activity.children, [entry("a"), entry("b"), entry("c")]);
+        assert_eq!(activity.children, [entry(0), entry(1), entry(2)]);
         assert_eq!(activity.pending, pending);
     }
 }

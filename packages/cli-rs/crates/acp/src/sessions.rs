@@ -95,7 +95,7 @@ impl Sessions {
     }
 
     async fn follow(&self, connected: &watch::Sender<bool>) {
-        let mut stream = subscribe(&self.client);
+        let mut stream = subscribe::<Value>(&self.client);
         while let Some(event) = stream.next().await {
             let event = match event {
                 Ok(event) => event,
@@ -208,7 +208,7 @@ impl Sessions {
     fn send_commands(&self, session_id: &str, catalog: &Catalog) -> Result<(), Failure> {
         self.connection.session_update(
             session_id,
-            json!({
+            &json!({
                 "sessionUpdate": "available_commands_update",
                 "availableCommands": available_commands(catalog),
             }),
@@ -222,7 +222,7 @@ impl Sessions {
         if options != config_options(previous, &selection) {
             let _ = self.connection.session_update(
                 &attached.id,
-                json!({ "sessionUpdate": "config_option_update", "configOptions": options }),
+                &json!({ "sessionUpdate": "config_option_update", "configOptions": options }),
             );
         }
         if next.commands != previous.commands {

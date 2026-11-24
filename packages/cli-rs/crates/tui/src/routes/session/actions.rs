@@ -66,7 +66,7 @@ impl Inner {
         };
         let slash = |name: &str, arguments: bool| Slash { arguments, ..Slash::new(name) };
         let routed = |tui: &Tui, session: &SessionID, check: fn(&SessionInfo) -> bool| {
-            tui.route() == (Route::Session { id: session.clone() })
+            *tui.route() == (Route::Session { id: session.clone() })
                 && tui.data.read(|state| state.session(session).is_some_and(check))
         };
         let reverted = {
@@ -112,7 +112,7 @@ impl Inner {
             return;
         };
         let title = input.trim().to_owned();
-        let data = tui.data.clone();
+        let remote = tui.data.remote();
         let session = self.session.clone();
         let generate = title.is_empty();
         tui.request(
@@ -122,10 +122,13 @@ impl Inner {
                     title: Some(title),
                     ..SessionUpdateInput::default()
                 };
-                data.client().session_update(&input).await.map_err(|error| error.to_string())?;
+                remote.client().session_update(&input).await.map_err(|error| error.to_string())?;
                 if generate {
-                    data.session_invalidate(&session);
-                    data.session_sync(&session, false).await.map_err(|error| error.to_string())?;
+                    let sync = remote.call(move |data| {
+                        data.session_invalidate(&session);
+                        data.session_sync(&session, false)
+                    });
+                    sync.await.map_err(|error| error.to_string())?.await.map_err(|error| error.to_string())?;
                 }
                 Ok::<_, String>(())
             },

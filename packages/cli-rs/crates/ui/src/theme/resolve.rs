@@ -1,4 +1,9 @@
-//! Resolves hue scales and per-surface tokens from an expanded definition.
+//! Resolves hue scales and per-surface tokens from a theme document, read in place.
+//!
+//! A surface stacks the page definition, then the dialog's, then the footer's. Each definition is the document's
+//! `base` merged under the selected mode (`mergeTheme`), and `expandTheme` fills its missing derived tokens from the
+//! same definition. A token is the topmost definition's; on a raised surface each action state falls back as
+//! `contextualize` does.
 
 use std::collections::HashMap;
 
@@ -6,23 +11,33 @@ use opentui::style::Color;
 use serde_json::{Map, Value};
 
 use super::color::{from_hex, is_hex};
-use super::document::{STATES, STEPS, VARIANTS, expand_theme, merge, select};
+use super::document::{STATES, STEP_KEYS, STEPS, VARIANTS, modes};
 use super::tokens::Tokens;
-use super::{Scale, ThemeMode, Views};
+use super::{Scale, ThemeMode, Views, mode_name};
 use opencode_api_types::js::truthy;
 
 const SECTIONS: [&str; 7] = ["text", "background", "border", "scrollbar", "diff", "syntax", "markdown"];
+/// The document keys of [`STATES`].
+const STATE_KEYS: [&str; 5] = ["$disabled", "$pressed", "$focused", "$selected", "$hovered"];
+
+/// A definition: the document's `base` layer, then the selected mode's, which wins.
+type Group<'a> = [Option<&'a Map<String, Value>>; 2];
 
 /// `resolveThemeDocument`: the views of `document` in `mode`, or in its first mode when it lacks `mode`.
 pub(crate) fn resolve_document(document: &Value, mode: ThemeMode) -> Result<(Views, ThemeMode), String> {
-    let (definition, mode) = select(document, mode)?;
-    Ok((resolve_expanded(&expand_theme(&definition))?, mode))
+    let modes = modes(document);
+    let selected = if modes.contains(&mode) { Some(mode) } else { modes.first().copied() };
+    let definition = selected.and_then(|mode| document.get(mode_name(mode))).filter(|value| truthy(value));
+    let (Some(selected), Some(definition)) = (selected, definition) else {
+        return Err("Theme must provide at least one mode".to_owned());
+    };
+    let page = [document.get("base"), Some(definition)].map(|layer| layer.and_then(Value::as_object));
+    Ok((resolve_definition(page)?, selected))
 }
 
-fn resolve_expanded(definition: &Map<String, Value>) -> Result<Views, String> {
-    let hue = resolve_hue(definition.get("hue"))?;
-    let categorical_hues = definition
-        .get("categorical")
+fn resolve_definition(page: Group<'_>) -> Result<Views, String> {
+    let hue = resolve_hue(get(page, &["hue"]))?;
+    let categorical_hues = get(page, &["categorical"])
         .and_then(Value::as_array)
         .ok_or("Theme categorical hues are missing")?
         .iter()
@@ -34,20 +49,16 @@ fn resolve_expanded(definition: &Map<String, Value>) -> Result<Views, String> {
         })
         .collect::<Result<Vec<_>, _>>()?;
     let categorical = categorical_hues.iter().map(|index| hue[*index].1).collect();
-    let base = sections(definition);
-    let dialog = definition.get("@dialog").filter(|value| truthy(value));
-    let dialog_tokens = match dialog {
-        Some(dialog) => contextualize(&base, &sections(dialog.as_object().unwrap_or(&Map::new()))),
-        None => base.clone(),
-    };
+    let dialog = get(page, &["@dialog"]).filter(|value| truthy(value)).map(|_| child(page, "@dialog"));
+    let footer = dialog.and_then(|dialog| {
+        let footer = get(dialog, &["@footer"]).filter(|value| value.is_object() && truthy(value));
+        footer.map(|_| child(dialog, "@footer"))
+    });
+    let groups = [page, dialog.unwrap_or_default(), footer.unwrap_or_default()];
     // TypeScript resolves the dialog surfaces first, so their errors win.
-    let dialog_view = resolve_view(&dialog_tokens, &hue)?;
-    let footer = match dialog.and_then(|dialog| dialog.get("@footer")).filter(|value| truthy(value)) {
-        Some(Value::Object(footer)) => resolve_view(&contextualize(&dialog_tokens, footer), &hue)?,
-        Some(_) => resolve_view(&dialog_tokens, &hue)?,
-        None => dialog_view.clone(),
-    };
-    let base = resolve_view(&base, &hue)?;
+    let dialog_view = resolve_view(&groups[..if dialog.is_some() { 2 } else { 1 }], &hue)?;
+    let footer = if footer.is_some() { resolve_view(&groups, &hue)? } else { dialog_view.clone() };
+    let base = if dialog.is_some() { resolve_view(&groups[..1], &hue)? } else { dialog_view.clone() };
     Ok(Views {
         hue,
         categorical,
@@ -57,59 +68,83 @@ fn resolve_expanded(definition: &Map<String, Value>) -> Result<Views, String> {
     })
 }
 
-/// The token sections of a definition, as `tokens()` picks them.
-fn sections(definition: &Map<String, Value>) -> Map<String, Value> {
-    SECTIONS
-        .iter()
-        .map(|section| (section.to_string(), definition.get(*section).cloned().unwrap_or(Value::Null)))
-        .collect()
-}
-
-/// Layers a surface override on `base`. Each action state takes the override's state, then its base, then the
-/// underlying state, then the underlying base, so an override's `base` replaces every state of that variant.
-fn contextualize(base: &Map<String, Value>, surface: &Map<String, Value>) -> Map<String, Value> {
-    // `undefined` sections are skipped when TypeScript merges; null stands in for them here.
-    let present = |map: &Map<String, Value>| {
-        Value::Object(map.iter().filter(|(_, value)| !value.is_null()).map(|(k, v)| (k.clone(), v.clone())).collect())
-    };
-    let mut result = merge(&[&present(base), &present(surface)]);
-    for section in ["text", "background"] {
-        let actions = contextual_actions(
-            base.get(section).and_then(|value| value.get("action")),
-            surface.get(section).and_then(|value| value.get("action")),
-        );
-        let mut merged = result.get(section).and_then(Value::as_object).cloned().unwrap_or_default();
-        merged.insert("action".to_owned(), actions);
-        result.insert(section.to_owned(), Value::Object(merged));
+/// The layers of `key` in `group`. Like `mergeTheme`, a layer that is not an object hides the layer below.
+fn child<'a>(group: Group<'a>, key: &str) -> Group<'a> {
+    let [base, mode] = group.map(|layer| layer.and_then(|layer| layer.get(key)));
+    match mode {
+        Some(Value::Object(mode)) => [base.and_then(Value::as_object), Some(mode)],
+        Some(_) => [None, None],
+        None => [base.and_then(Value::as_object), None],
     }
-    result
 }
 
-fn contextual_actions(base: Option<&Value>, surface: Option<&Value>) -> Value {
-    let variants = VARIANTS.iter().map(|variant| {
-        let base = base.and_then(|value| value.get(*variant));
-        let surface = surface.and_then(|value| value.get(*variant));
-        let pick = |key: &str| {
-            fn read<'a>(value: Option<&'a Value>, key: &str) -> Option<&'a Value> {
-                value.and_then(|value| value.get(key)).filter(|value| !value.is_null())
-            }
-            read(surface, key)
-                .or_else(|| read(surface, "base"))
-                .or_else(|| read(base, key))
-                .or_else(|| read(base, "base"))
-                .cloned()
-                .unwrap_or(Value::Null)
-        };
-        let states = std::iter::once("base".to_owned())
-            .chain(STATES.iter().map(|state| format!("${state}")))
-            .map(|key| {
-                let value = pick(&key);
-                (key, value)
-            })
-            .collect();
-        (variant.to_string(), Value::Object(states))
-    });
-    Value::Object(variants.collect())
+/// The merged value at `path` in a definition.
+fn get<'a>(group: Group<'a>, path: &[&str]) -> Option<&'a Value> {
+    let (last, parents) = path.split_last()?;
+    let [base, mode] = parents.iter().fold(group, |group, key| child(group, key)).map(|layer| layer?.get(*last));
+    mode.or(base)
+}
+
+/// The value at `path` in a definition after `expandTheme`, which points missing derived text colors and every
+/// missing state of a stateful color at the definition's own token.
+fn expanded<'a>(group: Group<'a>, path: &[&str]) -> Option<&'a Value> {
+    let value = get(group, path);
+    if value.is_some_and(|value| !value.is_null()) {
+        return value;
+    }
+    let present = |path: &[&str]| get(group, path).filter(|value| truthy(value));
+    let derived = match *path {
+        ["text", "muted"] => present(&["text", "base"]),
+        ["text", "faint"] => present(&["text", "muted"]).or_else(|| present(&["text", "base"])),
+        ["text", "feedback", kind, "muted"] => present(&["text", "feedback", kind, "base"]),
+        [section @ ("text" | "background"), "formfield", state] if STATE_KEYS.contains(&state) => {
+            present(&[section, "formfield", "base"])
+        }
+        [section @ ("text" | "background"), "action", variant, state] if STATE_KEYS.contains(&state) => {
+            present(&[section, "action", variant, "base"])
+        }
+        _ => None,
+    };
+    derived.or(value)
+}
+
+/// The token at `path` on the surface stacking `groups`, page first.
+fn lookup<'a>(groups: &[Group<'a>], path: &[&str]) -> Option<&'a Value> {
+    if !SECTIONS.contains(path.first()?) {
+        return None;
+    }
+    match *path {
+        [section @ ("text" | "background"), "action", variant, key] if groups.len() > 1 => {
+            let known = VARIANTS.contains(&variant) && (key == "base" || STATE_KEYS.contains(&key));
+            known.then(|| action(groups, section, variant, key)).flatten()
+        }
+        _ => groups.iter().rev().find_map(|group| expanded(*group, path)),
+    }
+}
+
+/// `contextualize`: an action state on a raised surface takes its definition's state, then its base, then the
+/// state below, then the base below, so an override's `base` replaces every state of that variant.
+fn action<'a>(groups: &[Group<'a>], section: &str, variant: &str, key: &str) -> Option<&'a Value> {
+    let (top, below) = groups.split_last()?;
+    if below.is_empty() {
+        return expanded(*top, &[section, "action", variant, key]).filter(|value| !value.is_null());
+    }
+    let read = |key| get(*top, &[section, "action", variant, key]).filter(|value| !value.is_null());
+    read(key)
+        .or_else(|| read("base"))
+        .or_else(|| action(below, section, variant, key))
+        .or_else(|| action(below, section, variant, "base"))
+}
+
+/// Splits a token path; a path deeper than any token is never found.
+fn split(path: &str) -> Option<([&str; 4], usize)> {
+    let mut parts = [""; 4];
+    let mut count = 0;
+    for part in path.split('.') {
+        *parts.get_mut(count)? = part;
+        count += 1;
+    }
+    Some((parts, count))
 }
 
 fn resolve_hue(definition: Option<&Value>) -> Result<Vec<(String, Scale)>, String> {
@@ -118,16 +153,16 @@ fn resolve_hue(definition: Option<&Value>) -> Result<Vec<(String, Scale)>, Strin
     source.keys().map(|name| Ok((name.clone(), hue_scale(source, name, &mut Vec::new(), &mut cache)?))).collect()
 }
 
-fn hue_scale(
-    source: &Map<String, Value>,
-    name: &str,
-    stack: &mut Vec<String>,
-    cache: &mut HashMap<String, Scale>,
+fn hue_scale<'a>(
+    source: &'a Map<String, Value>,
+    name: &'a str,
+    stack: &mut Vec<&'a str>,
+    cache: &mut HashMap<&'a str, Scale>,
 ) -> Result<Scale, String> {
     if let Some(hit) = cache.get(name) {
         return Ok(*hit);
     }
-    if stack.iter().any(|item| item == name) {
+    if stack.contains(&name) {
         return Err(format!("Circular hue reference: {} -> {name}", stack.join(" -> ")));
     }
     let scale = match source.get(name) {
@@ -137,15 +172,15 @@ fn hue_scale(
             if source.get(target).is_none() {
                 return Err(format!("Hue alias \"{alias}\" references a missing hue"));
             }
-            stack.push(name.to_owned());
+            stack.push(name);
             let scale = hue_scale(source, target, stack, cache);
             stack.pop();
             scale?
         }
         Some(Value::Object(steps)) => {
             let mut colors = [Color::TRANSPARENT; 9];
-            for (index, step) in STEPS.iter().enumerate() {
-                match steps.get(&step.to_string()) {
+            for (index, step) in STEP_KEYS.iter().enumerate() {
+                match steps.get(*step) {
                     Some(Value::String(color)) if is_hex(color) => colors[index] = from_hex(color),
                     _ => return Err(format!("Invalid hue color at \"hue.{name}.{step}\"")),
                 }
@@ -159,7 +194,7 @@ fn hue_scale(
         }
         _ => return Err(format!("Hue \"{name}\" was not found")),
     };
-    cache.insert(name.to_owned(), scale);
+    cache.insert(name, scale);
     Ok(scale)
 }
 
@@ -174,59 +209,48 @@ enum Read<'a> {
 /// object identity; the source recorded here stands in for it.
 pub(crate) type Tone = (Color, Option<(usize, usize)>);
 
-struct Resolver<'a> {
-    tokens: &'a Map<String, Value>,
-    hue: &'a [(String, Scale)],
-    cache: HashMap<String, Tone>,
+struct Resolver<'a, 'v> {
+    groups: &'v [Group<'a>],
+    hue: &'v [(String, Scale)],
+    cache: HashMap<&'a str, Tone>,
 }
 
 /// The tokens of one surface, and every token's [`Tone`] in [`Tokens::visit`] order.
-fn resolve_view(tokens: &Map<String, Value>, hue: &[(String, Scale)]) -> Result<(Tokens, Vec<Tone>), String> {
-    let mut resolver = Resolver { tokens, hue, cache: HashMap::new() };
-    let mut flat = HashMap::new();
-    for (key, value) in tokens {
-        resolver.walk(value, &format!("theme.{key}"), key, &mut flat)?;
-    }
+fn resolve_view(groups: &[Group<'_>], hue: &[(String, Scale)]) -> Result<(Tokens, Vec<Tone>), String> {
+    let mut resolver = Resolver { groups, hue, cache: HashMap::new() };
     let mut result = Tokens::blank();
-    let mut missing = None;
     let mut tones = Vec::new();
-    result.visit(&mut |path, color| match flat.get(path) {
-        Some(found) => {
-            *color = found.0;
-            tones.push(*found);
-        }
-        None => {
-            missing.get_or_insert_with(|| path.to_owned());
+    let mut error = None;
+    result.visit(&mut |path, color| {
+        if error.is_none() {
+            match resolver.token(path) {
+                Ok(tone) => {
+                    *color = tone.0;
+                    tones.push(tone);
+                }
+                Err(message) => error = Some(message),
+            }
         }
     });
-    match missing {
-        Some(path) => Err(format!("Theme token \"{path}\" is missing")),
-        None => Ok((result, tones)),
-    }
+    error.map_or(Ok((result, tones)), Err)
 }
 
-impl<'a> Resolver<'a> {
-    /// Resolves every leaf under `value`; `path` names it in errors, `key` is its token path.
-    fn walk(&mut self, value: &Value, path: &str, key: &str, flat: &mut HashMap<String, Tone>) -> Result<(), String> {
-        match value {
-            Value::String(text) => {
-                let color = self.color(text, path, &mut Vec::new())?;
-                flat.insert(key.to_owned(), color);
-                Ok(())
-            }
-            // Numbers pass through the TypeScript resolver and are never colors.
-            Value::Number(_) => Ok(()),
-            Value::Object(object) => {
-                for (name, item) in object {
-                    self.walk(item, &format!("{path}.{name}"), &format!("{key}.{}", resolved_key(name)), flat)?;
-                }
-                Ok(())
-            }
-            _ => Err(format!("Invalid theme value at \"{path}\"")),
+impl<'a> Resolver<'a, '_> {
+    /// The token at a [`Tokens::visit`] path, whose state keys such as `hovered` read the document's `$hovered`.
+    fn token(&mut self, path: &str) -> Result<Tone, String> {
+        let missing = || format!("Theme token \"{path}\" is missing");
+        let (mut parts, count) = split(path).ok_or_else(missing)?;
+        if let Some(state) = STATES.iter().position(|state| *state == parts[count - 1]) {
+            parts[count - 1] = STATE_KEYS[state];
+        }
+        match lookup(self.groups, &parts[..count]) {
+            Some(Value::String(text)) => self.color(text, path, &mut Vec::new()),
+            Some(Value::Number(_) | Value::Object(_)) | None => Err(missing()),
+            Some(_) => Err(format!("Invalid theme value at \"theme.{path}\"")),
         }
     }
 
-    fn color(&mut self, value: &str, path: &str, stack: &mut Vec<String>) -> Result<Tone, String> {
+    fn color(&mut self, value: &'a str, path: &str, stack: &mut Vec<&'a str>) -> Result<Tone, String> {
         if value == "transparent" {
             return Ok((Color::TRANSPARENT, None));
         }
@@ -239,28 +263,21 @@ impl<'a> Resolver<'a> {
         if let Some(hit) = self.cache.get(target) {
             return Ok(*hit);
         }
-        if stack.iter().any(|item| item == target) {
+        if stack.contains(&target) {
             return Err(format!("Circular theme reference: {} -> {target}", stack.join(" -> ")));
         }
-        stack.push(target.to_owned());
+        stack.push(target);
         let result = match self.read(target)? {
             Read::Color(color) => Some(color),
             Read::Value(Value::String(text)) => Some(self.color(text, target, stack)?),
-            Read::Value(Value::Object(object)) => {
-                let mut ignored = HashMap::new();
-                for (name, item) in object {
-                    self.walk(item, &format!("{target}.{name}"), name, &mut ignored)?;
-                }
-                None
-            }
-            Read::Value(Value::Number(_)) | Read::NotColor => None,
+            Read::Value(Value::Number(_) | Value::Object(_)) | Read::NotColor => None,
             Read::Value(_) => return Err(format!("Invalid theme value at \"{target}\"")),
         };
         stack.pop();
         let Some(color) = result else {
             return Err(format!("Theme reference \"{value}\" at \"{path}\" is not a color"));
         };
-        self.cache.insert(target.to_owned(), color);
+        self.cache.insert(target, color);
         Ok(color)
     }
 
@@ -268,7 +285,7 @@ impl<'a> Resolver<'a> {
         let missing = || format!("Theme reference \"${path}\" was not found");
         if let Some(rest) = path.strip_prefix("hue.") {
             let step = rest.rsplit_once('.').and_then(|(name, step)| {
-                let index = STEPS.iter().position(|known| known.to_string() == step)?;
+                let index = STEP_KEYS.iter().position(|known| *known == step)?;
                 Some((name, index))
             });
             if let Some((name, index)) = step.filter(|(name, _)| !name.is_empty()) {
@@ -285,21 +302,10 @@ impl<'a> Resolver<'a> {
         if path == "hue" {
             return Ok(Read::NotColor);
         }
-        let mut current: Option<&'a Value> = None;
-        for (index, key) in path.split('.').enumerate() {
-            current = if index == 0 { self.tokens.get(key) } else { current.and_then(|value| value.get(key)) };
-        }
-        match current {
+        let (parts, count) = split(path).ok_or_else(missing)?;
+        match lookup(self.groups, &parts[..count]) {
             Some(Value::Null) | None => Err(missing()),
             Some(value) => Ok(Read::Value(value)),
         }
-    }
-}
-
-/// `$hovered` and the other state keys resolve to `hovered`; other keys keep their name.
-fn resolved_key(key: &str) -> &str {
-    match key.strip_prefix('$') {
-        Some(state) if STATES.contains(&state) => state,
-        _ => key,
     }
 }

@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import { Bus } from "@opencode/core/bus"
 import { Context, Effect, Layer, Sink, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
@@ -47,6 +48,7 @@ const shellToolNode = makeLocationNode({
     Shell.node,
     Shell.daemonNode,
     ShellSelect.node,
+    Bus.node,
     Tool.node,
   ],
 })

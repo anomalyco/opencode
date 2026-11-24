@@ -201,9 +201,9 @@ checksum = "77ce24cb58228fbb8aa041425bb1050850ac19177686ea6e0f41a70416f56fdb"
 
 [[package]]
 name = "form_urlencoded"
-version = "1.2.2"
+version = "1.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cb4cb245038516f5f85277875cdaa4f7d2c9a0fa0468de06ed190163b1581fcf"
+checksum = "afa489199eaffb1211795df1c6236ce1ad0d41a6fa45250add73e3b02420f06e"
 dependencies = [
  "percent-encoding",
 ]
@@ -710,12 +710,14 @@ dependencies = [
  "bytes",
  "futures-util",
  "indexmap",
+ "libc",
  "log",
  "opencode-api",
  "opencode-service",
  "opencode-util",
  "percent-encoding",
  "regex",
+ "serde",
  "serde_json",
  "tokio",
  "tokio-util",
@@ -797,6 +799,7 @@ dependencies = [
 name = "opencode-drive"
 version = "0.1.0"
 dependencies = [
+ "base64",
  "log",
  "opencode-api-types",
  "opencode-util",
@@ -859,6 +862,7 @@ version = "0.1.0"
 dependencies = [
  "futures-util",
  "indexmap",
+ "libc",
  "log",
  "opencode-api",
  "opencode-local",
@@ -958,6 +962,7 @@ dependencies = [
  "bytes",
  "futures-util",
  "indexmap",
+ "libc",
  "log",
  "opencode-api",
  "opencode-drive",
@@ -1051,9 +1056,9 @@ checksum = "7e036b411754132fd6b74e94b74e9a13c5cf606fa93d1885c35860d3060820b1"
 
 [[package]]
 name = "opentui"
-version = "0.9.7"
+version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "837759c1c31ba219383bad833bd76608b70a5850c2321e1f83405b9c856c5cd4"
+checksum = "363f97f2f257b5a532c22047f6b799beea3c9007383d117c81238539758fb865"
 dependencies = [
  "libc",
  "opentui-sys",
@@ -1069,9 +1074,9 @@ dependencies = [
 
 [[package]]
 name = "opentui-sys"
-version = "0.9.7"
+version = "0.9.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74fb68b041aef76af4640b7ccc232a7141bac6a92264a00ffc353dd4dba5c90e"
+checksum = "2ff014dbc81ff31efba18c42463ac1a11b2abf3d039fcbbbcc769efa78c95011"
 
 [[package]]
 name = "parking_lot"
@@ -2123,9 +2128,9 @@ checksum = "8ecb6da28b8a351d773b68d5825ac39017e680750f980f3a1a85cd8dd28a47c1"
 
 [[package]]
 name = "url"
-version = "2.5.8"
+version = "2.5.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ff67a8a4397373c3ef660812acab3268222035010ab8680ec4215f38ba3d0eed"
+checksum = "f00cd2407bb42c0ef17be88d4cf020f5cceffd121665bac9b8b9493a369b3b1a"
 dependencies = [
  "form_urlencoded",
  "idna",

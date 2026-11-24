@@ -39,6 +39,7 @@ use std::sync::Arc;
 
 use activation::{Activation, Drawn};
 pub use opencode_plugin_abi as abi;
+use opencode_plugin_abi::types::kinds::EventKinds;
 use opencode_ui::dialog::DialogKeymap;
 use opencode_ui::keymap::{Bind, Slash, TuiCommand};
 use opencode_ui::markdown::CodeBlockRenderers;
@@ -137,8 +138,8 @@ pub trait Host: 'static {
     /// Asks for the user's attention. Called outside every plugin callback.
     fn attention(&self, _attention: &abi::Attention) {}
     /// Calls `run` with each server event, after the host has applied it, until the disposer is dropped. `run` gets at
-    /// least the events whose type is in `types`, and may get others.
-    fn on_event(&self, _types: &[String], _run: Rc<dyn Fn(&abi::types::V2Event)>) -> Option<Disposer> {
+    /// least the events whose type is in `kinds`, and may get others.
+    fn on_event(&self, _kinds: EventKinds, _run: Rc<dyn Fn(&abi::types::V2Event)>) -> Option<Disposer> {
         None
     }
     /// Mounts slot `path` with `input` into `parent`, for a claim's [`abi::Node::Slot`].
@@ -565,11 +566,11 @@ pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) ->
         }
         let revoked = &scope.revoked;
         for (types, run) in api.events() {
-            let (kinds, run, scope) = (types.to_vec(), run.clone(), scope.clone());
+            let (kinds, run, scope) = (EventKinds::named(types), run.clone(), scope.clone());
             let subscription = setup.host().on_event(
-                types,
+                kinds.clone(),
                 Rc::new(move |event| {
-                    if kinds.iter().any(|kind| kind == event.tag()) {
+                    if kinds.contains(event) {
                         scope.run("on-event", |host| run(host, event));
                     }
                 }),
@@ -1352,13 +1353,13 @@ impl abi::Read for Scoped<'_> {
         family(id: &str) -> abi::Family;
         messages(id: &str, visit: &mut dyn FnMut(&[abi::types::SessionMessageInfo]));
         pending(id: &str) -> Vec<abi::types::SessionInboxInfo>;
-        models(location: Option<&abi::LocationRef>) -> Option<Vec<abi::types::ModelInfo>>;
+        models(location: Option<&abi::LocationRef>) -> Option<std::sync::Arc<[abi::types::ModelInfo]>>;
         model() -> Option<abi::types::ModelRef>;
         limits() -> Option<abi::types::UsageLimitsInfo>;
-        providers() -> Option<Vec<abi::types::ProviderInfo>>;
+        providers() -> Option<std::sync::Arc<[abi::types::ProviderInfo]>>;
         info() -> abi::Info;
-        mcp_servers(location: Option<&abi::LocationRef>) -> Option<Vec<abi::types::McpServer>>;
-        integrations(location: Option<&abi::LocationRef>) -> Option<Vec<abi::types::IntegrationInfo>>;
+        mcp_servers(location: Option<&abi::LocationRef>) -> Option<std::sync::Arc<[abi::types::McpServer]>>;
+        integrations(location: Option<&abi::LocationRef>) -> Option<std::sync::Arc<[abi::types::IntegrationInfo]>>;
         vcs(location: Option<&abi::LocationRef>) -> Option<abi::types::VcsInfo>;
         route() -> abi::Route;
         interactive() -> bool;
@@ -1721,7 +1722,7 @@ impl Staged {
 /// Model `model` of provider `provider`, when the host lists it.
 fn listed(read: &dyn abi::Read, provider: &str, model: &str) -> Option<abi::types::ModelInfo> {
     let models = read.models(None)?;
-    models.into_iter().find(|info| info.provider_id.0 == provider && info.id == model)
+    models.iter().find(|info| info.provider_id.0 == provider && info.id == model).cloned()
 }
 
 /// Whether a theme name is safe as a file name in a themes directory: no path, and no hidden file.
@@ -3355,7 +3356,9 @@ impl Nested {
 pub(crate) fn settle(host: &dyn Host, live: &slot::Live) {
     for _ in 0..=slot::PATHS.len() {
         let version = live.version();
-        for follower in live.followers() {
+        // Only one behind the live paths has anything to do.
+        let behind = |follower: &dyn Any| follower.downcast_ref::<Nested>().is_some_and(|it| it.seen.get() != version);
+        for follower in live.followers(behind) {
             if let Ok(nested) = follower.downcast::<Nested>() {
                 nested.refresh(host);
             }

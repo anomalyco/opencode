@@ -187,7 +187,6 @@ for (const scenario of scenarios) {
         await trigger.click()
         await expect(trigger).toHaveAttribute("aria-expanded", "true")
         const content = patch.getByRole("region", { name })
-        await content.getByRole("button", { name: "Show more" }).click()
         await expect
           .poll(() => content.evaluate((element) => element.getBoundingClientRect().height))
           .toBeGreaterThan(900)

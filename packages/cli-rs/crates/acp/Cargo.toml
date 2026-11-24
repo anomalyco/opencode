@@ -19,6 +19,7 @@ opencode-service.workspace = true
 opencode-util.workspace = true
 percent-encoding.workspace = true
 regex.workspace = true
+serde.workspace = true
 serde_json.workspace = true
 tokio = { workspace = true, features = ["io-std"] }
 tokio-util.workspace = true
@@ -26,3 +27,5 @@ url.workspace = true
 
 [dev-dependencies]
 bytes.workspace = true
+# The performance scenario (`src/perf.rs`): the process's CPU time and the thread's instruction counter.
+libc.workspace = true

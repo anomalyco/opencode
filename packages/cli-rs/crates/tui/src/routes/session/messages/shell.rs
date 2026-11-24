@@ -11,7 +11,7 @@ use opencode_util::text_boundary;
 use opentui::input::strip_ansi_sequences;
 use unicode_width::UnicodeWidthChar;
 
-use super::list::Context;
+use super::list::{Context, Switch};
 
 use crate::prelude::*;
 
@@ -33,7 +33,7 @@ struct Inner {
     props: RefCell<Option<Props>>,
     spinning: Cell<Option<bool>>,
     spinner: RefCell<Option<Spinner>>,
-    expanded: Cell<bool>,
+    expanded: Switch,
     hover: Cell<bool>,
     expandable: Cell<bool>,
     read: RefCell<Read>,
@@ -66,8 +66,15 @@ pub(crate) struct Output {
     pub(crate) text: String,
     pub(crate) truncated: bool,
     cursor: i64,
-    loading: bool,
-    drain_requested: bool,
+    reading: Reading,
+}
+
+#[derive(Default, PartialEq)]
+enum Reading {
+    #[default]
+    Idle,
+    Running,
+    ThenDrain,
 }
 
 /// What one [`Output::start`] read: the pages' output, the cursor after them, and whether it skipped ahead.
@@ -83,11 +90,13 @@ impl Output {
         directory: Option<String>,
         drain: bool,
     ) -> Option<impl Future<Output = Pages> + Send + use<>> {
-        if self.loading {
-            self.drain_requested |= drain;
+        if self.reading != Reading::Idle {
+            if drain {
+                self.reading = Reading::ThenDrain;
+            }
             return None;
         }
-        self.loading = true;
+        self.reading = Reading::Running;
         let client = client.clone();
         let start = self.cursor;
         let location = directory.map(|directory| LocationQueryInput { directory: Some(directory) });
@@ -138,8 +147,7 @@ impl Output {
         }
         self.truncated |= skipped;
         self.cursor = cursor;
-        self.loading = false;
-        std::mem::take(&mut self.drain_requested)
+        std::mem::take(&mut self.reading) == Reading::ThenDrain
     }
 }
 
@@ -178,7 +186,7 @@ impl Shell {
             props: RefCell::default(),
             spinning: Cell::new(None),
             spinner: RefCell::default(),
-            expanded: Cell::new(false),
+            expanded: cx.toggles.switch(),
             hover: Cell::new(false),
             expandable: Cell::new(false),
             read: RefCell::default(),
@@ -193,9 +201,7 @@ impl Shell {
             if !inner.expandable.get() {
                 return;
             }
-            let expanded = !inner.expanded.get();
-            inner.expanded.set(expanded);
-            if expanded {
+            if inner.expanded.flip() {
                 let background = inner.props.borrow().as_ref().is_some_and(|props| props.background);
                 inner.load(!background);
             }
@@ -249,7 +255,12 @@ impl Shell {
             return;
         }
         let background = props.background;
-        *self.0.props.borrow_mut() = Some(props);
+        let first = self.0.props.replace(Some(props)).is_none();
+        self.0.expanded.key(format!("shell {}", message.id));
+        // A row built again for a shell the reader opened reads its output, as the click that opened it did.
+        if first && self.0.expanded.get() {
+            self.0.load(!background);
+        }
         self.0.poll(background);
         self.0.render();
     }

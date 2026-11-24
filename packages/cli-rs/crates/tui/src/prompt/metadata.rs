@@ -1,10 +1,13 @@
-//! Agent, model, variant, and usage labels below the prompt.
+//! Agent, model, variant, speed, and usage labels below the prompt.
+
+use std::cell::Cell;
+use std::sync::Arc;
 
 use opencode_api::generated::{
-    AgentInfo, ConfigEntry, ConfigEntryDocumentInfoModel, ModelInfo, ModelRef, ProviderID, ProviderInfo,
+    AgentInfo, CommandInfo, ConfigEntry, ConfigEntryDocumentInfoModel, ModelInfo, ModelRef, ProviderID, ProviderInfo,
 };
 use opencode_store::location::{Catalog as Read, Location};
-use opencode_store::{Data, State, Task};
+use opencode_store::{Data, Parts, State, Task};
 use opencode_ui::theme::Theme;
 use opentui::prelude::*;
 use unicode_width::UnicodeWidthStr;
@@ -15,11 +18,11 @@ const READS: [Read; 6] = [Read::Agent, Read::Model, Read::Provider, Read::Config
 
 #[derive(Debug, Default)]
 pub struct Catalog {
-    pub agents: Vec<AgentInfo>,
-    pub models: Vec<ModelInfo>,
-    pub providers: Vec<ProviderInfo>,
-    /// Server command names, for `/name args` submits.
-    pub commands: Vec<String>,
+    pub agents: Arc<[AgentInfo]>,
+    pub models: Arc<[ModelInfo]>,
+    pub providers: Arc<[ProviderInfo]>,
+    /// Server commands, for `/name args` submits.
+    pub commands: Arc<[CommandInfo]>,
     pub branch: Option<String>,
 }
 
@@ -51,6 +54,21 @@ pub fn sync(data: &Data, location: &Location) -> Vec<Task<()>> {
 }
 
 impl Catalog {
+    /// What [`Catalog::read`] reads of a location.
+    pub const READS: Parts = Parts::catalogs(&[Read::Agent, Read::Model, Read::Provider, Read::Command, Read::Vcs]);
+
+    /// The same lists and branch as `other`. A list not read yet is a new empty one each time.
+    pub fn same(&self, other: &Self) -> bool {
+        fn same<T>(one: &Arc<[T]>, other: &Arc<[T]>) -> bool {
+            Arc::ptr_eq(one, other) || one.is_empty() && other.is_empty()
+        }
+        same(&self.agents, &other.agents)
+            && same(&self.models, &other.models)
+            && same(&self.providers, &other.providers)
+            && same(&self.commands, &other.commands)
+            && self.branch == other.branch
+    }
+
     /// The catalog of `location` once its agents and models are read (`promptDisplay` waits for
     /// both); the rest only label the selection.
     pub fn read(state: &State, location: &Location) -> Option<Self> {
@@ -59,7 +77,7 @@ impl Catalog {
             agents: data.agent.clone()?,
             models: data.model.clone()?,
             providers: data.provider.clone().unwrap_or_default(),
-            commands: data.command.iter().flatten().map(|command| command.name.clone()).collect(),
+            commands: data.command.clone().unwrap_or_default(),
             branch: data.vcs.as_ref().and_then(|vcs| vcs.branch.current.clone()),
         })
     }
@@ -79,10 +97,21 @@ impl Catalog {
             .iter()
             .find(|provider| provider.id.as_str() == choice.provider_id)
             .map_or_else(|| choice.provider_id.clone(), |provider| provider.name.clone());
+        // The speed shows beside the name, so the name is the model's own.
+        let standard = crate::local::standard_of(&self.models, &self.model(choice));
         let model = self
-            .info(&choice.provider_id, &choice.model_id)
+            .info(&standard.provider_id, &standard.model_id)
             .map_or_else(|| format!("{} (unavailable)", choice.model_id), |info| info.name.clone());
         (model, provider)
+    }
+
+    /// The speed `choice` runs at, `None` at its model's standard speed.
+    pub fn speed(&self, choice: &Choice) -> Option<String> {
+        crate::local::speed_of(&self.models, &self.model(choice))
+    }
+
+    fn model(&self, choice: &Choice) -> opencode_local::model_pref::Model {
+        opencode_local::model_pref::Model::new(&choice.provider_id, &choice.model_id)
     }
 
     pub fn color(&self, theme: &Theme, id: &str) -> Option<Color> {
@@ -131,21 +160,30 @@ pub struct Display {
     pub model: String,
     pub provider: String,
     pub variant: Option<String>,
+    /// The model's selected speed; `None` at its standard speed.
+    pub speed: Option<String>,
     /// Remaining workspace allowance and its warning severity for the selected model.
     pub limit: Option<(String, bool)>,
 }
 
 pub struct Row {
     text: Text,
+    /// The row's own width once laid out: beside the session tabs the prompt is narrower than the terminal.
+    measured: Cell<Option<u16>>,
 }
 
 impl Row {
     pub fn new(app: &App) -> Self {
-        Self { text: Text::new(app, "").truncate(true).wrap(WrapMode::None).min_height(1) }
+        Self { text: Text::new(app, "").truncate(true).wrap(WrapMode::None).min_height(1), measured: Cell::new(None) }
     }
 
     pub fn root(&self) -> &Text {
         &self.text
+    }
+
+    /// Records the width the row was laid out at; true when it changed.
+    pub fn measure(&self, width: u16) -> bool {
+        self.measured.replace(Some(width)) != Some(width)
     }
 
     pub fn set(&self, theme: &Theme, mode: Mode, display: &Display, highlight: Color, terminal_width: u16) {
@@ -153,7 +191,10 @@ impl Row {
             Mode::Shell => vec![display.agent.clone().unwrap_or_else(|| "Shell".into()).fg(highlight)],
             Mode::Normal if display.agent.is_none() => Vec::new(),
             Mode::Normal => {
-                let width = usize::from(terminal_width).saturating_sub(if terminal_width < 44 { 9 } else { 13 });
+                let width = self.measured.get().map_or_else(
+                    || usize::from(terminal_width).saturating_sub(if terminal_width < 44 { 9 } else { 13 }),
+                    usize::from,
+                );
                 let layout = layout(width, terminal_width, display);
                 let mut spans = Vec::new();
                 if let Some(agent) = &layout.agent {
@@ -175,6 +216,10 @@ impl Row {
                     if let Some(variant) = layout.variant {
                         spans.extend([gap(), "·".fg(theme.text.muted), gap()]);
                         spans.push(variant.fg(theme.text.feedback.warning.base).bold());
+                    }
+                    if let Some(speed) = layout.speed {
+                        spans.extend([gap(), "·".fg(theme.text.muted), gap()]);
+                        spans.push(speed.fg(theme.text.base));
                     }
                     if let Some((limit, danger)) = layout.limit {
                         let color = if danger { theme.text.feedback.error.base } else { theme.text.muted };
@@ -205,6 +250,7 @@ fn layout(width: usize, terminal_width: u16, display: &Display) -> Display {
     }
     let prefix = agent.as_ref().map_or(0, |agent| format!("{agent} · ").width());
     let suffix = display.variant.as_ref().map_or(0, |variant| format!(" · {variant}").width())
+        + display.speed.as_ref().map_or(0, |speed| format!(" · {speed}").width())
         + display.limit.as_ref().map_or(0, |(limit, _)| format!("  {limit}").width());
     Display {
         agent,
@@ -212,6 +258,7 @@ fn layout(width: usize, terminal_width: u16, display: &Display) -> Display {
         model: truncate(&display.model, width.saturating_sub(prefix + suffix).max(9)),
         provider: String::new(),
         variant: display.variant.clone(),
+        speed: display.speed.clone(),
         limit: display.limit.clone(),
     }
 }
@@ -236,6 +283,10 @@ fn flat(layout: &Display) -> String {
     if let Some(variant) = &layout.variant {
         parts.push("·");
         parts.push(variant);
+    }
+    if let Some(speed) = &layout.speed {
+        parts.push("·");
+        parts.push(speed);
     }
     let mut text = parts.join(" ");
     if let Some((limit, _)) = &layout.limit {
@@ -270,6 +321,7 @@ mod tests {
             model: model.into(),
             provider: provider.into(),
             variant: variant.map(str::to_owned),
+            speed: None,
             limit: None,
         }
     }
@@ -304,5 +356,14 @@ mod tests {
         let narrow = layout(30, 100, &full);
         assert_eq!(narrow.model, "Claude S…");
         assert_eq!(narrow.limit, full.limit);
+    }
+
+    #[test]
+    fn layout_keeps_the_speed_after_the_variant() {
+        let full = Display { speed: Some("fast".into()), ..display("Claude Sonnet", "Anthropic", Some("high")) };
+        assert_eq!(flat(&full), "Build · Claude Sonnet Anthropic · high · fast");
+        let narrow = layout(30, 100, &full);
+        assert_eq!(narrow.speed.as_deref(), Some("fast"));
+        assert_eq!(flat(&narrow), "Build · Claude S… · high · fast");
     }
 }

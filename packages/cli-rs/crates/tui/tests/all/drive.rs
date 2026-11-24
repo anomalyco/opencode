@@ -69,7 +69,8 @@ fn a_driver_types_into_the_headless_tui_and_captures_it() {
         opencode_tui::Deps { route: opencode_tui::Route::Home, ..support::deps(Arc::new(Memory::new(routes()))) };
     let tui = opencode_tui::mount_with(&app, deps, opencode_tui::Args::default());
     let server =
-        opencode_tui::features::drive::start(&tui, SocketAddr::from(([127, 0, 0, 1], 0)), "0.0.0-test".into()).unwrap();
+        opencode_tui::features::drive::start(&tui, SocketAddr::from(([127, 0, 0, 1], 0)), "0.0.0-test".into(), None)
+            .unwrap();
     let proxy = app.proxy();
     let url = server.url();
     let driver = std::thread::spawn(move || {
@@ -105,5 +106,5 @@ fn a_driver_types_into_the_headless_tui_and_captures_it() {
     let prompt = rows.iter().find(|row| row.contains("hello drive")).unwrap_or_else(|| panic!("{}", rows.join("\n")));
     println!("{}", rows.join("\n"));
     assert!(prompt.contains("hello drive"));
-    assert!(state.unwrap_err().starts_with("ui.state is not supported"));
+    assert_eq!(state, Ok(json!({ "focused": { "editor": true }, "elements": [] })));
 }

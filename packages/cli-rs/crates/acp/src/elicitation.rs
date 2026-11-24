@@ -1,5 +1,5 @@
 use std::collections::HashSet;
-use std::sync::LazyLock;
+use std::sync::{Arc, LazyLock};
 
 use opencode_api::client::Client;
 use opencode_api::generated::{
@@ -34,7 +34,7 @@ pub struct Input {
     pub form: Value,
     pub requested_schema: Value,
     pub client_session_id: String,
-    pub child: Option<child::Session>,
+    pub child: Option<Arc<child::Session>>,
     pub tool_call_sent: bool,
 }
 
@@ -100,13 +100,13 @@ pub async fn ask(input: &Input) -> Result<Outcome, Failure> {
         .tool_call_sent
         .then(|| input.form.get("metadata")?.get("tool")?.get("id")?.as_str())
         .flatten()
-        .map(|id| child::tool_call_id(input.child.as_ref(), id));
+        .map(|id| child::tool_call_id(input.child.as_deref(), id));
     let title = input.form.get("title").and_then(Value::as_str).unwrap_or_default();
     let params = json_object! {
         "mode": "form",
         "sessionId": input.client_session_id,
         "toolCallId"?: tool_call_id,
-        "message": child::prefix_title(input.child.as_ref(), title),
+        "message": child::prefix_title(input.child.as_deref(), title),
         "requestedSchema": input.requested_schema,
     };
     let response = input.connection.request("elicitation/create", params).await?;

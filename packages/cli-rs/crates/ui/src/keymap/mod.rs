@@ -349,7 +349,25 @@ pub struct TuiKeymap<T> {
     format: FormatOptions,
     /// The plugins' slash names [`Self::commands`] left out and logged, each `(command, name)`, so each logs once.
     shadowed: RefCell<std::collections::HashSet<(String, String)>>,
+    /// Shortcut labels by command, formatted once per engine revision ([`Self::labels`]).
+    labels: RefCell<Labels>,
     _addons: Vec<Disposer>,
+}
+
+/// Formatted shortcuts of the commands asked for since the engine's `revision` last moved. Registered queries read only
+/// the registered layers, and registering or removing one moves the revision.
+#[derive(Default)]
+struct Labels {
+    revision: u64,
+    /// `None` for a command no layer registers.
+    commands: std::collections::HashMap<String, Option<Shortcuts>>,
+}
+
+struct Shortcuts {
+    /// One per binding.
+    each: Vec<String>,
+    /// Every binding, joined.
+    all: Option<String>,
 }
 
 impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
@@ -393,6 +411,7 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
             next_mode: Cell::new(0),
             invocation: Rc::new(RefCell::new(None)),
             shadowed: RefCell::default(),
+            labels: RefCell::default(),
             format,
             _addons: addons,
         };
@@ -749,23 +768,40 @@ impl<T: Clone + PartialEq + 'static> TuiKeymap<T> {
 
     /// The first shortcut of a registered command, such as `ctrl+x n`.
     pub fn shortcut(&self, id: &str) -> Option<String> {
-        let sequences = self.sequences(id)?;
-        sequences.first().map(|sequence| format_key_sequence(sequence, &self.format))
+        self.labels(id, |shortcuts| shortcuts?.each.first().cloned())
     }
 
     /// Every shortcut of a registered command, joined, such as `ctrl+c, ctrl+d, ctrl+x q`.
     pub fn shortcut_all(&self, id: &str) -> Option<String> {
-        let sequences = self.sequences(id)?;
-        format_command_bindings(sequences.iter().map(Vec::as_slice), &self.format)
+        self.labels(id, |shortcuts| shortcuts?.all.clone())
     }
 
     /// Every shortcut of a registered command, one per binding.
     pub fn shortcuts(&self, id: &str) -> Vec<String> {
-        self.sequences(id)
-            .unwrap_or_default()
-            .iter()
-            .map(|sequence| format_key_sequence(sequence, &self.format))
-            .collect()
+        self.labels(id, |shortcuts| shortcuts.map(|shortcuts| shortcuts.each.clone()).unwrap_or_default())
+    }
+
+    /// Reads `id`'s formatted shortcuts, formatting them only on the first read since the engine's revision moved.
+    fn labels<R>(&self, id: &str, read: impl FnOnce(Option<&Shortcuts>) -> R) -> R {
+        let revision = self.keymap.revision();
+        {
+            let labels = self.labels.borrow();
+            if labels.revision == revision
+                && let Some(shortcuts) = labels.commands.get(id)
+            {
+                return read(shortcuts.as_ref());
+            }
+        }
+        let shortcuts = self.sequences(id).map(|sequences| Shortcuts {
+            each: sequences.iter().map(|sequence| format_key_sequence(sequence, &self.format)).collect(),
+            all: format_command_bindings(sequences.iter().map(Vec::as_slice), &self.format),
+        });
+        let mut labels = self.labels.borrow_mut();
+        if labels.revision != revision {
+            labels.revision = revision;
+            labels.commands.clear();
+        }
+        read(labels.commands.entry(id.to_owned()).or_insert(shortcuts).as_ref())
     }
 
     fn sequences(&self, id: &str) -> Option<Vec<Vec<opentui::keymap::KeySequencePart>>> {

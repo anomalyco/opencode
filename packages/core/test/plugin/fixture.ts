@@ -3,6 +3,7 @@ import { App } from "@opencode/core/app"
 import { Artifact } from "@opencode/core/artifact"
 import { BlobStore } from "@opencode/core/blob-store"
 import { AISDK } from "@opencode/core/aisdk"
+import { Automation } from "@opencode/core/automation"
 import { Command } from "@opencode/core/command"
 import { Config } from "@opencode/core/config"
 import { Credential } from "@opencode/core/credential"
@@ -19,6 +20,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Form } from "@opencode/core/form"
 import { Generate } from "@opencode/core/generate"
+import { Instance } from "@opencode/core/instance/service"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Integration } from "@opencode/core/integration"
 import { Job } from "@opencode/core/job"
@@ -26,6 +28,7 @@ import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Model } from "@opencode/core/model"
+import { ModelsDev } from "@opencode/core/models-dev"
 import { Npm } from "@opencode/util/npm"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
@@ -127,10 +130,13 @@ export const makePluginTestLayer = (
       Agent.node,
       Artifact.node,
       AISDK.node,
+      Automation.node,
       BlobStore.node,
       Provider.node,
       Model.node,
+      ModelsDev.node,
       Command.node,
+      Instance.node,
       InstructionDiscovery.node,
       Integration.node,
       Job.node,

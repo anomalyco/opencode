@@ -2,16 +2,18 @@ export * as AutomationCode from "./code.js"
 
 import { CodeMode } from "@opencode/codemode"
 import { Automation } from "@opencode/schema/automation"
-import { Array, Effect, Option, Result, Schema } from "effect"
+import { Array, Context, Effect, Option, Result, Schema } from "effect"
 import { Agent } from "../agent.js"
 import { CodeModeTool } from "../codemode/tool.js"
+import { Location } from "../location.js"
+import { LocationServiceMap } from "../location-service-map.js"
 import { Permission } from "../permission.js"
-import { Plugin } from "../plugin.js"
+import { Plugin } from "../plugin/service.js"
 import type { SessionMessage } from "../session/message.js"
 import type { SessionSchema } from "../session/schema.js"
 import { Tool } from "../tool.js"
 import { McpTool } from "../tool/mcp.js"
-import { Wildcard } from "../util/wildcard.js"
+
 import { type Invocation, matchesAuthor } from "./author.js"
 import type { AutomationEvent } from "./event.js"
 
@@ -43,6 +45,7 @@ const FORBIDDEN_TOOLS = new Set([
 ])
 
 export interface RunInput {
+  readonly automationID: Automation.ID
   readonly messageID: SessionMessage.ID
   readonly state: Schema.Json
   readonly now: number
@@ -83,6 +86,27 @@ function scanProgram(code: string): Result.Result<ProgramScan, string> {
 }
 
 /**
+ * The Location of the plugin making a create, if a plugin is making it. Code and subagent targets in that Location are
+ * checked against what is loaded now instead of waiting for its plugin activation, which may be running that plugin's
+ * setup and so would never finish. Targets in other Locations still wait for their plugins.
+ */
+export const FromPlugin = Context.Reference<Location.Ref | undefined>("@opencode/AutomationCode/FromPlugin", {
+  defaultValue: () => undefined,
+})
+
+/** Waits for the current Location's plugins, unless the create comes from one of them. */
+export const awaitPlugins = Effect.gen(function* () {
+  const from = yield* FromPlugin
+  if (from !== undefined) {
+    const location = yield* Location.Service
+    const current = LocationServiceMap.canonical({ directory: location.directory, workspaceID: location.workspaceID })
+    const own = LocationServiceMap.canonical(from)
+    if (current.directory === own.directory && current.workspaceID === own.workspaceID) return
+  }
+  yield* Plugin.awaitActivation
+})
+
+/**
  * Runs in the creating Session's Location while the user is present: asks once for tool and extension permissions (and for
  * `execute` if none of those needed approval), without saving, so every run can be allowed unattended.
  */
@@ -94,20 +118,20 @@ export const authorize = Effect.fnUntraced(function* (
   invocation?: Invocation,
 ) {
   const scanned = yield* Effect.fromResult(scan(action.code))
-  yield* Plugin.awaitActivation
+  yield* awaitPlugins
   const permission = yield* Permission.Service
   const agents = yield* Agent.Service
   const agent = yield* agents.select(session.agent)
   if (invocation && !matchesAuthor(session, agent.info, invocation))
     return yield* Effect.fail("Create the automation with the session's current agent")
   const actions = (yield* resolveCapabilities(scanned)).actions
-  const rules = Permission.merge(agent.info?.permissions ?? [], session.permissions ?? [])
+  const policy = Permission.Policy.fromRules(agent.info?.permissions ?? [], session.permissions ?? [])
   // A rule scoped to some resources (`vault:*: ask`) must prompt too, not only the catch-all `*`.
   const request = (item: string) => ({
     action: item,
     resources: Array.dedupe([
       "*",
-      ...scopedRules(rules, item).flatMap((rule) => (rule.effect === "ask" ? [rule.resource] : [])),
+      ...Permission.Policy.scopedRules(policy, item).flatMap((rule) => (rule.effect === "ask" ? [rule.resource] : [])),
     ]),
     ...(invocation ?? { sessionID: session.id, agent: agent.id }),
   })
@@ -127,11 +151,6 @@ export const authorize = Effect.fnUntraced(function* (
     { discard: true },
   )
 })
-
-/** Rules for `action` that name specific resources rather than `*`, in order. */
-function scopedRules(rules: Permission.Ruleset, action: string) {
-  return rules.filter((rule) => rule.resource !== "*" && Wildcard.match(action, rule.action))
-}
 
 const bunFileReadMembers = new Set([
   "name",
@@ -202,12 +221,12 @@ export const run = Effect.fnUntraced(
     if (Result.isFailure(resolved)) return { ok: false as const, error: resolved.failure, invalid: true }
 
     const actions = ["execute", ...resolved.success.actions]
-    const rules = Permission.merge(agent.info.permissions, session.permissions ?? [])
+    const policy = Permission.Policy.fromRules(agent.info.permissions, session.permissions ?? [])
     // Unattended rules come after the configured ones and the last match wins, so restate every scoped rule after the
     // grant: the approval stands in for the catch-all `*` only, and a scoped `ask` still needs a person.
     const unattended: Permission.Ruleset = actions.flatMap((item) => [
       { action: item, resource: "*", effect: "allow" as const },
-      ...scopedRules(rules, item),
+      ...Permission.Policy.scopedRules(policy, item),
     ])
 
     // A deny added to config after creation still wins.
@@ -230,7 +249,7 @@ export const run = Effect.fnUntraced(
         code: action.code,
         tools: scanned.success.tools,
         bindings: { ...bindings, input: bindings },
-        permissions: rules,
+        policy,
         limits: CODE_LIMITS,
         services: yield* CodeModeTool.services,
         context: {
@@ -238,6 +257,7 @@ export const run = Effect.fnUntraced(
           agent: agent.id,
           messageID: input.messageID,
           progress: () => Effect.void,
+          automation: { id: input.automationID },
         },
       })
       .pipe(Effect.provideService(Permission.Unattended, unattended))

@@ -6,7 +6,7 @@ pub use std::rc::{Rc, Weak};
 pub use std::time::Duration;
 
 pub use opencode_api::generated::{SessionID, SessionMessageInfo};
-pub use opencode_store::Changes;
+pub use opencode_store::{Changes, Touched};
 pub use opencode_ui::bind;
 pub use opencode_ui::dialog::{DialogOptions, DialogSize, HeaderProps, header};
 pub use opencode_ui::keymap::{Bind, KeymapLayer, TuiCommand};

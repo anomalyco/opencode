@@ -48,7 +48,7 @@ fn errors(data: &Data) -> Arc<Mutex<Vec<String>>> {
     errors
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn config_reads_and_update_refreshes_are_opt_in() {
     let requests = Log::<String>::default();
     let model = Arc::new(Mutex::new("provider/first".to_owned()));
@@ -91,12 +91,12 @@ async fn config_reads_and_update_refreshes_are_opt_in() {
     assert_eq!(config_reads(), 2);
     let config = data.read(|state| state.location(None).unwrap().config.clone().unwrap());
     assert_eq!(
-        serde_json::to_value(config).unwrap(),
+        serde_json::to_value(&*config).unwrap(),
         json!([{ "type": "document", "info": { "model": "provider/second" } }])
     );
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn event_refreshes_report_failures_remain_retryable_and_preserve_explicit_read_errors() {
     let offline = Arc::new(AtomicBool::new(true));
     let requests = Arc::new(AtomicUsize::new(0));
@@ -181,17 +181,17 @@ async fn background_reads_respect(mode: &str) {
     assert!(errors.lock().unwrap().is_empty());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn background_reads_respect_reconnecting_owners() {
     background_reads_respect("reconnecting").await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn background_reads_respect_disposed_owners() {
     background_reads_respect("disposed").await;
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn a_burst_of_mcp_status_changed_events_refetches_the_server_list_once_it_settles() {
     let requests = Log::<String>::default();
     let log = requests.clone();
@@ -220,7 +220,7 @@ async fn a_burst_of_mcp_status_changed_events_refetches_the_server_list_once_it_
     assert_eq!(reads(), 2);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn invalidations_that_land_before_a_queued_reload_starts_are_absorbed_by_it() {
     let pending = Arc::new(Mutex::new(Vec::<Slot<Reply>>::new()));
     let slots = pending.clone();
@@ -255,7 +255,7 @@ async fn invalidations_that_land_before_a_queued_reload_starts_are_absorbed_by_i
     assert_eq!(count(), 2);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn event_driven_session_reads_evict_missing_sessions_without_reporting_an_error() {
     let data = data(
         handler(|_req: Req| async {
@@ -292,7 +292,7 @@ async fn event_driven_session_reads_evict_missing_sessions_without_reporting_an_
     assert!(errors.lock().unwrap().is_empty());
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "local")]
 async fn delayed_metadata_and_family_reads_do_not_resurrect_sessions_deleted_while_in_flight() {
     let own_started = Slot::<()>::default();
     let own_release = Slot::<()>::default();
