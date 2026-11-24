@@ -830,7 +830,8 @@ describe("GithubCopilotPlugin", () => {
                     name: "Routed",
                     version: "routed",
                     model_picker_enabled: false,
-                    billing: { auto_discount: 0.1 },
+                    auto: true,
+                    billing: { restricted_to: ["free"] },
                     capabilities: {
                       family: "routed",
                       limits: { max_prompt_tokens: 128_000, max_output_tokens: 64_000 },
@@ -861,13 +862,16 @@ describe("GithubCopilotPlugin", () => {
       yield* drain
       const models = yield* Model.Service
       expect(
+        (yield* models.available()).filter((model) => model.providerID === Provider.ID.githubCopilot).map((m) => m.id),
+      ).toEqual([Model.ID.make("auto")])
+      expect(
         required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("auto"))).variants.map((v) => v.id),
       ).toEqual([Model.VariantID.make("efficiency"), Model.VariantID.make("intelligence")])
       const hooks = yield* PluginHooks.Service
       const ids = yield* sessions()
-      const resolve = (tier?: string) =>
+      const resolve = (tier?: string, sessionID = ids.parent) =>
         hooks.trigger("session", "experimental.model.resolve", {
-          sessionID: ids.parent,
+          sessionID,
           agent: Agent.ID.make("build"),
           kind: "primary",
           model: Model.Ref.make({
@@ -892,7 +896,16 @@ describe("GithubCopilotPlugin", () => {
       yield* resolve("intelligence")
       expect(picks).toHaveLength(2)
       expect(picks.at(-1)).toMatchObject({ tier: "intelligence" })
-      yield* resolve()
+      const untiered = yield* resolve()
+      expect(untiered.model.id).toBe(Model.ID.make("routed"))
+      const request = yield* hooks.trigger("session", "model.request", {
+        sessionID: ids.parent,
+        agent: Agent.ID.make("build"),
+        model: untiered.model,
+        kind: "primary",
+        headers: {},
+      })
+      expect(request.headers["Copilot-Session-Token"]).toBe("tier-token")
       expect(picks.at(-1)).toEqual({ prompt: "" })
       yield* resolve("default")
       expect(picks).toHaveLength(3)
@@ -911,6 +924,8 @@ describe("GithubCopilotPlugin", () => {
       const unverified = yield* resolve("efficiency").pipe(Effect.exit)
       expect(String(unverified)).toContain("Could not verify Copilot Auto tier availability")
       expect(picks).toHaveLength(4)
+      const untieredFailure = yield* resolve(undefined, ids.child).pipe(Effect.exit)
+      expect(String(untieredFailure)).toContain("Copilot Auto could not select a model")
     }),
   )
 
