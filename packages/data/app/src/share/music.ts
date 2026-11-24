@@ -34,7 +34,9 @@ export const shareTracks: ShareTrack[] = [
   bpm: 96,
   bar: 2.5,
   verse: 5,
-  length: 20,
+  // The drop: the strong beat nearest the end of the song's hook (20 s), where the card cuts to its closing slides and
+  // the track's ending comes in.
+  length: track.beat + Math.round((20 - track.beat) / 1.25) * 1.25,
   url: `${import.meta.env.BASE_URL}share-music/${track.id}.mp3`,
   cover: `${import.meta.env.BASE_URL}share-music/${track.id}.jpg`,
 }))

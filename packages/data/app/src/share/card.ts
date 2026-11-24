@@ -193,8 +193,20 @@ export async function loadShareFonts() {
 
 /** The video's length in seconds: the chart builds, each leading series takes a turn, then the still holds. */
 export function shareDuration(card: ShareCard, options: ShareOptions, timing = freeTiming) {
+  return mainLength(card, options, timing) + outroBeats * (timing.beat ?? freeBeat)
+}
+
+// The card's own part of the video, before the closing slides: with music it runs to the track's drop.
+function mainLength(card: ShareCard, options: ShareOptions, timing: ShareTiming) {
   return timing.length ?? timing.start + highlights(card, options).length * timing.rounds * timing.step + hold
 }
+
+// The closing slides, cut on the beat: the lockup large for 4 beats, the line for 3, then the address for 3. At 96 BPM
+// that's 6.25 s. Without music they keep 96 BPM's beat.
+const outroBeats = 10
+const freeBeat = 0.625
+const outroLine = "The largest inference in the world"
+const outroAddress = "opencode.ai"
 
 export function drawShareCard(
   ctx: CanvasRenderingContext2D,
@@ -211,6 +223,19 @@ export function drawShareCard(
   ctx.clearRect(0, 0, width, height)
   ctx.fillStyle = colors.background
   ctx.fillRect(0, 0, width, height)
+  const main = mainLength(card, options, timing)
+  const total = shareDuration(card, options, timing)
+  // The equaliser waits for the chart to finish building, then eases in over a beat, and plays on through the slides.
+  const level =
+    timing.beat && time >= timing.build && time < total
+      ? scaled(meter(time, timing.beat, timing.spectrum), settle(time, timing.build, timing.beat))
+      : undefined
+  if (time >= main && time < total) {
+    drawOutro(ctx, options, colors, width, height, time - main, timing.beat ?? freeBeat, level)
+    ctx.restore()
+    return
+  }
+
   // The footer's baseline sits as far from the bottom as its text from the side; the rule is 56px above its type.
   const footer = height - pad
   const rule = footer - 26 - 56
@@ -231,10 +256,7 @@ export function drawShareCard(
     dotGrid(card.chart, width),
     baseline * 0.4,
     baseline,
-    // The equaliser waits for the chart to finish building, then eases in over a beat.
-    timing.beat && time >= timing.build && time < (timing.length ?? Infinity)
-      ? scaled(meter(time, timing.beat, timing.spectrum), settle(time, timing.build, timing.beat))
-      : undefined,
+    level,
   )
   // The tall story card is seen smaller in a feed, so its lockup sets larger, and the intro moves down to match.
   const logo = height > 1350 ? 1.5 : 1
@@ -278,6 +300,59 @@ export function drawShareCard(
     )
 
   drawFooter(ctx, card, colors, width, footer, rule)
+  ctx.restore()
+}
+
+// The closing slides, each cut on a beat with a small punch-in: the OpenCode DATA lockup large in the middle (on the
+// track's drop), then the line, then the address. The dot grid fills the card and the equaliser keeps playing.
+function drawOutro(
+  ctx: CanvasRenderingContext2D,
+  options: ShareOptions,
+  colors: Palette,
+  width: number,
+  height: number,
+  time: number,
+  beat: number,
+  level?: (column: number, columns: number) => number,
+) {
+  drawBackground(
+    ctx,
+    options.background,
+    colors,
+    width,
+    height,
+    { center: width / 2, pitch: 24 },
+    height * 0.55,
+    height,
+    level,
+  )
+  const slide = time < 4 * beat ? 0 : time < 7 * beat ? 1 : 2
+  const since = time - [0, 4, 7][slide]! * beat
+  const punch = 1 + 0.05 * (1 - settle(since, 0, 0.35))
+  ctx.save()
+  ctx.translate(width / 2, height / 2)
+  ctx.scale(punch, punch)
+  ctx.fillStyle = colors.text
+  ctx.textBaseline = "middle"
+  if (slide === 0) {
+    // The lockup at three times its corner size, centred as a whole.
+    const zoom = 3.4
+    ctx.font = `700 ${34 * zoom}px ${font}`
+    const name = options.logo === "full" ? "OPENCODE DATA" : "DATA"
+    const text = [...name].reduce((sum, char) => sum + ctx.measureText(char).width + 34 * zoom * 0.08, 0)
+    const total = (40 + 24) * zoom + text
+    drawLogo(ctx, options.logo, colors, -total / 2, -24 * zoom, zoom)
+  }
+  if (slide > 0) {
+    const words = slide === 1 ? outroLine : outroAddress
+    const size = slide === 1 ? (width > height ? 80 : 72) : 88
+    ctx.font = `${slide === 2 ? 700 : 400} ${size}px ${font}`
+    const lines = balance(ctx, words, width - pad * 4)
+    const leading = size * 1.2
+    lines.forEach((line, index) =>
+      ctx.fillText(line, -ctx.measureText(line).width / 2, (index - (lines.length - 1) / 2) * leading),
+    )
+  }
   ctx.restore()
 }
 
@@ -674,11 +749,13 @@ function drawCallout(
     ctx.save()
     ctx.globalAlpha = amount * shown
     ctx.textBaseline = "middle"
-    ctx.font = `700 30px ${font}`
+    // Set as the footer is: the label as the address (bold 34px), the amount as the date (34px's companion, 30px).
+    ctx.font = `400 30px ${font}`
     const measured = ctx.measureText(value).width
     // The amount in the legend's lighter grey, as its values are.
     ctx.fillStyle = colors.muted
     ctx.fillText(value, x + width - measured, middle + 2)
+    ctx.font = `700 34px ${font}`
     const left = color ? x + 22 + 16 : x
     if (color) {
       ctx.fillStyle = color
