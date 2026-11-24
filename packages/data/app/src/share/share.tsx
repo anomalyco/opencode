@@ -212,6 +212,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     })
   })
   let video: { key: string; file: Promise<File> } | undefined
+  // The video being rendered, to stop when Cancel is pressed or the editor closes.
+  let renderAbort: AbortController | undefined
   let closing: ReturnType<typeof setTimeout> | undefined
 
   // Load the card's font with the page, so the preview is ready the moment the editor opens.
@@ -386,7 +388,20 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       setRendering(0)
       video = {
         key,
-        file: renderVideo(value, options(), music(), timing(), setRendering).finally(() => setRendering(undefined)),
+        file: renderVideo(
+          value,
+          options(),
+          music(),
+          timing(),
+          setRendering,
+          (renderAbort = new AbortController()).signal,
+        )
+          .catch((error: unknown) => {
+            // A cancelled or failed render isn't kept, so the next Export starts again.
+            video = undefined
+            throw error
+          })
+          .finally(() => setRendering(undefined)),
       }
     }
     return video.file
@@ -403,8 +418,10 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   }
 
   // Export saves the PNG or the video. On phones, where saving a file goes nowhere useful, it opens the share sheet.
-  const exportFile = () =>
-    run(async () => {
+  const exportFile = () => {
+    // While a video renders, the button is Cancel.
+    if (rendering() !== undefined) return renderAbort?.abort()
+    return run(async () => {
       const kind = format()
       // The button says Copied for a moment instead of a notice.
       if (kind === "embed") {
@@ -424,6 +441,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       download(shared)
       return kind === "image" ? "PNG saved" : "Video saved"
     })
+  }
 
   // Pressing the chosen track again plays or pauses it, with the preview.
   const chooseTrack = (id: string) => {
@@ -454,6 +472,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
         setMenu(undefined)
       }}
       onClose={() => {
+        renderAbort?.abort()
         setPlaying(false)
         audio?.pause()
         opener?.focus()
@@ -696,11 +715,18 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   data-rendering={rendering() !== undefined ? "" : undefined}
                   // While a video renders, the button is its progress bar: it fills from the left as the frames go.
                   style={{ "--progress": `${(rendering() ?? 0) * 100}%` } as JSX.CSSProperties}
-                  disabled={rendering() !== undefined}
                   aria-live="polite"
-                  aria-label={{ image: "Export image", video: "Export video", embed: "Copy embed code" }[format()]}
+                  aria-label={
+                    rendering() !== undefined
+                      ? "Cancel export"
+                      : { image: "Export image", video: "Export video", embed: "Copy embed code" }[format()]
+                  }
                   onClick={exportFile}
                 >
+                  {/* While it renders: the percentage, turning to Cancel under the pointer or keyboard focus. */}
+                  <Show when={rendering() !== undefined}>
+                    <span data-slot="button-cancel">Cancel</span>
+                  </Show>
                   <Show when={rendering() !== undefined ? "rendering" : copied() ? "copied" : "export"} keyed>
                     <span data-slot="button-label">
                       {rendering() !== undefined
@@ -1159,6 +1185,7 @@ async function renderVideo(
   track: ShareTrack | undefined,
   timing: ShareTiming | undefined,
   progress: (value: number) => void,
+  signal: AbortSignal,
 ) {
   // Created before the first await, while the click still counts, so the context starts running.
   const context = track ? new AudioContext() : undefined
@@ -1197,7 +1224,7 @@ async function renderVideo(
       const time = (performance.now() - start) / 1000
       drawShareCard(ctx, card, options, time, timing)
       progress(Math.min(1, time / length))
-      if (time >= length) return resolve()
+      if (time >= length || signal.aborted) return resolve()
       requestAnimationFrame(frame)
     }
     requestAnimationFrame(frame)
@@ -1205,6 +1232,7 @@ async function renderVideo(
   recorder.stop()
   await done
   void context?.close()
+  if (signal.aborted) throw new DOMException("Export cancelled", "AbortError")
   const base = type.split(";")[0] ?? "video/webm"
   return new File([new Blob(chunks, { type: base })], fileName(card, base === "video/mp4" ? "mp4" : "webm"), {
     type: base,

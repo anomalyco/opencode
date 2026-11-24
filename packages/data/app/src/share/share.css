@@ -976,6 +976,30 @@
     margin-right: 4px;
   }
 
+  /* Rendering, the button cancels: its percentage gives way to Cancel under the pointer or keyboard focus. */
+  [data-slot="bar-button"][data-rendering] {
+    position: relative;
+    cursor: pointer;
+
+    [data-slot="button-cancel"] {
+      position: absolute;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      opacity: 0;
+    }
+
+    &:is(:hover, :focus-visible) {
+      [data-slot="button-cancel"] {
+        opacity: 1;
+      }
+
+      [data-slot="button-label"] {
+        opacity: 0;
+      }
+    }
+  }
+
   /* Mute, Shuffle and Export, together at the far end. */
   [data-slot="bar-end"] {
     display: flex;
