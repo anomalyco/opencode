@@ -1137,7 +1137,8 @@
     color: var(--stats-text);
     white-space: nowrap;
     background: var(--stats-bg);
-    border: 1px solid var(--stats-line-strong);
+    /* A soft line, so the bar reads light. */
+    border: 1px solid var(--stats-line);
     border-radius: 0;
     transition: background-color 120ms ease;
 
