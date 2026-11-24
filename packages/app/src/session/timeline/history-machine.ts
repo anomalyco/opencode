@@ -1,5 +1,13 @@
-// A detached reader within this distance of the top loads the next older page.
+// A detached reader within this distance of the top loads the next older page, and the one after it while they stay
+// there.
 export const HISTORY_SCROLL_THRESHOLD = 200
+
+// The least loaded history, in pixels, that a reader who scrolls toward the top keeps above the view. A wheel covers
+// about this much while a page is on its way, and it is no slower in a short window.
+export const HISTORY_RUNWAY_MIN = 2400
+
+// The same in screens, for page keys, which move a screen at a time.
+export const HISTORY_RUNWAY_SCREENS = 2
 
 // A page that never settles fails, so paging cannot stay "loading" forever.
 export const HISTORY_LOAD_TIMEOUT_MS = 30_000
@@ -14,9 +22,10 @@ export type HistoryTarget = {
 
 /**
  * A layout check queued for the next frame. `fill`: a following view whose content does not overflow loads more.
- * `top`: a detached view still near the top after a prepend loads more.
+ * `top`: a detached view still near the top after a prepend loads more. `runway`: so does one with less than the
+ * runway above it, whose reader kept scrolling toward the top while the page loaded.
  */
-export type HistoryProbe = "fill" | "top"
+export type HistoryProbe = "fill" | "top" | "runway"
 
 // `attempt` advances on every change of phase, so a probe, page or cooldown result from an earlier one is ignored.
 export type TimelineHistoryState =
@@ -28,7 +37,13 @@ export type TimelineHistoryState =
       readonly attempt: number
       readonly probe?: HistoryProbe
     }
-  | { readonly status: "loading"; readonly target: HistoryTarget; readonly attempt: number }
+  | {
+      readonly status: "loading"
+      readonly target: HistoryTarget
+      readonly attempt: number
+      /** The reader scrolled toward the top while this page loaded, so the next one follows without another scroll. */
+      readonly advanced: boolean
+    }
   /**
    * The last page failed. Once `coolingDown` ends, the reader's own scroll retries it, and a following view checks its
    * fill once; a hash target does not, so a detached view does not poll a broken server.
@@ -60,7 +75,7 @@ export type TimelineHistoryEvent =
       /** The oldest loaded message. */
       readonly oldest: string | undefined
     }
-  /** A detached reader scrolled near the top. */
+  /** A detached reader scrolled at the top, or toward it with less than the runway above the view. */
   | { readonly type: "scroll.top" }
   /** The content or the view changed size while following. */
   | { readonly type: "fill.requested" }
@@ -127,7 +142,11 @@ export function transitionTimelineHistory(
 
   if (state.status === "inactive") return unchanged(state)
 
-  if (event.type === "scroll.top") return canRequestScrollPage(state) ? load(state) : unchanged(state)
+  if (event.type === "scroll.top") {
+    if (!canRequestScrollPage(state)) return unchanged(state)
+
+    return state.status === "loading" ? changed({ ...state, advanced: true }) : load(state)
+  }
 
   if (event.type === "seek.requested") return canSeekHistory(state) ? load(state) : unchanged(state)
 
@@ -161,7 +180,7 @@ export function transitionTimelineHistory(
     if (event.oldest === event.previous)
       return changed({ status: "exhausted", target: state.target, attempt, stalled: { oldest: event.oldest } })
 
-    return probe(state.target, attempt, event.following ? "fill" : "top", NO_EFFECTS)
+    return probe(state.target, attempt, event.following ? "fill" : state.advanced ? "runway" : "top", NO_EFFECTS)
   }
 
   return changed({ status: "failed", target: state.target, attempt, coolingDown: true }, [
@@ -170,9 +189,28 @@ export function transitionTimelineHistory(
   ])
 }
 
-/** A detached reader near the top may request the next page. */
+/** The loaded history a reader who scrolls toward the top keeps above a view `viewportHeight` tall. */
+export function historyRunway(viewportHeight: number) {
+  return Math.max(HISTORY_RUNWAY_MIN, viewportHeight * HISTORY_RUNWAY_SCREENS)
+}
+
+/**
+ * Whether a detached reader's scroll asks for the next older page: any scroll at the top, and one toward the top with
+ * less than the runway above the view, so the page lands before the reader gets there. Inside the runway only a
+ * scroll toward the top counts. A page that lands pushes the offset the other way, and rows can be far shorter than
+ * the messages they hold, so paging until the runway is full could load a whole session unasked.
+ */
+export function scrollLoadsHistory(top: number, previousTop: number, viewportHeight: number) {
+  return top < HISTORY_SCROLL_THRESHOLD || (top < previousTop && top < historyRunway(viewportHeight))
+}
+
+/** A scroll that asks for a page may request it, or tell a page that is loading that the reader is still coming. */
 export function canRequestScrollPage(state: TimelineHistoryState) {
-  return state.status === "idle" || (state.status === "failed" && !state.coolingDown)
+  return (
+    state.status === "idle" ||
+    (state.status === "failed" && !state.coolingDown) ||
+    (state.status === "loading" && !state.advanced)
+  )
 }
 
 /** A following view may check whether its content still leaves room for older messages. */
@@ -245,7 +283,7 @@ function enter(
 function load(state: Active, released = cancel(state)): TimelineHistoryTransition {
   const attempt = state.attempt + 1
 
-  return changed({ status: "loading", target: state.target, attempt }, [
+  return changed({ status: "loading", target: state.target, attempt, advanced: false }, [
     ...released,
     { type: "load.start", sessionID: state.target.sessionID, attempt },
   ])

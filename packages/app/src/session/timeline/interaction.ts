@@ -16,7 +16,9 @@ import {
   HISTORY_LOAD_TIMEOUT_MS,
   HISTORY_RETRY_COOLDOWN_MS,
   HISTORY_SCROLL_THRESHOLD,
+  historyRunway,
   historySeekStatus,
+  scrollLoadsHistory,
   SCROLL_TOP_EVENT,
   SEEK_REQUESTED_EVENT,
   transitionTimelineHistory,
@@ -78,6 +80,8 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
   let historyProbe: (() => void) | undefined
   let historyLoad: { controller: AbortController; timer: ReturnType<typeof setTimeout> } | undefined
   let historyCooldown: ReturnType<typeof setTimeout> | undefined
+  // The offset at the last scroll: a lower one now is the reader moving toward the top.
+  let historyTop = 0
   // Changes only when an older page lands or the transcript is replaced, not while a reply streams.
   const oldestMessage = createMemo(() => timeline.messages()[0]?.id)
   const visibleUserMessages = timeline.visibleUserMessages
@@ -239,13 +243,13 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
   }
 
   const onHistoryScroll = () => {
-    if (
-      !scroller ||
-      scroller.scrollTop >= HISTORY_SCROLL_THRESHOLD ||
-      !canRequestScrollPage(untrack(historyState)) ||
-      untrack(follow.following)
-    )
-      return
+    if (!scroller) return
+    const previousTop = historyTop
+    historyTop = scroller.scrollTop
+
+    if (untrack(follow.following) || !canRequestScrollPage(untrack(historyState))) return
+
+    if (!scrollLoadsHistory(historyTop, previousTop, scroller.clientHeight)) return
     dispatchHistory(SCROLL_TOP_EVENT)
   }
 
@@ -276,7 +280,9 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
             !!scroller &&
             (effect.probe === "fill"
               ? follow.following() && scroller.scrollHeight <= scroller.clientHeight + 1
-              : !follow.following() && scroller.scrollTop < HISTORY_SCROLL_THRESHOLD)
+              : !follow.following() &&
+                scroller.scrollTop <
+                  (effect.probe === "runway" ? historyRunway(scroller.clientHeight) : HISTORY_SCROLL_THRESHOLD))
         },
         () => {
           historyProbe = undefined

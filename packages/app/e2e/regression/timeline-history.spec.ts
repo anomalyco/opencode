@@ -187,6 +187,53 @@ test.describe("timeline history", () => {
     expect(requests).toEqual([undefined, "older", "oldest"])
   })
 
+  test("loads the next older page while the reader is two screens from the top, then waits for the reader", async ({
+    page,
+  }) => {
+    const text = Array.from({ length: 40 }, (_, index) => `Paragraph ${index}.`).join("\n\n")
+
+    const messages = Array.from({ length: 6 }, (_, turn) => [
+      userMessage([textPart(`prt_runway_${turn}_prompt`, `Prompt ${turn}`)], {
+        id: `msg_runway_${turn}_a_user`,
+        created: turn * 2 + 1,
+      }),
+      assistantMessage([textPart(`prt_runway_${turn}_reply`, text)], {
+        id: `msg_runway_${turn}_b_assistant`,
+        parentID: `msg_runway_${turn}_a_user`,
+        created: turn * 2 + 2,
+      }),
+    ]).flat()
+
+    const requests: (string | undefined)[] = []
+    await setupTimeline(page, {
+      sessionMessages: messages,
+      // Two turns a page: a few rows, which stand for far less height until they are measured.
+      pageMessages: (_, limit, before) => {
+        requests.push(before)
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        const start = Math.max(0, end - Math.min(4, limit))
+
+        return { items: messages.slice(start, end), cursor: start ? messages[start]!.id : undefined }
+      },
+    })
+    const scroller = timelineScroller(page)
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    expect(requests).toEqual([undefined])
+    await page.clock.install()
+    // One upward gesture that stops more than two screens short of the top.
+    await scroller.evaluate((element) => {
+      element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1 }))
+      element.scrollTop = 1_800
+    })
+    expect(await scroller.evaluate((element) => element.scrollTop / element.clientHeight)).toBeGreaterThan(2)
+    await expect.poll(() => requests).toEqual([undefined, messages[8]!.id])
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(1_800)
+    // The page landed above a reader who has stopped. Paging on until the unmeasured rows add up would load the
+    // rest of the session.
+    await page.clock.runFor(1_000)
+    expect(requests).toEqual([undefined, messages[8]!.id])
+  })
+
   test("keeps visible rows fixed while an older page prepends", async ({ page }) => {
     const older = Promise.withResolvers<void>()
     const requests: { before?: string; phase: "start" | "end" }[] = []
