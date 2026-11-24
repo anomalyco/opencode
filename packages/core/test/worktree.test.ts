@@ -3,7 +3,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { and, eq, isNull } from "drizzle-orm"
-import { Context, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
+import { Cause, Context, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -57,6 +57,7 @@ function worktreeLayer(
   bus: Bus.Interface,
   data: string,
   workspaceID?: Workspace.ID,
+  ...replacements: LayerNode.Replacement[]
 ) {
   return AppNodeBuilder.build(
     LayerNode.group([Worktree.node, WorktreeStrategies.node, Git.node, FSUtil.node, Location.node, Global.node]),
@@ -74,6 +75,7 @@ function worktreeLayer(
           }),
         ),
       ),
+      ...replacements,
     ],
   ).pipe(Layer.fresh)
 }
@@ -241,6 +243,54 @@ describe("Worktree", () => {
 
       expect(yield* stored(input.projectID)).toEqual([{ directory: input.sourceDirectory, strategy: null }])
       expect(yield* Effect.promise(() => Bun.file(target).exists())).toBe(false)
+    }),
+  )
+
+  it.live("registers a checkout when creation is aborted during path validation", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+      const filesystem = yield* FSUtil.Service
+      const strategies = yield* WorktreeStrategies.Service
+      const directory = abs(path.join(input.root.path, "trees"))
+      const target = abs(path.join(directory, "cancelled"))
+      const controller = new AbortController()
+      const context = yield* Layer.build(
+        worktreeLayer(
+          input.sourceDirectory,
+          input.projectID,
+          database,
+          bus,
+          input.root.path,
+          undefined,
+          FSUtil.node.replace(
+            Layer.succeed(FSUtil.Service, {
+              ...filesystem,
+              resolve: (file) =>
+                file === target
+                  ? Effect.sync(() => controller.abort()).pipe(Effect.andThen(filesystem.resolve(file)))
+                  : filesystem.resolve(file),
+            }),
+          ),
+        ),
+      )
+      const worktree = Context.get(context, Worktree.Service)
+      // Use the live Git strategy so the abort hits the catalog's validation, after Git has returned.
+      const fiber = Effect.runFork(
+        worktree.create({ projectID: input.projectID, directory, name: "cancelled" }, strategies),
+        {
+          signal: controller.signal,
+        },
+      )
+      const exit = yield* Fiber.await(fiber)
+
+      expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
+      expect(yield* filesystem.isFile(path.join(target, ".git"))).toBe(true)
+      expect(yield* worktree.list({ projectID: input.projectID })).toContainEqual({
+        directory: target,
+        strategy: "git",
+      })
     }),
   )
 

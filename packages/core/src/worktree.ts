@@ -217,20 +217,22 @@ const layer = Layer.effect(
         worktreeDirectory = AbsolutePath.make(path.join(directory, `${name}-${suffix}`))
       }
 
-      const created = yield* selected
-        .create({
-          directory: worktreeDirectory,
-          sourceDirectory,
-          branch: input.branch,
-        })
-        .pipe(Effect.mapError((error) => operationError(selected.id, "create", error)))
-      const result = { directory: yield* canonical(fs, created.directory) }
-      yield* changed(
-        input.projectID,
-        yield* ops.create(input.projectID, {
-          directory: result.directory,
-          strategy: selected.id,
-          replace: true,
+      // Defer interruption once the strategy can create a checkout, until it is in the catalog.
+      const result = yield* Effect.uninterruptible(
+        Effect.gen(function* () {
+          const created = yield* selected
+            .create({
+              directory: worktreeDirectory,
+              sourceDirectory,
+              branch: input.branch,
+            })
+            .pipe(Effect.mapError((error) => operationError(selected.id, "create", error)))
+          const directory = yield* canonical(fs, created.directory)
+          yield* changed(
+            input.projectID,
+            yield* ops.create(input.projectID, { directory, strategy: selected.id, replace: true }),
+          )
+          return { directory }
         }),
       )
       const command = row.commands?.start?.trim()
