@@ -13,13 +13,14 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { projectSettingsKey, useSettings } from "@/settings/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import {
+  sessionFamily,
   sessionFormRequest,
   sessionMayHoldRequests,
   sessionPermissionRequest,
   sessionTreeIDs,
 } from "@/session/requests/session-request-tree"
 import { createWebSearchRequest } from "./websearch"
-import { createSessionBackground, mergeJobList } from "@/session/requests/background"
+import { createSessionBackground, jobOutsideFamily, mergeJobList } from "@/session/requests/background"
 import { createSteerBackground } from "@/session/requests/steer-background"
 import { useData, useServer } from "@/runtime/server/current"
 import { needsUser } from "./auto-approve-machine"
@@ -60,11 +61,15 @@ export function createSessionRequestModel() {
     void data.shell.sync({ directory: sdk().directory }).catch(() => undefined)
   })
 
+  // The open session's family. Requests and background work come from its own tree, so nothing here reads the list of
+  // every session: with many agents at work, each change to any of them reran all of it.
+  const family = createMemo(() => sessionFamily(data, params.id))
+
   // Permissions and forms are per Session, so each one in the tree that may hold a request is read. Comparing by value
   // keeps every session update in a large subagent tree from re-requesting them.
   const requestSessions = createMemo(
     () =>
-      sessionTreeIDs(data.session.list(), params.id).filter(
+      sessionTreeIDs(family(), params.id).filter(
         (id) => id === params.id || sessionMayHoldRequests(data, id),
       ),
     [],
@@ -82,7 +87,7 @@ export function createSessionRequestModel() {
   })
 
   const formRequest = createMemo((): FormInfo | undefined => {
-    return sessionFormRequest(data.session.list(), data.session.form.list, params.id)
+    return sessionFormRequest(family(), data.session.form.list, params.id)
   })
 
   // MCP elicitations are owned by the Location rather than a Session, so they are listed per Location.
@@ -148,7 +153,7 @@ export function createSessionRequestModel() {
     )
 
     return sessionPermissionRequest(
-      data.session.list(),
+      family(),
       data.session.permission.list,
       id,
       (item) => needsUser(autoApprove.state(item.id), enabled) && !isPermissionReplied(replyState(item.id)),
@@ -178,6 +183,9 @@ export function createSessionRequestModel() {
 
   const stopJobs = serverSDK.event.on("experimental.job.updated", (event) => {
     const info = event.data.info
+
+    // Every job of every session arrives here. One from outside this family would rebuild the list for nothing.
+    if (params.id && jobOutsideFamily(info, data.session.family(params.id), (id) => !!data.session.get(id))) return
 
     jobUpdates?.set(info.id, info)
 
@@ -215,7 +223,7 @@ export function createSessionRequestModel() {
   const running = createSessionBackground({
     sessionID: () => params.id,
     messages: data.session.message.list,
-    sessions: data.session.list,
+    sessions: family,
     status: data.session.status,
     shells: () => data.shell.list({ directory: sdk().directory }),
     jobs: runningJobs,

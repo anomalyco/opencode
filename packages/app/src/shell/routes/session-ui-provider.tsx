@@ -15,6 +15,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
 import { SessionExportProvider } from "@/session/commands/export-session"
 import { createTurnDiffCache } from "@/session/timeline/turn-diffs"
+import { sessionFamily } from "@/session/requests/session-request-tree"
 import { SessionReferenceMenu, type SessionReferenceMenuTarget } from "@/session/session-reference-menu"
 import { useSettings } from "@/settings/model"
 import {
@@ -215,21 +216,25 @@ export function SessionUIProvider(
     }
   })
 
-  const sessionUIData = createMemo(() => ({
-    provider: providers.ready()
-      ? { all: providers.all(), default: providers.default(), connected: providers.connected().map((item) => item.id) }
-      : undefined,
-    session: data.session.list(),
-    session_status: Object.fromEntries(
-      data.session
-        .list()
-        .map((session) => [
+  // Rows look up the open session's own subagents, so they get its family. Given every session the server has, this
+  // object was rebuilt, and the rows that read it ran again, for each change to any other session.
+  const sessionUIData = createMemo(() => {
+    const family = sessionFamily(data, params.id)
+
+    return {
+      provider: providers.ready()
+        ? { all: providers.all(), default: providers.default(), connected: providers.connected().map((item) => item.id) }
+        : undefined,
+      session: family,
+      session_status: Object.fromEntries(
+        family.map((session) => [
           session.id,
           data.session.status(session.id) === "running" ? ({ type: "busy" } as const) : ({ type: "idle" } as const),
         ]),
-    ),
-    session_diff: {},
-  }))
+      ),
+      session_diff: {},
+    }
+  })
 
   return (
     <LocalProvider>

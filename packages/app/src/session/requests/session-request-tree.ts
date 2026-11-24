@@ -18,6 +18,19 @@ function sessionTreeRequest<T>(
   return list(id)?.find(include)
 }
 
+/**
+ * The records of a session's family: its root and every known session below that root. Reading them tracks those
+ * sessions only, so a change to any other session, however many the server has, reruns nothing that reads this.
+ */
+export function sessionFamily(
+  data: { session: { family: (sessionID: string) => readonly string[]; get: (sessionID: string) => SessionInfo | undefined } },
+  sessionID: string | undefined,
+) {
+  if (!sessionID) return []
+
+  return [...new Set([sessionID, ...data.session.family(sessionID)])].flatMap((id) => data.session.get(id) ?? [])
+}
+
 export function sessionTreeIDs(session: SessionInfo[], sessionID?: string) {
   if (!sessionID) return []
 
