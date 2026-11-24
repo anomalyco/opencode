@@ -784,7 +784,7 @@ describe("Code Mode opencode:// fetch", () => {
     ])
   })
 
-  test("asks as the opencode api command, and a webfetch rule for the URL can only deny", async () => {
+  test("asks as the opencode api command, and only a webfetch rule naming opencode:// can deny it", async () => {
     const asked: Array<{ action: string; resources: ReadonlyArray<string>; save?: ReadonlyArray<string> }> = []
     const checked: Array<ReadonlyArray<string>> = []
     const sent: Array<string> = []
@@ -816,18 +816,21 @@ describe("Code Mode opencode:// fetch", () => {
     ])
     expect(checked).toEqual([["opencode:///api/session/current/prompt"]])
 
-    expect(
-      await run(
-        permissionService({
-          assert: () => Effect.die("never asked"),
-          assertNotDenied: (input) =>
-            Effect.fail(
-              new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources }),
-            ),
-        }),
-      ),
-    ).toContain("Permission denied")
-    expect(sent).toHaveLength(1)
+    const denying = (resource: string, assert: Permission.Interface["assert"]) =>
+      permissionService({
+        assert,
+        assertNotDenied: (input) =>
+          Effect.fail(
+            new Permission.BlockedError({
+              rules: [{ action: "webfetch", resource, effect: "deny" }],
+              permission: input.action,
+              resources: input.resources,
+            }),
+          ),
+      })
+    expect(await run(denying("*", () => Effect.void))).toBe("sent")
+    expect(await run(denying("opencode:///*", () => Effect.die("never asked")))).toContain("Permission denied")
+    expect(sent).toHaveLength(2)
   })
 
   test("accepts only opencode:///api/... URLs, reports a disabled API, and fails without one", async () => {
