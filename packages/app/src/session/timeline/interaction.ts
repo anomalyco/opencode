@@ -25,6 +25,13 @@ import {
 } from "./history-machine"
 import { createRouteRevealState, routeRevealTarget, transitionRouteReveal } from "./machine"
 import { createTimelineModel } from "./model"
+import {
+  createRevealSeekState,
+  revealSeekTarget,
+  SEEK_CANCELLED_EVENT,
+  transitionRevealSeek,
+  type RevealSeekEvent,
+} from "./reveal-machine"
 
 /** `visible`: the conversation is on screen, not behind another narrow-screen view. */
 export function createSessionTimelineInteraction(session: SessionModel, visible: Accessor<boolean>) {
@@ -64,6 +71,16 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
     const event = { type: "route.synced", entryKey: location.key, target: location.state?.reveal } as const
     setRevealState((current) => transitionRouteReveal(current, event))
   })
+
+  // Each session gets a fresh seek, as it gets a fresh follow state, so one never carries on in the session opened
+  // next.
+  const revealSeek = createMemo(() => {
+    session.identity.sessionKey()
+
+    return createSignal(createRevealSeekState())
+  })
+  // Opens a loaded part in the active timeline, registered by its virtualizer.
+  let revealPart = (_target: string) => false
 
   // The active timeline's navigation, registered by its virtualizer.
   let revealMessage = (_id: string, _partID?: string) => {}
@@ -154,15 +171,21 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
     )
   }
 
+  const viewReady = createMemo(
+    () => !!session.identity.params.id && timeline.ready() && !!state.refs.scroller && visible(),
+  )
+
+  const historyStatus = createMemo(() => historySeekStatus(historyState()))
+
   const cursor = createTimelineCursor({
     sessionKey: session.identity.sessionKey,
-    viewReady: createMemo(() => !!session.identity.params.id && timeline.ready() && !!state.refs.scroller && visible()),
+    viewReady,
     following: follow.following,
     visibleUserMessages,
     syncing: () => timeline.resource.loading,
     revertMessageID: session.data.revertMessageID,
     oldestMessageID: oldestMessage,
-    historyStatus: createMemo(() => historySeekStatus(historyState())),
+    historyStatus,
     scroller: () => scroller,
     anchor,
     revealMessage: (id) => revealMessage(id),
@@ -181,6 +204,7 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
   let resumeFrame: (() => void) | undefined
 
   const resume = (behavior?: ScrollBehavior) => {
+    endRevealSeek()
     cursor.clear()
     const attempt = follow.beginReturn()
     // Scrolls on the next frame, before it paints. A submit resumes from its key handler right after changing the
@@ -216,6 +240,7 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
       return
     }
 
+    endRevealSeek()
     cursor.jump(messages[target].id, "auto")
   }
 
@@ -227,6 +252,33 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
 
     if (nested && nested !== scroller) return
     cursor.dispatch(SCROLL_MOVED_EVENT)
+  }
+
+  // The reader's gesture also ends the search for an older call. It does so here and not inside `markUserScroll`:
+  // every seek ends on its own condition, and two that shared one function were merged onto one condition.
+  const markUserGesture = (target?: EventTarget | null) => {
+    const nested = target instanceof Element ? target.closest("[data-scrollable]") : undefined
+
+    if (scroller && (!nested || nested === scroller)) endRevealSeek()
+    markUserScroll(target)
+  }
+
+  const seekingReveal = () => revealSeekTarget(untrack(() => revealSeek()[0]())) !== undefined
+
+  // The reader moved the view, gave scroll input, or asked to go somewhere else. A call that loads later would take
+  // the view from where they are, so the search for it ends. Runs on every scroll the reader makes, so it checks first.
+  function endRevealSeek() {
+    if (seekingReveal()) dispatchRevealSeek(SEEK_CANCELLED_EVENT)
+  }
+
+  function dispatchRevealSeek(event: RevealSeekEvent) {
+    untrack(() => {
+      const [current, setCurrent] = revealSeek()
+      const next = transitionRevealSeek(current(), event)
+
+      if (next.state !== current()) setCurrent(next.state)
+      next.effects.forEach(() => dispatchHistory(SEEK_REQUESTED_EVENT))
+    })
   }
 
   const setScrollRef = (element: HTMLDivElement | undefined) => {
@@ -382,6 +434,17 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
       oldest: oldestMessage(),
     })
   })
+  // Looks for a sought call again once the timeline is on screen, when an older page lands and when paging changes
+  // phase. Reads the transcript only while a call is sought.
+  createEffect(() => {
+    const target = revealSeekTarget(revealSeek()[0]())
+
+    if (!target || !viewReady()) return
+    // Read so that this runs again when an older page lands.
+    oldestMessage()
+    const history = historyStatus()
+    untrack(() => dispatchRevealSeek({ type: "seek.synced", found: revealPart(target), history }))
+  })
   createResizeObserver(
     () => state.refs.dock,
     (_rect, _element, entry) => {
@@ -417,10 +480,14 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
   return {
     actions: {
       navigateMessage,
-      jumpToMessage: (id: string) => cursor.jump(id, "auto"),
+      jumpToMessage: (id: string) => {
+        endRevealSeek()
+        cursor.jump(id, "auto")
+      },
       page: (direction: 1 | -1) => page(direction),
       // Find and tool reveals move the view like a scroll, so the chosen prompt is no longer where navigation starts.
       revealMessage: (id: string, partID?: string) => {
+        endRevealSeek()
         cursor.dispatch(SCROLL_MOVED_EVENT)
         revealMessage(id, partID)
       },
@@ -438,7 +505,7 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
     follow,
     view: {
       anchor,
-      markUserScroll,
+      markUserScroll: markUserGesture,
       onHistoryScroll,
       scheduleScrollState,
       contentResized: () => {
@@ -454,11 +521,18 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
       setRevealMessage: (reveal: (id: string, partID?: string) => void) => {
         revealMessage = reveal
       },
-      // The tool call the route opened the session on, attempted once per history entry.
+      // The tool call the route opened the session on, attempted once per history entry, and the search for a call
+      // that is older than the loaded messages.
       reveal: {
         pending: () => routeRevealTarget(untrack(revealState)),
         consume: (entryKey: string) =>
           setRevealState((current) => transitionRouteReveal(current, { type: "reveal.attempted", entryKey })),
+        attempted: (target: string, found: boolean) =>
+          dispatchRevealSeek({ type: "reveal.requested", target, found }),
+        register: (reveal: (target: string) => boolean) => {
+          revealPart = reveal
+        },
+        readerMoved: endRevealSeek,
       },
       setScrollRef,
       setScrollToEnd: (scroll: (behavior?: ScrollBehavior) => void) => {

@@ -23,7 +23,7 @@ import { createNextTimelineRowRenderer, laneGap, StatusLane, timelineStatus } fr
 import { getReadyMarkdown, preloadMarkdown } from "@opencode/session-ui/markdown-cache"
 import { createTimelineController, type TimelineController, type TimelineSessionSource } from "./controller"
 import type { TimelineFollow } from "./follow"
-import { createTimelineVirtualizer, type TimelineRouteReveal } from "./virtualizer"
+import { createTimelineVirtualizer, type TimelineToolReveal } from "./virtualizer"
 import { createSelectedEffect } from "./selected-effect"
 import { containsDirectory } from "@opencode/util/path"
 import { isWorkspaceDirectory } from "@/workspaces/paths"
@@ -100,7 +100,7 @@ type MessageTimelineProps = {
   setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
   setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
   setPage?: (fn: (direction: 1 | -1) => void) => void
-  reveal?: TimelineRouteReveal
+  reveal?: TimelineToolReveal
   search?: JSX.Element
 }
 

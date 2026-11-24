@@ -14,6 +14,7 @@ import {
   setupTimeline,
   status,
   textPart,
+  toolPart,
   userID,
   userMessage,
   validateTimelineMessages,
@@ -125,6 +126,339 @@ test.describe("timeline history", () => {
     await expect(timelineScroller(page).getByText(target.text, { exact: true })).toBeInViewport()
     expect(oldest).toBeGreaterThan(0)
   })
+
+  test("a shell notice opens its call from an older page, paging back only as far as the call", async ({ page }) => {
+    const history = historyMessages(120)
+
+    // IDs ascend with creation, as the server makes them: the call's message, the shell it starts, then later turns.
+    const call = assistantMessage(
+      [
+        toolPart(
+          "prt_older_call",
+          "shell",
+          "completed",
+          { command: "bun serve.ts", background: true },
+          { output: "listening", metadata: { shellID: "sh_00079_history_d_shell", status: "running" } },
+        ),
+      ],
+      { id: "msg_00079_history_c_call", parentID: "msg_00079_history_a_user", created: 1690000792000 },
+    )
+
+    const messages: SessionMessageInfo[] = [
+      ...history.slice(0, 160),
+      call,
+      ...history.slice(160),
+      {
+        id: "msg_00120_shell_finished",
+        type: "synthetic",
+        text: '<shell id="sh_00079_history_d_shell" state="completed" command="bun serve.ts">\nlistening\n</shell>',
+        description: "bun serve.ts",
+        metadata: { source: "shell", shellID: "sh_00079_history_d_shell", state: "completed" },
+        time: { created: 1690001200000 },
+      },
+    ]
+
+    let oldest = messages.length
+
+    await setupTimeline(page, {
+      sessionMessages: messages,
+      pageMessages: (_, limit, before) => {
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        const start = Math.max(0, end - Math.min(16, limit))
+        oldest = Math.min(oldest, start)
+
+        // A cursor with every page that holds a message, as the server gives it.
+        return { items: messages.slice(start, end), cursor: end > 0 ? messages[start]!.id : undefined }
+      },
+    })
+
+    const scroller = timelineScroller(page)
+    const notice = scroller.getByRole("button", { name: /^Shell finished/ })
+    const trigger = scroller.locator('[data-timeline-part-id="prt_older_call"] [data-slot="collapsible-trigger"]')
+
+    await expect(notice).toBeInViewport()
+    await expect(trigger).toHaveCount(0)
+    await notice.click()
+
+    await expect(trigger).toHaveAttribute("aria-expanded", "true")
+    await expect(trigger).toBeInViewport()
+    expect(oldest).toBeGreaterThan(0)
+  })
+
+  // A shell that a Code Mode script started has a notice and no call. Where the call would be was read from the order
+  // of two IDs as text, and IDs do not sort in the transcript's order: a fork copies every message as
+  // `msg_<fork event>_<seq>`, which sorts after every shell that ran before the fork. The search then never ended, and
+  // one click on such a notice loaded the whole session.
+  test("a shell notice without a call in a forked session loads ten older pages, not the session", async ({ page }) => {
+    // Every page of 16 begins with a prompt, so no page is asked for to complete a turn.
+    const original: SessionMessageInfo[] = [
+      ...historyMessages(120),
+      userMessage([textPart("prt_fork_prompt", "Start the server")], {
+        id: "msg_00120_serve_a_user",
+        created: 1690001190000,
+      }),
+      {
+        id: "msg_00120_shell_finished",
+        type: "synthetic",
+        text: '<shell id="sh_1e1dbe17b0010Bv53WdPWVw1ic" state="completed" command="bun serve.ts">\nlistening\n</shell>',
+        description: "bun serve.ts",
+        metadata: { source: "shell", shellID: "sh_1e1dbe17b0010Bv53WdPWVw1ic", state: "completed" },
+        time: { created: 1690001200000 },
+      },
+    ]
+
+    // The fork's copies, in the transcript's order. The fork came after the shell, so its event's ID is the higher.
+    const ids = new Map(original.map((message, index) => [message.id, `msg_1e2a41c7d001_${index + 1}`]))
+
+    const messages = original.map(
+      (message): SessionMessageInfo =>
+        message.type === "assistant" && message.parentID
+          ? { ...message, id: ids.get(message.id)!, parentID: ids.get(message.parentID) ?? message.parentID }
+          : { ...message, id: ids.get(message.id)! },
+    )
+
+    const requests: { before?: string; phase: "start" | "end" }[] = []
+    await setupTimeline(page, {
+      sessionMessages: messages,
+      // A cursor with every page that holds a message, as the server gives it.
+      pageMessages: (_, limit, before) => {
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        const start = Math.max(0, end - Math.min(16, limit))
+
+        return { items: messages.slice(start, end), cursor: end > 0 ? messages[start]!.id : undefined }
+      },
+      onMessages: (request) => requests.push(request),
+    })
+
+    const older = (phase: "start" | "end") =>
+      requests.filter((request) => request.before && request.phase === phase).length
+
+    const notice = timelineScroller(page).getByRole("button", { name: /^Shell finished/ })
+
+    await expect(notice).toBeInViewport()
+    expect(older("start")).toBe(0)
+    await notice.click()
+    // Fifteen older pages hold messages.
+    await expect.poll(() => older("end")).toBe(10)
+    // Run the frames in which a search that went on would ask for the next page.
+    await page.clock.install()
+    await page.clock.runFor(1_000)
+    expect(older("start")).toBe(10)
+  })
+
+  // In the New timeline the notice is a link inside an events row, and it keeps focus after the click. An older page
+  // that lands builds that row again: focus went to the link that took its place, and the browser scrolled the
+  // timeline back to it, away from the call.
+  test("a shell's link in the New timeline opens its call from an older page", async ({ page }) => {
+    const history = historyMessages(120)
+
+    const call = assistantMessage(
+      [
+        toolPart(
+          "prt_older_call",
+          "shell",
+          "completed",
+          { command: "bun serve.ts", background: true },
+          { output: "listening", metadata: { shellID: "sh_00079_history_d_shell", status: "running" } },
+        ),
+      ],
+      { id: "msg_00079_history_c_call", parentID: "msg_00079_history_a_user", created: 1690000792000 },
+    )
+
+    const messages: SessionMessageInfo[] = [
+      ...history.slice(0, 160),
+      call,
+      ...history.slice(160),
+      {
+        id: "msg_00120_shell_finished",
+        type: "synthetic",
+        text: '<shell id="sh_00079_history_d_shell" state="completed" command="bun serve.ts">\nlistening\n</shell>',
+        description: "bun serve.ts",
+        metadata: { source: "shell", shellID: "sh_00079_history_d_shell", state: "completed" },
+        time: { created: 1690001200000 },
+      },
+    ]
+
+    await setupTimeline(page, {
+      settings: { newTimeline: true },
+      sessionMessages: messages,
+      pageMessages: (_, limit, before) => {
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        const start = Math.max(0, end - Math.min(16, limit))
+
+        // A cursor with every page that holds a message, as the server gives it.
+        return { items: messages.slice(start, end), cursor: end > 0 ? messages[start]!.id : undefined }
+      },
+    })
+
+    const scroller = timelineScroller(page)
+    const link = scroller.locator('[data-slot="timeline-event-item"][data-kind="shell"]')
+    const tool = scroller.locator('[data-timeline-part-id="prt_older_call"]')
+
+    await scroller.locator('[data-component="timeline-event-row"] [data-slot="collapsible-trigger"]').click()
+    await expect(tool).toHaveCount(0)
+    await link.click()
+    await expect(tool).toBeInViewport()
+    // Once every page the search asked for has landed, the call is still where the reader was taken.
+    await page.clock.install()
+    await page.clock.runFor(1_000)
+    await expect(tool).toBeInViewport()
+  })
+
+  // The search for the call ended only on input the timeline handles itself: the wheel, a touch, its own scroll keys
+  // and a press. A key the browser handles or a drag of the scrollbar thumb left it running, and the call took the
+  // view from wherever the reader had gone. A press on the thumb that moves nothing, at the end of the transcript,
+  // left it running too: the thumb is outside the scroll view, so its press was not the timeline's.
+  // A press on the thumb, and a drag when `distance` is not 0. The thumb reports the press itself.
+  const pressThumb = async (page: Page, distance: number) => {
+    const thumb = page.locator('.scroll-view__thumb[data-orientation="vertical"]')
+    const box = await thumb.boundingBox()
+
+    if (!box) throw new Error("The timeline has no scrollbar thumb")
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.down()
+    await expect(thumb).toHaveAttribute("data-dragging", "true")
+
+    if (distance) await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + distance, { steps: 8 })
+    await page.mouse.up()
+  }
+
+  for (const input of [
+    {
+      name: "goes to the end with Ctrl+End",
+      reply: true,
+      taken: false,
+      move: (page: Page) => page.keyboard.press("Control+End"),
+    },
+    {
+      name: "goes to the end with a drag of the scrollbar thumb",
+      reply: true,
+      taken: false,
+      move: (page: Page) => pressThumb(page, 2_000),
+    },
+    // From here the notice is the last row: the view is at the end already, and no input below moves it.
+    {
+      name: "presses Ctrl+End at the end",
+      reply: false,
+      taken: false,
+      move: (page: Page) => page.keyboard.press("Control+End"),
+    },
+    {
+      name: "presses the scrollbar thumb at the end",
+      reply: false,
+      taken: false,
+      move: (page: Page) => pressThumb(page, 0),
+    },
+    {
+      // The browser handles a page key on a button, not the timeline.
+      name: "presses PageDown on a button at the end",
+      reply: false,
+      taken: false,
+      move: (page: Page) => timelineScroller(page).getByRole("button", { name: /^Shell finished/ }).press("PageDown"),
+    },
+    // The same held page opens the call for a reader who gives no input.
+    { name: "waits at the end", reply: false, taken: true, move: () => Promise.resolve() },
+  ])
+    test(`a reader who ${input.name} while a shell's call is sought is ${input.taken ? "" : "not "}taken to it`, async ({
+      page,
+    }) => {
+      const history = historyMessages(120)
+      const text = Array.from({ length: 40 }, (_, index) => `Paragraph ${index}.`).join("\n\n")
+
+      const call = assistantMessage(
+        [
+          toolPart(
+            "prt_sought_call",
+            "shell",
+            "completed",
+            { command: "bun serve.ts", background: true },
+            { output: "listening", metadata: { shellID: "sh_00109_history_d_shell", status: "running" } },
+          ),
+        ],
+        { id: "msg_00109_history_c_call", parentID: "msg_00109_history_a_user", created: 1690001092000 },
+      )
+
+      // The notice is on the newest page, above a long reply or as its last row. Its call is on the page before.
+      const messages: SessionMessageInfo[] = [
+        ...history.slice(0, 220),
+        call,
+        ...history.slice(220),
+        {
+          id: "msg_00120_shell_finished",
+          type: "synthetic",
+          text: '<shell id="sh_00109_history_d_shell" state="completed" command="bun serve.ts">\nlistening\n</shell>',
+          description: "bun serve.ts",
+          metadata: { source: "shell", shellID: "sh_00109_history_d_shell", state: "completed" },
+          time: { created: 1690001200000 },
+        },
+        ...(input.reply
+          ? [
+              userMessage([textPart("prt_sought_prompt", "Summarise the run")], {
+                id: "msg_00121_later_a_user",
+                created: 1690001210000,
+              }),
+              assistantMessage([textPart("prt_sought_reply", text)], {
+                id: "msg_00121_later_b_assistant",
+                parentID: "msg_00121_later_a_user",
+                created: 1690001211000,
+              }),
+            ]
+          : []),
+      ]
+
+      const older = Promise.withResolvers<void>()
+      const requests: { before?: string; phase: "start" | "end" }[] = []
+      await setupTimeline(page, {
+        sessionMessages: messages,
+        pageMessages: (_, limit, before) => {
+          const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+          const start = Math.max(0, end - Math.min(16, limit))
+
+          // A cursor with every page that holds a message, as the server gives it.
+          return { items: messages.slice(start, end), cursor: end > 0 ? messages[start]!.id : undefined }
+        },
+        beforeMessagesResponse: ({ before }) => (before ? older.promise : Promise.resolve()),
+        onMessages: (request) => requests.push(request),
+      })
+
+      const scroller = timelineScroller(page)
+      const notice = scroller.getByRole("button", { name: /^Shell finished/ })
+      const end = input.reply ? scroller.getByText("Paragraph 39.", { exact: true }) : notice
+
+      // How far the view is from the end of the transcript.
+      const away = () =>
+        scroller.evaluate((element) => Math.round(element.scrollHeight - element.clientHeight - element.scrollTop))
+
+      await expect(end).toBeInViewport()
+      await scroller.hover()
+
+      if (input.reply)
+        await expect(async () => {
+          await page.mouse.wheel(0, -200)
+          await expect(notice).toBeInViewport({ timeout: 1_000 })
+        }).toPass()
+      await notice.click()
+      await expect.poll(() => requests.some((request) => request.before && request.phase === "start")).toBe(true)
+
+      await input.move(page)
+      await expect.poll(away).toBe(0)
+      const height = await scroller.evaluate((element) => element.scrollHeight)
+
+      older.resolve()
+      // The page with the call has landed above the reader.
+      await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
+
+      if (input.taken) {
+        await expect(scroller.locator('[data-timeline-part-id="prt_sought_call"]')).toBeInViewport()
+
+        return
+      }
+      // Run the frames in which a reveal that was still to come would scroll.
+      await page.clock.install()
+      await page.clock.runFor(1_000)
+      expect(await away()).toBe(0)
+      await expect(end).toBeInViewport()
+    })
 
   test("restoring a paged transcript waits for another upward scroll before loading history", async ({ page }) => {
     const id = "ses_history_restore"
