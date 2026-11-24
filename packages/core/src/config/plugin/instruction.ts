@@ -142,6 +142,7 @@ export const Plugin = define({
         }
         for (const [key] of Array.from(watches)) if (!watched.has(key)) yield* FiberMap.remove(watches, key)
         for (const file of watched) {
+          if (FiberMap.hasUnsafe(watches, file)) continue
           const updates = yield* watcher.subscribe({ path: file, type: "file" })
           yield* FiberMap.run(watches, file, updates.pipe(Stream.runForEach(publish)), {
             onlyIfMissing: true,
@@ -151,9 +152,9 @@ export const Plugin = define({
         return files
       })
 
-      // Remote instructions are fetched only when config loads, not on every file rescan.
-      // A failed fetch keeps the last good copy or skips the URL, so an unreachable URL
-      // never makes the whole instruction set unavailable.
+      // A remote instruction is fetched once and kept until its URL leaves config, so a config
+      // update does not refetch it. A failed fetch skips the URL, so an unreachable URL never
+      // makes the whole instruction set unavailable, and is retried on the next config update.
       const reconfigure = Effect.fn("ConfigInstructionPlugin.reconfigure")(
         function* () {
           const entries = yield* config.entries()
@@ -162,18 +163,19 @@ export const Plugin = define({
           )
           const fetched = yield* Effect.forEach(
             sources.filter(isUrl),
-            (url) =>
-              HttpClientRequest.get(url).pipe(
+            (url) => {
+              const cached = configured.remote.get(url)
+              if (cached) return Effect.succeed(cached)
+              return HttpClientRequest.get(url).pipe(
                 http.execute,
                 Effect.flatMap((response) => response.text),
                 Effect.timeout("5 seconds"),
                 Effect.map((content) => new InstructionDiscovery.File({ path: url, content })),
                 Effect.catchCause((cause) =>
-                  Effect.logWarning("failed to fetch instruction url", { url, cause }).pipe(
-                    Effect.as(configured.remote.get(url)),
-                  ),
+                  Effect.logWarning("failed to fetch instruction url", { url, cause }).pipe(Effect.as(undefined)),
                 ),
-              ),
+              )
+            },
             { concurrency: 4 },
           )
           configured.sources = sources
@@ -223,6 +225,7 @@ export const Plugin = define({
         Effect.forkScoped({ startImmediately: true }),
       )
       // Subscribe before the first config read so an update in between still triggers a reload.
+      // Local sources are rescanned even when unchanged: a pattern can match a new file.
       yield* ctx.event.subscribe({ types: ["config.updated"] }).pipe(
         Stream.runForEach(() => reconfigure().pipe(Effect.andThen(refresh()), Effect.andThen(discovery.reload()))),
         Effect.forkScoped({ startImmediately: true }),
