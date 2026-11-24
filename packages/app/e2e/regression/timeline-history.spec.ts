@@ -253,7 +253,10 @@ test.describe("timeline history", () => {
       const runs: number[] = (window.__scrollWrites = [])
       const run = { open: false }
 
-      Element.prototype.scrollTo = function (this: Element) {
+      Element.prototype.scrollTo = function (
+        this: Element,
+        ...args: [options?: ScrollToOptions] | [x: number, y: number]
+      ) {
         if (this.matches(".scroll-view__viewport") && !run.open) {
           run.open = true
           runs.push(0)
@@ -261,8 +264,11 @@ test.describe("timeline history", () => {
         }
 
         if (this.matches(".scroll-view__viewport")) runs[runs.length - 1]!++
+        const scroll = scrollTo.bind(this)
 
-        return Reflect.apply(scrollTo, this, arguments)
+        if (args.length === 2) return scroll(args[0], args[1])
+
+        return scroll(args[0])
       }
     })
     await setupTimeline(page, {
