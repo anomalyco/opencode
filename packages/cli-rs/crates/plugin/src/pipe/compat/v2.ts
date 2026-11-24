@@ -1152,11 +1152,22 @@ export function context(base: Base, carrier: Carrier) {
     baseUrl: "http://opencode.internal/",
     fetch: (async (url: URL, init?: RequestInit) => {
       const body = typeof init?.body === "string" ? JSON.parse(init.body) : undefined
-      const result = await carrier.fetch({
-        method: init?.method ?? "GET",
-        path: url.pathname,
-        query: [...url.searchParams],
-        ...(body === undefined ? {} : { body }),
+      const signal = init?.signal
+      // As fetch does: an aborted call never starts, and an abort mid-call rejects with the signal's reason.
+      if (signal?.aborted) throw signal.reason
+      const result = await new Promise<Json>((resolve, reject) => {
+        const abort = () => reject(signal!.reason)
+        signal?.addEventListener("abort", abort, { once: true })
+        Promise.resolve(
+          carrier.fetch({
+            method: init?.method ?? "GET",
+            path: url.pathname,
+            query: [...url.searchParams],
+            ...(body === undefined ? {} : { body }),
+          }),
+        )
+          .then(resolve, reject)
+          .finally(() => signal?.removeEventListener("abort", abort))
       })
       if (result && "Ok" in result)
         return result.Ok === null
