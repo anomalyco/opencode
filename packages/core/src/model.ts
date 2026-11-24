@@ -8,6 +8,7 @@ import { State } from "./state.js"
 import { Location } from "./location.js"
 import { freeze } from "immer"
 import { AISDKNative } from "./aisdk-native.js"
+import { lookupModel } from "./model-lookup.js"
 
 export const ID = Model.ID
 export type ID = typeof ID.Type
@@ -293,7 +294,12 @@ const layer = Layer.effect(
       transform: (update) => prepare.pipe(Effect.andThen(state.transform(update))),
       reload,
       get: Effect.fn("Model.get")((providerID, modelID) =>
-        read().pipe(Effect.map((value) => value.byProvider.get(providerID)?.get(modelID))),
+        read().pipe(
+          Effect.map((value) => {
+            const models = value.byProvider.get(providerID)
+            return lookupModel(providerID, modelID, (id) => models?.get(id))
+          }),
+        ),
       ),
       all: Effect.fn("Model.all")(() => read().pipe(Effect.map((value) => value.all))),
       available: Effect.fn("Model.available")((types?: readonly Model.Type[]) =>
