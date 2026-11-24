@@ -127,13 +127,16 @@ test("the picker lists the prompts a revert leaves, by their place and not by th
   const row = (id: string, created: number) => ({ id, text: id, created })
   // Newest first, as the history loads. The scheduled prompt is the oldest and sorts after every other ID.
   const history = [row("msg_4", 4), row("msg_3", 3), row("msg_2", 2), row("msg_sch_1", 1)]
+
   const state = transitionJumpToMessage(startJumpToMessage().state, {
     type: "history.loaded",
     attempt: 1,
     history,
   }).state
+
   const ids = (transcript: Parameters<typeof selectJumpPrompts>[1]) =>
     selectJumpPrompts(state, transcript).map((prompt) => prompt.id)
+
   const none = { loaded: [], visible: [], pending: new Set<string>() }
 
   expect(ids({ ...none, revertMessageID: undefined })).toEqual(["msg_4", "msg_3", "msg_2", "msg_sch_1"])
