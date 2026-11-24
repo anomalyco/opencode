@@ -5,6 +5,7 @@ import {
   createRouteRevealState,
   defersAdjustments,
   isFollowing,
+  isGliding,
   isTouchHeld,
   needsEndProbe,
   ROUTE_REVEAL_HISTORY_LIMIT,
@@ -258,6 +259,33 @@ test("a newer return supersedes a queued one", () => {
 
   expect(transitionFollow(queued, { type: "return.run", attempt: 1 })).toBe(queued)
   expect(transitionFollow(queued, { type: "return.run", attempt: 2 })).toEqual({ type: "following" })
+})
+
+test("a glide to the end lasts until it arrives or the reader scrolls away", () => {
+  const gliding = replay([{ type: "glide.start" }])
+
+  // A growing composer, a streamed line and a scroll toward the end all ask for the end, where the glide is going.
+  const kept: FollowEvent[] = [
+    { type: "follow" },
+    scroll(700, 600, 1000, 1000, 0),
+    { type: "scroll.settled", atReachableEnd: false },
+    { type: "scroll.intent", upward: false, overflow: false },
+    { type: "pointer.down" },
+  ]
+
+  const ended: FollowEvent[] = [
+    { type: "scroll.intent", upward: true, overflow: true },
+    scroll(480, 500),
+    { type: "detach" },
+    { type: "return.start", attempt: 1 },
+    { type: "glide.end" },
+  ]
+
+  expect(isGliding(gliding)).toBe(true)
+  kept.forEach((event) => expect(isGliding(transitionFollow(gliding, event))).toBe(true))
+  ended.forEach((event) => expect(isGliding(transitionFollow(gliding, event))).toBe(false))
+  expect(transitionFollow(gliding, { type: "glide.end" })).toEqual({ type: "following" })
+  expect(isGliding(replay([{ type: "detach" }, { type: "glide.start" }]))).toBe(false)
 })
 
 test("only the reader's own input lets a revealed tool go", () => {

@@ -47,13 +47,16 @@ import {
   type ColdMountEvent,
   type ColdMountSample,
 } from "./cold-mount"
-import { prefersReducedMotion } from "@opencode/ui/motion"
+import { frameLoop, prefersReducedMotion, Spring } from "@opencode/ui/motion"
 import { holdLandingWidth } from "@/shell/panel-motion"
 import type { TimelineFollow } from "./follow"
 import {
   CONTACT_LOST_EVENT,
   defersAdjustments,
   END_EPSILON,
+  GLIDE_END_EVENT,
+  GLIDE_START_EVENT,
+  isGliding,
   isTouchHeld,
   MIN_OVERFLOW,
   needsEndProbe,
@@ -61,6 +64,9 @@ import {
 } from "./machine"
 
 const fallbackItemSize = 60
+
+// The glide to the latest message: a spring without bounce, close to the browser's own smooth scroll over one screen.
+const glideSpring = { duration: 0.5, bounce: 0 }
 
 const pendingMarkdown = '[data-component="markdown"]:not([data-markdown-ready])'
 
@@ -406,6 +412,10 @@ export function createTimelineVirtualizer(input: Input) {
 
       if (coldMountFlushing(untrack(coldMount)) && input.follow.following()) return
       const root = instance.scrollElement
+      // A glide to the end arrives there itself. A jump to the end before then would cut it short, and history that
+      // loads above the view must not show, so such a write only puts the view where the glide has brought it. The
+      // corrections for rows that change size go through.
+      const gliding = options.adjustments === undefined && isGliding(input.follow.peek())
       touchAdjustment = 0
       setRendering("scrollAdjustment", 0)
 
@@ -414,6 +424,15 @@ export function createTimelineVirtualizer(input: Input) {
         if (root) readScroll(root)
 
         if (virtualContent) virtualContent.style.height = `${instance.getTotalSize()}px`
+
+        if (gliding && root) {
+          // The range as the new height leaves it.
+          readScroll(root)
+          placeGlide(root, 0)
+
+          return
+        }
+
         elementScroll(offset, options, instance)
 
         if (root) syncScroll(root)
@@ -534,7 +553,7 @@ export function createTimelineVirtualizer(input: Input) {
       if (untrack(coldHidden)) pinColdBottom()
       dispatchCold(CHECK_REQUESTED)
 
-      if (untrack(coldHidden) || !input.follow.following()) return
+      if (untrack(coldHidden) || !input.follow.following() || isGliding(input.follow.peek())) return
 
       // Reopening a settled scroll-to-end operation can fight subsequent keyboard scrolling.
       if (root && !atReachableEnd(root)) virtualizer.scrollToEnd()
@@ -678,6 +697,57 @@ export function createTimelineVirtualizer(input: Input) {
     syncScroll(root)
   }
 
+  // How far the glide to the latest message still has to go.
+  const glideGap = Spring.fromDuration(0, glideSpring)
+  let cancelGlide: (() => void) | undefined
+
+  // Glides to the end as the timeline's own animation. The browser's smooth scroll heads for where the end was when
+  // it started, and starts again from rest each time it gets a new target, so a reply that streams left it far
+  // behind and the next row measurement jumped the rest of the way. TanStack's smooth scroll to the end aims at the
+  // last row by its index, which an older page that loads meanwhile gives to a row in the middle of the history.
+  // This spring closes the distance to the end wherever the end moves, and each step is one of the timeline's own
+  // scroll writes.
+  function glide(root: HTMLDivElement) {
+    cancelGlide?.()
+    readScroll(root)
+    // Glide only the final screen. Crossing the whole history smoothly would stream every row through the virtualizer.
+    root.scrollTo({ top: Math.max(seen.top, seen.max - root.clientHeight) })
+    syncScroll(root)
+    glideGap.snap(seen.max - seen.top).set(0)
+    input.follow.dispatch(GLIDE_START_EVENT)
+    cancelGlide = frameLoop.addMeasured(
+      () => {
+        if (active() && root.isConnected) readScroll(root)
+      },
+      (dt) => {
+        // The reader or a navigation took over, or this view went away.
+        if (!active() || !isGliding(input.follow.peek())) return false
+
+        if (root.isConnected && placeGlide(root, dt) >= 1) return true
+        input.follow.dispatch(GLIDE_END_EVENT)
+        // TanStack lands on the exact end once the rows there have measured.
+        virtualizer.scrollToEnd()
+
+        return false
+      },
+    )
+  }
+
+  // Puts the view as far from the end as the glide still has to go, `dt` seconds on, and returns that distance.
+  // Content that arrives below carries the view along and history that loads above leaves it where it is, so neither
+  // adds to the distance. Whatever brought the view closer to the end, such as the reader's own scroll toward it,
+  // shortens the glide. The caller has just read the scroll.
+  function placeGlide(root: HTMLDivElement, dt: number) {
+    glideGap.value = Math.min(glideGap.value, seen.max - seen.top)
+    const left = glideGap.step(dt)
+    root.scrollTo({ top: left < 1 ? seen.max : seen.max - left })
+    syncScroll(root)
+
+    return left
+  }
+
+  onCleanup(() => cancelGlide?.())
+
   // A row mounts with the row and the place it draws, so it never has to find either. TanStack lists the rows it last
   // read, which one flush can replace before it reads them again; a listed key the projection dropped is not a row.
   // One row mounts per key: a turn interrupted twice has two dividers under one key, and one measurement.
@@ -742,9 +812,7 @@ export function createTimelineVirtualizer(input: Input) {
       flushTouchAdjustment()
       input.follow.dispatch({ type: "follow" })
 
-      // Glide only the final screen. Crossing the whole history smoothly would stream every row through the virtualizer.
-      if (behavior === "smooth")
-        virtualizer.scrollToOffset(Math.max(root.scrollTop, root.scrollHeight - root.clientHeight * 2))
+      if (behavior === "smooth") return glide(root)
       virtualizer.scrollToEnd({ behavior })
     })
     input.setPage?.((direction) => {
@@ -984,7 +1052,10 @@ export function createTimelineVirtualizer(input: Input) {
         flushTouchAdjustment()
         setRendering("scrollAdjustment", 0)
 
-        if (input.sessionKey() === ownerSessionKey) input.follow.dispatch(CONTACT_LOST_EVENT)
+        if (input.sessionKey() !== ownerSessionKey) return
+        input.follow.dispatch(CONTACT_LOST_EVENT)
+        // A glide stops with its view. The view pins to the end when it is shown again.
+        input.follow.dispatch(GLIDE_END_EVENT)
       },
       { defer: true },
     ),
@@ -1041,6 +1112,16 @@ export function createTimelineVirtualizer(input: Input) {
     intentEvent.upward = upward
     intentEvent.overflow = upward && !!root && root.scrollHeight - root.clientHeight > MIN_OVERFLOW
     input.follow.dispatch(intentEvent)
+
+    if (!input.follow.following()) stopScroll()
+  }
+
+  // Ends TanStack's scroll to a target, which it writes again whenever a measurement moves the target, so that the
+  // reader's input wins over it. Callers leave a scroll to the end running while the timeline still follows the end.
+  // TanStack has no call for this. Its declaration names the field, so a rename fails the type check rather than
+  // leaving the scroll running.
+  function stopScroll() {
+    virtualizer["scrollState"] = null
   }
 
   // Heard on the whole view: a wheel over the session header or the jump button, which lie over the timeline, scrolls
@@ -1067,6 +1148,8 @@ export function createTimelineVirtualizer(input: Input) {
     input.follow.dispatch(
       nested && nested !== root && nested.scrollHeight > nested.clientHeight ? nestedTouchStartEvent : touchStartEvent,
     )
+
+    if (!input.follow.following()) stopScroll()
     // Native touch events keep their original target, even when streaming or
     // virtualization detaches it. Listen there instead of relying on bubbling.
     touchTarget = event.target
@@ -1094,6 +1177,8 @@ export function createTimelineVirtualizer(input: Input) {
     const root = listRoot()
     touchDragEvent.overflow = !!root && root.scrollHeight - root.clientHeight > MIN_OVERFLOW
     input.follow.dispatch(touchDragEvent)
+
+    if (!input.follow.following()) stopScroll()
   }
 
   const handleListTouchEnd = () => {
@@ -1180,7 +1265,11 @@ export function createTimelineVirtualizer(input: Input) {
     scrollEvent.maxScroll = maxScroll
     scrollEvent.reader = seen.reader
     seen.reader = 0
+    const following = input.follow.following()
     input.follow.dispatch(scrollEvent)
+
+    // A scroll of the reader's own that leaves the end also ends the timeline's scroll to it.
+    if (following && !input.follow.following()) stopScroll()
     dispatchCold(CHECK_REQUESTED)
     input.onScheduleScrollState(root)
     input.onHistoryScroll()
