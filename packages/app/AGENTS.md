@@ -129,6 +129,12 @@ This section is the single source for what may move or restyle the session timel
 - Keeper: "a focused control that scrolls out of the mounted rows leaves the timeline where it was scrolled" in `e2e/regression/session-timeline-accessibility.spec.ts`.
 - To check by hand: click a tool header, a link and a notice in the timeline, then scroll up and down with the wheel. The timeline must follow the wheel.
 
+### Scroll writes
+
+- A native scroll write (`scrollTo`, `scrollTop =`) forces a layout when anything is dirty. TanStack corrects the scroll position once for each row it resizes above the view, so a batch of measured rows forced one layout for each row.
+- `scrollToFn` in `src/session/timeline/virtualizer.tsx` holds the corrections made while a batch of sizes is applied and writes the last one once. Keep scroll writes for size changes on that path, and call `flushHeldScroll` before code inside the batch reads the native offset.
+- Keeper: "corrects the scroll position once for each batch of rows an older page measures" in `e2e/regression/timeline-history.spec.ts`.
+
 ### Transcript reads
 
 - The reader keeps their place only while the rows in view stay in the transcript. `session.message.sync` (`packages/client/src/solid/data.ts`) reads the newest page again on every reconnect of the event stream, and when a turn ends with a tool still running. It once replaced the transcript with that page: a reader further back than the page jumped 3,400 to 8,100 px, and the older pages were gone.

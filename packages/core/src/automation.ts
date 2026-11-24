@@ -104,8 +104,14 @@ export interface Interface {
   ) => Effect.Effect<Info, InvalidError | DisabledError | Session.NotFoundError | Permission.Error>
   /** Oldest first, leaving out automations whose directory has automations off. */
   readonly list: (input?: ListInput) => Effect.Effect<Info[], InvalidError | DisabledError | Session.NotFoundError>
-  /** These fail with DisabledError when the automation's directory has automations off. */
-  readonly get: (id: ID) => Effect.Effect<Info, NotFoundError | DisabledError>
+  /**
+   * These fail with DisabledError when the automation's directory has automations off. `get` with a `projectID`
+   * treats an automation in another project as missing, whatever its directory's config.
+   */
+  readonly get: (
+    id: ID,
+    options?: { readonly projectID?: ProjectID },
+  ) => Effect.Effect<Info, NotFoundError | DisabledError>
   readonly pause: (id: ID) => Effect.Effect<Info, NotFoundError | DisabledError>
   readonly resume: (id: ID) => Effect.Effect<Info, NotFoundError | DisabledError>
   readonly remove: (id: ID) => Effect.Effect<void, NotFoundError | DisabledError>
@@ -249,13 +255,24 @@ const layer = Layer.effect(
     const watches = yield* FiberMap.make<ID>()
 
     /**
+     * Runs `effect` with `owner`'s Session capabilities. A plugin provides its instance's selector, which can serve the
+     * instance while it is still booting.
+     */
+    const inSession =
+      (owner: SessionSchema.Info) =>
+      <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+        Effect.flatMap(Effect.serviceOption(Instance.Service), (selector) =>
+          Option.getOrElse(selector, () => instances).provide(owner)(effect),
+        )
+
+    /**
      * The agent a run's child Session starts with, if `owner` could start it with the subagent tool: not hidden, not
      * primary-only, within the depth limit and already allowed in the owner's current Location. The code/tools
      * authorized when the automation was created do not grant permission to start a child.
      */
     const subagent = (owner: SessionSchema.Info, id: Agent.ID, invocation?: Invocation) =>
       Effect.gen(function* () {
-        yield* Plugin.awaitActivation
+        yield* AutomationCode.awaitPlugins
         const location = yield* Location.Service
         if (location.project.id !== owner.projectID)
           return yield* new InvalidError({ reason: "The creating session's location is no longer in its project" })
@@ -290,7 +307,7 @@ const layer = Layer.effect(
             ),
           )
         return agent
-      }).pipe(instances.provide(owner))
+      }).pipe(inSession(owner))
 
     /** Runs `effect` in the Location of `directory`; fails with DirectoryNotFoundError when the folder is gone. */
     const inDirectory =
@@ -316,10 +333,15 @@ const layer = Layer.effect(
         Effect.catchTag("FileSystem.DirectoryNotFoundError", () => Effect.succeed(true)),
       )
 
-    /** The row of an automation callers may manage: it exists and its directory has automations on. */
-    const findVisible = (id: ID) =>
+    /**
+     * The row of an automation callers may manage: it exists, is in `projectID` when given, and its directory has
+     * automations on. Ownership is checked first so another project's config is never read.
+     */
+    const findVisible = (id: ID, projectID?: ProjectID) =>
       Effect.gen(function* () {
         const row = yield* find(id)
+        if (projectID !== undefined && row.project_id !== projectID)
+          return yield* new NotFoundError({ automationID: id })
         if (!(yield* visible(row.directory))) return yield* new DisabledError()
         return row
       })
@@ -1085,7 +1107,7 @@ const layer = Layer.effect(
       if (action.type === "shell") {
         if (!owner) return yield* new InvalidError({ reason: "A shell action needs a session" })
         yield* AutomationShell.authorize(owner, input.name, trigger, action, invocation).pipe(
-          instances.provide(owner),
+          inSession(owner),
           Effect.mapError((error) => (typeof error === "string" ? new InvalidError({ reason: error }) : error)),
         )
         return action
@@ -1216,8 +1238,8 @@ const layer = Layer.effect(
         )
         return matching.filter((row) => shown.has(row.directory)).map(toInfo)
       }),
-      get: Effect.fn("Automation.get")(function* (id) {
-        return toInfo(yield* findVisible(id))
+      get: Effect.fn("Automation.get")(function* (id, options) {
+        return toInfo(yield* findVisible(id, options?.projectID))
       }),
       pause: Effect.fn("Automation.pause")(function* (id) {
         const row = yield* findVisible(id)

@@ -68,6 +68,15 @@ test("a model runs at the speed last used with it, and a speed it no longer has 
   expect(setup.local.model.speed.current()).toBeUndefined()
 })
 
+test("a variant saved for a speed before speeds shared their model's variant still applies to it", async () => {
+  await using setup = await renderLocal({
+    models: speedy("first").map((item) => ({ ...item, variants: [{ id: "low" }, { id: "high" }] })),
+    preferences: { variant: { "provider/first-fast": "high" } },
+  })
+  setup.local.model.speed.set("fast")
+  expect(setup.local.model.selection()).toEqual({ ...ref("first-fast"), variant: "high" })
+})
+
 test("favorites, recents and sessions naming a speed stand for the model", async () => {
   await using setup = await renderLocal({
     models: speedy("first"),
