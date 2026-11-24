@@ -332,15 +332,40 @@ test.describe("timeline history", () => {
     const landed = await fromEnd()
     expect(landed).toBeLessThanOrEqual(left)
     expect(landed).toBeGreaterThan(screen / 4)
-    // The glide goes on from there, a part of the way in each frame.
+
+    // The glide goes on from there, a part of the way in each frame. A row that measures taller in one of these
+    // frames moves the end away, so the distance to the end does not say how far the view went. The row at the top of
+    // what shows does: nothing but the view moves it.
+    const topRow = () =>
+      scroller.evaluate((element) => {
+        const fold = element.getBoundingClientRect().top + Number.parseFloat(getComputedStyle(element).scrollPaddingTop)
+
+        return [...element.querySelectorAll<HTMLElement>("[data-timeline-key]")]
+          .filter((row) => row.getBoundingClientRect().bottom > fold)
+          .reduce((first, row) => (row.getBoundingClientRect().top < first.getBoundingClientRect().top ? row : first))
+          .dataset.timelineKey!
+      })
+
+    const rowTop = (key: string) =>
+      scroller.evaluate(
+        (element, key) =>
+          [...element.querySelectorAll<HTMLElement>("[data-timeline-key]")]
+            .find((row) => row.dataset.timelineKey === key)
+            ?.getBoundingClientRect().top,
+        key,
+      )
+
     const gaps: number[] = []
+    const steps: number[] = []
 
     for (const _ of [1, 2, 3, 4]) {
+      const key = await topRow()
+      const from = await rowTop(key)
       await page.clock.runFor(16)
       gaps.push(await fromEnd())
+      steps.push(from! - (await rowTop(key))!)
     }
 
-    const steps = gaps.slice(1).map((gap, index) => gaps[index]! - gap)
     expect(Math.min(...gaps)).toBeGreaterThan(screen / 4)
     expect(Math.min(...steps)).toBeGreaterThan(0)
     expect(Math.max(...steps)).toBeLessThan(screen / 6)

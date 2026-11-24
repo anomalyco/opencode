@@ -70,6 +70,17 @@ const fallbackItemSize = 60
 // The glide to the latest message: a spring without bounce, close to the browser's own smooth scroll over one screen.
 const glideSpring = { duration: 0.5, bounce: 0 }
 
+// The most of a screen that one frame of the glide moves the view: a little more than the spring covers in a frame at
+// 30 frames a second. Two things made one frame move it much further. The jump that starts a glide mounts a screen of
+// rows, and the frame that lays them out can take 100 ms: the spring made up that time in one step, two fifths of the
+// screen at its fastest. And a row below that measured taller moved the end away, and the view went after it at once.
+const glideStep = 0.16
+
+// The longest a glide lasts, in milliseconds. It takes about half a second, and 1.1 to 1.9 s on a machine four times
+// slower. One that has not arrived by then may never: a reply that grows by more than a frame of the glide may move
+// the view keeps the view behind it.
+const glideLimit = 2_000
+
 const pendingMarkdown = '[data-component="markdown"]:not([data-markdown-ready])'
 
 const upwardKeys = new Set(["up", "page-up", "home"])
@@ -433,7 +444,7 @@ export function createTimelineVirtualizer(input: Input) {
         if (gliding && root) {
           // The range as the new height leaves it.
           readScroll(root)
-          placeGlide(root, 0)
+          placeGlide(root)
 
           return
         }
@@ -758,6 +769,7 @@ export function createTimelineVirtualizer(input: Input) {
     root.scrollTo({ top: Math.max(seen.top, seen.max - root.clientHeight) })
     syncScroll(root)
     glideGap.snap(seen.max - seen.top).set(0)
+    const started = performance.now()
     input.follow.dispatch(GLIDE_START_EVENT)
     cancelGlide = frameLoop.addMeasured(
       () => {
@@ -767,7 +779,8 @@ export function createTimelineVirtualizer(input: Input) {
         // The reader or a navigation took over, or this view went away.
         if (!active() || !isGliding(input.follow.peek())) return false
 
-        if (root.isConnected && placeGlide(root, dt) >= 1) return true
+        // A glide that has run out of time goes the rest of the way in one step, as following does.
+        if (root.isConnected && performance.now() - started < glideLimit && stepGlide(root, dt) >= 1) return true
         input.follow.dispatch(GLIDE_END_EVENT)
         // TanStack lands on the exact end once the rows there have measured.
         virtualizer.scrollToEnd()
@@ -777,13 +790,25 @@ export function createTimelineVirtualizer(input: Input) {
     )
   }
 
-  // Puts the view as far from the end as the glide still has to go, `dt` seconds on, and returns that distance.
-  // Content that arrives below carries the view along and history that loads above leaves it where it is, so neither
-  // adds to the distance. Whatever brought the view closer to the end, such as the reader's own scroll toward it,
-  // shortens the glide. The caller has just read the scroll.
-  function placeGlide(root: HTMLDivElement, dt: number) {
-    glideGap.value = Math.min(glideGap.value, seen.max - seen.top)
-    const left = glideGap.step(dt)
+  // Moves the glide on by a frame of `dt` seconds and returns the distance it still has to go. Content that arrives
+  // below carries the view along, so a reply that streams adds nothing to the distance. One frame moves the view no
+  // further than `glideStep` of a screen all the same: what is over, from a frame that ran long or a row that grew by
+  // more, stays in the distance, and the spring goes on from there at the speed it has reached. The caller has just
+  // read the scroll.
+  function stepGlide(root: HTMLDivElement, dt: number) {
+    const away = seen.max - seen.top
+    glideGap.value = Math.min(glideGap.value, away)
+    glideGap.value = Math.max(glideGap.step(dt), away - root.clientHeight * glideStep)
+
+    return placeGlide(root)
+  }
+
+  // Puts the view as far from the end as the glide still has to go, and returns that distance. History that loads
+  // above the view leaves it where it is, so it adds nothing to the distance. Whatever brought the view closer to the
+  // end, such as the reader's own scroll toward it, shortens the glide. The caller has just read the scroll.
+  function placeGlide(root: HTMLDivElement) {
+    const left = Math.min(glideGap.value, seen.max - seen.top)
+    glideGap.value = left
     root.scrollTo({ top: left < 1 ? seen.max : seen.max - left })
     syncScroll(root)
 

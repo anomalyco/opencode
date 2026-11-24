@@ -1136,10 +1136,13 @@ for (const input of [
   })
 }
 
-for (const input of ["a streamed line", "the reader's wheel"] as const) {
-  test(`the glide to the latest message ${input === "a streamed line" ? "outlasts" : "yields to"} ${input}`, async ({
-    page,
-  }) => {
+for (const [input, verb] of [
+  ["a streamed line", "outlasts"],
+  ["the reader's wheel", "yields to"],
+  ["a frame that runs long", "keeps its pace through"],
+  ["a reply that outruns it", "gives way to"],
+] as const) {
+  test(`the glide to the latest message ${verb} ${input}`, async ({ page }) => {
     // The glide was the browser's smooth scroll to where the end was. A streamed line measured during it jumped the
     // view the rest of the way, and after a wheel away it still carried the view to the latest message.
     const timeline = await setupTimeline(page, {
@@ -1170,19 +1173,73 @@ for (const input of ["a streamed line", "the reader's wheel"] as const) {
     // The view jumped to the last screen, where the glide starts.
     expect(await fromEnd()).toBeLessThanOrEqual(screen)
 
+    if (input === "a frame that runs long") {
+      // The jump mounts a screen of rows, and the frame that lays them out can take 100 ms. The glide made up that
+      // time in one step: at its fastest it crossed two fifths of the screen between two frames.
+      const gap = await fromEnd()
+      // One frame, 100 ms after the frame before it.
+      await page.clock.fastForward(100)
+      const step = gap - (await fromEnd())
+      expect(step).toBeGreaterThan(0)
+      expect(step).toBeLessThan(screen / 5)
+      await page.clock.runFor(2_000)
+      await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+
+      return
+    }
+
+    if (input === "a reply that outruns it") {
+      // One frame of the glide moves the view a limited distance. A reply that grows by more than that in every frame
+      // kept the view behind it for as long as it grew.
+      expect(await fromEnd()).toBeGreaterThan(screen / 4)
+
+      for (const round of [1, 2, 3, 4, 5, 6, 7, 8]) {
+        const grown = await height()
+        await timeline.send(partDelta("prt_glide", `\n\n${notes(`Round ${round}`, 24)}`))
+        // Two frames render the lines, and a third comes late: 300 ms a round, in which the reply grows by more than
+        // three frames of the glide may move the view.
+        await page.clock.runFor(32)
+        await expect.poll(height).toBeGreaterThan(grown + (screen * 3) / 5)
+        await page.clock.fastForward(268)
+      }
+
+      // The reply is still ahead after 2.4 s. The glide has given way, and the view is at the end.
+      await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+      await expect(page.getByText("Round 8 note 24.", { exact: true })).toBeInViewport()
+
+      return
+    }
+
     if (input === "the reader's wheel") {
       await page.mouse.wheel(0, -2000)
       await page.clock.runFor(100)
     }
 
     const before = await height()
+    const top = () => scroller.evaluate((element) => element.scrollTop)
+    // How far each frame moves the view.
+    const steps: number[] = []
+
+    const frame = async () => {
+      const from = await top()
+      await page.clock.runFor(16)
+      steps.push((await top()) - from)
+    }
+
     await timeline.send(partDelta("prt_glide", `\n\n${notes("Streamed", 8)}`))
-    await page.clock.runFor(32)
+    await frame()
+    await frame()
     await expect.poll(height).toBeGreaterThan(before)
 
     if (input === "a streamed line") {
       // Measuring the line has not ended the glide: a good part of the screen is still to go.
       expect(await fromEnd()).toBeGreaterThan(screen / 4)
+      // The lines moved the end away by more than a frame of the glide covers, and the view went after it in one
+      // frame. It takes the lines up over the frames that follow.
+      expect((await height()) - before).toBeGreaterThan(screen / 5)
+
+      for (const _ of [1, 2, 3, 4, 5, 6]) await frame()
+      expect(Math.max(...steps)).toBeLessThan(screen / 5)
       await page.clock.runFor(2_000)
       await expect.poll(fromEnd).toBeLessThanOrEqual(1)
       await expect(page.getByText("Streamed note 8.", { exact: true })).toBeInViewport()
