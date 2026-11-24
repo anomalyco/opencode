@@ -264,11 +264,22 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       }
 
       function preferredSelection(model: ModelPreferenceModel): ModelSelection {
+        // A model runs at the speed last used with it.
+        const speed = preferences.speed[modelPreferenceKey(model)]
+        const choices = speed ? speeds(model) : []
+        const alias = speed && modelAlias(model.providerID, `${model.modelID}-${speed}`)
+        const remembered =
+          choices.find((item) => item.experimental?.speed?.id === speed) ?? choices.find((item) => item.id === alias)
+        const target = remembered ? { providerID: model.providerID, modelID: remembered.id } : model
         const configured = agent.current()?.model
         const fallback = configuredModel()
         // A model's speeds share its variant. Preferences saved before then may name one of its speeds instead.
         const standard = standardModel(model)
-        const preferred = [standard, model, ...speeds(standard).map((item) => ({ providerID: item.providerID, modelID: item.id }))]
+        const preferred = [
+          standard,
+          target,
+          ...speeds(standard).map((item) => ({ providerID: item.providerID, modelID: item.id })),
+        ]
           .map((item) => preferences.variant[modelPreferenceKey(item)])
           .find((value) => value !== undefined)
         const variant = normalizeModelVariant(
@@ -280,16 +291,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
               ? fallback.variant
               : undefined),
         )
-        const info = findModel(model)
-        // A model runs at the speed last used with it.
-        const speed = preferences.speed[modelPreferenceKey(model)]
-        const choices = speed ? speeds(model) : []
-        const alias = speed && modelAlias(model.providerID, `${model.modelID}-${speed}`)
-        const remembered =
-          choices.find((item) => item.experimental?.speed?.id === speed) ?? choices.find((item) => item.id === alias)
+        const info = findModel(target)
         return {
-          providerID: model.providerID,
-          modelID: remembered ? remembered.id : model.modelID,
+          providerID: target.providerID,
+          modelID: target.modelID,
           variant: info?.variants.some((item) => item.id === variant) ? variant : undefined,
         }
       }

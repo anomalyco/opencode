@@ -68,11 +68,12 @@ test("a model runs at the speed last used with it, and a speed it no longer has 
   expect(setup.local.model.speed.current()).toBeUndefined()
 })
 
-test("a variant saved for a speed before speeds shared their model's variant still applies to it", async () => {
+test("a draft speed switch uses the target's legacy variant instead of its sibling's", async () => {
   await using setup = await renderLocal({
     models: speedy("first").map((item) => ({ ...item, variants: [{ id: "low" }, { id: "high" }] })),
-    preferences: { variant: { "provider/first-fast": "high" } },
+    preferences: { variant: { "provider/first-flex": "low", "provider/first-fast": "high" } },
   })
+  expect(setup.local.model.selection()).toEqual({ ...ref("first"), variant: "low" })
   setup.local.model.speed.set("fast")
   expect(setup.local.model.selection()).toEqual({ ...ref("first-fast"), variant: "high" })
 })
