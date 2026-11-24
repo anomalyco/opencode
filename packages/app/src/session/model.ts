@@ -7,7 +7,7 @@ import { same } from "@/runtime/persistence/equality"
 import { containsDirectory } from "@opencode/util/path"
 import { isProjectDirectory, isWorkspaceDirectory } from "@/workspaces/paths"
 import { projectForSession } from "@/shell/layout/helpers"
-import { selectSessionUserMessages, selectVisibleSessionUserMessages } from "./session-domain"
+import { olderMayHoldRevert, selectSessionUserMessages, selectVisibleSessionUserMessages } from "./session-domain"
 import { useSessionLayout } from "./session-layout"
 import { useTabs } from "@/shell/tabs/tabs"
 import { useServer } from "@/runtime/server/current"
@@ -67,11 +67,11 @@ export function useSessionModel() {
     return id ? data.session.message.list(id) : emptyMessages
   })
 
-  // The session has older messages that are not loaded.
-  const more = createMemo(() => {
+  // A revert boundary that is not loaded may be in an older page.
+  const older = createMemo(() => {
     const id = sessionID()
 
-    return id ? data.session.message.more(id) : false
+    return id ? olderMayHoldRevert(messages().length, data.session.message.more(id)) : false
   })
 
   const userMessages = createMemo(() => selectSessionUserMessages(messages()), emptyUserMessages, { equals: same })
@@ -81,7 +81,7 @@ export function useSessionModel() {
     () => {
       const boundary = revertMessageID()
 
-      return boundary ? selectVisibleSessionUserMessages(messages(), boundary, more()) : userMessages()
+      return boundary ? selectVisibleSessionUserMessages(messages(), boundary, older()) : userMessages()
     },
     emptyUserMessages,
     { equals: same },
@@ -118,7 +118,7 @@ export function useSessionModel() {
     },
     history: {
       messages,
-      more,
+      older,
       userMessages,
       visibleUserMessages,
       lastUserMessage: createMemo(() => visibleUserMessages().at(-1)),

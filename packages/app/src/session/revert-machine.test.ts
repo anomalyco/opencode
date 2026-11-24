@@ -19,7 +19,7 @@ const m3 = user("msg_3")
 
 const messages = [user("msg_1"), m2, m3]
 
-const delivered = { messages, more: false, inboxIDs: new Set<string>() }
+const delivered = { messages, older: false, inboxIDs: new Set<string>() }
 
 const draft = (text: string): RevertDraftSnapshot => ({
   prompt: [{ type: "text", content: text, start: 0, end: text.length }],
@@ -31,7 +31,7 @@ const undo = (revertMessageID?: string, inboxIDs = new Set<string>()): SessionRe
   type: "undo.requested",
   revertMessageID,
   messages,
-  more: false,
+  older: false,
   inboxIDs,
 })
 
@@ -40,7 +40,7 @@ const rewindTo = (messageID: string, revertMessageID?: string, inboxIDs = new Se
   messageID,
   revertMessageID,
   messages,
-  more: false,
+  older: false,
   inboxIDs,
 })
 
@@ -69,7 +69,7 @@ const last = (events: SessionRevertEvent[], from?: SessionRevertState) => {
 }
 
 const view = (state: SessionRevertState, revertMessageID?: string) =>
-  viewSessionRevert(state, { messages, more: false, revertMessageID })
+  viewSessionRevert(state, { messages, older: false, revertMessageID })
 
 describe("transitionSessionRevert", () => {
   test("refuses every request while an operation runs, so two pipelines never share a Session", () => {
@@ -280,7 +280,7 @@ describe("transitionSessionRevert", () => {
       attempt: 5,
       prompt,
       messages,
-      more: false,
+      older: false,
       inboxIDs: queued,
     })
 
@@ -372,7 +372,7 @@ describe("a transcript whose IDs do not sort in its order", () => {
     time: { created: 1 },
   }
 
-  const transcript = { messages: [scheduled, m2, reply, m3], more: false, inboxIDs: new Set<string>() }
+  const transcript = { messages: [scheduled, m2, reply, m3], older: false, inboxIDs: new Set<string>() }
 
   test("undo rewinds the prompt before the boundary in the transcript", () => {
     const step = transitionSessionRevert(createSessionRevertState(), {
@@ -393,13 +393,13 @@ describe("a transcript whose IDs do not sort in its order", () => {
     expect(selectCursorAfterRevert(transcript, "msg_2a")).toBe("msg_2")
   })
 
-  test("a boundary that is not loaded is older than the loaded prompts only while older messages are left", () => {
+  test("a boundary that is not loaded is older than the loaded prompts only while it may be in an older page", () => {
     const state = createSessionRevertState()
-    const partial = { ...transcript, more: true }
+    const partial = { ...transcript, older: true }
 
     expect(selectCursorAfterRevert(partial, "msg_0")).toBeUndefined()
     expect(viewSessionRevert(state, { ...partial, revertMessageID: "msg_0" }).canUndo).toBe(false)
-    // With the whole transcript loaded, the session no longer has that boundary: undo takes the newest prompt.
+    // Otherwise the session no longer has that boundary: undo takes the newest prompt.
     expect(selectCursorAfterRevert(transcript, "msg_0")).toBe("msg_3")
     expect(viewSessionRevert(state, { ...transcript, revertMessageID: "msg_0" })).toMatchObject({
       canUndo: true,

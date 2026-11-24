@@ -12,6 +12,7 @@ import { pinPromptMedia } from "@/composer/media"
 import { clonePrompt, promptLength } from "@/composer/prompt-parts"
 import { showToast } from "@/shell/notifications/toast"
 import type { SessionModel } from "./model"
+import { olderMayHoldRevert } from "./session-domain"
 import {
   createSessionRevertState,
   REVERT_TIMEOUT_MS,
@@ -48,7 +49,7 @@ export function createSessionRevert(input: {
 
     return viewSessionRevert((sessionID && sessions()[sessionID]) || IDLE, {
       messages: input.session.history.messages(),
-      more: input.session.history.more(),
+      older: input.session.history.older(),
       revertMessageID: input.session.data.revertMessageID(),
     })
   })
@@ -90,9 +91,11 @@ export function createSessionRevert(input: {
   }
 
   const snapshot = (sessionID: string) => {
+    const messages = data.session.message.list(sessionID)
+
     return {
-      messages: data.session.message.list(sessionID),
-      more: data.session.message.more(sessionID),
+      messages,
+      older: olderMayHoldRevert(messages.length, data.session.message.more(sessionID)),
       inboxIDs: new Set(data.session.input.list(sessionID)),
     }
   }

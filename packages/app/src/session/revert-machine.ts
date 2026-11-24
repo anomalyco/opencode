@@ -59,8 +59,8 @@ export type SessionRevertState =
 /** The Session's transcript when a request or result is dispatched. */
 type RevertMessages = {
   readonly messages: readonly SessionMessageInfo[]
-  /** The Session has older messages that are not loaded. */
-  readonly more: boolean
+  /** A revert boundary that is not loaded may be in an older page. */
+  readonly older: boolean
   /** Messages still waiting in the inbox. */
   readonly inboxIDs: ReadonlySet<string>
 }
@@ -125,7 +125,7 @@ export function transitionSessionRevert(state: SessionRevertState, event: Sessio
   if (event.type === "undo.requested") {
     if (state.status === "running") return unchanged(state)
     const boundary = effectiveRevertMessageID(state, event.revertMessageID)
-    const message = selectVisibleSessionUserMessages(event.messages, boundary, event.more).at(-1)
+    const message = selectVisibleSessionUserMessages(event.messages, boundary, event.older).at(-1)
 
     if (!message) return unchanged(state)
 
@@ -265,7 +265,7 @@ export function effectiveRevertMessageID(state: SessionRevertState, serverRevert
 
 /** The prompt before the boundary, or the latest delivered prompt when nothing is reverted. */
 export function selectCursorAfterRevert(input: RevertMessages, boundary: string | undefined) {
-  if (boundary) return selectVisibleSessionUserMessages(input.messages, boundary, input.more).at(-1)?.id
+  if (boundary) return selectVisibleSessionUserMessages(input.messages, boundary, input.older).at(-1)?.id
 
   return selectSessionUserMessages(input.messages)
     .filter((item) => !input.inboxIDs.has(item.id))
@@ -274,7 +274,7 @@ export function selectCursorAfterRevert(input: RevertMessages, boundary: string 
 
 export function viewSessionRevert(
   state: SessionRevertState,
-  context: Pick<RevertMessages, "messages" | "more"> & { readonly revertMessageID: string | undefined },
+  context: Pick<RevertMessages, "messages" | "older"> & { readonly revertMessageID: string | undefined },
 ) {
   const busy = state.status === "running"
   const revertMessageID = effectiveRevertMessageID(state, context.revertMessageID)
@@ -283,7 +283,7 @@ export function viewSessionRevert(
     busy,
     revertMessageID,
     canUndo:
-      !busy && beforeRevert(context.messages, revertMessageID, context.more).some((item) => item.type === "user"),
+      !busy && beforeRevert(context.messages, revertMessageID, context.older).some((item) => item.type === "user"),
     canRedo: !busy && !!revertMessageID,
   }
 }

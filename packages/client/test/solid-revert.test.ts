@@ -1,7 +1,13 @@
 import { expect, test } from "bun:test"
 import { createRoot } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
-import { OpenCode, type OpenCodeEvent, type SessionInboxItem, type SessionMessageInfo } from "../src/promise"
+import {
+  OpenCode,
+  type OpenCodeEvent,
+  type SessionInboxItem,
+  type SessionInfo,
+  type SessionMessageInfo,
+} from "../src/promise"
 
 const sessionID = "ses_revert"
 
@@ -9,6 +15,19 @@ const note = (id: string): SessionMessageInfo => ({ id, type: "user", text: id, 
 
 const notes = (first: number, last: number) =>
   Array.from({ length: last - first + 1 }, (_, index) => note(`msg_${String(first + index).padStart(3, "0")}`))
+
+const id = (number: number) => notes(number, number)[0]!.id
+
+// The session as the server has it while a revert is staged at `boundary`.
+const staged = (boundary: string): SessionInfo => ({
+  id: sessionID,
+  projectID: "project",
+  cost: 0,
+  tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  time: { created: 0, updated: 0 },
+  location: { directory: "/project" },
+  revert: { messageID: boundary },
+})
 
 const waiting = (id: string): SessionInboxItem => ({
   id,
@@ -94,24 +113,68 @@ test("a committed revert removes the boundary message and those after it, whatev
   }
 })
 
-test.each([
-  { name: "is not loaded", boundary: 10 },
-  { name: "is the oldest loaded message", boundary: 21 },
-])("a committed revert whose boundary $name reads the transcript again", async (item) => {
+test("a committed revert at the oldest loaded message reads the transcript again", async () => {
   const setup = fixture(notes(1, 40))
   try {
     await setup.data.session.message.sync(sessionID)
     expect(setup.ids()).toEqual(notes(21, 40).map((message) => message.id))
 
-    setup.server.messages = notes(1, item.boundary - 1)
-    setup.emit(committed(notes(item.boundary, item.boundary)[0]!.id))
+    setup.server.messages = notes(1, 20)
+    setup.emit(committed(id(21)))
     // No loaded message came before the boundary, and the cursor named one that is gone.
     expect(setup.ids()).toEqual([])
     expect(setup.data.session.message.more(sessionID)).toBe(false)
     // Joins the read that the revert started.
     await setup.data.session.message.sync(sessionID)
 
-    expect(setup.ids()).toEqual(setup.server.messages.slice(-20).map((message) => message.id))
+    expect(setup.ids()).toEqual(notes(1, 20).map((message) => message.id))
+    expect(setup.server.requests).toEqual(["message?limit=20&order=desc", "message?limit=20&order=desc"])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("a committed revert whose boundary may be in an older page keeps what is loaded until it is read again", async () => {
+  const setup = fixture(notes(1, 40))
+  try {
+    setup.data.session.remember(staged(id(10)))
+    await setup.data.session.message.sync(sessionID)
+    const loaded = notes(21, 40).map((message) => message.id)
+
+    setup.server.messages = notes(1, 9)
+    setup.emit(committed(id(10)))
+    // Only the server knows whether these messages came after the boundary. They stay, and the pointer that hides
+    // them stays, until the read lands.
+    expect(setup.ids()).toEqual(loaded)
+    expect(setup.data.session.get(sessionID)?.revert?.messageID).toBe(id(10))
+    // Joins the read that the revert started.
+    await setup.data.session.message.sync(sessionID)
+
+    expect(setup.ids()).toEqual(notes(1, 9).map((message) => message.id))
+    expect(setup.data.session.get(sessionID)?.revert).toBeUndefined()
+    expect(setup.server.requests).toEqual(["message?limit=20&order=desc", "message?limit=20&order=desc"])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("a read that applied a committed revert clears the pointer, and the late event changes nothing", async () => {
+  const setup = fixture(notes(1, 40))
+  try {
+    setup.data.session.remember(staged(id(31)))
+    await setup.data.session.message.sync(sessionID)
+
+    // The server committed the revert. This read holds the message before the boundary and not the boundary.
+    setup.server.messages = notes(1, 30)
+    setup.data.session.message.invalidate(sessionID)
+    await setup.data.session.message.sync(sessionID)
+    const left = notes(11, 30).map((message) => message.id)
+    expect(setup.ids()).toEqual(left)
+    expect(setup.data.session.get(sessionID)?.revert).toBeUndefined()
+
+    setup.emit(committed(id(31)))
+    expect(setup.ids()).toEqual(left)
+    expect(setup.data.session.message.more(sessionID)).toBe(true)
     expect(setup.server.requests).toEqual(["message?limit=20&order=desc", "message?limit=20&order=desc"])
   } finally {
     setup.dispose()

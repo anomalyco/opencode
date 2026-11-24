@@ -98,7 +98,7 @@ export function createTimelineCache(
                 parentID: select(session.data.parentID),
                 status: select(session.data.status),
               },
-              history: { messages: select(session.history.messages), more: select(session.history.more) },
+              history: { messages: select(session.history.messages), older: select(session.history.older) },
             },
             active,
           )

@@ -383,6 +383,10 @@ export function createData(config: CreateDataInput) {
     Object.values(store.session.info).toSorted((a, b) => b.time.updated - a.time.updated),
   )
   const messageIndex = new Map<string, Map<string, number>>()
+  // What a read of the transcript and a committed revert's event know of each other, by session. `applied`: the read
+  // came first and showed that the revert at `boundary` was committed, so its event has nothing left to do.
+  // `awaited`: the event came first and could not place the boundary, so the read under way brings what it left.
+  const revertReads = new Map<string, { readonly status: "applied" | "awaited"; readonly boundary: string }>()
   const omitFiles = () =>
     typeof config.omitToolFileData === "function" ? config.omitToolFileData() : config.omitToolFileData === true
   const stored = (message: SessionMessageInfo) => (omitFiles() ? omitMessageFileData(message) : message)
@@ -408,6 +412,26 @@ export function createData(config: CreateDataInput) {
         sessionID,
         (store.session.pending[sessionID] ?? []).filter((item) => item.id !== inboxID),
       )
+  }
+
+  // A read of the newest page is about to replace the transcript: what it says about a staged revert. `read` holds
+  // the IDs of the messages it brought.
+  function settleRevert(sessionID: string, read: ReadonlySet<string>) {
+    const pointer = store.session.info[sessionID]?.revert?.messageID
+    const awaited = revertReads.get(sessionID)
+    if (awaited?.status === "awaited") {
+      revertReads.delete(sessionID)
+      if (pointer === awaited.boundary) setStore("session", "info", sessionID, "revert", undefined)
+      return
+    }
+    if (!pointer || read.has(pointer)) return
+    const at = messageIndex.get(sessionID)?.get(pointer)
+    const previous = at ? store.session.message[sessionID]?.[at - 1]?.id : undefined
+    // The server's transcript has no gaps. A read that holds the message before the boundary and not the boundary
+    // shows that the server committed the revert, which also cleared its pointer.
+    if (!previous || !read.has(previous)) return
+    revertReads.set(sessionID, { status: "applied", boundary: pointer })
+    setStore("session", "info", sessionID, "revert", undefined)
   }
 
   function removePermission(sessionID: string, requestID: string) {
@@ -699,6 +723,7 @@ export function createData(config: CreateDataInput) {
     sync.invalidate(`session.pending:${sessionID}`)
     sync.invalidate(`session.message:${sessionID}`)
     messageLoads.delete(sessionID)
+    revertReads.delete(sessionID)
     // Keep unacknowledged submissions until their echo or rollback settles them.
     const pending = store.session.pending[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
     const messages = store.session.message[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
@@ -752,6 +777,7 @@ export function createData(config: CreateDataInput) {
     removeJobTree(sessionID)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
+    revertReads.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
     sync.invalidate(`session.family:${sessionID}`)
     sync.invalidate(`session.pending:${sessionID}`)
@@ -1323,25 +1349,38 @@ export function createData(config: CreateDataInput) {
         refresh(() => result.session.sync(event.data.sessionID))
         return
       case "session.revert.staged":
+        revertReads.delete(event.data.sessionID)
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "revert", event.data.revert)
         return
       case "session.revert.cleared":
+        revertReads.delete(event.data.sessionID)
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "revert", undefined)
         return
       case "session.revert.committed": {
         const sessionID = event.data.sessionID
-        if (store.session.info[sessionID]) setStore("session", "info", sessionID, "revert", undefined)
+        const read = revertReads.get(sessionID)
+        revertReads.delete(sessionID)
+        // The server removes the boundary message and every message after it, by their place in the transcript. IDs
+        // do not sort in that order.
+        const at = messageIndex.get(sessionID)?.get(event.data.to)
         // Older messages are left to load.
         const more = store.session.messageCursor[sessionID] !== undefined
+        // A read already brought the transcript that this revert left: the whole transcript is loaded, or the read
+        // held the message before the boundary and not the boundary.
+        const applied = !more || (read?.status === "applied" && read.boundary === event.data.to)
+        // The boundary may be in an older page, which makes every loaded message one that the server removed, or a
+        // read may have applied the revert. Only the server knows, so the transcript is read again. Until that read
+        // lands, the loaded messages and the staged pointer stay: nothing that is shown goes, and nothing that the
+        // pointer hides shows.
+        const unknown = at === undefined && !applied && !!store.session.message[sessionID]
+        if (unknown) revertReads.set(sessionID, { status: "awaited", boundary: event.data.to })
+        if (!unknown && store.session.info[sessionID]) setStore("session", "info", sessionID, "revert", undefined)
         const removed = new Set<string>()
-        // The server removes the boundary message and every message after it, by their place in the transcript. IDs
-        // do not sort in that order. A boundary that is not loaded is older than every loaded message while older
-        // messages are left to load. With the whole transcript loaded, a read already applied this revert.
-        if (store.session.message[sessionID])
+        if (at !== undefined)
           message.update(sessionID, (draft, index) => {
-            for (const item of draft.splice(index.get(event.data.to) ?? (more ? 0 : draft.length))) {
+            for (const item of draft.splice(at)) {
               index.delete(item.id)
               removed.add(item.id)
             }
@@ -1359,9 +1398,10 @@ export function createData(config: CreateDataInput) {
           sync.invalidate(`session.pending:${sessionID}`)
           refresh(() => result.session.pending.sync(sessionID))
         }
-        if (!more || store.session.message[sessionID]?.length !== 0) return
         // Nothing loaded is left, and the cursor names a removed message, so the transcript is read again.
-        setStore("session", "messageCursor", sessionID, undefined)
+        const emptied = more && store.session.message[sessionID]?.length === 0
+        if (!unknown && !emptied) return
+        if (emptied) setStore("session", "messageCursor", sessionID, undefined)
         sync.invalidate(`session.message:${sessionID}`)
         refresh(() => result.session.message.sync(sessionID))
         return
@@ -2055,6 +2095,7 @@ export function createData(config: CreateDataInput) {
                 outbox.delete(id)
                 removePending(sessionID, id)
               })
+              settleRevert(sessionID, ids)
               messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
               setStore("session", "message", sessionID, reconcile(messages))
               setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)

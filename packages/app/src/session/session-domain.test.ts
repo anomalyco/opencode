@@ -1,6 +1,11 @@
 import { expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
-import { selectSessionUserMessages, selectVisibleSessionUserMessages } from "./session-domain"
+import {
+  olderMayHoldRevert,
+  REVERT_SEARCH_LIMIT,
+  selectSessionUserMessages,
+  selectVisibleSessionUserMessages,
+} from "./session-domain"
 
 const user = (id: string): SessionMessageUser => ({
   id,
@@ -34,4 +39,12 @@ test("selects the prompts before the revert boundary by their place in the trans
   // With the whole transcript loaded, the session no longer has that boundary.
   expect(ids(selectVisibleSessionUserMessages(messages.slice(2), "msg_2", false))).toEqual(["msg_b", "msg_1"])
   expect(ids(selectVisibleSessionUserMessages(messages, undefined, true))).toEqual(["msg_sch_a", "msg_b", "msg_1"])
+})
+
+test("a revert boundary that is not loaded may be in an older page only up to the search limit", () => {
+  expect(olderMayHoldRevert(REVERT_SEARCH_LIMIT - 1, true)).toBe(true)
+  // Past the limit the timeline stops looking, so the loaded messages show.
+  expect(olderMayHoldRevert(REVERT_SEARCH_LIMIT, true)).toBe(false)
+  // No older page is left.
+  expect(olderMayHoldRevert(20, false)).toBe(false)
 })
