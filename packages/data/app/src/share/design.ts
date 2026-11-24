@@ -15,7 +15,7 @@ export const shareControls = [
     options: [
       ["headline", "Headline"],
       ["number", "Number"],
-      ["chart", "Chart"],
+      ["chart", "Title"],
     ],
   },
   {

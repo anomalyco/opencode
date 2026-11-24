@@ -59,7 +59,7 @@ const sizes = [
 const layouts = [
   { value: "headline", label: "Headline" },
   { value: "number", label: "Number" },
-  { value: "chart", label: "Chart" },
+  { value: "chart", label: "Title" },
 ] as const
 
 /**
@@ -515,27 +515,21 @@ function TrackOption(props: {
   )
 }
 
-// The layout icons: what sits above the chart (two headline lines, the big number as a block, or a short title),
-// then the same light bars at the foot. The chart layout's bars stand a little taller, as its chart does.
+// The layout icons: only what sits above the chart. Two headline lines, the big number as a block, or a single title
+// line.
 function LayoutGlyph(props: { layout: ShareOptions["layout"] }) {
-  const heights = () => (props.layout === "chart" ? [16, 21, 18, 25, 22] : [10, 13, 11, 15, 14])
   return (
-    <svg data-slot="glyph" viewBox="0 0 40 50" aria-hidden="true">
+    <svg data-slot="glyph" viewBox="0 0 40 28" aria-hidden="true">
       <Show when={props.layout === "headline"}>
-        <rect x="4" y="8" width="30" height="3" fill="currentColor" />
-        <rect x="4" y="14" width="22" height="3" fill="currentColor" />
+        <rect x="4" y="9" width="32" height="3" fill="currentColor" />
+        <rect x="4" y="16" width="22" height="3" fill="currentColor" />
       </Show>
       <Show when={props.layout === "number"}>
-        <rect x="4" y="7" width="18" height="10" fill="currentColor" />
+        <rect x="4" y="7" width="22" height="14" fill="currentColor" />
       </Show>
       <Show when={props.layout === "chart"}>
-        <rect x="4" y="8" width="12" height="3" fill="currentColor" />
+        <rect x="4" y="12.5" width="20" height="3" fill="currentColor" />
       </Show>
-      <For each={heights()}>
-        {(height, index) => (
-          <rect x={4 + index() * 6} y={44 - height} width="4" height={height} opacity="0.3" fill="currentColor" />
-        )}
-      </For>
     </svg>
   )
 }

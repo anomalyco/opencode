@@ -555,8 +555,8 @@
   }
 
   [data-slot="glyph"] {
-    width: 26px;
-    height: 32px;
+    width: 36px;
+    height: 25px;
     color: var(--stats-text);
   }
 
