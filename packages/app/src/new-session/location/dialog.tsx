@@ -54,9 +54,14 @@ export function useNewSessionLocationDialog(input: {
       () => (
         <NewSessionLocationDialog
           project={input.project}
-          workspace={input.workspace}
           drilled={options?.project}
-          onWorkspace={options?.onWorkspace}
+          current={(project) => (input.project.isSelected(project) ? input.workspace.selection.value() : undefined)}
+          onWorkspace={(project, value) => {
+            if (input.project.isSelected(project)) input.workspace.selection.set(value)
+
+            if (!input.project.isSelected(project)) input.project.select(project, value)
+            options?.onWorkspace?.(value)
+          }}
         />
       ),
       input.onDone,
@@ -64,11 +69,31 @@ export function useNewSessionLocationDialog(input: {
   }
 }
 
+/**
+ * Opens one project's worktree step on its own, with no way back to the projects. `onSelect` gets "main", "create", or
+ * a worktree directory; `omit` leaves out a directory that cannot be chosen, such as a session's missing folder.
+ */
+export function useWorktreeDialog() {
+  const dialog = useDialog()
+
+  return (options: { project: PromptProject; omit?: string; onSelect: (value: string) => void }) =>
+    void dialog.show(() => (
+      <NewSessionLocationDialog
+        drilled={options.project}
+        omit={options.omit}
+        onWorkspace={(_, value) => options.onSelect(value)}
+      />
+    ))
+}
+
 function NewSessionLocationDialog(props: {
-  project: PromptProjectController
-  workspace: NewSessionWorkspaceController
+  /** Absent when the dialog only lists the drilled project's worktrees. */
+  project?: PromptProjectController
   drilled?: PromptProject
-  onWorkspace?: (value: string) => void
+  /** The project's chosen destination, marked with a check. */
+  current?: (project: PromptProject) => string | undefined
+  omit?: string
+  onWorkspace: (project: PromptProject, value: string) => void
 }) {
   const dialog = useDialog()
   const language = useLanguage()
@@ -77,14 +102,14 @@ function NewSessionLocationDialog(props: {
   const servers = useServers()
   const serverSDK = useServerSDK()
 
-  const [step, setStep] = createSignal(createLocationDialogState(props.drilled))
+  const [step, setStep] = createSignal(createLocationDialogState(props.drilled, !props.project))
   const view = createMemo(() => locationDialogView(step()))
   const drilled = createMemo(() => view().drilled)
 
   const currentDestination = createMemo(() => {
     const project = drilled()
 
-    if (project && props.project.isSelected(project)) return props.workspace.selection.value()
+    if (project) return props.current?.(project)
   })
 
   const current = (entry: LocationEntry) => {
@@ -145,15 +170,16 @@ function NewSessionLocationDialog(props: {
         .catch(() => undefined)
   })
 
-  const otherCount = createMemo(() => props.project.projects().filter((project) => !project.used).length)
+  const projects = () => props.project?.projects() ?? []
+
+  const otherCount = createMemo(() => projects().filter((project) => !project.used).length)
 
   const projectEntries = createMemo<LocationEntry[]>(() => {
     const others = step().type === "others"
     const query = step().query.trim()
 
     return [
-      ...props.project
-        .projects()
+      ...projects()
         .filter((project) => (others ? !project.used : project.used || !!query))
         // Remote projects also match their server's name, which their tag shows.
         .filter((project) => matches(displayName(project), project.worktree, tagged(project.server)?.name))
@@ -172,8 +198,7 @@ function NewSessionLocationDialog(props: {
   )
 
   const serverEntries = createMemo<LocationEntry[]>(() =>
-    props.project
-      .servers()
+    (props.project?.servers() ?? [])
       .filter((server) => matches(server.name))
       .map((server) => ({ id: `server:${server.key}`, type: "server" as const, server })),
   )
@@ -194,13 +219,15 @@ function NewSessionLocationDialog(props: {
         value: directory,
         directory,
       })),
-    ].filter((entry) =>
-      matches(
-        workspaceTitle(project, entry.value),
-        entry.directory,
-        entry.value === "main" ? checkout(project) : undefined,
-      ),
-    )
+    ]
+      .filter((entry) => entry.value === "create" || !props.omit || !sameDirectory(entry.directory, props.omit))
+      .filter((entry) =>
+        matches(
+          workspaceTitle(project, entry.value),
+          entry.directory,
+          entry.value === "main" ? checkout(project) : undefined,
+        ),
+      )
   })
 
   const entries = () => {
@@ -223,7 +250,7 @@ function NewSessionLocationDialog(props: {
 
   const placeholder = () => language.t(view().placeholderKey)
 
-  const choosesServer = () => props.project.servers().length > 1
+  const choosesServer = () => (props.project?.servers().length ?? 0) > 1
   command.register("new-session-location", () => [
     {
       id: "project.open",
@@ -283,23 +310,20 @@ function NewSessionLocationDialog(props: {
 
       if (effect.type === "project.add") {
         dialog.close()
-        props.project.add(effect.server)
+        props.project?.add(effect.server)
 
         return
       }
 
       if (effect.type === "project.select") {
-        props.project.select(effect.project)
+        props.project?.select(effect.project)
         dialog.close()
 
         return
       }
 
       if (effect.type === "workspace.select") {
-        if (props.project.isSelected(effect.project)) props.workspace.selection.set(effect.value)
-
-        if (!props.project.isSelected(effect.project)) props.project.select(effect.project, effect.value)
-        props.onWorkspace?.(effect.value)
+        props.onWorkspace(effect.project, effect.value)
       }
 
       dialog.close()
@@ -353,7 +377,7 @@ function NewSessionLocationDialog(props: {
             aria-label={placeholder()}
             placeholder={placeholder()}
             leadingIcon={
-              <Show when={view().ownsEscape} fallback={<Icon name="magnifying-glass" />}>
+              <Show when={view().ownsEscape && step().history.length > 0} fallback={<Icon name="magnifying-glass" />}>
                 <Tooltip value={language.t("session.new.location.back")} placement="bottom-start">
                   <button
                     type="button"

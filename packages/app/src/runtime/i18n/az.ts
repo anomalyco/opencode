@@ -861,7 +861,6 @@ export const dict = {
   "session.location.description": "Bu sessiyaya davam etmək üçün başqa qovluq seçin.",
   "session.location.choose": "Qovluq seç",
   "session.location.worktree": "İş ağacı seç",
-  "session.location.worktreesFailed": "İş ağacları yüklənə bilmədi",
   "session.rewind.toast.title": "Geri qaytarıldı",
   "session.rewind.toast.undo": "Geri al",
   "session.location.moving": "Sessiya köçürülür…",

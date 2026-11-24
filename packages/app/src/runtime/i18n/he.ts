@@ -851,7 +851,6 @@ export const dict = {
   "session.location.description": "בחר תיקייה אחרת כדי להמשיך בהפעלה זו.",
   "session.location.choose": "בחר תיקייה",
   "session.location.worktree": "בחר עץ עבודה",
-  "session.location.worktreesFailed": "טעינת עצי העבודה נכשלה",
   "session.rewind.toast.title": "בוטל",
   "session.rewind.toast.undo": "בטל",
   "session.location.moving": "מעביר את ההפעלה…",

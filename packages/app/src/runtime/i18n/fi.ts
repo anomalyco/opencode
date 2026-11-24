@@ -856,7 +856,6 @@ export const dict = {
   "session.location.description": "Jatka tätä istuntoa valitsemalla toinen hakemisto.",
   "session.location.choose": "Valitse hakemisto",
   "session.location.worktree": "Valitse työpuu",
-  "session.location.worktreesFailed": "Työpuiden lataaminen epäonnistui",
   "session.rewind.toast.title": "Palautettu",
   "session.rewind.toast.undo": "Kumoa",
   "session.location.moving": "Siirretään istuntoa…",

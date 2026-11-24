@@ -927,7 +927,6 @@ export const dict = {
   "session.location.description": "Odaberite drugi direktorij da nastavite ovu sesiju.",
   "session.location.choose": "Odaberi direktorij",
   "session.location.worktree": "Odaberi worktree",
-  "session.location.worktreesFailed": "Učitavanje worktreeova nije uspjelo",
   "session.rewind.toast.title": "Vraćeno",
   "session.rewind.toast.undo": "Poništi",
   "session.location.moving": "Premještanje sesije…",

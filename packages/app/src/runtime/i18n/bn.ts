@@ -859,7 +859,6 @@ export const dict = {
   "session.location.description": "এই সেশন চালিয়ে যেতে অন্য একটি ডিরেক্টরি বেছে নিন।",
   "session.location.choose": "ডিরেক্টরি বেছে নিন",
   "session.location.worktree": "ওয়ার্কট্রি বেছে নিন",
-  "session.location.worktreesFailed": "ওয়ার্কট্রি লোড করা যায়নি",
   "session.rewind.toast.title": "আগের অবস্থায় ফেরানো হয়েছে",
   "session.rewind.toast.undo": "পূর্বাবস্থায় ফেরান",
   "session.location.moving": "সেশন সরানো হচ্ছে…",

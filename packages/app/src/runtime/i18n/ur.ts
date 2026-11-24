@@ -871,7 +871,6 @@ export const dict = {
   "session.location.description": "یہ سیشن جاری رکھنے کے لیے کوئی دوسری ڈائریکٹری منتخب کریں۔",
   "session.location.choose": "ڈائریکٹری منتخب کریں",
   "session.location.worktree": "ورک ٹری منتخب کریں",
-  "session.location.worktreesFailed": "ورک ٹریز لوڈ نہیں ہو سکیں",
   "session.rewind.toast.title": "واپس کر دیا گیا",
   "session.rewind.toast.undo": "کالعدم کریں",
   "session.location.moving": "سیشن منتقل کیا جا رہا ہے…",
