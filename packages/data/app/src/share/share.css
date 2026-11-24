@@ -954,6 +954,12 @@
       translate: -50% 0;
     }
 
+    /* Opening the dropdown under it: the tooltip fades away where it is, a little slower, rather than dropping. */
+    &[aria-expanded="true"]::after {
+      translate: -50% 0;
+      transition: opacity 180ms ease;
+    }
+
     @media (prefers-reduced-motion: reduce) {
       &::after {
         translate: -50% 0;
@@ -998,6 +1004,20 @@
         opacity: 0;
       }
     }
+  }
+
+  /* On wider screens the settings sit in the bar itself; the sheet's parts and labels are for phones only. An icon
+     dropdown shows its icon alone. */
+  [data-slot="bar-settings"] {
+    display: contents;
+  }
+
+  :is([data-slot="sheet-open"], [data-slot="sheet-head"], [data-slot="sheet-label"], [data-slot="sheet-backdrop"]) {
+    display: none;
+  }
+
+  [data-component="dropdown"][data-show="icon"] [data-slot="dropdown-trigger"] [data-slot="dropdown-value"] {
+    display: none;
   }
 
   /* Mute, Shuffle and Export, together at the far end. */
@@ -1472,8 +1492,146 @@
     }
 
     /* On a phone the bar wraps onto as many rows as it needs, over the card. */
+    /* On a phone the bar holds Close, Settings, and Mute, Shuffle and Export, always to hand; the settings slide up in
+       a sheet from the bottom, every one a full row with its name, and slide back down when it's dismissed. */
     [data-slot="editor-bar"] {
+      flex-wrap: nowrap;
       padding: calc(8px + env(safe-area-inset-top, 0px)) 8px 8px;
+    }
+
+    [data-slot="sheet-open"] {
+      display: flex;
+      gap: 6px;
+      align-items: center;
+      height: 36px;
+      padding: 0 10px;
+      font-size: 13px;
+      color: var(--stats-text);
+      background: var(--stats-bg);
+      border: 1px solid var(--stats-line-strong);
+      border-radius: 0;
+
+      &[aria-expanded="true"] {
+        background: var(--stats-layer-2);
+      }
+    }
+
+    /* Below the bar, so Mute, Shuffle and Export stay in reach with the sheet open. */
+    [data-slot="sheet-backdrop"] {
+      position: fixed;
+      inset: calc(52px + env(safe-area-inset-top, 0px)) 0 0;
+      z-index: 5;
+      display: block;
+      background: rgb(0 0 0 / 0.32);
+      animation: share-fade-in 200ms ease;
+    }
+
+    [data-slot="bar-settings"] {
+      position: fixed;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      z-index: 6;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 0 16px calc(16px + env(safe-area-inset-bottom, 0px));
+      visibility: hidden;
+      background: var(--stats-bg);
+      box-shadow:
+        0 -1px 0 var(--stats-line),
+        0 -12px 32px -12px rgb(0 0 0 / 0.24);
+      translate: 0 100%;
+      transition:
+        translate 360ms cubic-bezier(0.32, 0.72, 0, 1),
+        visibility 0s 360ms;
+
+      &[data-open] {
+        visibility: visible;
+        translate: 0 0;
+        transition:
+          translate 360ms cubic-bezier(0.32, 0.72, 0, 1),
+          visibility 0s;
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+
+        &[data-open] {
+          transition: none;
+        }
+      }
+
+      /* Each setting a row: its name, then its control filling the rest. */
+      > :is([data-component="dropdown"], [data-slot="date-tool"], [data-slot="music-tool"]) {
+        display: flex;
+        gap: 12px;
+        align-items: center;
+      }
+
+      [data-slot="sheet-label"] {
+        display: block;
+        flex: none;
+        width: 72px;
+        font-size: 12px;
+        color: var(--stats-faint);
+        white-space: nowrap;
+      }
+
+      [data-slot="dropdown-trigger"],
+      [data-component="dropdown"][data-show] [data-slot="dropdown-trigger"],
+      [data-slot="date-tool"] [data-slot="dropdown-trigger"],
+      [data-slot="music-tool"] [data-slot="dropdown-trigger"] {
+        flex: 1;
+        width: auto;
+        min-width: 0;
+        height: 44px;
+      }
+
+      [data-slot="music-tool"] [data-component="dropdown"] {
+        flex: 1;
+        min-width: 0;
+      }
+
+      [data-component="dropdown"][data-show="icon"] [data-slot="dropdown-trigger"] [data-slot="dropdown-value"] {
+        display: block;
+      }
+
+      /* Lists and the calendar open upwards in the sheet, over the rows above, as wide as their control. */
+      [data-slot="dropdown-menu"] {
+        top: auto;
+        right: 0;
+        bottom: calc(100% + 6px);
+        left: auto;
+        width: 100%;
+        transform-origin: bottom left;
+      }
+
+      [data-component="share-calendar"] {
+        top: auto;
+        right: 0;
+        bottom: calc(100% + 6px);
+        left: auto;
+        translate: none;
+        animation-name: share-fade-in;
+      }
+    }
+
+    [data-slot="sheet-head"] {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 52px;
+      font-size: 15px;
+
+      [data-slot="sheet-done"] {
+        height: 44px;
+        padding: 0 4px;
+        font-size: 15px;
+        color: var(--stats-accent);
+        background: transparent;
+        border: 0;
+      }
     }
 
     /* Taller rows for fingers, the same height for every row of wide choices. */
@@ -1491,6 +1649,12 @@
     [data-slot="row"][data-variant="list"] [data-slot="row-label"] {
       padding-top: 14px;
     }
+  }
+}
+
+@keyframes share-fade-in {
+  from {
+    opacity: 0;
   }
 }
 

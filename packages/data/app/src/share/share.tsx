@@ -129,6 +129,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   const [hovered, setHovered] = createSignal<string>()
   // The open dropdown or the date picker, by id; one at a time.
   const [menu, setMenu] = createSignal<string>()
+  // On phones, the settings sheet: closed until Settings opens it.
+  const [sheet, setSheet] = createSignal(false)
   // The chart column the card is about, or the whole range; each section starts on the whole range.
   const [day, setDay] = createSignal<number>()
   // Lead with the top model or the total: the sections that can say a total (Top Models).
@@ -228,6 +230,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     if (dialog?.open) return
     setFormat("video")
     setMenu(undefined)
+    setSheet(false)
     shuffle()
     // Opens silent: no music until one is chosen (or Shuffle picks one).
     setTrack("none")
@@ -467,9 +470,10 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       }}
       // Escape closes an open dropdown first, then the editor.
       onCancel={(event) => {
-        if (!menu()) return
+        if (!menu() && !sheet()) return
         event.preventDefault()
-        setMenu(undefined)
+        if (menu()) return setMenu(undefined)
+        setSheet(false)
       }}
       onClose={() => {
         renderAbort?.abort()
@@ -495,168 +499,205 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   <path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" />
                 </svg>
               </button>
-
-              <Dropdown
-                id="type"
-                label="Type"
-                open={menu()}
-                onOpen={setMenu}
-                value={format()}
-                options={(["video", "image", "embed"] as const).map((item) => ({
-                  value: item,
-                  label: { video: "Video", image: "Image", embed: "Embed" }[item],
-                  icon: <TypeGlyph format={item} />,
-                }))}
-                onSelect={(item) => {
-                  setFormat(item)
-                  setPlaying(true)
-                }}
-              />
-              <Show when={starts().length > 1}>
-                <div data-slot="date-tool">
-                  <button
-                    type="button"
-                    data-slot="dropdown-trigger"
-                    aria-label={`Date: ${dateLabel()}`}
-                    aria-haspopup="dialog"
-                    data-tooltip="Date"
-                    aria-expanded={menu() === "date" ? "true" : "false"}
-                    onClick={() => setMenu(menu() === "date" ? undefined : "date")}
-                  >
-                    <span data-slot="tool-icon">
-                      <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                        <path
-                          d="M2.75 3.75h10.5v9.5H2.75zM2.75 6.75h10.5M5.5 2v3M10.5 2v3"
-                          fill="none"
-                          stroke="currentColor"
-                          stroke-width="1.5"
-                        />
-                      </svg>
-                    </span>
-                    <span data-slot="dropdown-value">{dateLabel()}</span>
-                    <Chevron />
+              {/* Phones only: the settings live in a sheet, opened from here. */}
+              <button
+                type="button"
+                data-slot="sheet-open"
+                aria-expanded={sheet() ? "true" : "false"}
+                aria-controls="share-settings"
+                onClick={() => setSheet(true)}
+              >
+                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                  <path
+                    d="M2 4.5h6M12 4.5h2M2 11.5h2M8 11.5h6M10 4.5a1.75 1.75 0 1 1 0 .01M6 11.5a1.75 1.75 0 1 1 0 .01"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                  />
+                </svg>
+                <span>Settings</span>
+              </button>
+              <Show when={sheet()}>
+                <div data-slot="sheet-backdrop" aria-hidden="true" onClick={() => setSheet(false)} />
+              </Show>
+              {/* Every setting: in the bar on wider screens; on phones a sheet that slides up from the bottom. */}
+              <div
+                id="share-settings"
+                data-slot="bar-settings"
+                data-open={sheet() ? "" : undefined}
+                role="group"
+                aria-label="Settings"
+              >
+                <div data-slot="sheet-head">
+                  <strong>Settings</strong>
+                  <button type="button" data-slot="sheet-done" onClick={() => setSheet(false)}>
+                    Done
                   </button>
-                  <Show when={menu() === "date"}>
-                    <ShareCalendar
-                      starts={starts()}
-                      weekly={weekly()}
-                      day={day()}
-                      onPick={setDay}
-                      onClose={() => setMenu(undefined)}
-                    />
-                  </Show>
                 </div>
-              </Show>
-              <Show when={leads()}>
                 <Dropdown
-                  id="lead"
-                  label="Lead with"
+                  id="type"
+                  label="Type"
                   open={menu()}
                   onOpen={setMenu}
-                  value={lead()}
-                  options={[
-                    { value: "top" as const, label: "Top model", icon: <LeadGlyph lead="top" /> },
-                    { value: "total" as const, label: "Total", icon: <LeadGlyph lead="total" /> },
-                  ]}
-                  onSelect={setLead}
+                  value={format()}
+                  options={(["video", "image", "embed"] as const).map((item) => ({
+                    value: item,
+                    label: { video: "Video", image: "Image", embed: "Embed" }[item],
+                    icon: <TypeGlyph format={item} />,
+                  }))}
+                  onSelect={(item) => {
+                    setFormat(item)
+                    setPlaying(true)
+                  }}
                 />
-              </Show>
-              <Dropdown
-                id="layout"
-                label="Layout"
-                open={menu()}
-                onOpen={setMenu}
-                value={options().layout}
-                options={layouts.map((item) => ({
-                  value: item.value,
-                  label: item.label,
-                  icon: <LayoutGlyph layout={item.value} />,
-                }))}
-                onSelect={(item) => setShareOption("layout", item)}
-              />
-              <Dropdown
-                id="size"
-                label="Size"
-                open={menu()}
-                onOpen={setMenu}
-                value={options().size}
-                show="value"
-                options={sizes.map((item) => ({ value: item.value, label: item.value, detail: item.label }))}
-                onSelect={(item) => setShareOption("size", item)}
-              />
-              <Dropdown
-                id="style"
-                label="Style"
-                open={menu()}
-                onOpen={setMenu}
-                value={options().theme}
-                options={(["dark", "light", "leader"] as const).map((item) => ({
-                  value: item,
-                  label: { dark: "Dark", light: "Light", leader: "Top" }[item],
-                  icon: (
-                    <i
-                      data-slot="swatch"
-                      data-theme={item}
-                      style={item === "leader" ? { background: leaderColor(value()) } : undefined}
-                    />
-                  ),
-                }))}
-                onSelect={(item) => setShareOption("theme", item)}
-              />
-              <Show when={format() === "embed"}>
-                <Dropdown
-                  id="data"
-                  label="Data"
-                  open={menu()}
-                  onOpen={setMenu}
-                  value={fixed() ? "fixed" : "live"}
-                  options={[
-                    {
-                      value: "live" as const,
-                      label: "Live data",
-                      icon: <DataGlyph fixed={false} />,
-                    },
-                    {
-                      value: "fixed" as const,
-                      label: "Fixed data",
-                      icon: <DataGlyph fixed />,
-                    },
-                  ]}
-                  onSelect={(item) => setFixed(item === "fixed")}
-                />
-              </Show>
-              <Show when={format() === "video"}>
-                <div data-slot="music-tool" role="group" aria-label="Music">
+                <Show when={starts().length > 1}>
+                  <div data-slot="date-tool">
+                    <span data-slot="sheet-label">Date</span>
+                    <button
+                      type="button"
+                      data-slot="dropdown-trigger"
+                      aria-label={`Date: ${dateLabel()}`}
+                      aria-haspopup="dialog"
+                      data-tooltip="Date"
+                      aria-expanded={menu() === "date" ? "true" : "false"}
+                      onClick={() => setMenu(menu() === "date" ? undefined : "date")}
+                    >
+                      <span data-slot="tool-icon">
+                        <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                          <path
+                            d="M2.75 3.75h10.5v9.5H2.75zM2.75 6.75h10.5M5.5 2v3M10.5 2v3"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                          />
+                        </svg>
+                      </span>
+                      <span data-slot="dropdown-value">{dateLabel()}</span>
+                      <Chevron />
+                    </button>
+                    <Show when={menu() === "date"}>
+                      <ShareCalendar
+                        starts={starts()}
+                        weekly={weekly()}
+                        day={day()}
+                        onPick={setDay}
+                        onClose={() => setMenu(undefined)}
+                      />
+                    </Show>
+                  </div>
+                </Show>
+                <Show when={leads()}>
                   <Dropdown
-                    id="music"
-                    label="Music"
+                    id="lead"
+                    label="Lead with"
                     open={menu()}
                     onOpen={setMenu}
-                    value={track()}
+                    value={lead()}
                     options={[
-                      { value: "none", label: "No music", icon: <MusicCover /> },
-                      ...shareTracks.map((item) => ({
-                        value: item.id,
-                        label: item.name,
-                        explicit: item.explicit,
-                        icon: <MusicCover cover={item.cover} />,
-                      })),
+                      { value: "top" as const, label: "Top model", icon: <LeadGlyph lead="top" /> },
+                      { value: "total" as const, label: "Total", icon: <LeadGlyph lead="total" /> },
                     ]}
-                    show="both"
-                    onPreview={(id) => {
-                      setHovered(id)
-                      if (id) setPlaying(true)
-                    }}
-                    trigger={
-                      <MusicCover
-                        cover={chosen()?.cover}
-                        state={muted() || silent() ? undefined : playing() ? "playing" : "paused"}
-                      />
-                    }
-                    onSelect={chooseTrack}
+                    onSelect={setLead}
                   />
-                </div>
-              </Show>
+                </Show>
+                <Dropdown
+                  id="layout"
+                  label="Layout"
+                  open={menu()}
+                  onOpen={setMenu}
+                  value={options().layout}
+                  options={layouts.map((item) => ({
+                    value: item.value,
+                    label: item.label,
+                    icon: <LayoutGlyph layout={item.value} />,
+                  }))}
+                  onSelect={(item) => setShareOption("layout", item)}
+                />
+                <Dropdown
+                  id="size"
+                  label="Size"
+                  open={menu()}
+                  onOpen={setMenu}
+                  value={options().size}
+                  show="value"
+                  options={sizes.map((item) => ({ value: item.value, label: item.value, detail: item.label }))}
+                  onSelect={(item) => setShareOption("size", item)}
+                />
+                <Dropdown
+                  id="style"
+                  label="Style"
+                  open={menu()}
+                  onOpen={setMenu}
+                  value={options().theme}
+                  options={(["dark", "light", "leader"] as const).map((item) => ({
+                    value: item,
+                    label: { dark: "Dark", light: "Light", leader: "Top" }[item],
+                    icon: (
+                      <i
+                        data-slot="swatch"
+                        data-theme={item}
+                        style={item === "leader" ? { background: leaderColor(value()) } : undefined}
+                      />
+                    ),
+                  }))}
+                  onSelect={(item) => setShareOption("theme", item)}
+                />
+                <Show when={format() === "embed"}>
+                  <Dropdown
+                    id="data"
+                    label="Data"
+                    open={menu()}
+                    onOpen={setMenu}
+                    value={fixed() ? "fixed" : "live"}
+                    options={[
+                      {
+                        value: "live" as const,
+                        label: "Live data",
+                        icon: <DataGlyph fixed={false} />,
+                      },
+                      {
+                        value: "fixed" as const,
+                        label: "Fixed data",
+                        icon: <DataGlyph fixed />,
+                      },
+                    ]}
+                    onSelect={(item) => setFixed(item === "fixed")}
+                  />
+                </Show>
+                <Show when={format() === "video"}>
+                  <div data-slot="music-tool" role="group" aria-label="Music">
+                    <span data-slot="sheet-label">Music</span>
+                    <Dropdown
+                      id="music"
+                      label="Music"
+                      open={menu()}
+                      onOpen={setMenu}
+                      value={track()}
+                      options={[
+                        { value: "none", label: "No music", icon: <MusicCover /> },
+                        ...shareTracks.map((item) => ({
+                          value: item.id,
+                          label: item.name,
+                          explicit: item.explicit,
+                          icon: <MusicCover cover={item.cover} />,
+                        })),
+                      ]}
+                      show="both"
+                      onPreview={(id) => {
+                        setHovered(id)
+                        if (id) setPlaying(true)
+                      }}
+                      trigger={
+                        <MusicCover
+                          cover={chosen()?.cover}
+                          state={muted() || silent() ? undefined : playing() ? "playing" : "paused"}
+                        />
+                      }
+                      onSelect={chooseTrack}
+                    />
+                  </div>
+                </Show>
+              </div>
               {/* The bar's far end: Mute (for a video), Shuffle, then Export. */}
               <div data-slot="bar-end">
                 <Show when={format() === "video" && !silent()}>
@@ -952,6 +993,9 @@ function Dropdown<T extends string>(props: {
   }
   return (
     <div ref={element} data-component="dropdown" data-id={props.id} data-show={show()}>
+      <Show when={props.id !== "music"}>
+        <span data-slot="sheet-label">{props.label}</span>
+      </Show>
       <button
         type="button"
         data-slot="dropdown-trigger"
@@ -964,9 +1008,7 @@ function Dropdown<T extends string>(props: {
         <Show when={show() !== "value"}>
           <span data-slot="tool-icon">{props.trigger ?? current()?.icon}</span>
         </Show>
-        <Show when={show() !== "icon"}>
-          <span data-slot="dropdown-value">{current()?.label}</span>
-        </Show>
+        <span data-slot="dropdown-value">{current()?.label}</span>
         <Show when={current()?.explicit}>
           <em data-slot="explicit" title="Explicit lyrics">
             {short() ? "E" : "Explicit"}
