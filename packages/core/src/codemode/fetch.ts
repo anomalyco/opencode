@@ -97,16 +97,7 @@ const fetchOpencode = (url: string, init: Init) =>
     const method = (init.method ?? "GET").toUpperCase()
     const source = { type: "tool" as const, messageID: execution.messageID, id: execution.id }
     // The call is checked as the `opencode api` command that would make it, so shell rules for that command cover it
-    // too, and saving approval saves what the shell tool saves for it. A webfetch rule for the URL can only deny: one
-    // call asks at most once.
-    yield* permission.assertNotDenied({
-      action: "webfetch",
-      resources: [url],
-      metadata: display([url, init]),
-      sessionID: execution.sessionID,
-      agent: execution.agent,
-      source,
-    })
+    // too, and saving approval saves what the shell tool saves for it.
     yield* permission
       .assert({
         action: "shell",
