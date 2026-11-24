@@ -244,25 +244,36 @@ test.describe("timeline history", () => {
 
   // The search for the call ended only on input the timeline handles itself: the wheel, a touch, its own scroll keys
   // and a press. A key the browser handles or a drag of the scrollbar thumb left it running, and the call took the
-  // view from wherever the reader had gone.
-  for (const input of [
-    { name: "Ctrl+End", move: (page: Page) => page.keyboard.press("Control+End") },
-    {
-      name: "a drag of the scrollbar thumb",
-      move: async (page: Page) => {
-        const box = await page.locator('.scroll-view__thumb[data-orientation="vertical"]').boundingBox()
+  // view from wherever the reader had gone. A press on the thumb that moves nothing, at the end of the transcript,
+  // left it running too: the thumb is outside the scroll view, so its press was not the timeline's.
+  const dragThumb = async (page: Page, distance: number) => {
+    const box = await page.locator('.scroll-view__thumb[data-orientation="vertical"]').boundingBox()
 
-        if (!box) throw new Error("The timeline has no scrollbar thumb")
-        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
-        await page.mouse.down()
-        await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + 2_000, { steps: 8 })
-        await page.mouse.up()
-      },
+    if (!box) throw new Error("The timeline has no scrollbar thumb")
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+    await page.mouse.down()
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + distance, { steps: 8 })
+    await page.mouse.up()
+  }
+
+  for (const input of [
+    { name: "goes to the end with Ctrl+End", reply: true, move: (page: Page) => page.keyboard.press("Control+End") },
+    {
+      name: "goes to the end with a drag of the scrollbar thumb",
+      reply: true,
+      move: (page: Page) => dragThumb(page, 2_000),
+    },
+    // The notice is the last row, so the view is at the end already and none of these moves it.
+    { name: "presses Ctrl+End at the end", reply: false, move: (page: Page) => page.keyboard.press("Control+End") },
+    { name: "presses the scrollbar thumb at the end", reply: false, move: (page: Page) => dragThumb(page, 200) },
+    {
+      // The browser handles a page key on a button, not the timeline.
+      name: "presses PageDown on a button at the end",
+      reply: false,
+      move: (page: Page) => timelineScroller(page).getByRole("button", { name: /^Shell finished/ }).press("PageDown"),
     },
   ])
-    test(`a reader who goes to the end with ${input.name} while a shell's call is sought is not taken to it`, async ({
-      page,
-    }) => {
+    test(`a reader who ${input.name} while a shell's call is sought is not taken to it`, async ({ page }) => {
       const history = historyMessages(120)
       const text = Array.from({ length: 40 }, (_, index) => `Paragraph ${index}.`).join("\n\n")
 
@@ -279,7 +290,7 @@ test.describe("timeline history", () => {
         { id: "msg_00109_history_c_call", parentID: "msg_00109_history_a_user", created: 1690001092000 },
       )
 
-      // The notice is on the newest page, above a long reply. Its call is on the page before.
+      // The notice is on the newest page, above a long reply or as its last row. Its call is on the page before.
       const messages: SessionMessageInfo[] = [
         ...history.slice(0, 220),
         call,
@@ -292,15 +303,19 @@ test.describe("timeline history", () => {
           metadata: { source: "shell", shellID: "sh_00109_history_d_shell", state: "completed" },
           time: { created: 1690001200000 },
         },
-        userMessage([textPart("prt_sought_prompt", "Summarise the run")], {
-          id: "msg_00121_later_a_user",
-          created: 1690001210000,
-        }),
-        assistantMessage([textPart("prt_sought_reply", text)], {
-          id: "msg_00121_later_b_assistant",
-          parentID: "msg_00121_later_a_user",
-          created: 1690001211000,
-        }),
+        ...(input.reply
+          ? [
+              userMessage([textPart("prt_sought_prompt", "Summarise the run")], {
+                id: "msg_00121_later_a_user",
+                created: 1690001210000,
+              }),
+              assistantMessage([textPart("prt_sought_reply", text)], {
+                id: "msg_00121_later_b_assistant",
+                parentID: "msg_00121_later_a_user",
+                created: 1690001211000,
+              }),
+            ]
+          : []),
       ]
 
       const older = Promise.withResolvers<void>()
@@ -319,7 +334,7 @@ test.describe("timeline history", () => {
 
       const scroller = timelineScroller(page)
       const notice = scroller.getByRole("button", { name: /^Shell finished/ })
-      const end = scroller.getByText("Paragraph 39.", { exact: true })
+      const end = input.reply ? scroller.getByText("Paragraph 39.", { exact: true }) : notice
 
       // How far the view is from the end of the transcript.
       const away = () =>
@@ -327,10 +342,12 @@ test.describe("timeline history", () => {
 
       await expect(end).toBeInViewport()
       await scroller.hover()
-      await expect(async () => {
-        await page.mouse.wheel(0, -200)
-        await expect(notice).toBeInViewport({ timeout: 1_000 })
-      }).toPass()
+
+      if (input.reply)
+        await expect(async () => {
+          await page.mouse.wheel(0, -200)
+          await expect(notice).toBeInViewport({ timeout: 1_000 })
+        }).toPass()
       await notice.click()
       await expect.poll(() => requests.some((request) => request.before && request.phase === "start")).toBe(true)
 

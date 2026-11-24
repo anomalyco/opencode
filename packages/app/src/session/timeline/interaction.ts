@@ -79,11 +79,11 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
 
     return createSignal(createRevealSeekState())
   })
+  // Opens a loaded part in the active timeline, registered by its virtualizer.
+  let revealPart = (_target: string) => false
 
   // The active timeline's navigation, registered by its virtualizer.
   let revealMessage = (_id: string, _partID?: string) => {}
-
-  let revealPart = (_target: string) => false
 
   let scrollToEnd = (_behavior?: ScrollBehavior) => {}
 
@@ -244,26 +244,31 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
     cursor.jump(messages[target].id, "auto")
   }
 
-  const seekingReveal = () => revealSeekTarget(untrack(() => revealSeek()[0]())) !== undefined
-
-  // The reader moved the view or asked to go somewhere else. A call that loads later would take the view from
-  // where they went, so the search for it ends. Runs on every scroll the reader makes, so it checks first.
-  function endRevealSeek() {
-    if (seekingReveal()) dispatchRevealSeek(SEEK_CANCELLED_EVENT)
-  }
-
   // A gesture inside a nested scrollable region scrolls that region, not the timeline.
   const markUserScroll = (target?: EventTarget | null) => {
-    const seeking = seekingReveal()
-
-    if (!scroller || (!seeking && !hasFreshCursorOrSeek(untrack(cursor.state)))) return
+    if (!scroller || !hasFreshCursorOrSeek(untrack(cursor.state))) return
     const element = target instanceof Element ? target : undefined
     const nested = element?.closest("[data-scrollable]")
 
     if (nested && nested !== scroller) return
-
-    if (seeking) dispatchRevealSeek(SEEK_CANCELLED_EVENT)
     cursor.dispatch(SCROLL_MOVED_EVENT)
+  }
+
+  // The reader's gesture also ends the search for an older call. It does so here and not inside `markUserScroll`:
+  // every seek ends on its own condition, and two that shared one function were merged onto one condition.
+  const markUserGesture = (target?: EventTarget | null) => {
+    const nested = target instanceof Element ? target.closest("[data-scrollable]") : undefined
+
+    if (scroller && (!nested || nested === scroller)) endRevealSeek()
+    markUserScroll(target)
+  }
+
+  const seekingReveal = () => revealSeekTarget(untrack(() => revealSeek()[0]())) !== undefined
+
+  // The reader moved the view, gave scroll input, or asked to go somewhere else. A call that loads later would take
+  // the view from where they are, so the search for it ends. Runs on every scroll the reader makes, so it checks first.
+  function endRevealSeek() {
+    if (seekingReveal()) dispatchRevealSeek(SEEK_CANCELLED_EVENT)
   }
 
   function dispatchRevealSeek(event: RevealSeekEvent) {
@@ -501,7 +506,7 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
     follow,
     view: {
       anchor,
-      markUserScroll,
+      markUserScroll: markUserGesture,
       onHistoryScroll,
       scheduleScrollState,
       contentResized: () => {

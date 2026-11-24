@@ -66,6 +66,12 @@ const pendingMarkdown = '[data-component="markdown"]:not([data-markdown-ready])'
 
 const upwardKeys = new Set(["up", "page-up", "home"])
 
+const pageKeyOnControl = (event: KeyboardEvent) =>
+  (event.key === "PageUp" || event.key === "PageDown") &&
+  event.target instanceof HTMLElement &&
+  !event.target.isContentEditable &&
+  !["INPUT", "TEXTAREA", "SELECT"].includes(event.target.tagName)
+
 const settledEvent = { type: "scroll.settled", atReachableEnd: false } as const
 
 const settledAtEndEvent = { type: "scroll.settled", atReachableEnd: true } as const
@@ -1144,6 +1150,17 @@ export function createTimelineVirtualizer(input: Input) {
     input.follow.dispatch(pointerDownEvent)
   }
 
+  // The ScrollView calls this before its scrollbar, or a scroll key, reads the geometry: a press and a drag of the
+  // thumb, the keys it scrolls by, and the ones it leaves to the browser, such as Ctrl+End. All of them are the
+  // reader's scroll input, also at the end of the transcript, where they move nothing. The thumb is portalled out of
+  // the ScrollView root, so its press does not reach `handleListPointerDown`.
+  const prepareReaderNavigation = () => {
+    const root = listRoot()
+
+    if (active() && root) input.onUserScroll(root)
+    prepareNavigation()
+  }
+
   // A release only ends a pointer gesture, so every view may report it, including one that went inactive mid-press.
   // On touch devices it also fires beside touchend, which owns the touch gesture.
   const releasePointer = () => input.follow.dispatch(pointerUpEvent)
@@ -1180,9 +1197,15 @@ export function createTimelineVirtualizer(input: Input) {
 
     if (!key) return
 
-    if (!isScrollKeyTarget(event.target, key)) return
-
     if (scrollKeyOwner(event.currentTarget, event.target, key) !== event.currentTarget) return
+
+    if (!isScrollKeyTarget(event.target, key)) {
+      // PageUp and PageDown on a button or a link in a row are left to the browser, which scrolls the timeline
+      // itself. They are the reader's scroll input all the same. A key in a text field is not.
+      if (pageKeyOnControl(event)) input.onUserScroll(event.currentTarget)
+
+      return
+    }
     input.onUserScroll(event.currentTarget)
     dispatchIntent(upwardKeys.has(key))
   }
@@ -1199,12 +1222,14 @@ export function createTimelineVirtualizer(input: Input) {
     scrollEvent.maxScroll = maxScroll
     scrollEvent.reader = seen.reader
     seen.reader = 0
-
-    if (scrollEvent.reader !== 0) input.reveal?.readerMoved()
     input.follow.dispatch(scrollEvent)
     dispatchCold(CHECK_REQUESTED)
     input.onScheduleScrollState(root)
     input.onHistoryScroll()
+
+    // The reader moved the view, by whatever input. While the cold mount is hidden they see no rows and scroll none,
+    // whatever the offset does.
+    if (scrollEvent.reader !== 0 && !untrack(coldHidden)) input.reveal?.readerMoved()
   }
 
   function View(props: ViewProps) {
@@ -1336,7 +1361,7 @@ export function createTimelineVirtualizer(input: Input) {
           viewportRef={bindListRoot}
           thumbContainer={visibleArea()}
           thumbHoverTarget={viewRoot()}
-          onBeforeScroll={prepareNavigation}
+          onBeforeScroll={prepareReaderNavigation}
           verticalScrollAdjustment={rendering.scrollAdjustment}
           onWheel={handleListWheel}
           onTouchStart={handleListTouchStart}
@@ -1412,8 +1437,8 @@ export function createTimelineVirtualizer(input: Input) {
     dispatchCold(DISPOSED)
 
     if (active()) {
-      input.setScrollRef(undefined)
       input.reveal?.register(() => false)
+      input.setScrollRef(undefined)
       input.setRevealMessage?.(() => {})
       input.setScrollToEnd?.(() => {})
       input.setPage?.(() => {})
