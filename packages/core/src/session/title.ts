@@ -8,6 +8,7 @@ import { Database } from "../database/database.js"
 import { Bus } from "../bus.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { isExactRootFallback } from "@opencode/util/session-title-fallback"
+import { TextBoundary } from "@opencode/util/text-boundary"
 import { llmClient } from "../effect/app-node-platform.js"
 import { SessionContext } from "./context.js"
 import { SessionEvent } from "./event.js"
@@ -29,7 +30,8 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/SessionTitle") {}
 
-const truncate = (value: string) => (value.length <= MAX_LENGTH ? value : `${value.slice(0, MAX_LENGTH - 3)}...`)
+const truncate = (value: string) =>
+  value.length <= MAX_LENGTH ? value : `${TextBoundary.head(value, MAX_LENGTH - 3)}...`
 // Framing the input as text to name keeps models from answering or carrying out the request instead.
 const messagePrompt = (text: string) =>
   `Here is the first message of the conversation:\n\n<message>\n${text}\n</message>\n\nReply with only the title.`
@@ -119,7 +121,7 @@ export const layer = Layer.effect(
       const text = !isUntitled(session)
         ? yield* store.context(session.id).pipe(
             Effect.map((messages) => {
-              const original = `Original request:\n${firstUser.text.slice(0, MAX_FIRST_MESSAGE_LENGTH)}`
+              const original = `Original request:\n${TextBoundary.head(firstUser.text, MAX_FIRST_MESSAGE_LENGTH)}`
               const recent = messages
                 .flatMap((message) => {
                   if (message.type === "user" && message.id !== firstUser.id) return [`User: ${message.text.trim()}`]
@@ -134,7 +136,7 @@ export const layer = Layer.effect(
               if (!recent) return conversationPrompt(original)
               const prefix = `${original}\n\nRecent conversation:\n`
               const budget = MAX_CONTEXT_LENGTH - conversationPrompt("").length - prefix.length
-              return conversationPrompt(`${prefix}${recent.slice(-budget)}`)
+              return conversationPrompt(`${prefix}${TextBoundary.tail(recent, budget)}`)
             }),
             Effect.orElseSucceed(() => messagePrompt(firstUser.text)),
           )

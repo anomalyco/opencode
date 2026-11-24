@@ -1,5 +1,5 @@
 import { Marked } from "~/component/site/marked"
-import { useI18n } from "~/context/i18n"
+import { useI18n } from "~/context/i18n-context"
 import "./media-gallery.css"
 import { createEffect, createSignal, For, Match, on, onCleanup, onMount, Show, Switch } from "solid-js"
 import { fanMotion } from "~/component/site/fan-motion"
@@ -7,6 +7,7 @@ import type { PressMediaItem } from "~/lib/press-content"
 import { Still } from "~/component/site/media"
 import { mediaUrl } from "~/lib/media"
 import { inlineKey, scrollLeftFor, scrollStart } from "~/lib/direction"
+import { staticRender } from "~/lib/static-render"
 
 type Product = {
   name: string
@@ -107,6 +108,25 @@ export function MediaGallery(props: { products: Product[]; style: Style }) {
           </Show>
         )}
       </For>
+      {/* The static page renders the lightbox in the browser (src/client/islands/press-lightbox.tsx), from this. */}
+      <Show when={staticRender()}>
+        <script
+          type="application/json"
+          data-slot="lightbox-media"
+          innerHTML={JSON.stringify(
+            props.products.map((product) => ({
+              name: product.name,
+              items: product.items.map((item) => ({
+                title: item.title,
+                image: item.image,
+                video: item.video,
+                width: item.width,
+                height: item.height,
+              })),
+            })),
+          ).replace(/</g, "\\u003c")}
+        />
+      </Show>
       <Show when={open()}>
         {(state) => (
           <Lightbox
@@ -455,8 +475,19 @@ function Fan(props: { product: Product; onOpen: (item: number, event: MouseEvent
   )
 }
 
+/** What the lightbox shows of a product's media. */
+export type LightboxMedia = {
+  name: string
+  items: Pick<PressMediaItem, "title" | "image" | "video" | "width" | "height">[]
+}
+
 /** The enlarged item, with the previous and next items, downloads and a close button. */
-function Lightbox(props: { product: Product; index: number; onIndex: (index: number) => void; onClose: () => void }) {
+export function Lightbox(props: {
+  product: LightboxMedia
+  index: number
+  onIndex: (index: number) => void
+  onClose: () => void
+}) {
   const i18n = useI18n()
   let root!: HTMLDivElement
   const item = () => props.product.items[props.index]

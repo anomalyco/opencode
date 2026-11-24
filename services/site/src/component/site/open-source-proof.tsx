@@ -1,11 +1,12 @@
 import "./open-source-proof.css"
-import { createEffect, createSignal, createUniqueId, For, on, onMount, Show } from "solid-js"
+import { createEffect, createUniqueId, For, on, onMount, Show } from "solid-js"
 import { config } from "~/config"
 import { useI18n } from "~/context/i18n"
 import { rich } from "~/i18n/rich"
 import type { Contributor, RepoStats } from "~/lib/github"
 import { ExternalArrow, NewTab } from "./icons"
-import { createWash, revealMotion, washStep } from "./reveal"
+import { revealMotion, washItem, washStep } from "./reveal"
+import { createWash } from "./use-wash"
 import { siteSettings } from "./settings"
 
 const repo = config.github.repoUrl
@@ -116,11 +117,11 @@ export function OpenSourceProof(props: {
 /**
  * Two rows of greyscale avatars that reveal in a diagonal wash from the top left, one at a time,
  * when the wall first scrolls into view, with the logo row's reveal styles (reveal.ts; Settings ›
- * Avatar animation and Avatar stagger). An avatar still loading when its turn comes reveals once it
- * has decoded, so no empty box animates in. Until the page's code runs, and with reduced motion,
- * every avatar simply shows. With Avatar links on, each avatar links to the contributor's commits,
- * pull requests or profile and shows in colour on hover and focus; off, the wall is one decorative
- * image.
+ * Avatar animation and Avatar stagger). An avatar still loading when its turn comes reveals once
+ * it has decoded, so no empty box animates in. Until the page's code runs, and with reduced
+ * motion, every avatar simply shows (on a static page, src/client/islands/home.ts plays it). With
+ * Avatar links on, each avatar links to the contributor's commits, pull requests or profile and
+ * shows in colour on hover and focus; off, the wall is one decorative image.
  */
 function AvatarWall(props: { people: Contributor[]; after?: () => number | undefined }) {
   const i18n = useI18n()
@@ -203,42 +204,15 @@ const avatarLinks = {
   }),
 }
 
-// One avatar: revealed at `at` (a performance.now() time), or as soon as it has decoded after that.
+// One avatar: in at `at` (a performance.now() time), or as soon as it has decoded after that (washItem).
 function Avatar(props: { person: Contributor; link?: keyof typeof avatarLinks; at?: number }) {
   const i18n = useI18n()
-  const [ready, setReady] = createSignal(false)
-  const [delay, setDelay] = createSignal<number>()
   let image: HTMLImageElement | undefined
-
-  onMount(() => {
-    if (!image) return
-    const decoded = () =>
-      image?.decode().then(
-        () => setReady(true),
-        () => {},
-      )
-    if (image.complete && image.naturalWidth > 0) return void decoded()
-    image.addEventListener("load", decoded, { once: true })
-  })
-
-  // The delay is fixed when both are true, so a late image starts at once rather than mid-wash.
-  createEffect(() => {
-    const at = props.at
-    if (at === undefined) return setDelay(undefined)
-    if (!ready()) return
-    setDelay(Math.max(0, at - performance.now()))
-  })
+  let mark: HTMLSpanElement | undefined
+  onMount(() => createEffect(() => mark && washItem(mark, props.at, image)))
 
   const brand = (
-    <span
-      data-slot="brand"
-      data-state={delay() === undefined ? undefined : "in"}
-      style={
-        delay() === undefined
-          ? undefined
-          : { "--logo-delay": `${Math.round(delay()!)}ms`, "--wipe-delay": `${Math.round(delay()!)}ms` }
-      }
-    >
+    <span ref={mark} data-slot="brand">
       <img
         ref={image}
         data-slot="mark"

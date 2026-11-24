@@ -107,7 +107,8 @@ describe("ConfigCompactionPlugin.Plugin", () => {
           inputID: SessionMessage.ID.make("msg_compaction_manual"),
         }),
       ).toEqual({ status: "completed" })
-      expect(Option.getOrThrow(yield* Fiber.join(ended)).metadata?.keepID).toBe(messages[1].id)
+      // `keep: 0` retains nothing; the default would keep the latest exchange.
+      expect(Option.getOrThrow(yield* Fiber.join(ended)).metadata?.keepID).toBeUndefined()
 
       yield* config.setEntries([
         new Document({

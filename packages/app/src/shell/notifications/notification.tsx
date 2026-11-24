@@ -57,6 +57,21 @@ function hasRunningChild(data: Data, sessionID: string) {
     )
 }
 
+// What a request asks, for the notification's second line: the permission's action and what it acts on, or the
+// form's title. The server's own words, not app copy.
+function requestDetail(data: Data, kind: keyof typeof requestTitles, sessionID: string, requestID: string) {
+  if (kind !== "permission") return data.session.form.list(sessionID)?.find((form) => form.id === requestID)?.title
+
+  const request = data.session.permission.list(sessionID)?.find((item) => item.id === requestID)
+
+  if (!request) return
+
+  // A request record without resources still says what it asks: its action.
+  const resources = request.resources ?? []
+
+  return resources.length ? `${request.action}: ${resources.join(", ")}` : request.action
+}
+
 // The list Desktop kept before unread state moved to the server. Until its viewed state reaches the server, unread
 // state still honours it, so sessions read here don't light up while the server catches up.
 const LegacyNotificationStore = Persistence.struct({
@@ -79,6 +94,8 @@ export function createServerNotificationState(input: {
   data: Data
   key: ServerConnection.Key
   coordinator: ReturnType<typeof createNotificationCoordinator>
+  muted: (sessionID: string) => boolean
+  preferencesLoaded?: Promise<unknown>
 }) {
   const platform = usePlatform()
   const settings = useSettings()
@@ -280,10 +297,27 @@ export function createServerNotificationState(input: {
     const root = input.data.session.root(sessionID)
     const session = input.data.session.get(root)
     const idle = session?.time.idle
+    platform.dismissNotification?.(sessionTag(root))
 
     if (idle === undefined || !isSessionUnread(session)) return
     dispatchView(root, { type: "view", idle })
   }
+
+  // The system notification each run and request posts, so a repeat replaces it and an answer takes it back.
+  const sessionTag = (sessionID: string) => `${input.key}\0session:${sessionID}`
+
+  const requestTag = (requestID: string) => `${input.key}\0request:${requestID}`
+
+  // Requests whose notification may still be shown, with what tells whether they still wait.
+  const [shown, setShown] = createSignal<ReadonlyArray<{ readonly id: string; readonly pending: () => boolean }>>([])
+
+  createEffect(() => {
+    const answered = shown().filter((request) => !request.pending())
+
+    if (answered.length === 0) return
+    answered.forEach((request) => platform.dismissNotification?.(requestTag(request.id)))
+    setShown((list) => list.filter((request) => !answered.includes(request)))
+  })
 
   const opened = (sessionID: string) => updateManual(input.data.session.root(sessionID), false)
 
@@ -294,6 +328,7 @@ export function createServerNotificationState(input: {
 
   // Loading the session keeps a background completion visible in the server-derived unread state.
   const lookup = async (sessionID: string) => {
+    if (input.preferencesLoaded) await input.preferencesLoaded
     const session = input.data.session.get(sessionID)
 
     if (session) return session
@@ -309,7 +344,7 @@ export function createServerNotificationState(input: {
     if (hasRunningChild(input.data, sessionID)) return
 
     void lookup(sessionID).then((session) => {
-      if (disposed.value) return
+      if (disposed.value || input.muted(sessionID)) return
 
       if (!session) return
 
@@ -323,8 +358,11 @@ export function createServerNotificationState(input: {
 
       if (hasOpenTab && settings.notifications.agent()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
-          platform.notify(language.t("notification.session.responseReady.title"), session.title ?? sessionID, () =>
-            openNotificationSession(tabs, input.key, sessionID),
+          platform.notify(
+            language.t("notification.session.responseReady.title"),
+            session.title ?? sessionID,
+            () => openNotificationSession(tabs, input.key, sessionID),
+            { tag: sessionTag(sessionID) },
           ),
         )
       }
@@ -333,7 +371,7 @@ export function createServerNotificationState(input: {
 
   const handleSessionError = (sessionID: string, eventID: string) => {
     void lookup(sessionID).then((session) => {
-      if (disposed.value) return
+      if (disposed.value || input.muted(sessionID)) return
 
       if (session?.parentID) return
 
@@ -347,8 +385,11 @@ export function createServerNotificationState(input: {
 
       if (hasOpenTab && settings.notifications.errors()) {
         void input.coordinator.system(`${input.key}\0${eventID}`, () =>
-          platform.notify(language.t("notification.session.error.title"), description, () =>
-            openNotificationSession(tabs, input.key, sessionID),
+          platform.notify(
+            language.t("notification.session.error.title"),
+            description,
+            () => openNotificationSession(tabs, input.key, sessionID),
+            { tag: sessionTag(sessionID) },
           ),
         )
       }
@@ -369,7 +410,7 @@ export function createServerNotificationState(input: {
     const category = kind === "question" || kind === "mcp-elicitation" ? "questions" : "permissions"
 
     const pending = () => {
-      if (disposed.value) return false
+      if (disposed.value || input.muted(sessionID) || input.muted(input.data.session.root(sessionID))) return false
 
       if (kind !== "permission") return input.data.session.form.list(sessionID)?.some((form) => form.id === requestID)
 
@@ -392,9 +433,17 @@ export function createServerNotificationState(input: {
 
     void input.coordinator.system(key, () => {
       if (!pending()) return
+      setShown((list) => [
+        ...list.filter((request) => request.id !== requestID),
+        { id: requestID, pending: () => !!pending() },
+      ])
+      void platform.requestAttention?.().catch(() => undefined)
 
-      return platform.notify(language.t(requestTitles[kind]), session.title ?? sessionID, () =>
-        openNotificationSession(tabs, input.key, target),
+      return platform.notify(
+        language.t(requestTitles[kind]),
+        session.title ?? sessionID,
+        () => openNotificationSession(tabs, input.key, target),
+        { tag: requestTag(requestID), detail: requestDetail(input.data, kind, sessionID, requestID) },
       )
     })
   }

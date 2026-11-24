@@ -26,11 +26,13 @@ import { metaResponse } from "~/lib/meta"
 import { setSecurityHeaders } from "~/lib/security-headers"
 import { noindexDev } from "~/lib/noindex"
 import { docsMiddleware } from "~/docs/middleware"
+import { staticPages } from "~/static/render"
 
 // dev.opencode.ai's noindex header on every response (lib/noindex.ts), then the docs (everything
 // under /docs and /v1/docs, and the V1 docs' old host, docs/middleware.ts), then the page middleware, then the HTML cache headers and edge
 // cache (lib/html-cache.ts), which see the request without its locale, then the page's head links
-// (lib/head-links.ts), inside the cache so cached pages carry them too.
+// (lib/head-links.ts), inside the cache so cached pages carry them too, then the pages rendered
+// without hydration (static/render.tsx), which answer before the app does.
 export default [
   noindexDev,
   ...docsMiddleware,
@@ -145,6 +147,7 @@ export default [
   }),
   htmlCache,
   headLinks,
+  staticPages,
 ]
 
 // The text files above change with releases and carry dates, so they are cached for an hour.

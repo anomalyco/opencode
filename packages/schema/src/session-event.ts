@@ -346,6 +346,17 @@ export namespace Step {
   })
   export type Started = typeof Started.Type
 
+  /** Records when the provider streamed the first output token, before the rest of the response. */
+  export const FirstToken = Event.durable({
+    type: "session.step.first-token",
+    ...options,
+    schema: {
+      ...Base,
+      assistantMessageID: SessionMessage.ID,
+    },
+  })
+  export type FirstToken = typeof FirstToken.Type
+
   /** Records the provider response-body boundary independently of tool settlement. */
   export const Streamed = Event.durable({
     type: "session.step.streamed",
@@ -679,6 +690,7 @@ export const Definitions = Event.inventory(
   Shell.Started,
   Shell.Ended,
   Step.Started,
+  Step.FirstToken,
   Step.Streamed,
   Step.Ended,
   Step.Failed,

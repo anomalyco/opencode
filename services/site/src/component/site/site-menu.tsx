@@ -3,6 +3,7 @@ import { ExternalArrow, NewTab } from "./icons"
 import { onCloseMenus } from "./menu-open"
 import { placeMenu } from "./place-menu"
 import { Sheet, prefersSheet, type SheetControl } from "./sheet"
+import { staticRender } from "~/lib/static-render"
 
 /** One row: a link, with the external arrow and a new-tab note when it opens in a new tab. */
 export type SiteMenuItem = { label: string; href: string; external?: boolean }
@@ -84,26 +85,26 @@ export function SiteMenu(props: {
       >
         {props.trigger}
       </button>
-      <Show when={open()}>
-        <div data-slot="menu" id={id} role="menu" aria-label={props.label} onKeyDown={move}>
-          <For each={props.items}>
-            {(item) => (
-              <a data-slot="link" role="menuitem" href={item.href} {...external(item)} onClick={() => setOpen(false)}>
-                <span data-slot="link-label">
-                  {item.label}
-                  <Show when={item.external}>
-                    <ExternalArrow />
-                  </Show>
-                </span>
+      {/* Always in the page, hidden while closed, so the static pages' script (src/client/menus.ts)
+          opens the same menu. */}
+      <div data-slot="menu" id={id} role="menu" aria-label={props.label} hidden={!open()} onKeyDown={move}>
+        <For each={props.items}>
+          {(item) => (
+            <a data-slot="link" role="menuitem" href={item.href} {...external(item)} onClick={() => setOpen(false)}>
+              <span data-slot="link-label">
+                {item.label}
                 <Show when={item.external}>
-                  <NewTab />
+                  <ExternalArrow />
                 </Show>
-              </a>
-            )}
-          </For>
-        </div>
-      </Show>
-      <Show when={sheet()}>
+              </span>
+              <Show when={item.external}>
+                <NewTab />
+              </Show>
+            </a>
+          )}
+        </For>
+      </div>
+      <Show when={sheet() || staticRender()}>
         <Sheet name="menu" label={props.label} control={(control) => (sheetControl = control)}>
           <ul>
             <For each={props.items}>

@@ -28,17 +28,20 @@ function ToastRegion(props: ToastRegionProps) {
     // A modal dialog hides what's outside it from assistive tech. The region is in the Portal's own div, so that div,
     // rather than the toaster, is what the dialog would hide.
     container.setAttribute("data-kb-top-layer", "")
+    // Dismissing a toast moves focus to the next one, or back to where it was before the last.
+    container.setAttribute("data-focus-scope", "")
 
     const sync = () => {
       container.querySelectorAll<HTMLElement>(".toast-v2-region .toast-v2").forEach((element) => {
         const hidden = element.dataset.visible === "false"
+        element.toggleAttribute("data-floating-overlay", !hidden || element.dataset.removed === "true")
         element.inert = hidden
         element.tabIndex = hidden ? -1 : 0
       })
     }
 
     const observer = new MutationObserver(sync)
-    observer.observe(container, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-visible"] })
+    observer.observe(container, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-visible", "data-removed"] })
     sync()
     onCleanup(() => observer.disconnect())
   }
@@ -183,6 +186,8 @@ export interface ToastAction {
 }
 
 export interface ToastOptions {
+  /** Called when the user closes or swipes away the toast. */
+  onDismiss?: () => void
   title?: string
   description?: string
   /** An element, or a render function the toast calls under its own owner, for icons created from imperative code. */
@@ -254,7 +259,11 @@ function publishToast(id: number, options: ToastOptions) {
     className: `toast-v2 toast-v2--${options.variant ?? "default"}`,
     testId: `toast-v2-${id}`,
     unstyled: true,
-    onDismiss: release,
+    onDismiss: () => {
+      const current = selectToastOptions(registry, id)
+      release()
+      current?.onDismiss?.()
+    },
     onAutoClose: release,
   })
 }

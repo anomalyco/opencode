@@ -49,4 +49,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} 在 {{timeout}}ms 后超时",
   "error.failedPort": "无法获取端口",
   "menu.remove": "移除",
+  "error.busy": "{{distro}} 正忙于其他任务。请在其完成后重试。",
 }

@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} üçün {{timeout}}ms gözləmə müddəti bitdi",
   "error.failedPort": "Portu əldə etmək mümkün olmadı",
   "menu.remove": "Sil",
+  "error.busy": "{{distro}} başqa tapşırıqla məşğuldur. Bitdikdən sonra yenidən cəhd edin.",
 }

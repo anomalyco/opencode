@@ -16,7 +16,12 @@ import "./scanner.css"
 
 // Redeems with the form's own redeem, so the form keeps the token and a failed connection check retries without the
 // spent code; the form gets back a link it can show, and fills it in.
-export function PairingScanner(props: { redeem: RedeemPairing; onScan: (link: string) => void; onCancel: () => void }) {
+export function PairingScanner(props: {
+  redeem: RedeemPairing
+  onScan: (link: string) => void
+  onCancel: () => void
+  camera?: typeof createCamera
+}) {
   const language = useLanguage()
   const [scannerState, setScannerState] = createSignal(createScannerState())
   const view = createMemo(() => selectScannerView(scannerState()))
@@ -103,21 +108,12 @@ export function PairingScanner(props: { redeem: RedeemPairing; onScan: (link: st
     }
 
     // QrScanner hides detached videos, so initialize only after this preview is mounted.
-    const scanner = new QrScanner(video, (result) => dispatch({ type: "code.detected", data: result.data }), {
-      preferredCamera: "environment",
-      maxScansPerSecond: 10,
-      returnDetailedScanResult: true,
-      // QrScanner only logs a decoder that fails (for example, a worker the page may not start), so the preview
-      // would look like it is still scanning.
-      onDecodeError: (error) => {
-        // The native BarcodeDetector engine reports an empty frame as "Scanner error: No QR code found".
-        if (String(error).includes(QrScanner.NO_QR_CODE_FOUND)) return
-        dispatch({ type: "decode.failed" })
-      },
-    })
+    const scanner = (props.camera ?? createCamera)(
+      video,
+      (data) => dispatch({ type: "code.detected", data }),
+      () => dispatch({ type: "decode.failed" }),
+    )
 
-    // Terminal QR codes can be light-on-dark depending on the terminal theme.
-    scanner.setInversionMode("both")
     onCleanup(() => {
       dispatch({ type: "disposed" })
       scanner.destroy()
@@ -153,4 +149,25 @@ export function PairingScanner(props: { redeem: RedeemPairing; onScan: (link: st
       </Button>
     </section>
   )
+}
+
+function createCamera(
+  video: HTMLVideoElement,
+  detect: (data: string) => void,
+  failed: () => void,
+): Pick<QrScanner, "start" | "stop" | "destroy"> {
+  const scanner = new QrScanner(video, (result) => detect(result.data), {
+    preferredCamera: "environment",
+    maxScansPerSecond: 10,
+    returnDetailedScanResult: true,
+    onDecodeError: (error) => {
+      // The native BarcodeDetector engine reports an empty frame as "Scanner error: No QR code found".
+      if (!String(error).includes(QrScanner.NO_QR_CODE_FOUND)) failed()
+    },
+  })
+
+  // Terminal QR codes can be light-on-dark depending on the terminal theme.
+  scanner.setInversionMode("both")
+
+  return scanner
 }

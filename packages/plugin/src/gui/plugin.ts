@@ -1,16 +1,16 @@
 import type { SetupContext } from "./context.js"
 import type { Cleanup } from "./core.js"
-import type { Declarations, Stores } from "./declarations.js"
+import type { Declarations, Icons, Stores } from "./declarations.js"
 import type { MainContext } from "./main.js"
 
 export type { Cleanup, Declarations }
 
 /**
  * A window setup: the `setup` of `Plugin.define`. `Plugin.Setup<typeof definition>` types one written apart from
- * its declarations, with `ctx.stores` from the declared stores. Runs synchronously under the plugin's Solid owner;
- * return nothing, or a cleanup that runs when the plugin goes away. Put async work in `createKeyed` or
- * `createLatest`, and pass `ctx.signal` or a signal derived from it. The return type rejects async functions and
- * replacement values; the host also rejects thenables from JavaScript bundles.
+ * its declarations, with `ctx.stores` and `ctx.icons` from the declared stores and icons. Runs synchronously under the
+ * plugin's Solid owner; return nothing, or a cleanup that runs when the plugin goes away. Put async work in
+ * `createKeyed` or `createLatest`, and pass `ctx.signal` or a signal derived from it. The return type rejects async
+ * functions and replacement values; the host also rejects thenables from JavaScript bundles.
  *
  * @param ctx - The plugin's context, under its Solid owner.
  *
@@ -23,7 +23,7 @@ export type { Cleanup, Declarations }
  * })
  * ```
  */
-export type Setup<D extends Declarations = Declarations<{}>> = (ctx: SetupContext<D>) => Cleanup | void
+export type Setup<D extends Declarations = Declarations<{}, {}>> = (ctx: SetupContext<D>) => Cleanup | void
 
 /**
  * A main-process setup: the `main` of `Plugin.define`. It may be async; return nothing, or a cleanup that runs when
@@ -47,9 +47,9 @@ export type MainSetup = (ctx: MainContext) => Cleanup | void | Promise<Cleanup |
  * A plugin's GUI: the default export of its `./gui-experimental` bundle. Its `Declarations`, then a window setup, a
  * main-process setup, or both. The app's built-in plugins declare with it too.
  */
-export type Definition<S extends Stores = Stores> = Declarations<S> & {
+export type Definition<S extends Stores = Stores, I extends Icons = Icons> = Declarations<S, I> & {
   /** Runs in every desktop app window. See `Setup`. */
-  readonly setup?: Setup<NoInfer<Declarations<S>>>
+  readonly setup?: Setup<NoInfer<Declarations<S, I>>>
   /** Runs once in the desktop app's main process. See `MainSetup`. */
   readonly main?: MainSetup
 }
@@ -57,7 +57,8 @@ export type Definition<S extends Stores = Stores> = Declarations<S> & {
 /**
  * Defines a plugin's GUI, the default export of its `./gui-experimental` bundle, as `Plugin.define` from
  * `@opencode/plugin` and `@opencode/plugin/tui` define its server and terminal halves. It declares no id: the host
- * assigns the server plugin's (`ctx.id`). The window setup's `ctx.stores` is typed from the declared stores.
+ * assigns the server plugin's (`ctx.id`). The window setup's `ctx.stores` and `ctx.icons` are typed from the declared
+ * stores and icons.
  *
  * @param plugin - The declarations and at least one setup.
  * @returns The same object.
@@ -74,7 +75,9 @@ export type Definition<S extends Stores = Stores> = Declarations<S> & {
  * })
  * ```
  */
-export function define<const S extends Stores = {}>(plugin: Definition<S> & WithSetup): Definition<S>
+export function define<const S extends Stores = {}, const I extends Icons = {}>(
+  plugin: Definition<S, I> & WithSetup,
+): Definition<S, I>
 /**
  * Declares a plugin's GUI without setups, so setups written in other files are typed from it
  * (`Plugin.Setup<typeof definition>`) and the app's host lists can attach their own entries. Returns only the
@@ -83,7 +86,9 @@ export function define<const S extends Stores = {}>(plugin: Definition<S> & With
  * @param plugin - The declarations.
  * @returns The same object.
  */
-export function define<const S extends Stores = {}>(plugin: Declarations<S>): Declarations<S>
+export function define<const S extends Stores = {}, const I extends Icons = {}>(
+  plugin: Declarations<S, I>,
+): Declarations<S, I>
 /**
  * Returns the plugin as it is; the overloads above carry its types.
  *

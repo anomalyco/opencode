@@ -22,6 +22,7 @@ import {
   type JSX,
 } from "solid-js"
 import { MenuScroll } from "../../components/menu-scroll"
+import { createOverlayFocus } from "../../context/overlay-focus"
 import { createSelectHighlightState, transitionSelectHighlight, type SelectHighlightEvent } from "./machine"
 import "./select.css"
 
@@ -127,6 +128,10 @@ export function Select<T>(props: SelectProps<T>) {
 
   let scroller: HTMLDivElement | undefined
 
+  let trigger: HTMLDivElement | undefined
+
+  const overlayFocus = createOverlayFocus()
+
   const dispatch = (event: SelectHighlightEvent) => {
     const next = transitionSelectHighlight(highlight, event)
     highlight = next.state
@@ -219,11 +224,14 @@ export function Select<T>(props: SelectProps<T>) {
         local.onSelect?.(v)
       }}
       onOpenChange={(open) => {
+        overlayFocus.openChanged(open)
+
         if (others.open === undefined) dispatch({ type: "open.changed", open })
         local.onOpenChange?.(open)
       }}
     >
       <Trigger
+        ref={trigger}
         as="div"
         aria-label={props["aria-label"]}
         aria-labelledby={props["aria-labelledby"]}
@@ -261,6 +269,7 @@ export function Select<T>(props: SelectProps<T>) {
           data-kb-top-layer=""
           data-component="menu-v2-content"
           data-slot="select-v2-content"
+          onCloseAutoFocus={(event) => overlayFocus.restore(event, trigger)}
         >
           <MenuScroll viewportRef={(element) => (scroller = element)}>
             <Listbox data-slot="select-v2-listbox" scrollRef={() => scroller} />

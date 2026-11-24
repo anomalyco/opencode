@@ -1,5 +1,6 @@
 ---
 title: "Models"
+description: "Choose a model per session or run, set a default, and configure variants, reasoning, prompt caching, and local models."
 ---
 
 Choose a model for the current session with `/models`:
@@ -74,6 +75,8 @@ opencode service set env OPENCODE_DISABLE_FREE_MODELS 1
 Free means an `opencode` or `opencode-go` model with no input price. These models disappear from the catalog and defaults;
 explicitly selecting one fails with `Model unavailable`. Signed out, the `opencode` provider is absent until you connect
 an OpenCode Console account or set `OPENCODE_API_KEY`, which restores its paid models.
+
+To block free models for everyone in an organization, use a policy instead. See [Enterprise](/enterprise#block-free-models).
 
 ## Variants
 
@@ -212,6 +215,7 @@ Use `modelID` to give an API model a friendlier catalog ID:
           "name": "Coding default",
           "capabilities": {
             "tools": true,
+            "freeform": ["text", "lark"],
             "input": ["text", "image"],
             "output": ["text"],
           },
@@ -229,9 +233,11 @@ Use `modelID` to give an API model a friendlier catalog ID:
 Here, `openai/coding-default` is the selectable reference and `gpt-6.1-sol` is sent to the provider. For a model that is not
 already in the catalog, OpenCode assumes:
 
-- Tool support, text and image input, and text output.
+- JSON tool support, text and image input, and text output. No freeform tool input unless `capabilities.freeform` lists the format.
 - A 200,000-token context limit and 32,000-token output limit.
 - An unspecified input limit.
+
+OpenCode recognizes `text`, `regex`, and `lark`. Other format names from models.dev are ignored without dropping the model or its tools. If a proxy in front of a catalog model rejects freeform tools, set `capabilities.freeform` to `[]` on that model.
 
 These are fallback assumptions, not detected capabilities. Set accurate `capabilities` and `limit` values when known;
 explicit values replace the fallbacks. Add `disabled: true` to hide a model from the available catalog:

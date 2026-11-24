@@ -1,5 +1,5 @@
 import { Effect, Schema, Stream } from "effect"
-import { ProgressEvent, QueuedEvent } from "./generation.js"
+import { ProgressEvent } from "./generation.js"
 import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
@@ -51,7 +51,7 @@ export class SpeechModel<Options extends SpeechOptions = SpeechOptions> extends 
     return new SpeechModel<Options>({
       id: input.id,
       provider: route.protocol.provider,
-      http: input.http,
+      transport: input.transport,
       providerOptions: input.providerOptions,
       route: composeRoute(route, input, collectResponse) as SpeechRoute,
     })
@@ -142,7 +142,6 @@ export const SpeechFinishEvent = Schema.Struct({
 }).annotate({ identifier: "Speech.Event.Finish" })
 
 const speechEventTagged = Schema.Union([
-  QueuedEvent,
   ProgressEvent,
   SpeechAudioDeltaEvent,
   SpeechTimestampsEvent,
@@ -150,7 +149,6 @@ const speechEventTagged = Schema.Union([
 ]).pipe(Schema.toTaggedUnion("type"))
 export const SpeechEvent = Object.assign(speechEventTagged, {
   is: {
-    generationQueued: speechEventTagged.guards["generation-queued"],
     generationProgress: speechEventTagged.guards["generation-progress"],
     audioDelta: speechEventTagged.guards["audio-delta"],
     timestamps: speechEventTagged.guards.timestamps,

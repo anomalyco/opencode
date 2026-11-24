@@ -17,7 +17,7 @@ function map(
     package: `aisdk:${packageName}`,
     settings: { ...settings },
   }
-  AISDKNative.rewrite(target, { specifier: target.package, providerID, modelID })
+  AISDKNative.rewrite(target, { builtins: Provider.builtinPackages, specifier: target.package, providerID, modelID })
   return target.package?.startsWith("aisdk:") ? undefined : target
 }
 
@@ -240,7 +240,12 @@ describe("AISDKNative", () => {
         package: specifier,
         settings,
       }
-      AISDKNative.rewrite(target, { specifier, providerID: "test-provider", modelID })
+      AISDKNative.rewrite(target, {
+        builtins: Provider.builtinPackages,
+        specifier,
+        providerID: "test-provider",
+        modelID,
+      })
       return target
     }
 

@@ -110,9 +110,6 @@ function setup() {
           },
           sessionID: undefined,
           agents: true,
-          get backgroundCompaction() {
-            return state.directory === "/other"
-          },
           navigateToSession: undefined,
           sessionHref: undefined,
           shellRunning: undefined,
@@ -215,7 +212,6 @@ function setup() {
               workspace().directory,
               data.directory,
               (readImage && imageReaders.get(readImage)) ?? "",
-              data.backgroundCompaction ? "/other" : "/repo",
             ]
           })
           createComputed(() => {
@@ -477,8 +473,8 @@ test("a view first reading its providers while another Location is selected read
     input.cache()
     input.setState("deferred", true)
     expect(input.deferredReads).toEqual({
-      "ses_a in /repo": ["/repo", "/repo", "/repo", "/repo"],
-      "ses_b in /other": ["/other", "/other", "/other", "/other"],
+      "ses_a in /repo": ["/repo", "/repo", "/repo"],
+      "ses_b in /other": ["/other", "/other", "/other"],
     })
   } finally {
     input.dispose()

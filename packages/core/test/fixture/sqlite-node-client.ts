@@ -9,6 +9,7 @@ import { SqlClient } from "effect/sql"
 import { isSqlError } from "effect/sql/SqlError"
 import { Database } from "../../src/database/database"
 import { sqliteLayer } from "../../src/database/sqlite.node"
+import { StorageFailure } from "../../src/database/storage-failure"
 
 const typed = sqliteTable("typed", { id: integer().primaryKey(), name: text().notNull() })
 
@@ -63,6 +64,10 @@ const program = Effect.gen(function* () {
 
   const leakedTransaction = yield* sweep((client) => client.withTransaction(client`SELECT 2`))
   const leakedReserve = yield* sweep((client) => Effect.scoped(Effect.andThen(client.reserve, Effect.yieldNow)))
+
+  // SQLite never lowers the limit below the current size, so 1 means the database may not grow.
+  yield* db.run(sql`PRAGMA max_page_count = 1`)
+  const full = yield* db.run(sql`INSERT INTO probe (id) VALUES (${"x".repeat(60_000)})`).pipe(Effect.flip)
   return {
     journal: journal?.journal_mode,
     reason: isSqlError(cause) ? cause.reason._tag : "not a SqlError",
@@ -73,6 +78,10 @@ const program = Effect.gen(function* () {
     raw: raw?.count,
     leakedTransaction,
     leakedReserve,
+    storageFailure: {
+      full: StorageFailure.message(Cause.fail(full)),
+      constraint: StorageFailure.message(Cause.fail(error)) ?? null,
+    },
   }
 })
 

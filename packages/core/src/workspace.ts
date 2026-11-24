@@ -4,11 +4,7 @@ import { Workspace } from "@opencode/schema/workspace"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { eq } from "drizzle-orm"
 import { Clock, Context, Deferred, Duration, Effect, Exit, FiberSet, Layer, Ref, Schedule, Schema, Scope } from "effect"
-import { systemError } from "effect/PlatformError"
-import { make } from "effect/process/ChildProcessSpawner"
-import type { EnvironmentDriver } from "./environment/driver.js"
-import { makeFiles } from "./environment/exec-defaults.js"
-import { Failed, type Files, type FilesImpl } from "./environment/files.js"
+import { EnvironmentDriver } from "./environment/driver.js"
 import { Database } from "./database/database.js"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { WorkspaceDriver } from "./workspace/driver.js"
@@ -16,6 +12,9 @@ import { WorkspaceTable } from "./workspace/sql.js"
 
 export const ID = Workspace.ID
 export type ID = Workspace.ID
+
+/** Disjoint from Machines.Name (which disallows underscores) and from "local". */
+export const isID = (value: string): value is ID => /^wrk_[A-Za-z0-9_-]+$/.test(value)
 
 export class Info extends Schema.Class<Info>("Workspace.Info")({
   id: ID,
@@ -25,7 +24,11 @@ export class Info extends Schema.Class<Info>("Workspace.Info")({
   lastUsedAt: Schema.Number,
 }) {}
 
-export class NotFound extends Schema.TaggedError<NotFound>()("Workspace.NotFound", { workspaceID: ID }) {}
+export class NotFound extends Schema.TaggedError<NotFound>()("Workspace.NotFound", { workspaceID: ID }) {
+  override get message() {
+    return `No workspace named ${JSON.stringify(this.workspaceID)}.`
+  }
+}
 
 export class CreateConflict extends Schema.TaggedError<CreateConflict>()("Workspace.CreateConflict", {
   workspaceID: ID,
@@ -46,6 +49,10 @@ export interface Interface {
   readonly connect: (
     workspaceID: ID,
   ) => Effect.Effect<EnvironmentDriver.Driver, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
+  /** Whether a logical workspace row exists; never wakes or provisions the backing resource. */
+  readonly exists: (workspaceID: ID) => Effect.Effect<boolean>
+  /** Whether the workspace currently holds a live connection in memory; never wakes or provisions it. */
+  readonly connected: (workspaceID: ID) => Effect.Effect<boolean>
   /** Makes the workspace absent; reports whether this call destroyed an existing workspace. */
   readonly destroy: (
     workspaceID: ID,
@@ -62,7 +69,6 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Wo
 interface Connection {
   readonly driver: WorkspaceDriver.Interface
   readonly environment: EnvironmentDriver.Driver
-  readonly files: Files
   readonly saveBinding: (binding: WorkspaceDriver.Binding) => Effect.Effect<void>
   readonly lastActivity: Ref.Ref<number>
   readonly active: Ref.Ref<number>
@@ -169,7 +175,6 @@ const layer = (options: Options) =>
         const connection: Connection = {
           driver,
           environment,
-          files: makeFiles(environment),
           saveBinding: persistBinding,
           lastActivity: yield* Ref.make(now),
           active: yield* Ref.make(0),
@@ -278,41 +283,15 @@ const layer = (options: Options) =>
                 }),
               ),
           )
-          const spawner = make((command) =>
-            acquire.pipe(
-              Effect.mapError((cause) =>
-                systemError({
-                  _tag: "Unknown",
-                  module: "Workspace",
-                  method: "spawn",
-                  description: `Failed to wake workspace ${workspaceID}`,
-                  cause,
-                }),
-              ),
-              Effect.flatMap((connection) => connection.environment.spawner.spawn(command)),
-            ),
+          return EnvironmentDriver.lazy(
+            Effect.map(acquire, (connection) => connection.environment),
+            { module: "Workspace", spawnDescription: `Failed to wake workspace ${workspaceID}` },
           )
-          const withFiles = <A, E>(
-            path: string,
-            use: (files: Files) => Effect.Effect<A, E>,
-          ): Effect.Effect<A, E | Failed> =>
-            Effect.scoped(
-              acquire.pipe(
-                Effect.mapError((cause) => new Failed({ path, cause })),
-                Effect.flatMap((connection) => use(connection.files)),
-              ),
-            )
-          const overrides: FilesImpl = {
-            read: (path, range) => withFiles(path, (files) => files.read(path, range)),
-            write: (path, bytes) => withFiles(path, (files) => files.write(path, bytes)),
-            stat: (path) => withFiles(path, (files) => files.stat(path)),
-            list: (path) => withFiles(path, (files) => files.list(path)),
-            remove: (path) => withFiles(path, (files) => files.remove(path)),
-            move: (from, to) => withFiles(from, (files) => files.move(from, to)),
-            mkdir: (path) => withFiles(path, (files) => files.mkdir(path)),
-          }
-          return { spawner, overrides }
         }),
+        exists: Effect.fn("Workspace.exists")(function* (workspaceID) {
+          return (yield* find(workspaceID)) !== undefined
+        }),
+        connected: (workspaceID) => Effect.sync(() => connections.has(workspaceID)),
         destroy: Effect.fn("Workspace.destroy")(function* (workspaceID) {
           // Settling the shared attempt cancels its racing provision body and fails
           // waiters with NotFound before teardown commits. Accepted tradeoffs: if the

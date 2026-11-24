@@ -501,6 +501,8 @@ const fixtures = [
   "$'scan_probe\\Uz'",
   "$'scan_probe\\C-@x'",
   "$'scan_probe\\C@x'",
+  "$'scan\\_probe'",
+  ": <<$'E\\[F'\nE[F\nscan_probe\nE\\[F",
   "a=(1); set -A 'a[$(scan_probe)]' 1",
   "a=(1); set +A 'a[$(scan_probe)]' 1",
   "unsetopt noglobsubst; x='*(e:scan_probe:)'; echo $x",

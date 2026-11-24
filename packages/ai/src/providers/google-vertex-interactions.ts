@@ -3,7 +3,6 @@ import { GoogleInteractions } from "../protocols/google-interactions.js"
 import { Auth } from "../route/auth.js"
 import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
-import { Framing } from "../route/framing.js"
 import { ProviderConfigurationError, ProviderID, type ModelID, type RequestOptions } from "../schema/index.js"
 import { GoogleVertexShared } from "./google-vertex-shared.js"
 
@@ -41,7 +40,7 @@ const route = Route.make({
     const serviceTier = request.providerOptions?.serviceTier
     return typeof serviceTier === "string" ? { "x-vertex-ai-llm-shared-request-type": serviceTier } : {}
   },
-  framing: Framing.sse,
+  transport: GoogleInteractions.transport,
 })
 
 export const routes = [route]

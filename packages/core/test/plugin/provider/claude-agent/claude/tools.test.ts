@@ -342,6 +342,24 @@ describe("Claude tool steps", () => {
     }),
   )
 
+  it.effect("a tool list change lets the parked turn finish and answers calls to removed tools", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make(FakeClaude.replay("tools"))
+      const test = yield* TestSessions.start(claude)
+      const prompt = TestTools.prompt()
+      TestTools.append(prompt, yield* TestTools.step(test.model, prompt), TestTools.output)
+      const remaining = TestTools.tools.filter((tool) => tool.name !== "confirm")
+      yield* TestTools.step(test.model, prompt, remaining)
+      const last = claude.runs[0]!.received.findLast((message) => message.response?.response?.mcp_response)
+      expect(last.response.response.mcp_response.result).toEqual({
+        isError: true,
+        content: [{ type: "text", text: "This tool is no longer available." }],
+      })
+      yield* test.registry.close()
+      claude.check()
+    }),
+  )
+
   it.effect("an unavailable OpenCode server fails closed", () =>
     Effect.gen(function* () {
       const turn = FakeClaude.expectTurn()

@@ -113,6 +113,49 @@ function ToggleCell(props: {
   )
 }
 
+function CopyCell(props: { inline?: boolean; label: string; onClick?: () => void; tip: string; value: string }) {
+  const content = () => (
+    <button
+      type="button"
+      disabled={!props.onClick}
+      aria-label={`${props.label}: ${props.value}`}
+      classList={{
+        "flex min-w-0 items-center font-mono enabled:hover:bg-surface-raised-base focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-v2-border-border-focus": true,
+        "min-h-[20px] w-fit justify-start rounded px-1.5 py-0.5 text-left": !!props.inline,
+        "min-h-[42px] w-full flex-col justify-center rounded-[8px] px-0.5 py-1 text-center": !props.inline,
+      }}
+      onClick={() => props.onClick?.()}
+    >
+      <span
+        classList={{
+          flex: true,
+          "-translate-y-px items-baseline gap-1.5": !!props.inline,
+          "flex-col items-center": !props.inline,
+        }}
+      >
+        <span dir="ltr" class="text-[10px] leading-none font-black tracking-[0.04em] opacity-70">
+          {props.label}
+        </span>
+        <span
+          dir="ltr"
+          classList={{
+            "text-[11px] leading-none font-bold tabular-nums": true,
+            "uppercase opacity-70": !props.onClick,
+          }}
+        >
+          {props.value}
+        </span>
+      </span>
+    </button>
+  )
+
+  return (
+    <Tooltip appearance={props.inline ? "compact" : "standard"} value={props.tip} placement="top">
+      {content()}
+    </Tooltip>
+  )
+}
+
 export default function DebugBar(props: {
   /** The dev server's layout tools: the direction and focus toggles. */
   devTools?: boolean
@@ -195,6 +238,29 @@ export default function DebugBar(props: {
 
   onCleanup(() => dispatchFocus({ type: "disposed" }))
 
+  const sessionID = () => target()?.id
+
+  const sessionTip = () => {
+    const id = sessionID()
+
+    return id ? ctx.t("session.tip", { id }) : ctx.t("session.none")
+  }
+
+  const copySessionID = () => {
+    const id = sessionID()
+
+    if (!id) return
+    void ctx.system.copy(id).then(
+      () => showToast({ variant: "success", title: ctx.t("common.copied"), description: id }),
+      (cause) =>
+        showToast({
+          variant: "error",
+          title: ctx.t("session.copyFailed"),
+          description: cause instanceof Error ? cause.message : String(cause),
+        }),
+    )
+  }
+
   return (
     <aside
       aria-label={ctx.t("providerAriaLabel")}
@@ -226,6 +292,13 @@ export default function DebugBar(props: {
             />
           </Tooltip>
         </Show>
+        <CopyCell
+          label={ctx.t("session.label")}
+          tip={sessionTip()}
+          value={shortSessionID(sessionID()) ?? na()}
+          inline={props.inline}
+          onClick={sessionID() ? copySessionID : undefined}
+        />
         <Cell
           label={ctx.t("duration.label")}
           tip={ctx.t("duration.tip")}
@@ -322,6 +395,12 @@ export default function DebugBar(props: {
       </div>
     </aside>
   )
+}
+
+function shortSessionID(id: string | undefined) {
+  if (!id) return
+
+  return `${id.slice(0, 8)}…${id.slice(-4)}`
 }
 
 // The bar's speed cell steps through the common slow-downs, then back to full speed.

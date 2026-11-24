@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "metadata": {
+    "model": "gemini-decision-1",
+    "tags": [
+      "prefix:google-decision",
+      "provider:google",
+      "protocol:google-decisions"
+    ],
+    "name": "google-decision/decides-choice-score-and-predicate-questions",
+    "recordedAt": "2026-11-11T18:28:08.454Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/decisions",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"gemini-decision-1\",\"input\":[{\"type\":\"text\",\"text\":\"I was charged twice for the same invoice. Please refund the duplicate payment today.\"}],\"questions\":{\"department\":{\"type\":\"choice\",\"instructions\":\"Which team should handle this support request?\",\"criteria\":{\"billing\":\"Payments, invoices, refunds, or failed charges\",\"technical\":\"Bugs, outages, or integrations\",\"sales\":\"Pricing, upgrades, or new accounts\"}},\"urgency\":{\"type\":\"score\",\"instructions\":\"How urgent is this support request?\",\"criteria\":[\"Can wait for normal support\",\"Needs prompt attention\",\"Actively blocking revenue\"]},\"refund\":{\"type\":\"noul\",\"instructions\":\"Is the customer asking for a refund?\"}}}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"answers\":{\"department\":{\"confidence\":0.9978076976696219,\"choice\":\"billing\",\"probabilities\":{\"billing\":0.9978076976696219,\"sales\":0.000687029007305657,\"technical\":0.001505273323072618},\"type\":\"choice\"},\"refund\":{\"confidence\":0.99,\"noul\":0.99,\"type\":\"noul\"},\"urgency\":{\"confidence\":0.5717345111874732,\"score\":1.1772012843064368,\"probabilities\":{\"1\":0.5717345111874732,\"0\":0.1255321022530451,\"2\":0.3027333865594818},\"legend\":{\"1\":\"Needs prompt attention\",\"2\":\"Actively blocking revenue\",\"0\":\"Can wait for normal support\"},\"type\":\"score\"}},\"usage\":{\"total_tokens\":242,\"total_input_tokens\":242,\"input_tokens_by_modality\":[{\"modality\":\"text\",\"tokens\":242}],\"total_output_tokens\":0}}"
+      }
+    }
+  ]
+}

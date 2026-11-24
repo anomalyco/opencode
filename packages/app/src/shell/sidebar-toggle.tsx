@@ -108,7 +108,7 @@ export function SidebarToggle(props: { handoff?: "out" | "in" }) {
         type="button"
         variant="ghost-muted"
         size="large"
-        class="shrink-0"
+        class="shrink-0 focus-visible:-outline-offset-2"
         onMouseDown={(event) => event.preventDefault()}
         onClick={() => settings.appearance.setSidebarOpen(!settings.appearance.sidebarOpen())}
         aria-label={language.t(unread() ? "command.sidebar.toggle.unread" : "command.sidebar.toggle")}

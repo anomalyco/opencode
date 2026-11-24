@@ -1,5 +1,6 @@
 ---
 title: "Web search"
+description: "Let OpenCode search the web with Exa, Firecrawl, Parallel, Tavily, TinyFish, or your Claude plan, and choose the provider and permissions for searches."
 ---
 
 Ask OpenCode for current information and it can search the web, read the results, and include source links in its response.
@@ -28,6 +29,23 @@ Connect an account from the TUI with `/connect`, or set the provider's environme
 ```bash
 $ TAVILY_API_KEY=your-key opencode
 ```
+
+### Claude Agent
+
+When [Claude Agent](/claude-agent) is connected, it also offers a search provider with the ID `claude-agent`. It runs Claude Code's WebSearch, so searches count toward your Claude plan and need no search API key. Every model can use it, not just Claude.
+
+Claude Agent is never picked automatically. Select it in `opencode.jsonc`:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "websearch": {
+    "provider": "claude-agent",
+  },
+}
+```
+
+WebSearch returns page contents encrypted, so a Claude model has to run each search. Haiku runs it, and its short summary of the results comes first, followed by the links. Searches use the Claude Agent provider's connection settings and the account your chats used last.
 
 ## Selection
 

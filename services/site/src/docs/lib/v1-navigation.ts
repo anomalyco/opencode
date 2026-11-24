@@ -3,7 +3,7 @@ import type { Locale } from "~/lib/language"
 import { docsHref, type DocsSection } from "./navigation"
 
 /**
- * The V1 docs' languages, as their Starlight app had them (packages/web/astro.config.mjs): the folder
+ * The V1 docs' languages, as their Starlight app had them: the folder
  * and the name, with `<html lang>` and the site's strings (src/i18n) where they aren't the folder's
  * name. The site has no Bosnian; src/i18n/bs.ts has the strings a docs page shows.
  */

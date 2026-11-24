@@ -22,7 +22,9 @@ import {
 } from "./branch-machine"
 import type { NewSessionWorkspaceController } from "./controller"
 
-export function NewSessionBranch(props: { workspace: NewSessionWorkspaceController; onDone: () => void }) {
+const MAIN_CHECKOUT = Symbol("main checkout")
+
+export function BaseBranchPicker(props: { workspace: NewSessionWorkspaceController; onDone: () => void }) {
   const language = useLanguage()
 
   const command = useCommand()
@@ -34,8 +36,6 @@ export function NewSessionBranch(props: { workspace: NewSessionWorkspaceControll
   const requests = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
 
   let trigger: HTMLButtonElement | undefined
-
-  const creating = () => props.workspace.selection.value() === "create"
 
   const dispatch = (event: BranchPickerEvent) =>
     untrack(() => {
@@ -49,6 +49,8 @@ export function NewSessionBranch(props: { workspace: NewSessionWorkspaceControll
 
     if (effect.type === "branch.choose") return props.workspace.selection.branch(effect.branch)
 
+    if (effect.type === "checkout.use") return props.workspace.selection.set("main")
+
     if (effect.type === "branches.abort") {
       const request = requests.get(effect.attempt)
       requests.delete(effect.attempt)
@@ -61,24 +63,21 @@ export function NewSessionBranch(props: { workspace: NewSessionWorkspaceControll
     const attempt = effect.attempt
     const controller = new AbortController()
     const timer = setTimeout(() => dispatch({ type: "branches.timed-out", attempt }), BRANCH_PRELOAD_TIMEOUT_MS)
+
+    const settle = (event: BranchPickerEvent) => {
+      clearTimeout(timer)
+      requests.delete(attempt)
+      dispatch(event)
+    }
+
     requests.set(attempt, { controller, timer })
     props.workspace.branches("", controller.signal).then(
-      (items) => settle(attempt, controller, { type: "branches.loaded", attempt, items }),
-      () => settle(attempt, controller, { type: "branches.failed", attempt }),
+      (items) => settle({ type: "branches.loaded", attempt, items }),
+      () => settle({ type: "branches.failed", attempt }),
     )
   }
 
-  const settle = (attempt: number, controller: AbortController, event: BranchPickerEvent) => {
-    if (controller.signal.aborted) return
-    clearTimeout(requests.get(attempt)?.timer)
-    requests.delete(attempt)
-    dispatch(event)
-  }
-
-  // Branches load before the picker opens, so it never shows a smaller loading panel.
-  createComputed(() =>
-    dispatch({ type: "target.changed", directory: creating() ? props.workspace.project.root() : undefined }),
-  )
+  createComputed(() => dispatch({ type: "target.changed", directory: props.workspace.project.root() }))
 
   onCleanup(() => dispatch({ type: "disposed" }))
 
@@ -88,7 +87,6 @@ export function NewSessionBranch(props: { workspace: NewSessionWorkspaceControll
       title: language.t("command.session.branch.choose"),
       category: language.t("command.category.workspace"),
       keybind: "mod+alt+b",
-      disabled: !creating() || !props.workspace.bar.branch(),
       onSelect: (source) => dispatch({ type: "command.select", source }),
     },
   ])
@@ -115,108 +113,118 @@ export function NewSessionBranch(props: { workspace: NewSessionWorkspaceControll
     )
   })
 
-  const label = () =>
-    creating()
-      ? language.t("session.new.workspace.fromBranch", { branch: props.workspace.bar.branch() ?? "" })
-      : props.workspace.bar.branch()
+  const label = () => {
+    const branch = props.workspace.bar.branch()
+
+    return branch
+      ? language.t("session.new.workspace.fromBranch", { branch })
+      : language.t("command.session.branch.choose")
+  }
 
   const observe = (element: HTMLSpanElement) =>
     createResizeObserver(element, () => setLayout("truncated", element.scrollWidth > element.clientWidth))
 
   return (
-    <Show when={props.workspace.bar.branch()}>
-      <Tooltip
-        placement="top"
-        openDelay={creating() ? 800 : 400}
-        value={
-          <Show when={creating()} fallback={label()}>
-            <div class="flex flex-col gap-1">
-              <span class="flex items-center gap-2">
-                {language.t("command.session.branch.choose")}
-                <Show when={command.keybindParts("session.branch.choose").length}>
-                  <Keybind keys={command.keybindParts("session.branch.choose")} variant="neutral" />
-                </Show>
-              </span>
-              <Show when={layout.truncated}>{label()}</Show>
-            </div>
-          </Show>
-        }
-        disabled={!creating() && !layout.truncated}
-        class="flex min-w-0 max-w-[220px]"
-        contentClass="max-w-[calc(100vw-32px)] break-all"
+    <Tooltip
+      placement="top"
+      openDelay={800}
+      value={
+        <div class="flex flex-col items-center gap-1.5">
+          <div class="flex items-center gap-1.5">
+            {language.t("session.location.worktree")}
+            <Show when={command.keybindParts("session.location.select").length}>
+              <Keybind keys={command.keybindParts("session.location.select")} variant="neutral" />
+            </Show>
+          </div>
+          <div class="flex items-center gap-1.5">
+            {language.t("command.session.branch.choose")}
+            <Show when={command.keybindParts("session.branch.choose").length}>
+              <Keybind keys={command.keybindParts("session.branch.choose")} variant="neutral" />
+            </Show>
+          </div>
+          <Show when={layout.truncated}>{label()}</Show>
+        </div>
+      }
+      class="flex min-w-0 max-w-[220px]"
+      contentClass="max-w-[calc(100vw-32px)] break-all"
+    >
+      <Popover
+        open={selectBranchPopoverOpen(picker())}
+        onOpenChange={(open) => dispatch({ type: "open.change", open })}
+        placement="bottom-start"
+        gutter={4}
       >
-        <Show
-          when={creating()}
-          fallback={
-            <div class="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 ps-1.5 pe-2 text-v2-text-text-faint">
-              <Icon name="branch" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
-              <span ref={observe} dir="auto" class="min-w-0 truncate">
-                {label()}
-              </span>
-            </div>
-          }
+        <Popover.Trigger
+          ref={trigger}
+          aria-busy={selectBranchBusy(picker())}
+          aria-description={language.t("command.session.branch.choose")}
+          class="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 rounded-sm px-1.5 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-base"
         >
-          <Popover
-            open={selectBranchPopoverOpen(picker())}
-            onOpenChange={(open) => dispatch({ type: "open.change", open })}
-            placement="bottom-start"
-            gutter={4}
-          >
-            <Popover.Trigger
-              ref={trigger}
-              aria-busy={selectBranchBusy(picker())}
-              aria-description={language.t("command.session.branch.choose")}
-              class="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 rounded-sm px-1.5 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-base"
-            >
-              <Icon name="branch-out" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
-              <span ref={observe} dir="auto" class="min-w-0 truncate">
-                {label()}
-              </span>
-              <Icon name="chevron-down" size="small" class="-ms-0.5 shrink-0 text-v2-icon-icon-muted" />
-            </Popover.Trigger>
-            <Popover.Portal>
-              <Show when={selectBranchInitial(picker())}>
-                {(initial) => (
-                  <Popover.Content
-                    class="w-[243px] overflow-hidden rounded-lg bg-v2-background-bg-layer-01 shadow-[var(--v2-elevation-floating)] focus:outline-none"
-                    onInteractOutside={(event) => {
-                      if (!event.defaultPrevented) dispatch({ type: "interact.outside" })
-                    }}
-                    // The machine returns focus to the composer, unless the user moved it outside.
-                    onCloseAutoFocus={(event) => event.preventDefault()}
-                  >
-                    <Typeahead
-                      initial={initial()}
-                      placeholder={language.t("session.new.workspace.branch.search.placeholder")}
-                      emptyLabel={language.t("palette.empty")}
-                      retryLabel={language.t("common.retry")}
-                      source={async (query, signal) => {
-                        const directory = props.workspace.project.root()
-                        const items = await props.workspace.branches(query, signal)
+          <Icon name="outline-worktree" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
+          <span ref={observe} dir="auto" class="min-w-0 truncate">
+            {label()}
+          </span>
+          <Icon name="chevron-down" class="-ms-0.5 shrink-0 text-v2-icon-icon-muted" />
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Show when={selectBranchInitial(picker())}>
+            {(initial) => (
+              <Popover.Content
+                class="w-[243px] overflow-hidden rounded-lg bg-v2-background-bg-layer-01 shadow-[var(--v2-elevation-floating)] focus:outline-none"
+                onInteractOutside={(event) => {
+                  if (!event.defaultPrevented) dispatch({ type: "interact.outside" })
+                }}
+                // The machine returns focus to the composer, unless the user moved it outside.
+                onCloseAutoFocus={(event) => event.preventDefault()}
+              >
+                <Typeahead<string | typeof MAIN_CHECKOUT>
+                  initial={initial()}
+                  emptyQueryItem={MAIN_CHECKOUT}
+                  placeholder={language.t("session.new.workspace.branch.search.placeholder")}
+                  emptyLabel={language.t("palette.empty")}
+                  retryLabel={language.t("common.retry")}
+                  source={async (query, signal) => {
+                    const directory = props.workspace.project.root()
+                    const items = await props.workspace.branches(query, signal)
 
-                        if (!query) dispatch({ type: "branches.synced", directory, items })
+                    if (!query) dispatch({ type: "branches.synced", directory, items })
 
-                        return items
-                      }}
-                      match={(branch, query) => branch.toLowerCase().includes(query.toLowerCase())}
-                      delay={100}
-                      key={(branch) => branch}
-                      selected={props.workspace.bar.branch()}
-                      onSelect={(branch) => dispatch({ type: "branch.selected", branch })}
-                    >
-                      {(branch) => (
-                        <span dir="auto" class="min-w-0 truncate">
-                          {branch}
+                    return items
+                  }}
+                  match={(item, query) => item !== MAIN_CHECKOUT && item.toLowerCase().includes(query.toLowerCase())}
+                  delay={100}
+                  key={(item) => (item === MAIN_CHECKOUT ? "checkout" : `branch:${item}`)}
+                  selected={`branch:${props.workspace.bar.branch() ?? ""}`}
+                  onSelect={(item) =>
+                    dispatch(
+                      item === MAIN_CHECKOUT
+                        ? { type: "checkout.selected" }
+                        : { type: "branch.selected", branch: item },
+                    )
+                  }
+                >
+                  {(item) =>
+                    item === MAIN_CHECKOUT ? (
+                      <>
+                        <span class="shrink-0 whitespace-nowrap">
+                          {language.t("session.new.workspace.useMainCheckout")}
                         </span>
-                      )}
-                    </Typeahead>
-                  </Popover.Content>
-                )}
-              </Show>
-            </Popover.Portal>
-          </Popover>
-        </Show>
-      </Tooltip>
-    </Show>
+                        <span dir="auto" class="min-w-0 truncate text-v2-text-text-muted">
+                          {props.workspace.bar.checkout()?.branch}
+                        </span>
+                      </>
+                    ) : (
+                      <span dir="auto" class="min-w-0 truncate">
+                        {item}
+                      </span>
+                    )
+                  }
+                </Typeahead>
+              </Popover.Content>
+            )}
+          </Show>
+        </Popover.Portal>
+      </Popover>
+    </Tooltip>
   )
 }

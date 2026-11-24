@@ -56,7 +56,8 @@
     position: relative;
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    /* Label and chevron are one button, so the chevron sits close, as in the product navs. */
+    gap: 4px;
 
     /* OpenTUI Mono's caps sit 0.325px below its line box's centre; this puts them on the logo's centre. */
     padding: 0 6px 0.65px;
@@ -436,22 +437,6 @@
   &:focus-visible {
     outline: 2px solid var(--link);
     outline-offset: 2px;
-  }
-}
-
-/* The section word also opens the OpenCode product menu on hover (packages/nav-menus), so hovered, open and pressed it
-   takes the one name fill every OpenCode nav shares (--nav-name-hover), never a darker one; the chevron keeps its own
-   states for the sections menu. */
-[data-site] [data-component="docs-lockup"] [data-slot="word"][data-nav-product] {
-  @media (hover: hover) and (pointer: fine) {
-    &:hover {
-      background: var(--nav-name-hover);
-    }
-  }
-
-  &:active,
-  &[aria-expanded="true"] {
-    background: var(--nav-name-hover);
   }
 }
 

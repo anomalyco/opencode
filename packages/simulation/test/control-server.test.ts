@@ -1,18 +1,19 @@
 import { expect, test } from "bun:test"
 import { Effect, Queue, Schema } from "effect"
 import { SimulationControlServer } from "../src/control-server"
-import { availableEndpoint, connect } from "./fixture/websocket"
+import { connect } from "./fixture/websocket"
 
 const Request = Schema.Struct({ id: Schema.optional(Schema.Number) })
+// Port 0 asks the kernel for one, and the server reports the address it bound; nothing can take it in between.
+const endpoint = "ws://127.0.0.1:0"
 
 test("awaits accepted socket cleanup before the server scope closes", async () => {
-  const endpoint = availableEndpoint()
   let cleaned = false
 
-  await Effect.runPromise(
+  const bound = await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        yield* SimulationControlServer.start({
+        const server = yield* SimulationControlServer.start({
           endpoint,
           label: "control server test",
           data: () => ({}),
@@ -24,36 +25,35 @@ test("awaits accepted socket cleanup before the server scope closes", async () =
               cleaned = true
             }),
         })
-        yield* connect(endpoint)
+        yield* connect(server.url)
+        return server.url
       }),
     ),
   )
 
   expect(cleaned).toBe(true)
-  const url = new URL(endpoint)
+  const url = new URL(bound)
   const rebound = Bun.serve({ hostname: url.hostname, port: Number(url.port), fetch: () => new Response() })
   await rebound.stop(true)
 })
 
 test("continues serving after a response targets a closed socket", async () => {
-  const endpoint = availableEndpoint()
-
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        yield* SimulationControlServer.start({
+        const server = yield* SimulationControlServer.start({
           endpoint,
           label: "control server test",
           data: () => ({}),
           decode: Schema.decodeUnknownEffect(Schema.fromJsonString(Request)),
           handle: () => Effect.sleep(25).pipe(Effect.as({ ok: true })),
         })
-        const closed = yield* connect(endpoint)
+        const closed = yield* connect(server.url)
         closed.send(JSON.stringify({ id: 1 }))
         closed.close()
         yield* Effect.sleep(50)
 
-        const socket = yield* connect(endpoint)
+        const socket = yield* connect(server.url)
         const messages = yield* Queue.unbounded<unknown>()
         socket.addEventListener("message", (event) => Queue.offerUnsafe(messages, JSON.parse(String(event.data))))
         socket.send(JSON.stringify({ id: 2 }))
@@ -64,14 +64,13 @@ test("continues serving after a response targets a closed socket", async () => {
 })
 
 test("disconnects and cleans up when an outbound message exceeds the queue bound", async () => {
-  const endpoint = availableEndpoint()
   let cleaned = false
   let delivered = false
 
   await Effect.runPromise(
     Effect.scoped(
       Effect.gen(function* () {
-        yield* SimulationControlServer.start({
+        const server = yield* SimulationControlServer.start({
           endpoint,
           label: "control server test",
           data: () => ({}),
@@ -84,7 +83,7 @@ test("disconnects and cleans up when an outbound message exceeds the queue bound
             }),
           close: () => Effect.sync(() => void (cleaned = true)),
         })
-        const socket = yield* connect(endpoint)
+        const socket = yield* connect(server.url)
         const closed = yield* Queue.unbounded<void>()
         const messages: string[] = []
         socket.addEventListener("close", () => Queue.offerUnsafe(closed, undefined))

@@ -23,6 +23,7 @@ import {
   selectProviderDialogView,
   transitionProviderDialog,
   type ProviderAccounts,
+  type ProviderBackTarget,
   type ProviderDialogEffect,
   type ProviderDialogEvent,
 } from "./dialog-machine"
@@ -397,6 +398,18 @@ export function createProviderDialogController(options: {
       return
     }
 
+    if (effect.type === "paste") {
+      void serverSDK.api.integration.oauth
+        .complete({ integrationID, attemptID: effect.signIn.authorization.attemptID, location, code: effect.value })
+        .then(
+          () => result({ type: "paste.accepted", attempt: effect.attempt }),
+          (error) =>
+            result({ type: "paste.rejected", attempt: effect.attempt, error: formatServerError(error, language.t) }),
+        )
+
+      return
+    }
+
     if (effect.type === "sync") return void sync()
 
     void refresh(effect, integrationID, result)
@@ -623,7 +636,7 @@ export function createProviderDialogController(options: {
       dispatch({ type: "provider.selected", provider: id, fromPicker: true, accounts: accountsOf(id) }),
     input: (event: ProviderConnectEvent) => dispatch({ type: "connect.input", event }),
     rename: accountActions.rename,
-    back: () => dispatch({ type: "back" }),
+    navigate: (target: ProviderBackTarget) => dispatch({ type: "navigate", target }),
     checkClaude: () => {
       const id = provider()
 

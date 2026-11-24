@@ -53,7 +53,7 @@ fn daemon_client_read_rows_roundtrip() {
         );
 
         let registration = opencode_pty::daemon::read_registration(&directory).unwrap();
-        assert_eq!(registration.protocol, 8);
+        assert_eq!(registration.protocol, 9);
         // Exercise omitted rows independently of the Rust client's null encoding.
         let mut stream = std::os::unix::net::UnixStream::connect(registration.socket).unwrap();
         write_frame(

@@ -1,5 +1,5 @@
-// @ts-nocheck
-import { Switch } from "./switch"
+import { createEffect, createSignal } from "solid-js"
+import { Switch, type SwitchProps } from "./switch"
 
 const docs = `### Overview
 Toggle control for binary settings.
@@ -25,10 +25,19 @@ Use in settings panels or forms.
 
 `
 
+function Sample(props: SwitchProps) {
+  const [checked, setChecked] = createSignal(false)
+
+  createEffect(() => setChecked(!!props.defaultChecked))
+
+  return <Switch {...props} checked={checked()} onChange={setChecked} />
+}
+
 export default {
   title: "UI/Switch",
   id: "ui-switch",
   component: Switch,
+  render: Sample,
   tags: ["autodocs"],
   parameters: {
     docs: {
@@ -40,17 +49,27 @@ export default {
   args: {
     defaultChecked: true,
     children: "Enable notifications",
+    description: "",
+    appearance: "compact",
+    hideLabel: false,
+    disabled: false,
+    readOnly: false,
+    required: false,
+    validationState: "valid",
+  } satisfies SwitchProps,
+  argTypes: {
+    appearance: { options: ["standard", "compact"] },
+    validationState: { options: ["valid", "invalid"] },
   },
 }
 
 export const Basic = {}
 
 export const Appearances = {
-  render: () => (
+  args: { appearance: "standard", children: "Standard" },
+  render: (args: SwitchProps) => (
     <div style={{ display: "grid", gap: "12px" }}>
-      <Switch appearance="standard" defaultChecked>
-        Standard
-      </Switch>
+      <Sample {...args} />
       <Switch appearance="compact" defaultChecked>
         Compact
       </Switch>
@@ -59,9 +78,10 @@ export const Appearances = {
 }
 
 export const States = {
-  render: () => (
+  args: { children: "Enabled" },
+  render: (args: SwitchProps) => (
     <div style={{ display: "grid", gap: "12px" }}>
-      <Switch defaultChecked>Enabled</Switch>
+      <Sample {...args} />
       <Switch>Disabled</Switch>
       <Switch disabled>Disabled switch</Switch>
     </div>

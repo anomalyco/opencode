@@ -37,7 +37,8 @@ export function Composer(props: {
 
     if (preview) return preview.model
     const selection = props.model.model.selection
-    const model = selection.current()
+    // The speed shows beside the name, so the name is the model's own.
+    const model = selection.standard?.() ?? selection.current()
 
     if (model) return model.name
     const key = selection.key()
@@ -67,6 +68,8 @@ export function Composer(props: {
         attachKeybind={command.keybindParts("file.attach")}
         attachShortcut={command.keybind("file.attach")}
         alternateKeybind={[formatKeybind("mod", language.t), "↵"]}
+        queueFirstKeybind={[formatKeybind("alt", language.t), "↵"]}
+        queueFirstLabel={language.t("session.queue.first")}
         exitShellKeybind={[formatKeybind("esc", language.t)]}
         suggestionBoundary={props.suggestionBoundary}
         modelControl={

@@ -3,10 +3,10 @@ import { solidStart } from "@solidjs/start/config"
 import { nitro } from "nitro/vite"
 import { fromPathname } from "./src/lib/language"
 import { docs } from "./src/docs/vite"
-import { i18nSlices } from "./script/i18n-plugin"
 import { foldSettingsForProduction } from "./script/fold-settings"
 import { cssVariantsForProduction, devOnlyCss } from "./script/css-variants-plugin"
 import { stylesheetGroups } from "./script/stylesheet-groups"
+import { staticClient } from "./script/static-client"
 
 // Nitro's dev server drops any page the app renders with a 404 status and falls through to a bare
 // "Cannot GET". In development only, serve the not-found page's preview (/dev/404, which follows
@@ -53,13 +53,19 @@ export default defineConfig({
       cloudflare: {
         nodeCompat: true,
       },
+      // The Worker's code in one file. Nitro bundles the server build's chunks again, and Rolldown
+      // could split code the pages share with the server entry into a chunk that imports the entry
+      // back, which workerd refuses to load (5 Nov: _ssr/ssr.mjs and ssr2.mjs, "Export 'ssr_exports'
+      // is not defined"). Every module ships in the one upload anyway, so splitting saves nothing.
+      // Here, not as Nitro's top-level inlineDynamicImports: the preset's rollupConfig overrides that.
+      rollupConfig: { output: { inlineDynamicImports: true } },
     }),
     notFoundInDev(),
     devOnlyCss(),
     cssVariantsForProduction(),
     stylesheetGroups(),
+    staticClient(),
     docs(),
-    i18nSlices(),
   ],
   server: {
     allowedHosts: true,
@@ -96,38 +102,11 @@ export default defineConfig({
     cssTarget: ["chrome123", "edge123", "firefox120", "safari17.5"],
   },
   environments: {
-    // The browser bundles are minified; the Worker keeps readable code for its stack traces.
     client: {
       build: {
         // Nitro copies public/ with fs.cp, which keeps the symlinks into packages/ui as links.
         // Letting Vite copy it first writes real files.
         copyPublicDir: true,
-        // Oxc, Vite 8's own minifier. "esbuild" here left the bundles unminified: Vite only adds its
-        // esbuild minifier when the top-level build.minify asks for it, and that stays off for the Worker.
-        minify: "oxc",
-        // strobe builds with STROBE_SOURCEMAP=hidden: maps beside the scripts without a
-        // sourceMappingURL comment, so the scripts stay byte for byte and profiles name source lines.
-        sourcemap: process.env.STROBE_SOURCEMAP === "hidden" ? "hidden" : undefined,
-        rolldownOptions: {
-          output: {
-            // Rolldown gives the code that pages share one chunk per set of pages sharing it, which
-            // had the home page preload 29 files, most under 3 kB. Plain modules (not components,
-            // which may bring their stylesheet to every page that loads the chunk) of up to 4 kB
-            // that 12 or more of the bundle's entries (page routes and lazily loaded modules)
-            // import go in one chunk instead: fewer requests and a little less code on most pages.
-            // Each language's strings keep their own files (script/i18n-plugin.ts).
-            codeSplitting: {
-              groups: [
-                {
-                  name: "common",
-                  test: (id) => !/\.(tsx|jsx|css)(\?|$)/.test(id) && !id.startsWith("\0virtual:i18n"),
-                  minShareCount: 12,
-                  maxModuleSize: 4000,
-                },
-              ],
-            },
-          },
-        },
       },
     },
   },

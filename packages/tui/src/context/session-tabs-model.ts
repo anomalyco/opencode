@@ -43,11 +43,13 @@ export function openSessionTab(tabs: SessionTab[], tab: SessionTab): SessionTab[
   return tabs.map((item, position) => (position === index ? { ...item, title: tab.title } : item))
 }
 
-export function closeSessionTab(tabs: SessionTab[], sessionID: string) {
+export function closeSessionTab(tabs: SessionTab[], sessionID: string, lastIndex?: number) {
   const index = tabs.findIndex((tab) => tab.sessionID === sessionID)
   // Like openSessionTab and moveSessionTab, a no-op returns the same reference so callers can
-  // detect it by identity.
-  if (index === -1) return { tabs, next: undefined }
+  // detect it by identity. Another TUI sharing the tab list may already have closed the tab, so
+  // its last known index still picks the neighbour that took its place.
+  if (index === -1)
+    return { tabs, next: lastIndex === undefined ? undefined : tabs[Math.min(lastIndex, tabs.length - 1)]?.sessionID }
   return {
     tabs: tabs.filter((tab) => tab.sessionID !== sessionID),
     next: tabs[index + 1]?.sessionID ?? tabs[index - 1]?.sessionID,

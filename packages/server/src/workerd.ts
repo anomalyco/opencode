@@ -8,6 +8,9 @@ import type { DurableObjectStorage } from "@opencode/core/database/sqlite.worker
 import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { FileSystem } from "@opencode/core/filesystem"
 import { FileSystemSearch } from "@opencode/core/filesystem/search"
+import { Identity } from "@opencode/core/machine/identity"
+import { BlobStore } from "@opencode/core/blob-store"
+import { VideoGeneration } from "@opencode/core/video-generation"
 import { Pty } from "@opencode/core/pty"
 import { Snapshot } from "@opencode/core/snapshot"
 import { Vcs } from "@opencode/core/vcs"
@@ -30,6 +33,7 @@ import type { ServerOptions } from "./options"
  *   FileSystemSearch, and Pty fail with a clear defect until a remote sandbox
  *   backs them; Npm fails package installs with a typed workerd error; Snapshot
  *   and Vcs degrade to no-op results.
+ * - Blob storage and video generation report themselves unsupported: blobs are files on a local disk.
  * - Config is injected as a string (no filesystem); plugin discovery is
  *   precompiled-only, and stdio MCP reports the same no-plane failure as Shell.
  *
@@ -81,6 +85,7 @@ export function serverOptions(options: Options): ServerOptions {
 export function replacements(options: Options): LayerNode.Replacements {
   return [
     Database.node.replace(Database.configuredClient(sqliteLayer({ storage: options.storage }))),
+    Identity.node.replace(Identity.kvNode),
     CrossSpawnSpawner.node.replace(EnvironmentUnavailable.layer),
     Snapshot.node.replace(Snapshot.noopLayer),
     Vcs.node.replace(vcsLayer),
@@ -88,6 +93,9 @@ export function replacements(options: Options): LayerNode.Replacements {
     FileSystemSearch.node.replace(fileSystemSearchLayer),
     Pty.node.replace(ptyLayer),
     Npm.node.replace(npmLayer),
+    // Blobs need a local `blobs/` folder, which a Durable Object doesn't have.
+    BlobStore.node.replace(BlobStore.unsupportedLayer),
+    VideoGeneration.node.replace(VideoGeneration.unsupportedLayer),
     // Precompiled (internal and SDK) plugins only: no plugin-directory scan, npm
     // install, or import of plugin code from disk.
     ConfigPluginSource.node.replace(ConfigPluginSource.empty),
@@ -112,6 +120,8 @@ const npmLayer = Layer.succeed(
     resolve: (name) => Effect.succeed({ directory: "", name }),
     check: () => Effect.succeed(false),
     update: (pkg) => npmUnavailable("Npm.update", pkg),
+    follows: () => Effect.succeed(false),
+    reject: () => Effect.succeed(false),
     which: () => Effect.undefined,
   }),
 )

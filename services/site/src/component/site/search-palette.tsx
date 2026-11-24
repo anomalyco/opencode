@@ -8,14 +8,9 @@ import { strip } from "~/lib/language"
 import { devicePreviewOpenEvent, inDevicePreview } from "~/lib/platform"
 import { siteSettings, type SiteSettings } from "./settings"
 import { onCloseMenus } from "./menu-open"
-import {
-  isSearchShortcut,
-  searchOpenEvent,
-  setSearchAnnouncement,
-  setSearchShown,
-  type SearchVia,
-  type SiteSearchProps,
-} from "./search"
+import { isSearchShortcut } from "./search-key"
+import { handOff, reveal, trim } from "./search-reveal"
+import { searchOpenEvent, setSearchAnnouncement, setSearchShown, type SearchVia, type SiteSearchProps } from "./search"
 import type { SearchAction, SearchGroup, SearchItem, SearchResult } from "./search-index"
 
 /**
@@ -250,7 +245,11 @@ export function SearchPalette(props: SiteSearchProps & { openOnMount?: SearchVia
     }
     close(false)
     const path = trim(url.pathname)
-    if (path !== trim(window.location.pathname)) props.go(url.pathname)
+    if (path !== trim(window.location.pathname)) {
+      // A full page load (the static pages, or from one) reveals the place itself (search-reveal.ts).
+      handOff(path, item.target)
+      props.go(url.pathname)
+    }
     reveal(path, item.target)
   }
 
@@ -613,58 +612,6 @@ function Highlight(props: { text: string; ranges: [number, number][] }) {
   )
 }
 
-/**
- * Scrolls to a search result's place once its page is showing: an element ID, a heading with the
- * result's text, or a FAQ question (opened). Pages fade in after in-place navigation, so this waits
- * for the path and the element for up to three seconds.
- */
-function reveal(path: string, target: SearchItem["target"]) {
-  const started = performance.now()
-  const step = () => {
-    const ready = trim(window.location.pathname) === path
-    const element = ready ? find(target) : undefined
-    if (!element) {
-      if (performance.now() - started < 3000) requestAnimationFrame(step)
-      return
-    }
-    const trigger = target?.faq ? element.querySelector<HTMLElement>('[data-slot="faq-question"]') : undefined
-    if (trigger && trigger.getAttribute("aria-expanded") !== "true") trigger.click()
-    const bar = document.querySelector('[data-component="topbar"]')?.getBoundingClientRect()
-    // The small-screen header is sticky, so the target lands below it.
-    const offset = (bar && bar.height > 0 ? Math.max(bar.bottom, 0) : 0) + 24
-    const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches
-    window.scrollTo({
-      top: element.getBoundingClientRect().top + window.scrollY - offset,
-      behavior: reduce ? "instant" : "smooth",
-    })
-    const focusable = trigger ?? element
-    if (!trigger && !element.hasAttribute("tabindex")) element.setAttribute("tabindex", "-1")
-    focusable.focus({ preventScroll: true })
-    element.setAttribute("data-search-target", "")
-    setTimeout(() => element.removeAttribute("data-search-target"), 1600)
-  }
-  if (!target) return window.scrollTo({ top: 0 })
-  requestAnimationFrame(step)
-}
-
-function find(target: SearchItem["target"]): HTMLElement | undefined {
-  if (!target) return
-  const content = document.querySelector('[data-component="content"]') ?? document
-  if (target.id) return document.getElementById(target.id) ?? undefined
-  if (target.faq)
-    return (
-      [...content.querySelectorAll<HTMLElement>('[data-slot="faq-item"]')].find(
-        (item) => item.querySelector('[data-slot="faq-question-text"]')?.textContent?.trim() === target.faq,
-      ) ?? undefined
-    )
-  const text = target.text?.trim().toLowerCase()
-  return (
-    [...content.querySelectorAll<HTMLElement>("h1, h2, h3, h4, strong, dt")].find(
-      (element) => element.textContent?.trim().toLowerCase() === text && element.getClientRects().length > 0,
-    ) ?? undefined
-  )
-}
-
 /** A chosen result for the funnel: the page it opens, without its language (`link:/desktop`), or the action it runs. */
 function resultTarget(item: SearchItem) {
   if (item.action && item.action !== "brand-assets") return `action:${item.action}`
@@ -676,10 +623,6 @@ function resultTarget(item: SearchItem) {
 /** Reports a search event to the funnel (lib/funnel.ts), through its queue. */
 function report(event: FunnelEvent) {
   window.__ocFunnel?.push({ event, at: performance.now() })
-}
-
-function trim(path: string) {
-  return path.length > 1 ? path.replace(/\/$/, "") : path
 }
 
 function readRecent(): { items: string[]; queries: string[] } {

@@ -81,19 +81,8 @@ export function createTimelineCache(
         const readImage = select(() => markdown?.readImage)
         const openSession = select(() => markdown?.openSession)
         const sessionTitle = select(() => markdown?.sessionTitle)
+        const sessionMenu = select(() => markdown?.sessionMenu)
         const turnDiff = select(() => data.turnDiff)
-
-        // The Location's config is a query: read it in the reader and only while selected, so a pending config
-        // suspends that reader as the live provider would rather than this view's owner, the whole screen.
-        let compaction = false
-
-        const backgroundCompaction = () => {
-          if (!active()) return compaction
-
-          compaction = data.backgroundCompaction
-
-          return compaction
-        }
 
         const view = () =>
           render(
@@ -131,12 +120,6 @@ export function createTimelineCache(
                 get agents() {
                   return agents()
                 },
-                get copyAlwaysVisible() {
-                  return data.copyAlwaysVisible
-                },
-                get backgroundCompaction() {
-                  return backgroundCompaction()
-                },
                 navigateToSession: data.navigateToSession,
                 sessionHref: data.sessionHref,
                 readMedia: data.readMedia,
@@ -162,6 +145,13 @@ export function createTimelineCache(
                     },
                     get sessionTitle() {
                       return sessionTitle()
+                    },
+                    get sessionMenu() {
+                      return sessionMenu()
+                    },
+                    // An app-wide setting, so every view follows it, detached or not.
+                    get codeWrap() {
+                      return markdown?.codeWrap
                     },
                   },
                   view,

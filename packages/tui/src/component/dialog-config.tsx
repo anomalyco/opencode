@@ -117,7 +117,7 @@ export const settings: Setting[] = [
     category: "Session",
     path: ["session", "verbosity"],
     description: "How much tool activity is shown in the chat",
-    default: "medium",
+    default: "low",
     values: ["low", "medium", "high"],
     keywords: ["detail", "activity", "summary", "transcript"],
   },
@@ -403,7 +403,8 @@ export function DialogConfig(props: { current?: string }) {
       if (!result || typeof result !== "object") return undefined
       return (result as Record<string, unknown>)[key]
     }, config.data)
-    if (setting.path.join(".") === "theme.name") return current ?? themes.selected
+    // The theme context resolves aliases and missing themes, so it names what is actually shown.
+    if (setting.path.join(".") === "theme.name") return themes.selected
     return current ?? setting.default
   }
   const values = (setting: Setting) =>

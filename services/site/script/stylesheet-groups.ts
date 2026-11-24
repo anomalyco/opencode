@@ -2,7 +2,7 @@ import type { PluginOption } from "vite"
 
 // Pages that share a layout share a stylesheet: the product pages with the changelog (both show
 // release notes), and otherwise each section of the site (the route's first path segment).
-const productPages = /^(product|desktop|terminal|mobile|sdk|ide|mini|changelog)(\/|$)/
+const productPages = /^(product|desktop|terminal|mobile|sdk|mini|changelog)(\/|$)/
 const shell = /[\\/]src[\\/](app|component[\\/]site[\\/]site)\.tsx$/
 
 /**
@@ -12,9 +12,8 @@ const shell = /[\\/]src[\\/](app|component[\\/]site[\\/]site)\.tsx$/
  * a year, so a visitor downloads the shell once and each group the first time they open one of its
  * pages, whichever page that is. Vite splits stylesheets by JavaScript chunk, so this names a chunk
  * of stylesheets for each: the stylesheets a page's code imports, and none that load on demand
- * (search, the Markdown view, the Hex pop-up), which stay with their own code. Chunks of stylesheets
- * alone leave no JavaScript (Vite's pure CSS chunks), and Vite's loader adds a group's stylesheet the
- * first time the app moves to one of its pages.
+ * (search, the Markdown view, the Hex pop-up), which stay with their own code (script/static-client.ts).
+ * Chunks of stylesheets alone leave no JavaScript (Vite's pure CSS chunks).
  */
 export function stylesheetGroups(): PluginOption {
   return {
@@ -31,9 +30,6 @@ export function stylesheetGroups(): PluginOption {
                   {
                     name: (id, context) => group(id, (module) => context.getModuleInfo(module)),
                     test: /\.css$/,
-                    // Ahead of vite.config.ts's "common" group, which takes along the modules its small
-                    // shared ones import, so it would otherwise take stylesheets too (the orb's, the sheet's).
-                    priority: 1,
                   },
                 ],
               },
@@ -46,7 +42,7 @@ export function stylesheetGroups(): PluginOption {
 }
 
 /** The group a stylesheet goes in: the shell's, a group of pages', or none (it loads on demand). */
-function group(id: string, info: (id: string) => { importers: string[] } | null) {
+export function group(id: string, info: (id: string) => { importers: string[] } | null) {
   const groups = new Set<string>()
   const seen = new Set<string>()
   // Up the static imports only, to the shell and the page routes.

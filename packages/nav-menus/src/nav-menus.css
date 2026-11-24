@@ -10,12 +10,15 @@
      --nav-menu-icon      the Brand, ZIP and Press drawings
      --nav-menu-mono      OpenTUI Mono (the host loads it) */
 [data-nav-menu] {
-  --ink: var(--nav-menu-ink, light-dark(hsl(0 0% 8%), hsl(0 0% 95%)));
-  --weak: var(--nav-menu-weak, light-dark(hsl(0 0% 40%), hsl(0 0% 64%)));
-  --popover: var(--nav-menu-popover, light-dark(hsl(0 0% 100%), hsl(0 0% 10%)));
+  --ink: var(--nav-menu-ink, light-dark(#161616, #fafafa));
+  --weak: var(--nav-menu-weak, light-dark(#5c5c5c, #aeaeae));
+  --popover: var(--nav-menu-popover, light-dark(#ffffff, #161616));
   --link: var(--nav-menu-link, light-dark(#3b5cf6, #6b8fff));
-  --bar: var(--nav-menu-bar, light-dark(hsl(0 0% 40%), hsl(0 0% 62%)));
-  --icon: var(--nav-menu-icon, light-dark(hsl(0 0% 40%), hsl(0 0% 56%)));
+  --bar: var(--nav-menu-bar, light-dark(#5c5c5c, #aeaeae));
+  --icon: var(--nav-menu-icon, light-dark(#6b6b6b, #8f8f8f));
+  /* The fixed backgrounds behind the Brand files' light and dark previews. */
+  --tile-light: #f5f5f5;
+  --tile-dark: #0c0c0c;
   --tint: color-mix(in srgb, var(--link) 10%, var(--popover));
   /* The divider between a card's thumbnail and its label, and the card's ring. */
   --divider: light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.1));
@@ -158,14 +161,14 @@
 
     /* Each file on the background it is made for: light marks on light, dark on dark. */
     &[data-tone="light"] {
-      background: hsl(0 0% 96%);
+      background: var(--tile-light);
     }
 
     /* A dark preview's ring is its own colour, so it reads at full size (blue while hovered). */
     &[data-tone="dark"],
     &[data-tone="dark"]:dir(rtl) {
-      background: #0a0a0a;
-      box-shadow: 0 0 0 1px #0a0a0a;
+      background: var(--tile-dark);
+      box-shadow: 0 0 0 1px var(--tile-dark);
     }
 
     &[data-kind="logo"] svg {
@@ -270,14 +273,14 @@
   @media (hover: hover) and (pointer: fine) {
     &:hover {
       background: var(--nav-chevron-hover);
-      color: var(--nav-menu-ink, light-dark(hsl(0 0% 8%), hsl(0 0% 95%)));
+      color: var(--nav-menu-ink, var(--nav-chevron-ink));
     }
   }
 
   &:active,
   &[aria-expanded="true"] {
     background: var(--nav-chevron-press);
-    color: var(--nav-menu-ink, light-dark(hsl(0 0% 8%), hsl(0 0% 95%)));
+    color: var(--nav-menu-ink, var(--nav-chevron-ink));
   }
 
   &[aria-expanded="true"] svg {
@@ -306,16 +309,16 @@
   --nav-edge: 24px;
   --nav-end: 17.5px;
   --nav-rule: light-dark(hsl(0 0% 88%), hsl(0 0% 18%));
-  /* The product name's one fill (hover, open and pressed), opencode.ai's lockup hover: half the mark's inner grey on
-     the docs page (#d2d2d2 over #fbfbfb, #4b4b4b over #0c0c0c). Fixed, so it is the same on every page background. */
-  --nav-name-hover: light-dark(#e7e7e7, #2c2c2c);
+  /* The product name's one fill (hover, open and pressed), opencode.ai's lockup hover: the hover step of the shared
+     grey scale. Fixed, so it is the same on every page background. */
+  --nav-name-hover: light-dark(#eeeeee, #242424);
   /* The chevron after a product name (and the docs' after DOCS): its box, the gap after the name's highlight, the glyph,
      how far its touch target reaches past it, and its colours. */
   --nav-chevron-width: 20px;
   --nav-chevron-gap: 2px;
   --nav-chevron-glyph: 10px;
   --nav-chevron-reach: 24px;
-  --nav-chevron-ink: light-dark(hsl(0 0% 8%), hsl(0 0% 95%));
+  --nav-chevron-ink: light-dark(#161616, #fafafa);
   --nav-chevron-hover: var(--nav-name-hover);
   --nav-chevron-press: light-dark(#d2d2d2, #4b4b4b);
   /* The product name after the mark (and the docs' DOCS): its size, and the padding under it that puts OpenTUI Mono's
@@ -349,7 +352,7 @@
    highlight, --nav-name-hover while hovered, pressed or open (hovering opens the product menu, so it never steps darker).
    Placed at --nav-edge, centred in the bar. */
 [data-nav-lockup] {
-  --nav-lockup-ink: light-dark(hsl(0 0% 8%), hsl(0 0% 95%));
+  --nav-lockup-ink: light-dark(#161616, #fafafa);
   --nav-logo-inner: light-dark(#d2d2d2, #4b4b4b);
   --nav-logo-code: light-dark(#1f1f1f, #eeeeee);
   --nav-lockup-inset: round(calc((var(--nav-logo-box-h) - 25px) / 2), 1px);
