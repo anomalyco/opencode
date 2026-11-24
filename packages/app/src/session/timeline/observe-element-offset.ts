@@ -11,7 +11,8 @@ import {
 export function observeElementOffsetReconnectAware<TScrollElement extends Element, TItemElement extends Element>(
   instance: Virtualizer<TScrollElement, TItemElement>,
   callback: (offset: number, isScrolling: boolean) => void,
-  onReconnect?: () => void,
+  /** `returning`: the element was in the document before, and comes back without the offset it had there. */
+  onReconnect?: (returning: boolean) => void,
 ) {
   const element = instance.scrollElement
   let state = createReconnectState(!!element?.isConnected)
@@ -43,7 +44,7 @@ export function observeElementOffsetReconnectAware<TScrollElement extends Elemen
   }
 
   const run = (effect: ReconnectEffect) => {
-    if (effect.type === "reconnected") return onReconnect?.()
+    if (effect.type === "reconnected") return onReconnect?.(effect.returning)
 
     if (effect.type === "offset.deliver") return deliver(effect.offset, false)
 

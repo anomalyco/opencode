@@ -47,14 +47,29 @@ describe("reconnect machine", () => {
     // `main.append(staging)`
     const back = transitionReconnect(detached.state, mutated(true, true))
     expect(back.state).toMatchObject({ status: "checking", deadline: 100, framesAfterDeadline: 0 })
-    expect(back.effects).toEqual([{ type: "reconnected" }, { type: "frame.schedule", attempt: attemptOf(back.state) }])
+    expect(back.effects).toEqual([
+      { type: "reconnected", returning: true },
+      { type: "frame.schedule", attempt: attemptOf(back.state) },
+    ])
+  })
+
+  test("tells a view's first attachment from its return", () => {
+    // A cached view is built before it is in the page, so it has no offset there to go back to.
+    const first = transitionReconnect(createReconnectState(false), mutated(true, false))
+    expect(first.effects[0]).toEqual({ type: "reconnected", returning: false })
+
+    const away = transitionReconnect(first.state, mutated(false, false))
+    const back = transitionReconnect(away.state, mutated(true, false))
+    expect(back.effects[0]).toEqual({ type: "reconnected", returning: true })
   })
 
   test("detects a detach and reattach within one batch", () => {
     // `wrap.remove(); main.append(scroller)`
     const next = transitionReconnect(createReconnectState(true), mutated(true, true))
     expect(next.state.status).toBe("checking")
-    expect(next.effects.filter((effect) => effect.type === "reconnected")).toHaveLength(1)
+    expect(next.effects.filter((effect) => effect.type === "reconnected")).toEqual([
+      { type: "reconnected", returning: true },
+    ])
   })
 
   test("ignores unrelated mutations without a new state", () => {

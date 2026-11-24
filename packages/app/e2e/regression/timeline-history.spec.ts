@@ -384,6 +384,42 @@ test.describe("timeline history", () => {
     expect(await positions()).toEqual(before)
   })
 
+  // Out of the document a timeline measures as empty and at its top, which read as room to fill and as a reader at
+  // the start: it loaded one older page after another for as long as it was not shown.
+  test("asks for no older page while the conversation is behind another narrow-screen view", async ({ page }) => {
+    const messages = validateTimelineMessages([
+      ...historyMessages(40),
+      userMessage(),
+      assistantMessage([textPart("prt_hidden_tail", "Checking the route")]),
+    ])
+
+    const older: string[] = []
+
+    await setupTimeline(page, {
+      sessionMessages: messages,
+      viewport: { width: 390, height: 844 },
+      pageMessages: (_, limit, before) => {
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        const start = Math.max(0, end - Math.min(16, limit))
+
+        return { items: messages.slice(start, end), cursor: start ? messages[start]!.id : undefined }
+      },
+      onMessages: (request) => {
+        if (request.before && request.phase === "start") older.push(request.before)
+      },
+    })
+
+    const tail = timelineScroller(page).getByText("Checking the route", { exact: true })
+    const views = page.getByRole("tablist", { name: "Session view", exact: true })
+    await expect(tail).toBeInViewport()
+    await views.getByRole("tab", { name: "Changes", exact: true }).click()
+    await expect(page.locator('[data-component="session-review"]')).toBeVisible()
+    await views.getByRole("tab", { name: "Session", exact: true }).click()
+    // A reader who followed the end comes back to it.
+    await expect(tail).toBeInViewport()
+    expect(older).toEqual([])
+  })
+
   // Each native scroll write forces a layout of the rows resized before it.
   test("corrects the scroll position once for each batch of rows an older page measures", async ({ page }) => {
     const messages = [
