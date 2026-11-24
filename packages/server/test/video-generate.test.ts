@@ -26,13 +26,14 @@ const generate = makeLocationNode({
         start: () => Effect.succeed({ id: "provider_1" }),
         status: () => Effect.succeed({ status: "completed" }),
         result: () => Effect.succeed([{ mime: "video/mp4", stream: Stream.make(video) }]),
+        cancel: () => Effect.void,
       },
     }),
   ),
   deps: [],
 })
 
-const serve = (dir: string, enabled: boolean) =>
+const serve = (dir: string) =>
   ServerFetch.make(
     {
       app: { version: "test" },
@@ -40,7 +41,6 @@ const serve = (dir: string, enabled: boolean) =>
       config: {
         directory: dir,
         project: false,
-        content: JSON.stringify({ experimental: { video_generate: enabled } }),
       },
       models: { fetch: false },
       fs: { filewatcher: false },
@@ -60,7 +60,7 @@ const unknown = `video_${"0".repeat(12)}${"A".repeat(14)}`
 it.live("generates a video in the background and serves its blob with Range and ETag support", () =>
   Effect.gen(function* () {
     const dir = (yield* tmpdirScoped("opencode-video-route-")).path
-    const handler = yield* serve(dir, true)
+    const handler = yield* serve(dir)
     const call = (url: string, init?: RequestInit) => Effect.promise(() => handler(new Request(url, init)))
 
     const started = yield* call(`${base}/generate/video`, {
@@ -79,12 +79,12 @@ it.live("generates a video in the background and serves its blob with Range and 
       ),
       (body: { data: Record<string, unknown> }) => body.data.status !== "running",
     )
-    const blob = `${data.id}_0`
     expect(completed.data).toEqual({
       id: data.id,
       status: "completed",
-      blobs: [{ id: blob, mime: "video/mp4", bytes: 20, expiresAt: expect.any(Number) }],
+      blobs: [{ id: expect.stringMatching(/^blob_/), mime: "video/mp4", bytes: 20 }],
     })
+    const blob = (completed.data.blobs as { id: string }[])[0].id
     const route = `${base}/blob/${blob}`
 
     const full = yield* call(route)
@@ -112,8 +112,8 @@ it.live("generates a video in the background and serves its blob with Range and 
     expect(cached.status).toBe(304)
     expect((yield* Effect.promise(() => cached.arrayBuffer())).byteLength).toBe(0)
 
-    // A restarted server reads the finished job back from its blobs.
-    const restarted = yield* serve(dir, true)
+    // A restarted server reads the finished job back from its record.
+    const restarted = yield* serve(dir)
     const reread = yield* Effect.promise(() => restarted(new Request(`${base}/generate/video/${data.id}`)))
     expect(((yield* Effect.promise(() => reread.json())) as { data: unknown }).data).toEqual(completed.data)
 
@@ -124,24 +124,8 @@ it.live("generates a video in the background and serves its blob with Range and 
 
     expect((yield* call(`${base}/generate/video/${unknown}`)).status).toBe(404)
     // An ID that isn't one never reaches the disk.
-    expect((yield* call(`${base}/blob/video_..%2F..%2Fsecret`)).status).toBe(400)
+    expect((yield* call(`${base}/blob/blob_..%2F..%2Fsecret`)).status).toBe(400)
   }).pipe(Effect.scoped),
-)
-
-it.live("rejects video routes while experimental.video_generate is off", () =>
-  Effect.gen(function* () {
-    const dir = (yield* tmpdirScoped("opencode-video-off-")).path
-    const handler = yield* serve(dir, false)
-    const start = yield* Effect.promise(() =>
-      handler(
-        new Request(`${base}/generate/video`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ model: { providerID: "test", id: "video" }, prompt: "a cat" }),
-        }),
-      ),
-    )
-    expect(start.status).toBe(403)
-    expect((yield* Effect.promise(() => handler(new Request(`${base}/generate/video/${unknown}`)))).status).toBe(403)
-  }).pipe(Effect.scoped),
+  // The first status check runs at the next 5-second check.
+  15_000,
 )

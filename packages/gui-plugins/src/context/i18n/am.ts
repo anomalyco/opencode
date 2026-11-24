@@ -5,7 +5,6 @@ export default {
   "usage.usage": "አጠቃቀም",
   "usage.cost": "ዋጋ",
   "usage.view": "የአውድ አጠቃቀምን ይመልከቱ",
-  "systemPrompt.title": "የስርዓት ፕሮምፕት",
   "rawMessages.title": "ጥሬ መልዕክቶች",
   "export.session": "ክፍለ ጊዜን ወደ ውጭ ላክ",
   "stats.session": "ክፍለ ጊዜ",

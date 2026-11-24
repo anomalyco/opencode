@@ -282,6 +282,28 @@ test("scrolls within a long answer without mounting unrelated history", async ({
   await expect(answer.locator('[data-component="markdown"]')).toHaveAttribute("data-markdown-ready", "")
 })
 
+// Each cached view provides its own Markdown context, so it must pass the app's code wrap setting on.
+test("wraps the code blocks of a cached view when the setting is on", async ({ page }) => {
+  await mockStressTimeline(page, { pageMessages: () => ({ items: messages[fixture.sourceID] }) })
+  await installTimelineSettings(page)
+  await page.addInitScript(() => {
+    const settings = JSON.parse(localStorage.getItem("settings.v3")!)
+    localStorage.setItem(
+      "settings.v3",
+      JSON.stringify({ ...settings, general: { ...settings.general, wrapCodeBlocks: true } }),
+    )
+  })
+  await page.goto(sessionHref(fixture.sourceID))
+
+  const markdown = page.locator(
+    `[data-timeline-part-id="${expected[fixture.sourceID].answerID}"] [data-component="markdown"]`,
+  )
+
+  await expect(markdown).toHaveAttribute("data-markdown-ready", "")
+  await expect(markdown).toHaveAttribute("data-code-wrap", "")
+  await expect(markdown.locator('[data-component="markdown-code"] > pre').first()).toHaveCSS("white-space", "pre-wrap")
+})
+
 test("fills a short cold transcript before revealing it", async ({ page }) => {
   const history = messages[fixture.sourceID].slice(-6).map((message, index) => {
     if (message.type === "user") return { ...message, text: `Prompt ${index}`, metadata: undefined }

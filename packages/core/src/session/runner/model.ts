@@ -8,6 +8,7 @@ import { Context, Effect, Layer, Schema } from "effect"
 import type { SessionRequestKind } from "@opencode/plugin/effect/session"
 import { Agent } from "../../agent.js"
 import { ModelResolver } from "../../model-resolver.js"
+import { findModelByID } from "../../model-lookup.js"
 import { PluginHooks } from "../../plugin/hooks.js"
 import { SessionSchema } from "../schema.js"
 
@@ -36,6 +37,13 @@ export type Error = ModelNotSelectedError | ModelUnavailableError | ModelResolve
 export type Resolved = ModelResolver.Resolved
 
 export interface Interface {
+  readonly select: (
+    session: SessionSchema.Info,
+    available: () => Effect.Effect<ReadonlyArray<Model.Info>>,
+  ) => Effect.Effect<
+    { readonly info: Model.Info; readonly variant: Model.VariantID | undefined },
+    ModelNotSelectedError | ModelUnavailableError
+  >
   /** Availability is sampled lazily for each explicitly selected model resolution. */
   readonly resolve: (
     session: SessionSchema.Info,
@@ -83,9 +91,7 @@ const layer = Layer.effect(
       available: () => Effect.Effect<ReadonlyArray<Model.Info>>,
     ) {
       const find = (ref: Model.Ref) =>
-        available().pipe(
-          Effect.map((models) => models.find((model) => model.providerID === ref.providerID && model.id === ref.id)),
-        )
+        available().pipe(Effect.map((models) => findModelByID(models, ref.providerID, ref.id)))
       if (session.model) {
         const info = yield* find(session.model)
         if (info) return { info, variant: session.model.variant }
@@ -99,6 +105,7 @@ const layer = Layer.effect(
       return yield* new ModelNotSelectedError({ sessionID: session.id })
     })
     return Service.of({
+      select,
       resolve: Effect.fn("SessionRunnerModel.resolve")(function* (session, available, request) {
         const selected = yield* select(session, available)
         const ref = Model.Ref.make({

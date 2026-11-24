@@ -72,7 +72,7 @@ const setup: Plugin.Setup<typeof Terminal> = (ctx) => {
     render: (input) => (
       <Show when={model.available(input.session.server)}>
         <Menu.Item onSelect={() => create(input.session, model.load(input.session))}>
-          <Icon name="outline-console" class="text-v2-icon-icon-muted" />
+          <Icon name="terminal" class="text-v2-icon-icon-muted" />
           {ctx.t("location.open")}
         </Menu.Item>
       </Show>

@@ -26,12 +26,14 @@ describe("plugin GUI bundles", () => {
       exports.default = sdk.Plugin.define({
         os: ["macos"],
         i18n: { fr: { title: "Notes" } },
+        icons: { logo: "<svg viewBox='0 0 16 16'/>" },
         setup() {},
       })
     `)
 
     expect(bundle.definition.os).toEqual(["macos"])
     expect(bundle.definition.i18n).toEqual({ fr: { title: "Notes" }, en: {} })
+    expect(bundle.definition.icons).toEqual({ logo: "<svg viewBox='0 0 16 16'/>" })
     expect(bundle.setup).toBeFunction()
     expect(bundle.main).toBeUndefined()
   })
@@ -54,6 +56,7 @@ describe("plugin GUI bundles", () => {
     ["a store without a schema", 'stores: { count: { scope: "global", initial: 0 } }', "schema"],
     ["an unknown OS", 'os: ["plan9"]', "os"],
     ["a lazy catalog", "i18n: { en: {}, fr: () => ({}) }", "fr"],
+    ["an icon that is not an SVG document's text", "icons: { logo: { viewBox: '0 0 16 16' } }", "logo"],
     ["a setup that is not a function", "setup: true", "setup"],
   ])("reject a plugin with %s", (_, field, named) => {
     const evaluated = () => evaluate(`exports.default = { ${field}, main() {} }`)

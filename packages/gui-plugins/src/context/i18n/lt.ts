@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Naudojimas",
   "usage.cost": "Kaina",
   "usage.view": "Peržiūrėkite kontekstinį naudojimą",
-  "systemPrompt.title": "Sistemos raginimas",
   "rawMessages.title": "Neapdoroti pranešimai",
   "export.session": "Eksportuoti seansą",
   "stats.session": "Seansas",

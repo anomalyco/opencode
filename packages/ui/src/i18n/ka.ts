@@ -48,6 +48,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "კომენტირება ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "კომენტარის დამატება",
+  "ui.lineComment.add": "კომენტარის დამატება",
+  "ui.lineComment.actions": "მონიშნულის მოქმედებები",
   "ui.lineComment.contextPlaceholder": "დაამატეთ კონტექსტი ამ ცვლილებისთვის",
   "ui.lineComment.submit": "კომენტარი",
   "ui.lineComment.cancel": "გაუქმება",

@@ -1,4 +1,6 @@
 import { Browser } from "@opencode/plugin-browser/rpc"
+import { uuid } from "@opencode/util/uuid"
+import { Schema } from "effect"
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { ResizeHandle } from "@opencode/ui/resize-handle"
 import {
@@ -25,6 +27,7 @@ import {
 import {
   type Appearance,
   type App,
+  type ComposerDelivery,
   type ComposerNote,
   type Context,
   type Embeds,
@@ -46,18 +49,25 @@ import {
   type Workspaces,
 } from "@opencode/plugin/gui"
 import barStyles from "./bar.css?inline"
-import type { History } from "./history"
+import { BrowserHistory } from "./history/ipc"
+import { pageKey, type PageVisit } from "./history/page"
+import { createPageIndex, findPages } from "./history/search"
+import type { History } from "./history/visits"
 import browserEn from "./i18n/en"
 import type definition from "./index"
 import { createModel } from "./model"
 import SessionBrowserPane from "./panel"
-import { BrowserPane, type PaneEvent } from "./ipc"
+import { BrowserPane, PluginTabHandle, type PaneEvent, type PromptAnswer, type PromptView } from "./ipc"
 import { pageShortcut } from "./keys"
 import { normalizeURL, refusal } from "./policy"
+import { navigationNotice } from "./refusal-notice"
 import { type BuiltinLayout } from "@opencode/plugin/gui/builtin"
 
 /** The renderer host pieces the pane runs on, passed in by `packages/app/component-tests/browser-pane.spec.ts`. */
 type PaneHost = {
+  createAppLinks(review: (href: string) => void): void
+  /** The host's routing of another app's address: the system mail app, the review, or a copy. */
+  appLinkRoute(href: string, reviewer: boolean): "mail" | "review" | "copy"
   createEmbeds(input: {
     bridge: Bridge | undefined
     zoom: () => number
@@ -73,6 +83,11 @@ type PaneHost = {
 
 type PaneFixtureState = {
   session: string
+  /** The user's answers to the tab's prompts, as main receives them. */
+  answers: PromptAnswer[]
+  /** The tab each answer went to, by title. */
+  answeredTabs: string[]
+  secondTab: boolean
   mounted: boolean
   visible: boolean
   url: string | undefined
@@ -83,6 +98,7 @@ type PaneFixtureState = {
   loadErrors: Record<string, string | undefined>
   error: string | undefined
   layouts: Record<string, BridgeLayout | undefined>
+  layoutCalls: number
   covered: boolean
   /** A panel is in flight, as the host's panel motion reports it. */
   moving: boolean
@@ -92,30 +108,44 @@ type PaneFixtureState = {
   dialog: boolean
   captures: number
   holdCapture: boolean
+  /** Main returns no still, as when the view cannot be captured. */
+  failCapture: boolean
   picker: Record<string, boolean | undefined>
   /** Main drops picker requests unanswered, as when the tab has no page or no registration yet. */
   dropInspect: boolean
   highlights: { sessionKey: string; ref?: Browser.Ref }[]
   comments: ComposerNote[]
-  /** The page's zoom as main last reported it. */
-  zoom: number
+  /** The comment IDs a comment editor's Mod+Enter sent. */
+  sent: string[]
+  /** Presentation details last reported by each native tab. */
+  pages: Record<string, PageDetails | undefined>
   /** The browser history store. */
   history: History
+  /** How many pages main's history holds. */
+  historyPages: number
+  /** Main's history store cannot open: every call to it rejects, as with a damaged file. */
+  historyAway: boolean
+  /** What the pane last said in a toast. */
+  toast: string
   /** URLs the pane opened in the system browser. */
   external: string[]
   /** Cookies the page's address can read. */
   cookies: number
   /** Main fails the next cookie read, as when the pane is suspended. */
   failSite: boolean
+  /** Main rejects the next command for a reason of its own, with a message the window has no sentence for. */
+  failCommand: boolean
   selection: string
 }
 
-export type BrowserScenario = "Page" | "Empty" | "Recent" | "Loading" | "Failed" | "Suspended"
+export type BrowserScenario = "Page" | "Empty" | "Recent" | "History" | "Loading" | "Failed" | "Suspended"
 
 type ElementRect = Pick<DOMRect, "x" | "y" | "width" | "height">
 
 type StoryHost = Pick<PaneHost, "useLanguage"> & {
   scenario: BrowserScenario
+  /** How the composer would send a comment now; undefined while nothing can be sent. */
+  delivery?: ComposerDelivery
   Page: Component<{ url: string; zoom: number; picking: boolean; pick: (rect: ElementRect) => void }>
   Frame: ParentComponent<{
     loading: boolean
@@ -124,8 +154,11 @@ type StoryHost = Pick<PaneHost, "useLanguage"> & {
     reconnect: () => void
     external: string | undefined
     comments: readonly ComposerNote[]
+    sent: readonly string[]
   }>
 }
+
+type PageDetails = Pick<Extract<PaneEvent, { type: "page" }>, "zoom" | "viewport" | "icon">
 
 // A 16px blue square, as main reports a page icon.
 const icon =
@@ -145,6 +178,56 @@ const visits: History["visits"] = [
   { url: "http://localhost:5173/settings", title: "Settings - Preview" },
   { url: "https://alpha.example/", title: "Alpha" },
 ]
+
+const DAY = 86_400_000
+
+// A made-up history as an import from another browser leaves it in main: many GitHub repositories, of which a few
+// have "rune" in their name or title, and other sites. No page has an icon, as imported pages have none.
+const repositories = [
+  "anomalyco/opencode",
+  "anomalyco/opentui",
+  "anomalyco/models.dev",
+  "sst/sst",
+  "solidjs/solid",
+  "oven-sh/bun",
+  "effect-ts/effect",
+  "microsoft/typescript",
+  "vitejs/vite",
+  "electron/electron",
+  "nodejs/node",
+  "denoland/deno",
+  "rust-lang/rust",
+  "ziglang/zig",
+  "neovim/neovim",
+  "zed-industries/zed",
+  "withastro/astro",
+  "sveltejs/svelte",
+  "tailwindlabs/tailwindcss",
+  "oxc-project/oxc",
+  "biomejs/biome",
+  "microsoft/playwright",
+  "tanstack/query",
+  "drizzle-team/drizzle-orm",
+  "example-org/prune-cli",
+]
+
+function importedPages(now: number): PageVisit[] {
+  const page = (url: string, title: string, visits: number, days: number, typed = 0): PageVisit => ({ url, title, visits, typed, visited: now - days * DAY })
+
+  return [
+    page("https://github.com/anomalyco/rune-desktop", "anomalyco/rune-desktop: Rune for the desktop", 46, 1, 3),
+    page("https://github.com/anomalyco/rune-desktop/pulls", "Pull requests · anomalyco/rune-desktop", 18, 2),
+    page("https://github.com/anomalyco/rune-desktop/issues/128", "Rune panel flickers on resize · Issue #128 · anomalyco/rune-desktop", 5, 6),
+    page("https://github.com/runelabs/rune-lang", "runelabs/rune-lang: A small language for layouts", 7, 40),
+    page("https://docs.rune.example/guide/getting-started", "Getting started - Rune guide", 9, 12),
+    page("https://github.com/", "GitHub", 22, 0, 12),
+    page("https://news.ycombinator.com/", "Hacker News", 140, 0, 30),
+    page("https://developer.mozilla.org/en-US/docs/Web/API/Popover_API", "Popover API - Web APIs | MDN", 12, 3),
+    page("http://localhost:5173/", "OpenCode dev", 80, 0, 8),
+    ...repositories.map((name, position) => page(`https://github.com/${name}`, `${name}: ${name.split("/")[1]} on GitHub`, 3 + ((position * 7) % 40), position % 30)),
+    ...repositories.map((name, position) => page(`https://github.com/${name}/issues`, `Issues · ${name}`, 1 + (position % 6), 5 + position)),
+  ]
+}
 
 // Component-test fixture: the real pane on the real host embeds, with the desktop faked at its two
 // boundaries: the model's main-process pane (tab state, picker events) and the host bridge that shows native views.
@@ -179,6 +262,9 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
 
     const [store, setStore] = createStore<PaneFixtureState>({
       session: "Alpha",
+      answers: [],
+      answeredTabs: [],
+      secondTab: false,
       mounted: true,
       visible: true,
       url: scenario === "Empty" || scenario === "Recent" ? "about:blank" : undefined,
@@ -189,21 +275,28 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       loadErrors: scenario === "Failed" ? { Alpha: "ERR_CONNECTION_REFUSED" } : {},
       error: scenario === "Suspended" ? "browser.pane.suspended" : undefined,
       layouts: {},
+      layoutCalls: 0,
       covered: false,
       moving: false,
       width: 640,
       dialog: false,
       captures: 0,
       holdCapture: false,
+      failCapture: false,
       picker: {},
       dropInspect: false,
       highlights: [],
       comments: [],
-      zoom: 1,
+      sent: [],
+      pages: {},
       history: { visits: scenario === "Recent" ? structuredClone(visits) : [] },
+      historyPages: 0,
+      historyAway: false,
+      toast: "",
       external: [],
       cookies: 3,
       failSite: false,
+      failCommand: false,
       selection: "default",
     })
 
@@ -218,8 +311,9 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       if (binding) listeners.forEach((listener) => listener({ binding, event }))
     }
 
-    const tabs = ["Alpha", "Beta"].map((name) => ({
-      id: Browser.TabID.make(`tab_${name === "Alpha" ? "11111111" : "22222222"}-1111-1111-1111-111111111111`),
+    const tabs = ["Alpha", "Beta", "Second"].map((name, index) => ({
+      id: Browser.TabID.make(`tab_${String(index + 1).repeat(8)}-1111-1111-1111-111111111111`),
+      owner: name === "Second" ? "Alpha" : name,
       title: name,
       url: `https://${name.toLowerCase()}.example/`,
       loading: false,
@@ -228,7 +322,24 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       generation: 0,
     }))
 
-    const current = () => tabs.find((tab) => tab.title === store.session) ?? tabs[0]
+    const current = (key = store.session) =>
+      tabs.find((tab) => tab.title === (key === "Alpha" && store.secondTab ? "Second" : key)) ?? tabs[0]
+
+    const target = (value: { binding: string; tabID: Browser.TabID }) => {
+      const tab = tabs.find((item) => item.id === value.tabID && bindings.get(item.owner) === value.binding)
+
+      if (!tab) throw new Error("Unknown browser tab")
+
+      return tab
+    }
+
+    const details = (tabID: Browser.TabID): PageDetails => store.pages[tabID] ?? { zoom: 1, viewport: { mode: "auto" } }
+
+    const page = (tab: (typeof tabs)[number], update: Partial<PageDetails> = {}, notice?: "zoom") => {
+      const next = { ...details(tab.id), ...update }
+      setStore("pages", (pages) => ({ ...pages, [tab.id]: next }))
+      emit(tab.owner, { type: "page", tabID: tab.id, ...next, ...(notice && { viewportNotice: notice }) })
+    }
 
     // Main's window focus reports, which focus moving into an embed does not end.
     const windowFocus = new Set<Parameters<Bridge["on"]>[0]>()
@@ -239,12 +350,17 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
 
         return () => windowFocus.delete(listener)
       },
-      embed: (id, layout) => setStore("layouts", id, layout),
+      embed: (id, layout) => batch(() => {
+        setStore("layoutCalls", count => count + 1)
+        setStore("layouts", id, layout)
+      }),
       capture: async () => {
         const count = store.captures + 1
         setStore("captures", count)
 
         if (store.holdCapture) await new Promise<void>((resolve) => held.push(resolve))
+
+        if (store.failCapture) return undefined
         // Each capture is a pixel wider than the last, so a spec can tell which one a still shows.
         const canvas = new OffscreenCanvas(3 + count, 4)
         const paint = canvas.getContext("2d")
@@ -274,7 +390,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
                 <Show when={props.id && props.visible && !store.loading && !model.suspended({ key: store.session })}>
                   <input.Page
                     url={store.url ?? current().url}
-                    zoom={store.zoom}
+                    zoom={details(current().id).zoom}
                     picking={!!store.picker[store.session]}
                     pick={pick}
                   />
@@ -296,7 +412,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       embeds,
       t,
       // English plural forms, as the host picks them.
-      plural: (key: string, count: number) => t(`${key}.${count === 1 ? "one" : "other"}`, { count }),
+      plural: (key: string, count: number, params?: Parameters<typeof t>[1]) => t(`${key}.${count === 1 ? "one" : "other"}`, { ...params, count }),
     }
 
     const panel: PanelFrame = {
@@ -305,7 +421,15 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       placement: () => "side",
       reserve: () => false,
       animate: () => false,
-      sidebar: { opened: () => false, width: () => 0, transition: () => false, resize() {}, toggle() {} },
+      sidebar: {
+        opened: () => false,
+        width: () => 0,
+        transition: () => false,
+        resize() {},
+        toggle() {},
+        side: () => "start",
+        move() {},
+      },
       open: () => [],
     }
 
@@ -314,7 +438,7 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       name: "Local",
       local: true,
       compatible: true,
-      data: { on: () => () => undefined },
+      data: { on: () => () => undefined, session: { status: () => "idle" } },
     }
 
     const [reads, setReads] = createStore({ directory: 0 })
@@ -341,60 +465,77 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       }),
     )
 
-    const session = () => views.get(store.session) ?? views.get("Alpha")
+    const session = () => {
+      const view = views.get(store.session)
+
+      if (!view) throw new Error("Unknown fixture session")
+
+      return view
+    }
 
     // The session screen: one object that follows the route, with the composer the pane attaches comments to.
-    // SAFETY: the pane reads only file.search and composer.attach; the model's workspace-link paths are not invoked.
+    // SAFETY: the pane reads only file.search and composer.attach, delivery and send; the model's workspace-link paths
+    // are not invoked.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
     const screen = {
       file: { search: async () => [] },
-      composer: { attach: (note: ComposerNote) => setStore("comments", (items) => [...items, note]) },
+      composer: {
+        attach: (note: ComposerNote) => setStore("comments", (items) => [...items, note]),
+        delivery: () => ("delivery" in input ? input.delivery : undefined),
+        send: (commentID: string) => setStore("sent", (items) => [...items, commentID]),
+      },
     } as unknown as SessionScreen
 
     const back: string[] = []
     const forward: string[] = []
 
     const report = (key = store.session) => {
-      const tab = tabs.find((item) => item.title === key)
+      const inventory = tabs.filter((item) => item.owner === key)
 
-      if (!tab) return
+      if (!inventory.length) return
+
+      const tab = current(key)
       emit(key, {
         type: "state",
         state: {
-          tabs: [
-            {
-              ...tab,
-              url: store.url ?? tab.url,
-              canGoBack: back.length > 0,
-              canGoForward: forward.length > 0,
-              loading: store.loading,
-              generation: store.generation,
-              loadError: store.loadErrors[key],
-            },
-          ],
+          tabs: inventory.map((item) =>
+            item === tab
+              ? {
+                  ...item,
+                  url: store.url ?? item.url,
+                  canGoBack: back.length > 0,
+                  canGoForward: forward.length > 0,
+                  loading: store.loading,
+                  generation: store.generation,
+                  loadError: store.loadErrors[key],
+                }
+              : item,
+          ),
           focusedTabID: tab.id,
         },
         error: store.error,
       })
+
+      return tab
     }
+
+    const embed = (tab: (typeof tabs)[number]) =>
+      emit(tab.owner, { type: "embed", tabID: tab.id, embed: `embed-${tab.title}` })
 
     // Address rejection counters and cleanup run through the real model over this main-process Ipc boundary.
     const pane: PaneClient = {
       register: async (value) => {
         bindings.set(value.session, value.binding)
         queueMicrotask(() => {
-          report(value.session)
+          const tab = report(value.session)
 
           // A suspended attachment reports its retained inventory once. The next interaction can reconnect it.
-          if (store.error === "browser.pane.suspended") {
-            setStore("error", undefined)
+          if (store.error === "browser.pane.suspended") return setStore("error", undefined)
 
-            return
+          if (tab) {
+            embed(tab)
+            page(tab)
           }
-
-          const tab = tabs.find((item) => item.title === value.session)
-
-          if (tab) emit(value.session, { type: "embed", tabID: tab.id, embed: `embed-${tab.title}` })
         })
       },
       load: async () => undefined,
@@ -404,6 +545,12 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
         const reason = command.type === "navigate" ? refusal(command.url) : undefined
 
         if (reason) throw new Error(reason)
+
+        if (store.failCommand) {
+          setStore("failCommand", false)
+          throw new Error("The browser page did not finish starting.")
+        }
+
         setStore("error", undefined)
 
         if (command.type === "navigate" || command.type === "reload") setStore("loadErrors", store.session, undefined)
@@ -456,12 +603,20 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
       },
       // Main steps through Chromium's presets and reports the page's new zoom.
       zoom: async (value) => {
+        const tab = target(value)
+
+        const previous = details(tab.id)
+
         const steps = [0.9, 1, 1.1, 1.25]
-        const index = steps.indexOf(store.zoom)
-        const next = value.zoom === "reset" ? 1 : (steps[index + (value.zoom === "in" ? 1 : -1)] ?? store.zoom)
-        setStore("zoom", next)
-        emit(store.session, { type: "page", tabID: value.tabID, zoom: next })
+
+        const index = steps.indexOf(previous.zoom)
+
+        const zoom = value.zoom === "reset" ? 1 : (steps[index + (value.zoom === "in" ? 1 : -1)] ?? previous.zoom)
+
+        if (zoom === previous.zoom) return
+        page(tab, { zoom, viewport: { mode: "auto" } }, previous.viewport.mode === "fixed" ? "zoom" : undefined)
       },
+      setViewport: async (value) => page(target(value), { viewport: value.viewport }),
       site: async () => {
         if (store.failSite) {
           setStore("failSite", false)
@@ -470,12 +625,41 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
 
         return { cookies: store.cookies }
       },
+      find: async (value) => {
+        const action = value.action
+        const query = action.type === "query" ? action.query : model.search({ key: store.session }, value.tabID)?.query ?? ""
+        emit(store.session, { type: "find", tabID: value.tabID, view: action.type === "close" ? null : {
+          query, result: query ? { active: action.type === "next" ? 2 : 1, total: 3 } : null,
+        } })
+      },
+      notice: async () => undefined,
+      reviewLink: async ({ url }) => {
+        const tabID = tabs[0].id
+        emit(store.session, { type: "refusal", tabID, token: uuid(), notice: navigationNotice(url, {}, "conversation") })
+
+        return tabID
+      },
+      // Main answers the page, which then waits on nothing.
+      answer: async (value) => {
+        setStore("answers", (answers) => [...answers, value.answer])
+        setStore("answeredTabs", (titles) => [...titles, target(value).title])
+        emit(store.session, { type: "prompt", tabID: value.tabID, prompt: null })
+      },
+      reveal: async () => undefined,
+      openPage: async ({ expected }) => { setStore("external", (items) => [...items, expected]) },
+      createTab: async () => PluginTabHandle.make("handle"),
+      closeTab: async () => true,
       // Main deletes the site's data and reloads the page.
       clearSite: async () => {
         setStore({ cookies: 0, generation: store.generation + 1 })
         report()
       },
+      clearCache: async () => {
+        setStore("generation", (value) => value + 1)
+        report()
+      },
       close: async () => undefined,
+      forget: async () => undefined,
       state: () => undefined,
       on: (_name, listener) => {
         // SAFETY: the pane's Ipc has one event, whose payload is exactly this binding and PaneEvent.
@@ -488,16 +672,93 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
 
     const live = liveAccessor(() => ({ status: "active", generation: 1, value: pane }))
 
+    // Main's history, faked at its Ipc with the real search over an index of its pages: what an import left, and the
+    // visits the model records.
+    const index = createPageIndex()
+    const pages = new Map<number, PageVisit>()
+    const position = (url: string) => Array.from(pages).find((item) => pageKey(item[1].url) === pageKey(url))?.[0]
+
+    const keep = (page: PageVisit, id = pages.size + 1) => {
+      pages.set(id, page)
+      index.set(id, page)
+      setStore("historyPages", pages.size)
+    }
+
+    const seedImported = () => importedPages(Date.now()).forEach((page) => keep(page))
+
+    // As main rejects each call while its store cannot open.
+    const reachable = () => {
+      if (store.historyAway) throw new Error("unable to open database file")
+    }
+
+    const historyClient = {
+      prepare: async () => reachable(),
+      search: async (request: { query: string; limit: number }) => {
+        reachable()
+
+        return findPages(index, request.query, request.limit, Date.now(), {
+          shown: (id) => pages.get(id),
+          front: (host) => Array.from(pages.values()).find((page) => pageKey(page.url) === host),
+        })
+      },
+      visit: async (request: { url: string; title: string }) => {
+        reachable()
+        const id = position(request.url)
+        const known = id === undefined ? undefined : pages.get(id)
+
+        if (pageKey(request.url)) keep({ ...request, visits: (known?.visits ?? 0) + 1, typed: known?.typed ?? 0, visited: Date.now() }, id)
+      },
+      retitle: async () => undefined,
+      remove: async (request: { url: string }) => {
+        reachable()
+        const id = position(request.url)
+
+        if (id === undefined) return
+        pages.delete(id)
+        index.remove(id)
+        setStore("historyPages", pages.size)
+      },
+      clear: async () => {
+        reachable()
+        pages.clear()
+        index.clear()
+        setStore("historyPages", 0)
+      },
+    }
+
+    // SAFETY: the model calls only the six methods above, with the inputs the history's Ipc schemas describe.
+    // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
+    const historyMain = historyClient as unknown as IpcClient<(typeof BrowserHistory)["spec"]>
+    const historyLive = liveAccessor(() => ({ status: "active", generation: 1, value: historyMain }))
+
+    if (scenario === "History") seedImported()
+
     const fake = {
       ...base,
-      use: () => live,
+      app: { name: "opencode", version: "", channel: "dev", platform: "desktop", packaged: false },
+      use: (token: { readonly id: string }) => (token.id === BrowserHistory.id ? historyLive : live),
+      // The plugin instance's lifetime, which the model's calls to main's history end with.
+      signal: new AbortController().signal,
+      toast: { show: (shown: { title: string }) => setStore("toast", shown.title) },
       sessions: { current: session, list: () => Array.from(views.values()).filter((view) => view.key !== "Empty") },
       screen: { current: () => screen },
       layout: {
         narrow: () => false,
+        fitsSide: () => true,
+        // The stored layout has not loaded, so the pane's model reads no strip from it.
+        ready: () => false,
         stored: () => [],
-        state: () => "visible",
-        open() {},
+        // The open pane shows each session's current tab; its other tab is in the strip behind it.
+        state: (key: string) => (tabs.some((tab) => key === `browser:${tab.id}` && tab !== current(tab.owner)) ? "open" : "visible"),
+        // As the host does for the model's own selection of a tab: the strip selects it.
+        open(key: string, _session: SessionRef, options?: { tab?: string }) {
+          const tab = tabs.find((item) => key === `browser:${item.id}`)
+
+          if (options?.tab !== "select" || !tab || tab.owner !== "Alpha" || tab === current("Alpha")) return
+          setStore("secondTab", tab.title === "Second")
+          report("Alpha")
+          embed(tab)
+        },
         close() {},
         side: { opened: () => true, toggle() {}, menu: () => [], width: () => undefined, resize() {} },
       },
@@ -509,6 +770,10 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
           },
           set: (next: History) => setStore("history", reconcile(next)),
         },
+        // Already welcomed: the pane's offer to import sign-ins needs main's profile, which this fixture has none of.
+        preferences: { value: { links: true, welcomed: true }, set() {} },
+        // The pane fixture has no strip to draw saved tabs in.
+        tabs: { value: { sessions: [] }, set() {} },
       },
       system: {
         copy: async () => undefined,
@@ -520,6 +785,16 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
     const plugin = fake as unknown as Context & SetupContext<typeof definition>
     const model = createModel(plugin)
+
+    // As the host routes it; a mail or copied address is recorded on the body instead of leaving the page.
+    if ("createAppLinks" in input) input.createAppLinks((href) => {
+      const route = input.appLinkRoute(href, true)
+
+      if (route !== "review") return void (document.body.dataset[route] = href)
+      const view = session()
+
+      if (view) void model.reviewLink(view, href)
+    })
 
     const pick = (rect?: ElementRect) => {
       const selector = () => {
@@ -560,11 +835,10 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
               suspended={model.suspended({ key: store.session })}
               reconnect={() => model.command({ key: store.session }, { type: "reload", tabID: current().id })}
               comments={store.comments}
+              sent={store.sent}
               external={store.external.at(-1)}
             >
-              <Show when={session()}>
-                {(view) => <SessionBrowserPane tab={current} session={view()} screen={screen} model={model} />}
-              </Show>
+              <SessionBrowserPane tab={current} session={session()} screen={screen} model={model} />
             </input.Frame>
           </PanelContext.Provider>
         </PluginContext.Provider>
@@ -576,7 +850,35 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
           {/* The plugin contributes the bar's styles through the host's Style registry, which this fixture skips.
               Menus and suggestions portal into <body>, under this fixture's fixed host unless raised above it. */}
           <style>{`${barStyles}\n[data-popper-positioner] { z-index: 1001 !important; }`}</style>
-          <h1 style={{ "font-size": "24px", "margin-bottom": "16px" }}>Browser pane lifecycle</h1>
+          {/* Beside the title, so the controls below keep their rows and the pane keeps its place. */}
+          <h1 style={{ "font-size": "24px", "margin-bottom": "16px", display: "flex", "justify-content": "space-between" }}>
+            Browser pane lifecycle
+            <span style={{ display: "flex", gap: "8px" }}>
+              {/* Beside the title too: the pane below is measured where it is. */}
+              <span style={{ "font-size": "14px", "align-self": "center" }}>Main history: {store.historyPages}</span>
+              <span style={{ "font-size": "14px", "align-self": "center" }}>{store.toast}</span>
+              <button style={{ "font-size": "14px" }} onClick={seedImported}>
+                Seed imported history
+              </button>
+              <button style={{ "font-size": "14px" }} onClick={() => setStore("historyAway", (away) => !away)}>
+                History away
+              </button>
+              <button style={{ "font-size": "14px" }} onClick={() => setStore("failCommand", true)}>
+                Fail next command
+              </button>
+              <button
+                style={{ "font-size": "14px" }}
+                disabled={store.session !== "Alpha"}
+                onClick={() => {
+                  setStore("secondTab", (selected) => !selected)
+                  report()
+                  embed(current())
+                }}
+              >
+                Switch browser tab
+              </button>
+            </span>
+          </h1>
           <nav style={{ display: "flex", "flex-wrap": "wrap", gap: "12px", margin: "16px 0" }}>
             <For each={["Alpha", "Beta", "Empty"]}>
               {(name) => <button onClick={() => setStore({ session: name, mounted: name !== "Empty" })}>{name}</button>}
@@ -663,17 +965,16 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
             </select>
             <button onClick={() => setStore("history", { visits })}>Seed history</button>
             <button onClick={() => setStore("failSite", true)}>Fail next site read</button>
-            <button onClick={() => emit(store.session, { type: "page", tabID: current().id, icon, zoom: store.zoom })}>
-              Page icon
-            </button>
+            <button onClick={() => page(current(), { icon })}>Page icon</button>
           </nav>
+
           <p>Captures: {store.captures}</p>
-          <p>Zoom: {Math.round(store.zoom * 100)}</p>
+          <p>Zoom: {Math.round(details(current().id).zoom * 100)}</p>
           <p>Visits: {store.history.visits.map((visit) => visit.url).join(" ")}</p>
           <p>External: {store.external.join(" ")}</p>
           <p>Session getter reads: {reads.directory}</p>
           <p>Picker: {store.picker[store.session] ? "on" : "off"}</p>
-          <For each={tabs}>
+          <For each={tabs.filter((tab) => tab.title !== "Second")}>
             {(tab) => (
               <p>
                 Picker {tab.title}: {store.picker[tab.title] ? "on" : "off"}
@@ -683,8 +984,8 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
           <p>Highlights: {store.highlights.map((item) => item.ref ?? "clear").join(",")}</p>
           <p>Highlight owners: {store.highlights.map((item) => item.sessionKey).join(",")}</p>
           <div style={{ position: "relative", width: `${store.width}px`, height: "360px", border: "1px solid #555" }}>
-            <Show when={store.mounted && session()}>
-              {(view) => <SessionBrowserPane tab={() => current()} session={view()} screen={screen} model={model} />}
+            <Show when={store.mounted}>
+              <SessionBrowserPane tab={current} session={session()!} screen={screen} model={model} />
             </Show>
             <ResizeHandle
               data-testid="pane-resize-handle"
@@ -707,6 +1008,188 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
             </For>
           </ul>
           <div data-testid="fixture-comment-metadata">{JSON.stringify(store.comments)}</div>
+          {/* Below the pane, so the pane keeps the place the geometry specs measure. */}
+          <nav>
+            <button onClick={() => setStore("failCapture", true)}>Fail capture</button>
+            <button
+              onClick={() =>
+                emit(store.session, {
+                  type: "prompt",
+                  tabID: current().id,
+                  prompt: {
+                    id: 1,
+                    waiting: 1,
+                    focus: true,
+                    asked: 1,
+                    page: false,
+                    ask: {
+                      kind: "dialog",
+                      dialog: "confirm",
+                      site: { kind: "web", host: "alpha.example", embedded: false },
+                      message: "Discard the draft?\nIt cannot be restored.",
+                      value: "",
+                      stop: true,
+                    },
+                  },
+                })
+              }
+            >
+              Page confirm
+            </button>
+            <button
+              onClick={() =>
+                emit(store.session, {
+                  type: "prompt",
+                  tabID: current().id,
+                  prompt: {
+                    id: 2,
+                    waiting: 0,
+                    focus: false,
+                    asked: 1,
+                    page: false,
+                    ask: {
+                      kind: "permission",
+                      site: { kind: "web", host: "alpha.example", embedded: false },
+                      permissions: ["notifications"],
+                      remember: "kept",
+                      agent: false,
+                      system: false,
+                    },
+                  },
+                })
+              }
+            >
+              Permission request
+            </button>
+            <button
+              onClick={() =>
+                emit(store.session, {
+                  type: "prompt",
+                  tabID: current().id,
+                  prompt: {
+                    id: 2,
+                    waiting: 0,
+                    focus: false,
+                    asked: 2,
+                    page: false,
+                    ask: {
+                      kind: "permission",
+                      site: { kind: "web", host: "alpha.example", embedded: false },
+                      permissions: ["notifications"],
+                      remember: "kept",
+                      agent: false,
+                      system: false,
+                    },
+                  },
+                })
+              }
+            >
+              Repeat permission request
+            </button>
+            {/* Where the keyboard is in the window outside the pane, as the chat composer. */}
+            <input aria-label="Composer stand-in" />
+            <button
+              onClick={() =>
+                emit(store.session, {
+                  type: "prompt",
+                  tabID: current().id,
+                  prompt: {
+                    id: 3,
+                    waiting: 0,
+                    focus: false,
+                    asked: 1,
+                    page: false,
+                    ask: {
+                      kind: "permission",
+                      site: { kind: "web", host: "alpha.example", embedded: false },
+                      permissions: ["microphone"],
+                      remember: "none",
+                      agent: true,
+                      system: false,
+                    },
+                  },
+                })
+              }
+            >
+              Agent permission request
+            </button>
+            <button
+              onClick={() =>
+                emit(store.session, {
+                  type: "prompt",
+                  tabID: current().id,
+                  prompt: {
+                    id: 4,
+                    waiting: 0,
+                    focus: true,
+                    asked: 1,
+                    page: false,
+                    ask: {
+                      kind: "dialog",
+                      dialog: "prompt",
+                      site: { kind: "web", host: "alpha.example", embedded: false },
+                      message: "Name the copy",
+                      value: "Draft",
+                      stop: false,
+                    },
+                  },
+                })
+              }
+            >
+              Page prompt
+            </button>
+            <button
+              onClick={() =>
+                emit(store.session, {
+                  type: "prompt",
+                  tabID: current().id,
+                  prompt: {
+                    id: 5,
+                    waiting: 0,
+                    focus: true,
+                    asked: 1,
+                    page: false,
+                    ask: { kind: "auth", host: "intranet.alpha.example", realm: "Staff area", failed: true },
+                  },
+                })
+              }
+            >
+              Sign-in request
+            </button>
+            <button
+              onClick={() => {
+                const second = tabs[2]
+
+                if (!second) return
+                // The agent's page asked before the agent showed it. Each tab counts its requests alone, so this one
+                // has the id of the first tab's "Permission request".
+                emit("Alpha", {
+                  type: "prompt",
+                  tabID: second.id,
+                  prompt: {
+                    id: 2,
+                    waiting: 0,
+                    focus: false,
+                    asked: 1,
+                    page: false,
+                    ask: {
+                      kind: "permission",
+                      site: { kind: "web", host: "second.example", embedded: false },
+                      permissions: ["camera"],
+                      remember: "none",
+                      agent: true,
+                      system: false,
+                    },
+                  },
+                })
+                emit("Alpha", { type: "activity", tabID: second.id, reveal: "tab" })
+              }}
+            >
+              Agent shows a page that asks
+            </button>
+          </nav>
+          <p>Answers: {JSON.stringify(store.answers)}</p>
+          <p>Answered in: {JSON.stringify(store.answeredTabs)}</p>
           <Show when={store.covered}>
             {/* Floating content portals into <body> like a menu or hover card over the page. */}
             <Portal mount={document.body}>
@@ -725,15 +1208,24 @@ export function browserPaneFixture(input: PaneHost | StoryHost) {
             </Portal>
           </Show>
           <For each={tabs}>
-            {(tab) => (
-              <div
-                data-testid={`native-${tab.title}`}
-                data-visible={!!store.layouts[`embed-${tab.title}`]?.visible}
-                style={{ padding: "12px", margin: "8px 0", border: "1px solid #555" }}
-              >
-                {tab.title}: {store.layouts[`embed-${tab.title}`]?.visible ? "visible" : "hidden"}
-              </div>
-            )}
+            {(tab) => {
+              const layout = () => store.layouts[`embed-${tab.title}`]
+
+              return (
+                <div
+                  data-testid={`native-${tab.title}`}
+                  data-visible={!!layout()?.visible}
+                  data-x={layout()?.bounds?.x}
+                  data-y={layout()?.bounds?.y}
+                  data-width={layout()?.bounds?.width}
+                  data-height={layout()?.bounds?.height}
+                  data-layout-calls={store.layoutCalls}
+                  style={{ padding: "12px", margin: "8px 0", border: "1px solid #555" }}
+                >
+                  {tab.title}: {layout()?.visible ? "visible" : "hidden"}
+                </div>
+              )
+            }}
           </For>
         </PanelContext.Provider>
       </PluginContext.Provider>
@@ -784,7 +1276,7 @@ type RegionHost = {
       ipc: (token: Ipc) => PaneClient | undefined
     }>
   >
-  usePluginHost(): { ready(): boolean }
+  usePluginHost(): { ready(): boolean; links: { open(link: { href: string; exact: boolean; session: MountedSession }): void } }
   createRegion(input: {
     region: "side"
     view: Accessor<MountedSession>
@@ -823,6 +1315,10 @@ type RegionHost = {
   }>
   /** The real host wrapper that renders a plugin in its context. */
   Contribution: Component<{ plugin: string; children: () => JSX.Element }>
+  /** The host's own placement of a tab it adds without selecting it: after `after` when the strip has it, else last. */
+  appendTab(strip: { all: string[] }, tab: string, after?: string): { all: string[] }
+  /** The host's own choice of the sessions whose stored strips it forgets: all but the `max` used last, and never `keep`. */
+  pruneKeys(input: { keep?: string; max: number; used: Map<string, number>; view: string[]; tabs: string[] }): string[]
 }
 
 type RegionFixtureState = {
@@ -832,6 +1328,8 @@ type RegionFixtureState = {
   registrations: { binding: string; session: string; restore: number }[]
   /** The pane's Ipc is gone, as while its main plugin reloads or is not active. */
   away: boolean
+  /** The browser plugin is not running, as between quitting the app and opening it again. */
+  quit: boolean
   /** Whether the fixture's shell session was closed by its fallback shortcut. */
   closed: boolean
   /** How many times the review side panel toggled from a shortcut. */
@@ -842,6 +1340,8 @@ type RegionFixtureState = {
   sessions: number
   /** How many browser tabs the pane asked main to open. */
   opens: number
+  previewURL?: string
+  toast?: string
   /** How many page reloads the pane asked main for. */
   reloads: number
   reopens: number
@@ -876,6 +1376,7 @@ export function mountBrowserRegion(input: RegionHost) {
       },
       registrations: [],
       away: false,
+      quit: false,
       closed: false,
       reviews: 0,
       opened: true,
@@ -908,7 +1409,7 @@ export function mountBrowserRegion(input: RegionHost) {
       id: "browser-test",
       name: "Browser test",
       url: "http://127.0.0.1:4096",
-      data: { on: () => () => undefined },
+      data: { on: () => () => undefined, session: { status: () => "idle" } },
       local: true,
       builtin: true,
       compatible: true,
@@ -966,17 +1467,22 @@ export function mountBrowserRegion(input: RegionHost) {
 
     // One screen object while the strip mounts, whichever session it routes.
     // SAFETY: this fixture draws file tab triggers and the browser pane. Its file model implements list,
-    // normalize and focus; the browser has a composer attach callback. File-view operations are never invoked here.
+    // normalize and focus; the browser has composer attach, delivery and send callbacks. File-view operations are never
+    // invoked here.
     // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
-    const screen = { file, composer: { attach() {} } } as unknown as SessionScreen
+    const screen = { file, composer: { attach() {}, delivery: () => undefined, send() {} } } as unknown as SessionScreen
 
     const layout = (plugin: string): BuiltinLayout => ({
       narrow: () => false,
+      fitsSide: () => true,
       ready: () => true,
       open(key, session, options) {
-        if (!strip(session.key).all.includes(key)) setAll(session.key, [...strip(session.key).all, key])
+        setAll(session.key, input.appendTab({ all: [...strip(session.key).all] }, key, options?.after).all)
 
         if (options?.tab !== "append") setStore("strips", session.key, "active", key)
+
+        // As the host does for a selected tab, without the toggle's move of keyboard focus.
+        if (options?.tab === "select") setStore("opened", true)
       },
       // As the host does, the routed session's strip closes it.
       close: (key, session) => (session.key === view().key ? sideRegion()?.close(key) : close(session.key, key)),
@@ -989,7 +1495,7 @@ export function mountBrowserRegion(input: RegionHost) {
       },
       stored: (session) =>
         strip(session.key).all.flatMap((key) => (key.startsWith(`${plugin}:`) ? [key.slice(plugin.length + 1)] : [])),
-      side: { opened: () => true, toggle() {}, menu: () => [], width: () => undefined, resize() {} },
+      side: { opened: () => store.opened, toggle() {}, menu: () => [], width: () => undefined, resize() {} },
       sidebar: { opened: () => true },
       scroll: { get: () => undefined, set() {} },
       settings() {},
@@ -1020,9 +1526,19 @@ export function mountBrowserRegion(input: RegionHost) {
       }
     }
 
+    // What each store holds, as JSON: it outlives the plugin's instance, as storage outlives a quit.
+    const kept = new Map<string, () => string>()
+
     // Loaded at once.
     const storage = (plugin: string): Storage => ({
-      store: (key, options) => keep(`${plugin}:${key}`, options.initial).store,
+      store(key, options) {
+        const name = `${plugin}:${key}`
+        const saved = kept.get(name)
+        const opened = keep(name, saved ? Schema.decodeUnknownSync(options.schema)(JSON.parse(saved())) : options.initial).store
+        kept.set(name, () => JSON.stringify(opened.value))
+
+        return opened
+      },
       memory: (key, options) => keep(`${plugin}:${key}`, options.initial).memory,
       remove() {},
     })
@@ -1057,7 +1573,10 @@ export function mountBrowserRegion(input: RegionHost) {
       },
       load: async () => undefined,
       command: async (value) => {
-        if (value.command.type === "tabs.open") setStore("opens", (count) => count + 1)
+        if (value.command.type === "tabs.open") {
+          setStore("opens", (count) => count + 1)
+          setStore("previewURL", value.command.url)
+        }
 
         if (value.command.type === "reload") setStore("reloads", (count) => count + 1)
 
@@ -1086,9 +1605,21 @@ export function mountBrowserRegion(input: RegionHost) {
       },
       highlight: async () => undefined,
       zoom: async () => undefined,
+      setViewport: async () => undefined,
       site: async () => ({ cookies: 0 }),
       clearSite: async () => undefined,
+      clearCache: async () => undefined,
+      find: async () => undefined,
+      notice: async () => undefined,
+      reviewLink: async () => tabID,
+      // Main answers the page, which then waits on nothing.
+      answer: async () => ask(null),
+      reveal: async () => undefined,
       close: async () => undefined,
+      openPage: async () => undefined,
+      createTab: async () => PluginTabHandle.make("handle"),
+      closeTab: async () => true,
+      forget: async () => undefined,
       state: () => undefined,
       on: (_name, listener) => {
         // SAFETY: the pane's Ipc has one event, so every listener takes that event's payload.
@@ -1108,17 +1639,47 @@ export function mountBrowserRegion(input: RegionHost) {
       servers: () => servers,
       workspaces: () => workspaces,
       desktop: () => ({ zoom: () => 1 }),
-      embeds: () => ({ View: () => null, capture: async () => undefined }),
+      // The page area with what the pane draws over it, as a page's prompt; the page itself is the iframe above.
+      embeds: () => ({
+        View: (props: Parameters<Embeds["View"]>[0]) => (
+          <div class={props.class} style={{ "min-height": "240px" }}>
+            {props.children}
+          </div>
+        ),
+        capture: async () => undefined,
+      }),
       system: () => ({ copy: async () => undefined, openExternal() {}, save: async () => false }),
       sessions: () => ({ list: () => refs, current: view }),
       screen: () => ({ current: () => screen }),
-      toast: () => ({ show: () => ({ dismiss() {} }) }),
+      toast: () => ({ show: (input: { title: string }) => {
+        setStore("toast", input.title)
+
+        return { dismiss() {} }
+      } }),
       tabs: () => ({ list: () => [], open() {}, focus() {}, move() {}, close() {} }),
       layout,
       storage,
     }
 
     const latest = () => store.registrations.filter((item) => item.session === "ses_beta").at(-1)
+
+    const probe = { open: async (): Promise<void> => { throw new Error("Fixture consumer not active") } }
+    const [apiResult, setApiResult] = createSignal("")
+
+    const consumer: Entry = { id: "fixture-tabs", windowEntry: async () => {
+      const contract = await import("@opencode/plugin/gui/browser")
+
+      return { default(ctx: Context) {
+        const read = ctx.use(contract.Browser)
+        probe.open = async () => {
+          const pane = read()
+
+          if (pane.status !== "active") throw new Error("missing pane")
+          const id = await pane.value.experimental.open(view(), "https://fixture.invalid")
+          setApiResult(String(await pane.value.experimental.close(id)))
+        }
+      } }
+    } }
 
     // The desktop answers Beta's latest registration with the tab it restored.
     const inventory = () => {
@@ -1129,6 +1690,25 @@ export function mountBrowserRegion(input: RegionHost) {
       listeners.forEach((listener) =>
         listener({ binding, event: { type: "state", state: { tabs: [tab(tabID)], focusedTabID: tabID } } }),
       )
+    }
+
+    // What main sends Beta's latest registration, as the JSON a test wrote, read by the Ipc's own event schema.
+    const [mainEvent, setMainEvent] = createSignal<HTMLTextAreaElement>()
+
+    const sendMainEvent = () => {
+      const binding = latest()?.binding
+      const field = mainEvent()
+
+      if (!binding || !field) return
+      const sent = Schema.decodeUnknownSync(BrowserPane.spec.events.event)({ binding, event: JSON.parse(field.value) })
+      listeners.forEach((listener) => listener(sent))
+    }
+
+    // As main reports a page's prompt on Beta's tab.
+    const ask = (prompt: PromptView | null) => {
+      const binding = latest()?.binding
+
+      if (binding) listeners.forEach((listener) => listener({ binding, event: { type: "prompt", tabID, prompt } }))
     }
 
     // Wires an embedded page with the same before-input-event shortcut interception as chromium.ts.
@@ -1151,6 +1731,7 @@ export function mountBrowserRegion(input: RegionHost) {
               alt: event.altKey,
             },
             mac,
+            true,
           )
 
           const binding = latest()?.binding
@@ -1215,42 +1796,56 @@ export function mountBrowserRegion(input: RegionHost) {
           <div role="tablist" aria-label="Side panel" style={{ display: "flex", gap: "8px", margin: "16px 0" }}>
             <For each={region.keys()}>
               {(key) => (
-                <span role="tab" aria-selected={region.active() === key} style={{ padding: "4px 8px" }}>
-                  {region.entry(key)?.tab.title}
-                </span>
+                <button type="button" role="tab" aria-selected={region.active() === key} onClick={() => region.select(key)} style={{ padding: "4px 8px" }}>
+                  {region.entry(key)?.tab.label?.({ active: region.active() === key, preview: false, session: view() }) ?? region.entry(key)?.tab.title}
+                </button>
               )}
             </For>
           </div>
           <p data-testid="selected">{region.active() ?? "none"}</p>
           <p data-testid="side-new-tab">{region.newTab("side") ? "shown" : "none"}</p>
           <Show when={browser()}>
-            {(entry) => (
-              <PanelContext.Provider
-                value={{
-                  visible: () => true,
-                  present: () => true,
-                  placement: () => "side",
-                  reserve: () => false,
-                  animate: () => false,
-                  sidebar: { opened: () => false, width: () => 0, transition: () => false, resize() {}, toggle() {} },
-                  open: () => [tabID],
-                }}
-              >
-                <input.Contribution plugin={entry().plugin}>
-                  {() =>
-                    entry().provider.render({
-                      get tab() {
-                        return entry().tab
-                      },
-                      get session() {
-                        return view()
-                      },
-                      screen,
-                    })
-                  }
-                </input.Contribution>
-              </PanelContext.Provider>
-            )}
+            {(shown) => {
+              // The pane's last reads come after the route has left its tab: they get the entry it mounted with.
+              const mounted = shown()
+              const entry = () => browser() ?? mounted
+
+              return (
+                <PanelContext.Provider
+                  value={{
+                    visible: () => true,
+                    present: () => true,
+                    placement: () => "side",
+                    reserve: () => false,
+                    animate: () => false,
+                    sidebar: {
+                      opened: () => false,
+                      width: () => 0,
+                      transition: () => false,
+                      resize() {},
+                      toggle() {},
+                      side: () => "start",
+                      move() {},
+                    },
+                    open: () => [tabID],
+                  }}
+                >
+                  <input.Contribution plugin={entry().plugin}>
+                    {() =>
+                      entry().provider.render({
+                        get tab() {
+                          return entry().tab
+                        },
+                        get session() {
+                          return view()
+                        },
+                        screen,
+                      })
+                    }
+                  </input.Contribution>
+                </PanelContext.Provider>
+              )
+            }}
           </Show>
         </aside>
       )
@@ -1259,15 +1854,20 @@ export function mountBrowserRegion(input: RegionHost) {
     function Ready(props: ParentProps) {
       const plugins = input.usePluginHost()
 
-      return <Show when={plugins.ready()}>{props.children}</Show>
+      return <Show when={plugins.ready()}>
+        <button onClick={() => plugins.links.open({ href: "report.html", exact: true, session: view() })}>Open workspace HTML</button>
+        <output>{store.previewURL}</output>
+        <output>{store.toast}</output>
+        {props.children}
+      </Show>
     }
 
     return (
       <DialogProvider>
         <input.Shell>
           <input.PluginHostProvider
-            definitions={() => input.definitions}
-            disabled={() => new Set<string>()}
+              definitions={() => [...input.definitions, consumer]}
+            disabled={() => new Set(store.quit ? ["browser"] : [])}
             apis={apis}
             whenMounted={(run) => {
               run()
@@ -1299,7 +1899,30 @@ export function mountBrowserRegion(input: RegionHost) {
                 }}
               >
                 First inventory
-              </button>
+                </button>
+                <button onClick={() => {
+                  const binding = latest()?.binding
+
+                  if (binding) listeners.forEach(listener => listener({ binding, event: { type: "state", state: { tabs: [tab(tabID)], focusedTabID: tabID }, error: "browser.pane.suspended" } }))
+                }}>Suspend binding</button>
+                <button onClick={() => void probe.open?.()}>Plugin open and close</button>
+                <button onClick={() => {
+                  const binding = latest()?.binding
+
+                  if (binding) listeners.forEach(listener => listener({ binding, event: { type: "activity", tabID, reveal: "tab" } }))
+                }}>Agent show request</button>
+                {/* Off screen, so the strip below keeps its place: a test dispatches its click, as the agent's request
+                    arrives with no input from the person. */}
+                <button style={{ position: "absolute", left: "-9999px" }} onClick={() => {
+                  const binding = latest()?.binding
+                  const shown = Browser.TabID.make("tab_55555555-5555-5555-5555-555555555555")
+
+                  if (!binding) return
+                  // As main reports a tab the agent opened beside the person's and asked to show.
+                  listeners.forEach(listener => listener({ binding, event: { type: "state", state: { tabs: [tab(tabID), tab(shown)], focusedTabID: tabID } } }))
+                  listeners.forEach(listener => listener({ binding, event: { type: "activity", tabID: shown, reveal: "tab" } }))
+                }}>Agent shows another page</button>
+                <output>Plugin closed: {apiResult()}</output>
               <button
                 onClick={() => {
                   setStore("blank", true)
@@ -1308,8 +1931,80 @@ export function mountBrowserRegion(input: RegionHost) {
               >
                 Blank page
               </button>
+              {/* Off screen, like the agent's request above, so the strip keeps its place: a test dispatches each click. */}
+              <div style={{ position: "absolute", left: "-9999px" }}>
+                {/* The plugin's instance ends and a new one starts over the same storage and strip, as the app does. */}
+                <button
+                  onClick={() => {
+                    setStore("quit", true)
+                    queueMicrotask(() => setStore("quit", false))
+                  }}
+                >
+                  Quit and reopen
+                </button>
+                <textarea aria-label="Main event" ref={setMainEvent} />
+                <button onClick={sendMainEvent}>Send main event</button>
+                <button onClick={() => setStore("session", alpha)}>Alpha</button>
+                {/* As the host's layout does (`prune` in layout.tsx): it stores the strips of the 50 sessions used last. Fifty
+                    other sessions were used since Beta, so it forgets Beta's, whose shell tab is still open. No plugin
+                    hears of it. */}
+                <button
+                  onClick={() => {
+                    const others = Array.from({ length: 50 }, (_, index) => `browser-test\nses_other${index}`)
+                    const used = new Map([[beta, 1], ...others.map((key, index): [string, number] => [key, index + 2])])
+
+                    input
+                      .pruneKeys({ keep: store.session, max: 50, used, view: [], tabs: [alpha, beta, ...others] })
+                      .forEach((key) => setStore("strips", key, { all: [], active: undefined }))
+                  }}
+                >
+                  Fifty other sessions used
+                </button>
+              </div>
               <button onClick={() => setStore("away", true)}>Pane away</button>
               <button onClick={() => setStore("away", false)}>Pane back</button>
+              <button
+                onClick={() =>
+                  ask({
+                    id: 1,
+                    waiting: 0,
+                    focus: true,
+                    asked: 1,
+                    page: false,
+                    ask: {
+                      kind: "dialog",
+                      dialog: "prompt",
+                      site: { kind: "web", host: "beta.example", embedded: false },
+                      message: "Name the copy",
+                      value: "Draft",
+                      stop: false,
+                    },
+                  })
+                }
+              >
+                Page prompt
+              </button>
+              <button
+                onClick={() =>
+                  ask({
+                    id: 2,
+                    waiting: 0,
+                    focus: true,
+                    asked: 1,
+                    page: false,
+                    ask: {
+                      kind: "permission",
+                      site: { kind: "web", host: "beta.example", embedded: false },
+                      permissions: ["notifications"],
+                      remember: "kept",
+                      agent: false,
+                      system: false,
+                    },
+                  })
+                }
+              >
+                Permission request
+              </button>
             </nav>
             <iframe
               title="Browser page"

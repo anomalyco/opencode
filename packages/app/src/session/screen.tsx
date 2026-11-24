@@ -23,11 +23,11 @@ import type { SessionModel } from "@/session/model"
 import { SESSION_PANEL_WIDTH_MIN } from "@/session/session-panel-width"
 import { useLayout } from "@/shell/state/layout"
 import { SessionPanelFrame } from "@/session/session-frame"
-import { PluginLinks } from "@/runtime/plugin/render"
+import { createWebLinks, PluginLinks } from "@/runtime/plugin/render"
 import { createPanelSidebar, createRegion, MobilePanel } from "@/runtime/plugin/panels"
 import { createMobileViews, MobileViewTabs } from "@/runtime/plugin/mobile"
 import { usePluginAttachment } from "@/runtime/plugin/host-apis"
-import { createMountedSession } from "@/runtime/plugin/mounted-session"
+import { createMountedSession, type ScreenPrompt } from "@/runtime/plugin/mounted-session"
 import { useUsageExceededDialogs } from "./usage-exceeded-dialogs"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionScreenLayout } from "./screen-layout"
@@ -54,6 +54,7 @@ import { createPanelMotion, holdLandingWidth, panelOpacity, setPanelResizing } f
 export function SessionScreenView(props: { session: SessionModel }) {
   // Link handling for the rest of the screen; each cached timeline provides its own for its session.
   const mounted = createMountedSession(props.session)
+  createWebLinks(mounted.view)
 
   return (
     <PluginLinks session={mounted.view()}>
@@ -74,7 +75,7 @@ function SessionScreenContent(props: {
   view: Accessor<MountedSession>
   screen: SessionScreen
   bindBackground: (tasks: () => readonly BackgroundTask[]) => void
-  bindPrompt: (prompt: { quotable: () => boolean; focus: () => void; focused: () => boolean }) => void
+  bindPrompt: (prompt: ScreenPrompt) => void
 }) {
   const session = props.session
   const language = useLanguage()
@@ -204,6 +205,9 @@ function SessionScreenContent(props: {
     distance: screen.side.width,
   })
 
+  // The pinned header toggle tabs in the chat's order, so a settled open panel shows its own copy in its strip.
+  const toggleInPanel = createMemo(() => sideVisible() && sideMotion.openAtRest())
+
   const hideTimelineScrollbar = () => setStore("timelineScrollbarHidden", true)
 
   const revealTimelineScrollbar = (event: Event) => {
@@ -238,7 +242,13 @@ function SessionScreenContent(props: {
   })
 
   props.bindBackground(composer.requests.background.tasks)
-  props.bindPrompt({ quotable: composer.quote.available, focus: composer.quote.focus, focused: composer.focused })
+  props.bindPrompt({
+    quotable: composer.quote.available,
+    focus: composer.quote.focus,
+    focused: composer.focused,
+    delivery: composer.quote.delivery,
+    send: composer.quote.send,
+  })
   useUsageExceededDialogs({
     selection: () => composer.active()?.composer.model.selection,
     onDone: () => composer.active()?.composer.restoreFocus(),
@@ -301,6 +311,7 @@ function SessionScreenContent(props: {
             actions={actions}
             scroll={timeline.scroll}
             onResumeScroll={timeline.actions.resume}
+            focusComposer={composer.quote.focus}
             setScrollRef={timeline.view.setScrollRef}
             onScheduleScrollState={timeline.view.scheduleScrollState}
             follow={timeline.follow}
@@ -308,6 +319,25 @@ function SessionScreenContent(props: {
             onHistoryScroll={timeline.view.onHistoryScroll}
             centered={screen.centered()}
             reserveReviewToggle={!sideVisible()}
+            reviewToggle={
+              <div
+                data-slot="session-review-toggle"
+                classList={{ invisible: toggleInPanel() }}
+                onPointerDown={(event) => {
+                  event.stopPropagation()
+                  hideTimelineScrollbar()
+                }}
+                onClick={hideTimelineScrollbar}
+              >
+                <SessionReviewToggle
+                  onToggle={region.toggle}
+                  glyph={(fill) => {
+                    sideGlyph = fill
+                    paintSideGlyph(sideMotion.closed())
+                  }}
+                />
+              </div>
+            }
             onContentResize={timeline.view.contentResized}
             bottomInset={timeline.inset()}
             setVisibleRef={timeline.view.setVisibleRef}
@@ -450,23 +480,6 @@ function SessionScreenContent(props: {
     <>
       <div class="flex-1 min-h-0 flex flex-col gap-2 px-[var(--shell-inline-inset,8px)] pb-[var(--shell-bottom-inset,8px)] pt-[var(--shell-top-inset,8px)]">
         <div ref={screen.panel.ref} data-pane-row class="relative flex-1 min-h-0 flex flex-col md:flex-row gap-2">
-          {/* Keep the control outside panel animations. */}
-          <Show when={isDesktop() && messagesReady() && session.identity.params.id}>
-            <div
-              class="absolute end-[var(--session-header-inset-end,12px)] top-0 z-30 h-12 flex items-center"
-              data-slot="session-review-toggle"
-              onPointerDown={hideTimelineScrollbar}
-              onClick={hideTimelineScrollbar}
-            >
-              <SessionReviewToggle
-                onToggle={region.toggle}
-                glyph={(fill) => {
-                  sideGlyph = fill
-                  paintSideGlyph(sideMotion.closed())
-                }}
-              />
-            </div>
-          </Show>
           <div
             ref={chat}
             class="relative z-10 min-w-0 shrink-0 flex flex-col min-h-0 h-full flex-1 md:flex-none"
@@ -531,6 +544,16 @@ function SessionScreenContent(props: {
                       size={screen.size}
                       contentWidth={screen.side.contentWidth}
                       drag={drag}
+                      toggle={
+                        <div
+                          data-slot="session-review-panel-toggle"
+                          classList={{ invisible: !toggleInPanel() }}
+                          onPointerDown={hideTimelineScrollbar}
+                          onClick={hideTimelineScrollbar}
+                        >
+                          <SessionReviewToggle onToggle={region.toggle} />
+                        </div>
+                      }
                     />
                   </div>
                 </div>

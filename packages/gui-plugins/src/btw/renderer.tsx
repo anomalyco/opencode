@@ -1,6 +1,6 @@
-import { createMemo, lazy, onCleanup, Suspense } from "solid-js"
+import { createMemo, lazy, onCleanup, Show, Suspense } from "solid-js"
 import { Icon } from "@opencode/ui/icon"
-import { Command, createKeyed, type PanelTab, type Plugin } from "@opencode/plugin/gui"
+import { Command, createKeyed, usePanel, type PanelTab, type Plugin } from "@opencode/plugin/gui"
 import { BuiltinPanel, onIdle } from "@opencode/plugin/gui/builtin"
 import type Btw from "./index"
 import type { BtwTabView } from "./machine"
@@ -86,6 +86,13 @@ const setup: Plugin.Setup<typeof Btw> = (ctx) => {
             <div class="flex min-w-0 items-center gap-1.5">
               <Icon name="comment" class="shrink-0" />
               <span class="truncate">{title(btw.tab(state.session, id))}</span>
+              <Show when={btw.unread(state.session, id)}>
+                <span
+                  role="img"
+                  aria-label={ctx.t("tab.unread")}
+                  class="size-1.5 shrink-0 rounded-full bg-v2-state-fg-info"
+                />
+              </Show>
             </div>
           ),
         }
@@ -95,11 +102,19 @@ const setup: Plugin.Setup<typeof Btw> = (ctx) => {
         return [tab]
       })
     },
-    render: (props) => (
-      <Suspense>
-        <SessionBtwPanel btw={btw} session={props.session} id={props.tab.id} />
-      </Suspense>
-    ),
+    render: (props) => {
+      const panel = usePanel()
+      createKeyed(
+        () => panel.visible() && props.tab.id,
+        (id) => btw.seen(props.session, id),
+      )
+
+      return (
+        <Suspense>
+          <SessionBtwPanel btw={btw} session={props.session} id={props.tab.id} />
+        </Suspense>
+      )
+    },
     close: (input) => {
       btw.remove(input.session, input.tab.id)
       tabs.get(input.session.key)?.delete(input.tab.id)

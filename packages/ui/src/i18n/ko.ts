@@ -31,6 +31,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "",
   "ui.lineComment.editorLabel.suffix": "에 댓글 작성 중",
   "ui.lineComment.placeholder": "댓글 추가",
+  "ui.lineComment.add": "댓글 추가",
+  "ui.lineComment.actions": "선택 영역 작업",
   "ui.lineComment.contextPlaceholder": "이 변경 사항에 대한 컨텍스트 추가",
   "ui.lineComment.submit": "댓글 달기",
 

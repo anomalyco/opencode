@@ -5,7 +5,8 @@ Authoring interfaces and runtime loader support for OpenCode V2 plugins:
 - `@opencode/plugin` — [Promise plugin API](./src/README.md)
 - `@opencode/plugin/effect` — [Effect plugin API](./src/effect/README.md)
 - `@opencode/plugin/rpc` — portable RPC contract definitions
-- `@opencode/plugin/tui` — terminal UI plugin API
+- `@opencode/plugin/tui` - terminal UI plugin API
+- `@opencode/plugin/gui/browser` - desktop pane contract, including experimental scoped tab handles
 
 ## Packaging And Runtime `effect`
 

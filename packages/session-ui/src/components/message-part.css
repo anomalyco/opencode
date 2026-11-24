@@ -207,9 +207,17 @@
       text-decoration-color: color-mix(in oklch, currentColor 40%, transparent);
       text-underline-offset: 2px;
       cursor: pointer;
+      /* Focus scrolls a link in a folded message clear of the 40px fade. */
+      scroll-margin-block-end: 40px;
 
       &:hover {
         text-decoration-color: currentColor;
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--v2-border-border-focus);
+        outline-offset: 2px;
+        border-radius: 2px;
       }
     }
 
@@ -217,9 +225,12 @@
   }
 
   /* A folded message is laid out whole and clipped, so copy, select-all and assistive tech still get all of it. Its
-     last lines fade out (a mask, not a crop) into the toggle. Opening and closing are instant. */
+     last lines fade out (a mask, not a crop) into the toggle. Opening and closing are instant. The inline padding,
+     taken back by the margin, is room for a link's focus ring at the start and end of a line. */
   [data-slot="user-message-fold"] {
     overflow: hidden;
+    padding-inline: 5px;
+    margin-inline: -5px;
 
     /* unicode-bidi isn't inherited, and each paragraph of mixed LTR and RTL text takes its own direction. */
     > div {
@@ -262,7 +273,7 @@
     }
 
     &:focus-visible {
-      outline: 1px solid var(--v2-text-text-accent);
+      outline: 2px solid var(--v2-border-border-focus);
       outline-offset: 2px;
       border-radius: 4px;
     }
@@ -582,22 +593,6 @@
     justify-content: flex-start;
     gap: 4px;
 
-    /* Production keeps the whole footer hover-only. Dev channels keep the copy control visible and
-       hide only the metadata. Keeping the metadata in flow means the copy control does not move. */
-    @media (hover: hover) {
-      &:not([data-copy-always-visible]) {
-        opacity: 0;
-        pointer-events: none;
-      }
-    }
-
-    &[data-copy-always-visible] [data-slot="text-part-meta"] {
-      @media (hover: hover) {
-        opacity: 0;
-        pointer-events: none;
-      }
-    }
-
     [data-component="tooltip-v2-trigger"] {
       display: inline-flex;
       flex: none;
@@ -668,16 +663,14 @@
     transition: none;
   }
 
-  &:hover [data-slot="text-part-copy-wrapper"],
-  &:focus-within [data-slot="text-part-copy-wrapper"] {
-    opacity: 1;
-    pointer-events: auto;
-  }
-
-  &:hover [data-slot="text-part-copy-wrapper"][data-copy-always-visible] [data-slot="text-part-meta"],
-  &:focus-within [data-slot="text-part-copy-wrapper"][data-copy-always-visible] [data-slot="text-part-meta"] {
-    opacity: 1;
-    pointer-events: auto;
+  @media (hover: hover) {
+    &:not(:hover, :focus-within) {
+      [data-slot="text-part-copy-wrapper"]:not([data-keep-copy-visible]),
+      [data-slot="text-part-copy-wrapper"][data-keep-copy-visible] [data-slot="text-part-meta"] {
+        opacity: 0;
+        pointer-events: none;
+      }
+    }
   }
 }
 
@@ -728,6 +721,12 @@
   [data-component="reasoning-part"] [data-component="markdown"] :not(pre) > code {
     opacity: 0.6;
   }
+}
+
+/* Tool output regions take focus so the keyboard can scroll them, and draw no ring. */
+[data-component="tool-output"]:focus-visible,
+[data-slot="bash-scroll"]:focus-visible {
+  outline: none;
 }
 
 [data-component="tool-output"] {
@@ -977,6 +976,42 @@
   justify-content: center;
 }
 
+[data-component="file-counts"] {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 0;
+  font-size: 13px;
+  color: var(--v2-text-text-base);
+
+  [data-slot="file-counts-name"] {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  [data-slot="file-counts-directory"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-component="diff-changes"] {
+    flex-shrink: 0;
+  }
+
+  [data-component="diff-changes"] [data-empty] {
+    display: none;
+  }
+}
+
+/* A script's changes are each their own card, set apart by the gap between a turn's items, so two changes to one file
+   read as two. The New timeline spaces them its own way. */
+[data-script-change="patch"] + [data-script-change="patch"] {
+  margin-top: 12px;
+}
+
 [data-component="execute-tool-calls"] {
   display: flex;
   flex-direction: column;
@@ -1031,8 +1066,29 @@
     }
 
     &:focus-visible {
-      outline: 1px solid var(--v2-text-text-accent);
+      outline: 2px solid var(--v2-border-border-focus);
       outline-offset: 2px;
+      border-radius: 4px;
+    }
+  }
+
+  /* Lines up with the calls' names, past their markers. */
+  [data-slot="execute-tool-call-more"] {
+    all: unset;
+    width: fit-content;
+    margin-inline-start: 20px;
+    cursor: pointer;
+    color: var(--v2-text-text-faint);
+    user-select: none;
+
+    &:hover {
+      color: var(--v2-text-text-base);
+    }
+
+    &:focus-visible {
+      outline: 2px solid var(--v2-border-border-focus);
+      outline-offset: 2px;
+      border-radius: 4px;
     }
   }
 
@@ -1131,6 +1187,8 @@
   gap: 16px;
   width: 100%;
   min-width: 0;
+  /* Code and output share the dialog's height and scroll in their own boxes, so the bottom padding always shows. */
+  min-height: 0;
   padding: 0 16px 16px;
 
   [data-slot="execute-details-section"] {
@@ -1138,6 +1196,7 @@
     flex-direction: column;
     gap: 6px;
     min-width: 0;
+    min-height: 0;
   }
 
   [data-slot="execute-details-section-header"] {
@@ -1244,8 +1303,9 @@
   }
 
   &:focus-visible {
-    outline: 1px solid var(--v2-text-text-accent);
+    outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
+    border-radius: 4px;
   }
 }
 
@@ -1964,6 +2024,107 @@
     width: 342px;
     padding-bottom: 12px;
   }
+
+  [data-slot="user-message-quotes"] {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    white-space: normal;
+  }
+
+  [data-slot="user-message-text"] > [data-slot="user-message-quotes"]:not(:first-child),
+  [data-slot="user-message-fold"] > div > [data-slot="user-message-quotes"]:not(:first-child) {
+    margin-top: 8px;
+  }
+
+  [data-slot="user-message-quote-group"] {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  [data-slot="user-message-quote"] {
+    margin: 0;
+    padding-inline-start: 8px;
+    border-inline-start: 2px solid var(--v2-border-border-strong);
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="user-message-quote-text"],
+  [data-slot="user-message-quote-comment"] {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    unicode-bidi: plaintext;
+
+    /* Each paragraph reads in its own direction but lines up with the bubble, so an English quote in a Hebrew message
+       starts at the bar. */
+    &:dir(ltr) {
+      text-align: left;
+    }
+
+    &:dir(rtl) {
+      text-align: right;
+    }
+  }
+
+  [data-slot="user-message-quote-text"] {
+    &:not([data-open]) {
+      display: -webkit-box;
+      -webkit-box-orient: vertical;
+      -webkit-line-clamp: 3;
+      line-clamp: 3;
+      overflow: hidden;
+    }
+
+    &[data-expandable] {
+      cursor: pointer;
+      border-radius: 4px;
+    }
+
+    &[data-expandable]:hover,
+    &[data-expandable]:focus-visible {
+      color: var(--v2-text-text-base);
+    }
+  }
+
+  /* A source's icon leads the quote like a file's. It sits inline, so wrapped lines return to the bar. */
+  [data-slot="user-message-quote-icon"] {
+    display: inline-flex;
+    vertical-align: -2px;
+    margin-inline-end: 6px;
+    color: var(--v2-icon-icon-muted);
+
+    [data-slot="icon-svg"] {
+      width: 14px;
+      height: 14px;
+    }
+  }
+
+  [data-slot="user-message-quote-reference"] {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+
+    [data-component="file-icon"],
+    [data-slot="icon-svg"] {
+      width: 14px;
+      height: 14px;
+      flex: none;
+    }
+  }
+
+  [data-slot="user-message-quote-reference-label"] {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  [data-slot="user-message-quote-reference-detail"] {
+    flex: none;
+    color: var(--v2-text-text-faint);
+  }
 }
 
 /* Only delivery animates. A steer can render once before its admission marks it pending, and must not fade from the
@@ -1973,4 +2134,9 @@
   background: var(--v2-background-bg-layer-01);
   color: var(--v2-text-text-muted);
   transition: none;
+}
+
+:root body [data-component="user-message"][data-pending] [data-slot="user-message-quote"] {
+  border-color: var(--v2-border-border-base);
+  color: var(--v2-text-text-faint);
 }

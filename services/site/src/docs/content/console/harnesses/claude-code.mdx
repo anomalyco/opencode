@@ -7,6 +7,12 @@ Claude Code speaks the Anthropic Messages API. Point it at Console with two envi
 model, including GPT, Gemini, and open models. Console translates the request for models that don't accept Anthropic
 Messages.
 
+<Callout>
+  The [Console CLI](/console/harnesses#console-cli) sets up Claude Code with one command, including the workspace's
+  policies, MCP servers, skills and instructions. Run `npx @opencode/console setup claude-code`. The steps below set it
+  up by hand.
+</Callout>
+
 ```bash
 export ANTHROPIC_BASE_URL="https://opencode.ai/inference/anthropic"
 export ANTHROPIC_AUTH_TOKEN="oc_sk_..."

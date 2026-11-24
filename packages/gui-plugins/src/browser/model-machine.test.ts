@@ -35,7 +35,7 @@ describe("browser model machine", () => {
     ])
 
     expect(selectBrowserModelError(failed.state)).toBe("chunk")
-    expect(selectBrowserTabHidden(failed.state, known)).toBe(false)
+    expect(selectBrowserTabHidden(failed.state, known, false)).toBe(false)
     expect(failed.effects).toEqual([{ type: "load-model", attempt: 1 }])
 
     const retried = replay(
@@ -45,14 +45,19 @@ describe("browser model machine", () => {
 
     expect(retried.effects).toEqual([{ type: "load-model", attempt: 2 }])
     expect(selectBrowserModel(retried.state)).toEqual({ name: "m" })
-    expect(selectBrowserTabHidden(retried.state, () => false)).toBe(true)
+    expect(selectBrowserTabHidden(retried.state, () => false, false)).toBe(true)
   })
 
-  test("stored tabs stay hidden while the model loads, and a second request loads once", () => {
+  // After a restart the strip was empty until the model had loaded and the desktop had reported the tabs.
+  test("stored tabs stay hidden while the model loads unless the last run saved them, and a second request loads once", () => {
     const loading = replay([{ type: "load.requested" }, { type: "load.requested" }, { type: "retry.requested" }])
+    const loaded = replay([{ type: "load.succeeded", attempt: 1, model: { name: "m" } }], loading.state)
 
     expect(loading.effects).toEqual([{ type: "load-model", attempt: 1 }])
-    expect(selectBrowserTabHidden(loading.state, known)).toBe(true)
+    expect(selectBrowserTabHidden(loading.state, known, false)).toBe(true)
+    expect(selectBrowserTabHidden(createBrowserModelState<Model>(), known, true)).toBe(false)
+    expect(selectBrowserTabHidden(loading.state, known, true)).toBe(false)
+    expect(selectBrowserTabHidden(loaded.state, () => false, true)).toBe(false)
   })
 
   test("a load the plugin's cleanup or a newer attempt overtook settles nothing", () => {

@@ -1,4 +1,4 @@
-import { Component } from "solid-js"
+import type { Component } from "solid-js"
 import { Switch } from "@opencode/ui/switch"
 import { Select } from "@opencode/ui/select"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -30,6 +30,20 @@ export const SettingsExperimental: Component = () => {
         <div class="settings-section">
           <SettingsList>
             <SettingsRow
+              title={language.t("settings.experimental.row.tabGroups.title")}
+              description={language.t("settings.experimental.row.tabGroups.description")}
+            >
+              <div data-action="settings-tab-groups">
+                <Switch
+                  checked={settings.general.tabGroups()}
+                  onChange={(checked) => settings.general.setTabGroups(checked)}
+                  hideLabel
+                >
+                  {language.t("settings.experimental.row.tabGroups.title")}
+                </Switch>
+              </div>
+            </SettingsRow>
+            <SettingsRow
               title={language.t("settings.experimental.row.sidebarOrganize.title")}
               description={language.t("settings.experimental.row.sidebarOrganize.description")}
             >
@@ -42,28 +56,6 @@ export const SettingsExperimental: Component = () => {
                 placement="bottom-end"
                 gutter={6}
               />
-            </SettingsRow>
-            <SettingsRow
-              title={language.t("settings.experimental.row.newIcons.title")}
-              description={language.t("settings.experimental.row.newIcons.description")}
-            >
-              <div data-action="settings-new-icons">
-                <Switch
-                  checked={settings.general.newIcons()}
-                  onChange={(checked) => settings.general.setNewIcons(checked)}
-                />
-              </div>
-            </SettingsRow>
-            <SettingsRow
-              title={language.t("settings.experimental.row.foldUserMessages.title")}
-              description={language.t("settings.experimental.row.foldUserMessages.description")}
-            >
-              <div data-action="settings-fold-user-messages">
-                <Switch
-                  checked={settings.general.foldUserMessages()}
-                  onChange={(checked) => settings.general.setFoldUserMessages(checked)}
-                />
-              </div>
             </SettingsRow>
             <SettingsRow
               title={language.t("settings.experimental.row.newTimeline.title")}

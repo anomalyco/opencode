@@ -395,8 +395,9 @@ const toolChanges = (input: ToolChangesInput): ToolChanges => ({
 })
 
 /**
- * Raw-text wire encoding for a tool with exactly one required string parameter. Models that accept the format
- * write that parameter's value directly instead of JSON arguments; calls still decode to the normal object input.
+ * Raw-text wire encoding for a tool with exactly one required string parameter, or the one its `field` names among
+ * others. Models that accept the format write that parameter's value directly instead of JSON arguments, after a
+ * first line holding the others; calls still decode to the normal object input.
  */
 export const Freeform = Tool.Freeform
 export type Freeform = Tool.Freeform
@@ -428,12 +429,15 @@ export namespace ToolDefinition {
   /** Normalize tool definition input into the canonical `ToolDefinition` class. */
   export const make = (input: Input) => (input instanceof ToolDefinition ? input : new ToolDefinition(input))
 
-  /** The parameter a freeform call fills: the input schema's only property, when it is a required string. */
-  export const freeformField = (schema: JsonSchema) => {
+  /**
+   * The parameter a freeform call fills, when it is a required string: the one the format's `field` names, otherwise
+   * the input schema's only property.
+   */
+  export const freeformField = (schema: JsonSchema, freeform?: Freeform) => {
     const properties = Object.entries(Schema.is(JsonSchema)(schema.properties) ? schema.properties : {})
-    if (properties.length !== 1) return undefined
-    const [name, property] = properties[0]
-    if (!Schema.is(JsonSchema)(property) || property.type !== "string") return undefined
+    if (freeform?.field === undefined && properties.length !== 1) return undefined
+    const [name, property] = properties.find(([name]) => (freeform?.field ?? name) === name) ?? []
+    if (name === undefined || !Schema.is(JsonSchema)(property) || property.type !== "string") return undefined
     return Array.isArray(schema.required) && schema.required.includes(name) ? name : undefined
   }
 }

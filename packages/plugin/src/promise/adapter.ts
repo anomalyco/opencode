@@ -2,14 +2,13 @@ import { Tool } from "@opencode/schema/tool"
 import type { Rpc } from "@opencode/schema/rpc"
 import type { OpenCodeEvent } from "@opencode/client"
 import type { RpcCallOptions, RpcEventPayload, SelectedEvent, SubscribeOptions } from "@opencode/client/promise/api"
-import { Effect, Schema, SchemaAST, Stream } from "effect"
+import { Cause, Effect, Exit, Schema, SchemaAST, Stream } from "effect"
 import type { Scope } from "effect"
 import { HttpApiEndpoint, HttpApiSchema } from "effect/http-api"
 import { define } from "../effect/plugin.js"
-import type { ToolFailures, ToolHooks } from "../effect/tool.js"
 import { AssertInput } from "../permission.js"
 import type { Plugin } from "./plugin.js"
-import type { Info } from "./tool.js"
+import type { Info, ToolHooks } from "./tool.js"
 import type { RpcDomain, RpcHandlers } from "./rpc.js"
 
 type HostRegistration = { readonly dispose: Effect.Effect<void> }
@@ -263,22 +262,74 @@ export function fromPromise(plugin: Plugin) {
               { signal: context.signal },
             )
 
+        // Only execute.before may reject a call; a rejection fails that call alone, like an Effect hook.
+        const adaptToolHook: {
+          readonly [Name in keyof ToolHooks]: (
+            callback: (event: ToolHooks[Name]) => Promise<void> | void,
+          ) => Parameters<typeof host.tool.hook<Name>>[1]
+        } = {
+          "execute.before": (callback) => (event) => {
+            const adapted: ToolHooks["execute.before"] = {
+              ...event,
+              info: event.info && { ...event.info, execute: promiseExecutor(event.info.execute) },
+            }
+            return Effect.tryPromise({
+              try: () =>
+                Promise.resolve(callback(adapted)).then(() => {
+                  event.tool = adapted.tool
+                  event.input = adapted.input
+                }),
+              catch: toolError,
+            })
+          },
+          "execute.after": (callback) => (event) => {
+            const adapted: ToolHooks["execute.after"] = {
+              ...event,
+              info: event.info && { ...event.info, execute: promiseExecutor(event.info.execute) },
+            }
+            return Effect.promise(() =>
+              Promise.resolve(callback(adapted)).then(() => {
+                if (event.status === "completed" && adapted.status === "completed") event.result = adapted.result
+                if (event.status === "error" && adapted.status === "error") event.error = adapted.error
+              }),
+            )
+          },
+        }
+
         const adaptApiMethod = <PromiseMethod>(
           endpoint: HttpApiEndpoint.Top,
           method: (input: never) => Effect.Effect<unknown, unknown>,
         ) => {
           const compiled = compileEndpoint(endpoint)
-          return ((input?: unknown) =>
-            Effect.gen(function* () {
-              // Match the generated Promise client, whose request body crosses JSON before endpoint decoding.
-              const normalized = yield* Schema.encodeUnknownEffect(JsonInput)(input ?? {}).pipe(
-                Effect.flatMap(Schema.decodeUnknownEffect(JsonInput)),
-              )
-              const decoded = yield* Effect.forEach(compiled.decode, (decode) => decode(normalized))
-              const result = yield* method(Object.assign({}, ...decoded) as never)
-              if (compiled.noContent) return undefined
-              return yield* compiled.encode(result)
-            }).pipe(Effect.runPromiseWith(runtime))) as PromiseMethod
+          return ((input?: unknown, options?: { readonly signal?: AbortSignal }) => {
+            const signal = options?.signal
+            // The runner evaluates synchronously before it checks the signal, so an aborted call could start a mutation.
+            if (signal?.aborted) return Promise.reject(signal.reason)
+            return Effect.runPromiseExitWith(runtime)(
+              Effect.gen(function* () {
+                // Match the generated Promise client, whose request body crosses JSON before endpoint decoding.
+                const normalized = yield* Schema.encodeUnknownEffect(JsonInput)(input ?? {}).pipe(
+                  Effect.flatMap(Schema.decodeUnknownEffect(JsonInput)),
+                )
+                const decoded = yield* Effect.forEach(compiled.decode, (decode) => decode(normalized))
+                const result = yield* method(Object.assign({}, ...decoded) as never)
+                if (compiled.noContent) return undefined
+                return yield* compiled.encode(result)
+              }),
+              { signal },
+            ).then((exit) => {
+              if (Exit.isSuccess(exit)) return exit.value
+              // Effect records AbortSignal interruptions without an interrupting fiber ID.
+              if (
+                signal?.aborted &&
+                Cause.hasInterruptsOnly(exit.cause) &&
+                exit.cause.reasons.some((reason) => Cause.isInterruptReason(reason) && reason.fiberId === undefined)
+              ) {
+                throw signal.reason
+              }
+              throw Cause.squash(exit.cause)
+            })
+          }) as PromiseMethod
         }
 
         const transform =
@@ -372,6 +423,11 @@ export function fromPromise(plugin: Plugin) {
                   }),
                 ),
             },
+            automation: {
+              create: adaptApiMethod(ExperimentalEndpoints["automation.create"], host.experimental.automation.create),
+              list: adaptApiMethod(ExperimentalEndpoints["automation.list"], host.experimental.automation.list),
+              delete: adaptApiMethod(ExperimentalEndpoints["automation.delete"], host.experimental.automation.delete),
+            },
           },
           generate: {
             text: adaptApiMethod(GenerateEndpoints["generate.text"], host.generate.text),
@@ -437,6 +493,7 @@ export function fromPromise(plugin: Plugin) {
                       update: (input) => {
                         if (!("authorize" in input)) return editor.method.update(input)
                         const refresh = input.refresh
+                        const revoke = input.revoke
                         editor.method.update({
                           ...input,
                           authorize: (answer) =>
@@ -463,6 +520,11 @@ export function fromPromise(plugin: Plugin) {
                             refresh === undefined
                               ? undefined
                               : (credential) => Effect.promise(() => refresh(credential)),
+                          revoke:
+                            revoke === undefined
+                              ? undefined
+                              : (credential) =>
+                                  Effect.tryPromise({ try: () => revoke(credential), catch: (error) => error }),
                         })
                       },
                       remove: editor.method.remove,
@@ -551,8 +613,7 @@ export function fromPromise(plugin: Plugin) {
                   }),
                 ),
               ),
-            hook: (name, callback) =>
-              register(host.tool.hook(name, (event) => toolHook[name](() => Promise.resolve(callback(event))))),
+            hook: (name, callback) => register(host.tool.hook(name, adaptToolHook[name](callback))),
           },
           vcs: {
             get: adaptApiMethod(VcsEndpoints["vcs.get"], host.vcs.get),
@@ -689,14 +750,6 @@ const toolError = (error: unknown) =>
   error instanceof Tool.Error
     ? error
     : new Tool.Error({ message: error instanceof Error ? error.message : String(error), error })
-
-// Only execute.before may reject a call; a rejection fails that call alone, like an Effect hook.
-const toolHook: {
-  readonly [Name in keyof ToolHooks]: (run: () => Promise<void>) => Effect.Effect<void, ToolFailures[Name]>
-} = {
-  "execute.before": (run) => Effect.tryPromise({ try: run, catch: toolError }),
-  "execute.after": (run) => Effect.promise(run),
-}
 
 const executePromiseTool = (tool: Info, input: any, context: Tool.Context) =>
   Effect.tryPromise({

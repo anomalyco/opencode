@@ -15,7 +15,7 @@ export type LineCommentEvent =
   | { readonly type: "draft.opened"; readonly range: SelectedLineRange }
   | { readonly type: "draft.changed"; readonly text: string }
   | { readonly type: "draft.cancelled" }
-  | { readonly type: "draft.submitted"; readonly text: string }
+  | { readonly type: "draft.submitted"; readonly text: string; readonly send?: boolean }
   | { readonly type: "comment.hovered"; readonly range: SelectedLineRange }
   | { readonly type: "comment.toggled"; readonly id: string; readonly range: SelectedLineRange }
   | { readonly type: "comment.focused"; readonly id: string; readonly range: SelectedLineRange }
@@ -23,18 +23,24 @@ export type LineCommentEvent =
   | { readonly type: "edit.opened"; readonly id: string; readonly range: SelectedLineRange; readonly text: string }
   | { readonly type: "edit.changed"; readonly text: string }
   | { readonly type: "edit.cancelled" }
-  | { readonly type: "edit.submitted"; readonly text: string }
+  | { readonly type: "edit.submitted"; readonly text: string; readonly send?: boolean }
   | { readonly type: "passive.cleared" }
   | { readonly type: "reset" }
 
 export type LineCommentEffect =
   | { readonly type: "sync-selected"; readonly range: SelectedLineRange | null }
-  | { readonly type: "submit-draft"; readonly comment: string; readonly selection: SelectedLineRange }
+  | {
+      readonly type: "submit-draft"
+      readonly comment: string
+      readonly selection: SelectedLineRange
+      readonly send: boolean
+    }
   | {
       readonly type: "submit-edit"
       readonly id: string
       readonly comment: string
       readonly selection: SelectedLineRange
+      readonly send: boolean
     }
   | { readonly type: "delete-comment"; readonly id: string }
 
@@ -93,6 +99,7 @@ export function transitionLineComment(state: LineCommentMode, event: LineComment
         type: "submit-draft",
         comment,
         selection: cloneSelectedLineRange(state.range),
+        send: !!event.send,
       })
     }
 
@@ -146,6 +153,7 @@ export function transitionLineComment(state: LineCommentMode, event: LineComment
         id: state.id,
         comment,
         selection: cloneSelectedLineRange(state.range),
+        send: !!event.send,
       })
     }
 

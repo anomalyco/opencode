@@ -36,6 +36,7 @@ const it = testEffect(
       LayerNodePlatform.llmClient.replace(llmLayer),
       SessionRunnerModel.node.replace(
         Layer.succeed(SessionRunnerModel.Service, {
+          select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })),
           resolve: () =>
             Effect.succeed(
               SessionRunnerModel.resolved(
@@ -319,19 +320,62 @@ describe("goal plugin", () => {
       yield* sessions.prompt({ sessionID: session.id, text: "Carry on" })
       yield* sessions.wait(session.id)
       const next = (yield* llm.requests()).slice(before).find((request) => !summarize(request) && !isReview(request))
-      // The reminder follows the user's prompt as request-local text, so cache breakpoints stay before it, and it is
-      // not saved to the Session.
+      expect(JSON.stringify(next?.messages)).toContain("A goal is active for this session. Keep working toward it.")
+      // The reminder goes before the user's prompt and is not saved to the Session.
       expect(JSON.stringify(next?.messages.at(-1))).toContain("Carry on")
-      expect(next?.messages.at(-1)?.content.at(-1)).toMatchObject({
-        type: "text",
-        text: expect.stringContaining("A goal is active for this session. Keep working toward it."),
-        transient: true,
-      })
       expect(
         (yield* sessions.messages({ sessionID: session.id, order: "asc" })).some(
           (message) => message.type === "synthetic" && message.text.includes("Keep working toward it."),
         ),
       ).toBe(false)
+    }),
+  )
+
+  it.live("keeps the reminder in place after a compaction so each step extends the request before it", () =>
+    Effect.gen(function* () {
+      const session = yield* project()
+      const sessions = yield* Session.Service
+      const llm = yield* TestLLM.Test
+      const summarize = (request: LLMRequest) => JSON.stringify(request.messages.at(-1)).includes("summar")
+      const calls = { remaining: 0 }
+      yield* serve((request) => {
+        if (summarize(request)) return TestLLM.text("## Objective\n- Make CI green", "summary")
+        if (isReview(request)) return TestLLM.text('{"verdict":"paused","reason":"Stop here."}', "review")
+        if (calls.remaining === 0) return TestLLM.text("On it.", "work")
+        calls.remaining--
+        return TestLLM.toolCall(`call-${calls.remaining}`, "missing_tool", {})
+      })
+      yield* sessions.prompt({ sessionID: session.id, text: "Look at the failing CI job" })
+      yield* sessions.wait(session.id)
+      yield* setGoal(session.id, {
+        id: "goal-compacted",
+        objective: "Make CI green",
+        status: "active",
+        rounds: 2,
+        maxRounds: 50,
+        boot: "an-earlier-process",
+        updatedAt: 0,
+      })
+      yield* sessions.compact({ sessionID: session.id })
+      yield* sessions.wait(session.id)
+
+      const before = (yield* llm.requests()).length
+      calls.remaining = 3
+      yield* sessions.prompt({ sessionID: session.id, text: "Carry on" })
+      yield* sessions.wait(session.id)
+      const steps = (yield* llm.requests())
+        .slice(before)
+        .filter((request) => !summarize(request) && !isReview(request))
+        .map((request) => request.messages.map((message) => JSON.stringify([message.role, message.content])))
+
+      expect(steps).toHaveLength(4)
+      // The provider caches each request up to its last message, which the next step can only reuse as its prefix.
+      steps
+        .slice(1)
+        .forEach((messages, index) => expect(messages.slice(0, steps[index]!.length)).toEqual(steps[index]!))
+      steps.forEach((messages) =>
+        expect(messages.filter((message) => message.includes("Keep working toward it."))).toHaveLength(1),
+      )
     }),
   )
 

@@ -588,6 +588,18 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
         [data-file-tree-virtualized-scroll] {
           overscroll-behavior: contain;
         }
+        /* @pierre/trees reveals middle-truncation markers at height > 1lh, which trips on subpixel rounding at
+           fractional UI zoom; overflowing text wraps to >= 2lh, so 1.5lh sits cleanly between fitting and overflowing rows. */
+        [data-truncate-marker] {
+          opacity: 0;
+          transition: opacity var(--truncate-internal-marker-fade-out-duration) ease-in-out;
+        }
+        @container measure (height > 1.5lh) {
+          [data-truncate-marker] {
+            opacity: 1;
+            transition: opacity var(--truncate-internal-marker-fade-in-duration) ease-in-out;
+          }
+        }
       `,
       onExpansionChange(change) {
         if (change.expanded) dispatchTree({ type: "dir.expanded", dir: change.path })
@@ -636,7 +648,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
           <Show when={subtitle()}>
             {(value) => (
               <span class="directory-picker-server" dir="ltr">
-                <Icon name="server" size="small" />
+                <Icon name="server" />
                 <span class="truncate">{value()}</span>
               </span>
             )}
@@ -657,7 +669,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
             class="directory-picker-input"
             data-owns-escape={ownsPickerEscape(machines().combobox, committed()) ? "" : undefined}
             appearance="large"
-            leadingIcon={<Icon name="magnifying-glass" size="small" />}
+            leadingIcon={<Icon name="magnifying-glass" />}
             onInput={(event) => dispatchCombobox({ type: "input.changed", value: event.currentTarget.value })}
             role="combobox"
             aria-label={language.t("dialog.directory.search.placeholder")}
@@ -708,7 +720,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
                         onClick={() => dispatchCombobox({ type: "item.clicked", index: index() })}
                       >
                         <span data-slot="menu-v2-item-content">
-                          <Icon name={suggestion.type === "directory" ? "folder" : "open-file"} size="small" />
+                          <Icon name={suggestion.type === "directory" ? "folder" : "open-file"} />
                           <span class="directory-picker-item-name">
                             {pickerBreadcrumbs(suggestion.absolute, home()).at(-1)?.label}
                           </span>
@@ -806,7 +818,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
                 {(crumb, index) => (
                   <>
                     <Show when={index() > 0}>
-                      <Icon name="chevron-right" size="small" class="directory-picker-breadcrumb-separator" />
+                      <Icon name="chevron-right" class="directory-picker-breadcrumb-separator" />
                     </Show>
                     <button
                       type="button"

@@ -145,10 +145,14 @@ export const Plugin = define({
       if (goal?.status !== "active") return
       if (goal.boot !== boot())
         return yield* settle(sessionID, goal, "paused", "The server restarted while the goal was active")
-      // The Session's own running subagent or image job wakes it with its notice, and the hook runs again then. A
+      // The Session's own running subagent, image, video or script wakes it with its notice, and the hook runs again then. A
       // grandchild reports to its own parent, so it would never wake this Session.
       if (
-        background.some((work) => (work.kind === "subagent" || work.kind === "image") && work.sessionID === sessionID)
+        background.some(
+          (work) =>
+            (work.kind === "subagent" || work.kind === "image" || work.kind === "video" || work.kind === "codemode") &&
+            work.sessionID === sessionID,
+        )
       )
         return
       if (goal.rounds >= goal.maxRounds)
@@ -215,21 +219,20 @@ export const Plugin = define({
       ),
     )
 
-    // Until the next continuation restates the objective, a compacted history may not show it. Append it at the tail,
-    // without persisting it, so the reminder stops once a continuation lands. It is request-local text: cache
-    // breakpoints stay on the history before it, which the next request repeats.
+    // Until the next continuation restates the objective, a compacted history may not show it. Add it right after the
+    // first message, the compaction summary, without persisting it. The last message carries the conversation's cache
+    // point, so a reminder at the tail would move every step and no request would reuse the previous one's cache.
     yield* ctx.session.hook("context", (event) =>
       read(event.sessionID).pipe(
         Effect.map((goal) => {
           if (goal?.status !== "active") return
           const objective = objectiveBlock(goal.objective)
           if (event.messages.some((message) => message.role === "user" && textOf(message).includes(objective))) return
-          const part = { ...Message.text(render(REMINDER, { objective: escape(goal.objective) })), transient: true }
-          const last = event.messages.at(-1)
-          // A spread keeps the stored metadata that later hooks read on this message; a new UserMessage would drop it.
-          if (last?.role === "user")
-            event.messages[event.messages.length - 1] = { ...last, content: [...last.content, part] }
-          else event.messages.push(Message.user([part]))
+          event.messages.splice(
+            Math.min(1, event.messages.length),
+            0,
+            Message.user(render(REMINDER, { objective: escape(goal.objective) })),
+          )
         }),
         Effect.catchCause((cause) => Effect.logWarning("failed to remind the model of the goal", { cause })),
       ),

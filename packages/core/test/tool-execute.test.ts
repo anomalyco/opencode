@@ -1,14 +1,26 @@
 import { afterAll, beforeAll, describe, expect, test } from "bun:test"
+import fs from "fs/promises"
+import path from "path"
+import { CodeModeDiffs } from "@opencode/core/codemode/diffs"
+import { CodeModeApi } from "@opencode/core/codemode/api"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
+import { ai } from "@opencode/ai/effect"
+import { OpenAI } from "@opencode/ai/providers"
+import { compileRequest } from "@opencode/ai/testing"
+import { Location } from "@opencode/core/location"
+import { AbsolutePath } from "@opencode/core/schema"
 import { Permission } from "@opencode/core/permission"
 import { Tool } from "@opencode/core/tool"
-import { execute } from "@opencode/core/tool/runtime"
+import { definition, execute } from "@opencode/core/tool/runtime"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import type { Info } from "@opencode/schema/tool"
-import { Deferred, Effect, Fiber, Schema } from "effect"
+import { Context, Deferred, Effect, Fiber, Schema } from "effect"
 import { TestClock } from "effect/testing"
+import { codeModeServices } from "./fixture/codemode"
+import { location } from "./fixture/location"
+import { tmpdir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 import { permissionService } from "./lib/permission"
 
@@ -22,8 +34,13 @@ const context = {
 
 const allowAll = permissionService({ assert: () => Effect.void })
 
-const createCodeMode = (tools: ReadonlyMap<string, Info>, permission = allowAll) =>
-  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission)
+const createCodeMode = (
+  tools: ReadonlyMap<string, Info>,
+  permission = allowAll,
+  services?: Context.Context<CodeModeTool.Services>,
+  api?: Context.Context<CodeModeTool.Api>,
+) =>
+  CodeModeTool.create({ tools }, (_, tool, input, context) => execute(tool, input, context), permission, services, api)
 
 test("execute takes raw code as freeform text, and Code Mode calls freeform tools with a string", async () => {
   const input = Schema.Struct({ text: Schema.NonEmptyString })
@@ -39,7 +56,7 @@ test("execute takes raw code as freeform text, and Code Mode calls freeform tool
     ["send", { ...send, freeform: { type: "text" } }],
   ])
   const codeMode = createCodeMode(tools)
-  expect(codeMode.freeform).toEqual({ type: "text" })
+  expect(codeMode.freeform).toEqual({ type: "text", field: "code" })
   expect(CodeModeTool.catalog({ tools }).tools.map((tool) => "signature" in tool && tool.signature)).toEqual([
     "tools.echo({\n  /** @minLength 1 */\n  text: string,\n}): Promise<string>",
     "tools.send(/** @minLength 1 */ text: string): Promise<string>",
@@ -51,17 +68,60 @@ test("execute takes raw code as freeform text, and Code Mode calls freeform tool
   expect(calls.output.toolCalls.map((call) => call.input)).toEqual([{ text: "first" }, { text: "second" }])
 })
 
+test("with full_codemode, raw-text models set execute's timeout and background on a first line", async () => {
+  const codeMode = createCodeMode(new Map(), allowAll, codeModeServices(process.cwd()))
+  const prepared = await Effect.runPromise(
+    compileRequest(
+      ai.request({
+        model: OpenAI.model("gpt-5.4", { apiKey: "test" }),
+        prompt: "Run it.",
+        tools: [definition(codeMode)],
+      }),
+    ),
+  )
+  const [tool] = prepared.body.tools
+  expect(tool).toMatchObject({ type: "custom", name: "execute", format: { type: "grammar", syntax: "lark" } })
+  expect(tool.description).toContain(
+    "To set the parameters below, start with a `// @options:` line holding a JSON object of them",
+  )
+  expect(tool.format.definition).toContain('ff_pair: "\\"timeout\\"" " "* ":" " "* /[1-9][0-9]*/')
+  expect(tool.format.definition).toContain('| "\\"background\\"" " "* ":" " "* ("true" | "false")')
+  // Without `full_codemode` the code is the only parameter, and goes out as plain text.
+  const plain = await Effect.runPromise(
+    compileRequest(
+      ai.request({
+        model: OpenAI.model("gpt-5.4", { apiKey: "test" }),
+        prompt: "Run it.",
+        tools: [definition(createCodeMode(new Map()))],
+      }),
+    ),
+  )
+  expect(plain.body.tools[0]).toMatchObject({ type: "custom", name: "execute", format: { type: "text" } })
+})
+
 test("execute describes invariant Code Mode behavior", () => {
   expect(createCodeMode(new Map()).description).toBe(
     [
       "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
       "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
+      "Each call is a fresh program; nothing carries over from earlier calls.",
       "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
       "Inside `execute`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
       'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
       "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
       "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
     ].join("\n"),
+  )
+})
+
+test("with full_codemode, execute names Bun's file APIs instead of ruling out filesystem access", () => {
+  const description = createCodeMode(new Map(), allowAll, codeModeServices(process.cwd())).description
+  expect(description).toContain(
+    "`fetch` is available for HTTP requests, and Bun's file APIs (`Bun.file`, `Bun.write`, `Bun.Glob`) for files, in place of Node's `fs`. Imports and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
+  )
+  expect(description).not.toContain("direct filesystem access")
+  expect(description.split("\n")[0]).toBe(
+    "Run JavaScript in a confined Code Mode runtime to work with files and data, script tool calls and HTTP requests, and compose their results.",
   )
 })
 
@@ -150,6 +210,300 @@ test("execute rejects filesystem fetches", async () => {
 
   expect(result.output.error).toBe(true)
   expect(result.output.output).toContain("fetch cannot be used for filesystem access.")
+})
+
+describe("path", () => {
+  const directory = path.resolve("/session/dir")
+  const withPath = () => createCodeMode(new Map(), allowAll, codeModeServices(directory))
+  const run = async (code: string, codeMode = withPath()) =>
+    JSON.parse((await Effect.runPromise(codeMode.execute({ code }, context))).output.output)
+
+  test("without the experimental flag there is no path", async () => {
+    expect(await run("return [typeof path]", createCodeMode(new Map()))).toEqual(["undefined"])
+  })
+
+  test("path is the host's path module, resolving against the session's directory", async () => {
+    expect(
+      await run(
+        `return [path.resolve("a", "b"), path.relative("a", "c"), path.join("out", "..", "x.txt"), path.basename("/a/b.ts", ".ts"), path.posix.join("a", "b"), path.win32.join("a", "b"), path.sep]`,
+      ),
+    ).toEqual([path.resolve(directory, "a", "b"), path.join("..", "c"), "x.txt", "b", "a/b", "a\\b", path.sep])
+  })
+
+  test("the other platform's flavour resolves from its own root, not the server's working directory", async () => {
+    const other = path.sep === "/" ? "win32" : "posix"
+    const [resolved] = await run(`return [path.${other}.resolve("a")]`)
+    expect(resolved).toBe(path[other].resolve(path[other].sep, "a"))
+    expect(resolved).not.toContain(process.cwd())
+  })
+
+  test("path is importable by its Node module names", async () => {
+    expect(
+      await run(`import { join } from "node:path"
+        const posix = require("path").posix
+        return [join("a", "b"), posix.dirname("a/b")]`),
+    ).toEqual([path.join("a", "b"), "a"])
+  })
+})
+
+describe("Bun", () => {
+  const run = async (directory: string, code: string, permission = allowAll, services = codeModeServices(directory)) =>
+    JSON.parse(
+      (await Effect.runPromise(createCodeMode(new Map(), permission, services).execute({ code }, context))).output
+        .output,
+    )
+  const deny = (action: string) => ({
+    assert: (input: Permission.AssertInput) =>
+      input.action === action
+        ? Effect.fail(new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources }))
+        : Effect.void,
+  })
+
+  test("Bun and the bun module exist only with the experimental flag", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "notes.txt"), "hello")
+    const code = `import { file } from "bun"
+      return [await file("notes.txt").text(), require("bun") === Bun]`
+    expect(await run(tmp.path, code)).toEqual(["hello", true])
+    const without = await Effect.runPromise(createCodeMode(new Map()).execute({ code }, context))
+    expect(without.output.output).toContain('Cannot import "bun"')
+  })
+
+  test("Bun.file reads a file, a slice of it, and fails on a missing one with a Node-shaped error", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "notes.txt"), "hello world")
+    await Bun.write(path.join(tmp.path, "data.json"), '{"a":1}')
+    expect(
+      await run(
+        tmp.path,
+        `const notes = Bun.file("notes.txt")
+        const missing = Bun.file("missing.txt")
+        let error
+        try { await missing.text() } catch (e) { error = [e.code, e.syscall, e.path] }
+        return [await notes.text(), await Bun.file("data.json").json(), [...await notes.slice(0, 5).bytes()],
+          await notes.slice(-5).text(), [notes.size, notes.type], await missing.exists(), error]`,
+      ),
+    ).toEqual([
+      "hello world",
+      { a: 1 },
+      [104, 101, 108, 108, 111],
+      "world",
+      [11, "text/plain;charset=utf-8"],
+      false,
+      ["ENOENT", "open", "missing.txt"],
+    ])
+  })
+
+  test("Bun.write writes text, bytes and copies, and a writer replaces then appends", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "notes.txt"), "hello")
+    expect(
+      await run(
+        tmp.path,
+        `const failure = async (run) => { try { await run() } catch (e) { return e.code ?? e.message } }
+        const log = Bun.file("log.txt").writer()
+        log.write("one\\n")
+        log.flush()
+        log.write("two\\n")
+        log.end()
+        return [
+          await Bun.write("deep/text.txt", "text"),
+          await Bun.write("bytes.bin", new Uint8Array([0xff, 0x00])),
+          await Bun.write("copy.txt", Bun.file("notes.txt")),
+          await failure(() => Bun.write("missing/x.txt", "x", { createPath: false })),
+          await failure(() => Bun.write("mode.txt", "x", { mode: 0o755 })),
+          await Bun.file("log.txt").text(),
+        ]`,
+      ),
+    ).toEqual([
+      4,
+      2,
+      5,
+      "ENOENT",
+      'Bun.write does not support the "mode" option in Code Mode. Supported options: createPath.',
+      "one\ntwo\n",
+    ])
+    expect((await fs.readdir(tmp.path)).toSorted()).toEqual(
+      ["bytes.bin", "copy.txt", "deep", "log.txt", "notes.txt"].toSorted(),
+    )
+  })
+
+  test("Bun.Glob scans for files, with dot files, folders and absolute paths on request", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "src", "a.ts"), "a")
+    await Bun.write(path.join(tmp.path, "src", "nested", "b.ts"), "b")
+    await Bun.write(path.join(tmp.path, "src", ".hidden", "c.ts"), "c")
+    const nested = path.join("nested", "b.ts")
+    expect(
+      await run(
+        tmp.path,
+        `const scan = (pattern, options) => new Bun.Glob(pattern).scanSync(options).sort()
+        let unsupported
+        try { new Bun.Glob("*").scan({ followSymlinks: true }) } catch (e) { unsupported = e.name }
+        return [scan("**/*.ts", "src"), scan("**/*.ts", { cwd: "src", dot: true }), scan("*", { cwd: "src", onlyFiles: false }),
+          scan("src/*.ts", { absolute: true }), new Bun.Glob("*.ts").match("a.ts"), unsupported]`,
+      ),
+    ).toEqual([
+      ["a.ts", nested],
+      [path.join(".hidden", "c.ts"), "a.ts", nested],
+      ["a.ts", "nested"],
+      [path.join(tmp.path, "src", "a.ts")],
+      true,
+      "TypeError",
+    ])
+  })
+
+  test("Bun asks the permissions the file tools ask", async () => {
+    await using tmp = await tmpdir()
+    await using outside = await tmpdir()
+    await Bun.write(path.join(tmp.path, "notes.txt"), "old\n")
+    const file = path.join(outside.path, "far.txt")
+    await Bun.write(file, "far")
+    const asked: Array<Permission.AssertInput> = []
+    const record = { assert: (input: Permission.AssertInput) => Effect.sync(() => void asked.push(input)) }
+    await run(
+      tmp.path,
+      `const notes = Bun.file("notes.txt")
+      await notes.text()
+      await notes.text()
+      await Bun.write("notes.txt", "old\\nnew\\n")
+      await Bun.file(${JSON.stringify(file)}).text()
+      new Bun.Glob("*.txt").scanSync()
+      return []`,
+      permissionService(record),
+      codeModeServices(tmp.path, record),
+    )
+    const resource = file.replaceAll("\\", "/")
+    expect(asked.map((input) => [input.action, input.resources])).toEqual([
+      ["read", ["notes.txt"]],
+      ["edit", ["notes.txt"]],
+      ["external_directory", [path.posix.join(path.posix.dirname(resource), "*")]],
+      ["read", [resource]],
+      ["read", ["."]],
+    ])
+    expect(asked[1]?.metadata?.files).toMatchObject([{ file: "notes.txt", status: "modified", additions: 1 }])
+  })
+
+  test("a script's changes are recorded one per change, from diffs the write paths already build", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "notes.txt"), "old\n")
+    await Bun.write(path.join(tmp.path, "gone.txt"), "bye\n")
+    const reads: string[] = []
+    const services = codeModeServices(tmp.path, undefined, undefined, (files) => ({
+      read: (file, range) => {
+        reads.push(path.relative(tmp.path, file))
+        return files.read(file, range)
+      },
+    }))
+    const result = await Effect.runPromise(
+      createCodeMode(new Map(), allowAll, services).execute(
+        {
+          code: `await Bun.write("notes.txt", "old\\nnew\\n")
+          await Bun.write("notes.txt", "newer\\n")
+          await Bun.write("created.txt", "a\\nb\\n")
+          const log = Bun.file("log.txt").writer()
+          log.write("one\\n")
+          await log.flush()
+          log.write("two\\nthree\\n")
+          await log.end()
+          await Bun.file("gone.txt").delete()
+          return []`,
+        },
+        context,
+      ),
+    )
+    expect(
+      (result.metadata?.files as Array<{ file: string; status: string; additions?: number; patch?: string }>).map(
+        ({ file, status, additions, patch }) => [file, status, additions, patch !== undefined],
+      ),
+    ).toEqual([
+      ["notes.txt", "modified", 1, true],
+      ["notes.txt", "modified", 1, true],
+      ["created.txt", "added", 2, true],
+      ["log.txt", "added", 1, true],
+      ["log.txt", "modified", 2, false],
+      ["gone.txt", "deleted", undefined, false],
+    ])
+    // Only the permission request's own diff reads a file it overwrites; nothing reads to record a change.
+    expect(reads).toEqual(["notes.txt", "notes.txt"])
+  })
+
+  test("a namespaced tool named like a file tool records no changes", async () => {
+    const tool = (name: string, namespace?: string): Info => ({
+      name,
+      description: "Looks like a file tool",
+      input: Schema.Struct({ path: Schema.String, content: Schema.String }),
+      output: Schema.String,
+      ...(namespace ? { options: { namespace } } : {}),
+      execute: ({ path }) =>
+        Effect.succeed({
+          output: `Created file successfully: ${path}`,
+          metadata: { files: [{ file: path, status: "added", additions: 1, deletions: 0, patch: "+x" }] },
+        }),
+    })
+    const result = await Effect.runPromise(
+      createCodeMode(new Map([["notes_write", tool("write", "notes")]])).execute(
+        { code: 'await tools.notes.write({ path: "n.md", content: "x" })\nreturn []' },
+        context,
+      ),
+    )
+    expect(result.metadata?.files).toBeUndefined()
+  })
+
+  test("progress carries the changes made so far, capped, and a failed script keeps them", async () => {
+    await using tmp = await tmpdir()
+    const pause: Info = {
+      name: "pause",
+      description: "Pause",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: () => Effect.sleep("150 millis").pipe(Effect.as({ output: "ok" })),
+    }
+    const progress: Array<Tool.Metadata> = []
+    const result = await Effect.runPromise(
+      createCodeMode(new Map([["pause", pause]]), allowAll, codeModeServices(tmp.path)).execute(
+        {
+          code: `await Bun.write("a.txt", "x\\n")
+          await tools.pause({})
+          for (let i = 0; i < ${CodeModeDiffs.MAX_FILES + 5}; i++) await Bun.write(\`f\${i}.txt\`, "x\\n")
+          await tools.pause({})
+          throw new Error("boom")`,
+        },
+        { ...context, progress: (update) => Effect.sync(() => progress.push(update)) },
+      ),
+    )
+    const counts = progress.map((update) => (Array.isArray(update.files) ? update.files.length : 0))
+    expect(counts).toContain(1)
+    expect(counts.toSorted((left, right) => left - right)).toEqual(counts)
+    expect(counts.at(-1)).toBe(CodeModeDiffs.MAX_FILES)
+    expect(progress.find((update) => update.files)?.files).toMatchObject([
+      { file: "a.txt", status: "added", additions: 1 },
+    ])
+    expect(result.metadata?.error).toBe(true)
+    expect(result.metadata?.files).toHaveLength(CodeModeDiffs.MAX_FILES)
+  })
+
+  test("a denied permission reaches the program and changes nothing", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "keep.txt"), "keep")
+    const denied = (action: string, code: string) =>
+      run(tmp.path, code, permissionService(deny(action)), codeModeServices(tmp.path, deny(action)))
+    const failure = `const failure = async (run) => { try { await run() } catch (e) { return e.message } }`
+    expect(await denied("read", `${failure}\nreturn [await failure(() => Bun.file("keep.txt"))]`)).toEqual([
+      "Permission denied: read",
+    ])
+    expect(await denied("glob", 'return new Bun.Glob("*").scanSync()')).toEqual(["keep.txt"])
+    expect(await denied("read", `${failure}\nreturn [await failure(() => new Bun.Glob("*").scanSync())]`)).toEqual([
+      "Permission denied: read",
+    ])
+    expect(
+      await denied(
+        "edit",
+        `${failure}\nreturn [await failure(() => Bun.write("new.txt", "x")), await failure(() => Bun.file("keep.txt").delete())]`,
+      ),
+    ).toEqual(["Permission denied: edit", "Permission denied: edit"])
+    expect(await fs.readdir(tmp.path)).toEqual(["keep.txt"])
+  })
 })
 
 describe("execute output", () => {
@@ -322,7 +676,7 @@ describe("fetch permissions", () => {
       {
         action: "webfetch",
         resources: [url],
-        save: ["*"],
+        save: [server.url.origin, `${server.url.origin}/*`],
         metadata: { method: "POST", url },
         sessionID: context.sessionID,
         agent: context.agent,
@@ -402,6 +756,119 @@ describe("fetch permissions", () => {
 
     expect(result.output.output).toBe("rejected")
     expect(hits).toEqual([])
+  })
+})
+
+describe("Code Mode opencode:// fetch", () => {
+  // Only the API and a Location, without the full_codemode file services: opencode:// doesn't need them.
+  const api = (handle: CodeModeApi.Interface["fetch"]) =>
+    Context.make(CodeModeApi.Service, { fetch: handle }).pipe(
+      Context.add(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make("/workspace/demo") }))),
+    )
+
+  test("sends the request to CodeModeApi in the session's directory, with current naming the calling session", async () => {
+    const received: Array<{ method: string; url: string; directory: string | null; body: string }> = []
+    const result = await Effect.runPromise(
+      createCodeMode(
+        new Map(),
+        allowAll,
+        undefined,
+        api((request) =>
+          Effect.promise(async () => {
+            received.push({
+              method: request.method,
+              url: request.url,
+              directory: request.headers.get("x-opencode-directory"),
+              body: await request.text(),
+            })
+            return Response.json({ ok: true })
+          }),
+        ),
+      ).execute(
+        {
+          code: `const a = await (await fetch("opencode:///api/session/current/message?limit=1")).json()
+            const b = await (await fetch("opencode:///api/session", {
+              method: "POST",
+              headers: { "x-opencode-directory": encodeURIComponent("/custom/dir") },
+              body: JSON.stringify({ title: "demo" }),
+            })).json()
+            const c = await (await fetch("opencode:///api/vcs/status?location[directory]=/query/dir")).json()
+            return [a.ok, b.ok, c.ok]`,
+        },
+        context,
+      ),
+    )
+
+    expect(JSON.parse(result.output.output)).toEqual([true, true, true])
+    expect(received).toEqual([
+      {
+        method: "GET",
+        url: `http://opencode.local/api/session/${context.sessionID}/message?limit=1`,
+        directory: encodeURIComponent("/workspace/demo"),
+        body: "",
+      },
+      {
+        method: "POST",
+        url: "http://opencode.local/api/session",
+        directory: encodeURIComponent("/custom/dir"),
+        body: JSON.stringify({ title: "demo" }),
+      },
+      {
+        method: "GET",
+        url: "http://opencode.local/api/vcs/status?location[directory]=/query/dir",
+        directory: null,
+        body: "",
+      },
+    ])
+  })
+
+  test("asks as the opencode api command that would make the same call", async () => {
+    const asked: Array<{ action: string; resources: ReadonlyArray<string>; save?: ReadonlyArray<string> }> = []
+    const sent: Array<string> = []
+    const handle = api((request) => Effect.sync(() => (sent.push(request.url), Response.json({ ok: true }))))
+    const run = (permission: Permission.Interface) =>
+      Effect.runPromise(
+        createCodeMode(new Map(), permission, undefined, handle).execute(
+          {
+            code: `try { await fetch("opencode:///api/session/current/prompt", { method: "POST", body: "{}" }); return "sent" } catch (e) { return e.message }`,
+          },
+          context,
+        ),
+      ).then((result) => result.output.output)
+
+    expect(await run(permissionService({ assert: (input) => Effect.sync(() => void asked.push(input)) }))).toBe("sent")
+    expect(asked).toEqual([
+      expect.objectContaining({
+        action: "shell",
+        resources: [`opencode api post /api/session/${context.sessionID}/prompt`],
+        save: ["opencode *"],
+      }),
+    ])
+    const denied = permissionService({
+      assert: (input) =>
+        Effect.fail(new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources })),
+    })
+    expect(await run(denied)).toContain("Permission denied: shell")
+    expect(sent).toHaveLength(1)
+  })
+
+  test("accepts only opencode:///api/... URLs, reports a disabled API, and fails without one", async () => {
+    const run = (code: string, api?: Context.Context<CodeModeTool.Api>) =>
+      Effect.runPromise(createCodeMode(new Map(), allowAll, undefined, api).execute({ code }, context)).then(
+        (result) => result.output.output,
+      )
+    const never = api(() => Effect.die("never sent"))
+    for (const url of ["opencode://api/session", "opencode:x@evil.com/api/info", "opencode:///openapi.json"])
+      expect(await run(`try { await fetch(${JSON.stringify(url)}) } catch (e) { return e.message }`, never)).toContain(
+        "use opencode:///api/...",
+      )
+    const disabled = Context.add(never, CodeModeApi.Service, CodeModeApi.disabled)
+    expect(await run(`try { await fetch("opencode:///api/info") } catch (e) { return e.message }`, disabled)).toContain(
+      "OPENCODE_FLAGS=opencode_api",
+    )
+    expect(await run(`try { await fetch("opencode:///api/info") } catch (e) { return e.message }`)).toContain(
+      "opencode:// URLs are unavailable",
+    )
   })
 })
 
@@ -573,6 +1040,34 @@ it.effect("execute sends at most one progress update per 100 ms with the latest 
     yield* TestClock.adjust("1 second")
     expect(progress.slice(2)).toEqual([{ toolCalls: [...steps, row("wait", "completed")] }])
     expect(result.metadata).toEqual({ toolCalls: [...steps, row("wait", "completed"), row("step", "completed")] })
+  }),
+)
+
+it.effect("execute interrupted right after a change sends the change it has not reported yet", () =>
+  Effect.gen(function* () {
+    const tmp = yield* Effect.promise(() => tmpdir())
+    const started = yield* Deferred.make<void>()
+    const progress: Array<Tool.Metadata> = []
+    const wait: Info = {
+      name: "wait",
+      description: "Wait",
+      input: Schema.Struct({}),
+      output: Schema.String,
+      execute: () => Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
+    }
+    const fiber = yield* createCodeMode(new Map([["wait", wait]]), allowAll, codeModeServices(tmp.path))
+      .execute(
+        { code: 'await Bun.write("a.txt", "x\\n"); await Bun.write("b.txt", "y\\n"); return await tools.wait({})' },
+        { ...context, progress: (update) => Effect.sync(() => progress.push(update)) },
+      )
+      .pipe(Effect.forkChild({ startImmediately: true }))
+    yield* Deferred.await(started)
+    const before = progress.at(-1)?.files
+    yield* Fiber.interrupt(fiber)
+    yield* Effect.promise(() => tmp[Symbol.asyncDispose]())
+
+    expect(Array.isArray(before) ? before.length : 0).toBeLessThan(2)
+    expect(progress.at(-1)?.files).toMatchObject([{ file: "a.txt" }, { file: "b.txt" }])
   }),
 )
 

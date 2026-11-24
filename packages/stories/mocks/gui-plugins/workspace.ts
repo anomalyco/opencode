@@ -8,6 +8,7 @@ import { createPathHelpers } from "@/workspaces/files/path"
 import type {
   Comment,
   Comments,
+  ComposerDelivery,
   FileContent,
   FileNode,
   Files,
@@ -61,7 +62,11 @@ const contents = new Map<string, FileContent>([
   ],
 ])
 
-export function createWorkspace(scenario: ChangesScenario) {
+/** `delivery` reads how the composer would send a comment now; undefined while nothing can be sent. */
+export function createWorkspace(
+  scenario: ChangesScenario,
+  delivery: () => ComposerDelivery | undefined = () => undefined,
+) {
   const location = { directory: root }
 
   const paths = [...contents.keys()]
@@ -238,6 +243,9 @@ export function createWorkspace(scenario: ChangesScenario) {
       focus() {},
       update() {},
       detach() {},
+      delivery,
+      // As the app does once the session takes it, a sent file comment leaves the file.
+      send: (id) => setComments((items) => items.filter((item) => item.id !== id)),
       focused: () => false,
     },
   }

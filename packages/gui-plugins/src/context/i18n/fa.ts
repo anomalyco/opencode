@@ -5,7 +5,6 @@ export default {
   "usage.usage": "استفاده",
   "usage.cost": "هزینه",
   "usage.view": "مشاهده استفاده از زمینه",
-  "systemPrompt.title": "پرامپت سیستم",
   "rawMessages.title": "پیام های خام",
   "export.session": "جلسه صادرات",
   "stats.session": "جلسه",

@@ -108,9 +108,9 @@ function expectFooter(actual: RunTheme, theme: ResolvedTheme) {
     formfieldFocusedBg: theme.background.formfield.focused,
     formfieldFocusedText: theme.text.formfield.focused,
     selection: theme.text.formfield.selected,
-    running: theme.hue.interactive[200],
-    question: theme.hue.accent[200],
-    permission: theme.hue.accent[200],
+    running: theme.hue.interactive[400],
+    question: theme.hue.accent[400],
+    permission: theme.hue.accent[400],
     success: theme.text.feedback.success.base,
     link: theme.markdown.link,
     shade: theme.background.raised.base,
@@ -162,7 +162,7 @@ test.each(["light", "dark"] as const)("uses shared %s defaults and named built-i
       expectFooter(theme, expected)
       expect(rgba(theme.background).toInts()).toEqual(RGBA.fromHex(colors.defaultBackground!).toInts())
       expect(theme.footer.categorical.map((color) => rgba(color).toInts())).toEqual(
-        expected.categorical.map((scale) => scale[200].toInts()),
+        expected.categorical.map((scale) => scale[400].toInts()),
       )
       expect(theme.block.syntax?.getAllStyles().size).toBeGreaterThan(0)
       for (const color of [

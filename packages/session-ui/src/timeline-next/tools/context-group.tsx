@@ -3,8 +3,6 @@ import { AnimatedNumber } from "@opencode/ui/animated-number"
 import { Badge } from "@opencode/ui/badge"
 import { type UiI18n, useI18n } from "@opencode/ui/context/i18n"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
-import { getFilename } from "@opencode/util/path"
-import { Option, Schema } from "effect"
 import { createMemo, For, Index, Match, Show, Switch } from "solid-js"
 import { BasicTool } from "../../components/basic-tool"
 import {
@@ -18,15 +16,17 @@ import { AssistantReasoningContent } from "../../message/message-content"
 import {
   CurrentReadToolGroup,
   currentSkillName,
-  displayDirectory,
+  displayFolder,
   scrollParent,
   toolInput,
   toolMetadata,
   type ContextGroupPart,
 } from "../../tools/tool-renderer"
 import { TimelineEventRow } from "../event-row"
-import { launchKeys, summarizeShells, toolEvent, verbKeys, workKey, type TimelineEvent } from "../events"
-import { toolRule, toolStopped, type ToolMode } from "../rules"
+import { toolEvent, workKey, type TimelineEvent } from "../events"
+import { toolRule } from "../rules"
+import { sameFileFact, toolStopped } from "../../timeline/facts"
+import { activityLabel, activityText, usedLabel } from "./activity-label"
 import { FileGroup } from "./file-group"
 import { ThoughtRow } from "./thought"
 import { ToolDisplay } from "./tool-display"
@@ -59,25 +59,15 @@ export function ContextGroup(props: {
   onRevealShell?: (shellID: string) => void
 }) {
   const i18n = useI18n()
-  const tools = createMemo(() => props.parts.filter((part) => part.type === "tool"))
   const reasoning = createMemo(() => props.parts.flatMap((part) => (part.type === "reasoning" ? [part] : [])))
   const thoughtsOnly = createMemo(() => reasoning().length > 0 && reasoning().length === props.parts.length)
   const events = createMemo(() => [...workEvents(props.parts).values()])
 
   const workOnly = createMemo(() => events().length > 0 && props.parts.every((part) => part.type === "event"))
 
-  const activity = createMemo(() => activityLabel(tools(), events(), i18n))
+  const activity = createMemo(() => activityLabel(props.parts, i18n))
 
-  const label = createMemo(() => {
-    const value = activity()
-
-    if (value)
-      return {
-        text: [[value.verb, value.main].filter(Boolean).join(" "), value.others.join(", ")].filter(Boolean).join(" · "),
-      }
-
-    return usedLabel(props.parts, i18n)
-  })
+  const label = createMemo(() => activityText(activity()) ?? usedLabel(props.parts, i18n))
 
   const items = createMemo(() =>
     (props.open ? props.parts : []).reduce<
@@ -229,6 +219,20 @@ export function ContextGroup(props: {
                     return !Array.isArray(value) && value.type === "reasoning" ? value : undefined
                   })
 
+                  // A change keeps its card while progress reports rebuild the list around it.
+                  const file = createMemo(
+                    () => {
+                      const value = item()
+
+                      return !Array.isArray(value) && value.type === "file" ? value : undefined
+                    },
+                    undefined,
+                    {
+                      equals: (previous, next) =>
+                        previous === next || (!!previous && !!next && sameFileFact(previous.file, next.file)),
+                    },
+                  )
+
                   const callback = createMemo(() => {
                     const value = item()
 
@@ -254,8 +258,16 @@ export function ContextGroup(props: {
                             <Show
                               when={work()}
                               fallback={
-                                <Show when={callback()}>
-                                  {(part) => <div data-slot="context-tool-group-item">{part().render()}</div>}
+                                <Show
+                                  when={file()}
+                                  keyed
+                                  fallback={
+                                    <Show when={callback()}>
+                                      {(part) => <div data-slot="context-tool-group-item">{part().render()}</div>}
+                                    </Show>
+                                  }
+                                >
+                                  {(part) => <div data-slot="context-tool-group-item">{part.render()}</div>}
                                 </Show>
                               }
                             >
@@ -330,6 +342,7 @@ function GroupItem(props: {
 }) {
   const tool = createMemo(() => props.tools[0]!)
   const name = createMemo(() => toolRule(tool()).name)
+  const defaultOpen = createMemo(() => props.toolDefaultOpen?.(tool()))
 
   return (
     <Switch
@@ -343,8 +356,8 @@ function GroupItem(props: {
           error={currentToolError(tool())}
           stopped={toolStopped(tool())}
           status={tool().state.status}
-          defaultOpen={props.toolDefaultOpen?.(tool()) ?? false}
-          open={props.toolOpen?.(tool().id) ?? props.toolDefaultOpen?.(tool())}
+          defaultOpen={defaultOpen() ?? false}
+          open={props.toolOpen?.(tool().id) ?? defaultOpen()}
           onOpenChange={(open) => props.onToolOpenChange?.(tool().id, open)}
           deferContent
           virtualizeDiff={false}
@@ -492,35 +505,6 @@ function UsedTitle(props: { label: ReturnType<typeof usedLabel> }) {
   )
 }
 
-function usedLabel(parts: ActivityGroupPart[], i18n: UiI18n) {
-  const count = parts.filter((part) => part.type === "reasoning").length
-
-  if (!count) {
-    const text = i18n.t("ui.messagePart.context.updates")
-
-    return { text, title: "", before: text, count: undefined, between: "", after: "" }
-  }
-
-  const title = i18n.plural("ui.messagePart.context.thought", count)
-  const text = i18n.plural("ui.messagePart.tools.used", count, { tools: title })
-  const index = text.indexOf(title)
-  const before = text.slice(0, index).trim()
-  const countText = String(count)
-  const countIndex = before.indexOf(countText)
-  const after = text.slice(index + title.length).trim()
-
-  if (countIndex === -1) return { text, title, before, count: undefined, between: "", after }
-
-  return {
-    text,
-    title,
-    before: before.slice(0, countIndex).trim(),
-    count,
-    between: before.slice(countIndex + countText.length).trim(),
-    after,
-  }
-}
-
 /**
  * What each background shell in a group did, for its label. Work that reports back anywhere in the group
  * that started it is counted once, as how it ended: "Finished", not "Started" and "Finished".
@@ -567,128 +551,11 @@ function workEvents(parts: ActivityGroupPart[]) {
   )
 }
 
-// The most consequential work names a group: changing files over running commands, and both over reading.
-const modePriority: ToolMode[] = ["edit", "run", "tool", "explore"]
-
-const modeVerb = {
-  explore: "ui.timeline.activity.explored",
-  edit: "ui.timeline.activity.edited",
-  run: "ui.timeline.activity.ran",
-  tool: "ui.timeline.activity.used",
-} as const
-
-const decodeChangedPath = Schema.decodeUnknownOption(Schema.Struct({ file: Schema.String }))
-
-/**
- * Names a stretch of the agent's work by its main mode, then what its other calls did: "Edited 4 files · 2 commands,
- * started 1 shell". A background shell is counted once by its outcome.
- */
-function activityLabel(group: SessionMessageAssistantTool[], events: TimelineEvent[], i18n: UiI18n) {
-  const tools = group.filter((tool) => toolRule(tool).layout !== "event")
-  const launches = summarizeShells(events).verbs
-  const launched = launches.map((bucket) => i18n.plural(launchKeys[bucket.verb], bucket.count))
-
-  const modes = new Set(tools.map((tool) => toolRule(tool).mode))
-  const mode = modePriority.find((item) => modes.has(item))
-
-  if (!mode) {
-    const [first, ...rest] = launches
-
-    if (!first) return
-
-    return {
-      verb: i18n.t(verbKeys[first.verb]),
-      main: i18n.plural("ui.timeline.event.shells", first.count),
-      others: rest.map((bucket) => i18n.plural(launchKeys[bucket.verb], bucket.count)),
-    }
-  }
-
-  const calls = (item: ToolMode) => tools.filter((tool) => toolRule(tool).mode === item)
-  const count = (names: string[]) => tools.filter((tool) => names.includes(toolRule(tool).name)).length
-  const reads = new Set(tools.flatMap((tool) => (tool.name === "read" ? [toolInput(currentToolInput(tool)).path] : [])))
-
-  const files = [
-    ...new Set(
-      calls("edit").flatMap((tool) => {
-        const changed = (toolMetadata(currentToolMetadata(tool)).files ?? []).flatMap((file) =>
-          Option.toArray(decodeChangedPath(file)).map((value) => value.file),
-        )
-
-        const path = toolInput(currentToolInput(tool)).path
-
-        return changed.length ? changed : path ? [path] : []
-      }),
-    ),
-  ]
-
-  // Reads count as files where exploring names the group, and as reads beside other work.
-  const explore = (main: boolean) =>
-    [
-      [main ? "ui.timeline.activity.files" : "ui.timeline.activity.reads", reads.size] as const,
-      ["ui.timeline.activity.searches", count(["glob", "grep", "list"])] as const,
-      ["ui.timeline.activity.webSearches", count(["websearch"])] as const,
-      ["ui.timeline.activity.pages", count(["webfetch"])] as const,
-      ["ui.timeline.activity.skills", count(["skill"])] as const,
-    ].flatMap(([key, value]) => (value > 0 ? [i18n.plural(key, value)] : []))
-
-  const runs = calls("run")
-  // Commands are counted, never quoted: a command can be any length.
-  const commands = runs.length ? [i18n.plural("ui.timeline.activity.commands", runs.length)] : []
-  const used = [...new Set(calls("tool").map((tool) => toolTitle(tool, i18n)))]
-
-  const others = {
-    explore: explore(false),
-    edit: files.length ? [i18n.plural("ui.timeline.activity.editedFiles", files.length)] : [],
-    run: commands,
-    tool: used,
-  }
-
-  const main = {
-    // A few files read better by name; past that, the count says more than a list that truncates.
-    edit:
-      files.length <= 2
-        ? files.map((path) => getFilename(path)).join(", ")
-        : i18n.plural("ui.timeline.activity.files", files.length),
-    run: commands[0]!,
-    tool: used.join(", "),
-    explore: explore(true).join(", "),
-  }[mode]
-
-  return {
-    verb: i18n.t(modeVerb[mode]),
-    main,
-    others: [...modePriority.filter((item) => item !== mode).flatMap((item) => others[item]), ...launched],
-  }
-}
-
-// What a call is named in a group's label.
-function toolTitle(tool: SessionMessageAssistantTool, i18n: UiI18n) {
-  const key = {
-    read: "ui.tool.read",
-    list: "ui.tool.list",
-    glob: "ui.tool.glob",
-    grep: "ui.tool.grep",
-    browser: "ui.tool.browser",
-    webfetch: "ui.tool.fetch",
-    websearch: "ui.tool.searchWeb",
-    subagent: "ui.tool.agent.default",
-    shell: "ui.tool.shell",
-    execute: "ui.tool.execute",
-    edit: "ui.messagePart.title.edit",
-    write: "ui.messagePart.title.write",
-    patch: "ui.tool.patch",
-    question: "ui.tool.questions",
-    skill: "ui.tool.skill",
-  }[toolRule(tool).name]
-
-  return key ? i18n.t(key) : tool.name
-}
-
 // A search in an opened group: what was searched, and how many matches it found.
 function searchTrigger(tool: SessionMessageAssistantTool, i18n: UiI18n) {
   const input = toolInput(currentToolInput(tool))
   const metadata = toolMetadata(currentToolMetadata(tool))
-  const subtitle = displayDirectory(input.path ?? "/")
+  const subtitle = displayFolder(input.path)
   const name = toolRule(tool).name
 
   if (name === "list") return { title: i18n.t("ui.tool.list"), subtitle, args: [], count: undefined }

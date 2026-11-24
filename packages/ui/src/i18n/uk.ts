@@ -79,6 +79,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Коментування: ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Додати коментар",
+  "ui.lineComment.add": "Додати коментар",
+  "ui.lineComment.actions": "Дії з виділеним",
   "ui.lineComment.contextPlaceholder": "Додати контекст для цієї зміни",
   "ui.lineComment.submit": "Коментувати",
   "ui.lineComment.cancel": "Скасувати",

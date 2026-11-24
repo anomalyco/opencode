@@ -48,6 +48,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "ຄໍາເຫັນກ່ຽວກັບ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "ເພີ່ມຄຳເຫັນ",
+  "ui.lineComment.add": "ເພີ່ມຄຳເຫັນ",
+  "ui.lineComment.actions": "ການດຳເນີນການສຳລັບສ່ວນທີ່ເລືອກ",
   "ui.lineComment.contextPlaceholder": "ເພີ່ມບໍລິບົດສໍາລັບການປ່ຽນແປງນີ້",
   "ui.lineComment.submit": "ຄໍາເຫັນ",
   "ui.lineComment.cancel": "ຍົກເລີກ",

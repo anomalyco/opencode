@@ -129,13 +129,19 @@ export function BaseBranchPicker(props: { workspace: NewSessionWorkspaceControll
       placement="top"
       openDelay={800}
       value={
-        <div class="flex flex-col gap-1">
-          <span class="flex items-center gap-2">
+        <div class="flex flex-col items-center gap-1.5">
+          <div class="flex items-center gap-1.5">
+            {language.t("session.location.worktree")}
+            <Show when={command.keybindParts("session.location.select").length}>
+              <Keybind keys={command.keybindParts("session.location.select")} variant="neutral" />
+            </Show>
+          </div>
+          <div class="flex items-center gap-1.5">
             {language.t("command.session.branch.choose")}
             <Show when={command.keybindParts("session.branch.choose").length}>
               <Keybind keys={command.keybindParts("session.branch.choose")} variant="neutral" />
             </Show>
-          </span>
+          </div>
           <Show when={layout.truncated}>{label()}</Show>
         </div>
       }
@@ -154,11 +160,11 @@ export function BaseBranchPicker(props: { workspace: NewSessionWorkspaceControll
           aria-description={language.t("command.session.branch.choose")}
           class="flex h-7 min-w-0 max-w-[220px] items-center gap-1.5 rounded-sm px-1.5 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-base"
         >
-          <Icon name="branch-out" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
+          <Icon name="outline-worktree" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
           <span ref={observe} dir="auto" class="min-w-0 truncate">
             {label()}
           </span>
-          <Icon name="chevron-down" size="small" class="-ms-0.5 shrink-0 text-v2-icon-icon-muted" />
+          <Icon name="chevron-down" class="-ms-0.5 shrink-0 text-v2-icon-icon-muted" />
         </Popover.Trigger>
         <Popover.Portal>
           <Show when={selectBranchInitial(picker())}>
@@ -200,7 +206,9 @@ export function BaseBranchPicker(props: { workspace: NewSessionWorkspaceControll
                   {(item) =>
                     item === MAIN_CHECKOUT ? (
                       <>
-                        <span>{language.t("session.new.workspace.useMainCheckout")}</span>
+                        <span class="shrink-0 whitespace-nowrap">
+                          {language.t("session.new.workspace.useMainCheckout")}
+                        </span>
                         <span dir="auto" class="min-w-0 truncate text-v2-text-text-muted">
                           {props.workspace.bar.checkout()?.branch}
                         </span>
