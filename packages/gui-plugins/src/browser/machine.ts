@@ -29,7 +29,8 @@ export type Ipc =
  * - `backoff`: main closed or refused the binding; a timer registers again.
  * - `suspended`: the tabs stay without a binding. `idle`: the server evicted it, and a user or agent wakes it. `ipc`:
  *   the pane's Ipc is gone, and it registers again once the Ipc is back.
- * - `blocked`: another window took the session (`replaced`), or the server lacks it (`missing`).
+ * - `blocked`: another window took the session (`replaced`), until the person is at it here again or no desktop holds
+ *   it, or the server lacks it (`missing`).
  */
 export type Phase =
   | { readonly status: "idle" }
@@ -212,8 +213,11 @@ export type Event =
   | { readonly type: "session.removed"; readonly sessionKeys: readonly string[] }
   | { readonly type: "session.routed"; readonly sessionKey: string | undefined }
   | { readonly type: "session.located"; readonly sessionKey: string; readonly located: boolean }
-  /** A user or agent edge asks for the pane: focus, a key, the route, or a Session execution. */
-  | { readonly type: "session.wake"; readonly sessionKey: string }
+  /**
+   * A user or agent edge asks for the pane: focus, a key, the route, or a Session execution. `takes`: the person is
+   * at the session in this window, or no desktop holds its browser, so a session another window took comes back here.
+   */
+  | { readonly type: "session.wake"; readonly sessionKey: string; readonly takes: boolean }
   /** The person asks to open the browser again, from a pane that said it could not (`sessionUnavailable`). */
   | { readonly type: "session.retry"; readonly sessionKey: string }
   /** The server finished creating the session. */
@@ -425,6 +429,16 @@ export function sessionAttached(state: State, sessionKey: string) {
   const attachment = attachmentOf(state, sessionKey)
 
   return !!attachment && (attachment.phase.status === "ready" || attachment.browser !== null)
+}
+
+/**
+ * The session's browser can be opened from this window: the desktop answered for it, or another window took it and
+ * opening it here takes it back.
+ */
+export function sessionOpenable(state: State, sessionKey: string) {
+  const phase = attachmentOf(state, sessionKey)?.phase
+
+  return sessionAttached(state, sessionKey) || (phase?.status === "blocked" && phase.reason === "replaced")
 }
 
 /**
@@ -748,16 +762,16 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
     case "session.capability.changed":
       if (phase.status !== "blocked" || phase.reason !== "unsupported") return {state,effects:[]}
 
-      return wake(state,key,suspend(attachment,"idle"),false)
+      return wake(state,key,suspend(attachment,"idle"),false,false)
     case "session.presence":
-      if (event.listed) return phase.status === "suspended" && phase.reason === "unlisted" ? wake(state,key,suspend(attachment,"idle"),false) : {state,effects:[]}
+      if (event.listed) return phase.status === "suspended" && phase.reason === "unlisted" ? wake(state,key,suspend(attachment,"idle"),false,false) : {state,effects:[]}
 
       if (phase.status === "suspended" && phase.reason === "unlisted") return {state,effects:[]}
 
       return put(state,key,suspend(attachment,"unlisted"),stop(key,phase))
     case "session.rebind": {
       if (phase.status === "suspended" && phase.reason === "unlisted") return {state,effects:[]}
-      const next = wake(state,key,suspend(attachment,"idle"),false)
+      const next = wake(state,key,suspend(attachment,"idle"),false,false)
 
       return {...next,effects:[...stop(key,phase),...next.effects]}
     }
@@ -770,7 +784,7 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
       if (phase.status !== "backoff" && !(phase.status === "blocked" && phase.reason === "unsupported"))
         return { state, effects: [] }
       // Registers now, in place of a retry timer.
-      const next = wake(state, key, suspend(attachment, "idle"), false)
+      const next = wake(state, key, suspend(attachment, "idle"), false, false)
 
       return { ...next, effects: [...stop(key, phase), ...next.effects] }
     }
@@ -778,9 +792,9 @@ function session(state: Open, key: string, attachment: Attachment, event: Sessio
     case "session.located":
       return located(state, key, attachment, event.located)
     case "session.wake":
-      return wake(state, key, attachment, false)
+      return wake(state, key, attachment, false, event.takes)
     case "session.created":
-      return wake(state, key, attachment, true)
+      return wake(state, key, attachment, true, false)
     case "session.command": {
       const reveal = attachment.reveal
 
@@ -1021,8 +1035,9 @@ function located(state: Open, key: string, attachment: Attachment, value: boolea
 }
 
 // Passive edges wake an idle or suspended pane without bypassing transport backoff or duplicating a binding. Only the
-// server creating the session lifts `missing`; nothing lifts `replaced` but the user's next session visit elsewhere.
-function wake(state: Open, key: string, attachment: Attachment, created: boolean): Transition {
+// server creating the session lifts `missing`. Only a wake that `takes` lifts `replaced`: the other window may be
+// long closed, and a block nothing lifts leaves the session without a browser for as long as the app runs.
+function wake(state: Open, key: string, attachment: Attachment, created: boolean, takes: boolean): Transition {
   const phase = attachment.phase
 
   if (phase.status === "suspended" && phase.reason === "unlisted") return {state,effects:[]}
@@ -1030,7 +1045,7 @@ function wake(state: Open, key: string, attachment: Attachment, created: boolean
   if (phase.status === "registering" || phase.status === "ready" || phase.status === "backoff")
     return { state, effects: [] }
 
-  if (phase.status === "blocked" && (phase.reason === "replaced" || !created)) return { state, effects: [] }
+  if (phase.status === "blocked" && !(phase.reason === "replaced" ? takes : created)) return { state, effects: [] }
 
   if (state.ipc.status !== "active") {
     if (phase.status === "suspended" && phase.reason === "ipc") return { state, effects: [] }

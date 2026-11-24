@@ -2,7 +2,7 @@ import { FileVerificationError } from "./file-verification"
 import { builtinContext } from "@opencode/plugin/gui/builtin"
 import { FileSource } from "../file/contract"
 import { ACTIVATION_DELAY_MS } from "./activation-delay"
-import { attachable, attachesUnopened } from "./prompt-gate"
+import { attachable, attachesUnopened, unheld } from "./prompt-gate"
 import { batch, createRoot, createSignal, getOwner, onCleanup, untrack } from "solid-js"
 import { createStore, reconcile, unwrap } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -49,6 +49,7 @@ import {
   sessionPending,
   sessionRegistration,
   sessionAttaching,
+  sessionOpenable,
   sessionSuspended,
   sessionTab,
   sessionTabs,
@@ -576,7 +577,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (document.visibilityState !== "visible") return
     const view = sessions.current()
 
-    if (view) dispatch({ type: "session.wake", sessionKey: view.key })
+    // The person is at the routed session in this window, so one another window took comes back here.
+    if (view) dispatch({ type: "session.wake", sessionKey: view.key, takes: true })
   }
 
   // The pane's Ipc goes away while its main plugin reloads or is not active, taking every binding with it.
@@ -646,7 +648,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           )
           onCleanup(
             data.on("session.execution.started", (event) => {
-              if (event.data.sessionID === ref.id) dispatch({ type: "session.wake", sessionKey })
+              if (event.data.sessionID === ref.id) dispatch({ type: "session.wake", sessionKey, takes: unheld(ref) })
             }),
           )
         },
@@ -665,7 +667,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       // The server finished creating the session.
       createKeyed(
         () => !ref.pending,
-        () => dispatch({ type: "session.wake", sessionKey }),
+        () => dispatch({ type: "session.wake", sessionKey, takes: false }),
       )
 
       // The strip can be written once the server reports the session's location.
@@ -728,6 +730,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   const attached = (session: Session) => sessionAttached(machine(), session.key)
 
+  const openable = (session: Session) => sessionOpenable(machine(), session.key)
+
   const available = (session: SessionRef) =>
     sessionSupported(machine(), session.key) && !!session.id && session.server.compatible && !layout.narrow()
 
@@ -781,10 +785,15 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
   // A session that runs in a tab nobody has opened since the app started attaches as the routed one does. Keyed by the
   // sessions it applies to, so each attaches once when it starts to run, and a later run wakes its attachment itself.
+  // No desktop holds such a session, so one another window took and let go of attaches again here.
   const unopened = () => sessions.list().filter((ref) => attachesUnopened(ref, online()))
   createKeyed(
     () => unopened().map((ref) => ref.key).join("\n"),
-    () => unopened().forEach(attach),
+    () =>
+      unopened().forEach((ref) => {
+        attach(ref)
+        dispatch({ type: "session.wake", sessionKey: ref.key, takes: true })
+      }),
   )
 
   // A prompt is about to go to the session. Its first step lists the browser tools only if the server already holds
@@ -796,7 +805,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const ready = (session: SessionRef, signal: AbortSignal) => {
     if (!untrack(() => attachable(session, online()))) return Promise.resolve()
     attach(session)
-    dispatch({ type: "session.wake", sessionKey: session.key })
+    // The person's prompt goes out from this window, so its session's browser is this window's.
+    dispatch({ type: "session.wake", sessionKey: session.key, takes: true })
 
     if (!untrack(() => attaching(session)) || signal.aborted) return Promise.resolve()
     const settled = Promise.withResolvers<void>()
@@ -821,6 +831,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   return {
     available,
     attached,
+    openable,
     ready,
     canOpen,
     openFile,
@@ -830,7 +841,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       const ref = sessions.list().find(item => item.key === sessionKey)
 
       if (ref?.server.compatible) attach(ref)
-      dispatch({ type: "session.wake", sessionKey })
+      dispatch({ type: "session.wake", sessionKey, takes: false })
       const target = registrations.get(sessionKey)
 
       if (!target) throw new Error("browser.pane.unavailable")
@@ -838,7 +849,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       return target.registration.createTab(owner, url, () => sessions.current()?.key === sessionKey)
     },
     async closeOwned(sessionKey: string, owner: string, id: ExperimentalBrowserTab) {
-      dispatch({ type: "session.wake", sessionKey })
+      dispatch({ type: "session.wake", sessionKey, takes: false })
       const target = registrations.get(sessionKey)
 
       if (!target) return false
@@ -850,6 +861,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     /** Opens a blank tab for the user, whose pane then focuses the address field. */
     open(session: SessionRef) {
       if (!available(session)) return
+      // Opening the browser here takes it back from another window, which would otherwise answer the command.
+      dispatch({ type: "session.wake", sessionKey: session.key, takes: true })
       dispatch({ type: "session.command", sessionKey: session.key, action: { type: "tabs.open" }, focusAddress: true })
     },
     /** Whether the user just opened this blank tab; true once, for the pane that focuses its address. */

@@ -20,10 +20,19 @@ export function attachable(session: SessionRef, online: boolean) {
  */
 export function attachesUnopened(session: SessionRef, online: boolean) {
   if (!attachable(session, online)) return false
-  const data = session.server.data.session
 
-  if (data.status(session.id) !== "running") return false
-  const info = data.get(session.id)
+  if (session.server.data.session.status(session.id) !== "running") return false
+
+  return unheld(session)
+}
+
+/**
+ * Whether no desktop holds the session's browser: its details carry no browser grant, which the server writes while a
+ * desktop is attached and revokes when that attachment ends. Details this window has not loaded say nothing about a
+ * grant, so such a session does not count.
+ */
+export function unheld(session: SessionRef) {
+  const info = session.server.data.session.get(session.id)
 
   return (
     info !== undefined &&
