@@ -261,7 +261,7 @@ export function drawShareCard(
     dotGrid(card.chart, width),
     baseline * 0.4,
     baseline,
-    level,
+    card.chart.kind === "ranked" ? undefined : level,
   )
   // The tall story card is seen smaller in a feed, so its lockup sets larger, and the intro moves down to match.
   const logo = height > 1350 ? 1.5 : 1
@@ -292,6 +292,10 @@ export function drawShareCard(
         time - highlightsEnd(card, options, timing),
       )
     }
+  }
+  if (card.chart.kind === "ranked" && level && options.background !== "plain") {
+    const span = rankedSpan(card.chart, { x: pad, y: top, width: width - pad * 2, height: chartBottom - top })
+    drawSideMeter(ctx, colors, width, dotGrid(card.chart, width), baseline, span.from, span.to, level)
   }
   if (card.chart.kind === "ranked")
     drawRanked(
@@ -403,25 +407,10 @@ function drawBackground(
   level?: (column: number, columns: number) => number,
 ) {
   if (kind === "plain") return
-  // The banner's dot grid (og/card.ts), on the chart's own pitch: square dots on square cells, at full strength from the
-  // top, then fading out from fadeStart to nothing at fadeEnd (the x axis). The first row sits as far from the top as
-  // the first column from the side.
-  const dot = Math.min(8, Math.max(4, Math.round(grid.pitch * 0.36)))
-  const first = grid.center - Math.floor(grid.center / grid.pitch) * grid.pitch
-  const inset = Math.max(0, first - dot / 2)
   const end = kind === "band" ? height * 0.28 : fadeEnd
-  const columns = Array.from(
-    { length: Math.floor((width - inset - dot) / grid.pitch) + 1 },
-    (_, index) => inset + index * grid.pitch,
-  )
+  const { dot, inset, columns, rows, pitch, playing } = dotLayout(width, grid, end)
   // With music, each column is also a bar of an equaliser rising from the x axis: its lit dots climb with its band of
   // the track, bass on the left and treble on the right. Lit dots ignore the fade, so the bars read from the bottom.
-  // The rows run from the top inset to the x axis, the last row's foot exactly on it, so the equaliser stands on the
-  // axis; their pitch stretches by a fraction of a pixel to land there.
-  const rows = Math.max(1, Math.round((end - dot - inset) / grid.pitch))
-  const pitch = (end - dot - inset) / rows
-  // Only the columns behind the chart play, never the gutters either side of it; the bands spread across them.
-  const playing = columns.filter((x) => x >= pad && x + dot <= width - pad)
   const lit = columns.map((x) => {
     const index = playing.indexOf(x)
     return level && index >= 0 ? Math.round(level(index, playing.length) * rows * 0.85) : 0
@@ -440,6 +429,50 @@ function drawBackground(
   ctx.fillStyle = colors.dot
   if (kind !== "band") return
   columns.forEach((x) => ctx.fillRect(x, height - inset - dot, dot, dot))
+}
+
+// The banner's dot grid (og/card.ts), on the chart's own pitch: square dots on square cells. The first row sits as far
+// from the top as the first column from the side; the rows run to `end` (the x axis), the last row's foot exactly on
+// it, their pitch stretched by a fraction of a pixel to land there. The playing columns are those behind the chart,
+// never the gutters either side of it.
+function dotLayout(width: number, grid: { center: number; pitch: number }, end: number) {
+  const dot = Math.min(8, Math.max(4, Math.round(grid.pitch * 0.36)))
+  const first = grid.center - Math.floor(grid.center / grid.pitch) * grid.pitch
+  const inset = Math.max(0, first - dot / 2)
+  const columns = Array.from(
+    { length: Math.floor((width - inset - dot) / grid.pitch) + 1 },
+    (_, index) => inset + index * grid.pitch,
+  )
+  const rows = Math.max(1, Math.round((end - dot - inset) / grid.pitch))
+  const pitch = (end - dot - inset) / rows
+  const playing = columns.filter((x) => x >= pad && x + dot <= width - pad)
+  return { dot, inset, columns, rows, pitch, playing }
+}
+
+// The equaliser for a ranked chart, on its side: each dot row from the first bar to the last is a band of the track
+// (bass at the top), its lit dots running from the chart's left edge to the right. Drawn over the grid after the
+// intro, so it can find the rows, and under the chart.
+function drawSideMeter(
+  ctx: CanvasRenderingContext2D,
+  colors: Palette,
+  width: number,
+  grid: { center: number; pitch: number },
+  end: number,
+  from: number,
+  to: number,
+  level: (band: number, bands: number) => number,
+) {
+  const { dot, inset, rows, pitch, playing } = dotLayout(width, grid, end)
+  const lines = Array.from({ length: rows + 1 }, (_, row) => inset + row * pitch).filter(
+    (y) => y + dot >= from && y <= to,
+  )
+  ctx.globalAlpha = 0.35
+  ctx.fillStyle = colors.meter
+  lines.forEach((y, band) => {
+    const lit = Math.round(level(band, lines.length) * playing.length * 0.85)
+    playing.slice(0, lit).forEach((x) => ctx.fillRect(x, y, dot, dot))
+  })
+  ctx.globalAlpha = 1
 }
 
 // A highlighted series' colour: its own, or in the Top style white for every series but the winner, whose grey would
@@ -541,7 +574,7 @@ function drawIntro(
         ctx.fillText(line, pad, first + index * leading)
       }),
     )
-    return first + lines.length * leading + 24
+    return first + lines.length * leading + room(ctx) - 8
   }
 
   if (options.layout === "chart") {
@@ -551,7 +584,7 @@ function drawIntro(
       ctx.font = `400 ${size}px ${font}`
       ctx.fillText(card.title, pad - 2, y + 64 + size * 0.8)
     })
-    return y + 64 + size + 32
+    return y + 64 + size + room(ctx)
   }
 
   const size =
@@ -580,7 +613,13 @@ function drawIntro(
       }, pad - 2)
     })
   })
-  return y + 56 + lines.length * leading + 32
+  return y + 56 + lines.length * leading + room(ctx)
+}
+
+// The space between the intro and the chart: more on the tall story card, whose chart would otherwise press up
+// against the headline.
+function room(ctx: CanvasRenderingContext2D) {
+  return ctx.canvas.height > 1350 ? 112 : 64
 }
 
 // The big number rolling into place like an odometer: each digit spins up through 0 to 9 and settles on its own, the
@@ -838,9 +877,7 @@ function drawRanked(
   focus: Focus,
   time: number,
 ) {
-  const rows = chart.rows.slice(0, Math.max(1, Math.floor(box.height / 72)))
-  const row = Math.min(112, box.height / Math.max(1, rows.length))
-  const size = row >= 96 ? 30 : 26
+  const { rows, row, size } = rankedRows(chart, box)
   rows.forEach((item, index) => {
     const y = box.y + index * row
     const delay = (index / Math.max(1, rows.length - 1)) * 0.45
@@ -869,6 +906,20 @@ function drawRanked(
     ctx.fillRect(box.x + 72, bar, (box.width - 72) * Math.max(0.01, Math.min(1, item.fill)) * grow, 10)
     ctx.restore()
   })
+}
+
+// How many rows fit, how tall each is and the type size.
+function rankedRows(chart: Extract<ShareChart, { kind: "ranked" }>, box: Box) {
+  const rows = chart.rows.slice(0, Math.max(1, Math.floor(box.height / 72)))
+  const row = Math.min(112, box.height / Math.max(1, rows.length))
+  return { rows, row, size: row >= 96 ? 30 : 26 }
+}
+
+// From the top of the first bar to the bottom of the last.
+function rankedSpan(chart: Extract<ShareChart, { kind: "ranked" }>, box: Box) {
+  const layout = rankedRows(chart, box)
+  const bar = box.y + layout.size + 18
+  return { from: bar, to: bar + (layout.rows.length - 1) * layout.row + 10 }
 }
 
 function drawFooter(
