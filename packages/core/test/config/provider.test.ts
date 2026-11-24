@@ -198,6 +198,26 @@ describe("ConfigProviderPlugin.Plugin", () => {
     }),
   )
 
+  it.effect("infers Anthropic cache markers for a migrated OpenAI-compatible Claude model", () =>
+    Effect.sync(() => {
+      // V1 marked these models for prompt caching by model id. V2 names the marker format instead, so the migration
+      // has to keep them marked or every turn on them bills uncached (#65400).
+      const result = ConfigNormalize.normalize({
+        provider: {
+          gateway: {
+            npm: "@ai-sdk/openai-compatible",
+            options: { baseURL: "http://127.0.0.1:8787/v1" },
+            models: { "claude-sonnet-5-5": { id: "claude-sonnet-5-5" }, "gpt-luna": {} },
+          },
+        },
+      })
+      if (result.type !== "normalized") throw new Error("Expected normalized config")
+      const migrated = decode(result.encoded).providers?.gateway?.models ?? {}
+      expect(migrated["claude-sonnet-5-5"]?.compatibility).toEqual({ cacheFormat: "anthropic" })
+      expect(migrated["gpt-luna"]?.compatibility).toBeUndefined()
+    }),
+  )
+
   it.effect("applies provider compatibility to every provider model with model overrides", () =>
     Effect.gen(function* () {
       const providers = yield* Provider.Service
