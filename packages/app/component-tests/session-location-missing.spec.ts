@@ -22,9 +22,13 @@ story(
       await expect(search).toBeFocused()
     }
 
-    // Rows are not Tab stops, so Tab leaves focus, and typing, in the search field.
+    // Tab reaches the rows, and typing there still goes to the search field.
     await page.keyboard.press("Tab")
+    await expect(search).not.toBeFocused()
+    await expect(page.locator(":focus")).toHaveAttribute("role", "option")
+    await page.keyboard.type("rev")
     await expect(search).toBeFocused()
+    await expect(search).toHaveValue("rev")
 
     await page.keyboard.press("Escape")
     await expect(search).toBeHidden()

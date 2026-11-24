@@ -345,6 +345,17 @@ function NewSessionLocationDialog(props: {
 
   const back = () => dispatch({ type: "back" })
 
+  // Tab reaches the rows, so typing on a focused row goes back to the search field before the key lands.
+  const sendTypingToSearch = (event: KeyboardEvent) => {
+    if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return
+
+    if (event.key.length !== 1 && event.key !== "Backspace") return
+
+    // Space chooses a focused row until there is a query to add it to.
+    if (event.key === " " && !step().query) return
+    inputRef?.focus({ preventScroll: true })
+  }
+
   const handleKeyDown = (event: KeyboardEvent) => {
     // SAFETY: this handler is only attached to the search TextInput's <input>, so currentTarget is that element.
     const target = event.currentTarget as HTMLInputElement
@@ -410,7 +421,7 @@ function NewSessionLocationDialog(props: {
           viewportClass="command-palette-scroll"
           viewportRef={(el) => (resultsRef = el)}
         >
-          <div id={typeahead.listID} class="command-palette-results" role="listbox">
+          <div id={typeahead.listID} class="command-palette-results" role="listbox" onKeyDown={sendTypingToSearch}>
             <div
               class="command-palette-group"
               role={title() ? "group" : undefined}
@@ -462,8 +473,6 @@ function NewSessionLocationDialog(props: {
                           "new-session-location-workspace": entry.type === "workspace",
                         }}
                         role="option"
-                        // Focus stays in the search field; the arrow keys and the pointer only move the highlight.
-                        tabIndex={-1}
                         aria-selected={entry.type === "workspace" ? current(entry) : activeEntry()?.id === entry.id}
                         data-active={activeEntry()?.id === entry.id ? "" : undefined}
                         onMouseMove={(event) => {
