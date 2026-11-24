@@ -20,8 +20,12 @@ import { shareTracks, type ShareTrack } from "./music"
 import type { ShareView } from "./embed"
 import { loadSpectrum, type Spectrum } from "./spectrum"
 
-// `view` is the range the section showed, so an embed of it can show the same.
-export type ShareDraft = Omit<ShareCard, "updatedAt" | "url"> & { view?: ShareView }
+// `view` is the range the section showed, so an embed of it can show the same. `days` makes the card for one column
+// of its chart, for the editor's Date row (share/sections.ts).
+export type ShareDraft = Omit<ShareCard, "updatedAt" | "url"> & {
+  view?: ShareView
+  days?: (index: number) => ShareDraft | undefined
+}
 
 const [request, setRequest] = createSignal<ShareDraft>()
 let opener: HTMLElement | undefined
@@ -113,10 +117,26 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   const [ready, setReady] = createSignal(false)
   const [playing, setPlaying] = createSignal(true)
   const [track, setTrack] = createSignal("none")
+  // The options panel: closed when the editor opens, on a card made at random, until Customize opens it.
+  const [settings, setSettings] = createSignal(false)
+  // The chart column the card is about, or the whole range; each section starts on the whole range.
+  const [day, setDay] = createSignal<number>()
+  const section = createMemo(() => request()?.id)
+  createEffect(() => {
+    section()
+    setDay(undefined)
+  })
+  // The columns the Date row can choose from: a bar chart's, when its section can make a card for one.
+  const columns = createMemo(() => {
+    const value = request()
+    return value?.days && value.chart.kind === "stacked" ? value.chart.columns.map((column) => column.label) : []
+  })
   const card = createMemo(() => {
     const value = request()
     if (!value) return undefined
-    return { ...value, updatedAt: props.updatedAt, url: props.url }
+    const index = day()
+    const chosen = index === undefined ? value : (value.days?.(index) ?? value)
+    return { ...chosen, days: undefined, updatedAt: props.updatedAt, url: props.url }
   })
   // The card's provider logos (the leaderboard and comparison cards); the preview redraws once they've loaded.
   const [logos, setLogos] = createSignal(0)
@@ -176,9 +196,9 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     setNotice(undefined)
     // Stepping to another section keeps the editor open, its music and its options.
     if (dialog?.open) return
-    setTrack("none")
-    // Closing paused it; each opening plays from the start again.
-    setPlaying(true)
+    setFormat("video")
+    setSettings(false)
+    shuffle()
     dialog?.showModal()
     void loadShareFonts().then(() => setReady(true))
   })
@@ -255,6 +275,16 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   }
 
   const close = () => dialog?.close()
+
+  // A card made at random: any layout and style, a size for a feed or a story (not Wide), and a track, never silence.
+  // Playing from the start again, as each opening does.
+  const shuffle = () => {
+    setShareOption("layout", pick(layouts).value)
+    setShareOption("size", pick(sizes.filter((item) => item.value !== "16:9")).value)
+    setShareOption("theme", pick(["dark", "light", "leader"] as const))
+    setTrack(pick(shareTracks).id)
+    setPlaying(true)
+  }
 
   const file = async (kind: "image" | "video") => {
     const value = card()
@@ -335,7 +365,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     >
       <Show when={card()}>
         {(value) => (
-          <div data-slot="editor">
+          <div data-slot="editor" data-settings={settings() ? "open" : "closed"}>
             <div data-slot="editor-stage" data-card-theme={options().theme}>
               <button type="button" data-slot="icon-button" data-variant="close" aria-label="Close" onClick={close}>
                 <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
@@ -414,9 +444,66 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   {notice() ?? `${value().title} · ${size()[0]} × ${size()[1]}`}
                 </span>
               </div>
+              {/* Under the card: a new random card, the options panel, and Export. */}
+              <div data-slot="editor-actions">
+                <button type="button" data-slot="bar-button" onClick={shuffle}>
+                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                    <g fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M2 4.5h2.5c3.5 0 3.5 7 7 7H14M2 11.5h2.5c1.4 0 2.2-1.1 2.9-2.4M14 4.5h-2.5c-1.4 0-2.2 1.1-2.9 2.4" />
+                      <path d="m12 2.5 2 2-2 2M12 9.5l2 2-2 2" />
+                    </g>
+                  </svg>
+                  <span>Shuffle</span>
+                </button>
+                <button
+                  type="button"
+                  data-slot="bar-button"
+                  aria-expanded={settings() ? "true" : "false"}
+                  aria-controls="share-settings"
+                  onClick={() => setSettings(!settings())}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                    <g fill="none" stroke="currentColor" stroke-width="1.5">
+                      <path d="M2 4.5h6M12 4.5h2M2 11.5h2M8 11.5h6" />
+                      <circle cx="10" cy="4.5" r="1.75" />
+                      <circle cx="6" cy="11.5" r="1.75" />
+                    </g>
+                  </svg>
+                  <span>Customize</span>
+                </button>
+                <button
+                  type="button"
+                  data-slot="bar-button"
+                  data-variant="primary"
+                  data-rendering={rendering() !== undefined ? "" : undefined}
+                  // While a video renders, the button is its progress bar: it fills from the left as the frames go.
+                  style={{ "--progress": `${(rendering() ?? 0) * 100}%` } as JSX.CSSProperties}
+                  disabled={rendering() !== undefined}
+                  aria-live="polite"
+                  onClick={exportFile}
+                >
+                  {/* A new label fades up when the button changes what it does; the render's percentage counts in place. */}
+                  <Show when={rendering() !== undefined ? "rendering" : copied() ? "copied" : format()} keyed>
+                    <span data-slot="button-label">
+                      {rendering() !== undefined
+                        ? `Rendering video ${Math.round((rendering() ?? 0) * 100)}%`
+                        : {
+                            image: "Export image",
+                            video: "Export video",
+                            embed: copied() ? "Copied" : "Copy embed code",
+                          }[format()]}
+                    </span>
+                  </Show>
+                </button>
+              </div>
             </div>
 
-            <aside data-slot="editor-inspector" aria-label={`Share ${value().title}`}>
+            <aside
+              id="share-settings"
+              data-slot="editor-inspector"
+              aria-label={`Share ${value().title}`}
+              inert={!settings()}
+            >
               <div data-slot="inspector-scroll">
                 <div data-slot="rows">
                   <Row label="Type">
@@ -437,6 +524,66 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                       )}
                     </For>
                   </Row>
+                  <Show when={columns().length > 1}>
+                    <Row label="Date">
+                      <For each={[false, true]}>
+                        {(item) => (
+                          <button
+                            type="button"
+                            data-slot="chip"
+                            data-variant="text"
+                            aria-pressed={(day() !== undefined) === item}
+                            onClick={() => setDay(item ? (day() ?? columns().length - 1) : undefined)}
+                          >
+                            <span>
+                              {item ? (request()?.view?.period === "weekly" ? "One week" : "One day") : "Whole range"}
+                            </span>
+                          </button>
+                        )}
+                      </For>
+                    </Row>
+                    <Show when={day() !== undefined}>
+                      <Row label={request()?.view?.period === "weekly" ? "Week" : "Day"}>
+                        <div data-slot="day-picker">
+                          <button
+                            type="button"
+                            data-slot="icon-button"
+                            aria-label="Earlier"
+                            disabled={day() === 0}
+                            onClick={() => setDay(Math.max(0, (day() ?? 0) - 1))}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                              <path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
+                            </svg>
+                          </button>
+                          <select
+                            aria-label={request()?.view?.period === "weekly" ? "Week" : "Day"}
+                            value={day()}
+                            onChange={(event) => setDay(Number(event.currentTarget.value))}
+                          >
+                            <For each={columns()}>
+                              {(label, index) => (
+                                <option value={index()} selected={index() === day()}>
+                                  {request()?.view?.period === "weekly" ? `Week of ${label}` : label}
+                                </option>
+                              )}
+                            </For>
+                          </select>
+                          <button
+                            type="button"
+                            data-slot="icon-button"
+                            aria-label="Later"
+                            disabled={day() === columns().length - 1}
+                            onClick={() => setDay(Math.min(columns().length - 1, (day() ?? 0) + 1))}
+                          >
+                            <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                              <path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
+                            </svg>
+                          </button>
+                        </div>
+                      </Row>
+                    </Show>
+                  </Show>
                   <Row label="Layout">
                     <For each={layouts}>
                       {(item) => (
@@ -547,38 +694,16 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   </Show>
                 </div>
               </div>
-              <div data-slot="inspector-footer">
-                <button
-                  type="button"
-                  data-slot="bar-button"
-                  data-variant="primary"
-                  data-rendering={rendering() !== undefined ? "" : undefined}
-                  // While a video renders, the button is its progress bar: it fills from the left as the frames go.
-                  style={{ "--progress": `${(rendering() ?? 0) * 100}%` } as JSX.CSSProperties}
-                  disabled={rendering() !== undefined}
-                  aria-live="polite"
-                  onClick={exportFile}
-                >
-                  {/* A new label fades up when the button changes what it does; the render's percentage counts in place. */}
-                  <Show when={rendering() !== undefined ? "rendering" : copied() ? "copied" : format()} keyed>
-                    <span data-slot="button-label">
-                      {rendering() !== undefined
-                        ? `Rendering video ${Math.round((rendering() ?? 0) * 100)}%`
-                        : {
-                            image: "Export image",
-                            video: "Export video",
-                            embed: copied() ? "Copied" : "Copy embed code",
-                          }[format()]}
-                    </span>
-                  </Show>
-                </button>
-              </div>
             </aside>
           </div>
         )}
       </Show>
     </dialog>
   )
+}
+
+function pick<T>(items: readonly T[]) {
+  return items[Math.floor(Math.random() * items.length)]!
 }
 
 // One option row: its label on the left, its choices inline on the right.

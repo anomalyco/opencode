@@ -400,6 +400,73 @@
       0 16px 32px -12px rgb(0 0 0 / 0.14);
   }
 
+  /* Closed, the panel slides off to the side and the card takes the whole stage. */
+  [data-slot="editor"][data-settings="closed"] {
+    [data-slot="editor-stage"] {
+      padding-right: 48px;
+    }
+
+    [data-slot="icon-button"][data-variant="step"][data-side="next"] {
+      right: 4px;
+    }
+
+    [data-slot="editor-inspector"] {
+      visibility: hidden;
+      opacity: 0;
+      translate: 16px 0;
+    }
+  }
+
+  [data-slot="editor-inspector"] {
+    transition:
+      opacity 200ms cubic-bezier(0.23, 1, 0.32, 1),
+      translate 240ms cubic-bezier(0.23, 1, 0.32, 1),
+      visibility 0s 0s;
+
+    @media (prefers-reduced-motion: reduce) {
+      translate: none !important;
+    }
+  }
+
+  [data-slot="editor"][data-settings="closed"] [data-slot="editor-inspector"] {
+    transition:
+      opacity 160ms ease,
+      translate 160ms ease,
+      visibility 0s 160ms;
+  }
+
+  /* One day or week of a chart: step either way, or choose it from the list. */
+  [data-slot="day-picker"] {
+    display: flex;
+    gap: 6px;
+
+    [data-slot="icon-button"] {
+      width: 36px;
+      height: 36px;
+      color: var(--stats-text);
+      background: var(--editor-control);
+      border: 1px solid var(--editor-control-line);
+
+      &:disabled {
+        color: var(--stats-faint);
+        opacity: 0.5;
+      }
+    }
+
+    select {
+      flex: 1;
+      min-width: 0;
+      height: 36px;
+      padding: 0 10px;
+      font: inherit;
+      font-size: 13px;
+      color: var(--stats-text);
+      background: var(--editor-control);
+      border: 1px solid var(--editor-control-line);
+      border-radius: 0;
+    }
+  }
+
   [data-slot="inspector-scroll"] {
     display: flex;
     flex: 1;
@@ -409,18 +476,26 @@
     overscroll-behavior: contain;
   }
 
-  /* Export stays pinned to the panel's foot; the options scroll under it. */
-  [data-slot="inspector-footer"] {
+  /* Under the card: Shuffle, Customize and Export, centred on the stage. */
+  [data-slot="editor-actions"] {
+    display: flex;
     flex: none;
-    padding: 12px;
-    background: var(--stats-bg);
-    border-top: 1px solid var(--stats-line);
+    gap: 8px;
+    max-width: 100%;
 
     [data-slot="bar-button"] {
       justify-content: center;
-      width: 100%;
       height: 40px;
       font-size: 14px;
+    }
+
+    [data-slot="bar-button"]:not([data-variant="primary"])[aria-expanded="true"] {
+      background: color-mix(in srgb, var(--stats-accent) 7%, var(--stats-layer));
+      border-color: var(--stats-accent);
+    }
+
+    [data-variant="primary"] {
+      min-width: 180px;
     }
 
     [data-slot="button-label"] {
@@ -880,6 +955,32 @@
     [data-slot="rows"],
     [data-slot="group"] {
       padding-inline: 16px;
+    }
+
+    /* The panel opens under the card, which shrinks to make room. */
+    [data-slot="editor"][data-settings="closed"] {
+      [data-slot="editor-stage"] {
+        padding-right: 16px;
+      }
+
+      [data-slot="editor-inspector"] {
+        display: none;
+      }
+    }
+
+    [data-slot="editor-actions"] {
+      width: 100%;
+
+      [data-slot="bar-button"] {
+        flex: 1;
+        min-width: 0;
+        height: 44px;
+        padding: 0 10px;
+      }
+
+      [data-variant="primary"] {
+        flex: 1.6;
+      }
     }
 
     /* Taller rows for fingers, the same height for every row of wide choices. */

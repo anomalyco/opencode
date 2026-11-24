@@ -150,14 +150,35 @@ export function comparisonCard(data: HomePageData, catalogLabs: readonly string[
   }
 }
 
+// `day` is one column of the chart to share instead of the whole range: its headline, number and legend, with the
+// other columns in grey. Without it, a card's `days` makes that card for any column.
 export function topModelsCard(
   usage: UsagePoint[],
   leaderboard: HomePageData["leaderboard"]["weekly"],
   view: ShareView,
+  day?: number,
 ): ShareDraft | undefined {
   const leader = leaderboard[0]
-  const chart = usageShareChart(usage, (value) => formatTokens(value), "All models")
+  const chart = usageShareChart(usage, (value) => formatTokens(value), "All models", day)
   if (!chart || !leader) return undefined
+  const days = (index: number) => topModelsCard(usage, leaderboard, view, index)
+  if (day !== undefined) {
+    const top = leadingSeries(chart)
+    if (!top) return undefined
+    const name = leaderboard.find((entry) => entry.model === top.key)?.name ?? top.label
+    const when = shareWhen(chart, view.period)
+    return {
+      id: "top-models",
+      title: shareTitles["top-models"],
+      range: shareDate(chart, view.period),
+      highlight: name,
+      headline: `${name} led OpenCode usage ${when}, with ${top.value} tokens`,
+      stat: { value: top.value, label: `tokens for ${name}, ${when}` },
+      chart,
+      view,
+      days,
+    }
+  }
   const when = view.leaderboard === "weekly" ? "in the past 7 days" : "yesterday"
   return {
     id: "top-models",
@@ -168,6 +189,7 @@ export function topModelsCard(
     stat: { value: formatBillions(leader.tokens), label: `tokens for ${leader.name}, ${when}` },
     chart,
     view,
+    days,
   }
 }
 
@@ -175,8 +197,9 @@ export function uniqueUsersCard(
   users: UsagePoint[],
   period: Period,
   names: Map<string, string>,
+  day?: number,
 ): ShareDraft | undefined {
-  const chart = usageShareChart(users, formatUsers, "All models")
+  const chart = usageShareChart(users, formatUsers, "All models", day)
   const top = chart && leadingSeries(chart)
   if (!chart || !top) return undefined
   const when = shareWhen(chart, period)
@@ -184,12 +207,13 @@ export function uniqueUsersCard(
   return {
     id: "unique-users",
     title: shareTitles["unique-users"],
-    range: shareRange(chart, period),
+    range: day === undefined ? shareRange(chart, period) : shareDate(chart, period),
     highlight: name,
     headline: `${name} had the most OpenCode users ${when}, with ${top.value}`,
     stat: { value: top.value, label: `OpenCode users on ${name}, ${when}` },
     chart,
     view: { period, leaderboard: "weekly" },
+    days: (index) => uniqueUsersCard(users, period, names, index),
   }
 }
 
@@ -262,20 +286,21 @@ export function cacheRatioCard(items: CacheRatioEntry[], names: Map<string, stri
   }
 }
 
-export function marketShareCard(days: MarketDay[], period: Period): ShareDraft | undefined {
-  const chart = marketShareChart(days, getMarketAuthorOrder(days))
+export function marketShareCard(days: MarketDay[], period: Period, day?: number): ShareDraft | undefined {
+  const chart = marketShareChart(days, getMarketAuthorOrder(days), day)
   const top = chart && leadingSeries(chart)
   if (!chart || !top) return undefined
   const when = shareWhen(chart, period)
   return {
     id: "market-share",
     title: shareTitles["market-share"],
-    range: shareRange(chart, period),
+    range: day === undefined ? shareRange(chart, period) : shareDate(chart, period),
     highlight: top.label,
     headline: `${top.label} served ${top.value} of OpenCode tokens ${when}`,
     stat: { value: top.value, label: `of OpenCode tokens went to ${top.label} models, ${when}` },
     chart,
     view: { period, leaderboard: "weekly" },
+    days: (index) => marketShareCard(days, period, index),
   }
 }
 
@@ -448,7 +473,7 @@ export const shareSeriesLimit = 6
 
 export const shareOtherColor = "#6b6b6b"
 
-export function usageShareChart(data: UsagePoint[], format: (value: number) => string, total: string) {
+export function usageShareChart(data: UsagePoint[], format: (value: number) => string, total: string, day?: number) {
   const points = data.length > 1 ? data.slice(0, -1) : data
   const order = getTopModelsSegmentOrder(points)
   const keys = [...order.keys()].filter((key) => key !== "Other").slice(0, shareSeriesLimit)
@@ -461,10 +486,11 @@ export function usageShareChart(data: UsagePoint[], format: (value: number) => s
     format,
     false,
     total,
+    day,
   )
 }
 
-export function marketShareChart(data: MarketDay[], order: Map<string, number>) {
+export function marketShareChart(data: MarketDay[], order: Map<string, number>, day?: number) {
   const days = data.length > 1 ? data.slice(0, -1) : data
   const keys = [...order.keys()].filter((key) => key !== "Other").slice(0, shareSeriesLimit)
   return stackedShareChart(
@@ -480,6 +506,7 @@ export function marketShareChart(data: MarketDay[], order: Map<string, number>) 
     (value) => `${value.toFixed(1)}%`,
     true,
     "All labs",
+    day,
   )
 }
 
@@ -489,6 +516,7 @@ export function stackedShareChart(
   format: (value: number) => string,
   normalized: boolean,
   total: string,
+  day?: number,
 ): Extract<ShareChart, { kind: "stacked" }> | undefined {
   if (columns.length === 0 || named.length === 0) return undefined
   const keys = new Set(named.map((item) => item.key))
@@ -497,14 +525,18 @@ export function stackedShareChart(
     const other = [...column.values].reduce((sum, [key, value]) => (keys.has(key) ? sum : sum + value), 0)
     return { label: column.label, values: [...values, other] }
   })
-  const last = rows.at(-1)?.values ?? []
+  if (day !== undefined && !rows[day]) return undefined
+  // The column the legend and total are for: the chosen day, or the latest.
+  const at = rows[day ?? rows.length - 1]
+  const last = at?.values ?? []
   return {
     kind: "stacked",
     normalized,
     columns: rows,
-    // The latest column's whole: its sum, or 100% when the columns are shares.
+    day,
+    // That column's whole: its sum, or 100% when the columns are shares.
     total: {
-      label: `${total}, ${rows.at(-1)?.label ?? ""}`,
+      label: `${total}, ${at?.label ?? ""}`,
       value: normalized ? "100%" : format(last.reduce((sum, value) => sum + value, 0)),
     },
     series: [...named, { key: "other", label: "Other", color: shareOtherColor }]
@@ -530,9 +562,9 @@ export function modelNames(data: HomePageData) {
   )
 }
 
-// The named series with the most in the latest column.
+// The named series with the most in the card's column: the chosen day, or the latest.
 export function leadingSeries(chart: Extract<ShareChart, { kind: "stacked" }>) {
-  const last = chart.columns.at(-1)?.values ?? []
+  const last = chart.columns.at(chart.day ?? -1)?.values ?? []
   return chart.series
     .map((item, index) => ({ item, value: last[index] ?? 0 }))
     .filter((entry) => entry.item.key !== "other")
@@ -544,6 +576,12 @@ export function shareRange(chart: Extract<ShareChart, { kind: "stacked" }>, peri
 }
 
 export function shareWhen(chart: Extract<ShareChart, { kind: "stacked" }>, period: Period) {
-  const label = chart.columns.at(-1)?.label ?? ""
+  const label = chart.columns.at(chart.day ?? -1)?.label ?? ""
   return period === "weekly" ? `in the week of ${label}` : `on ${label}`
+}
+
+// The eyebrow of a card about one column: its date.
+export function shareDate(chart: Extract<ShareChart, { kind: "stacked" }>, period: Period) {
+  const label = chart.columns.at(chart.day ?? -1)?.label ?? ""
+  return period === "weekly" ? `Week of ${label}` : label
 }

@@ -17,6 +17,9 @@ export type ShareChart =
       columns: { label: string; values: number[] }[]
       // The line under the chart before a series takes it, such as the latest column's total.
       total: { label: string; value: string }
+      // A card about one column (a day or a week): its index. The other columns go grey, and the series values, the
+      // total and the leader are that column's.
+      day?: number
     }
   | {
       kind: "ranked"
@@ -146,7 +149,18 @@ type Palette = (typeof palettes)["dark"]
 
 /** The colour the Leader style takes: the leading series' colour, or the site's accent for a ranked list. */
 export function leaderColor(card: Pick<ShareCard, "chart">) {
-  return card.chart.kind === "stacked" ? (card.chart.series[0]?.color ?? "#a684ff") : "#a684ff"
+  return card.chart.kind === "stacked" ? (card.chart.series[leaderIndex(card.chart)]?.color ?? "#a684ff") : "#a684ff"
+}
+
+// The leading series: the first, or on a card about one column, the named series with the most in it.
+function leaderIndex(chart: Extract<ShareChart, { kind: "stacked" }>) {
+  const column = chart.day === undefined ? undefined : chart.columns[chart.day]
+  if (!column) return 0
+  return chart.series.reduce(
+    (best, item, index) =>
+      item.key !== "other" && (column.values[index] ?? 0) > (column.values[best] ?? 0) ? index : best,
+    0,
+  )
 }
 
 // The Leader style: the dark card, where only the winner keeps its colour. The other series turn to greys, the dot
@@ -174,9 +188,15 @@ function leaderLook(card: ShareCard): { colors: Palette; card: ShareCard } {
   }
   if (card.chart.kind !== "stacked") return { colors, card }
   const steps = [1, 0.36, 0.29, 0.23, 0.19, 0.16]
+  const lead = leaderIndex(card.chart)
   const series = card.chart.series.map((item, index) => ({
     ...item,
-    color: index === 0 ? item.color : item.key === "other" ? grey(0.12) : grey(steps[index] ?? 0.14),
+    color:
+      index === lead
+        ? item.color
+        : item.key === "other"
+          ? grey(0.12)
+          : grey(steps[index < lead ? index + 1 : index] ?? 0.14),
   }))
   return { colors, card: { ...card, chart: { ...card.chart, series } } }
 }
@@ -814,8 +834,16 @@ function drawStacked(
         if (value <= 0 || total <= 0) return state
         const size = (value / total) * height
         const own = chart.series[series]?.color ?? colors.idle
-        // How far the bar has gone to the muted grey: "Other" always, the rest as another series takes the focus.
-        const muted = series === focus.index ? 0 : own === colors.other ? 1 : focus.amount
+        // How far the bar has gone to the muted grey: "Other" always, the rest as another series takes the focus, and
+        // every column but the card's own on a card about one day.
+        const muted =
+          chart.day !== undefined && chart.day !== index
+            ? 1
+            : series === focus.index
+              ? 0
+              : own === colors.other
+                ? 1
+                : focus.amount
         const rect = [x, state.y - size, width, Math.max(0, size - (size > 3 ? 1 : 0))] as const
         const color = series === focus.index ? spotlit(own, series, focus.amount, colors) : own
         return { y: state.y - size, parts: [...state.parts, { rect, color, muted }] }
