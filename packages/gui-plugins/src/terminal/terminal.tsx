@@ -22,6 +22,7 @@ import {
 import type { TerminalProps } from "./props"
 import { disposeIfDisposable, getHoveredLinkText, setOptionIfSupported } from "./runtime-adapters"
 import { terminalLinkLabel } from "./hover-label"
+import { terminalPasteText } from "./paste"
 import { consumeTerminalMetaKey, terminalKeyInput, terminalLinkTarget } from "./terminal-key-event"
 import { TerminalQuote } from "./quote"
 
@@ -110,7 +111,7 @@ const useTerminalUiBindings = (input: {
 
   const handlePaste = (event: ClipboardEvent) => {
     const clipboard = event.clipboardData
-    const text = clipboard?.getData("text/plain") ?? clipboard?.getData("text") ?? ""
+    const text = terminalPasteText(clipboard?.getData("text/plain") ?? clipboard?.getData("text") ?? "")
 
     if (!text) return
 
