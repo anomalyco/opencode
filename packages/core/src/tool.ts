@@ -307,9 +307,9 @@ const layer = Layer.effect(
       reload: state.reload,
       list: () => Effect.sync(() => Array.from(state.get().tools.values())),
       codeModeTools: (paths) => Effect.sync(() => new Map(codeModeTools(state.get().tools, paths))),
-      snapshot: Effect.fn("Tool.snapshot")((permissions, options) =>
+      snapshot: Effect.fn("Tool.snapshot")((input, options) =>
         Effect.gen(function* () {
-          const policy = permissions ?? PermissionPolicy.empty
+          const policy = input ?? PermissionPolicy.empty
           // Without Code Mode its tools would be unreachable, so expose them as direct tools instead.
           const codeModeEnabled = codeModeAvailable(policy)
           const full = codeModeEnabled && options?.services !== undefined && (yield* flags.enabled("full_codemode"))
