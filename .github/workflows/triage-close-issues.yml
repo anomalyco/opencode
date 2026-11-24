@@ -10,6 +10,10 @@ on:
         type: boolean
         default: true
 
+concurrency:
+  group: triage-close-issues
+  cancel-in-progress: false
+
 jobs:
   close:
     runs-on: ubuntu-latest
@@ -23,7 +27,7 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Close stale needs-info issues
+      - name: Close stale waiting-for-info issues
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |

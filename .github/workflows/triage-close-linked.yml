@@ -1,9 +1,10 @@
 name: triage-close-linked
 
-# GitHub only auto-closes the first issue after each keyword ("Fixes #1, #2"
-# leaves #2 open), ignores "Supersedes #3" / "Replaces #4", and never closes
-# superseded pull requests. Runs entirely against the GitHub API with no
-# checkout, so pull_request_target is safe here.
+# Closes what GitHub native auto-close misses on merge into the default branch:
+# - additional issues in lists ("Fixes #1, #2 and #3" -> closes #2 and #3; GitHub closes #1)
+# - superseded pull requests ("Supersedes #4", "Replaces #5")
+#
+# Runs entirely against the GitHub API with no checkout, so pull_request_target is safe.
 
 permissions:
   contents: read
@@ -38,13 +39,16 @@ jobs:
         uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8.0.0
         with:
           script: |
-            const KEYWORDS = new Set([
+            const ISSUE_KEYWORDS = new Set([
               "close", "closes", "closed",
               "fix", "fixes", "fixed",
               "resolve", "resolves", "resolved",
+            ]);
+            const PR_KEYWORDS = new Set([
               "supersede", "supersedes", "superseded",
               "replace", "replaces", "replaced",
             ]);
+            const KEYWORDS = new Set([...ISSUE_KEYWORDS, ...PR_KEYWORDS]);
             const HEDGES = new Set([
               "may", "might", "could", "would", "possibly", "probably", "potentially",
               "maybe", "perhaps", "hopefully", "likely", "unlikely", "partially", "partly", "partial",
@@ -59,18 +63,20 @@ jobs:
               "the", "a", "an", "of", "on", "in", "by", "from", "with", "for", "than",
             ]);
             const BASE_FORMS = new Set(["close", "fix", "resolve", "supersede", "replace"]);
-            const VERB_MARKERS = new Set(["will", "shall", "should", "does", "do", "did", "and", "we", "they", "i"]);
+            const VERB_MARKERS = new Set(["does", "do", "did", "and"]);
             const DETERMINERS = new Set(["this", "that", "the", "a", "an"]);
             const INTERVENING = new Set([
               "also", "fully", "completely", "entirely", "actually", "really", "yet", "directly", "properly",
               "have", "has", "had",
             ]);
+            const MAX_TARGETS = 10;
 
             function stripNonProse(body) {
               const lines = body.replaceAll("\r\n", "\n").split("\n");
               const kept = [];
               let fence = null;
               let inComment = false;
+              let paragraph = false;
               for (const line of lines) {
                 if (inComment) {
                   const end = line.indexOf("-->");
@@ -82,17 +88,28 @@ jobs:
                 const trimmed = line.trim();
                 if (fence !== null) {
                   if (trimmed.startsWith(fence) && [...trimmed].every(c => c === fence[0])) fence = null;
+                  paragraph = false;
+                  kept.push("");
+                  continue;
+                }
+                if (trimmed === "") { paragraph = false; kept.push(""); continue; }
+                // Skip 4-space or tab indented code blocks outside a paragraph.
+                if (!paragraph && (/^ {4}/.test(line) || line.startsWith("\t"))) {
                   kept.push("");
                   continue;
                 }
                 const fenceMatch = /^(`{3,}|~{3,})/.exec(trimmed);
                 if (fenceMatch && (fenceMatch[1][0] === "~" || !trimmed.slice(fenceMatch[1].length).includes("`"))) {
                   fence = fenceMatch[1];
+                  paragraph = false;
                   kept.push("");
                   continue;
                 }
-                if (trimmed.startsWith(">")) { kept.push(""); continue; }
-                let cleaned = line;
+                if (trimmed.startsWith(">")) { paragraph = false; kept.push(""); continue; }
+                // Skip markdown task list items like "- [ ] Fix #99".
+                if (/^[-*+]\s+\[[ xX]\]/.test(trimmed)) { paragraph = false; kept.push(""); continue; }
+                // Strip inline code spans BEFORE HTML comments so `<!--` in backticks is not a comment.
+                let cleaned = line.replace(/`[^`\n]+`/g, " code ");
                 while (cleaned.includes("<!--")) {
                   const start = cleaned.indexOf("<!--");
                   const end = cleaned.indexOf("-->", start + 4);
@@ -103,10 +120,10 @@ jobs:
                   }
                   cleaned = cleaned.slice(0, start) + " " + cleaned.slice(end + 3);
                 }
+                paragraph = !/^#{1,6}\s/.test(trimmed);
                 kept.push(cleaned);
               }
               let text = kept.join("\n");
-              text = text.replace(/`[^`\n]+`/g, " code ");
               text = text.replace(/~~[^~\n]+~~/g, " ");
               text = text.replace(/<(?:s|del|strike)\b[^>]*>[\s\S]*?<\/(?:s|del|strike)>/gi, " ");
               return text;
@@ -178,11 +195,28 @@ jobs:
               return false;
             };
 
+            // A continuation reference must terminate cleanly (end of text/line/clause or list separator),
+            // so "Fixes #12, #13 is tracked separately" does NOT close #13.
+            const endsCleanly = (tokens, j) => {
+              const next = tokens[skipEmph(tokens, j)];
+              if (!next || next.kind === "newline" || next.kind === "break") return true;
+              if (next.kind === "punct" && ".,;:)&".includes(next.text)) return true;
+              if (isWord(next, "and")) return true;
+              return false;
+            };
+
             function isClosingStatement(tokens, index, keyword) {
               let k = skipInterveningBack(tokens, index - 1);
+              // Skip parenthetical / dash / colon lead-ins from a reference ("Reverts #100 (fixes #99)", "TODO: fix #99").
+              if (isPunct(tokens[k], ":") && tokens[k - 1]?.kind === "word" && ["todo", "note", "fyi"].includes(tokens[k - 1].text)) return false;
+              if (tokens[k]?.kind === "punct" && "(—–-".includes(tokens[k].text)) {
+                let q = skipInterveningBack(tokens, k - 1);
+                while (tokens[q]?.kind === "punct" && "-—–".includes(tokens[q].text)) q = skipInterveningBack(tokens, q - 1);
+                if (endsWithRef(tokens, q)) return false;
+              }
               if (endsWithRef(tokens, k)) return false;
-              const lineStart = tokens[k]?.kind === "newline";
-              if (lineStart) {
+              const lineStart = tokens[k]?.kind === "newline" || tokens[k]?.kind === "break" || k < 0;
+              if (tokens[k]?.kind === "newline") {
                 const e = skipEmphBack(tokens, k - 1);
                 const w = skipInterveningBack(tokens, e);
                 if (w < e && endsWithRef(tokens, w)) return false;
@@ -243,22 +277,30 @@ jobs:
                   i++;
                   continue;
                 }
+                const targetKind = PR_KEYWORDS.has(token.text) ? "pull" : "issue";
                 let j = i + 1;
                 if (isPunct(tokens[j], ":")) j++;
                 let ref = readRef(tokens, j);
                 if (!ref) { i++; continue; }
+                let pos = 0;
                 for (;;) {
-                  found.push({ repository: ref.token.repository ?? self, number: ref.token.number, keyword: token.text });
+                  // For issue keywords, GitHub natively closes pos === 0 when bare #N/URL/owner/repo#N.
+                  // Still emit pos === 0 only for markdown-link/PR keywords, or list continuations (pos > 0),
+                  // avoiding racing GitHub native auto-close.
+                  const nativeClose = targetKind === "issue" && pos === 0 && tokens[skipEmph(tokens, j)]?.kind === "ref";
+                  if (!nativeClose && (pos === 0 || endsCleanly(tokens, ref.end))) {
+                    found.push({ repository: ref.token.repository ?? self, number: ref.token.number, keyword: token.text, targetKind });
+                  }
                   j = ref.end;
+                  pos++;
                   let k = skipEmph(tokens, j);
                   let sep = false;
                   if (isPunct(tokens[k], ",")) { k++; sep = true; }
-                  if (tokens[k]?.kind === "newline") k++;
                   if (isWord(tokens[k], "and") || isPunct(tokens[k], "&")) { k++; sep = true; }
                   if (!sep) break;
-                  if (tokens[k]?.kind === "newline") k++;
                   ref = readRef(tokens, k);
                   if (!ref) break;
+                  if (!endsCleanly(tokens, ref.end)) break;
                 }
                 i = j;
               }
@@ -267,6 +309,7 @@ jobs:
 
             const { owner, repo } = context.repo;
             const repository = `${owner}/${repo}`;
+            const expectedRepoUrl = `https://api.github.com/repos/${repository.toLowerCase()}`;
             const inputs = context.payload.inputs ?? {};
             const event = context.payload.pull_request;
             const prNumber = event?.number ?? Number(inputs.pr_number);
@@ -288,6 +331,8 @@ jobs:
               return;
             }
 
+            const prAuthor = pr.user?.login?.toLowerCase();
+            const trustedAuthor = ["OWNER", "MEMBER"].includes(pr.author_association);
             const body = (event ? event.body : pr.body) ?? "";
             const seen = new Set();
             const targets = [];
@@ -298,7 +343,11 @@ jobs:
               targets.push(ref);
             }
             if (targets.length === 0) {
-              core.info(`#${prNumber}: no linked references to close`);
+              core.info(`#${prNumber}: no additional linked references to close`);
+              return;
+            }
+            if (targets.length > MAX_TARGETS) {
+              core.warning(`#${prNumber}: found ${targets.length} references (cap ${MAX_TARGETS}); refusing bulk close`);
               return;
             }
 
@@ -313,8 +362,17 @@ jobs:
                 core.error(`#${ref.number}: ${error.message}`);
                 continue;
               }
+              if (item.repository_url && item.repository_url.toLowerCase() !== expectedRepoUrl) continue;
               if (item.state !== "open") continue;
               const isPull = item.pull_request !== undefined;
+              // Only close issues for close/fix/resolve, and only close PRs for supersede/replace.
+              if (ref.targetKind === "issue" && isPull) continue;
+              if (ref.targetKind === "pull" && !isPull) continue;
+              // Only allow an outside contributor PR to supersede their own PR.
+              if (isPull && !trustedAuthor && item.user?.login?.toLowerCase() !== prAuthor) {
+                core.info(`#${ref.number}: skipping supersede of another contributor PR by non-member`);
+                continue;
+              }
               if (dryRun) {
                 core.info(`[dry-run] Would close ${isPull ? "PR" : "issue"} #${ref.number} (${ref.keyword} in #${prNumber})`);
                 continue;
