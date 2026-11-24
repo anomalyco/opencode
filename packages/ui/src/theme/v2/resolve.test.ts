@@ -83,16 +83,16 @@ describe("input elevation", () => {
     {
       mode: "light",
       input:
-        "0px 1px 1.5px 0px var(--v2-alpha-dark-10), 0px 0px 0px 0.5px var(--v2-alpha-dark-14), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
+        "0px 0px 0px 0px var(--v2-alpha-dark-0), 0px 0px 0px 0.5px var(--v2-alpha-dark-14), 0px 1px 1.5px 0px var(--v2-alpha-dark-10)",
       button:
-        "0px 1px 1.5px 0px var(--v2-alpha-dark-10), 0px 0px 0px 0.5px var(--v2-alpha-dark-14), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
+        "0px 0px 0px 0px var(--v2-alpha-dark-0), 0px 0px 0px 0.5px var(--v2-alpha-dark-14), 0px 1px 1.5px 0px var(--v2-alpha-dark-10)",
     },
     {
       mode: "dark",
       input:
-        "0px 1px 2px 0px var(--v2-alpha-dark-0), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px -0.5px 0px 0px var(--v2-alpha-light-6)",
+        "0px -0.5px 0px 0px var(--v2-alpha-light-6), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px 1px 2px 0px var(--v2-alpha-dark-0)",
       button:
-        "0px 1px 2px 0px var(--v2-alpha-dark-40), 0px 0px 0px 0.5px var(--v2-alpha-light-20), 0px -0.5px 0px 0px var(--v2-alpha-light-10)",
+        "0px -0.5px 0px 0px var(--v2-alpha-light-10), 0px 0px 0px 0.5px var(--v2-alpha-light-20), 0px 1px 2px 0px var(--v2-alpha-dark-40)",
     },
   ] as const)(
     "$mode matches Figma in OC-2 and custom-theme fallbacks without changing buttons",
