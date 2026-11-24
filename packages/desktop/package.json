@@ -1,7 +1,7 @@
 {
   "name": "@opencode-ai/desktop",
   "private": true,
-  "version": "1.19.5",
+  "version": "1.19.6",
   "type": "module",
   "license": "MIT",
   "homepage": "https://opencode.ai",
@@ -39,7 +39,6 @@
     "@opencode-ai/app": "workspace:*",
     "@opencode-ai/ui": "workspace:*",
     "@sentry/solid": "catalog:",
-    "@sentry/vite-plugin": "catalog:",
     "@solid-primitives/i18n": "2.2.1",
     "@solid-primitives/storage": "catalog:",
     "@solidjs/meta": "catalog:",
