@@ -969,7 +969,7 @@ function LayoutGlyph(props: { layout: ShareOptions["layout"] }) {
           <path d="M4.75 5h6.5M4.75 7.75h6.5M4.75 10.5h3.5" />
         </Show>
         <Show when={props.layout === "number"}>
-          <path d="M6.75 5.25 8.25 4.5v5M4.75 11.75h6.5" />
+          <path d="M9.75 6.25a1.75 1.75 0 1 1-3.5 0 1.75 1.75 0 0 1 3.5 0v2.5A1.5 1.5 0 0 1 8.25 10.25H6.75M4.75 12h6.5" />
         </Show>
         <Show when={props.layout === "chart"}>
           <path d="M4.75 4.75h4M5.5 11.75v-2M8 11.75V7.75M10.5 11.75v-3" />

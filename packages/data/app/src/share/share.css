@@ -1122,6 +1122,17 @@
     width: 20px;
     height: 20px;
 
+    /* The icons fill their box, so they read as large as the style circles. */
+    > svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    /* Lines stay 1.5px on screen at the larger size, rather than scaling up with it. */
+    > svg * {
+      vector-effect: non-scaling-stroke;
+    }
+
     [data-slot="glyph"] {
       width: 20px;
       height: 14px;
