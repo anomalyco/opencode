@@ -7,6 +7,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { httpClient } from "@opencode/util/effect/app-node-platform"
 import { PushCrypto } from "./crypto.js"
 import { PushList } from "./list.js"
+import { PushOptions } from "./options.js"
 
 export interface Notification {
   readonly type: "session.idle" | "question" | "permission"
@@ -28,26 +29,33 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pu
 const maxMessageBytes = 2600
 const attempts = 3
 
-/** The JSON the phone decrypts, with the body shortened so the box stays within the relay's limit. */
+/** Drops characters from the end of `text` until its JSON is at least `bytes` shorter, then adds "…". */
+const shorten = (text: string, bytes: number) => {
+  const chars = Array.from(text)
+  let dropped = 0
+  while (chars.length > 0 && dropped < bytes + 3) {
+    dropped += Buffer.byteLength(JSON.stringify(chars.pop()), "utf8") - 2
+  }
+  return chars.join("") + "…"
+}
+
+/** The JSON the phone decrypts, with the body and then the title shortened so the box stays within the relay's limit. */
 export const message = (notification: Notification) => {
-  const make = (body: string) =>
+  const make = (title: string, body: string) =>
     JSON.stringify({
       v: 1,
       type: notification.type,
       sessionID: notification.sessionID,
-      title: notification.title,
+      title,
       body,
       data: notification.data,
     })
+  const over = (title: string, body: string) => Buffer.byteLength(make(title, body), "utf8") - maxMessageBytes
+  let title = notification.title
   let body = notification.body
-  let text = make(body)
-  while (Buffer.byteLength(text, "utf8") > maxMessageBytes && body.length > 1) {
-    const over = Buffer.byteLength(text, "utf8") - maxMessageBytes
-    const chars = Array.from(body)
-    body = chars.slice(0, Math.max(0, chars.length - over - 3)).join("") + "…"
-    text = make(body)
-  }
-  return text
+  if (over(title, body) > 0) body = shorten(body, over(title, body))
+  if (over(title, body) > 0) title = shorten(title, over(title, body))
+  return make(title, body)
 }
 
 export const level = (device: PushList.Stored, sessions: Record<string, Push.Bell>, sessionID: string) =>
@@ -57,14 +65,16 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const list = yield* PushList.Service
+    const options = yield* PushOptions.Service
     const http = yield* HttpClient.HttpClient
     const scope = yield* Scope.Scope
 
     const post = (url: string, box: string) =>
       http.execute(HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe({ box }))).pipe(
-        Effect.map((response) => response.status),
+        Effect.flatMap((response) => response.text.pipe(Effect.ignore, Effect.as(response.status))),
         Effect.timeout("10 seconds"),
         Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+        Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
         Effect.orElseSucceed(() => undefined),
       )
 
@@ -72,15 +82,17 @@ const layer = Layer.effect(
       device: PushList.Stored,
       sessions: Record<string, Push.Bell>,
       notification: Notification,
+      relays: readonly string[],
     ) {
       if (device.paused) return
+      if (!relays.includes(new URL(device.callbackURL).origin)) return
       const wanted = level(device, sessions, notification.sessionID)
       if (wanted === "none") return
       if (wanted === "attention" && !notification.attention) return
       const box = PushCrypto.seal(device.secret, device.id, message(notification))
       for (let attempt = 1; attempt <= attempts; attempt++) {
         const status = yield* post(device.callbackURL, box)
-        if (status === 404 || status === 410) return yield* list.remove(device.id)
+        if (status === 404 || status === 410) return yield* list.removeGone(device.id, device.callbackURL)
         if (status !== undefined && status < 500) return
         if (attempt < attempts) yield* Effect.sleep("1 second")
       }
@@ -89,10 +101,15 @@ const layer = Layer.effect(
     const deliver = Effect.fn("PushSender.deliver")(function* (notification: Notification) {
       const targets = yield* list.targets()
       if (targets.settings.paused) return
-      yield* Effect.forEach(targets.devices, (device) => sendTo(device, targets.sessions, notification), {
-        concurrency: "unbounded",
-        discard: true,
-      })
+      const current = yield* options.get()
+      yield* Effect.forEach(
+        targets.devices,
+        (device) =>
+          sendTo(device, targets.sessions, notification, current.relays).pipe(
+            Effect.ignoreCause({ log: "Warn", message: "Failed to send a push notification" }),
+          ),
+        { concurrency: "unbounded", discard: true },
+      )
     })
 
     return Service.of({
@@ -101,4 +118,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [PushList.node, httpClient] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [PushList.node, PushOptions.node, httpClient] })

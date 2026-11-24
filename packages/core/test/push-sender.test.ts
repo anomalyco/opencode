@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect } from "bun:test"
 import { createDecipheriv, createECDH, hkdfSync } from "node:crypto"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { KV } from "@opencode/core/kv"
 import { Bus } from "@opencode/core/bus"
 import { PushCrypto } from "@opencode/core/push/crypto"
@@ -15,29 +15,45 @@ import { testEffect } from "./lib/effect"
 import { waitUntil } from "./lib/eventually"
 
 interface Call {
+  readonly origin: string
   readonly path: string
   readonly box: string
+  readonly redirect?: RequestInit["redirect"]
 }
 
 let calls: Call[] = []
 
 const relay = async (input: Request | string | URL, init?: RequestInit) => {
-  const path = new URL(input instanceof Request ? input.url : input).pathname
+  const url = new URL(input instanceof Request ? input.url : input)
+  const path = url.pathname
   const text = input instanceof Request ? await input.text() : String(init?.body)
-  calls.push({ path, box: JSON.parse(text).box })
+  calls.push({ origin: url.origin, path, box: JSON.parse(text).box, redirect: init?.redirect })
   if (path.endsWith("/gone")) return new Response('{"status":"gone"}', { status: 410 })
+  if (path.endsWith("/missing")) return new Response("", { status: 404 })
+  if (path.endsWith("/busy")) return new Response("", { status: 429 })
   if (path.endsWith("/broken")) return new Response("", { status: 503 })
   return new Response('{"status":"accepted"}', { status: 202 })
 }
 
 const it = testEffect(
   LayerNode.compile(LayerNode.group([PushSender.node, PushList.node, KV.node, Bus.node]), {
-    replacements: [LayerNodePlatform.httpFetch.replace(LayerNodePlatform.fetchLayer(relay))],
+    replacements: [
+      LayerNodePlatform.httpFetch.replace(LayerNodePlatform.fetchLayer(relay)),
+      PushOptions.node.replace(
+        Layer.succeed(
+          PushOptions.Service,
+          PushOptions.Service.of({
+            get: () => Effect.succeed({ enabled: true, relays: [PushOptions.defaultRelay] }),
+          }),
+        ),
+      ),
+    ],
   }),
 )
 
 const sessionID = Session.ID.make("ses_push_sender")
-const relays = [PushOptions.defaultRelay]
+const removedRelay = "https://removed-relay.example.com"
+const relays = [PushOptions.defaultRelay, removedRelay]
 
 const finished: PushSender.Notification = {
   type: "session.idle",
@@ -57,14 +73,19 @@ const question: PushSender.Notification = {
   attention: true,
 }
 
-const phone = Effect.fn(function* (id: string, path: string, settings?: Push.DeviceSettings) {
+const phone = Effect.fn(function* (
+  id: string,
+  path: string,
+  settings?: Push.DeviceSettings,
+  origin = PushOptions.defaultRelay,
+) {
   const list = yield* PushList.Service
   const keys = createECDH("prime256v1")
   keys.generateKeys()
   const registered = yield* list.register(
     Push.DeviceID.make(id),
     {
-      callbackURL: `${PushOptions.defaultRelay}/v2/notify/${path}`,
+      callbackURL: `${origin}/v2/notify/${path}`,
       expiresAt: Date.now() + 86_400_000,
       publicKey: keys.getPublicKey("base64"),
       platform: "android",
@@ -93,6 +114,9 @@ const ids = {
   gone: "00000000-0000-4000-8000-000000000002",
   broken: "00000000-0000-4000-8000-000000000003",
   quiet: "00000000-0000-4000-8000-000000000004",
+  missing: "00000000-0000-4000-8000-000000000005",
+  busy: "00000000-0000-4000-8000-000000000006",
+  removed: "00000000-0000-4000-8000-000000000007",
 }
 
 beforeEach(() => {
@@ -128,13 +152,19 @@ describe("PushSender", () => {
       const list = yield* PushList.Service
       const ok = yield* phone(ids.ok, "ok")
       yield* phone(ids.gone, "gone")
+      yield* phone(ids.missing, "missing")
+      yield* phone(ids.busy, "busy")
       yield* phone(ids.broken, "broken")
       yield* phone(ids.quiet, "quiet", { default: "attention" })
+      yield* phone(ids.removed, "removed", undefined, removedRelay)
 
       yield* sender.send(finished)
       yield* waitUntil(Effect.sync(() => calls.filter((call) => call.path.endsWith("/broken")).length === 3))
 
       expect(calls.filter((call) => call.path.endsWith("/quiet"))).toEqual([])
+      expect(calls.filter((call) => call.origin === removedRelay)).toEqual([])
+      expect(calls.filter((call) => call.path.endsWith("/busy"))).toHaveLength(1)
+      expect(calls.every((call) => call.redirect === "manual")).toBe(true)
       const delivered = calls.find((call) => call.path.endsWith("/ok"))
       expect(open(ok, delivered!.box)).toEqual({
         v: 1,
@@ -145,7 +175,7 @@ describe("PushSender", () => {
         data: { outcome: "succeeded" },
       })
       const devices = (yield* list.info()).devices.map((device) => device.id)
-      expect(devices.toSorted()).toEqual([ids.ok, ids.broken, ids.quiet])
+      expect(devices.toSorted()).toEqual([ids.ok, ids.broken, ids.quiet, ids.busy, ids.removed].toSorted())
     }),
   )
 
@@ -174,11 +204,29 @@ describe("PushSender", () => {
     }),
   )
 
-  it.effect("shortens a long body so the box fits the relay", () =>
+  it.effect("shortens a long body, then a long title, so the box fits the relay", () =>
     Effect.sync(() => {
-      const text = PushSender.message({ ...question, body: "é".repeat(5_000) })
+      for (const body of ["é".repeat(5_000), "漢".repeat(1_500), "\n".repeat(3_000)]) {
+        const text = PushSender.message({ ...question, body })
+        expect(Buffer.byteLength(text, "utf8")).toBeLessThanOrEqual(2600)
+        expect(Buffer.byteLength(text, "utf8")).toBeGreaterThan(2580)
+        expect(JSON.parse(text).body.endsWith("…")).toBe(true)
+      }
+      const text = PushSender.message({ ...question, title: "t".repeat(3_000), body: "b".repeat(3_000) })
+      const parsed = JSON.parse(text)
       expect(Buffer.byteLength(text, "utf8")).toBeLessThanOrEqual(2600)
-      expect(JSON.parse(text).body.endsWith("…")).toBe(true)
+      expect(parsed.body).toBe("…")
+      expect(parsed.title.endsWith("…")).toBe(true)
+      expect(PushSender.message(question)).toBe(
+        JSON.stringify({
+          v: 1,
+          type: "question",
+          sessionID,
+          title: question.title,
+          body: question.body,
+          data: question.data,
+        }),
+      )
     }),
   )
 })
