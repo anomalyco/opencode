@@ -120,8 +120,12 @@ export function comparisonCard(data: HomePageData, catalogLabs: readonly string[
     if (values.some((value) => value === undefined)) return []
     const [a, b] = values as [number, number]
     const max = Math.max(a, b) || 1
+    const min = Math.min(a, b)
     const lead = a === b ? -1 : a < b === Boolean(measure.lower) ? 0 : 1
-    return [{ label: measure.label, values: [measure.format(a), measure.format(b)], fills: [a / max, b / max], lead }]
+    const scores = measure.lower ? [a ? min / a : 1, b ? min / b : 1] : [a / max, b / max]
+    return [
+      { label: measure.label, values: [measure.format(a), measure.format(b)], fills: [a / max, b / max], scores, lead },
+    ]
   })
   const ratio = first.tokens / Math.max(1, second.tokens)
   return {

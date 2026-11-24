@@ -90,9 +90,14 @@
   padding: 0;
   color: var(--stats-text);
   background: var(--stats-bg);
-  border: 1px solid var(--stats-line-strong);
+  border: 0;
   overflow: hidden;
-  box-shadow: 0 24px 80px rgb(0 0 0 / 0.35);
+  /* No border: a 1px ring of shadow is its edge, stacked over a contact shadow, a near one and a far, soft one. */
+  box-shadow:
+    0 0 0 1px light-dark(rgb(0 0 0 / 0.12), rgb(255 255 255 / 0.1)),
+    0 1px 2px rgb(0 0 0 / 0.12),
+    0 8px 24px -8px rgb(0 0 0 / 0.2),
+    0 24px 80px rgb(0 0 0 / 0.35);
 
   /* Opens with a short rise and settle from 97%, eased out; closes faster than it opens. Transitions rather than
      keyframes, so closing mid-open reverses from where it is. Only opacity and transform animate. */

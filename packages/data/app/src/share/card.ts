@@ -41,7 +41,9 @@ export type ShareChart =
       // model the metric favours (higher usage, lower cost), or -1 for a tie.
       kind: "versus"
       models: { label: string; provider: string; logo: string }[]
-      rows: { label: string; values: string[]; fills: number[]; lead: number }[]
+      // fills: each value against the larger, for the bars; scores: each against the better (1 is the better), for the
+      // radar, so the better model reaches the edge whichever way the measure runs.
+      rows: { label: string; values: string[]; fills: number[]; scores: number[]; lead: number }[]
     }
 
 export type Tone = "up" | "down" | "new" | "flat"
@@ -111,6 +113,9 @@ const palettes = {
     veil: "rgb(255 255 255 / 0.1)",
     up: "#3fb950",
     down: "#f85149",
+    // The two models of a comparison, as the comparison page's radar colours them.
+    first: "#6b8fff",
+    second: "#3fbf7f",
   },
   light: {
     background: "#fbfbfb",
@@ -131,6 +136,8 @@ const palettes = {
     veil: "rgb(0 0 0 / 0.1)",
     up: "#1a7f37",
     down: "#cf222e",
+    first: "#294bdb",
+    second: "#159447",
   },
 }
 
@@ -232,19 +239,20 @@ export function shareDuration(card: ShareCard, options: ShareOptions, timing = f
 // The card's own part of the video, before the closing slides: with music it runs to the track's drop. Embeds play
 // only this part.
 export function mainLength(card: ShareCard, options: ShareOptions, timing = freeTiming) {
-  const intro = card.chart.kind === "podium" ? (podiumSlides(options, timing)?.end ?? 0) : 0
+  const intro = introSlides(card, options, timing)?.end ?? 0
   return timing.length ?? intro + timing.start + highlights(card, options).length * timing.rounds * timing.step + hold
 }
 
-// The leaderboard's slides: the headline until the first cut, then first, second and third place for a bar each with
-// music (the cuts on the track's strong beats, where its highlights would fall) or 1.6 s each without. The Build motion
-// keeps the card alone.
-function podiumSlides(options: ShareOptions, timing: ShareTiming) {
-  if (options.motion === "build") return undefined
+// The slides the leaderboard and comparison open with: the headline until the first cut, then a slide a place (the top
+// three) or two for a comparison (head to head, then the radar), a bar each with music (the cuts on the track's strong
+// beats, where its highlights would fall) or 1.6 s each without. The Build motion keeps the card alone.
+function introSlides(card: ShareCard, options: ShareOptions, timing: ShareTiming) {
+  const count = card.chart.kind === "podium" ? card.chart.entries.length : card.chart.kind === "versus" ? 2 : 0
+  if (options.motion === "build" || count === 0) return undefined
   const length = timing.beat ? timing.beat * 4 : 1.6
   const grid = timing.beat ? timing.start % length : 0
   const first = grid + length * Math.max(1, Math.ceil((1.4 - grid) / length))
-  return { first, length, end: first + length * 3 }
+  return { first, length, count, end: first + length * count }
 }
 
 // The closing slides, cut on the beat: the lockup large for 4 beats, the line for 3, then the address for 3. At 96 BPM
@@ -282,11 +290,11 @@ export function drawShareCard(
     ctx.restore()
     return
   }
-  // The leaderboard opens with slides (podiumSlides): its headline, then each of the top three on its own. The card
-  // proper follows, its own clock starting when they end.
-  const slides = card.chart.kind === "podium" ? podiumSlides(options, timing) : undefined
-  if (slides && card.chart.kind === "podium" && at < slides.end) {
-    drawPodiumSlide(ctx, card, card.chart, options, colors, width, height, at, slides)
+  // The leaderboard and comparison open with slides (introSlides). The card proper follows, its own clock starting when
+  // they end.
+  const slides = introSlides(card, options, timing)
+  if (slides && at < slides.end) {
+    drawSlide(ctx, card, options, colors, width, height, at, slides)
     ctx.restore()
     return
   }
@@ -420,7 +428,7 @@ function drawOutro(
     ctx.font = `700 ${34 * zoom}px ${font}`
     const name = options.logo === "full" ? "OPENCODE DATA" : "DATA"
     const text = [...name].reduce((sum, char) => sum + ctx.measureText(char).width + 34 * zoom * 0.08, 0)
-    const total = (40 + 24) * zoom + text
+    const total = (40 + 16) * zoom + text
     drawLogo(ctx, options.logo, colors, -total / 2, -24 * zoom, zoom)
   }
   if (slide > 0) {
@@ -458,12 +466,12 @@ function highlightsEnd(card: ShareCard, options: ShareOptions, timing: ShareTimi
 }
 
 function highlights(card: ShareCard, options: ShareOptions) {
-  // The leaderboard has shown each place on its own slide already.
-  if (options.motion === "build" || card.chart.kind === "podium") return []
+  // The leaderboard and comparison have had their slides already.
+  if (options.motion === "build" || card.chart.kind === "podium" || card.chart.kind === "versus") return []
   const chart = card.chart
   const count =
     chart.kind === "stacked" ? chart.series.filter((item) => item.key !== "other").length : chart.rows.length
-  const most = chart.kind === "stacked" || chart.kind === "versus" ? 5 : 3
+  const most = chart.kind === "stacked" ? 5 : 3
   return Array.from({ length: Math.min(most, count) }, (_, index) => index)
 }
 
@@ -581,7 +589,8 @@ function drawLogo(
   ctx.fillStyle = colors.text
   ctx.textBaseline = "middle"
   ctx.font = `700 ${34 * zoom}px ${font}`
-  spaced(ctx, kind === "full" ? "OPENCODE DATA" : "DATA", x + (40 + 24) * zoom, y + size / 2 + zoom, 34 * zoom * 0.08)
+  // The word close after the mark (16px at the corner size), so the two read as one lockup.
+  spaced(ctx, kind === "full" ? "OPENCODE DATA" : "DATA", x + (40 + 16) * zoom, y + size / 2 + zoom, 34 * zoom * 0.08)
 }
 
 // The eyebrow, then the headline, the big number or the title; returns where the chart starts.
@@ -986,19 +995,19 @@ function drawRanked(
 }
 
 // How many rows fit, how tall each is and the type size.
-// One of the leaderboard's slides: before the first cut its headline, large; then a place alone on a tile the size of
-// the chart, its logo large and faint at the right, punching in on the cut.
-function drawPodiumSlide(
+// One of the opening slides: before the first cut the headline, large; then the leaderboard's places or the comparison's
+// head to head and radar.
+function drawSlide(
   ctx: CanvasRenderingContext2D,
   card: ShareCard,
-  chart: Extract<ShareChart, { kind: "podium" }>,
   options: ShareOptions,
   colors: Palette,
   width: number,
   height: number,
   time: number,
-  slides: { first: number; length: number },
+  slides: { first: number; length: number; count: number },
 ) {
+  const chart = card.chart
   drawBackground(
     ctx,
     options.background,
@@ -1015,13 +1024,11 @@ function drawPodiumSlide(
   const rule = footer - 26 - 56
   drawFooter(ctx, card, colors, width, footer, rule)
   const box = { x: pad, y: pad + 88 + 48 * zoom, width: width - pad * 2, height: rule - 64 - (pad + 88 + 48 * zoom) }
-  const index =
-    time < slides.first ? -1 : Math.min(chart.entries.length - 1, Math.floor((time - slides.first) / slides.length))
+  const index = time < slides.first ? -1 : Math.min(slides.count - 1, Math.floor((time - slides.first) / slides.length))
   const since = index < 0 ? time : time - slides.first - index * slides.length
-  const entry = chart.entries[index]
   ctx.textBaseline = "alphabetic"
 
-  if (!entry) {
+  if (index < 0) {
     // The headline, as large as fits in five lines, set in the middle of the space, under its eyebrow.
     const sizes = width > height ? [96, 84, 72, 64] : [104, 92, 80, 72, 64, 56]
     const size =
@@ -1048,6 +1055,13 @@ function drawPodiumSlide(
     )
     return
   }
+  if (chart.kind === "versus") {
+    if (index === 0) drawHeadToHead(ctx, chart, colors, box, width, since)
+    if (index === 1) drawRadar(ctx, chart, colors, box, since)
+    return
+  }
+  const entry = chart.kind === "podium" ? chart.entries[index] : undefined
+  if (!entry) return
 
   // Straight on the card, no tile: the logo large and faint at its right, the type punching in on the cut.
   const punch = 1 + 0.04 * (1 - settle(since, 0, 0.4))
@@ -1201,6 +1215,159 @@ function drawPodium(
   })
 }
 
+// The comparison's first slide: the two models facing each other, each over its logo, large and faint, in its own half,
+// a big "vs" between them.
+function drawHeadToHead(
+  ctx: CanvasRenderingContext2D,
+  chart: Extract<ShareChart, { kind: "versus" }>,
+  colors: Palette,
+  box: Box,
+  width: number,
+  since: number,
+) {
+  const dark = colors.background !== palettes.light.background
+  // Side by side on the wide card; one over the other otherwise, so each name has the full width.
+  const across = ctx.canvas.width > ctx.canvas.height
+  const middle = across ? box.x + box.width / 2 : box.y + box.height / 2
+  chart.models.forEach((model, side) => {
+    const area = across
+      ? { x: side === 0 ? box.x : middle + 60, y: box.y, width: box.width / 2 - 60, height: box.height }
+      : { x: box.x, y: side === 0 ? box.y : middle + 50, width: box.width, height: box.height / 2 - 50 }
+    const logo = shareLogo(model.logo, dark)
+    if (logo) {
+      const size = Math.min(area.height * 1.05, area.width * 0.9)
+      ctx.save()
+      ctx.beginPath()
+      ctx.rect(
+        across ? (side === 0 ? 0 : middle) : 0,
+        across ? 0 : side === 0 ? 0 : middle,
+        across ? width / 2 : width,
+        across ? ctx.canvas.height : side === 0 ? middle : ctx.canvas.height - middle,
+      )
+      ctx.clip()
+      ctx.globalAlpha = (dark ? 0.08 : 0.07) * settle(since, side * 0.15, 0.5)
+      ctx.drawImage(logo, area.x + area.width - size * 0.75, area.y + (area.height - size) / 2, size, size)
+      ctx.restore()
+    }
+    const name = Math.min(72, fit(ctx, model.label, area.width, 72, 700))
+    const foot = area.y + area.height / 2 + name * 0.4
+    rise(ctx, since, 0.1 + side * 0.15, foot, name, () => {
+      ctx.font = `700 ${name}px ${font}`
+      ctx.fillStyle = side === 0 ? colors.first : colors.second
+      ctx.fillText(model.label, area.x - 2, foot)
+    })
+    rise(ctx, since, 0.18 + side * 0.15, foot + 56, 36, () => {
+      ctx.font = `400 36px ${font}`
+      ctx.fillStyle = colors.muted
+      ctx.fillText(model.provider, area.x, foot + 56)
+    })
+  })
+  rise(ctx, since, 0.3, across ? box.y + box.height / 2 + 28 : middle + 28, 80, () => {
+    ctx.font = `400 80px ${font}`
+    ctx.fillStyle = colors.faint
+    const x = across ? middle - ctx.measureText("vs").width / 2 : box.x
+    ctx.fillText("vs", x, across ? box.y + box.height / 2 + 28 : middle + 28)
+  })
+}
+
+// The comparison's second slide: a radar of every measure, each model's shape in its colour, growing out from the
+// middle; each axis named at its tip with both values under the name.
+function drawRadar(
+  ctx: CanvasRenderingContext2D,
+  chart: Extract<ShareChart, { kind: "versus" }>,
+  colors: Palette,
+  box: Box,
+  since: number,
+) {
+  const count = chart.rows.length
+  if (count < 3) return
+  const legend = 48
+  const cx = box.x + box.width / 2
+  const cy = box.y + legend + (box.height - legend) / 2
+  const radius = Math.min(box.width / 2 - 150, (box.height - legend) / 2 - 90)
+  const point = (index: number, amount: number) => {
+    const angle = -Math.PI / 2 + (index / count) * Math.PI * 2
+    return { x: cx + Math.cos(angle) * radius * amount, y: cy + Math.sin(angle) * radius * amount }
+  }
+  // The legend: each model's swatch and name.
+  ctx.font = `700 28px ${font}`
+  chart.models.reduce((x, model, side) => {
+    ctx.globalAlpha = settle(since, 0.05 + side * 0.08, 0.5)
+    ctx.fillStyle = side === 0 ? colors.first : colors.second
+    ctx.fillRect(x, box.y + 4, 20, 20)
+    ctx.fillStyle = colors.text
+    ctx.fillText(model.label, x + 32, box.y + 23)
+    return x + 32 + ctx.measureText(model.label).width + 48
+  }, box.x)
+  ctx.globalAlpha = 1
+  // The web: four rings and a spoke an axis.
+  ctx.strokeStyle = colors.line
+  ctx.lineWidth = 2
+  ;[0.25, 0.5, 0.75, 1].forEach((ring) => {
+    ctx.beginPath()
+    Array.from({ length: count }, (_, index) => point(index, ring)).forEach((p, index) =>
+      index === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y),
+    )
+    ctx.closePath()
+    ctx.stroke()
+  })
+  Array.from({ length: count }, (_, index) => point(index, 1)).forEach((p) => {
+    ctx.beginPath()
+    ctx.moveTo(cx, cy)
+    ctx.lineTo(p.x, p.y)
+    ctx.stroke()
+  })
+  // Each model's shape, the second under the first.
+  ;[1, 0].forEach((side) => {
+    const grow = ease(Math.min(1, Math.max(0, (since - 0.2 - side * 0.1) / 0.7)))
+    if (grow <= 0) return
+    const color = side === 0 ? colors.first : colors.second
+    const points = chart.rows.map((row, index) => point(index, Math.max(0.04, row.scores[side] ?? 0) * grow))
+    ctx.beginPath()
+    points.forEach((p, index) => (index === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y)))
+    ctx.closePath()
+    ctx.globalAlpha = 0.16
+    ctx.fillStyle = color
+    ctx.fill()
+    ctx.globalAlpha = 1
+    ctx.strokeStyle = color
+    ctx.lineWidth = 4
+    ctx.stroke()
+    points.forEach((p) => {
+      ctx.beginPath()
+      ctx.arc(p.x, p.y, 7, 0, Math.PI * 2)
+      ctx.fillStyle = color
+      ctx.fill()
+    })
+  })
+  // The axes' names and values, out past each tip.
+  chart.rows.forEach((row, index) => {
+    const tip = point(index, 1)
+    const dx = tip.x - cx
+    const dy = tip.y - cy
+    const align: CanvasTextAlign = Math.abs(dx) < 4 ? "center" : dx > 0 ? "left" : "right"
+    const x = tip.x + Math.sign(Math.round(dx)) * 24
+    const y = tip.y + (Math.abs(dy) < 4 ? -14 : dy > 0 ? 40 : -44)
+    ctx.save()
+    ctx.globalAlpha = settle(since, 0.4 + index * 0.05, 0.5)
+    ctx.textAlign = align
+    ctx.font = `400 20px ${font}`
+    ctx.fillStyle = colors.faint
+    ctx.fillText(row.label.toUpperCase(), x, y)
+    ctx.font = `700 26px ${font}`
+    const [a, b] = row.values
+    const gap = "  "
+    const total = ctx.measureText(`${a}${gap}${b}`).width
+    const start = align === "left" ? x : align === "right" ? x - total : x - total / 2
+    ctx.textAlign = "left"
+    ctx.fillStyle = colors.first
+    ctx.fillText(a ?? "", start, y + 34)
+    ctx.fillStyle = colors.second
+    ctx.fillText(b ?? "", start + ctx.measureText(`${a}${gap}`).width, y + 34)
+    ctx.restore()
+  })
+}
+
 // Two models head to head: their names over their logos, large and faint, one each side; then a row a metric, its
 // name in the middle and each model's bar growing out from it, the one the metric favours in colour.
 function drawVersus(
@@ -1277,7 +1444,8 @@ function drawVersus(
     const caption = Math.round(22 * scale)
     const figure = Math.round(30 * scale)
     const baseline = y + figure
-    const bar = y + row * 0.58
+    // Clear air between the figures and their bars.
+    const bar = baseline + Math.max(14, row * 0.22)
     const thick = Math.max(5, Math.round(10 * scale))
     ctx.font = `400 ${caption}px ${font}`
     ctx.fillStyle = mix(colors.faint, colors.mark, dim)
@@ -1289,7 +1457,7 @@ function drawVersus(
       const fill = Math.max(0.02, Math.min(1, item.fills[side] ?? 0)) * reach * grow
       ctx.fillStyle = colors.track
       ctx.fillRect(side === 0 ? middle - 4 - reach : middle + 4, bar, reach, thick)
-      ctx.fillStyle = mix(lead ? colors.lead : colors.idle, colors.idle, dim)
+      ctx.fillStyle = mix(lead ? (side === 0 ? colors.first : colors.second) : colors.idle, colors.idle, dim)
       ctx.fillRect(side === 0 ? middle - 4 - fill : middle + 4, bar, fill, thick)
       ctx.font = `${lead ? 700 : 400} ${figure}px ${font}`
       ctx.fillStyle = mix(lead ? colors.text : colors.muted, colors.faint, dim)
