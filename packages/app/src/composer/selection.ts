@@ -7,7 +7,16 @@ import { useProviders } from "@/providers/catalog/providers"
 import { useData } from "@/runtime/server/current"
 import { normalizeAgentList, normalizeProviderList } from "@/runtime/server/global-sync/utils"
 import { useModels } from "@/providers/models/models"
-import { cycleModelVariant, getConfiguredAgentVariant, resolveModelVariant } from "@/providers/models/variant"
+import {
+  cycleModelVariant,
+  durableVariantSelection,
+  getConfiguredAgentVariant,
+  INHERIT_VARIANT,
+  resolveModelVariant,
+  variantSelectionFrom,
+} from "@/providers/models/variant"
+import { cycleModelSpeed } from "@/providers/models/speed"
+import type { AgentChoices } from "@/providers/models/selection-machine"
 import { useComposerState } from "./persistence"
 import { useConfiguredModel } from "@/providers/models/configured"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -189,18 +198,62 @@ export function createComposerModelSelection(input: {
       .filter((item): item is NonNullable<typeof item> => !!item),
   )
 
+  const currentKey = () => {
+    const item = current()
+
+    return item && { providerID: item.provider.id, modelID: item.id }
+  }
+
   const selection = {
     trackSessionCommit: local.model.trackSessionCommit,
-    remembered: () => Object.fromEntries(Object.entries(remembered).map(([name, model]) => [name, { model }])),
+    remembered: (): AgentChoices =>
+      Object.fromEntries(
+        Object.entries(remembered).flatMap(([name, model]) =>
+          model ? [[name, { providerID: model.providerID, modelID: model.modelID, variant: INHERIT_VARIANT }]] : [],
+        ),
+      ),
     ready: Object.assign(() => models.ready() && configuredModel.ready(), { promise: models.ready.promise }),
     key,
     current,
+    standard() {
+      const item = currentKey()
+
+      return item && models.find(models.standard(item))
+    },
     recent: recentModels,
     favorite: { list: favoriteModels, toggle: models.favorite.toggle },
-    list: models.list,
+    list: models.listed,
+    speed: {
+      list() {
+        const item = currentKey()
+
+        return item ? models.speed.list(item) : []
+      },
+      current() {
+        const item = currentKey()
+
+        return item && models.speed.of(item)
+      },
+      set(value: string | undefined) {
+        batch(() => {
+          const item = currentKey()
+          const target = item && models.speed.model(item, value)
+
+          if (!target) return
+          models.speed.remember(target, value)
+          selection.set(target)
+        })
+      },
+      cycle() {
+        const items = selection.speed.list()
+
+        if (items.length === 0) return
+        selection.speed.set(cycleModelSpeed(selection.speed.current(), items))
+      },
+    },
     cycle(direction: 1 | -1) {
       const items = recentModels()
-      const item = current()
+      const item = selection.standard()
 
       if (!item) return
       const index = items.findIndex((entry) => entry.provider.id === item.provider.id && entry.id === item.id)
@@ -212,11 +265,20 @@ export function createComposerModelSelection(input: {
 
       if (next) selection.set({ providerID: next.provider.id, modelID: next.id })
     },
-    set(item: ModelKey | undefined, options?: { recent?: boolean }) {
+    set(picked: ModelKey | undefined, options?: { recent?: boolean }) {
       batch(() => {
-        if (item && !valid(item)) return
-        const previous = current()
-        const same = item && previous?.provider.id === item.providerID && previous.id === item.modelID
+        if (picked && !valid(picked)) return
+        // A model runs at the speed last used with it.
+        const item = picked && models.speed.remembered(picked)
+        const previous = currentKey()
+
+        // Another speed of the same model keeps its variant.
+        const same =
+          item &&
+          previous &&
+          models.standard(previous).modelID === models.standard(item).modelID &&
+          previous.providerID === item.providerID
+
         prompt.model.set(
           item ? { ...item, variant: same ? (selection.variant.current() ?? null) : undefined } : undefined,
         )
@@ -247,18 +309,14 @@ export function createComposerModelSelection(input: {
           })
         )
       },
-      selected() {
-        const model = prompt.model.current()
-
-        return model && valid(model) ? model.variant : undefined
-      },
       current(item?: ModelKey) {
         const model = item ? models.find(item) : current()
         const same = !item || (current()?.provider.id === item.providerID && current()?.id === item.modelID)
+        const prompted = prompt.model.current()
 
         return resolveModelVariant({
           variants: Object.keys(model?.variants ?? {}),
-          selected: same ? this.selected() : undefined,
+          selected: same && prompted && valid(prompted) ? variantSelectionFrom(prompted.variant) : INHERIT_VARIANT,
           configured: this.configured(model),
           preferred: model ? models.variant.get({ providerID: model.provider.id, modelID: model.id }) : undefined,
         })
@@ -282,7 +340,7 @@ export function createComposerModelSelection(input: {
         this.set(
           cycleModelVariant({
             variants,
-            selected: this.current() ?? null,
+            selected: durableVariantSelection(this.current()),
             configured: undefined,
           }),
         )

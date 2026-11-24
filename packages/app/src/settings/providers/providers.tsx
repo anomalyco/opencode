@@ -1,6 +1,7 @@
 import { Button } from "@opencode/ui/button"
 import { Badge } from "@opencode/ui/badge"
 import { useDialog } from "@opencode/ui/context/dialog"
+import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Menu } from "@opencode/ui/menu"
@@ -9,18 +10,26 @@ import { showToast } from "@/shell/notifications/toast"
 import { popularProviders, useProviders } from "@/providers/catalog/providers"
 import { consoleProviderGroup } from "@/providers/catalog/console"
 import { useIntegrations } from "@/providers/catalog/integrations"
-import { createEffect, createMemo, type Component, For, type JSX, Show } from "solid-js"
-import { createStore, reconcile } from "solid-js/store"
+import { createEffect, createMemo, createSignal, on, untrack, type Component, For, type JSX, Show } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useServerSDK } from "@/runtime/server/client"
 import { formatServerError } from "@/runtime/server/errors"
-import { CONSOLE_INTEGRATION } from "@/providers/connect/controller"
+import { CONSOLE_INTEGRATION } from "@/providers/connect/dialog-machine"
 import { DialogConnectProvider, useProviderConnectController } from "@/providers/connect/dialog"
 import { ProviderModelIcon } from "@/providers/models/provider-group"
 import { SettingsList } from "@/settings/list"
 import { activeProviderAccount, providerAccounts, type ProviderAccount } from "./accounts"
 import { AccountNameInput } from "./account-name"
 import { useProviderAccountActions } from "./account-actions"
+import {
+  availableProviders,
+  connectedProviders,
+  createSettingsProvidersState,
+  providerAccountView,
+  transitionSettingsProviders,
+  type SettingsProvidersEffect,
+  type SettingsProvidersEvent,
+} from "./machine"
 import "@/settings/settings.css"
 
 type ProviderSource = "env" | "api" | "account" | "config" | "custom"
@@ -28,9 +37,9 @@ type ProviderSource = "env" | "api" | "account" | "config" | "custom"
 type ProviderItem = ReturnType<ReturnType<typeof useProviders>["connected"]>[number]
 
 const PROVIDER_NOTES = [
-  { match: (id: string) => id === "opencode", key: "dialog.provider.opencode.note" },
   { match: (id: string) => id === "opencode-go", key: "dialog.provider.opencodeGo.tagline" },
   { match: (id: string) => id === "anthropic", key: "dialog.provider.anthropic.note" },
+  { match: (id: string) => id === "claude-agent", key: "dialog.provider.claudeAgent.note" },
   { match: (id: string) => id.startsWith("github-copilot"), key: "dialog.provider.copilot.note" },
   { match: (id: string) => id === "openai", key: "dialog.provider.openai.note" },
   { match: (id: string) => id === "google", key: "dialog.provider.google.note" },
@@ -51,22 +60,114 @@ export const SettingsProviders: Component<{
   const providerConnect = useProviderConnectController()
   const accountActions = useProviderAccountActions(() => props.directory)
 
-  const [state, setState] = createStore<{
-    disconnecting: Record<string, "removing" | "removed" | "absent" | undefined>
-    consoleExpanded: boolean
-    credentialID?: string
-    renaming?: string
-    held?: ProviderItem[]
-  }>({
-    disconnecting: {},
-    consoleExpanded: false,
-  })
+  const [consoleExpanded, setConsoleExpanded] = createSignal(false)
+  const [pageState, setPageState] = createSignal(createSettingsProvidersState<ProviderItem>())
+  const accountView = createMemo(() => providerAccountView(pageState()))
 
-  const updateDisconnecting = (ids: string[], status: "removing" | "removed" | "absent" | undefined) =>
-    setState("disconnecting", (current) => ({
-      ...current,
-      ...Object.fromEntries(ids.map((id) => [id, status])),
-    }))
+  const dispatch = (event: SettingsProvidersEvent<ProviderItem>) => {
+    const result = transitionSettingsProviders(untrack(pageState), event)
+    setPageState(result.state)
+    result.effects.forEach(
+      (effect) => void Promise.try(() => run(effect)).catch((cause: unknown) => console.error(cause)),
+    )
+  }
+
+  // Results that arrive after Settings closes still report through a toast, as the user asked for the change.
+  const run = (effect: SettingsProvidersEffect) => {
+    if (effect.type === "dialog.open") {
+      providerConnect.select(effect.provider)
+      void dialog.show(
+        () => (
+          <DialogConnectProvider
+            directory={props.directory}
+            defaultLocation={props.directory === undefined}
+            controller={providerConnect}
+            onConnected={(providerID) => dispatch({ type: "provider.reconnected", providerID })}
+          />
+        ),
+        () => dispatch({ type: "dialog.closed", attempt: effect.attempt }),
+      )
+
+      return
+    }
+
+    if (effect.type === "catalog.refresh") {
+      void accountActions
+        .refresh()
+        .catch(() => undefined)
+        .finally(() => dispatch({ type: "dialog.refresh.settled", attempt: effect.attempt }))
+
+      return
+    }
+
+    // The actions toast their own request failures; anything else they throw still settles the menus.
+    if (effect.type === "account.activate.run" || effect.type === "account.remove.run") {
+      const input = { integrationID: effect.integrationID, provider: effect.providerName, account: effect.account }
+      void Promise.try(() =>
+        effect.type === "account.activate.run"
+          ? accountActions.activate(input)
+          : accountActions.remove({ ...input, final: effect.final }),
+      )
+        .catch((error) =>
+          showToast({ title: language.t("common.requestFailed"), description: formatServerError(error, language.t) }),
+        )
+        .finally(() => dispatch({ type: "account.settled", attempt: effect.attempt }))
+
+      return
+    }
+
+    if (effect.type === "disconnect.run") {
+      void serverSdk.api.integration
+        .get({
+          integrationID: effect.integrationID,
+          location: props.directory ? { directory: props.directory } : undefined,
+        })
+        .then(async (integration) => {
+          const credentials = integration.data?.connections.filter((item) => item.type === "credential") ?? []
+
+          if (credentials.length === 0) {
+            dispatch({ type: "disconnect.failed", attempt: effect.attempt, reason: { kind: "no-credentials" } })
+
+            return
+          }
+
+          await Promise.all(
+            credentials.map((credential) => serverSdk.api.credential.remove({ credentialID: credential.id })),
+          )
+          dispatch({ type: "disconnect.succeeded", attempt: effect.attempt })
+        })
+        .catch((error) =>
+          dispatch({ type: "disconnect.failed", attempt: effect.attempt, reason: { kind: "request", error } }),
+        )
+
+      return
+    }
+
+    if (effect.type === "toast.disconnected") {
+      showToast({
+        variant: "success",
+        icon: "circle-check",
+        title: language.t("provider.disconnect.toast.disconnected.title", { provider: effect.providerName }),
+        description: language.t("provider.disconnect.toast.disconnected.description", {
+          provider: effect.providerName,
+        }),
+      })
+
+      return
+    }
+
+    showToast({
+      title: language.t("common.requestFailed"),
+      description:
+        effect.reason.kind === "no-credentials"
+          ? language.t("provider.disconnect.toast.noCredentials.description", { provider: effect.providerName })
+          : language.tDynamic(
+              "provider.disconnect.toast.failed.description",
+              formatServerError(effect.reason.error, language.t),
+              { provider: effect.providerName },
+            ),
+    })
+  }
 
   // Console-managed providers (`opencode-go`, `console-*`) connect through the `opencode`
   // integration, so the lookup must follow `integrationID` rather than the provider id.
@@ -76,37 +177,11 @@ export const SettingsProviders: Component<{
     return integrations.list().find((entry) => entry.id === id)
   }
 
-  const connect = (provider?: string) => {
-    // The list stays as it was while the dialog connects, so a new sign-in that briefly drops the
-    // Console workspace providers from the catalog can't flash rows behind the dialog.
-    setState("held", available())
-    providerConnect.select(provider)
-    void dialog.show(
-      () => (
-        <DialogConnectProvider
-          directory={props.directory}
-          defaultLocation={props.directory === undefined}
-          controller={providerConnect}
-          onConnected={(providerID) => {
-            if (providerID === CONSOLE_INTEGRATION) {
-              setState("disconnecting", reconcile({}))
+  // The list stays as it was while the dialog connects, so a new sign-in that briefly drops the
+  // Console workspace providers from the catalog can't flash rows behind the dialog.
+  const connect = (provider?: string) => dispatch({ type: "dialog.opened", provider, catalog: untrack(available) })
 
-              return
-            }
-
-            setState("disconnecting", providerID, undefined)
-          }}
-        />
-      ),
-      () => void accountActions
-          .refresh()
-          .catch(() => undefined)
-          .finally(() => setState("held", undefined)),
-    )
-  }
-
-  const available = createMemo(() => {
-    if (state.held) return state.held
+  const liveAvailable = createMemo(() => {
     const connected = providers.connected()
     const managedConsole = consoleProviderGroup(connected)
 
@@ -126,20 +201,18 @@ export const SettingsProviders: Component<{
       .toSorted((a, b) => Number(b.id === "opencode-go") - Number(a.id === "opencode-go"))
   })
 
-  createEffect(() => {
-    const ids = new Set(available().map((item) => item.id))
-    Object.entries(state.disconnecting).forEach(([id, status]) => {
-      if ((status === "removing" || status === "removed") && !ids.has(id)) {
-        setState("disconnecting", id, "absent")
+  const available = createMemo(() => availableProviders(pageState(), liveAvailable()))
 
-        return
-      }
+  // Tells the machine which providers the server catalog lists, so a confirmed removal stops hiding a
+  // provider once the server drops it and shows it again if it is later reconnected.
+  createEffect(
+    on(
+      () => available().map((item) => item.id),
+      (providerIDs) => dispatch({ type: "catalog.synced", providerIDs }),
+    ),
+  )
 
-      if (status === "absent" && ids.has(id)) setState("disconnecting", id, undefined)
-    })
-  })
-
-  const connected = createMemo(() => available().filter((item) => !state.disconnecting[item.id]))
+  const connected = createMemo(() => connectedProviders(pageState(), available()))
 
   const consoleGroup = createMemo(() => consoleProviderGroup(available()))
 
@@ -158,10 +231,13 @@ export const SettingsProviders: Component<{
     // key, including one imported from a v1 auth.json, makes Zen "connected" without any account, so
     // the Popular list keeps the sign-in row until the active credential is an OAuth grant. Until the
     // integration list arrives the row is still the models.dev Zen provider, so dedupe it as before.
+    // OpenCode Go connects through OpenCode, so it's only listed for people who already saved a Go key.
     const account = integrations.list().find((entry) => entry.id === CONSOLE_INTEGRATION)
+    const go = integrations.list().find((entry) => entry.id === "opencode-go")
 
     const items = providers
       .popular()
+      .filter((p) => p.id !== "opencode-go" || !!go?.connections.some((connection) => connection.type === "credential"))
       .filter((p) => {
         if (p.id !== CONSOLE_INTEGRATION || !account) return !connectedIDs.has(p.id)
 
@@ -175,13 +251,13 @@ export const SettingsProviders: Component<{
   })
 
   // Connection state comes from the integration list like the TUI: credential
-  // connections mean an API key or OAuth grant, env connections mean detected
+  // connections mean an API key or an account login, env connections mean detected
   // environment variables, and a connectionless integration is config-provided.
   const source = (item: ProviderItem): ProviderSource | undefined => {
     const current = integration(item)
     const credential = current?.connections.find((connection) => connection.type === "credential")
 
-    if (credential) return credential.method === "oauth" ? "account" : "api"
+    if (credential) return credential.method === "key" ? "api" : "account"
 
     if (current?.connections.some((connection) => connection.type === "env")) return "env"
 
@@ -224,70 +300,73 @@ export const SettingsProviders: Component<{
 
   const note = (id: string) => PROVIDER_NOTES.find((item) => item.match(id))?.key
 
-  const disconnect = async (item: ProviderItem, name: string) => {
-    if (state.disconnecting[item.id]) return
-    const group = consoleGroup()
-    const ids = group?.root.id === item.id ? group.providers.map((provider) => provider.id) : [item.id]
-    updateDisconnecting(ids, "removing")
-    const location = props.directory ? { directory: props.directory } : undefined
-    await serverSdk.api.integration
-      .get({ integrationID: item.integrationID ?? item.id, location })
-      .then(async (integration) => {
-        const credentials = integration.data?.connections.filter((item) => item.type === "credential") ?? []
+  const disconnect = (item: ProviderItem, name: string) => {
+    const group = consoleGroup()?.root.id === item.id ? consoleGroup() : undefined
 
-        if (credentials.length === 0) {
-          showToast({
-            title: language.t("common.requestFailed"),
-            description: language.t("provider.disconnect.toast.noCredentials.description", { provider: name }),
-          })
-
-          return
+    void dialog.push(() => (
+      <DialogConfirmProviderRemoval
+        title={language.t("settings.providers.disconnect.title", { provider: name })}
+        description={
+          group && group.providers.length > 1
+            ? language.plural("settings.providers.disconnect.consoleDescription", group.providers.length, {
+                count: group.providers.length,
+                workspace: group.workspace,
+              })
+            : language.t("settings.providers.disconnect.description")
         }
-
-        await Promise.all(
-          credentials.map((credential) => serverSdk.api.credential.remove({ credentialID: credential.id })),
-        )
-        updateDisconnecting(ids, "removed")
-        showToast({
-          variant: "success",
-          icon: "circle-check",
-          title: language.t("provider.disconnect.toast.disconnected.title", { provider: name }),
-          description: language.t("provider.disconnect.toast.disconnected.description", { provider: name }),
-        })
-      })
-      .catch((err) => {
-        updateDisconnecting(ids, undefined)
-        const message = formatServerError(err, language.t)
-        showToast({
-          title: language.t("common.requestFailed"),
-          description: language.tDynamic("provider.disconnect.toast.failed.description", message, { provider: name }),
-        })
-      })
+        action={language.t("common.disconnect")}
+        onConfirm={() =>
+          dispatch({
+            type: "disconnect.requested",
+            providerIDs: group ? group.providers.map((provider) => provider.id) : [item.id],
+            integrationID: item.integrationID ?? item.id,
+            providerName: name,
+          })
+        }
+      />
+    ))
   }
 
-  const activate = async (provider: ProviderItem, providerName: string, account: ProviderAccount) => {
-    if (activeProviderAccount(integration(provider))?.id === account.id) return
-    setState({ credentialID: account.id, held: available() })
-    await accountActions.activate({ integrationID: provider.integrationID ?? provider.id, provider: providerName, account })
-    setState({ credentialID: undefined, held: undefined })
-  }
-
-  const remove = async (provider: ProviderItem, providerName: string, account: ProviderAccount) => {
-    setState({ credentialID: account.id, held: available() })
-    await accountActions.remove({
+  const activate = (provider: ProviderItem, providerName: string, account: ProviderAccount) =>
+    dispatch({
+      type: "account.activate.requested",
       integrationID: provider.integrationID ?? provider.id,
-      provider: providerName,
+      providerName,
       account,
-      final: providerAccounts(integration(provider)).length === 1,
+      activeCredentialID: activeProviderAccount(integration(provider))?.id,
+      catalog: untrack(available),
     })
-    setState({ credentialID: undefined, held: undefined })
-  }
+
+  const remove = (provider: ProviderItem, providerName: string, account: ProviderAccount) =>
+    void dialog.push(() => (
+      <DialogConfirmProviderRemoval
+        title={language.t("settings.providers.account.remove.title", { account: account.label })}
+        description={language.t(
+          providerAccounts(integration(provider)).length === 1
+            ? "settings.providers.account.remove.finalDescription"
+            : "settings.providers.account.remove.description",
+          { provider: providerName },
+        )}
+        action={language.t("dialog.provider.accounts.remove")}
+        // The account list can change while the dialog is open, so whether this is the last one is read on confirm.
+        onConfirm={() =>
+          dispatch({
+            type: "account.remove.requested",
+            integrationID: provider.integrationID ?? provider.id,
+            providerName,
+            account,
+            final: providerAccounts(integration(provider)).length === 1,
+            catalog: untrack(available),
+          })
+        }
+      />
+    ))
 
   function AccountMenu(menuProps: { provider: ProviderItem; name?: string }) {
     const accounts = () => providerAccounts(integration(menuProps.provider))
     const active = () => activeProviderAccount(integration(menuProps.provider))
     const name = () => menuProps.name ?? menuProps.provider.name
-    const renaming = () => accounts().find((account) => account.id === state.renaming)
+    const renaming = () => accounts().find((account) => account.id === accountView().renaming)
 
     return (
       <Show
@@ -301,7 +380,7 @@ export const SettingsProviders: Component<{
             value={account().label}
             class="settings-provider-account-input"
             onSave={(label) => accountActions.rename(account(), label)}
-            onClose={() => setState("renaming", undefined)}
+            onClose={() => dispatch({ type: "account.rename.closed" })}
           />
         )}
       </Show>
@@ -329,7 +408,7 @@ export const SettingsProviders: Component<{
             aria-label={language.t("settings.providers.account.manage", { provider: name() })}
           >
             <span>{active()?.label}</span>
-            <Icon name="chevron-down" size="small" />
+            <Icon name="chevron-down" />
           </Menu.Trigger>
           <Menu.Portal>
             <Menu.Content class="settings-provider-account-menu" onEscapeKeyDown={(event) => event.stopPropagation()}>
@@ -341,12 +420,12 @@ export const SettingsProviders: Component<{
                   onChange={(credentialID) => {
                     const account = accounts().find((item) => item.id === credentialID)
 
-                    if (account) void activate(menuProps.provider, name(), account)
+                    if (account) activate(menuProps.provider, name(), account)
                   }}
                 >
                   <For each={accounts()}>
                     {(account) => (
-                      <Menu.RadioItem value={account.id} closeOnSelect disabled={state.credentialID !== undefined}>
+                      <Menu.RadioItem value={account.id} closeOnSelect disabled={accountView().busy}>
                         <span class="settings-provider-account-label">{account.label}</span>
                       </Menu.RadioItem>
                     )}
@@ -354,8 +433,8 @@ export const SettingsProviders: Component<{
                 </Menu.RadioGroup>
               </Menu.Group>
               <Menu.Separator />
-              <Menu.Item disabled={state.credentialID !== undefined} onSelect={() => connect(menuProps.provider.id)}>
-                <Icon name="plus" size="small" class="shrink-0" />
+              <Menu.Item disabled={accountView().busy} onSelect={() => connect(menuProps.provider.id)}>
+                <Icon name="plus" class="shrink-0" />
                 {language.t("settings.providers.account.add")}
               </Menu.Item>
             </Menu.Content>
@@ -367,19 +446,25 @@ export const SettingsProviders: Component<{
             variant="ghost-muted"
             size="large"
             icon={<Icon name="outline-dots" />}
-            disabled={state.credentialID !== undefined || !active()}
+            disabled={accountView().busy || !active()}
             aria-label={language.t("dialog.provider.accounts.options", { account: active()?.label ?? "" })}
           />
           <Menu.Portal>
-            <Menu.Content onCloseAutoFocus={(event) => state.renaming && event.preventDefault()}>
-              <Menu.Item onSelect={() => setState("renaming", active()?.id)}>
+            <Menu.Content onCloseAutoFocus={(event) => accountView().renaming && event.preventDefault()}>
+              <Menu.Item
+                onSelect={() => {
+                  const account = active()
+
+                  if (account) dispatch({ type: "account.rename.started", credentialID: account.id })
+                }}
+              >
                 {language.t("common.rename")}
               </Menu.Item>
               <Menu.Item
                 onSelect={() => {
                   const account = active()
 
-                  if (account) void remove(menuProps.provider, name(), account)
+                  if (account) remove(menuProps.provider, name(), account)
                 }}
               >
                 {language.t("dialog.provider.accounts.remove")}
@@ -424,9 +509,7 @@ export const SettingsProviders: Component<{
                             <ProviderModelIcon provider={item} class="settings-provider-icon shrink-0" />
 
                             <div class="settings-provider-main">
-                              <span class="settings-provider-name truncate">
-                                {item.name}
-                              </span>
+                              <span class="settings-provider-name truncate">{item.name}</span>
                               <Badge>{type(item)}</Badge>
                             </div>
                           </div>
@@ -441,16 +524,25 @@ export const SettingsProviders: Component<{
                                   </span>
                                 }
                               >
-                                <Button
-                                  size="normal"
-                                  variant="ghost-muted"
-                                  onClick={() => void disconnect(item, item.name)}
-                                >
+                                <Button size="normal" variant="ghost-muted" onClick={() => disconnect(item, item.name)}>
                                   {language.t("common.disconnect")}
                                 </Button>
                               </Show>
                             }
                           >
+                            <Show when={activeProviderAccount(integration(item))?.status}>
+                              {(status) => (
+                                <Button
+                                  size="normal"
+                                  variant="ghost-muted"
+                                  class="text-[var(--v2-state-fg-warning)]"
+                                  title={status().message}
+                                  onClick={() => connect(item.id)}
+                                >
+                                  {language.t("dialog.provider.needsSignIn")}
+                                </Button>
+                              )}
+                            </Show>
                             <AccountMenu provider={item} />
                           </Show>
                         </div>
@@ -472,8 +564,8 @@ export const SettingsProviders: Component<{
                                   <button
                                     type="button"
                                     class="settings-provider-console-toggle"
-                                    aria-expanded={state.consoleExpanded}
-                                    onClick={() => setState("consoleExpanded", (value) => !value)}
+                                    aria-expanded={consoleExpanded()}
+                                    onClick={() => setConsoleExpanded((value) => !value)}
                                   >
                                     <span>
                                       {language.plural(
@@ -484,10 +576,9 @@ export const SettingsProviders: Component<{
                                     </span>
                                     <Icon
                                       name="chevron-right"
-                                      size="small"
                                       classList={{
                                         "settings-provider-console-chevron": true,
-                                        open: state.consoleExpanded,
+                                        open: consoleExpanded(),
                                       }}
                                     />
                                   </button>
@@ -500,7 +591,7 @@ export const SettingsProviders: Component<{
                                 <Button
                                   size="normal"
                                   variant="ghost-muted"
-                                  onClick={() => void disconnect(item, language.t("provider.connect.opencode.name"))}
+                                  onClick={() => disconnect(item, language.t("provider.connect.opencode.name"))}
                                 >
                                   {language.t("common.disconnect")}
                                 </Button>
@@ -509,7 +600,7 @@ export const SettingsProviders: Component<{
                               <AccountMenu provider={item} name={language.t("provider.connect.opencode.name")} />
                             </Show>
                           </div>
-                          <Show when={state.consoleExpanded}>
+                          <Show when={consoleExpanded()}>
                             <div class="settings-provider-console-list">
                               <div class="settings-provider-console-separator" aria-hidden="true" />
                               <For each={group().providers}>
@@ -522,7 +613,6 @@ export const SettingsProviders: Component<{
                                     <span>{provider.name.slice(group().prefix.length)}</span>
                                     <Icon
                                       name="chevron-right"
-                                      size="small"
                                       class="settings-provider-console-item-chevron"
                                     />
                                   </button>
@@ -551,9 +641,7 @@ export const SettingsProviders: Component<{
 
                     <div class="settings-provider-copy">
                       <div class="settings-provider-main">
-                        <span class="settings-provider-name">
-                          {item.name}
-                        </span>
+                        <span class="settings-provider-name">{item.name}</span>
                         <Show when={item.id === "opencode" || item.id === "opencode-go"}>
                           <Badge>{language.t("dialog.provider.tag.recommended")}</Badge>
                         </Show>
@@ -577,5 +665,38 @@ export const SettingsProviders: Component<{
         </div>
       </div>
     </>
+  )
+}
+
+// The row leaves the list as soon as the removal starts, so the dialog closes before the request settles.
+function DialogConfirmProviderRemoval(props: {
+  title: string
+  description: string
+  action: string
+  onConfirm: () => void
+}) {
+  const dialog = useDialog()
+  const language = useLanguage()
+
+  const confirm = () => {
+    if (dialog.closing) return
+    dialog.close()
+    props.onConfirm()
+  }
+
+  return (
+    <Dialog fit>
+      <DialogHeader hideClose>
+        <DialogTitleGroup title={props.title} description={props.description} />
+      </DialogHeader>
+      <DialogFooter>
+        <Button variant="ghost" autofocus disabled={dialog.closing} onClick={() => dialog.close()}>
+          {language.t("common.cancel")}
+        </Button>
+        <Button variant="danger" disabled={dialog.closing} onClick={confirm}>
+          {props.action}
+        </Button>
+      </DialogFooter>
+    </Dialog>
   )
 }

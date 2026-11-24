@@ -424,7 +424,7 @@ it.effect("falls back to execDefaults over the connection spawner for unprovided
     const spawner = makeSpawner((command) =>
       Effect.sync(() => {
         if (command._tag === "StandardCommand") {
-          spawned.push(command.args.at(3) ?? command.command)
+          spawned.push(String(command.args.at(3) ?? command.command))
         }
         return makeHandle({
           pid: ProcessId(1),

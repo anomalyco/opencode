@@ -6,6 +6,7 @@ import { Bus } from "./bus.js"
 import { Config } from "./config.js"
 import { Job } from "./job.js"
 import { Location } from "./location.js"
+import { LocationLifecycle } from "./location-lifecycle.js"
 import { LocationServiceMap } from "./location-service-map.js"
 import { SessionEvent } from "./session/event.js"
 import { SessionExecution } from "./session/execution.js"
@@ -50,6 +51,22 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
           Effect.orElseSucceed(() => timeToLive),
         )
 
+      // An open terminal or client MCP socket keeps its Location loaded: eviction would end the shell under the user,
+      // and the client would reconnect and boot a fresh Location right away.
+      const retained = (ref: Location.Ref) =>
+        locations
+          .contextEffectOption(ref)
+          .pipe(
+            Effect.map(
+              Option.exists((context) =>
+                Option.exists(Context.getOption(context, LocationLifecycle.Service), (lifecycle) =>
+                  lifecycle.isRetained(),
+                ),
+              ),
+            ),
+            Effect.scoped,
+          )
+
       const unsubscribe = yield* bus.listen((event) => {
         if (!isSessionEvent(event) || !event.location) return Effect.void
         const location = LocationServiceMap.canonical(event.location)
@@ -87,14 +104,16 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
         )
         yield* Effect.forEach(
           expired,
-          (entry) => {
-            if (occupied.has(key(entry.ref))) return touch(entry.ref)
-            entries.delete(key(entry.ref))
-            return Effect.logInfo("location services evicted", {
-              directory: entry.ref.directory,
-              workspaceID: entry.ref.workspaceID,
-            }).pipe(Effect.andThen(locations.invalidate(entry.ref)))
-          },
+          (entry) =>
+            Effect.gen(function* () {
+              if (occupied.has(key(entry.ref)) || (yield* retained(entry.ref))) return yield* touch(entry.ref)
+              entries.delete(key(entry.ref))
+              yield* Effect.logInfo("location services evicted", {
+                directory: entry.ref.directory,
+                workspaceID: entry.ref.workspaceID,
+              })
+              yield* locations.invalidate(entry.ref)
+            }),
           { discard: true },
         )
       }).pipe(Effect.forever, Effect.forkScoped)

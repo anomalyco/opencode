@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "Næsta",
   "releaseNotes.action.hideFuture": "Ikki vísa hesar í framtíðini",
   "releaseNotes.media.alt": "Útgávu forskoðan",
+  "action.reload": "Endurles fyri at dagføra",
+  "action.reloading": "Endurlesur…",
+  "web.ready.title": "Dagføring klár",
+  "web.ready.message": "Ein nýggj útgáva av OpenCode er klár. Endurles fyri at brúka hana í øllum opnum vindeygum.",
+  "web.reload": "Endurles",
+  "web.reset.title": "Endurles frá ambætaranum",
+  "web.reset.description": "Strika goymda avritið av forritinum og heinta núverandi útgávuna frá ambætaranum",
+  "web.reset.action": "Endurles frá ambætaranum",
 }

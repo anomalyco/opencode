@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "التالي",
   "releaseNotes.action.hideFuture": "عدم إظهارها مستقبلاً",
   "releaseNotes.media.alt": "معاينة الإصدار",
+  "action.reload": "إعادة التحميل للتحديث",
+  "action.reloading": "جارٍ إعادة التحميل…",
+  "web.ready.title": "التحديث جاهز",
+  "web.ready.message": "إصدار جديد من OpenCode جاهز. أعد التحميل لاستخدامه في كل النوافذ المفتوحة.",
+  "web.reload": "إعادة التحميل",
+  "web.reset.title": "إعادة التحميل من الخادم",
+  "web.reset.description": "مسح النسخة المحفوظة من التطبيق وتحميل الإصدار الحالي من الخادم",
+  "web.reset.action": "إعادة التحميل من الخادم",
 }

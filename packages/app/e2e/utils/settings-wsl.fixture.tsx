@@ -11,7 +11,7 @@ import { ServerConnection } from "../../src/runtime/server/registry"
 import { usePluginServers } from "../../src/runtime/plugin/servers"
 
 /** The input of a WSL or SSH method this fixture answers. */
-type FixtureInput = { id?: string; name?: string }
+type FixtureInput = { id?: string; name?: string; target?: string; prompt?: string; value?: string }
 
 /** A main-side method: SSH `start` answers with the state revision, the others with nothing. */
 type FixtureMethod = (input: FixtureInput) => number | void
@@ -19,7 +19,7 @@ type FixtureMethod = (input: FixtureInput) => number | void
 // A desktop window. `wsl` is the Ubuntu server's endpoint (default `server`); updating OpenCode restarts it on `restart`
 // (default `wsl`). `ssh` adds a saved SSH server `box`, ready on that endpoint with password `ssh-1`; each connect
 // brings up a new remote server with the next password (`ssh-2`, ...). `storage=async` stores in localStorage behind
-// asynchronous reads like the desktop app's; reads of keys containing `hold` wait for "Load held storage".
+// asynchronous reads like the desktop app's; reads of keys matching the pattern `hold` wait for "Load held storage".
 export function mount(input: {
   server: string
   mode: "failed" | "stopped" | "ready"
@@ -29,6 +29,10 @@ export function mount(input: {
   ssh?: string | null
   storage?: string | null
   hold?: string | null
+  /** Comma-separated installed distributions for the add-server dialog. */
+  distros?: string | null
+  /** Holds the distribution refresh job while inspecting disabled dialog controls. */
+  busy?: string | null
   /** Enables the updater Ipc; check and install reject with this message, which may be empty. */
   updater?: string | null
 }) {
@@ -40,13 +44,14 @@ export function mount(input: {
   const endpoint = { url: input.wsl ?? input.server }
   const ready = () => ({ kind: "ready" as const, url: endpoint.url, password: null })
   const held = Promise.withResolvers<void>()
+  const distros = input.distros?.split(",").filter(Boolean) ?? []
 
   const storage = (name?: string) => {
     const item = (key: string) => (name ? `${name}:${key}` : key)
 
     return {
       getItem: async (key: string) => {
-        if (input.hold && key.includes(input.hold)) await held.promise
+        if (input.hold && new RegExp(input.hold).test(key)) await held.promise
 
         return localStorage.getItem(item(key))
       },
@@ -59,12 +64,14 @@ export function mount(input: {
     const [store, setStore] = createStore<{
       calls: string[]
       connects: number
+      passphraseAnswered: boolean
       available: boolean
       state: WslServersState
       ssh: SshState
     }>({
       calls: [],
       connects: 0,
+      passphraseAnswered: false,
       available: true,
       ssh: {
         revision: 0,
@@ -82,11 +89,19 @@ export function mount(input: {
       },
       state: {
         runtime: { available: true, version: "2", error: null },
-        installed: [],
-        online: [],
-        distroProbes: {},
+        installed: distros.map((name) => ({ name, version: name === "Debian-WSL1" ? 1 : 2, isDefault: false })),
+        online: distros.length
+          ? ["Debian", "FedoraLinux-43", "openSUSE-Tumbleweed", "OracleLinux_9_1", "kali-linux"].map((name) => ({
+              name,
+              label: name,
+            }))
+          : [],
+        distroProbes: Object.fromEntries(
+          distros.map((name) => [name, { name, canExecute: true, hasBash: true, hasCurl: true, error: null }]),
+        ),
         pendingRestart: false,
-        job: null,
+        hostJob: input.busy ? "busy" : "idle",
+        distroJobs: {},
         servers: [
           {
             config: { id: "wsl:Ubuntu", distro: "Ubuntu" },
@@ -100,6 +115,19 @@ export function mount(input: {
           },
         ],
         opencodeChecks: {
+          ...Object.fromEntries(
+            distros.map((name) => [
+              name,
+              {
+                distro: name,
+                resolvedPath: null,
+                version: null,
+                expectedVersion: "current",
+                matchesDesktop: null,
+                error: null,
+              },
+            ]),
+          ),
           Ubuntu: {
             distro: "Ubuntu",
             resolvedPath: "/usr/bin/opencode",
@@ -160,11 +188,40 @@ export function mount(input: {
 
     const ssh = {
       // Like main: a connect opens a new tunnel to a remote server with a new password.
-      start() {
+      start(value) {
         setStore("connects", (count) => count + 1)
+
+        if (!store.ssh.servers.length && value.id && value.target) {
+          const config = { id: value.id, target: value.target, name: value.name ?? "" }
+
+          setStore("ssh", (state) => ({
+            revision: state.revision + 1,
+            servers: [{ config, saved: false, stage: "connecting", detail: "" }],
+          }))
+
+          if (value.target === "ssh dev@key-fallback")
+            setSsh({
+              stage: "authentication",
+              prompt: { id: "key", text: "Enter passphrase for key 'id_ed25519':", confirm: false },
+            })
+
+          return store.ssh.revision
+        }
+
         setSsh({ stage: "ready", http: { url: input.ssh ?? "", password: `ssh-${store.connects + 1}` } })
 
         return store.ssh.revision
+      },
+      respond(value) {
+        const server = store.ssh.servers.find((item) => item.config.id === value.id)
+
+        if (!server?.prompt || server.prompt.id !== value.prompt) throw new Error("Unexpected SSH prompt")
+
+        if (value.prompt === "key" && value.value === "incorrect-passphrase")
+          return setStore("passphraseAnswered", true)
+
+        if (value.prompt !== "account" || value.value !== "fixture-password") throw new Error("Unexpected SSH answer")
+        setSsh({ saved: true, stage: "ready", prompt: undefined, http: { url: input.server, password: "ssh-1" } })
       },
     } satisfies Readonly<Record<string, FixtureMethod>>
 
@@ -246,64 +303,111 @@ export function mount(input: {
     return (
       <PlatformProvider value={platform}>
         <AppBaseProviders locale="en">
-          <output aria-label="WSL actions">{store.calls.join(",")}</output>
-          {/* The WSL plugin's main side going away, as on a reload or failure, and coming back. */}
-          <label>
-            <input
-              type="checkbox"
-              checked={store.available}
-              onChange={(event) => {
-                const available = event.currentTarget.checked
-                setStore("available", available)
-                listeners.forEach((listener) => listener({ type: "available", ipc: "wsl", available }))
+          <div>
+            <output aria-label="WSL actions">{store.calls.join(",")}</output>
+            {/* The WSL plugin's main side going away, as on a reload or failure, and coming back. */}
+            <label>
+              <input
+                type="checkbox"
+                checked={store.available}
+                onChange={(event) => {
+                  const available = event.currentTarget.checked
+                  setStore("available", available)
+                  listeners.forEach((listener) => listener({ type: "available", ipc: "wsl", available }))
 
-                if (available) publish("wsl")
-              }}
-            />
-            WSL plugin
-          </label>
-          {/* The SSH plugin's main side going away and coming back. */}
-          <label>
-            <input
-              type="checkbox"
-              checked
-              onChange={(event) => {
-                const available = event.currentTarget.checked
-                listeners.forEach((listener) => listener({ type: "available", ipc: "ssh", available }))
+                  if (available) publish("wsl")
+                }}
+              />
+              WSL plugin
+            </label>
+            {/* The SSH plugin's main side going away and coming back. */}
+            <label>
+              <input
+                type="checkbox"
+                checked
+                onChange={(event) => {
+                  const available = event.currentTarget.checked
+                  listeners.forEach((listener) => listener({ type: "available", ipc: "ssh", available }))
 
-                if (available) publish("ssh")
-              }}
-            />
-            SSH plugin
-          </label>
-          {/* The SSH tunnel dropping, which only main notices. */}
-          <Show when={input.ssh}>
-            <button
-              type="button"
-              onClick={() => {
-                setSsh({ stage: "disconnected" })
-                publish("ssh")
-              }}
-            >
-              Drop SSH tunnel
-            </button>
-            {/* A background reconnect that needs a password, as main reports it to every window. */}
-            <button
-              type="button"
-              onClick={() => {
-                setSsh({ stage: "authentication" })
-                publish("ssh")
-              }}
-            >
-              Require SSH sign-in
-            </button>
-            <output aria-label="SSH connects">{store.connects}</output>
-          </Show>
-          <Show when={input.hold}>
-            <button type="button" onClick={() => held.resolve()}>
-              Load held storage
-            </button>
-          </Show>
+                  if (available) publish("ssh")
+                }}
+              />
+              SSH plugin
+            </label>
+            <Show when={store.ssh.servers.some((item) => !item.saved && item.stage === "connecting")}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSsh({ saved: true, stage: "ready", http: { url: input.server, password: "ssh-1" } })
+                  publish("ssh")
+                }}
+              >
+                Finish SSH connection
+              </button>
+            </Show>
+            {/* askpass accepts the answer before ssh rejects the key and asks for the account password. */}
+            <Show when={store.passphraseAnswered}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSsh({ stage: "connecting", prompt: undefined })
+                  publish("ssh")
+                }}
+              >
+                Clear SSH passphrase prompt
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSsh({
+                    stage: "authentication",
+                    prompt: { id: "account", text: "dev@key-fallback's password:", confirm: false },
+                  })
+                  publish("ssh")
+                }}
+              >
+                Request SSH account password
+              </button>
+            </Show>
+            {/* The SSH tunnel dropping, which only main notices. */}
+            <Show when={input.ssh}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSsh({ stage: "disconnected" })
+                  publish("ssh")
+                }}
+              >
+                Drop SSH tunnel
+              </button>
+              {/* A background reconnect that needs a password, as main reports it to every window. */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSsh({ stage: "authentication" })
+                  publish("ssh")
+                }}
+              >
+                Require SSH sign-in
+              </button>
+              {/* The remote server answering with a version this app does not support. */}
+              <button
+                type="button"
+                onClick={() => {
+                  setSsh({ stage: "incompatible" })
+                  publish("ssh")
+                }}
+              >
+                Report incompatible SSH server
+              </button>
+              <output aria-label="SSH connects">{store.connects}</output>
+            </Show>
+            <Show when={input.hold}>
+              <button type="button" onClick={() => held.resolve()}>
+                Load held storage
+              </button>
+            </Show>
+          </div>
           <Interface />
         </AppBaseProviders>
       </PlatformProvider>

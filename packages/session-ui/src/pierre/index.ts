@@ -45,7 +45,11 @@ const unsafeCSS = `
     rgb(from var(--v2-red-600) r g b / 0.4)
   );
   --diffs-fg-number-override: var(--v2-text-text-faint);
-  --diffs-fg-number-addition-override: light-dark(var(--v2-green-900), var(--v2-green-400));
+  /* A page can set the --opencode-diffs-addition-* variables to show additions plain, as a created file does. */
+  --diffs-fg-number-addition-override: var(
+    --opencode-diffs-addition-number-fg,
+    light-dark(var(--v2-green-900), var(--v2-green-400))
+  );
   --diffs-fg-number-deletion-override: light-dark(var(--v2-red-800), var(--v2-red-500));
   /* The app's code wrapping rules do not reach this shadow tree, and pretty is inherited from the page. */
   text-wrap-style: auto;
@@ -58,9 +62,9 @@ const unsafeCSS = `
     rgb(from var(--v2-red-600) r g b / 0.1)
   );
   --diffs-bg-deletion-number-override: var(--diffs-bg-deletion-override);
-  --diffs-bg-addition-override: light-dark(
-    rgb(from var(--v2-green-600) r g b / 0.05),
-    rgb(from var(--v2-green-800) r g b / 0.1)
+  --diffs-bg-addition-override: var(
+    --opencode-diffs-addition-bg,
+    light-dark(rgb(from var(--v2-green-600) r g b / 0.05), rgb(from var(--v2-green-800) r g b / 0.1))
   );
   --diffs-bg-addition-number-override: var(--diffs-bg-addition-override);
   --diffs-selection-base: var(--v2-background-bg-accent);
@@ -71,18 +75,60 @@ const unsafeCSS = `
   --diffs-bg-selection-number: var(--diffs-bg-selection-number-override, var(--diffs-bg-selection));
 }
 
-[data-diff] ::selection,
-[data-file] ::selection {
-  background-color: var(--timeline-quote-background);
+/* Each diff token is an element, so highlight rules match one ancestor where Blink inherits them; see quote-highlight.css. */
+@supports selector(:host-context(*)) {
+  [data-diff]::selection,
+  [data-file]::selection {
+    background-color: var(--timeline-quote-background);
+  }
+
+  :host::highlight(opencode-find) {
+    background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
+  }
+
+  [data-diff]::highlight(timeline-quote-source),
+  [data-file]::highlight(timeline-quote-source),
+  [data-diff]::highlight(timeline-quote-source-active),
+  [data-file]::highlight(timeline-quote-source-active) {
+    background-color: var(--timeline-quote-background);
+  }
+
+  :host::highlight(opencode-find-current) {
+    background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
+  }
+}
+
+@supports not selector(:host-context(*)) {
+  [data-diff] ::selection,
+  [data-file] ::selection {
+    background-color: var(--timeline-quote-background);
+  }
+
+  ::highlight(opencode-find) {
+    background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
+  }
+
+  [data-diff] ::highlight(timeline-quote-source),
+  [data-file] ::highlight(timeline-quote-source),
+  [data-diff] ::highlight(timeline-quote-source-active),
+  [data-file] ::highlight(timeline-quote-source-active) {
+    background-color: var(--timeline-quote-background);
+  }
+
+  ::highlight(opencode-find-current) {
+    background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
+  }
 }
 
 [data-indicators='bars'] [data-column-number][data-line-type='change-addition']::before,
 [data-indicators='bars'] [data-column-number][data-line-type='change-deletion']::before {
   width: 2px;
+  /* A page can quiet the change bars, as the Activity timeline does. */
+  opacity: var(--opencode-diffs-bar-opacity, 1);
 }
 
 [data-indicators='bars'] [data-column-number][data-line-type='change-addition']::before {
-  background-color: light-dark(var(--v2-green-900), var(--v2-green-400));
+  background-color: var(--opencode-diffs-addition-color, light-dark(var(--v2-green-900), var(--v2-green-400)));
 }
 
 [data-indicators='bars'] [data-column-number][data-line-type='change-deletion']::before {
@@ -135,21 +181,6 @@ const unsafeCSS = `
 [data-content-buffer] {
   background-image: none;
   background-color: var(--diffs-bg-context-gutter);
-}
-
-::highlight(opencode-find) {
-  background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
-}
-
-[data-diff] ::highlight(timeline-quote-source),
-[data-file] ::highlight(timeline-quote-source),
-[data-diff] ::highlight(timeline-quote-source-active),
-[data-file] ::highlight(timeline-quote-source-active) {
-  background-color: var(--timeline-quote-background);
-}
-
-::highlight(opencode-find-current) {
-  background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
 }
 
 [data-diff] [data-line][data-comment-selected]:not([data-selected-line]) {

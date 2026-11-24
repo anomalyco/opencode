@@ -17,9 +17,9 @@ import { VcsGitPlugin } from "@opencode/core/plugin/vcs/git"
 import type { VcsDefinition, VcsDiffInput } from "@opencode/plugin/effect/vcs"
 import { FileSystem } from "@opencode/schema/filesystem"
 import { VcsEvent } from "@opencode/schema/vcs-event"
-import { initGit } from "./fixture/git"
+import { git, initGit } from "./fixture/git"
 import { location } from "./fixture/location"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdirScoped } from "./fixture/tmpdir"
 import { it, testEffect } from "./lib/effect"
 import { host } from "./plugin/host"
 
@@ -54,10 +54,7 @@ const provide = (directory: string, input: { git?: boolean; worktree?: string } 
   )
 
 const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>
-  Effect.acquireRelease(
-    Effect.promise(() => tmpdir()),
-    (tmp) => Effect.promise(() => tmp[Symbol.asyncDispose]()),
-  ).pipe(Effect.flatMap((tmp) => f(tmp.path)))
+  tmpdirScoped().pipe(Effect.flatMap((tmp) => f(tmp.path)))
 
 const withGit = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>, input: { scope?: string } = {}) =>
   withTmp((directory) =>
@@ -575,6 +572,25 @@ describe("Vcs", () => {
     ),
   )
 
+  it.live("lists real branches ending in /HEAD while excluding symbolic refs", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await git(directory, "commit", "--allow-empty", "-m", "initial")
+          await git(directory, "branch", "topic/HEAD")
+          await git(directory, "update-ref", "refs/remotes/origin/main", "HEAD")
+          await git(directory, "update-ref", "refs/remotes/origin/topic/HEAD", "HEAD")
+          await git(directory, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+        })
+        const vcs = yield* Vcs.Service
+        expect(yield* vcs.branches()).toEqual(["main", "topic/HEAD", "origin/main", "origin/topic/HEAD"])
+        expect(yield* vcs.branches({ search: "topic" })).toEqual(["topic/HEAD", "origin/topic/HEAD"])
+        expect(yield* vcs.branches({ search: "HEAD" })).toEqual(["topic/HEAD", "origin/topic/HEAD"])
+        expect(yield* vcs.branches({ search: "HEAD", limit: 1 })).toEqual(["topic/HEAD"])
+      }),
+    ),
+  )
+
   it.live("reports modified, deleted, and untracked files", () =>
     withGit((directory) =>
       Effect.gen(function* () {
@@ -832,6 +848,45 @@ describe("Vcs", () => {
         expect(diff[0].deletions).toBe(1)
         expect(diff[1].patch).toContain("+hello")
         expect(diff[1].additions).toBe(1)
+      }),
+    ),
+  )
+
+  it.live("respects the repository's line-ending conversion", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        const body = Array.from({ length: 20 }, (_, index) => `line-${index}`).join("\r\n") + "\r\n"
+        yield* Effect.promise(async () => {
+          await fs.appendFile(path.join(directory, ".git", "config"), "[core]\n\tautocrlf = true\n")
+          await fs.writeFile(path.join(directory, "file.txt"), body)
+          await fs.writeFile(path.join(directory, "same.txt"), body)
+          await commitAll(directory, "initial")
+          await fs.writeFile(path.join(directory, "file.txt"), body.replace("line-10", "changed"))
+        })
+        const vcs = yield* Vcs.Service
+        expect(yield* vcs.status()).toEqual([{ file: "file.txt", additions: 1, deletions: 1, status: "modified" }])
+        const diff = yield* vcs.diff("working")
+        expect(diff.map((item) => [item.file, item.additions, item.deletions])).toEqual([["file.txt", 1, 1]])
+        expect(diff[0].patch).toContain("-line-10")
+        expect(diff[0].patch).toContain("+changed")
+      }),
+    ),
+  )
+
+  it.live("respects the repository's symlink setting", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          // Git checks a symlink out as a plain file holding its target when the checkout cannot create symlinks.
+          await fs.appendFile(path.join(directory, ".git", "config"), "[core]\n\tsymlinks = false\n")
+          await fs.writeFile(path.join(directory, "link"), "target.txt")
+          const hash = (await $`git hash-object -w link`.cwd(directory).text()).trim()
+          await $`git update-index --add --cacheinfo 120000,${hash},link`.cwd(directory).quiet()
+          await $`git commit -m initial`.cwd(directory).quiet()
+        })
+        const vcs = yield* Vcs.Service
+        expect(yield* vcs.status()).toEqual([])
+        expect(yield* vcs.diff("working")).toEqual([])
       }),
     ),
   )

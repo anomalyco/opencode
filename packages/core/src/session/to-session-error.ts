@@ -1,10 +1,18 @@
 import { AIError, ToolFailure, type FinishReasonDetails } from "@opencode/ai/effect"
 import { Tool } from "@opencode/schema/tool"
 import { SessionError } from "@opencode/schema/session-error"
+import { PlatformError } from "effect"
+import { AppProcess } from "@opencode/util/process"
+import { Environment } from "../environment/index.js"
+import { Machine } from "../machine/index.js"
+import { Machines } from "../machine/machines.js"
+import { MachinePath } from "../machine/path.js"
 import { Permission } from "../permission.js"
 import { Integration } from "../integration.js"
 import { AgentNotFoundError, StepFailedError } from "./error.js"
 import { ModelResolver } from "../model-resolver.js"
+import { ModelRetry } from "../model-retry.js"
+import { Workspace } from "../workspace.js"
 import { SessionRunnerModel } from "./runner/model.js"
 
 const tokenSharingMessages = {
@@ -12,6 +20,8 @@ const tokenSharingMessages = {
     "ChatGPT token sharing isn't available for this account. Connect with an API key or choose another provider.",
   subscription_sharing_usage_limit_exceeded:
     "ChatGPT usage limit reached. Check ChatGPT Settings → Usage for details.",
+  subscription_sharing_workplace_individual_usage_limit_exceeded:
+    "You've reached the usage limit your ChatGPT workspace admin set for you. Ask them to raise it in the OpenAI Admin Console.",
   subscription_sharing_usage_unavailable: "ChatGPT usage can't be checked right now. Try again later.",
   subscription_sharing_unsupported_capability:
     "This request uses a feature ChatGPT token sharing doesn't support. Remove the unsupported feature and try again.",
@@ -35,6 +45,8 @@ export function toSessionError(cause: unknown): SessionError.Error {
     // ChatGPT's usage limit arrives in HTTP and stream errors alike, whatever their reason, so its code decides the type.
     if (cause.reason.body?.includes("subscription_sharing_usage_limit_exceeded"))
       return providerError("provider.chatgpt-limit", cause.reason)
+    if (cause.reason.body?.includes("subscription_sharing_workplace_individual_usage_limit_exceeded"))
+      return providerError("provider.chatgpt-workspace-limit", cause.reason)
     switch (cause.reason._tag) {
       case "RateLimit":
         return providerError("provider.rate-limit", cause.reason)
@@ -49,6 +61,7 @@ export function toSessionError(cause: unknown): SessionError.Error {
       case "ContentPolicy":
         return providerError("provider.content-filter", cause.reason)
       case "Transport":
+        if (ModelRetry.isUnreachable(cause)) return unreachable(cause.reason)
         return providerError("provider.transport", cause.reason)
       case "ProviderInternal":
         return providerError("provider.internal", cause.reason)
@@ -58,8 +71,6 @@ export function toSessionError(cause: unknown): SessionError.Error {
         return providerError("provider.invalid-request", cause.reason)
       case "UnsupportedOperation":
         return providerError("provider.unsupported-operation", cause.reason)
-      case "NoRoute":
-        return providerError("provider.no-route", cause.reason)
       case "UnknownProvider":
         return providerError("provider.unknown", cause.reason)
       case "Timeout":
@@ -74,6 +85,9 @@ export function toSessionError(cause: unknown): SessionError.Error {
   if (cause instanceof Permission.CorrectedError) return { type: "permission.rejected", message: cause.feedback }
   if (cause instanceof ToolFailure || cause instanceof Tool.Error) {
     if (cause.error === undefined) return { type: "tool.execution", message: cause.message }
+    // A machine failure says why, however the tool wrapped it; every other cause keeps the tool's curated message.
+    const machine = machineMessage(cause.error)
+    if (machine !== undefined) return { type: "tool.execution", message: machine }
     // The canonical error is the sole model-visible representation, so a cause
     // with no message must not erase the tool's curated failure message.
     const unwrapped = toSessionError(cause.error)
@@ -122,6 +136,15 @@ function goLimit(reason: AIError["reason"]): SessionError.Error {
   }
 }
 
+// Names the network as the problem, so a DNS outage doesn't read like a broken model or provider.
+function unreachable(reason: AIError["reason"]): SessionError.Error {
+  const host = "url" in reason && reason.url !== undefined ? URL.parse(reason.url)?.hostname : undefined
+  return {
+    ...providerError("provider.transport", reason),
+    message: `Can't reach ${host || "the provider"}. Check the network connection. (${reason.message})`,
+  }
+}
+
 function providerError(type: string, reason: AIError["reason"]): SessionError.Error {
   const status = reason.http?.status
   const retryAfterMs = "retryAfterMs" in reason ? reason.retryAfterMs : undefined
@@ -132,4 +155,25 @@ function providerError(type: string, reason: AIError["reason"]): SessionError.Er
     ...(reason.body === undefined ? {} : { response: { body: reason.body } }),
     ...(retryAfterMs === undefined ? {} : { retryAfterMs }),
   }
+}
+
+/**
+ * The message of a machine failure, through the wrappers a tool may have put around it. A local failure has no
+ * machine error anywhere in its cause, so its text is untouched.
+ */
+const machineMessage = (error: unknown): string | undefined => {
+  if (error instanceof Machine.NotSent || error instanceof Machine.Unknown || error instanceof Machine.ProcessLost)
+    return error.message
+  if (
+    error instanceof Machines.NotFound ||
+    error instanceof Workspace.NotFound ||
+    error instanceof MachinePath.NotAbsolute
+  )
+    return error.message
+  if (
+    error instanceof Environment.Failed ||
+    error instanceof AppProcess.AppProcessError ||
+    error instanceof PlatformError.PlatformError
+  )
+    return machineMessage(error.cause)
 }

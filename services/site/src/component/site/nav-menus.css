@@ -1,0 +1,20 @@
+@import "../../../../../packages/nav-menus/src/nav-menus.css";
+
+/* Settings › Logo menu › fan, the default, is the shared nav menus' logo menu (packages/nav-menus, as on the docs,
+   Data, the Console and the status page), in the site's colours. */
+[data-site] {
+  --nav-menu-ink: var(--text-strong);
+  --nav-menu-weak: var(--popover-text-weak);
+  --nav-menu-popover: var(--popover-bg);
+  --nav-menu-link: var(--link);
+  --nav-menu-bar: var(--menu-bar);
+  --nav-menu-icon: var(--text-weak);
+  --nav-menu-mono: var(--font-mono);
+}
+
+/* The sidebar nav sits right under the logo, so it steps aside while the logo menu is open (it would show through the
+   gaps between the cards). */
+:root[data-nav-menu-open="logo"] [data-component="sidebar"] [data-component="nav"]:not([data-away]) {
+  opacity: 0;
+  pointer-events: none;
+}

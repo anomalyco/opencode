@@ -32,9 +32,7 @@ export const Input = Schema.Struct({
 })
 
 const Output = Schema.Struct({
-  url: Schema.String,
   contentType: Schema.String,
-  format: Input.fields.format,
   output: Schema.String,
 })
 type Format = (typeof Input.Type)["format"]
@@ -70,6 +68,8 @@ const request = (url: string, format: Format, userAgent = openCodeUserAgent) =>
 
 const assertHttpUrl = (url: URL) => {
   if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error("URL must use http:// or https://")
+  // Rules match the URL, so `https://user@evil.com` would slip past a rule for `https://evil.com/*`.
+  if (url.username || url.password) throw new Error("URL must not include credentials")
 }
 
 export const MAX_REDIRECTS = 10
@@ -95,6 +95,7 @@ const execute = (
           try: () => {
             const target = new URL(location, url)
             assertHttpUrl(target)
+            target.hash = ""
             return target.href
           },
           catch: (error) => (error instanceof Error ? error : new Error(String(error))),
@@ -138,35 +139,32 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
+              // Rules match the URL as written. The fragment is never sent, and would keep a rule for the exact
+              // URL from matching.
+              const url = input.url.split("#")[0]
               yield* Effect.try({
-                try: () => assertHttpUrl(new URL(input.url)),
+                try: () => assertHttpUrl(new URL(url)),
                 catch: (error) => error,
               })
 
               yield* permission.assert({
                 action: name,
-                resources: [input.url],
+                resources: [url],
                 save: ["*"],
                 metadata: input,
-                sessionID: context.sessionID,
-                agent: context.agent,
-                source: { type: "tool", messageID: context.messageID, id: context.id },
+                ...Permission.invocation(context),
               })
 
               const { body, contentType } = yield* Effect.gen(function* () {
-                const check = (url: string) =>
+                const check = (next: string) =>
                   permission.assertNotDenied({
                     action: name,
-                    resources: [url],
-                    metadata: { ...input, url },
-                    sessionID: context.sessionID,
-                    agent: context.agent,
-                    source: { type: "tool", messageID: context.messageID, id: context.id },
+                    resources: [next],
+                    metadata: { ...input, url: next },
+                    ...Permission.invocation(context),
                   })
-                const response = yield* execute(http, check, input.url, input.format).pipe(
-                  Effect.catchIf(isCloudflareChallenge, () =>
-                    execute(http, check, input.url, input.format, "opencode"),
-                  ),
+                const response = yield* execute(http, check, url, input.format).pipe(
+                  Effect.catchIf(isCloudflareChallenge, () => execute(http, check, url, input.format, "opencode")),
                 )
                 const contentType = response.headers["content-type"] || ""
                 const mime = mimeFrom(contentType)
@@ -186,13 +184,7 @@ export const Plugin = {
                 try: () => convert(content, contentType, input.format),
                 catch: (error) => error,
               })
-              const result = {
-                url: input.url,
-                contentType,
-                format: input.format,
-                output,
-              }
-              return { output: result, content: result.output, metadata: { contentType: result.contentType } }
+              return { output: { contentType, output }, content: output, metadata: { contentType } }
             }).pipe(Effect.mapError((error) => new ToolFailure({ message: `Unable to fetch ${input.url}`, error }))),
         }),
       )

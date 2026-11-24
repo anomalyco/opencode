@@ -22,10 +22,12 @@
   container: settings-screen / inline-size;
 }
 
+/* Spans the whole screen and centers its 1048px layout with padding, so the gutters belong to the page scroller. */
 .settings-screen > .settings {
   display: flex;
-  width: min(100%, 1048px);
+  width: 100%;
   min-width: 0;
+  padding-inline: max(0px, calc((100% - 1048px) / 2));
 }
 
 @media (max-width: 767px) {
@@ -86,6 +88,61 @@
   gap: 16px;
   overflow-y: auto;
   min-height: 0;
+}
+
+@property --settings-nav-fade-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --settings-nav-fade-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+/* Each edge fades in once content is hidden behind it. A list that does not overflow has no scroll timeline, so it keeps both lengths at 0.
+   The same timeline keeps the wheel inside an overflowing list at its edges. Chromium contains even a list that fits,
+   which would stop a wheel over the page list from scrolling the page. */
+@supports (animation-timeline: scroll()) {
+  .settings-nav-groups {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 var(--settings-nav-fade-start),
+      #000 calc(100% - var(--settings-nav-fade-end)),
+      transparent
+    );
+    animation:
+      settings-nav-fade-start linear both,
+      settings-nav-fade-end linear both,
+      settings-nav-contain linear both;
+    animation-timeline: scroll(self), scroll(self), scroll(self);
+    animation-range:
+      0 24px,
+      calc(100% - 24px) 100%,
+      normal;
+  }
+}
+
+@keyframes settings-nav-contain {
+  from,
+  to {
+    overscroll-behavior: contain;
+  }
+}
+
+@keyframes settings-nav-fade-start {
+  to {
+    --settings-nav-fade-start: 24px;
+  }
+}
+
+@keyframes settings-nav-fade-end {
+  from {
+    --settings-nav-fade-end: 24px;
+  }
 }
 
 .settings-nav-groups [data-slot="tabs-v2-trigger-wrapper"] {
@@ -272,9 +329,14 @@
   outline: none;
 }
 
-.settings-about-version:hover::before,
-.settings-about-version:focus-visible::before {
+.settings-about-version:hover::before {
   background: var(--v2-background-bg-layer-02);
+}
+
+/* The ring follows the hover background, which reaches past the label. */
+.settings-about-version:focus-visible::before {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: 2px;
 }
 
 .settings-about-version:disabled {
@@ -522,10 +584,6 @@
   transform: scaleX(-1);
 }
 
-[data-component="dialog-v2"][data-variant="settings"] [data-slot="dialog-container"] {
-  background: var(--v2-background-bg-base);
-}
-
 [data-component="dialog-v2"][data-variant="settings"] [data-slot="dialog-body"] {
   padding: 0;
   overflow: hidden;
@@ -539,6 +597,12 @@
   scrollbar-width: none;
   user-select: none;
   container: settings-panel / inline-size;
+}
+
+/* The panel takes focus when a click lands on its text, and Chromium then rings it on the next key press. It's a scroll
+   area, so focus shows on the controls inside it instead. */
+.settings-panel:focus-visible {
+  outline: none;
 }
 
 .settings-panel :is(input, textarea, [contenteditable="true"]) {
@@ -555,6 +619,11 @@
   z-index: 10;
   padding: 40px 40px 0;
   background: var(--v2-background-bg-base);
+}
+
+/* Focus scrolled up stops below the sticky header and its 24px fade. tab-header.ts measures the header. */
+.settings-tab-body :is(a[href], button, input, select, textarea, [tabindex]) {
+  scroll-margin-block-start: calc(var(--settings-tab-header-height, 0px) + 24px);
 }
 
 .settings-tab-header::before {
@@ -759,6 +828,10 @@
   border-bottom: 0.5px solid var(--v2-border-border-base);
 }
 
+[data-component="settings-row"][data-align="start"] {
+  align-items: flex-start;
+}
+
 [data-component="settings-row"]:last-child {
   border-bottom: none;
 }
@@ -801,7 +874,10 @@
   justify-content: flex-end;
 }
 
-[data-slot="settings-row-control"] > div:has([data-component="switch"]),
+/* The :has() belongs on the control, not on its div. Chromium checks a div:has() subject against every div in the
+   document and flags each one, then restyles a flagged div whenever an element is inserted anywhere beneath it, which
+   is every ancestor of a streaming answer. */
+[data-slot="settings-row-control"]:has(> div [data-component="switch"]) > div,
 [data-slot="settings-row-control"] > [data-component="switch"] {
   display: inline-flex;
   align-items: center;
@@ -809,8 +885,11 @@
 }
 
 [data-component="settings-list"][data-variant="catalog"]
+  [data-slot="settings-row-control"]:has(> div [data-component="switch"])
+  > div,
+[data-component="settings-list"][data-variant="catalog"]
   [data-slot="settings-row-control"]
-  > :is(div:has([data-component="switch"]), [data-component="switch"]) {
+  > [data-component="switch"] {
   padding: 0;
 }
 
@@ -841,6 +920,31 @@
 
 [data-component="tabs-v2"][data-variant="settings"][data-orientation="vertical"] > [data-slot="tabs-v2-list"] {
   background-color: var(--v2-background-bg-layer-01);
+}
+
+/* The whole view scrolls and the sidebar sticks, so a wheel over the gutters or the page list scrolls the page natively. */
+@container settings-screen (min-width: 800px) {
+  .settings-screen > .settings {
+    align-items: flex-start;
+    overflow-y: auto;
+    scrollbar-width: none;
+  }
+
+  .settings-screen > .settings > .settings-sidebar {
+    position: sticky;
+    top: 0;
+    height: 100%;
+  }
+
+  .settings-screen > .settings > .settings-content {
+    min-height: 100%;
+  }
+
+  .settings-screen > .settings > .settings-content > .settings-panel {
+    flex: 1 0 auto;
+    height: auto;
+    overflow: visible;
+  }
 }
 
 @container settings-screen (min-width: 800px) and (max-width: 1047px) {
@@ -1233,9 +1337,11 @@
 }
 
 .settings-providers-view-all {
+  align-self: flex-start;
   margin-top: 20px;
   padding: 0;
   border: 0;
+  border-radius: 4px;
   background: transparent;
   font-size: 13px;
   font-weight: 530;
@@ -1319,11 +1425,7 @@
 .settings-project-empty-card {
   width: 100%;
   border-radius: 8px;
-  background: color-mix(
-    in oklab,
-    var(--v2-background-bg-base) 50%,
-    var(--v2-background-bg-layer-01)
-  );
+  background: color-mix(in oklab, var(--v2-background-bg-base) 50%, var(--v2-background-bg-layer-01));
   box-shadow: inset 0 0 0 0.5px var(--v2-border-border-muted);
 }
 
@@ -1375,6 +1477,13 @@
 .settings-project-card:focus-within,
 .settings-project-card[data-menu="true"] {
   background: var(--v2-background-bg-layer-02);
+}
+
+/* The row's button opens the project, so the ring goes on the whole row, inset like the other full-width rows. The
+   options button keeps its own ring. */
+.settings-project-card:has(> button:first-child:focus-visible) {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: -2px;
 }
 .settings-models {
   gap: 12px;
@@ -1467,9 +1576,36 @@
 }
 
 .settings-models-console-groups {
+  --console-rail-strip: 16px;
+  position: relative;
   margin-inline-start: 14px;
-  padding-inline-start: 16px;
-  border-inline-start: 0.5px solid var(--v2-border-border-base);
+  padding-inline-start: var(--console-rail-strip);
+}
+
+.settings-models-console-rail {
+  position: absolute;
+  inset-block: 0;
+  inset-inline-start: -4px;
+  width: calc(var(--console-rail-strip) + 4px);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  cursor: default;
+
+  &::before {
+    content: "";
+    position: absolute;
+    inset-block: 0;
+    inset-inline-start: 4px;
+    width: 1px;
+    background-color: color-mix(in srgb, var(--v2-border-border-base) 50%, transparent);
+  }
+}
+
+@media (hover: hover) {
+  .settings-models-console-rail:not(:disabled):hover::before {
+    background-color: var(--v2-border-border-base);
+  }
 }
 
 .provider-model-group {
@@ -1812,7 +1948,9 @@
   min-height: 0;
   flex-direction: column;
   gap: 12px;
-  overflow: hidden;
+  /* Clipped for the removal animation, with room for a focus ring on the row's edge controls. */
+  overflow: clip;
+  overflow-clip-margin: 5px;
   transition:
     padding-bottom 150ms ease-out,
     margin-bottom 150ms ease-out,
@@ -2076,17 +2214,8 @@
   }
 }
 
-[data-component="dialog-v2"].settings-server-dialog [data-slot="dialog-container"] {
-  width: 480px;
-  max-width: calc(100vw - 32px);
-  height: auto;
-  border-radius: 8px;
-  align-items: stretch;
-}
-
 [data-component="dialog-v2"].settings-server-dialog [data-slot="dialog-content"] {
   align-items: stretch;
-  width: 100%;
 }
 
 [data-component="dialog-v2"].settings-server-dialog [data-slot="dialog-header"] {
@@ -2154,8 +2283,16 @@
   padding-inline: 0 !important;
 }
 
+/* The panel scrolls, so its sides are padded by 5px and taken back by the margin: room for the focus ring of a control
+   at its edge, such as Check for updates and How to add skills. The tabs root's overflow-clip-margin covers the rest. */
 .settings-subtabs > [data-slot="tabs-v2-content"] {
   padding-top: 24px;
+  padding-inline: 5px;
+  margin-inline: -5px;
+}
+
+.settings-subtabs > [data-slot="tabs-v2-content"]:focus-visible {
+  outline-offset: -2px;
 }
 
 .settings-extension-row {
@@ -2191,6 +2328,70 @@
 
 .settings-mcp-row {
   gap: 16px;
+}
+
+/* The name keeps its own width so the source sits right after it, not against the actions. */
+.settings-mcp-row .settings-extension-name {
+  flex: 0 1 auto;
+}
+
+/* A Console server or skill name links to where Console manages it. */
+.settings-console-name {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  cursor: pointer;
+}
+
+.settings-console-name .settings-extension-name {
+  text-decoration: underline;
+  text-decoration-color: var(--v2-border-border-strong);
+  text-underline-offset: 2px;
+}
+
+.settings-console-name [data-slot="icon-svg"] {
+  flex-shrink: 0;
+  color: var(--v2-icon-icon-muted);
+}
+
+.settings-console-name:focus-visible .settings-extension-name {
+  text-decoration-color: currentColor;
+}
+
+@media (hover: hover) {
+  .settings-console-name:hover .settings-extension-name {
+    text-decoration-color: currentColor;
+  }
+}
+
+/* When the user's config replaces a Console server, the row says so and still links to Console's. */
+.settings-mcp-source {
+  display: inline-flex;
+  min-width: 0;
+  align-items: center;
+  gap: 2px;
+  color: var(--v2-text-text-muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: var(--line-height-compact);
+  white-space: nowrap;
+}
+
+.settings-mcp-source [data-slot="icon-svg"] {
+  flex-shrink: 0;
+}
+
+.settings-mcp-source:focus-visible {
+  color: var(--v2-text-text-base);
+  text-decoration: underline;
+}
+
+@media (hover: hover) {
+  .settings-mcp-source:hover {
+    color: var(--v2-text-text-base);
+    text-decoration: underline;
+  }
 }
 
 /* The MCP status dot takes the icon's 16px slot, so names line up with the plugin and skill rows. */

@@ -3,15 +3,25 @@ import { VoiceProvider } from "@/voice/context"
 import { VoiceOverlay } from "@/voice/composer"
 import { DialogProvider } from "@opencode/ui/context/dialog"
 import { FileComponentProvider } from "@opencode/ui/context/file"
+import { installFocusRescue } from "@opencode/ui/context/focus-rescue"
 import { Font } from "@opencode/ui/font"
 import { ThemeProvider } from "@opencode/ui/theme/context"
 import { MetaProvider, Title } from "@solidjs/meta"
 import { type BaseRouterProps, Router } from "@solidjs/router"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
-import { type Component, createRenderEffect, ErrorBoundary, type JSX, type ParentProps } from "solid-js"
+import {
+  type Component,
+  createRenderEffect,
+  ErrorBoundary,
+  type JSX,
+  onCleanup,
+  onMount,
+  type ParentProps,
+} from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/shell/commands/command"
 import { DesktopCommands } from "@/shell/commands/desktop"
+import { KeySequenceHint } from "@/shell/commands/key-sequence"
 import { ProjectIconsProvider } from "@/shell/layout/project-icons"
 import { GlobalProvider } from "@/runtime/server/runtime"
 import { LanguageProvider, UiI18nBridge, type Locale } from "@/runtime/i18n/language"
@@ -21,6 +31,7 @@ import { TabsProvider } from "@/shell/tabs/tabs"
 import { ErrorPage } from "@/shell/errors/error"
 import { AppRoutes, File, preloadRoute } from "@/shell/routes/routes"
 import { PluginRoot } from "@/runtime/plugin/root"
+import { baseRouter } from "@/runtime/platform/base-path-router"
 
 export { preloadRoute }
 
@@ -55,15 +66,13 @@ export function AppBaseProviders(
     onThemeApplied?: (mode: "light" | "dark", scheme: "system" | "light" | "dark") => void
   }>,
 ) {
+  onMount(() => onCleanup(installFocusRescue()))
+
   return (
     <MetaProvider>
       <Title>OpenCode</Title>
       <Font />
-      <ThemeProvider
-        onThemeApplied={(_, mode, scheme) => {
-          props.onThemeApplied?.(mode, scheme)
-        }}
-      >
+      <ThemeProvider onThemeApplied={(mode, scheme) => props.onThemeApplied?.(mode, scheme)}>
         <LanguageProvider locale={props.locale} onNativeTranslations={props.onNativeTranslations}>
           <UiI18nBridge>
             <ErrorBoundary
@@ -109,6 +118,7 @@ export function AppInterface(props: {
               {rootProps.children}
               <VoiceOverlay />
             </VoiceProvider>
+            <KeySequenceHint />
           </CommandProvider>
         </ProjectIconsProvider>
       </GlobalProvider>
@@ -118,7 +128,7 @@ export function AppInterface(props: {
   return (
     <ServersProvider canonicalLocalServer={props.canonicalLocalServer} servers={props.servers}>
       <SettingsProvider>
-        <Dynamic component={props.router ?? Router} root={Root}>
+        <Dynamic component={props.router ?? baseRouter ?? Router} root={Root}>
           <AppRoutes />
         </Dynamic>
       </SettingsProvider>

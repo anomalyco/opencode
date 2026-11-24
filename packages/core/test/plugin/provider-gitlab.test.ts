@@ -67,7 +67,7 @@ const discoveryFixture = Effect.gen(function* () {
 
 const addPlugin = Effect.fn(function* () {
   const plugin = yield* Plugin.Service
-  const host = yield* PluginHost.make(plugin)
+  const host = yield* PluginHost.make(plugin, "test")
   yield* GitLabPlugin.effect(host)
 })
 

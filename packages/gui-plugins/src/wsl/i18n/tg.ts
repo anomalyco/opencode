@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} пас аз {{timeout}}мс ба охир расид",
   "error.failedPort": "Ба даст овардани порт муяссар нашуд",
   "menu.remove": "Хориҷ кунед",
+  "error.busy": "{{distro}} бо кори дигар банд аст. Пас аз анҷоми он аз нав кӯшиш кунед.",
 }

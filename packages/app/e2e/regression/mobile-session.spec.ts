@@ -16,11 +16,11 @@ async function openStress(page: Page, extra: SeedInput = {}) {
 }
 
 for (const position of ["top", "bottom"] as const) {
-  test(`mobile session tabs switch views and keep the terminal cached with ${position} navigation`, async ({
+  test(`mobile session tabs switch views and work with ${position} navigation`, async ({
     page,
   }) => {
     await page.setViewportSize({ width: 390, height: 844 })
-    await mockStressTimeline(page, { fileList: () => [], pty: {} })
+    await mockStressTimeline(page, { fileList: () => [] })
     await openStress(page, {
       settings: { general: { mobileTitlebarPosition: position } },
     })
@@ -157,29 +157,10 @@ for (const position of ["top", "bottom"] as const) {
 
     await more.click()
     await expect(views.getByRole("button", { name: "Files", exact: true })).toHaveAttribute("aria-pressed", "true")
-    await views.getByRole("button", { name: "Terminal", exact: true }).click()
+    await page.keyboard.press("Escape")
     await expect(views).toBeHidden()
-    const panel = page.locator("#terminal-panel")
-    await expect(panel.getByRole("tab", { name: /Terminal 1/ })).toBeVisible()
-    await expect(panel.locator('[data-component="terminal"]')).toBeVisible()
-    await expect(panel.locator("textarea")).toBeEditable()
-    await expect(panel).toHaveCount(1)
-    await panel.evaluate((element) => element.setAttribute("data-cache-probe", "original"))
-    await expect(composer).toBeHidden()
-
     await tabs.getByRole("tab", { name: "Session", exact: true }).click()
     await expect(message).toBeVisible()
-    await expect(panel).toBeHidden()
-    await expect(panel).toHaveAttribute("data-cache-probe", "original")
-
-    await page.keyboard.press("Control+Backquote")
-    await expect(picker).toHaveText("More...")
-    await expect(panel).toBeVisible()
-    await expect(panel).toHaveAttribute("data-cache-probe", "original")
-    await expect(panel.getByRole("tab", { name: /^Terminal/ })).toHaveCount(1)
-
-    await tabs.getByRole("tab", { name: "Session", exact: true }).click()
-    await expect(panel).toBeHidden()
 
     // The view resets to Session whenever the routed session changes, including through Home.
     const trigger = page.locator('[data-slot="mobile-tabs-trigger"]')
@@ -287,7 +268,7 @@ test("a narrow-screen palette pick keeps the view, and the side region shows the
     fileList: (path) => (path ? [] : [fileNode(fixture.directory, "README.md")]),
     fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
     findFiles: ({ query }) => ("README.md".includes(query) ? [fileNode(fixture.directory, "README.md")] : []),
-    pty: {},
+    persistentPty: {},
   })
   await openStress(page)
   await page.goto(sessionHref(fixture.targetID))

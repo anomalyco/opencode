@@ -137,6 +137,21 @@ export const makeMemoryDriver = (): MemoryDriver => {
         })
       }),
     mkdir: (value) => Effect.try({ try: () => mkdirSync(value), catch: (cause) => failed(value, cause) }),
+    append: (value, bytes) =>
+      Effect.try({
+        try: () => {
+          const target = resolveKey(value, true) ?? key(value)
+          const current = nodes.get(target)
+          if (current && current.type !== "file") throw new Error(`Path is not a file: ${value}`)
+          if (!current) requireParent(target)
+          const before = current?.bytes ?? new Uint8Array()
+          const next = new Uint8Array(before.length + bytes.length)
+          next.set(before)
+          next.set(bytes, before.length)
+          nodes.set(target, { type: "file", bytes: next, mtimeMs: Date.now() })
+        },
+        catch: (cause) => failed(value, cause),
+      }),
   }
 
   const spawner = make((command) =>

@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Naudojimas",
   "usage.cost": "Kaina",
   "usage.view": "Peržiūrėkite kontekstinį naudojimą",
-  "systemPrompt.title": "Sistemos raginimas",
   "rawMessages.title": "Neapdoroti pranešimai",
   "export.session": "Eksportuoti seansą",
   "stats.session": "Seansas",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Seansas išsaugotas {{filename}}",
   "export.failed.title": "Nepavyko eksportuoti seanso",
   "export.failed.description": "Eksportuojant seansą įvyko klaida",
+  "usage.toggle": "Perjungti seanso kontekstą",
 }

@@ -6,11 +6,27 @@
   );
 }
 
-[data-slot="session-timeline-scroll"] ::selection,
-:host ::selection,
-::highlight(timeline-quote-source) {
-  background-color: var(--timeline-quote-background);
-  color: currentColor;
+/* Blink computes a highlight style for every element a highlight rule matches, so rules that reach every element cost
+   a third of the timeline's style recalculation. Blink inherits highlight styles to descendants (::selection since
+   Chromium 134), so these rules match one ancestor instead. Gecko and WebKit do not inherit them and keep the descendant
+   rules; :host-context() is Blink-only, which is how these blocks tell the engines apart. */
+@supports selector(:host-context(*)) {
+  [data-slot="session-timeline-scroll"]::selection,
+  :host::selection,
+  :root::highlight(timeline-quote-source),
+  :host::highlight(timeline-quote-source) {
+    background-color: var(--timeline-quote-background);
+    color: currentColor;
+  }
+}
+
+@supports not selector(:host-context(*)) {
+  [data-slot="session-timeline-scroll"] ::selection,
+  :host ::selection,
+  ::highlight(timeline-quote-source) {
+    background-color: var(--timeline-quote-background);
+    color: currentColor;
+  }
 }
 
 .timeline-quote-highlight-host {

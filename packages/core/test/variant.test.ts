@@ -513,7 +513,7 @@ test("spells reasoning variants for every bundled native package", () => {
   // Image and decision APIs have no reasoning setting, except Gemini's, which has a spelling.
   const missing = Array.from(Provider.builtinPackages).filter(
     (packageName) =>
-      !/\/(images|decisions)$/.test(packageName) &&
+      !/\/(images|videos|decisions|embeddings)$/.test(packageName) &&
       Variant.resolve(model(packageName, "test-model", 32_000), supports).length === 0,
   )
   expect(missing).toEqual([])
@@ -546,6 +546,20 @@ test("spells Google Interactions variants as thinking levels", () => {
       { id: "low", settings: { thinkingLevel: "low", thinkingSummaries: "auto" } },
       { id: "high", settings: { thinkingLevel: "high", thinkingSummaries: "auto" } },
     ])
+})
+
+test("only adds Google Interactions thinking toggles for toggle-only models", () => {
+  const packageName = "@opencode/ai/providers/google/interactions"
+  expect(resolve(model(packageName, "gemma-4-31b-it"), Variant.supports({ supported: true, toggle: true }))).toEqual([
+    { id: "none", settings: { thinkingLevel: "minimal" } },
+    { id: "thinking", settings: { thinkingLevel: "high", thinkingSummaries: "auto" } },
+  ])
+  expect(
+    resolve(
+      model(packageName, "gemini-2.5-flash"),
+      Variant.supports({ supported: true, toggle: true, budget: { min: 0, max: 24_576 } }),
+    ),
+  ).toEqual([])
 })
 
 test("reads models.dev v2 reasoning as variant support", () => {

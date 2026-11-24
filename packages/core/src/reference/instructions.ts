@@ -28,36 +28,19 @@ const render = (references: ReadonlyArray<typeof Summary.Type>) =>
     "</available_references>",
   ].join("\n")
 
-const update = (previous: ReadonlyArray<typeof Summary.Type>, current: ReadonlyArray<typeof Summary.Type>) => {
-  const diff = Instructions.diffByKey(
-    previous,
-    current,
-    (reference) => reference.name,
-    (before, after) => before.path !== after.path || before.description !== after.description,
-  )
-  // Added, changed, and removed references render as deltas; the full list is restated only when no entry differs.
-  if (diff.added.length === 0 && diff.changed.length === 0 && diff.removed.length === 0)
-    return [
-      "The available project references have changed. This list supersedes the previous reference list.",
-      render(current),
-    ].join("\n")
-  return [
-    ...(diff.added.length === 0
-      ? []
-      : ["New project references are available in addition to those previously listed:", ...entries(diff.added)]),
-    ...(diff.changed.length === 0
-      ? []
-      : [
-          "The following project references have changed. Each entry replaces the previously listed reference with the same name:",
-          ...entries(diff.changed.map((change) => change.current)),
-        ]),
-    ...(diff.removed.length === 0
-      ? []
-      : [
-          `The following project references are no longer available and must not be used: ${diff.removed.map((reference) => reference.name).join(", ")}.`,
-        ]),
-  ].join("\n")
-}
+const update = Instructions.listUpdate<typeof Summary.Type>({
+  key: (reference) => reference.name,
+  changed: (before, after) => before.path !== after.path || before.description !== after.description,
+  entries,
+  render,
+  text: {
+    replaced: "The available project references have changed. This list supersedes the previous reference list.",
+    added: "New project references are available in addition to those previously listed:",
+    changed:
+      "The following project references have changed. Each entry replaces the previously listed reference with the same name:",
+    removed: (names) => `The following project references are no longer available and must not be used: ${names}.`,
+  },
+})
 
 export interface Interface {
   readonly load: () => Effect.Effect<Instructions.List>

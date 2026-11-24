@@ -1,0 +1,157 @@
+---
+title: 參照
+description: 將本機目錄和 Git 儲存庫新增為專案參照。
+---
+
+參照讓 OpenCode 可以存取目前專案之外的目錄。您可以用它在工作時提供文件、共用函式庫、範例或其他儲存庫。
+
+參照在 `opencode.json` 或 `opencode.jsonc` 中依別名設定。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and documentation conventions",
+    },
+    "sdk": {
+      "repository": "anomalyco/opencode-sdk-js",
+      "branch": "main",
+      "description": "Use for JavaScript SDK implementation details",
+    },
+  },
+}
+```
+
+---
+
+## 本機目錄
+
+使用 `path` 參照本機目錄。
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+    },
+  },
+}
+```
+
+路徑可以是：
+
+- 相對於定義該參照的設定檔的路徑
+- 絕對路徑，例如 `/home/user/docs`
+- 相對於主目錄的路徑，例如 `~/docs`
+
+您也可以使用字串簡寫：
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": "../docs",
+  },
+}
+```
+
+---
+
+## Git 儲存庫
+
+使用 `repository` 參照 Git 儲存庫。OpenCode 會將該儲存庫放入本機儲存庫快取中，並將簽出的原始碼作為參照目錄提供。
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+`repository` 接受 Git URL、host/path 形式的參照以及 GitHub `owner/repo` 簡寫。選用的 `branch` 欄位用於選擇分支或 ref。未設定 `branch` 時，OpenCode 會使用儲存庫的預設分支。
+
+如果不需要指定分支、描述或其他選項，可以使用字串簡寫：
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+  },
+}
+```
+
+:::note
+Git 參照會非同步重新整理。新設定的儲存庫可能需要一點時間才能完成複製或更新。
+:::
+
+---
+
+## 描述用途
+
+新增 `description` 來說明代理應在何時使用某個參照。
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when implementing UI components or design tokens",
+    },
+  },
+}
+```
+
+OpenCode 會將帶有描述的參照加入代理上下文。描述應簡短、具體，足以區分內容相似的參照。沒有描述的參照仍可透過自動完成和直接使用來存取，但不會告知代理。
+
+---
+
+## 隱藏自動完成項目
+
+將 `hidden` 設為 `true`，即可在 TUI 的 `@` 自動完成中隱藏某個參照。
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal implementation details",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` 只影響自動完成。帶有描述的隱藏參照仍會包含在代理上下文中。
+
+---
+
+## 使用參照
+
+已設定的參照會出現在 TUI 的 `@` 自動完成中。輸入 `@alias` 可附加參照的根目錄，輸入 `@alias/` 可搜尋其中的檔案。
+
+```text
+Compare this implementation with @sdk/src/client.ts
+```
+
+對於帶有描述的已設定參照，代理還會在系統上下文中收到它們的解析路徑和描述，因此在相關時可以自行檢視參照，無需您手動附加。
+
+OpenCode 會自動允許參照目錄通過其外部目錄權限邊界。一般的工具權限仍然適用；例如，無法編輯檔案的代理不會因為某個目錄被設定為參照而獲得編輯權限。
+
+---
+
+## 設定欄位
+
+| 欄位          | 本機 | Git | 說明                                         |
+| ------------- | ---- | --- | -------------------------------------------- |
+| `path`        | 是   | 否  | 本機參照目錄                                 |
+| `repository`  | 否   | 是  | Git URL、host/path 或 GitHub `owner/repo` 值 |
+| `branch`      | 否   | 是  | 選用的 Git 分支或 ref                        |
+| `description` | 是   | 是  | 說明何時使用該參照的指引                     |
+| `hidden`      | 是   | 是  | 在 TUI 的 `@` 自動完成中隱藏該參照           |
+
+參照別名不能為空，也不能包含 `/`、空白字元、反引號或逗號。

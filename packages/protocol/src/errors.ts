@@ -274,6 +274,15 @@ export class PtyNotFoundError extends Schema.TaggedError<PtyNotFoundError>()(
   { httpApiStatus: 404 },
 ) {}
 
+export class PtyFeatureUnsupportedError extends Schema.TaggedError<PtyFeatureUnsupportedError>()(
+  "PtyFeatureUnsupportedError",
+  {
+    feature: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 501 },
+) {}
+
 export class ShellNotFoundError extends Schema.TaggedError<ShellNotFoundError>()(
   "ShellNotFoundError",
   {
@@ -325,10 +334,46 @@ export class ProviderRequestError extends Schema.TaggedError<ProviderRequestErro
   { httpApiStatus: 502 },
 ) {}
 
-export class ScheduleNotFoundError extends Schema.TaggedError<ScheduleNotFoundError>()(
-  "ScheduleNotFoundError",
+export class AutomationNotFoundError extends Schema.TaggedError<AutomationNotFoundError>()(
+  "AutomationNotFoundError",
   {
-    scheduleID: Schema.String,
+    automationID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class VideoNotFoundError extends Schema.TaggedError<VideoNotFoundError>()(
+  "VideoNotFoundError",
+  {
+    videoID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class BlobNotFoundError extends Schema.TaggedError<BlobNotFoundError>()(
+  "BlobNotFoundError",
+  {
+    blobID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class ArtifactNotFoundError extends Schema.TaggedError<ArtifactNotFoundError>()(
+  "ArtifactNotFoundError",
+  {
+    artifactID: Schema.String,
+    message: Schema.String,
+  },
+  { httpApiStatus: 404 },
+) {}
+
+export class MachineNotFoundError extends Schema.TaggedError<MachineNotFoundError>()(
+  "MachineNotFoundError",
+  {
+    machine: Schema.String,
     message: Schema.String,
   },
   { httpApiStatus: 404 },

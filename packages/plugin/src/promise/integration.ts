@@ -54,6 +54,11 @@ export type IntegrationOAuthAuthorization = {
   | {
       readonly mode: "auto"
       readonly callback: Promise<Credential.OAuth>
+      /**
+       * Accepts the redirect URL a user pasted when the browser could not reach this machine, and settles `callback`
+       * with it. Check the URL's `state` as the browser path does; a rejection rejects only this paste.
+       */
+      readonly submit?: (redirect: string) => Promise<void>
     }
   | {
       readonly mode: "code"
@@ -66,6 +71,8 @@ export type IntegrationOAuthMethodRegistration = {
   readonly method: IntegrationOAuthMethod
   readonly authorize: (answer: Form.Answer) => Promise<IntegrationOAuthAuthorization>
   readonly refresh?: (credential: Credential.OAuth) => Promise<Credential.OAuth>
+  /** Signs the credential out remotely before it is removed. A rejection is logged and the credential is still removed. */
+  readonly revoke?: (credential: Credential.OAuth) => Promise<void>
   readonly label?: (credential: Credential.OAuth) => string | undefined
 }
 

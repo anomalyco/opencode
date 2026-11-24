@@ -53,7 +53,7 @@ export async function mockWorkspace(page: Page, input: WorkspaceInput) {
     ...input.seed,
   })
 
-  return { server: SERVER, directory, projectID, sessions, pty: mock.pty, push: mock.push }
+  return { server: SERVER, directory, projectID, sessions, persistentPty: mock.persistentPty, push: mock.push }
 }
 
 // Opens a session (default: the first) and waits until its composer accepts input.
@@ -71,12 +71,16 @@ export async function openSession(page: Page, input: WorkspaceInput & { sessionI
 }
 
 // Opens a new-session draft (no sessions by default) and waits until its composer accepts input.
-export async function openDraft(page: Page, input: WorkspaceInput & { draftID?: string }) {
+export async function openDraft(
+  page: Page,
+  input: WorkspaceInput & { draftID?: string; beforeOpen?: () => Promise<void> },
+) {
   const draftID = input.draftID ?? `draft_${input.name.toLowerCase().replace(/[^a-z0-9]+/g, "_")}`
   const directory = input.directory ?? `C:/OpenCode/${input.name}`
   const sessions = input.sessions ?? []
   const tabs: TabSeed[] = [...sessions.map((item) => item.id), { draft: draftID, directory }]
   const workspace = await mockWorkspace(page, { ...input, directory, sessions, seed: { tabs, ...input.seed } })
+  await input.beforeOpen?.()
   await page.goto(draftHref(draftID))
   const editor = page.locator('[data-component="composer-editor"]')
   await expect(editor).toBeEditable({ timeout: APP_READY_TIMEOUT })
@@ -84,19 +88,23 @@ export async function openDraft(page: Page, input: WorkspaceInput & { draftID?: 
   return { ...workspace, draftID, editor }
 }
 
-// Opens a draft on the local project with "New worktree" selected. Worktree creation stays pending until the test
-// resolves `worktree`; POST order (`worktree`, `session`, `prompt`), worktree requests, session creates and prompts are
-// recorded. The draft tab comes first, then a tab per session.
 // The new-session trigger that shows the draft's project and opens the location dialog on its projects.
 export function newSessionLocation(page: Page) {
   return page.locator('[data-component="new-session"] [data-action="prompt-project"]')
 }
 
-// The new-session trigger that shows the draft's worktree, or Local, and opens the project's worktree step.
+// The selected checkout's branch opens the project's worktree step.
 export function newSessionWorktree(page: Page) {
   return page.locator('[data-component="new-session"] [data-action="prompt-worktree"]')
 }
 
+export function newSessionBaseBranch(page: Page) {
+  return page.locator('[data-component="new-session"] button[aria-description="Choose base branch"]')
+}
+
+// Opens a draft on the local project with "New worktree" selected. Worktree creation stays pending until the test
+// resolves `worktree`; POST order (`worktree`, `session`, `prompt`), worktree requests, session creates and prompts are
+// recorded. The draft tab comes first, then a tab per session.
 export async function openWorktreeDraft(page: Page, input: WorkspaceInput & { draftID?: string }) {
   const worktree = Promise.withResolvers<{ status: number; json: unknown }>()
   const calls: string[] = []
@@ -147,7 +155,7 @@ export async function openWorktreeDraft(page: Page, input: WorkspaceInput & { dr
   await newSessionWorktree(page).click()
   await expect(page.getByRole("combobox", { name: "Search worktrees", exact: true })).toBeFocused()
   await page.getByRole("option", { name: /^New worktree/ }).click()
-  await expect(newSessionWorktree(page)).toContainText("New worktree")
+  await expect(newSessionBaseBranch(page)).toBeVisible()
   await expect(editor).toBeEditable()
 
   return { ...workspace, draftID, editor, worktree, calls, worktreeRequests, creates, prompts }

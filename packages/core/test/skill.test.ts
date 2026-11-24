@@ -1,24 +1,26 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Fiber, Layer, Schedule, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import { Agent } from "@opencode/core/agent"
+import { PermissionPolicy } from "@opencode/core/permission/policy"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
 import { Document, Event } from "@opencode/schema/config"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Skill } from "@opencode/core/skill"
 import { SkillInstructions } from "@opencode/core/skill/instructions"
+import { waitUntil } from "./lib/eventually"
 import { testEffect } from "./lib/effect"
 import { readInitial } from "./lib/instructions"
 import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/policy"
 
 const configLayer = Config.testLayer()
 const it = testEffect(
-  AppNodeBuilder.build(
-    LayerNode.group([Skill.node, SkillInstructions.node, Agent.node, Bus.node]),
-    [Config.node.replace(configLayer)],
-  ).pipe(Layer.provideMerge(configLayer)),
+  AppNodeBuilder.build(LayerNode.group([Skill.node, SkillInstructions.node, Agent.node, Bus.node, FSUtil.node]), [
+    Config.node.replace(configLayer),
+  ]).pipe(Layer.provideMerge(configLayer)),
 )
 
 const info = (id: string, description: string) =>
@@ -57,7 +59,7 @@ describe("Skill", () => {
       expect(yield* skills.get(Skill.ID.make("deploy"))).toBeUndefined()
       expect(yield* skills.get(Skill.ID.make("team:review"))).toEqual(info("team:review", "Review"))
       const instructions = yield* SkillInstructions.Service
-      const guidance = yield* instructions.load([]).pipe(Effect.flatMap(readInitial))
+      const guidance = yield* instructions.load(PermissionPolicy.empty).pipe(Effect.flatMap(readInitial))
       expect(guidance.text).toContain("<id>team:review</id>")
       expect(guidance.text).not.toContain("deploy")
 
@@ -217,16 +219,56 @@ describe("Skill", () => {
         }),
       )
       const agent = yield* agents.get(Agent.ID.make("reviewer"))
-      expect(Skill.available([info("deploy", "Deploy")], agent!.permissions)).toEqual([])
+      expect(Skill.available([info("deploy", "Deploy")], PermissionPolicy.fromRules(agent!.permissions))).toEqual([])
     }),
   )
-})
 
-const waitUntil = (condition: Effect.Effect<boolean>) =>
-  condition.pipe(
-    Effect.filterOrFail(
-      (ready) => ready,
-      () => new Error("Skill policy was not applied"),
-    ),
-    Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }),
+  it.effect(
+    "stores virtual skill files, notifies when they change, and prepares skill:// output without disk scans",
+    () =>
+      Effect.gen(function* () {
+        const skill = yield* Skill.Service
+        const bus = yield* Bus.Service
+        const virtual = Skill.Info.make({
+          ...info("review", "Review"),
+          path: AbsolutePath.make(Skill.uri("review", "SKILL.md")),
+        })
+        let extra: Record<string, string> = { "SKILL.md": "ignored", "references/b.md": "B", "references/a.md": "A" }
+        yield* skill.transform((editor) => {
+          editor.add(virtual, extra)
+          editor.update("review", (draft) => {
+            draft.description = "Updated"
+          })
+        })
+
+        const files = yield* skill.files(Skill.ID.make("review"))
+        expect(Array.from(files ?? [])).toEqual([
+          ["references/a.md", "A"],
+          ["references/b.md", "B"],
+        ])
+        const fs = yield* FSUtil.Service
+        const prepared = yield* Skill.prepare(
+          { ...fs, scan: () => Effect.die(new Error("unexpected disk scan")) },
+          virtual,
+          files,
+        )
+        expect(prepared).toEqual({
+          directory: "skill://review",
+          output: Skill.toModelOutput(virtual, ["skill://review/references/a.md", "skill://review/references/b.md"]),
+        })
+
+        let updates = 0
+        yield* bus.listen((event) =>
+          Effect.sync(() => {
+            if (event.type === Skill.Event.Updated.type) updates++
+          }),
+        )
+        extra = { "references/a.md": "Changed" }
+        yield* skill.reload()
+        expect(updates).toBe(1)
+
+        yield* skill.transform((editor) => editor.remove("review"))
+        expect(yield* skill.files(Skill.ID.make("review"))).toBeUndefined()
+      }),
   )
+})

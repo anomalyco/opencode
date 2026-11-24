@@ -1,15 +1,18 @@
 import { expect } from "bun:test"
 import { NodeHttpServer } from "@effect/platform-node"
 import { Location } from "@opencode/core/location"
+import { AbsolutePath } from "@opencode/core/schema"
+import { LocationLifecycle } from "@opencode/core/location-lifecycle"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { McpTool } from "@opencode/core/tool/mcp"
-import { Context, Effect, Exit, Layer, Schedule, Scope } from "effect"
+import { Context, Effect, Exit, Layer, MutableHashMap, Option, Schedule, Scope } from "effect"
 import { HttpRouter, HttpServer } from "effect/http"
 import { createServer } from "node:http"
 import path from "node:path"
+import { connectClientMcp } from "../../client/src/mcp"
 import { tmpdirScoped } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { ServerProcess } from "../src/process"
@@ -47,6 +50,7 @@ const serve = Effect.fnUntraced(function* () {
   return {
     base,
     directory,
+    context,
     url: (query: Record<string, string>) => {
       const url = new URL("/api/experimental/client-mcp", base)
       url.protocol = "ws:"
@@ -164,6 +168,66 @@ it.live(
       yield* until(() =>
         Effect.runPromise(server.inLocation(registryIDs)).then((ids) => !ids.includes("tui_open_terminal")),
       )
+    }),
+  20_000,
+)
+
+it.live(
+  "closes a client MCP socket with 1012 on reload and reattaches to the fresh location",
+  () =>
+    Effect.gen(function* () {
+      const server = yield* serve()
+      const events: string[] = []
+      class RecordingWebSocket extends globalThis.WebSocket {
+        constructor(...args: ConstructorParameters<typeof globalThis.WebSocket>) {
+          super(...args)
+          this.addEventListener("close", (event) => events.push(`close ${event.code}`))
+          this.addEventListener("message", (event) => {
+            if (String(event.data).includes('"notifications/initialized"')) events.push("attached")
+          })
+        }
+      }
+      const connection = yield* Effect.acquireRelease(
+        Effect.sync(() =>
+          connectClientMcp({
+            url: server.base,
+            name: "tui",
+            directory: server.directory,
+            headers: { authorization },
+            WebSocket: RecordingWebSocket,
+            tools: [{ name: "open_terminal", handler: () => ({ content: [{ type: "text", text: "opened" }] }) }],
+          }),
+        ),
+        (connection) => Effect.promise(() => connection.close()),
+      )
+      yield* until(() => events.includes("attached"))
+      const locations = Context.get(server.context, LocationServiceMap.Service)
+      const ref = LocationServiceMap.canonical(Location.Ref.make({ directory: AbsolutePath.make(server.directory) }))
+      const entry = () =>
+        locations.rcMap.state._tag === "Open"
+          ? Option.getOrUndefined(MutableHashMap.get(locations.rcMap.state.map, ref))
+          : undefined
+      const old = entry()
+      expect(old).toBeDefined()
+      // An attached client keeps the idle sweep away from its location.
+      const lifecycle = Context.get(yield* locations.contextEffect(ref).pipe(Effect.scoped), LocationLifecycle.Service)
+      expect(lifecycle.isRetained()).toBe(true)
+
+      const response = yield* Effect.promise(() =>
+        fetch(new URL("/api/location/reload", server.base), { method: "POST", headers: { authorization } }),
+      )
+      expect(response.status).toBe(204)
+      // The socket was the old location's last borrower, so closing it let the old location close.
+      yield* until(() => old?.scope.state._tag === "Closed")
+      // The client reconnected on its own and the replacement location attached it.
+      yield* until(() => events.length === 3)
+      expect(events).toEqual(["attached", "close 1012", "attached"])
+      expect(entry()).toBeDefined()
+      expect(entry()).not.toBe(old)
+
+      // Disconnect before the server stops, like the other tests here.
+      yield* Effect.promise(() => connection.close())
+      yield* until(() => events.length === 4)
     }),
   20_000,
 )

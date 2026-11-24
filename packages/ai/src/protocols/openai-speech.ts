@@ -3,7 +3,7 @@ import { Framing } from "../route/framing.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
 import { mergeJsonRecords, tokenUsage, type MediaUsage } from "../schema/index.js"
-import { SpeechModel, type SpeechEvent, type SpeechRequestFor } from "../speech.js"
+import { SpeechModel, type SpeechEvent, type SpeechRequest } from "../speech.js"
 import { SpeechStream } from "./utils/speech-stream.js"
 
 const route = MediaProtocol.identity({ id: "openai-speech", name: "OpenAI Speech", provider: "openai" })
@@ -22,7 +22,7 @@ export type OpenAISpeechOptions = {
   readonly stream_format?: "sse" | "audio"
 } & Record<string, unknown>
 
-export type Request = SpeechRequestFor<OpenAISpeechOptions>
+export type Request = SpeechRequest<SpeechModel<OpenAISpeechOptions>>
 
 // ---------------------------------------------------------------------------
 // 3. Streaming event schema

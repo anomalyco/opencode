@@ -1,13 +1,10 @@
-import { useDialog } from "@opencode/ui/context/dialog"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Icon } from "@opencode/ui/icon"
-import { Slash } from "@opencode/ui/slash"
 import { Keybind } from "@opencode/ui/keybind"
 import { useCommand } from "@/shell/commands/command"
-import { Show, createMemo, createSignal, type JSX } from "solid-js"
+import { Match, Show, Switch, createComputed, createMemo, createSignal, onCleanup, untrack } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
-import { getFilename } from "@opencode/util/path"
 import {
   displayName,
   getProjectAvatarGenerated,
@@ -16,7 +13,6 @@ import {
   ProjectAvatar,
 } from "@opencode/ui/project-avatar"
 import { Schema } from "effect"
-import { createPresence } from "@/runtime/presence"
 import { Composer } from "@/composer/composer"
 import { ComposerDropzone } from "@/composer/dropzone"
 import type { ComposerModel } from "@/composer/model"
@@ -28,37 +24,34 @@ import {
 import type { useNewSessionLocationDialog } from "@/new-session/location/dialog"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { useProviders } from "@/providers/catalog/providers"
+import { createProviderTip, ProviderTip } from "@/providers/connect/tip"
 import { NEW_SESSION_CONTENT_WIDTH } from "@/new-session/layout"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { useSettings } from "@/settings/model"
 import type { NewSessionWorkspaceController } from "./workspace/controller"
-import { NewSessionBranch } from "./workspace/selector"
+import {
+  CHECKOUT_PLACEHOLDER_DELAY_MS,
+  INITIAL_CHECKOUT_LABEL_STATE,
+  selectCheckoutSkeleton,
+  transitionCheckoutLabel,
+  type CheckoutLabelEvent,
+} from "./workspace/checkout-machine"
+import { BaseBranchPicker } from "./workspace/selector"
 import { NewSessionBrickBreaker } from "./brick-breaker"
-import { NewSessionPinBoard, type PinBoardHandle } from "./pin-board"
-import { NewSessionWordmark, type LodgerBall } from "./wordmark"
-
-const providerTipDismissalDuration = 30 * 24 * 60 * 60 * 1000
+import { NewSessionPinBoard } from "./pin-board"
+import { NewSessionWordmark } from "./wordmark"
+import {
+  createWordmarkState,
+  selectBrickBreaker,
+  selectPinBoard,
+  transitionWordmark,
+  type WordmarkEvent,
+} from "./wordmark-machine"
 
 export const WorkspaceOnboardingSchema = Persistence.struct({
   used: Schema.Boolean,
 })
-
-export const ProviderTipSchema = Persistence.struct({
-  dismissedAt: Schema.Finite,
-})
-
-type WordmarkState = {
-  box?: HTMLDivElement
-  mode: "flat" | "open" | "closing"
-  game: boolean
-}
-
-type BrickBreakerHandles = {
-  board?: PinBoardHandle
-  ball?: LodgerBall
-}
 
 export function NewSessionView(props: {
   composer: ComposerModel
@@ -74,7 +67,16 @@ export function NewSessionView(props: {
 
   const settings = useSettings()
 
-  const [wordmark, setWordmark] = createStore<WordmarkState>({ mode: "flat", game: false })
+  const [wordmark, setWordmark] = createSignal(createWordmarkState(false))
+  const [logo, setLogo] = createSignal<HTMLDivElement>()
+
+  const dispatchWordmark = (event: WordmarkEvent) =>
+    untrack(() => {
+      const next = transitionWordmark(wordmark(), event)
+      setWordmark(next.state)
+
+      if (next.effects.some((effect) => effect.type === "focus.composer")) props.composer.restoreFocus()
+    })
 
   const location = (project?: PromptProject) =>
     props.location({
@@ -84,8 +86,6 @@ export function NewSessionView(props: {
       },
     })
 
-  // Imperative handles for the brick breaker; they are not reactive state.
-  const handles: BrickBreakerHandles = {}
   let panel!: HTMLDivElement
 
   return (
@@ -93,6 +93,7 @@ export function NewSessionView(props: {
       <div
         ref={panel}
         data-component="new-session"
+        data-focus-scope
         class="relative isolate flex-1 min-h-0 overflow-hidden rounded-[10px] bg-v2-background-bg-base shadow-[var(--v2-elevation-raised)]"
       >
         <ComposerDropzone
@@ -102,15 +103,11 @@ export function NewSessionView(props: {
         <div class="absolute inset-x-0 top-[25.375%] flex justify-center px-6">
           <div class={NEW_SESSION_CONTENT_WIDTH}>
             <NewSessionWordmark
-              ref={(box) => setWordmark("box", box)}
+              ref={setLogo}
+              state={wordmark}
+              onEvent={dispatchWordmark}
+              play
               sound={settings.sounds.interfaceEnabled}
-              onOpen={() => setWordmark("mode", "open")}
-              onClose={() => setWordmark("mode", "closing")}
-              onFlat={() => setWordmark("mode", "flat")}
-              onPlay={(ball) => {
-                handles.ball = ball
-                setWordmark("game", true)
-              }}
             />
             <div class="mt-8 flex flex-col gap-3">
               <div data-slot="new-session-composer" class="flex flex-col gap-1">
@@ -121,11 +118,10 @@ export function NewSessionView(props: {
                   {(project) => (
                     <NewSessionLocation
                       project={project()}
-                      workspace={props.workspace.bar.visible() ? props.workspace.selection.value() : "main"}
-                      root={props.workspace.project.root()}
-                      branch={<NewSessionBranch workspace={props.workspace} onDone={props.composer.restoreFocus} />}
+                      workspace={props.workspace}
+                      onDone={props.composer.restoreFocus}
                       onboarding={onboardingReady() && !onboarding.used && props.workspace.bar.visible()}
-                      onClick={() => location()}
+                      onProjects={() => location()}
                       onWorktree={project().id && project().vcs === "git" ? () => location(project()) : undefined}
                     />
                   )}
@@ -137,28 +133,25 @@ export function NewSessionView(props: {
             </div>
           </div>
         </div>
-        <Show when={wordmark.mode !== "flat" && wordmark.box}>
-          {(logo) => (
+        <Show when={selectPinBoard(wordmark(), logo())}>
+          {(board) => (
             <NewSessionPinBoard
-              logo={logo()}
+              logo={board().logo}
               sound={settings.sounds.interfaceEnabled}
-              entrance="chain"
-              closing={wordmark.mode === "closing"}
-              ref={(board) => (handles.board = board)}
+              entrance={board().entrance}
+              closing={board().closing}
+              ref={(handle) => dispatchWordmark({ type: "board.mounted", board: handle })}
             />
           )}
         </Show>
-        <Show when={wordmark.game && handles.board && handles.ball && { board: handles.board, ball: handles.ball }}>
+        <Show when={selectBrickBreaker(wordmark())}>
           {(game) => (
             <NewSessionBrickBreaker
               panel={panel}
               board={game().board}
               ball={game().ball}
               sound={settings.sounds.interfaceEnabled}
-              onDone={() => {
-                setWordmark("game", false)
-                props.composer.restoreFocus()
-              }}
+              onDone={() => dispatchWordmark({ type: "game.done" })}
             />
           )}
         </Show>
@@ -169,87 +162,10 @@ export function NewSessionView(props: {
 }
 
 function NewSessionTips(props: { selection: ComposerModel["model"]["selection"]; onDone: () => void }) {
-  const language = useLanguage()
-  const dialog = useDialog()
   const sdk = useWorkspaceLocation()
-  const providers = useProviders(() => sdk().directory)
+  const tip = createProviderTip(() => sdk().directory)
 
-  const [providerState, setProviderState, , providerReady] = persisted(
-    Persist.global("new-session.provider-tip"),
-    ProviderTipSchema,
-    { dismissedAt: 0 },
-  )
-
-  const providerVisible = createMemo(
-    () =>
-      providerReady() &&
-      providers.anyConnection() === false &&
-      Date.now() - providerState.dismissedAt >= providerTipDismissalDuration,
-  )
-
-  const tip = providerVisible
-  const [ref, setRef] = createSignal<HTMLDivElement>()
-
-  const presence = createPresence({
-    show: tip,
-    element: () => ref() ?? null,
-  })
-
-  const open = () => {
-    if (!tip()) return
-
-    void import("@/providers/connect/dialog").then(({ DialogConnectProvider }) => {
-      void dialog.show(() => (
-        <DialogConnectProvider directory={sdk().directory} selection={props.selection} onDone={props.onDone} />
-      ))
-    })
-  }
-
-  const dismiss = () => {
-    if (!tip()) return
-
-    setProviderState("dismissedAt", Date.now())
-  }
-
-  return (
-    <Show when={presence.present()}>
-      <div class="pointer-events-none absolute inset-x-0 bottom-4 flex justify-center px-10">
-        <div
-          ref={setRef}
-          data-component="new-session-tip"
-          data-visible={tip()}
-          class="group/new-session-tip pointer-events-auto relative flex h-6 max-w-full items-center transition-[opacity,transform] duration-[250ms] ease-[cubic-bezier(0.215,0.61,0.355,1)] motion-reduce:transition-none"
-          classList={{ "data-[visible=false]:animate-out fade-out slide-out-to-bottom-4": true }}
-        >
-          <button
-            type="button"
-            class="flex h-6 min-w-0 items-center rounded-[4px] pl-1.5 text-[13px] leading-text-compact tracking-[-0.04px] text-v2-text-text-faint transition-[background-color,color] duration-150 ease-in-out hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-muted focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-muted focus-visible:outline-none"
-            onClick={open}
-          >
-            <span class="truncate">{language.t("home.providerTip")}</span>
-            <span class="flex size-6 shrink-0 items-center justify-center" aria-hidden="true">
-              <Icon name="chevron-down" size="small" class="-rotate-90" />
-            </span>
-          </button>
-          <Tooltip
-            class="hover-reveal absolute left-full top-0 flex h-6 w-7 items-center justify-end delay-0 duration-0 group-hover/new-session-tip:delay-[250ms] group-hover/new-session-tip:duration-150 group-hover/new-session-tip:opacity-100 focus-within:delay-0 focus-within:duration-0 focus-within:opacity-100"
-            placement="top"
-            openDelay={800}
-            value={language.t("common.dismiss")}
-          >
-            <button
-              type="button"
-              class="flex size-6 items-center justify-center rounded-[4px] text-v2-icon-icon-muted transition-[background-color,color] duration-150 ease-in-out hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-icon-icon-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-icon-icon-base focus-visible:outline-none"
-              aria-label={language.t("common.dismiss")}
-              onClick={dismiss}
-            >
-              <Icon name="xmark-small" />
-            </button>
-          </Tooltip>
-        </div>
-      </div>
-    </Show>
-  )
+  return <ProviderTip tip={tip} selection={props.selection} onDone={props.onDone} />
 }
 
 // Keeps as many leading segments as fit, then "…/", then the last two segments. The cut always lands on a slash.
@@ -276,36 +192,79 @@ function fitPath(value: string, width: number, font: string) {
 }
 
 const TRIGGER =
-  "flex h-7 items-center gap-1.5 rounded-sm text-start ps-1.5 pe-2 text-v2-text-text-muted transition-colors hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:text-v2-text-text-base focus-visible:outline-none"
+  "flex h-7 items-center gap-1.5 rounded-[4px] text-start ps-1.5 pe-2 text-v2-text-text-muted transition-[background-color,color] hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base"
 
-/** The composer tray: project and worktree pickers, Git context, and the session's directory. */
 function NewSessionLocation(props: {
   project: PromptProject
-  /** "main", "create", or a worktree directory. */
-  workspace: string
-  root: string
-  branch?: JSX.Element
+  workspace: NewSessionWorkspaceController
+  onDone: () => void
   onboarding: boolean
-  onClick: () => void
-  /** Opens the project's worktree step; without it the project has no worktrees to choose. */
+  onProjects: () => void
   onWorktree?: () => void
 }) {
   const language = useLanguage()
   const command = useCommand()
   const [layout, setLayout] = createStore({ width: 0, font: "" })
 
-  const worktree = () => {
-    if (props.workspace === "main") return
+  command.register("new-session-worktree", () => [
+    {
+      id: "session.location.select",
+      title: language.t("session.location.worktree"),
+      category: language.t("command.category.workspace"),
+      keybind: "mod+alt+o",
+      disabled: !props.onWorktree,
+      onSelect: props.onWorktree,
+    },
+  ])
 
-    if (props.workspace === "create") return language.t("workspace.new")
+  const [checkoutLabel, setCheckoutLabel] = createSignal(INITIAL_CHECKOUT_LABEL_STATE)
 
-    return getFilename(props.workspace)
-  }
+  const timers = new Map<number, ReturnType<typeof setTimeout>>()
+
+  const dispatchCheckout = (event: CheckoutLabelEvent) =>
+    untrack(() => {
+      const next = transitionCheckoutLabel(checkoutLabel(), event)
+      setCheckoutLabel(next.state)
+      next.effects.forEach((effect) => {
+        if (effect.type === "delay.stop") {
+          clearTimeout(timers.get(effect.attempt))
+          timers.delete(effect.attempt)
+
+          return
+        }
+
+        timers.set(
+          effect.attempt,
+          setTimeout(
+            () => dispatchCheckout({ type: "delay.elapsed", attempt: effect.attempt }),
+            CHECKOUT_PLACEHOLDER_DELAY_MS,
+          ),
+        )
+      })
+    })
 
   const path = () => {
-    if (props.workspace === "create") return
+    const selection = props.workspace.selection.value()
 
-    return props.workspace === "main" ? props.root : props.workspace
+    if (selection === "create") return
+
+    return selection === "main" ? props.workspace.project.root() : selection
+  }
+
+  createComputed(() =>
+    dispatchCheckout({
+      type: "checkout.changed",
+      directory: path() ?? props.workspace.project.root(),
+      loaded: props.workspace.bar.checkout() !== undefined,
+    }),
+  )
+
+  onCleanup(() => dispatchCheckout({ type: "disposed" }))
+
+  const label = () => {
+    const checkout = props.workspace.bar.checkout()
+
+    return checkout && (checkout.branch || language.t("session.location.noBranch"))
   }
 
   const fitted = createMemo(() => fitPath(path() ?? "", layout.width, layout.font))
@@ -317,7 +276,14 @@ function NewSessionLocation(props: {
           <Tooltip
             placement="top"
             openDelay={800}
-            value={language.t("session.new.project.trigger.tooltip")}
+            value={
+              <span class="flex items-center gap-2">
+                {language.t("session.new.project.trigger.tooltip")}
+                <Show when={command.keybindParts("project.select").length}>
+                  <Keybind keys={command.keybindParts("project.select")} variant="neutral" />
+                </Show>
+              </span>
+            }
             class="flex min-w-0"
           >
             <button
@@ -326,7 +292,7 @@ function NewSessionLocation(props: {
               aria-haspopup="dialog"
               aria-description={language.t("session.new.project.trigger.tooltip")}
               class={`${TRIGGER} min-w-0`}
-              onClick={props.onClick}
+              onClick={props.onProjects}
             >
               <ProjectAvatar
                 class="shrink-0"
@@ -336,48 +302,67 @@ function NewSessionLocation(props: {
                 generated={getProjectAvatarGenerated(props.project)}
               />
               <span class="min-w-0 truncate">{displayName(props.project)}</span>
+              <Icon name="chevron-down" class="shrink-0 text-v2-icon-icon-muted" />
             </button>
           </Tooltip>
           <Show when={props.onWorktree}>
             {(onWorktree) => (
-              <>
-                <Slash gap={2} />
+              <Show
+                when={props.workspace.selection.value() !== "create"}
+                fallback={<BaseBranchPicker workspace={props.workspace} onDone={props.onDone} />}
+              >
                 <Tooltip
                   appearance={props.onboarding ? "large" : undefined}
                   placement="top"
                   openDelay={800}
                   value={
-                    props.onboarding ? (
-                      <div class="flex flex-col gap-1 text-start">
+                    <div class="flex flex-col gap-1 text-start">
+                      <Show when={props.onboarding}>
                         <div class="flex items-center gap-1.5 font-[530] text-v2-text-text-base">
-                          <Icon name="outline-worktree" size="small" class="shrink-0 text-v2-text-text-accent" />
+                          <Icon name="outline-worktree" class="shrink-0 text-v2-text-text-accent" />
                           <span>{language.t("workspace.onboarding.title")}</span>
                         </div>
                         <span class="font-[440] text-v2-text-text-muted">
                           {language.t("workspace.onboarding.description")}
                         </span>
-                      </div>
-                    ) : (
-                      language.t("session.location.worktree")
-                    )
+                      </Show>
+                      <span
+                        class="flex items-center justify-between gap-2"
+                        classList={{ "font-[440] text-v2-text-text-muted": props.onboarding }}
+                      >
+                        {language.t("session.location.worktree")}
+                        <Show when={command.keybindParts("session.location.select").length}>
+                          <Keybind keys={command.keybindParts("session.location.select")} variant="neutral" />
+                        </Show>
+                      </span>
+                    </div>
                   }
                   contentClass={props.onboarding ? "max-w-[280px]" : undefined}
-                  class="flex min-w-12 shrink-[1000]"
+                  class="flex min-w-0 max-w-[220px]"
                 >
                   <button
                     type="button"
                     data-action="prompt-worktree"
                     aria-haspopup="dialog"
+                    aria-label={label() ?? language.t("session.location.worktree")}
+                    aria-busy={selectCheckoutSkeleton(checkoutLabel())}
                     aria-description={language.t("session.location.worktree")}
                     class={`${TRIGGER} min-w-0`}
                     onClick={onWorktree()}
                   >
-                    <Icon
-                      name={props.workspace === "create" ? "plus" : worktree() ? "outline-worktree" : "monitor"}
-                      size="small"
-                      class="shrink-0 text-v2-icon-icon-muted"
-                    />
-                    <span class="min-w-0 truncate">{worktree() ?? language.t("session.new.workspace.triggerLocal")}</span>
+                    <Icon name="branch" size="normal" class="shrink-0 text-v2-icon-icon-muted" />
+                    <Switch>
+                      <Match when={label()}>
+                        {(label) => (
+                          <span dir="auto" class="min-w-0 truncate">
+                            {label()}
+                          </span>
+                        )}
+                      </Match>
+                      <Match when={selectCheckoutSkeleton(checkoutLabel())}>
+                        <span aria-hidden="true" class="h-2 w-12 shrink-0 rounded-full bg-v2-background-bg-layer-02" />
+                      </Match>
+                    </Switch>
                     <Show when={props.onboarding}>
                       <span
                         data-slot="workspace-onboarding-dot"
@@ -387,18 +372,17 @@ function NewSessionLocation(props: {
                     </Show>
                   </button>
                 </Tooltip>
-              </>
+              </Show>
             )}
           </Show>
         </div>
-        {props.branch}
       </div>
       {/* An open tooltip can outlive this row; keep its path instead of a stale Show accessor. */}
       <Show when={path()} keyed>
         {(directory) => (
           <div
             class="flex min-w-0 flex-1 justify-end pe-1.5 @max-[560px]:hidden"
-            style={{ "min-width": `min(50%, ${Math.ceil(fitted().minimum) + 26}px)` }}
+            style={{ "min-width": `min(50%, ${Math.ceil(fitted().minimum) + 6}px)` }}
           >
             <Tooltip
               placement="top"
@@ -409,39 +393,24 @@ function NewSessionLocation(props: {
             >
               <span
                 ref={(row) =>
-                  createResizeObserver(row, () => {
-                    const icon = row.querySelector("[data-slot=new-session-location-icon]")
-                    const style = getComputedStyle(row)
-
+                  createResizeObserver(row, () =>
                     setLayout({
-                      width: row.clientWidth - (icon ? icon.clientWidth + parseFloat(style.columnGap) : 0),
-                      font: style.font,
-                    })
-                  })
+                      width: row.clientWidth,
+                      font: getComputedStyle(row).font,
+                    }),
+                  )
                 }
-                class="flex min-w-0 flex-1 items-center justify-end gap-1.5"
+                class="flex min-w-0 flex-1 items-center justify-end"
                 dir="ltr"
               >
-                {/* The worktree trigger already says Local, so only a worktree marks its path. */}
-                <Show when={worktree()}>
-                  <Tooltip
-                    placement="top"
-                    openDelay={800}
-                    value={
-                      <span class="flex items-center gap-2">
-                        {language.t("session.location.toggle")}
-                        <Keybind keys={command.keybindParts("session.location.cycle")} variant="neutral" />
-                      </span>
-                    }
-                  >
-                    <span class="flex shrink-0" data-slot="new-session-location-icon">
-                      <Icon name="outline-worktree" size="small" class="text-v2-icon-icon-muted" />
-                    </span>
-                  </Tooltip>
-                </Show>
                 <span
                   data-slot="new-session-location-path"
-                  class="min-w-0 overflow-hidden whitespace-nowrap text-v2-text-text-faint [direction:rtl] [text-align:end]"
+                  class="min-w-0 cursor-text select-text overflow-hidden whitespace-nowrap text-v2-text-text-faint [direction:rtl] [text-align:end]"
+                  onCopy={(event) => {
+                    if (!event.clipboardData || window.getSelection()?.toString() !== fitted().text) return
+                    event.clipboardData.setData("text/plain", directory)
+                    event.preventDefault()
+                  }}
                 >
                   <bdi dir="ltr">{fitted().text}</bdi>
                 </span>

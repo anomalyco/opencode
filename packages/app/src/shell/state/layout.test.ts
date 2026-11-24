@@ -4,7 +4,8 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { Persistence } from "@/runtime/persistence/schema"
 import { currentRoute, initialLayout, layoutPersistence, layoutSchema } from "./layout"
 import { createSignal } from "solid-js"
-import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
+import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys, sessionKeyOpen } from "./helpers"
+import { ServerScope, SessionRouteKey, SessionStateKey } from "@/runtime/server/scope"
 
 test.each(["settings", "connect"] as const)("%s has its own layout route", (type) => {
   expect(currentRoute(`/${type}`, "")).toEqual({ type })
@@ -76,15 +77,15 @@ describe("layout persistence", () => {
     expect(
       decode({
         sidebar: { workspaces: { good: true, bad: "bad" } },
-        sessionView: { [key]: { scroll, pendingMessage: "message" } },
+        sessionView: { [key]: { scroll, reviewFile: "src/app.ts" } },
       }),
     ).toMatchObject({
       sidebar: { workspaces: {} },
-      sessionView: { [key]: { scroll: {}, pendingMessage: "message" } },
+      sessionView: { [key]: { scroll: {}, reviewFile: "src/app.ts" } },
     })
-    expect(
-      decode({ sessionView: { [key]: { scroll: { good: { x: 1, y: 2 } }, pendingMessage: 5 } } }).sessionView,
-    ).toEqual({ [key]: { scroll: {} } })
+    expect(decode({ sessionView: { [key]: { scroll: { good: { x: 1, y: 2 } }, reviewFile: 5 } } }).sessionView).toEqual(
+      { [key]: { scroll: {} } },
+    )
   })
 
   test("keeps scoped state and salvages valid tab entries", () => {
@@ -133,4 +134,36 @@ test("pruneSessionKeys keeps the active key, drops the lowest-used keys, and nev
   const input = { max: 3, used, view: ["k1", "k2", "k4"], tabs: ["k1", "k3", "k4"] }
   expect(pruneSessionKeys({ ...input, keep: "k4" })).toEqual(["k1"])
   expect(pruneSessionKeys({ ...input, keep: undefined, max: 1 })).toEqual([])
+})
+
+// The layout forgot a session's side tabs, of every kind, while the session was still open in a shell tab: it ranked
+// sessions only by when they were last on screen. After a restart, when none has a time yet, it forgot the newest.
+test("pruneSessionKeys never drops a session open in a shell tab, and after a restart drops the keys stored first", () => {
+  const keys = Array.from({ length: 6 }, (_, index) => `k${index + 1}`)
+  // k1 was on screen first and five others since. Its shell tab is still open.
+  const used = new Map(keys.map((key, index) => [key, index + 1]))
+  const input = { keep: "k6", max: 3, used, view: keys.slice(0, 3), tabs: keys }
+  expect(pruneSessionKeys(input)).toEqual(["k3", "k2", "k1"])
+  expect(pruneSessionKeys({ ...input, open: (key) => key === "k1" || key === "k2" })).toEqual(["k5", "k4", "k3"])
+  // More open sessions than the layout stores: none of them goes, and every other one does.
+  expect(pruneSessionKeys({ ...input, open: (key) => key !== "k3" })).toEqual(["k3"])
+  // A new run: no session has a time. The ones stored last stay.
+  expect(pruneSessionKeys({ ...input, used: new Map() })).toEqual(["k3", "k2", "k1"])
+  expect(pruneSessionKeys({ ...input, keep: "k1", used: new Map() })).toEqual(["k4", "k3", "k2"])
+})
+
+test("a layout key is open while a shell tab shows or routes its session on the same server", () => {
+  const local = ServerConnection.Key.make("sidecar")
+  const remote = ServerConnection.Key.make("https://remote.example")
+  const scope = (server: ServerConnection.Key) => ServerScope.fromServerKey(server)
+  const key = (server: ServerConnection.Key, session?: string) => SessionStateKey.from(scope(server), SessionRouteKey.fromRoute("L3Byb2plY3Q", session))
+
+  const tabs = [
+    { type: "session" as const, server: local, sessionId: "ses_shown" },
+    { type: "session" as const, server: local, sessionId: "ses_parent", routeSessionId: "ses_child" },
+    { type: "draft" as const, draftID: "draft", server: local, directory: "/project" },
+  ]
+
+  expect(["ses_shown", "ses_parent", "ses_child", "ses_closed", undefined].map((session) => sessionKeyOpen(key(local, session), tabs, scope))).toEqual([true, true, true, false, false])
+  expect(sessionKeyOpen(key(remote, "ses_shown"), tabs, scope)).toBe(false)
 })

@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "Edasi",
   "releaseNotes.action.hideFuture": "Ärge näidake neid tulevikus",
   "releaseNotes.media.alt": "Väljalase eelvaade",
+  "action.reload": "Uuendamiseks laadi uuesti",
+  "action.reloading": "Uuesti laadimine…",
+  "web.ready.title": "Uuendus on valmis",
+  "web.ready.message": "OpenCode'i uus versioon on valmis. Laadi uuesti, et kasutada seda kõigis avatud akendes.",
+  "web.reload": "Laadi uuesti",
+  "web.reset.title": "Laadi serverist uuesti",
+  "web.reset.description": "Kustuta rakenduse salvestatud koopia ja laadi serveri praegune versioon",
+  "web.reset.action": "Laadi serverist uuesti",
 }

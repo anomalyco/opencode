@@ -46,4 +46,25 @@ describe("util.model", () => {
       "Switched model to anthropic/sonnet/high",
     )
   })
+
+  test("reads a switch between a model's speeds as a change of speed", () => {
+    const fast = { base: "gpt-5.5", id: "fast" }
+    const models = [
+      { providerID: "openai", id: "gpt-5.5", name: "GPT-5.5" },
+      { providerID: "openai", id: "gpt-5.5-fast", name: "GPT-5.5 Fast", experimental: { speed: fast } },
+      {
+        providerID: "openai",
+        id: "gpt-5.5-flex",
+        name: "GPT-5.5 Flex",
+        experimental: { speed: { ...fast, id: "flex" } },
+      },
+      { providerID: "openai", id: "gpt-6", name: "GPT-6" },
+    ]
+    const ref = (id: string) => ({ providerID: "openai", id })
+
+    expect(switchLabel(ref("gpt-5.5-fast"), models, ref("gpt-5.5"))).toBe("Switched speed to fast")
+    expect(switchLabel(ref("gpt-5.5-flex"), models, ref("gpt-5.5-fast"))).toBe("Switched speed to flex")
+    expect(switchLabel(ref("gpt-5.5"), models, ref("gpt-5.5-fast"))).toBe("Switched speed to standard")
+    expect(switchLabel(ref("gpt-5.5-fast"), models, ref("gpt-6"))).toBe("Switched model to GPT-5.5 Fast")
+  })
 })

@@ -106,6 +106,10 @@
     );
   }
 
+  [data-slot="session-timeline-scroll"] > .scroll-view__viewport:has(> [data-slot="session-header-inset"]) {
+    scroll-padding-block-start: calc(var(--sticky-accordion-top, 0px) + 16px);
+  }
+
   /* The review panel's visible width, which the header fade below tracks while the panel animates. Its fixed-width
      content holds nothing else that reads it. */
   #review-panel,
@@ -114,7 +118,8 @@
   }
 
   /* Like the composer toolbar, fade only clipped content without reserving layout space.
-     The fade contracts as overflow clears; the second mask preserves the header divider. */
+     The fade contracts as overflow clears; the second mask preserves the header divider.
+     The third keeps the review toggle's slot at the bar's end. */
   #review-panel .session-review-v2-tabs-bar {
     --session-review-header-fade: clamp(0px, calc(100% - 100cqi), 24px);
     mask-image:
@@ -123,7 +128,7 @@
         #000 calc(100cqi - 40px - var(--session-review-header-fade)),
         transparent calc(100cqi - 40px)
       ),
-      linear-gradient(to top, #000 1px, transparent 1px);
+      linear-gradient(to top, #000 1px, transparent 1px), linear-gradient(to left, #000 40px, transparent 40px);
 
     &:dir(rtl) {
       mask-image:
@@ -132,17 +137,31 @@
           #000 calc(100cqi - 40px - var(--session-review-header-fade)),
           transparent calc(100cqi - 40px)
         ),
-        linear-gradient(to top, #000 1px, transparent 1px);
+        linear-gradient(to top, #000 1px, transparent 1px), linear-gradient(to right, #000 40px, transparent 40px);
     }
   }
 
-  ::highlight(timeline-search-hit) {
-    background-color: color-mix(in srgb, var(--v2-icon-icon-accent) 28%, transparent);
+  /* Root rules reach every element where highlights inherit; see quote-highlight.css in session-ui. */
+  @supports selector(:host-context(*)) {
+    :root::highlight(timeline-search-hit) {
+      background-color: color-mix(in srgb, var(--v2-icon-icon-accent) 28%, transparent);
+    }
+
+    :root::highlight(timeline-search-hit-active) {
+      background-color: var(--v2-icon-icon-accent);
+      color: var(--v2-background-bg-deep);
+    }
   }
 
-  ::highlight(timeline-search-hit-active) {
-    background-color: var(--v2-icon-icon-accent);
-    color: var(--v2-background-bg-deep);
+  @supports not selector(:host-context(*)) {
+    ::highlight(timeline-search-hit) {
+      background-color: color-mix(in srgb, var(--v2-icon-icon-accent) 28%, transparent);
+    }
+
+    ::highlight(timeline-search-hit-active) {
+      background-color: var(--v2-icon-icon-accent);
+      color: var(--v2-background-bg-deep);
+    }
   }
 
   [data-component="menu-v2-content"].desktop-app-menu {
@@ -323,7 +342,7 @@
   }
 
   [data-color-scheme="dark"] [data-component="timeline-quote"] {
-    background-color: var(--v2-background-bg-layer-01);
+    background-color: var(--v2-background-bg-layer-02);
   }
 
   :root[data-motion="reduce"] {

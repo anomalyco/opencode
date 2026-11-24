@@ -3,11 +3,14 @@ import { compile, emitEffectImported, emitEffectShape, emitPromise, write } from
 import {
   ClientApi,
   clientNamespace,
+  deprecatedClientPaths,
   effectOmitEndpoints,
   groupNames,
   promiseOmitEndpoints,
 } from "@opencode/protocol/client"
 import { Agent } from "@opencode/schema/agent"
+import { Artifact } from "@opencode/schema/artifact"
+import { Automation } from "@opencode/schema/automation"
 import { Command } from "@opencode/schema/command"
 import { Config } from "@opencode/schema/config"
 import { Credential } from "@opencode/schema/credential"
@@ -20,6 +23,7 @@ import { Generate } from "@opencode/schema/generate"
 import { Instruction } from "@opencode/schema/instruction"
 import { InstructionEntry } from "@opencode/schema/instruction-entry"
 import { Integration } from "@opencode/schema/integration"
+import { Job } from "@opencode/schema/job"
 import { Location } from "@opencode/schema/location"
 import { Mcp } from "@opencode/schema/mcp"
 import { Model } from "@opencode/schema/model"
@@ -37,7 +41,6 @@ import { PtyTicket } from "@opencode/schema/pty-ticket"
 import { Question } from "@opencode/schema/question"
 import { Reference } from "@opencode/schema/reference"
 import { AbsolutePath, RelativePath } from "@opencode/schema/schema"
-import { Schedule } from "@opencode/schema/schedule"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { SessionInbox } from "@opencode/schema/session-inbox"
@@ -55,16 +58,18 @@ const promiseContract = compile(ClientApi, {
   groupNames,
   omitEndpoints: promiseOmitEndpoints,
   namespace: clientNamespace,
-  aliases: true,
+  aliases: deprecatedClientPaths,
 })
 const effectContract = compile(ClientApi, {
   groupNames,
   omitEndpoints: effectOmitEndpoints,
   namespace: clientNamespace,
-  aliases: true,
+  aliases: deprecatedClientPaths,
 })
 const effectTypeReferences = [
   ...namespaceTypes("Agent", "@opencode/schema/agent", Agent),
+  ...namespaceTypes("Artifact", "@opencode/schema/artifact", Artifact),
+  ...namespaceTypes("Automation", "@opencode/schema/automation", Automation),
   ...namespaceTypes("Command", "@opencode/schema/command", Command),
   ...namespaceTypes("Config", "@opencode/schema/config", Config),
   ...namespaceTypes("Credential", "@opencode/schema/credential", Credential),
@@ -77,6 +82,7 @@ const effectTypeReferences = [
   ...namespaceTypes("Instruction", "@opencode/schema/instruction", Instruction),
   ...namespaceTypes("InstructionEntry", "@opencode/schema/instruction-entry", InstructionEntry),
   ...namespaceTypes("Integration", "@opencode/schema/integration", Integration),
+  ...namespaceTypes("Job", "@opencode/schema/job", Job),
   typeReference("Location.PublicRef", "@opencode/schema/location", Location.PublicRef),
   typeReference("Location.Input", "@opencode/schema/location", Location.Input),
   typeReference("Location.PublicInfo", "@opencode/schema/location", Location.PublicInfo),
@@ -94,7 +100,6 @@ const effectTypeReferences = [
   ...namespaceTypes("PtyTicket", "@opencode/schema/pty-ticket", PtyTicket),
   ...namespaceTypes("Question", "@opencode/schema/question", Question),
   ...namespaceTypes("Reference", "@opencode/schema/reference", Reference),
-  ...namespaceTypes("Schedule", "@opencode/schema/schedule", Schedule),
   ...namespaceTypes("Session", "@opencode/schema/session", Session),
   ...namespaceTypes("SessionMessage", "@opencode/schema/session-message", SessionMessage),
   ...namespaceTypes("SessionInbox", "@opencode/schema/session-inbox", SessionInbox),

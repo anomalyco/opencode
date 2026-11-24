@@ -99,13 +99,14 @@ export default function SessionMobileFiles(props: { session: MountedSession; scr
           }}
           onSelect={open}
           onSelectPermanent={open}
-          filterRef={(element) => {
-            shared.filter.element = element
-
-            if (!shared.filter.pending) return
-            shared.filter.pending = false
-            queueMicrotask(() => element.focus())
-          }}
+          focusRequest={() =>
+            shared.filter.focusRequest({
+              placement: "mobile",
+              sessionKey: props.session.key,
+              browsing: browsing(),
+              visible: panel.visible(),
+            })
+          }
         />
       </div>
     </div>

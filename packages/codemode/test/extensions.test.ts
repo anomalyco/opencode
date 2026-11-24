@@ -73,9 +73,9 @@ describe("extension functions", () => {
   })
 
   test("a function inside a result is named by its path in diagnostics", async () => {
-    expect((await failure(`const res = await fetch("https://a.test/"); res.handlers[0](() => 1)`)).message).toContain(
-      "Argument 1 to fetch.handlers[0] contains a function",
-    )
+    expect(
+      (await failure(`const res = await fetch("https://a.test/"); res.handlers[0]([1].keys())`)).message,
+    ).toContain("Argument 1 to fetch.handlers[0] contains an iterator")
     const target = CodeMode.make({
       extensions: [Extension.make({ name: "odd", globals: { make: () => ({ sym: () => Symbol("s") }) } })],
     })
@@ -90,6 +90,91 @@ describe("extension functions", () => {
       handlers: [null],
     })
     expect(await value(`return JSON.stringify((await fetch("https://a.test/")).headers)`)).toBe("{}")
+  })
+
+  test("a host function passed back arrives as itself, wherever it sits", async () => {
+    const files = new WeakMap<Function, string>()
+    const target = CodeMode.make({
+      extensions: [
+        Extension.make({
+          name: "files",
+          globals: {
+            file: (name: string) => {
+              const text = async () => `text of ${name}`
+              files.set(text, name)
+              return { name, text }
+            },
+            copy: async (dest: string, source: { text: () => Promise<string> }) => [
+              dest,
+              files.get(source.text),
+              await source.text(),
+            ],
+          },
+        }),
+      ],
+    })
+    expect(await value(`return await copy("b", file("a"))`, target)).toEqual(["b", "a", "text of a"])
+    expect(await value(`const f = file("a"); return await copy("b", { text: f.text })`, target)).toEqual([
+      "b",
+      "a",
+      "text of a",
+    ])
+  })
+
+  test("a program function or a global passed to the host is left out, like any function", async () => {
+    const taken: Array<unknown> = []
+    const target = CodeMode.make({
+      extensions: [
+        Extension.make({
+          name: "gated",
+          globals: { fs: { rm: () => undefined }, take: (value: unknown) => void taken.push(value) },
+        }),
+      ],
+    })
+    await value(
+      `take({ text: async () => "x" }); take({ text: take }); take(fs.rm); take({ a: fs.rm }); take(fs)`,
+      target,
+    )
+    expect(taken).toEqual([{}, {}, undefined, {}, {}])
+  })
+
+  test("a constructible global works with new and returns what the host function returns", async () => {
+    const target = CodeMode.make({
+      extensions: [
+        Extension.make({
+          name: "glob",
+          globals: {
+            Glob: Extension.constructible((pattern: string) => ({ match: (name: string) => name.endsWith(pattern) })),
+          },
+        }),
+      ],
+    })
+    expect(await value(`const g = new Glob(".ts"); return [g.match("a.ts"), g.match("a.js")]`, target)).toEqual([
+      true,
+      false,
+    ])
+    expect(await value(`return Glob(".ts").match("a.ts")`, target)).toBe(true)
+    expect(await value(`return new Glob(...[".ts"]).match("a.ts")`, target)).toBe(true)
+    expect((await failure(`new (new Glob(".ts").match)("a")`, target)).message).toContain("is not supported")
+  })
+
+  test("a constructible global that blocks on the host gives new its value", async () => {
+    const target = CodeMode.make({
+      extensions: [
+        Extension.make({
+          name: "sum",
+          globals: {
+            Sum: Extension.constructible((...values: Array<number>) =>
+              Effect.succeed({ total: values.reduce((total, value) => total + value, 0) }),
+            ),
+          },
+        }),
+      ],
+    })
+    expect(await value(`return new Sum(1, 2).total + 1`, target)).toBe(4)
+    expect(await value(`return new Sum(...[1, 2]).total + 1`, target)).toBe(4)
+    // An argument that is still a promise is awaited first, as in a plain call.
+    expect(await value(`return new Sum((async () => { await null; return 1 })(), 2).total + 1`, target)).toBe(4)
   })
 
   test("a class global is only a function; calling it throws the host TypeError", async () => {
@@ -220,10 +305,11 @@ describe("values are converted at the boundary, never shared", () => {
     expect(held[1]).toBeInstanceOf(Error)
   })
 
-  test("functions, promises, iterators, and symbols cannot be passed in", async () => {
-    expect((await failure(`keep(() => 1)`)).message).toContain("Argument 1 to keep contains a function")
+  test("functions are left out and promises awaited, as in tool arguments; iterators and symbols cannot be passed in", async () => {
+    held.length = 0
+    await value(`keep({ f: () => 1, n: later(1) }); keep([() => 1, later(2)]); keep(() => 1); keep(later(3))`)
+    expect(held).toEqual([{ n: 2 }, [null, 3], undefined, 4])
     expect((await failure(`keep([1].keys())`)).message).toContain("Argument 1 to keep contains an iterator")
-    expect((await failure(`keep(later(1))`)).message).toContain("un-awaited Promise")
     expect((await failure(`keep(Symbol.iterator)`)).message).toContain("Argument 1 to keep contains a symbol")
   })
 
@@ -417,13 +503,18 @@ describe("Effect globals", () => {
   const web = Extension.make({
     name: "web",
     globals: {
-      fetch: (url: string) =>
+      fetch: Extension.async((url: string) =>
         Effect.gen(function* () {
           const session = yield* Session
           sent.push(url)
           return { url, session: session.id }
         }),
-      fail: () => Effect.fail(new RangeError("denied")),
+      ),
+      fail: Extension.async(() => Effect.fail(new RangeError("denied"))),
+      fs: {
+        readSync: (path: string) => Session.use((session) => Effect.succeed(`${session.id}:${path}`)),
+        failSync: () => Effect.fail(new RangeError("missing")),
+      },
     },
   })
 
@@ -458,6 +549,18 @@ describe("Effect globals", () => {
     expect(result).toMatchObject({ ok: true, value: [true, "denied"] })
   })
 
+  test("a synchronous Effect global returns its value, or throws, before the next statement", async () => {
+    const result = await Effect.runPromise(
+      CodeMode.make({ extensions: [web] })
+        .execute(
+          `const text = fs.readSync("a")
+           try { fs.failSync() } catch (e) { return [text, e instanceof RangeError, e.message] }`,
+        )
+        .pipe(Effect.provideService(Session, { id: "ses_1" })),
+    )
+    expect(result).toMatchObject({ ok: true, value: ["ses_1:a", true, "missing"] })
+  })
+
   test("a denying before hook stops the Effect before it runs", async () => {
     sent.length = 0
     const runtime = CodeMode.make({
@@ -471,6 +574,79 @@ describe("Effect globals", () => {
     )
     expect(result).toMatchObject({ ok: true, value: "fetch is not allowed" })
     expect(sent).toEqual([])
+  })
+})
+
+describe("imports", () => {
+  const fs = { readFile: (path: string) => `text of ${path}`, promises: { readFile: async (path: string) => path } }
+  const files = Extension.make({ name: "files", globals: { fs } })
+
+  test("import, require, and import() load globals by Node module name, and their functions fire the hooks", async () => {
+    const calls: Array<string> = []
+    const target = CodeMode.make({
+      extensions: [files],
+      hooks: { "extension.before": (call) => Effect.sync(() => void calls.push(`${call.extension}:${call.name}`)) },
+    })
+    expect(
+      await value(
+        `import fs, { readFile } from "node:fs"
+         import * as ns from "fs"
+         import { readFile as readAsync } from "fs/promises"
+         import { URL } from "url"
+         const dynamic = await import("fs")
+         return [readFile("a"), fs === require("fs"), ns.default === fs, dynamic === ns,
+           await readAsync("b"), new URL("https://a.test/x").pathname, typeof require("crypto").randomUUID]`,
+        target,
+      ),
+    ).toEqual(["text of a", true, true, true, "b", "/x", "function"])
+    expect(calls).toEqual(["files:fs.readFile", "files:fs.promises.readFile"])
+  })
+
+  test("an extension's module names load its globals, only in runs that get the extension", async () => {
+    const bun = Extension.make({
+      name: "bun",
+      globals: { Bun: { file: (path: string) => ({ name: path }) } },
+      modules: { bun: "Bun" },
+    })
+    const target = CodeMode.make({ extensions: [bun] })
+    expect(
+      await value(
+        `import Loaded, { file } from "bun"
+         return [file("a").name, Loaded === Bun, typeof require("bun").file, typeof (await import("bun")).file]`,
+        target,
+      ),
+    ).toEqual(["a", true, "function", "function"])
+    const without = await Effect.runPromise(target.execute(`import { file } from "bun"`, undefined, { extensions: [] }))
+    expect(without).toMatchObject({ ok: false, error: { message: expect.stringContaining(`Cannot import "bun"`) } })
+    expect((await failure(`import { file } from "bun"`)).message).toStartWith(`Error: Cannot import "bun"`)
+  })
+
+  test("a later extension's module name wins", async () => {
+    const one = Extension.make({ name: "one", globals: { A: { id: () => "a" } }, modules: { shared: "A" } })
+    const two = Extension.make({ name: "two", globals: { B: { id: () => "b" } }, modules: { shared: "B" } })
+    expect(await value(`return require("shared").id()`, CodeMode.make({ extensions: [one, two] }))).toBe("b")
+  })
+
+  test("a module that isn't provided, or a missing export, fails at the import", async () => {
+    const target = CodeMode.make({ extensions: [files] })
+    expect((await failure(`import yaml from "yaml"`, target)).message).toStartWith(
+      `Error: Cannot import "yaml": packages can't be installed here.`,
+    )
+    expect((await failure(`import ws from "ws"`, target)).message).toStartWith(
+      `Error: Cannot import "ws": packages can't be installed here.`,
+    )
+    expect((await failure(`import x from "./local.js"`, target)).message).toStartWith(
+      `Error: Cannot import "./local.js": local files can't be imported.`,
+    )
+    expect(await value(`try { await import("child_process") } catch (e) { return e.message }`, target)).toStartWith(
+      `Cannot import "child_process"`,
+    )
+    expect((await failure(`import { writeFile } from "fs"`, target)).message).toStartWith(
+      `SyntaxError: "fs" has no export named "writeFile".`,
+    )
+    expect((await failure(`require("fs")`)).message).toStartWith(
+      `Error: Cannot import "fs": this runtime doesn't provide it.`,
+    )
   })
 })
 
@@ -520,7 +696,7 @@ describe("host errors", () => {
       await value(
         `try { open() } catch (e) {
           const c = e.cause
-          return [e.message, Object.keys(e), c instanceof Error, c.code, c.errno, c.path, c.detail, Object.keys(c), "stack" in c]
+          return [e.message, Object.keys(e), c instanceof Error, c.code, c.errno, c.path, c.detail, Object.keys(c), c.stack, e.stack]
         }`,
         target,
       ),
@@ -533,7 +709,8 @@ describe("host errors", () => {
       "x",
       { retried: true },
       ["code", "errno", "path", "detail"],
-      false,
+      "Error: ENOENT: no such file or directory, open 'x'",
+      "Error: open failed",
     ])
   })
 
@@ -582,7 +759,7 @@ describe("configuration", () => {
     expect(result.toolCalls).toEqual([])
   })
 
-  test("a result handed to a tool is plain data", async () => {
+  test("a result with functions is handed to a tool as its data", async () => {
     const tools = CodeMode.make({
       extensions: [extension],
       tools: {
@@ -600,11 +777,34 @@ describe("configuration", () => {
       headers: {},
       handlers: [null],
     })
+    expect(
+      await value(
+        `const { status, ok } = await fetch("https://a.test/"); return await tools.echo({ v: { status, ok } })`,
+        tools,
+      ),
+    ).toEqual({ status: 200, ok: true })
   })
 
-  test("a global must be a function", () => {
+  test("a run can get only some of the runtime's extensions", async () => {
+    const files = Extension.make({ name: "files", globals: { read: () => "text" } })
+    const target = CodeMode.make({ extensions: [extension, files] })
+    expect(await value(`return [typeof read, typeof later]`, target)).toEqual(["function", "function"])
+    const only = await Effect.runPromise(
+      target.execute(`return [typeof read, typeof later, await later(1)]`, undefined, { extensions: [extension] }),
+    )
+    expect(only).toMatchObject({ ok: true, value: ["undefined", "function", 2] })
+    const none = await Effect.runPromise(
+      target.execute(`return [typeof read, typeof later]`, undefined, { extensions: [] }),
+    )
+    expect(none).toMatchObject({ ok: true, value: ["undefined", "undefined"] })
+    expect(() =>
+      target.program(`1`, undefined, { extensions: [Extension.make({ name: "other", globals: { f: () => 1 } })] }),
+    ).toThrow(`Extension "other" isn't one this runtime was made with.`)
+  })
+
+  test("a global must be a function or an object", () => {
     expect(() => Extension.make({ name: "bad", globals: { n: 1 as never } })).toThrow(
-      'Extension "bad" global "n" must be a function.',
+      'Extension "bad" global "n" must be a function or an object.',
     )
   })
 

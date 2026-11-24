@@ -11,6 +11,7 @@ import {
 } from "node:http"
 import { Duplex } from "node:stream"
 import { Schema } from "effect"
+import { BrowserProxyMachine } from "./proxy-machine.js"
 import { Browser } from "./rpc.js"
 
 export type Transport = {
@@ -29,14 +30,15 @@ export async function make(transport: Transport) {
   const clients = new Set<Duplex>()
   const tunnels = new Set<Duplex>()
   const pending = new Set<AbortController>()
-  let closed = false
+  const closed = Promise.withResolvers<void>()
+  let state = BrowserProxyMachine.initial
   const authorized = (value: string | undefined) => {
     if (!value) return false
     const actual = Buffer.from(value)
     return actual.length === expected.length && timingSafeEqual(actual, expected)
   }
   const connect = async (target: Browser.TunnelTarget, signal: AbortSignal) => {
-    if (closed) throw new Error("Browser proxy is closed")
+    if (!BrowserProxyMachine.admits(state)) throw new Error("Browser proxy is closed")
     const abort = new AbortController()
     const cancel = () => abort.abort()
     signal.addEventListener("abort", cancel, { once: true })
@@ -45,7 +47,7 @@ export async function make(transport: Transport) {
     try {
       const id = await transport.open(target, abort.signal)
       const socket = new TunnelSocket(transport, id)
-      if (closed || abort.signal.aborted) {
+      if (!BrowserProxyMachine.admits(state) || abort.signal.aborted) {
         socket.destroy()
         throw new Error("Browser proxy connection was cancelled")
       }
@@ -70,11 +72,18 @@ export async function make(transport: Transport) {
   server.requestTimeout = 30_000
   server.headersTimeout = 10_000
   server.on("connection", (socket) => {
+    // A backlog connection can surface while the server drains after `close()`.
+    if (!BrowserProxyMachine.admits(state)) {
+      socket.destroy()
+      return
+    }
     clients.add(socket)
     socket.on("error", () => socket.destroy())
     socket.once("close", () => clients.delete(socket))
   })
   const upgrade = (incoming: IncomingMessage, socket: Duplex, head: Buffer, connectMethod: boolean) => {
+    // Setup can throw before the close listeners pair the tunnel with the client socket.
+    let opened: Duplex | undefined
     void (async () => {
       if (!authorized(incoming.headers["proxy-authorization"])) {
         socket.end(
@@ -93,6 +102,7 @@ export async function make(transport: Transport) {
       socket.pause()
       try {
         const tunnel = await connect(target(url), abort.signal)
+        opened = tunnel
         if (socket.destroyed) {
           tunnel.destroy()
           return
@@ -123,6 +133,7 @@ export async function make(transport: Transport) {
         socket.off("close", cancel)
       }
     })().catch(() => {
+      opened?.destroy()
       if (!socket.destroyed) socket.end("HTTP/1.1 502 Bad Gateway\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
     })
   }
@@ -140,20 +151,21 @@ export async function make(transport: Transport) {
   })
   const address = server.address()
   if (!address || typeof address === "string") throw new Error("Browser proxy did not bind a TCP address")
-  let closing: Promise<void> | undefined
   return {
     url: `http://127.0.0.1:${address.port}`,
     host: "127.0.0.1",
     port: address.port,
     credentials: { username, password },
     close() {
-      if (closing) return closing
-      closed = true
-      pending.forEach((abort) => abort.abort())
-      tunnels.forEach((socket) => socket.destroy())
-      clients.forEach((socket) => socket.destroy())
-      closing = new Promise<void>((resolve) => server.close(() => resolve()))
-      return closing
+      const next = BrowserProxyMachine.transition(state, { type: "close" })
+      state = next.state
+      next.effects.forEach(() => {
+        pending.forEach((abort) => abort.abort())
+        tunnels.forEach((socket) => socket.destroy())
+        clients.forEach((socket) => socket.destroy())
+        server.close(() => closed.resolve())
+      })
+      return closed.promise
     },
   }
 }
@@ -180,8 +192,11 @@ async function forward(
   incoming.once("aborted", cancel)
   response.once("close", cancel)
   const agent = new Agent({ keepAlive: false, maxSockets: 1 })
+  // An abort before the request adopts the tunnel leaves it out of `agent.destroy()`.
+  let opened: Duplex | undefined
   try {
     const tunnel = await connect(target(url), abort.signal)
+    opened = tunnel
     agent.createConnection = () => tunnel
     const headers = forwardedHeaders(incoming.headers)
     headers.host = url.host
@@ -214,6 +229,7 @@ async function forward(
     incoming.off("aborted", cancel)
     response.off("close", cancel)
     agent.destroy()
+    opened?.destroy()
   }
 }
 
@@ -251,7 +267,7 @@ function target(url: URL) {
 class TunnelSocket extends Duplex {
   readonly connecting = false
   private readonly abort = new AbortController()
-  private pending = false
+  private reads: BrowserProxyMachine.ReadState = "idle"
 
   constructor(
     private readonly transport: Transport,
@@ -261,12 +277,10 @@ class TunnelSocket extends Duplex {
     this.on("error", () => this.destroy())
   }
   override _read() {
-    if (this.pending || this.destroyed) return
-    this.pending = true
+    if (!this.advance("pull")) return
     void this.transport.read(this.id, this.abort.signal).then(
       (result) => {
-        this.pending = false
-        if (this.destroyed) return
+        if (!this.advance(result.eof ? "eof" : "chunk")) return
         if (result.eof) {
           this.push(null)
           return
@@ -275,6 +289,12 @@ class TunnelSocket extends Duplex {
       },
       (error: unknown) => this.destroy(asError(error)),
     )
+  }
+  private advance(event: BrowserProxyMachine.ReadEvent) {
+    const next = BrowserProxyMachine.transitionRead(this.reads, event)
+    if (next === this.reads) return false
+    this.reads = next
+    return true
   }
   override _write(chunk: Buffer | string, encoding: BufferEncoding, callback: (error?: Error | null) => void) {
     const data = typeof chunk === "string" ? Buffer.from(chunk, encoding) : chunk
@@ -298,6 +318,7 @@ class TunnelSocket extends Duplex {
     )
   }
   override _destroy(error: Error | null, callback: (error?: Error | null) => void) {
+    this.advance("destroyed")
     this.abort.abort()
     void this.transport
       .close(this.id)

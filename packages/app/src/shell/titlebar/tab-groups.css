@@ -1,0 +1,269 @@
+/* ==========================================================================
+   Fluent 2 / FAST Perceptual Adaptive Tab Group Palette (Side Tabs)
+   - Same-polarity Acrylic/Jewel tint: deep translucent hue + soft luminous
+     near-white ink in dark mode; soft mineral tint + deep ink in light mode.
+   - Helmholtz-Kohlrausch chroma compensation so warm hues (Copper, Rose) and
+     green (Sage) never overpower cool hues (Steel, Teal, Iris).
+   ========================================================================== */
+
+[data-group-color="blue"] {
+  --group-h: 254;
+  --group-c-bg-dark: 0.056;
+  --group-c-fg-dark: 0.068;
+  --group-c-bg-light: 0.032;
+  --group-c-fg-light: 0.105;
+}
+
+[data-group-color="cyan"] {
+  --group-h: 206;
+  --group-c-bg-dark: 0.046;
+  --group-c-fg-dark: 0.06;
+  --group-c-bg-light: 0.028;
+  --group-c-fg-light: 0.092;
+}
+
+[data-group-color="green"] {
+  --group-h: 158;
+  --group-c-bg-dark: 0.044;
+  --group-c-fg-dark: 0.058;
+  --group-c-bg-light: 0.028;
+  --group-c-fg-light: 0.095;
+}
+
+[data-group-color="orange"] {
+  --group-h: 56;
+  --group-c-bg-dark: 0.045;
+  --group-c-fg-dark: 0.062;
+  --group-c-bg-light: 0.03;
+  --group-c-fg-light: 0.1;
+}
+
+[data-group-color="purple"] {
+  --group-h: 292;
+  --group-c-bg-dark: 0.056;
+  --group-c-fg-dark: 0.068;
+  --group-c-bg-light: 0.032;
+  --group-c-fg-light: 0.105;
+}
+
+[data-group-color="pink"] {
+  --group-h: 350;
+  --group-c-bg-dark: 0.05;
+  --group-c-fg-dark: 0.064;
+  --group-c-bg-light: 0.03;
+  --group-c-fg-light: 0.102;
+}
+
+/* Light mode: soft mineral paper wash (L=0.942) + deep ink (L=0.39) + crisp steady rail */
+[data-group-color] {
+  --tab-group-pill-bg: oklch(0.942 var(--group-c-bg-light, 0.03) var(--group-h, 254));
+  --tab-group-pill-fg: oklch(0.39 var(--group-c-fg-light, 0.1) var(--group-h, 254));
+  --tab-group-pill-border: oklch(0.865 calc(var(--group-c-bg-light, 0.03) * 1.55) var(--group-h, 254) / 0.72);
+  --tab-group-swatch: oklch(0.57 calc(var(--group-c-fg-light, 0.1) * 1.12) var(--group-h, 254));
+  --tab-group-rail: oklch(0.55 var(--group-c-fg-light, 0.1) var(--group-h, 254) / 0.78);
+}
+
+[data-group-color="gray"] {
+  --tab-group-pill-bg: oklch(0.942 0.004 260);
+  --tab-group-pill-fg: oklch(0.39 0.008 260);
+  --tab-group-pill-border: oklch(0.865 0.006 260 / 0.72);
+  --tab-group-swatch: oklch(0.56 0.01 260);
+  --tab-group-rail: oklch(0.54 0.01 260 / 0.78);
+}
+
+/* Dark mode: deep jewel-glass surface (L=0.252) + luminous tinted-white ink (L=0.875) + crisp steady rail */
+[data-color-scheme="dark"] [data-group-color] {
+  --tab-group-pill-bg: oklch(0.252 var(--group-c-bg-dark, 0.05) var(--group-h, 254));
+  --tab-group-pill-fg: oklch(0.875 var(--group-c-fg-dark, 0.064) var(--group-h, 254));
+  --tab-group-pill-border: oklch(0.36 calc(var(--group-c-bg-dark, 0.05) * 1.3) var(--group-h, 254) / 0.5);
+  --tab-group-swatch: oklch(0.67 calc(var(--group-c-fg-dark, 0.064) * 1.55) var(--group-h, 254));
+  --tab-group-rail: oklch(0.65 calc(var(--group-c-fg-dark, 0.064) * 1.45) var(--group-h, 254) / 0.78);
+}
+
+[data-color-scheme="dark"] [data-group-color="gray"] {
+  --tab-group-pill-bg: oklch(0.248 0.006 260);
+  --tab-group-pill-fg: oklch(0.855 0.008 260);
+  --tab-group-pill-border: oklch(0.35 0.008 260 / 0.5);
+  --tab-group-swatch: oklch(0.65 0.01 260);
+  --tab-group-rail: oklch(0.64 0.01 260 / 0.78);
+}
+
+[data-group-swatch] {
+  background: var(--tab-group-swatch);
+}
+
+/* Aligns Search leading icon (x = 8..24px) and placeholder (x = 32px) with Home & New session rows */
+[data-slot="sidebar-search-input"] [data-slot="text-input-v2-value"] {
+  gap: 8px;
+}
+
+/* ==========================================================================
+   Vertical (Side) Tabs: Tonal Jewel Pill + Steady Saturated Vertical Rail
+   ========================================================================== */
+
+[data-tab-group][data-orientation="vertical"] {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-block: 2px;
+}
+
+[data-tab-group][data-orientation="vertical"]:first-child {
+  margin-block-start: 0;
+}
+
+[data-tab-group][data-orientation="vertical"]:last-child {
+  margin-block-end: 0;
+}
+
+[data-tab-group-header][data-orientation="vertical"] {
+  height: 26px;
+  padding-inline: 0 2px;
+}
+
+[data-tab-group-header][data-orientation="vertical"] [data-tab-group-chip] {
+  display: inline-flex;
+  align-items: center;
+  height: 20px;
+  padding-inline: 7.5px;
+  border-radius: 5px;
+  background: var(--tab-group-pill-bg);
+  color: var(--tab-group-pill-fg);
+  box-shadow: inset 0 0 0 1px var(--tab-group-pill-border);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: var(--line-height-compact);
+  letter-spacing: -0.04px;
+}
+
+[data-tab-group][data-orientation="vertical"] > [data-tab-group-items] {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding-inline-start: 16px;
+  animation: tab-group-expand-v 130ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+[data-tab-group][data-orientation="vertical"] > [data-tab-group-items]::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: 8px;
+  inset-block-start: calc(3px + var(--group-rail-top, 0px));
+  inset-block-end: calc(5px - var(--group-rail-bottom, 0px));
+  width: 1.5px;
+  border-radius: 9999px;
+  background: var(--tab-group-rail);
+  pointer-events: none;
+}
+
+[data-tab-group][data-rail-empty="true"] > [data-tab-group-items]::before {
+  opacity: 0;
+}
+
+/* ==========================================================================
+   Physical Full-Row Sliding Drag & Drop + iOS Folder Combine
+   ========================================================================== */
+
+/* Freeze bystander pointer events while dragging and smoothly slide displaced rows/groups */
+[data-titlebar-tab-list][data-dragging="true"] > * {
+  pointer-events: none;
+}
+
+[data-titlebar-tab-list][data-dragging="true"] [data-titlebar-tab-slot]:not([data-drag-source="true"]),
+[data-titlebar-tab-list][data-dragging="true"] [data-tab-group]:not([data-dragging="true"]),
+[data-titlebar-tab-list][data-dragging="true"] [data-tab-group]:not([data-dragging="true"]) [data-tab-group-header] {
+  transition: transform 165ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+[data-titlebar-tab-list][data-dragging="true"] [data-tab-group][data-orientation="vertical"] > [data-tab-group-items]::before {
+  transition:
+    inset-block-start 165ms cubic-bezier(0.2, 0, 0, 1),
+    inset-block-end 165ms cubic-bezier(0.2, 0, 0, 1),
+    opacity 120ms ease-out;
+}
+
+/* Dragged tab keeps dev's exact native pressed fill (from tab-nav.css) with zero added outline or shadow */
+[data-titlebar-tab-slot][data-drag-source="true"] {
+  z-index: 40;
+}
+
+[data-titlebar-tab-slot][data-drag-source="true"] [data-titlebar-tab] {
+  transition:
+    margin-inline-start 140ms cubic-bezier(0.2, 0, 0, 1),
+    width 140ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+/* Snap dragged tab inline into/out of group rail indent without overflowing the right edge */
+[data-titlebar-tab-slot][data-drag-source="true"][data-lane-shift="in"] [data-titlebar-tab] {
+  margin-inline-start: 16px;
+  width: calc(100% - 16px);
+}
+
+[data-titlebar-tab-slot][data-drag-source="true"][data-lane-shift="out"] [data-titlebar-tab] {
+  margin-inline-start: -16px;
+  width: calc(100% + 16px);
+}
+
+/* Dragged group keeps native look with zero added outline or background box */
+[data-tab-group][data-dragging="true"] {
+  z-index: 40;
+}
+
+/* Join existing group header: same neutral gray as the dragged tab fill while transient */
+[data-tab-group-header][data-drop-over="true"] {
+  background: var(--v2-overlay-simple-overlay-pressed);
+  border-radius: 6px;
+}
+
+/* Combine target: transient neutral gray left rail (same gray as tab fill) until committed */
+[data-titlebar-tab-slot][data-combine-target="true"] [data-titlebar-tab] {
+  margin-inline-start: 16px;
+  width: calc(100% - 16px);
+  transition:
+    margin-inline-start 140ms cubic-bezier(0.2, 0, 0, 1),
+    width 140ms cubic-bezier(0.2, 0, 0, 1);
+}
+
+[data-titlebar-tab-slot][data-combine-target="true"]::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: 8px;
+  top: 3px;
+  height: 54px;
+  width: 2px;
+  border-radius: 9999px;
+  background: var(--v2-overlay-simple-overlay-pressed);
+  pointer-events: none;
+}
+
+[data-titlebar-tab-slot][data-combine-target="true"][data-combine-order="before"]::after {
+  top: -28px;
+}
+
+@keyframes tab-group-expand-v {
+  from {
+    opacity: 0;
+    transform: translateY(-3px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+:root[data-motion="reduce"] {
+  [data-tab-group][data-orientation="vertical"] > [data-tab-group-items] {
+    animation: none;
+  }
+
+  [data-titlebar-tab-list][data-dragging="true"] [data-titlebar-tab-slot]:not([data-drag-source="true"]),
+  [data-titlebar-tab-list][data-dragging="true"] [data-tab-group]:not([data-dragging="true"]),
+  [data-titlebar-tab-list][data-dragging="true"] [data-tab-group]:not([data-dragging="true"]) [data-tab-group-header],
+  [data-titlebar-tab-list][data-dragging="true"] [data-tab-group][data-orientation="vertical"] > [data-tab-group-items]::before,
+  [data-titlebar-tab-slot][data-drag-source="true"] [data-titlebar-tab] {
+    transition: none;
+  }
+}

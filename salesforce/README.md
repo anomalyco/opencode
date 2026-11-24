@@ -30,8 +30,3 @@ sf org assign permset --name Console_Account_Sync --target-org opencode
 
 The Console writes these fields when someone signs up. Enterprise inquiry Leads from
 the website no longer receive them from the website; Salesforce automation sets them.
-
-For local development, run `bun run dev:enterprise` in `packages/console/app` with
-`sf` on PATH. It serves the same Enterprise request handler on `127.0.0.1:3101`, using
-the CLI's authenticated transport. It never sends local sales notifications or
-EmailOctopus subscriptions.

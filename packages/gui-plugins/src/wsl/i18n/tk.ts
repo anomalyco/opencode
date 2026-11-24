@@ -52,4 +52,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} {{timeout}}ms-den soň gutardy",
   "error.failedPort": "Port alyp bilmedi",
   "menu.remove": "Aýyr",
+  "error.busy": "{{distro}} başga iş bilen meşgul. Ol tamamlanandan soň täzeden synanyşyň.",
 }

@@ -1,0 +1,696 @@
+//! Validate host reads and actions of a linked plugin.
+
+use crate::support::{self, Harness};
+
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+use std::sync::Arc;
+
+use opencode_api::generated::SessionID;
+use opencode_api::memory::{Memory, Route as MemoryRoute};
+use opencode_plugin::abi;
+use opencode_tui::{Deps, Route};
+use serde_json::{Value, json};
+
+thread_local! {
+    static BETWEEN: RefCell<Option<Box<dyn Fn()>>> = const { RefCell::new(None) };
+    static PAIR: Cell<Option<(f64, f64)>> = const { Cell::new(None) };
+    static TABS: RefCell<Vec<abi::Tab>> = const { RefCell::new(Vec::new()) };
+    /// The pending keys, active keys and commands `p0b.keys` read.
+    static KEYS: RefCell<Keys> = RefCell::default();
+}
+
+type Keys = (Vec<abi::KeymapPending>, Vec<abi::KeymapActive>, Vec<abi::KeymapCommand>);
+
+fn aura() -> Value {
+    let themes: Value = serde_json::from_str(include_str!("../../../ui/src/theme/generated/themes.json")).unwrap();
+    let themes = themes["themes"].as_array().unwrap();
+    themes.iter().find(|theme| theme["name"] == "aura").unwrap()["document"].clone()
+}
+
+fn reader(setup: &mut abi::Setup) -> Result<(), String> {
+    let command = |name: &str| abi::Command::new(name);
+    let toast = |host: &dyn abi::Host, text: String| host.toast(abi::Toast::new(abi::Variant::Info, text));
+    setup.command(command("p0b.open"), move |host, input| {
+        let opened = host.edit_tab(abi::TabEdit::Open { session: input.unwrap_or_default().to_owned() });
+        toast(host, format!("p0b open {opened}"));
+    });
+    setup.command(command("p0b.focus"), move |host, input| {
+        let focused = host.edit_tab(abi::TabEdit::Focus { session: input.unwrap_or_default().to_owned() });
+        toast(host, format!("p0b focus {focused}"));
+    });
+    setup.command(command("p0b.move"), move |host, input| {
+        let moved = host.edit_tab(abi::TabEdit::Move { session: input.unwrap_or_default().to_owned(), index: 0 });
+        toast(host, format!("p0b move {moved}"));
+    });
+    setup.command(command("p0b.close"), move |host, input| {
+        let closed = host.edit_tab(abi::TabEdit::Close { session: input.map(str::to_owned) });
+        toast(host, format!("p0b close {closed}"));
+    });
+    setup.command(command("p0b.theme"), move |host, input| {
+        toast(host, format!("p0b theme {}", host.set_theme(input.unwrap_or_default())));
+    });
+    setup.command(command("p0b.install"), |host, input| {
+        host.install_theme(input.unwrap_or_default(), json!({ "theme": {} }));
+    });
+    setup.command(command("p0b.tabs"), |host, _| TABS.set(host.tabs()));
+    setup.command(command("p0b.keys"), |host, _| {
+        KEYS.set((host.keymap_pending(), host.keymap_active(), host.keymap_commands()));
+    });
+    setup.command(command("p0b.pair"), |host, _| {
+        let cost = |id: &str| host.session(id).map_or(-1.0, |session| session.info.cost);
+        let a = cost("ses_a");
+        BETWEEN.with_borrow(|between| between.iter().for_each(|between| between()));
+        PAIR.set(Some((a, cost("ses_b"))));
+    });
+    // Several verbs in one call, `;`-separated, such as `open ses_a;close ses_a`: what each answered, `-` for none,
+    // after the number of the script.
+    let scripts = Cell::new(0);
+    setup.command(command("p0b.script"), move |host, input| {
+        scripts.set(scripts.get() + 1);
+        let answers: Vec<String> = input
+            .unwrap_or_default()
+            .split(';')
+            .map(|verb| {
+                let (verb, arg) = verb.split_once(' ').unwrap_or((verb, ""));
+                let session = arg.to_owned();
+                let answer = match verb {
+                    "open" => host.edit_tab(abi::TabEdit::Open { session }),
+                    "focus" => host.edit_tab(abi::TabEdit::Focus { session }),
+                    "move" => host.edit_tab(abi::TabEdit::Move { session, index: 0 }),
+                    "close" => host.edit_tab(abi::TabEdit::Close { session: Some(session).filter(|s| !s.is_empty()) }),
+                    "variant" => host.set_variant(Some(arg).filter(|arg| !arg.is_empty())),
+                    "theme" => host.set_theme(arg),
+                    "model" => {
+                        let (provider, model) = arg.split_once('/').unwrap_or_default();
+                        host.set_model(provider, model);
+                        return "-".to_owned();
+                    }
+                    "install" | "installbad" => {
+                        let theme = if verb == "install" { aura() } else { json!({ "x": 1 }) };
+                        host.install_theme(arg, theme);
+                        return "-".to_owned();
+                    }
+                    other => panic!("no verb {other}"),
+                };
+                answer.to_string()
+            })
+            .collect();
+        toast(host, format!("p0b script{} {}", scripts.get(), answers.join(",")));
+    });
+    setup.command(command("p0b.variant"), move |host, _| {
+        let (high, default) = (host.set_variant(Some("high")), host.set_variant(None));
+        toast(host, format!("p0b variant {high} {default}"));
+    });
+    setup.command(command("p0b.selection"), move |host, _| {
+        toast(host, format!("p0b selection {:?}", host.selection()));
+        host.clear_selection();
+    });
+    setup.command(command("p0b.wide"), |host, _| {
+        host.dialog(abi::Dialog::Panel(
+            abi::Panel::new(
+                "wide".to_owned(),
+                vec![abi::Span::new("Wide")],
+                abi::Node::text([abi::Span::new("p0b wide body")]),
+            )
+            .size(abi::PanelSize::XLarge),
+        ));
+    });
+    let program = Rc::new(Cell::new(None));
+    let asked = program.clone();
+    setup.command(command("p0b.run"), move |host, input| {
+        let args = vec!["-c".to_owned(), input.unwrap_or_default().to_owned()];
+        let cwd = Some(".".to_owned());
+        asked.set(host.try_foreground(abi::Foreground { command: "sh".to_owned(), args, cwd }).ok());
+    });
+    let asked = program.clone();
+    setup.command(command("p0b.missing"), move |host, _| {
+        let missing = abi::Foreground { command: "p0b-no-such-program".to_owned(), ..abi::Foreground::default() };
+        asked.set(host.try_foreground(missing).ok());
+    });
+    let exited = Rc::new(RefCell::new("-".to_owned()));
+    let told = exited.clone();
+    setup.on_reply(move |_, id, result| {
+        if program.get() == Some(id) {
+            *told.borrow_mut() = result.map_or_else(|error| error, |value| value["code"].to_string());
+        }
+    });
+    let link = Rc::new(RefCell::new("https://opencode.ai/p0b".to_owned()));
+    let linked = link.clone();
+    setup.command(command("p0b.link"), move |_, input| *linked.borrow_mut() = input.unwrap_or_default().to_owned());
+    let deltas = Rc::new(RefCell::new(String::new()));
+    let streamed = deltas.clone();
+    let calls = Rc::new(Cell::new(0));
+    let called = calls.clone();
+    setup.on_deltas(move |_, events| {
+        called.set(called.get() + 1);
+        // The host never calls with none.
+        if events.is_empty() {
+            streamed.borrow_mut().push('!');
+        }
+        for event in events {
+            if let abi::types::V2Event::SessionTextDelta(delta) = event {
+                streamed.borrow_mut().push_str(&delta.data.delta);
+            }
+        }
+    });
+    setup.slot(abi::Placement::append("app"), move |read, input, _| {
+        let tabs: Vec<String> = read
+            .tabs()
+            .into_iter()
+            .map(|tab| format!("{}{}", tab.session_id, if tab.active { "*" } else { "" }))
+            .collect();
+        let reachable = read.keymap_commands().iter().any(|command| command.id == "p0b.open");
+        let pending: Vec<String> = read.keymap_pending().into_iter().map(|key| key.key).collect();
+        let active = read.keymap_active();
+        let continues = active.iter().filter(|key| key.continues).count();
+        let described = active.iter().filter(|key| key.description.is_some()).count();
+        let installed = read.themes().iter().any(|name| name == "p0b-theme");
+        let text = format!(
+            "p0b w{} {} [{}] {} {reachable} {} {} d:{} x:{} c{} ds{} i:{installed} n:{} a:{}",
+            input.width,
+            read.theme().unwrap_or_default(),
+            tabs.join(","),
+            read.shortcuts("command.palette.show").join(","),
+            pending.join(" "),
+            read.variants().len(),
+            deltas.borrow(),
+            exited.borrow(),
+            continues.min(1),
+            described.min(1),
+            calls.get(),
+            active.len(),
+        );
+        abi::Render::Show(abi::Node::text([abi::Span::new(text).link(link.borrow().clone())]))
+    });
+    setup.sized(abi::Placement::append("app"));
+    Ok(())
+}
+
+/// The TUI's home with `reader` active, on a server of two sessions and a child
+/// `ses_c` of `ses_a`, with `config`; and the server.
+fn home(width: u16, config: Value) -> (Harness, Memory, opencode_util::temp::TempDir) {
+    home_on(width, config, Vec::new())
+}
+
+fn home_on(width: u16, config: Value, mut routes: Vec<MemoryRoute>) -> (Harness, Memory, opencode_util::temp::TempDir) {
+    let root = opencode_util::temp::tempdir().unwrap();
+    let paths = support::home_paths(root.path());
+    std::fs::create_dir_all(&paths.state).unwrap();
+    let child = support::merge(support::test_session("ses_c", "A child"), json!({ "parentID": "ses_a" }));
+    routes.extend(
+        [support::test_session("ses_a", "Fix the parser"), support::test_session("ses_b", "Write the docs"), child]
+            .iter()
+            .flat_map(support::session_routes),
+    );
+    routes.push(MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": [], "cursor": {} })));
+    let memory = Memory::new(routes);
+    let deps = Deps {
+        route: Route::Home,
+        config: support::config(support::decode(&config.to_string())),
+        roots: support::roots(paths, "p0b"),
+        events: true,
+        ..support::deps(Arc::new(memory.clone()))
+    };
+    let h = support::mount(width, 30, deps);
+    // The budget's verdicts are not the reads these rows check: on the wall clock a loaded machine's stall in a call
+    // (memory reclaim, swap), which is no wait on a run queue, would fail the reader. A call here takes no time.
+    let now = std::time::Instant::now();
+    h.tui.plugins.monitor().set_clock(move || now);
+    let definition = abi::Plugin { id: "p0b", setup: reader }.into();
+    opencode_tui::plugins::host::add(&h.tui, definition);
+    (h, memory, root)
+}
+
+#[test]
+fn a_claim_reads_its_width_the_theme_and_the_keymap() {
+    let (h, _memory, _root) = home(100, json!({}));
+    let screen = h.wait_for("p0b w100 opencode [] ctrl+p true  0 d: x:-");
+    let row = screen.lines().position(|line| line.contains("p0b w100")).unwrap();
+    let column = screen.lines().nth(row).unwrap().find("p0b").unwrap();
+    let link = opencode_tui::features::links::link_at(h.app.app(), column as u16, row as u16);
+    assert_eq!(link.as_deref(), Some("https://opencode.ai/p0b"));
+    h.app.resize(90, 30);
+    let first = h.app.render().text();
+    assert!(first.contains("p0b w90 "), "{first}");
+    h.tui.keymap.dispatch("p0b.variant", None);
+    h.wait_for("p0b variant false false");
+}
+
+// Control characters can terminate OSC 8 hyperlinks and must not reach the terminal.
+#[test]
+fn a_link_with_a_control_character_is_dropped() {
+    let (h, _memory, _root) = home(140, json!({}));
+    let screen = h.wait_for("p0b w140 ");
+    let row = screen.lines().position(|line| line.contains("p0b w140")).unwrap();
+    let column = screen.lines().nth(row).unwrap().find("p0b").unwrap() as u16;
+    let link = || opencode_tui::features::links::link_at(h.app.app(), column, row as u16);
+    for (url, kept) in [
+        ("https://x.test/\x1b]52;c;cHduZWQ=\x07", false),
+        ("https://x.test/\u{9c}", false),
+        ("https://x.test/\x7f", false),
+        ("https://x.test/ok", true),
+    ] {
+        h.tui.keymap.dispatch("p0b.link", Some(url));
+        h.app.render();
+        assert_eq!(link(), kept.then(|| url.to_owned()), "{url:?}");
+    }
+}
+
+#[test]
+fn a_claim_follows_the_pending_keys() {
+    let (h, _memory, _root) = home(120, json!({}));
+    h.wait_for("p0b w120 ");
+    h.wait_for(" c1 ds1 ");
+    h.app.press("ctrl+x");
+    h.wait_for("true ctrl+x 0");
+    h.app.press("escape");
+    h.wait_for("true  0");
+}
+
+#[test]
+fn tabs_open_move_and_close_as_ts_does() {
+    let (h, _memory, _root) = home(120, json!({ "tabs": { "enabled": true } }));
+    h.wait_for("p0b w120 ");
+    h.tui.keymap.dispatch("p0b.close", None);
+    h.wait_for("p0b close false");
+    h.tui.keymap.dispatch("p0b.open", Some("ses_a"));
+    h.wait_for("p0b open true");
+    h.wait_for("[ses_a]");
+    assert!(matches!(&*h.tui.route(), Route::Home), "open showed the tab");
+    h.tui.keymap.dispatch("p0b.open", Some("ses_b"));
+    h.wait_for("[ses_a,ses_b]");
+    opencode_tui::tabs::reorder(&h.tui, "ses_b", 0);
+    h.wait_for("[ses_b,ses_a]");
+    h.tui.keymap.dispatch("p0b.move", Some("ses_a"));
+    h.wait_for("[ses_a,ses_b]");
+    h.tui.keymap.dispatch("p0b.focus", Some("ses_b"));
+    h.wait_for("[ses_a,ses_b*]");
+    assert!(matches!(&*h.tui.route(), Route::Session { id } if id.0 == "ses_b"), "focus did not show the tab");
+    h.tui.keymap.dispatch("p0b.close", Some("ses_b"));
+    h.wait_for("[ses_a*]");
+    h.tui.keymap.dispatch("p0b.move", Some("ses_b"));
+    h.wait_for("p0b move false");
+
+    let (h, _memory, _root) = home(120, json!({ "tabs": { "enabled": false } }));
+    h.wait_for("p0b w120 ");
+    h.tui.keymap.dispatch("p0b.open", Some("ses_a"));
+    h.wait_for("p0b open false");
+}
+
+#[test]
+fn verbs_in_one_call_see_the_earlier_ones() {
+    let catalog = || {
+        let model = |id: &str, variant: &str| {
+            support::merge(support::model("p", id, id), json!({ "variants": [{ "id": variant }] }))
+        };
+        let list = |data: Value| json!({ "location": { "directory": support::DIRECTORY }, "data": data });
+        vec![
+            MemoryRoute::json("GET", "/api/agent", 200, &list(json!([support::agent("build", "primary", false)]))),
+            MemoryRoute::json("GET", "/api/model", 200, &list(json!([model("a", "low"), model("b", "high")]))),
+            MemoryRoute::json("GET", "/api/provider", 200, &list(json!([]))),
+        ]
+    };
+    let (h, _memory, _root) = home_on(160, json!({ "tabs": { "enabled": true } }), catalog());
+    h.wait_for("p0b w160 ");
+    let selected = || h.tui.local.selection().map(|selection| (selection.model.model_id, selection.variant));
+    h.tui.keymap.dispatch("p0b.script", Some("model p/a"));
+    h.wait_for("p0b script1 -");
+    assert_eq!(selected(), Some(("a".to_owned(), None)));
+    assert_eq!(h.tui.local.recent().first().map(|model| model.model_id.as_str()), Some("a"));
+    h.wait_for(" true  1 d:");
+    h.tui.keymap.dispatch("p0b.script", Some("model p/b;variant high"));
+    h.wait_for("p0b script2 -,true");
+    assert_eq!(selected(), Some(("b".to_owned(), Some("high".to_owned()))));
+    h.tui.keymap.dispatch("p0b.script", Some("model p/a;variant high"));
+    h.wait_for("p0b script3 -,false");
+    assert_eq!(selected().map(|selected| selected.0), Some("a".to_owned()));
+
+    h.tui.keymap.dispatch("p0b.script", Some("open ses_a;close ses_a;close ses_a"));
+    h.wait_for("p0b script4 true,true,false");
+    assert!(h.tui.tabs.open_ids(&h.tui).is_empty());
+    h.tui.keymap.dispatch("p0b.script", Some("open ses_b;move ses_b;focus ses_a;close"));
+    h.wait_for("p0b script5 true,true,true,true");
+    h.wait_for("[ses_b");
+    assert_eq!(h.tui.tabs.open_ids(&h.tui), ["ses_b"]);
+}
+
+#[test]
+fn close_takes_the_tab_id_and_move_a_child() {
+    let (h, _memory, _root) = home(120, json!({ "tabs": { "enabled": true } }));
+    h.wait_for("p0b w120 ");
+    h.tui.navigate(Route::Session { id: SessionID("ses_c".to_owned()) });
+    h.wait_for("[ses_a*]");
+    h.tui.keymap.dispatch("p0b.script", Some("close ses_c;move ses_c"));
+    h.wait_for("p0b script1 false,true");
+    h.wait_for("[ses_a*]");
+}
+
+#[test]
+fn a_plugin_selects_a_theme_it_knows() {
+    let (h, _memory, _root) = home(120, json!({}));
+    h.wait_for("p0b w120 opencode");
+    h.tui.keymap.dispatch("p0b.theme", Some("nord"));
+    h.wait_for("p0b theme true");
+    h.wait_for("p0b w120 nord");
+    h.tui.keymap.dispatch("p0b.theme", Some("not-a-theme"));
+    h.wait_for("p0b theme false");
+    assert_eq!(h.tui.theme.borrow().selected(), "nord");
+}
+
+#[test]
+fn a_plugin_installs_a_theme() {
+    let (h, _memory, root) = home(140, json!({}));
+    h.wait_for("p0b w140 opencode");
+    h.tui.keymap.dispatch("p0b.install", Some("../p0b-theme"));
+    h.tui.keymap.dispatch("p0b.install", Some("p0b-theme"));
+    h.wait_for(" i:true");
+    assert_eq!(h.tui.theme.borrow().selected(), "opencode");
+    // Listed at once and written after, on the themes' worker in the order asked: by then a write of the refused
+    // name, asked first, would be on disk too.
+    let written = || walk(root.path()).into_iter().filter(|path| path.ends_with("p0b-theme.json")).collect::<Vec<_>>();
+    assert!(h.app.wait_until(WAIT, || !written().is_empty()));
+    let written = written();
+    assert_eq!(written.len(), 1, "{written:?}");
+    assert!(written[0].parent().is_some_and(|dir| dir.ends_with("themes")), "{written:?}");
+}
+
+#[test]
+fn installs_land_in_order_and_select_at_once() {
+    let (h, _memory, _root) = home(140, json!({}));
+    h.wait_for("p0b w140 opencode");
+    h.tui.keymap.dispatch("p0b.script", Some("install p0b-new;theme p0b-new;installbad p0b-bad;theme p0b-bad"));
+    h.wait_for("p0b script1 -,true,-,false");
+    h.wait_for("p0b w140 p0b-new");
+    assert_eq!(h.tui.theme.borrow().selected(), "p0b-new");
+    let (h, _memory, root) = home(140, json!({}));
+    h.wait_for("p0b w140 opencode");
+    let install = |name: &str, theme: Value| opencode_plugin::Host::install_theme(&*h.tui, name, theme);
+    install("p0b-x", json!({ "theme": { "n": 1 } }));
+    install("p0b-x", json!({ "theme": { "n": 2 } }));
+    install("p0b-y", json!({ "theme": {} }));
+    install("p0b-x", json!({ "not": "a theme" }));
+    let file = |name: &str| walk(root.path()).into_iter().find(|path| path.ends_with(format!("{name}.json")));
+    let listed =
+        || ["p0b-x", "p0b-y"].iter().all(|name| h.tui.theme.borrow().names().iter().any(|known| known == name));
+    let settled = h.app.wait_until(std::time::Duration::from_secs(10), || file("p0b-y").is_some() && listed());
+    assert!(settled, "{:?}", h.tui.theme.borrow().names());
+    // The last scan has applied: wait until no write or scan is pending, then read the bytes.
+    h.app.wait_until(std::time::Duration::from_millis(200), || false);
+    assert!(listed(), "{:?}", h.tui.theme.borrow().names());
+    let written: Value = serde_json::from_slice(&std::fs::read(file("p0b-x").unwrap()).unwrap()).unwrap();
+    assert_eq!(written, json!({ "theme": { "n": 2 } }));
+    let leftovers: Vec<_> =
+        walk(root.path()).into_iter().filter(|path| path.to_string_lossy().ends_with(".tmp")).collect();
+    assert!(leftovers.is_empty(), "{leftovers:?}");
+
+    // Listed and selectable as it is installed, before any scan: here there is none, without config files.
+    let h = support::mount(100, 30, Deps { route: Route::Home, ..support::deps(Arc::new(support::empty())) });
+    opencode_plugin::Host::install_theme(&*h.tui, "p0b-mem", aura());
+    opencode_plugin::Host::set_theme(&*h.tui, "p0b-mem");
+    assert!(h.tui.theme.borrow().names().iter().any(|name| name == "p0b-mem"));
+    assert_eq!(h.tui.theme.borrow().selected(), "p0b-mem");
+    assert!(h.tui.theme.borrow_mut().take_error().is_none(), "the theme does not load");
+}
+
+#[test]
+fn a_claim_hears_of_tabs_keymap_and_theme_changes() {
+    let (h, _memory, root) = home(160, json!({ "tabs": { "enabled": true } }));
+    h.wait_for("p0b w160 ");
+    h.tui.keymap.dispatch("p0b.script", Some("open ses_a;open ses_b"));
+    h.wait_for("[ses_a,ses_b]");
+    let file = || walk(root.path()).into_iter().find(|path| path.ends_with("tabs.json"));
+    let written = h.app.wait_until(WAIT, || file().is_some_and(|file| read(&file).to_string().contains("ses_b")));
+    assert!(written);
+    // Under the storage lock, as another client writes, so a write of the TUI's in flight cannot undo it.
+    h.tui.storage().unwrap().update("tabs", &json!({}), reverse_tabs).unwrap();
+    let ids = || h.tui.tabs.tabs(&h.tui).iter().map(|tab| tab.session_id.clone()).collect::<Vec<_>>();
+    assert!(h.app.wait_until(WAIT, || ids() == ["ses_b", "ses_a"]), "{:?}", ids());
+    let first = h.app.render().text();
+    assert!(first.contains("[ses_b,ses_a]"), "{first}");
+    // The TUI's own writes from before, landing after, keep it.
+    h.tui.tabs.flush();
+    let after = h.app.render().text();
+    assert!(after.contains("[ses_b,ses_a]"), "{:?}\n{after}", ids());
+
+    let keys =
+        |screen: &str| screen.split(" a:").nth(1).and_then(|rest| rest.split_whitespace().next()).map(str::to_owned);
+    let before = keys(&h.app.render().text());
+    assert!(h.tui.keymap.pending().is_empty());
+    h.tui.keymap.dispatch("command.palette.show", None);
+    let first = h.app.render().text();
+    assert_ne!(keys(&first), before, "{first}");
+
+    h.tui.dialogs.clear();
+    h.app.render();
+    h.tui.theme.borrow_mut().config_name("system");
+    h.tui.theme_changed();
+    let first = h.app.render().text();
+    assert!(first.contains("p0b w160 system"), "{first}");
+}
+
+#[test]
+fn a_call_reads_one_snapshot() {
+    let (h, _memory, _root) = home(160, json!({ "tabs": { "enabled": true } }));
+    h.wait_for("p0b w160 ");
+    // The call below waits 200 ms on purpose; the harness charges a call no time.
+    h.tui.keymap.dispatch("p0b.script", Some("open ses_a;open ses_b"));
+    let loaded = |id: &str| h.tui.data.read(|state| state.session(&SessionID(id.to_owned())).is_some());
+    assert!(h.app.wait_until(WAIT, || loaded("ses_a") && loaded("ses_b")));
+    let usage = |id: &str| -> opencode_api::generated::V2Event {
+        serde_json::from_value(json!({
+            "id": format!("evt_usage_{id}"), "created": 2, "type": "session.usage.updated",
+            "durable": { "aggregateID": id, "seq": 100, "version": 1 },
+            "location": { "directory": support::DIRECTORY },
+            "data": { "sessionID": id, "cost": 5.0,
+                      "tokens": { "input": 0, "output": 0, "reasoning": 0, "cache": { "read": 0, "write": 0 } } },
+        }))
+        .unwrap()
+    };
+    let batch = vec![usage("ses_a"), usage("ses_b")];
+    let (go, started) = std::sync::mpsc::channel::<()>();
+    let (remote, runtime) = (h.tui.data.remote(), h.app.runtime());
+    let writer = std::thread::spawn(move || {
+        started.recv().unwrap();
+        drop(runtime.spawn(async move { remote.call(move |data| data.apply(batch)).await }));
+    });
+    BETWEEN.set(Some(Box::new(move || {
+        go.send(()).unwrap();
+        // Long enough for the writer's batch to arrive; it applies once the call returns.
+        std::thread::sleep(std::time::Duration::from_millis(200));
+    })));
+    h.tui.keymap.dispatch("p0b.pair", None);
+    BETWEEN.set(None);
+    assert_eq!(PAIR.take(), Some((0.0, 0.0)));
+    writer.join().unwrap();
+    let pair = std::cell::Cell::new(None);
+    let applied = h.app.wait_until(WAIT, || {
+        h.tui.keymap.dispatch("p0b.pair", None);
+        pair.set(PAIR.take());
+        pair.get() != Some((0.0, 0.0))
+    });
+    assert!(applied, "the batch never applied");
+    assert_eq!(pair.get(), Some((5.0, 5.0)));
+}
+
+#[test]
+fn tabs_read_their_metadata() {
+    let routes = || {
+        let failed = support::merge(
+            support::test_session("ses_b", "Write the docs"),
+            json!({ "time": { "created": 1, "updated": 1, "idle": 5 }, "outcome": "failed" }),
+        );
+        vec![
+            MemoryRoute::json(
+                "GET",
+                "/api/session/active",
+                200,
+                &json!({ "data": { "ses_a": { "type": "running" } } }),
+            ),
+            MemoryRoute::json("GET", "/api/session/ses_b", 200, &json!({ "data": failed })),
+        ]
+    };
+    let (h, memory, _root) = home_on(160, json!({ "tabs": { "enabled": true } }), routes());
+    h.wait_for("p0b w160 ");
+    h.tui.keymap.dispatch("p0b.script", Some("open ses_a;open ses_b"));
+    // Read for the tabs it opens, with the store otherwise quiet.
+    let titled = h.app.wait_until(WAIT, || {
+        h.tui.keymap.dispatch("p0b.tabs", None);
+        TABS.with_borrow(|tabs| tabs.iter().all(|tab| tab.title.is_some()) && tabs.len() == 2)
+    });
+    assert!(titled, "{:?}", TABS.take());
+    memory.emit(&json!({
+        "id": "evt_asked", "created": 1, "type": "permission.asked",
+        "location": { "directory": support::DIRECTORY },
+        "data": { "id": "per_1", "sessionID": "ses_a", "action": "shell", "resources": ["ls"], "save": [] },
+    }));
+    let tab = |id: &str, title: &str| abi::Tab {
+        session_id: id.to_owned(),
+        title: Some(title.to_owned()),
+        active: false,
+        busy: false,
+        attention: false,
+        unread: None,
+    };
+    let want = [
+        abi::Tab { busy: true, attention: true, ..tab("ses_a", "Fix the parser") },
+        abi::Tab { unread: Some(abi::Unread::Error), ..tab("ses_b", "Write the docs") },
+    ];
+    let read = h.app.wait_until(WAIT, || {
+        h.tui.keymap.dispatch("p0b.tabs", None);
+        TABS.with_borrow(|tabs| tabs == &want)
+    });
+    assert!(read, "{:?}", TABS.take());
+}
+
+#[test]
+fn keymap_reads_have_every_field() {
+    let (h, _memory, _root) = home(160, json!({}));
+    h.wait_for("p0b w160 ");
+    h.app.press("ctrl+x");
+    h.wait_for(" ctrl+x ");
+    h.tui.keymap.dispatch("p0b.keys", None);
+    h.app.press("escape");
+    let (pending, active, commands) = KEYS.take();
+    assert_eq!(pending, [abi::KeymapPending { key: "ctrl+x".into(), token: Some("leader".into()) }]);
+    let editor = abi::KeymapActive {
+        key: "e".into(),
+        title: Some("Open editor".into()),
+        description: Some("Open external editor".into()),
+        group: Some("Session".into()),
+        continues: false,
+    };
+    assert!(active.contains(&editor), "{active:?}");
+    let command = |id: &str| commands.iter().find(|command| command.id == id).cloned();
+    let slash = |name: &str, arguments| Some(abi::KeymapSlash { name: name.into(), aliases: Vec::new(), arguments });
+    let aside = abi::KeymapCommand {
+        id: "session.aside".into(),
+        title: Some("Ask a side question".into()),
+        description: Some("One-shot answer from the session's context without adding to the conversation".into()),
+        group: Some("Session".into()),
+        enabled: true,
+        palette: true,
+        slash: slash("btw", true),
+        suggested: false,
+    };
+    assert_eq!(command("session.aside"), Some(aside));
+    let connect = abi::KeymapCommand {
+        id: "provider.connect".into(),
+        title: Some("Connect an integration".into()),
+        description: None,
+        group: Some("Integration".into()),
+        enabled: true,
+        palette: true,
+        slash: Some(abi::KeymapSlash {
+            name: "connect".into(),
+            aliases: vec!["login".into(), "auth".into()],
+            arguments: false,
+        }),
+        suggested: true,
+    };
+    assert_eq!(command("provider.connect"), Some(connect));
+}
+
+const WAIT: std::time::Duration = std::time::Duration::from_secs(10);
+
+fn read(path: &std::path::Path) -> Value {
+    serde_json::from_slice(&std::fs::read(path).unwrap_or_default()).unwrap_or_default()
+}
+
+fn reverse_tabs(value: &mut Value) {
+    match value {
+        Value::Object(object) => object.iter_mut().for_each(|(key, value)| match value {
+            Value::Array(tabs) if key == "tabs" => tabs.reverse(),
+            value => reverse_tabs(value),
+        }),
+        Value::Array(items) => items.iter_mut().for_each(reverse_tabs),
+        _ => {}
+    }
+}
+
+fn walk(dir: &std::path::Path) -> Vec<std::path::PathBuf> {
+    let entries = std::fs::read_dir(dir).into_iter().flatten().flatten();
+    entries.flat_map(|entry| if entry.path().is_dir() { walk(&entry.path()) } else { vec![entry.path()] }).collect()
+}
+
+#[test]
+fn deltas_reach_the_plugin() {
+    let (h, memory, _root) = home(120, json!({}));
+    h.wait_for("p0b w120 ");
+    for (ordinal, delta) in ["he", "ll", "o"].iter().enumerate() {
+        memory.emit(&json!({
+            "id": format!("evt_{ordinal}"), "created": 1, "type": "session.text.delta",
+            "location": { "directory": support::DIRECTORY },
+            "data": { "sessionID": "ses_a", "assistantMessageID": "msg_1", "ordinal": ordinal, "delta": delta },
+        }));
+    }
+    h.wait_for("d:hello ");
+    opencode_tui::features::events::deltas(&h.tui);
+    h.app.wait_until(std::time::Duration::from_millis(50), || false);
+    assert!(h.app.text().contains("d:hello "), "{}", h.app.text());
+}
+
+#[test]
+fn deltas_reach_the_plugin_once_a_frame() {
+    let (h, _memory, _root) = home(120, json!({}));
+    h.wait_for("p0b w120 ");
+    let delta = |ordinal: usize, delta: &str| -> opencode_api::generated::V2Event {
+        serde_json::from_value(json!({
+            "id": format!("evt_{ordinal}"), "created": 1, "type": "session.text.delta",
+            "location": { "directory": support::DIRECTORY },
+            "data": { "sessionID": "ses_a", "assistantMessageID": "msg_1", "ordinal": ordinal, "delta": delta },
+        }))
+        .unwrap()
+    };
+    h.tui.data.apply(vec![delta(0, "a")]);
+    opencode_tui::features::events::deltas(&h.tui);
+    h.tui.data.apply(vec![delta(1, "b"), delta(2, "c")]);
+    opencode_tui::features::events::deltas(&h.tui);
+    let first = h.app.render().text();
+    assert!(first.contains("d:abc ") && first.contains(" n:1"), "{first}");
+}
+
+#[test]
+fn a_plugin_reads_and_clears_the_selection() {
+    let (h, _memory, _root) = home(120, json!({}));
+    let screen = h.wait_for("p0b w120 ");
+    let row = screen.lines().position(|line| line.contains("p0b w120")).unwrap() as u16;
+    let column = screen.lines().nth(row.into()).unwrap().find("p0b").unwrap() as u16;
+    h.app.drag((column, row), (column + 3, row));
+    h.tui.keymap.dispatch("p0b.selection", None);
+    h.wait_for(r#"p0b selection Some("p0b"#);
+    let cleared = h.app.wait_until(std::time::Duration::from_secs(5), || h.app.selected_text().is_none());
+    assert!(cleared, "still selected");
+}
+
+#[test]
+fn an_xlarge_panel_opens_xlarge() {
+    let (h, _memory, _root) = home(140, json!({}));
+    h.wait_for("p0b w140 ");
+    h.tui.keymap.dispatch("p0b.wide", None);
+    h.wait_for("p0b wide body");
+    assert_eq!(h.tui.dialogs.size(), opencode_ui::dialog::DialogSize::XLarge);
+}
+
+#[cfg(unix)]
+#[test]
+fn a_program_runs_in_the_foreground_and_its_exit_code_comes_back() {
+    let (h, _memory, _root) = home(120, json!({}));
+    h.wait_for("p0b w120 ");
+    h.tui.keymap.dispatch("p0b.run", Some("exit 3"));
+    h.wait_for(" x:3");
+    h.tui.keymap.dispatch("p0b.missing", None);
+    h.wait_for(" x:p0b-no-such-program: ");
+}
+
+#[cfg(unix)]
+#[test]
+fn a_second_program_is_refused_until_the_first_ran() {
+    let (h, _memory, _root) = home(200, json!({}));
+    h.wait_for("p0b w200 ");
+    h.tui.keymap.dispatch("p0b.run", Some("exit 3"));
+    h.tui.keymap.dispatch("p0b.run", Some("exit 4"));
+    h.wait_for(" x:another program is in the foreground ");
+    h.tui.keymap.dispatch("p0b.run", Some("exit 5"));
+    h.wait_for(" x:5");
+}

@@ -1,34 +1,28 @@
-import { Switch } from "@opencode/ui/switch"
 import { usePlugin } from "@opencode/plugin/gui"
 import type Review from "./index"
 
-/** The narrow-screen diff wrap row of the host's General settings section, in the host's settings row markup. */
+/** The narrow-screen diff wrap row of the host's General settings section. */
 export default function WrapLinesRow() {
   const ctx = usePlugin<typeof Review>()
+  const ui = ctx.ui
   const mobileDiff = ctx.stores.mobileDiff
 
   return (
-    <div data-component="settings-row">
-      <div data-slot="settings-row-copy">
-        <div data-slot="settings-row-title">{ctx.t("settings.wrapLines.title")}</div>
-        <div data-slot="settings-row-description">{ctx.t("settings.wrapLines.description")}</div>
-      </div>
-      <div data-slot="settings-row-control">
-        <div data-action="settings-mobile-diff-wrap">
-          <Switch
-            aria-label={ctx.t("settings.wrapLines.title")}
-            checked={mobileDiff.value.wrap}
-            onChange={(checked) =>
-              mobileDiff.update((draft) => {
-                draft.wrap = checked
-              })
-            }
-            hideLabel
-          >
-            {ctx.t("settings.wrapLines.title")}
-          </Switch>
-        </div>
-      </div>
-    </div>
+    <ui.SettingsRow
+      id="settings-mobile-diff-wrap"
+      title={ctx.t("settings.wrapLines.title")}
+      description={ctx.t("settings.wrapLines.description")}
+    >
+      <ui.Switch
+        label={ctx.t("settings.wrapLines.title")}
+        hideLabel
+        checked={mobileDiff.value.wrap}
+        onChange={(checked) =>
+          mobileDiff.update((draft) => {
+            draft.wrap = checked
+          })
+        }
+      />
+    </ui.SettingsRow>
   )
 }

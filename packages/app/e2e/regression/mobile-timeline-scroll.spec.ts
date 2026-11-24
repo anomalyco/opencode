@@ -732,7 +732,8 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
               timestamp: restingTimestamp(),
             })
 
-            for (let step = 1; step <= 23; step++)
+            // Far enough that the delayed image above the anchor comes back into the mounted window.
+            for (let step = 1; step <= 25; step++)
               await devtools.send("Input.dispatchTouchEvent", {
                 type: "touchMove",
                 touchPoints: [{ x: point.x, y: point.y + step * 30 }],
@@ -767,7 +768,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
             await expect(hidden).toHaveCount(1)
           }
 
-          const anchor = page.getByText(detach === "scroll" ? "Part 48." : "Reading 20.", { exact: true })
+          const anchor = page.getByText(detach === "scroll" ? "Part 50." : "Reading 20.", { exact: true })
           await expect(anchor).toBeInViewport()
           const before = await anchor.evaluate((element) => element.getBoundingClientRect().top)
           image.resolve()

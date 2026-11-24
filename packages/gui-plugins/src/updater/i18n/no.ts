@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "Neste",
   "releaseNotes.action.hideFuture": "Ikke vis disse igjen",
   "releaseNotes.media.alt": "Forhåndsvisning av utgivelse",
+  "action.reload": "Last inn på nytt for å oppdatere",
+  "action.reloading": "Laster inn på nytt …",
+  "web.ready.title": "Oppdatering klar",
+  "web.ready.message": "En ny versjon av OpenCode er klar. Last inn på nytt for å bruke den i alle åpne vinduer.",
+  "web.reload": "Last inn på nytt",
+  "web.reset.title": "Last inn på nytt fra serveren",
+  "web.reset.description": "Fjern den lagrede kopien av appen og last inn serverens gjeldende versjon",
+  "web.reset.action": "Last inn på nytt fra serveren",
 }

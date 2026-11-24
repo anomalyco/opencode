@@ -15,10 +15,11 @@ import type { FormAnswer, FormField, FormValue } from "@opencode/client"
 import { useData, type FormWithLocation } from "../../context/data"
 import { useClipboard } from "../../context/clipboard"
 import { SplitBorder } from "../../ui/border"
+import { useDialog } from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
 import { Keymap } from "../../context/keymap"
 import { useInteractivity } from "../../context/interactivity"
-import { useConfig } from "../../config"
+import { useCursorStyle } from "../../config"
 import { errorMessage } from "../../util/error"
 import {
   formCustom,
@@ -61,10 +62,11 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   const theme = useTheme()
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
+  const dialog = useDialog()
   const keymap = Keymap.use()
   const enabled = useInteractivity()
-  const active = () => enabled() && keymap.mode.current() === FORM_MODE
-  const config = useConfig().data
+  const active = () => enabled() && dialog.stack.length === 0 && keymap.mode.current() === FORM_MODE
+  const cursorStyle = useCursorStyle()
   const clipboard = useClipboard()
   const toast = useToast()
   const configuredFields = props.form.fields.filter(isFormAnswerField)
@@ -533,7 +535,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     )
   }
 
-  onMount(() => onCleanup(keymap.mode.push(FORM_MODE)))
+  onMount(() => onCleanup(keymap.mode.push(FORM_MODE, () => dialog.stack.length === 0)))
 
   Keymap.createLayer(() => ({
     mode: FORM_MODE,
@@ -885,7 +887,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
             <Show when={textual() ? answerField()!.key : undefined} keyed>
               <box paddingLeft={1}>
                 <textarea
-                  cursorStyle={{ ...config.cursor }}
+                  cursorStyle={cursorStyle()}
                   ref={(val: TextareaRenderable) => {
                     textarea = val
                     val.traits = { status: "ANSWER" }
@@ -1025,7 +1027,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                         >
                           <textarea
                             flexGrow={1}
-                            cursorStyle={{ ...config.cursor }}
+                            cursorStyle={cursorStyle()}
                             ref={(val: TextareaRenderable) => {
                               textarea = val
                               val.traits = { status: "ANSWER" }

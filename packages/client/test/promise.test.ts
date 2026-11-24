@@ -61,11 +61,17 @@ test("exposes every standard HTTP API group", () => {
     "file",
     "persistentPty",
     "media",
-    "schedule",
+    "blob",
+    "automation",
+    "artifacts",
+    "job",
+    "machine",
     "migration",
     "usage",
     "config",
   ])
+  expect(Object.keys(client.experimental.job)).toEqual(["list", "cancel"])
+  expect(Object.keys(client.experimental.machine)).toEqual(["list", "add", "remove"])
   expect(Object.keys(client.experimental.session)).toEqual([
     "stats",
     "import",
@@ -81,7 +87,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.experimental.integration.wellknown)).toEqual(["add"])
   expect(Object.keys(client.experimental.file)).toEqual(["write", "watch", "unwatch"])
   expect(Object.keys(client.experimental.media)).toEqual(["get"])
-  expect(Object.keys(client.experimental.schedule)).toEqual(["create", "list", "get", "pause", "resume", "delete"])
+  expect(Object.keys(client.experimental.automation)).toEqual(["create", "list", "get", "pause", "resume", "delete"])
   expect(client.experimental.persistentPty.read).toBeFunction()
 })
 
@@ -1047,7 +1053,14 @@ test("session methods use the public HTTP contract", async () => {
         })
       }
       if (url.includes("/prompt")) return Response.json(admission)
-      if (url.includes("/generate")) return Response.json({ data: { text: "A transient answer" } })
+      if (url.includes("/generate"))
+        return Response.json({
+          data: {
+            text: "A transient answer",
+            tokens: { input: 12, output: 3, reasoning: 0, cache: { read: 40, write: 0 } },
+            cost: 0.0001,
+          },
+        })
       if (url.includes("/synthetic")) return Response.json(syntheticAdmission)
       if (url.endsWith("/compact")) return Response.json(compactionAdmission)
       if (url.includes("/context")) return Response.json({ data: [] })
@@ -1095,6 +1108,7 @@ test("session methods use the public HTTP contract", async () => {
   expect(created.id).toBe("ses_test")
   expect(admitted.id).toBe("msg_test")
   expect(generated.text).toBe("A transient answer")
+  expect(generated.tokens.cache.read).toBe(40)
   expect(interrupted).toEqual({ interrupted: true })
   expect(synthetic).toMatchObject({ type: "synthetic", data: { text: "Completed" }, delivery: "queue" })
   expect(context).toEqual([])

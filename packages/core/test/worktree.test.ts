@@ -28,7 +28,7 @@ import { EventManifest } from "@opencode/schema/event-manifest"
 import { Workspace } from "@opencode/schema/workspace"
 import { host } from "./plugin/host"
 import { initRepo } from "./fixture/git"
-import { tmpdir } from "./fixture/tmpdir"
+import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 class Fixture extends Context.Service<Fixture, Effect.Success<ReturnType<typeof makeFixture>>>()("WorktreeFixture") {}
@@ -105,10 +105,7 @@ const fixtureWorktree = Effect.fnUntraced(function* () {
 
 function makeFixture() {
   return Effect.gen(function* () {
-    const root = yield* Effect.acquireRelease(
-      Effect.promise(() => tmpdir()),
-      (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-    )
+    const root = yield* tmpdirScoped()
     yield* Effect.promise(() => initRepo(root.path))
     const sourceDirectory = abs(yield* Effect.promise(() => fs.realpath(root.path)))
     const projectID = Project.ID.make("worktree-project")
@@ -136,8 +133,9 @@ function stored(projectID: Project.ID) {
       .all()
       .pipe(
         Effect.orDie,
-        Effect.map((rows): Array<{ directory: AbsolutePath; strategy: string | null }> =>
-          rows.toSorted((a, b) => a.directory.localeCompare(b.directory)),
+        Effect.map(
+          (rows): Array<{ directory: AbsolutePath; strategy: string | null }> =>
+            rows.toSorted((a, b) => a.directory.localeCompare(b.directory)),
         ),
       ),
   )
@@ -146,10 +144,7 @@ function stored(projectID: Project.ID) {
 describe("Worktree", () => {
   projectIt.live("tracks canonical and linked worktrees when a project resolves", () =>
     Effect.gen(function* () {
-      const root = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-      )
+      const root = yield* tmpdirScoped()
       yield* Effect.promise(() => initRepo(root.path))
       const linked = `${root.path}-linked`
       yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(linked, { recursive: true, force: true })))
@@ -307,10 +302,7 @@ describe("Worktree", () => {
 
   projectIt.live("uses canonical configuration with an explicit source clone", () =>
     Effect.gen(function* () {
-      const root = yield* Effect.acquireRelease(
-        Effect.promise(() => tmpdir()),
-        (dir) => Effect.promise(() => dir[Symbol.asyncDispose]()),
-      )
+      const root = yield* tmpdirScoped()
       const main = abs(path.join(root.path, "repo"))
       const clone = abs(path.join(root.path, "other-clone"))
       yield* Effect.promise(async () => {

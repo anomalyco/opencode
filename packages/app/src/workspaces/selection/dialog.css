@@ -2,19 +2,47 @@
   display: flex;
   min-width: 0;
   flex: 1;
-  flex-direction: column;
+  align-items: center;
   gap: 8px;
 }
 
-.directory-picker-subtitle {
-  overflow: hidden;
-  color: var(--v2-text-text-muted);
-  font-size: 11px;
-  font-weight: 440;
-  line-height: var(--line-height-tight);
-  letter-spacing: 0.05px;
-  text-overflow: ellipsis;
+/* Outranks the dialog's rule that grows the title, so the server chip sits beside it. */
+.directory-picker.directory-picker
+  [data-slot="dialog-header"]
+  .directory-picker-header
+  > [data-slot="dialog-header-title"] {
+  flex: none;
+}
+
+/* The 20px close button would add 2px below the 16px title row. */
+[data-component="dialog-v2"]
+  [data-slot="dialog-container"]
+  .directory-picker
+  [data-slot="dialog-header"]
+  [data-slot="dialog-close-button"] {
+  margin-block: -2px;
+}
+
+.directory-picker-server {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 240px;
+  height: 16px;
+  align-items: center;
+  gap: 4px;
+  padding: 0 4px;
+  border-radius: 4px;
+  background: var(--v2-overlay-simple-overlay-hover);
+  color: var(--v2-text-text-base);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: var(--line-height-compact);
   white-space: nowrap;
+}
+
+.directory-picker-server [data-component="icon"] {
+  flex-shrink: 0;
+  color: var(--v2-icon-icon-muted);
 }
 
 .directory-picker-body {
@@ -31,7 +59,6 @@
   z-index: 10;
   display: flex;
   align-items: center;
-  gap: 8px;
 }
 
 .directory-picker-input {
@@ -40,72 +67,121 @@
   flex: 1 1 0%;
 }
 
-.directory-picker-actions {
-  display: flex;
+.directory-picker-item-name {
   flex-shrink: 0;
-  gap: 2px;
+  max-width: 50%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.directory-picker-item-path {
+  min-width: 0;
+  overflow: hidden;
+  color: var(--v2-text-text-faint);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .directory-picker-recent {
   display: flex;
-  width: 100%;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 8px;
-}
-
-.directory-picker-recent-label {
-  color: var(--v2-text-text-base);
-  font-size: 13px;
-  font-weight: 530;
-  line-height: var(--line-height-compact);
-  letter-spacing: -0.04px;
-  user-select: none;
-}
-
-.directory-picker-recent-list {
-  display: flex;
-  width: 100%;
+  min-width: 0;
   flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 8px;
+  gap: 6px;
+  margin-top: -4px;
 }
 
 .directory-picker-recent-item {
-  max-width: 240px;
+  max-width: 160px;
+  gap: 6px;
+  padding-inline: 4px 8px;
+}
+
+.directory-picker-recent-menu {
+  max-width: 420px;
+}
+
+.directory-picker-recent + .directory-picker-folder {
+  margin-top: 4px;
+}
+
+.directory-picker-folder {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 312px;
+  flex-direction: column;
+  overflow: hidden;
+  border: 0.5px solid var(--v2-border-border-base);
+  border-radius: 6px;
+  background: var(--v2-background-bg-base);
+}
+
+.directory-picker-folder-header {
+  display: flex;
+  min-width: 0;
+  height: 32px;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 8px;
+  padding: 0 4px 0 6px;
+  border-bottom: 0.5px solid var(--v2-border-border-base);
+}
+
+.directory-picker-breadcrumbs {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 auto;
+  align-items: center;
+  gap: 2px;
+  overflow: hidden;
+}
+
+.directory-picker-breadcrumb {
+  min-width: 0;
+  height: 22px;
+  flex-shrink: 1;
+  overflow: hidden;
+  padding: 0 6px;
+  border-radius: 4px;
+  color: var(--v2-text-text-muted);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 22px;
+  letter-spacing: -0.04px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.directory-picker-breadcrumb:hover {
+  background: var(--v2-overlay-simple-overlay-hover);
+  color: var(--v2-text-text-base);
+}
+
+.directory-picker-breadcrumb[aria-current] {
+  flex-shrink: 0;
+  color: var(--v2-text-text-base);
+}
+
+.directory-picker-breadcrumb-separator {
+  flex-shrink: 0;
+  color: var(--v2-icon-icon-faint);
 }
 
 .directory-picker-suggestions {
   position: absolute;
   z-index: 20;
-  top: 34px;
+  top: 36px;
   right: 0;
   left: 0;
-  display: flex;
-  flex-direction: column;
-  padding: 4px;
-  border: 1px solid var(--v2-border-border-base);
-  border-radius: 6px;
-  background: var(--v2-background-bg-layer-02);
-  box-shadow: var(--v2-elevation-overlay);
 }
 
-.directory-picker-suggestions button {
-  overflow: hidden;
-  padding: 6px 8px;
-  border-radius: 4px;
-  color: var(--v2-text-text-muted);
-  font-size: 13px;
-  line-height: var(--line-height-compact);
-  text-align: left;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+.directory-picker-suggestions-viewport {
+  max-height: 232px;
 }
 
-.directory-picker-suggestions button:hover,
-.directory-picker-suggestions button[data-active] {
-  color: var(--v2-text-text-base);
-  background: var(--v2-overlay-simple-overlay-hover);
+.directory-picker-suggestions [data-component="menu-v2-item"] [data-component="icon"] {
+  flex-shrink: 0;
+  color: var(--v2-icon-icon-muted);
 }
 
 .directory-picker-browser {
@@ -116,10 +192,7 @@
   min-height: 0;
   flex: 1 1 280px;
   overflow: hidden;
-  padding: 6px;
-  border: 0.5px solid var(--v2-border-border-base);
-  border-radius: 6px;
-  background: var(--v2-background-bg-base);
+  padding: 4px 0;
 }
 
 .directory-picker-tree {
@@ -132,8 +205,8 @@
   --trees-bg-muted-override: transparent;
   --trees-selected-bg-override: var(--v2-overlay-simple-overlay-pressed);
   --trees-selected-fg-override: var(--v2-text-text-base);
-  --trees-selected-focused-border-color-override: var(--v2-border-border-focus);
-  --trees-focus-ring-color-override: var(--v2-border-border-focus);
+  --trees-selected-focused-border-color-override: transparent;
+  --trees-focus-ring-color-override: transparent;
   --trees-focus-ring-width-override: 1px;
   --trees-focus-ring-offset-override: -1px;
   --trees-border-color-override: var(--v2-border-border-base);
@@ -141,7 +214,8 @@
   --trees-font-size-override: 13px;
   --trees-item-height: 24px;
   --trees-border-radius-override: 4px;
-  --trees-padding-inline-override: 0px;
+  /* Matches the 6px scrollbar gutter, which the tree takes out of the end padding. */
+  --trees-padding-inline-override: 6px;
   --trees-item-margin-x-override: 0px;
   --trees-item-padding-x-override: 8px;
   --trees-item-row-gap-override: 6px;
@@ -157,24 +231,4 @@
   font-size: 13px;
   line-height: var(--line-height-compact);
   pointer-events: none;
-}
-
-.directory-picker-selection {
-  display: flex;
-  overflow: hidden;
-  min-width: 0;
-  flex: 1 1 0%;
-  align-self: center;
-}
-
-.directory-picker-selection-text {
-  overflow: hidden;
-  min-width: 0;
-  color: var(--v2-text-text-faint);
-  font-size: 13px;
-  font-weight: 440;
-  line-height: var(--line-height-compact);
-  letter-spacing: -0.04px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }

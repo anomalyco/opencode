@@ -44,7 +44,11 @@ export async function completeGroupBoundary(input: {
   }
 }
 
-export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessionID: string) => void) {
+export function createSessionRows(
+  sessionID: Accessor<string>,
+  onSynced?: (sessionID: string) => void,
+  beforePublish?: () => void,
+) {
   const data = useData()
   const client = useClient()
   const config = useConfig()
@@ -131,7 +135,7 @@ export function createSessionRows(sessionID: Accessor<string>, onSynced?: (sessi
             rows,
             messages: () => data.session.message.list(id).length,
             more: () => data.session.message.more(id),
-            loadMore: () => data.session.message.loadMore(id),
+            loadMore: () => data.session.message.loadMore(id, { beforePublish }),
             active: () => sessionID() === id,
           }).catch(() => undefined)
           if (sessionID() === id) onSynced?.(id)

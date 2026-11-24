@@ -1,7 +1,7 @@
 {
   "name": "@opencode/desktop",
   "private": true,
-  "version": "2.2.2",
+  "version": "2.4.1",
   "type": "module",
   "license": "MIT",
   "homepage": "https://opencode.ai",
@@ -17,8 +17,7 @@
     "migration": "bun run script/migration.ts",
     "build": "bun run script/build.ts",
     "pack": "bun run script/pack.ts",
-    "preview": "electron-vite preview",
-    "bench:startup": "bun run script/bench-startup.ts"
+    "preview": "electron-vite preview"
   },
   "main": "./out/main/index.js",
   "dependencies": {
@@ -26,11 +25,13 @@
     "electron-context-menu": "5.0.0",
     "electron-log": "^5",
     "electron-updater": "6.8.9",
+    "ffi-rs": "1.3.7",
     "lighthouse": "13.4.1"
   },
   "devDependencies": {
     "@brendonovich/vite-plugin-opencode": "0.1.3",
     "@effect/platform-node": "catalog:",
+    "@hona/strobe": "catalog:",
     "@lydell/node-pty": "catalog:",
     "@opencode/app": "workspace:*",
     "@opencode/gui-plugins": "workspace:*",
@@ -50,7 +51,6 @@
     "electron": "44.9.1",
     "electron-builder": "26.15.7",
     "electron-vite": "6.0.0-beta.1",
-    "htmlparser2": "8.0.2",
     "magic-string": "0.30.21",
     "solid-js": "catalog:",
     "typescript": "catalog:",

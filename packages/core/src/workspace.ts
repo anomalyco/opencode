@@ -7,7 +7,7 @@ import { Clock, Context, Deferred, Duration, Effect, Exit, FiberSet, Layer, Ref,
 import { systemError } from "effect/PlatformError"
 import { make } from "effect/process/ChildProcessSpawner"
 import type { EnvironmentDriver } from "./environment/driver.js"
-import { execDefaults } from "./environment/exec-defaults.js"
+import { makeFiles } from "./environment/exec-defaults.js"
 import { Failed, type Files, type FilesImpl } from "./environment/files.js"
 import { Database } from "./database/database.js"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
@@ -17,6 +17,9 @@ import { WorkspaceTable } from "./workspace/sql.js"
 export const ID = Workspace.ID
 export type ID = Workspace.ID
 
+/** Disjoint from Machines.Name (which disallows underscores) and from "local". */
+export const isID = (value: string): value is ID => /^wrk_[A-Za-z0-9_-]+$/.test(value)
+
 export class Info extends Schema.Class<Info>("Workspace.Info")({
   id: ID,
   provider: Schema.String,
@@ -25,7 +28,11 @@ export class Info extends Schema.Class<Info>("Workspace.Info")({
   lastUsedAt: Schema.Number,
 }) {}
 
-export class NotFound extends Schema.TaggedError<NotFound>()("Workspace.NotFound", { workspaceID: ID }) {}
+export class NotFound extends Schema.TaggedError<NotFound>()("Workspace.NotFound", { workspaceID: ID }) {
+  override get message() {
+    return `No workspace named ${JSON.stringify(this.workspaceID)}.`
+  }
+}
 
 export class CreateConflict extends Schema.TaggedError<CreateConflict>()("Workspace.CreateConflict", {
   workspaceID: ID,
@@ -46,6 +53,10 @@ export interface Interface {
   readonly connect: (
     workspaceID: ID,
   ) => Effect.Effect<EnvironmentDriver.Driver, NotFound | WorkspaceDriver.Error | WorkspaceDriver.ProviderNotFound>
+  /** Whether a logical workspace row exists; never wakes or provisions the backing resource. */
+  readonly exists: (workspaceID: ID) => Effect.Effect<boolean>
+  /** Whether the workspace currently holds a live connection in memory; never wakes or provisions it. */
+  readonly connected: (workspaceID: ID) => Effect.Effect<boolean>
   /** Makes the workspace absent; reports whether this call destroyed an existing workspace. */
   readonly destroy: (
     workspaceID: ID,
@@ -169,10 +180,7 @@ const layer = (options: Options) =>
         const connection: Connection = {
           driver,
           environment,
-          files: {
-            ...execDefaults(environment.spawner),
-            ...environment.overrides,
-          },
+          files: makeFiles(environment),
           saveBinding: persistBinding,
           lastActivity: yield* Ref.make(now),
           active: yield* Ref.make(0),
@@ -313,9 +321,14 @@ const layer = (options: Options) =>
             remove: (path) => withFiles(path, (files) => files.remove(path)),
             move: (from, to) => withFiles(from, (files) => files.move(from, to)),
             mkdir: (path) => withFiles(path, (files) => files.mkdir(path)),
+            append: (path, bytes) => withFiles(path, (files) => files.append(path, bytes)),
           }
           return { spawner, overrides }
         }),
+        exists: Effect.fn("Workspace.exists")(function* (workspaceID) {
+          return (yield* find(workspaceID)) !== undefined
+        }),
+        connected: (workspaceID) => Effect.sync(() => connections.has(workspaceID)),
         destroy: Effect.fn("Workspace.destroy")(function* (workspaceID) {
           // Settling the shared attempt cancels its racing provision body and fails
           // waiters with NotFound before teardown commits. Accepted tradeoffs: if the

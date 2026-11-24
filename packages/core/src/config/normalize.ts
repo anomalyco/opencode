@@ -28,7 +28,7 @@ import { ConfigMigrateV1 } from "../v1/config/migrate.js"
 import { PositiveInt } from "../schema.js"
 
 export interface Diagnostic {
-  readonly kind: "conflict" | "invalid" | "unsupported"
+  readonly kind: "conflict" | "invalid" | "removed" | "unsupported"
   readonly path: readonly string[]
   readonly message: string
 }
@@ -153,7 +153,19 @@ export function normalize(input: unknown): Result {
     canonical(ConfigAgent.Info, ConfigMigrateV1.migrateAgent({ ...value, mode: "primary" })),
   )
   const migratedAgents = mergeMaps(legacyAgents, modeAgents, ["agents"], diagnostics)
-  const nativeAgents = decodeMap(input.agents, ConfigAgent.Info, ["agents"], diagnostics, decodeEncoded)
+  const nativeAgents = decodeMap(
+    isRecord(input.agents)
+      ? mapValues(input.agents, (agent) =>
+          isRecord(agent) && agent.permissions !== undefined
+            ? { ...agent, permissions: renameTools(agent.permissions) }
+            : agent,
+        )
+      : input.agents,
+    ConfigAgent.Info,
+    ["agents"],
+    diagnostics,
+    decodeEncoded,
+  )
   diagnoseAgentUnsupported(input.agent, ["agent"], diagnostics)
   diagnoseAgentUnsupported(input.mode, ["mode"], diagnostics)
   mergeMap(
@@ -178,7 +190,13 @@ export function normalize(input: unknown): Result {
 
   const toolRules = migrateTools(input.tools, diagnostics)
   const permissionRules = migratePermissions(input.permission, diagnostics)
-  const nativePermissions = decodeList(input.permissions, Permission.Rule, ["permissions"], diagnostics, decodeEncoded)
+  const nativePermissions = decodeList(
+    renameTools(input.permissions),
+    Permission.Rule,
+    ["permissions"],
+    diagnostics,
+    decodeEncoded,
+  )
   const permissions = [...toolRules, ...permissionRules, ...nativePermissions]
   if (permissions.length || Array.isArray(input.permissions)) encoded.permissions = permissions
 
@@ -211,6 +229,7 @@ export function normalize(input: unknown): Result {
     enterprise: Info.fields.enterprise,
     username: Info.fields.username,
     timezone: Info.fields.timezone,
+    automations: Info.fields.automations,
     snapshots: Info.fields.snapshots,
     media: Info.fields.media,
     tool_output: Info.fields.tool_output,
@@ -353,14 +372,15 @@ function normalizeCompaction(
   unsupportedIfPresent(input.compaction, "tail_turns", ["compaction", "tail_turns"], diagnostics)
   unsupportedIfPresent(input.compaction, "prune", ["compaction", "prune"], diagnostics)
   const result: Record<string, unknown> = {}
-  if (own(input.compaction, "auto")) {
+  for (const key of ["auto", "background"] as const) {
+    if (!own(input.compaction, key)) continue
     const value = decodeEncoded(
-      ConfigCompaction.Info.fields.auto,
-      input.compaction.auto,
-      ["compaction", "auto"],
+      ConfigCompaction.Info.fields[key],
+      input.compaction[key],
+      ["compaction", key],
       diagnostics,
     )
-    if (value !== undefined) result.auto = value
+    if (value !== undefined) result[key] = value
   }
   const legacyTokens = own(input.compaction, "preserve_recent_tokens")
     ? decodeEncoded(
@@ -459,78 +479,20 @@ function normalizeExperimental(
       unsupportedExperimental.forEach((key) =>
         unsupportedIfPresent(experimental, key, ["experimental", key], diagnostics),
       )
-      if (own(experimental, "portable_shell_scanner")) {
-        const value = decodeEncoded(
-          ConfigExperimental.Info.fields.portable_shell_scanner,
-          experimental.portable_shell_scanner,
-          ["experimental", "portable_shell_scanner"],
-          diagnostics,
-        )
-        if (value !== undefined) result.portable_shell_scanner = value
+      for (const key of ["automations", "schedules"]) {
+        if (!own(experimental, key)) continue
+        diagnostics.push({
+          kind: "removed",
+          path: ["experimental", key],
+          message: "Use the top-level automations setting. Automations are enabled by default.",
+        })
       }
-      if (own(experimental, "todo")) {
-        const value = decodeEncoded(
-          ConfigExperimental.Info.fields.todo,
-          experimental.todo,
-          ["experimental", "todo"],
-          diagnostics,
-        )
-        if (value !== undefined) result.todo = value
-      }
-      if (own(experimental, "background_compaction")) {
-        const value = decodeEncoded(
-          ConfigExperimental.Info.fields.background_compaction,
-          experimental.background_compaction,
-          ["experimental", "background_compaction"],
-          diagnostics,
-        )
-        if (value !== undefined) result.background_compaction = value
-      }
-      if (own(experimental, "media_blob")) {
-        const value = decodeEncoded(
-          ConfigExperimental.Info.fields.media_blob,
-          experimental.media_blob,
-          ["experimental", "media_blob"],
-          diagnostics,
-        )
-        if (value !== undefined) result.media_blob = value
-      }
-      if (own(experimental, "image_generate")) {
-        const value = decodeEncoded(
-          ConfigExperimental.Info.fields.image_generate,
-          experimental.image_generate,
-          ["experimental", "image_generate"],
-          diagnostics,
-        )
-        if (value !== undefined) result.image_generate = value
-      }
-      if (own(experimental, "schedules")) {
-        const value = decodeEncoded(
-          ConfigExperimental.Info.fields.schedules,
-          experimental.schedules,
-          ["experimental", "schedules"],
-          diagnostics,
-        )
-        if (value !== undefined) result.schedules = value
-      }
-      if (own(experimental, "subagent_depth")) {
-        const value = decodeEncoded(
-          ConfigExperimental.Info.fields.subagent_depth,
-          experimental.subagent_depth,
-          ["experimental", "subagent_depth"],
-          diagnostics,
-        )
-        if (value !== undefined) result.subagent_depth = value
-      }
-      if (own(experimental, "location_idle_timeout")) {
-        const value = decodeEncoded(
-          ConfigExperimental.Info.fields.location_idle_timeout,
-          experimental.location_idle_timeout,
-          ["experimental", "location_idle_timeout"],
-          diagnostics,
-        )
-        if (value !== undefined) result.location_idle_timeout = value
-      }
+      // `policies` merges into top-level `policies` in normalizePolicies.
+      Object.entries(ConfigExperimental.Info.fields).forEach(([key, schema]) => {
+        if (key === "policies" || !own(experimental, key)) return
+        const value = decodeEncoded(schema, experimental[key], ["experimental", key], diagnostics)
+        if (value !== undefined) result[key] = value
+      })
     }
   }
   if (Object.keys(result).length || (isRecord(input.experimental) && !Object.keys(input.experimental).length))
@@ -585,6 +547,16 @@ function migrateTools(value: unknown, diagnostics: Diagnostic[]) {
     if (enabled === undefined) return []
     return [{ action: ConfigMigrateV1.normalizeAction(action), resource: "*", effect: enabled ? "allow" : "deny" }]
   })
+}
+
+// Native rules may still name the media tools by their old experimental names.
+function renameTools(rules: unknown) {
+  if (!Array.isArray(rules)) return rules
+  return rules.map((rule) =>
+    isRecord(rule) && typeof rule.action === "string"
+      ? { ...rule, action: ConfigMigrateV1.renamedTool(rule.action) }
+      : rule,
+  )
 }
 
 function migratePermissions(value: unknown, diagnostics: Diagnostic[]) {
@@ -688,7 +660,7 @@ function diagnoseSelectionMap(value: unknown, path: string[], diagnostics: Diagn
 }
 
 function diagnoseSelection(value: Record<string, unknown>, path: string[], diagnostics: Diagnostic[]) {
-  const modelValid = typeof value.model === "string" && /^[^/#]+\/[^#]+$/.test(value.model)
+  const modelValid = typeof value.model === "string" && ConfigMigrateV1.modelSelection(value.model) !== undefined
   if (own(value, "model") && typeof value.model === "string" && !modelValid)
     diagnostics.push({
       kind: "unsupported",

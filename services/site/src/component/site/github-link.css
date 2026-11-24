@@ -1,0 +1,87 @@
+/* The GitHub mark (site.tsx): the mark in the primary ink, the 40px circle round it the link. Beside the sidebar it is fixed in the top-right corner, centred on the logo row
+   and as far from the right edge as from the top; on small screens it
+   sits in the top bar, left of the menu button. Bare pages (the font page) have no top bar, so
+   there it stays in the corner at every width. */
+[data-site] {
+  --github-size: 2.5rem;
+  /* The voice orb's inset and size (voice/voice-mode.css: --voice-edge, --voice-orb), so the two
+     circles share a centre line. */
+  --github-right: calc(1rem + (4.5rem - var(--github-size)) / 2 + env(safe-area-inset-right, 0px));
+  /* What other controls in the logo row leave free on the right of the window for it. */
+  --github-clear: calc(var(--github-right) + var(--github-size) + 0.75rem);
+
+  @media (max-width: 40rem) {
+    --github-right: calc(0.75rem + (4.5rem - var(--github-size)) / 2 + env(safe-area-inset-right, 0px));
+  }
+
+  /* Beside the sidebar the mark mirrors the logo across the top: it sits as far from the right edge
+     (of the window, or of the capped layout) as from the top. Its link is centred on the logo row, so
+     the link's right inset equals its top inset, --top + --logo-height / 2 - --github-size / 2
+     (the 20px mark then 27.5px from both edges at the default logo size). The controls that sit
+     beside it or clear it follow --github-right. */
+  @media (min-width: 60.0625rem) {
+    --github-right: calc(
+      var(--top) + var(--logo-height) / 2 - var(--github-size) / 2 + env(safe-area-inset-right, 0px)
+    );
+  }
+
+  /* The link is the full 40px target round the 20px mark. No backing: over a dark or light surface it takes that
+     scheme's ink instead (below). */
+  [data-component="github-link"] {
+    --github-mark: 20px;
+    position: relative;
+    display: grid;
+    place-items: center;
+    width: var(--github-size);
+    height: var(--github-size);
+    border-radius: 50%;
+    color: var(--text-strong);
+    cursor: pointer;
+
+    svg {
+      width: var(--github-mark);
+      height: var(--github-mark);
+    }
+
+    /* Phones and tablets: a 24px mark in the top bar and in the bare pages' corner (the font page),
+       still centred in its 44px target. */
+    @media (max-width: 60rem) {
+      --github-mark: 24px;
+    }
+  }
+
+  /* The fixed marks (the GitHub mark, the product pages' chevrons beside it, the /font logo) take
+     the colour scheme of what is behind them: surface.ts sets data-on-surface from it as the page
+     scrolls, and their light-dark() colours switch to the matching artwork at once. */
+  [data-on-surface="dark"] {
+    color-scheme: dark;
+  }
+
+  [data-on-surface="light"] {
+    color-scheme: light;
+  }
+
+  [data-component="github-link"][data-owner="corner"] {
+    position: fixed;
+    /* The banner's height already includes the top inset (the status bar of an installed app). */
+    top: calc(
+      max(var(--banner-offset, 0px), env(safe-area-inset-top, 0px)) + var(--top) + var(--logo-height) / 2 -
+        var(--github-size) / 2
+    );
+    inset-inline-end: calc(var(--page-offset, 0px) + var(--github-right));
+    z-index: 8;
+  }
+
+  /* Its centre 54px in from the page edge, at any link size, so the 24px mark ends 24px before the menu button's lines
+     (phone-menu.css), and the search glyph before it (docs.css) ends 24px before the mark. */
+  [data-component="topbar"] [data-component="github-link"] {
+    margin-inline-start: auto;
+    margin-inline-end: calc(1.375rem - var(--github-size) / 2);
+  }
+
+  @media (max-width: 60rem) {
+    [data-slot="frame"] > [data-component="github-link"] {
+      display: none;
+    }
+  }
+}
