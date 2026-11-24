@@ -1,5 +1,5 @@
 import "./share.css"
-import { createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
+import { batch, createEffect, createMemo, createSignal, For, onCleanup, onMount, Show, type JSX } from "solid-js"
 import {
   barTiming,
   drawShareCard,
@@ -218,6 +218,11 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     setFormat("video")
     setMenu(undefined)
     shuffle()
+    // The card it opens on is where undo stops.
+    queueMicrotask(() => {
+      history.past = []
+      history.future = []
+    })
     dialog?.showModal()
     void loadShareFonts().then(() => setReady(true))
   })
@@ -297,13 +302,66 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
 
   // A card made at random: any layout and style, a size for a feed or a story (not Wide), and a track, never silence.
   // Playing from the start again, as each opening does.
-  const shuffle = () => {
-    setShareOption("layout", pick(layouts).value)
-    setShareOption("size", pick(sizes.filter((item) => item.value !== "16:9")).value)
-    setShareOption("theme", pick(["dark", "light", "leader"] as const))
-    setTrack(pick(shareTracks).id)
-    setMuted(false)
-    setPlaying(true)
+  const shuffle = () =>
+    batch(() => {
+      setShareOption("layout", pick(layouts).value)
+      setShareOption("size", pick(sizes.filter((item) => item.value !== "16:9")).value)
+      setShareOption("theme", pick(["dark", "light", "leader"] as const))
+      setTrack(pick(shareTracks).id)
+      setMuted(false)
+      setPlaying(true)
+    })
+
+  // Undo and redo (⌘Z, ⇧⌘Z) for the settings. Each change, Shuffle as one, keeps the settings before it; the history
+  // starts again with each section, and each opening, so undo never reaches back past the card in front of you.
+  const settings = createMemo(
+    () => ({
+      section: request()?.id,
+      format: format(),
+      day: day(),
+      lead: lead(),
+      layout: options().layout,
+      size: options().size,
+      theme: options().theme,
+      track: track(),
+      muted: muted(),
+      fixed: fixed(),
+    }),
+    undefined,
+    { equals: (a, b) => JSON.stringify(a) === JSON.stringify(b) },
+  )
+  const history = { past: [] as ReturnType<typeof settings>[], future: [] as ReturnType<typeof settings>[] }
+  let last: ReturnType<typeof settings> | undefined
+  let restoring = false
+  createEffect(() => {
+    const now = settings()
+    if (last?.section !== now.section) {
+      history.past = []
+      history.future = []
+    } else if (last && !restoring) {
+      history.past.push(last)
+      history.future = []
+    }
+    restoring = false
+    last = now
+  })
+  const travel = (redo: boolean) => {
+    const target = (redo ? history.future : history.past).pop()
+    const now = last
+    if (!target || !now) return
+    ;(redo ? history.past : history.future).push(now)
+    restoring = true
+    batch(() => {
+      setFormat(target.format)
+      setDay(target.day)
+      setLead(target.lead)
+      setShareOption("layout", target.layout)
+      setShareOption("size", target.size)
+      setShareOption("theme", target.theme)
+      setTrack(target.track)
+      setMuted(target.muted)
+      setFixed(target.fixed)
+    })
   }
 
   const file = async (kind: "image" | "video") => {
@@ -368,6 +426,11 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       ref={dialog}
       data-component="share-editor"
       aria-label="Share"
+      onKeyDown={(event) => {
+        if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "z") return
+        event.preventDefault()
+        travel(event.shiftKey)
+      }}
       // Escape closes it natively; a click on the backdrop lands on the dialog itself, since the editor fills its box.
       onClick={(event) => {
         if (event.target === event.currentTarget) close()
@@ -538,7 +601,6 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                       icon: <MusicCover cover={item.cover} />,
                     }))}
                     show="both"
-                    muted={muted()}
                     trigger={
                       <MusicCover
                         cover={chosen()?.cover}
@@ -660,30 +722,6 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   </For>
                 </div>
               </Show>
-              <button
-                type="button"
-                data-slot="icon-button"
-                data-variant="step"
-                data-side="previous"
-                aria-label="Previous section"
-                onClick={() => step(-1)}
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                  <path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
-                </svg>
-              </button>
-              <button
-                type="button"
-                data-slot="icon-button"
-                data-variant="step"
-                data-side="next"
-                aria-label="Next section"
-                onClick={() => step(1)}
-              >
-                <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                  <path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
-                </svg>
-              </button>
               <div data-slot="editor-canvas">
                 <canvas
                   ref={preview}
@@ -693,11 +731,34 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   style={{ "aspect-ratio": `${size()[0]} / ${size()[1]}` }}
                 />
               </div>
-              {/* Saved and copied notices, for a moment, on a line kept for them so the card never shifts. */}
+              {/* Under the card, the section's name between arrows that step to the previous and next section; a saved or
+                  copied notice takes the name's place for a moment. */}
               <div data-slot="editor-toolbar">
+                <button
+                  type="button"
+                  data-slot="icon-button"
+                  aria-label="Previous section"
+                  data-tooltip="Previous section"
+                  onClick={() => step(-1)}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
+                  </svg>
+                </button>
                 <span data-slot="editor-meta" role="status" aria-live="polite">
-                  {notice()}
+                  {notice() ?? value().title}
                 </span>
+                <button
+                  type="button"
+                  data-slot="icon-button"
+                  aria-label="Next section"
+                  data-tooltip="Next section"
+                  onClick={() => step(1)}
+                >
+                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
+                  </svg>
+                </button>
               </div>
             </div>
           </div>
@@ -721,8 +782,6 @@ function Dropdown<T extends string>(props: {
   value: T
   options: { value: T; label: string; detail?: string; explicit?: boolean; icon?: JSX.Element }[]
   show?: "icon" | "value" | "both"
-  // The music when muted: its button fades back.
-  muted?: boolean
   trigger?: JSX.Element
   onSelect: (value: T) => void
 }) {
@@ -754,13 +813,7 @@ function Dropdown<T extends string>(props: {
     if (event.key === "Tab") close(false)
   }
   return (
-    <div
-      ref={element}
-      data-component="dropdown"
-      data-id={props.id}
-      data-show={show()}
-      data-muted={props.muted ? "" : undefined}
-    >
+    <div ref={element} data-component="dropdown" data-id={props.id} data-show={show()}>
       <button
         type="button"
         data-slot="dropdown-trigger"
@@ -811,9 +864,6 @@ function Dropdown<T extends string>(props: {
                     Explicit
                   </em>
                 </Show>
-                <svg data-slot="check" width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                  <path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.5" />
-                </svg>
               </button>
             )}
           </For>
@@ -908,19 +958,22 @@ function TypeGlyph(props: { format: "video" | "image" | "embed" }) {
   )
 }
 
+// The layout icons, each a card: three lines of headline; a big number over its line; a short title over a chart.
 function LayoutGlyph(props: { layout: ShareOptions["layout"] }) {
   return (
-    <svg data-slot="glyph" viewBox="0 0 40 28" aria-hidden="true">
-      <Show when={props.layout === "headline"}>
-        <rect x="4" y="9" width="32" height="3" fill="currentColor" />
-        <rect x="9" y="16" width="22" height="3" fill="currentColor" />
-      </Show>
-      <Show when={props.layout === "number"}>
-        <rect x="9" y="7" width="22" height="14" fill="currentColor" />
-      </Show>
-      <Show when={props.layout === "chart"}>
-        <rect x="10" y="12.5" width="20" height="3" fill="currentColor" />
-      </Show>
+    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+      <g fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="2.25" y="1.75" width="11.5" height="12.5" rx="1" />
+        <Show when={props.layout === "headline"}>
+          <path d="M4.75 5h6.5M4.75 7.75h6.5M4.75 10.5h3.5" />
+        </Show>
+        <Show when={props.layout === "number"}>
+          <path d="M6.75 5.25 8.25 4.5v5M4.75 11.75h6.5" />
+        </Show>
+        <Show when={props.layout === "chart"}>
+          <path d="M4.75 4.75h4M5.5 11.75v-2M8 11.75V7.75M10.5 11.75v-3" />
+        </Show>
+      </g>
     </svg>
   )
 }

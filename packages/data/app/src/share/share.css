@@ -75,7 +75,6 @@
    screen and the inspector sits under the card, one group at a time behind tabs. */
 
 [data-page="stats"] dialog[data-component="share-editor"] {
-  --editor-bar: 48px;
   --editor-inset: 12px;
   /* The option cards, track rows and code: on the light panel a white card with a firm line; on the dark one a fill
      and line only just off the panel, so the choices don't shout. */
@@ -259,8 +258,7 @@
     align-items: center;
     gap: 12px;
     min-height: 0;
-    /* The same 64px either side of the card's area; the section arrows sit in those margins. */
-    padding: 32px 64px 8px;
+    padding: 32px 48px 12px;
     /* Grey on the light page; on the dark one a step lighter than the card (#0c0c0c), so it stands out, but well below
        the page's second layer, which glared. */
     background-color: light-dark(var(--stats-layer-2), color-mix(in srgb, var(--stats-bg) 50%, var(--stats-layer)));
@@ -287,26 +285,6 @@
     justify-content: center;
     width: 100%;
     min-height: 0;
-    /* 16px clear of the section arrows. */
-    padding-inline: 20px;
-  }
-
-  /* The arrows either side of the card: step to the previous or next section on the page, round and round. */
-  [data-slot="icon-button"][data-variant="step"] {
-    position: absolute;
-    top: 50%;
-    z-index: 1;
-    translate: 0 -50%;
-
-    /* 20px in from the stage's left edge... */
-    &[data-side="previous"] {
-      left: 20px;
-    }
-
-    /* ...and as far in from its right edge. */
-    &[data-side="next"] {
-      right: 20px;
-    }
   }
 
   [data-slot="share-preview"] {
@@ -328,17 +306,26 @@
   [data-slot="editor-toolbar"] {
     display: flex;
     flex: none;
+    gap: 4px;
     align-items: center;
     justify-content: center;
-    height: 20px;
+    height: 36px;
     max-width: 100%;
+
+    [data-slot="icon-button"] {
+      width: 36px;
+      height: 36px;
+    }
   }
 
+  /* The section's name, a fixed width so the arrows stay put as it changes. */
   [data-slot="editor-meta"] {
+    width: 200px;
     padding: 0 8px;
     overflow: hidden;
-    font-size: 12px;
-    color: var(--stats-faint);
+    font-size: 13px;
+    color: var(--stats-text);
+    text-align: center;
     white-space: nowrap;
     text-overflow: ellipsis;
     font-variant-numeric: tabular-nums;
@@ -667,8 +654,8 @@
   /* grey-ok: each swatch shows its card's own background, the same whatever the page's theme */
   [data-slot="swatch"] {
     flex: none;
-    width: 12px;
-    height: 12px;
+    width: 16px;
+    height: 16px;
     border: 1px solid var(--stats-line-strong);
     border-radius: 50%;
     background: #161616;
@@ -830,8 +817,8 @@
     flex-wrap: wrap;
     align-items: center;
     gap: 4px;
-    min-height: var(--editor-bar);
-    padding: 6px 8px 6px 8px;
+    /* The same space above and below the controls as at either end. */
+    padding: 8px;
     background: var(--stats-bg);
     box-shadow: 0 1px 0 var(--stats-line);
 
@@ -863,7 +850,7 @@
 
     &::after {
       position: absolute;
-      bottom: calc(100% + 8px);
+      bottom: calc(100% + 4px);
       left: 50%;
       z-index: 4;
       padding: 5px 8px;
@@ -873,7 +860,7 @@
       white-space: nowrap;
       pointer-events: none;
       content: attr(data-tooltip);
-      background: var(--stats-text);
+      background: color-mix(in srgb, var(--stats-text) 85%, transparent);
       opacity: 0;
       translate: -50% 2px;
       transition:
@@ -899,6 +886,11 @@
         translate: -50% 0;
       }
     }
+  }
+
+  /* Mute and Shuffle keep their grey on hover; only the wash behind them changes. */
+  [data-slot="bar-end"] [data-slot="icon-button"]:hover {
+    color: var(--stats-faint);
   }
 
   /* Close as far from the first dropdown as Shuffle is from Export: the gap and 4px more. */
@@ -1008,50 +1000,61 @@
     }
   }
 
+  /* The choices, as OpenCode's menus set them (nav-menus.css): grey until hovered, the chosen one in the text colour
+     with the active bar down its leading edge; no checkmarks. */
   [data-slot="dropdown-item"] {
+    position: relative;
     display: flex;
     flex: none;
     align-items: center;
     gap: 10px;
     min-height: 36px;
-    padding: 4px 12px 4px 14px;
+    padding: 4px 14px;
     font-size: 13px;
-    color: var(--stats-text);
+    color: var(--stats-faint);
     text-align: left;
     white-space: nowrap;
     background: transparent;
     border: 0;
     outline: none;
+    transition:
+      background-color 150ms ease,
+      color 150ms ease;
 
     @media (hover: hover) and (pointer: fine) {
       &:hover {
-        background: var(--stats-layer);
+        color: var(--stats-text);
+        background: color-mix(in srgb, var(--stats-accent) 10%, var(--stats-bg));
       }
     }
 
     &:focus-visible {
-      background: var(--stats-layer);
-      box-shadow: inset 0 0 0 1px var(--stats-accent);
+      color: var(--stats-text);
+      background: color-mix(in srgb, var(--stats-accent) 10%, var(--stats-bg));
     }
 
-    [data-slot="check"] {
-      flex: none;
-      margin-left: auto;
-      color: var(--stats-accent);
-      visibility: hidden;
-    }
+    &[aria-selected="true"] {
+      color: var(--stats-text);
 
-    &[aria-selected="true"] [data-slot="check"] {
-      visibility: visible;
+      &::before {
+        position: absolute;
+        inset-block: 0;
+        inset-inline-start: 0;
+        width: 2px;
+        content: "";
+        background: var(--stats-faint);
+      }
     }
 
     [data-slot="explicit"] {
-      margin-left: 12px;
+      margin-left: 16px;
     }
   }
 
+  /* The name takes the row's spare width, so the Explicit badges and the checks line up on the right. */
   [data-slot="dropdown-label"] {
     display: flex;
+    flex: 1;
     flex-direction: column;
     gap: 2px;
 
@@ -1069,15 +1072,6 @@
 
     > span {
       min-width: 4ch;
-    }
-  }
-
-  /* Muted: the music's button fades back, its choice kept for unmuting; the mute button only changes its icon. */
-  [data-component="dropdown"][data-muted] [data-slot="dropdown-trigger"] {
-    color: var(--stats-faint);
-
-    [data-slot="music-cover"] {
-      opacity: 0.4;
     }
   }
 
@@ -1312,21 +1306,6 @@
       padding: 16px 16px 8px;
     }
 
-    [data-slot="editor-canvas"] {
-      padding-inline: 40px;
-    }
-
-    /* The panel sits under the stage here, so the right arrow mirrors the close button. */
-    [data-slot="icon-button"][data-variant="step"] {
-      &[data-side="previous"] {
-        left: 4px;
-      }
-
-      &[data-side="next"] {
-        right: 4px;
-      }
-    }
-
     [data-slot="editor-inspector"] {
       position: relative;
       inset: auto;
@@ -1343,7 +1322,7 @@
 
     /* On a phone the bar wraps onto as many rows as it needs, over the card. */
     [data-slot="editor-bar"] {
-      padding: calc(6px + env(safe-area-inset-top, 0px)) 6px 6px;
+      padding: calc(8px + env(safe-area-inset-top, 0px)) 8px 8px;
     }
 
     /* Taller rows for fingers, the same height for every row of wide choices. */
