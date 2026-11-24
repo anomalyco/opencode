@@ -2426,6 +2426,67 @@ test("the inbox lists archived sessions in a collapsed section and pins sessions
   await expect(recent).toHaveText([/Active inbox session/, /Older inbox session/])
 })
 
+test("the inbox list's own menu moves Working between the bottom shelf and above Archived", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "WorkingPlacement",
+    sessions: [
+      { id: "ses_place_read", title: "Read inbox session", time: { created: T0, updated: T0, idle: T0, viewed: T0 } },
+      { id: "ses_place_working", title: "Working inbox session", time: { created: T0, updated: T0 + 1, busy: T0 } },
+      {
+        id: "ses_place_archived",
+        title: "Archived inbox session",
+        time: { created: T0, updated: T0, idle: T0, archived: T0 + 10 },
+      },
+    ],
+    sessionStatus: { ses_place_working: { type: "running" } },
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: [],
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true, archivedExpanded: true } },
+    },
+  })
+  await page.goto("/")
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const list = inbox.locator('[data-slot="sidebar-inbox-scroll"]')
+
+  const shelf = inbox.locator('[data-slot="sidebar-inbox-working"]')
+
+  await expect(shelf.locator('[data-slot="sidebar-inbox-item"]')).toHaveText([/Working inbox session/])
+  await expect(list.locator('[data-slot="sidebar-inbox-item"]')).toHaveText([
+    /Read inbox session/,
+    /Archived inbox session/,
+  ])
+
+  // A card's own menu stays the card's.
+  await list.locator('[data-slot="sidebar-inbox-item"]').filter({ hasText: "Read inbox session" }).click({ button: "right" })
+  await expect(page.getByRole("menuitemradio")).toHaveCount(0)
+  await page.keyboard.press("Escape")
+
+  await inbox.getByRole("button", { name: "Archived", exact: true }).click({ button: "right" })
+  await expect(page.getByRole("menuitemradio", { name: "Pinned to the bottom" })).toBeChecked()
+  await page.getByRole("menuitemradio", { name: "Above archived" }).click()
+
+  await expect(shelf).toHaveCount(0)
+  await expect(list.getByRole("group", { name: "Working", exact: true })).toBeVisible()
+  await expect(list.locator('[data-slot="sidebar-inbox-item"]')).toHaveText([
+    /Read inbox session/,
+    /Working inbox session/,
+    /Archived inbox session/,
+  ])
+
+  await page.reload()
+  await expect(list.locator('[data-slot="sidebar-inbox-item"]')).toHaveText([
+    /Read inbox session/,
+    /Working inbox session/,
+    /Archived inbox session/,
+  ])
+  await inbox.getByRole("button", { name: "Working", exact: true }).click({ button: "right" })
+  await page.getByRole("menuitemradio", { name: "Pinned to the bottom" }).click()
+  await expect(shelf.locator('[data-slot="sidebar-inbox-item"]')).toHaveText([/Working inbox session/])
+})
+
 test("deleting from the inbox closes its dialog at once and a slow delete leaves the next dialog open", async ({
   page,
 }) => {

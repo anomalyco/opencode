@@ -49,6 +49,7 @@ const InboxState = Persistence.struct({
   workingExpanded: Schema.Boolean,
   recentExpanded: Schema.Boolean,
   archivedExpanded: Schema.Boolean,
+  workingPlacement: Schema.Literals(["shelf", "inline"]),
 })
 
 const InboxNavigation = createContext<Accessor<string | undefined>>()
@@ -70,7 +71,10 @@ export function SidebarInbox() {
     workingExpanded: true,
     recentExpanded: false,
     archivedExpanded: false,
+    workingPlacement: "shelf",
   })
+
+  const shelf = () => state.workingPlacement === "shelf"
 
   const [announcement, setAnnouncement] = createStore({ text: "" })
 
@@ -356,6 +360,24 @@ export function SidebarInbox() {
       ),
     },
     {
+      id: "working",
+      get label() {
+        return language.t("sidebar.inbox.section.working")
+      },
+      // Between active and archived sessions when Working is not the bottom shelf.
+      get count() {
+        return shelf() ? 0 : sections().working.length
+      },
+      rows: () => rows(() => sections().working),
+      get expanded() {
+        return state.workingExpanded
+      },
+      get shimmer() {
+        return !state.workingExpanded
+      },
+      onToggle: () => setState("workingExpanded", !state.workingExpanded),
+    },
+    {
       id: "archived",
       get label() {
         return language.t("sidebar.inbox.section.archived")
@@ -384,7 +406,7 @@ export function SidebarInbox() {
       sections={groups}
       working={{
         get count() {
-          return sections().working.length
+          return shelf() ? sections().working.length : 0
         },
         rows: () => rows(() => sections().working),
         get expanded() {
@@ -392,6 +414,22 @@ export function SidebarInbox() {
         },
         onToggle: () => setState("workingExpanded", !state.workingExpanded),
       }}
+      menu={() => (
+        <Menu.Group>
+          <Menu.GroupLabel>{language.t("sidebar.inbox.working.placement")}</Menu.GroupLabel>
+          <Menu.RadioGroup
+            value={state.workingPlacement}
+            onChange={(value) => setState("workingPlacement", value === "inline" ? "inline" : "shelf")}
+          >
+            <Menu.RadioItem value="shelf" closeOnSelect>
+              {language.t("sidebar.inbox.working.shelf")}
+            </Menu.RadioItem>
+            <Menu.RadioItem value="inline" closeOnSelect>
+              {language.t("sidebar.inbox.working.inline")}
+            </Menu.RadioItem>
+          </Menu.RadioGroup>
+        </Menu.Group>
+      )}
     />
   )
 }
@@ -445,9 +483,12 @@ export function InboxSessionList(props: {
     /** Named for assistive tech only, without a visible header. */
     unlabeled?: boolean
     expanded?: boolean
+    shimmer?: boolean
     onToggle?: () => void
   }[]
   working: { count: number; rows: () => JSX.Element; expanded: boolean; onToggle: () => void }
+  /** Items for the list's own context menu, opened anywhere outside a card. */
+  menu?: () => JSX.Element
 }) {
   const language = useLanguage()
   const id = createUniqueId()
@@ -484,141 +525,154 @@ export function InboxSessionList(props: {
 
   return (
     <InboxNavigation.Provider value={() => navigation.focused}>
-      <div
-        ref={container}
-        data-slot="sidebar-inbox"
-        data-focus-scope
-        aria-busy={props.loading}
-        class="flex min-h-0 flex-1 flex-col"
-        onFocusIn={(event) => {
-          const row = event.target.closest<HTMLButtonElement>('[data-slot="sidebar-inbox-item"]')
-
-          if (row) setNavigation("focused", row.id)
-        }}
-        onKeyDown={(event) => {
-          if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
-
-          const rows = Array.from(
-            event.currentTarget.querySelectorAll<HTMLButtonElement>('[data-slot="sidebar-inbox-item"]'),
-          )
-
-          const index = rows.findIndex((row) => row === event.target)
-
-          if (index === -1) return
-
-          let next = index
-
-          switch (event.key) {
-            case "Home":
-              next = 0
-              break
-            case "End":
-              next = rows.length - 1
-              break
-            case "ArrowUp":
-              next = Math.max(0, index - 1)
-              break
-            case "ArrowDown":
-              next = Math.min(rows.length - 1, index + 1)
-              break
-            default:
-              return
-          }
-
-          event.preventDefault()
-
-          rows[next].focus({ preventScroll: true })
-          rows[next].scrollIntoView({ block: "nearest" })
-        }}
-      >
-        <span class="sr-only" role="status" aria-atomic="true">
-          {props.announcement}
-        </span>
-        <Show
-          when={!props.loading}
-          fallback={
-            <div class="flex justify-center p-2">
-              <Loader role="img" aria-hidden="false" aria-label={language.t("common.loading")} />
-            </div>
-          }
-        >
+      <Menu.Context modal={false}>
+        <Menu.Context.Trigger as="div" disabled={!props.menu} class="flex min-h-0 flex-1 flex-col">
           <div
-            data-slot="sidebar-inbox-scroll"
-            data-scrollable
-            class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-1"
+            ref={container}
+            data-slot="sidebar-inbox"
+            data-focus-scope
+            aria-busy={props.loading}
+            class="flex min-h-0 flex-1 flex-col"
+            onFocusIn={(event) => {
+              const row = event.target.closest<HTMLButtonElement>('[data-slot="sidebar-inbox-item"]')
+
+              if (row) setNavigation("focused", row.id)
+            }}
+            onKeyDown={(event) => {
+              if (event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+
+              const rows = Array.from(
+                event.currentTarget.querySelectorAll<HTMLButtonElement>('[data-slot="sidebar-inbox-item"]'),
+              )
+
+              const index = rows.findIndex((row) => row === event.target)
+
+              if (index === -1) return
+
+              let next = index
+
+              switch (event.key) {
+                case "Home":
+                  next = 0
+                  break
+                case "End":
+                  next = rows.length - 1
+                  break
+                case "ArrowUp":
+                  next = Math.max(0, index - 1)
+                  break
+                case "ArrowDown":
+                  next = Math.min(rows.length - 1, index + 1)
+                  break
+                default:
+                  return
+              }
+
+              event.preventDefault()
+
+              rows[next].focus({ preventScroll: true })
+              rows[next].scrollIntoView({ block: "nearest" })
+            }}
           >
-            <Show when={props.current.count > 0}>
-              <div class="flex shrink-0 flex-col gap-0.5 pb-2.5">{props.current.rows()}</div>
-            </Show>
-            <For each={props.sections}>
-              {(section) => (
-                <Show when={section.count > 0}>
-                  <div
-                    role="group"
-                    aria-label={section.unlabeled ? section.label : undefined}
-                    aria-labelledby={section.unlabeled ? undefined : `${id}-${section.id}`}
-                    class="flex shrink-0 flex-col gap-2 pb-2.5"
-                  >
-                    <Show when={!section.unlabeled}>
-                      <SectionHeader
-                        id={`${id}-${section.id}`}
-                        label={section.label}
-                        expanded={section.expanded}
-                        onToggle={section.onToggle}
-                      />
-                    </Show>
-                    <Show when={section.expanded !== false}>
-                      <div class="flex flex-col gap-0.5">{section.rows()}</div>
-                      {section.more?.()}
-                    </Show>
-                  </div>
-                </Show>
-              )}
-            </For>
+            <span class="sr-only" role="status" aria-atomic="true">
+              {props.announcement}
+            </span>
             <Show
-              when={
-                props.current.count === 0 &&
-                props.working.count === 0 &&
-                props.sections.every((section) => section.count === 0)
+              when={!props.loading}
+              fallback={
+                <div class="flex justify-center p-2">
+                  <Loader role="img" aria-hidden="false" aria-label={language.t("common.loading")} />
+                </div>
               }
             >
-              <div class="px-1.5 py-2 text-[13px] leading-4 text-v2-text-text-faint">
-                {language.t("sidebar.inbox.empty")}
+              <div
+                data-slot="sidebar-inbox-scroll"
+                data-scrollable
+                class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-1"
+              >
+                <Show when={props.current.count > 0}>
+                  <div class="flex shrink-0 flex-col gap-0.5 pb-2.5">{props.current.rows()}</div>
+                </Show>
+                <For each={props.sections}>
+                  {(section) => (
+                    <Show when={section.count > 0}>
+                      <div
+                        role="group"
+                        aria-label={section.unlabeled ? section.label : undefined}
+                        aria-labelledby={section.unlabeled ? undefined : `${id}-${section.id}`}
+                        class="flex shrink-0 flex-col gap-2 pb-2.5"
+                      >
+                        <Show when={!section.unlabeled}>
+                          <SectionHeader
+                            id={`${id}-${section.id}`}
+                            label={section.label}
+                            expanded={section.expanded}
+                            shimmer={section.shimmer}
+                            onToggle={section.onToggle}
+                          />
+                        </Show>
+                        <Show when={section.expanded !== false}>
+                          <div class="flex flex-col gap-0.5">{section.rows()}</div>
+                          {section.more?.()}
+                        </Show>
+                      </div>
+                    </Show>
+                  )}
+                </For>
+                <Show
+                  when={
+                    props.current.count === 0 &&
+                    props.working.count === 0 &&
+                    props.sections.every((section) => section.count === 0)
+                  }
+                >
+                  <div class="px-1.5 py-2 text-[13px] leading-4 text-v2-text-text-faint">
+                    {language.t("sidebar.inbox.empty")}
+                  </div>
+                </Show>
               </div>
-            </Show>
-          </div>
-          {/* Working sessions sit in a shelf pinned below the scrolling list. */}
-          <Show when={props.working.count > 0}>
-            <div
-              data-slot="sidebar-inbox-working"
-              role="group"
-              aria-labelledby={`${id}-working`}
-              class="relative flex max-h-[40%] shrink-0 flex-col gap-2 pt-[7px]"
-            >
-              <span
-                aria-hidden="true"
-                class="pointer-events-none absolute top-0 h-px bg-v2-border-border-muted"
-                style={{
-                  "inset-inline-start": "calc(1px - var(--sidebar-inset-start, 11px))",
-                  "inset-inline-end": "calc(1px - (var(--sidebar-inset-end, 3px) + var(--sidebar-divider-bleed, 0px)))",
-                }}
-              />
-              <SectionHeader
-                id={`${id}-working`}
-                label={language.t("sidebar.inbox.section.working")}
-                expanded={props.working.expanded}
-                shimmer={!props.working.expanded}
-                onToggle={props.working.onToggle}
-              />
-              <Show when={props.working.expanded}>
-                <div data-scrollable class="flex min-h-0 flex-col gap-0.5 overflow-y-auto">
-                  {props.working.rows()}
+              {/* Working sessions sit in a shelf pinned below the scrolling list. */}
+              <Show when={props.working.count > 0}>
+                <div
+                  data-slot="sidebar-inbox-working"
+                  role="group"
+                  aria-labelledby={`${id}-working`}
+                  class="relative flex max-h-[40%] shrink-0 flex-col gap-2 pt-[7px]"
+                >
+                  <span
+                    aria-hidden="true"
+                    class="pointer-events-none absolute top-0 h-px bg-v2-border-border-muted"
+                    style={{
+                      "inset-inline-start": "calc(1px - var(--sidebar-inset-start, 11px))",
+                      "inset-inline-end":
+                        "calc(1px - (var(--sidebar-inset-end, 3px) + var(--sidebar-divider-bleed, 0px)))",
+                    }}
+                  />
+                  <SectionHeader
+                    id={`${id}-working`}
+                    label={language.t("sidebar.inbox.section.working")}
+                    expanded={props.working.expanded}
+                    shimmer={!props.working.expanded}
+                    onToggle={props.working.onToggle}
+                  />
+                  <Show when={props.working.expanded}>
+                    <div data-scrollable class="flex min-h-0 flex-col gap-0.5 overflow-y-auto">
+                      {props.working.rows()}
+                    </div>
+                  </Show>
                 </div>
               </Show>
-            </div>
-          </Show>
+            </Show>
+          </div>
+        </Menu.Context.Trigger>
+        <Show when={props.menu}>
+          {(menu) => (
+            <Menu.Context.Portal>
+              <Menu.Context.Content>{menu()()}</Menu.Context.Content>
+            </Menu.Context.Portal>
+          )}
         </Show>
-      </div>
+      </Menu.Context>
     </InboxNavigation.Provider>
   )
 }
@@ -696,6 +750,7 @@ export function InboxDraftCard(props: {
         aria-current={props.selected ? "page" : undefined}
         data-slot="sidebar-inbox-item"
         data-roving
+        onPointerDown={(event: PointerEvent) => event.stopPropagation()}
         data-state={props.selected ? "active" : undefined}
         class="group flex h-[54px] w-full shrink-0 flex-col gap-1.5 rounded-[6px] p-2 text-start hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2 data-[state=active]:bg-v2-overlay-simple-overlay-pressed"
         onClick={props.onOpen}
@@ -782,6 +837,7 @@ export function InboxSessionCard(props: {
         aria-current={props.selected ? "page" : undefined}
         data-slot="sidebar-inbox-item"
         data-roving
+        onPointerDown={(event: PointerEvent) => event.stopPropagation()}
         data-status={status()}
         data-state={props.selected ? "active" : undefined}
         class="group flex h-[54px] w-full shrink-0 flex-col gap-1.5 rounded-[6px] p-2 text-start hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2 data-[state=active]:bg-v2-overlay-simple-overlay-pressed"
