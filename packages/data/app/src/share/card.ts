@@ -669,7 +669,9 @@ function drawFooter(
 function formatUpdated(value: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
-  return `${new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(date)} UTC`
+  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }).format(
+    date,
+  )
 }
 
 // Draws text with tracking one character at a time, since canvas letterSpacing isn't in every browser.
