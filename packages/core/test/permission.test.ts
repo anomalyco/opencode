@@ -118,6 +118,8 @@ test("Permission.site saves a web URL's site as written, and only the URL itself
   expect(Permission.site("https://evil.com\\@opencode.ai/x")).toEqual(["https://evil.com", "https://evil.com/*"])
   for (const url of ["https://opencode.ai@evil.com/x", "https://opencode.ai\t.evil.com/", "ftp://opencode.ai/x"])
     expect(Permission.site(url)).toEqual([url])
+  for (const url of ["https://*/x", "https://*.com/x", "https://opencode.ai@evil.com/x?y"])
+    expect(Permission.site(url)).toEqual([])
 })
 
 describe("Permission.isActionDenied", () => {
