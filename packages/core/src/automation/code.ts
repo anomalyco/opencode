@@ -5,6 +5,8 @@ import { Automation } from "@opencode/schema/automation"
 import { Array, Context, Effect, Option, Result, Schema } from "effect"
 import { Agent } from "../agent.js"
 import { CodeModeTool } from "../codemode/tool.js"
+import { Location } from "../location.js"
+import { LocationServiceMap } from "../location-service-map.js"
 import { Permission } from "../permission.js"
 import { Plugin } from "../plugin/service.js"
 import type { SessionMessage } from "../session/message.js"
@@ -83,15 +85,25 @@ function scanProgram(code: string): Result.Result<ProgramScan, string> {
   return Result.succeed({ tools: scanned.success.tools, actions: extensionActions(scanned.success) })
 }
 
-/** The calling plugin's registry. SDK instances and the host can have separate registries at the same Location. */
-export const FromPlugin = Context.Reference<Plugin.Interface | undefined>("@opencode/AutomationCode/FromPlugin", {
+/**
+ * The Location of the plugin making a create, if a plugin is making it. Code and subagent targets in that Location are
+ * checked against what is loaded now instead of waiting for its plugin activation, which may be running that plugin's
+ * setup and so would never finish. Targets in other Locations still wait for their plugins.
+ */
+export const FromPlugin = Context.Reference<Location.Ref | undefined>("@opencode/AutomationCode/FromPlugin", {
   defaultValue: () => undefined,
 })
 
-/** Wait unless this registry's activation could be waiting on the calling plugin's setup. */
+/** Waits for the current Location's plugins, unless the create comes from one of them. */
 export const awaitPlugins = Effect.gen(function* () {
-  const plugins = yield* Plugin.Service
-  if ((yield* FromPlugin) !== plugins) yield* plugins.awaitActivation
+  const from = yield* FromPlugin
+  if (from !== undefined) {
+    const location = yield* Location.Service
+    const current = LocationServiceMap.canonical({ directory: location.directory, workspaceID: location.workspaceID })
+    const own = LocationServiceMap.canonical(from)
+    if (current.directory === own.directory && current.workspaceID === own.workspaceID) return
+  }
+  yield* Plugin.awaitActivation
 })
 
 /**
