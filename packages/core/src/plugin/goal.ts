@@ -17,7 +17,7 @@ export const MAX_ROUNDS = 50
 export const MAX_STALLS = 3
 /** How long an active goal may sit idle, waiting on background work that never reports, before it pauses. */
 export const WAIT_LIMIT = Duration.minutes(30)
-// Identifies this server process. A goal armed by an earlier process comes back paused instead of resuming on its own.
+// Identifies this server process. A goal armed by an earlier process is re-armed to this one instead of being paused.
 // Created on first use: Workers forbid random values while a module loads.
 let processBoot: string | undefined
 const boot = () => (processBoot ??= crypto.randomUUID())
@@ -143,8 +143,9 @@ export const Plugin = define({
     ) {
       const goal = yield* read(sessionID)
       if (goal?.status !== "active") return
-      if (goal.boot !== boot())
-        return yield* settle(sessionID, goal, "paused", "The server restarted while the goal was active")
+      // A long-lived goal outlives restarts. Re-arm it to this process instead of pausing it: `replace` keeps any
+      // `/goal pause`, `clear` or new goal that landed while this process was starting.
+      if (goal.boot !== boot() && !(yield* replace(sessionID, goal, { ...goal, boot: boot() }))) return
       // The Session's own running subagent, image, video or script wakes it with its notice, and the hook runs again then. A
       // grandchild reports to its own parent, so it would never wake this Session.
       if (
@@ -304,7 +305,7 @@ export const Plugin = define({
             return watch(sessionID).pipe(
               Effect.catchCause((cause) => Effect.logWarning("failed to watch a waiting goal", { sessionID, cause })),
             )
-          // Shutdown keeps the goal active; the next process sees the boot change and pauses it.
+          // Shutdown keeps the goal active; the next process re-arms its boot and keeps working on it.
           if (event.type === "session.execution.interrupted" && event.data.reason !== "user") return Effect.void
           const reason =
             event.type === "session.execution.failed"
@@ -319,10 +320,9 @@ export const Plugin = define({
         Effect.forkScoped({ startImmediately: true }),
       )
 
-    // A goal an earlier process left active would show as running while nothing drives it, unless something wakes the
-    // Session, so pause those now; the boot check in the hook covers any that wake first. Goals of Sessions deleted
-    // while no instance listened are dropped. This assumes one server process per database: a second one would pause
-    // the first one's live goals.
+    // An active goal left by an earlier process should outlive the restart. Re-arm it to this process so it stays
+    // active; the idle hook continues it when the Session next wakes, and its boot check covers any that wake first.
+    // Goals of Sessions deleted while no instance listened are dropped.
     yield* Effect.gen(function* () {
       let after: string | undefined
       do {
@@ -337,14 +337,14 @@ export const Plugin = define({
               if (Option.isNone(session)) return yield* ctx.storage.remove(entry.key)
               const goal = Option.getOrUndefined(decodeState(entry.value))
               if (goal?.status !== "active" || goal.boot === boot()) return
-              yield* settle(session.value.id, goal, "paused", "The server restarted while the goal was active")
+              yield* replace(session.value.id, goal, { ...goal, boot: boot() })
             }),
           { discard: true },
         )
         after = page.next
       } while (after !== undefined)
     }).pipe(
-      Effect.catchCause((cause) => Effect.logWarning("failed to pause goals left by an earlier process", { cause })),
+      Effect.catchCause((cause) => Effect.logWarning("failed to re-arm goals left by an earlier process", { cause })),
       Effect.forkScoped({ startImmediately: true }),
     )
 

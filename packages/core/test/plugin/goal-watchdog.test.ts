@@ -112,7 +112,7 @@ const run = Effect.fnUntraced(function* (seed?: Goal.State) {
 })
 
 describe("goal plugin waiting", () => {
-  it.effect("pauses a goal an earlier server process left active when the plugin starts", () =>
+  it.effect("re-arms an active goal left by an earlier process so it survives a restart", () =>
     Effect.gen(function* () {
       const plugin = yield* run({
         id: "goal-earlier",
@@ -125,9 +125,10 @@ describe("goal plugin waiting", () => {
       })
 
       expect(plugin.goal()).toMatchObject({
-        status: "paused",
-        reason: "The server restarted while the goal was active",
+        status: "active",
+        rounds: 1,
       })
+      expect(plugin.goal()?.boot).not.toBe("an-earlier-process")
     }),
   )
 
