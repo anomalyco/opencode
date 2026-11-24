@@ -176,7 +176,7 @@ export type ShareTiming = {
   length?: number
   spectrum?: Spectrum
 }
-const freeTiming: ShareTiming = { build: 1.2, start: 1.2, step: 1.1, rounds: 1 }
+const freeTiming: ShareTiming = { build: 0.8, start: 1, step: 1.1, rounds: 1 }
 
 /**
  * The chart builds over the first bar; from the verse each highlight takes half a bar and the leaders go round twice;
@@ -186,7 +186,8 @@ export function barTiming(bar: number, verse: number, length: number, beat: numb
   // The first strong beat at the verse, from the track's measured beat, so every cut (each half bar) lands on one.
   const half = bar / 2
   const start = beat + Math.ceil((verse - 0.2 - beat) / half) * half
-  return { build: bar, start, step: half, rounds: 2, beat: bar / 4, length, spectrum }
+  // The chart builds over half a bar, so it lands on a strong beat.
+  return { build: half, start, step: half, rounds: 2, beat: bar / 4, length, spectrum }
 }
 
 /** Waits for the card's font, so the first frame isn't drawn in the fallback. */
