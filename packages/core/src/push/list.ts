@@ -49,6 +49,9 @@ export interface Interface {
     relays: readonly string[],
   ) => Effect.Effect<Push.Registered, InvalidError>
   readonly remove: (id: Push.DeviceID) => Effect.Effect<void>
+  /** Removes the phone after its relay answered gone, unless it has registered a new callback URL since. */
+  readonly removeGone: (id: Push.DeviceID, callbackURL: string) => Effect.Effect<void>
+  readonly hasDevices: () => Effect.Effect<boolean>
   readonly pause: (id: Push.DeviceID, paused: boolean) => Effect.Effect<Push.DevicePatch, NotFoundError>
   readonly setDeviceBell: (
     id: Push.DeviceID,
@@ -86,7 +89,7 @@ const notifyPath = /^\/v2\/notify\/[^/]+$/
 
 const validURL = (callbackURL: string, relays: readonly string[]) => {
   const url = URL.parse(callbackURL)
-  if (!url) return false
+  if (!url || url.href !== callbackURL) return false
   if (url.protocol !== "https:") return false
   if (url.username || url.password || url.search || url.hash) return false
   if (!relays.includes(url.origin)) return false
@@ -190,7 +193,7 @@ const layer = Layer.effect(
         })
       if (input.expiresAt <= now) return yield* new InvalidError({ reason: "expiresAt must be in the future" })
 
-      const existing = yield* readDevice(id)
+      const existing = Option.filter(yield* readDevice(id), (stored) => stored.expiresAt > now)
       const settings = input.settings ?? { default: "all" }
       if (Option.isSome(existing) && existing.value.phoneKey === input.publicKey) {
         yield* kv.set(deviceKey(id), {
@@ -202,7 +205,6 @@ const layer = Layer.effect(
           settings,
           updatedAt: now,
         })
-        yield* readDevices(now)
         yield* changed
         return { publicKey: existing.value.serverKey }
       }
@@ -226,7 +228,6 @@ const layer = Layer.effect(
         updatedAt: now,
       }
       yield* kv.set(deviceKey(id), stored)
-      yield* readDevices(now)
       yield* changed
       return { publicKey: stored.serverKey }
     })
@@ -235,6 +236,18 @@ const layer = Layer.effect(
       if (Option.isNone(yield* readDevice(id))) return
       yield* kv.remove(deviceKey(id))
       yield* changed
+    })
+
+    const removeGone = Effect.fn("PushList.removeGone")(function* (id: Push.DeviceID, callbackURL: string) {
+      const stored = yield* readDevice(id)
+      if (Option.isNone(stored) || stored.value.callbackURL !== callbackURL) return
+      yield* kv.remove(deviceKey(id))
+      yield* changed
+    })
+
+    const hasDevices = Effect.fn("PushList.hasDevices")(function* () {
+      const page = yield* kv.scan({ prefix: devicePrefix, limit: 1 })
+      return page.entries.length > 0
     })
 
     const requireDevice = Effect.fn("PushList.requireDevice")(function* (id: Push.DeviceID) {
@@ -333,7 +346,11 @@ const layer = Layer.effect(
     })
 
     yield* bus.subscribe([SessionEvent.Deleted]).pipe(
-      Stream.runForEach((event) => lock.withPermit(forgetSession(event.data.sessionID))),
+      Stream.runForEach((event) =>
+        lock
+          .withPermit(forgetSession(event.data.sessionID))
+          .pipe(Effect.ignoreCause({ log: "Warn", message: "Failed to drop push bells for a deleted session" })),
+      ),
       Effect.forkScoped({ startImmediately: true }),
     )
 
@@ -349,6 +366,8 @@ const layer = Layer.effect(
     return Service.of({
       register: (id, input, relays) => lock.withPermit(register(id, input, relays)),
       remove: (id) => lock.withPermit(remove(id)),
+      removeGone: (id, callbackURL) => lock.withPermit(removeGone(id, callbackURL)),
+      hasDevices,
       pause: (id, paused) => lock.withPermit(pause(id, paused)),
       setDeviceBell: (id, sessionID, bell) => lock.withPermit(setDeviceBell(id, sessionID, bell)),
       removeDeviceBell: (id, sessionID) => lock.withPermit(removeDeviceBell(id, sessionID)),

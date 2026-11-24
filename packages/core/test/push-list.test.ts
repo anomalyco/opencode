@@ -123,6 +123,32 @@ describe("PushList", () => {
     }),
   )
 
+  it.effect("removes a gone phone only while it still has the URL that was gone", () =>
+    Effect.gen(function* () {
+      const list = yield* PushList.Service
+      yield* list.register(id, input(phoneKey()), relays)
+      yield* list.register(id, { ...input(phoneKey()), callbackURL: `${callbackURL}-renewed` }, relays)
+      yield* list.removeGone(id, callbackURL)
+      expect((yield* list.info()).devices).toHaveLength(1)
+
+      yield* list.removeGone(id, `${callbackURL}-renewed`)
+      expect((yield* list.info()).devices).toEqual([])
+    }),
+  )
+
+  it.effect("starts afresh when a phone registers over its own expired entry", () =>
+    Effect.gen(function* () {
+      const list = yield* PushList.Service
+      const key = phoneKey()
+      const first = yield* list.register(id, input(key), relays)
+      yield* list.pause(id, true)
+      yield* TestClock.adjust(10_000)
+      const again = yield* list.register(id, { ...input(key), expiresAt: 50_000 }, relays)
+      expect(again.publicKey).not.toBe(first.publicKey)
+      expect((yield* list.info()).devices[0].paused).toBe(false)
+    }),
+  )
+
   it.effect("keeps a phone's pause and bells when it registers again", () =>
     Effect.gen(function* () {
       const list = yield* PushList.Service
