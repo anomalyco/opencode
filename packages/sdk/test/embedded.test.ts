@@ -680,3 +680,31 @@ it.live("preserves unknown workspace provider errors", () =>
     }),
   ),
 )
+
+// One-shot `at` triggers take a minimum 1s relative delay on the host's live clock.
+it.live(
+  "embedded host runs scheduled automations",
+  () =>
+    withEmbedded("opencode-embedded-automation-", (fixture) =>
+      Effect.gen(function* () {
+        const opencode = yield* fixture.sdk.OpenCode.create()
+        const session = yield* opencode.sessions.create({ location: location(fixture) })
+        const created = yield* opencode.experimental.automation.create({
+          sessionID: session.id,
+          name: "embedded-once",
+          trigger: { type: "at", at: "in 1 second" },
+          action: { type: "code", code: "return { state: { ran: true } }" },
+        })
+        const completed = yield* loaded(
+          "embedded automation run",
+          opencode.experimental.automation.get({ automationID: created.id }),
+          (info) => info.runCount > 0 && info.status === "done",
+        )
+
+        expect(completed.runCount).toBe(1)
+        expect(completed.lastOutcome).toBe("fired")
+        expect(completed.state).toEqual({ ran: true })
+      }),
+    ),
+  10_000,
+)

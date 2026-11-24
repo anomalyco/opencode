@@ -1,5 +1,6 @@
 export * as EmbeddedHost from "./host"
 
+import { Automation } from "@opencode/core/automation"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import type { Plugin } from "@opencode/plugin/effect/plugin"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
@@ -51,9 +52,10 @@ export const create = Effect.fn("EmbeddedHost.create")(function* <R = never>(
     const services = yield* runtime.contextEffect
     const sdkPlugins = Context.get(services, SdkPlugins.Service)
     for (const plugin of plugins ?? []) yield* sdkPlugins.register(plugin)
-    // The sweep is a no-op when nothing is suspended. ManagedRuntime owns the
-    // fiber so recovery never delays startup but still stops with the host.
+    // ManagedRuntime owns both background fibers so neither delays startup and
+    // both stop cleanly when the host disposes.
     runtime.runFork(Context.get(services, SessionRestart.Service).resumeSuspendedSessions)
+    runtime.runFork(Context.get(services, Automation.Service).run)
     const handler = HttpEffect.toWebHandlerWith<never, HttpServerRequest.HttpServerRequest | Scope.Scope>(
       context(services),
     )(Context.get(services, HttpRouter.HttpRouter).asHttpEffect())
