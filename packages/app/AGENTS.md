@@ -145,6 +145,13 @@ This section is the single source for what may move or restyle the session timel
 - Never select on `style` inside `:has()`. Every inline style write then rechecks the `:has()` of the element's ancestors, and the virtualizer writes inline styles while the reader scrolls. Set a `data-` attribute when the element is built, and select on that.
 - To check: record a Chrome trace of the `devtools.timeline` category while you scroll through history that has not been visited, click in the timeline and press a scroll key. Read `elementCount` on each `UpdateLayoutTree` event; DevTools shows it as Recalculate Style, Elements Affected. A pass that affects about as many elements as the timeline contains is this regression.
 
+### Transcripts of sessions nobody opened
+
+- The client stores a session's messages only once its transcript was asked for: `data.session.message.sync(id)` ran or runs, or this client created the session or sent a prompt into it. For any other session, `data.session.message.list(id)` holds at most the assistant message of the step that runs now, and nothing between steps.
+- Before, every session the server streamed grew a transcript in the store that nothing read: 18 to 26 MB of messages an hour with agents at work, most of it for subagents, kept for as long as a tab of their family stayed open.
+- Do not read another session's message list for a fact about it. Read its record (`data.session.get(id)`: title, `time.busy`, `time.idle`, outcome), its status, its inbox (`data.session.pending.list(id)`) or its jobs. To show its transcript, call `message.sync(id)` first.
+- Keepers: "sessions nobody opened store the step each runs, and nothing once their runs end" in `packages/client/test/solid-unopened.test.ts`, and "a tab that was never looked at is offered again after it closes" in `e2e/regression/tabs.spec.ts`.
+
 ## Localization
 
 - NEVER hardcode user-visible English strings in production code. ALWAYS use an i18n key for visible copy, placeholders, accessible labels, tooltips, menus, dialogs, toasts, empty states, and displayed errors.
