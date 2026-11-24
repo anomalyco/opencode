@@ -264,6 +264,25 @@ export function drawShareCard(
     baseline,
     card.chart.kind === "ranked" ? undefined : level,
   )
+  // The equaliser's lit dots inside `clip`, for the muted bars to show; the rest of the grid stays hidden behind them.
+  const litDots = (clip: Path2D) => {
+    if (!level) return
+    ctx.save()
+    ctx.clip(clip)
+    drawBackground(
+      ctx,
+      options.background,
+      colors,
+      width,
+      height,
+      dotGrid(card.chart, width),
+      baseline * 0.4,
+      baseline,
+      level,
+      true,
+    )
+    ctx.restore()
+  }
   // The tall story card is seen smaller in a feed, so its lockup sets larger, and the intro moves down to match.
   const logo = height > 1350 ? 1.5 : 1
   drawLogo(ctx, options.logo, colors, pad, pad, logo)
@@ -280,6 +299,7 @@ export function drawShareCard(
       { x: pad, y: top, width: width - pad * 2, height: chartBottom - top },
       progress,
       focus,
+      litDots,
     )
     if (legend) {
       drawCallout(ctx, card.chart, legend, colors, pad, chartBottom + 40, focus, 1 - reveal)
@@ -402,6 +422,8 @@ function drawBackground(
   fadeStart: number,
   fadeEnd: number,
   level?: (column: number, columns: number) => number,
+  // Only the equaliser's lit dots, for redrawing them inside the muted bars (drawStacked).
+  litOnly = false,
 ) {
   if (kind === "plain") return
   const end = kind === "band" ? height * 0.28 : fadeEnd
@@ -417,6 +439,7 @@ function drawBackground(
     const fade = kind === "band" ? Math.max(0, 1 - y / end) : Math.min(1, Math.max(0, (end - y) / (end - fadeStart)))
     columns.forEach((x, index) => {
       const on = rows - row < (lit[index] ?? 0)
+      if (litOnly && !on) return
       ctx.globalAlpha = on ? 0.35 : fade
       ctx.fillStyle = on ? colors.meter : colors.dot
       ctx.fillRect(x, y, dot, dot)
@@ -424,7 +447,7 @@ function drawBackground(
   }
   ctx.globalAlpha = 1
   ctx.fillStyle = colors.dot
-  if (kind !== "band") return
+  if (kind !== "band" || litOnly) return
   columns.forEach((x) => ctx.fillRect(x, height - inset - dot, dot, dot))
 }
 
@@ -666,6 +689,8 @@ function settle(time: number, delay: number, length: number) {
 type Box = { x: number; y: number; width: number; height: number }
 type Focus = { index: number; amount: number }
 
+type Segment = { rect: readonly [number, number, number, number]; color: string; muted: number }
+
 function drawStacked(
   ctx: CanvasRenderingContext2D,
   chart: Extract<ShareChart, { kind: "stacked" }>,
@@ -673,6 +698,7 @@ function drawStacked(
   box: Box,
   progress: number,
   focus: Focus,
+  litDots: (clip: Path2D) => void,
 ) {
   // Room above the bars for the focused series' label.
   // A little room between the intro and the tallest column.
@@ -685,7 +711,10 @@ function drawStacked(
   const gap = Math.min(10, Math.max(2, slot * 0.22))
   const base = plot.y + plot.height
 
-  chart.columns.forEach((column, index) => {
+  // Each bar's segments, drawn in three passes: under the muted ones the card's background, so the dot grid doesn't
+  // show through; then, with music, the equaliser's lit dots inside them; then every segment's colour, the muted grey
+  // as a translucent veil over those dots.
+  const segments = chart.columns.flatMap((column, index) => {
     // Columns rise left to right, each over half the build.
     const delay = (index / Math.max(1, count - 1)) * 0.5
     const grow = ease(Math.max(0, Math.min(1, (progress - delay) / 0.5)))
@@ -697,30 +726,49 @@ function drawStacked(
     const order = column.values.map((_, series) => series)
     const stack =
       focus.amount > 0 && focus.index >= 0 ? [focus.index, ...order.filter((item) => item !== focus.index)] : order
-    stack.reduce((y, series) => {
-      const value = column.values[series] ?? 0
-      if (value <= 0 || total <= 0) return y
-      const size = (value / total) * height
-      const own = chart.series[series]?.color ?? colors.idle
-      // How far the bar has gone to the muted grey: "Other" always, the rest as another series takes the focus. The
-      // muted grey is the translucent veil, cross-faded in over the bar's own colour.
-      const muted = series === focus.index ? 0 : own === colors.other ? 1 : focus.amount
-      const alpha = ctx.globalAlpha
-      const rect = [x, y - size, width, Math.max(0, size - (size > 3 ? 1 : 0))] as const
-      if (muted < 1) {
-        ctx.globalAlpha = alpha * (1 - muted)
-        ctx.fillStyle = series === focus.index ? spotlit(own, series, focus.amount, colors) : own
-        ctx.fillRect(...rect)
-      }
-      if (muted > 0) {
-        ctx.globalAlpha = alpha * muted
-        ctx.fillStyle = colors.veil
-        ctx.fillRect(...rect)
-      }
-      ctx.globalAlpha = alpha
-      return y - size
-    }, base)
+    return stack.reduce<{ y: number; parts: Segment[] }>(
+      (state, series) => {
+        const value = column.values[series] ?? 0
+        if (value <= 0 || total <= 0) return state
+        const size = (value / total) * height
+        const own = chart.series[series]?.color ?? colors.idle
+        // How far the bar has gone to the muted grey: "Other" always, the rest as another series takes the focus.
+        const muted = series === focus.index ? 0 : own === colors.other ? 1 : focus.amount
+        const rect = [x, state.y - size, width, Math.max(0, size - (size > 3 ? 1 : 0))] as const
+        const color = series === focus.index ? spotlit(own, series, focus.amount, colors) : own
+        return { y: state.y - size, parts: [...state.parts, { rect, color, muted }] }
+      },
+      { y: base, parts: [] },
+    ).parts
   })
+  const alpha = ctx.globalAlpha
+  const quiet = segments.filter((segment) => segment.muted > 0)
+  quiet.forEach((segment) => {
+    ctx.globalAlpha = alpha * segment.muted
+    ctx.fillStyle = colors.background
+    ctx.fillRect(...segment.rect)
+  })
+  ctx.globalAlpha = alpha
+  if (quiet.length > 0)
+    litDots(
+      quiet.reduce((path, segment) => {
+        path.rect(...segment.rect)
+        return path
+      }, new Path2D()),
+    )
+  segments.forEach((segment) => {
+    if (segment.muted < 1) {
+      ctx.globalAlpha = alpha * (1 - segment.muted)
+      ctx.fillStyle = segment.color
+      ctx.fillRect(...segment.rect)
+    }
+    if (segment.muted > 0) {
+      ctx.globalAlpha = alpha * segment.muted
+      ctx.fillStyle = colors.veil
+      ctx.fillRect(...segment.rect)
+    }
+  })
+  ctx.globalAlpha = alpha
 
   ctx.fillStyle = colors.line
   ctx.fillRect(plot.x, base + 1, plot.width, 1)

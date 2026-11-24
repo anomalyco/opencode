@@ -1,7 +1,8 @@
-// Soundtracks for share videos: 20-second 90s East Coast boom-bap rap songs with our own lyrics, two of them explicit, for the kinds of data
-// on the page. ElevenLabs Music v2.5, one take each with custom lyrics, on one grid: 96 BPM, a bar is 2.5 s, a
-// spoken line over the filtered intro (bars 1 and 2), a 4-bar verse from 5 s, a 2-bar hook from 15 s, and the beat
-// stops on the last word at 20 s. Cut to 20.0 s and loudness-matched to -14 LUFS. public/share-music has the files.
+// Soundtracks for share videos: explicit 90s East Coast boom-bap rap songs with our own lyrics, one for each kind of data
+// on the page. ElevenLabs Music v2.5, one take each with custom lyrics, on one grid: 96 BPM, a bar is 2.5 s, a spoken
+// line over the filtered intro (bars 1 and 2), a 4-bar verse from 5 s, a 2-bar hook from 15 s, then the drop at about
+// 20 s into a heavier beat for the closing slides. Cut 6.25 s after the drop with a short fade and loudness-matched to
+// -14 LUFS. public/share-music has the files.
 
 // `bar` and `verse` are seconds (one bar, and where the verse and the full beat start); `length` is where the track stops.
 export type ShareTrack = {
@@ -20,17 +21,17 @@ export type ShareTrack = {
 }
 
 export const shareTracks: ShareTrack[] = [
-  { id: "market", name: "Hold the Block", mood: "Piano stabs and baritone sax", beat: 0.035 },
-  { id: "models", name: "Rank and File", mood: "Tremolo guitar and horns", beat: 0.15 },
-  { id: "usage", name: "Come Back", mood: "Vibraphone and muted trumpet", beat: 0.03 },
-  { id: "cache", name: "Cache Hit", mood: "Cold piano and organ", beat: 0.005 },
-  { id: "newblood", name: "New Blood", mood: "Soul vocal and horn stab", beat: 0.344 },
-  { id: "cheapshot", name: "Cheap Shot", mood: "Warped Rhodes and bowed bass", beat: 0.324 },
-  { id: "burn", name: "Burn Through", mood: "Distorted organ and fuzz bass", explicit: true, beat: 1.169 },
-  { id: "worldwide", name: "Worldwide", mood: "Warped strings and sub bass", explicit: true, beat: 0.015 },
+  { id: "market", name: "Run the Board", mood: "Piano stabs and baritone sax", beat: 0.159 },
+  { id: "models", name: "Top Ten", mood: "Tremolo guitar and horn stabs", beat: 0.01 },
+  { id: "usage", name: "Clock In", mood: "Vibraphone and muted trumpet", beat: 0.079 },
+  { id: "cache", name: "Paid Once", mood: "Cold piano and organ", beat: 0.079 },
+  { id: "newblood", name: "Day One", mood: "Soul vocal chop and horns", beat: 0.015 },
+  { id: "cheapshot", name: "Half Price", mood: "Warped Rhodes and bowed bass", beat: 0.029 },
+  { id: "burn", name: "Trillions", mood: "Distorted organ and fuzz bass", beat: 0.104 },
+  { id: "worldwide", name: "Every Time Zone", mood: "Warped strings and sub bass", beat: 0.124 },
 ].map((track) => ({
-  explicit: false,
   ...track,
+  explicit: true,
   bpm: 96,
   bar: 2.5,
   verse: 5,
