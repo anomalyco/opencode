@@ -7,7 +7,7 @@ import * as TestClock from "effect/testing/TestClock"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/unstable/http"
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process"
 import { Installation } from "../../src/installation"
-import { InstallationVersion } from "@opencode-ai/core/installation/version"
+import { InstallationPluginVersion, InstallationVersion } from "@opencode-ai/core/installation/version"
 import { CrossSpawnSpawner } from "@opencode-ai/core/cross-spawn-spawner"
 import { testEffect } from "../lib/effect"
 
@@ -91,6 +91,12 @@ describe("installation", () => {
       expect(Installation.isUpdate("local", "1.19.0")).toBe(true)
       expect(Installation.isUpdate("local", "2.0.0")).toBe(false)
       expect(Installation.isUpdate("1.19.0", "not-a-version")).toBe(false)
+    })
+  })
+
+  describe("plugin version", () => {
+    test("follows the binary version when no plugin version is pinned at build time", () => {
+      expect(InstallationPluginVersion).toBe(InstallationVersion)
     })
   })
 
