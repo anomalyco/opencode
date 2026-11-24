@@ -175,7 +175,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     setLead("top")
   })
   // A bar chart over its range drawn as bars, or as a race of the leaders overtaking each other (card.ts drawRace).
-  const [chartStyle, setChartStyle] = createSignal<"bars" | "race">("bars")
+  const [chartStyle, setChartStyle] = createSignal<"bars" | "race" | "galaxy">("bars")
   const raceable = () => starts().length > 1 && day() === undefined
   const leads = createMemo(() => request()?.id === "top-models" && !!request()?.variant)
   // The first days of the columns the date picker can choose from: a bar chart's, when its section can make a card
@@ -197,8 +197,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     const focus = { day: day(), lead: lead() }
     const chosen = focus.day === undefined && focus.lead === "top" ? value : (value.variant?.(focus) ?? value)
     const chart =
-      chartStyle() === "race" && chosen.chart.kind === "stacked" && chosen.chart.day === undefined
-        ? { ...chosen.chart, race: true }
+      chartStyle() !== "bars" && chosen.chart.kind === "stacked" && chosen.chart.day === undefined
+        ? { ...chosen.chart, style: chartStyle() as "race" | "galaxy" }
         : chosen.chart
     return { ...chosen, chart, variant: undefined, updatedAt: props.updatedAt, url: props.url }
   })
@@ -402,7 +402,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       // Never an explicit track: those are for choosing on purpose.
       setTrack(pick(shareTracks.filter((item) => !item.explicit)).id)
       setLead(pick(["top", "total"] as const))
-      setChartStyle(pick(["bars", "race"] as const))
+      setChartStyle(pick(["bars", "race", "galaxy"] as const))
       setPlaying(true)
     })
 
@@ -732,6 +732,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     options={[
                       { value: "bars" as const, label: "Bars", icon: <ChartGlyph style="bars" /> },
                       { value: "race" as const, label: "Race", icon: <ChartGlyph style="race" /> },
+                      { value: "galaxy" as const, label: "Galaxy", icon: <ChartGlyph style="galaxy" /> },
                     ]}
                     onSelect={setChartStyle}
                   />
@@ -1145,7 +1146,7 @@ function parseSettings(raw: string | null) {
   const one = <T extends string>(key: string, choices: readonly T[]) => choices.find((choice) => choice === item[key])
   const format = one("format", ["video", "image", "embed"] as const)
   const lead = one("lead", ["top", "total"] as const)
-  const chart = one("chart", ["bars", "race"] as const)
+  const chart = one("chart", ["bars", "race", "galaxy"] as const)
   const layout = one(
     "layout",
     layouts.map((entry) => entry.value),
@@ -1430,15 +1431,32 @@ function AspectGlyph(props: { size: ShareOptions["size"] }) {
   )
 }
 
-// The chart's style: columns rising for bars, rows of different lengths for a race.
-function ChartGlyph(props: { style: "bars" | "race" }) {
+// The chart's style: columns rising for bars, rows of different lengths for a race, a scatter of dots for a galaxy.
+function ChartGlyph(props: { style: "bars" | "race" | "galaxy" }) {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-      <Show
-        when={props.style === "race"}
-        fallback={<path d="M3.25 13.5V8M8 13.5V3M12.75 13.5V6" fill="none" stroke="currentColor" stroke-width="1.5" />}
-      >
-        <path d="M2.5 3.75h11M2.5 8h7M2.5 12.25h9" fill="none" stroke="currentColor" stroke-width="1.5" />
+      <Show when={props.style === "galaxy"}>
+        <g fill="currentColor">
+          <rect x="7.25" y="7.25" width="1.5" height="1.5" />
+          <rect x="4.5" y="5" width="1.5" height="1.5" />
+          <rect x="10" y="4" width="1.5" height="1.5" />
+          <rect x="11" y="9.5" width="1.5" height="1.5" />
+          <rect x="5.5" y="10.5" width="1.5" height="1.5" />
+          <rect x="2" y="8" width="1.5" height="1.5" />
+          <rect x="8" y="12.5" width="1.5" height="1.5" />
+          <rect x="7" y="1.75" width="1.5" height="1.5" />
+          <rect x="12.75" y="6.5" width="1.5" height="1.5" />
+        </g>
+      </Show>
+      <Show when={props.style !== "galaxy"}>
+        <Show
+          when={props.style === "race"}
+          fallback={
+            <path d="M3.25 13.5V8M8 13.5V3M12.75 13.5V6" fill="none" stroke="currentColor" stroke-width="1.5" />
+          }
+        >
+          <path d="M2.5 3.75h11M2.5 8h7M2.5 12.25h9" fill="none" stroke="currentColor" stroke-width="1.5" />
+        </Show>
       </Show>
     </svg>
   )

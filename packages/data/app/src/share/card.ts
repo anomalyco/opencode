@@ -21,8 +21,9 @@ export type ShareChart =
       // A card about one column (a day or a week): its index. The other columns go grey, and the series values, the
       // total and the leader are that column's.
       day?: number
-      // Drawn as a race instead of bars: the series as horizontal bars overtaking each other day by day (drawRace).
-      race?: boolean
+      // Drawn as an animation over the days instead of bars: a race of horizontal bars overtaking each other
+      // (drawRace), or a spinning galaxy of dots shared out by the day's shares (drawGalaxy).
+      style?: "race" | "galaxy"
     }
   | {
       kind: "ranked"
@@ -264,13 +265,16 @@ export function shareDuration(card: ShareCard, options: ShareOptions, timing = f
 export function mainLength(card: ShareCard, options: ShareOptions, timing = freeTiming) {
   const intro = introSlides(card, options, timing)?.end ?? 0
   // A race runs to its last day just before the closing slides, so it ends on the finished order, not a long hold.
-  const play = isRace(card) ? raceLength(card, timing) + raceRest : turns(card, options, timing).length * timing.step + hold
+  const play = isRace(card)
+    ? raceLength(card, timing) + raceRest
+    : turns(card, options, timing).length * timing.step + hold
   return timing.length ?? intro + timing.start + play
 }
 
-// A race: a stacked chart over its whole range, drawn as bars overtaking each other day by day.
+// A stacked chart over its whole range drawn as an animation over the days (a race or a galaxy), which takes its own
+// time and needs no legend or highlights.
 function isRace(card: ShareCard) {
-  return card.chart.kind === "stacked" && !!card.chart.race && card.chart.day === undefined
+  return card.chart.kind === "stacked" && !!card.chart.style && card.chart.day === undefined
 }
 
 // How long the race runs: about a sixth of a second a day, or with music the whole track up to the closing slides,
@@ -395,7 +399,18 @@ export function drawShareCard(
   const top = drawIntro(ctx, card, options, colors, width, pad + 88 + 48 * logo, time)
   const progress = Math.min(1, time / timing.build)
 
-  if (card.chart.kind === "stacked" && race)
+  if (card.chart.kind === "stacked" && race && card.chart.style === "galaxy")
+    drawGalaxy(
+      ctx,
+      card.chart,
+      colors,
+      { x: pad, y: top, width: width - pad * 2, height: chartBottom - top },
+      time,
+      timing,
+      raceLength(card, timing),
+      level,
+    )
+  if (card.chart.kind === "stacked" && race && card.chart.style === "race")
     drawRace(
       ctx,
       card.chart,
@@ -999,7 +1014,7 @@ function drawRace(
   const ranks = { from: order(from), to: order(to) }
   const rows = Math.min(6, named.length)
   // Room under the rows for the date, so it never runs into the last one.
-  const row = Math.min(150, box.height / (rows + 0.9))
+  const row = Math.min(150, box.height / (rows + 0.5))
   const top = box.y
   const max = Math.max(1e-9, ...named.map(now))
   // The bars grow in from nothing while the intro rises, before the days start to run.
@@ -1010,9 +1025,9 @@ function drawRace(
   // The day, large and faint, in the lower right; it counts on with the race.
   ctx.save()
   ctx.textBaseline = "alphabetic"
-  ctx.font = `400 ${Math.round(row * 0.9)}px ${font}`
+  ctx.font = `400 ${Math.round(row * 0.42)}px ${font}`
   ctx.fillStyle = colors.faint
-  ctx.globalAlpha *= 0.35
+  ctx.globalAlpha *= 0.6
   // A clock runs before the date, through each day as the race crosses it, so something is always moving; it marks
   // the race's place between two days, the data itself being daily.
   const minutes = Math.min(24 * 60 - 1, Math.floor(step * 24 * 60))
@@ -1045,15 +1060,144 @@ function drawRace(
     ctx.fillStyle = color
     ctx.fillRect(box.x + indent, y, Math.min(length, span), bar)
     // One line a row: the name and share inside the bar when it's long enough, otherwise just past its end.
-    ctx.font = `${Math.round(place) === 0 ? 700 : 400} ${size}px ${font}`
-    const label = `${item?.label ?? ""}  ${(share * 100).toFixed(share >= 0.1 ? 0 : 1)}%`
-    const inner = size * 0.6
-    const fits = ctx.measureText(label).width + inner * 2 <= length
-    ctx.fillStyle = fits ? (luminance(color) > 0.5 ? "#0c0c0c" : "#ffffff") : colors.text
-    const x = fits ? box.x + indent + inner : box.x + indent + length + inner
-    ctx.fillText(truncate(ctx, label, box.x + box.width - x), x, middle)
+    // The label stays put at the left of its row while the bar races under it: drawn in the text colour, then again,
+    // clipped to the bar, in dark or white for contrast where the bar has reached. The leader's name is bold, the
+    // shares regular and a little faded.
+    const percent = `  ${(share * 100).toFixed(share >= 0.1 ? 0 : 1)}%`
+    const bold = `${Math.round(place) === 0 ? 700 : 400} ${size}px ${font}`
+    const regular = `400 ${size}px ${font}`
+    const x = box.x + indent + size * 0.6
+    ctx.font = regular
+    const percentWidth = ctx.measureText(percent).width
+    ctx.font = bold
+    const name = truncate(ctx, item?.label ?? "", Math.max(0, box.x + box.width - x - percentWidth))
+    const nameWidth = ctx.measureText(name).width
+    const label = (fill: string) => {
+      ctx.fillStyle = fill
+      ctx.font = bold
+      ctx.fillText(name, x, middle)
+      ctx.font = regular
+      ctx.globalAlpha *= 0.6
+      ctx.fillText(percent, x + nameWidth, middle)
+      ctx.globalAlpha /= 0.6
+    }
+    label(colors.text)
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(box.x + indent, y, Math.min(length, span), bar)
+    ctx.clip()
+    label(luminance(color) > 0.5 ? "#0c0c0c" : "#ffffff")
+    ctx.restore()
     ctx.restore()
   })
+}
+
+// The galaxy: the chart as a spinning spiral of dots laid out like a sunflower's seeds, shared out among the series by
+// their share of the day: the leader the core, the others rings around it in rank order, Other the rim. As the days run
+// the shares flow between days, so dots change hands at the ringed edges, which ripple like liquid; the inner dots
+// turn faster than the outer, so the spiral swirls; with music every dot pulses with its band of the track. The
+// clock and date tick in the corner, and the series are named under it with their share of the moment.
+function drawGalaxy(
+  ctx: CanvasRenderingContext2D,
+  chart: Extract<ShareChart, { kind: "stacked" }>,
+  colors: Palette,
+  box: Box,
+  time: number,
+  timing: ShareTiming,
+  length: number,
+  level: ((column: number, columns: number) => number) | undefined,
+) {
+  const days = chart.columns.length
+  if (days === 0) return
+  const at = Math.max(0, Math.min(1, (time - timing.start) / length)) * (days - 1)
+  const from = Math.floor(at)
+  const to = Math.min(days - 1, from + 1)
+  const step = at - from
+  const value = (day: number, series: number) => chart.columns[day]?.values[series] ?? 0
+  const now = (series: number) => value(from, series) + (value(to, series) - value(from, series)) * step
+  const all = chart.series.map((_, index) => index)
+  const whole = all.reduce((sum, series) => sum + now(series), 0) || 1
+  const other = (series: number) => chart.series[series]?.key === "other"
+  // Rank order, with Other always the rim.
+  const order = all.toSorted((a, b) => Number(other(a)) - Number(other(b)) || now(b) - now(a))
+
+  // The series and their shares under the galaxy, two columns.
+  const named = order.filter((series) => !other(series)).slice(0, 6)
+  const legendRows = Math.ceil(named.length / 2)
+  const line = Math.max(30, Math.min(46, box.height * 0.055))
+  const legendHeight = legendRows * line + line * 0.4
+  const area = { x: box.x, y: box.y, width: box.width, height: box.height - legendHeight }
+  const radius = Math.min(area.width, area.height) / 2
+  const cx = area.x + area.width / 2
+  const cy = area.y + area.height / 2
+  const pitch = Math.max(11, radius / 15)
+  const count = Math.min(1400, Math.round((Math.PI * radius * radius) / (pitch * pitch)))
+  const golden = Math.PI * (3 - Math.sqrt(5))
+
+  // Where each series' rings end, as fractions of the dots from the centre out.
+  const bounds = order.reduce<number[]>((list, series) => [...list, (list.at(-1) ?? 0) + now(series) / whole], [])
+  // The galaxy grows out from its core while the intro rises.
+  const grow = ease(Math.min(1, time / Math.max(0.01, timing.start)))
+  const dot = pitch * 0.42
+  ctx.save()
+  for (let index = 0; index < count; index++) {
+    const fraction = (index + 0.5) / count
+    if (fraction > grow) break
+    const distance = radius * Math.sqrt(fraction)
+    // Inner dots turn faster than outer ones: the spiral swirls as it spins.
+    const angle = index * golden + time * (0.15 + 0.5 * (1 - Math.sqrt(fraction)))
+    // The edges between series ripple, so the boundaries look liquid rather than ruled.
+    const ripple = 0.012 * Math.sin(angle * 3 + time * 2.2) + 0.008 * Math.sin(angle * 7 - time * 3.1)
+    const place = bounds.findIndex((bound) => fraction + ripple < bound)
+    const series = order[place === -1 ? order.length - 1 : place] ?? 0
+    const band = Math.floor(((((angle % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI)) / (2 * Math.PI)) * 32)
+    const beat = level ? level(band, 32) : 0.5 + 0.5 * Math.sin(time * 2.4 + distance * 0.04)
+    const size = dot * (0.75 + 0.55 * beat) * (0.85 + 0.3 * (1 - fraction))
+    ctx.fillStyle = other(series) ? colors.other : (chart.series[series]?.color ?? colors.idle)
+    ctx.fillRect(cx + Math.cos(angle) * distance - size / 2, cy + Math.sin(angle) * distance - size / 2, size, size)
+  }
+  ctx.restore()
+
+  // The clock and the day, faint in the upper right.
+  ctx.save()
+  ctx.textBaseline = "alphabetic"
+  ctx.font = `400 ${Math.round(line * 0.7)}px ${font}`
+  ctx.fillStyle = colors.faint
+  ctx.globalAlpha *= 0.7
+  const minutes = Math.min(24 * 60 - 1, Math.floor(step * 24 * 60))
+  const clock = `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`
+  const date = `${clock} ${chart.columns[from]?.label ?? ""}`
+  ctx.fillText(date, box.x + box.width - ctx.measureText(date).width, box.y + line)
+  ctx.restore()
+
+  // The legend: swatch, name and share of the moment.
+  ctx.save()
+  ctx.textBaseline = "middle"
+  const column = box.width / 2
+  const size = Math.round(line * 0.55)
+  named.forEach((series, index) => {
+    const x = box.x + Math.floor(index / legendRows) * column
+    const y = area.y + area.height + line * 0.4 + (index % legendRows) * line + line / 2
+    const amount = settle(time, 0.3 + index * 0.06, 0.6)
+    ctx.globalAlpha = amount
+    ctx.fillStyle = chart.series[series]?.color ?? colors.idle
+    ctx.fillRect(x, y - size * 0.4, size * 0.8, size * 0.8)
+    ctx.font = `400 ${size}px ${font}`
+    const share = `${((now(series) / whole) * 100).toFixed(now(series) / whole >= 0.1 ? 0 : 1)}%`
+    const shareWidth = ctx.measureText(share).width
+    const right = x + column - (index >= legendRows ? 0 : size * 2)
+    ctx.fillStyle = colors.text
+    ctx.globalAlpha = amount * 0.6
+    ctx.fillText(share, right - shareWidth, y)
+    ctx.globalAlpha = amount
+    ctx.fillStyle = colors.text
+    ctx.fillText(
+      truncate(ctx, chart.series[series]?.label ?? "", right - shareWidth - size - (x + size * 1.4)),
+      x + size * 1.4,
+      y,
+    )
+  })
+  ctx.restore()
 }
 
 // A colour's relative brightness (0 to 1), to set dark or white text on it.
