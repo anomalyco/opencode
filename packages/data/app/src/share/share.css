@@ -729,10 +729,6 @@
       }
     }
 
-    &:active {
-      transform: scale(0.98);
-    }
-
     &[aria-checked="true"] {
       color: var(--stats-text);
       border-color: var(--stats-accent);
