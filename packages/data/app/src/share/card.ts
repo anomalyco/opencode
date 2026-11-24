@@ -80,8 +80,8 @@ const palettes = {
     highlight: "#ffffff",
     // A highlighted series lights up in this colour instead of its own (the Top style's white); empty keeps its own.
     spotlight: "",
-    // The "Other" series: a mid grey on dark, a light one on the light card so it doesn't weigh down every column.
-    other: "#6b6b6b",
+    // The "Other" series: the same muted grey a dimmed series takes, so it sits back the whole time.
+    other: "#262626",
   },
   light: {
     background: "#fbfbfb",
@@ -98,7 +98,7 @@ const palettes = {
     lead: "#3b5cf6",
     highlight: "#161616",
     spotlight: "",
-    other: "#d0d0d0",
+    other: "#e2e2e2",
   },
 }
 
