@@ -90,3 +90,34 @@ it.live("Promise plugins can create, list and delete automations", () =>
     expect((yield* automations.list()).map((item) => item.id)).not.toContain(ids[0])
   }),
 )
+
+it.live("Promise plugins cannot delete an automation with an aborted signal", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const automations = yield* Automation.Service
+    const context = yield* PluginHost.make(plugins, "test")
+    const session = yield* context.session.create({ title: "Promise automation abort target" })
+    const ids: string[] = []
+
+    yield* PluginPromise.fromPromise({
+      id: "test.automation.abort",
+      async setup(ctx) {
+        const created = await ctx.experimental.automation.create({
+          directory: ctx.location.directory,
+          name: "kept inbox",
+          trigger: { type: "cron", cron: "0 9 * * *" },
+          action: { type: "prompt", prompt: "Check the balance now.", to: { session: session.id } },
+        })
+        ids.push(created.id)
+        const controller = new AbortController()
+        controller.abort()
+        await expect(
+          ctx.experimental.automation.delete({ automationID: created.id }, { signal: controller.signal }),
+        ).rejects.toThrow()
+      },
+    }).effect(context)
+
+    expect(ids).toHaveLength(1)
+    expect((yield* automations.list()).map((item): string => item.id)).toContain(ids[0])
+  }),
+)
