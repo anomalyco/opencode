@@ -205,7 +205,8 @@ function mainLength(card: ShareCard, options: ShareOptions, timing: ShareTiming)
 // that's 6.25 s. Without music they keep 96 BPM's beat.
 const outroBeats = 10
 const freeBeat = 0.625
-const outroLine = "The largest inference in the world"
+// The line on two lines, broken after "inference".
+const outroLine = ["The largest inference", "in the world"]
 const outroAddress = "opencode.ai"
 
 export function drawShareCard(
@@ -344,10 +345,10 @@ function drawOutro(
     drawLogo(ctx, options.logo, colors, -total / 2, -24 * zoom, zoom)
   }
   if (slide > 0) {
-    const words = slide === 1 ? outroLine : outroAddress
-    const size = slide === 1 ? (width > height ? 80 : 72) : 88
-    ctx.font = `${slide === 2 ? 700 : 400} ${size}px ${font}`
-    const lines = balance(ctx, words, width - pad * 4)
+    // The line and the address share one size, regular weight: the largest at which the line's longer half fits.
+    const size = fit(ctx, outroLine[0]!, width - pad * 3.5, 80, 400)
+    ctx.font = `400 ${size}px ${font}`
+    const lines = slide === 1 ? outroLine : [outroAddress]
     const leading = size * 1.2
     lines.forEach((line, index) =>
       ctx.fillText(line, -ctx.measureText(line).width / 2, (index - (lines.length - 1) / 2) * leading),
