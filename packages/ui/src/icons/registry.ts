@@ -15,7 +15,30 @@ type Artwork = {
 
 const namespace = "http://www.w3.org/2000/svg"
 
+const spriteHostID = "opencode-v2-icon-host"
+
 const spriteID = "opencode-v2-icon-registered"
+
+/**
+ * A single unhidden host for the SVG icon sprites. Kobalte's `ariaHideOutside` skips adding an already
+ * `aria-hidden="true"` element to its hidden set and would otherwise walk and hide every `<symbol>` child one by one.
+ */
+export function ensureIconSpriteHost() {
+  const existing = document.getElementById(spriteHostID)
+
+  if (existing) return existing
+
+  const host = document.createElement("div")
+
+  host.id = spriteHostID
+  host.style.position = "absolute"
+  host.style.width = "0"
+  host.style.height = "0"
+  host.style.overflow = "hidden"
+  document.body.insertBefore(host, document.body.firstChild)
+
+  return host
+}
 
 // What the artwork's root says about its document or its frame, not about the drawing.
 const structural = new Set(["xmlns", "width", "height", "viewBox", "id"])
@@ -147,7 +170,7 @@ function sprite() {
   svg.setAttribute("height", "0")
   svg.style.position = "absolute"
   svg.style.overflow = "hidden"
-  document.body.insertBefore(svg, document.body.firstChild)
+  ensureIconSpriteHost().append(svg)
 
   // Artwork may animate with SVG animation elements, which run on the sprite's clock. Under reduced motion the clock
   // holds at its start, so every icon shows its first frame.

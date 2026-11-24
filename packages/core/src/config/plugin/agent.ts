@@ -179,7 +179,12 @@ const decode = Effect.fnUntraced(function* (
     })
     return
   }
-  const agent = decoded.success
+  // Native rules may still name the media tools by their old experimental names.
+  const permissions = decoded.success.permissions?.map((rule) => ({
+    ...rule,
+    action: ConfigMigrateV1.renamedTool(rule.action),
+  }))
+  const agent = permissions ? ConfigAgent.Info.make({ ...decoded.success, permissions }) : decoded.success
   const info = Info.make({
     agents: { [name]: file.primary ? ConfigAgent.Info.make({ ...agent, mode: "primary" }) : agent },
   })

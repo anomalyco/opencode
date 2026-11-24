@@ -270,7 +270,6 @@ export function createCommandPaletteCommandEntry(option: CommandOption, category
 
 export function createServerSessionEntries(props: {
   server: ServerConnection.Key
-  archived?: boolean
   known?: () => SessionInfo[]
   /** Hides sessions deleted since they were loaded and adds a pending send's bump. */
   apply?: (sessions: SessionInfo[]) => SessionInfo[]
@@ -382,7 +381,7 @@ export function createServerSessionEntries(props: {
     const category = search ? props.category() : props.recentCategory()
 
     return sessions.flatMap((session) => {
-      if (!!session.time.archived !== !!props.archived) return []
+      if (session.time.archived) return []
 
       const project = projectForSession(session, projects)
 

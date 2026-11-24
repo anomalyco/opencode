@@ -157,6 +157,12 @@
         fill="currentColor"
       ></path>
     </symbol>
+    <symbol viewBox="0 0 24 24" fill="currentColor" id="thinkingmachines">
+      <path d="M3 3h5v2H5v3H3V3zm13 0h5v5h-2V5h-3V3zM3 16h2v3h3v2H3v-5zm16 0h2v5h-5v-2h3v-3z"></path>
+    </symbol>
+    <symbol viewBox="0 0 24 24" fill="currentColor" id="tencent">
+      <path fill-rule="evenodd" d="M9.976 1L24 9.8l-10.587.015L10.723 23H5.489L8.18 9.8H3.244L1 5.4h8.077L9.976 1z"></path>
+    </symbol>
     <symbol viewBox="0 0 24 24" fill="none" id="synthetic">
       <path
         shape-rendering="geometricPrecision"

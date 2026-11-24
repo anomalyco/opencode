@@ -575,8 +575,16 @@ export interface ComposerModel {
 }
 
 /**
+ * How `Composer.send` delivers an attached part now.
+ * - `send`: the session is idle, so the part starts its next step.
+ * - `steer`: the session is working, and the part reaches it at its next step.
+ * - `queue`: the session is working, and the part waits until it goes idle.
+ */
+export type ComposerDelivery = "send" | "steer" | "queue"
+
+/**
  * The session screen's composer: the routed session's next prompt, with its text, its attached parts and the model it
- * is sent with. Nothing here sends the prompt; the user does. A write to the draft (`insert`, `setText`, `attach`,
+ * is sent with. Nothing here sends the prompt; the user does, or `send` sends one attached part when the user asks. A write to the draft (`insert`, `setText`, `attach`,
  * `update`, `detach`) made before the session's stored draft loads waits for it, then applies to the session routed
  * when it was made, in call order with the other draft writes; the stored draft is never replaced.
  */
@@ -679,6 +687,31 @@ export interface Composer {
    * @param id - The part's `commentID`.
    */
   detach(id: string): void
+  /**
+   * How `send` delivers an attached part now: `send` while the session is idle, and while it works the user's
+   * follow-up behavior setting (`steer` or `queue`), as Enter in the composer does. Show it as the label of your
+   * editor's send action. Undefined while nothing can be sent: in a subagent's session, which has no composer, while
+   * the model catalog loads, and while another send is in flight. Reactive.
+   *
+   * @example
+   * const label = () => ctx.t(`comment.${screen.composer.delivery() ?? "send"}`)
+   */
+  delivery(): ComposerDelivery | undefined
+  /**
+   * Sends the attached file comment, note or quote with this `commentID` now, as a prompt of its own that carries
+   * its comment and nothing else from the draft, delivered as `delivery` says. Use it for an editor's "Steer comment"
+   * action, after `attach` or `update`. Once the session takes it, the part leaves the composer; when the
+   * send fails, the part stays attached and the app shows the error. Before the session's draft loads, it waits and
+   * applies in call order with the draft writes, so it finds a part an `attach` just before it added. Does nothing
+   * when no attached part has this `commentID`, or while `delivery` is undefined.
+   *
+   * @param commentID - The attached part's `commentID`.
+   *
+   * @example
+   * screen.composer.attach(note)
+   * screen.composer.send(note.commentID)
+   */
+  send(commentID: string): void
   /**
    * Whether keyboard focus is in the prompt now. Not reactive: read it where you act, such as in `Command.run`.
    *

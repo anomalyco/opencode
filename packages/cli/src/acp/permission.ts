@@ -86,6 +86,9 @@ export const withCompletedDiffs = Effect.fnUntraced(function* (
   cwd: string,
 ) {
   if (!source || update.sessionUpdate !== "tool_call_update") return update
+  // A script lists each change it made, some without a diff, and the same file more than once; rebuilding them from the
+  // file on disk would show its final text for every change.
+  if (canonicalName(source.toolName) === "execute") return update
   const hunks = canonicalName(source.toolName) === "patch" ? patchHunks(source.input) : []
   const diffs = yield* Effect.forEach(
     Option.getOrElse(decodeFiles(source.metadata?.files), () => []),

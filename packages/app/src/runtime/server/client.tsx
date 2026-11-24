@@ -166,6 +166,12 @@ function createServerSdkContextBase(server: ServerConnection.Any, scope: ServerS
     transport.dispose()
   })
 
+  // After sleep a stream can still read as connected while its socket is gone; replace it now rather than at its idle
+  // watchdog.
+  const stopResume = platform.onSystemResume?.(() => connection.internal.resync("System resumed from sleep"))
+
+  if (stopResume) onCleanup(stopResume)
+
   return {
     server,
     scope,

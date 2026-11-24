@@ -46,6 +46,7 @@ import {
   nextManualGroupNumber,
   pruneEmptyManualGroups,
   reconcileManualAssignments,
+  rememberAutoGroups,
   TAB_GROUP_MODES,
   TabGroupsStateSchema,
   type ComputedTabGroup,
@@ -210,6 +211,19 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
         },
       }),
     )
+
+    createEffect(() => {
+      if (!tabs.ready() || !stateReady() || !settings.general.tabGroups() || local.query.trim()) return
+      const remembered = rememberAutoGroups(groups(), state)
+
+      if (!remembered) return
+      setState(
+        produce((draft) => {
+          draft.groupOrder = remembered.groupOrder
+          draft.colors = remembered.colors
+        }),
+      )
+    })
 
     // Navigating into a session inside a collapsed group auto-expands that group so the active tab is visible.
     createEffect(
@@ -377,6 +391,28 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       indices.forEach((idx) => tabs.closeTab(idx))
 
       if (group.kind === "manual" && group.manualId) ungroupManual(group.manualId)
+    }
+
+    // Closing the current tab selects the next visible row, as browsers do. Its neighbour in tab order can sit in another
+    // group, and selecting a tab in a collapsed group expands it.
+    const closeTab = (tab: Tab) => {
+      const key = tabKey(tab)
+      const current = props.currentTab()
+      const visible = groups()?.flatMap((group) => group.visibleTabs) ?? []
+      const index = visible.findIndex((item) => tabKey(item) === key)
+
+      const keep =
+        current && tabKey(current) === key && index !== -1 ? (visible[index + 1] ?? visible[index - 1]) : undefined
+
+      if (keep) {
+        tabs.closeTabs([key], keep)
+
+        return
+      }
+
+      const storeIndex = tabs.store.findIndex((item) => tabKey(item) === key)
+
+      if (storeIndex !== -1) tabs.closeTab(storeIndex)
     }
 
     const groupByKey = createMemo(() => new Map((groups() ?? []).map((group) => [group.key, group])))
@@ -885,6 +921,7 @@ export const { use: useTabGroups, provider: TabGroupsProvider } = createSimpleCo
       assignTabToManualGroup,
       ungroupManual,
       closeGroup,
+      closeTab,
     }
   },
 })

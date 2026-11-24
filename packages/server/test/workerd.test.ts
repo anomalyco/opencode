@@ -1,8 +1,12 @@
 import { expect } from "bun:test"
-import { Effect } from "effect"
+import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Environment } from "@opencode/core/environment/index"
+import { Location } from "@opencode/core/location"
+import { AbsolutePath } from "@opencode/core/schema"
 import { Npm } from "@opencode/util/npm"
 import { makeDurableObjectStorage } from "../../core/test/fixture/durable-object-storage"
+import { location } from "../../core/test/fixture/location"
 import { it } from "../../core/test/lib/effect"
 import { ServerWorkerd } from "../src/workerd"
 
@@ -40,5 +44,25 @@ it.effect("fails Npm.add with a clear workerd error instead of running the insta
     const error = yield* npm.add("some-package").pipe(Effect.flip)
     expect(error).toBeInstanceOf(Npm.InstallFailedError)
     expect(String(error.cause)).toContain("Npm.add is unavailable in the workerd profile")
-  }).pipe(Effect.provide(AppNodeBuilder.build(Npm.node, ServerWorkerd.replacements({ storage: makeDurableObjectStorage() })))),
+  }).pipe(
+    Effect.provide(AppNodeBuilder.build(Npm.node, ServerWorkerd.replacements({ storage: makeDurableObjectStorage() }))),
+  ),
+)
+
+it.effect("leaves hostsServer and searchable unset on the workerd environment", () =>
+  Effect.gen(function* () {
+    const environment = yield* Environment.Service
+    expect(environment.id).toBe(Environment.localID)
+    expect(environment.hostsServer).toBeUndefined()
+    expect(environment.searchable).toBeUndefined()
+  }).pipe(
+    Effect.provide(
+      AppNodeBuilder.build(Environment.node, [
+        ...ServerWorkerd.replacements({ storage: makeDurableObjectStorage() }),
+        Location.node.replace(
+          Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make("/") }))),
+        ),
+      ]),
+    ),
+  ),
 )

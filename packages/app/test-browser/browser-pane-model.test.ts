@@ -106,7 +106,7 @@ function fixture(
     sessions: { current, list: () => refs },
     screen: { current: () => undefined },
     links: { open: () => undefined },
-    layout: { narrow: () => false, stored: () => [], state: () => "closed", open() {}, close() {}, side: { opened: () => false } },
+    layout: { narrow: () => false, ready: () => false, stored: () => [], state: () => "closed", open() {}, close() {}, side: { opened: () => false } },
     stores: { history, tabs },
   }
 
@@ -401,13 +401,14 @@ test("a command main rejects says what the person tried, never the app's generic
     await Bun.sleep(0)
     app.emit("ses_alpha", { tabs: [page], focusedTabID: page.id })
 
-    // A message main never sent before: the notice names the reload, offers it again, and the code is logged.
+    // A message main never sent before: the notice names the reload, offers it again, and the code and the action are
+    // logged as text, which the desktop log keeps.
     app.rejections.push("something new in main")
     app.model.command(alpha, { type: "reload", tabID: page.id })
     await Bun.sleep(0)
     expect(app.model.failure(alpha, page.id)).toMatchObject({ text: "failed.command.reload", lasting: false })
     expect(app.model.failure(alpha, page.id)?.retry).toBeFunction()
-    expect(warned).toHaveBeenCalledWith("[browser] unmapped failure", { code: "something new in main", action: "reload" })
+    expect(warned).toHaveBeenCalledWith("[browser] unmapped failure: something new in main (action: reload)")
     // It belongs to the tab the command was for.
     expect(app.model.failure(alpha, tab("b").id)).toBeUndefined()
 

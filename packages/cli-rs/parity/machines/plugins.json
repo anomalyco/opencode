@@ -1,0 +1,188 @@
+{
+  "about": "The life of a plugin as the user sees it, written by hand and never captured. The plugin is parity/plugins/life: tui.tsx for TS, and its Luau twin init.luau for Rust, which crates/tui/tests/all/plugin_machines.rs loads. An observation is line/palette/row/dialog: the plugin's line in home.footer (A, B or -), whether the palette finds its commands (yes or no), its row in the plugin manager (on, off, failed, pending or declined), and which of its dialogs shows (prompt, confirm, alert or -). While a dialog shows, the readers open neither the palette nor the manager, which would replace it, so the first three are ?. Actions: toggle is enter on its row in the plugin manager; flip, throw, stall, arm, dialog, confirm and alert run its palette commands Life flip, Life throw, Life stall (a call of 150 ms: over Rust's budget of one call, which TS does not have), Life arm (the next setup throws), Life dialog (opens its prompt), Life confirm (asks whether to flip the line) and Life alert (flips the line once it closes); leader presses the leader key (ctrl+x), which starts a key sequence: the plugin reads the pending keys (Luau read:keymapPending, TS keymap.pending) and its line shows them, so the observation is the line and its keys, as A+ctrl+x/?/?/-, the rest not read while a key would continue the sequence; enter answers the confirm yes; escape closes a dialog, which answers the confirm no, or ends a pending key sequence; reload puts a new build of the plugin in place. TS is the specification: an enable whose setup throws shows the error in a toast and leaves the row as it was, and a plugin's dialog stays open when it reloads; answered after the reload, it reaches nothing the user sees. A row in xfail is a known difference, [client, deviation file or finding:<name>, 'state action observation'].",
+  "depth": 4,
+  "seeds": 8,
+  "steps": 12,
+  "machines": {
+    "life": {
+      "initial": "onA",
+      "states": {
+        "onA": [
+          "A/yes/on/-",
+          {
+            "toggle": "off",
+            "flip": "onB",
+            "throw": "onA",
+            "stall": "onA",
+            "arm": "armedA",
+            "dialog": "dialogA",
+            "confirm": "confirmA",
+            "alert": "alertA",
+            "leader": "leaderA"
+          }
+        ],
+        "onB": [
+          "B/yes/on/-",
+          {
+            "toggle": "off",
+            "flip": "onA",
+            "stall": "onB",
+            "arm": "armedB",
+            "dialog": "dialogB",
+            "confirm": "confirmB",
+            "alert": "alertB",
+            "reload": "onA",
+            "leader": "leaderB"
+          }
+        ],
+        "armedA": ["A/yes/on/-", { "toggle": "offArmed", "flip": "armedB" }],
+        "armedB": ["B/yes/on/-", { "toggle": "offArmed", "flip": "armedA" }],
+        "off": ["-/no/off/-", { "toggle": "onA" }],
+        "offArmed": ["-/no/off/-", { "toggle": "off" }],
+        "dialogA": ["?/?/?/prompt", { "escape": "onA", "reload": "dialogReloaded" }],
+        "dialogB": ["?/?/?/prompt", { "escape": "onB", "reload": "dialogReloaded" }],
+        "dialogReloaded": ["?/?/?/prompt", { "escape": "onA" }],
+        "confirmA": ["?/?/?/confirm", { "enter": "onB", "escape": "onA", "reload": "confirmReloaded" }],
+        "confirmB": ["?/?/?/confirm", { "enter": "onA", "escape": "onB", "reload": "confirmReloaded" }],
+        "confirmReloaded": ["?/?/?/confirm", { "enter": "onA" }],
+        "alertA": ["?/?/?/alert", { "escape": "onB", "reload": "alertReloaded" }],
+        "alertB": ["?/?/?/alert", { "escape": "onA", "reload": "alertReloaded" }],
+        "alertReloaded": ["?/?/?/alert", { "escape": "onA" }],
+        "leaderA": ["A+ctrl+x/?/?/-", { "escape": "onA" }],
+        "leaderB": ["B+ctrl+x/?/?/-", { "escape": "onB" }]
+      },
+      "xfail": [
+        ["rust", "F16-plugin-budget-and-restart", "onA stall -/no/failed/-"],
+        ["rust", "F16-plugin-budget-and-restart", "onB stall -/no/failed/-"],
+        ["rust", "F16-plugin-panic-no-effects", "onA throw -/no/failed/-"],
+        ["rust", "F16-plugin-dialog-ends-with-activation", "dialogA reload A/yes/on/-"],
+        ["rust", "F16-plugin-dialog-ends-with-activation", "dialogB reload A/yes/on/-"],
+        ["rust", "F16-plugin-dialog-ends-with-activation", "confirmA reload A/yes/on/-"],
+        ["rust", "F16-plugin-dialog-ends-with-activation", "confirmB reload A/yes/on/-"],
+        ["rust", "F16-plugin-dialog-ends-with-activation", "alertA reload A/yes/on/-"],
+        ["rust", "F16-plugin-dialog-ends-with-activation", "alertB reload A/yes/on/-"]
+      ]
+    },
+    "project": {
+      "about": "The same plugin found in the project's .opencode/plugins instead of the config: the client starts in the project, and nothing names the plugin in its config. approve and decline answer the plugin manager's question about it (Enter on its row, then Approve or Decline); TS has no such question, so for TS they do nothing. TS loads the plugin at once. Rust lists it pending until it is approved, and declined once it is declined (deviation F16-project-plugin-approval); approved, it is the plugin TS shows. The xfail rows are those observations, and since Rust then follows TS again, a known row here does not end the path (continue).",
+      "initial": "found",
+      "continue": true,
+      "states": {
+        "found": ["A/yes/on/-", { "approve": "approved", "decline": "declined" }],
+        "declined": ["A/yes/on/-", { "approve": "approved" }],
+        "approved": ["A/yes/on/-", { "toggle": "off", "flip": "approvedB" }],
+        "approvedB": ["B/yes/on/-", { "toggle": "off", "flip": "approved" }],
+        "off": ["-/no/off/-", { "toggle": "approved" }]
+      },
+      "xfail": [
+        ["rust", "F16-project-plugin-approval", "found mount -/no/pending/-"],
+        ["rust", "F16-project-plugin-approval", "found decline -/no/declined/-"]
+      ]
+    },
+    "manager": {
+      "about": "The plugin manager's keys as the user presses them, with the life plugin loaded: open is /plugins, escape closes it, internal is ctrl+a, which shows or hides the built-in rows, and toggle is enter on the life row, which the manager selects as it opens with the built-ins hidden. An observation is dialog/internal/life: list or - for the manager on screen or not; show or hide as its footer offers (? while it is closed); and the life plugin on or off, from its row while the manager is open and from its line in home.footer while it is closed; while the built-in rows show, the life row may be below the screen, so it is ?. Every action of every state has an outcome: an edge, which a self-loop makes 'sent, and nothing changes' (escape, ctrl+a and enter in the empty home composer), or a place in unspecified, which a reader does not send and must not meet otherwise: open in a list types /plugins into its filter, and toggle with the built-in rows showing would toggle a built-in plugin.",
+      "unspecified": {
+        "listOn": ["open"],
+        "listOff": ["open"],
+        "internalOn": ["open", "toggle"],
+        "internalOff": ["open", "toggle"]
+      },
+      "initial": "closedOn",
+      "states": {
+        "closedOn": [
+          "-/?/on",
+          { "open": "listOn", "escape": "closedOn", "internal": "closedOn", "toggle": "closedOn" }
+        ],
+        "listOn": ["list/show/on", { "escape": "closedOn", "internal": "internalOn", "toggle": "listOff" }],
+        "internalOn": ["list/hide/?", { "escape": "closedOn", "internal": "listOn" }],
+        "listOff": ["list/show/off", { "escape": "closedOff", "internal": "internalOff", "toggle": "listOn" }],
+        "internalOff": ["list/hide/?", { "escape": "closedOff", "internal": "listOff" }],
+        "closedOff": [
+          "-/?/off",
+          { "open": "listOff", "escape": "closedOff", "internal": "closedOff", "toggle": "closedOff" }
+        ]
+      },
+      "xfail": []
+    },
+    "views": {
+      "about": "The plugin manager's views, with two plugins whose setups fail as they first load, each with its own cause: life (option fail in TS, the armed twin in Rust; cause 'life setup ...') and its distractor other (parity/plugins/other; cause 'other setup ...'). Both are listed failed, life first. open is /plugins; filter types parity.other into the list's filter (other alone would also match the letters of life's temporary path, which TS's filter searches); down moves the selection to the next row; details asks for the selected row's error with the key the footer offers for view error; escape closes the list, or goes back from the details to the list. An observation is dialog/a/b. For the list: the query as its field shows it (- while it shows its placeholder, Search) and the TUI plugin rows on screen in order, each name:status (failed, off or on), joined by +. For the details: the plugin whose source they show (its directory, parity.<name>) and the plugin whose cause they show. - for no manager. Every action of every state has an outcome or a place in unspecified, which a reader does not send: filter, down and details while the manager is closed would type into the home composer, open in a list or the details types /plugins, filter twice is not a view of its own, down past the last row wraps, and which row is selected after Back is left open.",
+      "unspecified": {
+        "closed": ["filter", "down", "details"],
+        "list": ["open"],
+        "listOther": ["open", "down"],
+        "filtered": ["open", "filter", "down"],
+        "errorLife": ["open", "filter", "down", "details"],
+        "errorOther": ["open", "filter", "down", "details"],
+        "back": ["open", "down", "details"]
+      },
+      "initial": "closed",
+      "states": {
+        "closed": ["-/?/?", { "open": "list", "escape": "closed" }],
+        "list": ["list/-/life:failed+other:failed", { "escape": "closed", "filter": "filtered", "down": "listOther", "details": "errorLife" }],
+        "listOther": ["list/-/life:failed+other:failed", { "escape": "closed", "filter": "filtered", "details": "errorOther" }],
+        "filtered": ["list/parity.other/other:failed", { "escape": "closed", "details": "errorOther" }],
+        "errorLife": ["error/life/life", { "escape": "back" }],
+        "errorOther": ["error/other/other", { "escape": "back" }],
+        "back": ["list/-/life:failed+other:failed", { "escape": "closed", "filter": "filtered" }]
+      },
+      "xfail": []
+    },
+    "viewer": {
+      "about": "The diff viewer's full-screen route, opened from home at 120 by 30 cells with the source Uncommitted over two files, a.ts and b.ts, that fit on one screen, so the card at the top of the list of all files is always a.ts. open is /diff and enter on home, close is q, review is m (diff.mark_reviewed) and single is s (diff.single_patch). An observation is screen/reviewed/shown: diff while the viewer shows, else -; the files the tree marks reviewed (a, b, ab or -); and the cards shown, ab for the list of all files, else the one file's. While it is closed the last two are ?. The single view is a setting, so it outlives the viewer; the reviewed marks start over with each open. Review in the list of all files toggles the selected file, else the one at the top; in the single view it marks the file and moves on to the next, and at the last it stays there until single or close. Every action of every state has an outcome or a place in unspecified, which a reader does not send: closed, q, m and s would type into the home composer, and open while the viewer shows would type into it.",
+      "unspecified": {
+        "closedAll": ["close", "review", "single"],
+        "closedOne": ["close", "review", "single"],
+        "all": ["open"],
+        "allA": ["open"],
+        "one": ["open"],
+        "oneAa": ["open"],
+        "oneAb": ["open"],
+        "oneABdone": ["open"],
+        "allAb": ["open"],
+        "allABb": ["open"],
+        "oneABa": ["open"],
+        "oneBa": ["open"],
+        "allABa": ["open"],
+        "oneABb": ["open"],
+        "allBa": ["open"]
+      },
+      "initial": "closedAll",
+      "states": {
+        "closedAll": ["-/?/?", { "open": "all" }],
+        "closedOne": ["-/?/?", { "open": "one" }],
+        "all": ["diff/-/ab", { "close": "closedAll", "review": "allA", "single": "one" }],
+        "allA": ["diff/a/ab", { "close": "closedAll", "review": "all", "single": "oneAa" }],
+        "one": ["diff/-/a", { "close": "closedOne", "review": "oneAb", "single": "all" }],
+        "oneAa": ["diff/a/a", { "close": "closedOne", "review": "one", "single": "allA" }],
+        "oneAb": ["diff/a/b", { "close": "closedOne", "review": "oneABdone", "single": "allAb" }],
+        "oneABdone": ["diff/ab/b", { "close": "closedOne", "review": "oneABdone", "single": "allABb" }],
+        "allAb": ["diff/a/ab", { "close": "closedAll", "review": "allABb", "single": "oneAa" }],
+        "allABb": ["diff/ab/ab", { "close": "closedAll", "review": "allAb", "single": "oneABa" }],
+        "oneABa": ["diff/ab/a", { "close": "closedOne", "review": "oneBa", "single": "allABa" }],
+        "oneBa": ["diff/b/a", { "close": "closedOne", "review": "oneABb", "single": "allBa" }],
+        "allABa": ["diff/ab/ab", { "close": "closedAll", "review": "allBa", "single": "oneABa" }],
+        "oneABb": ["diff/ab/b", { "close": "closedOne", "review": "oneAb", "single": "allABb" }],
+        "allBa": ["diff/b/ab", { "close": "closedAll", "review": "allABa", "single": "oneBa" }]
+      },
+      "xfail": []
+    }
+  },
+  "faults": {
+    "life": {
+      "cycles": ["toggle toggle", "flip flip", "arm toggle toggle toggle"],
+      "xfail": []
+    },
+    "manager": {
+      "cycles": ["open escape", "open toggle toggle escape", "open internal internal escape"],
+      "xfail": []
+    },
+    "views": {
+      "cycles": ["open escape", "open filter escape", "open details escape escape", "open down details escape escape", "open filter details escape escape"],
+      "xfail": []
+    },
+    "viewer": {
+      "cycles": ["open close", "open review review close", "open single single close"],
+      "xfail": []
+    }
+  }
+}

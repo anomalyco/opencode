@@ -44,6 +44,11 @@
   gap: 8px;
 }
 
+/* A script's changes, each its own card, keep the spacing of a direct patch's files. */
+[data-timeline="next"] [data-script-change="patch"] + [data-script-change="patch"] {
+  margin-top: var(--timeline-gap-s);
+}
+
 /* Each changed file is its own accordion, rather than one stacked group, as far from the next
    as any two rows. */
 [data-timeline="next"] [data-component="accordion"][data-scope="apply-patch"] {
@@ -623,6 +628,16 @@
     outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
   }
+}
+
+/* An open group's sticky header ends the gap above its first row and would paint over that row's ring. Its last 4px,
+   the width of a ring outside its row, stay unpainted, so the ring shows there and a row scrolling under the header
+   still passes beneath it. */
+[data-timeline="next"]
+  [data-component="collapsed-tool-group"]
+  > [data-component="collapsible"].tool-collapsible
+  > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+  clip-path: inset(-8px -8px min(4px, var(--tool-content-gap)) -8px);
 }
 
 /* A command set in its monospace face sits on the line's top rather than its baseline, so the row stays one line tall

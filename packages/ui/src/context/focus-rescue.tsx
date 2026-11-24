@@ -2,8 +2,6 @@
 // event. Inside a focus scope ([data-focus-scope]: a list, a tab strip, a chip row), move it to the next item, or to the
 // previous one when the last item went, and widen to the enclosing scope when the inner one has nothing left.
 
-import { focusField } from "./field-focus"
-
 const FOCUSABLE = [
   'a[href]:not([tabindex="-1"])',
   'button:not(:disabled):not([tabindex="-1"])',
@@ -14,8 +12,9 @@ const FOCUSABLE = [
   '[contenteditable="plaintext-only"]',
   '[contenteditable=""]',
   '[tabindex]:not([tabindex="-1"])',
-  // Roving focus: only one tree item is a Tab stop, but focus may land on any of them.
+  // Roving focus: only one item is a Tab stop, but focus may land on any of them.
   '[role="treeitem"]',
+  "[data-roving]",
 ].join(",")
 
 const SCOPE = "[data-focus-scope]"
@@ -58,7 +57,12 @@ export function installFocusRescue() {
   }
 }
 
-const useKeyboard = () => {
+// A rescued control shows its ring only while the keyboard is moving focus. Typing, shortcuts and a key pressed on a
+// control the pointer focused are not that.
+const NAVIGATION = new Set(["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"])
+
+const useKeyboard = (event: KeyboardEvent) => {
+  if (event.ctrlKey || event.altKey || event.metaKey || !NAVIGATION.has(event.key)) return
   keyboard = true
 }
 
@@ -105,7 +109,8 @@ function lose(entry: Entry, records: MutationRecord[]) {
   if (entry.spot) return
   const element = entry.element
 
-  if (usable(element)) return
+  // A panel or popover focused as a whole (tabindex -1) keeps focus when its page changes around it.
+  if (usable(element) || holds(element)) return
 
   const record = records.find(
     (item) => item.type === "childList" && Array.from(item.removedNodes).some((node) => node.contains(element)),
@@ -133,7 +138,7 @@ function rescue() {
   const active = document.activeElement
 
   // A control that was just disabled can still be the active element until Chromium's next update.
-  if (active instanceof HTMLElement && active !== document.body && usable(active)) return
+  if (active instanceof HTMLElement && active !== document.body && (usable(active) || holds(active))) return
 
   const ring = keyboard
   const entries = history.toReversed()
@@ -144,15 +149,14 @@ function rescue() {
     if (!entry.spot) return
     const target = pick(entry.spot)
 
-    // Fields such as the composer draw their own ring.
-    if (target) return focusField(target, ring, { focusVisible: ring })
+    if (target) return target.focus({ focusVisible: ring })
 
     if (target === undefined) continue
 
     // A scope left with nothing to focus, such as the last toast, hands focus back to what had it before.
     const previous = entries.slice(index + 1).find((item) => !item.spot && usable(item.element))
 
-    if (previous) focusField(previous.element, ring, { focusVisible: ring })
+    if (previous) previous.element.focus({ focusVisible: ring })
 
     return
   }
@@ -199,6 +203,16 @@ function within(root: HTMLElement, self: boolean) {
 // Not aria-hidden: a closing modal menu or dialog still hides the rest of the page from assistive tech for a moment.
 function usable(element: HTMLElement) {
   return element.matches(FOCUSABLE) && element.checkVisibility() && !element.closest("[inert]")
+}
+
+// Still the focused element and still able to keep focus, though not a Tab stop: lost focus would be on <body>.
+function holds(element: HTMLElement) {
+  return (
+    element === document.activeElement &&
+    element.matches('[tabindex]:not(:disabled)') &&
+    element.checkVisibility() &&
+    !element.closest("[inert]")
+  )
 }
 
 function after(spot: Spot, element: HTMLElement) {

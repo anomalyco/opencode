@@ -10,6 +10,7 @@ import { selectionFromLines, type SelectedLineRange, useFile } from "@/workspace
 import { useComments } from "@/composer/comments"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
+import { orderedSpeeds } from "@/providers/models/speed"
 import { usePluginHost } from "@/runtime/plugin/host"
 import { usePluginAttachment } from "@/runtime/plugin/host-apis"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -334,6 +335,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     comments: {
       capture: historyComments,
       clear: comments.clear,
+      remove: comments.remove,
       restore: restoreHistoryComments,
     },
     clientCommand: (text) => {
@@ -349,6 +351,9 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   })
 
   const submitView = createMemo(() => composerSubmitView(submission.state()))
+
+  const commentSendable = () =>
+    available() && !adapter.controls().model.loading && submitView().canSubmit && !options?.queue?.undoing()
 
   const controller = createComposerEditor({
     store: prompt.store,
@@ -529,6 +534,19 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         },
         keybind: () => command.keybindParts("model.variant.cycle"),
       },
+      speed: {
+        options: () =>
+          orderedSpeeds(adapter.controls().model.selection.speed?.list() ?? []).map((id) =>
+            id === undefined ? { id: "standard", label: language.t("composer.speed.standard") } : { id, label: id },
+          ),
+        current: () => adapter.controls().model.selection.speed?.current() ?? "standard",
+        onSelect: (value) => {
+          if (adapter.controls().model.loading) return
+
+          adapter.controls().model.selection.speed?.set(value === "standard" ? undefined : value)
+        },
+        keybind: () => command.keybindParts("model.speed.cycle"),
+      },
       submit: {
         available,
         stopping,
@@ -540,13 +558,18 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         quote:
           adapter.kind === "active-session"
             ? {
-                available: () =>
-                  available() &&
-                  !adapter.controls().model.loading &&
-                  submitView().canSubmit &&
-                  !options?.queue?.undoing(),
+                available: commentSendable,
                 delivery: () => (adapter.working() ? (options?.queue?.alternate() ?? "steer") : undefined),
-                onSubmit: submission.submitQuote,
+                onSubmit: submission.submitComment,
+              }
+            : undefined,
+        comment:
+          adapter.kind === "active-session"
+            ? {
+                available: commentSendable,
+                delivery: () => (adapter.working() ? (options?.queue?.delivery() ?? "steer") : undefined),
+                onSubmit: (key: string, comment: string) =>
+                  submission.submitComment(key, comment, { alternate: false }),
               }
             : undefined,
         onSubmit: (submitOptions) => {

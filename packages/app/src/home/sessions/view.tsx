@@ -25,7 +25,6 @@ import { Menu } from "@opencode/ui/menu"
 import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useLanguage } from "@/runtime/i18n/language"
-import { createFieldFocus } from "@opencode/ui/context/field-focus"
 import { ServerConnection } from "@/runtime/server/registry"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { showToast } from "@/shell/notifications/toast"
@@ -238,7 +237,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
       aria-label={props.language.t("sidebar.project.recentSessions")}
     >
       <div
-        class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base pb-1 pt-6 md:pb-3 lg:pt-12"
+        class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base pb-1 pt-6 md:pb-3 md:pt-12"
         onWheel={props.onWheel}
       >
         <HomeSessionSearch
@@ -248,7 +247,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
           onHoverSession={(sessionID) => setHover("sessionID", sessionID)}
         />
         <Show when={props.groups.length > 0 && props.canCreateSession}>
-          <div class="pointer-events-none absolute right-0 top-[68px] z-20 flex md:top-[84px] lg:top-[108px]">
+          <div class="pointer-events-none absolute right-0 top-[68px] z-20 flex md:top-[108px]">
             <Button
               data-action="home-new-session"
               variant="ghost-muted"
@@ -262,18 +261,18 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
           </div>
         </Show>
       </div>
-      <div class="pointer-events-none sticky top-[68px] z-40 h-0 -mr-3 md:top-[84px] lg:top-[108px]">
+      <div class="pointer-events-none sticky top-[68px] z-40 h-0 -mr-3 md:top-[108px]">
         <div
           ref={props.onSetThumbTrack}
           data-component="home-session-scroll-track"
-          class="relative ml-auto h-[calc(100cqh-68px)] w-3 md:h-[calc(100cqh-84px)] lg:h-[calc(100cqh-108px)]"
+          class="relative ml-auto h-[calc(100cqh-68px)] w-3 md:h-[calc(100cqh-108px)]"
         />
       </div>
       <div
         data-slot="home-sessions-list"
         data-focus-scope
         data-reveal={skeleton() || undefined}
-        class="relative -mr-3 min-h-[calc(100cqh-64px)] md:min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]"
+        class="relative -mr-3 min-h-[calc(100cqh-64px)] md:min-h-[calc(100cqh-96px)]"
         aria-busy={props.listView.status === "loading"}
       >
         <Show when={skeleton()}>
@@ -436,8 +435,6 @@ function HomeSessionSearch(
 ) {
   const scope = children(() => props.searchScope)
 
-  const keyboardFocus = createFieldFocus()
-
   return (
     <div class="w-full">
       <div
@@ -515,10 +512,6 @@ function HomeSessionSearch(
         </Show>
         <label
           data-slot="home-session-search-field"
-          onPointerDown={keyboardFocus.pointer}
-          onClick={(event) => {
-            if (event.detail > 0) keyboardFocus.pointer()
-          }}
           class={`
             relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] py-1 ps-3 pe-2
             bg-v2-background-bg-layer-02/60 text-v2-icon-icon-muted transition-[background-color,box-shadow]
@@ -541,13 +534,7 @@ function HomeSessionSearch(
             aria-activedescendant={
               props.searchActive && props.searchOpen ? `home-session-search-option-${props.searchActive}` : undefined
             }
-            data-field-focus
-            data-keyboard-focus={keyboardFocus.visible() || undefined}
-            onBlur={keyboardFocus.leave}
-            onFocus={(event) => {
-              keyboardFocus.enter(event.currentTarget)
-              props.onSearchFocus()
-            }}
+            onFocus={() => props.onSearchFocus()}
             onInput={(event) => props.onSearchInput(event.currentTarget.value)}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
@@ -703,7 +690,7 @@ function HomeSessionGroupHeader(props: {
       ref={element}
       class={`
         pointer-events-none sticky top-[68px] flex h-7 min-w-0 items-center justify-between
-        bg-v2-background-bg-base ps-1.5 md:ps-3 md:top-[84px] lg:top-[108px]
+        bg-v2-background-bg-base ps-1.5 md:ps-3 md:top-[108px]
       `}
       classList={{ "home-session-group-header z-[5]": !!props.elevated, "z-10": !props.elevated }}
     >

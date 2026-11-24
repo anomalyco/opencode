@@ -27,7 +27,7 @@ import { createWebLinks, PluginLinks } from "@/runtime/plugin/render"
 import { createPanelSidebar, createRegion, MobilePanel } from "@/runtime/plugin/panels"
 import { createMobileViews, MobileViewTabs } from "@/runtime/plugin/mobile"
 import { usePluginAttachment } from "@/runtime/plugin/host-apis"
-import { createMountedSession } from "@/runtime/plugin/mounted-session"
+import { createMountedSession, type ScreenPrompt } from "@/runtime/plugin/mounted-session"
 import { useUsageExceededDialogs } from "./usage-exceeded-dialogs"
 import { SessionErrorFallback } from "./route-error"
 import { createSessionScreenLayout } from "./screen-layout"
@@ -75,7 +75,7 @@ function SessionScreenContent(props: {
   view: Accessor<MountedSession>
   screen: SessionScreen
   bindBackground: (tasks: () => readonly BackgroundTask[]) => void
-  bindPrompt: (prompt: { quotable: () => boolean; focus: () => void; focused: () => boolean }) => void
+  bindPrompt: (prompt: ScreenPrompt) => void
 }) {
   const session = props.session
   const language = useLanguage()
@@ -242,7 +242,13 @@ function SessionScreenContent(props: {
   })
 
   props.bindBackground(composer.requests.background.tasks)
-  props.bindPrompt({ quotable: composer.quote.available, focus: composer.quote.focus, focused: composer.focused })
+  props.bindPrompt({
+    quotable: composer.quote.available,
+    focus: composer.quote.focus,
+    focused: composer.focused,
+    delivery: composer.quote.delivery,
+    send: composer.quote.send,
+  })
   useUsageExceededDialogs({
     selection: () => composer.active()?.composer.model.selection,
     onDone: () => composer.active()?.composer.restoreFocus(),

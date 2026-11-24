@@ -27,6 +27,8 @@ export class InvalidKey extends Schema.TaggedError<InvalidKey>()("Identity.Inval
 export interface Interface {
   readonly publicKey: () => Effect.Effect<Uint8Array, InvalidKey>
   readonly sign: (bytes: Uint8Array) => Effect.Effect<Uint8Array, InvalidKey>
+  /** The raw 32-byte seed, for the home's Iroh endpoint, whose endpoint id is then the home's public key. */
+  readonly seed: () => Effect.Effect<Uint8Array, InvalidKey>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Identity") {}
@@ -128,7 +130,7 @@ const load = (file: string) =>
           `its mode ${(mode & 0o777).toString(8)} lets other users read it; run "chmod 600 ${file}"`,
         )
     }
-    return fromSeed(seed)
+    return { ...fromSeed(seed), seed: new Uint8Array(seed) }
   })
 
 const layer = Layer.effect(
@@ -146,6 +148,7 @@ const layer = Layer.effect(
     return Service.of({
       publicKey: () => Effect.map(identity(), (key) => key.publicKey),
       sign: (bytes) => Effect.map(identity(), (key) => key.sign(bytes)),
+      seed: () => Effect.map(identity(), (key) => key.seed),
     })
   }),
 )

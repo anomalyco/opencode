@@ -73,7 +73,7 @@ const layer = Layer.effect(
       yield* permission.assert({
         action: "edit",
         resources: [target.resource],
-        save: ["*"],
+        save: [FileAccess.always(target)],
         metadata: preview ? { files: [preview] } : undefined,
         ...Permission.invocation(context),
       })

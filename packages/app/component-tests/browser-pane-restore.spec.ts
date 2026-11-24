@@ -25,6 +25,7 @@ const modules = {
   platform: source("../src/runtime/platform/platform.tsx"),
   solid: source("./plugin-host.fixture.tsx"),
   sessionTabs: source("../src/shell/state/session-tabs.ts"),
+  layoutKeys: source("../src/shell/state/helpers.ts"),
 }
 
 story.beforeEach(async ({ mount, page }) => {
@@ -47,6 +48,7 @@ story.beforeEach(async ({ mount, page }) => {
       closed,
       pluginCommands,
       sessionTabs,
+      layoutKeys,
     ] = await Promise.all([
       import(modules.fixture),
       import(modules.host),
@@ -63,6 +65,7 @@ story.beforeEach(async ({ mount, page }) => {
       import(modules.closed),
       import(modules.pluginCommands),
       import(modules.sessionTabs),
+      import(modules.layoutKeys),
       // Load the pane before mounting: Vite must not reload the page to optimize its dependencies mid-fixture.
       import(modules.browserPanel),
     ])
@@ -215,6 +218,7 @@ story.beforeEach(async ({ mount, page }) => {
       },
       Contribution: renderer.Contribution,
       appendTab: sessionTabs.appendSessionTab,
+      pruneKeys: layoutKeys.pruneSessionKeys,
     })
   }, modules)
 })
@@ -266,7 +270,7 @@ story("toggles the element picker from the shortcut only inside the browser pane
   await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
 
   await root.getByRole("button", { name: "Blank page", exact: true }).click()
-  // The comment tool has no button in the bar; while it waits for a pick, the pane says so in a status line.
+  // While the comment tool waits for a pick, the pane says so in a status line.
   const picking = root.getByText("Click part of the page to comment on it. Press Escape to cancel.", { exact: true })
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.click()
@@ -316,22 +320,19 @@ story("keeps in-page shortcuts in the editor and forwards toolbar, review and cl
   await editor.press(`${mod}+k`)
   await expect(editor).toHaveValue("handled:k")
 
-  const toggle = root.getByRole("button", { name: "Toggle browser toolbar", exact: true })
+  // The toolbar's toggle is an item of the options menu, so the shortcut leaves the keyboard on that menu's button.
+  const toolbar = root.getByRole("region", { name: "Viewport", exact: true })
+  const options = root.getByRole("button", { name: "Browser options", exact: true })
   await editor.press(`${mod}+Shift+m`)
-  await expect(toggle).toHaveAttribute("aria-expanded", "true")
-  await expect(toggle).toBeFocused()
+  await expect(toolbar).toBeVisible()
+  await expect(options).toBeFocused()
   await root.getByRole("button", { name: "Device preset", exact: true }).press("ArrowDown")
   await page.getByRole("menuitem", { name: "More devices", exact: true }).press("ArrowRight")
   await expect(page.getByRole("menuitemradio", { name: "iPhone SE", exact: true })).toBeFocused()
   await page.keyboard.press(`${mod}+Shift+m`)
-  await expect(toggle).toHaveAttribute("aria-expanded", "false")
-  await expect(toggle).toBeFocused()
-  await expect(toggle).toHaveCSS("outline-style", "solid")
-  await toggle.click()
-  await expect(toggle).toBeFocused()
-  await expect(toggle).toHaveCSS("outline-style", "none")
-  await page.keyboard.press(`${mod}+Shift+m`)
-  await expect(toggle).toHaveCSS("outline-style", "solid")
+  await expect(toolbar).toBeHidden()
+  await expect(options).toBeFocused()
+  await expect(options).toHaveCSS("outline-style", "solid")
 
   // Shell shortcuts like ⌘⇧R and pane-scoped ⌘W are claimed before the page sees them.
   await editor.press(`${mod}+Shift+r`)
@@ -345,18 +346,18 @@ story("keeps in-page shortcuts in the editor and forwards toolbar, review and cl
 story("the pane's toolbar shortcut works from inside the options menu's More tools", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mod = (await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))) ? "Meta" : "Control"
-  const toggle = root.getByRole("button", { name: "Toggle browser toolbar", exact: true })
+  const toolbar = root.getByRole("region", { name: "Viewport", exact: true })
   await root.getByRole("button", { name: "Beta", exact: true }).click()
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
   await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
-  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await expect(toolbar).toBeHidden()
 
   // The submenu is a portal of its own, outside the pane: it must still count as the pane for the pane's shortcuts.
   await root.getByRole("button", { name: "Browser options", exact: true }).click()
   await page.getByRole("menuitem", { name: "More tools", exact: true }).press("ArrowRight")
   await expect(page.getByRole("menu", { name: "More tools", exact: true }).getByRole("menuitem").first()).toBeFocused()
   await page.keyboard.press(`${mod}+Shift+m`)
-  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(toolbar).toBeVisible()
 })
 
 story(
@@ -1032,6 +1033,55 @@ story("a tab a link opens in front appears at once, selected, beside the tab it 
   await expect(root.getByRole("button", { name: "Reload", exact: true })).toBeVisible()
   expect(await drawn(tabs)).toEqual([...named.slice(0, 3), { ...named[3], icon: docsIcon }, named[4]])
   await expect(selected).toHaveText(`browser:${front.id}`)
+})
+
+// The strip is the host's, and the host can drop a session's tabs with no plugin hearing of it: its layout stores the
+// strips of the 50 sessions used last, open or not, and a session that comes back in another directory starts with
+// none. The desktop still held every tab, but the strip took only the tabs new to an inventory, so none came back. The
+// next tab the agent worked in, or the next one to open, then stood alone: every browser tab but one had gone, and
+// nobody had closed one.
+story("a strip the host forgot gets back every tab the desktop holds, so the tab the agent works in next does not stand alone", async ({ page }) => {
+  const { root, tabs, listed, selected } = await linkStrip(page)
+  const guide = "tab_77777777-7777-7777-7777-777777777777"
+  const pricing = reported({ id: "tab_88888888-8888-8888-8888-888888888888", url: "https://example.com/pricing", title: "Pricing", generation: 1 })
+  const before = await drawn(tabs)
+
+  // Each browser tab as it was drawn, wherever the strip now starts: the file tab went with the strip.
+  const same = (now: Box[]) => {
+    expect(now.map((tab) => ({ ...tab, x: 0 }))).toEqual(before.slice(1).map((tab) => ({ ...tab, x: 0 })))
+    now.slice(1).forEach((tab, index) => expect(tab.x - now[index].x).toBeCloseTo(before[index + 2].x - before[index + 1].x, 3))
+  }
+
+  // The person works in other sessions, fifty of them, and the host forgets this one's strip. Its shell tab is open.
+  const away = async () => {
+    await root.getByRole("button", { name: "Alpha", exact: true }).dispatchEvent("click")
+    await expect(tabs).toHaveText(["alpha.ts"])
+    await root.getByRole("button", { name: "Fifty other sessions used", exact: true }).dispatchEvent("click")
+  }
+
+  await away()
+  // Meanwhile the agent works in Guide, which main brings to the front.
+  await send(root, { type: "focus", tabID: guide })
+  // The person comes back: all three tabs, each once, in the desktop's order, as they were drawn, and Guide in front.
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(tabs).toHaveText(["Preview", "Docs", "Guide"])
+  await expect(selected).toHaveText(`browser:${guide}`)
+  same(await drawn(tabs))
+
+  // Again, and this time the desktop reports a tab the agent opened: it joins the three, at the end.
+  const returned = await drawn(tabs)
+  await away()
+  await send(root, { type: "state", state: { tabs: [...listed([]).state.tabs, pricing], focusedTabID: docs } })
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(tabs).toHaveText(["Preview", "Docs", "Guide", "Pricing"])
+  expect((await drawn(tabs)).slice(0, 3)).toEqual(returned)
+
+  // Once more, with nothing from the desktop, whose pages are quiet: coming back is enough.
+  const four = await drawn(tabs)
+  await away()
+  await root.getByRole("button", { name: "Beta", exact: true }).click()
+  await expect(tabs).toHaveText(["Preview", "Docs", "Guide", "Pricing"])
+  expect(await drawn(tabs)).toEqual(four)
 })
 
 // A page's icon arrives after its tab is drawn: Chromium lists it once the document's head has parsed, and main loads

@@ -5,7 +5,7 @@ import { HttpApiEndpoint, HttpApiSchema, OpenApi } from "effect/http-api"
 import { AutomationNotFoundError, ForbiddenError, InvalidRequestError, SessionNotFoundError } from "../errors.js"
 
 const EXPERIMENTAL =
-  "Experimental: needs experimental.automations in the config of the automation's directory and may change without compatibility guarantees."
+  "Experimental: may change without compatibility guarantees. Set automations to false in the directory's config to disable access."
 const errors = [AutomationNotFoundError, ForbiddenError] as const
 const params = { automationID: Automation.ID }
 const annotations = (identifier: string, summary: string, description: string) =>

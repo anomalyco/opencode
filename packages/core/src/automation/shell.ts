@@ -6,7 +6,7 @@ import { Agent } from "../agent.js"
 import { Environment } from "../environment/index.js"
 import { FileAccess } from "../file-access.js"
 import { Permission } from "../permission.js"
-import { Plugin } from "../plugin.js"
+import { Plugin } from "../plugin/service.js"
 import type { SessionSchema } from "../session/schema.js"
 import { Shell } from "../shell.js"
 import { ShellPermissions } from "../shell/permissions.js"
@@ -41,8 +41,8 @@ export const authorize = Effect.fnUntraced(function* (
     command: action.command,
     program,
     target,
-    local: true,
     once: true,
+    policy: Effect.succeed(Permission.Policy.fromRules(agent.info?.permissions ?? [], owner.permissions ?? [])),
   }).pipe(Effect.mapError((error) => error.message))
   // No save patterns: approval applies only to the command stored in this automation.
   yield* Effect.forEach(
@@ -57,6 +57,7 @@ export const authorize = Effect.fnUntraced(function* (
   )
 })
 
+// Approved once at creation (see authorize); runs intentionally don't recheck permissions. Pause or delete to stop future runs.
 export const start = Effect.fnUntraced(function* (
   owner: SessionSchema.Info,
   action: Automation.ShellAction,

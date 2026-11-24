@@ -37,6 +37,7 @@ import {
 } from "@opencode/plugin/gui"
 import { BuiltinPanel, BuiltinPromptGate, type BuiltinOpenOptions, type BuiltinStoreFrom, type BuiltinStoreOptions } from "@opencode/plugin/gui/builtin"
 import { usePlatform } from "@/runtime/platform/platform"
+import { startDragOut } from "@/runtime/platform/drag-out"
 import { same } from "@/runtime/persistence/equality"
 import { Persist, persisted, removePersisted } from "@/runtime/persistence/storage"
 import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
@@ -327,6 +328,7 @@ export function createHostApis() {
             reveal: (path) => platform.revealPath?.(path) ?? Promise.resolve(false),
             installed: (app) => platform.checkAppExists?.(app) ?? Promise.resolve(false),
             forceFocus: (enabled) => platform.setForceFocus?.(enabled) ?? Promise.resolve(),
+            dragOut: (event, path) => startDragOut(platform, event, path),
             async pick(options) {
               if (options?.directory) {
                 const picked = await platform.openDirectoryPickerDialog({
@@ -651,8 +653,16 @@ export function createPluginAttachment(apis: HostApis) {
     return servers.scope(ServerConnection.Key.make(id))
   }
 
+  // The ref outlives the route that made it, so its root comes from the tab that owns it rather than its routed ID.
+  const panelSessionID = (session: SessionRef) => {
+    const tab = tabs.store.find((item) => tabKey(item) === session.tab)
+
+    return tab?.type === "session" ? tab.sessionId : session.id
+  }
+
   // The registry's scope is pure: an unlisted server's sessions (e.g. a stopped WSL server, whose tabs stay open) keep
-  // their key, and no server controller starts for it.
+  // their key, and no server controller starts for it. A child session the tab routes to shares its root session's
+  // panels, so both go by the root's key.
   const stateKey = (session: SessionRef) => {
     const location = session.location
 
@@ -660,7 +670,7 @@ export function createPluginAttachment(apis: HostApis) {
 
     return SessionStateKey.from(
       servers.scope(ServerConnection.Key.make(session.server.id)),
-      SessionRouteKey.fromRoute(base64Encode(location.directory), session.id),
+      SessionRouteKey.fromRoute(base64Encode(location.directory), panelSessionID(session)),
     )
   }
 

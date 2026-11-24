@@ -207,7 +207,7 @@ export const Plugin = {
               yield* permission.assert({
                 action: "edit",
                 resources: [...new Set(targets.map((target) => target.resource))],
-                save: ["*"],
+                save: [...new Set(targets.map(FileAccess.always))],
                 metadata: {
                   filepath: targets.map((target) => target.resource).join(", "),
                   diff: patchFiles.map((file) => `${file.patch}\n`).join(""),

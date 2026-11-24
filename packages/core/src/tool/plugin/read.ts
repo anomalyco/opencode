@@ -1,14 +1,13 @@
 export * as ReadTool from "./read.js"
 
 import type { Context } from "@opencode/plugin/effect/plugin"
-import { basename, dirname, extname, isAbsolute, join, posix, relative } from "path"
+import path, { basename, dirname, extname, isAbsolute, join, relative } from "path"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
-import { Location } from "../../location.js"
 import { FileAccess } from "../../file-access.js"
 import { InstructionDiscovery } from "../../instruction-discovery.js"
 import { Permission } from "../../permission.js"
@@ -50,7 +49,7 @@ export const Plugin = {
     const sessionInstructions = yield* SessionInstructions.Service
     const fs = yield* FSUtil.Service
     const environment = yield* Environment.Service
-    const location = yield* Location.Service
+    const currentWorkingDirectory = yield* Environment.workingDirectoryResolver
     const config = yield* Config.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
@@ -68,6 +67,7 @@ export const Plugin = {
           output: ReadToolFileSystem.Output,
           execute: (input, context) => {
             return Effect.gen(function* () {
+              const workingDirectory = yield* currentWorkingDirectory
               if (input.limit === 0) return yield* new ToolFailure({ message: "Limit must be a positive integer" })
               if (Skill.isUri(input.path)) {
                 const parsed = parseSkillUri(input.path)
@@ -147,8 +147,11 @@ export const Plugin = {
               // skipped, and discovery failures never fail the read.
               yield* Effect.gen(function* () {
                 if (result.target.externalDirectory !== undefined) return
+                // Discovery walks this server's files, so it follows only a target on the Location's own environment.
+                // A cwd on a paired machine brings its instructions with it in a later change.
+                if (result.target.environment.id !== environment.id) return
                 const resolved = yield* fs.resolve(result.target.absolute)
-                const root = yield* fs.resolve(location.directory)
+                const root = yield* fs.resolve(workingDirectory.absolute)
                 // The Location and its ancestors are already supplied by initial instructions,
                 // even when an upward walk from elsewhere in the project cannot reach root.
                 const discovered = yield* fs.up({
@@ -205,9 +208,9 @@ export const Plugin = {
         (entry) => entry.type === "file" && canonical(entry.name) === base,
       )
       if (matches.length !== 1) return
-      // Another machine's path follows POSIX rules, whatever this server's platform joins with.
-      if (target.environment.id !== environment.id) return posix.join(posix.dirname(target.absolute), matches[0].name)
-      return join(dirname(target.absolute), matches[0].name)
+      // The path follows its environment's rules, whatever this server's platform joins with.
+      const rules = target.environment.path ?? path
+      return rules.join(rules.dirname(target.absolute), matches[0].name)
     })
 
     // Lists through the requested target's environment, which may be a remote workspace rather than this host.
@@ -221,7 +224,7 @@ export const Plugin = {
     // A path written from the wrong root, such as /Users/me/src/a.ts for a location at /Users/me/repo,
     // usually means <location>/src/a.ts, so check that one path and nothing else.
     const reroot = Effect.fn("ReadTool.reroot")(function* (miss: Missing) {
-      const root = location.directory
+      const root = (yield* currentWorkingDirectory).absolute
       // A machine's path is not this server's path to reroot, even when the text happens to sit under the Location.
       if (miss.requested.environment.id !== environment.id) return []
       if (FSUtil.contains(root, miss.requested.absolute) || !FSUtil.contains(dirname(root), miss.requested.absolute))

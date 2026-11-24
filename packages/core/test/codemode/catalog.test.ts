@@ -100,11 +100,18 @@ describe("CodeModeCatalog.summarize", () => {
     expect(catalog.namespaces[0]?.entries[0]?.line).toEndWith("// Summary")
   })
 
-  test("limits inline descriptions to 500 characters", () => {
-    const catalog = CodeModeCatalog.summarize({ tools: [entry("alpha.one", "x".repeat(501))] })
-    const description = catalog.namespaces[0]?.entries[0]?.line.split(" // ")[1]
-    expect(description).toHaveLength(500)
+  test("limits inline descriptions to 2,000 characters", () => {
+    const listing = CodeModeCatalog.lookup({ tools: [entry("alpha.one", "x".repeat(2_001))] })
+    const description = listing("alpha.one")?.line.split(" // ")[1]
+    expect(description).toHaveLength(2_000)
     expect(description).toEndWith("...")
+  })
+
+  test("shows pinned tools' full descriptions", () => {
+    const tool = entry("alpha.one", `Summary  \n\n  indented ${"x".repeat(2_001)}\nLast\n`, undefined, true)
+    expect(CodeModeCatalog.summarize({ tools: [tool] }, { budget: 0 }).namespaces[0]?.entries[0]?.line).toBe(
+      `  - ${tool.signature} // Summary\n    //\n    //   indented ${"x".repeat(2_001)}\n    // Last`,
+    )
   })
 
   test("always retains namespace descriptions and charges them before tool listings", () => {

@@ -8,6 +8,7 @@ import { sendBackgroundEvent, workerQueue } from "./worker-events"
 import { eventPage } from "./event-page"
 import preloadSource from "./preload.js?raw"
 import frameStyles from "./frame-styles.js?raw"
+import appBadge from "./app-badge.js?raw"
 
 /** A context that listens to an event: a page frame, or the extension's service worker, which is started to hear it. */
 type Subscriber = { readonly kind: "frame"; readonly process: number; readonly routing: number } | { readonly kind: "worker" | "eventPage" }
@@ -15,7 +16,9 @@ type Subscriber = { readonly kind: "frame"; readonly process: number; readonly r
 /**
  * The bridge between extension contexts and the API modules. It writes the profile's preload, which adds each
  * module's namespaces to the pages and service workers of installed extensions, answers their calls and delivers
- * events to the contexts that listen.
+ * events to the contexts that listen. The same file carries two scripts that are not for extensions alone: the
+ * stylesheet receiver of pane documents (`frame-styles.js`), and what keeps every page and worker of the partition off
+ * the app's badge (`app-badge.js`).
  *
  * Trust: a frame is answered only while its document is a `chrome-extension://` page of an extension loaded in
  * `session`, and a service worker only when its scope is such an extension's root; either only for a namespace its
@@ -51,7 +54,7 @@ export async function createExtensionHost(input: {
   // The modules already listen (to cookies, tabs); a host that cannot start lets them go again.
   await writeFile(
     file,
-    frameStyles + "\n" + preloadSource.replace('"__NAMESPACES__"', JSON.stringify(JSON.stringify(namespaces))),
+    [frameStyles, appBadge, preloadSource.replace('"__NAMESPACES__"', JSON.stringify(JSON.stringify(namespaces)))].join("\n"),
     "utf8",
   ).catch((cause: unknown) => {
     input.modules.forEach((module) => module.dispose?.())

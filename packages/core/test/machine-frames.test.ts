@@ -14,7 +14,7 @@ import { Machines } from "@opencode/core/machine/machines"
 import { Noise } from "@opencode/core/machine/noise"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
-import { Cause, Deferred, Effect, Exit, Fiber, Option, Queue, Result, Schema, Scope, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber, Logger, Option, Queue, Result, Schema, Scope, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { TestClock } from "effect/testing"
 import transcript from "./fixture/link-v1-transcript.json"
@@ -41,6 +41,7 @@ const PIECE = 65_535 - 16 - 1
 
 const HELLO: Machine.Hello = {
   type: "hello",
+  protocol: 2,
   os: "linux",
   arch: "x64",
   home: "/home/worker",
@@ -348,6 +349,7 @@ it.effect("carries messages of many frames intact both ways, one whole message a
         { length: 8 },
         (_, index): Extract<Machine.FromWorker, { type: "output" }> => ({
           type: "output",
+          stream: "stdout",
           id: Machine.ProcessID.make(`${index}`),
           offset: 0,
           data: new Uint8Array(200_000).fill(index),
@@ -458,6 +460,22 @@ it.effect("refuses a worker whose first message is not a hello", () =>
       const worker = yield* raw(carrier, { home: paired.home, identity: paired.worker })
       yield* worker.message(started("a"))
       expect(yield* Fiber.join(serving).pipe(Effect.flip)).toEqual(new Link.Refused())
+    }),
+  ),
+)
+
+it.effect("refuses a hello with no protocol version or one it does not know", () =>
+  home(
+    Effect.gen(function* () {
+      const paired = yield* enrol("gpu")
+      const { protocol: _, ...unversioned } = Schema.encodeSync(Machine.Hello)(HELLO)
+      for (const hello of [unversioned, { ...unversioned, protocol: 1 }]) {
+        const carrier = yield* wires()
+        const serving = yield* Effect.forkChild(Link.serve(carrier.home), { startImmediately: true })
+        const worker = yield* raw(carrier, { home: paired.home, identity: paired.worker })
+        yield* worker.frame(concat(Uint8Array.of(0), text(JSON.stringify(hello))))
+        expect(yield* Fiber.join(serving).pipe(Effect.flip)).toEqual(new Link.Refused())
+      }
     }),
   ),
 )
@@ -624,6 +642,7 @@ it.effect("keeps a message whole when a rekey falls between its frames, in each 
       const down: Machine.ToWorker = { type: "fs", req: 1, call: "write", path: "/big", bytes: randomBytes(150_000) }
       const up: Extract<Machine.FromWorker, { type: "output" }> = {
         type: "output",
+        stream: "stdout",
         id: Machine.ProcessID.make("p"),
         offset: 0,
         data: randomBytes(150_000),
@@ -717,3 +736,33 @@ it.effect("reproduces the pinned v1 transcript", () => {
     hex(inputs.home_seed),
   )
 })
+
+for (const protocol of [1, 3]) {
+  it.effect(`refuses protocol ${protocol} and logs an update instruction`, () =>
+    home(
+      Effect.gen(function* () {
+        const paired = yield* enrol("version-test")
+        const carrier = yield* wires()
+        const logs: unknown[] = []
+        const serving = yield* Effect.forkChild(
+          Link.serve(carrier.home).pipe(
+            Effect.provide(
+              Logger.layer([
+                Logger.make(({ message }) => {
+                  logs.push(message)
+                }),
+              ]),
+            ),
+          ),
+          { startImmediately: true },
+        )
+        const worker = yield* raw(carrier, { home: paired.home, identity: paired.worker })
+        yield* worker.frame(concat(Uint8Array.of(0), text(JSON.stringify({ ...HELLO, protocol }))))
+        expect(yield* Fiber.join(serving).pipe(Effect.flip)).toEqual(new Link.Refused())
+        expect(JSON.stringify(logs)).toContain(`uses protocol ${protocol}`)
+        expect(JSON.stringify(logs)).toContain("requires protocol 2")
+        expect(JSON.stringify(logs)).toContain("The worker and the home must be the same version")
+      }),
+    ),
+  )
+}

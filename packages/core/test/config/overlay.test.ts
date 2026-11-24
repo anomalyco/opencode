@@ -74,6 +74,7 @@ const instances = Layer.effect(
             update: unexpected,
             reject: () => Effect.succeed(false),
             which: () => Effect.undefined,
+            follows: () => Effect.succeed(false),
           }),
         ),
       ),
