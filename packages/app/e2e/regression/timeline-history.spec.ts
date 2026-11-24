@@ -251,24 +251,27 @@ test.describe("timeline history", () => {
       }),
     ]).flat()
 
+    // The first older page waits until the reader has asked again.
+    const asked = Promise.withResolvers<void>()
+    const older = Promise.withResolvers<void>()
     const requests: (string | undefined)[] = []
     await setupTimeline(page, {
       sessionMessages: messages,
       pageMessages: (_, limit, before) => {
-        requests.push(before)
         const end = before ? messages.findIndex((message) => message.id === before) : messages.length
         const start = Math.max(0, end - Math.min(4, limit))
 
         return { items: messages.slice(start, end), cursor: start ? messages[start]!.id : undefined }
       },
-    })
-    // The first older page waits until the reader has asked again.
-    const asked = Promise.withResolvers<void>()
-    const older = Promise.withResolvers<void>()
-    await page.route(/\/message\?.*cursor=/, async (route) => {
-      asked.resolve()
-      await older.promise
-      await route.fallback()
+      beforeMessagesResponse: ({ before }) => {
+        if (!before) return Promise.resolve()
+        asked.resolve()
+
+        return older.promise
+      },
+      onMessages: (request) => {
+        if (request.phase === "start") requests.push(request.before)
+      },
     })
     const scroller = timelineScroller(page)
     await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
