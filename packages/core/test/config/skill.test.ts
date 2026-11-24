@@ -364,6 +364,107 @@ describe("ConfigSkillPlugin.Plugin", () => {
     ),
   )
 
+  // Skills linked from one folder share a watch on it, except on Linux, where each keeps a file watch.
+  const linkedWatches = (target: string, files: readonly string[]) =>
+    process.platform === "linux"
+      ? files.map((file) => ({ path: file, type: "file" as const }))
+      : [{ path: target, type: "directory" as const, ignore: SkillScan.ignore.toSorted() }]
+
+  const link = (target: string, source: string, names: readonly string[]) =>
+    Effect.promise(async () => {
+      await fs.mkdir(source, { recursive: true })
+      for (const name of names) {
+        await fs.mkdir(path.join(target, name), { recursive: true })
+        await write(target, name, name)
+        await fs.symlink(
+          path.join(target, name),
+          path.join(source, name),
+          process.platform === "win32" ? "junction" : undefined,
+        )
+      }
+    })
+
+  const names = (prefix: string) => Array.from({ length: 10 }, (_, index) => `${prefix}${index}`)
+
+  it.live("shares one watch between skills linked from the same folder", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const source = path.join(tmp.path, "source")
+          const target = path.join(tmp.path, "target")
+          const linked = names("skill")
+          yield* link(target, source, linked)
+
+          const skill = yield* start([source], tmp.path)
+          const watcher = yield* Watcher.Test
+          expect((yield* skill.list()).map((item) => item.id)).toEqual(linked.map((name) => Skill.ID.make(name)))
+          expect((yield* watcher.subscriptions()).filter((item) => FSUtil.contains(target, item.path))).toEqual(
+            linkedWatches(
+              target,
+              linked.map((name) => path.join(target, name, "SKILL.md")),
+            ),
+          )
+
+          yield* Effect.promise(() => write(target, "skill3", "Updated"))
+          yield* emitAndWait({ type: "update", path: path.join(target, "skill3", "SKILL.md") })
+          expect((yield* skill.list()).find((item) => item.id === "skill3")?.description).toBe("Updated")
+        }),
+      ),
+    ),
+  )
+
+  it.live("shares one watch between skills linked from the same folder by different sources", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const first = path.join(tmp.path, "first")
+          const second = path.join(tmp.path, "second")
+          const target = path.join(tmp.path, "target")
+          yield* link(target, first, names("a"))
+          yield* link(target, second, names("b"))
+
+          const skill = yield* start([first, second], tmp.path)
+          const watcher = yield* Watcher.Test
+          expect((yield* watcher.subscriptions()).filter((item) => FSUtil.contains(target, item.path))).toEqual(
+            linkedWatches(
+              target,
+              [...names("a"), ...names("b")].map((name) => path.join(target, name, "SKILL.md")),
+            ),
+          )
+
+          yield* Effect.promise(() => write(target, "b4", "Updated"))
+          yield* emitAndWait({ type: "update", path: path.join(target, "b4", "SKILL.md") })
+          expect((yield* skill.list()).find((item) => item.id === "b4")?.description).toBe("Updated")
+        }),
+      ),
+    ),
+  )
+
+  it.live("keeps a source's own watch when skills elsewhere link into it", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const links = path.join(tmp.path, "links")
+          const target = path.join(tmp.path, "target")
+          yield* link(target, links, names("skill"))
+
+          const skill = yield* start([links, target], tmp.path)
+          const watcher = yield* Watcher.Test
+          expect((yield* watcher.subscriptions()).filter((item) => FSUtil.contains(target, item.path))).toEqual([
+            { path: target, type: "directory", ignore: SkillScan.ignore.toSorted() },
+          ])
+
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(target, "fresh"), { recursive: true })
+            await write(target, "fresh", "Fresh")
+          })
+          yield* emitAndWait({ type: "create", path: path.join(target, "fresh", "SKILL.md") })
+          expect((yield* skill.list()).find((item) => item.id === "fresh")?.description).toBe("Fresh")
+        }),
+      ),
+    ),
+  )
+
   it.live("reloads symlinked sources when their target changes", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
