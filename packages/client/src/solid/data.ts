@@ -383,14 +383,14 @@ export function createData(config: CreateDataInput) {
     Object.values(store.session.info).toSorted((a, b) => b.time.updated - a.time.updated),
   )
   const messageIndex = new Map<string, Map<string, number>>()
-  // What a read of the transcript and a committed revert's event know of each other, by session. `applied`: the read
-  // came first and showed that the revert at `boundary` was committed, so its event has nothing left to do.
-  // `awaited`: the event came first and could not place the boundary, so the read under way brings what it left.
-  const revertReads = new Map<string, { readonly status: "applied" | "awaited"; readonly boundary: string }>()
   const omitFiles = () =>
     typeof config.omitToolFileData === "function" ? config.omitToolFileData() : config.omitToolFileData === true
   const stored = (message: SessionMessageInfo) => (omitFiles() ? omitMessageFileData(message) : message)
   const sync = createSync()
+  // What a read of the transcript and a committed revert's event know of each other, by session. `applied`: the read
+  // came first and showed that the revert at `boundary` was committed, so its event has nothing left to do.
+  // `awaited`: the event came first and could not place the boundary, so the read under way brings what it left.
+  const revertReads = new Map<string, { readonly status: "applied" | "awaited"; readonly boundary: string }>()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
   // Job events that arrive while a tree's list is in flight, applied over its response: the latest info, or undefined
   // once settled.
@@ -720,10 +720,10 @@ export function createData(config: CreateDataInput) {
 
   function evictSession(sessionID: string) {
     if (sessionOutbox.has(sessionID)) return
+    revertReads.delete(sessionID)
     sync.invalidate(`session.pending:${sessionID}`)
     sync.invalidate(`session.message:${sessionID}`)
     messageLoads.delete(sessionID)
-    revertReads.delete(sessionID)
     // Keep unacknowledged submissions until their echo or rollback settles them.
     const pending = store.session.pending[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
     const messages = store.session.message[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
@@ -775,9 +775,9 @@ export function createData(config: CreateDataInput) {
   function removeSession(sessionID: string) {
     activeUpdates?.set(sessionID, undefined)
     removeJobTree(sessionID)
+    revertReads.delete(sessionID)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
-    revertReads.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
     sync.invalidate(`session.family:${sessionID}`)
     sync.invalidate(`session.pending:${sessionID}`)
@@ -2091,11 +2091,11 @@ export function createData(config: CreateDataInput) {
             // inbox.delivered event (and maybe its enqueued echo) while the event stream was down.
             const delivered = [...admitted].filter((id) => ids.has(id))
             batch(() => {
+              settleRevert(sessionID, ids)
               delivered.forEach((id) => {
                 outbox.delete(id)
                 removePending(sessionID, id)
               })
-              settleRevert(sessionID, ids)
               messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
               setStore("session", "message", sessionID, reconcile(messages))
               setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)

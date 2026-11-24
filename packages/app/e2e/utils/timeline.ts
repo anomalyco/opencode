@@ -443,47 +443,6 @@ export function validateTimelineMessages(input: readonly TimelineMessage[]): Tim
   return messages
 }
 
-export async function waitForVisualSettle(page: Page, selectors: string[], stableFrames = 3) {
-  await page.waitForFunction(
-    ({ selectors, stableFrames }) => {
-      const elements = selectors.map((selector) => document.querySelector<HTMLElement>(selector))
-
-      if (elements.some((element) => !element)) return false
-
-      return new Promise<boolean>((resolve) => {
-        let stable = 0
-        let previous = ""
-
-        const sample = () => {
-          const signature = JSON.stringify(
-            elements.map((element) => {
-              const rect = element!.getBoundingClientRect()
-
-              return [Math.round(rect.top * 10), Math.round(rect.bottom * 10), Math.round(rect.height * 10)]
-            }),
-          )
-
-          stable = signature === previous ? stable + 1 : 0
-          previous = signature
-
-          const ordered = elements
-            .slice(1)
-            .every(
-              (element, index) =>
-                elements[index]!.getBoundingClientRect().bottom <= element!.getBoundingClientRect().top + 0.5,
-            )
-
-          if (stable >= stableFrames && ordered) return resolve(true)
-          requestAnimationFrame(sample)
-        }
-
-        requestAnimationFrame(sample)
-      })
-    },
-    { selectors, stableFrames },
-  )
-}
-
 /**
  * Records the key of every timeline row at each animation frame, until `stop` returns the frames. It shows what a
  * reader saw between two moments, which the state before and the state after cannot.
@@ -532,6 +491,47 @@ export async function recordTimelineFrames(page: Page) {
       return frames
     },
   }
+}
+
+export async function waitForVisualSettle(page: Page, selectors: string[], stableFrames = 3) {
+  await page.waitForFunction(
+    ({ selectors, stableFrames }) => {
+      const elements = selectors.map((selector) => document.querySelector<HTMLElement>(selector))
+
+      if (elements.some((element) => !element)) return false
+
+      return new Promise<boolean>((resolve) => {
+        let stable = 0
+        let previous = ""
+
+        const sample = () => {
+          const signature = JSON.stringify(
+            elements.map((element) => {
+              const rect = element!.getBoundingClientRect()
+
+              return [Math.round(rect.top * 10), Math.round(rect.bottom * 10), Math.round(rect.height * 10)]
+            }),
+          )
+
+          stable = signature === previous ? stable + 1 : 0
+          previous = signature
+
+          const ordered = elements
+            .slice(1)
+            .every(
+              (element, index) =>
+                elements[index]!.getBoundingClientRect().bottom <= element!.getBoundingClientRect().top + 0.5,
+            )
+
+          if (stable >= stableFrames && ordered) return resolve(true)
+          requestAnimationFrame(sample)
+        }
+
+        requestAnimationFrame(sample)
+      })
+    },
+    { selectors, stableFrames },
+  )
 }
 
 export function historyMessages(count: number): TimelineMessage[] {

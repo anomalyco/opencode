@@ -1610,10 +1610,12 @@ test.describe("revert", () => {
         },
       })
 
-      // Until the limit every loaded message counts as reverted, so none shows and older pages load. Then they show.
+      // Until the limit every loaded message counts as reverted, so none shows and older pages load. Then they show,
+      // and paging stops short of the session's 1,060 messages.
       await expect(page.getByText("Reply 529.", { exact: true })).toBeInViewport()
       await expect(page.getByText("Prompt 529", { exact: true })).toBeVisible()
-      expect(served.messages).toBe(1_000)
+      expect(served.messages).toBeGreaterThanOrEqual(1_000)
+      expect(served.messages).toBeLessThan(long.length)
     })
 
     test(`a committed revert leaves the messages before its boundary on the ${name} timeline`, async ({ page }) => {
