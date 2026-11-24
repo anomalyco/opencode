@@ -2155,10 +2155,13 @@ body {
 }
 
 [data-page="stats"] [data-slot="heading-anchor"] {
+  /* On the title's baseline, a short space before it. */
   position: absolute;
-  top: -0.08em;
+  top: 0;
   right: 100%;
-  margin-right: 0.48em;
+  margin-right: 0.24em;
+  /* No leading above the glyph, as the title's own glyphs have none; the line height would push it down. */
+  line-height: normal;
   color: var(--stats-accent);
   opacity: 0;
 }
