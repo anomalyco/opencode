@@ -848,6 +848,12 @@
     }
   }
 
+  /* The bar's icon buttons as tall as its dropdowns and Export, their hover and target area too. */
+  [data-slot="editor-bar"] [data-slot="icon-button"] {
+    width: 36px;
+    height: 36px;
+  }
+
   /* Mute, Shuffle and Export, together at the far end. */
   [data-slot="bar-end"] {
     display: flex;
