@@ -744,13 +744,13 @@
     width: 24px;
     height: 24px;
     color: var(--stats-faint);
-    background: var(--stats-layer-2);
+    /* A see-through wash rather than a solid grey, so it tints whatever row it sits on. */
+    background: light-dark(rgb(0 0 0 / 0.06), rgb(255 255 255 / 0.08));
   }
 
-  /* Chosen (No music): a black square with the icon in a light blue, clearer than grey on the light blue row. */
+  /* Chosen, the icon darkens; its see-through square takes the row's light blue under it. */
   [data-slot="track"][aria-checked="true"] [data-slot="track-icon"] {
-    color: color-mix(in srgb, var(--stats-accent) 55%, white);
-    background: #000;
+    color: var(--stats-text);
   }
 
   /* A track's single cover fills its square; on the chosen track the play state sits over a darkened cover. */
