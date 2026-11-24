@@ -209,11 +209,13 @@
       background: var(--stats-accent);
       border-color: var(--stats-accent);
 
-      /* Rendering: the button fills with the accent from the left as the video renders, over a paler accent. */
+      /* Rendering: the button fills with the full accent from the left as the video renders, over a slightly muted one. */
       &[data-rendering] {
         background: linear-gradient(var(--stats-accent), var(--stats-accent)) left / var(--progress) 100% no-repeat
-          color-mix(in srgb, var(--stats-accent) 45%, var(--stats-bg));
+          color-mix(in srgb, var(--stats-accent) 62%, var(--stats-bg));
         border-color: transparent;
+        /* At full strength, though it's disabled while it renders. */
+        opacity: 1;
         cursor: progress;
         font-variant-numeric: tabular-nums;
       }
