@@ -63,9 +63,7 @@ test("keeps the parent title anchored when opening a subagent", async ({ page })
     // Measuring before then can read the detached heading, whose empty bounds put the start at 0.
     const card = page.locator(`a[href="${sessionHref(childID)}"]`)
     await expect(card).toBeVisible()
-    const start = await titleInlineStart(
-      page.locator("[data-session-title]").getByRole("heading", { name: parentTitle }),
-    )
+    const start = await titleInlineStart(page.locator("[data-session-title]").getByRole("heading", { name: parentTitle }))
 
     await card.click()
     await expectSessionTitle(page, taskDescription)
@@ -84,6 +82,7 @@ test("keeps the parent title anchored when opening a subagent", async ({ page })
 
 test("shows the parent session's side panel tabs in a subagent", async ({ page }) => {
   const parentStrip = `local\u0000${base64Encode(directory)}/${parentID}`
+
   await setup(page, undefined, 0, {
     fileList: () => [],
     fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
@@ -99,6 +98,7 @@ test("shows the parent session's side panel tabs in a subagent", async ({ page }
       },
     },
   })
+
   const side = page.locator('[data-pane-content="side"]')
   const strip = side.getByRole("tab")
   const expectParentStrip = async () => {
@@ -121,6 +121,7 @@ test("shows the parent session's side panel tabs in a subagent", async ({ page }
   await expectSessionTitle(page, parentTitle)
   await expect(side.getByRole("tab", { name: "README.md", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect(strip).toHaveText(["README.md", "notes.md"])
+
   expect(await storedStrips(page)).toEqual([parentStrip])
 })
 
