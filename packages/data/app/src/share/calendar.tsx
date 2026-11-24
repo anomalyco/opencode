@@ -118,9 +118,15 @@ export function shareRangeLabel(starts: string[], weekly: boolean) {
   return `${short(time(starts[0] ?? ""))} – ${short(end)}`
 }
 
-/** One column's date as its button shows it: Nov 23, or Week of Nov 17. */
+/** One column's date as its button shows it, with its year: Nov 23, 2026, or Week of Nov 17, 2026. */
 export function shareDayLabel(start: string, weekly: boolean) {
-  return weekly ? `Week of ${short(time(start))}` : short(time(start))
+  const date = new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(time(start))
+  return weekly ? `Week of ${date}` : date
 }
 
 function time(date: string) {

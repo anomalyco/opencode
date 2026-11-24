@@ -771,7 +771,7 @@ function Dropdown<T extends string>(props: {
                   <span data-slot="tool-icon">{item.icon}</span>
                 </Show>
                 <span data-slot="dropdown-label">
-                  {item.label}
+                  <span>{item.label}</span>
                   <Show when={item.detail}>
                     <small>{item.detail}</small>
                   </Show>

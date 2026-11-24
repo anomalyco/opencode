@@ -920,7 +920,7 @@
   }
 
   [data-slot="date-tool"] [data-slot="dropdown-trigger"] {
-    width: 196px;
+    width: 224px;
   }
 
   [data-slot="dropdown-menu"] {
@@ -999,6 +999,17 @@
     small {
       font-size: 11px;
       color: var(--stats-faint);
+    }
+  }
+
+  /* Sizes: each ratio with its name to its right, the names in a column. */
+  [data-component="dropdown"][data-id="size"] [data-slot="dropdown-label"] {
+    flex-direction: row;
+    gap: 12px;
+    align-items: baseline;
+
+    > span {
+      min-width: 4ch;
     }
   }
 
