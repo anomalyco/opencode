@@ -507,10 +507,11 @@ export const Plugin = {
       if (Option.isNone(found) || found.value.metadata.sessionID !== context.sessionID)
         return yield* new ToolFailure({ message: `${input.shellID} is not a shell command of this session.` })
       const wait = Math.min(input.wait_ms ?? READ_WAIT_MS, READ_MAX_WAIT_MS)
-      // Waits for the command's job when it has one, so the exit it sees is the job's: holding the job's notification
-      // meanwhile, and taking its result once finished, so a pushed command read here isn't notified again.
+      // Waits for the command's job too when it has one, holding the job's notification meanwhile and taking its result
+      // once finished, so a pushed command read here isn't notified again. A cancelled job ends before its command.
       const job = yield* jobs.get(id)
-      const until: Effect.Effect<unknown, unknown> = job?.status === "running" ? jobs.wait({ id }) : shell.wait(id)
+      const until: Effect.Effect<unknown, unknown> =
+        job?.status === "running" ? jobs.wait({ id }).pipe(Effect.andThen(shell.wait(id))) : shell.wait(id)
       // The calling script keeps blocking while this waits, instead of moving to the background.
       yield* jobs
         .collect(

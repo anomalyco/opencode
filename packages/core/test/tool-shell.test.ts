@@ -1310,6 +1310,24 @@ describe("ShellTool", () => {
           expect((yield* shell.wait(shellID)).status).toBe("killed")
           yield* outboxCleared
           expect((yield* stop([shellID], "call-stop-again")).output).toEqual({ stopped: [], notRunning: [shellID] })
+
+          // A shell_read waiting on the command doesn't hold the stop up, and sees the command end.
+          const other = yield* executeTool(registry, codeModeCall({ command: idleCommand, yield_ms: 50 }, "call-other"))
+          const otherID = String(other.output.shellID)
+          const reading = yield* executeTool(
+            registry,
+            codeModeCall({ shellID: otherID, wait_ms: 60_000 }, "call-read", ShellTool.readName),
+          ).pipe(Effect.forkScoped({ startImmediately: true }))
+          yield* Effect.promise(() => Bun.sleep(100))
+          expect((yield* stop([otherID], "call-stop-read").pipe(Effect.timeout("3 seconds"))).output).toEqual({
+            stopped: [otherID],
+            notRunning: [],
+          })
+          expect((yield* Fiber.join(reading).pipe(Effect.timeout("3 seconds"))).output).toMatchObject({
+            running: false,
+            exitCode: null,
+          })
+          yield* outboxCleared
           expect(yield* Queue.size(notices)).toBe(0)
         }),
       )

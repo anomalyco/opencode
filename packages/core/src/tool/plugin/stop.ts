@@ -63,9 +63,9 @@ export const Plugin = {
               yield* Effect.forEach(
                 stopped,
                 Effect.fnUntraced(function* (id) {
-                  // The model asked for this, so no notification follows.
-                  yield* jobs.deliver(id)
-                  const info = yield* jobs.cancel(id)
+                  // The model asked for this, so no notification follows: the cancel's result is taken. This doesn't
+                  // wait for other holds, such as a `shell_read` waiting on the same shell, which the cancel ends.
+                  const [info] = yield* jobs.collect([id], jobs.cancel(id).pipe(Effect.asVoid))
                   if (info?.notificationID) yield* jobs.completeBackground(info.notificationID)
                 }),
                 { discard: true },
