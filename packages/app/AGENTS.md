@@ -129,6 +129,15 @@ This section is the single source for what may move or restyle the session timel
 - Keeper: "a focused control that scrolls out of the mounted rows leaves the timeline where it was scrolled" in `e2e/regression/session-timeline-accessibility.spec.ts`.
 - To check by hand: click a tool header, a link and a notice in the timeline, then scroll up and down with the wheel. The timeline must follow the wheel.
 
+### Transcript reads
+
+- The reader keeps their place only while the rows in view stay in the transcript. `session.message.sync` (`packages/client/src/solid/data.ts`) reads the newest page again on every reconnect of the event stream, and when a turn ends with a tool still running. It once replaced the transcript with that page: a reader further back than the page jumped 3,400 to 8,100 px, and the older pages were gone.
+- A new read of the newest page keeps the loaded messages before it and their cursor. When the page does not reach the loaded messages, it reads older pages until they meet; after a long absence it gives up and keeps the newest messages only.
+- Never join a page to messages it does not adjoin. A transcript that skips messages is worse than a lost place, and nothing shows the reader that messages are missing. `loadMore` drops an older page when a newer read replaced the transcript the page continued.
+- A message counts as loaded history only where the server put it. The row of a waiting input sits where the input was admitted until its delivery moves it, so it cannot tell where a page meets the history.
+- Keepers: "reading the newest page again keeps the loaded history" and the cases after it in `packages/client/test/solid-data.test.ts`, and "a reconnect of the event stream keeps a reader in older history where they were" in `e2e/regression/timeline-history.spec.ts`.
+- To check by hand: scroll several screens back in a long session, then run `window.dispatchEvent(new Event("online"))` in DevTools. The app drops the event stream and reads the transcript again. The rows in view must not move.
+
 ### `:has()` selectors
 
 - Chromium rechecks an element's `:has()` when focus moves, an attribute changes, or an element is added or removed near it. In and around the timeline, that happens many times a second during a scroll.

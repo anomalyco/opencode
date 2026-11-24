@@ -2,7 +2,14 @@ import { expect, test } from "bun:test"
 import { getEventListeners } from "node:events"
 import { createRoot, createSignal } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
-import { OpenCode, type ModelInfo, type OpenCodeEvent, type Project, type SessionInfo } from "../src/promise"
+import {
+  OpenCode,
+  type ModelInfo,
+  type OpenCodeEvent,
+  type Project,
+  type SessionInfo,
+  type SessionMessageInfo,
+} from "../src/promise"
 
 const session = (viewed: number): SessionInfo => ({
   id: "ses_refresh",
@@ -1610,6 +1617,208 @@ test.each(["success", "failure", "cancel", "cancel-retry", "cancel-page", "join-
 )
 
 test.each([
+  {
+    name: "after fewer new messages than a page",
+    loaded: 30,
+    server: notes(1, 35),
+    requests: ["message?limit=20&order=desc"],
+  },
+  {
+    name: "after more new messages than a page",
+    loaded: 30,
+    server: notes(1, 60),
+    requests: ["message?limit=20&order=desc", "message?limit=20&cursor=msg_041"],
+  },
+  {
+    name: "without the messages a revert removed",
+    loaded: 30,
+    server: [...notes(1, 25), ...notes(36, 38)],
+    requests: ["message?limit=20&order=desc"],
+  },
+])("reading the newest page again keeps the loaded history $name", async (item) => {
+  const setup = transcript(notes(1, item.loaded))
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    await setup.data.session.message.loadMore("ses_refresh", { all: true })
+    expect(setup.ids()).toEqual(notes(1, item.loaded).map((message) => message.id))
+
+    setup.server.messages = item.server
+    setup.server.requests.length = 0
+    setup.data.session.message.invalidate("ses_refresh")
+    await setup.data.session.message.sync("ses_refresh")
+
+    expect(setup.ids()).toEqual(item.server.map((message) => message.id))
+    expect(setup.server.requests).toEqual(item.requests)
+    // The history was loaded to its start, and still is.
+    expect(setup.data.session.message.more("ses_refresh")).toBe(false)
+  } finally {
+    setup.dispose()
+  }
+})
+
+test("a newest page too far ahead of the loaded history replaces it, and the older page that continued it", async () => {
+  const older = Promise.withResolvers<void>()
+  const setup = transcript(notes(1, 40))
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    setup.server.hold = (request) => (request.endsWith("cursor=msg_021") ? older.promise : undefined)
+    const paging = setup.data.session.message.loadMore("ses_refresh")
+    await wait(() => setup.server.requests.length === 2)
+
+    setup.server.messages = notes(1, 340)
+    setup.data.session.message.invalidate("ses_refresh")
+    await setup.data.session.message.sync("ses_refresh")
+    older.resolve()
+    await paging
+
+    // Messages 41 to 120 were never read, so nothing before them may show.
+    expect(setup.ids()).toEqual(notes(121, 340).map((message) => message.id))
+    await setup.data.session.message.loadMore("ses_refresh")
+    expect(setup.ids()).toEqual(notes(101, 340).map((message) => message.id))
+  } finally {
+    older.resolve()
+    setup.dispose()
+  }
+})
+
+test("a kept message that was still running is read again", async () => {
+  const tool = (state: object): SessionMessageInfo =>
+    ({
+      id: "msg_005",
+      type: "assistant",
+      agent: "build",
+      model: { providerID: "provider", id: "model" },
+      time: { created: 5, completed: 5 },
+      content: [{ type: "tool", id: "call_shell", name: "shell", time: { created: 5, ran: 5 }, state }],
+    }) as SessionMessageInfo
+  const setup = transcript([...notes(1, 4), tool({ status: "running", input: {}, metadata: {} }), ...notes(6, 30)])
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    await setup.data.session.message.loadMore("ses_refresh", { all: true })
+
+    setup.server.messages = [
+      ...notes(1, 4),
+      tool({ status: "completed", input: {}, content: [{ type: "text", text: "done" }] }),
+      ...notes(6, 33),
+    ]
+    setup.server.requests.length = 0
+    setup.data.session.message.invalidate("ses_refresh")
+    await setup.data.session.message.sync("ses_refresh")
+
+    expect(setup.data.session.message.get("ses_refresh", "msg_005")).toMatchObject({
+      content: [{ state: { status: "completed" } }],
+    })
+    expect(setup.server.requests).toEqual(["message?limit=20&order=desc", "message/msg_005"])
+  } finally {
+    setup.dispose()
+  }
+})
+
+test.each([
+  { name: "that events alone built is replaced by its first read", created: false, first: 16, more: true },
+  { name: "built since the session's creation keeps its start", created: true, first: 11, more: false },
+])("a transcript $name", async (item) => {
+  const setup = transcript(notes(item.created ? 11 : 1, 35))
+  try {
+    if (item.created)
+      setup.emit({
+        id: "evt_created",
+        created: 0,
+        type: "session.created",
+        durable: { aggregateID: "ses_refresh", seq: 0, version: 1 },
+        data: {
+          sessionID: "ses_refresh",
+          projectID: "project",
+          location: { directory: "/project" },
+          slug: "refresh",
+          version: "2",
+        },
+      })
+    notes(11, 35).forEach((message, index) =>
+      setup.emit({
+        id: message.id.replace("msg_", "evt_"),
+        created: message.time.created,
+        type: "session.synthetic",
+        durable: { aggregateID: "ses_refresh", seq: index + 1, version: 1 },
+        data: { sessionID: "ses_refresh", text: "Synthetic" },
+      }),
+    )
+    expect(setup.ids()).toEqual(notes(11, 35).map((message) => message.id))
+
+    setup.data.session.message.invalidate("ses_refresh")
+    await setup.data.session.message.sync("ses_refresh")
+
+    // Only a read gives a cursor to the messages before a transcript that events built.
+    expect(setup.ids()).toEqual(notes(item.first, 35).map((message) => message.id))
+    expect(setup.data.session.message.more("ses_refresh")).toBe(item.more)
+  } finally {
+    setup.dispose()
+  }
+})
+
+test.each([
+  { name: "that still waits stays one row, after the newest page", delivered: false },
+  { name: "delivered while its events were missed is placed by the server", delivered: true },
+])("an input $name", async (item) => {
+  const input: SessionMessageInfo = { id: "msg_input", type: "user", text: "Queued", time: { created: 31 } }
+  const steps: SessionMessageInfo[] = Array.from({ length: 25 }, (_, index) => ({
+    id: `msg_step_${String(index + 1).padStart(2, "0")}`,
+    type: "synthetic",
+    text: "Synthetic",
+    time: { created: 32 + index },
+  }))
+  const setup = transcript(notes(1, 30))
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    setup.emit({
+      id: "evt_input",
+      created: 31,
+      type: "session.inbox.enqueued",
+      durable: { aggregateID: "ses_refresh", seq: 1, version: 1 },
+      data: {
+        sessionID: "ses_refresh",
+        inboxID: input.id,
+        item: { type: "user", delivery: "queue", payload: { text: "Queued" } },
+      },
+    })
+    steps.forEach((message, index) =>
+      setup.emit({
+        id: message.id.replace("msg_", "evt_"),
+        created: message.time.created,
+        type: "session.synthetic",
+        durable: { aggregateID: "ses_refresh", seq: index + 2, version: 1 },
+        data: { sessionID: "ses_refresh", text: "Synthetic" },
+      }),
+    )
+    // The row sits where the input was admitted: before the steps that ran while it waited.
+    expect(setup.ids()).toEqual([...notes(11, 30), input, ...steps].map((message) => message.id))
+
+    // Delivered, the input follows the steps on the server and is the oldest message of the newest page.
+    setup.server.messages = [...notes(1, 30), ...steps, ...(item.delivered ? [input, ...notes(57, 75)] : [])]
+    // An inbox read that lands first stops listing a delivered input, and leaves its row where it was admitted.
+    if (item.delivered) await setup.data.session.pending.sync("ses_refresh")
+    expect(setup.data.session.input.has("ses_refresh", input.id)).toBe(!item.delivered)
+    setup.data.session.message.invalidate("ses_refresh")
+    await setup.data.session.message.sync("ses_refresh")
+
+    expect(setup.ids()).toEqual(
+      (item.delivered ? setup.server.messages.slice(10) : [...notes(11, 30), ...steps, input]).map(
+        (message) => message.id,
+      ),
+    )
+    if (!item.delivered) return
+
+    // The read placed the input, so the next read keeps it with the rest of the history.
+    setup.server.messages = [...setup.server.messages, ...notes(76, 85)]
+    setup.data.session.message.invalidate("ses_refresh")
+    await setup.data.session.message.sync("ses_refresh")
+    expect(setup.ids()).toEqual(setup.server.messages.slice(10).map((message) => message.id))
+  } finally {
+    setup.dispose()
+  }
+})
+
+test.each([
   "session.execution.succeeded",
   "session.execution.failed",
   "session.execution.interrupted",
@@ -1781,6 +1990,64 @@ function activityFixture(read: () => Response | Promise<Response>, sessions: Ses
     emit: (details: OpenCodeEvent) => listeners.forEach((listener) => listener({ name: details.type, details })),
     dispose,
   }))
+}
+
+function notes(first: number, last: number): SessionMessageInfo[] {
+  return Array.from({ length: last - first + 1 }, (_, index) => ({
+    id: `msg_${String(first + index).padStart(3, "0")}`,
+    type: "user",
+    text: `Message ${first + index}`,
+    time: { created: first + index },
+  }))
+}
+
+// A server transcript that a test changes between reads. Pages follow the server's rules: newest first, and a cursor
+// names the message that a page continues from.
+function transcript(messages: SessionMessageInfo[]) {
+  const server: {
+    messages: SessionMessageInfo[]
+    requests: string[]
+    hold?: (request: string) => Promise<void> | undefined
+  } = { messages, requests: [] }
+  const listeners = new Set<Parameters<CreateDataInput["event"]["listen"]>[0]>()
+  const api = OpenCode.make({
+    baseUrl: "http://opencode.local",
+    fetch: async (input, init) => {
+      const url = new URL((input instanceof Request ? input : new Request(input, init)).url)
+      const path = url.pathname.replace("/api/session/ses_refresh", "").slice(1)
+      if (path === "") return Response.json({ data: session(0) })
+      if (path === "inbox") return Response.json({ data: [] })
+      const request = path + decodeURIComponent(url.search)
+      server.requests.push(request)
+      await server.hold?.(request)
+      if (path !== "message")
+        return Response.json({ data: server.messages.find((message) => `message/${message.id}` === path) })
+      const cursor = url.searchParams.get("cursor")
+      const end = cursor ? server.messages.findIndex((message) => message.id === cursor) : server.messages.length
+      const page = server.messages.slice(Math.max(0, end - Number(url.searchParams.get("limit"))), end).toReversed()
+      return Response.json({ data: page, cursor: page.length > 0 ? { next: page.at(-1)?.id } : {} })
+    },
+  })
+  return createRoot((dispose) => {
+    const data = createData({
+      api: () => api,
+      directory: "/project",
+      event: {
+        on: () => () => {},
+        listen(handler) {
+          listeners.add(handler)
+          return () => listeners.delete(handler)
+        },
+      },
+    })
+    return {
+      data,
+      server,
+      ids: () => data.session.message.list("ses_refresh").map((message) => message.id),
+      emit: (details: OpenCodeEvent) => listeners.forEach((listener) => listener({ name: details.type, details })),
+      dispose,
+    }
+  })
 }
 
 async function wait(check: () => boolean) {
