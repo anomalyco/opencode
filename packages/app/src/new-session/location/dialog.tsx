@@ -462,6 +462,8 @@ function NewSessionLocationDialog(props: {
                           "new-session-location-workspace": entry.type === "workspace",
                         }}
                         role="option"
+                        // Focus stays in the search field; the arrow keys and the pointer only move the highlight.
+                        tabIndex={-1}
                         aria-selected={entry.type === "workspace" ? current(entry) : activeEntry()?.id === entry.id}
                         data-active={activeEntry()?.id === entry.id ? "" : undefined}
                         onMouseMove={(event) => {
