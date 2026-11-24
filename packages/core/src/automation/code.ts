@@ -2,11 +2,9 @@ export * as AutomationCode from "./code.js"
 
 import { CodeMode } from "@opencode/codemode"
 import { Automation } from "@opencode/schema/automation"
-import { Array, Context, Effect, Option, Result, Schema } from "effect"
+import { Array, Effect, Option, Result, Schema } from "effect"
 import { Agent } from "../agent.js"
 import { CodeModeTool } from "../codemode/tool.js"
-import { Location } from "../location.js"
-import { LocationServiceMap } from "../location-service-map.js"
 import { Permission } from "../permission.js"
 import { Plugin } from "../plugin/service.js"
 import type { SessionMessage } from "../session/message.js"
@@ -86,27 +84,6 @@ function scanProgram(code: string): Result.Result<ProgramScan, string> {
 }
 
 /**
- * The Location of the plugin making a create, if a plugin is making it. Code and subagent targets in that Location are
- * checked against what is loaded now instead of waiting for its plugin activation, which may be running that plugin's
- * setup and so would never finish. Targets in other Locations still wait for their plugins.
- */
-export const FromPlugin = Context.Reference<Location.Ref | undefined>("@opencode/AutomationCode/FromPlugin", {
-  defaultValue: () => undefined,
-})
-
-/** Waits for the current Location's plugins, unless the create comes from one of them. */
-export const awaitPlugins = Effect.gen(function* () {
-  const from = yield* FromPlugin
-  if (from !== undefined) {
-    const location = yield* Location.Service
-    const current = LocationServiceMap.canonical({ directory: location.directory, workspaceID: location.workspaceID })
-    const own = LocationServiceMap.canonical(from)
-    if (current.directory === own.directory && current.workspaceID === own.workspaceID) return
-  }
-  yield* Plugin.awaitActivation
-})
-
-/**
  * Runs in the creating Session's Location while the user is present: asks once for tool and extension permissions (and for
  * `execute` if none of those needed approval), without saving, so every run can be allowed unattended.
  */
@@ -118,7 +95,7 @@ export const authorize = Effect.fnUntraced(function* (
   invocation?: Invocation,
 ) {
   const scanned = yield* Effect.fromResult(scan(action.code))
-  yield* awaitPlugins
+  yield* Plugin.awaitActivation
   const permission = yield* Permission.Service
   const agents = yield* Agent.Service
   const agent = yield* agents.select(session.agent)
