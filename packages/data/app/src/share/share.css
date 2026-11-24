@@ -429,11 +429,9 @@
   }
 
   /* The option rows: each label on the left, its choices inline on the right, so the music sits high in the panel. */
-  /* The rows shrink to the panel only as far as a fill row (the embed code) lets them; otherwise the panel scrolls. */
   [data-slot="rows"] {
     display: flex;
-    flex: 0 1 auto;
-    min-height: 0;
+    flex: none;
     flex-direction: column;
     gap: 10px;
     padding: 16px 20px;
@@ -451,10 +449,19 @@
     color: var(--stats-faint);
   }
 
+  /* With a fill row (the embed code), the rows shrink to the panel and that row scrolls instead of the panel. */
+  [data-slot="rows"]:has([data-variant="fill"]) {
+    flex: 0 1 auto;
+    min-height: 0;
+  }
+
+  /* A long list's label stays in view as the panel scrolls, as far below its top as the rows are in from the side. */
   [data-slot="row"][data-variant="list"] {
     align-items: start;
 
     [data-slot="row-label"] {
+      position: sticky;
+      top: 10px;
       padding-top: 10px;
     }
   }
