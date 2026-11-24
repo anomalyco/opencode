@@ -15,10 +15,13 @@ import { Event } from "@opencode/schema/config"
 import { PluginModule } from "@opencode/core/plugin/module"
 import { Session } from "@opencode/core/session"
 import { SessionSchema } from "@opencode/core/session/schema"
+import { State } from "@opencode/core/state"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { fromPromise } from "@opencode/plugin/promise/adapter"
 import { testEffect } from "./lib/effect"
-import { PluginTestLayer } from "./plugin/fixture"
+import { makePluginTestLayer, PluginTestLayer } from "./plugin/fixture"
+import { Mcp } from "@opencode/core/mcp/index"
+import { McpEvent } from "@opencode/schema/mcp-event"
 
 const it = testEffect(PluginTestLayer)
 
@@ -753,4 +756,85 @@ it.effect("unknown event type warnings name the subscribing plugin", () =>
 
     expect(warnings).toEqual([["ignoring unknown event types", { pluginID: "probe", types: ["test.unknown"] }]])
   }),
+)
+
+it.effect("publishes activated plugin inventory only after batched state notifications settle", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const notifying = yield* Deferred.make<void>()
+    const release = yield* Deferred.make<void>()
+    let reconciled = false
+    const domain = State.create<{ ready: boolean }, { mark: () => void }>({
+      name: "test-reconcile",
+      initial: () => ({ ready: false }),
+      editor: (state) => ({
+        mark: () => {
+          state.ready = true
+        },
+      }),
+      notify: () =>
+        Deferred.succeed(notifying, undefined).pipe(
+          Effect.andThen(Deferred.await(release)),
+          Effect.andThen(Effect.sync(() => void (reconciled = true))),
+        ),
+    })
+
+    const activation = yield* plugins
+      .activate([
+        {
+          id: "reconciling",
+          revision: "1",
+          effect: () => domain.transform((editor) => editor.mark()).pipe(Effect.asVoid),
+        },
+      ])
+      .pipe(Effect.forkChild({ startImmediately: true }))
+
+    yield* Deferred.await(notifying)
+    expect(reconciled).toBe(false)
+    expect(yield* plugins.list()).toEqual([])
+
+    yield* Deferred.succeed(release, undefined)
+    yield* Fiber.join(activation)
+    expect(reconciled).toBe(true)
+    expect((yield* plugins.list()).map((plugin) => plugin.id)).toEqual([Plugin.ID.make("reconciling")])
+  }),
+)
+
+testEffect(makePluginTestLayer(undefined, undefined, [Mcp.node.replace(Mcp.node)])).effect(
+  "reconciles MCP servers before exposing the activating plugin in Plugin.list",
+  () =>
+    Effect.gen(function* () {
+      const plugins = yield* Plugin.Service
+      const mcp = yield* Mcp.Service
+      const bus = yield* Bus.Service
+      const seenDuringReconcile: number[] = []
+      yield* Effect.acquireRelease(
+        bus.listen((event) =>
+          event.type === McpEvent.StatusChanged.type
+            ? plugins.list().pipe(
+                Effect.tap((items) => Effect.sync(() => void seenDuringReconcile.push(items.length))),
+                Effect.asVoid,
+              )
+            : Effect.void,
+        ),
+        (unsubscribe) => unsubscribe,
+      )
+
+      yield* plugins.activate([
+        {
+          id: "mcp-provider",
+          revision: "1",
+          effect: () =>
+            mcp
+              .transform((editor) => {
+                editor.set("project-demo", { type: "local", command: ["echo", "unused"], disabled: true })
+              })
+              .pipe(Effect.asVoid),
+        },
+      ])
+
+      expect(seenDuringReconcile).toEqual([0])
+      expect((yield* plugins.list()).map((plugin) => plugin.id)).toEqual([Plugin.ID.make("mcp-provider")])
+      expect((yield* mcp.servers()).map((server) => server.name)).toEqual(["project-demo"])
+    }),
 )

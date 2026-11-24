@@ -154,7 +154,11 @@ type Store = {
 }
 
 export function locationKey(location: LocationRef) {
-  return JSON.stringify([location.directory, location.workspaceID])
+  const directory = location.directory.replace(
+    /^(\\\\\?\\)?([a-z]):/,
+    (_, prefix = "", drive: string) => `${prefix}${drive.toUpperCase()}:`,
+  )
+  return JSON.stringify([directory, location.workspaceID])
 }
 
 function locationQuery(ref: LocationRef) {
@@ -1223,8 +1227,7 @@ export function createData(config: CreateDataInput) {
             error: event.data.error,
             input: typeof tool.state.input === "string" ? {} : tool.state.input,
             metadata: event.data.metadata,
-            content:
-              omitFiles() && event.data.content ? omitFileData(event.data.content) : event.data.content,
+            content: omitFiles() && event.data.content ? omitFileData(event.data.content) : event.data.content,
           }
           tool.executed = event.data.executed || tool.executed === true
           if (event.data.native) tool.native = { ...tool.native, ...event.data.native }
