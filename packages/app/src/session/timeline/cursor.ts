@@ -1,5 +1,6 @@
 import type { SessionMessageUser } from "@opencode/client/promise"
 import { useLocation, useNavigate } from "@solidjs/router"
+import { scrollPort } from "@opencode/ui/scroll-port"
 import { createEffect, createSignal, on, onCleanup, onMount, untrack, type Accessor } from "solid-js"
 import {
   CLEAR_WITHOUT_HASH_EVENT,
@@ -31,6 +32,8 @@ export function createTimelineCursor(input: {
   scroller: () => HTMLDivElement | undefined
   anchor: (id: string) => string
   revealMessage: (id: string) => void
+  /** Ends the scroll `revealMessage` started. */
+  stopReveal: () => void
   detach: () => void
   toEnd: () => void
   seekHistory: () => void
@@ -59,6 +62,8 @@ export function createTimelineCursor(input: {
     if (effect.type === "follow.end") return input.toEnd()
 
     if (effect.type === "history.seek") return input.seekHistory()
+
+    if (effect.type === "reveal.stop") return input.stopReveal()
 
     if (effect.type === "hash.set")
       return navigate(location.pathname + location.search + `#${input.anchor(effect.messageID)}`, { replace: true })
@@ -125,10 +130,12 @@ export function createTimelineCursor(input: {
     const root = input.scroller()
 
     if (!root) return false
-    const sticky = root.querySelector("[data-session-title]")
-    const inset = sticky instanceof HTMLElement ? sticky.offsetHeight : 0
-    const top = element.getBoundingClientRect().top - root.getBoundingClientRect().top + root.scrollTop - inset
-    root.scrollTo({ top: Math.max(0, top), behavior })
+    // Where the virtualizer's reveal and the router's own scroll to the hash put a prompt. A write that lands
+    // anywhere else is undone by one of them or stays, whichever runs last.
+    root.scrollTo({
+      top: Math.max(0, root.scrollTop + element.getBoundingClientRect().top - scrollPort(root).top),
+      behavior,
+    })
 
     return true
   }

@@ -7,6 +7,7 @@ import { Tooltip } from "@opencode/ui/tooltip"
 import { DockPrompt } from "@opencode/session-ui/dock-prompt"
 import { LinkedText } from "@opencode/session-ui/linked-text"
 import { Icon } from "@opencode/ui/icon"
+import { scrollPort } from "@opencode/ui/scroll-port"
 import { TextInput } from "@opencode/ui/text-input"
 import { frameLoop, Spring, type DurationOptions } from "@opencode/ui/motion"
 import { motionTuning } from "@opencode/ui/motion-tuning"
@@ -371,16 +372,12 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
   const measure = () => {
     if (!root) return
 
-    const scroller = document.querySelector('[data-slot="session-timeline-scroll"] > .scroll-view__viewport')
-    const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
+    const scroller = document.querySelector<HTMLElement>(
+      '[data-slot="session-timeline-scroll"] > .scroll-view__viewport',
+    )
 
-    // The timeline starts under its sticky header, or at its own top when it has none.
-    const top =
-      head instanceof HTMLElement && head.classList.contains("sticky")
-        ? head.getBoundingClientRect().bottom
-        : scroller instanceof HTMLElement
-          ? scroller.getBoundingClientRect().top
-          : 0
+    // The timeline shows from below its session header, which covers the top of its viewport.
+    const top = scroller ? scrollPort(scroller).top : 0
 
     const dock = root.closest('[data-component="session-composer-dock"]')
     // The dock sits at the foot of the column it shares with the timeline, in the app inside a zero-height row that it

@@ -8,6 +8,7 @@ import {
 } from "@tanstack/solid-virtual"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode/ui/scroll-view"
 import { ownScroll } from "@opencode/ui/hold-scroll"
+import { scrollPage } from "@opencode/ui/scroll-port"
 import { Predicate } from "effect"
 import { Timeline, TimelineRow } from "@opencode/session-ui/timeline/projection"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -29,7 +30,7 @@ import { Key } from "@solid-primitives/keyed"
 import { createMediaQuery } from "@solid-primitives/media"
 import type { createTimelineProjection } from "./projection"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
-import { filterVirtualIndexes } from "./virtual-items"
+import { filterVirtualIndexes, isAboveFold } from "./virtual-items"
 import {
   ACTIVATED,
   CHECK_REQUESTED,
@@ -134,7 +135,8 @@ type Input = {
     row: TimelineRow.TimelineRow,
     disclosure: Readonly<Record<string, boolean | undefined>>,
   ) => boolean
-  setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
+  /** Registers the reveal of a message's row, and the call that ends the scroll a reveal started. */
+  setRevealMessage?: (fn: (id: string, partID?: string) => void, stop: () => void) => void
   setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
   /** Pages the timeline for keys pressed outside it, such as PageUp in the composer. */
   setPage?: (fn: (direction: 1 | -1) => void) => void
@@ -159,7 +161,10 @@ export function createTimelineVirtualizer(input: Input) {
   const language = useLanguage()
   const active = () => input.active?.() !== false
   const isDesktop = createMediaQuery("(min-width: 768px)")
-  const topOffset = () => (input.showHeader() ? 64 : isDesktop() ? 0 : 16)
+  // The session header is one 48px row over the top of the viewport (session-identity-header.css), and its fade takes
+  // 16px more. The header inset inside the viewport reserves both.
+  const headerHeight = 48
+  const topOffset = () => (input.showHeader() ? headerHeight + 16 : isDesktop() ? 0 : 16)
   // Reserved below the last row: a 36px lane for the live status row and its background hint, a 14px gap, then the
   // activity pill and its 10px composer gap. Without hover the pill grows from 32px to its 44px touch size
   // (composer-lane.css), and the tail grows with it. Both come and go inside it, so neither moves the rows above.
@@ -310,7 +315,6 @@ export function createTimelineVirtualizer(input: Input) {
   // layout. While a batch of sizes is applied, a request replaces the one before it, and the last is written once.
   let scrollHeld = false
   let heldScroll: (() => void) | undefined
-  const [headerHeight, setHeaderHeight] = createSignal(48)
 
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
     get count() {
@@ -325,13 +329,7 @@ export function createTimelineVirtualizer(input: Input) {
 
         // A taller viewport shortens the scroll range. Read the clamp before anything else grows the range again.
         if (root) readScroll(root)
-        batch(() => {
-          // The container-responsive header can be 48px or 80px.
-          setHeaderHeight(
-            root ? parseFloat(getComputedStyle(root).getPropertyValue("--session-header-height")) || 48 : 48,
-          )
-          callback({ width: rect.width, height: Math.max(0, rect.height - bottomInset()) })
-        })
+        batch(() => callback({ width: rect.width, height: Math.max(0, rect.height - bottomInset()) }))
       }
 
       return observeElementRect(instance, (rect) => {
@@ -460,7 +458,7 @@ export function createTimelineVirtualizer(input: Input) {
     },
     // Revealed prompts sit below the solid header and its 16px fade.
     get scrollPaddingStart() {
-      return input.showHeader() ? headerHeight() + 16 : 0
+      return input.showHeader() ? headerHeight + 16 : 0
     },
     get rangeExtractor() {
       return rangeExtractor()
@@ -564,11 +562,11 @@ export function createTimelineVirtualizer(input: Input) {
   virtualizer.shouldAdjustScrollPositionOnItemSizeChange = (item, delta, instance) => {
     // Prepended rows can resize more than once as deferred content mounts. Keep
     // compensating while they remain entirely above the visible content fold.
-    const first = instance.range?.startIndex
+    const offset = (instance.scrollOffset ?? 0) + instance.scrollAdjustments
 
     const adjust = addedKeys.has(String(item.key))
-      ? item.end <= (instance.scrollOffset ?? 0) + instance.scrollAdjustments + instance.options.scrollMargin
-      : first !== undefined && item.index < first
+      ? item.end <= offset + instance.options.scrollMargin
+      : isAboveFold(item, instance.range?.startIndex, offset + instance.options.scrollPaddingStart)
 
     if (!defersAdjustments(input.follow.peek())) return adjust
 
@@ -678,6 +676,45 @@ export function createTimelineVirtualizer(input: Input) {
   function prepareNavigation() {
     input.follow.dispatch({ type: "release" })
     flushTouchAdjustment()
+    revealed = undefined
+  }
+
+  // The row a message reveal scrolls to, and TanStack's scroll to it. TanStack names the row by its index for as long
+  // as that scroll lasts, up to five seconds.
+  let revealed: { key: string; index: number; align: "start" | "center"; scroll: unknown } | undefined
+
+  function revealRow(index: number, align: "start" | "center") {
+    virtualizer.scrollToIndex(index, { align })
+    revealed = { key: rowKeys()[index], index, align, scroll: virtualizer["scrollState"] }
+  }
+
+  // A page of history that arrives above gives the index to another row, and TanStack then scrolls to that one. The
+  // scroll goes on to the row it was made for. TanStack has the new rows by now: it takes them in a computation.
+  createEffect(
+    on(
+      rowKeys,
+      (keys) => {
+        if (!revealed || !revealed.scroll || revealed.scroll !== virtualizer["scrollState"]) return
+        const index = keys.indexOf(revealed.key)
+
+        if (index < 0) return stopScroll()
+
+        if (index !== revealed.index) revealRow(index, revealed.align)
+      },
+      { defer: true },
+    ),
+  )
+
+  // A reveal made while the cold mount is hidden works with rows that have no sizes yet. The scroll range can be too
+  // short to bring the row to its place, and nothing scrolls again when the range grows. The rows have their sizes
+  // when the cold mount shows, so the reveal is made again then, before the first paint.
+  function repeatReveal() {
+    const target = revealed
+
+    if (!target || !active() || !listRoot()?.isConnected || input.follow.following()) return
+    const index = rowKeys().indexOf(target.key)
+
+    if (index >= 0) revealRow(index, target.align)
   }
 
   function flushTouchAdjustment() {
@@ -803,8 +840,8 @@ export function createTimelineVirtualizer(input: Input) {
 
       if (index === undefined) return
       prepareNavigation()
-      virtualizer.scrollToIndex(index, { align: partIndex >= 0 ? "center" : "start" })
-    })
+      revealRow(index, partIndex >= 0 ? "center" : "start")
+    }, stopScroll)
     input.setScrollToEnd?.((behavior) => {
       const root = listRoot()
 
@@ -824,9 +861,9 @@ export function createTimelineVirtualizer(input: Input) {
       dispatchIntent(direction < 0)
       readScroll(root)
       const from = seen.top
-      // Like the timeline's own PageUp: 80% of a page, measured above the composer that covers its bottom. The scroll
-      // event then pins at the end or loads older history near the top, as a wheel scroll does.
-      virtualizer.scrollToOffset(root.scrollTop + direction * (visibleArea()?.clientHeight || root.clientHeight) * 0.8)
+      // The page the timeline's own PageUp moves. The scroll event then pins at the end or loads older history near
+      // the top, as a wheel scroll does.
+      virtualizer.scrollToOffset(root.scrollTop + direction * scrollPage(root))
       // The page is the reader's scroll, as the same key in the transcript is: it leaves the end, and arrives at it.
       seen.reader += seen.top - from
     })
@@ -1001,6 +1038,7 @@ export function createTimelineVirtualizer(input: Input) {
     clearTimeout(revealTimer)
     contentObserver?.disconnect()
     viewportObserver?.disconnect()
+    repeatReveal()
   }
 
   function sampleColdMount(): ColdMountSample {
@@ -1266,7 +1304,11 @@ export function createTimelineVirtualizer(input: Input) {
     scrollEvent.reader = seen.reader
     seen.reader = 0
     const following = input.follow.following()
-    input.follow.dispatch(scrollEvent)
+
+    // While the cold mount is hidden its rows have no sizes, so the end of its scroll range is not the session's end,
+    // and no scroll is the reader's. A view that navigation sent to a prompt must not count as having arrived at the
+    // end: that would follow the end from then on and drop the prompt's link.
+    if (following || !untrack(coldHidden)) input.follow.dispatch(scrollEvent)
 
     // A scroll of the reader's own that leaves the end also ends the timeline's scroll to it.
     if (following && !input.follow.following()) stopScroll()
@@ -1419,7 +1461,7 @@ export function createTimelineVirtualizer(input: Input) {
             if (window.getSelection()?.toString()) input.follow.dispatch({ type: "detach" })
           }}
           class="relative min-w-0 w-full h-full"
-          style={{ "--sticky-accordion-top": input.showHeader() ? "var(--session-header-height, 48px)" : "0px" }}
+          style={{ "--sticky-accordion-top": input.showHeader() ? `${headerHeight}px` : "0px" }}
         >
           <Show when={input.showHeader()} fallback={<div aria-hidden="true" class="h-4 md:hidden" />}>
             {props.headerInset}
@@ -1485,7 +1527,10 @@ export function createTimelineVirtualizer(input: Input) {
 
     if (active()) {
       input.setScrollRef(undefined)
-      input.setRevealMessage?.(() => {})
+      input.setRevealMessage?.(
+        () => {},
+        () => {},
+      )
       input.setScrollToEnd?.(() => {})
       input.setPage?.(() => {})
     }

@@ -68,6 +68,8 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
   // The active timeline's navigation, registered by its virtualizer.
   let revealMessage = (_id: string, _partID?: string) => {}
 
+  let stopReveal = () => {}
+
   let scrollToEnd = (_behavior?: ScrollBehavior) => {}
 
   let page = (_direction: 1 | -1) => {}
@@ -166,6 +168,7 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
     scroller: () => scroller,
     anchor,
     revealMessage: (id) => revealMessage(id),
+    stopReveal: () => stopReveal(),
     detach,
     toEnd: () => {
       follow.dispatch({ type: "follow" })
@@ -219,14 +222,21 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
     cursor.jump(messages[target].id, "auto")
   }
 
+  // Find's seek, which the reader's scroll ends as it ends the cursor's. Registered by the session's Find.
+  let searchSeek = { active: () => false, stop: () => {} }
+
   // A gesture inside a nested scrollable region scrolls that region, not the timeline.
   const markUserScroll = (target?: EventTarget | null) => {
-    if (!scroller || !hasFreshCursorOrSeek(untrack(cursor.state))) return
+    const seeking = searchSeek.active()
+
+    if (!scroller || (!seeking && !hasFreshCursorOrSeek(untrack(cursor.state)))) return
     const element = target instanceof Element ? target : undefined
     const nested = element?.closest("[data-scrollable]")
 
     if (nested && nested !== scroller) return
     cursor.dispatch(SCROLL_MOVED_EVENT)
+
+    if (seeking) searchSeek.stop()
   }
 
   const setScrollRef = (element: HTMLDivElement | undefined) => {
@@ -424,6 +434,7 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
         cursor.dispatch(SCROLL_MOVED_EVENT)
         revealMessage(id, partID)
       },
+      stopReveal: () => stopReveal(),
       resume,
       setActiveMessage,
     },
@@ -451,8 +462,12 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
       setVisibleRef: (element: HTMLDivElement | undefined) => {
         setState("refs", "visible", element)
       },
-      setRevealMessage: (reveal: (id: string, partID?: string) => void) => {
+      setRevealMessage: (reveal: (id: string, partID?: string) => void, stop: () => void) => {
         revealMessage = reveal
+        stopReveal = stop
+      },
+      setSearchSeek: (seek: { readonly active: () => boolean; readonly stop: () => void }) => {
+        searchSeek = seek
       },
       // The tool call the route opened the session on, attempted once per history entry.
       reveal: {

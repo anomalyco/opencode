@@ -136,7 +136,9 @@ function SessionScreenContent(props: {
     sessionID: session.identity.sessionID,
     scrollRef: timeline.scroller,
     revealMessage: timeline.actions.revealMessage,
+    stopReveal: timeline.actions.stopReveal,
     pauseAutoScroll: () => timeline.follow.dispatch({ type: "detach" }),
+    registerSeek: timeline.view.setSearchSeek,
   })
 
   const messagesReady = timeline.ready

@@ -311,6 +311,77 @@ test("keeps a file diff anchored while it expands and collapses", async ({ page 
   await expect.poll(bottom).toBeLessThanOrEqual(1)
 })
 
+test("shows the Find bar of an open diff where the timeline shows", async ({ page }) => {
+  const id = "prt_file_find_patch"
+  const before = Array.from({ length: 80 }, (_, index) => `export const value${index} = ${index}\n`).join("")
+
+  await setupTimeline(page, {
+    settings: {
+      timelineDetail: { ...timelinePresets[2].value, edit: { placement: "separate", details: "collapsed" } },
+    },
+    messages: [
+      userMessage(),
+      assistantMessage([
+        toolPart(
+          id,
+          "patch",
+          "completed",
+          { patchText: "Update src/find.ts" },
+          {
+            metadata: {
+              files: [
+                {
+                  file: "src/find.ts",
+                  status: "modified",
+                  patch: createTwoFilesPatch(
+                    "a/src/find.ts",
+                    "b/src/find.ts",
+                    before,
+                    before.replaceAll(" = ", " = -"),
+                  ),
+                  additions: 80,
+                  deletions: 80,
+                },
+              ],
+            },
+          },
+        ),
+      ]),
+    ],
+    viewport: { width: 1200, height: 600 },
+  })
+
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const wrapper = page.locator(`[data-timeline-part-id="${id}"]`)
+  await wrapper.locator('[data-slot="accordion-trigger"]').click()
+  await expect(wrapper.locator('[data-component="apply-patch-file-diff"]')).toBeVisible()
+
+  // The open diff is as tall as its lines, and the timeline follows its end: the diff's top is far above the screen.
+  await expect
+    .poll(() => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop))
+    .toBeLessThanOrEqual(1)
+  const view = (await scroller.boundingBox())!
+  await page.mouse.click(view.x + view.width / 2, view.y + view.height / 2)
+  await page.keyboard.press("ControlOrMeta+f")
+  const find = page.getByRole("textbox", { name: "Find", exact: true })
+  await expect(find).toBeFocused()
+
+  // The bar against the session header's lower edge and the composer region's top.
+  await expect
+    .poll(() =>
+      find.evaluate((element) => {
+        const bar = element.parentElement!.getBoundingClientRect()
+        const header = document.querySelector("[data-session-title]")!.firstElementChild!.getBoundingClientRect()
+        const dock = document.querySelector('[data-component="session-composer-dock"]')!.getBoundingClientRect()
+
+        if (bar.top < header.bottom) return "above the timeline"
+
+        return bar.bottom > dock.top ? "behind the composer" : "shown"
+      }),
+    )
+    .toBe("shown")
+})
+
 for (const outline of [
   { name: "shell outline at 1.25x", kind: "shell", deviceScaleFactor: 1.25 },
   { name: "shell outline at 1.5x", kind: "shell", deviceScaleFactor: 1.5 },
@@ -853,6 +924,239 @@ async function scrollsBehindComposerRegion(
 
   await expect.poll(async () => (await dock.boundingBox())!.height).toBeGreaterThan(before + 40)
   await expect.poll(geometry).toEqual(expected)
+}
+
+test("shows the match Find moves to between the session header and a tall draft", async ({ page }) => {
+  const history = historyMessages(12)
+
+  // A reply much taller than what shows, with the match on its last line, far from the middle of its row.
+  const tall = [
+    userMessage(undefined, { id: "msg_00005_tall_a_user", created: 1690000055000 }),
+    assistantMessage(
+      [
+        textPart(
+          "prt_find_tall",
+          [...Array.from({ length: 40 }, (_, index) => `Filler paragraph ${index}.`), "The needle rests here."].join(
+            "\n\n",
+          ),
+        ),
+      ],
+      { id: "msg_00005_tall_b_assistant", parentID: "msg_00005_tall_a_user", created: 1690000056000 },
+    ),
+  ]
+
+  // A short window and a tall draft: the composer region covers the middle of the viewport, which runs on under it.
+  await setupTimeline(page, {
+    viewport: { width: 1200, height: 460 },
+    sessionMessages: validateTimelineMessages([
+      ...history.slice(0, 12),
+      ...tall,
+      ...history.slice(12),
+      userMessage(),
+      assistantMessage([textPart("prt_find_tail", "The newest answer.")]),
+    ]),
+  })
+  await expect(page.getByText("The newest answer.", { exact: true })).toBeVisible()
+
+  const covered = () =>
+    page.evaluate(() => {
+      const viewport = document.querySelector('[data-slot="session-timeline-scroll"] > *')!.getBoundingClientRect()
+      const dock = document.querySelector('[data-component="session-composer-dock"]')!.getBoundingClientRect()
+
+      return dock.top < (viewport.top + viewport.bottom) / 2
+    })
+
+  await page.locator('[data-component="composer"]').getByRole("textbox").click()
+  await page.keyboard.insertText(Array.from({ length: 20 }, (_, index) => `Draft line ${index}`).join("\n"))
+  await expect.poll(covered).toBe(true)
+
+  await page.keyboard.press("ControlOrMeta+f")
+  const search = page.locator('[data-component="timeline-search-bar"] input')
+  await expect(search).toBeFocused()
+  const active = () => page.evaluate(() => CSS.highlights.get("timeline-search-hit-active")?.size ?? 0)
+
+  // The match is in history that was not shown yet. The timeline brings its row in while the rows around it measure,
+  // and Find then scrolls to the match itself, so only where the match stays counts.
+  await search.fill("needle rests")
+  await expect.poll(active).toBe(1)
+  await waitForVisualSettle(page, [`[data-timeline-part-id="${renderedPartID("prt_find_tall")}"]`], 6)
+
+  // The active match against the header's lower edge and the composer region's top.
+  expect(
+    await page.evaluate(() => {
+      const match = [...(CSS.highlights.get("timeline-search-hit-active") ?? [])][0]
+
+      if (!(match instanceof Range)) return "no match"
+      const rect = match.getBoundingClientRect()
+      const header = document.querySelector("[data-session-title]")!.getBoundingClientRect()
+      const dock = document.querySelector('[data-component="session-composer-dock"]')!.getBoundingClientRect()
+
+      if (rect.top < header.bottom) return "under the header"
+
+      return rect.bottom > dock.top ? "behind the composer" : "shown"
+    }),
+  ).toBe("shown")
+})
+
+// Find holds its match in place for the rest of twelve frames after it scrolls there, and brings the match's row back
+// when a late row pushes it out of the mounted rows. A reader who scrolled away in that time unmounted the row too,
+// and Find took the view back: End reached the latest message and the view returned to a match 2,659 to 4,882px up.
+// Ctrl+Home, a page key on a control in a row and the scrollbar send the timeline no input event.
+// Before Find's own scroll, the timeline is still scrolling to the match's row. That scroll took the view back too,
+// and a write of Find's or the timeline's during the browser's own scroll ended it: End did nothing at all.
+for (const { input, when } of [
+  { input: "End", when: "once Find holds its match" },
+  { input: "Ctrl+Home", when: "once Find holds its match" },
+  { input: "PageUp on a control in a row", when: "once Find holds its match" },
+  { input: "the scrollbar", when: "once Find holds its match" },
+  { input: "the wheel", when: "once Find holds its match" },
+  { input: "End", when: 0 },
+  { input: "End", when: 1 },
+  { input: "End", when: 2 },
+  { input: "End", when: 3 },
+  { input: "the wheel", when: 0 },
+] as const) {
+  const title = when === "once Find holds its match" ? when : `${when} frames into Find's seek`
+
+  test(`leaves the view where ${input} takes it ${title}`, async ({ page }) => {
+    const history = historyMessages(40)
+    const prompt = "msg_00009_seek_a_user"
+    await page.clock.install({ time: 1_700_000_000_000 })
+    await setupTimeline(page, {
+      sessionMessages: validateTimelineMessages([
+        ...history.slice(0, 20),
+        userMessage([userText("The needle rests in this prompt.", { id: "prt_reader_seek" })], {
+          id: prompt,
+          created: 1690000095000,
+        }),
+        assistantMessage(
+          [shell("prt_reader_seek_shell", "completed", "done"), textPart("prt_reader_seek_reply", "A short reply.")],
+          { id: "msg_00009_seek_b_assistant", parentID: prompt, created: 1690000096000 },
+        ),
+        ...history.slice(20),
+        userMessage(),
+        assistantMessage([textPart("prt_reader_tail", "The newest answer.")]),
+      ]),
+    })
+    await expect(page.getByText("The newest answer.", { exact: true })).toBeVisible()
+
+    const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+    const top = () => scroller.evaluate((element) => element.scrollTop)
+    const fromEnd = () => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)
+
+    // How far the active match is from the middle of what the timeline shows.
+    const offCentre = () =>
+      page.evaluate(() => {
+        const match = [...(CSS.highlights.get("timeline-search-hit-active") ?? [])][0]
+
+        if (!(match instanceof Range)) return Number.POSITIVE_INFINITY
+        const rect = match.getBoundingClientRect()
+        const header = document.querySelector("[data-session-title]")!.getBoundingClientRect()
+        const visible = document.querySelector('[data-slot="session-timeline-visible"]')!.getBoundingClientRect()
+
+        return rect.height ? Math.abs((rect.top + rect.bottom - header.bottom - visible.bottom) / 2) : Number.POSITIVE_INFINITY
+      })
+
+    await page.keyboard.press("ControlOrMeta+f")
+    const search = page.locator('[data-component="timeline-search-bar"] input')
+    await expect(search).toBeFocused()
+
+    // The frames are the test's from here. A seek probes once a frame, and it must be under way when the reader scrolls.
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000)
+    await search.fill("needle rests")
+
+    if (when === "once Find holds its match") {
+      let frames = 0
+      await expect
+        .poll(
+          async () => {
+            await page.clock.runFor(16)
+            frames += 1
+
+            return offCentre()
+          },
+          { intervals: [100] },
+        )
+        .toBeLessThanOrEqual(16)
+      // Find scrolled to its match, and its seek has frames left.
+      expect(frames).toBeLessThan(10)
+    } else if (when) await page.clock.runFor(16 * when)
+
+    const held = await top()
+
+    if (input === "End") {
+      // The rest of the seek's frames run while the browser's own scroll is still on its way. The key must take the
+      // view all the way to the end, and nothing may take it back.
+      await scroller.press("End")
+      await page.clock.runFor(16 * 24)
+      await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+      await page.clock.runFor(16 * 24)
+      expect(await fromEnd()).toBeLessThanOrEqual(1)
+      await expect(page.locator('[data-slot="timeline-search-count"]')).toHaveText("1/1")
+
+      return
+    }
+
+    const scrolled = {
+      "Ctrl+Home": () => scroller.press("Control+Home"),
+      "PageUp on a control in a row": () =>
+        scroller.getByRole("button", { name: "Used 1 Shell", exact: true }).press("PageUp"),
+      "the scrollbar": async () => {
+        const thumb = page.locator('[data-slot="session-timeline-visible"] [data-orientation="vertical"]')
+        await thumb.hover()
+        const grip = (await thumb.boundingBox())!
+        await page.mouse.down()
+        await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2 + 160, { steps: 4 })
+        await page.mouse.up()
+      },
+      "the wheel": async () => {
+        await scroller.hover()
+        await page.mouse.wheel(0, 1600)
+      },
+    }[input]
+
+    // The browser scrolls without a frame of the app's, so none of Find's probes runs before the view rests.
+    await scrolled()
+    await expect.poll(top).not.toBe(held)
+    let last = Number.NaN
+    await expect
+      .poll(async () => {
+        const now = await top()
+        const rests = now === last
+        last = now
+
+        return rests
+      })
+      .toBe(true)
+
+    const reader = await scroller.evaluate((element) => {
+      const box = element.getBoundingClientRect()
+      const middle = (box.top + box.bottom) / 2
+
+      const row = [...element.querySelectorAll<HTMLElement>("[data-timeline-key]")].find((item) => {
+        const rect = item.getBoundingClientRect()
+
+        return rect.top <= middle && rect.bottom > middle
+      })
+
+      return row && { key: row.dataset.timelineKey!, y: row.getBoundingClientRect().top, top: element.scrollTop }
+    })
+    expect(reader, "a row is mounted where the reader scrolled to").toBeDefined()
+
+    // The rest of the seek's frames, and more.
+    await page.clock.runFor(16 * 24)
+
+    // How far the row the reader scrolled to moved on screen, or the scroll offset once that row is no longer mounted.
+    expect(
+      await scroller.evaluate((element, reader) => {
+        const row = element.querySelector<HTMLElement>(`[data-timeline-key="${CSS.escape(reader.key)}"]`)
+
+        return Math.abs(row ? row.getBoundingClientRect().top - reader.y : element.scrollTop - reader.top)
+      }, reader!),
+    ).toBeLessThanOrEqual(1)
+    // The match and the count stay.
+    await expect(page.locator('[data-slot="timeline-search-count"]')).toHaveText("1/1")
+  })
 }
 
 test("groups consecutive sent prompts under the last one's meta line, with each bubble's actions beside it", async ({

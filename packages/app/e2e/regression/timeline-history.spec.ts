@@ -17,6 +17,7 @@ import {
   userID,
   userMessage,
   validateTimelineMessages,
+  waitForVisualSettle,
 } from "../utils/timeline"
 import { expectSessionTitle } from "../utils/waits"
 import { openSession } from "../utils/workspace"
@@ -632,7 +633,7 @@ test.describe("timeline history", () => {
     })
   }
 
-  test("pages the timeline from the composer, resuming follow at the end and loading history at the top", async ({
+  test("pages the timeline from the composer and the transcript by what shows between them and the header, resuming follow at the end and loading history at the top", async ({
     page,
   }) => {
     const messages = validateTimelineMessages([
@@ -693,20 +694,60 @@ test.describe("timeline history", () => {
 
     await page.keyboard.type("keep this draft")
 
-    const pageHeight = await page
-      .locator('[data-slot="session-timeline-visible"]')
-      .evaluate((element) => element.clientHeight)
+    // The viewport runs on under the session header and the composer region; the reader sees what is between them.
+    const shown = await page.evaluate(() => {
+      const header = document.querySelector("[data-session-title]")!.getBoundingClientRect()
+      const visible = document.querySelector('[data-slot="session-timeline-visible"]')!.getBoundingClientRect()
 
-    await editor.press("PageUp")
-    await expect.poll(top).toBeLessThan(resting - pageHeight * 0.6)
-    expect(resting - (await top())).toBeLessThan(pageHeight)
+      return visible.bottom - header.bottom
+    })
+
+    // How far the first row below the header moves down the screen. The scroll offset would also count the rows that
+    // measure above the view.
+    const paged = async (press: () => Promise<void>) => {
+      const key = await scroller.evaluate((element) => {
+        const header = document.querySelector("[data-session-title]")!.getBoundingClientRect().bottom
+
+        return [...element.querySelectorAll<HTMLElement>("[data-timeline-key]")].find(
+          (row) => row.getBoundingClientRect().top >= header,
+        )!.dataset.timelineKey!
+      })
+
+      const row = scroller.locator(`[data-timeline-key="${key}"]`)
+      const from = (await row.boundingBox())!.y
+      await press()
+
+      return () => row.boundingBox().then((box) => Math.round(box!.y - from))
+    }
+
+    const toEnd = async () => {
+      for (let index = 0; index < 10 && (await fromEnd()) > 1; index++) await editor.press("PageDown")
+      await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+    }
+
+    // A first visit measures the rows above, which moves the rows in view further. Visit them once before measuring.
+    // The scroll offset does not say whether the page moved: the older page that this page asks for lands above the
+    // view and raises it.
+    const visited = await paged(() => editor.press("PageUp"))
+    await expect.poll(visited).toBeGreaterThan(0)
+    await toEnd()
+
+    const fromComposer = await paged(() => editor.press("PageUp"))
+    await expect.poll(fromComposer).toBeGreaterThan(shown * 0.6)
+    const distance = await fromComposer()
+    expect(distance).toBeLessThanOrEqual(shown)
     await expect(editor).toBeFocused()
     await expect(editor).toHaveText("keep this draft")
     expect(await caret()).toBe("keep this draft".length)
+    await toEnd()
+
+    // The same key pressed in the transcript moves the same page, not one that counts what the composer covers.
+    await scroller.focus()
+    const fromTranscript = await paged(() => page.keyboard.press("PageUp"))
+    await expect.poll(async () => Math.abs((await fromTranscript()) - distance)).toBeLessThanOrEqual(1)
 
     // Paging back to the end follows new content again, as a wheel scroll there does.
-    for (let index = 0; index < 10 && (await fromEnd()) > 1; index++) await editor.press("PageDown")
-    await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+    await toEnd()
     await timeline.send(partUpdated(textPart("prt_page_keys_tail", "Arrived after paging down.\n\n".repeat(20))))
     await timeline.waitForPart("prt_page_keys_tail")
     await expect.poll(fromEnd).toBeLessThanOrEqual(1)
@@ -718,7 +759,9 @@ test.describe("timeline history", () => {
     await expect(editor).toHaveText("keep this draft")
   })
 
-  test("a message hash and message navigation keep the prompt in view and the hash in step", async ({ page }) => {
+  test("a message hash and message navigation land the prompt below the session header and keep the hash in step", async ({
+    page,
+  }) => {
     const messages = validateTimelineMessages([
       ...historyMessages(20),
       userMessage(),
@@ -726,20 +769,39 @@ test.describe("timeline history", () => {
     ])
 
     const prompt = (index: number) => messages.filter((message) => message.type === "user")[index]!.id
-    const row = (index: number) => page.locator(`[data-timeline-row="UserMessage"][data-message-id="${prompt(index)}"]`)
+    const selector = (index: number) => `[data-timeline-row="UserMessage"][data-message-id="${prompt(index)}"]`
+    const row = (index: number) => page.locator(selector(index))
     const hash = () => page.evaluate(() => location.hash)
+
+    // Where the prompt rests, against the lower edge of the session header and its fade, which cover the viewport's
+    // top. Several scrolls land a prompt one after another, so only the place it stays at counts.
+    const belowHeader = async (index: number) => {
+      await waitForVisualSettle(page, [selector(index)], 6)
+
+      return row(index).evaluate((element) =>
+        Math.round(
+          element.getBoundingClientRect().top -
+            document.querySelector("[data-session-title]")!.getBoundingClientRect().bottom,
+        ),
+      )
+    }
 
     await setupTimeline(page, { sessionMessages: messages })
     await expect(page.getByText("Latest answer", { exact: true })).toBeInViewport()
     await page.evaluate((id) => (location.hash = `#message-${id}`), prompt(10))
-    await expect(row(10)).toBeInViewport()
+    expect(await belowHeader(10)).toBe(0)
 
     await page.keyboard.press("Control+Alt+BracketLeft")
     await expect.poll(hash).toBe(`#message-${prompt(9)}`)
-    await expect(row(9)).toBeInViewport()
+    expect(await belowHeader(9)).toBe(0)
     await page.keyboard.press("Control+Alt+BracketRight")
     await expect.poll(hash).toBe(`#message-${prompt(10)}`)
-    await expect(row(10)).toBeInViewport()
+    expect(await belowHeader(10)).toBe(0)
+
+    // A link to a prompt whose rows are mounted and measured: nothing measures afterwards to correct where it lands.
+    await page.evaluate((id) => (location.hash = `#message-${id}`), prompt(9))
+    await expect.poll(hash).toBe(`#message-${prompt(9)}`)
+    expect(await belowHeader(9)).toBe(0)
 
     await page.getByRole("button", { name: "Jump to latest" }).click()
     await expect.poll(hash).toBe("")
@@ -755,6 +817,294 @@ test.describe("timeline history", () => {
     await page.evaluate(() => history.back())
     await expect.poll(hash).toBe("")
     await expect(latest).toBeInViewport()
+  })
+
+  // The timeline's scroll to a prompt's row goes on after the cursor has put the prompt in place: until a frame finds
+  // the row where that scroll wants it, and for up to five seconds while rows above it measure. It writes the row's
+  // place again whenever a measurement moves it. A drag of the scrollbar sends the timeline no input event, so nothing
+  // ended that scroll: the rows the drag brought in measured, and the view went back 1,540px to the prompt.
+  test("leaves the view where the scrollbar takes it once message navigation has put its prompt in place", async ({
+    page,
+  }) => {
+    const messages = validateTimelineMessages([
+      ...historyMessages(30),
+      userMessage(),
+      assistantMessage([textPart("prt_let_go_tail", "Latest answer")]),
+    ])
+
+    const prompt = (index: number) => messages.filter((message) => message.type === "user")[index]!.id
+    const scroller = timelineScroller(page)
+    const top = () => scroller.evaluate((element) => element.scrollTop)
+    const range = () => scroller.evaluate((element) => element.scrollHeight - element.clientHeight)
+
+    const belowHeader = (index: number) =>
+      page.evaluate(
+        (selector) => {
+          const row = document.querySelector(selector)
+
+          return (
+            row &&
+            Math.round(
+              row.getBoundingClientRect().top -
+                document.querySelector("[data-session-title]")!.getBoundingClientRect().bottom,
+            )
+          )
+        },
+        `[data-timeline-row="UserMessage"][data-message-id="${prompt(index)}"]`,
+      )
+
+    await page.clock.install({ time: 1_700_000_000_000 })
+    await setupTimeline(page, { sessionMessages: messages })
+    await expect(page.getByText("Latest answer", { exact: true })).toBeInViewport()
+
+    // The frames are the test's from here: the scroll to a row ends in the first frame that finds the row in place.
+    await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000)
+    await page.evaluate((id) => (location.hash = `#message-${id}`), prompt(15))
+    await expect
+      .poll(
+        async () => {
+          await page.clock.runFor(16)
+
+          return belowHeader(15)
+        },
+        { intervals: [100] },
+      )
+      .toBe(0)
+    // Everything that navigation started is over.
+    await page.clock.runFor(6_000)
+    expect(await belowHeader(15)).toBe(0)
+
+    // The next prompt is mounted, so the cursor puts it in place at the key press, with no frame in between.
+    await page.keyboard.press("Control+Alt+BracketRight")
+    expect(await belowHeader(16)).toBe(0)
+    const held = await top()
+    const sized = await range()
+
+    const thumb = page.locator('[data-slot="session-timeline-visible"] [data-orientation="vertical"]')
+    await thumb.hover()
+    const grip = (await thumb.boundingBox())!
+    await page.mouse.down()
+    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2 - 160, { steps: 4 })
+    await page.mouse.up()
+    await expect.poll(top).not.toBe(held)
+    let last = Number.NaN
+    await expect
+      .poll(async () => {
+        const now = await top()
+        const rests = now === last
+        last = now
+
+        return rests
+      })
+      .toBe(true)
+    // The drag brought in rows that had no sizes yet. They have measured, which moves the place of the prompt's row.
+    expect(await range()).not.toBe(sized)
+
+    const reader = await scroller.evaluate((element) => {
+      const box = element.getBoundingClientRect()
+      const middle = (box.top + box.bottom) / 2
+
+      const row = [...element.querySelectorAll<HTMLElement>("[data-timeline-key]")].find((item) => {
+        const rect = item.getBoundingClientRect()
+
+        return rect.top <= middle && rect.bottom > middle
+      })
+
+      return row && { key: row.dataset.timelineKey!, y: row.getBoundingClientRect().top, top: element.scrollTop }
+    })
+    expect(reader, "a row is mounted where the reader scrolled to").toBeDefined()
+
+    await page.clock.runFor(16 * 24)
+
+    // How far the row the reader scrolled to moved on screen, or the scroll offset once that row is no longer mounted.
+    expect(
+      await scroller.evaluate((element, reader) => {
+        const row = element.querySelector<HTMLElement>(`[data-timeline-key="${CSS.escape(reader.key)}"]`)
+
+        return Math.abs(row ? row.getBoundingClientRect().top - reader.y : element.scrollTop - reader.top)
+      }, reader!),
+    ).toBeLessThanOrEqual(1)
+  })
+
+  // The reveal a link makes while the timeline is still hidden is made again when the timeline shows, because the rows
+  // have their sizes only then. A reader who follows another link in that time goes to that link's prompt: the repeat
+  // is of the latest reveal, not of the one that opened the session.
+  test("a link followed before the timeline shows wins over the link that opened the session", async ({ page }) => {
+    const messages = validateTimelineMessages([
+      ...historyMessages(20),
+      userMessage(),
+      // Tall, so the timeline is still hidden when the first link's reveal is made.
+      assistantMessage([
+        textPart("prt_newer_link_tail", Array.from({ length: 120 }, (_, index) => `Paragraph ${index}.`).join("\n\n")),
+      ]),
+    ])
+
+    const prompt = (index: number) => messages.filter((message) => message.type === "user")[index]!.id
+    const selector = `[data-timeline-row="UserMessage"][data-message-id="${prompt(6)}"]`
+
+    // Follows the newer link in the task of the scroll event the first link's reveal sends, while the timeline is
+    // hidden. The session's own first scroll is to its end, and the first link's prompt is far from it.
+    await page.addInitScript(() => {
+      document.addEventListener(
+        "scroll",
+        (event) => {
+          const newer = sessionStorage.getItem("newer-link")
+          const view = event.target
+
+          if (!newer || !(view instanceof HTMLElement)) return
+          const content = view.querySelector("[data-timeline-virtual-content]")
+
+          if (!content || getComputedStyle(content).visibility === "visible") return
+
+          if (view.scrollHeight - view.clientHeight - view.scrollTop < 1_000) return
+          sessionStorage.removeItem("newer-link")
+          location.hash = newer
+        },
+        true,
+      )
+    })
+    await setupTimeline(page, { sessionMessages: messages })
+    await expect(page.getByText("Paragraph 119.", { exact: true })).toBeInViewport()
+
+    // The same session again from a link, with nothing measured.
+    await page.evaluate(
+      ([first, newer]) => {
+        sessionStorage.setItem("newer-link", `#message-${newer}`)
+        location.hash = `#message-${first}`
+      },
+      [prompt(5), prompt(6)],
+    )
+    await page.reload()
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    // The newer link was followed while the timeline was hidden.
+    expect(await page.evaluate(() => sessionStorage.getItem("newer-link"))).toBeNull()
+    await expect(page.locator(selector)).toBeInViewport()
+    await waitForVisualSettle(page, [selector], 6)
+    expect(await page.evaluate(() => location.hash)).toBe(`#message-${prompt(6)}`)
+
+    expect(
+      await page
+        .locator(selector)
+        .evaluate((element) =>
+          Math.round(
+            element.getBoundingClientRect().top -
+              document.querySelector("[data-session-title]")!.getBoundingClientRect().bottom,
+          ),
+        ),
+    ).toBe(0)
+  })
+
+  // The timeline goes to the prompt while it is still hidden and its rows have no sizes. The prompt and its reply
+  // then stand a few lines from the end of a short scroll range. A correction for the rows above moved the view
+  // onto that end, which counted as the reader's return to the latest message: the link was dropped and the session
+  // opened on its end. Without that, the range was still too short to bring the prompt up to its place.
+  test("a link that opens the session on its newest prompt lands the prompt below the session header", async ({
+    page,
+  }) => {
+    const messages = validateTimelineMessages([
+      ...historyMessages(20),
+      userMessage(),
+      // Taller than the window, so the prompt is not within sight of the end once the reply has its size.
+      assistantMessage([
+        textPart("prt_cold_tail", Array.from({ length: 120 }, (_, index) => `Paragraph ${index}.`).join("\n\n")),
+      ]),
+    ])
+
+    const selector = `[data-timeline-row="UserMessage"][data-message-id="${userID}"]`
+    await setupTimeline(page, { sessionMessages: messages })
+    await expect(page.getByText("Paragraph 119.", { exact: true })).toBeInViewport()
+
+    // The same session again from a link, with nothing measured.
+    await page.evaluate((id) => (location.hash = `#message-${id}`), userID)
+    await page.reload()
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    await expect(page.locator(selector)).toBeInViewport()
+    await waitForVisualSettle(page, [selector], 6)
+    expect(await page.evaluate(() => location.hash)).toBe(`#message-${userID}`)
+
+    expect(
+      await page
+        .locator(selector)
+        .evaluate((element) =>
+          Math.round(
+            element.getBoundingClientRect().top -
+              document.querySelector("[data-session-title]")!.getBoundingClientRect().bottom,
+          ),
+        ),
+    ).toBe(0)
+  })
+
+  // The timeline scrolls to a row by its index, for up to five seconds. A page of history that arrived above in that
+  // time gave the index to another row, and the timeline went there.
+  test("Find reaches its match when an older page arrives while the timeline scrolls to it", async ({ page }) => {
+    const history = historyMessages(30)
+
+    const all = validateTimelineMessages([
+      ...history.slice(0, 40),
+      userMessage(undefined, { id: "msg_00019_seek_a_user", created: 1690000195000 }),
+      assistantMessage([textPart("prt_seek_match", "The needle rests here.")], {
+        id: "msg_00019_seek_b_assistant",
+        parentID: "msg_00019_seek_a_user",
+        created: 1690000196000,
+      }),
+      ...history.slice(40),
+      userMessage(),
+      assistantMessage([textPart("prt_seek_tail", "The newest answer.")]),
+    ])
+
+    const older = Promise.withResolvers<void>()
+    const requests: string[] = []
+    await setupTimeline(page, {
+      sessionMessages: all,
+      pageMessages: (_session, _limit, before) =>
+        before ? { items: all.slice(0, 20) } : { items: all.slice(20), cursor: "older" },
+      beforeMessagesResponse: ({ before }) => (before ? older.promise : Promise.resolve()),
+      onMessages: (request) => {
+        if (request.before && request.phase === "start") requests.push(request.before)
+      },
+    })
+    const scroller = timelineScroller(page)
+    await expect(page.getByText("The newest answer.", { exact: true })).toBeInViewport()
+
+    // Up to the top of what is loaded, which asks for the older page. It stays on its way.
+    await scroller.hover()
+    await page.mouse.wheel(0, -100_000)
+    await expect.poll(() => requests).toEqual(["older"])
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeLessThanOrEqual(1)
+
+    // The last row stays mounted, and its index grows by the rows that land above.
+    const rows = () =>
+      scroller.evaluate((element) =>
+        Math.max(...[...element.querySelectorAll<HTMLElement>("[data-index]")].map((row) => Number(row.dataset.index))),
+      )
+
+    const loaded = await rows()
+
+    await page.keyboard.press("ControlOrMeta+f")
+    const search = page.locator('[data-component="timeline-search-bar"] input')
+    await expect(search).toBeFocused()
+
+    // No frame runs between the start of the scroll to the match's row and the page that lands above it.
+    const start = Date.now()
+    await page.clock.install({ time: start })
+    await page.clock.pauseAt(start + 10_000)
+    await search.fill("needle rests")
+    older.resolve()
+    await expect.poll(rows).toBeGreaterThan(loaded)
+    await page.clock.runFor(2_000)
+
+    expect(
+      await page.evaluate(() => {
+        const match = [...(CSS.highlights.get("timeline-search-hit-active") ?? [])][0]
+
+        if (!(match instanceof Range)) return "no match"
+        const rect = match.getBoundingClientRect()
+        const header = document.querySelector("[data-session-title]")!.getBoundingClientRect()
+        const dock = document.querySelector('[data-component="session-composer-dock"]')!.getBoundingClientRect()
+
+        return rect.height > 0 && rect.top >= header.bottom && rect.bottom <= dock.top ? "shown" : "out of sight"
+      }),
+    ).toBe("shown")
   })
 
   test("a hash for a prompt the revert hides, or one that does not exist, clears without paging history", async ({
