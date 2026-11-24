@@ -659,6 +659,11 @@
     justify-content: flex-end;
   }
 
+  /* A turn that went back to work keeps its reply's footer in place, unseen, so the row keeps its height. */
+  &[data-copy-held] > :is([data-slot="text-part-footer"], [data-slot="text-part-copy-wrapper"]) {
+    visibility: hidden;
+  }
+
   :root[data-motion="reduce"] & [data-slot="text-part-copy-wrapper"] {
     transition: none;
   }

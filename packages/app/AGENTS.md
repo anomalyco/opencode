@@ -145,6 +145,13 @@ This section is the single source for what may move or restyle the session timel
 - Never select on `style` inside `:has()`. Every inline style write then rechecks the `:has()` of the element's ancestors, and the virtualizer writes inline styles while the reader scrolls. Set a `data-` attribute when the element is built, and select on that.
 - To check: record a Chrome trace of the `devtools.timeline` category while you scroll through history that has not been visited, click in the timeline and press a scroll key. Read `elementCount` on each `UpdateLayoutTree` event; DevTools shows it as Recalculate Style, Elements Affected. A pass that affects about as many elements as the timeline contains is this regression.
 
+### Rows under a reader at the end
+
+- A reader who follows the end sits on the last rows. When one of them gets shorter, the scroll range shrinks, the browser pulls the offset back, and everything in view moves down. A reply lost its footer when its finished turn went back to work, and the view moved 28 to 31px.
+- Do not take a part out of a row because state outside the row changed: the session went busy, the turn went back to work, another row arrived. Keep the part's space and hide it, as the reply's footer does with `data-copy-held` (`visibility: hidden`).
+- A row may grow at its end as its own content arrives.
+- Keeper: "keeps a finished reply where it is when its turn goes back to work" in `e2e/regression/timeline-stream.spec.ts`.
+
 ## Localization
 
 - NEVER hardcode user-visible English strings in production code. ALWAYS use an i18n key for visible copy, placeholders, accessible labels, tooltips, menus, dialogs, toasts, empty states, and displayed errors.

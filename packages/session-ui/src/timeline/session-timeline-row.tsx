@@ -317,13 +317,18 @@ export function createSessionTimelineRowRenderer(input: {
     })
   }
 
-  const copyContentID = (messageID: string) => {
-    if (phase(messageID).hideCopy) return null
+  // Where the session last went idle. The steps before it belong to runs that finished.
+  const lastIdle = createMemo(() => turns().messages.findLastIndex((message) => message.type === "idle"))
 
-    const message = input.projection
-      .assistantMessagesByParent()
-      .get(messageID)
-      ?.findLast((message) => message.content.some((content) => content.type === "text" && !!content.text.trim()))
+  // The reply of a turn at work is not final, so it offers no Copy. A turn that finished and went back to work keeps
+  // the footer its last reply had, unseen, so that row does not shrink under the reader. Only the steps it had
+  // finished count there, so the footer stays where it was.
+  const copyContentID = (messageID: string) => {
+    const steps = input.projection.assistantMessagesByParent().get(messageID)
+
+    const message = (
+      phase(messageID).hideCopy ? steps?.filter((step) => turns().indexes.get(step.id)! < lastIdle()) : steps
+    )?.findLast((message) => message.content.some((content) => content.type === "text" && !!content.text.trim()))
 
     return message
       ? Timeline.contentEntries(message).findLast(
@@ -685,6 +690,7 @@ export function createSessionTimelineRowRenderer(input: {
                 content={content()}
                 contentID={ref()!.partID}
                 showAssistantCopyPartID={copyContentID(row().userMessageID)}
+                copyHeld={phase(row().userMessageID).hideCopy}
                 keepCopyVisible={latestCopyTurn() === row().userMessageID}
                 turnDurationMs={duration(row().userMessageID)}
                 turnTokensPerSecond={turnTokensPerSecond()}
