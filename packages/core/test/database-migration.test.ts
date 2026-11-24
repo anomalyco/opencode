@@ -27,6 +27,7 @@ import scheduleChecksMigration from "@opencode/core/database/migration/202610291
 import automationMigration from "@opencode/core/database/migration/20261116043204_automation"
 import automationEventPosition from "@opencode/core/database/migration/20261116181958_automation_event_position"
 import automationActiveIndex from "@opencode/core/database/migration/20261116213417_automation_active_index"
+import rootUpdatedIndexMigration from "@opencode/core/database/migration/20261124000000_session_root_updated_index"
 import { Global } from "@opencode/util/global"
 
 const run = <A, E>(
@@ -200,6 +201,27 @@ describe("DatabaseMigration", () => {
     )
   })
 
+  test("adds the root updated index to databases that already applied the original migration", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(sql`CREATE TABLE session_v2 (id text PRIMARY KEY, project_id text, parent_id text, path text, time_updated integer, time_archived integer)`)
+        yield* db.run(sql`CREATE INDEX session_v2_root_project_path_updated_idx ON session_v2 (project_id, path, time_updated desc, id desc) WHERE parent_id is null and time_archived is null`)
+        yield* db.run(sql`CREATE TABLE migration (id text PRIMARY KEY, time_completed integer NOT NULL)`)
+        yield* db.run(
+          sql`INSERT INTO migration (id, time_completed) VALUES ('20261123223420_numerous_avengers', 1795475001189)`,
+        )
+        yield* DatabaseMigration.applyOnly(db, [rootUpdatedIndexMigration])
+        yield* DatabaseMigration.applyOnly(db, [rootUpdatedIndexMigration])
+        const indexes = (yield* db.all<{ name: string }>(
+          sql`SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'session_v2' ORDER BY name`,
+        )).map((row) => row.name)
+        expect(indexes).toContain("session_v2_root_project_path_updated_idx")
+        expect(indexes).toContain("session_v2_root_updated_idx")
+        expect(yield* db.get(sql`SELECT count(*) AS count FROM migration`)).toEqual({ count: 2 })
+      }),
+    )
+  })
   test("adds nullable attention state to existing sessions", async () => {
     await run(
       Effect.gen(function* () {
