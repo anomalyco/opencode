@@ -1129,7 +1129,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   data-tooltip={i18n.t("share.previous")}
                   onClick={() => step(-1)}
                 >
-                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" data-mirror>
                     <path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
                   </svg>
                 </button>
@@ -1143,7 +1143,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   data-tooltip={i18n.t("share.next")}
                   onClick={() => step(1)}
                 >
-                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                  <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" data-mirror>
                     <path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
                   </svg>
                 </button>

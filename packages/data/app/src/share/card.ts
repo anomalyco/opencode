@@ -222,7 +222,10 @@ function hex(from: string, to: string, amount: number) {
     .join("")}`
 }
 
-const font = '"OpenMono", "OpenMono Menlo", "OpenMono Consolas", "OpenMono Courier", ui-monospace, monospace'
+// OpenMono has no Arabic, and a monospace fallback stretches Arabic letters to fill its cells, so Arabic falls back to
+// a proportional Arabic face first.
+const font =
+  '"OpenMono", "OpenMono Menlo", "OpenMono Consolas", "OpenMono Courier", "Geeza Pro", "Noto Sans Arabic", ui-monospace, monospace'
 const pad = 80
 // The still holds long enough for the legend to arrive after the highlights.
 const hold = 2.2

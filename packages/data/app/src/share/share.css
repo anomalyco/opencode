@@ -441,7 +441,7 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
   [data-slot="editor-inspector"] {
     position: absolute;
     top: var(--editor-inset);
-    right: var(--editor-inset);
+    inset-inline-end: var(--editor-inset);
     bottom: var(--editor-inset);
     display: flex;
     flex-direction: column;
@@ -588,7 +588,7 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
   [data-slot="embed-copied"] {
     position: absolute;
     top: 8px;
-    right: 8px;
+    inset-inline-end: 8px;
     z-index: 1;
     padding: 4px 8px;
     font-size: 12px;
@@ -611,6 +611,8 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
     padding: 10px 12px;
     overflow-y: auto;
     overscroll-behavior: contain;
+    /* Code reads left to right in every language. */
+    direction: ltr;
     text-align: left;
     cursor: copy;
     background: var(--stats-bg);
@@ -808,8 +810,9 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
     align-items: center;
     gap: 10px;
     height: 36px;
-    padding: 0 9px 0 5px;
-    text-align: left;
+    padding-block: 0;
+    padding-inline: 5px 9px;
+    text-align: start;
     color: var(--stats-muted);
     background: var(--editor-control);
     border: 1px solid var(--editor-control-line);
@@ -955,7 +958,7 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
     [data-variant="primary"] {
       justify-content: center;
       min-width: 96px;
-      margin-left: 4px;
+      margin-inline-start: 4px;
     }
 
     [data-slot="button-label"] {
@@ -1036,7 +1039,7 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
 
   /* Close as far from the first dropdown as Shuffle is from Export: the gap and 4px more. */
   [data-slot="editor-bar"] > [data-slot="icon-button"]:first-child {
-    margin-right: 4px;
+    margin-inline-end: 4px;
   }
 
   /* Rendering, the button cancels: its percentage gives way to Cancel under the pointer (once it has left and come
@@ -1137,7 +1140,7 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
     [data-slot="music-tool"]
     [data-slot="dropdown-trigger"] {
     width: auto;
-    padding-right: 6px;
+    padding-inline-end: 6px;
 
     :is([data-slot="dropdown-value"], [data-slot="explicit"]) {
       display: none;
@@ -1156,7 +1159,7 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
     display: flex;
     gap: 4px;
     align-items: center;
-    margin-left: auto;
+    margin-inline-start: auto;
   }
 
   [data-component="dropdown"],
@@ -1218,7 +1221,7 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
     flex: 1;
     min-width: 0;
     overflow: hidden;
-    text-align: left;
+    text-align: start;
     text-overflow: ellipsis;
   }
 
@@ -1231,7 +1234,7 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
 
   [data-component="dropdown"][data-show="value"] [data-slot="dropdown-trigger"] {
     width: 72px;
-    padding-left: 12px;
+    padding-inline-start: 12px;
   }
 
   [data-slot="date-tool"] [data-slot="dropdown-trigger"] {
@@ -1241,7 +1244,7 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
   [data-slot="dropdown-menu"] {
     position: absolute;
     top: calc(100% + 6px);
-    left: 0;
+    inset-inline-start: 0;
     width: max-content;
     z-index: 3;
     display: flex;
@@ -1257,7 +1260,12 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
       0 4px 12px -4px rgb(0 0 0 / 0.14),
       0 16px 32px -12px rgb(0 0 0 / 0.2);
     animation: share-menu-in 140ms cubic-bezier(0.23, 1, 0.32, 1);
+    /* It grows from the corner at its button: the start edge, the right in a right-to-left language. */
     transform-origin: top left;
+
+    &:dir(rtl) {
+      transform-origin: top right;
+    }
 
     @media (prefers-reduced-motion: reduce) {
       animation: none;
@@ -1274,10 +1282,11 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
     gap: 10px;
     min-height: 36px;
     /* Each choice's icon starts where its button's does: the border and the button's 8px. */
-    padding: 8px 14px 8px 9px;
+    padding-block: 8px;
+    padding-inline: 9px 14px;
     font-size: 13px;
     color: var(--stats-text);
-    text-align: left;
+    text-align: start;
     white-space: nowrap;
     background: transparent;
     border: 0;
@@ -1326,14 +1335,14 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
     }
 
     [data-slot="explicit"] {
-      margin-left: 16px;
+      margin-inline-start: 16px;
     }
   }
 
   /* The music list's covers and names in line with the cover and name in its button. */
   [data-component="dropdown"][data-id="music"] [data-slot="dropdown-item"] {
     gap: 6px;
-    padding-left: 6px;
+    padding-inline-start: 6px;
   }
 
   /* The name takes the row's spare width, so the Explicit badges and the checks line up on the right. */
@@ -1351,7 +1360,7 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
 
   /* Sizes: each ratio where its button's value starts, with its name to its right, the names in a column. */
   [data-component="dropdown"][data-id="size"] [data-slot="dropdown-item"] {
-    padding-left: 13px;
+    padding-inline-start: 13px;
   }
 
   [data-component="dropdown"][data-id="size"] [data-slot="dropdown-label"] {
@@ -1378,7 +1387,7 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
     /* As wide as its list, the longest name with its Explicit badge. */
     [data-slot="dropdown-trigger"] {
       width: 250px;
-      padding-left: 5px;
+      padding-inline-start: 5px;
     }
   }
 
@@ -1745,7 +1754,7 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
       }
 
       [data-component="dropdown"][data-id="size"] [data-slot="dropdown-trigger"] {
-        padding-left: 8px;
+        padding-inline-start: 8px;
       }
 
       [data-slot="dropdown-detail"] {
@@ -1757,18 +1766,23 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
       /* Lists and the calendar open upwards in the sheet, over the rows above, as wide as their control. */
       [data-slot="dropdown-menu"] {
         top: auto;
-        right: 0;
+        inset-inline-end: 0;
         bottom: calc(100% + 6px);
-        left: auto;
+        inset-inline-start: auto;
         width: 100%;
         transform-origin: bottom left;
+
+        &:dir(rtl) {
+          transform-origin: bottom right;
+        }
       }
 
       [data-component="share-calendar"] {
         top: auto;
-        right: 0;
+        right: auto;
         bottom: calc(100% + 6px);
         left: auto;
+        inset-inline-end: 0;
         translate: none;
         animation-name: share-fade-in;
       }
@@ -1926,3 +1940,8 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
   }
 }
 /* grey-ok-end */
+
+/* Arrows that mean previous and next point the other way in a right-to-left language. */
+[data-component="share-editor"] svg[data-mirror]:dir(rtl) {
+  scale: -1 1;
+}

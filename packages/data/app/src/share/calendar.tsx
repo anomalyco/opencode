@@ -71,7 +71,7 @@ export function ShareCalendar(props: {
           disabled={month() <= monthOf(first())}
           onClick={() => step(-1)}
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" data-mirror>
             <path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
           </svg>
         </button>
@@ -82,7 +82,7 @@ export function ShareCalendar(props: {
           disabled={month() >= monthOf(last())}
           onClick={() => step(1)}
         >
-          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+          <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true" data-mirror>
             <path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
           </svg>
         </button>

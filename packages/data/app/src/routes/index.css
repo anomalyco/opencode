@@ -155,6 +155,8 @@
   unicode-range: U+0300-0301, U+0400-052F, U+A64C-A64D;
 }
 
+/* The metric fallbacks cover what OpenMono does (Latin, Greek, Cyrillic, punctuation and symbols) and no more:
+   Courier New also has monospace Arabic, which would otherwise win over a proper Arabic face. */
 @font-face {
   font-family: "OpenMono Menlo";
   src: local("Menlo Regular"), local("Menlo-Regular"), local("DejaVu Sans Mono");
@@ -163,6 +165,7 @@
   ascent-override: 96.83%;
   descent-override: 22.08%;
   line-gap-override: 6.52%;
+  unicode-range: U+0000-052F, U+1E00-1FFF, U+2000-2BFF;
 }
 
 @font-face {
@@ -173,6 +176,7 @@
   ascent-override: 96.83%;
   descent-override: 22.08%;
   line-gap-override: 6.52%;
+  unicode-range: U+0000-052F, U+1E00-1FFF, U+2000-2BFF;
 }
 
 @font-face {
@@ -183,6 +187,7 @@
   ascent-override: 88.43%;
   descent-override: 26.12%;
   line-gap-override: 0%;
+  unicode-range: U+0000-052F, U+1E00-1FFF, U+2000-2BFF;
 }
 
 @font-face {
@@ -193,6 +198,7 @@
   ascent-override: 88.43%;
   descent-override: 26.12%;
   line-gap-override: 0%;
+  unicode-range: U+0000-052F, U+1E00-1FFF, U+2000-2BFF;
 }
 
 @font-face {
@@ -203,6 +209,7 @@
   ascent-override: 96.52%;
   descent-override: 28.5%;
   line-gap-override: 0%;
+  unicode-range: U+0000-052F, U+1E00-1FFF, U+2000-2BFF;
 }
 
 @font-face {
@@ -213,6 +220,7 @@
   ascent-override: 96.52%;
   descent-override: 28.5%;
   line-gap-override: 0%;
+  unicode-range: U+0000-052F, U+1E00-1FFF, U+2000-2BFF;
 }
 
 /* The page behind the app, in the page step of the shared grey scale (--stats-bg), written out because the tokens
@@ -302,7 +310,7 @@ body {
 [data-page="stats"] [data-component="content"] {
   color: var(--stats-text);
   font-family:
-    "OpenMono", "OpenMono Menlo", "OpenMono Consolas", "OpenMono Courier",
+    "OpenMono", "OpenMono Menlo", "OpenMono Consolas", "OpenMono Courier", "Geeza Pro", "Noto Sans Arabic",
     var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
 }
 
@@ -322,7 +330,7 @@ body {
   color: var(--stats-text);
   background: var(--stats-bg);
   font-family:
-    "OpenMono", "OpenMono Menlo", "OpenMono Consolas", "OpenMono Courier",
+    "OpenMono", "OpenMono Menlo", "OpenMono Consolas", "OpenMono Courier", "Geeza Pro", "Noto Sans Arabic",
     var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
 }
 
@@ -667,7 +675,7 @@ body {
   padding: 112px clamp(32px, 4vw, 48px) 24px;
   color: var(--stats-text);
   font-family:
-    "OpenMono", "OpenMono Menlo", "OpenMono Consolas", "OpenMono Courier",
+    "OpenMono", "OpenMono Menlo", "OpenMono Consolas", "OpenMono Courier", "Geeza Pro", "Noto Sans Arabic",
     var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
   font-size: 11px;
 }
