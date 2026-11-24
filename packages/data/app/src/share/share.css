@@ -566,13 +566,13 @@
       box-shadow: inset 0 0 0 1px var(--stats-accent);
     }
 
-    /* The swatch sits as far from the left edge as from the top and bottom: (36 - 16) / 2, less the border. */
+    /* The swatch sits as far from the left edge as from the top and bottom: (36 - 14) / 2 = 11, less the 1px border. */
     &[data-variant="wide"] {
       flex-direction: row;
       justify-content: flex-start;
       gap: 8px;
       height: 36px;
-      padding: 0 9px;
+      padding: 0 9px 0 10px;
       font-size: 13px;
     }
 
@@ -661,19 +661,15 @@
   /* Three wide choices in a row (Style) set tighter, so their labels fit. */
   [data-slot="row-options"]:has(> [data-variant="wide"]:nth-child(3)) > [data-variant="wide"] {
     gap: 6px;
-    padding: 0 7px;
+    padding: 0 7px 0 10px;
     font-size: 12px;
-
-    [data-slot="swatch"] {
-      width: 14px;
-      height: 14px;
-    }
   }
 
+  /* 14px across with its border. */
   [data-slot="swatch"] {
     flex: none;
-    width: 16px;
-    height: 16px;
+    width: 12px;
+    height: 12px;
     border: 1px solid var(--stats-line-strong);
     background: #161616;
 
