@@ -9,6 +9,10 @@ export const ZOOM_SLACK = 4
 // A scroll range at or below this does not overflow.
 export const MIN_OVERFLOW = 1
 
+// A reply that streams moves the end away while the reader's scroll is on its way there, so the scroll lands a line
+// or two short of it. A wheel or key toward the end that lands within this distance rejoins it.
+export const REJOIN_DISTANCE = 80
+
 /** A revealed tool call, whose top edge stays put until the reader scrolls. */
 export type FollowAnchor = { readonly key: string; readonly partID: string }
 
@@ -30,13 +34,14 @@ export type FollowState =
   /**
    * Stays where the reader is. `endPending`: a scroll landed within the zoom slack of the end and may have reached it.
    * `by`: what put the view here, while that decides how it returns to the end. `"navigation"`: navigation or a
-   * selection did, and the reader has not scrolled on since.
+   * selection did, and the reader has not scrolled on since. `"toward-end"`: the reader's last wheel or scroll key
+   * was toward the end.
    */
   | {
       readonly type: "detached"
       readonly gesture?: FollowGesture
       readonly endPending: boolean
-      readonly by?: "navigation"
+      readonly by?: DetachedBy
     }
   /** Holds a revealed tool call in place. */
   | { readonly type: "anchored"; readonly anchor: FollowAnchor }
@@ -85,9 +90,13 @@ export type FollowEvent =
 
 type Unanchored = Exclude<FollowState, { type: "anchored" }>
 
+type DetachedBy = "navigation" | "toward-end"
+
 const FOLLOWING: FollowState = Object.freeze({ type: "following" })
 
 const DETACHED: FollowState = Object.freeze({ type: "detached", endPending: false })
+
+const DETACHED_TOWARD_END: FollowState = Object.freeze({ type: "detached", endPending: false, by: "toward-end" })
 
 export const CONTACT_LOST_EVENT: FollowEvent = Object.freeze({ type: "contact.lost" })
 
@@ -122,13 +131,19 @@ export function transitionFollow(state: FollowState, event: FollowEvent): Follow
   if (event.type === "detach")
     return state.type === "detached" && state.by === "navigation" ? state : detached(state.gesture, false, "navigation")
 
-  if (event.type === "release") return withGesture(state, contact(state.gesture))
+  // A programmatic scroll takes the view somewhere else, so the reader is no longer on the way to the end.
+  if (event.type === "release")
+    return state.type === "detached" && state.by === "toward-end"
+      ? detached(contact(state.gesture), state.endPending)
+      : withGesture(state, contact(state.gesture))
 
   if (event.type === "scroll.intent") {
     if (state.type !== "detached") return event.upward && event.overflow ? detached(state.gesture, false) : state
 
-    // The reader scrolls on from where navigation sent the view.
-    return state.by ? detached(state.gesture, state.endPending) : state
+    // The reader scrolls on from where navigation sent the view, toward the end or away from it.
+    const by = event.upward ? undefined : "toward-end"
+
+    return state.by === by ? state : detached(state.gesture, state.endPending, by)
   }
 
   if (event.type === "pointer.down") return touchHeld(state.gesture) ? state : withGesture(state, "pointer")
@@ -220,7 +235,9 @@ export function needsEndProbe(state: FollowState) {
 
 // Only the reader's own input lets an anchored tool go.
 function releaseAnchor(state: FollowState, event: FollowEvent): FollowState {
-  if (event.type === "release" || event.type === "scroll.intent") return DETACHED
+  if (event.type === "release") return DETACHED
+
+  if (event.type === "scroll.intent") return detached(undefined, false, event.upward ? undefined : "toward-end")
 
   if (event.type === "pointer.down") return detached("pointer", false)
 
@@ -265,6 +282,10 @@ function scrolled(state: Unanchored, event: Extract<FollowEvent, { type: "scroll
 
   if (atEnd) return following(state.gesture)
 
+  // The reader's own scroll toward the end, not a size correction, landed within reach of it.
+  if (state.by === "toward-end" && event.reader > END_EPSILON && event.maxScroll - event.scrollTop <= REJOIN_DISTANCE)
+    return following(state.gesture)
+
   // Probing the zoomed end now would cancel a scroll still in motion, so it waits for the scroll to settle.
   const endPending =
     arrived && event.maxScroll - event.scrollTop <= ZOOM_SLACK && !(movedUp && state.gesture)
@@ -296,10 +317,12 @@ function following(gesture: FollowGesture | undefined, away = 0): FollowState {
   return gesture ? { type: "following", gesture } : FOLLOWING
 }
 
-function detached(gesture: FollowGesture | undefined, endPending: boolean, by?: "navigation"): FollowState {
-  if (by) return { type: "detached", gesture, endPending, by }
+function detached(gesture: FollowGesture | undefined, endPending: boolean, by?: DetachedBy): FollowState {
+  if (!by) return gesture || endPending ? { type: "detached", gesture, endPending } : DETACHED
 
-  return gesture || endPending ? { type: "detached", gesture, endPending } : DETACHED
+  if (by === "toward-end" && !gesture && !endPending) return DETACHED_TOWARD_END
+
+  return { type: "detached", gesture, endPending, by }
 }
 
 function withGesture(state: Unanchored, gesture: FollowGesture | undefined): FollowState {
