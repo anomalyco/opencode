@@ -353,7 +353,7 @@ function NewSessionLocationDialog(props: {
             aria-label={placeholder()}
             placeholder={placeholder()}
             leadingIcon={
-              <Show when={view().ownsEscape && !view().titleKey} fallback={<Icon name="magnifying-glass" />}>
+              <Show when={view().ownsEscape} fallback={<Icon name="magnifying-glass" />}>
                 <Tooltip value={language.t("session.new.location.back")} placement="bottom-start">
                   <button
                     type="button"
@@ -383,17 +383,16 @@ function NewSessionLocationDialog(props: {
           viewportRef={(el) => (resultsRef = el)}
         >
           <div id={typeahead.listID} class="command-palette-results" role="listbox">
-            <div class="command-palette-group">
+            <div
+              class="command-palette-group"
+              role={title() ? "group" : undefined}
+              aria-labelledby={title() ? `${typeahead.listID}-title` : undefined}
+            >
               <Show when={title()}>
                 {(value) => (
-                  <button
-                    type="button"
-                    class="command-palette-group-title new-session-location-back"
-                    aria-label={language.t("session.new.location.back")}
-                    onClick={back}
-                  >
+                  <div id={`${typeahead.listID}-title`} class="command-palette-group-title">
                     {value()}
-                  </button>
+                  </div>
                 )}
               </Show>
               <Show
