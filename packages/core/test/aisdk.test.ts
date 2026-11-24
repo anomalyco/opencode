@@ -19,13 +19,14 @@ import {
   Message,
   ProviderID,
   RateLimitError,
+  StepFinish,
   TransportError,
   UnknownProviderError,
 } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { compileRequest } from "@opencode/ai/testing"
 import { expect } from "bun:test"
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Schema } from "effect"
 import { HttpClientRequest, HttpClientResponse } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
@@ -890,6 +891,33 @@ it.effect("emits malformed AI SDK tool input without executing it", () =>
     expect(response.events.some(LLMEvent.is.toolInputEnd)).toBeTrue()
     expect(response.events.some(LLMEvent.is.toolCall)).toBeFalse()
     expect(response.finishReason).toEqual({ normalized: "tool-calls", raw: "tool_calls" })
+  }),
+)
+
+it.effect("accepts a finish reason reported as a bare string by an AI SDK V2 provider", () =>
+  Effect.gen(function* () {
+    // A provider loaded through the AI SDK V2 interface reports the finish reason as a plain string. The
+    // step-finish schema rejected it, and the session drain treated that as fatal (#66153).
+    const aisdk = yield* AISDK.Service
+    yield* aisdk.hook.sdk((event) => {
+      event.sdk = {
+        languageModel: () =>
+          streamModel([
+            { type: "text-start", id: "text-0" },
+            { type: "text-delta", id: "text-0", delta: "PONG" },
+            { type: "text-end", id: "text-0" },
+            { type: "finish", finishReason: "stop", usage } as unknown as LanguageModelV3StreamPart,
+          ]),
+      }
+    })
+
+    const resolved = yield* aisdk.model(model("@ai-sdk/openai-compatible"))
+    const response = yield* LLMClient.generate(ai.request({ model: resolved, prompt: "Say PONG" })).pipe(
+      Effect.provide(client),
+    )
+
+    expect(response.finishReason).toEqual({ normalized: "stop", raw: "stop" })
+    expect(Schema.is(StepFinish)(response.events.find(LLMEvent.is.stepFinish))).toBeTrue()
   }),
 )
 

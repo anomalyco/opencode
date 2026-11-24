@@ -9,7 +9,6 @@ import type {
   JSONValue,
   LanguageModelV3,
   LanguageModelV3CallOptions,
-  LanguageModelV3FinishReason,
   LanguageModelV3FunctionTool,
   LanguageModelV3Message,
   LanguageModelV3Prompt,
@@ -27,6 +26,7 @@ import {
   TransportError,
   ToolResultValue,
   type ContentPart,
+  type FinishReasonDetails,
   type LLMRequest,
   type Media,
   type ToolDefinition,
@@ -842,7 +842,7 @@ function streamPartEvents(
       ])
     case "finish": {
       const finish = {
-        reason: { normalized: finishReason(event.finishReason), raw: event.finishReason.raw },
+        reason: finishReason(event.finishReason),
         usage: usage(event.usage),
         providerMetadata: providerMetadata(event.providerMetadata),
       }
@@ -892,8 +892,15 @@ function usage(input: Extract<LanguageModelV3StreamPart, { type: "finish" }>["us
   return Object.values(output).some((value) => value !== undefined) ? output : undefined
 }
 
-function finishReason(value: LanguageModelV3FinishReason): FinishReason {
-  return value.unified === "other" ? "unknown" : value.unified
+// A provider loaded through the AI SDK V2 interface reports the finish reason as a plain string, and the V2 bridge
+// reports "other" for a reason it cannot classify. Neither is in the wire schema, so a single step would fail the
+// step-finish decode and abort the session drain (#66153).
+function finishReason(value: unknown): FinishReasonDetails {
+  const unified = typeof value === "string" ? value : isRecord(value) ? value.unified : undefined
+  return {
+    normalized: Schema.is(FinishReason)(unified) ? unified : "unknown",
+    raw: typeof value === "string" ? value : isRecord(value) && typeof value.raw === "string" ? value.raw : undefined,
+  }
 }
 
 function providerMetadata(value: unknown) {
