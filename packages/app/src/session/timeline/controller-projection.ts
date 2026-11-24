@@ -66,10 +66,12 @@ function handoffNotices(
   ]
 }
 
+/** `more`: the session has older messages that are not loaded, which is where a boundary that is not loaded then is. */
 export function visibleTimelineMessages(
   messages: SessionMessageInfo[],
   pending: SessionInboxInfo[],
   revertMessageID?: string,
+  more = false,
 ) {
   const queued = new Set(
     pending.flatMap((item) => (item.type === "user" && item.delivery === "queue" ? [item.id] : [])),
@@ -83,7 +85,7 @@ export function visibleTimelineMessages(
 
   if (queued.size === 0 && inputs.size === 0 && !revertMessageID) return messages
 
-  const visible = beforeRevert(messages, revertMessageID).filter((message) => !queued.has(message.id))
+  const visible = beforeRevert(messages, revertMessageID, more).filter((message) => !queued.has(message.id))
 
   if (inputs.size === 0) return visible
 

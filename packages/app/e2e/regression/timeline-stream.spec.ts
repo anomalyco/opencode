@@ -20,7 +20,6 @@ import {
   partUpdated,
   reasoningPart,
   renderedPartID,
-  revertCleared,
   revertCommitted,
   revertStaged,
   session,
@@ -1548,8 +1547,37 @@ test.describe("revert", () => {
       await timeline.send(revertStaged({ sessionID, revert: { messageID: "msg_0005" } }))
       await expect.poll(() => shown(page)).toEqual(["msg_sch_0001", "msg_0002"])
 
-      await timeline.send(revertCleared({ sessionID }))
+      // The whole transcript is loaded, so the session no longer has a boundary that is not in it: nothing is reverted.
+      await timeline.send(revertStaged({ sessionID, revert: { messageID: "msg_0003" } }))
       await expect.poll(() => shown(page)).toEqual(all)
+    })
+
+    test(`a staged revert at a message in an older page leaves the messages before it on the ${name} timeline`, async ({
+      page,
+    }) => {
+      // The newest page holds only messages after the boundary, and their IDs sort before the boundary's.
+      const paged = [
+        ...messages.slice(0, 2),
+        { id: "msg_0009", type: "user", text: "Boundary prompt", time: { created: 3 } },
+        reply("msg_0008", "Boundary reply", 4),
+        { id: "msg_0007", type: "user", text: "Later prompt", time: { created: 5 } },
+        reply("msg_0006", "Later reply", 6),
+      ] satisfies SessionMessageInfo[]
+
+      await setupTimeline(page, {
+        sessionMessages: paged,
+        settings: { newTimeline },
+        sessions: [session({ revert: { messageID: "msg_0009" } })],
+        // Pages of two. Like the server, a page ends before the cursor's message, and every page that has a message
+        // gives a cursor.
+        pageMessages: (_, _limit, before) => {
+          const end = before ? paged.findIndex((message) => message.id === before) : paged.length
+          const items = paged.slice(Math.max(0, end - 2), end)
+
+          return { items, cursor: items[0]?.id }
+        },
+      })
+      await expect.poll(() => shown(page)).toEqual(["msg_sch_0001", "msg_0002"])
     })
 
     test(`a committed revert leaves the messages before its boundary on the ${name} timeline`, async ({ page }) => {

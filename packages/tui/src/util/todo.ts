@@ -3,7 +3,6 @@ import type {
   SessionMessageInfo,
   SessionMessageToolStateCompleted,
 } from "@opencode/client"
-import { beforeRevert } from "@opencode/util/session-revert"
 import { isRecord } from "./record"
 
 export type TodoStatus = "pending" | "in_progress" | "completed" | "cancelled"
@@ -32,7 +31,9 @@ export function todoMarker(status: TodoStatus, ascii = false) {
 
 /** The current list is the input of the latest completed `todowrite` call before the revert boundary. */
 export function sessionTodos(messages: ReadonlyArray<SessionMessageInfo>, boundary?: string): Todo[] {
-  const tool = beforeRevert(messages, boundary)
+  const boundaryIndex = boundary ? messages.findIndex((message) => message.id === boundary) : -1
+  const tool = messages
+    .slice(0, boundaryIndex === -1 ? messages.length : boundaryIndex)
     .flatMap((message) => (message.type === "assistant" ? message.content : []))
     .findLast(
       (item): item is SessionMessageAssistantTool & { state: SessionMessageToolStateCompleted } =>

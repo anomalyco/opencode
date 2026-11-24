@@ -118,6 +118,24 @@ test.each([
   }
 })
 
+test("a committed revert that a read already applied removes nothing from a whole transcript", async () => {
+  const setup = fixture(notes(1, 5))
+  try {
+    await setup.data.session.message.sync(sessionID)
+    // The page before the oldest message is empty, so no older message is left to load.
+    await setup.data.session.message.loadMore(sessionID)
+    expect(setup.data.session.message.more(sessionID)).toBe(false)
+
+    // The session no longer has the boundary: the transcript that was read is the one the revert left.
+    setup.emit(committed("msg_006"))
+
+    expect(setup.ids()).toEqual(notes(1, 5).map((message) => message.id))
+    expect(setup.server.requests).toEqual(["message?limit=20&order=desc", "message?limit=20&cursor=msg_001"])
+  } finally {
+    setup.dispose()
+  }
+})
+
 test("a committed revert keeps a waiting input that came before the boundary, and reads the inbox again", async () => {
   const early = waiting("msg_900_early")
   const late = waiting("msg_050_late")

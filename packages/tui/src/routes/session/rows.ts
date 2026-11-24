@@ -55,12 +55,13 @@ export function createSessionRows(
   const config = useConfig()
   const [rows, setRows] = createStore<(SessionRow & { key?: string })[]>([])
   const revertBoundary = () => data.session.get(sessionID())?.revert?.messageID
+  const more = () => data.session.message.more(sessionID())
   const turnTokens = () => Boolean(config.data.debug?.turn_tokens)
   const verbosity = () => config.data.session?.verbosity ?? defaultVerbosity
 
   function reduce() {
     // A revert leaves the messages before its boundary in the transcript. IDs do not sort in that order.
-    const messages = beforeRevert(data.session.message.list(sessionID()), revertBoundary())
+    const messages = beforeRevert(data.session.message.list(sessionID()), revertBoundary(), more())
     const inputs = new Set(data.session.input.list(sessionID()))
     const pending = data.session.pending.list(sessionID())
     const queued = new Set(
@@ -140,9 +141,10 @@ export function createSessionRows(
     }),
   )
 
-  // Re-reduce when the revert boundary changes (stage/clear/commit). These reactions defer
-  // their first run: the mount effect above has already reduced the same state.
-  createEffect(on(revertBoundary, rebuild, { defer: true }))
+  // Re-reduce when the revert boundary changes (stage/clear/commit), or when the last older page shows that the
+  // session no longer has the boundary. These reactions defer their first run: the mount effect above has already
+  // reduced the same state.
+  createEffect(on([revertBoundary, () => !!revertBoundary() && more()], rebuild, { defer: true }))
 
   createEffect(
     on(

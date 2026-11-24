@@ -365,10 +365,6 @@ export function revertStaged(data: Extract<OpenCodeEvent, { type: "session.rever
   return makeEvent("session.revert.staged", data)
 }
 
-export function revertCleared(data: Extract<OpenCodeEvent, { type: "session.revert.cleared" }>["data"]) {
-  return makeEvent("session.revert.cleared", data)
-}
-
 export function revertCommitted(data: Extract<OpenCodeEvent, { type: "session.revert.committed" }>["data"]) {
   return makeEvent("session.revert.committed", data)
 }

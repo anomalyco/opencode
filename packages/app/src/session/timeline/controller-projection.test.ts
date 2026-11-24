@@ -178,7 +178,10 @@ describe("visibleTimelineMessages", () => {
       "msg_2",
       "msg_3",
     ])
-    expect(visibleTimelineMessages(messages, [], "msg_0")).toEqual([])
+    // A boundary that is not loaded is older than every loaded message while older messages are left to load.
+    expect(visibleTimelineMessages(messages, [], "msg_0", true)).toEqual([])
+    // With the whole transcript loaded, the session no longer has that boundary, so it hides nothing.
+    expect(visibleTimelineMessages(messages, [], "msg_0", false)).toEqual(messages)
   })
 
   test("a staged revert keeps the messages before its boundary, whatever their IDs sort like", () => {

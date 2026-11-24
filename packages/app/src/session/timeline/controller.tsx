@@ -67,7 +67,7 @@ const taskDescription = (message: SessionMessageInfo, sessionID: string): string
 export type TimelineSessionSource = {
   identity: Pick<SessionModel["identity"], "params" | "sessionID" | "sessionKey">
   data: Pick<SessionModel["data"], "info" | "parent" | "parentID" | "status">
-  history: Pick<SessionModel["history"], "messages">
+  history: Pick<SessionModel["history"], "messages" | "more">
 }
 
 export function createTimelineController(input: {
@@ -117,6 +117,7 @@ export function createTimelineController(input: {
       input.session.history.messages(),
       pendingList(),
       input.session.data.info()?.revert?.messageID,
+      input.session.history.more(),
     ),
   )
 

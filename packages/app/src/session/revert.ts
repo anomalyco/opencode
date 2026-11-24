@@ -48,6 +48,7 @@ export function createSessionRevert(input: {
 
     return viewSessionRevert((sessionID && sessions()[sessionID]) || IDLE, {
       messages: input.session.history.messages(),
+      more: input.session.history.more(),
       revertMessageID: input.session.data.revertMessageID(),
     })
   })
@@ -89,7 +90,11 @@ export function createSessionRevert(input: {
   }
 
   const snapshot = (sessionID: string) => {
-    return { messages: data.session.message.list(sessionID), inboxIDs: new Set(data.session.input.list(sessionID)) }
+    return {
+      messages: data.session.message.list(sessionID),
+      more: data.session.message.more(sessionID),
+      inboxIDs: new Set(data.session.input.list(sessionID)),
+    }
   }
 
   // Requests act on the routed Session; a kept timeline of another Session cannot start one. The promise settles with

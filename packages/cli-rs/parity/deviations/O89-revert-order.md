@@ -1,10 +1,11 @@
 # O89: a committed revert removes messages by their place, and reads the inbox again
 
 **TypeScript.** `session.revert.committed` removes the boundary message and every message after it by their place in
-the transcript (`packages/client/src/solid/data.ts`). A boundary that is not loaded is older than every loaded
-message, so all of them go. Waiting inputs whose rows went are dropped, and the inbox is read again when any input
-was waiting, because only the server knows when each was enqueued. When no loaded message is left, the cursor is
-cleared and the newest page is read again. A staged revert is shown by the same rule
+the transcript (`packages/client/src/solid/data.ts`). While older messages are left to load, a boundary that is not
+loaded is older than every loaded message, so all of them go. With the whole transcript loaded, a read already
+applied the revert, and nothing goes. Waiting inputs whose rows went are dropped, and the inbox is read again when
+any input was waiting, because only the server knows when each was enqueued. When no loaded message is left, the
+cursor is cleared and the newest page is read again. A staged revert is shown by the same rule
 (`@opencode/util/session-revert`).
 
 **Rust.** `revert_messages` truncates from the first message whose ID is not below the boundary's, and

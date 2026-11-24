@@ -26,10 +26,12 @@ test("selects the prompts before the revert boundary by their place in the trans
   const ids = (list: SessionMessageUser[]) => list.map((message) => message.id)
 
   expect(ids(selectSessionUserMessages(messages))).toEqual(["msg_sch_a", "msg_b", "msg_1"])
-  expect(ids(selectVisibleSessionUserMessages(messages, "msg_b"))).toEqual(["msg_sch_a"])
+  expect(ids(selectVisibleSessionUserMessages(messages, "msg_b", false))).toEqual(["msg_sch_a"])
   // A boundary need not be a prompt.
-  expect(ids(selectVisibleSessionUserMessages(messages, "msg_2"))).toEqual(["msg_sch_a"])
-  // A boundary that is not loaded is older than every loaded message.
-  expect(selectVisibleSessionUserMessages(messages.slice(2), "msg_2")).toEqual([])
-  expect(ids(selectVisibleSessionUserMessages(messages))).toEqual(["msg_sch_a", "msg_b", "msg_1"])
+  expect(ids(selectVisibleSessionUserMessages(messages, "msg_2", false))).toEqual(["msg_sch_a"])
+  // A boundary that is not loaded is older than every loaded message while older messages are left to load.
+  expect(selectVisibleSessionUserMessages(messages.slice(2), "msg_2", true)).toEqual([])
+  // With the whole transcript loaded, the session no longer has that boundary.
+  expect(ids(selectVisibleSessionUserMessages(messages.slice(2), "msg_2", false))).toEqual(["msg_b", "msg_1"])
+  expect(ids(selectVisibleSessionUserMessages(messages, undefined, true))).toEqual(["msg_sch_a", "msg_b", "msg_1"])
 })

@@ -67,6 +67,13 @@ export function useSessionModel() {
     return id ? data.session.message.list(id) : emptyMessages
   })
 
+  // The session has older messages that are not loaded.
+  const more = createMemo(() => {
+    const id = sessionID()
+
+    return id ? data.session.message.more(id) : false
+  })
+
   const userMessages = createMemo(() => selectSessionUserMessages(messages()), emptyUserMessages, { equals: same })
   const revertMessageID = createMemo(() => info()?.revert?.messageID)
 
@@ -74,7 +81,7 @@ export function useSessionModel() {
     () => {
       const boundary = revertMessageID()
 
-      return boundary ? selectVisibleSessionUserMessages(messages(), boundary) : userMessages()
+      return boundary ? selectVisibleSessionUserMessages(messages(), boundary, more()) : userMessages()
     },
     emptyUserMessages,
     { equals: same },
@@ -111,6 +118,7 @@ export function useSessionModel() {
     },
     history: {
       messages,
+      more,
       userMessages,
       visibleUserMessages,
       lastUserMessage: createMemo(() => visibleUserMessages().at(-1)),

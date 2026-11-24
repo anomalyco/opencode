@@ -183,7 +183,8 @@ export function Session(props: {
   const messages = () => data.session.message.list(route.sessionID)
   const messageIndexes = createMemo(() => new Map(messages().map((message, index) => [message.id, index])))
   const legacy = createMemo(() => SessionTurn.legacy(messages()))
-  const messagesBeforeRevert = () => beforeRevert(messages(), session()?.revert?.messageID)
+  const messagesBeforeRevert = () =>
+    beforeRevert(messages(), session()?.revert?.messageID, data.session.message.more(route.sessionID))
   const messagesFromRevert = () => (session()?.revert?.messageID ? messages().slice(messagesBeforeRevert().length) : [])
   const currentLocation = useLocation()
   const location = createMemo(() => session()?.location ?? currentLocation.ref)

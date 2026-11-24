@@ -1333,13 +1333,15 @@ export function createData(config: CreateDataInput) {
       case "session.revert.committed": {
         const sessionID = event.data.sessionID
         if (store.session.info[sessionID]) setStore("session", "info", sessionID, "revert", undefined)
-        const loaded = !!store.session.message[sessionID]
+        // Older messages are left to load.
+        const more = store.session.messageCursor[sessionID] !== undefined
         const removed = new Set<string>()
         // The server removes the boundary message and every message after it, by their place in the transcript. IDs
-        // do not sort in that order. A boundary that is not loaded is older than every loaded message.
-        if (loaded)
+        // do not sort in that order. A boundary that is not loaded is older than every loaded message while older
+        // messages are left to load. With the whole transcript loaded, a read already applied this revert.
+        if (store.session.message[sessionID])
           message.update(sessionID, (draft, index) => {
-            for (const item of draft.splice(index.get(event.data.to) ?? 0)) {
+            for (const item of draft.splice(index.get(event.data.to) ?? (more ? 0 : draft.length))) {
               index.delete(item.id)
               removed.add(item.id)
             }
@@ -1357,7 +1359,7 @@ export function createData(config: CreateDataInput) {
           sync.invalidate(`session.pending:${sessionID}`)
           refresh(() => result.session.pending.sync(sessionID))
         }
-        if (!loaded || store.session.message[sessionID]?.length) return
+        if (!more || store.session.message[sessionID]?.length !== 0) return
         // Nothing loaded is left, and the cursor names a removed message, so the transcript is read again.
         setStore("session", "messageCursor", sessionID, undefined)
         sync.invalidate(`session.message:${sessionID}`)
