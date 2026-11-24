@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import path from "path"
 import { Effect, Layer } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -275,7 +276,7 @@ describe("Environments", () => {
           }),
         )
         expect(localTarget.environment.id).toBe(Environment.localID)
-        expect(`${localTarget.absolute}`).toBe(`${tmp.path}/spill.txt`)
+        expect(`${localTarget.absolute}`).toBe(path.join(tmp.path, "spill.txt"))
 
         for (const bad of [`${wrkID}:~/notes`, `${wrkID}:relative`, "local:relative"]) {
           const err = yield* access.locate(bad).pipe(Effect.flip)
@@ -351,11 +352,11 @@ describe("Environments", () => {
         const access = yield* FileAccess.Service
         const localPrefixed = yield* access.resolve({ path: "local:/x", kind: "file" })
         expect(localPrefixed.environment.id).toBe(Environment.localID)
-        expect(`${localPrefixed.absolute}`).toBe(`${tmp.path}/local:/x`)
+        expect(`${localPrefixed.absolute}`).toBe(path.join(tmp.path, "local:/x"))
 
         const wrkPrefixed = yield* access.resolve({ path: "wrk_other:/x", kind: "file" })
         expect(wrkPrefixed.environment.id).toBe(Environment.localID)
-        expect(`${wrkPrefixed.absolute}`).toBe(`${tmp.path}/wrk_other:/x`)
+        expect(`${wrkPrefixed.absolute}`).toBe(path.join(tmp.path, "wrk_other:/x"))
         expect(calls).toEqual([])
       }).pipe(Effect.provide(layer))
     }),

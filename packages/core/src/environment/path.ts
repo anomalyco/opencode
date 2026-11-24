@@ -31,7 +31,8 @@ const split = (text: string): Parsed | undefined => {
   return { environment: Environment.ID.make(environment), path: text.slice(colon + 1) }
 }
 
-const rooted = (path: string) => path.startsWith("/") || path.startsWith("~")
+// A Windows drive path is rooted too, so `local:C:\…` reaches a Windows host's files.
+const rooted = (path: string) => path.startsWith("/") || path.startsWith("~") || /^[A-Za-z]:[\\/]/.test(path)
 
 /**
  * Splits `local:/a`, `gpu:/work/a`, `gpu:~/a`, or `wrk_...:/workspace` into an environment and the rest.
