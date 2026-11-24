@@ -1,6 +1,11 @@
 import { describe, expect, test } from "bun:test"
 import type { FormInfo, PermissionRequest, SessionInfo } from "@opencode/client/promise"
-import { sessionPermissionRequest, sessionFormRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
+import {
+  sessionFamily,
+  sessionFormRequest,
+  sessionPermissionRequest,
+  sessionTreeIDs,
+} from "@/session/requests/session-request-tree"
 
 // SAFETY: the request tree reads only a session's id and parentID.
 const session = (input: { id: string; parentID?: string }) =>
@@ -25,6 +30,29 @@ const question = (id: string, sessionID: string) =>
     metadata: { kind: "question" },
     fields: [{ key: "q0", type: "string" }],
   }) as FormInfo
+
+describe("sessionFamily", () => {
+  // The server can hold hundreds of sessions. A session's page reads its own family and no other record.
+  test("reads the records of the session's family and no others", () => {
+    const records = new Map(["root", "child", "other"].map((id) => [id, session({ id })]))
+    const asked: string[] = []
+
+    const data = {
+      session: {
+        family: () => ["root", "child", "unloaded"],
+        get: (id: string) => {
+          asked.push(id)
+
+          return records.get(id)
+        },
+      },
+    }
+
+    expect(sessionFamily(data, "child").map((info) => info.id)).toEqual(["child", "root"])
+    expect(asked).toEqual(["child", "root", "unloaded"])
+    expect(sessionFamily(data, undefined)).toEqual([])
+  })
+})
 
 describe("sessionTreeIDs", () => {
   test("returns only the current session and its descendants", () => {

@@ -130,47 +130,70 @@ export function createSessionBackground(input: {
   // A script that can't move still covers its shells, but isn't offered to move.
   const blocking = createMemo(() => history().blocking.filter((item) => item.type !== "execute" || item.background))
 
-  // Like the TUI, a subagent runs exactly while its session, or any session below it, is running. Subagents always run
-  // in the background, so every running descendant is background work, and so is an idle one whose tree still runs a
-  // job. A subagent job belongs to the child it runs.
-  const subagents = createMemo(() => {
-    const id = input.sessionID()
+  // The sessions below this one, each with the running jobs of its own tree. A subagent job belongs to the child it
+  // runs. The value holds while it names the same sessions and jobs, so a session or a job outside this tree, however
+  // many the server has, redoes nothing that reads it.
+  const below = createMemo(
+    () => {
+      const id = input.sessionID()
 
-    if (!id) return []
-    const current = history()
-    const sessions = input.sessions()
-    const parents = new Map(sessions.map((info) => [info.id, info.parentID]))
+      if (!id) return []
+      const sessions = input.sessions()
+      const parents = new Map(sessions.map((info) => [info.id, info.parentID]))
 
-    const descends = (sessionID: string, ancestor: string) => {
-      const seen = new Set<string>()
-      let parentID = parents.get(sessionID)
+      const descends = (sessionID: string, ancestor: string) => {
+        const seen = new Set<string>()
+        let parentID = parents.get(sessionID)
 
-      while (parentID && !seen.has(parentID)) {
-        if (parentID === ancestor) return true
-        seen.add(parentID)
-        parentID = parents.get(parentID)
+        while (parentID && !seen.has(parentID)) {
+          if (parentID === ancestor) return true
+          seen.add(parentID)
+          parentID = parents.get(parentID)
+        }
+
+        return false
       }
 
-      return false
-    }
+      const jobs = (input.jobs?.() ?? []).filter((job) => job.status === "running")
 
-    const jobs = (input.jobs?.() ?? []).filter((job) => job.status === "running")
+      // The session list is most recently updated first, so its order would move a child each time its info is read
+      // again.
+      return oldestFirst(
+        sessions.filter((info) => descends(info.id, id)),
+        (info) => info.time.created,
+      ).map((info) => ({
+        info,
+        jobs: jobs.filter((job) => {
+          const owner = job.kind === "subagent" ? job.childSessionID : job.sessionID
 
-    // The latest call for a child names it; its own session or its tree's jobs decide whether it still runs. The
-    // session list is most recently updated first, so its order would move a child each time its info is read again.
-    return oldestFirst(
-      sessions.filter((info) => descends(info.id, id)),
-      (info) => info.time.created,
-    ).flatMap((info): Subagent[] => {
-      const owned = jobs.filter((job) => {
-        const owner = job.kind === "subagent" ? job.childSessionID : job.sessionID
+          return owner === info.id || descends(owner, info.id)
+        }),
+      }))
+    },
+    [],
+    {
+      equals: (previous, next) =>
+        previous.length === next.length &&
+        previous.every(
+          (item, index) =>
+            item.info === next[index]!.info &&
+            item.jobs.length === next[index]!.jobs.length &&
+            item.jobs.every((job, position) => job === next[index]!.jobs[position]),
+        ),
+    },
+  )
 
-        return owner === info.id || descends(owner, info.id)
-      })
+  // Like the TUI, a subagent runs exactly while its session, or any session below it, is running. Subagents always run
+  // in the background, so every running descendant is background work, and so is an idle one whose tree still runs a
+  // job.
+  const subagents = createMemo(() => {
+    const current = history()
 
+    // The latest call for a child names it; its own session or its tree's jobs decide whether it still runs.
+    return below().flatMap(({ info, jobs }): Subagent[] => {
       const running = input.status(info.id) === "running"
 
-      if (!running && owned.length === 0) return []
+      if (!running && jobs.length === 0) return []
 
       const latest = current.calls.get(info.id)
 
@@ -183,7 +206,7 @@ export function createSessionBackground(input: {
         started: latest?.started ?? info.time.created,
       }
 
-      if (owned.length > 0) item.jobs = owned.map((job) => job.id)
+      if (jobs.length > 0) item.jobs = jobs.map((job) => job.id)
 
       return [item]
     })
@@ -267,6 +290,14 @@ function executeShellCommands(calls: JsonValue | undefined) {
 
 // Applies the job.updated events that arrived while the list request was in flight on top of its response, which may
 // predate them.
+// A job that a known session outside the open session's family owns can never show for it. A session with no record
+// yet may be a subagent that was just made, so its job counts.
+export function jobOutsideFamily(job: JobInfo, family: readonly string[], known: (sessionID: string) => boolean) {
+  const outside = (sessionID: string) => known(sessionID) && !family.includes(sessionID)
+
+  return outside(job.sessionID) && (job.kind !== "subagent" || outside(job.childSessionID))
+}
+
 export function mergeJobList<T extends Pick<JobInfo, "id"> & { status: string }>(
   listed: readonly T[],
   updates: ReadonlyMap<string, T>,

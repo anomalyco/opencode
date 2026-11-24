@@ -62,6 +62,45 @@ const notification = (id: string, metadata: Record<string, string>) => ({
 })
 
 describe("createSessionBackground", () => {
+  // With many agents at work, every record and every job of every other session reaches the open session's page.
+  test("redoes nothing for a session or a job outside its tree", () => {
+    createRoot((dispose) => {
+      const [store, setStore] = createStore<{ sessions: SessionInfo[]; jobs: JobInfo[] }>({
+        sessions: [session("child", "root", 1), { ...session("other"), parentID: undefined }],
+        jobs: [],
+      })
+
+      const reads = { status: 0 }
+
+      const background = createSessionBackground({
+        sessionID: () => "root",
+        messages: () => [],
+        sessions: () => store.sessions,
+        status: () => {
+          reads.status++
+
+          return "running"
+        },
+        shells: () => [],
+        jobs: () => store.jobs,
+      })
+
+      expect(background.tasks().map((task) => task.id)).toEqual(["child"])
+      expect(reads.status).toBe(1)
+      setStore("jobs", [{ kind: "codemode", id: "cm_other", sessionID: "other", status: "running", time: { started: 5 } }])
+      setStore("sessions", (sessions) => [...sessions, { ...session("another"), parentID: undefined }])
+      expect(background.tasks().map((task) => task.id)).toEqual(["child"])
+      expect(reads.status).toBe(1)
+      // A job of its own tree still shows.
+      setStore("jobs", (jobs) => [
+        ...jobs,
+        { kind: "codemode", id: "cm_child", sessionID: "child", status: "running", time: { started: 6 } },
+      ])
+      expect(background.tasks()).toMatchObject([{ id: "child", jobs: ["cm_child"] }])
+      dispose()
+    })
+  })
+
   test("counts a subagent from its session status, whatever its call or completion notices say", () => {
     createRoot((dispose) => {
       const [store, setStore] = createStore<{ status: Record<string, "idle" | "running"> }>({
