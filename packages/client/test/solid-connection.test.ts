@@ -58,7 +58,12 @@ function server(answerAfter?: number, refused = 0) {
   return { api, streams }
 }
 
-function setup(input: ReturnType<typeof server>, idleTimeout: number, connectTimeout?: number) {
+function setup(
+  input: ReturnType<typeof server>,
+  idleTimeout: number,
+  connectTimeout?: number,
+  moved?: ReturnType<typeof server>,
+) {
   const events: OpenCodeEvent[] = []
   return createRoot((dispose) => ({
     events,
@@ -66,6 +71,8 @@ function setup(input: ReturnType<typeof server>, idleTimeout: number, connectTim
     connection: createClientConnection(input.api, {
       idleTimeout,
       connectTimeout,
+      // The server moved: after the first failure the stream connects to the other address.
+      reconnect: moved ? async () => moved.api : undefined,
       flushInterval: 0,
       onEvent: (event) => events.push(event),
     }),
@@ -130,6 +137,20 @@ test("an attempt that fails at once leaves the limit as it was", async () => {
     await until(() => ctx.connection.status() === "connected", 4_000)
     // The stream after the refused request still had the first limit, so it was cut off before its handshake.
     expect(fake.streams.map((stream) => stream.aborted)).toEqual([true, false])
+  } finally {
+    ctx.dispose()
+  }
+})
+
+// A limit learned at one address says nothing about the address the server moved to.
+test("a server at another address starts from the first limit", async () => {
+  const old = server(150)
+  const moved = server(150)
+  const ctx = setup(old, 10_000, 100, moved)
+  try {
+    await until(() => ctx.connection.status() === "connected", 4_000)
+    expect(old.streams.map((stream) => stream.aborted)).toEqual([true])
+    expect(moved.streams.map((stream) => stream.aborted)).toEqual([true, false])
   } finally {
     ctx.dispose()
   }

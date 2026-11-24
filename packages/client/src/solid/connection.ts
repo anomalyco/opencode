@@ -24,7 +24,7 @@ export type ClientConnectionOptions = {
    */
   readonly idleTimeout?: number
   /**
-   * How long the first attempt waits for the server's handshake. Each attempt that ends without one doubles the
+   * How long the first attempt waits for the server's handshake. Each attempt that this limit cuts off doubles the
    * wait of the next, so a server that answers late under load is reached instead of cut off again and again.
    */
   readonly connectTimeout?: number
@@ -35,7 +35,7 @@ export type ClientConnectionOptions = {
 }
 
 const defaultConnectTimeout = 2_000
-// The longest an attempt waits for the handshake, however many attempts before it went unanswered.
+// The longest an attempt waits for the handshake, however many attempts before it were cut off.
 const connectTimeoutLimit = 30_000
 const reconnectDelay = 1_000
 const connectionHistoryLimit = 50
