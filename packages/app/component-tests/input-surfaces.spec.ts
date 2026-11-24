@@ -292,10 +292,12 @@ story("radios support their surfaces with the design system control states", asy
     await expect(controls.nth(index)).toHaveCSS("background-color", background)
     await expect(controls.nth(index)).toHaveCSS("background-image", "none")
   }
+
   for (const index of [1, 5]) {
     await expect(controls.nth(index)).toHaveCSS("background-color", "rgb(1, 2, 3)")
     await expect(controls.nth(index)).not.toHaveCSS("background-image", "none")
   }
+
   for (const index of [3, 7]) {
     await expect(controls.nth(index)).toHaveCSS("box-shadow", "rgb(7, 8, 9) 0px 0px 0px 0.5px inset")
   }
