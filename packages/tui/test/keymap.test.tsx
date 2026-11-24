@@ -4,9 +4,65 @@ import { useKeymap } from "@opentui/keymap/solid"
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { createSignal } from "solid-js"
-import { ConfigProvider } from "../src/config"
+import { ConfigProvider, useConfig, type Info, type Interface } from "../src/config"
 import { Keymap } from "../src/context/keymap"
 import { createTuiResolvedConfig } from "./fixture/tui-runtime"
+
+test("applies input binding edits to the focused textarea", async () => {
+  const info: Info = {}
+  const service: Interface = {
+    get: async () => info,
+    update: async (update) => {
+      update(info)
+      return info
+    },
+  }
+  let config: ReturnType<typeof useConfig> | undefined
+  function Prompt() {
+    config = useConfig()
+    return <textarea focused initialValue={"aaa\nbbbccc"} />
+  }
+
+  const app = await testRender(
+    () => (
+      <ConfigProvider config={createTuiResolvedConfig()} service={service}>
+        <Keymap.Provider>
+          <Prompt />
+        </Keymap.Provider>
+      </ConfigProvider>
+    ),
+    { width: 80, height: 24, kittyKeyboard: true },
+  )
+  try {
+    const editor = app.renderer.currentFocusedEditor
+    if (!editor || !config) throw new Error("Expected a focused editor and config")
+    editor.cursorOffset = 7
+    app.mockInput.pressKey("HOME")
+    expect(editor.cursorOffset).toBe(0)
+
+    await config.update((draft) => {
+      draft.keybinds = {
+        "input.line.home": "home",
+        "input.buffer.end": "ctrl+end",
+      }
+    })
+    editor.cursorOffset = 7
+    app.mockInput.pressKey("HOME")
+    expect(editor.cursorOffset).toBe(4)
+    app.mockInput.pressKey("END", { ctrl: true })
+    expect(editor.cursorOffset).toBe(10)
+
+    await config.update((draft) => {
+      delete draft.keybinds
+    })
+    app.mockInput.pressKey("HOME")
+    expect(editor.cursorOffset).toBe(0)
+    expect(app.renderer.currentFocusedEditor).toBe(editor)
+    expect(editor.plainText).toBe("aaa\nbbbccc")
+  } finally {
+    app.renderer.destroy()
+  }
+})
 
 test("legacy page key aliases compile as page keys", async () => {
   let read = () => ({ up: "", down: "" })

@@ -2,11 +2,13 @@ import type { KeymapActive, KeymapCommand, KeymapLayer, KeymapPending } from "@o
 import { InputRenderable, TextareaRenderable, type KeyEvent, type Renderable } from "@opentui/core"
 import { stringifyKeyStroke, type Binding, type CommandContext } from "@opentui/keymap"
 import {
+  createTextareaBindings,
   registerBackspacePopsPendingSequence,
   registerBaseLayoutFallback,
   registerCommaBindings,
+  registerEditBufferCommands,
   registerEscapeClearsPendingSequence,
-  registerManagedTextareaLayer,
+  registerTextareaMappingSuspension,
   registerTimedLeader,
 } from "@opentui/keymap/addons/opentui"
 import { formatCommandBindings, formatKeySequence } from "@opentui/keymap/extras"
@@ -89,12 +91,52 @@ function Provider(props: ParentProps<{ config?: KeymapConfig }>) {
     registerBaseLayoutFallback(keymap),
     registerEscapeClearsPendingSequence(keymap),
     registerBackspacePopsPendingSequence(keymap),
-    registerManagedTextareaLayer(keymap, renderer, {
-      enabled: () => {
-        const editor = renderer.currentFocusedEditor
-        return editor instanceof TextareaRenderable && !(editor instanceof InputRenderable)
-      },
-      bindings: [
+    registerEditBufferCommands(keymap, renderer),
+    registerTextareaMappingSuspension(keymap, renderer),
+  ]
+  const leader = config.keybinds.get("leader")?.[0]?.key
+  if (leader) {
+    dispose.push(
+      registerTimedLeader(keymap, {
+        trigger: leader,
+        name: "leader",
+        timeoutMs: config.leader?.timeout ?? ("leader_timeout" in config ? config.leader_timeout : undefined) ?? 2000,
+      }),
+    )
+  }
+  onCleanup(() => {
+    dispose.reverse().forEach((item) => item())
+    mode.dispose()
+  })
+  return (
+    <KeymapProvider keymap={keymap}>
+      <Context.Provider
+        value={{
+          keymap,
+          config,
+          mode,
+          dispatch,
+          input: (id) => (invocation?.id === id ? invocation.input : undefined),
+        }}
+      >
+        <TextareaBindings />
+        {props.children}
+      </Context.Provider>
+    </KeymapProvider>
+  )
+}
+
+function TextareaBindings() {
+  const renderer = useRenderer()
+  const config = useValue().config
+  const enabled = () => {
+    const editor = renderer.currentFocusedEditor
+    return editor instanceof TextareaRenderable && !(editor instanceof InputRenderable)
+  }
+  useBindings(() => ({
+    enabled,
+    bindings: createTextareaBindings(
+      [
         "input.move.left",
         "input.move.right",
         "input.move.up",
@@ -132,37 +174,9 @@ function Provider(props: ParentProps<{ config?: KeymapConfig }>) {
         "input.select.all",
         "input.submit",
       ].flatMap((command) => config.keybinds.get(command)),
-    }),
-  ]
-  const leader = config.keybinds.get("leader")?.[0]?.key
-  if (leader) {
-    dispose.push(
-      registerTimedLeader(keymap, {
-        trigger: leader,
-        name: "leader",
-        timeoutMs: config.leader?.timeout ?? ("leader_timeout" in config ? config.leader_timeout : undefined) ?? 2000,
-      }),
-    )
-  }
-  onCleanup(() => {
-    dispose.reverse().forEach((item) => item())
-    mode.dispose()
-  })
-  return (
-    <KeymapProvider keymap={keymap}>
-      <Context.Provider
-        value={{
-          keymap,
-          config,
-          mode,
-          dispatch,
-          input: (id) => (invocation?.id === id ? invocation.input : undefined),
-        }}
-      >
-        {props.children}
-      </Context.Provider>
-    </KeymapProvider>
-  )
+    ),
+  }))
+  return null
 }
 
 export type { KeymapCommand, KeymapLayer } from "@opencode/plugin/tui/context"
