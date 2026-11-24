@@ -848,14 +848,6 @@
     }
   }
 
-  [data-slot="bar-divider"] {
-    flex: none;
-    width: 1px;
-    height: 20px;
-    margin: 0 2px;
-    background: var(--stats-line);
-  }
-
   [data-component="dropdown"],
   [data-slot="date-tool"] {
     position: relative;
@@ -1013,7 +1005,21 @@
     }
   }
 
-  /* The music: arrows either side of its dropdown, which shows the cover and the name. */
+  /* Muted: the mute button lit, the music's button faded back, its choice kept for unmuting. */
+  [data-slot="music-tool"] [data-slot="icon-button"][aria-pressed="true"] {
+    color: var(--stats-text);
+    background: var(--stats-layer);
+  }
+
+  [data-component="dropdown"][data-muted] [data-slot="dropdown-trigger"] {
+    color: var(--stats-faint);
+
+    [data-slot="music-cover"] {
+      opacity: 0.4;
+    }
+  }
+
+  /* The music: the mute button, then its dropdown, which shows the cover and the name. */
   [data-slot="music-tool"] {
     display: flex;
     align-items: center;
@@ -1265,10 +1271,6 @@
     /* On a phone the bar wraps onto as many rows as it needs, over the card. */
     [data-slot="editor-bar"] {
       padding: calc(8px + env(safe-area-inset-top, 0px)) 8px 8px;
-    }
-
-    [data-slot="bar-divider"] {
-      display: none;
     }
 
     /* Taller rows for fingers, the same height for every row of wide choices. */

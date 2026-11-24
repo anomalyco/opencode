@@ -120,7 +120,9 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   const [rendering, setRendering] = createSignal<number>()
   const [ready, setReady] = createSignal(false)
   const [playing, setPlaying] = createSignal(true)
-  const [track, setTrack] = createSignal("none")
+  // The chosen track, and whether the video is muted; muting keeps the choice for unmuting.
+  const [track, setTrack] = createSignal(shareTracks[0]?.id ?? "")
+  const [muted, setMuted] = createSignal(false)
   // The open dropdown or the date picker, by id; one at a time.
   const [menu, setMenu] = createSignal<string>()
   // The chart column the card is about, or the whole range; each section starts on the whole range.
@@ -147,12 +149,6 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     const index = day()
     return index === undefined ? shareRangeLabel(starts(), weekly()) : shareDayLabel(starts()[index] ?? "", weekly())
   }
-  // The arrow keys step through the music, from either arrow button.
-  const musicKeys = (event: KeyboardEvent) => {
-    if ((event.key !== "ArrowLeft" && event.key !== "ArrowRight") || menu() === "music") return
-    event.preventDefault()
-    chooseTrack(stepTrack(track(), event.key === "ArrowLeft" ? -1 : 1))
-  }
   const card = createMemo(() => {
     const value = request()
     if (!value) return undefined
@@ -171,7 +167,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   // A copy of the options, so reading them tracks every field.
   const options = createMemo<ShareOptions>(() => ({ ...shareOptions }))
   const size = createMemo(() => shareSizes[options().size])
-  const music = createMemo(() => shareTracks.find((item) => item.id === track()))
+  const chosen = createMemo(() => shareTracks.find((item) => item.id === track()))
+  const music = createMemo(() => (muted() ? undefined : chosen()))
   // The chosen track's spectrum, for the dot equaliser; measured once per track (spectrum.ts). A plain signal, not a
   // resource: a resource would suspend the page's Suspense boundary, which takes the dialog out of the DOM and puts it
   // back no longer modal, under the page.
@@ -305,6 +302,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     setShareOption("size", pick(sizes.filter((item) => item.value !== "16:9")).value)
     setShareOption("theme", pick(["dark", "light", "leader"] as const))
     setTrack(pick(shareTracks).id)
+    setMuted(false)
     setPlaying(true)
   }
 
@@ -313,7 +311,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     if (!value) throw new Error("Nothing to share")
     await loadShareLogos(cardLogos(value.chart))
     if (kind === "image") return renderImage(value, options())
-    const key = JSON.stringify([value, options(), track()])
+    const key = JSON.stringify([value, options(), music()?.id])
     if (video?.key !== key) {
       setRendering(0)
       video = {
@@ -359,8 +357,9 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
 
   // Pressing the chosen track again plays or pauses it, with the preview.
   const chooseTrack = (id: string) => {
-    if (id === track() && id !== "none") return setPlaying(!playing())
+    if (id === track() && !muted()) return setPlaying(!playing())
     setTrack(id)
+    setMuted(false)
     setPlaying(true)
   }
 
@@ -410,7 +409,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   </g>
                 </svg>
               </button>
-              <span data-slot="bar-divider" aria-hidden="true" />
+
               <Dropdown
                 id="type"
                 label="Type"
@@ -532,16 +531,38 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 />
               </Show>
               <Show when={format() === "video"}>
-                <span data-slot="bar-divider" aria-hidden="true" />
-                <div data-slot="music-tool" role="group" aria-label="Music" onKeyDown={musicKeys}>
+                <div data-slot="music-tool" role="group" aria-label="Music">
                   <button
                     type="button"
                     data-slot="icon-button"
-                    aria-label="Previous track"
-                    onClick={() => chooseTrack(stepTrack(track(), -1))}
+                    aria-label="Mute music"
+                    aria-pressed={muted()}
+                    title={muted() ? "Unmute" : "Mute"}
+                    onClick={() => {
+                      setMuted(!muted())
+                      setPlaying(true)
+                    }}
                   >
                     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                      <path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
+                      <path d="M1 6h2.5L7 3v10L3.5 10H1Z" fill="currentColor" />
+                      <Show
+                        when={muted()}
+                        fallback={
+                          <path
+                            d="M9.5 5.5a3.5 3.5 0 0 1 0 5M11.5 3.5a6.5 6.5 0 0 1 0 9"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="1.5"
+                          />
+                        }
+                      >
+                        <path
+                          d="m10.5 6 4 4m0-4-4 4"
+                          stroke="currentColor"
+                          stroke-width="1.5"
+                          stroke-linecap="square"
+                        />
+                      </Show>
                     </svg>
                   </button>
                   <Dropdown
@@ -550,34 +571,22 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     open={menu()}
                     onOpen={setMenu}
                     value={track()}
-                    options={[
-                      { value: "none", label: "No music", icon: <MusicCover /> },
-                      ...shareTracks.map((item) => ({
-                        value: item.id,
-                        label: item.name,
-                        explicit: item.explicit,
-                        icon: <MusicCover cover={item.cover} />,
-                      })),
-                    ]}
+                    options={shareTracks.map((item) => ({
+                      value: item.id,
+                      label: item.name,
+                      explicit: item.explicit,
+                      icon: <MusicCover cover={item.cover} />,
+                    }))}
                     show="both"
+                    muted={muted()}
                     trigger={
                       <MusicCover
-                        cover={music()?.cover}
-                        state={music() ? (playing() ? "playing" : "paused") : undefined}
+                        cover={chosen()?.cover}
+                        state={muted() ? undefined : playing() ? "playing" : "paused"}
                       />
                     }
                     onSelect={chooseTrack}
                   />
-                  <button
-                    type="button"
-                    data-slot="icon-button"
-                    aria-label="Next track"
-                    onClick={() => chooseTrack(stepTrack(track(), 1))}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                      <path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
-                    </svg>
-                  </button>
                 </div>
               </Show>
               <button
@@ -700,6 +709,8 @@ function Dropdown<T extends string>(props: {
   value: T
   options: { value: T; label: string; detail?: string; explicit?: boolean; icon?: JSX.Element }[]
   show?: "icon" | "value" | "both"
+  // The music when muted: its button fades back.
+  muted?: boolean
   trigger?: JSX.Element
   onSelect: (value: T) => void
 }) {
@@ -731,7 +742,13 @@ function Dropdown<T extends string>(props: {
     if (event.key === "Tab") close(false)
   }
   return (
-    <div ref={element} data-component="dropdown" data-id={props.id} data-show={show()}>
+    <div
+      ref={element}
+      data-component="dropdown"
+      data-id={props.id}
+      data-show={show()}
+      data-muted={props.muted ? "" : undefined}
+    >
       <button
         type="button"
         data-slot="dropdown-trigger"
@@ -871,12 +888,6 @@ function TypeGlyph(props: { format: "video" | "image" | "embed" }) {
       </Show>
     </svg>
   )
-}
-
-// The track after or before `current` in the music list, No music first, round and round.
-function stepTrack(current: string, direction: 1 | -1) {
-  const ids = ["none", ...shareTracks.map((item) => item.id)]
-  return ids[(ids.indexOf(current) + direction + ids.length) % ids.length]!
 }
 
 function LayoutGlyph(props: { layout: ShareOptions["layout"] }) {
