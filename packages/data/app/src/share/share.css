@@ -419,7 +419,7 @@
     align-items: start;
 
     [data-slot="row-label"] {
-      padding-top: 14px;
+      padding-top: 10px;
     }
   }
 
@@ -461,7 +461,7 @@
     align-items: center;
     justify-content: center;
     gap: 6px;
-    height: 44px;
+    height: 56px;
     padding: 0 4px;
     font-size: 12px;
     color: var(--stats-muted);
@@ -588,7 +588,7 @@
     display: flex;
     align-items: center;
     gap: 10px;
-    height: 44px;
+    height: 36px;
     padding: 0 9px 0 5px;
     text-align: left;
     color: var(--stats-muted);
@@ -649,8 +649,8 @@
     display: grid;
     flex: none;
     place-items: center;
-    width: 32px;
-    height: 32px;
+    width: 24px;
+    height: 24px;
     color: var(--stats-faint);
     background: var(--stats-layer-2);
   }
@@ -738,8 +738,19 @@
       padding-inline: 16px;
     }
 
+    /* Taller rows for fingers, the same height for every row of wide choices. */
+    [data-slot="chip"][data-variant="wide"],
     [data-slot="track"] {
-      min-height: 44px;
+      height: 44px;
+    }
+
+    [data-slot="track-icon"] {
+      width: 32px;
+      height: 32px;
+    }
+
+    [data-slot="row"][data-variant="list"] [data-slot="row-label"] {
+      padding-top: 14px;
     }
   }
 }

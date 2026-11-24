@@ -21,10 +21,10 @@ export const shareTracks: ShareTrack[] = [
   { id: "models", name: "Rank and File", mood: "Tremolo guitar and horns" },
   { id: "usage", name: "Come Back", mood: "Vibraphone and muted trumpet" },
   { id: "cache", name: "Cache Hit", mood: "Cold piano and organ" },
-  { id: "burn", name: "Burn Through", mood: "Distorted organ and fuzz bass", explicit: true },
-  { id: "worldwide", name: "Worldwide", mood: "Warped strings and sub bass", explicit: true },
   { id: "newblood", name: "New Blood", mood: "Soul vocal and horn stab" },
   { id: "cheapshot", name: "Cheap Shot", mood: "Warped Rhodes and bowed bass" },
+  { id: "burn", name: "Burn Through", mood: "Distorted organ and fuzz bass", explicit: true },
+  { id: "worldwide", name: "Worldwide", mood: "Warped strings and sub bass", explicit: true },
 ].map((track) => ({
   explicit: false,
   ...track,
