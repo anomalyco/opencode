@@ -2,6 +2,7 @@ import { Link, Meta, Title } from "@solidjs/meta"
 import { createAsync, query, useLocation, useParams } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, onCleanup, onMount, Show } from "solid-js"
 import { getRequestEvent } from "solid-js/web"
+import { dataFlag } from "../../lib/flag"
 import { baseUrl } from "../../lib/language"
 import { loadHomePage } from "../../lib/page-data"
 import { drawShareCard, loadShareFonts, mainLength, shareSizes, type ShareCard } from "../../share/card"
@@ -31,7 +32,9 @@ export default function Embed() {
     event.response.headers.set("Content-Security-Policy", "frame-ancestors *")
     event.response.headers.set("X-Robots-Tag", "noindex")
   }
-  const embed = createMemo(() => readEmbed(params.section ?? "", new URLSearchParams(location.search)))
+  const enabled = dataFlag("share")
+  if (event && !enabled) event.response.status = 404
+  const embed = createMemo(() => readEmbed(enabled ? (params.section ?? "") : "", new URLSearchParams(location.search)))
   const data = createAsync(() => getData())
   // A fixed embed's card, from the URL's fragment, which only the browser sees. Until it's been read, draw nothing,
   // so a fixed embed never flashes the live numbers first.

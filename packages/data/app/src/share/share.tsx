@@ -13,6 +13,7 @@ import {
   type ShareTiming,
 } from "./card"
 import { embedSnippet, embedUrl, packCard } from "./embed"
+import { dataFlag } from "../lib/flag"
 import { cardLogos, loadShareLogos } from "./logos"
 import { cycleShareOption, designMode, designOnly, setShareOption, shareControls, shareOptions } from "./design"
 import { shareTracks, type ShareTrack } from "./music"
@@ -43,6 +44,7 @@ function step(direction: 1 | -1) {
 
 /** The share icon in a section's heading. `card` reads the section's current view when it's pressed. */
 export function ShareButton(props: { card: () => ShareDraft | undefined; label: string }) {
+  if (!dataFlag("share")) return null
   let element: HTMLButtonElement | undefined
   onMount(() => {
     if (!element) return

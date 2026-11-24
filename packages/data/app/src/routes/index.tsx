@@ -22,6 +22,7 @@ import { formatPeriodDate } from "../lib/format"
 import { baseUrl, jsonUrl, localizedUrl, markdownUrl } from "../lib/language"
 import { providerIconId } from "../lib/provider-icon"
 import { dismissChartTooltipOnExit } from "../lib/chart-tooltip"
+import { dataFlag } from "../lib/flag"
 import { methodologyItems } from "../lib/methodology"
 import { loadHomePage, type HomePageData } from "../lib/page-data"
 import { homeSummary } from "../lib/summaries"
@@ -130,12 +131,14 @@ export default function StatsHome() {
             <LocaleLinks path="/data/" />
             <FormatLinks path="/data/" />
             {/* A pasted link to the page embeds its Top Models card (routes/oembed.ts). */}
-            <Link
-              rel="alternate"
-              type="application/json+oembed"
-              href={`${baseUrl}/data/oembed?format=json&url=${encodeURIComponent(`${baseUrl}/data/`)}`}
-              title="OpenCode Data"
-            />
+            <Show when={dataFlag("share")}>
+              <Link
+                rel="alternate"
+                type="application/json+oembed"
+                href={`${baseUrl}/data/oembed?format=json&url=${encodeURIComponent(`${baseUrl}/data/`)}`}
+                title="OpenCode Data"
+              />
+            </Show>
             <LastModified value={stats().updatedAt} />
             <Meta property="og:type" content="website" />
             <Meta property="og:site_name" content="OpenCode" />
@@ -169,7 +172,9 @@ export default function StatsHome() {
           <Show when={data()} fallback={<StatsLoading />}>
             {(stats) => (
               <>
-                <ShareDialog updatedAt={stats().updatedAt} url="opencode.ai/data" />
+                <Show when={dataFlag("share")}>
+                  <ShareDialog updatedAt={stats().updatedAt} url="opencode.ai/data" />
+                </Show>
                 <Hero updatedAt={stats().updatedAt} summary={homeSummary(language.locale(), stats())} />
                 <TopModelsSection
                   data={stats().usage}

@@ -1,4 +1,5 @@
 import type { APIEvent } from "@solidjs/start/server"
+import { dataFlag } from "../lib/flag"
 import { baseUrl } from "../lib/language"
 import { embedSize, embedSnippet, readEmbed, shareTitles } from "../share/embed"
 
@@ -8,6 +9,7 @@ import { embedSize, embedSnippet, readEmbed, shareTitles } from "../share/embed"
  * or Top Models. Only JSON.
  */
 export function GET(event: APIEvent) {
+  if (!dataFlag("share")) return Response.json({ error: "Not found" }, { status: 404 })
   const query = new URL(event.request.url).searchParams
   if (query.get("format") && query.get("format") !== "json") return new Response("Only JSON", { status: 501 })
   const target = parseTarget(query.get("url"))
