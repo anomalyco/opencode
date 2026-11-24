@@ -108,6 +108,20 @@ function waitForRequest(input: Partial<Permission.AssertInput> = {}) {
   })
 }
 
+test("Permission.site saves a web URL's site as written, and only the URL itself when its site isn't plain", () => {
+  expect(Permission.site("https://opencode.ai/docs/x?y#z")).toEqual(["https://opencode.ai", "https://opencode.ai/*"])
+  expect(Permission.site("HTTPS://OpenCode.ai:8443")).toEqual([
+    "HTTPS://OpenCode.ai:8443",
+    "HTTPS://OpenCode.ai:8443/*",
+  ])
+  // URL parsers end the site at a backslash, so this goes to evil.com.
+  expect(Permission.site("https://evil.com\\@opencode.ai/x")).toEqual(["https://evil.com", "https://evil.com/*"])
+  for (const url of ["https://opencode.ai@evil.com/x", "https://opencode.ai\t.evil.com/", "ftp://opencode.ai/x"])
+    expect(Permission.site(url)).toEqual([url])
+  for (const url of ["https://*/x", "https://*.com/x", "https://opencode.ai@evil.com/x?y"])
+    expect(Permission.site(url)).toEqual([])
+})
+
 describe("Permission.isActionDenied", () => {
   const rule = (action: string, resource: string, effect: Permission.Rule["effect"]): Permission.Rule => ({
     action,

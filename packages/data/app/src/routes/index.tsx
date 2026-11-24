@@ -33,6 +33,7 @@ import { installShareDesign } from "../share/design"
 import { ShareButton, ShareDialog, type ShareDraft } from "../share/share"
 import {
   usageColors,
+  otherUsageColor,
   marketColors,
   usageTotal,
   formatTokens,
@@ -696,7 +697,7 @@ function TopModelsChart(props: {
                             <span data-slot="tooltip-label">
                               <i
                                 style={{
-                                  background: getRankColor(item.segment.model, item.index, segmentOrder(), usageColors),
+                                  background: getTopModelColor(item.segment.model, item.index, segmentOrder()),
                                 }}
                               />
                               <span data-slot="tooltip-name">{item.segment.model}</span>
@@ -908,8 +909,14 @@ function getTopModelsSegmentColor(
   activeModel: string | undefined,
 ) {
   if (activeModel !== undefined)
-    return activeModel === model ? getRankColor(model, index, order, usageColors) : "var(--stats-layer-2)"
+    return activeModel === model ? getTopModelColor(model, index, order) : "var(--stats-layer-2)"
   if (muted) return "var(--stats-layer-2)"
+  return getTopModelColor(model, index, order)
+}
+
+// Other keeps one color whether the chart colors the daily 9 models or the weekly 11.
+function getTopModelColor(model: string, index: number, order: Map<string, number>) {
+  if (model === "Other") return otherUsageColor
   return getRankColor(model, index, order, usageColors)
 }
 

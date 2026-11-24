@@ -32,13 +32,17 @@ export const Input = LocationInput
 type Missing = { input: string; requested: FileAccess.Target; context: FileAccess.Invocation }
 
 const description = (codemode: boolean) =>
-  [
-    "Read the contents of a file or directory. Supports text files, images, and PDFs.",
-    codemode
-      ? "Reading an image or PDF automatically attaches it to the execute result, even if the program doesn't return or print the media reference."
-      : "Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line.",
-    "Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
-  ].join(" ")
+  codemode
+    ? [
+        "Read a file or directory: text, images, and PDFs.",
+        "An image or PDF is attached to the execute result even if the program doesn't return it.",
+        `A call returns one page, at most ${ReadToolFileSystem.MAX_READ_LINES} lines or ${ReadToolFileSystem.MAX_READ_BYTES / 1024} KB, and \`next\` is where the following page starts.`,
+      ].join(" ")
+    : [
+        "Read the contents of a file or directory. Supports text files, images, and PDFs.",
+        "Each text line is prefixed by its 1-based line number as <line>: <content>. The prefix is for reference and is not part of the file content. Directory entries are returned one per line.",
+        "Use offset and limit to read large files or directories in sections. Prefer one larger read over many small slices, and use grep to find specific content in large files.",
+      ].join(" ")
 
 export const Plugin = {
   id: "opencode.tool.read",
@@ -173,15 +177,7 @@ export const Plugin = {
               return { output: result.content, path: result.path }
             }).pipe(
               Effect.map((result) => ({
-                output:
-                  result.output.type === "media"
-                    ? {
-                        type: result.output.type,
-                        uri: result.output.uri,
-                        mime: result.output.mime,
-                        name: result.output.name,
-                      }
-                    : result.output,
+                output: toOutput(result.output),
                 content: toModelContent(result.path, input.offset, result.output),
                 metadata: { truncated: result.output.type !== "media" && result.output.next !== undefined },
               })),
@@ -352,10 +348,19 @@ function parseSkillUri(value: string) {
   return { id, target: rest === "" ? "/" : `/${rest}`, uri: Skill.uri(id, rest || undefined) }
 }
 
+const toOutput = (
+  output: ReadToolFileSystem.TextPage | ReadToolFileSystem.DirectoryContent | ReadToolFileSystem.Media,
+): ReadToolFileSystem.Output => {
+  if (output.type === "media") return { type: output.type, uri: output.uri, mime: output.mime, name: output.name }
+  if (output.type === "directory") return output
+  const { lineCount: _, ...text } = output
+  return text
+}
+
 export const toModelContent = (
   path: string,
   offset: number | undefined,
-  output: ReadToolFileSystem.TextContent | ReadToolFileSystem.DirectoryContent | ReadToolFileSystem.Media,
+  output: ReadToolFileSystem.TextPage | ReadToolFileSystem.DirectoryContent | ReadToolFileSystem.Media,
 ) => {
   if (output.type === "media")
     return [

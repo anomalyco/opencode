@@ -439,9 +439,10 @@ export const usageColors = [
   "#00bc7d",
   "#9ae600",
   "#ffb900",
-  "#ff8904",
   "#ff6467",
+  "#fb64b6",
 ]
+export const otherUsageColor = "#ff8904"
 
 export const marketColors = [
   "#ed6aff",
