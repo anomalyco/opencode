@@ -738,6 +738,7 @@ it.effect("host event subscriptions stay scoped to the host location while retai
       workspaceID: Workspace.ID.make("wrk_other"),
     })
     const received: string[] = []
+    const delivered = yield* Deferred.make<void>()
     // Plugin.load runs plugin effects without Location.Service. Subscribing through the plugin host
     // reproduces the leak; subscribing directly in the test fiber would still see its location.
     yield* plugins.activate([
@@ -761,6 +762,7 @@ it.effect("host event subscriptions stay scoped to the host location while retai
               ),
               Stream.take(2),
               Stream.runDrain,
+              Effect.andThen(Deferred.succeed(delivered, void 0)),
               Effect.forkScoped({ startImmediately: true }),
             ),
       },
@@ -770,7 +772,7 @@ it.effect("host event subscriptions stay scoped to the host location while retai
     yield* bus.publish(Event.Updated, {}, { location: other })
     yield* bus.publish(Event.Updated, {}, { global: true })
     yield* bus.publish(Event.Updated, {})
-    yield* Effect.yieldNow
+    yield* Deferred.await(delivered)
 
     expect(received).toEqual(["global", "owned"])
   }),
