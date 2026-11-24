@@ -120,6 +120,14 @@ This section is the single source for scroll containers across `app`, `ui`, `ses
 
 This section is the single source for what may move or restyle the session timeline. It applies to every component and stylesheet that renders in or around the timeline, across `app`, `ui`, `session-ui` and `gui-plugins`. Each rule comes from a regression that shipped.
 
+### Other sessions
+
+- The app hears every event of every session on the server, and its store holds the record of every session it has heard of. With many agents at work, a session's page gets several events a second that are not about it.
+- An event for another session may cost the open session's page a small constant, and no computation of that page may run again for it. `data.session.list()` is every session: a memo that reads it runs again for each change to any of them, and reads them all.
+- Read the open session's own family with `sessionFamily` (`src/session/requests/session-request-tree.ts`). It tracks the root and the sessions below it and nothing else. The requests model and the data that `SessionUIProvider` gives the rows are built from it.
+- An event listener hears all sessions too. Drop what cannot concern the open session before it writes a signal, as `jobOutsideFamily` does for job events.
+- Keeper: "redoes nothing for a session or a job outside its tree" in `test-browser/session-background.test.ts`.
+
 ### Scroll position
 
 - The timeline moves when the reader scrolls it or asks to go somewhere (a jump, a search hit, a link). Nothing else scrolls it: not focus, not an update, not a row that mounts.
