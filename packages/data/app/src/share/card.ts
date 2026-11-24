@@ -370,8 +370,8 @@ export function drawShareCard(
     dotGrid(card.chart, width),
     baseline * 0.4,
     baseline,
-    // The equaliser plays behind bar charts, but not a race, whose rows are busy enough.
-    card.chart.kind === "stacked" && !race ? level : undefined,
+    // The equaliser plays behind bar charts, but not a race or the dot matrix, which are busy enough.
+    card.chart.kind === "stacked" && !race && card.chart.style !== "dots" ? level : undefined,
   )
   // The equaliser's lit dots inside `clip`, for the muted bars to show; the rest of the grid stays hidden behind them.
   const litDots = (clip: Path2D) => {
