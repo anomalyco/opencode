@@ -1016,8 +1016,9 @@ function drawRace(
   const order = (day: number) => named.toSorted((a, b) => value(day, b) - value(day, a))
   const ranks = { from: order(from), to: order(to) }
   const rows = Math.min(6, named.length)
-  // Room under the rows for the date, so it never runs into the last one.
-  const row = Math.min(150, box.height / (rows + 0.5))
+  // The clock and date set at the size of the card's subtitle, with room under the rows so they never meet.
+  const dateSize = ctx.canvas.height <= 1080 ? 28 : 34
+  const row = Math.min(150, (box.height - dateSize * 1.8) / rows)
   const top = box.y
   const max = Math.max(1e-9, ...named.map(now))
   // The bars grow in from nothing while the intro rises, before the days start to run.
@@ -1025,10 +1026,10 @@ function drawRace(
   const bar = Math.round(row * 0.72)
   const size = Math.round(bar * 0.34)
 
-  // The day, large and faint, in the lower right; it counts on with the race.
+  // The day, faint in the lower right; it counts on with the race.
   ctx.save()
   ctx.textBaseline = "alphabetic"
-  ctx.font = `400 ${Math.round(row * 0.32)}px ${font}`
+  ctx.font = `400 ${dateSize}px ${font}`
   ctx.fillStyle = colors.faint
   ctx.globalAlpha *= 0.6
   // A clock runs before the date, through each day as the race crosses it, so something is always moving; it marks
@@ -1074,21 +1075,32 @@ function drawRace(
     ctx.font = bold
     const name = truncate(ctx, item?.label ?? "", Math.max(0, box.x + box.width - x - percentWidth))
     const nameWidth = ctx.measureText(name).width
-    const label = (fill: string) => {
+    const label = (fill: string, blend: GlobalCompositeOperation) => {
       ctx.fillStyle = fill
       ctx.font = bold
       ctx.fillText(name, x, middle)
       ctx.font = regular
       ctx.globalAlpha *= 0.6
+      ctx.globalCompositeOperation = blend
       ctx.fillText(percent, x + nameWidth, middle)
+      ctx.globalCompositeOperation = "source-over"
       ctx.globalAlpha /= 0.6
     }
-    label(colors.text)
+    const end = box.x + indent + Math.min(length, span)
+    ctx.save()
+    ctx.beginPath()
+    ctx.rect(end, y, box.x + box.width - end, bar)
+    ctx.clip()
+    label(colors.text, "source-over")
+    ctx.restore()
+    // On the bar the faded share blends into its colour (multiply under dark text, screen under white), so it reads
+    // as a tone of the bar rather than grey.
     ctx.save()
     ctx.beginPath()
     ctx.rect(box.x + indent, y, Math.min(length, span), bar)
     ctx.clip()
-    label(luminance(color) > 0.5 ? "#0c0c0c" : "#ffffff")
+    const dark = luminance(color) > 0.5
+    label(dark ? "#0c0c0c" : "#ffffff", dark ? "multiply" : "screen")
     ctx.restore()
     ctx.restore()
   })
