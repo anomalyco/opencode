@@ -35,7 +35,7 @@ export default {
   "view.copyContent": "复制内容",
   "view.actions": "文件操作",
   "view.download": "下载",
-  "view.reveal": "在{{app}}中显示",
+  "view.reveal": "在 {{app}} 中显示",
   "view.openInBrowser": "在浏览器中打开",
   "view.fullscreen": "进入全屏",
   "view.binary": "二进制文件 · {{size}}",

@@ -5,7 +5,7 @@ export default {
   "duration.label": "TIME",
   "duration.tip": "从开启最近一轮的提示到其回复完成所用的时间。",
   "tps.label": "TPS",
-  "tps.tip": "最近一轮模型请求中每秒的输出与推理 token 数，不含工具耗时。",
+  "tps.tip": "最近一轮模型请求中每秒的输出与推理 Token 数，不含工具耗时。",
   "focus.label": "FOCUS",
   "focus.tip": "强制所有交互元素显示焦点样式",
   "focus.on": "开",
