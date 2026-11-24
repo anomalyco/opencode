@@ -2129,6 +2129,7 @@ export type TuiToastShow = {
     message: string
     variant: "info" | "success" | "warning" | "error"
     duration?: number | undefined
+    source?: string
   }
 }
 
@@ -2681,6 +2682,7 @@ export type ConfigEntry =
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
           location_idle_timeout?: string | false
+          auto_balance_accounts?: boolean
           policies?: Array<{
             action:
               | "provider.use"

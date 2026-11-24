@@ -27,7 +27,10 @@ const request = (get: UsageLimits.Interface["get"]) =>
           UsageLimits.node.replace(
             makeLocationNode({
               service: UsageLimits.Service,
-              layer: Layer.succeed(UsageLimits.Service, UsageLimits.Service.of({ get })),
+              layer: Layer.succeed(
+                UsageLimits.Service,
+                UsageLimits.Service.of({ get, go: () => Effect.succeed(undefined) }),
+              ),
               deps: [],
             }),
           ),

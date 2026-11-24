@@ -2,6 +2,7 @@ import { ai } from "@opencode/ai/effect"
 import { LLMClient, RequestExecutor } from "@opencode/ai/route"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
+import { UsageLimits } from "@opencode/core/usage-limits"
 import { Model } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
@@ -76,7 +77,7 @@ const fixture = Effect.gen(function* () {
       Effect.provide(LLMClient.layer.pipe(Layer.provide(RequestExecutor.layer), Layer.fresh)),
       Effect.provideService(HttpClient.HttpClient, http),
     )
-  }).pipe(Effect.provide(ModelResolver.layer))
+  }).pipe(Effect.provide(ModelResolver.layer.pipe(Layer.provide(Layer.succeed(UsageLimits.Service, UsageLimits.Service.of({ get: () => Effect.succeed(undefined), go: () => Effect.succeed(undefined) }))))))
   return { requests, replies, integrations, credentials, status, connect, send }
 })
 

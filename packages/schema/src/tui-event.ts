@@ -46,6 +46,7 @@ export const ToastShow = Event.ephemeral({
     duration: PositiveInt.pipe(Schema.withDecodingDefault(Effect.succeed(DEFAULT_TOAST_DURATION))).annotate({
       description: "Duration in milliseconds",
     }),
+    source: optional(Schema.String),
   },
 })
 

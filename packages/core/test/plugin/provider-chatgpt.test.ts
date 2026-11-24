@@ -7,12 +7,13 @@ import { classifyProviderFailure } from "@opencode/ai/route"
 import { compileRequest } from "@opencode/ai/testing"
 import { describe, expect } from "bun:test"
 // import { DateTime, Deferred, Effect, Schedule } from "effect"
-import { DateTime, Effect, Schedule } from "effect"
+import { DateTime, Effect, Layer, Schedule } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
 import { exportJWK, generateKeyPair, SignJWT } from "jose"
 import { App } from "@opencode/core/app"
 import { Credential } from "@opencode/core/credential"
 import { Integration } from "@opencode/core/integration"
+import { UsageLimits } from "@opencode/core/usage-limits"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
@@ -1232,7 +1233,18 @@ describe("ChatGPTPlugin", () => {
         expect(yield* resolve(baseID)).toEqual({ type: "summary" })
         expect(yield* resolve(modelID)).toEqual({ type: "native" })
         expect(yield* resolve(variantID, Model.VariantID.make("high"))).toEqual({ type: "native" })
-      }).pipe(Effect.provide(ModelResolver.layer)),
+      }).pipe(
+        Effect.provide(
+          ModelResolver.layer.pipe(
+            Layer.provide(
+              Layer.succeed(
+                UsageLimits.Service,
+                UsageLimits.Service.of({ get: () => Effect.succeed(undefined), go: () => Effect.succeed(undefined) }),
+              ),
+            ),
+          ),
+        ),
+      ),
     )
   }
 
@@ -1311,7 +1323,18 @@ describe("ChatGPTPlugin", () => {
             ],
           }[connection],
         )
-      }).pipe(Effect.provide(ModelResolver.layer)),
+      }).pipe(
+        Effect.provide(
+          ModelResolver.layer.pipe(
+            Layer.provide(
+              Layer.succeed(
+                UsageLimits.Service,
+                UsageLimits.Service.of({ get: () => Effect.succeed(undefined), go: () => Effect.succeed(undefined) }),
+              ),
+            ),
+          ),
+        ),
+      ),
     )
   }
 

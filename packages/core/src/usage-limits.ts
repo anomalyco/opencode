@@ -22,6 +22,10 @@ export class UnavailableError extends Schema.TaggedError<UnavailableError>()("Us
 export interface Interface {
   /** The usage limits of the OpenCode Console workspace this location is signed in to, if it is. */
   readonly get: () => Effect.Effect<Info | undefined, UnavailableError>
+  /** The OpenCode Go allowance for a specific credential, if it subscribes to Go. */
+  readonly go: (
+    credential: Credential.Key | Credential.OAuth,
+  ) => Effect.Effect<UsageLimits.Go | undefined, UnavailableError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/UsageLimits") {}
@@ -31,6 +35,7 @@ export const layer = Layer.effect(
   Effect.gen(function* () {
     const integrations = yield* Integration.Service
     const http = yield* HttpClient.HttpClient
+    const cache = new Map<string, { at: number; value: UsageLimits.Go | undefined }>()
 
     const get = Effect.fn("UsageLimits.get")(function* () {
       const connection = yield* integrations.connection.active(Integration.ID.make("opencode"))
@@ -62,7 +67,30 @@ export const layer = Layer.effect(
       }
     })
 
-    return Service.of({ get })
+    const go = Effect.fn("UsageLimits.go")(function* (credential: Credential.Key | Credential.OAuth) {
+      const workspaceID = credential.metadata?.orgID
+      if (typeof workspaceID !== "string") return undefined
+      const server = ConsoleAccess.server(credential)
+      const cacheKey = `${credential.type}:${credential.type === "key" ? credential.key : credential.access}:${workspaceID}`
+      const now = Date.now()
+      const ttl = 5 * 60 * 1000
+      const cached = cache.get(cacheKey)
+      if (cached && now - cached.at < ttl) return cached.value
+      const result = yield* readGo(http, server, credential, workspaceID).pipe(
+        Effect.timeoutOrElse({
+          duration: Duration.seconds(15),
+          orElse: () => Effect.fail(new UnavailableError({ message: "OpenCode Go usage timed out" })),
+        }),
+        Effect.result,
+      )
+      if (result._tag === "Success") {
+        cache.set(cacheKey, { at: now, value: result.success })
+        return result.success
+      }
+      return undefined
+    })
+
+    return Service.of({ get, go })
   }),
 )
 
@@ -153,7 +181,7 @@ function readBudgets(http: HttpClient.HttpClient, server: string, credential: Cr
  * The Go allowance, from the inference API that shares the Console's origin. Go refuses (403) a workspace the member
  * doesn't subscribe to Go in, which has no allowance to show.
  */
-function readGo(
+export function readGo(
   http: HttpClient.HttpClient,
   server: string,
   credential: Credential.Key | Credential.OAuth,
