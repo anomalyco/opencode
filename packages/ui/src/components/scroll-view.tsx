@@ -33,6 +33,7 @@ import {
   type ScrollThumbEvent,
   type ScrollThumbState,
 } from "./scroll-view-machine"
+import { scrollPage } from "./scroll-port"
 
 export type ScrollViewThumbVisibility = "hover" | "scroll"
 
@@ -479,7 +480,7 @@ export function ScrollView(props: ScrollViewProps) {
     prepareScroll()
 
     if (!next) return
-    const scrollAmount = viewportRef.clientHeight * 0.8
+    const scrollAmount = scrollPage(viewportRef)
     const lineAmount = 40
 
     switch (next) {

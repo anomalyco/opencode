@@ -858,6 +858,14 @@ story("scrolls fragment links to their heading inside the document's scroller", 
   await markdown.getByRole("link", { name: "the second usage" }).click()
   await expect.poll(() => offset(2)).toBeCloseTo(0, 0)
   expect(page.url()).toBe(url)
+
+  // A scroller that keeps a header over its top edge declares it as scroll padding, and the heading lands below it.
+  await host.evaluate((host) => {
+    host.style.scrollPaddingTop = "48px"
+    host.scrollTo({ top: 0 })
+  })
+  await markdown.getByRole("link", { name: "Host services" }).click()
+  await expect.poll(() => offset(1)).toBeCloseTo(48, 0)
 })
 
 async function resolvedColor(page: Page, token: string) {
