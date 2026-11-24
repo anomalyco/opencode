@@ -235,6 +235,8 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
 
   const setScrollRef = (element: HTMLDivElement | undefined) => {
     scroller = element
+    // Another timeline's offset says nothing about this one: its first scroll is not one toward the top.
+    historyTop = 0
     setState("refs", "scroller", element)
 
     if (!element) return
