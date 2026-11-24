@@ -18,6 +18,7 @@ export const ModalPlugin = define({
     const cache = yield* SharedCache.Service
     const http = yield* HttpClient.HttpClient
     const discovered = yield* ProviderRefresh.start({
+      discovery: ctx.experimental.modelDiscovery.begin(),
       integrationID: "modal",
       initial: {} as {
         readonly baseURL?: string

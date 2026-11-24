@@ -1,6 +1,6 @@
 import { App } from "@opencode/core/app"
 import { Agent } from "@opencode/schema/agent"
-import { Copilot } from "@opencode/schema/copilot"
+import { ModelDiscovery } from "@opencode/schema/model-discovery"
 import { Session } from "@opencode/core/session"
 import { Location } from "@opencode/core/location"
 import { describe, expect, test } from "bun:test"
@@ -12,6 +12,7 @@ import { ModelResolver } from "@opencode/core/model-resolver"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { ModelDiscoveryPlugin } from "@opencode/core/plugin/model-discovery"
 import {
   copilotBaseURL,
   copilotEntitlementError,
@@ -716,11 +717,23 @@ describe("GithubCopilotPlugin", () => {
       yield* addPlugin().pipe(Effect.provideService(HttpClient.HttpClient, api))
       const models = yield* Model.Service
       const rpc = yield* Rpc.Service
+      const plugin = yield* Plugin.Service
+      const host = yield* PluginHost.make(plugin, "other-provider")
+      yield* ModelDiscoveryPlugin.effect(host)
+      const ready = rpc.call(ModelDiscovery.Definition.id, "ready", undefined)
       yield* advance(() => state.listed)
-      expect(yield* rpc.call(Copilot.Definition.id, "catalogReady", undefined)).toBe(false)
-      yield* Deferred.succeed(catalog, undefined)
-      yield* drain
-      expect(yield* rpc.call(Copilot.Definition.id, "catalogReady", undefined)).toBe(true)
+      expect(yield* ready).toBe(false)
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          yield* host.experimental.modelDiscovery.begin()
+          yield* Deferred.succeed(catalog, undefined)
+          yield* drain
+          expect(yield* ready).toBe(false)
+          // A pending catalog does not block reads or hide models another provider already published.
+          expect((yield* models.available()).some((model) => model.providerID === Provider.ID.githubCopilot)).toBe(true)
+        }),
+      )
+      expect(yield* ready).toBe(true)
       // Free plans hide every model from the picker; Auto is the one they can select.
       expect(
         (yield* models.available()).filter((model) => model.providerID === Provider.ID.githubCopilot).map((m) => m.id),

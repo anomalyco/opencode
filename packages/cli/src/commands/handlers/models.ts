@@ -1,6 +1,6 @@
 import { OpenCode } from "@opencode/client"
 import { Service } from "@opencode/client/effect/service"
-import { Copilot } from "@opencode/schema/copilot"
+import { ModelDiscovery } from "@opencode/schema/model-discovery"
 import { Effect, Schedule } from "effect"
 import { EOL } from "node:os"
 import { Commands } from "../commands"
@@ -19,8 +19,8 @@ export default Runtime.handler(
     const location = { directory: process.cwd() }
     yield* waitForPlugins(client, location.directory)
     // Plugins can publish models after activation. A one-shot command would miss those updates.
-    const copilot = client.rpc(Copilot.Definition)
-    yield* Effect.tryPromise((signal) => copilot.catalogReady(undefined, { location, signal })).pipe(
+    const discovery = client.rpc(ModelDiscovery.Definition)
+    yield* Effect.tryPromise((signal) => discovery.ready(undefined, { location, signal })).pipe(
       Effect.repeat({ until: (ready) => ready, schedule: Schedule.spaced("100 millis") }),
       Effect.timeout("10 seconds"),
       Effect.ignore,

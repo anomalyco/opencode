@@ -1,6 +1,6 @@
 export * as Provider from "./provider.js"
 
-import { Context, Effect, Layer, Option, Schema, Stream, Struct } from "effect"
+import { Context, Effect, Layer, Option, Schema, Scope, Stream, Struct } from "effect"
 import { Provider } from "@opencode/schema/provider"
 import { Model } from "@opencode/schema/model"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -332,6 +332,8 @@ export interface Snapshot {
 }
 
 export interface Interface extends State.Transformable<Editor> {
+  readonly beginDiscovery: () => Effect.Effect<{ readonly dispose: Effect.Effect<void> }, never, Scope.Scope>
+  readonly discoveryReady: Effect.Effect<boolean>
   readonly get: (providerID: ID) => Effect.Effect<Info | undefined>
   readonly all: () => Effect.Effect<readonly Info[]>
   readonly available: () => Effect.Effect<readonly Info[]>
@@ -363,6 +365,7 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const integrations = yield* Integration.Service
     const location = yield* Location.Service
+    const discovering = new Set<symbol>()
     const state = State.create<
       Map<
         ID,
@@ -514,6 +517,16 @@ const layer = Layer.effect(
       Effect.forkScoped({ startImmediately: true }),
     )
     return Service.of({
+      beginDiscovery: () =>
+        Effect.acquireRelease(
+          Effect.sync(() => {
+            const id = Symbol()
+            discovering.add(id)
+            return { dispose: Effect.sync(() => discovering.delete(id)).pipe(Effect.asVoid) }
+          }),
+          (registration) => registration.dispose,
+        ),
+      discoveryReady: Effect.sync(() => discovering.size === 0),
       transform: state.transform,
       reload: state.reload,
       get: Effect.fn("Provider.get")((id) => Effect.sync(() => freeze(state.get().get(id)?.provider, true))),

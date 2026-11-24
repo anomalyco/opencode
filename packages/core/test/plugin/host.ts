@@ -69,6 +69,7 @@ export function host(overrides: Overrides = {}): Plugin.Context {
     },
     event: { subscribe: events(overrides.event?.subscribe ?? (() => Stream.empty)) },
     experimental: overrides.experimental ?? {
+      modelDiscovery: { begin: () => Effect.die("unused experimental.modelDiscovery.begin") },
       terminal: {
         read: () => Effect.die("unused experimental.terminal.read"),
       },

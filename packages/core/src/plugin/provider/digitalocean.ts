@@ -121,6 +121,7 @@ export const DigitalOceanPlugin = define({
     const cache = yield* SharedCache.Service
     const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
     const discovered = yield* ProviderRefresh.start({
+      discovery: ctx.experimental.modelDiscovery.begin(),
       integrationID,
       initial: { routers: [] } as { readonly key?: string; readonly routers: Routers },
       active: ctx.integration.connection.active(integrationID),

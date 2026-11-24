@@ -13,8 +13,8 @@ pub fn run(context: &Context) -> error::Result<()> {
         super::client::wait_for_plugins(&server.client, location.clone()).await;
         // Plugins can publish models after activation. A one-shot command would miss those updates.
         let status = RpcCallInput {
-            rpc_id: "experimental.github-copilot".into(),
-            method: "catalogReady".into(),
+            rpc_id: "experimental.model-discovery".into(),
+            method: "ready".into(),
             location: location.clone(),
             input: None,
         };

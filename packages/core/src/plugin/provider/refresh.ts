@@ -51,42 +51,39 @@ export const start = Effect.fnUntraced(function* <A>(input: {
   readonly active: Effect.Effect<Connection>
   readonly load: (current: A, options: Options) => Effect.Effect<{ readonly connection: Connection; readonly value: A }>
   readonly reload: Effect.Effect<void>
-}): Effect.fn.Return<
-  { readonly current: A; readonly ready: Effect.Effect<boolean> },
-  never,
-  Bus.Service | Scope.Scope
-> {
+  readonly discovery: Effect.Effect<{ readonly dispose: Effect.Effect<void> }, never, Scope.Scope>
+}): Effect.fn.Return<{ readonly current: A }, never, Bus.Service | Scope.Scope> {
   const interval = input.interval ?? SharedCache.interval
   const lock = Semaphore.makeUnsafe(1)
   const loading = yield* FiberHandle.make<void, never>()
   const state = { current: input.initial }
-  let applied: string | undefined
+  const discovery = yield* input.discovery
   const apply = (next: { readonly connection: Connection; readonly value: A }) =>
     lock
       .withPermit(
         Effect.gen(function* () {
-          const key = IntegrationConnection.key(next.connection)
-          if (key !== IntegrationConnection.key(yield* input.active)) return
-          if (!Equal.equals(next.value, state.current)) {
-            state.current = next.value
-            yield* input.reload
-          }
-          applied = key
+          if (IntegrationConnection.key(next.connection) !== IntegrationConnection.key(yield* input.active)) return
+          if (Equal.equals(next.value, state.current)) return
+          state.current = next.value
+          yield* input.reload
         }),
       )
       .pipe(Effect.uninterruptible)
   const load = (options: Options) => Effect.suspend(() => input.load(state.current, { interval, ...options }))
   const refresh = load({}).pipe(Effect.flatMap(apply))
-  yield* onSwitch(input.integrationID, FiberHandle.run(loading, switched(load, apply)))
-  yield* FiberHandle.run(loading, refresh, { onlyIfMissing: true }).pipe(Effect.forkScoped)
+  yield* onSwitch(
+    input.integrationID,
+    FiberHandle.run(loading, Effect.scoped(input.discovery.pipe(Effect.andThen(switched(load, apply))))),
+  )
+  yield* FiberHandle.run(loading, refresh, { onlyIfMissing: true }).pipe(
+    Effect.flatMap(Fiber.await),
+    Effect.ensuring(discovery.dispose),
+    Effect.forkScoped,
+  )
   yield* Effect.sleep(interval).pipe(
     Effect.andThen(FiberHandle.run(loading, refresh, { onlyIfMissing: true })),
     Effect.forever,
     Effect.forkScoped,
   )
-  return Object.assign(state, {
-    ready: input.active.pipe(
-      Effect.map((connection) => !connection || IntegrationConnection.key(connection) === applied),
-    ),
-  })
+  return state
 })
