@@ -121,6 +121,44 @@ test("defensively syncs advertised Copilot models", async () => {
   }
 })
 
+test("builds Auto from the model Copilot flags as auto", async () => {
+  // Copilot Free sends no billing.auto_discount; its Auto model carries a top-level auto flag instead.
+  const item = (id: string, limits: Record<string, number>, extra: Record<string, unknown> = {}) => ({
+    model_picker_enabled: false,
+    id,
+    name: id,
+    version: id,
+    supported_endpoints: ["/responses"],
+    capabilities: { family: "gpt", limits, supports: { tool_calls: true } },
+    ...extra,
+  })
+  const server = Bun.serve({
+    port: 0,
+    fetch: () =>
+      Response.json({
+        data: [
+          item(
+            "gpt-5.6-luna-free-auto",
+            { max_output_tokens: 128000, max_prompt_tokens: 922000 },
+            { auto: true, billing: { restricted_to: ["free"] } },
+          ),
+          item("gpt-5.6-luna", { max_output_tokens: 1000, max_prompt_tokens: 8000 }),
+        ],
+      }),
+  })
+
+  try {
+    const remote = await run((http) => CopilotModels.load(http, server.url.origin, {}))
+    expect(CopilotModels.autoModel(server.url.origin, remote)?.limit).toEqual({
+      context: 922000,
+      input: 922000,
+      output: 128000,
+    })
+  } finally {
+    await server.stop(true)
+  }
+})
+
 test("prices cache reads from either token price spelling", async () => {
   // API version 2026-08-01 renamed cache_price to cache_read_price; older payloads still use cache_price.
   const item = (id: string, prices: Record<string, number>) => ({
