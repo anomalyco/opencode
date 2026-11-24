@@ -1129,7 +1129,8 @@ function drawPodium(
   time: number,
 ) {
   const gap = 20
-  const across = box.width > box.height * 1.6
+  // Side by side only on the wide card; stacked, every name has the full width.
+  const across = ctx.canvas.width > ctx.canvas.height
   const count = chart.entries.length
   const tile = across
     ? { width: (box.width - gap * (count - 1)) / count, height: Math.min(box.height, 340) }
@@ -1162,15 +1163,20 @@ function drawPodium(
       ctx.drawImage(logo, x + tile.width - size * 0.78, y + (tile.height - size) / 2, size, size)
       ctx.globalAlpha = amount
     }
+    // A short tile (under the big number) sets in one row: the place, then the name over the provider, then the tokens
+    // over the change on the right, all centred. A taller one puts the place in its corner and the rest at its foot.
+    const row = !across && tile.height < 180
     const inset = across ? 32 : 36
-    const size = across ? 34 : Math.min(44, tile.height * 0.19)
+    const size = across ? 34 : row ? 36 : Math.min(44, tile.height * 0.19)
     const small = Math.round(size * 0.72)
     ctx.textBaseline = "alphabetic"
-    ctx.font = `400 ${small}px ${font}`
+    ctx.font = `400 ${row ? size : small}px ${font}`
     ctx.fillStyle = colors.faint
-    ctx.fillText(entry.place, x + inset, y + inset + small * 0.8)
+    const placeWidth = ctx.measureText(entry.place).width
+    ctx.fillText(entry.place, x + inset, row ? y + tile.height / 2 + size * 0.36 : y + inset + small * 0.8)
+    const start = row ? x + inset + placeWidth + 32 : x + inset
     // The name and provider at the foot on the left; the tokens and change at the foot on the right.
-    const foot = y + tile.height - inset
+    const foot = row ? y + tile.height / 2 + size * 0.36 + small * 0.75 : y + tile.height - inset
     ctx.font = `400 ${small}px ${font}`
     const value = ctx.measureText(entry.value).width
     const change = ctx.measureText(entry.change).width
@@ -1184,10 +1190,10 @@ function drawPodium(
     )
     ctx.fillText(entry.change, right - change, foot)
     ctx.fillStyle = mix(colors.muted, colors.faint, dim)
-    ctx.fillText(truncate(ctx, entry.provider, tile.width - inset * 2 - change - 24), x + inset, foot)
+    ctx.fillText(truncate(ctx, entry.provider, right - change - 24 - start), start, foot)
     ctx.font = `700 ${size}px ${font}`
     ctx.fillStyle = mix(colors.text, colors.faint, dim)
-    ctx.fillText(truncate(ctx, entry.label, tile.width - inset * 2 - value - 24), x + inset, foot - size * 1.25)
+    ctx.fillText(truncate(ctx, entry.label, right - value - 24 - start), start, foot - size * 1.25)
     ctx.restore()
   })
 }
