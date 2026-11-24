@@ -8,10 +8,13 @@ import {
   stoppedExitCode,
 } from "./fixture/service-fixture"
 import { accelerate } from "./fixture/service-timing"
-import { withEnsureTiming } from "../src/service-timing"
+import { completeRestart, releaseRestart, tryBeginRestart } from "../src/service-restart"
+import { defaultEnsureTiming, type EnsureTiming, withEnsureTiming } from "../src/service-timing"
 
 const ensure = accelerate(Service.ensure)
 const stop = accelerate(Service.stop)
+const ensureSlowWindow = accelerate(Service.ensure, { unresponsiveWindow: 2_000, spawnDelay: 5_000 })
+const ensurePatient = accelerate(Service.ensure, { spawnDelay: 5_000 })
 
 test("discovers a registered service", async () => {
   await using fixture = await serviceFixture()
@@ -223,6 +226,80 @@ test("evicts an unresponsive registered service before starting its replacement"
   expect(await existing.exited).toBe(stoppedExitCode)
   expect(replacement.pid).not.toBe(original.pid)
   expect(endpoint.url).toBe(replacement.url)
+})
+
+test("reuses a registered service that answers after a short timeout streak", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  const existing = fixture.spawn("recovering")
+  await fixture.waitForFile()
+  const original = await Bun.file(registration).json()
+  const starts: EnsureReason[] = []
+
+  const endpoint = await ensureSlowWindow({
+    file: registration,
+    version: "test",
+    command: [],
+    onStart: (reason) => starts.push(reason),
+  })
+
+  expect(endpoint.url).toBe(original.url)
+  expect((await Bun.file(registration + ".requests").text()).trim().split("\n")).toHaveLength(3)
+  expect(await fixture.signal()).toBeUndefined()
+  expect(existing.exitCode).toBe(null)
+  expect(await Bun.file(registration).json()).toEqual(original)
+  expect(starts).toEqual([])
+})
+
+test("a healthy answer interleaved into a timeout streak resets it", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  const existing = fixture.spawn("intermittent")
+  await fixture.waitForFile()
+  const original = await Bun.file(registration).json()
+  const endpoint = await ensurePatient({ file: registration, version: "test", command: [] })
+  expect(endpoint.url).toBe(original.url)
+  expect(await fixture.signal()).toBeUndefined()
+  expect(existing.exitCode).toBe(null)
+  expect(await Bun.file(registration).json()).toEqual(original)
+})
+
+test("two concurrent ensure calls share one reboot", async () => {
+  await using fixture = await serviceFixture()
+  const registration = fixture.registration
+  const existing = fixture.spawn("hanging")
+  await fixture.waitForFile()
+  const original = await Bun.file(registration).json()
+  const command = fixture.command("delayed", "0")
+  const results = await Promise.all([
+    ensure({ file: registration, version: "test", command }),
+    ensurePatient({ file: registration, version: "test", command }),
+  ])
+  const signals = (await Bun.file(registration + ".signals").text().catch(() => ""))
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+  if (catchesSigterm) expect(signals).toHaveLength(1)
+  expect(await existing.exited).toBe(stoppedExitCode)
+  expect((await Bun.file(registration + ".starts").text()).trim().split("\n")).toHaveLength(1)
+  const replacement = await Bun.file(registration).json()
+  fixture.track(replacement.pid)
+  expect(replacement.pid).not.toBe(original.pid)
+  for (const result of results) expect(result.url).toBe(replacement.url)
+})
+
+test("restart lock honors the completion cooldown", async () => {
+  await using fixture = await serviceFixture()
+  const timing: EnsureTiming = { ...defaultEnsureTiming, restartCooldown: 150 }
+  const first = await tryBeginRestart(fixture.registration, timing)
+  if (first === undefined) throw new Error("expected to acquire the restart lock")
+  await completeRestart(fixture.registration, first.token)
+  expect(await tryBeginRestart(fixture.registration, timing)).toBeUndefined()
+  await Bun.sleep(180)
+  const second = await tryBeginRestart(fixture.registration, timing)
+  if (second === undefined) throw new Error("expected to acquire the restart lock after the cooldown")
+  await releaseRestart(fixture.registration, second.token)
+  expect(await Bun.file(fixture.registration + ".restart").exists()).toBe(false)
 })
 
 test("recovers when the starting service it waits for is stopped", async () => {

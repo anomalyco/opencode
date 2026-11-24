@@ -5,6 +5,7 @@ import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
 import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { completeRestart, releaseRestart, tryBeginRestart } from "../service-restart.js"
 import { processStopped } from "../service-process.js"
 
 export * from "../service.js"
@@ -30,7 +31,8 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
   const timing = ensureTiming(options)
   const deadline = Date.now() + timing.promiseTimeout
   const pool = contenderPool(timing)
-  let timeouts: { readonly info: Info; readonly count: number } | undefined
+  let timeouts: { readonly info: Info; readonly count: number; readonly start: number } | undefined
+  let restartToken: string | undefined
   let announced = false
 
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) => {
@@ -54,23 +56,34 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
         throw pool.failure() ?? new Error("Timed out waiting for the background service to start")
       const registration = await registered(options.file, timing.requestTimeout)
       if (registration.timedOut && registration.info !== undefined) {
-        timeouts = {
-          info: registration.info,
-          count: timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts.count + 1 : 1,
-        }
-        if (timeouts.count >= 3) {
-          announce("missing")
-          console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
-          await PtyHandoff.clear(options.file ?? fallback())
-          await terminate(registration.info, options, timing)
-          pool.evict(registration.info.pid)
-          pool.recruitNow()
-          timeouts = undefined
+        const now = Date.now()
+        const streak = timeouts !== undefined && same(timeouts.info, registration.info) ? timeouts : undefined
+        const count = streak === undefined ? 1 : streak.count + 1
+        const start = streak?.start ?? now
+        timeouts = { info: registration.info, count, start }
+        if (count >= timing.unresponsiveFailures && now - start >= timing.unresponsiveWindow) {
+          const acquired = await tryBeginRestart(options.file, timing)
+          if (acquired !== undefined) {
+            restartToken = acquired.token
+            announce("missing")
+            console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
+            await PtyHandoff.clear(options.file ?? fallback())
+            await terminate(registration.info, options, timing)
+            pool.evict(registration.info.pid)
+            pool.recruitNow()
+            timeouts = undefined
+          }
         }
       } else timeouts = undefined
 
       if (registration.service !== undefined) {
         const service = registration.service
+        // A ready service is the end of this reboot (z in the cooldown window), whoever started it.
+        const token = restartToken
+        if (service.state === "ready" && token !== undefined) {
+          restartToken = undefined
+          await completeRestart(options.file, token)
+        }
         pool.serviceAnswered(service.info.pid, service.state === "ready")
         const decision = decide(service, options)
         if (decision._tag === "fail") throw decision.error
@@ -79,11 +92,15 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
           return service.endpoint
         }
         if (decision._tag === "replace") {
-          announce("version-mismatch", service.version)
-          if (service.state !== "ready")
-            console.warn("Background service is not ready; replacement cannot preserve persistent terminals")
-          await stop({ file: options.file, pty: decision.pty }).catch(() => undefined)
-          pool.evict(service.info.pid)
+          const acquired = await tryBeginRestart(options.file, timing)
+          if (acquired !== undefined) {
+            restartToken = acquired.token
+            announce("version-mismatch", service.version)
+            if (service.state !== "ready")
+              console.warn("Background service is not ready; replacement cannot preserve persistent terminals")
+            await stop({ file: options.file, pty: decision.pty }).catch(() => undefined)
+            pool.evict(service.info.pid)
+          }
         }
       } else {
         const failed = pool.reap()
@@ -96,6 +113,7 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
       await delay(timing.pollInterval)
     }
   } finally {
+    if (restartToken !== undefined) await releaseRestart(options.file, restartToken)
     pool.releaseAll()
   }
 }

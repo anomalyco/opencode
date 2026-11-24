@@ -5,6 +5,7 @@ import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
 import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
+import { completeRestart, releaseRestart, tryBeginRestart } from "../service-restart.js"
 import { processStopped } from "../service-process.js"
 
 export * from "../service.js"
@@ -50,7 +51,8 @@ export const incumbent = Effect.fn("service.incumbent")(function* (
 export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOptions = {}) {
   const timing = ensureTiming(options)
   const pool = contenderPool(timing)
-  let timeouts: { readonly info: Info; readonly count: number } | undefined
+  let timeouts: { readonly info: Info; readonly count: number; readonly start: number } | undefined
+  let restartToken: string | undefined
   let announced = false
   const announce = (reason: "missing" | "version-mismatch", previousVersion?: string) =>
     Effect.sync(() => {
@@ -74,21 +76,32 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
     const info = registration.info
     const service = registration.service
     if (registration.timedOut && info !== undefined) {
-      timeouts = {
-        info,
-        count: timeouts !== undefined && same(timeouts.info, info) ? timeouts.count + 1 : 1,
-      }
-      if (timeouts.count >= 3) {
-        yield* announce("missing")
-        yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
-        yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
-        yield* terminate(info, options, timing)
-        pool.evict(info.pid)
-        pool.recruitNow()
-        timeouts = undefined
+      const now = Date.now()
+      const streak = timeouts !== undefined && same(timeouts.info, info) ? timeouts : undefined
+      const count = streak === undefined ? 1 : streak.count + 1
+      const start = streak?.start ?? now
+      timeouts = { info, count, start }
+      if (count >= timing.unresponsiveFailures && now - start >= timing.unresponsiveWindow) {
+        const acquired = yield* Effect.tryPromise(() => tryBeginRestart(options.file, timing))
+        if (acquired !== undefined) {
+          restartToken = acquired.token
+          yield* announce("missing")
+          yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
+          yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
+          yield* terminate(info, options, timing)
+          pool.evict(info.pid)
+          pool.recruitNow()
+          timeouts = undefined
+        }
       }
     } else timeouts = undefined
     if (service !== undefined) {
+      // A ready service is the end of this reboot (z in the cooldown window), whoever started it.
+      const token = restartToken
+      if (service.state === "ready" && token !== undefined) {
+        restartToken = undefined
+        yield* Effect.tryPromise(() => completeRestart(options.file, token))
+      }
       pool.serviceAnswered(service.info.pid, service.state === "ready")
       const decision = decide(service, options)
       if (decision._tag === "fail") return yield* Effect.fail(decision.error)
@@ -97,11 +110,15 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
         return Option.some(service)
       }
       if (decision._tag === "replace") {
-        yield* announce("version-mismatch", service.version)
-        if (service.state !== "ready")
-          yield* Effect.logWarning("Background service is not ready; replacement cannot preserve persistent terminals")
-        yield* stop({ file: options.file, pty: decision.pty }).pipe(Effect.ignore)
-        pool.evict(service.info.pid)
+        const acquired = yield* Effect.tryPromise(() => tryBeginRestart(options.file, timing))
+        if (acquired !== undefined) {
+          restartToken = acquired.token
+          yield* announce("version-mismatch", service.version)
+          if (service.state !== "ready")
+            yield* Effect.logWarning("Background service is not ready; replacement cannot preserve persistent terminals")
+          yield* stop({ file: options.file, pty: decision.pty }).pipe(Effect.ignore)
+          pool.evict(service.info.pid)
+        }
       }
       return Option.none()
     }
@@ -121,6 +138,11 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
       schedule: Schedule.spaced(timing.pollInterval).pipe(Schedule.upTo({ duration: timing.promiseTimeout })),
     }),
     Effect.ensuring(Effect.sync(() => pool.releaseAll())),
+    Effect.ensuring(
+      Effect.promise(() =>
+        restartToken === undefined ? Promise.resolve() : releaseRestart(options.file, restartToken),
+      ),
+    ),
   )
   if (Option.isNone(found))
     return yield* Effect.fail(pool.failure() ?? new Error("Timed out waiting for the background service to start"))

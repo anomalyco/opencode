@@ -75,8 +75,21 @@ const server = Bun.serve({
       return new Response(null, { status: 404 })
     requests += 1
     if (mode === "starting") await writeFile(registration + ".status-request", "")
-    if (mode === "hanging" || controlled === "hang") {
+    if (mode === "hanging" || controlled === "hang" || (mode === "recovering" && requests <= 3) || mode === "intermittent") {
       await appendFile(registration + ".requests", process.pid + "\n")
+      // A single healthy answer in the middle of a timeout streak must reset the streak.
+      if (mode === "intermittent" && requests === 3)
+        return Response.json(
+          { version, pid: process.pid, urls: [server.url.toString()], paths: { tmp: "/tmp/opencode" } },
+          { status: 503 },
+        )
+      if (mode === "intermittent" && requests === 6)
+        return Response.json({
+          version,
+          pid: process.pid,
+          urls: [server.url.toString()],
+          paths: { tmp: "/tmp/opencode" },
+        })
       return new Promise<Response>(() => {})
     }
     if (mode === "modern" && requests === 1) {
@@ -123,7 +136,10 @@ await writeFile(
 await rename(registration + ".tmp", registration)
 
 async function shutdown(signal?: NodeJS.Signals) {
-  if (signal !== undefined) await writeFile(registration + ".signal", signal)
+  if (signal !== undefined) {
+    await appendFile(registration + ".signals", signal + "\n")
+    await writeFile(registration + ".signal", signal)
+  }
   // A lingering server unregisters on SIGTERM but keeps running, and holds its port, until killed.
   if (mode === "lingering") {
     await rm(registration, { force: true })
