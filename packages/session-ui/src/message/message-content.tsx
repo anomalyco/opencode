@@ -1158,6 +1158,8 @@ export function AssistantTextContent(props: {
   text: string
   message: SessionMessageAssistant
   showCopy: boolean
+  /** The turn went back to work: the footer keeps its place, so the row keeps its height, but does not show. */
+  copyHeld?: boolean
   keepCopyVisible?: boolean
   turnDurationMs?: number | null
   turnTokensPerSecond?: number
@@ -1230,7 +1232,7 @@ export function AssistantTextContent(props: {
 
   return (
     <Show when={props.text}>
-      <div data-component="text-part" data-timeline-part-id={props.id}>
+      <div data-component="text-part" data-timeline-part-id={props.id} data-copy-held={props.copyHeld ? "" : undefined}>
         <div data-slot="text-part-body">
           <PacedMarkdown text={props.text} cacheKey={props.id} streaming={props.message.time.completed === undefined} />
         </div>

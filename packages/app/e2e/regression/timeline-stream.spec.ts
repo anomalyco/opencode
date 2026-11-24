@@ -705,6 +705,54 @@ test("holds undelivered input still while live status above it comes and goes", 
   await expect.poll(lane).toBe(36)
 })
 
+// Background work that reports back puts a finished turn to work again. Its last reply is not final then, so it offers
+// no Copy, but a footer that left the row would shrink it and move the reply under a reader who follows the end.
+for (const newTimeline of [false, true]) {
+  test(`keeps a finished reply where it is when its turn goes back to work (${newTimeline ? "New" : "current"} timeline)`, async ({
+    page,
+  }) => {
+    const reply = Array.from({ length: 40 }, (_, index) => `Reply paragraph ${index}.`).join("\n\n")
+
+    const timeline = await setupTimeline(page, {
+      settings: { newTimeline },
+      sessionMessages: [
+        userMessage(),
+        assistantMessage([textPart("prt_resume_reply", reply)], { id: "msg_resume_reply" }),
+        { id: "msg_resume_idle", type: "idle", outcome: "succeeded", time: { created: 1700000003000 } },
+      ],
+    })
+
+    const end = page.getByText("Reply paragraph 39.", { exact: true })
+    const copy = page.getByRole("button", { name: "Copy response" })
+    await expect(copy).toBeVisible()
+    await expect(end).toBeInViewport()
+
+    const position = async () => Math.round((await end.boundingBox())?.y ?? Number.NaN)
+
+    const finished = await position()
+
+    await timeline.send(status("busy"))
+    await expect(page.getByRole("button", { name: "Stop" })).toBeVisible()
+    await expect(copy).toBeHidden()
+    await expect.poll(position).toBe(finished)
+
+    // The turn's new last reply takes the footer once the turn finishes again.
+    const next = assistantMessage([], { id: "msg_resume_next", completed: false, created: 1700000004000 })
+    await timeline.send(stepStarted(next))
+    await timeline.send(
+      partUpdated({ id: "prt_resume_next", type: "text", text: "Follow-up reply.", messageID: next.id }),
+    )
+    await timeline.send(messageUpdated(completedAssistantInfo(next)))
+    await timeline.send(status("idle"))
+    await expect(copy).toHaveCount(1)
+    await expect(
+      page.locator('[data-component="text-part"]', { hasText: "Follow-up reply." }).getByRole("button", {
+        name: "Copy response",
+      }),
+    ).toBeVisible()
+  })
+}
+
 test.describe("Working", () => {
   test("shows Working between busy and reasoning states", async ({ page }) => {
     const timeline = await setupTimeline(page, {
