@@ -735,6 +735,36 @@ describe("ModelsDev Service", () => {
     }),
   )
 
+  it.effect("keeps a mode's ID on the tier the mode asks for", () =>
+    Effect.gen(function* () {
+      const [acme] = yield* ModelsDev.decodeSnapshot(
+        JSON.stringify({
+          acme: {
+            ...fixture.acme,
+            models: {
+              "acme-1": sourceModel("acme-1", {
+                capabilities: {
+                  tools: { supported: true },
+                  reasoning: { supported: false },
+                  service_tier: ["priority", "fast"],
+                },
+                // Saved sessions hold "acme-1-fast", which has always asked for the priority tier. The "fast" tier
+                // would take that ID, so it isn't offered as a second choice next to it.
+                experimental: { modes: { fast: { service_tier: "priority", body: { service_tier: "priority" } } } },
+              }),
+            },
+          },
+        }),
+        false,
+        true,
+      )
+      expect(acme?.models.map((item) => [item.id, item.settings?.serviceTier])).toEqual([
+        ["acme-1", undefined],
+        ["acme-1-fast", "priority"],
+      ])
+    }),
+  )
+
   it.effect("skips non-chat models whose only opencode package serves another type", () =>
     Effect.gen(function* () {
       const api = (opencodeai: string) => ({
