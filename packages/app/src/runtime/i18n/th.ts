@@ -1233,7 +1233,6 @@ export const dict = {
   "sidebar.inbox.section.working": "กำลังทำงาน",
   "sidebar.inbox.section.recent": "ล่าสุด",
   "sidebar.inbox.section.archived": "จัดเก็บแล้ว",
-  "sidebar.inbox.archived.title": "เซสชันที่จัดเก็บ",
   "sidebar.inbox.unarchive": "เลิกจัดเก็บ",
   "sidebar.inbox.status.approval": "รออนุมัติ",
   "sidebar.inbox.status.input": "คำถาม",

@@ -1203,7 +1203,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Duke punuar",
   "sidebar.inbox.section.recent": "Së fundmi",
   "sidebar.inbox.section.archived": "Të arkivuara",
-  "sidebar.inbox.archived.title": "Sesionet e arkivuara",
   "sidebar.inbox.unarchive": "Çarkivo",
   "sidebar.inbox.status.approval": "Miratim",
   "sidebar.inbox.status.input": "Pyetje",

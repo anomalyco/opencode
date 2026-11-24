@@ -1239,7 +1239,6 @@ export const dict = {
   "sidebar.inbox.section.working": "މަސައްކަތް ކުރަމުން",
   "sidebar.inbox.section.recent": "ފަހުގެ",
   "sidebar.inbox.section.archived": "އާކައިވްކޮށްފައި",
-  "sidebar.inbox.archived.title": "އާކައިވްކޮށްފައިވާ ސެޝަންތައް",
   "sidebar.inbox.unarchive": "އާކައިވުން ނަގާ",
   "sidebar.inbox.status.approval": "ހުއްދަ",
   "sidebar.inbox.status.input": "ސުވާލު",

@@ -2358,18 +2358,21 @@ test("renaming an inbox card updates the same session on Home", async ({ page })
   await expect(home).toContainText("Renamed inbox title")
 })
 
-test("the inbox Archived dialog searches only archived sessions and restores the selected session", async ({
-  page,
-}) => {
+test("the inbox lists archived sessions in a collapsed section and pins sessions at the top of Recent", async ({ page }) => {
   await page.clock.install({ time: T0 + 41 * 60_000 })
   await mockWorkspace(page, {
     name: "ArchivedInbox",
     sessions: [
       { id: "ses_archive_active", title: "Active inbox session", time: { created: T0, updated: T0, idle: T0 } },
+      {
+        id: "ses_archive_older",
+        title: "Older inbox session",
+        time: { created: T0 - 200, updated: T0 - 200, idle: T0 - 200 },
+      },
       ...["First archived session", "Second archived session"].map((title, index) => ({
         id: `ses_archive_${index}`,
         title,
-        time: { created: T0 - 100, updated: T0 + index, idle: index ? T0 - 100 : T0, archived: T0 + 10 },
+        time: { created: T0 - 100, updated: T0 + index, idle: T0 - 100, archived: T0 + 10 + index },
       })),
     ],
     seed: {
@@ -2386,43 +2389,38 @@ test("the inbox Archived dialog searches only archived sessions and restores the
 
   const rows = inbox.locator('[data-slot="sidebar-inbox-item"]')
 
-  await expect(rows).toHaveCount(1)
-  await expect(rows).toContainText("Active inbox session")
-  await expect(archived).toBeVisible()
-  await archived.focus()
-  await archived.press("Enter")
+  await expect(rows).toHaveText([/Active inbox session/, /Older inbox session/])
+  await expect(archived).toHaveAttribute("aria-expanded", "false")
+  await archived.click()
+  await expect(archived).toHaveAttribute("aria-expanded", "true")
+  await expect(rows).toHaveText([
+    /Active inbox session/,
+    /Older inbox session/,
+    /Second archived session/,
+    /First archived session/,
+  ])
 
-  const dialog = page.getByRole("dialog")
+  await rows.filter({ hasText: "Older inbox session" }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Pin", exact: true }).click()
 
-  const search = dialog.getByRole("combobox")
+  const recent = inbox.getByRole("group", { name: "Recent", exact: true }).locator('[data-slot="sidebar-inbox-item"]')
 
-  await expect(search).toBeFocused()
-  await expect(search).toHaveAttribute("placeholder", "Search sessions")
-  await expect(dialog.getByText("Archived sessions", { exact: true })).toBeVisible()
-  await expect(dialog.getByRole("option")).toHaveCount(2)
-  await expect(dialog.getByRole("option", { name: /First archived session/ })).toBeVisible()
-  await expect(dialog.getByRole("option", { name: /Second archived session/ })).toBeVisible()
-  await search.fill("Active inbox session")
-  await expect(dialog.getByText("No results found", { exact: true })).toBeVisible()
-  await search.fill("First archived")
-  await expect(dialog.getByRole("option")).toHaveCount(1)
-  const option = dialog.getByRole("option", { name: /First archived session/ })
-  await expect(option).toHaveAttribute("aria-selected", "true")
+  const pin = inbox.getByRole("img", { name: "Pinned", exact: true })
 
-  // A second Enter while the restore is in flight restores and opens the session once.
-  const restore = await holdRoute(page, /\/api\/session\/ses_archive_0(\?|$)/, { method: "PATCH" })
-  await search.press("Enter")
-  await restore.arrived
-  await expect(option).toHaveAttribute("aria-busy", "true")
-  await expect(option.getByRole("img", { name: "Loading", exact: true })).toBeVisible()
-  await search.press("Enter")
-  await expect(dialog).toBeVisible()
-  restore.release()
-  await expect(dialog).toHaveCount(0)
-  expect(restore.requests).toHaveLength(1)
-  await expectPath(page, sessionHref("ses_archive_0"))
-  await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
-  await expect(rows.filter({ hasText: "First archived session" })).toHaveAttribute("data-state", "active")
+  await expect(recent).toHaveText([/Older inbox session/, /Active inbox session/])
+  await expect(recent.filter({ hasText: "Older inbox session" }).getByRole("img", { name: "Pinned" })).toBeVisible()
+  await expect(pin).toHaveCount(1)
+  await expect(rows).toHaveText([
+    /Older inbox session/,
+    /Active inbox session/,
+    /Second archived session/,
+    /First archived session/,
+  ])
+
+  await rows.filter({ hasText: "Older inbox session" }).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Unpin", exact: true }).click()
+  await expect(pin).toHaveCount(0)
+  await expect(recent).toHaveText([/Active inbox session/, /Older inbox session/])
 })
 
 test("deleting from the inbox closes its dialog at once and a slow delete leaves the next dialog open", async ({

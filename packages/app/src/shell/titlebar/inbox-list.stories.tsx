@@ -21,7 +21,8 @@ function SessionListStory(props: {
   needsCount: number
   recentCount: number
   workingCount: number
-  archived: boolean
+  pinnedCount: number
+  archivedCount: number
   workingExpanded: boolean
   selectedSession: string
   width: number
@@ -37,7 +38,7 @@ function SessionListStory(props: {
   const [state, setState] = createStore({
     selected: props.selectedSession,
     expanded: props.workingExpanded,
-    archived: props.archived,
+    archivedExpanded: false,
     removed: new Array<string>(),
     action: "",
     recentExpanded: props.recentExpanded,
@@ -45,15 +46,17 @@ function SessionListStory(props: {
 
   createEffect(() => setState("selected", props.selectedSession))
   createEffect(() => setState("expanded", props.workingExpanded))
-  createEffect(() => setState("archived", props.archived))
   createEffect(() => setState("recentExpanded", props.recentExpanded))
 
-  const sessions = (section: "current" | "needs" | "recent" | "working", count: number) =>
+  const sessions = (
+    section: "current" | "pinned" | "needs" | "recent" | "working" | "archived",
+    count: number,
+  ) =>
     Array.from({ length: count }, (_, index) => {
       const status = (): InboxStatus => {
         if (section === "current") return "ready"
 
-        if (section === "working") return "working"
+        if (section === "working" || (section === "pinned" && index === 0)) return "working"
 
         if (section === "needs") return index % 2 === 0 ? "approval" : "input"
 
@@ -82,9 +85,15 @@ function SessionListStory(props: {
 
   const recent = createMemo(() => sessions("recent", props.recentCount))
 
-  const visibleRecent = createMemo(() => (state.recentExpanded ? recent() : recent().slice(0, 10)))
 
   const working = createMemo(() => sessions("working", props.workingCount))
+
+  const pinned = createMemo(() => sessions("pinned", props.pinnedCount))
+
+  const archived = createMemo(() => sessions("archived", props.archivedCount))
+
+  // Pins lead Recent.
+  const visibleRecent = createMemo(() => [...pinned(), ...(state.recentExpanded ? recent() : recent().slice(0, 10))])
 
   const remove = (id: string, action: string) => {
     setState("removed", (removed) => [...removed, id])
@@ -105,17 +114,17 @@ function SessionListStory(props: {
           title={session.title}
           status={session.status}
           selected={state.selected === session.id}
-          archived={props.currentArchived && session.id.startsWith("current-")}
+          archived={
+            session.id.startsWith("archived-") || (props.currentArchived && session.id.startsWith("current-"))
+          }
+          pinned={session.id.startsWith("pinned-")}
           server={session.index % 3 === 2 ? "Build server · build.example.internal" : undefined}
           branch={session.index % 4 === 3 ? undefined : "dev"}
           worktree={session.index % 2 === 0}
           now={now}
           since={now - (session.index + 1) * 7 * 60_000}
           onOpen={() => setState("selected", session.id)}
-          onArchive={() => {
-            remove(session.id, `Archived ${session.title}`)
-            setState("archived", true)
-          }}
+          onArchive={() => remove(session.id, `Archived ${session.title}`)}
           onUnarchive={() => setState("action", `Unarchived ${session.title}`)}
           onDelete={() => remove(session.id, `Deleted ${session.title}`)}
         />
@@ -157,6 +166,20 @@ function SessionListStory(props: {
         </Show>
       ),
     },
+    {
+      id: "archived",
+      get label() {
+        return language.t("sidebar.inbox.section.archived")
+      },
+      get count() {
+        return archived().length
+      },
+      rows: () => rows(archived),
+      get expanded() {
+        return state.archivedExpanded
+      },
+      onToggle: () => setState("archivedExpanded", !state.archivedExpanded),
+    },
   ]
 
   return (
@@ -175,7 +198,6 @@ function SessionListStory(props: {
             rows: () => rows(current),
           }}
           sections={sections}
-          archived={state.archived}
           working={{
             get count() {
               return working().length
@@ -186,7 +208,6 @@ function SessionListStory(props: {
             },
             onToggle: () => setState("expanded", !state.expanded),
           }}
-          onArchived={() => setState("action", "Archived sessions requested (local story only)")}
         />
       </div>
       <div class="flex items-center gap-3 text-[12px] leading-4 text-v2-text-text-muted">
@@ -197,7 +218,7 @@ function SessionListStory(props: {
             setState({
               selected: props.selectedSession,
               expanded: props.workingExpanded,
-              archived: props.archived,
+              archivedExpanded: false,
               removed: [],
               action: "",
               recentExpanded: props.recentExpanded,
@@ -209,7 +230,7 @@ function SessionListStory(props: {
         <span aria-live="polite">{state.action}</span>
       </div>
       <span class="max-w-[360px] text-[12px] leading-4 text-v2-text-text-muted">
-        Click to select; right-click to archive or delete. Working collapses. All actions stay local to this story.
+        Click to select; right-click to archive or delete. Working and Archived collapse. All actions stay local to this story.
       </span>
     </div>
   )
@@ -224,7 +245,8 @@ export default {
     needsCount: 2,
     recentCount: 6,
     workingCount: 2,
-    archived: true,
+    pinnedCount: 2,
+    archivedCount: 3,
     workingExpanded: true,
     selectedSession: "recent-1",
     width: 280,
@@ -240,6 +262,8 @@ export default {
     needsCount: { control: { type: "range", min: 0, max: 12, step: 1 } },
     recentCount: { control: { type: "range", min: 0, max: 20, step: 1 } },
     workingCount: { control: { type: "range", min: 0, max: 12, step: 1 } },
+    pinnedCount: { control: { type: "range", min: 0, max: 6, step: 1 } },
+    archivedCount: { control: { type: "range", min: 0, max: 20, step: 1 } },
     selectedSession: {
       control: "select",
       options: ["current-0", "recent-1", "recent-0", "needs-0", "working-0", "none"],
@@ -251,7 +275,7 @@ export default {
     docs: {
       description: {
         component:
-          "The production inbox list and cards with local fixtures. Click to select, collapse Working, right-click to archive or delete, and reset without touching real sessions. Archived records an action rather than opening the live search dialog.",
+          "The production inbox list and cards with local fixtures. Click to select, collapse Working, right-click to archive or delete, and reset without touching real sessions.",
       },
     },
   },
@@ -268,14 +292,15 @@ export const CurrentOnly = {
     recentCount: 0,
     workingCount: 0,
     selectedSession: "current-0",
-    archived: false,
+    pinnedCount: 0,
+    archivedCount: 0,
   },
 }
 
 export const RecentOnly = { args: { needsCount: 0, workingCount: 0 } }
 
 export const NeedsAttention = {
-  args: { needsCount: 4, recentCount: 0, workingCount: 0, archived: false },
+  args: { needsCount: 4, recentCount: 0, workingCount: 0, pinnedCount: 0, archivedCount: 0 },
 }
 
 export const WorkingOnly = {
@@ -284,13 +309,16 @@ export const WorkingOnly = {
     recentCount: 0,
     workingCount: 3,
     selectedSession: "working-0",
-    archived: false,
+    pinnedCount: 0,
+    archivedCount: 0,
   },
 }
 
 export const WorkingCollapsed = { args: { workingExpanded: false, selectedSession: "working-0" } }
 
-export const Empty = { args: { needsCount: 0, recentCount: 0, workingCount: 0, archived: false } }
+export const Empty = {
+  args: { needsCount: 0, recentCount: 0, workingCount: 0, pinnedCount: 0, archivedCount: 0 },
+}
 
 export const NeverRun = { args: { neverRun: true } }
 
@@ -310,4 +338,4 @@ export const Loading = { args: { loading: true } }
 
 export const RecentExpanded = { args: { recentCount: 16, recentExpanded: true } }
 
-export const ArchivedOnly = { args: { needsCount: 0, recentCount: 0, workingCount: 0 } }
+export const ArchivedOnly = { args: { needsCount: 0, recentCount: 0, workingCount: 0, pinnedCount: 0 } }

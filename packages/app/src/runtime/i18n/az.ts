@@ -1204,7 +1204,6 @@ export const dict = {
   "sidebar.inbox.section.working": "İşləyir",
   "sidebar.inbox.section.recent": "Son",
   "sidebar.inbox.section.archived": "Arxivlənmiş",
-  "sidebar.inbox.archived.title": "Arxivlənmiş sessiyalar",
   "sidebar.inbox.unarchive": "Arxivdən çıxar",
   "sidebar.inbox.status.approval": "Təsdiq",
   "sidebar.inbox.status.input": "Sual",

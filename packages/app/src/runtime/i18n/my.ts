@@ -1209,7 +1209,6 @@ export const dict = {
   "sidebar.inbox.section.working": "လုပ်ဆောင်နေသည်",
   "sidebar.inbox.section.recent": "လတ်တလော",
   "sidebar.inbox.section.archived": "သိမ်းဆည်းထားသည်",
-  "sidebar.inbox.archived.title": "သိမ်းဆည်းထားသော စက်ရှင်များ",
   "sidebar.inbox.unarchive": "သိမ်းဆည်းမှုမှ ပြန်ထုတ်ရန်",
   "sidebar.inbox.status.approval": "အတည်ပြုရန်",
   "sidebar.inbox.status.input": "မေးခွန်း",

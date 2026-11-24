@@ -1202,7 +1202,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Sedang bekerja",
   "sidebar.inbox.section.recent": "Terkini",
   "sidebar.inbox.section.archived": "Diarkibkan",
-  "sidebar.inbox.archived.title": "Sesi diarkibkan",
   "sidebar.inbox.unarchive": "Nyaharkib",
   "sidebar.inbox.status.approval": "Kelulusan",
   "sidebar.inbox.status.input": "Soalan",

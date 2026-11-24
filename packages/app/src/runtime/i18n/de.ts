@@ -1236,7 +1236,6 @@ export const dict = {
   "sidebar.inbox.section.working": "In Arbeit",
   "sidebar.inbox.section.recent": "Zuletzt",
   "sidebar.inbox.section.archived": "Archiviert",
-  "sidebar.inbox.archived.title": "Archivierte Sitzungen",
   "sidebar.inbox.unarchive": "Archivierung aufheben",
   "sidebar.inbox.status.approval": "Genehmigung",
   "sidebar.inbox.status.input": "Frage",

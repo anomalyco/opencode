@@ -1200,7 +1200,6 @@ export const dict = {
   "sidebar.inbox.section.working": "მუშაობს",
   "sidebar.inbox.section.recent": "ბოლოდროინდელი",
   "sidebar.inbox.section.archived": "დაარქივებული",
-  "sidebar.inbox.archived.title": "დაარქივებული სესიები",
   "sidebar.inbox.unarchive": "არქივიდან ამოღება",
   "sidebar.inbox.status.approval": "დამტკიცება",
   "sidebar.inbox.status.input": "კითხვა",

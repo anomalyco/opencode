@@ -39,6 +39,8 @@ import { useGlobal } from "@/runtime/server/runtime"
 import { useLayout } from "@/shell/state/layout"
 import { tabKey, useTabs, type DraftTab } from "@/shell/tabs/tabs"
 import { createDraftComposerState } from "@/composer/state"
+import { pinnedRefs, pinKey } from "@/shell/tabs/pins"
+import { usePins } from "./pinned-area"
 import { isAttachment } from "@/composer/prompt-parts"
 
 const RECENT_LIMIT = 10
@@ -46,6 +48,7 @@ const RECENT_LIMIT = 10
 const InboxState = Persistence.struct({
   workingExpanded: Schema.Boolean,
   recentExpanded: Schema.Boolean,
+  archivedExpanded: Schema.Boolean,
 })
 
 const InboxNavigation = createContext<Accessor<string | undefined>>()
@@ -59,12 +62,14 @@ export function SidebarInbox() {
   const tabs = useTabs()
   const layout = useLayout()
   const global = useGlobal()
+  const pins = usePins()
 
   const exporter = createSessionExporter()
 
   const [state, setState, , ready] = persisted(Persist.global("sidebar.inbox"), InboxState, {
     workingExpanded: true,
     recentExpanded: false,
+    archivedExpanded: false,
   })
 
   const [announcement, setAnnouncement] = createStore({ text: "" })
@@ -111,11 +116,23 @@ export function SidebarInbox() {
     return { underway, statuses: new Map(entries.map((entry) => [entry.key, entry.status])) }
   })
 
+  const pinRef = (entry: InboxEntry) => ({ server: entry.server, sessionId: entry.session.id })
+
+  const pinned = (entry: InboxEntry) => pins.pinned(pinRef(entry))
+
   const sections = createMemo(() => {
     const list = inbox.entries()
 
-    // Archived sessions are available through the Archived search dialog, not in the sidebar list.
-    const active = list.filter((entry) => !inboxArchived(entry))
+    // Pins are shared with the other sidebar layouts. They lead Recent in their own order, whatever the session's state.
+    const order = new Map(pinnedRefs(pins.state).map((ref, index) => [pinKey(ref), index]))
+
+    const top = list
+      .filter((entry) => order.has(entry.key))
+      .toSorted((a, b) => (order.get(a.key) ?? 0) - (order.get(b.key) ?? 0))
+
+    const rest = list.filter((entry) => !order.has(entry.key))
+
+    const active = rest.filter((entry) => !inboxArchived(entry))
 
     const needs = active
       .filter((entry) => entry.status === "approval" || entry.status === "input")
@@ -126,10 +143,16 @@ export function SidebarInbox() {
       .filter((entry) => entry.status === "done" || entry.status === "failed" || entry.status === "ready")
       .toSorted((a, b) => (b.since ?? 0) - (a.since ?? 0))
 
-    const recent = state.recentExpanded ? settled : settled.slice(0, RECENT_LIMIT)
+    const recent = [...top, ...(state.recentExpanded ? settled : settled.slice(0, RECENT_LIMIT))]
 
     // `time.updated` moves with every message of a run, so keep Working ordered by run start.
     const working = active.filter((entry) => entry.status === "working").toSorted(compareWorking)
+
+    const archived = rest
+      .filter(inboxArchived)
+      .toSorted((a, b) => (b.session.time.archived ?? 0) - (a.session.time.archived ?? 0))
+
+    const shown = [...needs, ...recent, ...working, ...(state.archivedExpanded ? archived : [])]
 
     const current = list.find((entry) => inbox.selected(entry))
 
@@ -137,12 +160,10 @@ export function SidebarInbox() {
       needs,
       recent,
       more: settled.length > RECENT_LIMIT,
-      current:
-        current && ![...needs, ...recent, ...working].some((entry) => entry.key === current.key)
-          ? [current]
-          : [],
-      archived: list.some(inboxArchived),
+      current: current && !shown.some((entry) => entry.key === current.key) ? [current] : [],
+      archived,
       working,
+      shown,
     }
   })
 
@@ -204,7 +225,7 @@ export function SidebarInbox() {
   createEffect(() => {
     const visible = sections()
 
-    inbox.loadBranches([...visible.needs, ...visible.current, ...visible.working, ...visible.recent])
+    inbox.loadBranches([...visible.current, ...visible.shown])
   })
 
   // Takes an accessor so only the For tracks the section. Reading it here would recreate the For, remounting every
@@ -226,8 +247,14 @@ export function SidebarInbox() {
               branch={inbox.branch(entry())}
               worktree={inbox.inWorktree(entry())}
               archived={inboxArchived(entry())}
+              pinned={pinned(entry())}
               actions={
                 <>
+                  <Menu.Item
+                    onSelect={() => (pinned(entry()) ? pins.unpin(pinRef(entry())) : pins.pin(pinRef(entry())))}
+                  >
+                    {language.t(pinned(entry()) ? "sidebar.recent.unpin" : "sidebar.recent.pin")}
+                  </Menu.Item>
                   <Menu.Item
                     onSelect={() => {
                       const current = entry()
@@ -327,6 +354,20 @@ export function SidebarInbox() {
         </Show>
       ),
     },
+    {
+      id: "archived",
+      get label() {
+        return language.t("sidebar.inbox.section.archived")
+      },
+      get count() {
+        return sections().archived.length
+      },
+      rows: () => rows(() => sections().archived),
+      get expanded() {
+        return state.archivedExpanded
+      },
+      onToggle: () => setState("archivedExpanded", !state.archivedExpanded),
+    },
   ]
 
   return (
@@ -349,12 +390,6 @@ export function SidebarInbox() {
           return state.workingExpanded
         },
         onToggle: () => setState("workingExpanded", !state.workingExpanded),
-      }}
-      archived={sections().archived}
-      onArchived={async () => {
-        const { DialogSessionSearch } = await import("@/shell/commands/session-search")
-
-        void dialog.show(() => <DialogSessionSearch archived />)
       }}
     />
   )
@@ -400,10 +435,16 @@ export function InboxSessionList(props: {
   loading?: boolean
   announcement?: string
   current: { count: number; rows: () => JSX.Element }
-  sections: { id: string; label: string; count: number; rows: () => JSX.Element; more?: () => JSX.Element }[]
+  sections: {
+    id: string
+    label: string
+    count: number
+    rows: () => JSX.Element
+    more?: () => JSX.Element
+    expanded?: boolean
+    onToggle?: () => void
+  }[]
   working: { count: number; rows: () => JSX.Element; expanded: boolean; onToggle: () => void }
-  archived: boolean
-  onArchived: () => void
 }) {
   const language = useLanguage()
   const id = createUniqueId()
@@ -417,7 +458,7 @@ export function InboxSessionList(props: {
       () => [
         props.loading,
         props.current.count,
-        ...props.sections.map((section) => section.count),
+        ...props.sections.flatMap((section) => [section.count, section.expanded]),
         props.working.count,
         props.working.expanded,
       ],
@@ -510,9 +551,16 @@ export function InboxSessionList(props: {
               {(section) => (
                 <Show when={section.count > 0}>
                   <div role="group" aria-labelledby={`${id}-${section.id}`} class="flex shrink-0 flex-col gap-2 pb-2.5">
-                    <SectionHeader id={`${id}-${section.id}`} label={section.label} />
-                    <div class="flex flex-col gap-0.5">{section.rows()}</div>
-                    {section.more?.()}
+                    <SectionHeader
+                      id={`${id}-${section.id}`}
+                      label={section.label}
+                      expanded={section.expanded}
+                      onToggle={section.onToggle}
+                    />
+                    <Show when={section.expanded !== false}>
+                      <div class="flex flex-col gap-0.5">{section.rows()}</div>
+                      {section.more?.()}
+                    </Show>
                   </div>
                 </Show>
               )}
@@ -526,18 +574,6 @@ export function InboxSessionList(props: {
             >
               <div class="px-1.5 py-2 text-[13px] leading-4 text-v2-text-text-faint">
                 {language.t("sidebar.inbox.empty")}
-              </div>
-            </Show>
-            <Show when={props.archived}>
-              <div class="shrink-0 pt-3">
-                <Button
-                  variant="ghost-muted"
-                  size="normal"
-                  class="w-full justify-start px-2 focus-visible:-outline-offset-2"
-                  onClick={props.onArchived}
-                >
-                  {language.t("sidebar.inbox.section.archived")}
-                </Button>
               </div>
             </Show>
           </div>
@@ -649,6 +685,7 @@ export function InboxDraftCard(props: {
         tabIndex={navigation ? (navigation() === id ? 0 : -1) : 0}
         aria-current={props.selected ? "page" : undefined}
         data-slot="sidebar-inbox-item"
+        data-roving
         data-state={props.selected ? "active" : undefined}
         class="group flex h-[54px] w-full shrink-0 flex-col gap-1.5 rounded-[6px] p-2 text-start hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2 data-[state=active]:bg-v2-overlay-simple-overlay-pressed"
         onClick={props.onOpen}
@@ -691,6 +728,7 @@ export function InboxSessionCard(props: {
   branch: string | undefined
   worktree: boolean
   archived: boolean
+  pinned?: boolean
   onOpen: () => void
   onArchive: () => void
   onUnarchive: () => void
@@ -733,6 +771,7 @@ export function InboxSessionCard(props: {
         tabIndex={navigation ? (navigation() === id ? 0 : -1) : 0}
         aria-current={props.selected ? "page" : undefined}
         data-slot="sidebar-inbox-item"
+        data-roving
         data-status={status()}
         data-state={props.selected ? "active" : undefined}
         class="group flex h-[54px] w-full shrink-0 flex-col gap-1.5 rounded-[6px] p-2 text-start hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2 data-[state=active]:bg-v2-overlay-simple-overlay-pressed"
@@ -752,6 +791,9 @@ export function InboxSessionCard(props: {
           >
             {sessionTabTitle(props.title, language.t("session.tab.session"))}
           </span>
+          <Show when={props.pinned}>
+            <Icon name="pin" aria-label={language.t("sidebar.recent.pinned")} class="shrink-0 text-v2-icon-icon-muted" />
+          </Show>
         </span>
         <span class="relative flex h-4 w-full min-w-0 shrink-0 items-center gap-2 ps-6 text-[13px] leading-4 tracking-[-0.04px] text-v2-text-text-muted">
           <Show when={props.server}>

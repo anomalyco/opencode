@@ -1193,7 +1193,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Að vinna",
   "sidebar.inbox.section.recent": "Nýlegt",
   "sidebar.inbox.section.archived": "Í geymslu",
-  "sidebar.inbox.archived.title": "Setur í geymslu",
   "sidebar.inbox.unarchive": "Taka úr geymslu",
   "sidebar.inbox.status.approval": "Samþykki",
   "sidebar.inbox.status.input": "Spurning",

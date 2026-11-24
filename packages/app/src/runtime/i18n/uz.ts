@@ -1212,7 +1212,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Bajarilmoqda",
   "sidebar.inbox.section.recent": "Oxirgilar",
   "sidebar.inbox.section.archived": "Arxivlangan",
-  "sidebar.inbox.archived.title": "Arxivlangan sessiyalar",
   "sidebar.inbox.unarchive": "Arxivdan chiqarish",
   "sidebar.inbox.status.approval": "Tasdiqlash",
   "sidebar.inbox.status.input": "Savol",

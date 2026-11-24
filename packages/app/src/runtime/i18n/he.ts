@@ -1180,7 +1180,6 @@ export const dict = {
   "sidebar.inbox.section.working": "בעבודה",
   "sidebar.inbox.section.recent": "אחרונות",
   "sidebar.inbox.section.archived": "בארכיון",
-  "sidebar.inbox.archived.title": "הפעלות בארכיון",
   "sidebar.inbox.unarchive": "הוצא מהארכיון",
   "sidebar.inbox.status.approval": "אישור",
   "sidebar.inbox.status.input": "שאלה",

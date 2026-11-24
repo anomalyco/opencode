@@ -1212,7 +1212,6 @@ export const dict = {
   "sidebar.inbox.section.working": "کام جاری ہے",
   "sidebar.inbox.section.recent": "حالیہ",
   "sidebar.inbox.section.archived": "آرکائیو شدہ",
-  "sidebar.inbox.archived.title": "آرکائیو شدہ سیشنز",
   "sidebar.inbox.unarchive": "آرکائیو سے نکالیں",
   "sidebar.inbox.status.approval": "منظوری",
   "sidebar.inbox.status.input": "سوال",

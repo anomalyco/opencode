@@ -1239,7 +1239,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Vykdomi",
   "sidebar.inbox.section.recent": "Naujausi",
   "sidebar.inbox.section.archived": "Archyvuoti",
-  "sidebar.inbox.archived.title": "Archyvuoti seansai",
   "sidebar.inbox.unarchive": "Išarchyvuoti",
   "sidebar.inbox.status.approval": "Patvirtinimas",
   "sidebar.inbox.status.input": "Klausimas",

@@ -1214,7 +1214,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Bezig",
   "sidebar.inbox.section.recent": "Recent",
   "sidebar.inbox.section.archived": "Gearchiveerd",
-  "sidebar.inbox.archived.title": "Gearchiveerde sessies",
   "sidebar.inbox.unarchive": "Archiveren ongedaan maken",
   "sidebar.inbox.status.approval": "Goedkeuring",
   "sidebar.inbox.status.input": "Vraag",

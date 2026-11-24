@@ -1235,7 +1235,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Deluje",
   "sidebar.inbox.section.recent": "Nedavno",
   "sidebar.inbox.section.archived": "Arhivirano",
-  "sidebar.inbox.archived.title": "Arhivirane seje",
   "sidebar.inbox.unarchive": "Odarhiviraj",
   "sidebar.inbox.status.approval": "Odobritev",
   "sidebar.inbox.status.input": "Vprašanje",

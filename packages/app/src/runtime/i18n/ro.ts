@@ -1225,7 +1225,6 @@ export const dict = {
   "sidebar.inbox.section.working": "În lucru",
   "sidebar.inbox.section.recent": "Recente",
   "sidebar.inbox.section.archived": "Arhivate",
-  "sidebar.inbox.archived.title": "Sesiuni arhivate",
   "sidebar.inbox.unarchive": "Dezarhivează",
   "sidebar.inbox.status.approval": "Aprobare",
   "sidebar.inbox.status.input": "Întrebare",

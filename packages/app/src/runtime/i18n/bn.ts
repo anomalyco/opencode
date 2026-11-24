@@ -1201,7 +1201,6 @@ export const dict = {
   "sidebar.inbox.section.working": "কাজ চলছে",
   "sidebar.inbox.section.recent": "সাম্প্রতিক",
   "sidebar.inbox.section.archived": "সংরক্ষণাগারভুক্ত",
-  "sidebar.inbox.archived.title": "সংরক্ষণাগারভুক্ত সেশন",
   "sidebar.inbox.unarchive": "সংরক্ষণাগার থেকে বের করুন",
   "sidebar.inbox.status.approval": "অনুমোদন",
   "sidebar.inbox.status.input": "প্রশ্ন",

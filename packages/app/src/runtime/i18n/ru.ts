@@ -1303,7 +1303,6 @@ export const dict = {
   "sidebar.inbox.section.working": "В работе",
   "sidebar.inbox.section.recent": "Недавние",
   "sidebar.inbox.section.archived": "Архив",
-  "sidebar.inbox.archived.title": "Архивные сессии",
   "sidebar.inbox.unarchive": "Разархивировать",
   "sidebar.inbox.status.approval": "Одобрение",
   "sidebar.inbox.status.input": "Вопрос",

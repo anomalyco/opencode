@@ -1210,7 +1210,6 @@ export const dict = {
   "sidebar.inbox.section.working": "作業中",
   "sidebar.inbox.section.recent": "最近",
   "sidebar.inbox.section.archived": "アーカイブ済み",
-  "sidebar.inbox.archived.title": "アーカイブ済みのセッション",
   "sidebar.inbox.unarchive": "アーカイブを解除",
   "sidebar.inbox.status.approval": "承認",
   "sidebar.inbox.status.input": "質問",

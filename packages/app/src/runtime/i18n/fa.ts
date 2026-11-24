@@ -1193,7 +1193,6 @@ export const dict = {
   "sidebar.inbox.section.working": "در حال کار",
   "sidebar.inbox.section.recent": "اخیر",
   "sidebar.inbox.section.archived": "بایگانی‌شده",
-  "sidebar.inbox.archived.title": "جلسه‌های بایگانی‌شده",
   "sidebar.inbox.unarchive": "خارج کردن از بایگانی",
   "sidebar.inbox.status.approval": "در انتظار تأیید",
   "sidebar.inbox.status.input": "سؤال",

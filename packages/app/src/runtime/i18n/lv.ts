@@ -1226,7 +1226,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Darbojas",
   "sidebar.inbox.section.recent": "Nesenās",
   "sidebar.inbox.section.archived": "Arhivētās",
-  "sidebar.inbox.archived.title": "Arhivētās sesijas",
   "sidebar.inbox.unarchive": "Atarhivēt",
   "sidebar.inbox.status.approval": "Apstiprinājums",
   "sidebar.inbox.status.input": "Jautājums",

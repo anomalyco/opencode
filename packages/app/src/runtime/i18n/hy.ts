@@ -1197,7 +1197,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Աշխատում են",
   "sidebar.inbox.section.recent": "Վերջինները",
   "sidebar.inbox.section.archived": "Արխիվացված",
-  "sidebar.inbox.archived.title": "Արխիվացված նիստեր",
   "sidebar.inbox.unarchive": "Ապարխիվացնել",
   "sidebar.inbox.status.approval": "Հաստատում",
   "sidebar.inbox.status.input": "Հարց",

@@ -1197,7 +1197,6 @@ export const dict = {
   "sidebar.inbox.section.working": "작업 중",
   "sidebar.inbox.section.recent": "최근",
   "sidebar.inbox.section.archived": "보관됨",
-  "sidebar.inbox.archived.title": "보관된 세션",
   "sidebar.inbox.unarchive": "보관 해제",
   "sidebar.inbox.status.approval": "승인",
   "sidebar.inbox.status.input": "질문",

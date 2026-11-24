@@ -1205,7 +1205,6 @@ export const dict = {
   "sidebar.inbox.section.working": "工作中",
   "sidebar.inbox.section.recent": "最近",
   "sidebar.inbox.section.archived": "已封存",
-  "sidebar.inbox.archived.title": "已封存的工作階段",
   "sidebar.inbox.unarchive": "取消封存",
   "sidebar.inbox.status.approval": "待核准",
   "sidebar.inbox.status.input": "問題",

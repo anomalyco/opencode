@@ -1186,7 +1186,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Töötab",
   "sidebar.inbox.section.recent": "Viimased",
   "sidebar.inbox.section.archived": "Arhiveeritud",
-  "sidebar.inbox.archived.title": "Arhiveeritud seansid",
   "sidebar.inbox.unarchive": "Taasta arhiivist",
   "sidebar.inbox.status.approval": "Kinnitus",
   "sidebar.inbox.status.input": "Küsimus",

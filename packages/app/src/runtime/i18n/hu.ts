@@ -1212,7 +1212,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Folyamatban",
   "sidebar.inbox.section.recent": "Legutóbbiak",
   "sidebar.inbox.section.archived": "Archivált",
-  "sidebar.inbox.archived.title": "Archivált munkamenetek",
   "sidebar.inbox.unarchive": "Archiválás visszavonása",
   "sidebar.inbox.status.approval": "Jóváhagyás",
   "sidebar.inbox.status.input": "Kérdés",

@@ -1253,7 +1253,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Arbejder",
   "sidebar.inbox.section.recent": "Seneste",
   "sidebar.inbox.section.archived": "Arkiveret",
-  "sidebar.inbox.archived.title": "Arkiverede sessioner",
   "sidebar.inbox.unarchive": "Fjern fra arkiv",
   "sidebar.inbox.status.approval": "Godkendelse",
   "sidebar.inbox.status.input": "Spørgsmål",

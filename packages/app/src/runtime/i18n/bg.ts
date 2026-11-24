@@ -1211,7 +1211,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Работят",
   "sidebar.inbox.section.recent": "Последни",
   "sidebar.inbox.section.archived": "Архивирани",
-  "sidebar.inbox.archived.title": "Архивирани сесии",
   "sidebar.inbox.unarchive": "Разархивиране",
   "sidebar.inbox.status.approval": "Одобрение",
   "sidebar.inbox.status.input": "Въпрос",

@@ -1215,7 +1215,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Дар ҳоли кор",
   "sidebar.inbox.section.recent": "Охирин",
   "sidebar.inbox.section.archived": "Бойгонишуда",
-  "sidebar.inbox.archived.title": "Сессияҳои бойгонишуда",
   "sidebar.inbox.unarchive": "Аз бойгонӣ баровардан",
   "sidebar.inbox.status.approval": "Тасдиқ",
   "sidebar.inbox.status.input": "Савол",

@@ -1198,7 +1198,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Đang làm việc",
   "sidebar.inbox.section.recent": "Gần đây",
   "sidebar.inbox.section.archived": "Đã lưu trữ",
-  "sidebar.inbox.archived.title": "Phiên đã lưu trữ",
   "sidebar.inbox.unarchive": "Bỏ lưu trữ",
   "sidebar.inbox.status.approval": "Phê duyệt",
   "sidebar.inbox.status.input": "Câu hỏi",

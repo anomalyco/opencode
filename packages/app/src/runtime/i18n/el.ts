@@ -1228,7 +1228,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Σε εξέλιξη",
   "sidebar.inbox.section.recent": "Πρόσφατες",
   "sidebar.inbox.section.archived": "Αρχειοθετημένες",
-  "sidebar.inbox.archived.title": "Αρχειοθετημένες συνεδρίες",
   "sidebar.inbox.unarchive": "Κατάργηση αρχειοθέτησης",
   "sidebar.inbox.status.approval": "Έγκριση",
   "sidebar.inbox.status.input": "Ερώτηση",

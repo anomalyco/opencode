@@ -1225,7 +1225,6 @@ export const dict = {
   "sidebar.inbox.section.working": "ལཱ་འབད་དོ།",
   "sidebar.inbox.section.recent": "འཕྲལ་གྱི།",
   "sidebar.inbox.section.archived": "གཏན་མཛོད་ནང་བཞག་ཡོདཔ།",
-  "sidebar.inbox.archived.title": "གཏན་མཛོད་ནང་གི་ལཱ་ཡུན་ཚུ།",
   "sidebar.inbox.unarchive": "གཏན་མཛོད་ལས་བཏོན།",
   "sidebar.inbox.status.approval": "ཆ་འཇོག",
   "sidebar.inbox.status.input": "དྲི་བ།",

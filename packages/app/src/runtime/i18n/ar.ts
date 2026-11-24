@@ -1257,7 +1257,6 @@ export const dict = {
   "sidebar.inbox.section.working": "قيد العمل",
   "sidebar.inbox.section.recent": "الأخيرة",
   "sidebar.inbox.section.archived": "المؤرشفة",
-  "sidebar.inbox.archived.title": "الجلسات المؤرشفة",
   "sidebar.inbox.unarchive": "إلغاء الأرشفة",
   "sidebar.inbox.status.approval": "موافقة",
   "sidebar.inbox.status.input": "سؤال",

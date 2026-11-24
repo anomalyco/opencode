@@ -1278,7 +1278,6 @@ export const dict = {
   "sidebar.inbox.section.working": "U toku",
   "sidebar.inbox.section.recent": "Nedavno",
   "sidebar.inbox.section.archived": "Arhivirano",
-  "sidebar.inbox.archived.title": "Arhivirane sesije",
   "sidebar.inbox.unarchive": "Vrati iz arhive",
   "sidebar.inbox.status.approval": "Odobrenje",
   "sidebar.inbox.status.input": "Pitanje",

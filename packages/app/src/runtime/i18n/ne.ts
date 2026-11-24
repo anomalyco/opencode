@@ -1200,7 +1200,6 @@ export const dict = {
   "sidebar.inbox.section.working": "काम हुँदै",
   "sidebar.inbox.section.recent": "हालैका",
   "sidebar.inbox.section.archived": "अभिलेखित",
-  "sidebar.inbox.archived.title": "अभिलेखित सत्रहरू",
   "sidebar.inbox.unarchive": "अभिलेखबाट निकाल्नुहोस्",
   "sidebar.inbox.status.approval": "स्वीकृति",
   "sidebar.inbox.status.input": "प्रश्न",

@@ -1249,7 +1249,6 @@ export const dict = {
   "sidebar.inbox.section.working": "W toku",
   "sidebar.inbox.section.recent": "Ostatnie",
   "sidebar.inbox.section.archived": "Zarchiwizowane",
-  "sidebar.inbox.archived.title": "Zarchiwizowane sesje",
   "sidebar.inbox.unarchive": "Przywróć z archiwum",
   "sidebar.inbox.status.approval": "Zatwierdzenie",
   "sidebar.inbox.status.input": "Pytanie",

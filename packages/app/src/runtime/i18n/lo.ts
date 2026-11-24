@@ -1181,7 +1181,6 @@ export const dict = {
   "sidebar.inbox.section.working": "ກຳລັງເຮັດວຽກ",
   "sidebar.inbox.section.recent": "ຫຼ້າສຸດ",
   "sidebar.inbox.section.archived": "ຮວບຮວມແລ້ວ",
-  "sidebar.inbox.archived.title": "ເຊດຊັນທີ່ຮວບຮວມແລ້ວ",
   "sidebar.inbox.unarchive": "ເອົາອອກຈາກບ່ອນຮວບຮວມ",
   "sidebar.inbox.status.approval": "ອະນຸມັດ",
   "sidebar.inbox.status.input": "ຄຳຖາມ",

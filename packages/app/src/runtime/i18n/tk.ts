@@ -1194,7 +1194,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Işleýär",
   "sidebar.inbox.section.recent": "Soňkular",
   "sidebar.inbox.section.archived": "Arhiwlenen",
-  "sidebar.inbox.archived.title": "Arhiwlenen sessiýalar",
   "sidebar.inbox.unarchive": "Arhiwden çykar",
   "sidebar.inbox.status.approval": "Tassyklama",
   "sidebar.inbox.status.input": "Sorag",

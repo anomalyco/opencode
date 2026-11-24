@@ -1201,7 +1201,6 @@ export const dict = {
   "sidebar.inbox.section.working": "වැඩ කරමින්",
   "sidebar.inbox.section.recent": "මෑත",
   "sidebar.inbox.section.archived": "සංරක්ෂිත",
-  "sidebar.inbox.archived.title": "සංරක්ෂිත සැසි",
   "sidebar.inbox.unarchive": "සංරක්ෂණයෙන් ඉවත් කරන්න",
   "sidebar.inbox.status.approval": "අනුමැතිය",
   "sidebar.inbox.status.input": "ප්‍රශ්නය",

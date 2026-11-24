@@ -1145,7 +1145,6 @@ export const dict = {
   "sidebar.inbox.section.working": "በመስራት ላይ",
   "sidebar.inbox.section.recent": "የቅርብ ጊዜ",
   "sidebar.inbox.section.archived": "በማህደር የተቀመጡ",
-  "sidebar.inbox.archived.title": "በማህደር የተቀመጡ ክፍለ ጊዜዎች",
   "sidebar.inbox.unarchive": "ከማህደር አውጣ",
   "sidebar.inbox.status.approval": "ማጽደቅ",
   "sidebar.inbox.status.input": "ጥያቄ",

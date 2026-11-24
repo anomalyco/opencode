@@ -1274,7 +1274,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Çalışıyor",
   "sidebar.inbox.section.recent": "Son oturumlar",
   "sidebar.inbox.section.archived": "Arşivlenmiş",
-  "sidebar.inbox.archived.title": "Arşivlenmiş oturumlar",
   "sidebar.inbox.unarchive": "Arşivden çıkar",
   "sidebar.inbox.status.approval": "Onay",
   "sidebar.inbox.status.input": "Soru",

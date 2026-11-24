@@ -1209,7 +1209,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Ажиллаж байна",
   "sidebar.inbox.section.recent": "Сүүлийн",
   "sidebar.inbox.section.archived": "Архивласан",
-  "sidebar.inbox.archived.title": "Архивласан сессүүд",
   "sidebar.inbox.unarchive": "Архиваас гаргах",
   "sidebar.inbox.status.approval": "Зөвшөөрөл",
   "sidebar.inbox.status.input": "Асуулт",

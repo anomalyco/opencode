@@ -1209,7 +1209,6 @@ export const dict = {
   "sidebar.inbox.section.working": "工作中",
   "sidebar.inbox.section.recent": "最近",
   "sidebar.inbox.section.archived": "已归档",
-  "sidebar.inbox.archived.title": "已归档的会话",
   "sidebar.inbox.unarchive": "取消归档",
   "sidebar.inbox.status.approval": "待批准",
   "sidebar.inbox.status.input": "问题",

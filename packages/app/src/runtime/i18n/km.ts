@@ -1188,7 +1188,6 @@ export const dict = {
   "sidebar.inbox.section.working": "កំពុងធ្វើការ",
   "sidebar.inbox.section.recent": "ថ្មីៗ",
   "sidebar.inbox.section.archived": "បានដាក់ក្នុងបណ្ណសារ",
-  "sidebar.inbox.archived.title": "សម័យក្នុងបណ្ណសារ",
   "sidebar.inbox.unarchive": "ដកចេញពីបណ្ណសារ",
   "sidebar.inbox.status.approval": "ការយល់ព្រម",
   "sidebar.inbox.status.input": "សំណួរ",

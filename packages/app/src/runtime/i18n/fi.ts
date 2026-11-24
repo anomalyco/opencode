@@ -1198,7 +1198,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Työskentelee",
   "sidebar.inbox.section.recent": "Viimeaikaiset",
   "sidebar.inbox.section.archived": "Arkistoidut",
-  "sidebar.inbox.archived.title": "Arkistoidut istunnot",
   "sidebar.inbox.unarchive": "Palauta arkistosta",
   "sidebar.inbox.status.approval": "Hyväksyntä",
   "sidebar.inbox.status.input": "Kysymys",
