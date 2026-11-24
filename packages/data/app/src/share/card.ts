@@ -222,29 +222,28 @@ const hold = 2.2
 // The space under a stacked chart for its date labels.
 const axisHeight = 44
 
-// When the chart builds, when the highlights start, how long each takes and how many times they go round. Without
+// When the chart builds, when the highlights start and how long each takes. Without
 // music it runs at its own pace; with a soundtrack it follows the track (barTiming) and `beat` drives the dot meter.
 export type ShareTiming = {
   build: number
   start: number
   step: number
-  rounds: number
   beat?: number
   length?: number
   spectrum?: Spectrum
 }
-const freeTiming: ShareTiming = { build: 0.8, start: 1, step: 1.1, rounds: 1 }
+const freeTiming: ShareTiming = { build: 0.8, start: 1, step: 1.1 }
 
 /**
- * The chart builds over the first bar; from the verse each highlight takes half a bar and the leaders go round twice;
- * the dots pulse on every beat; the video ends with the track.
+ * The chart builds over the first bar; from the verse each highlight takes half a bar, once along the chart; the dots
+ * pulse on every beat; the video ends with the track.
  */
 export function barTiming(bar: number, verse: number, length: number, beat: number, spectrum?: Spectrum): ShareTiming {
   // The first strong beat at the verse, from the track's measured beat, so every cut (each half bar) lands on one.
   const half = bar / 2
   const start = beat + Math.ceil((verse - 0.2 - beat) / half) * half
   // The chart builds over half a bar, so it lands on a strong beat.
-  return { build: half, start, step: half, rounds: 2, beat: bar / 4, length, spectrum }
+  return { build: half, start, step: half, beat: bar / 4, length, spectrum }
 }
 
 /** Waits for the card's font, so the first frame isn't drawn in the fallback. */
@@ -262,7 +261,7 @@ export function shareDuration(card: ShareCard, options: ShareOptions, timing = f
 // only this part.
 export function mainLength(card: ShareCard, options: ShareOptions, timing = freeTiming) {
   const intro = introSlides(card, options, timing)?.end ?? 0
-  return timing.length ?? intro + timing.start + highlights(card, options).length * timing.rounds * timing.step + hold
+  return timing.length ?? intro + timing.start + turns(card, options, timing).length * timing.step + hold
 }
 
 // The slides the leaderboard and comparison open with: the headline until the first cut, then a slide a place (the top
@@ -481,8 +480,7 @@ function drawOutro(
 
 // The highlight's state at `time`: which series (or row) leads and how far the others have dimmed.
 function focusAt(card: ShareCard, options: ShareOptions, time: number, timing: ShareTiming) {
-  const once = highlights(card, options)
-  const order = Array.from({ length: timing.rounds }, () => once).flat()
+  const order = turns(card, options, timing)
   const step = timing.step
   const local = time - timing.start
   if (local < 0 || local >= order.length * step) return { index: -1, amount: 0 }
@@ -496,23 +494,28 @@ function focusAt(card: ShareCard, options: ShareOptions, time: number, timing: S
 
 // When the last highlight lets go: the build alone when there are no highlights.
 function highlightsEnd(card: ShareCard, options: ShareOptions, timing: ShareTiming) {
-  const count = highlights(card, options).length * timing.rounds
+  const count = turns(card, options, timing).length
   return count > 0 ? timing.start + count * timing.step : timing.build
+}
+
+// The highlights in turn: each bar of the chart once, first to last. With music the video ends with the track, so a long
+// list stops where the rest would run past it, leaving the legend its moment.
+function turns(card: ShareCard, options: ShareOptions, timing: ShareTiming) {
+  const all = highlights(card, options)
+  if (!timing.length) return all
+  return all.slice(0, Math.max(0, Math.floor((timing.length - timing.start - hold) / timing.step)))
 }
 
 function highlights(card: ShareCard, options: ShareOptions) {
   // The leaderboard and comparison have had their slides already.
   if (options.motion === "build" || card.chart.kind === "podium" || card.chart.kind === "versus") return []
   const chart = card.chart
-  const count =
-    chart.kind === "stacked" ? chart.series.filter((item) => item.key !== "other").length : chart.rows.length
-  const most = chart.kind === "stacked" ? 5 : 3
-  // A one-day chart goes along its bars, left to right.
-  if (chart.kind === "stacked" && chart.day !== undefined)
-    return dayOrder(chart)
-      .filter((series) => chart.series[series]?.key !== "other")
-      .slice(0, most)
-  return Array.from({ length: Math.min(most, count) }, (_, index) => index)
+  // A one-day chart goes along its bars, left to right; the whole range down its series in the legend's order.
+  if (chart.kind === "stacked")
+    return (chart.day !== undefined ? dayOrder(chart) : chart.series.map((_, index) => index)).filter(
+      (series) => chart.series[series]?.key !== "other",
+    )
+  return chart.rows.map((_, index) => index)
 }
 
 function drawBackground(

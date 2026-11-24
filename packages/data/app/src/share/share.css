@@ -75,7 +75,7 @@
    screen and the inspector sits under the card, one group at a time behind tabs. */
 
 [data-page="stats"] dialog[data-component="share-editor"] {
-  --editor-inspector: 344px;
+  --editor-bar: 56px;
   --editor-inset: 12px;
   /* The option cards, track rows and code: on the light panel a white card with a firm line; on the dark one a fill
      and line only just off the panel, so the choices don't shout. */
@@ -157,9 +157,11 @@
     }
   }
 
-  /* The canvas fills the editor; the panel floats on it, inset from the top, side and bottom. */
+  /* The bar across the top, the stage under it. */
   [data-slot="editor"] {
     position: relative;
+    display: flex;
+    flex-direction: column;
     height: 100%;
   }
 
@@ -249,15 +251,15 @@
 
   /* The stage: the card on the site's dot grid, with the format and play controls under it. */
   [data-slot="editor-stage"] {
-    position: absolute;
-    inset: 0;
+    position: relative;
     display: flex;
+    flex: 1;
     flex-direction: column;
     align-items: center;
-    gap: 16px;
+    gap: 12px;
     min-height: 0;
     /* The same 48px either side of the card's area; the section arrows sit in those margins. */
-    padding: 56px 48px 20px;
+    padding: 32px 48px 8px;
     /* Grey on the light page; on the dark one a step lighter than the card (#0c0c0c), so it stands out, but well below
        the page's second layer, which glared. */
     background-color: light-dark(var(--stats-layer-2), color-mix(in srgb, var(--stats-bg) 50%, var(--stats-layer)));
@@ -438,40 +440,6 @@
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
-  }
-
-  /* Under the card: every option as a button, the music, then Export; centred, wrapping on narrow stages. */
-  [data-slot="editor-actions"] {
-    display: flex;
-    flex: none;
-    flex-wrap: wrap;
-    align-items: stretch;
-    justify-content: center;
-    gap: 6px;
-    max-width: 100%;
-
-    [data-variant="primary"] {
-      justify-content: center;
-      min-width: 104px;
-      height: 48px;
-      font-size: 14px;
-    }
-    [data-slot="button-label"] {
-      animation: share-label-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
-
-      @media (prefers-reduced-motion: reduce) {
-        animation: none;
-      }
-    }
-  }
-
-  /* Close, centred on the canvas's second dot from the side and the top: the dots sit at the middle of 16px cells,
-     so that dot is at 24px, and the 40px button starts 20px before it. */
-  [data-slot="icon-button"][data-variant="close"] {
-    position: absolute;
-    top: 4px;
-    left: 4px;
-    z-index: 1;
   }
 
   /* The option rows: each label on the left, its choices inline on the right, so the music sits high in the panel. */
@@ -850,24 +818,67 @@
     }
   }
 
-  /* One option: its icon, then its name small over its value. Pressing steps to the next choice. */
-  [data-slot="tool"],
-  [data-slot="music-track"] {
+  /* The bar across the top: a line under it, its options in a row, Export at the far end. */
+  /* When the editor is too narrow for one row, the bar wraps onto another and the stage gives up the room. */
+  [data-slot="editor-bar"] {
+    position: relative;
+    z-index: 2;
+    display: flex;
+    flex: none;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    min-height: var(--editor-bar);
+    padding: 10px 12px 10px 8px;
+    background: var(--stats-bg);
+    box-shadow: 0 1px 0 var(--stats-line);
+
+    [data-variant="primary"] {
+      justify-content: center;
+      min-width: 96px;
+      margin-left: auto;
+    }
+
+    [data-slot="button-label"] {
+      animation: share-label-in 200ms cubic-bezier(0.23, 1, 0.32, 1);
+
+      @media (prefers-reduced-motion: reduce) {
+        animation: none;
+      }
+    }
+  }
+
+  [data-slot="bar-divider"] {
+    flex: none;
+    width: 1px;
+    height: 20px;
+    margin: 0 2px;
+    background: var(--stats-line);
+  }
+
+  [data-component="dropdown"],
+  [data-slot="date-tool"] {
+    position: relative;
+    display: flex;
+  }
+
+  /* A dropdown's button: icon, value, chevron; no label, the icon says what it is. */
+  [data-slot="dropdown-trigger"] {
     display: flex;
     align-items: center;
-    gap: 8px;
-    height: 48px;
-    padding: 0 12px 0 10px;
+    gap: 6px;
+    height: 36px;
+    padding: 0 6px 0 8px;
+    font-size: 13px;
     color: var(--stats-text);
-    text-align: left;
+    white-space: nowrap;
     background: var(--stats-bg);
     border: 1px solid var(--stats-line-strong);
     border-radius: 0;
-    white-space: nowrap;
     transition: border-color 120ms ease;
 
     @media (hover: hover) and (pointer: fine) {
-      &:hover:not(:disabled) {
+      &:hover {
         border-color: var(--stats-faint);
       }
     }
@@ -876,18 +887,151 @@
       background: color-mix(in srgb, var(--stats-accent) 7%, var(--stats-bg));
       border-color: var(--stats-accent);
     }
+
+    [data-slot="chevron"] {
+      flex: none;
+      color: var(--stats-faint);
+      transition: rotate 150ms ease;
+    }
+
+    &[aria-expanded="true"] [data-slot="chevron"] {
+      rotate: 180deg;
+    }
   }
 
-  [data-slot="tool"][data-variant="icon"] {
-    justify-content: center;
-    width: 48px;
-    padding: 0;
-    color: var(--stats-faint);
+  [data-slot="dropdown-value"] {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-align: left;
+    text-overflow: ellipsis;
+  }
+
+  /* Fixed widths, so the bar never shifts as the choices change: an icon and its chevron, a size's value, the date
+     (its longest label, a week), and the music. */
+  [data-component="dropdown"][data-show="icon"] [data-slot="dropdown-trigger"] {
+    justify-content: space-between;
+    width: 56px;
+  }
+
+  [data-component="dropdown"][data-show="value"] [data-slot="dropdown-trigger"] {
+    width: 72px;
+    padding-left: 12px;
+  }
+
+  [data-slot="date-tool"] [data-slot="dropdown-trigger"] {
+    width: 196px;
+  }
+
+  [data-slot="dropdown-menu"] {
+    position: absolute;
+    top: calc(100% + 6px);
+    left: 0;
+    width: max-content;
+    z-index: 3;
+    display: flex;
+    flex-direction: column;
+    min-width: 100%;
+    max-height: min(420px, 60dvh);
+    padding: 4px;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    background: var(--stats-bg);
+    box-shadow:
+      0 0 0 1px light-dark(rgb(0 0 0 / 0.12), rgb(255 255 255 / 0.08)),
+      0 4px 12px -4px rgb(0 0 0 / 0.14),
+      0 16px 32px -12px rgb(0 0 0 / 0.2);
+    animation: share-menu-in 140ms cubic-bezier(0.23, 1, 0.32, 1);
+    transform-origin: top left;
+
+    @media (prefers-reduced-motion: reduce) {
+      animation: none;
+    }
+  }
+
+  [data-slot="dropdown-item"] {
+    display: flex;
+    flex: none;
+    align-items: center;
+    gap: 10px;
+    min-height: 36px;
+    padding: 4px 8px 4px 10px;
+    font-size: 13px;
+    color: var(--stats-text);
+    text-align: left;
+    white-space: nowrap;
+    background: transparent;
+    border: 0;
+    outline: none;
 
     @media (hover: hover) and (pointer: fine) {
       &:hover {
-        color: var(--stats-text);
+        background: var(--stats-layer);
       }
+    }
+
+    &:focus-visible {
+      background: var(--stats-layer);
+      box-shadow: inset 0 0 0 1px var(--stats-accent);
+    }
+
+    [data-slot="check"] {
+      flex: none;
+      margin-left: auto;
+      color: var(--stats-accent);
+      visibility: hidden;
+    }
+
+    &[aria-selected="true"] [data-slot="check"] {
+      visibility: visible;
+    }
+
+    [data-slot="explicit"] {
+      margin-left: 12px;
+    }
+  }
+
+  [data-slot="dropdown-label"] {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+
+    small {
+      font-size: 11px;
+      color: var(--stats-faint);
+    }
+  }
+
+  /* The music: arrows either side of its dropdown, which shows the cover and the name. */
+  [data-slot="music-tool"] {
+    display: flex;
+    align-items: center;
+
+    [data-slot="dropdown-trigger"] {
+      width: 200px;
+      padding-left: 6px;
+    }
+  }
+
+  [data-slot="music-cover"] {
+    position: relative;
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    overflow: hidden;
+    color: var(--stats-faint);
+    background: var(--editor-control);
+
+    img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    [data-slot="eq"] {
+      scale: 0.7;
     }
   }
 
@@ -909,31 +1053,7 @@
     }
   }
 
-  [data-slot="tool-text"] {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
-    min-width: 0;
-    line-height: 1;
-
-    small {
-      display: flex;
-      gap: 6px;
-      align-items: center;
-      font-size: 10px;
-      color: var(--stats-faint);
-      text-transform: uppercase;
-      letter-spacing: 0.06em;
-    }
-
-    > span {
-      overflow: hidden;
-      font-size: 13px;
-      text-overflow: ellipsis;
-    }
-  }
-
-  /* The date: the calendar opens above its button. */
+  /* The date: the calendar opens under its button. */
   [data-slot="date-tool"] {
     position: relative;
     display: flex;
@@ -941,9 +1061,9 @@
 
   [data-component="share-calendar"] {
     position: absolute;
-    bottom: calc(100% + 8px);
+    top: calc(100% + 6px);
     left: 50%;
-    z-index: 2;
+    z-index: 3;
     width: 280px;
     padding: 12px;
     translate: -50% 0;
@@ -953,7 +1073,7 @@
       0 4px 12px -4px rgb(0 0 0 / 0.14),
       0 16px 32px -12px rgb(0 0 0 / 0.2);
     animation: share-calendar-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
-    transform-origin: bottom center;
+    transform-origin: top center;
 
     @media (prefers-reduced-motion: reduce) {
       animation: none;
@@ -1062,58 +1182,6 @@
     }
   }
 
-  /* The music, made a feature of: the cover large, the name, arrows either side. */
-  [data-slot="music-tool"] {
-    display: flex;
-    align-items: stretch;
-
-    [data-slot="music-track"] {
-      min-width: 168px;
-      max-width: 220px;
-      padding-left: 6px;
-      border-inline: 0;
-
-      &:disabled {
-        cursor: default;
-        opacity: 1;
-      }
-    }
-  }
-
-  [data-slot="music-step"] {
-    display: grid;
-    place-items: center;
-    width: 32px;
-    padding: 0;
-    color: var(--stats-faint);
-    background: var(--stats-bg);
-    border: 1px solid var(--stats-line-strong);
-
-    @media (hover: hover) and (pointer: fine) {
-      &:hover {
-        color: var(--stats-text);
-      }
-    }
-  }
-
-  [data-slot="music-cover"] {
-    position: relative;
-    display: grid;
-    flex: none;
-    place-items: center;
-    width: 36px;
-    height: 36px;
-    overflow: hidden;
-    color: var(--stats-faint);
-    background: var(--editor-control);
-
-    img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-  }
-
   /* grey-ok: the play state sits on the cover art, white whatever the theme */
   [data-slot="music-state"] {
     position: absolute;
@@ -1123,15 +1191,6 @@
     color: #fff;
     background: rgb(0 0 0 / 0.35);
   }
-  /* grey-ok-end */
-
-  [data-slot="music-tool"] [data-slot="explicit"] {
-    padding: 1px 3px;
-    font-size: 8px;
-    font-style: normal;
-    line-height: 1;
-  }
-
   @media (max-width: 760px) {
     width: 100vw;
     height: 100dvh;
@@ -1164,7 +1223,7 @@
       position: relative;
       flex: 1;
       gap: 10px;
-      padding: calc(48px + env(safe-area-inset-top, 0px)) 16px 8px;
+      padding: 16px 16px 8px;
     }
 
     [data-slot="editor-canvas"] {
@@ -1176,11 +1235,6 @@
       &[data-side="next"] {
         right: 4px;
       }
-    }
-
-    /* Below the notch, still on a dot. */
-    [data-slot="icon-button"][data-variant="close"] {
-      top: calc(4px + round(up, env(safe-area-inset-top, 0px), 16px));
     }
 
     [data-slot="editor-inspector"] {
@@ -1197,42 +1251,13 @@
       padding-inline: 16px;
     }
 
-    /* On a phone the options go two to a row; the date, the music and Export a full row each. */
-    [data-slot="editor-actions"] {
-      width: 100%;
-
-      > [data-slot="tool"]:not([data-variant="icon"]) {
-        flex: 1 1 40%;
-        min-width: 0;
-      }
-
-      > [data-slot="date-tool"] {
-        flex: 1 1 100%;
-      }
-
-      [data-slot="date-tool"] [data-slot="tool"] {
-        flex: 1;
-        min-width: 0;
-      }
-
-      [data-slot="music-tool"] {
-        flex: 1 1 100%;
-
-        [data-slot="music-track"] {
-          flex: 1;
-          max-width: none;
-        }
-      }
-
-      [data-variant="primary"] {
-        flex: 1 1 60%;
-      }
+    /* On a phone the bar wraps onto as many rows as it needs, over the card. */
+    [data-slot="editor-bar"] {
+      padding: calc(8px + env(safe-area-inset-top, 0px)) 8px 8px;
     }
 
-    [data-component="share-calendar"] {
-      position: fixed;
-      bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-      left: 50%;
+    [data-slot="bar-divider"] {
+      display: none;
     }
 
     /* Taller rows for fingers, the same height for every row of wide choices. */
@@ -1253,11 +1278,19 @@
   }
 }
 
+@keyframes share-menu-in {
+  from {
+    opacity: 0;
+    scale: 0.97;
+    translate: 0 -4px;
+  }
+}
+
 @keyframes share-calendar-in {
   from {
     opacity: 0;
     scale: 0.96;
-    translate: -50% 6px;
+    translate: -50% -6px;
   }
 }
 
