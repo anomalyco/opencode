@@ -12,6 +12,8 @@ export type MarkdownWorkerRequest =
   | { type: "parse"; id: number; text: string }
   | { type: "project"; id: number; key: string; text: string; live: boolean }
   | { type: "highlight"; id: number; key: string; text: string; language: string; complete?: boolean }
+  /** The text each source shows once rendered (`markdownText`), for Find. */
+  | { type: "text"; id: number; sources: readonly string[] }
   | { type: "dispose"; target: MarkdownWorkerLaneTarget; key: string }
 
 export type MarkdownWorkerResponse =
@@ -26,6 +28,7 @@ export type MarkdownWorkerResponse =
       stable: MarkdownToken[]
       unstable: MarkdownToken[]
     }
+  | { type: "text"; id: number; texts: readonly string[] }
   | { type: "error"; id: number; key?: string; message: string }
 
 export type MarkdownWorkerState = {

@@ -1223,6 +1223,93 @@ test("a wheel with no vertical distance leaves Find's seek to reach its match", 
   await expect(page.locator('[data-slot="timeline-search-count"]')).toHaveText("1/1")
 })
 
+// Find counted the hits in a reply's Markdown source and drew them in its rendered text, one text node at a time. The
+// two disagreed: asterisks, backticks and the address behind a link's label were counted and are nowhere on screen,
+// and a phrase that runs across bold text or the tokens of a code block was on screen and not found. A step to a
+// hit that nothing showed left "2/3" with no match in the timeline.
+test("Find counts the hits a reply shows and lands each step on one", async ({ page }) => {
+  const history = historyMessages(40)
+  const prompt = "msg_00009_shown_a_user"
+
+  const reply = [
+    "## Notes on **bold** steps",
+    "",
+    "Read [the guide](https://github.com/anomalyco/opencode) or github.com itself.",
+    "",
+    "Tom &amp; Jerry use `inline code` here.",
+    "",
+    "```ts",
+    "const answer = compute(41) + 1",
+    "```",
+  ].join("\n")
+
+  await setupTimeline(page, {
+    sessionMessages: validateTimelineMessages([
+      ...history.slice(0, 20),
+      // A prompt shows its text as it was typed, asterisks included.
+      userMessage([userText("Compare github.com with **stars** as typed.", { id: "prt_shown_prompt" })], {
+        id: prompt,
+        created: 1690000095000,
+      }),
+      assistantMessage([textPart("prt_shown_reply", reply)], {
+        id: "msg_00009_shown_b_assistant",
+        parentID: prompt,
+        created: 1690000096000,
+      }),
+      ...history.slice(20),
+      userMessage(),
+      assistantMessage([textPart("prt_shown_tail", "The newest answer.")]),
+    ]),
+  })
+  await expect(page.getByText("The newest answer.", { exact: true })).toBeVisible()
+  await page.keyboard.press("ControlOrMeta+f")
+  const search = page.locator('[data-component="timeline-search-bar"] input')
+  await expect(search).toBeFocused()
+
+  // The hits drawn in the timeline, the text of the active one, and whether it lies in the part the reader sees.
+  const drawn = () =>
+    page.evaluate(() => {
+      const active = [...(CSS.highlights.get("timeline-search-hit-active") ?? [])]
+      const range = active[0]
+      const total = (CSS.highlights.get("timeline-search-hit")?.size ?? 0) + active.length
+
+      if (!(range instanceof Range)) return { total, active: null, shown: false }
+      const rect = range.getBoundingClientRect()
+      const header = document.querySelector("[data-session-title]")!.getBoundingClientRect()
+      const visible = document.querySelector('[data-slot="session-timeline-visible"]')!.getBoundingClientRect()
+
+      return {
+        total,
+        active: range.toString().toLowerCase(),
+        shown: rect.height > 0 && rect.top >= header.bottom && rect.bottom <= visible.bottom,
+      }
+    })
+
+  for (const { query, hits } of [
+    // Both in the prompt. The reply's bold text shows none.
+    { query: "**", hits: 2 },
+    // The prompt, and the reply's own text. Not the address behind "the guide".
+    { query: "github.com", hits: 2 },
+    { query: "tom & jerry", hits: 1 },
+    { query: "bold steps", hits: 1 },
+    { query: "answer = compute", hits: 1 },
+    { query: "`", hits: 0 },
+  ]) {
+    await search.fill(query)
+
+    for (const step of Array.from({ length: hits }, (_, index) => index + 1)) {
+      await expect(page.locator('[data-slot="timeline-search-count"]')).toHaveText(`${step}/${hits}`)
+      await expect.poll(drawn).toEqual({ total: hits, active: query, shown: true })
+
+      if (step < hits) await search.press("Enter")
+    }
+
+    if (hits > 0) continue
+    await expect(page.locator('[data-slot="timeline-search-count"]')).toHaveText("0/0")
+    await expect.poll(drawn).toEqual({ total: 0, active: null, shown: false })
+  }
+})
+
 test("groups consecutive sent prompts under the last one's meta line, with each bubble's actions beside it", async ({
   page,
 }) => {

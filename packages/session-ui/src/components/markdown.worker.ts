@@ -10,6 +10,7 @@ import {
   type MarkdownWorkerResponse,
 } from "./markdown-worker-protocol"
 import { project, type Projection } from "./markdown-stream"
+import { markdownText } from "./markdown-text"
 
 type Stream = {
   language: string
@@ -56,6 +57,12 @@ self.onmessage = (event: MessageEvent<MarkdownWorkerRequest>) => {
     return
   }
 
+  if (event.data.type === "text") {
+    readText(event.data)
+
+    return
+  }
+
   highlight(event.data)
 }
 
@@ -68,6 +75,15 @@ async function parse(request: Extract<MarkdownWorkerRequest, { type: "parse" }>)
     post({ type: "error", id: request.id, message: error instanceof Error ? error.message : String(error) })
   } finally {
     fragments.clear()
+  }
+}
+
+function readText(request: Extract<MarkdownWorkerRequest, { type: "text" }>) {
+  try {
+    // The same parser that renders, so that the text is of what is shown.
+    post({ type: "text", id: request.id, texts: request.sources.map((source) => markdownText(parser.lexer(source))) })
+  } catch (error) {
+    post({ type: "error", id: request.id, message: error instanceof Error ? error.message : String(error) })
   }
 }
 

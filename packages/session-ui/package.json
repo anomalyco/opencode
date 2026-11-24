@@ -37,6 +37,7 @@
     "./comment-card": "./src/message/comment-card.tsx",
     "./markdown-stream": "./src/components/markdown-stream.ts",
     "./markdown-cache": "./src/components/markdown-cache.tsx",
+    "./markdown-worker": "./src/components/markdown-worker.ts",
     "./line-comment-styles": "./src/components/line-comment-styles.ts",
     "./pierre": "./src/pierre/index.ts",
     "./pierre/*": "./src/pierre/*.ts",

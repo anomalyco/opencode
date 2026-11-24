@@ -2,6 +2,7 @@ export { renderBlockKindToHtml, renderBlocksToHtml, renderInlinesToHtml, escapeH
 export { healStreamingInline, computeTailHeal, applyTailHeal, type TailHeal } from "./heal"
 export { parseInlines, type InlineParseOptions, type ReferenceDef } from "./inline"
 export { createMarkdownStream, PatchmarkStream, splitPendingMarker } from "./stream"
+export { decodeEntity, ENTITY_PATTERN } from "./entities"
 export type {
   BlockKind,
   BlockPatch,

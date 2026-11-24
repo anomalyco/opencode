@@ -11,6 +11,18 @@ export type TimelineSearchMatch = {
   readonly occurrence: number
 }
 
+/** A part's text as the transcript holds it. */
+export type SearchableSource = {
+  readonly revealID: string
+  readonly partID: string
+  readonly text: string
+  /** The part renders as Markdown, so what it shows is not its source. */
+  readonly markdown: boolean
+  /** The part's message is complete: its text no longer grows. */
+  readonly settled: boolean
+}
+
+/** A part and the text Find counts in: what the part shows, lowercased. */
 export type SearchablePart = {
   readonly revealID: string
   readonly partID: string
@@ -33,6 +45,8 @@ export type TimelineSearchState =
   | (SearchFields & { readonly status: "open" })
   | (SearchFields & {
       readonly status: "seeking"
+      /** The way the reader stepped to this match: where the seek goes on when the match turns out not to be there. */
+      readonly step: 1 | -1
       readonly retries: number
       readonly unfolded: boolean
       /** The scroll offset that centres the match where the last probe found it. */
@@ -53,6 +67,12 @@ export type TimelineSearchEvent =
     }
   | {
       readonly type: "matches.synced"
+      readonly sessionID: string | undefined
+      readonly matches: readonly TimelineSearchMatch[]
+    }
+  /** A part was read, and shows other hits than Find had counted in its source. The transcript is the same. */
+  | {
+      readonly type: "matches.read"
       readonly sessionID: string | undefined
       readonly matches: readonly TimelineSearchMatch[]
     }
@@ -171,7 +191,7 @@ export function transitionTimelineSearch(
   if (event.type === "move") {
     if (event.delta === 0 || state.matches.length === 0) return unchanged(state)
 
-    return seek(state, mod(state.activeIndex + event.delta, state.matches.length))
+    return seek(state, mod(state.activeIndex + event.delta, state.matches.length), event.delta < 0 ? -1 : 1)
   }
 
   if (event.type === "session.changed") {
@@ -183,7 +203,8 @@ export function transitionTimelineSearch(
     )
   }
 
-  if (event.type === "matches.synced") return matchesSynced(state, event.sessionID, event.matches)
+  if (event.type === "matches.synced" || event.type === "matches.read")
+    return matchesSynced(state, event.sessionID, event.matches, event.type === "matches.read")
 
   // The view is the reader's from here: the seek ends, and so does the reveal it started, which the timeline would
   // otherwise go on writing. The match, its highlight and the count stay.
@@ -278,43 +299,79 @@ export function sameTimelineSearchView(a: TimelineSearchView, b: TimelineSearchV
 }
 
 // User and assistant text in timeline order. A match reveals the turn that its user or shell message starts.
-export function extractSearchableParts(messages: readonly SessionMessageInfo[]) {
-  const parts: SearchablePart[] = []
+export function searchableSources(messages: readonly SessionMessageInfo[]) {
+  const sources: SearchableSource[] = []
   let revealID = ""
 
   for (const message of messages) {
     if (message.type === "user" || message.type === "shell") revealID = message.id
 
     if (message.type === "user") {
-      if (message.text) parts.push({ revealID, partID: `${message.id}:text:0`, lower: message.text.toLowerCase() })
+      if (message.text)
+        sources.push({ revealID, partID: `${message.id}:text:0`, text: message.text, markdown: false, settled: true })
 
       continue
     }
 
     if (message.type !== "assistant") continue
+    const settled = message.time.completed !== undefined
 
     for (const entry of Timeline.contentEntries(message)) {
       if (entry.content.type !== "text" || !entry.content.text) continue
-      parts.push({ revealID, partID: entry.id, lower: entry.content.text.toLowerCase() })
+      sources.push({ revealID, partID: entry.id, text: entry.content.text, markdown: true, settled })
     }
   }
 
-  return parts
+  return sources
 }
 
 // `query` is already normalized.
 export function findMatchesInParts(parts: readonly SearchablePart[], query: string) {
   if (!query) return EMPTY_MATCHES
 
-  return parts.flatMap((part) => {
-    const found: TimelineSearchMatch[] = []
+  return parts.flatMap((part) => matchesOf(part, countHits(part.lower, query)))
+}
 
-    for (let at = part.lower.indexOf(query); at !== -1; at = part.lower.indexOf(query, at + query.length)) {
-      found.push({ revealID: part.revealID, partID: part.partID, occurrence: found.length })
+/**
+ * `findMatchesInParts` that counts a part once for a query. A part whose text is read again is a new object, so a
+ * reading that changes one part counts that part alone and not the whole transcript again.
+ */
+export function createMatchFinder() {
+  const counted = { query: "", counts: new WeakMap<SearchablePart, number>() }
+
+  return (parts: readonly SearchablePart[], query: string) => {
+    if (!query) return EMPTY_MATCHES
+
+    if (query !== counted.query) {
+      counted.query = query
+      counted.counts = new WeakMap()
     }
 
-    return found
-  })
+    return parts.flatMap((part) => {
+      const known = counted.counts.get(part)
+
+      if (known !== undefined) return matchesOf(part, known)
+      const count = countHits(part.lower, query)
+      counted.counts.set(part, count)
+
+      return matchesOf(part, count)
+    })
+  }
+}
+
+function countHits(lower: string, query: string) {
+  let count = 0
+
+  for (let at = lower.indexOf(query); at !== -1; at = lower.indexOf(query, at + query.length)) count += 1
+
+  return count
+}
+
+function matchesOf(part: SearchablePart, count: number) {
+  return Array.from(
+    { length: count },
+    (_, occurrence): TimelineSearchMatch => ({ revealID: part.revealID, partID: part.partID, occurrence }),
+  )
 }
 
 function queryChanged(state: Active, value: string, matches: readonly TimelineSearchMatch[]): TimelineSearchTransition {
@@ -328,7 +385,7 @@ function queryChanged(state: Active, value: string, matches: readonly TimelineSe
     return changed(settled({ ...state, value, query, matches: EMPTY_MATCHES, activeIndex: 0 }), cancelSeek(state))
   }
 
-  return seek({ ...state, value, query, matches }, 0)
+  return seek({ ...state, value, query, matches }, 0, 1)
 }
 
 // Keeps the active match by identity, so a list that shrinks and grows again never resurrects an old index.
@@ -336,6 +393,7 @@ function matchesSynced(
   state: Active,
   sessionID: string | undefined,
   matches: readonly TimelineSearchMatch[],
+  read: boolean,
 ): TimelineSearchTransition {
   if (sessionID !== state.sessionID || !state.query || sameMatches(state.matches, matches)) return unchanged(state)
   const active = state.matches[state.activeIndex]
@@ -343,14 +401,36 @@ function matchesSynced(
 
   if (state.status === "seeking" && kept >= 0) return changed({ ...state, matches, activeIndex: kept })
 
+  // The match Find is on its way to is not there: its part was read, and shows fewer hits than Find had counted in
+  // its source, such as a marker or the destination behind a link's label. What the reader cannot see is not a hit,
+  // so the seek goes on to the next one the way the reader stepped. It ran out its frames there before, with the
+  // count on a hit that was nowhere on screen. A match whose message left the transcript ends the seek, as before.
+  if (read && state.status === "seeking" && matches.length > 0)
+    return seek({ ...state, matches }, successor(state, matches), state.step)
+
   return changed(settled({ ...state, matches, activeIndex: Math.max(kept, 0) }), cancelSeek(state))
 }
 
-function seek(fields: SearchFields, activeIndex: number): TimelineSearchTransition {
+// Where the match after the active one stands in the new list, the way the reader stepped: the first of the old
+// matches beyond it that is still there. Past the last one, Find wraps as a step does.
+function successor(state: Seeking, matches: readonly TimelineSearchMatch[]) {
+  const places = new Map(matches.map((match, index) => [`${match.partID}\n${match.occurrence}`, index]))
+
+  for (let index = state.activeIndex + state.step; index >= 0 && index < state.matches.length; index += state.step) {
+    const place = places.get(`${state.matches[index].partID}\n${state.matches[index].occurrence}`)
+
+    if (place !== undefined) return place
+  }
+
+  return state.step > 0 ? 0 : matches.length - 1
+}
+
+function seek(fields: SearchFields, activeIndex: number, step: 1 | -1): TimelineSearchTransition {
   const match = fields.matches[activeIndex]
 
   const next: Seeking = {
     status: "seeking",
+    step,
     sessionID: fields.sessionID,
     value: fields.value,
     query: fields.query,

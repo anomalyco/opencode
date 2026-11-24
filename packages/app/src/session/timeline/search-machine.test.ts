@@ -2,9 +2,9 @@ import { expect, test } from "bun:test"
 import type { SessionMessageInfo } from "@opencode/client/promise"
 import {
   createTimelineSearchState,
-  extractSearchableParts,
   findMatchesInParts,
   normalizeSearchQuery,
+  searchableSources,
   TIMELINE_SEARCH_SEEK_LIMIT,
   timelineSearchView,
   transitionTimelineSearch,
@@ -13,6 +13,7 @@ import {
   type TimelineSearchState,
   type TimelineSearchTransition,
 } from "./search-machine"
+import { createSearchText } from "./search-text"
 
 const user = (id: string, text: string): SessionMessageInfo => ({ id, type: "user", time: { created: 1 }, text })
 
@@ -41,9 +42,12 @@ const history = [
   assistant("msg_a2", "One prompt"),
 ]
 
-// Builds matches the way the driver does: lowercased parts, then the normalized query.
+// Builds matches the way the driver does before a part is read: its text lowercased, then the normalized query.
 const find = (messages: SessionMessageInfo[], value: string) =>
-  findMatchesInParts(extractSearchableParts(messages), normalizeSearchQuery(value))
+  findMatchesInParts(
+    createSearchText({ read: () => new Promise(() => {}), changed: () => {} }).parts(searchableSources(messages)),
+    normalizeSearchQuery(value),
+  )
 
 const typed = (value: string, messages = history): TimelineSearchEvent => ({
   type: "query.changed",
@@ -338,6 +342,50 @@ test.each([
   const late = transitionTimelineSearch(result.state, ready(2, 900))
   expect(late.state).toBe(result.state)
   expect(late.effects).toEqual([])
+})
+
+// Find counted a part's hits in its Markdown source. A step to one that the part does not show, such as a marker or
+// the destination behind a link's label, ran the seek out with nothing on screen: "3/6" and no active match.
+test.each([
+  { name: "forward to the next hit that is shown", steps: [1, 1], lands: 2, shown: "**c**" },
+  { name: "backward to the hit before it", steps: [-1, -1, -1], lands: 1, shown: "**a**" },
+])("a seek goes on $name when the part it was going to is read and shows no hit", ({ steps, lands }) => {
+  const messages = [user("msg_u1", "**a**"), assistant("msg_a1", "**b**"), user("msg_u2", "**c**")]
+  const text = createSearchText({ read: () => new Promise(() => {}), changed: () => {} })
+  const matches = () => findMatchesInParts(text.parts(searchableSources(messages)), "**")
+
+  const start = replay(
+    steps.map((delta): TimelineSearchEvent => ({ type: "move", delta })),
+    opened({ type: "query.changed", value: "**", matches: matches() }).state,
+  )
+  expect(timelineSearchView(start.state)).toMatchObject({ count: 6, activePartID: "msg_a1:text:0" })
+
+  // The reply has rendered: its bold text shows no asterisk.
+  text.rendered("msg_a1:text:0", "b")
+  const read = transitionTimelineSearch(start.state, { type: "matches.read", sessionID: "ses_1", matches: matches() })
+  expect(read.state).toMatchObject({ status: "seeking", activeIndex: lands, attempt: seeking(start.state).attempt + 1 })
+  expect(timelineSearchView(read.state)).toMatchObject({ count: 4, activeDisplay: lands + 1 })
+  expect(read.effects.map((effect) => effect.type)).toEqual(["reveal", "seek.schedule"])
+
+  // Find at rest keeps its place in the list and does not scroll.
+  const rested = replay(landed(seeking(start.state).attempt, 300), start.state)
+  const late = transitionTimelineSearch(rested.state, { type: "matches.read", sessionID: "ses_1", matches: matches() })
+  expect(late.state).toMatchObject({ status: "open", activeIndex: 0 })
+  expect(late.effects).toEqual([])
+})
+
+test("a seek that goes on from the last hit wraps to the first", () => {
+  const messages = [user("msg_u1", "**a**"), assistant("msg_a1", "**b**")]
+  const text = createSearchText({ read: () => new Promise(() => {}), changed: () => {} })
+  const matches = () => findMatchesInParts(text.parts(searchableSources(messages)), "**")
+
+  const start = replay(
+    [{ type: "move", delta: 2 }],
+    opened({ type: "query.changed", value: "**", matches: matches() }).state,
+  )
+  text.rendered("msg_a1:text:0", "b")
+  const read = transitionTimelineSearch(start.state, { type: "matches.read", sessionID: "ses_1", matches: matches() })
+  expect(read.state).toMatchObject({ status: "seeking", activeIndex: 0 })
 })
 
 test("a switched session adopts its own matches and ignores the old session's sync", () => {

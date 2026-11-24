@@ -27,6 +27,7 @@ type Resolver =
   | (Settle<MarkdownHTML> & { readonly kind: "parse" })
   | (Settle<Projection> & { readonly kind: "project" })
   | (Settle<MarkdownWorkerState> & { readonly kind: "highlight" })
+  | (Settle<readonly string[]> & { readonly kind: "text" })
 
 /** The part of a `Worker` the client uses. */
 export type MarkdownWorkerPort = {
@@ -132,6 +133,8 @@ export function createMarkdownWorkerClient(spawn: () => MarkdownWorkerPort) {
     if (effect.type === "resolve-project" && resolver?.kind === "project") return resolver.resolve(effect.projection)
 
     if (effect.type === "resolve-highlight" && resolver?.kind === "highlight") return resolver.resolve(effect.value)
+
+    if (effect.type === "resolve-text" && resolver?.kind === "text") return resolver.resolve(effect.texts)
   }
 
   const start = (attempt: number) => {
@@ -218,6 +221,13 @@ export function createMarkdownWorkerClient(spawn: () => MarkdownWorkerPort) {
     disposeStreamingCode(key: string) {
       dispatch({ type: "highlight.disposed", key })
     },
+
+    /** The text each Markdown source shows once rendered, read off the main thread. Requests run in arrival order. */
+    readMarkdownText(sources: readonly string[]) {
+      return new Promise<readonly string[]>((resolve, reject) =>
+        request({ type: "text.requested", sources }, { kind: "text", resolve, reject }),
+      )
+    },
   }
 }
 
@@ -248,3 +258,5 @@ export const disposeMarkdownProjection = client.disposeMarkdownProjection
 export const highlightStreamingCode = client.highlightStreamingCode
 
 export const disposeStreamingCode = client.disposeStreamingCode
+
+export const readMarkdownText = client.readMarkdownText
