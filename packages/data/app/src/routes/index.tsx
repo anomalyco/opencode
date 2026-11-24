@@ -370,6 +370,7 @@ function SectionTitle(props: {
   action?: JSX.Element
   share?: (locale: Locale) => ShareDraft | undefined
 }) {
+  const i18n = useI18n()
   const share = props.share
   return (
     <SectionHeading
@@ -377,7 +378,7 @@ function SectionTitle(props: {
       title={props.title}
       description={props.description}
       action={props.action}
-      share={share && <ShareButton label={`Share ${props.title}`} card={share} />}
+      share={share && <ShareButton label={i18n.t("share.openSection", { title: props.title })} card={share} />}
     />
   )
 }
@@ -447,7 +448,7 @@ function TopModelsSection(props: {
         action={<PeriodToggle value={chartPeriod()} onChange={setChartPeriod} label={i18n.t("nav.topModels")} />}
         share={
           <ShareButton
-            label={`Share ${i18n.t("nav.topModels")}`}
+            label={i18n.t("share.openSection", { title: i18n.t("nav.topModels") })}
             card={(locale) =>
               topModelsCard(locale, props.data[chartPeriod()], leaderboard(), {
                 period: chartPeriod(),
@@ -494,7 +495,7 @@ function TopModelsSection(props: {
           </button>
         </div>
         <ShareButton
-          label={`Share ${i18n.t("nav.leaderboard")}`}
+          label={i18n.t("share.openSection", { title: i18n.t("nav.leaderboard") })}
           card={(locale) => leaderboardCard(locale, leaderboard(), period(), props.catalogLabs)}
         />
       </div>

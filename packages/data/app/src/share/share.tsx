@@ -13,9 +13,11 @@ import {
   type ShareTiming,
 } from "./card"
 import { embedSnippet, embedUrl, packCard } from "./embed"
+import { useI18n } from "../context/i18n"
 import { useLanguage } from "../context/language"
+import { translate } from "../i18n"
 import { dataFlag } from "../lib/flag"
-import type { Locale } from "../lib/language"
+import { route, type Locale } from "../lib/language"
 import { cardLogos, loadShareLogos } from "./logos"
 import { cycleShareOption, designMode, designOnly, setShareOption, shareControls, shareOptions } from "./design"
 import { shareTracks, type ShareTrack } from "./music"
@@ -59,6 +61,7 @@ function step(direction: 1 | -1) {
 export function ShareButton(props: { card: (locale: Locale) => ShareDraft | undefined; label: string }) {
   if (!dataFlag("share")) return null
   const language = useLanguage()
+  const i18n = useI18n()
   let element: HTMLButtonElement | undefined
   onMount(() => {
     if (!element) return
@@ -88,22 +91,22 @@ export function ShareButton(props: { card: (locale: Locale) => ShareDraft | unde
           <path d="M8 1.75v8.5M5.25 4.5 8 1.75l2.75 2.75M2.75 9v4.25h10.5V9" />
         </g>
       </svg>
-      <span>Share</span>
+      <span>{i18n.t("share.open")}</span>
     </button>
   )
 }
 
 const sizes = [
-  { value: "4:5", label: "Feed" },
-  { value: "1:1", label: "Square" },
-  { value: "9:16", label: "Story" },
-  { value: "16:9", label: "Wide" },
+  { value: "4:5", label: "share.size.feed" },
+  { value: "1:1", label: "share.size.square" },
+  { value: "9:16", label: "share.size.story" },
+  { value: "16:9", label: "share.size.wide" },
 ] as const
 
 const layouts = [
-  { value: "headline", label: "Headline" },
-  { value: "number", label: "Number" },
-  { value: "chart", label: "Title" },
+  { value: "headline", label: "share.layout.headline" },
+  { value: "number", label: "share.layout.number" },
+  { value: "chart", label: "share.layout.title" },
 ] as const
 
 /**
@@ -112,6 +115,8 @@ const layouts = [
  * the preview (card.ts).
  */
 export function ShareDialog(props: { updatedAt: string | null; url: string }) {
+  const i18n = useI18n()
+  const language = useLanguage()
   let dialog: HTMLDialogElement | undefined
   let preview: HTMLCanvasElement | undefined
   // The card's width on screen, for the embed code under it to match.
@@ -199,7 +204,9 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   const weekly = () => request()?.view?.period === "weekly"
   const dateLabel = () => {
     const index = day()
-    return index === undefined ? shareRangeLabel(starts(), weekly()) : shareDayLabel(starts()[index] ?? "", weekly())
+    return index === undefined
+      ? shareRangeLabel(language.locale(), starts(), weekly())
+      : shareDayLabel(language.locale(), starts()[index] ?? "", weekly())
   }
   const card = createMemo(() => {
     const value = request()
@@ -252,7 +259,12 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     const value = card()
     const opts = options()
     if (format() !== "embed" || !value) return
-    const url = embedUrl(new URL(import.meta.env.BASE_URL, location.origin).toString(), value, opts)
+    // In the card's language, which the embed page takes from its path.
+    const url = embedUrl(
+      new URL(route(value.locale, import.meta.env.BASE_URL), location.origin).toString(),
+      value,
+      opts,
+    )
     const done = (address: URL) => setSnippet(embedSnippet(address.toString(), value.title, opts.size))
     if (!fixed()) return done(url)
     let current = true
@@ -519,7 +531,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
 
   const file = async (kind: "image" | "video") => {
     const value = card()
-    if (!value) throw new Error("Nothing to share")
+    if (!value) throw new Error(i18n.t("share.error.empty"))
     await loadShareLogos(cardLogos(value.chart))
     if (kind === "image") return renderImage(value, options())
     const key = JSON.stringify([value, options(), music()?.id])
@@ -553,7 +565,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       if (message) setNotice(message)
     } catch (error) {
       if (error instanceof DOMException && error.name === "AbortError") return
-      setNotice(error instanceof Error ? error.message : "Something went wrong")
+      setNotice(error instanceof Error ? error.message : i18n.t("share.error.generic"))
     }
   }
 
@@ -565,7 +577,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       const kind = format()
       // The button says Copied for a moment instead of a notice.
       if (kind === "embed") {
-        await copyText(snippet(), dialog)
+        await copyText(snippet(), dialog, i18n.t("share.error.copy"))
         setCopied(true)
         setTimeout(() => setCopied(false), 1600)
         return undefined
@@ -579,7 +591,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
         return undefined
       }
       download(shared)
-      return kind === "image" ? "PNG saved" : "Video saved"
+      return i18n.t(kind === "image" ? "share.saved.image" : "share.saved.video")
     })
   }
 
@@ -595,7 +607,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     <dialog
       ref={dialog}
       data-component="share-editor"
-      aria-label="Share"
+      aria-label={i18n.t("share.open")}
       onKeyDown={(event) => {
         if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "z") return
         event.preventDefault()
@@ -639,9 +651,15 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
               }}
               data-slot="editor-bar"
               role="toolbar"
-              aria-label={`Share ${value().title}`}
+              aria-label={i18n.t("share.openSection", { title: value().title })}
             >
-              <button type="button" data-slot="icon-button" aria-label="Close" data-tooltip="Close" onClick={close}>
+              <button
+                type="button"
+                data-slot="icon-button"
+                aria-label={i18n.t("share.close")}
+                data-tooltip={i18n.t("share.close")}
+                onClick={close}
+              >
                 <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
                   <path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" />
                 </svg>
@@ -662,7 +680,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     stroke-width="1.5"
                   />
                 </svg>
-                <span>Settings</span>
+                <span>{i18n.t("share.settings")}</span>
               </button>
               <Show when={sheet()}>
                 <div data-slot="sheet-backdrop" aria-hidden="true" onClick={() => setSheet(false)} />
@@ -673,23 +691,23 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 data-slot="bar-settings"
                 data-open={sheet() ? "" : undefined}
                 role="group"
-                aria-label="Settings"
+                aria-label={i18n.t("share.settings")}
               >
                 <div data-slot="sheet-head">
-                  <strong>Settings</strong>
+                  <strong>{i18n.t("share.settings")}</strong>
                   <button type="button" data-slot="sheet-done" onClick={() => setSheet(false)}>
-                    Done
+                    {i18n.t("share.done")}
                   </button>
                 </div>
                 <Dropdown
                   id="type"
-                  label="Type"
+                  label={i18n.t("share.type")}
                   open={menu()}
                   onOpen={setMenu}
                   value={format()}
                   options={(["video", "image", "embed"] as const).map((item) => ({
                     value: item,
-                    label: { video: "Video", image: "Image", embed: "Embed" }[item],
+                    label: i18n.t(`share.type.${item}`),
                     icon: <TypeGlyph format={item} />,
                   }))}
                   onSelect={(item) => {
@@ -699,13 +717,13 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 />
                 <Show when={starts().length > 1}>
                   <div data-slot="date-tool">
-                    <span data-slot="sheet-label">Date</span>
+                    <span data-slot="sheet-label">{i18n.t("share.date")}</span>
                     <button
                       type="button"
                       data-slot="dropdown-trigger"
-                      aria-label={`Date: ${dateLabel()}`}
+                      aria-label={i18n.t("share.option", { label: i18n.t("share.date"), value: dateLabel() })}
                       aria-haspopup="dialog"
-                      data-tooltip="Date"
+                      data-tooltip={i18n.t("share.date")}
                       aria-expanded={menu() === "date" ? "true" : "false"}
                       onClick={() => setMenu(menu() === "date" ? undefined : "date")}
                     >
@@ -738,13 +756,13 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     id="lead"
                     roll={rolls()}
                     rollDelay={45}
-                    label="Lead with"
+                    label={i18n.t("share.lead")}
                     open={menu()}
                     onOpen={setMenu}
                     value={lead()}
                     options={[
-                      { value: "top" as const, label: "Top model", icon: <LeadGlyph lead="top" /> },
-                      { value: "total" as const, label: "Total", icon: <LeadGlyph lead="total" /> },
+                      { value: "top" as const, label: i18n.t("share.lead.top"), icon: <LeadGlyph lead="top" /> },
+                      { value: "total" as const, label: i18n.t("share.lead.total"), icon: <LeadGlyph lead="total" /> },
                     ]}
                     onSelect={setLead}
                   />
@@ -752,7 +770,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 <Show when={raceable()}>
                   <Dropdown
                     id="chart"
-                    label="Chart"
+                    label={i18n.t("share.chart")}
                     roll={rolls()}
                     rollDelay={90}
                     open={menu()}
@@ -760,7 +778,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     value={style()}
                     options={chartStyles().map((item) => ({
                       value: item,
-                      label: { bars: "Bars", race: "Race", list: "List", dots: "Dots" }[item],
+                      label: i18n.t(`share.chart.${item}`),
                       icon: <ChartGlyph style={item} />,
                     }))}
                     onSelect={setChartStyle}
@@ -770,13 +788,13 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   id="layout"
                   roll={rolls()}
                   rollDelay={135}
-                  label="Layout"
+                  label={i18n.t("share.layout")}
                   open={menu()}
                   onOpen={setMenu}
                   value={options().layout}
                   options={layouts.map((item) => ({
                     value: item.value,
-                    label: item.label,
+                    label: i18n.t(item.label),
                     icon: <LayoutGlyph layout={item.value} />,
                   }))}
                   onSelect={(item) => setShareOption("layout", item)}
@@ -785,7 +803,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   id="size"
                   roll={rolls()}
                   rollDelay={180}
-                  label="Size"
+                  label={i18n.t("share.size")}
                   open={menu()}
                   onOpen={setMenu}
                   value={options().size}
@@ -793,7 +811,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   options={sizes.map((item) => ({
                     value: item.value,
                     label: item.value,
-                    detail: item.label,
+                    detail: i18n.t(item.label),
                     icon: <AspectGlyph size={item.value} />,
                   }))}
                   onSelect={(item) => setShareOption("size", item)}
@@ -802,13 +820,17 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   id="style"
                   roll={rolls()}
                   rollDelay={270}
-                  label="Style"
+                  label={i18n.t("share.style")}
                   open={menu()}
                   onOpen={setMenu}
                   value={options().theme}
                   options={(["dark", "light", "leader"] as const).map((item) => ({
                     value: item,
-                    label: { dark: "Dark", light: "Light", leader: "Top" }[item],
+                    label: i18n.t(
+                      ({ dark: "share.style.dark", light: "share.style.light", leader: "share.style.top" } as const)[
+                        item
+                      ],
+                    ),
                     icon: (
                       <i
                         data-slot="swatch"
@@ -824,19 +846,19 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     id="data"
                     roll={rolls()}
                     rollDelay={315}
-                    label="Data"
+                    label={i18n.t("share.data")}
                     open={menu()}
                     onOpen={setMenu}
                     value={fixed() ? "fixed" : "live"}
                     options={[
                       {
                         value: "live" as const,
-                        label: "Live data",
+                        label: i18n.t("share.data.live"),
                         icon: <DataGlyph fixed={false} />,
                       },
                       {
                         value: "fixed" as const,
-                        label: "Fixed data",
+                        label: i18n.t("share.data.fixed"),
                         icon: <DataGlyph fixed />,
                       },
                     ]}
@@ -844,18 +866,18 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   />
                 </Show>
                 <Show when={format() === "video"}>
-                  <div data-slot="music-tool" role="group" aria-label="Music">
-                    <span data-slot="sheet-label">Music</span>
+                  <div data-slot="music-tool" role="group" aria-label={i18n.t("share.music")}>
+                    <span data-slot="sheet-label">{i18n.t("share.music")}</span>
                     <Dropdown
                       id="music"
                       roll={rolls()}
                       rollDelay={360}
-                      label="Music"
+                      label={i18n.t("share.music")}
                       open={menu()}
                       onOpen={setMenu}
                       value={track()}
                       options={[
-                        { value: "none", label: "No music", icon: <MusicCover /> },
+                        { value: "none", label: i18n.t("share.music.none"), icon: <MusicCover /> },
                         ...shareTracks.map((item) => ({
                           value: item.id,
                           label: item.name,
@@ -885,9 +907,9 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   <button
                     type="button"
                     data-slot="icon-button"
-                    aria-label="Mute music"
+                    aria-label={i18n.t("share.music.mute")}
                     aria-pressed={muted()}
-                    data-tooltip={muted() ? "Unmute" : "Mute"}
+                    data-tooltip={i18n.t(muted() ? "share.unmute" : "share.mute")}
                     onClick={() => {
                       setMuted(!muted())
                       setPlaying(true)
@@ -919,8 +941,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 <button
                   type="button"
                   data-slot="icon-button"
-                  aria-label="Shuffle"
-                  data-tooltip="Shuffle"
+                  aria-label={i18n.t("share.shuffle")}
+                  data-tooltip={i18n.t("share.shuffle")}
                   onClick={() => {
                     shuffle()
                     roll()
@@ -945,24 +967,32 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   aria-live="polite"
                   aria-label={
                     rendering() !== undefined
-                      ? "Cancel export"
-                      : { image: "Export image", video: "Export video", embed: "Copy embed code" }[format()]
+                      ? i18n.t("share.export.cancel")
+                      : i18n.t(
+                          (
+                            {
+                              image: "share.export.image",
+                              video: "share.export.video",
+                              embed: "share.copyEmbed",
+                            } as const
+                          )[format()],
+                        )
                   }
                   onClick={exportFile}
                 >
                   {/* While it renders: the percentage, turning to Cancel under the pointer or keyboard focus. */}
                   <Show when={rendering() !== undefined}>
-                    <span data-slot="button-cancel">Cancel</span>
+                    <span data-slot="button-cancel">{i18n.t("share.cancel")}</span>
                   </Show>
                   <Show when={rendering() !== undefined ? "rendering" : copied() ? "copied" : "export"} keyed>
                     <span data-slot="button-label">
                       {rendering() !== undefined
                         ? `${Math.round((rendering() ?? 0) * 100)}%`
                         : copied()
-                          ? "Copied"
+                          ? i18n.t("share.copied")
                           : format() === "embed"
-                            ? "Copy embed code"
-                            : "Export"}
+                            ? i18n.t("share.copyEmbed")
+                            : i18n.t("share.export")}
                     </span>
                   </Show>
                 </button>
@@ -1033,7 +1063,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     data-slot="playback"
                     role="slider"
                     tabIndex={0}
-                    aria-label="Video position"
+                    aria-label={i18n.t("share.position")}
                     aria-valuemin={0}
                     aria-valuemax={100}
                     aria-valuenow={0}
@@ -1072,13 +1102,13 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                   {/* Copying shows here as well as on the button, where the press was. */}
                   <Show when={copied()}>
                     <span data-slot="embed-copied" aria-hidden="true">
-                      Copied
+                      {i18n.t("share.copied")}
                     </span>
                   </Show>
                   <button
                     type="button"
                     data-slot="embed-code"
-                    aria-label="Copy embed code"
+                    aria-label={i18n.t("share.copyEmbed")}
                     tabIndex={format() === "embed" ? 0 : -1}
                     onClick={exportFile}
                   >
@@ -1094,8 +1124,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 <button
                   type="button"
                   data-slot="icon-button"
-                  aria-label="Previous"
-                  data-tooltip="Previous"
+                  aria-label={i18n.t("share.previous")}
+                  data-tooltip={i18n.t("share.previous")}
                   onClick={() => step(-1)}
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
@@ -1108,8 +1138,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 <button
                   type="button"
                   data-slot="icon-button"
-                  aria-label="Next"
-                  data-tooltip="Next"
+                  aria-label={i18n.t("share.next")}
+                  data-tooltip={i18n.t("share.next")}
                   onClick={() => step(1)}
                 >
                   <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
@@ -1127,7 +1157,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
 
 // Copies `text`: the Clipboard API, or where a browser refuses it (no focus, no permission) a selected hidden field
 // inside the editor and the copy command, which the top-layer dialog lets through.
-async function copyText(text: string, host: HTMLElement | undefined) {
+async function copyText(text: string, host: HTMLElement | undefined, failure: string) {
   const written = await navigator.clipboard?.writeText(text).then(
     () => true,
     () => false,
@@ -1142,7 +1172,7 @@ async function copyText(text: string, host: HTMLElement | undefined) {
   field.select()
   const copied = document.execCommand("copy")
   field.remove()
-  if (!copied) throw new Error("Couldn't copy the embed code")
+  if (!copied) throw new Error(failure)
 }
 
 // The embed code split for highlighting: the tag's name, each attribute's name and quoted value, and the brackets.
@@ -1214,6 +1244,7 @@ function Dropdown<T extends string>(props: {
   trigger?: JSX.Element
   onSelect: (value: T) => void
 }) {
+  const i18n = useI18n()
   const show = () => props.show ?? "icon"
   // The reel: random choices, then the value, scrolled up through the button like an odometer's wheel.
   const [reel, setReel] = createSignal<T[]>()
@@ -1283,7 +1314,7 @@ function Dropdown<T extends string>(props: {
       <button
         type="button"
         data-slot="dropdown-trigger"
-        aria-label={`${props.label}: ${current()?.label ?? ""}`}
+        aria-label={i18n.t("share.option", { label: props.label, value: current()?.label ?? "" })}
         aria-haspopup="listbox"
         data-tooltip={props.label}
         aria-expanded={open() ? "true" : "false"}
@@ -1331,8 +1362,8 @@ function Dropdown<T extends string>(props: {
           )}
         </Show>
         <Show when={current()?.explicit}>
-          <em data-slot="explicit" title="Explicit lyrics">
-            {short() ? "E" : "Explicit"}
+          <em data-slot="explicit" title={i18n.t("share.explicit.title")}>
+            {i18n.t(short() ? "share.explicit.short" : "share.explicit")}
           </em>
         </Show>
         <Chevron />
@@ -1363,8 +1394,8 @@ function Dropdown<T extends string>(props: {
                   </Show>
                 </span>
                 <Show when={item.explicit}>
-                  <em data-slot="explicit" title="Explicit lyrics">
-                    Explicit
+                  <em data-slot="explicit" title={i18n.t("share.explicit.title")}>
+                    {i18n.t("share.explicit")}
                   </em>
                 </Show>
               </button>
@@ -1594,10 +1625,10 @@ async function renderImage(card: ShareCard, options: ShareOptions) {
   canvas.width = width
   canvas.height = height
   const ctx = canvas.getContext("2d")
-  if (!ctx) throw new Error("Canvas is not available")
+  if (!ctx) throw new Error(translate(card.locale, "share.error.canvas"))
   drawShareCard(ctx, card, options, Infinity)
   const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/png"))
-  if (!blob) throw new Error("Could not make the image")
+  if (!blob) throw new Error(translate(card.locale, "share.error.image"))
   return new File([blob], fileName(card, "png"), { type: "image/png" })
 }
 
@@ -1618,13 +1649,13 @@ async function renderVideo(
     ? ["video/mp4;codecs=avc1.640028,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm"]
     : ["video/mp4;codecs=avc1.640028", "video/mp4", "video/webm;codecs=vp9", "video/webm"]
   const type = types.find((item) => MediaRecorder.isTypeSupported(item))
-  if (!type) throw new Error("This browser can't record video")
+  if (!type) throw new Error(translate(card.locale, "share.error.video"))
   const canvas = document.createElement("canvas")
   const [width, height] = shareSizes[options.size]
   canvas.width = width
   canvas.height = height
   const ctx = canvas.getContext("2d")
-  if (!ctx) throw new Error("Canvas is not available")
+  if (!ctx) throw new Error(translate(card.locale, "share.error.canvas"))
   drawShareCard(ctx, card, options, 0, timing)
   const length = shareDuration(card, options, timing)
   const sound = context && track ? await soundtrack(context, track.url, length) : undefined

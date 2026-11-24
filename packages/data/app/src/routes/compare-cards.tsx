@@ -1,6 +1,7 @@
 import { ProviderIcon } from "@opencode/ui/provider-icon"
 import { For, Show } from "solid-js"
 import { providerIconId } from "../lib/provider-icon"
+import { useI18n } from "../context/i18n"
 import type { Locale } from "../lib/language"
 import { ShareButton, type ShareDraft } from "../share/share"
 import { catalogSlug, formatCatalogLabName, type ModelCatalogEntry } from "./model-catalog"
@@ -62,6 +63,7 @@ export function ComparisonCardsSection(props: {
   // The home page's comparisons share the top pair (share/sections.ts).
   share?: (locale: Locale) => ShareDraft | undefined
 }) {
+  const i18n = useI18n()
   const featured = () => props.variant === "featured"
   const pairs = () => (featured() ? props.pairs.slice(0, 4) : props.pairs)
 
@@ -80,7 +82,10 @@ export function ComparisonCardsSection(props: {
           <Show when={props.share}>
             {(share) => (
               <div data-slot="section-actions">
-                <ShareButton label={`Share ${props.title ?? "Model Comparisons"}`} card={share()} />
+                <ShareButton
+                  label={i18n.t("share.openSection", { title: props.title ?? "Model Comparisons" })}
+                  card={share()}
+                />
               </div>
             )}
           </Show>

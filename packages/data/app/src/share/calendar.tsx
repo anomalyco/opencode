@@ -1,7 +1,10 @@
 import { createMemo, createSignal, For, onCleanup, onMount } from "solid-js"
+import { useI18n } from "../context/i18n"
+import { useLanguage } from "../context/language"
+import { translate } from "../i18n"
+import { tag, type Locale } from "../lib/language"
 
 const day = 86_400_000
-const weekdays = ["M", "T", "W", "T", "F", "S", "S"]
 
 /**
  * The editor's date picker: a month of days over the chart's columns, opening above its button. A day the chart has
@@ -15,6 +18,13 @@ export function ShareCalendar(props: {
   onPick: (day: number | undefined) => void
   onClose: () => void
 }) {
+  const i18n = useI18n()
+  const language = useLanguage()
+  const format = (options: Intl.DateTimeFormatOptions) =>
+    new Intl.DateTimeFormat(tag(language.locale()), { ...options, timeZone: "UTC" })
+  // Monday first, as the data's weeks start; January 5, 2026 was a Monday.
+  const weekdays = () =>
+    Array.from({ length: 7 }, (_, index) => format({ weekday: "narrow" }).format(Date.UTC(2026, 0, 5 + index)))
   let element: HTMLDivElement | undefined
   const first = () => time(props.starts[0] ?? "")
   const last = () => time(props.starts.at(-1) ?? "") + (props.weekly ? 6 * day : 0)
@@ -53,11 +63,11 @@ export function ShareCalendar(props: {
   })
 
   return (
-    <div ref={element} data-component="share-calendar" role="dialog" aria-label="Choose a date">
+    <div ref={element} data-component="share-calendar" role="dialog" aria-label={i18n.t("share.calendar.label")}>
       <div data-slot="calendar-head">
         <button
           type="button"
-          aria-label="Previous month"
+          aria-label={i18n.t("share.calendar.previous")}
           disabled={month() <= monthOf(first())}
           onClick={() => step(-1)}
         >
@@ -65,17 +75,20 @@ export function ShareCalendar(props: {
             <path d="M10 3 5 8l5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
           </svg>
         </button>
-        <span aria-live="polite">
-          {new Intl.DateTimeFormat("en", { month: "long", year: "numeric", timeZone: "UTC" }).format(month())}
-        </span>
-        <button type="button" aria-label="Next month" disabled={month() >= monthOf(last())} onClick={() => step(1)}>
+        <span aria-live="polite">{format({ month: "long", year: "numeric" }).format(month())}</span>
+        <button
+          type="button"
+          aria-label={i18n.t("share.calendar.next")}
+          disabled={month() >= monthOf(last())}
+          onClick={() => step(1)}
+        >
           <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
             <path d="m6 3 5 5-5 5" fill="none" stroke="currentColor" stroke-width="1.5" />
           </svg>
         </button>
       </div>
       <div data-slot="calendar-grid" role="grid">
-        <For each={weekdays}>{(name) => <span data-slot="weekday">{name}</span>}</For>
+        <For each={weekdays()}>{(name) => <span data-slot="weekday">{name}</span>}</For>
         <For each={cells()}>
           {(cell) => (
             <button
@@ -84,7 +97,7 @@ export function ShareCalendar(props: {
               data-outside={cell.outside ? "" : undefined}
               data-range={cell.column >= 0 ? "" : undefined}
               aria-pressed={selected(cell.date)}
-              aria-label={label(cell.date)}
+              aria-label={format({ weekday: "long", month: "long", day: "numeric" }).format(cell.date)}
               disabled={cell.column < 0}
               onClick={() => {
                 props.onPick(cell.column)
@@ -105,29 +118,32 @@ export function ShareCalendar(props: {
           props.onClose()
         }}
       >
-        <span>Whole range</span>
-        <small>{shareRangeLabel(props.starts, props.weekly)}</small>
+        <span>{i18n.t("share.calendar.wholeRange")}</span>
+        <small>{shareRangeLabel(language.locale(), props.starts, props.weekly)}</small>
       </button>
     </div>
   )
 }
 
 /** The chart's whole range as its button shows it, as in Sep 30 – Nov 23. */
-export function shareRangeLabel(starts: string[], weekly: boolean) {
+export function shareRangeLabel(locale: Locale, starts: string[], weekly: boolean) {
   const end = time(starts.at(-1) ?? "") + (weekly ? 6 * day : 0)
-  return `${short(time(starts[0] ?? ""))} – ${short(end)}`
+  return new Intl.DateTimeFormat(tag(locale), { month: "short", day: "numeric", timeZone: "UTC" }).formatRange(
+    time(starts[0] ?? ""),
+    end,
+  )
 }
 
 /** One column's date as its button shows it, with its year: a day with its month written out (November 23, 2026), a
  * week with it short, to fit the same button (Week of Nov 17, 2026). */
-export function shareDayLabel(start: string, weekly: boolean) {
-  const date = new Intl.DateTimeFormat("en", {
+export function shareDayLabel(locale: Locale, start: string, weekly: boolean) {
+  const date = new Intl.DateTimeFormat(tag(locale), {
     month: weekly ? "short" : "long",
     day: "numeric",
     year: "numeric",
     timeZone: "UTC",
   }).format(time(start))
-  return weekly ? `Week of ${date}` : date
+  return weekly ? translate(locale, "share.range.weekOf", { date }) : date
 }
 
 function time(date: string) {
@@ -144,12 +160,4 @@ function year(date: number) {
 
 function monthIndex(date: number) {
   return new Date(date).getUTCMonth()
-}
-
-function short(date: number) {
-  return new Intl.DateTimeFormat("en", { month: "short", day: "numeric", timeZone: "UTC" }).format(date)
-}
-
-function label(date: number) {
-  return new Intl.DateTimeFormat("en", { weekday: "long", month: "long", day: "numeric", timeZone: "UTC" }).format(date)
 }
