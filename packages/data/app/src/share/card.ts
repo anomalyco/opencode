@@ -1636,11 +1636,25 @@ function drawFooter(
   ctx.font = `700 34px ${font}`
   ctx.fillStyle = colors.text
   ctx.fillText(card.url, pad, y)
-  if (!card.updatedAt) return
+  const label = footerDate(card)
+  if (!label) return
   ctx.font = `400 30px ${font}`
   ctx.fillStyle = colors.faint
-  const label = `Updated ${formatUpdated(card.updatedAt)}`
   ctx.fillText(label, width - pad - ctx.measureText(label).width, y)
+}
+
+// The footer's date: on a card about one day, that day (or its week), as the eyebrow and the editor's Date say;
+// otherwise when the data was updated.
+function footerDate(card: ShareCard) {
+  const chart = card.chart
+  const column = chart.kind === "stacked" && chart.day !== undefined ? chart.columns[chart.day] : undefined
+  if (chart.kind === "stacked" && column?.start) {
+    const starts = chart.columns.map((item) => Date.parse(`${item.start}T00:00:00Z`))
+    const weekly = (starts[1] ?? 0) - (starts[0] ?? 0) >= 6 * 86_400_000
+    const date = formatUpdated(`${column.start}T00:00:00Z`)
+    return weekly ? `Week of ${date}` : date
+  }
+  return card.updatedAt ? `Updated ${formatUpdated(card.updatedAt)}` : undefined
 }
 
 function formatUpdated(value: string) {

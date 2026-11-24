@@ -177,6 +177,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     if (id) return shareTracks.find((item) => item.id === id)
     return muted() ? undefined : chosen()
   })
+  const silent = () => !chosen()
   // The chosen track's spectrum, for the dot equaliser; measured once per track (spectrum.ts). A plain signal, not a
   // resource: a resource would suspend the page's Suspense boundary, which takes the dialog out of the DOM and puts it
   // back no longer modal, under the page.
@@ -226,6 +227,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     setFormat("video")
     setMenu(undefined)
     shuffle()
+    // Opens silent: no music until one is chosen (or Shuffle picks one).
+    setTrack("none")
     // The card it opens on is where undo stops.
     queueMicrotask(() => {
       history.past = []
@@ -424,7 +427,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
 
   // Pressing the chosen track again plays or pauses it, with the preview.
   const chooseTrack = (id: string) => {
-    if (id === track() && !muted()) return setPlaying(!playing())
+    if (id === track() && id !== "none" && !muted()) return setPlaying(!playing())
     setTrack(id)
     setMuted(false)
     setPlaying(true)
@@ -611,12 +614,15 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     open={menu()}
                     onOpen={setMenu}
                     value={track()}
-                    options={shareTracks.map((item) => ({
-                      value: item.id,
-                      label: item.name,
-                      explicit: item.explicit,
-                      icon: <MusicCover cover={item.cover} />,
-                    }))}
+                    options={[
+                      { value: "none", label: "No music", icon: <MusicCover /> },
+                      ...shareTracks.map((item) => ({
+                        value: item.id,
+                        label: item.name,
+                        explicit: item.explicit,
+                        icon: <MusicCover cover={item.cover} />,
+                      })),
+                    ]}
                     show="both"
                     onPreview={(id) => {
                       setHovered(id)
@@ -625,7 +631,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     trigger={
                       <MusicCover
                         cover={chosen()?.cover}
-                        state={muted() ? undefined : playing() ? "playing" : "paused"}
+                        state={muted() || silent() ? undefined : playing() ? "playing" : "paused"}
                       />
                     }
                     onSelect={chooseTrack}
@@ -634,7 +640,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
               </Show>
               {/* The bar's far end: Mute (for a video), Shuffle, then Export. */}
               <div data-slot="bar-end">
-                <Show when={format() === "video"}>
+                <Show when={format() === "video" && !silent()}>
                   <button
                     type="button"
                     data-slot="icon-button"
@@ -1047,14 +1053,13 @@ function DataGlyph(props: { fixed: boolean }) {
   )
 }
 
-// Lead with: a medal for the top model, the sum sign for the total.
+// Lead with: a trophy for the top model, the sum sign for the total.
 function LeadGlyph(props: { lead: "top" | "total" }) {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
       <g fill="none" stroke="currentColor" stroke-width="1.5">
         <Show when={props.lead === "top"} fallback={<path d="M12 3.25H4.25L8.5 8l-4.25 4.75H12" />}>
-          <path d="M4.25 1.75H6.75L8.75 6.9M11.75 1.75H9.25L7.25 6.9" />
-          <circle cx="8" cy="10.5" r="3.25" />
+          <path d="M4.75 2.75h6.5v3a3.25 3.25 0 0 1-6.5 0zM4.75 4H2.75v.75a2.25 2.25 0 0 0 2.25 2.25M11.25 4h2v.75A2.25 2.25 0 0 1 11 7M8 9v3.25M5.25 13.25h5.5" />
         </Show>
       </g>
     </svg>

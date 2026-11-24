@@ -1,3 +1,12 @@
+/* OpenMono Condensed Bold, cut down to the letters of the Explicit badge (OpenMono 1.000, OFL: asset/fonts). */
+@font-face {
+  font-family: "OpenMono Condensed";
+  src: url("../asset/fonts/openmono-condensed-bold-explicit.woff2") format("woff2");
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* The share icon in section headings, and the share dialog (share.tsx). */
 
 [data-page="stats"] [data-slot="section-actions"] {
@@ -783,14 +792,16 @@
   /* The explicit-lyrics badge, on the right of its track: solid black with bold white capitals, like the label on a
      CD sleeve. A hairline keeps its edge on a dark page. */
   /* grey-ok: the Explicit badge is white on black on purpose, like the label on a CD sleeve */
+  /* In OpenMono's condensed bold, a step under the track names, so the word stays short. */
   [data-slot="explicit"] {
     flex: none;
-    padding: 3px 5px;
-    font-size: 9px;
+    padding: 2px 5px;
+    font-family: "OpenMono Condensed", "OpenMono", ui-monospace, monospace;
+    font-size: 11px;
     font-style: normal;
     font-weight: 700;
     line-height: 1;
-    letter-spacing: 0.08em;
+    letter-spacing: 0.04em;
     text-transform: uppercase;
     color: #fff;
     background: #000;
@@ -1190,7 +1201,7 @@
     /* The cover as far from the left edge as from the top and bottom: (36 - 24) / 2, less the border. */
     /* As wide as its list, the longest name with its Explicit badge. */
     [data-slot="dropdown-trigger"] {
-      width: 248px;
+      width: 250px;
       padding-left: 5px;
     }
   }
