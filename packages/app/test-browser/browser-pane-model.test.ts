@@ -33,6 +33,8 @@ function fixture(
   const [connected, setConnected] = createSignal(given.connected ?? true)
   const [ipc, setIpc] = createSignal(given.ipc ?? "active")
   const answered = Promise.withResolvers<void>()
+  // The sessions the server runs, as the test starts them.
+  const [running, setRunning] = createSignal<readonly string[]>([])
 
   if (!given.slow) answered.resolve()
 
@@ -44,7 +46,10 @@ function fixture(
     },
     local: given.local ?? true,
     builtin: true,
-    data: { on: () => () => undefined, session: { status: () => "idle" } },
+    data: {
+      on: () => () => undefined,
+      session: { status: (id: string) => (running().includes(id) ? "running" : "idle"), get: () => ({ permissions: [] }) },
+    },
   }
 
   const refs = ["ses_alpha", "ses_beta"].map((id) => ({
@@ -127,7 +132,7 @@ function fixture(
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
   const sessions = refs.map((ref) => ref as unknown as SessionRef)
 
-  return { ...owned, sessions, route: setCurrent, refs, emit, send, rejections, setConnected, setIpc, answer: answered.resolve, registered: () => Array.from(bindings.keys()) }
+  return { ...owned, sessions, route: setCurrent, refs, emit, send, rejections, setConnected, setIpc, run: (id: string) => setRunning((ids) => [...ids, id]), answer: answered.resolve, registered: () => Array.from(bindings.keys()) }
 }
 
 // Runs the promise jobs queued so far, which the fake clock does not: more turns than a registration takes.
@@ -251,6 +256,24 @@ test("a prompt waits for a pane that is still starting, and for one whose server
     restore()
     starting.dispose()
     local.dispose()
+  }
+})
+
+// After the app starts only the routed session attaches. One in another tab has nobody to open it when the server
+// resumes it, or an automation or a finished job wakes it, and its agent lists the browser tools only once attached.
+test("a session in a tab nobody opened attaches once it runs", async () => {
+  const app = fixture()
+  const session = app.sessions[1]
+
+  try {
+    await turns()
+    expect(app.registered()).not.toContain(session.id)
+
+    app.run(session.id)
+    await turns()
+    expect(app.registered()).toContain(session.id)
+  } finally {
+    app.dispose()
   }
 })
 

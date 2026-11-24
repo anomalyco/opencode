@@ -21,11 +21,12 @@ export function attachable(session: SessionRef, online: boolean) {
 export function attachesUnopened(session: SessionRef, online: boolean) {
   if (!attachable(session, online)) return false
   const data = session.server.data.session
+
+  if (data.status(session.id) !== "running") return false
   const info = data.get(session.id)
 
   return (
     info !== undefined &&
-    data.status(session.id) === "running" &&
     !info.permissions?.some((rule) => rule.action === "browser" && rule.resource === "*" && rule.effect === "allow")
   )
 }
