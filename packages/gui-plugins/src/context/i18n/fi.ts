@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Käyttö",
   "usage.cost": "Kustannukset",
   "usage.view": "Näytä kontekstin käyttö",
-  "systemPrompt.title": "Järjestelmäkehote",
   "rawMessages.title": "Raakaviestit",
   "export.session": "Vie istunto",
   "stats.session": "Istunto",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Istunto tallennettu tiedostoon {{filename}}",
   "export.failed.title": "Istunnon vieminen epäonnistui",
   "export.failed.description": "Istuntoa vietäessä tapahtui virhe",
+  "usage.toggle": "Näytä tai piilota istunnon konteksti",
 }

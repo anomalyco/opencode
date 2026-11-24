@@ -39,4 +39,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Tilføj server",
   "menu.delete": "Slet",
+  "error.unavailable": "SSH er ikke tilgængelig",
 }

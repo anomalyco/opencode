@@ -2,6 +2,7 @@ import {
   createEffect,
   createMemo,
   createResource,
+  createSelector,
   createSignal,
   createUniqueId,
   For,
@@ -16,6 +17,7 @@ import { createStore } from "solid-js/store"
 import { Portal } from "solid-js/web"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { createMediaQuery } from "@solid-primitives/media"
+import { Key } from "@solid-primitives/keyed"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
@@ -28,6 +30,7 @@ import { Menu } from "@opencode/ui/menu"
 import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { AttachmentCard } from "@opencode/session-ui/attachment-card"
+import { useMarkdown } from "@opencode/session-ui/context/markdown"
 import { ProgressCircle } from "@opencode/ui/progress-circle"
 import type { Upload } from "../attachments/uploads"
 import { CommentCard, commentCardTarget, quoteTooltip } from "@opencode/session-ui/comment-card"
@@ -45,8 +48,18 @@ import type {
   ComposerSuggestion,
 } from "../types"
 import type { ComposerEditorModel, ComposerSelectControl } from "./interaction"
-import { isAttachment } from "../prompt-parts"
+import { isAttachment, promptLength } from "../prompt-parts"
+import { editorMatchesPrompt, getCursorPosition, isEditorDomBlank, isPromptInlineBlank } from "./dom"
+import {
+  INITIAL_EDITOR_SYNC_STATE,
+  INPUT_PARSED,
+  INPUT_PARSED_BLANK,
+  storeChanged,
+  transitionEditorSync,
+} from "./machine"
+import { composerHistoryPreviewHeight, composerPopoverActiveID, isComposerPopoverOpen } from "../suggestions/machine"
 import { QuoteCommentEditor } from "./quote-comment"
+import { selectQuoteCommentView, type QuoteCommentController } from "../quote-comment-machine"
 import "../attachments/attachments.css"
 import "./editor.css"
 import "@/shell/palette-menu.css"
@@ -82,12 +95,15 @@ export type ComposerEditorProps = {
   attachKeybind?: string[]
   attachShortcut?: string
   alternateKeybind?: string[]
+  queueFirstKeybind?: string[]
+  queueFirstLabel?: string
   exitShellKeybind?: string[]
   suggestionBoundary?: () => HTMLElement | undefined
 }
 
 export function ComposerEditor(props: ComposerEditorProps) {
   const i18n = useI18n()
+  const markdown = useMarkdown()
   const state = props.controller.state
   const view = props.controller.view
   const suggestionsID = createUniqueId()
@@ -98,7 +114,8 @@ export function ComposerEditor(props: ComposerEditorProps) {
   let controlsViewport!: HTMLDivElement
   let controlsContent!: HTMLDivElement
   const [overflow, setOverflow] = createStore({ start: false, end: false })
-  const [historyLayout, setHistoryLayout] = createStore<{ height?: number }>({})
+  // A history preview holds the composer at the height it had when the list opened.
+  const historyHeight = createMemo(() => composerHistoryPreviewHeight(state))
   // Phones and tablets, whatever their width: a narrow desktop window keeps the desktop composer.
   const touch = createMediaQuery("(hover: none) and (pointer: coarse)")
   // The shell's slot at the bottom of the screen; without one (a story), the touch bar stays under the composer.
@@ -107,11 +124,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
   onMount(() => setDock(document.querySelector<HTMLElement>('[data-slot="composer-touch-bar-mount"]') ?? undefined))
 
   createEffect(() => {
-    if (state.popover.type !== "history") setHistoryLayout("height", undefined)
-  })
-
-  createEffect(() => {
-    const preview = historyLayout.height !== undefined
+    const preview = historyHeight() !== undefined
 
     if (preview) props.controller.parts()
 
@@ -138,7 +151,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
   const [fadeBottom, setFadeBottom] = createSignal(0)
 
   const updateScroll = () => {
-    const scroller = historyLayout.height !== undefined ? content : viewport
+    const scroller = historyHeight() !== undefined ? content : viewport
 
     if (!scroller) return
     setFadeBottom(Math.min(16, Math.max(0, scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop)))
@@ -158,14 +171,21 @@ export function ComposerEditor(props: ComposerEditorProps) {
       scrollObserver.disconnect()
     })
   })
-  let localInput = false
+  let sync = INITIAL_EDITOR_SYNC_STATE
+  let firstFocus = true
+  // A press puts the caret where it lands, and focus follows in the same task.
+  let pressed = false
+  let pressTimer: ReturnType<typeof setTimeout> | undefined
+
+  onCleanup(() => clearTimeout(pressTimer))
 
   const updateCursor = () => {
-    if (!editor || !window.getSelection()?.isCollapsed) return
-    props.controller.onCursor(composerCursor(editor))
+    const cursor = editor && getCursorPosition(editor)
+
+    if (cursor !== undefined) props.controller.onCursor(cursor)
   }
 
-  const mode = createMemo(() => state.mode)
+  const mode = createMemo(() => props.controller.mode())
 
   const buttons = createMemo(() => ({
     opacity: mode() === "normal" ? 1 : 0,
@@ -177,14 +197,15 @@ export function ComposerEditor(props: ComposerEditorProps) {
     const parts = props.controller.parts()
 
     if (!editor) return
+    // The DOM already shows the user's own input and any update that leaves the text alone (an attachment), so
+    // neither rewrites it, which would move the caret and drop native undo. Each check reads every part, so an
+    // in-place store update runs this again.
+    const matches = editorMatchesPrompt(editor, parts)
+    const blank = !matches && isPromptInlineBlank(parts) && isEditorDomBlank(editor)
+    const step = transitionEditorSync(sync, storeChanged(matches, blank))
+    sync = step.state
 
-    if (localInput) {
-      localInput = false
-
-      return
-    }
-
-    renderComposerEditor(editor, parts)
+    if (step.render) renderComposerEditor(editor, parts)
   })
 
   // Kept out of JSX: an inline ternary prop compiles to a memo created on every read, and the popover reads
@@ -215,16 +236,19 @@ export function ComposerEditor(props: ComposerEditorProps) {
           event.currentTarget.value = ""
         }}
       />
-      <Show when={!view.draftOnly && state.popover.type !== "closed"}>
+      <Show when={!view.draftOnly && isComposerPopoverOpen(state)}>
         <ComposerEditorPopover
           id={suggestionsID}
           emptyLabel={i18n.t("ui.promptInput.noMatchingItems")}
           items={props.controller.suggestions()}
           boundary={props.suggestionBoundary}
-          activeID={state.popover.type === "closed" ? undefined : state.popover.activeID}
+          activeID={composerPopoverActiveID(state)}
           search={search()}
-          history={state.popover.type === "history" ? state.mode : undefined}
-          onClose={() => props.controller.dispatch({ type: "popover.close" })}
+          history={state.popover.type === "history" ? mode() : undefined}
+          // Clicking into the draft keeps the previewed entry to edit; anywhere else cancels back to the draft.
+          onClose={(target) =>
+            props.controller.dispatch({ type: editor?.contains(target) ? "popover.close" : "popover.dismiss" })
+          }
           onActiveChange={(item) => props.controller.dispatch({ type: "popover.active", id: item.id })}
           onSelect={(item) => props.controller.dispatch({ type: "popover.select", item })}
         />
@@ -234,10 +258,10 @@ export function ComposerEditor(props: ComposerEditorProps) {
         data-component="composer"
         data-dock-border-underlay={props.borderUnderlay ? "true" : undefined}
         class="group/composer relative w-full overflow-clip rounded-xl bg-v2-background-bg-base"
-        style={{ height: historyLayout.height === undefined ? undefined : `${historyLayout.height}px` }}
+        style={{ height: historyHeight() === undefined ? undefined : `${historyHeight()}px` }}
         classList={{
           "shadow-[var(--v2-elevation-raised)]": !props.borderUnderlay,
-          "flex flex-col": historyLayout.height !== undefined,
+          "flex flex-col": historyHeight() !== undefined,
         }}
         onSubmit={(event) => {
           event.preventDefault()
@@ -251,13 +275,13 @@ export function ComposerEditor(props: ComposerEditorProps) {
         <div
           ref={content}
           data-slot="composer-content"
-          data-history-preview={historyLayout.height !== undefined ? "" : undefined}
+          data-history-preview={historyHeight() !== undefined ? "" : undefined}
           class="min-h-0"
-          classList={{ "flex-1 overflow-y-auto no-scrollbar": historyLayout.height !== undefined }}
+          classList={{ "flex-1 overflow-y-auto no-scrollbar": historyHeight() !== undefined }}
           style={{ "--composer-fade-bottom": `${fadeBottom()}px` }}
           onScroll={updateScroll}
         >
-          <Show when={state.mode === "normal"}>
+          <Show when={mode() === "normal"}>
             <ComposerAttachments
               attachments={props.controller.attachments()}
               uploads={props.controller.uploads()}
@@ -272,10 +296,8 @@ export function ComposerEditor(props: ComposerEditorProps) {
               onCommentClick={(comment) => props.controller.toggleContext(comment.key)}
               onCommentRemove={(comment) => props.controller.removeContext(comment.key)}
               onFileRemove={(file) => props.controller.removeContext(file.key)}
-              editingQuote={props.controller.editingQuote()}
-              quoteAnchor={props.controller.quoteAnchor()}
+              quoteComment={props.controller.quoteComment}
               onQuoteFocus={props.controller.focusQuotePrompt}
-              onEditQuote={props.controller.editQuote}
               onQuoteComment={(quote, comment) => props.controller.commentQuote(quote.key, comment)}
               quoteSubmit={view.submit.quote}
               searchPaths={props.controller.searchPaths}
@@ -286,7 +308,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
             data-component="composer-scroll"
             data-scrollable
             class="relative overflow-y-auto"
-            classList={{ "max-h-[180px]": historyLayout.height === undefined }}
+            classList={{ "max-h-[180px]": historyHeight() === undefined }}
             onScroll={updateScroll}
             ref={viewport}
           >
@@ -300,28 +322,42 @@ export function ComposerEditor(props: ComposerEditorProps) {
               aria-multiline="true"
               aria-label={i18n.t("ui.promptInput.label")}
               aria-controls={state.popover.type === "history" ? suggestionsID : undefined}
-              dir={state.mode === "normal" ? "auto" : "ltr"}
+              dir={mode() === "normal" ? "auto" : "ltr"}
               contenteditable={!props.disabled && !props.readOnly}
-              autocapitalize={state.mode === "normal" ? "sentences" : "off"}
-              autocorrect={state.mode === "normal" ? "on" : "off"}
+              autocapitalize={mode() === "normal" ? "sentences" : "off"}
+              autocorrect={mode() === "normal" ? "on" : "off"}
               enterkeyhint={touch() ? "enter" : undefined}
-              spellcheck={state.mode === "normal"}
+              spellcheck={mode() === "normal"}
               // @ts-expect-error
               autocomplete="off"
               class="relative z-10 block w-full whitespace-pre-wrap bg-transparent ps-4 pe-[var(--composer-scroll-end)] pt-4 pb-2 text-[13px] font-[440] leading-5 text-v2-text-text-base focus:outline-none [&_[data-mention=file]]:text-syntax-property [&_[data-mention=agent]]:text-syntax-type [&_[data-mention=reference]]:text-v2-text-text-muted"
-              classList={{ "font-mono! tracking-[-0.04px]": state.mode === "shell", "opacity-50": props.disabled }}
+              classList={{ "font-mono! tracking-[-0.04px]": mode() === "shell", "opacity-50": props.disabled }}
               style={{
-                "unicode-bidi": state.mode === "normal" ? "plaintext" : undefined,
+                "unicode-bidi": mode() === "normal" ? "plaintext" : undefined,
                 "text-align": "start",
               }}
+              onContextMenu={(event) => {
+                const target = event.target instanceof Element ? event.target : undefined
+                const mention = target?.closest<HTMLElement>('[data-mention="session"]')
+                const part = mention ? mentionParts.get(mention) : undefined
+                const menu = markdown?.sessionMenu
+
+                if (part?.type !== "session" || !menu) return
+                event.preventDefault()
+                menu({ sessionID: part.id, x: event.clientX, y: event.clientY })
+              }}
               onInput={(event) => {
-                const cursor = composerCursor(event.currentTarget)
                 const prompt = parseComposerEditor(event.currentTarget)
-                const attachments = props.controller.parts().filter(isAttachment)
-                localInput = true
+                const cursor = getCursorPosition(event.currentTarget) ?? promptLength(prompt)
+                const parts = props.controller.parts()
+                sync = transitionEditorSync(
+                  sync,
+                  event.currentTarget.firstChild && isPromptInlineBlank(prompt) ? INPUT_PARSED_BLANK : INPUT_PARSED,
+                ).state
+                // Every keystroke runs this, so a plain text draft skips the copies a mixed one needs.
                 props.controller.onInput(
-                  prompt.map((part) => part.content).join(""),
-                  [...prompt, ...attachments],
+                  prompt.length === 1 ? prompt[0]!.content : prompt.map((part) => part.content).join(""),
+                  parts.some(isAttachment) ? [...prompt, ...parts.filter(isAttachment)] : prompt,
                   cursor,
                 )
               }}
@@ -334,15 +370,11 @@ export function ComposerEditor(props: ComposerEditorProps) {
 
                 // Capture the opening footprint before the controller applies its first history preview.
                 const height =
-                  state.popover.type === "closed" && event.shiftKey && event.key === "ArrowUp"
+                  !isComposerPopoverOpen(state) && event.shiftKey && event.key === "ArrowUp"
                     ? composer?.getBoundingClientRect().height
                     : undefined
 
-                if (!view.draftOnly && props.controller.onKeyDown(event)) {
-                  if (height !== undefined && state.popover.type === "history") setHistoryLayout("height", height)
-
-                  return
-                }
+                if (!view.draftOnly && props.controller.onKeyDown(event, height)) return
 
                 const mod = event.metaKey || event.ctrlKey
 
@@ -359,7 +391,13 @@ export function ComposerEditor(props: ComposerEditorProps) {
 
                   if (event.repeat) return
                   // On touch, Cmd+Return is the touch bar's primary action, since plain Return cannot send.
-                  props.controller.submit(mod && !touch() ? { alternate: true } : undefined)
+                  props.controller.submit(
+                    !touch() && event.altKey && !mod
+                      ? { first: true }
+                      : mod && !touch()
+                        ? { alternate: true }
+                        : undefined,
+                  )
                 }
               }}
               // The editor holds one flat run of text, mentions and <br>s. A touch keyboard's Return arrives as a
@@ -393,17 +431,28 @@ export function ComposerEditor(props: ComposerEditorProps) {
                   if (caret.top < bounds.top + 16) viewport.scrollTop += caret.top - bounds.top - 16
                 })
               }}
-              onFocus={() => props.controller.dispatch({ type: "focus.editor" })}
+              onPointerDown={() => {
+                pressed = true
+                clearTimeout(pressTimer)
+                pressTimer = setTimeout(() => (pressed = false))
+              }}
+              onFocus={() => {
+                // A request dock can replace the editor. Focus on the new editor that no press caused must keep the
+                // draft's caret.
+                if (firstFocus && !pressed) props.controller.restoreCaret()
+                firstFocus = false
+                props.controller.dispatch({ type: "focus.editor" })
+              }}
             />
             <Show when={!props.controller.value()}>
               <div
-                dir={state.mode === "normal" ? "auto" : "ltr"}
+                dir={mode() === "normal" ? "auto" : "ltr"}
                 class="pointer-events-none absolute inset-x-0 top-0 ps-4 pe-[var(--composer-scroll-end)] pt-4 text-[13px] font-[440] leading-5 text-v2-text-text-faint"
-                classList={{ "font-mono! tracking-[-0.04px]": state.mode === "shell" }}
-                style={{ "unicode-bidi": state.mode === "normal" ? "plaintext" : undefined, "text-align": "start" }}
+                classList={{ "font-mono! tracking-[-0.04px]": mode() === "shell" }}
+                style={{ "unicode-bidi": mode() === "normal" ? "plaintext" : undefined, "text-align": "start" }}
               >
                 {view.placeholder?.() ??
-                  (state.mode === "shell"
+                  (mode() === "shell"
                     ? i18n.t("ui.promptInput.placeholder.shell")
                     : i18n.t("ui.promptInput.placeholder.normal", { slash: "/", at: "@" }))}
               </div>
@@ -411,16 +460,16 @@ export function ComposerEditor(props: ComposerEditorProps) {
           </div>
         </div>
 
-        <div class="flex h-11 shrink-0 items-center px-2" classList={{ hidden: touch() && state.mode === "shell" }}>
+        <div class="flex h-11 shrink-0 items-center px-2" classList={{ hidden: touch() && mode() === "shell" }}>
           <Show when={!touch()}>
             <div
               class="flex shrink-0 items-center"
-              aria-hidden={state.mode === "shell"}
-              inert={state.mode === "shell" ? true : undefined}
+              aria-hidden={mode() === "shell"}
+              inert={mode() === "shell" ? true : undefined}
               style={buttons()}
             >
               <ComposerEditorAddMenu
-                disabled={view.draftOnly || state.mode === "shell"}
+                disabled={view.draftOnly || mode() === "shell"}
                 title={i18n.t("ui.promptInput.add")}
                 keybind={props.attachKeybind ?? ["Mod", "U"]}
                 attachLabel={i18n.t("ui.promptInput.attachments")}
@@ -445,8 +494,8 @@ export function ComposerEditor(props: ComposerEditorProps) {
             onScroll={updateOverflow}
             // Chromium leaves a partly visible control where it is when it takes focus, cut off by the edge.
             onFocusIn={() => document.activeElement?.scrollIntoView({ block: "nearest", inline: "nearest" })}
-            aria-hidden={state.mode === "shell"}
-            inert={state.mode === "shell" ? true : undefined}
+            aria-hidden={mode() === "shell"}
+            inert={mode() === "shell" ? true : undefined}
             style={buttons()}
           >
             <div ref={controlsContent} class="flex h-full w-max min-w-full items-center gap-0.5">
@@ -475,18 +524,33 @@ export function ComposerEditor(props: ComposerEditorProps) {
                     </Show>
                   )}
                 </Show>
+                <Show when={view.speed} keyed>
+                  {(control) => (
+                    // Hidden at the standard speed, so it adds nothing to the composer until a speed is chosen with
+                    // the speed command.
+                    <Show when={control.options().length > 1 && control.current() !== "standard"}>
+                      <ComposerEditorConfiguredSelect
+                        mobileDrawer
+                        title={i18n.t("ui.promptInput.chooseSpeed")}
+                        control={control}
+                      />
+                    </Show>
+                  )}
+                </Show>
               </Show>
             </div>
           </div>
           <Show when={!touch()}>
             <div data-slot="composer-actions" class="flex shrink-0 items-center">
-              <Show when={state.mode === "normal"}>
+              <Show when={mode() === "normal"}>
                 <ComposerEditorAlternateDelivery
                   controller={props.controller}
                   keybind={props.alternateKeybind ?? ["Mod", "Enter"]}
+                  firstKeybind={props.queueFirstKeybind ?? ["Alt", "Enter"]}
+                  firstLabel={props.queueFirstLabel}
                 />
               </Show>
-              <Show when={state.mode === "shell"}>
+              <Show when={mode() === "shell"}>
                 <Button
                   data-action="composer-exit-shell"
                   type="button"
@@ -494,8 +558,9 @@ export function ComposerEditor(props: ComposerEditorProps) {
                   size="small"
                   class="me-3 gap-1.5 px-1.5"
                   onClick={() => {
-                    props.controller.dispatch({ type: "mode.normal" })
+                    // Before the mode change unmounts this button, so focus keeps its ring state.
                     props.controller.restoreFocus()
+                    props.controller.dispatch({ type: "mode.normal" })
                   }}
                 >
                   {i18n.t("ui.promptInput.exitShell")}
@@ -505,7 +570,7 @@ export function ComposerEditor(props: ComposerEditorProps) {
                 </Button>
               </Show>
               <ComposerEditorSubmitButton
-                mode={state.mode}
+                mode={mode()}
                 stopping={view.submit.stopping()}
                 busy={view.submit.busy?.() ?? false}
                 disabled={!props.controller.canSubmit()}
@@ -696,17 +761,6 @@ function parseComposerEditor(editor: HTMLDivElement) {
   return [{ type: "text" as const, content: "", start: 0, end: 0 }]
 }
 
-function composerCursor(editor: HTMLDivElement) {
-  const selection = window.getSelection()
-
-  if (!selection?.rangeCount || !editor.contains(selection.anchorNode)) return editor.textContent?.length ?? 0
-  const range = selection.getRangeAt(0).cloneRange()
-  range.selectNodeContents(editor)
-  range.setEnd(selection.anchorNode!, selection.anchorOffset)
-
-  return range.toString().length
-}
-
 function ComposerAttachments(props: {
   attachments: ComposerAttachment[]
   uploads?: Upload[]
@@ -722,10 +776,8 @@ function ComposerAttachments(props: {
   onCommentClick?: (comment: ComposerComment) => void
   onCommentRemove?: (comment: ComposerComment) => void
   onFileRemove?: (file: Extract<ComposerComment, { type: "file" }>) => void
-  editingQuote?: string
-  quoteAnchor?: ReturnType<ComposerEditorModel["quoteAnchor"]>
+  quoteComment: QuoteCommentController
   onQuoteFocus?: () => void
-  onEditQuote?: (key?: string) => void
   onQuoteComment?: (quote: Extract<ComposerComment, { type: "quote" }>, comment: string) => void
   quoteSubmit?: ComposerEditorModel["view"]["submit"]["quote"]
   searchPaths?: (query: string) => Promise<string[]>
@@ -737,15 +789,15 @@ function ComposerAttachments(props: {
 
   // Plain functions, not inline conditionals: the tooltip reads these from event handlers, outside any owner.
   const quoteTitle = (comment: ComposerComment) => (comment.type === "quote" ? quoteTooltip(comment) : undefined)
-  const quoteHint = (comment: ComposerComment) => comment.type === "quote" && props.editingQuote !== comment.key
+  const quoteHint = (comment: ComposerComment) => comment.type === "quote" && props.quoteComment.key() !== comment.key
 
   const commentActive = (comment: ComposerComment) =>
-    comment.key === props.activeCommentID || comment.key === props.editingQuote
+    comment.key === props.activeCommentID || comment.key === props.quoteComment.key()
 
   const editing = createMemo(() =>
     props.comments?.find(
       (comment): comment is Extract<ComposerComment, { type: "quote" }> =>
-        comment.type === "quote" && comment.key === props.editingQuote,
+        comment.type === "quote" && comment.key === props.quoteComment.key(),
     ),
   )
 
@@ -758,7 +810,7 @@ function ComposerAttachments(props: {
         (props.files?.length ?? 0) > 0
       }
     >
-      <div data-component="composer-attachments" data-slot="composer-attachments" class="relative">
+      <div data-component="composer-attachments" data-slot="composer-attachments" data-focus-scope class="relative">
         <div
           data-slot="composer-attachments-scroll"
           class="flex flex-nowrap gap-2 overflow-x-auto no-scrollbar px-2 pt-2 pb-1"
@@ -787,20 +839,17 @@ function ComposerAttachments(props: {
                     active={commentActive(comment)}
                     onClick={() => {
                       if (comment.type !== "quote") return props.onCommentClick?.(comment)
-                      props.onEditQuote?.(props.editingQuote === comment.key ? undefined : comment.key)
+                      props.quoteComment.set(props.quoteComment.key() === comment.key ? undefined : comment.key)
                     }}
                   />
                 </Tooltip>
                 <button
                   type="button"
-                  onClick={() => {
-                    if (props.editingQuote === comment.key) props.onEditQuote?.()
-                    props.onCommentRemove?.(comment)
-                  }}
+                  onClick={() => props.onCommentRemove?.(comment)}
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                   aria-label={props.removeLabel}
                 >
-                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                  <Icon name="close" class="text-v2-icon-icon-contrast" />
                 </button>
               </div>
             )}
@@ -829,7 +878,7 @@ function ComposerAttachments(props: {
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                   aria-label={props.removeLabel}
                 >
-                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                  <Icon name="close" class="text-v2-icon-icon-contrast" />
                 </button>
               </div>
             )}
@@ -844,7 +893,7 @@ function ComposerAttachments(props: {
               const missing = () => url.state === "errored" || (url.state === "ready" && !url())
 
               return (
-                <div class="relative group shrink-0">
+                <div class="relative group shrink-0 self-start">
                   <Tooltip
                     value={attachment.type === "path" ? attachment.path : attachment.filename}
                     placement="top"
@@ -858,12 +907,12 @@ function ComposerAttachments(props: {
                         </AttachmentCard>
                       }
                     >
-                      <Show when={src()} fallback={<div class="w-[58px] h-[46px]" />}>
+                      <Show when={src()} fallback={<div class="w-[78px] h-[52px]" />}>
                         {(value) => (
                           <img
                             src={value()}
                             alt={attachment.filename}
-                            class="w-[58px] h-[46px] rounded-[6px] object-cover"
+                            class="w-[78px] h-[52px] rounded-[6px] object-cover"
                             onClick={(event) => props.onAttachmentClick?.(attachment, event.currentTarget)}
                           />
                         )}
@@ -877,7 +926,7 @@ function ComposerAttachments(props: {
                     class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                     aria-label={props.removeLabel}
                   >
-                    <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                    <Icon name="close" class="text-v2-icon-icon-contrast" />
                   </button>
                 </div>
               )
@@ -900,7 +949,7 @@ function ComposerAttachments(props: {
                   class="absolute -top-1 -end-1 size-4 rounded-full bg-v2-icon-icon-muted outline-solid outline-1 outline-v2-icon-icon-contrast flex items-center justify-center hover-reveal group-hover:opacity-100"
                   aria-label={i18n.t("ui.promptInput.cancelUpload")}
                 >
-                  <Icon name="outline-xmark" class="text-v2-icon-icon-contrast" />
+                  <Icon name="close" class="text-v2-icon-icon-contrast" />
                 </button>
               </div>
             )}
@@ -920,24 +969,26 @@ function ComposerAttachments(props: {
               {(anchor) => (
                 <QuoteCommentEditor
                   anchor={anchor()}
-                  source={props.quoteAnchor}
+                  source={props.quoteComment.anchor()}
                   text={current.text}
                   comment={current.comment ?? ""}
+                  view={selectQuoteCommentView(props.quoteComment.state(), current.key, current.comment ?? "")}
                   mention={(query) => props.searchPaths?.(query) ?? Promise.resolve([])}
+                  onInput={props.quoteComment.setDraft}
                   send={
                     props.quoteSubmit && {
                       available: props.quoteSubmit.available(),
                       delivery: props.quoteSubmit.delivery(),
-                      onSubmit: (comment) => props.quoteSubmit!.onSubmit(current.key, comment),
+                      onSubmit: (comment) => props.quoteComment.send(comment, props.quoteSubmit!.onSubmit),
                     }
                   }
                   onSubmit={(comment) => {
                     props.onQuoteComment?.(current, comment)
-                    props.onEditQuote?.()
+                    props.quoteComment.set()
                     props.onQuoteFocus?.()
                   }}
                   onClose={(focus) => {
-                    props.onEditQuote?.()
+                    props.quoteComment.set()
 
                     if (focus) props.onQuoteFocus?.()
                   }}
@@ -1221,7 +1272,8 @@ function ComposerEditorPopover(props: {
   items: ComposerSuggestion[]
   activeID?: string
   history?: ComposerMode
-  onClose?: () => void
+  /** A pointer or focus outside the list, at `target`. */
+  onClose?: (target: Node) => void
   search?: {
     value: string
     label: string
@@ -1235,6 +1287,7 @@ function ComposerEditorPopover(props: {
 }) {
   const i18n = useI18n()
   const listID = props.id ?? createUniqueId()
+  const active = createSelector(() => props.activeID)
   let container: HTMLDivElement | undefined
   const [store, setStore] = createStore({ maxHeight: COMPOSER_SUGGESTION_MAX_HEIGHT })
 
@@ -1260,7 +1313,7 @@ function ComposerEditorPopover(props: {
     const dismiss = (event: Event) => {
       if (!(event.target instanceof Node) || container?.contains(event.target)) return
 
-      props.onClose?.()
+      props.onClose?.(event.target)
     }
 
     document.addEventListener("pointerdown", dismiss)
@@ -1348,7 +1401,7 @@ function ComposerEditorPopover(props: {
                       {item.label || item.description || i18n.t("ui.promptInput.history.contextOnly")}
                     </bdi>
                     <Show when={item.description}>
-                      <Icon name="file-document" size="small" class="shrink-0 text-v2-icon-icon-muted" />
+                      <Icon name="file-document" class="shrink-0 text-v2-icon-icon-muted" />
                     </Show>
                   </button>
                 )}
@@ -1378,34 +1431,34 @@ function ComposerEditorPopover(props: {
           when={props.items.length > 0}
           fallback={<div class="px-2 py-1 text-v2-text-text-muted">{props.emptyLabel}</div>}
         >
-          <For each={props.items}>
+          <Key each={props.items} by="id">
             {(item) => (
               <button
                 type="button"
-                data-suggestion-id={item.id}
-                data-active={props.activeID === item.id ? "" : undefined}
+                data-suggestion-id={item().id}
+                data-active={active(item().id) ? "" : undefined}
                 class="flex h-7 w-full shrink-0 items-center gap-2 rounded-md px-2 py-1 text-start"
-                classList={{ "bg-v2-overlay-simple-overlay-hover": props.activeID === item.id }}
+                classList={{ "bg-v2-overlay-simple-overlay-hover": active(item().id) }}
                 onPointerMove={(event) => {
-                  if (event.movementX || event.movementY) props.onActiveChange(item)
+                  if (event.movementX || event.movementY) props.onActiveChange(item())
                 }}
-                onClick={() => props.onSelect(item)}
+                onClick={() => props.onSelect(item())}
               >
                 <div class="flex min-w-0 flex-1 items-center gap-2">
-                  <ComposerSuggestionIcon item={item} />
+                  <ComposerSuggestionIcon item={item()} />
                   <bdi dir="auto" class="shrink-0 text-v2-text-text-base">
-                    {item.label}
+                    {item().label}
                   </bdi>
-                  <Show when={item.description}>
-                    <span class="min-w-0 truncate text-v2-text-text-muted">{item.description}</span>
+                  <Show when={item().description}>
+                    <span class="min-w-0 truncate text-v2-text-text-muted">{item().description}</span>
                   </Show>
                 </div>
-                <Show when={item.keybind?.length}>
-                  <span class="shrink-0 text-v2-text-text-muted">{item.keybind?.join("+")}</span>
+                <Show when={item().keybind?.length}>
+                  <span class="shrink-0 text-v2-text-text-muted">{item().keybind?.join("+")}</span>
                 </Show>
               </button>
             )}
-          </For>
+          </Key>
         </Show>
       </Show>
     </div>
@@ -1429,7 +1482,12 @@ function composerSuggestionMaxHeight(boundaryHeight: number, search: boolean, hi
 // delivery opposite to what plain Enter does. Visible only while the queue
 // exposes an alternate (turn running and composer holding a value), so it
 // disappears on its own when the current turn ends.
-function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorModel; keybind: string[] }) {
+function ComposerEditorAlternateDelivery(props: {
+  controller: ComposerEditorModel
+  keybind: string[]
+  firstKeybind: string[]
+  firstLabel?: string
+}) {
   const i18n = useI18n()
   const view = props.controller.view
 
@@ -1447,7 +1505,27 @@ function ComposerEditorAlternateDelivery(props: { controller: ComposerEditorMode
   return (
     <Show when={action()} keyed>
       {(delivery) => (
-        <Tooltip placement="top" inactive={delivery !== "steer"} value={i18n.t("ui.promptInput.steerHint")}>
+        <Tooltip
+          placement="top"
+          inactive={delivery !== "steer" && !view.submit.queue?.count()}
+          value={
+            <Show
+              when={view.submit.queue?.count() && !view.submit.queue?.editing() && props.firstLabel}
+              fallback={i18n.t("ui.promptInput.steerHint")}
+            >
+              <div class="flex flex-col gap-1">
+                <div class="flex items-center justify-between gap-4">
+                  <span>{delivery === "steer" ? i18n.t("ui.promptInput.steer") : i18n.t("ui.promptInput.queue")}</span>
+                  <Keybind keys={props.keybind} variant="neutral" />
+                </div>
+                <div class="flex items-center justify-between gap-4">
+                  <span>{props.firstLabel}</span>
+                  <Keybind keys={props.firstKeybind} variant="neutral" />
+                </div>
+              </div>
+            </Show>
+          }
+        >
           <Button
             data-action="composer-alternate-delivery"
             type="button"
@@ -1492,7 +1570,7 @@ function ComposerEditorSubmitButton(props: {
           props.busy && !props.stopping ? (
             <Loader class="size-4" />
           ) : (
-            <Icon name={props.stopping ? "stop" : props.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />
+            <Icon name={props.stopping ? "stop" : props.mode === "shell" ? "enter" : "arrow-up"} />
           )
         }
         aria-busy={props.busy && !props.stopping}
@@ -1521,7 +1599,6 @@ function ComposerEditorSubmitButton(props: {
 // keyboard while one is open. Buttons keep the editor focused so the keyboard stays open.
 function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked?: boolean }) {
   const i18n = useI18n()
-  const state = props.controller.state
   const view = props.controller.view
   const keep = (event: MouseEvent) => event.preventDefault()
 
@@ -1539,7 +1616,7 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
   const alternate = createMemo(() => {
     const queue = view.submit.queue
 
-    if (state.mode !== "normal" || !queue || !props.controller.canSubmit()) return undefined
+    if (props.controller.mode() !== "normal" || !queue || !props.controller.canSubmit()) return undefined
 
     if (queue.editing()) return "steer" as const
 
@@ -1549,7 +1626,7 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
   const label = () => {
     const queue = view.submit.queue
 
-    if (state.mode !== "normal" || !queue) return i18n.t("ui.promptInput.send")
+    if (props.controller.mode() !== "normal" || !queue) return i18n.t("ui.promptInput.send")
 
     // A submit while editing puts the prompt back in the queue; the alternate steers it.
     if (queue.editing()) return i18n.t("ui.promptInput.queue")
@@ -1572,7 +1649,7 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
       }}
     >
       <Show
-        when={state.mode === "normal"}
+        when={props.controller.mode() === "normal"}
         fallback={
           <Button
             data-action="composer-exit-shell"
@@ -1580,8 +1657,8 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
             class="h-11 rounded-lg px-3 text-[15px] leading-5"
             onMouseDown={keep}
             onClick={() => {
-              props.controller.dispatch({ type: "mode.normal" })
               props.controller.restoreFocus()
+              props.controller.dispatch({ type: "mode.normal" })
             }}
           >
             {i18n.t("ui.promptInput.exitShell")}
@@ -1632,7 +1709,7 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
             onMouseDown={keep}
             onClick={props.controller.stop}
           >
-            <Icon name="stop" size="small" />
+            <Icon name="stop" />
             {i18n.t("ui.promptInput.stop")}
           </Button>
         }
@@ -1660,7 +1737,7 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
           onClick={() => props.controller.submit()}
         >
           {label()}
-          <Show when={busy()} fallback={<Icon name={state.mode === "shell" ? "arrow-undo-down" : "arrow-up"} />}>
+          <Show when={busy()} fallback={<Icon name={props.controller.mode() === "shell" ? "enter" : "arrow-up"} />}>
             <Loader class="size-4" />
           </Show>
         </Button>
@@ -1670,11 +1747,11 @@ function ComposerEditorTouchBar(props: { controller: ComposerEditorModel; docked
 }
 
 function ComposerSuggestionIcon(props: { item: ComposerSuggestion }) {
-  if (props.item.kind === "session") return <Icon name="speech-bubble" size="small" class="shrink-0" />
+  if (props.item.kind === "session") return <Icon name="comment" class="shrink-0" />
 
   if (props.item.kind === "agent") return <Icon name="brain" size="small" class="shrink-0 text-icon-info-active" />
 
-  if (props.item.kind === "skill") return <Icon name="post-skill" size="small" class="shrink-0" />
+  if (props.item.kind === "skill") return <Icon name="post-skill" class="shrink-0" />
 
   if (props.item.kind === "command") return null
 

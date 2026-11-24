@@ -9,7 +9,6 @@ import {
   Suspense,
   untrack,
   type ParentProps,
-  type Signal,
 } from "solid-js"
 import { createStore, produce, unwrap } from "solid-js/store"
 import { Icon } from "@opencode/ui/icon"
@@ -20,7 +19,6 @@ import {
   bindPlugin,
   LinkHandler,
   MenuItem,
-  Slot,
   Style,
   usePanel,
   type Files,
@@ -36,7 +34,14 @@ import { artifactKind } from "@opencode/util/artifact"
 import { uuid } from "@opencode/util/uuid"
 import { resolveArtifactPath } from "./artifact"
 import { FileContext, type FileShared } from "./context"
-import type { OpenApp } from "./apps"
+import { FileSource } from "./contract"
+import {
+  ARRIVAL_GUARD_MS,
+  createArrivalGuardState,
+  selectArrivalGuard,
+  transitionArrivalGuard,
+  type ArrivalGuardEvent,
+} from "./arrival-guard-machine"
 import {
   FileTree,
   OpenInApp,
@@ -61,7 +66,15 @@ import {
   type LinkResolution,
   type LinkRoute,
 } from "./link-open-machine"
-import { fileTabId, fileTabPath, isFileTab, workspaceFileUrl } from "./path"
+import {
+  createOpenInAppState,
+  isOpenAppInstalled,
+  isOpenInAppLaunching,
+  transitionOpenInApp,
+  type OpenInAppEffect,
+  type OpenInAppEvent,
+} from "./open-in-app-machine"
+import { fileTabId, fileTabPath, isFileTab, openInAppParentPath } from "./path"
 import {
   createPickerState,
   pickerBrowsing,
@@ -115,7 +128,8 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
   const desktop = ctx.desktop
   const [handoff, setHandoff] = storage.memory<Handoff>("handoff", { initial: { sessions: {} } })
   const preference = desktop ? ctx.stores.app : undefined
-  const [request, setRequest] = createStore<{ app?: OpenApp }>({})
+  const [openInApp, setOpenInApp] = createSignal(createOpenInAppState())
+  const openInAppTimers = new Map<number, ReturnType<typeof setTimeout>>()
 
   const [machines, setMachines] = createStore({ linkOpen: createLinkOpenState(), picker: createPickerState() })
 
@@ -143,6 +157,19 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
   const focused = new WeakMap<SessionScreen, string>()
 
   const key = (files: Files, path: string) => `file:${fileTabId(files, path)}`
+  const [unseen, setUnseen] = createStore<Record<string, boolean | undefined>>({})
+
+  // Drops the marks of sessions whose shell tab closed.
+  createKeyed(
+    () => [...sessions.list().map((session) => session.key), sessions.current()?.key].join("\u0000"),
+    () => {
+      const keep = [...sessions.list().map((session) => session.key), sessions.current()?.key]
+
+      Object.keys(unseen)
+        .filter((id) => !keep.some((session) => session !== undefined && id.startsWith(`${session}\n`)))
+        .forEach((id) => setUnseen(id, undefined))
+    },
+  )
 
   const active = (session: MountedSession, id: string) => {
     const state = layout.state(`file:${id}`, session)
@@ -166,8 +193,69 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     })
   }
 
+  const dispatchOpenInApp = (event: OpenInAppEvent) => {
+    const next = transitionOpenInApp(untrack(openInApp), event)
+
+    setOpenInApp(next.state)
+    next.effects.forEach(runOpenInApp)
+  }
+
+  const runOpenInApp = (effect: OpenInAppEffect) => {
+    if (effect.type === "clear-timer") {
+      clearTimeout(openInAppTimers.get(effect.attempt))
+      openInAppTimers.delete(effect.attempt)
+
+      return
+    }
+
+    if (effect.type === "toast-failed") {
+      ctx.toast.show({ variant: "error", title: ctx.t("common.requestFailed"), description: effect.error })
+
+      return
+    }
+
+    const attempt = effect.attempt
+
+    if (effect.type === "check-app") {
+      const openWith = effect.openWith
+      const drop = () => dispatchOpenInApp({ type: "app.check-dropped", attempt, openWith })
+
+      openInAppTimers.set(attempt, setTimeout(drop, effect.timeoutMs))
+      void Promise.try(() => desktop?.installed(openWith)).then(
+        (installed) => dispatchOpenInApp({ type: "app.checked", attempt, openWith, installed: Boolean(installed) }),
+        drop,
+      )
+
+      return
+    }
+
+    openInAppTimers.set(
+      attempt,
+      setTimeout(() => dispatchOpenInApp({ type: "launch.timed-out", attempt }), effect.timeoutMs),
+    )
+    const target = effect.target
+
+    void Promise.try(() => {
+      if (!desktop) throw new Error(ctx.t("common.requestFailed"))
+
+      if (!effect.reveal) return desktop.launch(target, effect.openWith)
+
+      return desktop
+        .reveal(target)
+        .then((revealed) => (revealed ? undefined : desktop.launch(openInAppParentPath(target))))
+    }).then(
+      () => dispatchOpenInApp({ type: "launch.succeeded", attempt }),
+      (cause: unknown) =>
+        dispatchOpenInApp({
+          type: "launch.failed",
+          attempt,
+          error: cause instanceof Error ? cause.message : String(cause),
+        }),
+    )
+  }
+
   // Opens on the session screen, whose file model serves the routed session `session` is.
-  const open = (session: MountedSession, path: string, options?: OpenOptions) => {
+  const openSource = (session: MountedSession, path: string, options?: OpenOptions) => {
     const screen = ctx.screen.current()
 
     if (!screen) return
@@ -175,8 +263,59 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     // Not batched: the mobile tab strip must register the new tab before it leaves the browser, or Kobalte falls back
     // to the first tab and reselects it.
     layout.open(key(screen.file, path), session, options)
-    dispatchPicker({ type: "file.opened", sessionKey: session.key })
+
+    if (options?.tab !== "append") dispatchPicker({ type: "file.opened", sessionKey: session.key })
     void screen.file.sync(path)
+  }
+
+  // The file tab an agent's show request put in front of the person (`arrival-guard-machine.ts`).
+  const [arrival, setArrival] = createSignal(createArrivalGuardState())
+  let arrivalTimer: ReturnType<typeof setTimeout> | undefined
+  onCleanup(() => clearTimeout(arrivalTimer))
+
+  const dispatchArrival = (event: ArrivalGuardEvent) => {
+    const next = transitionArrivalGuard(untrack(arrival), event)
+
+    setArrival(next.state)
+    next.effects.forEach((effect) => {
+      clearTimeout(arrivalTimer)
+      arrivalTimer = setTimeout(() => dispatchArrival({ type: "elapsed", token: effect.token }), ARRIVAL_GUARD_MS)
+    })
+  }
+
+  ctx.provide(FileSource, { open(session, address, tab, unprompted) {
+    const files = ctx.screen.current()?.file
+    const path = files?.resolve(address)
+
+    if (!files || !path || files.absolute(path) || path.split(/[\\/]/).includes("..") || sessions.current()?.key !== session.key)
+      return ctx.toast.show({ variant: "error", title: ctx.t("load.failed") })
+
+    if (tab === "append" && layout.state(key(files, address), session) !== "visible") setUnseen(`${session.key}\n${fileTabId(files, address)}`, true)
+
+    // The selection changes what is under the person's pointer without a press of theirs.
+    if (unprompted && tab === "select" && layout.state(key(files, address), session) !== "visible")
+      dispatchArrival({ type: "arrived", key: `${session.key}\n${fileTabId(files, address)}` })
+    openSource(session, address, tab ? { tab, background: true } : undefined)
+  } })
+
+  const open = (session: MountedSession, path: string, options?: OpenOptions) => {
+    if (!desktop || artifactKind(path) !== "html") return openSource(session, path, options)
+
+    if (ctx.screen.current()?.file.absolute(path)) {
+      ctx.toast.show({ variant: "error", title: ctx.t("preview.outside") })
+
+      return
+    }
+
+    const pane = shared.browser()
+
+    if (pane.status === "active" && pane.value.canOpen(session, path)) return pane.value.openFile(session, path)
+
+    ctx.toast.show({ variant: "error", title: ctx.t("preview.unavailable"), actions: [{
+      label: ctx.t("view.viewSource"), run: () => {
+        if (sessions.current()?.key === session.key) openSource(session, path)
+      },
+    }] })
   }
 
   const applySelection = (session: MountedSession, files: Files, path: string, selection: LineRange | undefined) => {
@@ -231,7 +370,6 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
       focusRequest: (view) => pickerFocusRequest(machines.picker, view),
       focused: (request) => dispatchPicker({ type: "focus.ended", request }),
     },
-    installed: new Map(),
     app: preference && {
       current: () => preference.value.app,
       set: (app) =>
@@ -239,9 +377,11 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
           draft.app = app
         }),
     },
-    request: {
-      app: () => request.app,
-      set: (app) => setRequest("app", app),
+    openInApp: {
+      check: (openWith) => dispatchOpenInApp({ type: "apps.requested", openWith }),
+      installed: (openWith) => isOpenAppInstalled(openInApp(), openWith),
+      opening: () => isOpenInAppLaunching(openInApp()),
+      launch: (input) => dispatchOpenInApp({ type: "launch.requested", ...input }),
     },
     handoff: {
       get: (session, path) => handoff.sessions[session]?.[path],
@@ -314,7 +454,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     },
     label: () => (
       <div class="flex items-center gap-1.5">
-        <Icon name="file-tree" size="small" />
+        <Icon name="folder" />
         <span>{ctx.t("command.open")}</span>
       </div>
     ),
@@ -335,7 +475,12 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
 
         return missing() ? ctx.t("tab.notFound", { name }) : name
       },
-      label: (state) => <FileVisual path={path()} temporary={state.preview} notFound={missing()} />,
+      label: (state) => <>
+        <FileVisual path={path()} temporary={state.preview} notFound={missing()} />
+        <Show when={unseen[`${state.session.key}\n${id}`]}>
+          <span role="img" aria-label={ctx.t("tab.activity")} class="ms-1 size-1.5 shrink-0 rounded-full bg-v2-state-fg-info" />
+        </Show>
+      </>,
       get missing() {
         return missing()
       },
@@ -384,6 +529,9 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
       })
     },
     close(input) {
+      setUnseen(`${input.session.key}\n${input.tab.id}`, undefined)
+
+      if (selectArrivalGuard(arrival(), `${input.session.key}\n${input.tab.id}`) !== undefined) dispatchArrival({ type: "left" })
       tabs.get(input.screen)?.delete(input.tab.id)
 
       if (isLauncher(input.tab.id))
@@ -393,21 +541,36 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
     },
     render: (props) => {
       const panel = usePanel()
+      createKeyed(() => panel.visible() && `${props.session.key}\n${props.tab.id}`, id => setUnseen(id, undefined))
+      const guarded = createMemo(() => selectArrivalGuard(arrival(), `${props.session.key}\n${props.tab.id}`) !== undefined)
+
+      // The guard's delay starts when the person can see the tab, not while its pane is still closed or behind another.
+      createKeyed(
+        () => guarded() && panel.visible() && `${props.session.key}\n${props.tab.id}`,
+        (key) => dispatchArrival({ type: "shown", key }),
+      )
 
       return (
         <FileProvider>
-          <Suspense>
-            <Show
-              when={panel.placement() === "mobile"}
-              fallback={<FileBrowser tab={() => props.tab} session={props.session} screen={props.screen} />}
-            >
-              <MobileFiles session={props.session} screen={props.screen} />
-            </Show>
-          </Suspense>
+          {/* No box of its own: the tab an agent just put here takes no click or key until its guard ends. */}
+          <div class="contents" inert={guarded()}>
+            <Suspense>
+              <Show
+                when={panel.placement() === "mobile"}
+                fallback={<FileBrowser tab={() => props.tab} session={props.session} screen={props.screen} />}
+              >
+                <MobileFiles session={props.session} screen={props.screen} />
+              </Show>
+            </Suspense>
+          </div>
         </FileProvider>
       )
     },
     focus(input) {
+      // The person selected another of the file tabs themselves: nothing is held for that.
+      if (arrival().status !== "none" && selectArrivalGuard(arrival(), `${input.session.key}\n${input.tab.id}`) === undefined)
+        dispatchArrival({ type: "left" })
+
       if (!isFileTab(input.tab.id)) return
 
       // A file the user selects on a wide screen is what the narrow-screen view shows too, not the browser. Narrow
@@ -447,7 +610,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
       menu: "session.panel",
       id: "open",
       title: ctx.t("command.open"),
-      icon: "file-tree",
+      icon: "folder",
       keybind: "file.browse",
       order: 30,
       run: () => {
@@ -463,21 +626,6 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
   const OpenInAppMenuItem = lazy(() =>
     import("./open-in-app").then((module) => ({ default: module.OpenInAppMenuItem })),
   )
-
-  // How many "Open in" buttons each screen's panel headers show; the tab strip shows its own only while none do.
-  const headers = new WeakMap<SessionScreen, Signal<number>>()
-
-  const headerButtons = (screen: SessionScreen) => {
-    const existing = headers.get(screen)
-
-    if (existing) return existing
-
-    const created = createSignal(0)
-
-    headers.set(screen, created)
-
-    return created
-  }
 
   if (desktop) {
     onCleanup(
@@ -496,37 +644,18 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
         </FileProvider>
       ),
     })
-    ctx.add(Slot, {
-      at: "session.panel.end",
-      render: (input) => (
-        <Show when={headerButtons(input.screen)[0]() === 0}>
-          <FileProvider>
-            <Suspense>
-              <OpenInAppButton session={input.session} screen={input.screen} />
-            </Suspense>
-          </FileProvider>
-        </Show>
-      ),
-    })
   }
 
   ctx.provide(OpenInApp, {
-    Button: bindPlugin((props: OpenInAppProps) => {
-      const count = headerButtons(props.screen)
-
-      count[1]((value) => value + 1)
-      onCleanup(() => count[1]((value) => value - 1))
-
-      return (
-        <Show when={desktop}>
-          <FileProvider>
-            <Suspense>
-              <OpenInAppButton session={props.session} screen={props.screen} />
-            </Suspense>
-          </FileProvider>
-        </Show>
-      )
-    }),
+    Button: bindPlugin((props: OpenInAppProps) => (
+      <Show when={desktop}>
+        <FileProvider>
+          <Suspense>
+            <OpenInAppButton session={props.session} screen={props.screen} />
+          </Suspense>
+        </FileProvider>
+      </Show>
+    )),
   })
 
   // The review panel lists its changed files with the browser's tree; it renders under this plugin, on the
@@ -573,7 +702,8 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
   const resolve = (files: Files, value: string, base?: string) => {
     const root = files.root.replaceAll("\\", "/").replace(/\/+$/, "")
 
-    if (/^skill:\/\//i.test(value) || /^[a-z]:\//i.test(value) || value.startsWith("/")) return files.resolve(value)
+    if (/^skill:\/\//i.test(value) || /^[a-z]:\//i.test(value) || /^(?:\/|~(?:\/|$))/.test(value))
+      return files.resolve(value)
 
     const relative = resolveArtifactPath(base ?? "", value)
 
@@ -798,15 +928,11 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
 
     if (effect.type === "open-exact") return open(routed, effect.path, { background: effect.background })
 
+    if (effect.type === "open-source") return openSource(routed, effect.path, { background: effect.background })
+
     if (effect.type === "open-picker") return openPicker(routed, effect.query, { background: effect.background })
 
-    if (effect.type === "open-browser") {
-      const pane = shared.browser()
-
-      if (pane.status === "active") pane.value.open(routed, effect.url)
-
-      return
-    }
+    if (effect.type === "open-browser") return open(routed, effect.path)
 
     batch(() => {
       applySelection(routed, screen.file, effect.path, effect.selection)
@@ -832,36 +958,29 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
 
     // Absolute paths, links written relative to a document, and agent previews name one exact file.
     if (isAbsoluteLink(parsed.path) || link.base !== undefined || link.background)
-      return fileOrPage(screen, direct, parsed.selection)
+      return fileOrPage(direct, parsed.selection)
 
     const target = await findFileLink({ files: screen.file, path: parsed.path, signal })
 
     if (target?.kind === "picker") return { kind: "picker", query: target.query }
 
     // With no match, the literal path still covers files the search index skips, such as an ignored `.env`.
-    return fileOrPage(screen, target?.path ?? direct, parsed.selection)
+    return fileOrPage(target?.path ?? direct, parsed.selection)
   }
 
-  // The browser pane shows HTML it can load. While it is pending or off, the file opens as a tab instead.
-  const fileOrPage = (screen: SessionScreen, path: string, selection: LineRange | undefined): LinkResolution => {
-    const pane = shared.browser()
-    const routed = sessions.current()
-
-    if (routed && artifactKind(path) === "html" && pane.status === "active" && pane.value.canOpen(routed, path))
-      return { kind: "browser", url: workspaceFileUrl(screen.file.root, path) }
-
-    return { kind: "file", path, selection }
-  }
+  // Browser documents stream from their origin, not through the file viewer's full-content read.
+  const fileOrPage = (path: string, selection: LineRange | undefined): LinkResolution =>
+    desktop && artifactKind(path) === "html" ? { kind: "browser", path } : { kind: "file", path, selection }
 
   onCleanup(() => {
     dispatchLink({ type: "disposed" })
     dispatchPicker({ type: "disposed" })
+    dispatchOpenInApp({ type: "disposed" })
   })
 
-  // Opens files the agent references as side panel tabs, inside or outside the workspace, or as
-  // a browser tab for HTML when the desktop can load the file directly.
+  // File references open as side panel tabs. Desktop HTML opens in the session browser. Web links are not files.
   ctx.add(LinkHandler, {
-    match: () => true,
+    match: (link) => !/^https?:\/\//i.test(link.href),
     exists: linkExists,
     open(link) {
       const session = sessions.current()
@@ -874,6 +993,7 @@ const setup: Plugin.Setup<typeof File> = (ctx) => {
       if (link.exact || link.origin === "file")
         return dispatchLink({
           type: "link.exact",
+          origin: link.origin,
           href: link.href,
           path: files.resolve(link.href),
           background: Boolean(link.background),

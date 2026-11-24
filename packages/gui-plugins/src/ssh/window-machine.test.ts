@@ -3,6 +3,7 @@ import { Schema } from "effect"
 import { SshItem, SshState } from "./contract"
 import {
   createSshWindowState,
+  selectSshCanOffer,
   selectSshError,
   selectSshPromptTarget,
   selectSshResolvable,
@@ -218,6 +219,107 @@ describe("ssh window attempt", () => {
     expect(transitionSshWindow(disposed.state, connect(later)).effects).toEqual([
       { type: "waiters.notify", waiters: [later], ready: false },
     ])
+  })
+})
+
+describe("ssh cover offer", () => {
+  const visit = "/new-session?draftId=1"
+
+  const other = { id: "box-b", target: "ssh box-b", name: "Box B" }
+
+  function offer(
+    item: SshItem,
+    fields?: { readonly path?: string; readonly dialogActive?: boolean; readonly ipcActive?: boolean },
+  ): SshWindowEvent {
+    return {
+      type: "cover.offered",
+      id: item.config.id,
+      path: fields?.path ?? visit,
+      dialogActive: fields?.dialogActive ?? false,
+      ipcActive: fields?.ipcActive ?? true,
+      item,
+    }
+  }
+
+  test("a second server that needs a sign-in on the same visit still offers it", () => {
+    const first = server({ stage: "authentication" })
+    const second = { ...server({ stage: "authentication" }), config: other }
+
+    const result = replay(createSshWindowState(), [{ type: "visit.changed", path: visit }, offer(first), offer(second)])
+
+    expect(result.effects).toEqual([
+      { type: "rpc.start", id: config.id, attempt: 1, config, replace: false },
+      { type: "rpc.start", id: other.id, attempt: 2, config: other, replace: false },
+    ])
+  })
+
+  test("each server offers once per visit, and again on a new visit", () => {
+    const item = server({ stage: "authentication" })
+
+    const offered = replay(createSshWindowState(), [
+      { type: "visit.changed", path: visit },
+      offer(item),
+      { type: "cancel.requested", id: config.id, saved: true },
+    ]).state
+
+    expect(selectSshCanOffer(offered, config.id, visit, false, true, item)).toBe(false)
+    expect(transitionSshWindow(offered, offer(item)).state).toBe(offered)
+
+    const back = replay(offered, [
+      { type: "visit.changed", path: "/s/other" },
+      { type: "visit.changed", path: visit },
+      offer(item),
+    ])
+
+    expect(back.effects).toEqual([{ type: "rpc.start", id: config.id, attempt: 2, config, replace: false }])
+  })
+
+  test("an offer that cannot start is not spent", () => {
+    const item = server({ stage: "authentication" })
+    const state = transitionSshWindow(createSshWindowState(), { type: "visit.changed", path: visit }).state
+
+    const blocked = [
+      offer(item, { ipcActive: false }),
+      offer(item, { dialogActive: true }),
+      offer(server({ stage: "authentication", authenticatingElsewhere: true })),
+      offer(server({ stage: "connecting" })),
+    ]
+
+    blocked.forEach((event) => {
+      const result = transitionSshWindow(state, event)
+
+      expect(result.state).toBe(state)
+      expect(result.effects).toEqual([])
+    })
+
+    // Main came back on the same visit: the offer starts the attempt now, without the toast an inactive main gave.
+    expect(transitionSshWindow(state, offer(item)).effects).toEqual([
+      { type: "rpc.start", id: config.id, attempt: 1, config, replace: false },
+    ])
+  })
+
+  test("an offer joins the attempt that already shows the prompt and is spent with it", () => {
+    const item = server({ stage: "authentication", prompt })
+
+    const joined = replay(createSshWindowState(), [
+      { type: "visit.changed", path: visit },
+      connect(),
+      { type: "start.confirmed", id: config.id, attempt: 1, item },
+      offer(item),
+    ])
+
+    expect(joined.effects.filter((effect) => effect.type === "rpc.start")).toHaveLength(1)
+
+    // Cancelling that prompt does not reopen it on this visit.
+    const cancelled = transitionSshWindow(joined.state, { type: "cancel.requested", id: config.id, saved: true }).state
+    expect(selectSshCanOffer(cancelled, config.id, visit, false, true, server({ stage: "authentication" }))).toBe(false)
+  })
+
+  test("a disposed window offers nothing", () => {
+    const disposed = transitionSshWindow(createSshWindowState(), { type: "disposed" }).state
+
+    expect(transitionSshWindow(disposed, offer(server({ stage: "authentication" }))).state).toBe(disposed)
+    expect(transitionSshWindow(disposed, { type: "visit.changed", path: visit }).state).toBe(disposed)
   })
 })
 

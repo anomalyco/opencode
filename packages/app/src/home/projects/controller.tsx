@@ -43,7 +43,7 @@ export function createHomeProjectsController(home: HomeController) {
       server: conn,
       title: language.t("command.project.open"),
       multiple: true,
-      onSelect: (result) => void home.project.add(conn, homeProjectDirectories(result)),
+      onSelect: (result) => home.project.add(conn, homeProjectDirectories(result)),
     })
   }
 
@@ -84,6 +84,7 @@ export function createHomeProjectsController(home: HomeController) {
       add: home.project.add,
       openNewSession: actions.openNewSession,
       canImportSession: actions.canImportSession,
+      importingSession: actions.importingSession,
       importSession: actions.importSession,
       edit: actions.edit,
       hasUnread: actions.hasUnread,

@@ -202,8 +202,6 @@ function step(state: StartupState, event: StartupEvent): StartupTransition {
 
   if (state.status === "failed") return unchanged(state)
 
-  if (event.type === "startup.failed") return fail(state, { error: event.error })
-
   if (event.type === "sidecar.changed") {
     if (state.sidecar?.url === event.data.url) return unchanged(state)
 
@@ -228,6 +226,9 @@ function step(state: StartupState, event: StartupEvent): StartupTransition {
 
     return unchanged(state)
   }
+
+  // Once the app shows, a late startup failure must not replace the working window with the error page.
+  if (event.type === "startup.failed") return fail(state, { error: event.error })
 
   if (event.type === "drawing.started")
     return state.drawing === "pending" ? to({ ...state, drawing: "running" }) : unchanged(state)
@@ -401,6 +402,11 @@ export function selectStartupLocale(state: StartupState) {
 /** The startup error to throw inside the app's error boundary. */
 export function selectStartupFailure(state: StartupState) {
   return state.status === "failed" ? state.failure : undefined
+}
+
+/** The splash is fading out or gone, so the user can see and use the app. */
+export function selectStartupRevealed(state: StartupState) {
+  return state.status === "fading" || state.status === "revealed"
 }
 
 export function selectInterfaceMounted(state: StartupState) {

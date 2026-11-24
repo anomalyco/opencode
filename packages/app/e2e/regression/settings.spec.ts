@@ -3,8 +3,12 @@ import type { ConfigEntry, OpenCodeEvent, SessionMessageInfo, WorktreeDirectory 
 import { NO_PROVIDER, REMOTE_SERVER, SERVER, holdRoute, project, seed, session } from "../utils/app"
 import { mockMissingLocation, mockOpenCodeServer } from "../utils/mock-server"
 import { mockRemoteServer, mockWorkspace, openSession, openSettings, type WorkspaceInput } from "../utils/workspace"
+import { CONSOLE_URL, consoleGateway, consoleSignIn } from "../utils/console"
 import { recordNotifications } from "../utils/notifications"
 import { installSseTransport } from "../utils/sse-transport"
+import { APP_READY_TIMEOUT } from "../utils/waits"
+import { dict as ar } from "../../src/runtime/i18n/ar"
+import { dict as en } from "../../src/runtime/i18n/en"
 
 const directory = "C:/Projects/settings-demo"
 
@@ -60,6 +64,21 @@ test("settings has its own route and returns through app history", async ({ page
   const { settings } = await open(page)
   const home = page.getByRole("button", { name: "Home", exact: true })
   await expect(page).toHaveURL("/settings")
+  await expect(settings.getByRole("tab")).toHaveText([
+    "Preferences",
+    "Appearance",
+    "Notifications",
+    "Shortcuts",
+    "Providers",
+    "Models",
+    "Extensions",
+    "Projects",
+    "Worktrees",
+    "Server",
+    "Experimental",
+    "About",
+  ])
+  await expect(settings.getByRole("tab", { name: "Preferences", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect(home).toHaveAttribute("aria-pressed", "false")
   await settings.getByRole("button", { name: "Back to app", exact: true }).click()
   await expect(page).toHaveURL("/")
@@ -94,6 +113,43 @@ test("a settings page survives refresh", async ({ page }) => {
   await page.reload()
   await expect(appearance).toHaveAttribute("aria-selected", "true")
   await expect(page).toHaveURL("/settings?tab=appearance")
+})
+
+// The Arabic dictionary chunks: built (`_assets/ar-<hash>.js`) and dev (`.../i18n/ar.ts`), for the app and the UI.
+const arabic = /\/(?:_assets\/ar-[\w-]+\.js|i18n\/ar\.ts)(?:\?|$)/
+
+async function pickArabic(page: Page) {
+  const { settings } = await open(page)
+  await settings.locator('[data-action="settings-language"]').click()
+  await page.getByRole("listbox").getByRole("option", { name: "العربية", exact: true }).click()
+
+  return settings
+}
+
+test("a language switch keeps settings on screen and flips direction only with the new strings", async ({ page }) => {
+  const chunks = await holdRoute(page, arabic)
+  const html = page.locator("html")
+  const settings = await pickArabic(page)
+  await chunks.arrived
+
+  await expect(settings.getByText("Language", { exact: true })).toBeVisible()
+  await expect(html).toHaveAttribute("dir", "ltr")
+  await expect(html).toHaveAttribute("lang", "en")
+
+  chunks.release()
+  await expect(settings.getByText("اللغة", { exact: true })).toBeVisible()
+  await expect(html).toHaveAttribute("dir", "rtl")
+  await expect(html).toHaveAttribute("lang", "ar")
+})
+
+test("a language whose chunk fails to load keeps English and says so", async ({ page }) => {
+  await page.route(arabic, (route) => route.abort("failed"))
+  const settings = await pickArabic(page)
+
+  await expect(page.getByText("Failed to load العربية", { exact: true })).toBeVisible()
+  await expect(settings.getByText("Language", { exact: true })).toBeVisible()
+  await expect(page.locator("html")).toHaveAttribute("dir", "ltr")
+  await expect(settings.locator('[data-action="settings-language"]')).toContainText("English")
 })
 
 test("Questions settings default independently of old Permissions settings and survive reload", async ({ page }) => {
@@ -236,8 +292,20 @@ test("request events use real Questions settings without disabling Permissions a
     .toEqual([...previews, expect.stringContaining("alert-01"), expect.stringContaining("alert-01")])
 })
 
-for (const locale of ["en", "ar"]) {
+for (const [locale, dict] of [
+  ["en", en],
+  ["ar", ar],
+] as const) {
   test(`background activity alignment stays physical and persists (${locale})`, async ({ page }) => {
+    const label = dict["settings.timeline.row.backgroundActivity.title"]
+
+    const names = {
+      Hidden: dict["settings.timeline.row.backgroundActivity.off"],
+      Left: dict["settings.timeline.row.backgroundActivity.left"],
+      Center: dict["settings.timeline.row.backgroundActivity.center"],
+      Right: dict["settings.timeline.row.backgroundActivity.right"],
+    }
+
     const id = "ses_activity_settings"
     const childID = "ses_activity_settings_child"
     const stopped: string[] = []
@@ -314,13 +382,13 @@ for (const locale of ["en", "ar"]) {
     for (const value of ["Center", "Right", "Hidden", "Left", "Right"] as const) {
       await page.keyboard.press("Control+,")
       const settings = page.getByTestId("settings-screen")
-      const control = settings.getByLabel("Background activity", { exact: true })
+      const control = settings.getByLabel(label, { exact: true })
       await expect(control).toBeVisible()
       await control.click()
       const options = page.getByRole("listbox")
-      await expect(options.getByRole("option")).toHaveText(["Hidden", "Left", "Center", "Right"])
-      await options.getByRole("option", { name: value, exact: true }).click()
-      await expect(control).toHaveText(value)
+      await expect(options.getByRole("option")).toHaveText([names.Hidden, names.Left, names.Center, names.Right])
+      await options.getByRole("option", { name: names[value], exact: true }).click()
+      await expect(control).toHaveText(names[value])
       await page.goBack()
 
       if (value === "Hidden") {
@@ -375,9 +443,7 @@ for (const locale of ["en", "ar"]) {
       .toBe("right")
     await page.keyboard.press("Control+,")
     await page.reload()
-    await expect(page.getByTestId("settings-screen").getByLabel("Background activity", { exact: true })).toHaveText(
-      "Right",
-    )
+    await expect(page.getByTestId("settings-screen").getByLabel(label, { exact: true })).toHaveText(names.Right)
   })
 }
 
@@ -467,6 +533,42 @@ test("several servers share one selected server across per-server pages", async 
   await expect(settings.getByRole("button", { name: "Retry", exact: true })).toBeVisible()
   await expect(settings.getByRole("button", { name: "Edit server", exact: true })).toBeVisible()
 })
+
+for (const server of [
+  { name: "Signed-out box", url: REMOTE_SERVER, password: "secret" },
+  // Nothing answers on this server.
+  { name: "Offline box", url: "http://127.0.0.1:4099" },
+]) {
+  test(`a project route on an unavailable server falls back to its Projects page (${server.name})`, async ({
+    page,
+  }) => {
+    const remote = "/remote/settings-demo"
+    await mockWorkspace(page, {
+      name: "Settings demo",
+      directory,
+      provider: NO_PROVIDER,
+      sessions: [],
+      seed: { tabs: [] },
+    })
+
+    if (server.password)
+      await mockRemoteServer(page, { name: server.name, directory: remote, password: server.password })
+
+    if (!server.password) await seed(page, { servers: [{ url: server.url, name: server.name }] })
+    await page.goto(
+      `/settings?server=${encodeURIComponent(server.url)}&project=${encodeURIComponent(remote)}&tab=general`,
+    )
+    const settings = page.getByTestId("settings-screen")
+    await expect(settings.getByRole("status").filter({ hasText: `Can't reach ${server.name}` })).toBeVisible()
+    await expect(settings.getByRole("heading", { name: "Projects", exact: true })).toBeVisible()
+    await expect(page).toHaveURL(
+      (url) =>
+        url.searchParams.get("server") === server.url &&
+        url.searchParams.get("tab") === "projects" &&
+        !url.searchParams.has("project"),
+    )
+  })
+}
 
 test("project list menus rename, edit, add, and stay inside the scrollport", async ({ page }) => {
   const projects = ["rebase", "dinocms", "opencode", "Playground"].map((name, index) =>
@@ -583,6 +685,30 @@ test("project list menus rename, edit, add, and stay inside the scrollport", asy
   await expect(page.locator('[data-component="home-project-row"]').filter({ hasText: "dinocms" })).toBeVisible()
 })
 
+test("a project rename that hangs keeps its field focused, and Escape cancels it without leaving settings", async ({
+  page,
+}) => {
+  const { settings } = await open(page)
+  const hold = await holdRoute(page, (url) => url.pathname === `/api/project/${projectID}`, { method: "PATCH" })
+  await settings.getByRole("tab", { name: "Projects", exact: true }).click()
+  const card = settings.getByRole("listitem").filter({ hasText: "Settings demo" })
+  await card.getByRole("button", { name: "More options", exact: true }).click()
+  await page.getByRole("menu").getByRole("menuitem", { name: "Rename", exact: true }).click()
+  const rename = settings.getByRole("textbox", { name: "Rename", exact: true })
+  await expect(rename).toBeFocused()
+  await rename.fill("Renamed demo")
+  await rename.press("Enter")
+  await hold.arrived
+
+  await expect(rename).toHaveAttribute("aria-busy", "true")
+  await expect(rename).toHaveAttribute("readonly", "")
+  await expect(rename).toBeFocused()
+  await rename.press("Escape")
+  await expect(card.getByRole("button", { name: "Settings demo", exact: true })).toBeFocused()
+  await expect(settings).toBeVisible()
+  hold.release()
+})
+
 test("project settings open as a nested view that keeps its route", async ({ page }) => {
   const { settings } = await open(page)
   await openProject(page)
@@ -648,6 +774,133 @@ test("a project whose folder is gone opens its settings with a notice", async ({
   await settings.getByRole("tab", { name: "General", exact: true }).click()
   await expect(settings.getByRole("textbox", { name: "Project name", exact: true })).toBeVisible()
   await expect(notice).toContainText(directory)
+})
+
+test("a project plugin list that fails to load offers Retry instead of an empty list", async ({ page }) => {
+  const { settings } = await open(page)
+  await openProject(page)
+  const lists = { failing: true }
+
+  // Only the project's list carries a location; the server-wide list still loads.
+  await page.route(/\/api\/plugin\?.*location/, (route) =>
+    route.fulfill(
+      lists.failing
+        ? {
+            status: 500,
+            json: { name: "UnknownError", data: { message: "config is invalid" } },
+            headers: { "access-control-allow-origin": "*" },
+          }
+        : {
+            json: {
+              location: { directory },
+              data: [{ id: "project-plugin", source: { type: "package", target: "project-plugin" } }],
+            },
+            headers: { "access-control-allow-origin": "*" },
+          },
+    ),
+  )
+
+  await settings.getByRole("tab", { name: "Extensions", exact: true }).click()
+  await settings.getByRole("tab", { name: "Plugins", exact: true }).click()
+  const panel = settings.getByRole("tabpanel", { name: "Plugins", exact: true })
+  await expect(panel.getByRole("status")).toContainText("Could not load plugins")
+  await expect(panel.getByText("No plugins yet", { exact: true })).toHaveCount(0)
+
+  lists.failing = false
+  await panel.getByRole("button", { name: "Try again", exact: true }).click()
+  await expect(panel.getByText("project-plugin", { exact: true })).toBeVisible()
+  await expect(panel.getByRole("status")).toHaveCount(0)
+})
+
+test("project extensions link Console MCPs and skills and offer sign-in as the server-wide page does", async ({
+  page,
+  context,
+}) => {
+  const consoleUrl = CONSOLE_URL
+  await context.route("https://opencode.ai/console/**", (route) => route.fulfill({ body: "Console" }))
+
+  const { settings } = await open(page, {
+    configEntries: [
+      {
+        type: "document",
+        info: {
+          mcp: {
+            servers: {
+              slack: consoleGateway("slack"),
+              github: consoleGateway("github", { protocol: "2026-07-28" }),
+            },
+          },
+        },
+      },
+    ],
+    mcp: [
+      ...["figma", "github", "slack"].map((name) => ({ name, status: { status: "connected" } })),
+      { name: "stripe", integrationID: "stripe-oauth", status: { status: "needs_auth", error: "Sign in required" } },
+    ],
+    integrations: [
+      consoleSignIn,
+      {
+        id: "stripe-oauth",
+        name: "Stripe",
+        methods: [{ id: "oauth", type: "oauth" }],
+        connections: [],
+        metadata: { source: "mcp" },
+      },
+    ],
+    skills: [
+      { id: "review", name: "Code review", path: "/home/test/.config/opencode/skills/review/SKILL.md", content: "x" },
+      { id: "funnel", name: "Funnel analytics", path: "skill://funnel/SKILL.md", content: "x" },
+    ],
+  })
+
+  await openProject(page)
+  await settings.getByRole("tab", { name: "Extensions", exact: true }).click()
+
+  // Console's servers are shared with every project, so they list under Shared.
+  const mcps = settings.getByRole("tabpanel", { name: "MCPs", exact: true })
+  await mcps.getByRole("button", { name: /^Shared/ }).click()
+  await expect(mcps.getByRole("switch", { name: "figma", exact: true })).toBeVisible()
+  // As on the server-wide page, a dot shows each status and the words stay for assistive technology.
+  await expect(mcps.getByRole("switch", { name: "slack", exact: true })).toHaveAccessibleDescription("Connected")
+  await expect(mcps.getByRole("switch", { name: "github", exact: true })).toHaveCount(0)
+  await expect(mcps.getByRole("button", { name: "Manage figma in Console", exact: true })).toHaveCount(0)
+  // A server that needs a sign-in asks for it in the switch's place, as on the server-wide page.
+  await expect(mcps.getByRole("button", { name: "Sign in to stripe", exact: true })).toHaveText("Sign in")
+  await expect(mcps.getByRole("switch", { name: "stripe", exact: true })).toHaveCount(0)
+
+  const connection = page.waitForEvent("popup")
+  await mcps.getByRole("button", { name: "Connect github in Console", exact: true }).click()
+  await expect(await connection).toHaveURL(`${consoleUrl}/org_acme/extensions?connect=github`)
+
+  const manage = page.waitForEvent("popup")
+  await mcps.getByRole("button", { name: "Manage slack in Console", exact: true }).click()
+  await expect(await manage).toHaveURL(`${consoleUrl}/org_acme/extensions/mcp/slack`)
+
+  await settings.getByRole("tab", { name: "Skills", exact: true }).click()
+  const skills = settings.getByRole("tabpanel", { name: "Skills", exact: true })
+  await skills.getByRole("button", { name: /^Shared/ }).click()
+  await expect(skills.getByText("Code review", { exact: true })).toBeVisible()
+  await expect(skills.getByRole("button", { name: "Manage Code review in Console", exact: true })).toHaveCount(0)
+
+  const skill = page.waitForEvent("popup")
+  await skills.getByRole("button", { name: "Manage Funnel analytics in Console", exact: true }).click()
+  await expect(await skill).toHaveURL(`${consoleUrl}/org_acme/extensions?kind=skills&search=funnel`)
+})
+
+test("a Console skill links to Console's home when no Console MCP names the workspace", async ({ page, context }) => {
+  await context.route(`${CONSOLE_URL}**`, (route) => route.fulfill({ body: "Console" }))
+
+  const { settings } = await open(page, {
+    integrations: [consoleSignIn],
+    skills: [{ id: "funnel", name: "Funnel analytics", path: "skill://funnel/SKILL.md", content: "x" }],
+  })
+
+  await settings.getByRole("tab", { name: "Extensions", exact: true }).click()
+  await settings.getByRole("tab", { name: "Skills", exact: true }).click()
+
+  const skill = page.waitForEvent("popup")
+  await settings.getByRole("button", { name: "Manage Funnel analytics in Console", exact: true }).click()
+  await expect(await skill).toHaveURL(CONSOLE_URL)
 })
 
 for (const field of [
@@ -750,6 +1003,45 @@ test("clearing project fields sends explicit removal values", async ({ page }) =
   }
 })
 
+test("Enter removes a custom project icon, and a failed save stays marked until it is sent again", async ({ page }) => {
+  const { settings } = await open(page)
+  await openProject(page)
+  const icon = settings.getByRole("button", { name: "Project icon", exact: true })
+  await expect(icon.locator("img")).toHaveCount(1)
+
+  // Keyboard and touch users never hover, so activating the icon alone removes it.
+  const cleared = patched(page)
+  await icon.focus()
+  await page.keyboard.press("Enter")
+  expect((await cleared).postDataJSON()).toEqual({ icon: { color: "orange", override: "" } })
+  await expect(icon.locator("img")).toHaveCount(0)
+  await expect(settings.locator('[aria-busy="true"]')).toHaveCount(0)
+
+  // Only the next save fails.
+  let failed = false
+
+  await page.route(new RegExp(`/api/project/${projectID}(\\?|$)`), (route) => {
+    if (route.request().method() !== "PATCH" || failed) return route.fallback()
+    failed = true
+
+    return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ message: "down" }) })
+  })
+
+  const blue = settings.getByRole("button", { name: "Select blue color", exact: true })
+  const retry = settings.getByRole("button", { name: "Try again", exact: true })
+  await blue.click()
+  await expect(retry).toBeVisible()
+  await expect(icon).toHaveAttribute("aria-invalid", "true")
+  await expect(blue).toHaveAttribute("aria-pressed", "true")
+  await expect(settings.locator('[aria-busy="true"]')).toHaveCount(0)
+
+  const resent = patched(page)
+  await retry.click()
+  expect((await resent).postDataJSON()).toEqual({ icon: { color: "blue", override: "" } })
+  await expect(retry).toHaveCount(0)
+  await expect(icon).not.toHaveAttribute("aria-invalid")
+})
+
 test("shortcuts list Search sessions once and unbind a shortcut while recording it", async ({ page }) => {
   // Opening Settings from Home registers Home's Find, which must not add a second Search sessions.
   const { settings } = await open(page)
@@ -783,6 +1075,23 @@ for (const own of [false, true]) {
     await expect(settings.locator('[data-keybind-id="terminal.close"]')).toHaveText(own ? ["Ctrl+Alt+E"] : [])
   })
 }
+
+test("typing in the shortcut search while recording filters instead of binding the key", async ({ page }) => {
+  const { settings } = await open(page)
+  await settings.getByRole("tab", { name: "Shortcuts", exact: true }).click()
+  const binding = settings.locator('[data-keybind-id="tab.new"]')
+  const shortcut = (await binding.textContent()) ?? ""
+  await binding.click()
+  await expect(binding).toHaveText("Press keys")
+
+  const search = settings.getByRole("searchbox", { name: "Search shortcuts", exact: true })
+  await search.click()
+  await expect(binding).toHaveText(shortcut)
+  // "t" still lists the row: its shortcut contains T.
+  await page.keyboard.type("t")
+  await expect(search).toHaveValue("t")
+  await expect(binding).toHaveText(shortcut)
+})
 
 test("the new session shortcut waits for a shortcut recording, then leaves settings", async ({ page }) => {
   const { settings } = await open(page)
@@ -829,6 +1138,18 @@ test("single extension rows stay aligned when switching tabs", async ({ page }) 
   }
 })
 
+test("a settings page takes focus from a click on its text without a ring around the whole page", async ({ page }) => {
+  const { settings } = await open(page)
+
+  const panel = settings.getByRole("tabpanel").filter({ has: page.getByRole("heading", { name: "Preferences" }) })
+
+  await panel.getByRole("heading", { name: "Preferences", exact: true }).click()
+  // Chromium matches :focus-visible on the focused page once a key is pressed; the controls inside show focus instead.
+  await page.keyboard.press("ArrowDown")
+  await expect(panel).toBeFocused()
+  await expect(panel).toHaveCSS("outline-style", "none")
+})
+
 test.describe("pages open before slow data", () => {
   test("worktrees", async ({ page }) => {
     const { settings } = await open(page)
@@ -860,8 +1181,31 @@ test.describe("pages open before slow data", () => {
     refresh.release()
   })
 
+  test("extensions keeps the empty MCP panel's keyboard ring inside the tabs", async ({ page }) => {
+    const { settings } = await open(page)
+
+    await settings.getByRole("tab", { name: "Extensions", exact: true }).click()
+
+    const tab = settings.getByRole("tab", { name: "MCPs", exact: true })
+
+    const panel = settings.getByRole("tabpanel", { name: "Extensions", exact: true }).getByRole("tabpanel")
+
+    await expect(panel.getByText("Available to all projects")).toBeVisible()
+    await tab.press("Tab")
+    await expect(panel).toBeFocused()
+    await expect(panel).toHaveCSS("outline-style", "solid")
+    await expect(panel).toHaveCSS("outline-offset", "-2px")
+  })
+
   test("extensions", async ({ page }) => {
-    const { settings } = await open(page, { mcp: [{ name: "demo-mcp", status: { status: "connected" } }] })
+    const { settings } = await open(page, {
+      mcp: [{ name: "demo-mcp", status: { status: "connected" } }],
+      skills: [
+        { id: "opencode", name: "OpenCode", path: "skill://opencode/SKILL.md", content: "OpenCode help" },
+        { id: "plugin-skill", name: "Plugin skill", path: "skill://plugin-skill/SKILL.md", content: "Plugin help" },
+      ],
+    })
+
     const mcp = await holdRoute(page, (url) => url.pathname === "/api/mcp")
     await settings.getByRole("tab", { name: "Extensions", exact: true }).click()
     await mcp.arrived
@@ -870,6 +1214,11 @@ test.describe("pages open before slow data", () => {
     mcp.release()
     await settings.getByRole("tab", { name: "MCPs", exact: true }).click()
     await expect(settings.getByRole("switch", { name: "demo-mcp" })).toBeChecked()
+    // Without a Console sign-in, a virtual skill is never linked to Console.
+    await settings.getByRole("tab", { name: "Skills", exact: true }).click()
+    await expect(settings.getByText("OpenCode", { exact: true })).toBeVisible()
+    await expect(settings.getByText("Plugin skill", { exact: true })).toBeVisible()
+    await expect(settings.getByRole("button", { name: /in Console$/ })).toHaveCount(0)
   })
 
   test("extensions show MCP status dots with sign-in, error, and switch controls", async ({ page, context }) => {
@@ -926,6 +1275,100 @@ test.describe("pages open before slow data", () => {
     await expect(details.getByText(error, { exact: true })).toBeVisible()
   })
 
+  test("extensions list Console MCPs and skills with local ones", async ({ page, context }) => {
+    await context.route("https://opencode.ai/console/**", (route) => route.fulfill({ body: "Console" }))
+    const consoleUrl = CONSOLE_URL
+
+    const actions: string[] = []
+
+    const { settings, push } = await open(page, {
+      configEntries: [
+        {
+          type: "document",
+          info: {
+            mcp: {
+              servers: {
+                linear: consoleGateway("linear"),
+                github: consoleGateway("github", { protocol: "2026-07-28" }),
+                clickhouse: consoleGateway("clickhouse"),
+              },
+            },
+          },
+        },
+        {
+          type: "document",
+          path: "/home/test/.config/opencode/opencode.json",
+          info: { mcp: { servers: { linear: { type: "remote", url: "https://mcp.linear.app/mcp" } } } },
+        },
+      ],
+      integrations: [consoleSignIn],
+      mcp: ["figma", "linear", "github", "clickhouse"].map((name) => ({ name, status: { status: "connected" } })),
+      skills: [
+        {
+          id: "review",
+          name: "Code review",
+          path: "/home/test/.config/opencode/skills/review/SKILL.md",
+          content: "Review code",
+        },
+        { id: "opencode", name: "OpenCode", path: "skill://opencode/SKILL.md", content: "OpenCode help" },
+        { id: "report", name: "Report", path: "skill://report/SKILL.md", content: "Report bugs" },
+        { id: "browser", name: "Browser", path: "skill://browser/SKILL.md", content: "Browser help" },
+        { id: "funnel", name: "Funnel analytics", path: "skill://funnel/SKILL.md", content: "Analyze the funnel" },
+      ],
+      onMcpAction: (input) => {
+        actions.push(`${input.server}:${input.action}`)
+      },
+    })
+
+    await settings.getByRole("tab", { name: "Extensions", exact: true }).click()
+
+    // One list: a name both configs define is one row, the user's server, with Console's link kept. A Console server
+    // whose account isn't connected asks for the connection in the switch's place.
+    await expect(settings.getByRole("switch")).toHaveCount(3)
+    await expect(settings.getByRole("switch", { name: "linear", exact: true })).toBeChecked()
+    await expect(settings.getByRole("switch", { name: "figma", exact: true })).toBeChecked()
+    await expect(settings.getByRole("switch", { name: "github", exact: true })).toHaveCount(0)
+    await expect(settings.getByRole("button", { name: "Manage linear in Console" })).toHaveText(
+      "Replaces OpenCode Console",
+    )
+    await expect(settings.getByRole("button", { name: "Manage github in Console" })).toHaveText("github")
+    await expect(settings.getByRole("button", { name: "Manage clickhouse in Console" })).toHaveText("clickhouse")
+    await expect(settings.getByText("OpenCode Console", { exact: true })).toHaveCount(0)
+    await expect(settings.getByRole("button", { name: "Manage figma in Console" })).toHaveCount(0)
+
+    const connection = page.waitForEvent("popup")
+    await settings.getByRole("button", { name: "Connect github in Console" }).click()
+    await expect(await connection).toHaveURL(`${consoleUrl}/org_acme/extensions?connect=github`)
+
+    const manage = page.waitForEvent("popup")
+    await settings.getByRole("button", { name: "Manage linear in Console" }).click()
+    await expect(await manage).toHaveURL(`${consoleUrl}/org_acme/extensions/mcp/linear`)
+
+    const toggle = settings.getByRole("switch", { name: "clickhouse", exact: true })
+    await toggle.press("Space")
+    await expect(toggle).not.toBeChecked()
+    expect(actions).toEqual(["clickhouse:disconnect"])
+    const refreshed = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/config")
+    await push([{ id: "evt_config_extensions", created: 1, type: "config.updated", data: {} }])
+    await refreshed
+    await expect(toggle).not.toBeChecked()
+
+    // One sorted list: only a skill Console delivers links to Console, filtered to that skill.
+    await settings.getByRole("tab", { name: "Skills", exact: true }).click()
+    await expect(settings.locator(".settings-extension-name")).toHaveText([
+      "Browser",
+      "Code review",
+      "Funnel analytics",
+      "OpenCode",
+      "Report",
+    ])
+    await expect(settings.getByRole("button", { name: /in Console$/ })).toHaveCount(1)
+
+    const skill = page.waitForEvent("popup")
+    await settings.getByRole("button", { name: "Manage Funnel analytics in Console", exact: true }).click()
+    await expect(await skill).toHaveURL(`${consoleUrl}/org_acme/extensions?kind=skills&search=funnel`)
+  })
+
   for (const fails of [false, true]) {
     test(`about ${fails ? "keeps its fallback when contributors fail" : "updates contributors later"}`, async ({
       page,
@@ -965,6 +1408,20 @@ test.describe("pages open before slow data", () => {
       await expect(website).toBeFocused()
     })
   }
+})
+
+test("the version's Copied tooltip closes when another settings page opens", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"])
+  const { settings } = await open(page)
+  await page.route(contributors, (route) => route.abort("failed"))
+  await settings.getByRole("tab", { name: "About", exact: true }).click()
+  await settings.getByRole("button", { name: "Copy", exact: true }).click()
+  const tooltip = page.getByRole("tooltip")
+  await expect(tooltip).toHaveText("Copied")
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toMatch(/^Version /)
+
+  await settings.getByRole("tab", { name: "Preferences", exact: true }).click()
+  await expect(tooltip).toBeHidden()
 })
 
 test("worktrees follow inventory events, wait for session counts, and delete by project", async ({ page }) => {
@@ -1046,6 +1503,103 @@ test("worktrees follow inventory events, wait for session counts, and delete by 
   await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
   await expect(settings.getByText("13 worktrees", { exact: true })).toBeVisible()
   await expect(settings.getByLabel(sandboxes[0]!, { exact: true })).toHaveCount(0)
+})
+
+test("a failed worktree delete restores its row, and the next confirmation still deletes it", async ({ page }) => {
+  const inventory: WorktreeDirectory[] = [
+    { directory },
+    ...sandboxes.map((item) => ({ directory: item, strategy: "git" })),
+  ]
+
+  const removals = { failing: true, requests: 0 }
+
+  const { settings } = await open(page, {
+    worktrees: () => inventory,
+    onWorktreeRemove: (body) => {
+      inventory.splice(
+        inventory.findIndex((item) => item.directory === body.directory),
+        1,
+      )
+    },
+  })
+
+  // The first removal fails at once, so its dialog is still closing when the row comes back.
+  await page.route(/\/api\/worktree(?:\?|$)/, (route) => {
+    if (route.request().method() !== "DELETE") return route.fallback()
+    removals.requests += 1
+
+    if (!removals.failing) return route.fallback()
+    removals.failing = false
+
+    return route.fulfill({ status: 500, json: { name: "UnknownError", data: { message: "worktree is locked" } } })
+  })
+
+  await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
+  await expect(settings.getByText("12 worktrees", { exact: true })).toBeVisible()
+  const trash = settings.getByRole("button", { name: "Delete “workspace-1”?", exact: true })
+
+  const confirm = page
+    .getByRole("dialog", { name: "Delete “workspace-1”?", exact: true })
+    .getByRole("button", { name: "Delete worktree", exact: true })
+
+  await trash.click()
+  await confirm.click()
+  await expect(page.getByText("Failed to delete worktree", { exact: true })).toBeVisible()
+  await expect(trash).toBeEnabled()
+  await expect(settings.getByLabel(sandboxes[0]!, { exact: true })).toBeVisible()
+  expect(removals.requests).toBe(1)
+
+  await trash.click()
+  await confirm.click()
+  await expect(settings.getByText("11 worktrees", { exact: true })).toBeVisible()
+  await expect(settings.getByLabel(sandboxes[0]!, { exact: true })).toHaveCount(0)
+  expect(removals.requests).toBe(2)
+})
+
+test("a failed worktree check offers Retry, and the passing retry enables Delete", async ({ page }) => {
+  const inventory: WorktreeDirectory[] = [
+    { directory },
+    ...sandboxes.map((item) => ({ directory: item, strategy: "git" })),
+  ]
+
+  const { settings } = await open(page, {
+    worktrees: () => inventory,
+    onWorktreeRemove: (body) => {
+      inventory.splice(
+        inventory.findIndex((item) => item.directory === body.directory),
+        1,
+      )
+    },
+  })
+
+  const checks = { failing: true }
+
+  await page.route(/\/api\/vcs\/status(\?|$)/, (route) =>
+    checks.failing
+      ? route.fulfill({
+          status: 500,
+          json: { name: "UnknownError", data: { message: "git is busy" } },
+          headers: { "access-control-allow-origin": "*" },
+        })
+      : route.fallback(),
+  )
+
+  await settings.getByRole("tab", { name: "Worktrees", exact: true }).click()
+  await expect(settings.getByText("12 worktrees", { exact: true })).toBeVisible()
+  await settings.getByRole("button", { name: "Delete “workspace-1”?", exact: true }).click()
+  const dialog = page.getByRole("dialog", { name: "Delete “workspace-1”?", exact: true })
+  const remove = dialog.getByRole("button", { name: "Delete worktree", exact: true })
+  const retry = dialog.getByRole("button", { name: "Try again", exact: true })
+  await expect(dialog.getByText("Unable to verify git status.", { exact: true })).toBeVisible()
+  await expect(remove).toBeDisabled()
+
+  checks.failing = false
+  await retry.click()
+  await expect(remove).toBeEnabled()
+  await expect(retry).toHaveCount(0)
+  await expect(dialog.getByText("Unable to verify git status.", { exact: true })).toHaveCount(0)
+  await remove.click()
+  await expect(settings.getByText("11 worktrees", { exact: true })).toBeVisible()
 })
 
 test.describe("worktrees prefetch", () => {
@@ -1264,15 +1818,20 @@ for (const row of [
     // Anthropic only exists in the integration fixture, so its row proves the integration list has loaded.
     await expect(settings.getByText("Anthropic", { exact: true })).toBeVisible()
     await expect(settings.getByText("OpenCode Console", { exact: true })).toHaveCount(row.console ? 1 : 0)
+    // OpenCode Go connects through OpenCode, so it isn't offered without a saved Go key.
+    await expect(settings.getByText("OpenCode Go", { exact: true })).toHaveCount(0)
   })
 }
+
+const connectDialog = (page: Page) =>
+  page.getByRole("dialog").filter({ has: page.getByRole("navigation", { name: "Connect steps", exact: true }) })
 
 const consoleIntegrations = [
   {
     id: "opencode",
-    name: "OpenCode Console",
+    name: "OpenCode",
     methods: [
-      { id: "device", type: "oauth", label: "OpenCode Console account" },
+      { id: "device", type: "oauth", label: "OpenCode account" },
       { type: "key", label: "API key (service account)" },
     ],
     connections: [],
@@ -1287,21 +1846,22 @@ test("providers: OpenCode Console signs in from its method list", async ({ page,
 
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
   await settings
-    .locator(".settings-provider-row", { hasText: "OpenCode Console" })
+    .locator(".settings-provider-row")
+    .filter({ has: page.locator(".settings-provider-name", { hasText: /^OpenCode$/ }) })
     .getByRole("button", { name: "Connect", exact: true })
     .click()
-  const methods = page.getByRole("dialog", { name: "Connect OpenCode Console", exact: true })
+  const methods = page.getByRole("dialog", { name: "Connect OpenCode", exact: true })
   // The methods come from the integration in the TUI's order: sign-ins first, API keys last.
   await expect(methods.locator('[data-action="provider-connect-method"]')).toHaveText([
-    "OpenCode Console account",
+    "OpenCode account",
     "API key (service account)",
   ])
 
   const popup = page.waitForEvent("popup")
-  await methods.getByRole("button", { name: "OpenCode Console account", exact: true }).click()
+  await methods.getByRole("button", { name: "OpenCode account", exact: true }).click()
   await expect(await popup).toHaveURL(url)
 
-  const signIn = page.getByRole("dialog", { name: "Connecting to OpenCode Console", exact: true })
+  const signIn = page.getByRole("dialog", { name: "Connect OpenCode", exact: true })
   await expect(signIn.getByRole("group", { name: "Device code: ABCD-EFGH", exact: true })).toBeVisible()
   await expect(signIn.getByRole("button", { name: "Copy sign-in link", exact: true })).toBeVisible()
 })
@@ -1310,7 +1870,16 @@ test("providers: OpenCode Go connects with its own methods, not the Console sign
   const attempts: string[] = []
 
   const { settings } = await open(page, {
-    integrations: consoleIntegrations,
+    // Settings lists OpenCode Go only for people who already saved a Go key.
+    integrations: [
+      ...consoleIntegrations.filter((integration) => integration.id !== "opencode-go"),
+      {
+        id: "opencode-go",
+        name: "OpenCode Go",
+        methods: [{ type: "key" }],
+        connections: [{ type: "credential", id: "cred_go", label: "Go key", method: "key" }],
+      },
+    ],
     onIntegrationOAuth: (input) => {
       attempts.push(input.integrationID)
 
@@ -1325,6 +1894,12 @@ test("providers: OpenCode Go connects with its own methods, not the Console sign
     .click()
   const dialog = page.getByRole("dialog", { name: "Connect OpenCode Go", exact: true })
   await expect(dialog.getByPlaceholder("API key")).toBeVisible()
+
+  const connect = dialog.getByRole("navigation").getByRole("button", { name: "Connect", exact: true })
+
+  await dialog.getByRole("button", { name: "Close", exact: true }).press("Shift+Tab")
+  await expect(connect).toBeFocused()
+  await expect(connect).toHaveCSS("outline-style", "solid")
   expect(attempts).toEqual([])
 })
 
@@ -1356,9 +1931,7 @@ test("providers: a rejected API key shows the server error and can be sent again
   expect(keys).toEqual([expect.objectContaining({ key: "sk-bad" })])
 })
 
-test("providers: Back during a pending API key request does not report the provider as connected", async ({
-  page,
-}) => {
+test("providers: Back during a pending API key request does not report the provider as connected", async ({ page }) => {
   const keys: string[] = []
 
   const { settings } = await open(page, {
@@ -1384,14 +1957,14 @@ test("providers: Back during a pending API key request does not report the provi
     .locator(".settings-provider-row", { hasText: "OpenRouter" })
     .getByRole("button", { name: "Connect", exact: true })
     .click()
-  const dialog = page.getByRole("dialog", { name: "Connect OpenRouter", exact: true })
+  const dialog = connectDialog(page)
   await dialog.getByRole("button", { name: "API key", exact: true }).click()
   await dialog.getByPlaceholder("API key").fill("sk-late")
   await dialog.getByRole("button", { name: "Continue", exact: true }).click()
   await held.arrived
   await expect(dialog.getByRole("button", { name: "Continue", exact: true })).toBeDisabled()
 
-  await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
+  await dialog.getByRole("navigation").getByRole("button", { name: "OpenRouter", exact: true }).click()
   await expect(dialog.getByRole("button", { name: "Sign in", exact: true })).toBeVisible()
 
   // The server still saves the key, so its late success reloads the catalogs without leaving the method list.
@@ -1404,7 +1977,7 @@ test("providers: Back during a pending API key request does not report the provi
   await expect(dialog.getByPlaceholder("API key")).toHaveValue("")
 })
 
-test("providers: the free tier upsell opens Go on its own, sized to its content", async ({ page }) => {
+test("providers: the free tier upsell opens OpenCode on its own, sized to its content", async ({ page }) => {
   const view = await openSession(page, { name: "FreeTier", integrations: consoleIntegrations })
   await view.push([
     {
@@ -1425,12 +1998,16 @@ test("providers: the free tier upsell opens Go on its own, sized to its content"
     .getByRole("button", { name: "Subscribe", exact: true })
     .click()
 
-  const dialog = page.getByRole("dialog", { name: "Connect OpenCode Go", exact: true })
+  // Go connects through the OpenCode connection, so the upsell opens its sign-in methods.
+  const dialog = page.getByRole("dialog", { name: "Connect OpenCode", exact: true })
   const container = page.locator('[data-slot="dialog-container"]')
-  await expect(dialog.getByPlaceholder("API key")).toBeVisible()
-  // Nothing to go back to: the upsell opened the dialog straight on Go.
-  await expect(dialog.getByRole("button", { name: "Navigate back", exact: true })).toHaveCount(0)
-  await expect.poll(async () => (await container.boundingBox())?.height).toBeLessThan(512)
+  await expect(dialog.locator('[data-action="provider-connect-method"]')).toHaveText([
+    "OpenCode account",
+    "API key (service account)",
+  ])
+  // Nothing to go back to: the upsell opened the dialog straight on OpenCode.
+  await expect(dialog.getByRole("navigation").getByRole("button")).toHaveCount(0)
+  await expect.poll(async () => (await container.boundingBox())?.height).toBeLessThan(368)
 })
 
 test("providers: the connect dialog lists connected providers and manages their accounts", async ({ page }) => {
@@ -1482,11 +2059,12 @@ test("providers: the connect dialog lists connected providers and manages their 
   await expect(dialog.locator('[data-provider-id="linear"]')).toHaveCount(0)
   await expect(dialog.getByText("MCP", { exact: true })).toHaveCount(0)
   const container = page.locator('[data-slot="dialog-container"]')
-  await expect.poll(async () => (await container.boundingBox())?.height).toBe(512)
+  await expect(container).toHaveCSS("width", "680px")
+  await expect(container).toHaveCSS("max-height", "600px")
   const picker = await container.boundingBox()
   await openai.click()
 
-  await expect(page.getByRole("dialog", { name: "OpenAI", exact: true })).toBeVisible()
+  await expect(page.getByRole("dialog", { name: "Connect OpenAI", exact: true })).toBeVisible()
   // The provider step fits its content below the list's top edge.
   await expect.poll(async () => (await container.boundingBox())?.height).toBeLessThan(picker!.height)
   expect((await container.boundingBox())?.y).toBe(picker!.y)
@@ -1514,7 +2092,7 @@ test("providers: the connect dialog lists connected providers and manages their 
   await name.fill("Ignored")
   await name.press("Escape")
   await expect(list.getByRole("radio")).toHaveText(["Home", "Work"])
-  await expect(page.getByRole("dialog", { name: "OpenAI", exact: true })).toBeVisible()
+  await expect(page.getByRole("dialog", { name: "Connect OpenAI", exact: true })).toBeVisible()
 
   await list.getByRole("button", { name: "Work options", exact: true }).click()
   await page.getByRole("menuitem", { name: "Remove", exact: true }).click()
@@ -1529,7 +2107,7 @@ test("providers: the connect dialog lists connected providers and manages their 
 
   await dialog.getByRole("button", { name: "Add account", exact: true }).click()
   await expect(dialog.getByPlaceholder("API key")).toBeVisible()
-  await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
+  await dialog.getByRole("navigation").getByRole("button", { name: "OpenAI", exact: true }).click()
   await expect(list).toBeVisible()
 })
 
@@ -1568,15 +2146,127 @@ test("providers: adding an account starts a lone method once", async ({ page, co
   await expect(dialog.getByPlaceholder("API key")).toBeVisible()
   expect(attempts).toEqual([])
 
-  await dialog.getByRole("button", { name: "Navigate back", exact: true }).click()
+  await dialog.getByRole("navigation").getByRole("button", { name: "OpenCode Go", exact: true }).click()
   await expect(dialog.getByRole("radio", { name: "Go key", exact: true })).toBeVisible()
-  await dialog.getByRole("button", { name: "Integrations", exact: true }).click()
+  await dialog.getByRole("navigation").getByRole("button", { name: "Connect", exact: true }).click()
   await dialog.locator('[data-provider-id="github-copilot"]').click()
   const popup = page.waitForEvent("popup")
   await dialog.getByRole("button", { name: "Add account", exact: true }).click()
   await popup
   await expect.poll(() => attempts).toEqual(["github-copilot"])
   expect(attempts).toEqual(["github-copilot"])
+})
+
+test("providers: Back from a pending sign-in cancels it and lets a backdrop click close the list", async ({
+  page,
+  context,
+}) => {
+  await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
+  const cancelled: string[] = []
+
+  const { settings } = await open(page, {
+    integrations: [
+      {
+        id: "github-copilot",
+        name: "GitHub Copilot",
+        methods: [{ id: "device", type: "oauth", label: "GitHub" }],
+        connections: [],
+      },
+    ],
+    onIntegrationOAuth: () => ({ url: "https://auth.example.test/device?user_code=GH12-3456" }),
+    onIntegrationOAuthCancel: (attemptID) => cancelled.push(attemptID),
+  })
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  await settings.getByRole("button", { name: "Show more providers", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  const popup = page.waitForEvent("popup")
+  await dialog.locator('[data-provider-id="github-copilot"]').click()
+  await popup
+  await expect(dialog.getByText("Waiting for authorization", { exact: true })).toBeVisible()
+
+  await dialog.getByRole("navigation").getByRole("button", { name: "Connect", exact: true }).click()
+  await expect(dialog.locator('[data-provider-id="github-copilot"]')).toBeVisible()
+  await expect.poll(() => cancelled).toEqual(["con_mock_1"])
+
+  // The page corner is outside the dialog, so the click lands on the backdrop.
+  await page.mouse.click(8, 8)
+  await expect(dialog).toHaveCount(0)
+})
+
+test("providers: Back from a Claude Agent check started by Add account returns to its accounts", async ({ page }) => {
+  const { settings } = await open(page, {
+    integrations: [
+      {
+        id: "claude-agent",
+        name: "Claude Agent",
+        methods: [{ id: "claude-login", type: "external", label: "Claude Code login (claude auth login)" }],
+        connections: [{ type: "credential", id: "cred_claude", label: "Claude Code", method: "external" }],
+      },
+    ],
+  })
+
+  const held = await holdRoute(page, /\/api\/integration\/claude-agent\/connect\/external(\?|$)/, { method: "POST" })
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  await settings.getByRole("button", { name: "Show more providers", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  await dialog.locator('[data-provider-id="claude-agent"]').click()
+  await dialog.getByRole("button", { name: "Add account", exact: true }).click()
+  await dialog.getByRole("button", { name: "Check again", exact: true }).click()
+  await held.arrived
+  await expect(dialog.getByText("Checking Claude Code", { exact: true })).toBeVisible()
+
+  await dialog.getByRole("navigation").getByRole("button", { name: "Claude Agent", exact: true }).click()
+  await expect(dialog.getByRole("radio", { name: "Claude Code", exact: true })).toBeVisible()
+  held.release()
+})
+
+test("providers: Back from a Console connection without models returns to its sign-in methods", async ({
+  page,
+  context,
+}) => {
+  await context.route("https://auth.example.test/**", (route) => route.fulfill({ body: "Sign in" }))
+  const state = { authorized: false }
+
+  const { settings } = await open(page, {
+    // The workspace has loaded, but it offers no models.
+    provider: () =>
+      state.authorized
+        ? {
+            all: [
+              { id: "opencode", integrationID: "opencode", name: "Anomaly / OpenCode", models: {} },
+              { id: "console-google", integrationID: "opencode", name: "Anomaly / Google", models: {} },
+            ],
+            connected: ["opencode", "console-google"],
+            default: {},
+          }
+        : NO_PROVIDER,
+    integrations: consoleIntegrations,
+    onIntegrationOAuth: () => ({ url: "https://auth.example.test/device?user_code=ABCD-EFGH" }),
+    onIntegrationOAuthStatus: () => {
+      state.authorized = true
+
+      return "complete"
+    },
+  })
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  await settings
+    .locator(".settings-provider-row")
+    .filter({ has: page.locator(".settings-provider-name", { hasText: /^OpenCode$/ }) })
+    .getByRole("button", { name: "Connect", exact: true })
+    .click()
+  const dialog = connectDialog(page)
+  const popup = page.waitForEvent("popup")
+  await dialog.getByRole("button", { name: "OpenCode account", exact: true }).click()
+  await popup
+  await expect(page.getByRole("dialog").getByText("OpenCode connected", { exact: true })).toBeVisible()
+
+  await dialog.getByRole("navigation").getByRole("button", { name: "OpenCode", exact: true }).click()
+  await expect(dialog.locator('[data-action="provider-connect-method"]')).toHaveText([
+    "OpenCode account",
+    "API key (service account)",
+  ])
 })
 
 test("providers: the account options rename and remove the active account", async ({ page }) => {
@@ -1640,8 +2330,17 @@ test("providers: the account options rename and remove the active account", asyn
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
   await expect(trigger).toHaveText("Shared")
 
+  const confirm = page.getByRole("dialog", { name: "Remove Shared?", exact: true })
   await settings.getByRole("button", { name: "Shared options", exact: true }).click()
   await page.getByRole("menuitem", { name: "Remove", exact: true }).click()
+  await confirm.getByRole("button", { name: "Cancel", exact: true }).click()
+  await expect(confirm).toBeHidden()
+  await expect(trigger).toHaveText("Shared")
+  expect(removed).toEqual([])
+
+  await settings.getByRole("button", { name: "Shared options", exact: true }).click()
+  await page.getByRole("menuitem", { name: "Remove", exact: true }).click()
+  await confirm.getByRole("button", { name: "Remove", exact: true }).click()
   await expect.poll(() => removed).toEqual(["cred_work"])
 })
 
@@ -1658,6 +2357,10 @@ test("providers: a disconnect that finds no stored credentials keeps the provide
   await expect(connected.getByText("OpenRouter", { exact: true })).toBeVisible()
 
   await disconnect.click()
+  await page
+    .getByRole("dialog", { name: "Disconnect OpenRouter?", exact: true })
+    .getByRole("button", { name: "Disconnect", exact: true })
+    .click()
   await expect(page.getByText("No removable credentials found for OpenRouter", { exact: true })).toBeVisible()
   await expect(connected.getByText("OpenRouter", { exact: true })).toBeVisible()
   await expect(disconnect).toBeVisible()
@@ -1696,8 +2399,8 @@ test("providers: switching to a Zen API key does not wait for a Console workspac
     integrations: () => [
       {
         id: "opencode",
-        name: "OpenCode Console",
-        methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
+        name: "OpenCode",
+        methods: [{ id: "device", type: "oauth", label: "OpenCode account" }],
         connections: accounts.toSorted((a, b) => Number(b.id === state.active) - Number(a.id === state.active)),
       },
     ],
@@ -1707,7 +2410,7 @@ test("providers: switching to a Zen API key does not wait for a Console workspac
   })
 
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
-  const trigger = settings.getByRole("button", { name: "Manage OpenCode Console accounts", exact: true })
+  const trigger = settings.getByRole("button", { name: "Manage OpenCode accounts", exact: true })
   await expect(trigger).toHaveText("Anomaly")
   await trigger.click()
 
@@ -1718,7 +2421,7 @@ test("providers: switching to a Zen API key does not wait for a Console workspac
       catalogReads.push(request.url())
   })
   await page.getByRole("menuitemradio", { name: "Zen key", exact: true }).click()
-  await expect(page.getByText("OpenCode Console account switched")).toBeVisible()
+  await expect(page.getByText("OpenCode account switched")).toBeVisible()
   // One refresh after the switch; a Console workspace poll would keep reading the catalog.
   expect(catalogReads).toHaveLength(1)
 })
@@ -1753,8 +2456,8 @@ test("providers: adding a Console account keeps the Console row in place", async
     integrations: () => [
       {
         id: "opencode",
-        name: "OpenCode Console",
-        methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
+        name: "OpenCode",
+        methods: [{ id: "device", type: "oauth", label: "OpenCode account" }],
         connections: [
           { type: "credential", id: "cred_console", label: "Anomaly", method: "oauth" },
           ...(state.authorized ? [{ type: "credential", id: "cred_clara", label: "Clara", method: "oauth" }] : []),
@@ -1775,10 +2478,11 @@ test("providers: adding a Console account keeps the Console row in place", async
 
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
   const connected = settings.locator('[data-component="connected-providers-section"]')
-  await expect(connected.getByText("OpenCode Console", { exact: true })).toBeVisible()
+  const consoleRow = connected.locator(".settings-provider-console")
+  await expect(consoleRow.getByText("OpenCode", { exact: true })).toBeVisible()
   await connected.evaluate((element) => {
     new MutationObserver(() => {
-      if (!element.textContent?.includes("OpenCode Console")) element.dataset.flashed = ""
+      if (!element.querySelector(".settings-provider-console")) element.dataset.flashed = ""
     }).observe(element, { childList: true, subtree: true, characterData: true })
   })
 
@@ -1788,9 +2492,11 @@ test("providers: adding a Console account keeps the Console row in place", async
   const popup = page.waitForEvent("popup")
   await dialog.getByRole("button", { name: "Add account", exact: true }).click()
   await popup
-  await expect(page.getByText("OpenCode Console connected", { exact: true })).toBeVisible()
+  await expect(
+    page.getByRole("region", { name: /^Notifications/ }).getByText("OpenCode connected", { exact: true }),
+  ).toBeVisible()
 
-  await expect(connected.getByText("OpenCode Console", { exact: true })).toBeVisible()
+  await expect(consoleRow.getByText("OpenCode", { exact: true })).toBeVisible()
   await expect(connected).not.toHaveAttribute("data-flashed")
 })
 
@@ -1830,8 +2536,8 @@ test("providers: switching Console accounts keeps the list until the new workspa
     integrations: () => [
       {
         id: "opencode",
-        name: "OpenCode Console",
-        methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
+        name: "OpenCode",
+        methods: [{ id: "device", type: "oauth", label: "OpenCode account" }],
         connections: accounts.toSorted((a, b) => Number(b.id === state.active) - Number(a.id === state.active)),
       },
     ],
@@ -1843,7 +2549,7 @@ test("providers: switching Console accounts keeps the list until the new workspa
 
   await settings.getByRole("tab", { name: "Providers", exact: true }).click()
   const connected = settings.locator('[data-component="connected-providers-section"]')
-  const trigger = connected.getByRole("button", { name: "Manage OpenCode Console accounts", exact: true })
+  const trigger = connected.getByRole("button", { name: "Manage OpenCode accounts", exact: true })
   await expect(trigger).toHaveText("Clara")
   await connected.evaluate((element) => {
     new MutationObserver(() => {
@@ -1853,9 +2559,68 @@ test("providers: switching Console accounts keeps the list until the new workspa
 
   await trigger.click()
   await page.getByRole("menuitemradio", { name: "Anomaly", exact: true }).click()
-  await expect(page.getByText("OpenCode Console account switched")).toBeVisible()
+  await expect(page.getByText("OpenCode account switched")).toBeVisible()
   await expect(trigger).toHaveText("Anomaly")
   await expect(connected).not.toHaveAttribute("data-flashed")
+})
+
+test("models: a Console provider picked on Providers opens its collapsed group, then the search types normally", async ({
+  page,
+}) => {
+  const model = (id: string, name: string) => ({ [id]: { id, name, limit: { context: 200_000 } } })
+
+  const { settings } = await open(page, {
+    provider: {
+      all: [
+        {
+          id: "opencode",
+          integrationID: "opencode",
+          name: "Anomaly / OpenCode",
+          models: model("console-model", "Console Model"),
+        },
+        {
+          id: "console-google",
+          canonical: "google",
+          integrationID: "opencode",
+          name: "Anomaly / Google",
+          models: model("managed-gemini", "Managed Gemini"),
+        },
+      ],
+      connected: ["opencode", "console-google"],
+      default: {},
+    },
+    integrations: [
+      {
+        id: "opencode",
+        name: "OpenCode",
+        methods: [{ id: "device", type: "oauth", label: "OpenCode account" }],
+        connections: [{ type: "credential", id: "cred_anomaly", label: "Anomaly", method: "oauth" }],
+      },
+    ],
+  })
+
+  const group = settings
+    .locator('[data-component="settings-models-console"]')
+    .getByRole("button", { name: "OpenCode Anomaly", exact: true })
+
+  await settings.getByRole("tab", { name: "Models", exact: true }).click()
+  await group.click()
+  await expect(group).toHaveAttribute("aria-expanded", "false")
+
+  await settings.getByRole("tab", { name: "Providers", exact: true }).click()
+  const connected = settings.locator('[data-component="connected-providers-section"]')
+  await connected.getByRole("button", { name: "2 providers available", exact: true }).click()
+  await connected.getByRole("button", { name: "Google", exact: true }).click()
+
+  // The nested provider mounts only inside the expanded Console group, so the reveal opens the group first.
+  const google = settings.locator('[data-component="provider-model-group"][data-provider="console-google"]')
+  await expect(group).toHaveAttribute("aria-expanded", "true")
+  await expect(google.locator(".provider-model-group-trigger")).toBeFocused()
+
+  const search = settings.getByRole("searchbox", { name: "Search models", exact: true })
+  await search.pressSequentially("gemini")
+  await expect(search).toHaveValue("gemini")
+  await expect(settings.getByRole("switch", { name: "Managed Gemini", exact: true })).toBeVisible()
 })
 
 test("the add server dialog keeps focus above fullscreen settings", async ({ page }) => {
@@ -2004,6 +2769,36 @@ test("the Side tabs interface mode switches to vertical tabs and survives reload
   await expect(layout.getByRole("radio", { name: "Side tabs", exact: true })).toBeChecked()
   await expect(page.locator('[data-slot="vertical-tabs-sidebar"]')).toBeVisible()
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
+})
+
+test("settings lines its sidebar and content up with Home's columns", async ({ page }) => {
+  await mockWorkspace(page, { name: "SettingsAlign", sessions: [] })
+  await page.goto("/")
+
+  const entry = page
+    .getByRole("complementary", { name: "Projects" })
+    .getByRole("button", { name: "Settings", exact: true })
+
+  await expect(entry).toBeVisible()
+  const field = await page.locator('[data-slot="home-session-search-field"]').boundingBox()
+  const item = await entry.boundingBox()
+  await entry.click()
+  const settings = page.getByTestId("settings-screen")
+  await expect(settings).toBeFocused({ timeout: APP_READY_TIMEOUT })
+
+  const tab = await settings.getByRole("tab", { name: "Preferences", exact: true }).boundingBox()
+
+  // The panel keeps 4px on each side for card shadows; its content box is what lines up with the search field.
+  const content = await settings.locator(".settings-content > .settings-panel:visible").evaluate((panel) => {
+    const box = panel.getBoundingClientRect()
+    const style = getComputedStyle(panel)
+    const start = parseFloat(style.paddingLeft)
+
+    return { x: box.x + start, width: box.width - start - parseFloat(style.paddingRight) }
+  })
+
+  expect({ x: tab?.x, width: tab?.width }).toEqual({ x: item?.x, width: item?.width })
+  expect(content).toEqual({ x: field?.x, width: field?.width })
 })
 
 for (const viewport of [

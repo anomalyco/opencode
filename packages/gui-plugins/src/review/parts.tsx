@@ -5,6 +5,7 @@ import { Button } from "@opencode/ui/button"
 import { Select } from "@opencode/ui/select"
 import { usePlugin } from "@opencode/plugin/gui"
 import type Review from "./index"
+import type { ReviewDiffFailure } from "./machine"
 import type { ChangeMode, ReviewModel } from "./model"
 
 export function ReviewTitle(props: { review: ReviewModel }) {
@@ -103,17 +104,22 @@ export function ReviewPanelEmpty(props: { review: ReviewModel }) {
 
 /** Why the changes cannot show: the server is unreachable, or their request failed and can be retried. */
 function ReviewUnavailable(props: { review: ReviewModel }) {
-  const ctx = usePlugin<typeof Review>()
-
   const failure = () => {
     const current = props.review.diff()
 
     return current.status === "error" ? current.failure : undefined
   }
 
+  return <ReviewFailure failure={failure()} onRetry={() => props.review.retry()} />
+}
+
+/** A failed request with Try again, or without `failure` that the server is unreachable. */
+export function ReviewFailure(props: { failure: ReviewDiffFailure | undefined; onRetry: () => void }) {
+  const ctx = usePlugin<typeof Review>()
+
   return (
     <Show
-      when={failure()}
+      when={props.failure}
       keyed
       fallback={<div class="px-4 text-center text-14-regular text-text-weak max-w-56">{ctx.t("offline")}</div>}
     >
@@ -125,7 +131,7 @@ function ReviewUnavailable(props: { review: ReviewModel }) {
               {failure.type === "timeout" ? ctx.t("load.timeout") : failure.message}
             </div>
           </div>
-          <Button size="small" variant="outline" onClick={() => props.review.retry()}>
+          <Button size="small" variant="outline" onClick={() => props.onRetry()}>
             {ctx.t("common.retry")}
           </Button>
         </div>

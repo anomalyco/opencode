@@ -15,6 +15,10 @@ export default {
   "duration.tip": "Time from the prompt that started the latest turn until its response completed.",
   "tps.label": "TPS",
   "tps.tip": "Output and reasoning tokens per second across the latest turn's model requests, excluding tool time.",
+  "session.label": "SESSION",
+  "session.tip": "{{id}}. Click to copy.",
+  "session.none": "No session open",
+  "session.copyFailed": "Failed to copy session ID",
   "memory.label": "MEMLOG",
   "memory.tip":
     "Memory diagnostics: log app memory to the desktop logs every 30 seconds. Stays on across restarts until turned off; the bar stays open while it runs.",

@@ -1,5 +1,93 @@
 import { expect, story } from "../../stories/playwright/story"
 
+story("active search options keep their system highlight in forced colours", async ({ mount, page }) => {
+  await page.emulateMedia({ forcedColors: "active" })
+
+  const root = await mount("review-focus-visibility--all-surfaces", { args: { forced: false } })
+
+  const highlight = await page.evaluate(() => {
+    const probe = document.createElement("span")
+
+    probe.style.backgroundColor = "Highlight"
+    probe.style.color = "HighlightText"
+    document.body.append(probe)
+    const style = getComputedStyle(probe)
+
+    const result = { background: style.backgroundColor, color: style.color }
+
+    probe.remove()
+
+    return result
+  })
+
+  for (const name of [
+    "Palette: active option loses contrast",
+    "Search list: active option loses contrast",
+    "Home search results: Shift+Tab reaches",
+  ]) {
+    const card = root.locator("figure").filter({ hasText: name })
+
+    const active = card.locator("[data-active]")
+
+    const input = card.getByRole("combobox")
+
+    await expect(active).toHaveCSS("background-color", highlight.background)
+    await expect(active.getByText("Active option")).toHaveCSS("color", highlight.color)
+    await input.press("ArrowDown")
+    await expect(input).toBeFocused()
+    await expect(active).toHaveText("Next option")
+    await expect(active).toHaveCSS("background-color", highlight.background)
+  }
+})
+
+story("focus-only outlines stay off at rest in forced colours", async ({ mount, page }) => {
+  await page.emulateMedia({ forcedColors: "active" })
+
+  const root = await mount("review-focus-visibility--all-surfaces", { args: { forced: false, locator: false } })
+
+  const controls = [
+    {
+      card: "Switch: a black ring flashes",
+      target: '[data-slot="switch-input"]',
+      ring: '[data-slot="switch-control"]',
+      hasBorder: true,
+    },
+    {
+      card: "Radio: forced colours show a ring",
+      target: '[data-slot="radio-v2-item-input"][value="text"]',
+      ring: '[data-slot="radio-v2-item"][data-checked] [data-slot="radio-v2-item-control"]',
+      hasBorder: true,
+    },
+    {
+      card: "Language: inline select",
+      target: '[data-component="select-v2"]',
+      ring: '[data-component="select-v2"]',
+      hasBorder: false,
+    },
+  ]
+
+  for (const control of controls) {
+    const card = root.locator("figure").filter({ hasText: control.card })
+
+    const target = card.locator(control.target)
+
+    const ring = card.locator(control.ring)
+
+    await expect(ring).toHaveCSS("outline-style", "none")
+
+    if (control.hasBorder) await expect(ring).toHaveCSS("border-top-width", "1px")
+
+    await target.press("Shift+Tab")
+    await page.keyboard.press("Tab")
+    await expect(target).toBeFocused()
+    await expect(ring).toHaveCSS("outline-style", "solid")
+    await expect(ring).toHaveCSS("outline-width", "2px")
+    await expect(ring).not.toHaveCSS("transition-property", /outline|all/)
+    await page.keyboard.press("Shift+Tab")
+    await expect(ring).toHaveCSS("outline-style", "none")
+  }
+})
+
 for (const control of ["text-input", "textarea"]) {
   story(`${control} supports its surfaces with inset feedback and stable geometry`, async ({ mount, page }) => {
     const root = await mount(`ui-${control}--surfaces`)
@@ -125,6 +213,32 @@ story("select fields come in the text input sizes and default to the inline trig
   await expect(fields.nth(3)).toHaveCSS("box-shadow", "none")
 })
 
+story(
+  "a select previews the highlighted option, reverts it on Escape, and keeps the chosen one",
+  async ({ mount, page }) => {
+    const root = await mount("ui-select--highlight-preview")
+    const trigger = root.locator('[data-component="select-v2"]')
+    const preview = root.locator('[data-slot="select-preview"]')
+
+    await trigger.click()
+    await page.getByRole("option", { name: "Cherry", exact: true }).hover()
+    await expect(preview).toHaveText("Showing Cherry")
+    await page.keyboard.press("Escape")
+    await expect(page.getByRole("listbox")).toHaveCount(0)
+    await expect(preview).toHaveText("Showing Apple")
+
+    await trigger.click()
+    const banana = page.getByRole("option", { name: "Banana", exact: true })
+    await banana.hover()
+    await expect(preview).toHaveText("Showing Banana")
+    await banana.click()
+    await expect(page.getByRole("listbox")).toHaveCount(0)
+    await expect(trigger).toContainText("Banana")
+    // Choosing the previewed option must not run its undo afterwards.
+    await expect(preview).toHaveText("Showing Banana")
+  },
+)
+
 story("compact checkboxes use the design system control states and focus ring", async ({ mount, page }) => {
   const root = await mount("ui-checkbox--compact")
 
@@ -151,6 +265,49 @@ story("compact checkboxes use the design system control states and focus ring", 
   await expect(root.getByRole("checkbox", { name: "Default" })).toBeFocused()
   await expect(controls.nth(0)).toHaveCSS("outline-width", "2px")
   await expect(controls.nth(0)).toHaveCSS("outline-offset", "2px")
+})
+
+story("radios support their surfaces with the design system control states", async ({ mount, page }) => {
+  const root = await mount("ui-radio--surfaces")
+
+  await page.addStyleTag({
+    content: `[data-component="radio-v2"] {
+      --v2-background-bg-base: rgb(20, 30, 40);
+      --v2-background-bg-layer-01: rgb(50, 60, 70);
+      --v2-background-bg-accent: rgb(1, 2, 3);
+      --v2-border-border-strong: rgb(4, 5, 6);
+      --v2-overlay-simple-overlay-hover: rgb(10, 20, 30);
+      --v2-state-fg-danger: rgb(7, 8, 9);
+    }`,
+  })
+
+  const controls = root.locator('[data-slot="radio-v2-item-control"]')
+
+  for (const [index, background] of [
+    [0, "rgb(20, 30, 40)"],
+    [2, "rgb(20, 30, 40)"],
+    [4, "rgb(50, 60, 70)"],
+    [6, "rgb(50, 60, 70)"],
+  ] as const) {
+    await expect(controls.nth(index)).toHaveCSS("background-color", background)
+    await expect(controls.nth(index)).toHaveCSS("background-image", "none")
+  }
+
+  for (const index of [1, 5]) {
+    await expect(controls.nth(index)).toHaveCSS("background-color", "rgb(1, 2, 3)")
+    await expect(controls.nth(index)).not.toHaveCSS("background-image", "none")
+  }
+
+  for (const index of [3, 7]) {
+    await expect(controls.nth(index)).toHaveCSS("box-shadow", "rgb(7, 8, 9) 0px 0px 0px 0.5px inset")
+  }
+
+  await controls.nth(4).hover()
+  await expect(controls.nth(4)).toHaveCSS("background-color", "rgb(50, 60, 70)")
+  await expect(controls.nth(4)).toHaveCSS(
+    "box-shadow",
+    /^rgb\(4, 5, 6\) 0px 0px 0px 0\.5px inset, rgb\(10, 20, 30\) 0px 0px 0px [\d.]+px inset$/,
+  )
 })
 
 story(

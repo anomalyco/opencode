@@ -207,6 +207,22 @@ describe("ConfigNormalize", () => {
     })
   })
 
+  test("keeps an inline variant in legacy model references", () => {
+    const result = normalized({
+      small_model: "anthropic/claude-haiku-4-5#low",
+      agent: { reviewer: { model: "anthropic/claude#high", variant: "low" } },
+      command: { review: { template: "review", model: "anthropic/claude#high" } },
+    })
+    expect(result.encoded.agents).toEqual({
+      reviewer: { model: { providerID: "anthropic", model: "claude", variant: "high" } },
+      title: { model: { providerID: "anthropic", model: "claude-haiku-4-5", variant: "low" } },
+    })
+    expect(result.encoded.commands).toEqual({
+      review: { template: "review", model: { providerID: "anthropic", model: "claude", variant: "high" } },
+    })
+    expect(result.diagnostics).toEqual([])
+  })
+
   test("migrates the legacy small model to the title agent", () => {
     const result = normalized({ small_model: "anthropic/claude-haiku-4-5" })
     expect(result.encoded.agents).toEqual({
@@ -303,6 +319,16 @@ describe("ConfigNormalize", () => {
       { action: "subagent", resource: "*", effect: "allow" },
       { action: "native", resource: "*", effect: "deny" },
     ])
+  })
+
+  test("maps the media tools' old experimental names in native rules", () => {
+    const rule = { action: "experimental_image_generate", resource: "*", effect: "deny" }
+    const result = normalized({
+      permissions: [rule],
+      agents: { build: { permissions: [{ ...rule, action: "experimental_video_generate" }] } },
+    }).encoded
+    expect(result.permissions).toEqual([{ ...rule, action: "generate_image" }])
+    expect(result.agents).toMatchObject({ build: { permissions: [{ ...rule, action: "generate_video" }] } })
   })
 
   test.each(["agent", "mode"])("preserves legacy %s permission source order", (key) => {
@@ -551,7 +577,6 @@ describe("ConfigNormalize", () => {
         experimental: {
           portable_shell_scanner: true,
           todo: true,
-          background_compaction: true,
           media_blob: true,
           part_rows: true,
           image_generate: { model: "openai/gpt-image-2" },
@@ -564,7 +589,6 @@ describe("ConfigNormalize", () => {
       experimental: {
         portable_shell_scanner: true,
         todo: true,
-        background_compaction: true,
         media_blob: true,
         part_rows: true,
         image_generate: { model: { providerID: "openai", model: "gpt-image-2" } },
@@ -598,6 +622,44 @@ describe("ConfigNormalize", () => {
         ["invalid", ["experimental", "image_generate"]],
       ])
     }
+  })
+
+  test("normalizes flag booleans and keeps automations at the top level", () => {
+    const result = normalized({
+      automations: false,
+      experimental: {
+        todo: true,
+        media_blob: false,
+        artifacts: "yes",
+        full_codemode: true,
+        automations: false,
+        schedules: false,
+      },
+    })
+    expect(result.encoded.automations).toBe(false)
+    expect(result.encoded.experimental).toEqual({ todo: true, media_blob: false, full_codemode: true })
+    expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+      ["removed", ["experimental", "automations"]],
+      ["removed", ["experimental", "schedules"]],
+      ["invalid", ["experimental", "artifacts"]],
+    ])
+    expect(normalized({ experimental: { automations: false, schedules: false } }).encoded).toEqual({})
+  })
+
+  test("accepts deprecated codemode_vm and ignores retired codemodeVm without diagnostics", () => {
+    const result = normalized({ experimental: { codemode_vm: true, codemodeVm: false } })
+    expect(result.encoded.experimental).toEqual({ codemode_vm: true })
+    expect(result.diagnostics).toEqual([])
+  })
+
+  test("passes experimental.all_flags through as a boolean", () => {
+    expect(normalized({ experimental: { all_flags: true } }).encoded.experimental).toEqual({ all_flags: true })
+    expect(normalized({ experimental: { all_flags: false } }).encoded.experimental).toEqual({ all_flags: false })
+    const invalid = normalized({ experimental: { all_flags: "yes" } })
+    expect(invalid.encoded.experimental).toBeUndefined()
+    expect(invalid.diagnostics.map((item) => [item.kind, item.path])).toEqual([
+      ["invalid", ["experimental", "all_flags"]],
+    ])
   })
 
   test("never emits experimental policies", () => {

@@ -10,7 +10,7 @@ import {
   TransportError,
   type LLMRequest,
 } from "@opencode/ai/effect"
-import { OpenAIChat } from "@opencode/ai/protocols"
+import { OpenAIChat, OpenAIResponses } from "@opencode/ai/protocols"
 import { Agent } from "@opencode/core/agent"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -35,7 +35,7 @@ import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Money } from "@opencode/schema/money"
-import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
+import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { testEffect } from "./lib/effect"
 
 let requests: LLMRequest[] = []
@@ -84,11 +84,11 @@ const successfulTitle = () =>
       reason: { normalized: "stop" },
     }),
   )
-let titleStream: () => Stream.Stream<LLMEvent, AIError> = successfulTitle
+let titleStream: (request: LLMRequest) => Stream.Stream<LLMEvent, AIError> = successfulTitle
 const client = Layer.mock(LLMClient.Service)({
   stream: (request: LLMRequest) => {
     requests.push(request)
-    return titleStream()
+    return titleStream(request)
   },
   generate: () => Effect.die("unused"),
 })
@@ -236,6 +236,50 @@ it.effect("generates a title from the sole user message and renames the session"
     expect(renamed?.cost).toBeCloseTo(0.0000233)
   }),
 )
+
+for (const timing of ["start", "end"] as const)
+  it.effect(`excludes commentary from titles when the response phase arrives at ${timing}`, () =>
+    Effect.gen(function* () {
+      yield* enableTitleAgent
+      const sessionID = Session.ID.make(`ses_title_phase_${timing}`)
+      yield* insertSession(sessionID)
+      yield* prompt(sessionID, "Investigate performance across four hosts without making changes")
+      // Sanitized shape of a live Luna response: both messages are output_text, not reasoning.
+      titleStream = (request) =>
+        Stream.fromIterable([
+          {
+            type: "response.output_item.added",
+            item: { type: "message", id: "commentary", ...(timing === "start" ? { phase: "commentary" } : {}) },
+          },
+          {
+            type: "response.output_text.delta",
+            item_id: "commentary",
+            delta: "We need title only. Need capture investigation four machines performance read-only. Title concise.",
+          },
+          {
+            type: "response.output_item.done",
+            item: { type: "message", id: "commentary", phase: "commentary" },
+          },
+          { type: "response.output_item.added", item: { type: "message", id: "final", phase: "final_answer" } },
+          { type: "response.output_text.delta", item_id: "final", delta: "Read-only performance investigation" },
+          { type: "response.output_item.done", item: { type: "message", id: "final", phase: "final_answer" } },
+          { type: "response.completed", response: { id: "response_title" } },
+        ]).pipe(
+          Stream.map((event) => Schema.decodeUnknownSync(OpenAIResponses.protocol.stream.event)(JSON.stringify(event))),
+          Stream.mapAccumEffect(
+            () => OpenAIResponses.protocol.stream.initial(request),
+            OpenAIResponses.protocol.stream.step,
+          ),
+        )
+
+      const title = yield* SessionTitle.Service
+      yield* title.generate(sessionID)
+
+      const store = yield* SessionStore.Service
+      expect(requests).toHaveLength(1)
+      expect((yield* store.get(sessionID))?.title).toBe("Read-only performance investigation")
+    }),
+  )
 
 it.effect("runs title hooks instead of context hooks", () =>
   Effect.gen(function* () {
@@ -589,6 +633,52 @@ it.effect("bounds regeneration context while preserving the original request and
     expect(content.text).not.toContain("OMITTED_OLD_CONTEXT")
   }),
 )
+
+it.effect("keeps the clipped regeneration context well formed", () =>
+  Effect.gen(function* () {
+    yield* enableTitleAgent
+    const sessionID = Session.ID.make("ses_title_regenerate_emoji")
+    yield* insertSession(sessionID, "Original title")
+    // The leading x puts both cuts, the original request's head and the recent conversation's tail, inside an emoji.
+    yield* prompt(sessionID, `x${"😀".repeat(1_500)}`)
+    yield* prompt(sessionID, `x${"😀".repeat(5_000)}`)
+
+    const title = yield* SessionTitle.Service
+    yield* title.generate(sessionID)
+
+    const content = requests[0]?.messages[0]?.content[0]
+    expect(content?.type).toBe("text")
+    if (content?.type !== "text") return
+    expect(content.text.length).toBeLessThanOrEqual(8_000)
+    expect(content.text.length).toBeGreaterThan(7_900)
+    expect(content.text.isWellFormed()).toBe(true)
+  }),
+)
+
+for (const [prefix, stored] of [
+  [95, `${"a".repeat(95)}😀...`],
+  [96, `${"a".repeat(96)}...`],
+  [97, `${"a".repeat(97)}...`],
+] as const)
+  it.effect(`clips a long generated title without splitting an emoji after ${prefix} letters`, () =>
+    Effect.gen(function* () {
+      yield* enableTitleAgent
+      titleStream = () =>
+        Stream.make(
+          LLMEvent.textDelta({ id: "title", text: `${"a".repeat(prefix)}😀${"b".repeat(20)}` }),
+          LLMEvent.finish({ reason: { normalized: "stop" } }),
+        )
+      const sessionID = Session.ID.make(`ses_title_emoji_${prefix}`)
+      yield* insertSession(sessionID)
+      yield* prompt(sessionID, "Name this session")
+
+      const title = yield* SessionTitle.Service
+      yield* title.generate(sessionID)
+
+      const store = yield* SessionStore.Service
+      expect((yield* store.get(sessionID))?.title).toBe(stored)
+    }),
+  )
 
 it.effect("preserves the existing title when regeneration fails", () =>
   Effect.gen(function* () {

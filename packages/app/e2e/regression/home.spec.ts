@@ -1,7 +1,18 @@
 import type { OpenCodeEvent } from "@opencode/client/promise"
 import { expect, test, type Page } from "@playwright/test"
-import { expectPath, holdRoute, NO_PROVIDER, project, REMOTE_SERVER, seed, sessionHref, T0 } from "../utils/app"
-import { mockOpenCodeServer } from "../utils/mock-server"
+import {
+  expectPath,
+  holdRoute,
+  NO_PROVIDER,
+  project,
+  REMOTE_SERVER,
+  seed,
+  SERVER,
+  session,
+  sessionHref,
+  T0,
+} from "../utils/app"
+import { mockOpenCodeServer, mockServers } from "../utils/mock-server"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { mockRemoteServer, mockWorkspace, newSessionLocation } from "../utils/workspace"
 import { APP_READY_TIMEOUT, expectAppVisible } from "../utils/waits"
@@ -17,6 +28,81 @@ async function openHome(page: Page, input: Parameters<typeof mockStressTimeline>
   await page.goto("/")
 }
 
+test("Home projects, utility rows, search and recent sessions show keyboard focus", async ({ page }) => {
+  const workspace = await mockWorkspace(page, { name: "HomeFocus" })
+
+  await seed(page, { usedProjects: { local: [workspace.projectID] } })
+  await page.goto("/")
+
+  const projects = page.getByRole("complementary", { name: "Projects" })
+
+  const viewport = page.getByRole("main").getByRole("region", { name: "scrollable content", exact: true })
+
+  const projectButton = projects.getByRole("button", { name: /HomeFocus/ })
+
+  const settings = projects.getByRole("button", { name: "Settings", exact: true })
+
+  const help = projects.getByRole("button", { name: "Help", exact: true })
+
+  await expect(projectButton).toBeVisible()
+  await expect(viewport).toHaveAttribute("tabindex", "-1")
+  await projects.getByRole("button", { name: "Add project", exact: true }).press("Tab")
+  await expect(projectButton).toBeFocused()
+  await expect
+    .poll(() =>
+      projectButton.evaluate((button) => {
+        const row = button.closest("[data-home-row]")
+
+        return row && getComputedStyle(row, "::after").outlineStyle
+      }),
+    )
+    .toBe("solid")
+
+  // The two project row actions come before the utility buttons.
+  await page.keyboard.press("Tab")
+  await page.keyboard.press("Tab")
+  await page.keyboard.press("Tab")
+  await expect(settings).toBeFocused()
+  await expect(settings).toHaveCSS("outline-style", "solid")
+  await expect(settings).not.toHaveCSS("transition-property", /\b(all|outline)\b/)
+  await page.keyboard.press("Tab")
+  await expect(help).toBeFocused()
+  await expect(help).toHaveCSS("outline-style", "solid")
+
+  const search = page.getByRole("textbox", { name: "Search sessions", exact: true })
+
+  const field = page.locator('[data-slot="home-session-search-field"]')
+
+  // A text field shows its caret and background, not a ring.
+  await page.keyboard.press("Tab")
+  await expect(search).toBeFocused()
+  await expect(field).toHaveCSS("outline-style", "none")
+
+  const recent = page.getByRole("region", { name: "Recent sessions" })
+
+  const sessionRow = row(page, "HomeFocus")
+
+  await sessionRow.hover()
+  await expect(sessionRow).toHaveCSS("outline-style", "none")
+  await recent.getByRole("button", { name: "New session", exact: true }).press("Tab")
+  await expect(sessionRow).toBeFocused()
+  await expect(sessionRow).toHaveCSS("outline-style", "solid")
+  await expect(sessionRow).toHaveCSS("outline-offset", "-2px")
+
+  await page.setViewportSize({ width: 1280, height: 200 })
+  await expect.poll(() => viewport.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+  await expect(viewport).toHaveAttribute("tabindex", "-1")
+  await projects.getByRole("button", { name: "Add project", exact: true }).press("Shift+Tab")
+  await expect(viewport).not.toBeFocused()
+
+  // A click still focuses the list so the keyboard can scroll it, without a ring around the whole area.
+  await viewport.click({ position: { x: 4, y: 4 } })
+  await expect(viewport).toBeFocused()
+  await expect(viewport).toHaveCSS("outline-style", "none")
+  await page.keyboard.press("PageDown")
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+})
+
 test("Home keeps the session list in every interface mode", async ({ page }) => {
   const earlier = { id: "ses_home_earlier", title: "Finished earlier" }
   await mockWorkspace(page, { name: "Home", sessions: [earlier] })
@@ -30,13 +116,40 @@ test("Home keeps the session list in every interface mode", async ({ page }) => 
     await page.keyboard.press("Control+,")
     const settings = page.getByTestId("settings-screen")
     const option = settings.getByRole("radio", { name: mode, exact: true })
-    await settings.getByRole("group", { name: "Interface layout", exact: true }).getByText(mode, { exact: true }).click()
+    await settings
+      .getByRole("group", { name: "Interface layout", exact: true })
+      .getByText(mode, { exact: true })
+      .click()
     await expect(option).toBeChecked()
     await settings.getByRole("button", { name: "Back to app", exact: true }).click()
     await expect(page).toHaveURL("/")
     await expect(search).toBeVisible()
     await expect(row(page, earlier.title)).toBeVisible()
   }
+})
+
+test("choosing Customize replaces Home with Settings in desktop side tabs", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "Website",
+    sessions: [],
+    seed: { settings: { appearance: { tabLayout: "vertical" } } },
+  })
+  await page.goto(`/e2e/utils/windows-menu.html?${new URLSearchParams({ server: SERVER })}`)
+  const sidebar = page.locator("#vertical-tabs-sidebar")
+
+  const main = page.getByRole("main")
+
+  await expect(sidebar.getByRole("button", { name: "Home", exact: true })).toBeVisible()
+  await main.getByRole("button", { name: "Settings", exact: true }).click()
+  await main.getByRole("tab", { name: "Experimental", exact: true }).click()
+  await main.locator('[data-action="settings-sidebar-organize"]').click()
+  await page.getByRole("option", { name: "Customize", exact: true }).click()
+  await expect(sidebar.getByRole("button", { name: "Home", exact: true })).toHaveCount(0)
+  await main.getByRole("button", { name: "Back to app", exact: true }).click()
+  await expect(main.getByRole("button", { name: "New session", exact: true })).toBeVisible()
+  await expect(sidebar.getByRole("button", { name: "View options", exact: true })).toBeVisible()
+  await sidebar.getByRole("button", { name: "Settings", exact: true }).click()
+  await expect(page.getByTestId("settings-screen")).toBeVisible()
 })
 
 test("a working Home session keeps its project avatar and shows its activity ring at the end of the row", async ({
@@ -89,7 +202,7 @@ test("the session context menu renames, exports, and deletes a Home session", as
   const box = await target.boundingBox()
   await target.click({ button: "right", position: { x: 48, y: 12 } })
   await expect(page).toHaveURL("/")
-  await expect(page.getByRole("menuitem")).toHaveText(["Rename", "Export…", "Delete…"])
+  await expect(page.getByRole("menuitem")).toHaveText(["Open", "Open in background", "Rename", "Export…", "Delete…"])
   const menu = await page.locator('[data-component="menu-v2-content"]').boundingBox()
   expect(Math.abs((menu?.x ?? 0) - (box?.x ?? 0) - 48)).toBeLessThan(4)
 
@@ -110,7 +223,7 @@ test("the session context menu renames, exports, and deletes a Home session", as
   await renamedRow.click()
   await expect(page).toHaveURL(new RegExp(`/session/${fixture.targetID}$`))
   await expect(page.locator('[data-slot="titlebar-tabs"] a').filter({ hasText: "Renamed from Home" })).toBeVisible()
-  await page.getByRole("button", { name: "Home" }).click()
+  await page.getByRole("button", { name: "Home", exact: true }).click()
   await expect(page).toHaveURL("/")
 
   await renamedRow.click({ button: "right" })
@@ -124,13 +237,158 @@ test("the session context menu renames, exports, and deletes a Home session", as
   await expect(dialog).toContainText('Delete session "Renamed from Home"?')
   await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeFocused()
 
-  const removed = page.waitForRequest(
-    (request) => request.method() === "DELETE" && new URL(request.url()).pathname.endsWith(`/${fixture.targetID}`),
-  )
+  const removed = await holdRoute(page, (url) => url.pathname.endsWith(`/session/${fixture.targetID}`), {
+    method: "DELETE",
+  })
 
-  await dialog.getByRole("button", { name: "Delete session" }).click()
-  await removed
+  // A double click claims one delete: the dialog stays open, with both buttons disabled, until the server answers.
+  await dialog.getByRole("button", { name: "Delete session" }).dblclick()
+  await removed.arrived
+  await expect(dialog.getByRole("button", { name: "Delete session" })).toBeDisabled()
+  await expect(dialog.getByRole("button", { name: "Cancel", exact: true })).toBeDisabled()
+  removed.release()
+  await expect(dialog).toBeHidden()
   await expect(renamedRow).toBeHidden()
+  expect(removed.requests).toHaveLength(1)
+})
+
+test("Open in background and a middle click add a Home session's tab without leaving Home, and Open goes to it", async ({
+  page,
+}) => {
+  const background = { id: "ses_home_open_background", title: "Opened in the background" }
+  const middle = { id: "ses_home_open_middle", title: "Opened with a middle click" }
+  const open = { id: "ses_home_open", title: "Opened from the menu" }
+  await mockWorkspace(page, { name: "HomeOpen", sessions: [background, middle, open], seed: { tabs: [] } })
+  await page.goto("/")
+  const tabs = page.locator('[data-slot="titlebar-tabs"] a')
+
+  await row(page, background.title).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Open in background", exact: true }).click()
+  await expect(tabs.filter({ hasText: background.title })).toBeVisible()
+
+  await row(page, middle.title).click({ button: "middle" })
+  await expect(tabs.filter({ hasText: middle.title })).toBeVisible()
+  await expect(page).toHaveURL("/")
+
+  await row(page, open.title).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Open", exact: true }).click()
+  await expect(page).toHaveURL(new RegExp(`/session/${open.id}$`))
+})
+
+test("a failed session list says so and loads again on Try again, instead of showing the empty state", async ({
+  page,
+}) => {
+  const earlier = { id: "ses_home_failed_load", title: "Listed after retry" }
+  await mockWorkspace(page, { name: "HomeLoad", sessions: [earlier], seed: { tabs: [] } })
+  const list = /\/api\/session\?/
+  await page.route(list, (route) =>
+    route.request().method() === "GET"
+      ? route.fulfill({
+          status: 500,
+          json: { message: "Index unavailable" },
+          headers: { "access-control-allow-origin": "*" },
+        })
+      : route.fallback(),
+  )
+  await page.goto("/")
+
+  const alert = page.getByRole("alert").filter({ hasText: "Couldn't load sessions" })
+  await expect(alert).toBeVisible({ timeout: APP_READY_TIMEOUT })
+  await expect(page.getByText("Nothing here yet")).toHaveCount(0)
+  await expect(page.locator('[data-component="home-session-skeleton"]')).toHaveCount(0)
+
+  await page.unroute(list)
+  await alert.getByRole("button", { name: "Try again", exact: true }).click()
+  await expect(row(page, earlier.title)).toBeVisible()
+  await expect(alert).toHaveCount(0)
+})
+
+test("tabbing out of session search closes its results, and tabbing back reopens them", async ({ page }) => {
+  const earlier = { id: "ses_home_search_tab", title: "Finished earlier" }
+  await mockWorkspace(page, { name: "HomeSearch", sessions: [earlier] })
+  await page.goto("/")
+  const search = page.getByRole("textbox", { name: /Search sessions/ })
+  const panel = page.locator('[data-component="home-session-search-panel"]')
+  await expect(row(page, earlier.title)).toBeVisible()
+
+  await search.click()
+  await page.keyboard.type("Finished")
+  await expect(panel.getByRole("option")).toHaveCount(1)
+  await expect(panel.getByRole("option")).toContainText(earlier.title)
+
+  // The clear button is part of the search; the next stop is outside it.
+  await page.keyboard.press("Tab")
+  await expect(search).not.toBeFocused()
+  await expect(panel).toBeVisible()
+  await page.keyboard.press("Tab")
+  await expect(panel).toHaveCount(0)
+  await expect(search).toHaveValue("Finished")
+
+  await page.keyboard.press("Shift+Tab")
+  await page.keyboard.press("Shift+Tab")
+  await expect(search).toBeFocused()
+  await expect(panel.getByRole("option")).toContainText(earlier.title)
+
+  // The results are active descendants, not independent Tab stops before the search input.
+  await search.press("Shift+Tab")
+  await expect(panel).toHaveCount(0)
+
+  const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
+
+  await page.keyboard.press(`${modifier}+f`)
+  await expect(search).toBeFocused()
+  await expect(panel.getByRole("option")).toContainText(earlier.title)
+})
+
+test("picking a project from the picker in session search clears the search", async ({ page }) => {
+  const earlier = { id: "ses_home_search_scope", title: "Finished earlier" }
+  const workspace = await mockWorkspace(page, { name: "HomeScope", sessions: [earlier] })
+  await seed(page, { usedProjects: { local: [workspace.projectID] } })
+  // Between md and lg the project picker sits inside the search field instead of a projects column.
+  await page.setViewportSize({ width: 900, height: 720 })
+  await page.goto("/")
+  const search = page.getByRole("textbox", { name: /Search sessions/ })
+  const panel = page.locator('[data-component="home-session-search-panel"]')
+  await expect(row(page, earlier.title)).toBeVisible()
+
+  await search.fill("Finished")
+  await expect(panel.getByRole("option")).toContainText(earlier.title)
+  await page.getByRole("button", { name: "Projects", exact: true }).click()
+  await page
+    .getByRole("dialog", { name: "Projects", exact: true })
+    .getByRole("button", { name: /HomeScope/ })
+    .click()
+
+  // The results panel closes with the picker, so a query left in the field would no longer filter anything.
+  await expect(search).toHaveValue("")
+  await expect(search).toHaveAttribute("placeholder", "Search sessions in HomeScope")
+  await expect(row(page, earlier.title)).toBeVisible()
+})
+
+test("Escape cancels an inline rename whose save does not answer", async ({ page }) => {
+  const target = { id: "ses_home_rename_hang", title: "Rename me" }
+  await mockWorkspace(page, { name: "HomeRename", sessions: [target] })
+  const save = await holdRoute(page, /\/api\/session\/ses_home_rename_hang$/, { method: "PATCH" })
+  await page.goto("/")
+  const session = row(page, target.title)
+  await expect(session).toBeVisible()
+
+  await session.click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Rename" }).click()
+  const title = page.locator('[data-component="home-session-rename"]')
+  await expect(title).toBeFocused()
+  await title.fill("Never saved")
+  await title.press("Enter")
+  await save.arrived
+
+  // The input keeps focus while the save is pending, so Escape reaches it.
+  await expect(title).toBeFocused()
+  await expect(title).toHaveAttribute("aria-busy", "true")
+  await page.keyboard.press("Escape")
+  await expect(title).toHaveCount(0)
+  await expect(session).toBeFocused()
+  await expect(session).toContainText(target.title)
+  save.release()
 })
 
 test("the Home shortcut focuses session search, and the Home button leaves focus alone", async ({ page }) => {
@@ -254,6 +512,90 @@ test("Home migrates the directories an older build listed to the server's curren
   await expect
     .poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("opencode.global.dat:server") ?? "{}")))
     .toMatchObject({ usedProjectIDs: { local: ["proj_api", "proj_web"] }, projects: {} })
+})
+
+test("selecting a Home project lists its worktrees once, however often the project updates", async ({ page }) => {
+  const listed = [entry("alpha", 2), entry("beta", 1)]
+  const view = await homeProjects(page, listed)
+  await seed(page, { usedProjects: { local: ["proj_alpha", "proj_beta"] } })
+  const lists: string[] = []
+  page.on("request", (request) => {
+    const url = new URL(request.url())
+
+    if (request.method() === "GET" && url.pathname === "/api/worktree") lists.push(url.searchParams.get("projectID")!)
+  })
+  await page.goto("/")
+  await expect(view.rows).toHaveText(["alpha", "beta"])
+  const alpha = page.locator('[data-component="home-project-row"]').filter({ hasText: "alpha" })
+
+  const refreshed = page.waitForRequest(
+    (request) => request.method() === "POST" && new URL(request.url()).pathname === "/api/worktree/refresh",
+  )
+
+  await alpha.click()
+  await expect(alpha).toHaveAttribute("data-selected", "")
+  await refreshed
+
+  // Each update replaces the selected project's object in the store.
+  const renamed: OpenCodeEvent = {
+    id: "evt_home_worktrees",
+    created: T0,
+    type: "project.updated",
+    data: { ...listed[0]!, name: "alpha renamed" },
+  }
+
+  await view.server.push([renamed])
+  await expect(view.rows).toHaveText(["alpha renamed", "beta"])
+
+  const beta = page.waitForRequest((request) => new URL(request.url()).searchParams.get("projectID") === "proj_beta")
+  await page.locator('[data-component="home-project-row"]').filter({ hasText: "beta" }).click()
+  await beta
+  expect(lists).toEqual(["proj_alpha", "proj_beta"])
+})
+
+test("Home keeps a restored remote selection while the desktop server list loads", async ({ page }) => {
+  const local = session({ id: "ses_home_local", directory: "/repo", title: "Local session" })
+  const remote = session({ id: "ses_home_remote", directory: "/remote/project", title: "Remote session" })
+  const selection = { server: REMOTE_SERVER, directory: "/remote/project" }
+
+  await mockServers(page, {
+    [SERVER]: {
+      directory: "/repo",
+      project: project({ id: "proj_local", directory: "/repo" }),
+      provider: NO_PROVIDER,
+      sessions: [local],
+      pageMessages: () => ({ items: [] }),
+    },
+    [REMOTE_SERVER]: {
+      directory: selection.directory,
+      project: project({ id: "proj_remote", directory: selection.directory, name: "remote-project" }),
+      provider: NO_PROVIDER,
+      sessions: [remote],
+      pageMessages: () => ({ items: [] }),
+    },
+  })
+  await seed(page, {
+    servers: [{ url: REMOTE_SERVER, name: "Remote" }],
+    usedProjects: { [REMOTE_SERVER]: ["proj_remote"] },
+    storage: { "opencode.global.dat:layout": { home: { selection } } },
+  })
+  // Desktop storage is asynchronous; the stored servers load after the layout here.
+  await page.goto(
+    `/e2e/utils/settings-wsl.html?${new URLSearchParams({ server: SERVER, mode: "stopped", storage: "async", hold: "^server$", path: "/" })}`,
+  )
+
+  // Until then Home shows this computer's sessions, not filtered by the remote server's directory.
+  await expect(row(page, local.title)).toBeVisible()
+  await page.getByRole("button", { name: "Load held storage", exact: true }).click()
+
+  await expect(row(page, remote.title)).toBeVisible()
+  await expect(
+    page.locator('[data-component="home-project-row"]').filter({ hasText: "remote-project" }),
+  ).toHaveAttribute("data-selected", "")
+  await expect(row(page, local.title)).toHaveCount(0)
+  expect(
+    await page.evaluate(() => JSON.parse(localStorage.getItem("opencode.global.dat:layout") ?? "{}").home.selection),
+  ).toEqual(selection)
 })
 
 test("Home shows loaded sessions before the location request resolves", async ({ page }) => {

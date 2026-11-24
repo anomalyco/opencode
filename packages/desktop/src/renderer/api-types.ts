@@ -1,5 +1,6 @@
 import type { DesktopMenuAction, DesktopZoomLevel } from "@opencode/app/desktop-menu"
 import type { DesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
+import type { StorageSnapshot } from "../shared/ipc-transport"
 import type { WindowBootstrap } from "../shared/window-bootstrap"
 import type {
   ClipboardImage,
@@ -9,6 +10,7 @@ import type {
   PickedFiles,
   SaveFilePickerOptions,
   ServerReadyData,
+  TaskbarProgressMode,
   TitlebarTheme,
 } from "../shared/ipc-contract"
 
@@ -16,12 +18,15 @@ export type ElectronAPI = {
   awaitInitialization(): Promise<ServerReadyData>
   reconnectService(signal?: AbortSignal): Promise<ServerReadyData>
   onSidecarChanged(cb: (data: ServerReadyData) => void): () => void
+  onSystemResumed(cb: () => void): () => void
   readyDeepLinks(): void
   acknowledgeDeepLinks(attempt: number): void
   isFirstLaunchOnboardingPending(): Promise<boolean>
   finishFirstLaunchOnboarding(createDefaultProject: boolean): Promise<string | null>
   checkAppExists(appName: string): Promise<boolean>
   resolveAppPath(appName: string): Promise<string | null>
+  /** The namespaces the preload read before the page ran; `createDesktopStorage` serves each first read from it. */
+  getStorageSnapshot(): Promise<StorageSnapshot>
   storeItems(name: string): Promise<{ items: Record<string, string>; revision: number }>
   storeUpdate(name: string, insert: Record<string, string>, remove: string[]): Promise<number>
   storeClear(name: string): Promise<void>
@@ -36,7 +41,7 @@ export type ElectronAPI = {
   getWindowID(): string
   getWindowBootstrap(): WindowBootstrap
   themeReady(): Promise<void>
-  onMenuCommand(cb: (id: string) => void): () => void
+  onMenuCommand(cb: (id: string, accelerator: boolean) => void): () => void
   onDeepLink(cb: (delivery: { attempt: number; urls: string[] }) => void): () => void
   openDirectoryPicker(opts?: DirectoryPickerOptions): Promise<string | string[] | null>
   openFilePicker(opts?: FilePickerOptions): Promise<PickedFiles | null>
@@ -46,18 +51,22 @@ export type ElectronAPI = {
   saveFile(opts: SaveFilePickerOptions, content: string): Promise<boolean>
   openExternal(url: string): void
   openBrowser(url: string): Promise<boolean>
-  openLocalFile(url: string): void
   openPath(path: string, app?: string): Promise<string | undefined>
   revealPath(path: string): Promise<boolean>
+  startFileDrag(path: string): Promise<boolean>
   readClipboardImage(): Promise<ClipboardImage | null>
   writeClipboardText(text: string): Promise<void>
   getWindowFocused(): Promise<boolean>
+  requestAttention(): Promise<void>
   requestMicrophone(): Promise<boolean>
   setVoiceCallActive(active: boolean): Promise<void>
   getWindowFullscreen(): Promise<boolean>
   onWindowFullscreenChanged(cb: (fullscreen: boolean) => void): () => void
   setWindowFocus(): Promise<void>
   showWindow(): Promise<void>
+  showToast(toast: { tag: string; title: string; body: string }): Promise<void>
+  dismissToast(tag: string): Promise<void>
+  onToastActivated(cb: (tag: string) => void): () => void
   relaunch(): void
   getZoomFactor(): Promise<number>
   setZoomFactor(factor: number): Promise<void>
@@ -69,6 +78,8 @@ export type ElectronAPI = {
   onZoomChanged(cb: (zoom: { factor: number; level: DesktopZoomLevel }) => void): () => void
   setTitlebar(theme: TitlebarTheme): Promise<void>
   setTrafficLightsPosition(position: { x: number; y: number }): Promise<void>
+  setTaskbarBadge(count: number, description: string): Promise<void>
+  setTaskbarProgress(mode: TaskbarProgressMode): Promise<void>
   runDesktopMenuAction(action: DesktopMenuAction): Promise<void>
   setBackgroundColor(color: string): Promise<void>
   exportDebugLogs(): Promise<string>

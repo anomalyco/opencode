@@ -2,21 +2,17 @@ import { BrowserWindow } from "electron"
 import { parseDesktopNativeBundle } from "@opencode/app/i18n/desktop-native"
 import { Effect } from "effect"
 import { AppRpcs } from "../../shared/ipc-rpc"
-import { openExternalURL } from "../files"
 import { checkAppExists, resolveAppPath } from "../files/apps"
 import { setForceFocus } from "../native/debug"
-import { showCliInstaller } from "../native/install-cli"
 import { DesktopLogging, scoped } from "../native/logging"
-import { createMenu, sendMenuCommand } from "../native/menu"
 import { getSpellcheckEnabled, setSpellcheckEnabled } from "../native/spellcheck"
 import { setNativeTranslations } from "../native/translations"
 import { IpcPortHandoff } from "../ipc-transport"
 import { ApplicationLifecycle } from "../lifecycle"
 import { finishFirstLaunchOnboarding, isFirstLaunchOnboardingPending } from "../lifecycle/onboarding"
 import { BackgroundService } from "../service/background-service"
-import { DesktopCli } from "../service/desktop-cli"
 import { SidecarCredentials } from "../service/sidecar-credentials"
-import { getLastFocusedWindow, getWindowID, setBackgroundColor } from "../windows"
+import { getWindowID, setBackgroundColor } from "../windows"
 import { sender } from "./context"
 
 export const appHandlers = AppRpcs.toLayer(
@@ -24,9 +20,7 @@ export const appHandlers = AppRpcs.toLayer(
     const handoff = yield* IpcPortHandoff
     const lifecycle = yield* ApplicationLifecycle.Service
     const background = yield* BackgroundService.Service
-    const desktopCli = yield* DesktopCli.Service
     const logging = yield* DesktopLogging.Service
-    const runFork = Effect.runForkWith(yield* Effect.context())
 
     return AppRpcs.of({
       AppAwaitInitialization: () => background.connection.pipe(Effect.map(SidecarCredentials.ready)),
@@ -67,18 +61,8 @@ export const appHandlers = AppRpcs.toLayer(
 
           if (!bundle) throw new Error("Invalid native translation bundle")
 
-          if (!setNativeTranslations(bundle)) return
-          createMenu({
-            trigger: (id) => {
-              const win = getLastFocusedWindow()
-
-              if (win) sendMenuCommand(win, id)
-            },
-            installCli: () => runFork(showCliInstaller(desktopCli)),
-            createWindow: lifecycle.createWindow,
-            openExternal: (url) => runFork(openExternalURL(url)),
-            relaunch: lifecycle.relaunch,
-          })
+          // An installed menu rebuilds through the translation listener in `ipc.ts`.
+          setNativeTranslations(bundle)
         }),
       AppRelaunch: () => Effect.sync(lifecycle.relaunch),
     })

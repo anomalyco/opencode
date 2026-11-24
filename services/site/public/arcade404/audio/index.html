@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="robots" content="noindex" />
+<title>404 arcade sounds</title>
+<style>
+  body { margin: 0; padding: 32px 40px; background: #0c0c0c; color: #eee; font: 14px/1.5 Inter, system-ui, sans-serif; }
+  h1 { font: 400 22px ui-monospace, monospace; margin: 0 0 4px; }
+  p.intro { color: #999; margin: 0 0 24px; max-width: 48rem; }
+  ol { list-style: none; padding: 0; margin: 0; display: grid; gap: 10px; max-width: 900px; }
+  ol.options { gap: 6px; margin-top: 8px; }
+  li.group { padding: 12px 14px; background: #131313; border: 1px solid #2a2a2a; }
+  li.group > .name { margin-bottom: 2px; }
+  li.row { display: grid; grid-template-columns: 40px 180px 1fr; gap: 14px; align-items: center; padding: 12px 14px; background: #161616; border: 1px solid #2a2a2a; }
+  li.group li.row { grid-template-columns: 40px 260px 1fr; padding: 8px 10px; background: #191919; }
+  li.row.playing { border-color: #4c8dff; }
+  button { width: 36px; height: 36px; border: 1px solid #3a3a3a; background: #1f1f1f; color: #fff; cursor: pointer; font: 16px system-ui; }
+  button:hover { border-color: #4c8dff; }
+  .name { font: 500 14px ui-monospace, monospace; }
+  .label { font-size: 13px; }
+  .meta { color: #999; font-size: 12px; }
+  .bar { height: 2px; background: #2a2a2a; margin-top: 6px; }
+  .bar i { display: block; height: 100%; width: 0; background: #4c8dff; }
+  .family { color: #8aa; font: 500 12px ui-monospace, monospace; margin: 10px 0 0; }
+  .more { width: auto; height: auto; padding: 6px 12px; margin-top: 8px; font: 13px system-ui; color: #9bf; }
+  .inuse { color: #4c8dff; font-size: 12px; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<h1>404 arcade sounds</h1>
+<p class="intro">Placeholder sounds (Kenney CC0 packs, BigSoundBank CC0 floppy recordings, the OpenCode 2.0 startup recipes and synthesis) until ElevenLabs has credits. Click ▶ to play, again to stop. The ambience loops. Sounds with several options list them in order; option 1 is the manifest default and <span class="inuse">in use</span> marks the take the arcade plays. Candidates from your OpenCode SFX library sit behind “Show more”.</p>
+<ol id="list"></ol>
+<script>
+const order = ["ambience", "coin-pickup", "coin-insert", "coin-reject", "power-up", "glitch", "boot", "start", "menu-move", "menu-select"]
+const labels = { ambience: "Ambience (loop)", "coin-pickup": "Coin pickup", "coin-insert": "Coin insert", "coin-reject": "Coin rejected", "power-up": "Power-up", glitch: "404 glitch", boot: "Boot sequence", start: "Start jingle", "menu-move": "Menu move", "menu-select": "Menu select" }
+let current
+
+function row(title, clip, s) {
+  const li = document.createElement("li")
+  li.className = "row"
+  const audio = new Audio(clip.files.webm)
+  audio.loop = !!s.loop
+  audio.volume = Math.min(1, s.volume ?? 0.7)
+  li.innerHTML = `<button aria-label="Play ${title.replace(/<[^>]+>/g, "")}">▶</button><div><div class="${clip === s ? "name" : "label"}">${title}</div><div class="meta">${clip.duration.toFixed(2)} s${s.loop ? " · loop" : ""}</div></div><div><div class="meta">${clip.source}${clip === s ? "" : ` — ${clip.licence}`}</div><div class="bar"><i></i></div></div>`
+  const btn = li.querySelector("button"), bar = li.querySelector(".bar i")
+  const stop = () => { audio.pause(); audio.currentTime = 0; btn.textContent = "▶"; li.classList.remove("playing"); bar.style.width = "0" }
+  btn.onclick = () => {
+    if (current && current.audio !== audio) current.stop()
+    if (!audio.paused) return stop()
+    current = { audio, stop }
+    audio.currentTime = 0
+    audio.play()
+    btn.textContent = "■"
+    li.classList.add("playing")
+  }
+  audio.ontimeupdate = () => (bar.style.width = (audio.currentTime / clip.duration) * 100 + "%")
+  audio.onended = stop
+  return li
+}
+
+// Mirrors preferredVariant in src/component/site/arcade/sound.ts.
+const inUse = { boot: "boot-post", "coin-pickup": "coin-pickup-slide" }
+
+fetch("manifest.json").then((r) => r.json()).then((m) => {
+  const list = document.getElementById("list")
+  for (const key of order) {
+    const s = m.sounds[key]
+    if (!s) continue
+    if (!s.variants?.length) {
+      list.append(row(labels[key], s, s))
+      continue
+    }
+    const group = document.createElement("li")
+    group.className = "group"
+    const own = s.variants.filter((v) => !v.library)
+    const library = s.variants.filter((v) => v.library)
+    group.innerHTML = `<div class="name">${labels[key]}</div><div class="meta">${s.variants.length} options${library.length ? ` · ${library.length} from the OpenCode SFX library` : ""}</div><ol class="options"></ol>`
+    const options = group.querySelector("ol")
+    const label = (v, i) => `${i + 1}. ${v.label}${i === 0 ? " (default)" : ""}${inUse[key] === v.id ? ' <span class="inuse">in use</span>' : ""}`
+    own.forEach((v, i) => options.append(row(label(v, i), v, s)))
+    if (library.length) {
+      const extra = document.createElement("ol")
+      extra.className = "options"
+      extra.hidden = true
+      let family
+      library.forEach((v, i) => {
+        if (v.family !== family) {
+          family = v.family
+          const head = document.createElement("li")
+          head.className = "family"
+          head.textContent = `${family} (${library.filter((x) => x.family === family).length})`
+          extra.append(head)
+        }
+        extra.append(row(label(v, own.length + i), v, s))
+      })
+      const more = document.createElement("button")
+      more.className = "more"
+      const text = () => (more.textContent = extra.hidden ? `Show ${library.length} more (OpenCode SFX library)` : `Hide ${library.length} OpenCode SFX options`)
+      text()
+      more.onclick = () => { extra.hidden = !extra.hidden; text() }
+      group.append(more, extra)
+    }
+    list.append(group)
+  }
+})
+</script>
+</body>
+</html>

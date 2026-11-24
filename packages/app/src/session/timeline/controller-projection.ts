@@ -33,6 +33,9 @@ function handoffNotices(
   const time = { created: handoff.message.time.created }
   const selection = handoff.selection
 
+  // A held prompt switches nothing until its Location's agents and models load.
+  if (!selection) return []
+
   return [
     ...(session?.agent && session.agent !== selection.agent
       ? [

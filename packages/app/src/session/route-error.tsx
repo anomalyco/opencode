@@ -62,7 +62,7 @@ export function SessionNotFoundPanel(props: { sessionID: string; serverKey: Serv
         <Button
           variant="neutral"
           size="normal"
-          icon="xmark-small"
+          icon="close"
           onClick={() => tabs.removeSessionTab({ server: props.serverKey, sessionId: props.sessionID })}
         >
           {language.t("session.error.notFound.closeTab")}

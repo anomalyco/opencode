@@ -21,20 +21,103 @@ export function parseOption(content: string) {
   }
 }
 
-// Other coding agents accept unquoted colons in frontmatter values. Retry
-// those values as YAML block scalars so existing config files keep working.
+// Join a legacy separate `variant` into a string `model` so it survives native decoding.
+// Embedded and structured native selections, and a variant without a model, stay unchanged.
+export function joinLegacyVariant(data: Record<string, unknown>) {
+  if (typeof data.model !== "string" || data.model.includes("#")) return data
+  if (typeof data.variant !== "string" || !/^[^#]+$/.test(data.variant)) return data
+  return { ...data, model: `${data.model}#${data.variant}` }
+}
+
+// Other coding agents accept unquoted colons and leading tags like `[Tag] text`
+// in frontmatter values. Retry those values as YAML block scalars so existing
+// config files keep working without rewriting valid YAML flow collections.
 export function sanitize(content: string) {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---/)
   if (!match) return content
   const frontmatter = match[1]
+  let flow: FlowState | undefined
   const result = frontmatter.split(/\r?\n/).flatMap((line) => {
+    if (flow) {
+      flow = scanFlow(line, flow).state
+      return [line]
+    }
     if (line.trim().startsWith("#") || line.trim() === "" || /^\s+/.test(line)) return [line]
     const entry = line.match(/^([a-zA-Z_][a-zA-Z0-9_]*)\s*:\s*(.*)$/)
     if (!entry) return [line]
     const value = entry[2].trim()
-    if (value === "" || value === ">" || value === "|" || value.startsWith('"') || value.startsWith("'")) return [line]
-    if (!value.includes(":")) return [line]
+    if (value === "" || value.startsWith('"') || value.startsWith("'")) return [line]
+    if (value.startsWith("[") || value.startsWith("{")) {
+      const scan = scanFlow(value, { stack: [], quote: undefined })
+      if (scan.status === "open") flow = scan.state
+      if (scan.status !== "trailing") return [line]
+      return [`${entry[1]}: |-`, `  ${value}`]
+    }
+    if (!value.includes(":") || isValidYaml(line)) return [line]
     return [`${entry[1]}: |-`, `  ${value}`]
   })
   return content.replace(frontmatter, () => result.join("\n"))
+}
+
+function isValidYaml(line: string) {
+  try {
+    matter(`---\n${line}\n---`, {})
+    return true
+  } catch {
+    return false
+  }
+}
+
+type FlowState = {
+  stack: Array<"]" | "}">
+  quote: '"' | "'" | undefined
+}
+
+function scanFlow(text: string, state: FlowState) {
+  const stack = [...state.stack]
+  let quote = state.quote
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i]
+    if (quote === '"') {
+      if (ch === "\\") {
+        i++
+        continue
+      }
+      if (ch === '"') quote = undefined
+      continue
+    }
+    if (quote === "'") {
+      if (ch === "'") {
+        if (text[i + 1] === "'") {
+          i++
+          continue
+        }
+        quote = undefined
+      }
+      continue
+    }
+    if ((ch === '"' || ch === "'") && (i === 0 || /[\s[{,:]/.test(text[i - 1]))) {
+      quote = ch
+      continue
+    }
+    if (ch === "#" && (i === 0 || /\s/.test(text[i - 1]))) break
+    if (ch === "[") {
+      stack.push("]")
+      continue
+    }
+    if (ch === "{") {
+      stack.push("}")
+      continue
+    }
+    if (ch === "]" || ch === "}") {
+      if (stack.at(-1) !== ch) return { status: "invalid" as const, state: undefined }
+      stack.pop()
+      if (stack.length === 0) {
+        const rest = text.slice(i + 1).trim()
+        if (rest === "" || rest.startsWith("#")) return { status: "closed" as const, state: undefined }
+        return { status: "trailing" as const, state: undefined }
+      }
+    }
+  }
+  return { status: "open" as const, state: { stack, quote } }
 }

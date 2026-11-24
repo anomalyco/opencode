@@ -1,9 +1,11 @@
 // One long session (120 turns of markdown, code fences, tool calls and diffs) at normal speed.
 import { bench, web } from "@hona/strobe"
+import { Match } from "effect"
 import { editTools, reviewDiffs } from "./fixtures/diffs"
 import { dragDivider, measureDivider, type Divider } from "./fixtures/drag"
 import { cached } from "./fixtures/mock"
 import { openReview } from "./fixtures/review"
+import { scriptTools } from "./fixtures/scripts"
 import { composer, mockTimelineSession, oldestPrompt, timeline } from "./fixtures/timeline"
 
 const find = '[data-component="timeline-search-bar"] input'
@@ -17,39 +19,62 @@ const diff = '[data-component="apply-patch-file-diff"] diffs-container >>> [data
 
 const drag = "drag the review's edge"
 
+const scripts = "open a group of scripts"
+
+// The turn's one group of scripts, and the calls its scripts list once open.
+const group =
+  '[data-component="collapsed-tool-group"] > [data-component="collapsible"] > [data-slot="collapsible-trigger"]'
+
+const groupList = '[data-component="collapsed-tool-group"] [data-component="execute-tool-calls"]'
+
 // The divider between the session and the side panel, read once the review is open. The session panel keeps at least
 // 400px, the side panel 320px and the 8px gap.
+const handle = '[data-slot="session-chat-panel"] > div > [data-component="resize-handle"]'
+
 let divider: Divider | undefined
 
 export default bench({
+  // The session a case's launch loads: the edits alone, the scripts alone, the history beside the review, or the history.
+  // Cases with the same one share a launch.
+  setupKey: (ctx) =>
+    ctx.case === "expand an edit"
+      ? "edits"
+      : ctx.case === scripts
+        ? "scripts"
+        : ctx.case === drag
+          ? "review"
+          : "history",
+
   targets: {
     web: web({
       expect: { title: "OpenCode" },
       viewport: { width: 1366, height: 768 },
-      prepare: async ({ case: name, playwright, mock, url }) => ({
-        ...(await mockTimelineSession(cached(playwright.page, mock), {
-          server: new URL(url).origin,
+      prepare: async (ctx) =>
+        mockTimelineSession(cached(ctx), {
+          server: new URL(ctx.url).origin,
           // The edits alone, so the case measures the diff, not the history around it.
-          historyTurns: name === "expand an edit" ? 0 : 120,
-          collapsedEdits: name === "expand an edit",
-          tools: name === "expand an edit" ? await editTools() : undefined,
-          vcsDiff: name === drag ? reviewDiffs() : undefined,
-        })),
-        mouse: playwright.page.mouse,
-      }),
+          historyTurns: ctx.setupKey === "edits" || ctx.setupKey === "scripts" ? 0 : 120,
+          collapsedEdits: ctx.setupKey === "edits",
+          compact: ctx.setupKey === "scripts",
+          tools: await Match.value(ctx.setupKey).pipe(
+            Match.when("edits", () => editTools()),
+            Match.when("scripts", async () => scriptTools()),
+            Match.orElse(async () => undefined),
+          ),
+          vcsDiff: ctx.setupKey === "review" ? reviewDiffs() : undefined,
+        }),
       url: ({ prepared }) => prepared.path,
     }),
   },
 
-  async setup({ case: name, page }) {
+  async setup({ setupKey, page }) {
     await page.waitFor(timeline, { timeout: 60_000 })
     await page.waitFor(composer)
 
-    if (name === drag) {
+    if (setupKey === "review") {
       await openReview(page)
       await page.idle()
       divider = await page.eval(measureDivider, {
-        selector: '[data-slot="session-chat-panel"] > div > [data-component="resize-handle"]',
         panel: '[data-slot="session-chat-panel"]',
         row: "[data-pane-row]",
         min: 400,
@@ -62,7 +87,9 @@ export default bench({
 
   cases: {
     "scroll history": {
-      primary: "main.busy",
+      // Work to scroll the same distance in both directions; keep busy share for lit-display runs.
+      primary: "main.work",
+      metrics: ["main.busy"],
       async run({ page, phase }) {
         await phase("up", () => page.scroll(timeline, { by: -4000, speed: 3000 }))
         await phase("down", () => page.scroll(timeline, { by: 4000, speed: 3000 }))
@@ -111,6 +138,21 @@ export default bench({
       },
     },
 
+    // 46 Code Mode scripts of one turn folded into one group, six of which read a source tree file by file: 19,039 calls
+    // in all. Opening the group opens each script, as the default timeline detail does.
+    [scripts]: {
+      primary: "main.work",
+      metrics: ["interaction.p50", "run.duration", "main.style", "main.layout", "main.script"],
+      async run({ page }) {
+        await page.click(group, { until: groupList })
+        await page.idle()
+      },
+      async reset({ page }) {
+        await page.click(group)
+        await page.idle()
+      },
+    },
+
     // The divider beside the review (72 changed files) held for five seconds and dragged as a hand does, a pointer
     // move every display frame: a slow stretch toward the session, jiggles, a fast throw toward the review and a slow
     // pull back (fixtures/drag.ts). The timeline narrows and widens on every frame, so the rows in view rewrap; each
@@ -118,7 +160,7 @@ export default bench({
     [drag]: {
       primary: "frames.dropped.pct",
       metrics: ["main.work", "main.layout", "main.style", "main.script", "frames.interval.p95"],
-      run: ({ prepared }) => dragDivider(prepared.mouse, divider!),
+      run: ({ page }) => dragDivider(page, handle, divider!),
       reset: ({ page }) => page.idle(),
     },
   },

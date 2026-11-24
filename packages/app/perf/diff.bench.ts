@@ -4,6 +4,7 @@ import { bench, web, type Case } from "@hona/strobe"
 import { reviewDiffs, routesDiff } from "./fixtures/diffs"
 import { cached } from "./fixtures/mock"
 import { openReview, review } from "./fixtures/review"
+import { keepStartStorage, saveStartStorage } from "./fixtures/storage"
 import { mockTimelineSession, serveDiffs, timeline } from "./fixtures/timeline"
 
 // The pane opening on the diff, in a fresh document each run.
@@ -20,15 +21,29 @@ const open: Case<{}> = {
   },
 }
 
+/** What a launch sets up: the huge diff, the long one with the pane moved past it, or the long one. */
+type Setup = "huge" | "return" | "long"
+
 export default bench({
+  // The workspace's changes and where setup leaves the pane: cases with the same ones share a launch.
+  setupKey: ({ case: name }): Setup => {
+    if (name === "open a huge diff") return "huge"
+
+    if (name === "return to a long diff") return "return"
+
+    return "long"
+  },
+
   targets: {
     web: web({
       expect: { title: "OpenCode" },
       viewport: { width: 1366, height: 768 },
-      async prepare({ case: name, playwright, mock, url }) {
-        const page = cached(playwright.page, mock)
+      async prepare(ctx) {
+        const { setupKey, url } = ctx
+        const page = cached(ctx)
+        await keepStartStorage(page)
         const session = await mockTimelineSession(page, { server: new URL(url).origin, historyTurns: 0 })
-        await serveDiffs(page, changes(name))
+        await serveDiffs(page, changes(setupKey))
 
         return session
       },
@@ -36,12 +51,14 @@ export default bench({
     }),
   },
 
-  async setup({ case: name, page }) {
+  async setup({ setupKey, page }) {
     await page.waitFor(timeline, { timeout: 60_000 })
 
     // The long diff rendered once, then the pane moved to another file.
-    if (name === "return to a long diff") {
+    if (setupKey === "return") {
       await openReview(page)
+      // The pane widens to fit the diff after its first file shows, which moves Next: click it once the pane rests.
+      await page.idle()
       await page.click(review.next)
       await page.waitFor(review.file, { text: "routes.ts" })
       await page.waitFor(review.line)
@@ -50,6 +67,8 @@ export default bench({
     }
 
     await page.idle()
+    // A reload keeps the review open (the app saves its layout on pagehide), so every run starts from this storage.
+    await saveStartStorage(page)
   },
 
   cases: {
@@ -75,11 +94,11 @@ export default bench({
   },
 })
 
-/** The workspace's changes for a case: the huge diff alone, a small file before the long one, or the long one alone. */
-function changes(name: string) {
-  if (name === "open a huge diff") return [routesDiff(1_200)]
+/** The workspace's changes for a setup: the huge diff alone, a small file before the long one, or the long one alone. */
+function changes(setupKey: Setup) {
+  if (setupKey === "huge") return [routesDiff(1_200)]
 
-  if (name === "return to a long diff") return [reviewDiffs(1)[0], routesDiff(120)]
+  if (setupKey === "return") return [reviewDiffs(1)[0], routesDiff(120)]
 
   return [routesDiff(120)]
 }

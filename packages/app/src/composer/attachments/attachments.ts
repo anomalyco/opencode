@@ -1,7 +1,7 @@
 import { onCleanup, onMount } from "solid-js"
-import { createStore } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createBlobReference } from "@/runtime/persistence/drafts"
+import { dragOutText, draggingOut } from "@/runtime/platform/drag-out"
 import { uuid } from "@opencode/util/uuid"
 import type { ComposerPrompt } from "../types"
 import type { ImageAttachmentPart, PathAttachmentPart } from "../state"
@@ -9,6 +9,8 @@ import type { AttachmentDestination } from "./destination"
 import { uploads } from "./uploads"
 
 type PromptTarget = {
+  /** The draft the prompt belongs to, which owns uploads started for it across composer remounts. */
+  scope?: object
   current: () => ComposerPrompt
   cursor: () => number | undefined
   set: (prompt: ComposerPrompt, cursor?: number) => void
@@ -55,8 +57,9 @@ export function createComposerAttachments(
     return { prompt, cursor: prompt.cursor() ?? cursorPosition(editor) }
   }
 
-  // Uploads this composer started; they finish (or fail) even if the composer unmounts.
-  const [pending, setPending] = createStore<{ ids: string[] }>({ ids: [] })
+  // A composer without a draft scope owns its uploads itself.
+  const fallbackScope = {}
+  const scopeOf = (prompt = input.capture()) => prompt.scope ?? fallbackScope
 
   // Media the model reads natively travels inline with the prompt, so its bytes live in the draft
   // store. Everything else, including text, reaches the model as a path on the server that its
@@ -125,19 +128,16 @@ export function createComposerAttachments(
     target: NonNullable<ReturnType<typeof capture>>,
     destination: AttachmentDestination,
   ) => {
-    const id = uuid()
-    setPending("ids", (ids) => [...ids, id])
-
     const path = await uploads
-      .track({ id, filename: file.name, mime, size: file.size }, (report, signal) =>
-        destination.upload(file, report, signal),
+      .track(
+        { id: uuid(), scope: scopeOf(target.prompt), filename: file.name, mime, size: file.size },
+        (report, signal) => destination.upload(file, report, signal),
       )
       .catch((error) => {
         input.onUploadError(error)
 
         return undefined
       })
-      .finally(() => setPending("ids", (ids) => ids.filter((item) => item !== id)))
 
     if (path) addPath(target, { filename: file.name, mime, path })
   }
@@ -213,7 +213,10 @@ export function createComposerAttachments(
     if (input.isDialogActive()) return
     event.preventDefault()
     clearDrag()
-    const plainText = event.dataTransfer?.getData("text/plain")
+
+    const plainText =
+      event.dataTransfer?.getData("text/plain") ||
+      dragOutText(Array.from(event.dataTransfer?.files ?? []).map((file) => input.getPathForFile?.(file) ?? ""))
 
     if (plainText?.startsWith("file:")) {
       const path = plainText.slice("file:".length)
@@ -251,10 +254,8 @@ export function createComposerAttachments(
     handlePaste,
     handleDrop,
     /** Uploads still in flight for this composer; sending waits for them. */
-    pending: () => uploads.items().filter((item) => pending.ids.includes(item.id)),
-    cancel(id: string) {
-      uploads.items().find((item) => item.id === id)?.cancel()
-    },
+    pending: () => uploads.forScope(scopeOf()),
+    cancel: (id: string) => uploads.cancel(id),
     pick(fallback: () => void, done: () => void) {
       if (!input.picker) {
         fallback()
@@ -273,6 +274,8 @@ export function createComposerAttachments(
 // Files from the system and file rows from the workspace tree (which also carry a file URL) drop as attachments.
 // A text selection carries neither, so dragging it shows no dropzone.
 function dragType(data: DataTransfer | null) {
+  if (draggingOut()) return "@mention"
+
   if (data?.types.includes("Files")) return "image"
 
   if (data?.types.includes("text/uri-list")) return "@mention"

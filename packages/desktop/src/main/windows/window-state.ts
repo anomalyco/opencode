@@ -76,7 +76,11 @@ export function resolveWindowState(
     }
   }
 
-  if (all.some((bounds) => within(saved, bounds))) return saved
+  // Windows counts a window's invisible resize borders in its bounds, so a window snapped to a display's edge hangs
+  // about 7px off it at 100% scale and more at higher scales.
+  const slack = process.platform === "win32" ? 16 : 0
+
+  if (all.some((bounds) => within(saved, bounds, slack))) return saved
   const primary = displays.primary()
 
   return {
@@ -100,9 +104,26 @@ export function readWindowState(file: string) {
   return Option.getOrUndefined(Schema.decodeUnknownOption(StateFile)(readFileSync(file, "utf8")))
 }
 
+type ManagedEvent = "resize" | "move" | "close" | "closed"
+
+export type ManagedWindow = Pick<
+  BrowserWindow,
+  | "maximize"
+  | "setFullScreen"
+  | "isDestroyed"
+  | "isMaximized"
+  | "isMinimized"
+  | "isFullScreen"
+  | "getBounds"
+  | "getNormalBounds"
+> & {
+  on(event: ManagedEvent, listener: () => void): void
+  off(event: ManagedEvent, listener: () => void): void
+}
+
 // Tracks the window until it closes and writes the final state then. Bounds are recorded while
 // the window is in its normal state so a maximized window restores to its previous size.
-export function manageWindowState(win: BrowserWindow, file: string, initial: WindowState, displays: Displays) {
+export function manageWindowState(win: ManagedWindow, file: string, initial: WindowState, displays: Displays) {
   const state = { ...initial }
 
   if (state.isMaximized) win.maximize()
@@ -112,6 +133,9 @@ export function manageWindowState(win: BrowserWindow, file: string, initial: Win
 
   const update = () => {
     if (win.isDestroyed()) return
+
+    // A minimized window on Windows reports no maximized state and a frame at -32000, so it keeps how it was shown.
+    if (process.platform === "win32" && win.isMinimized()) return
     const bounds = win.getBounds()
 
     if (!win.isMaximized() && !win.isMinimized() && !win.isFullScreen()) {
@@ -119,6 +143,16 @@ export function manageWindowState(win: BrowserWindow, file: string, initial: Win
       state.y = bounds.y
       state.width = bounds.width
       state.height = bounds.height
+    }
+
+    // Windows keeps the frame a maximized window restores to and moves it with the window (Win+Shift+Arrow), which
+    // the bounds read while restored can never see.
+    if (process.platform === "win32" && win.isMaximized() && !win.isFullScreen()) {
+      const normal = win.getNormalBounds()
+      state.x = normal.x
+      state.y = normal.y
+      state.width = normal.width
+      state.height = normal.height
     }
 
     state.isMaximized = win.isMaximized()
@@ -152,12 +186,12 @@ function hasBounds(state: Partial<WindowState>): state is WindowState & Required
   return state.x !== undefined && state.y !== undefined && (state.width ?? 0) > 0 && (state.height ?? 0) > 0
 }
 
-function within(state: WindowState & { x: number; y: number }, bounds: Rectangle) {
+function within(state: WindowState & { x: number; y: number }, bounds: Rectangle, slack = 0) {
   return (
-    state.x >= bounds.x &&
-    state.y >= bounds.y &&
-    state.x + state.width <= bounds.x + bounds.width &&
-    state.y + state.height <= bounds.y + bounds.height
+    state.x >= bounds.x - slack &&
+    state.y >= bounds.y - slack &&
+    state.x + state.width <= bounds.x + bounds.width + slack &&
+    state.y + state.height <= bounds.y + bounds.height + slack
   )
 }
 

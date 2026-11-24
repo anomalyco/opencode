@@ -4,7 +4,8 @@ import { Icon } from "@opencode/ui/icon"
 import { IconButton } from "@opencode/ui/icon-button"
 import { Loader } from "@opencode/ui/loader"
 import { Schema } from "effect"
-import { createEffect, For, onCleanup, onMount, Show, untrack, type ParentProps } from "solid-js"
+import { makeEventListener } from "@solid-primitives/event-listener"
+import { createEffect, createSignal, For, onCleanup, onMount, Show, untrack, type ParentProps } from "solid-js"
 import { createStore } from "solid-js/store"
 import type { SessionInfo } from "@opencode/client/promise"
 import { useServer } from "@/runtime/server/current"
@@ -14,6 +15,17 @@ import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import en from "@/runtime/i18n/en"
 import { useVoice } from "./context"
+import {
+  canGrabVoicePanel,
+  canToggleVoiceCaptions,
+  fillVoicePanelBounds,
+  HYDRATING_VOICE_PANEL_STATE,
+  transitionVoicePanel,
+  voicePanelOffset,
+  voicePanelTransform,
+  type MutablePanelBounds,
+  type VoicePanelEvent,
+} from "./panel-machine"
 import "./voice.css"
 
 const toggle = motionTuning.toggle("voice.calls", {
@@ -93,70 +105,77 @@ function VoicePanel() {
     expanded: false,
   })
 
-  // How far the panel can move while staying inside the window, read once per drag rather than every frame.
-  const bounds = () => {
-    const rect = panel.getBoundingClientRect()
+  // A signal, not a store: a drag moves the dragging state in place.
+  const [panelState, setPanelState] = createSignal(HYDRATING_VOICE_PANEL_STATE)
+  // Reused by every move and resize, so a drag allocates nothing.
+  const move = { type: "pointer.move" as const, pointerId: 0, clientX: 0, clientY: 0 }
+  const resize = { type: "resize" as const, bounds: { minX: 0, maxX: 0, minY: 0, maxY: 0 } }
 
-    return {
-      x: [position.x - rect.left, position.x + window.innerWidth - rect.right],
-      y: [position.y - rect.top, position.y + window.innerHeight - rect.bottom],
-    }
-  }
-
-  const clamp = (limits: ReturnType<typeof bounds>, x: number, y: number) => ({
-    x: Math.min(Math.max(x, limits.x[0]), Math.max(limits.x[0], limits.x[1])),
-    y: Math.min(Math.max(y, limits.y[0]), Math.max(limits.y[0], limits.y[1])),
-  })
-
-  // Before stored state loads, a write would mark the store edited and drop the saved position.
-  const settle = () => {
-    if (!ready()) return
-    const next = clamp(bounds(), position.x, position.y)
-
-    if (next.x !== position.x || next.y !== position.y) setPosition(next)
-  }
-
-  const grab = (event: PointerEvent) => {
-    if (
-      event.button !== 0 ||
-      !(event.target instanceof Element) ||
-      event.target.closest("button") ||
-      onScrollbar(event)
+  // Measured against the offset painted now, so a saved position that has not painted yet cannot skew it.
+  const bounds = (out: MutablePanelBounds) =>
+    fillVoicePanelBounds(
+      out,
+      panel.getBoundingClientRect(),
+      voicePanelOffset(untrack(panelState)),
+      window.innerWidth,
+      window.innerHeight,
     )
+
+  const dispatch = (event: VoicePanelEvent) => {
+    const prev = untrack(panelState)
+    const prevX = voicePanelOffset(prev).x
+    const prevY = voicePanelOffset(prev).y
+    const next = transitionVoicePanel(prev, event)
+
+    if (next === prev) {
+      if (next.status === "dragging" && (next.x !== prevX || next.y !== prevY))
+        panel.style.transform = voicePanelTransform(next)
+
       return
-    event.preventDefault()
-    const limits = bounds()
-    const start = { x: event.clientX - position.x, y: event.clientY - position.y }
-    panel.setPointerCapture(event.pointerId)
-
-    const move = (moved: PointerEvent) => setPosition(clamp(limits, moved.clientX - start.x, moved.clientY - start.y))
-
-    const drop = () => {
-      panel.removeEventListener("pointermove", move)
-      panel.removeEventListener("pointerup", drop)
-      panel.removeEventListener("pointercancel", drop)
-      panel.removeEventListener("lostpointercapture", drop)
     }
 
-    panel.addEventListener("pointermove", move)
-    panel.addEventListener("pointerup", drop)
-    panel.addEventListener("pointercancel", drop)
-    panel.addEventListener("lostpointercapture", drop)
+    if (prev.status === "dragging" && panel.hasPointerCapture(prev.pointerId))
+      panel.releasePointerCapture(prev.pointerId)
+
+    if (next.status === "dragging") panel.setPointerCapture(next.pointerId)
+    // Saved when a load, resize or drag settles it, and when the panel closes mid-drag; never before it loaded.
+    const settled = next.status === "idle" ? next : prev.status === "dragging" ? prev : undefined
+
+    if (settled && settled.x !== position.x) setPosition("x", settled.x)
+
+    if (settled && settled.y !== position.y) setPosition("y", settled.y)
+    setPanelState(next)
+  }
+
+  const onResize = () => {
+    bounds(resize.bounds)
+    dispatch(resize)
   }
 
   onMount(() => {
-    const observer = new ResizeObserver(settle)
+    const observer = new ResizeObserver(onResize)
     observer.observe(panel)
-    window.addEventListener("resize", settle)
+    window.addEventListener("resize", onResize)
     onCleanup(() => {
       observer.disconnect()
-      window.removeEventListener("resize", settle)
+      window.removeEventListener("resize", onResize)
     })
   })
+  makeEventListener(window, "blur", () => dispatch({ type: "blur" }))
+  // Registered after `persisted`, so it runs before its cleanup and an unmount mid-drag still saves the position.
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   // A saved position from a larger window is pulled back on screen once storage has loaded.
   createEffect(() => {
-    if (ready()) untrack(settle)
+    if (ready())
+      untrack(() =>
+        dispatch({
+          type: "hydrated",
+          x: position.x,
+          y: position.y,
+          bounds: bounds({ minX: 0, maxX: 0, minY: 0, maxY: 0 }),
+        }),
+      )
   })
 
   const speaker = (value: "user" | "assistant") => language.t(value === "user" ? "voice.you" : "voice.assistant")
@@ -166,8 +185,34 @@ function VoicePanel() {
       ref={panel}
       class="voice-panel"
       aria-label={language.t("voice.panel")}
-      style={{ transform: `translate(${position.x}px, ${position.y}px)` }}
-      onPointerDown={grab}
+      style={{ transform: voicePanelTransform(panelState()) }}
+      onPointerDown={(event) => {
+        if (
+          !canGrabVoicePanel(panelState()) ||
+          event.button !== 0 ||
+          !(event.target instanceof Element) ||
+          event.target.closest("button") ||
+          onScrollbar(event)
+        )
+          return
+        event.preventDefault()
+        dispatch({
+          type: "pointer.down",
+          pointerId: event.pointerId,
+          clientX: event.clientX,
+          clientY: event.clientY,
+          bounds: bounds({ minX: 0, maxX: 0, minY: 0, maxY: 0 }),
+        })
+      }}
+      onPointerMove={(event) => {
+        move.pointerId = event.pointerId
+        move.clientX = event.clientX
+        move.clientY = event.clientY
+        dispatch(move)
+      }}
+      onPointerUp={(event) => dispatch({ type: "pointer.up", pointerId: event.pointerId })}
+      onPointerCancel={(event) => dispatch({ type: "pointer.up", pointerId: event.pointerId })}
+      onLostPointerCapture={(event) => dispatch({ type: "pointer.up", pointerId: event.pointerId })}
       // Pointer presses never move focus, so typing in the composer carries on while the call is controlled.
       onMouseDown={(event) => {
         if (!onScrollbar(event)) event.preventDefault()
@@ -200,6 +245,7 @@ function VoicePanel() {
           icon={<Icon name={position.expanded ? "chevron-down" : "chevron-up"} />}
           aria-expanded={position.expanded}
           aria-label={language.t(position.expanded ? "voice.captions.hide" : "voice.captions.show")}
+          disabled={!canToggleVoiceCaptions(panelState())}
           onClick={() => setPosition("expanded", !position.expanded)}
         />
       </div>

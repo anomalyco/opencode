@@ -2,6 +2,7 @@ import {
   createContext,
   createEffect,
   createMemo,
+  createSelector,
   For,
   type JSX,
   on,
@@ -43,7 +44,8 @@ export type SearchListField = {
 
 export type SearchListHandle<T> = {
   active: () => T | undefined
-  setActive: (key: string | undefined) => void
+  /** `pointer` marks a highlight the pointer took through a row handler of the page's own, as the row's own does. */
+  setActive: (key: string | undefined, input?: "pointer") => void
 }
 
 const QueryContext = createContext<() => string>(() => "")
@@ -79,6 +81,8 @@ export function SearchList<T>(props: {
   empty: JSX.Element
   /** A note beneath the rows, such as a hint that more results are hidden. */
   footer?: JSX.Element
+  /** Whether to draw the top edge fade beneath sticky headers. On by default. */
+  topFade?: boolean
   /** Where the results start scrolled each time they mount, such as a position kept from an earlier visit. */
   scrollTop?: number
   onScroll?: (scrollTop: number) => void
@@ -94,9 +98,11 @@ export function SearchList<T>(props: {
 }) {
   let viewport: HTMLDivElement | undefined
   let results: HTMLDivElement | undefined
+  let fade: HTMLDivElement | undefined
 
   const sectionOf = (item: T) => props.section?.(item) ?? ""
   const open = () => props.open ?? true
+  const topFade = () => props.topFade ?? true
 
   // Sections in the order their first row arrives; rows then list section by section, which is also the arrow order.
   const groups = createMemo(() => {
@@ -129,6 +135,9 @@ export function SearchList<T>(props: {
     return item === undefined ? undefined : props.key(item)
   })
 
+  // Moving the highlight updates the two rows it leaves and lands on, not every row.
+  const isActive = createSelector(activeKey)
+
   // The first row shows from the top, so its header is never hidden; any other row scrolls in only as far as needed.
   const reveal = () => {
     const item = typeahead.activeItem()
@@ -141,54 +150,86 @@ export function SearchList<T>(props: {
 
   // Rows fade out where they run under the top header or past the bottom edge. Each fade reaches full strength once
   // 15 px is hidden, so it eases in with the scroll. The top fade follows the header over the topmost section and
-  // measures what that section has hidden, so a header that pushes the last one away starts clear again. Sections are
-  // measured when the list lays out, so scrolling only does arithmetic.
+  // measures what that section has hidden, so a header that pushes the last one away starts clear again. Sections and
+  // scroll extent are measured when the list lays out, so scrolling only does arithmetic.
   let sections: { top: number; bottom: number; header: number }[] = []
+  let maxScroll = 0
+  const lastFade = { offset: "", top: "", bottom: "" }
 
-  const edges = () => {
+  const edges = (scroll: number) => {
     if (!viewport) return
-    const scroll = viewport.scrollTop
     const strength = (hidden: number) => String(Math.min(1, Math.max(0, hidden / 15)))
-    const current = sections.findLast((section) => section.top - scroll < section.header)
 
-    // A stuck header sits at the top until its section's end pushes it up.
-    const offset = current?.header
-      ? Math.min(Math.max(current.top - scroll, 0) + current.header, current.bottom - scroll)
-      : 0
+    if (topFade() && fade) {
+      const current = sections.findLast((section) => section.top - scroll < section.header)
 
-    viewport.style.setProperty("--search-list-fade-offset", `${Math.max(0, offset)}px`)
-    viewport.style.setProperty("--search-list-fade-top", strength(current ? scroll - current.top : 0))
-    viewport.style.setProperty(
-      "--search-list-fade-bottom",
-      strength(viewport.scrollHeight - viewport.clientHeight - scroll),
-    )
+      // A stuck header sits at the top until its section's end pushes it up.
+      const offset = current?.header
+        ? Math.min(Math.max(current.top - scroll, 0) + current.header, current.bottom - scroll)
+        : 0
+
+      const nextOffset = `${Math.max(0, offset)}px`
+      const nextTop = strength(current ? scroll - current.top : 0)
+
+      if (lastFade.offset !== nextOffset) {
+        lastFade.offset = nextOffset
+        fade.style.setProperty("--search-list-fade-offset", nextOffset)
+      }
+
+      if (lastFade.top !== nextTop) {
+        lastFade.top = nextTop
+        fade.style.setProperty("--search-list-fade-top", nextTop)
+      }
+    }
+
+    const nextBottom = strength(maxScroll - scroll)
+
+    if (lastFade.bottom !== nextBottom) {
+      lastFade.bottom = nextBottom
+      viewport.style.setProperty("--search-list-fade-bottom", nextBottom)
+    }
   }
 
   const measure = () => {
     if (!viewport) return
-    const origin = viewport.getBoundingClientRect().top - viewport.scrollTop
+    const scroll = viewport.scrollTop
+    maxScroll = Math.max(0, viewport.scrollHeight - viewport.clientHeight)
 
-    sections = [...viewport.querySelectorAll<HTMLElement>('[data-slot="search-list-section"]')].map((section) => {
-      const rect = section.getBoundingClientRect()
+    if (topFade()) {
+      const origin = viewport.getBoundingClientRect().top - scroll
 
-      // A sticky header stays inside its section's content box, so the section's bottom padding is out of its reach.
-      return {
-        top: rect.top - origin,
-        bottom: rect.bottom - origin - parseFloat(getComputedStyle(section).paddingBottom),
-        header: section.querySelector<HTMLElement>('[data-slot="search-list-header"]')?.offsetHeight ?? 0,
-      }
-    })
-    edges()
+      sections = [...viewport.querySelectorAll<HTMLElement>('[data-slot="search-list-section"]')].map((section) => {
+        const rect = section.getBoundingClientRect()
+
+        // A sticky header stays inside its section's content box, so the section's bottom padding is out of its reach.
+        return {
+          top: rect.top - origin,
+          bottom: rect.bottom - origin - parseFloat(getComputedStyle(section).paddingBottom),
+          header: section.querySelector<HTMLElement>('[data-slot="search-list-header"]')?.offsetHeight ?? 0,
+        }
+      })
+    }
+
+    edges(scroll)
   }
 
   createResizeObserver(() => [viewport, results], measure)
-  createEffect(on(rows, measure, { defer: true }))
+  createEffect(
+    on(
+      rows,
+      () => {
+        if (topFade()) measure()
+      },
+      { defer: true },
+    ),
+  )
 
   createEffect(() => props.onActive?.(typeahead.activeItem()))
 
   // A new query starts from the top. Results that arrive later for the same query bring a chosen row back into view,
-  // but leave the list where the wheel put it while the first row is still the default.
+  // but leave the list where the wheel put it while the first row is still the default or the pointer took the row.
   let revealed = props.query
+  let pointed: string | undefined
 
   createEffect(
     on(
@@ -197,7 +238,7 @@ export function SearchList<T>(props: {
         const fresh = props.query !== revealed
         revealed = props.query
 
-        if (!fresh && typeahead.activeItem() === all[0]) return
+        if (!fresh && (typeahead.activeItem() === all[0] || activeKey() === pointed)) return
         const frame = requestAnimationFrame(reveal)
         onCleanup(() => cancelAnimationFrame(frame))
       },
@@ -205,7 +246,12 @@ export function SearchList<T>(props: {
     ),
   )
 
-  props.ref?.({ active: typeahead.activeItem, setActive: typeahead.setActive })
+  const choose = (key: string | undefined, input?: "pointer") => {
+    pointed = input === "pointer" ? key : undefined
+    typeahead.setActive(key)
+  }
+
+  props.ref?.({ active: typeahead.activeItem, setActive: choose })
 
   const onKeyDown = (event: KeyboardEvent) => {
     if (event.isComposing) return
@@ -232,7 +278,7 @@ export function SearchList<T>(props: {
     const target = all[step(from)]
 
     if (target === undefined) return
-    typeahead.setActive(props.key(target))
+    choose(props.key(target))
     reveal()
   }
 
@@ -254,7 +300,7 @@ export function SearchList<T>(props: {
     },
     onInput: (event) => {
       // A new query starts again from its first row.
-      typeahead.setActive(undefined)
+      choose(undefined)
       props.onQuery(event.currentTarget.value)
     },
     onKeyDown,
@@ -266,23 +312,28 @@ export function SearchList<T>(props: {
     },
     role: "option",
     get "aria-selected"() {
-      return activeKey() === key
+      return isActive(key)
     },
     "data-slot": "search-list-row",
     get "data-active"() {
-      return activeKey() === key ? ("" as const) : undefined
+      return isActive(key) ? ("" as const) : undefined
     },
     onMouseMove: (event) => {
       // A static cursor must not take the active row while the keyboard scrolls rows beneath it.
-      if (event.movementX !== 0 || event.movementY !== 0) typeahead.setActive(key)
+      if (event.movementX === 0 && event.movementY === 0) return
+      pointed = key
+      typeahead.setActive(key)
     },
     // Focus stays in the field.
     onMouseDown: (event) => event.preventDefault(),
     onClick: () => props.onSelect(item()),
   })
 
+  // Every highlighted row reads this, so the query is trimmed and lower-cased once per keystroke, not once per row.
+  const needle = createMemo(() => props.query.trim().toLowerCase())
+
   return (
-    <QueryContext.Provider value={() => props.query}>
+    <QueryContext.Provider value={needle}>
       <div data-component="search-list" data-popover={props.popover ? "" : undefined} class={props.class}>
         <Show
           when={props.field}
@@ -312,11 +363,15 @@ export function SearchList<T>(props: {
             data-slot="search-list-scroll"
             viewportRef={(element) => (viewport = element)}
             onScroll={(event) => {
-              edges()
-              props.onScroll?.(event.currentTarget.scrollTop)
+              const top = event.currentTarget.scrollTop
+              // Callers read clean layout before edge-fade properties mutate the viewport.
+              props.onScroll?.(top)
+              edges(top)
             }}
           >
-            <div data-slot="search-list-fade" aria-hidden="true" />
+            <Show when={topFade()}>
+              <div ref={fade} data-slot="search-list-fade" aria-hidden="true" />
+            </Show>
             <div
               ref={results}
               id={typeahead.listID}
@@ -376,17 +431,16 @@ export function SearchList<T>(props: {
 
 /** Text with its first match for the list's query marked. One mark per row keeps short queries from speckling the list. */
 export function SearchHighlight(props: { text: string }) {
-  const query = useContext(QueryContext)
+  const needle = useContext(QueryContext)
+  const haystack = createMemo(() => props.text.toLowerCase())
 
   const match = createMemo(() => {
-    const needle = query().trim().toLowerCase()
-    const haystack = props.text.toLowerCase()
-    const at = needle ? haystack.indexOf(needle) : -1
+    const at = needle() ? haystack().indexOf(needle()) : -1
 
     // Lower-casing a few scripts changes the length, and then offsets no longer line up with the text.
-    if (at === -1 || haystack.length !== props.text.length) return
+    if (at === -1 || haystack().length !== props.text.length) return
 
-    return { at, end: at + needle.length }
+    return { at, end: at + needle().length }
   })
 
   return (

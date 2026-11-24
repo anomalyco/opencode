@@ -8,6 +8,19 @@ export default {
   title: "UI/ThinkingHeading",
   id: "components-thinking-heading",
   tags: ["autodocs"],
+  args: {
+    heading: "Planning key generation details",
+    active: true,
+    duration: 550,
+    travel: 25,
+    bounce: 1.35,
+    compare: false,
+  },
+  argTypes: {
+    duration: { control: { type: "range", min: 200, max: 1400, step: 50 } },
+    travel: { control: { type: "range", min: 0, max: 120, step: 1 } },
+    bounce: { control: { type: "range", min: 1, max: 2.2, step: 0.05 } },
+  },
   parameters: {
     docs: {
       description: {
@@ -559,14 +572,21 @@ const cardStyle = {
 // Variants
 // ---------------------------------------------------------------------------
 
-const VARIANTS: { key: string; label: string }[] = []
+const VARIANTS = ["spring-up", "spring-down", "spring-pop", "spring-blur", "odometer"]
 
 // ---------------------------------------------------------------------------
 // Story
 // ---------------------------------------------------------------------------
 
 export const Playground = {
-  render: () => {
+  render: (args: {
+    heading: string
+    active: boolean
+    duration: number
+    travel: number
+    bounce: number
+    compare: boolean
+  }) => {
     const [state, setState] = createStore({
       heading: HEADINGS[0],
       headingIndex: 0,
@@ -574,13 +594,22 @@ export const Playground = {
       cycling: false,
       duration: 550,
       blur: 2,
-      travel: 4,
+      travel: 25,
       bounce: 1.35,
       maskSize: 12,
       maskPad: 9,
       maskHeight: 0,
       debug: false,
       odoBlur: false,
+    })
+
+    for (const key of ["duration", "travel", "bounce", "active"] as const) {
+      createEffect(() => setState(key, args[key]))
+    }
+
+    createEffect(() => {
+      setState("heading", args.heading || undefined)
+      setState("headingIndex", Math.max(0, HEADINGS.indexOf(args.heading || undefined)))
     })
 
     const heading = () => state.heading
@@ -671,7 +700,7 @@ export const Playground = {
                 <TextReveal
                   text={heading()}
                   duration={duration()}
-                  travel={25}
+                  travel={travel()}
                   edge={17}
                   spring={`cubic-bezier(0.34, ${bounce()}, 0.64, 1)`}
                   springSoft={`cubic-bezier(0.34, ${Math.max(bounce() * 0.7, 1)}, 0.64, 1)`}
@@ -680,18 +709,18 @@ export const Playground = {
               </span>
             </span>
           </div>
-          <For each={VARIANTS}>
+          <For each={args.compare ? VARIANTS : []}>
             {(v) => (
               <div style={cardStyle}>
-                <span style={cardLabel}>{v.label}</span>
+                <span style={cardLabel}>{v}</span>
                 <span style={thinkingRow}>
                   <TextShimmer text="Thinking" active={active()} />
                   <span style={headingSlot}>
                     <AnimatedHeading
                       text={heading()}
-                      variant={v.key}
-                      debug={v.key === "odometer" && debug()}
-                      odoBlur={v.key === "odometer" && odoBlur()}
+                      variant={v}
+                      debug={v === "odometer" && debug()}
+                      odoBlur={v === "odometer" && odoBlur()}
                     />
                   </span>
                 </span>

@@ -1,7 +1,7 @@
 import path from "node:path"
 import fs from "node:fs/promises"
 import os from "node:os"
-import { describe, expect, test } from "bun:test"
+import { describe, expect, spyOn, test } from "bun:test"
 import {
   Client,
   InMemoryTransport,
@@ -30,6 +30,8 @@ import { ID, type Payload } from "@opencode/schema/event"
 import { Form } from "@opencode/core/form"
 import { Integration } from "@opencode/core/integration"
 import { Environment } from "@opencode/core/environment/index"
+import { App } from "@opencode/core/app"
+import { Flag } from "@opencode/core/flag"
 import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
@@ -47,6 +49,7 @@ import { McpResourceTools } from "@opencode/core/tool/plugin/mcp-resource"
 import { Tool } from "@opencode/core/tool"
 import { ToolOutput } from "@opencode/core/tool-output"
 import {
+  Clock,
   Context,
   Deferred,
   Effect,
@@ -57,6 +60,7 @@ import {
   Logger,
   Option,
   PubSub,
+  Queue,
   Ref,
   Schedule,
   Schema,
@@ -68,14 +72,13 @@ import {
 import { TestClock } from "effect/testing"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
-import { Image } from "@opencode/core/image"
 import { Global } from "@opencode/util/global"
 import { isRecord } from "@opencode/util/record"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { advance, drain } from "./lib/clock"
 import { testEffect } from "./lib/effect"
+import { permissionLayer } from "./lib/permission"
 import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/policy"
-import { imagePassthrough } from "./lib/image"
 import { location } from "./fixture/location"
 import { host } from "./plugin/host"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -86,6 +89,7 @@ import {
   registerToolPlugin,
   toolDefinitions,
   toolIdentity,
+  toolNodeReplacements,
   waitForTool,
 } from "./lib/tool"
 
@@ -118,12 +122,17 @@ function resourceServer(
      * malformed optional field of each kind, then one with every optional field valid.
      */
     malformedTool?: boolean
-    /** Listed after the default tools. A call's `structured` argument comes back as structured content. */
+    /**
+     * Listed after the default tools. A call's `structured` argument comes back as structured content and
+     * its `text` argument as text content.
+     */
     tools?: ListToolsResult["tools"]
     /** Legacy servers give up on the URL elicitation after this many milliseconds. */
     elicitationTimeout?: number
     /** Lists a `roots` tool that asks for the client's roots (2026-07-28 only) and returns them. */
     roots?: boolean
+    /** Advertises MCP Events; answer its requests through `respond`. */
+    events?: boolean
     respond?: (request: Request) => Response | undefined | Promise<Response | undefined>
   } = {},
 ) {
@@ -166,6 +175,7 @@ function resourceServer(
               tools: { listChanged: input.listChanged },
               prompts: {},
               ...(input.resources === false ? {} : { resources: { listChanged: input.listChanged } }),
+              ...(input.events ? { extensions: { "io.modelcontextprotocol/events": {} } } : {}),
             },
             instructions: "Use the resources tools.",
           },
@@ -269,9 +279,9 @@ function resourceServer(
               progressToken: request.params._meta?.progressToken,
             })
             const structured = request.params.arguments?.structured
-            return Promise.resolve(
-              structured === undefined ? { content: [] } : { content: [], structuredContent: structured },
-            )
+            const text = request.params.arguments?.text
+            const content = typeof text === "string" ? [{ type: "text" as const, text }] : []
+            return Promise.resolve(structured === undefined ? { content } : { content, structuredContent: structured })
           })
         }
         protocol.setRequestHandler("prompts/list", () => Promise.resolve({ prompts: [{ name: "greet" }] }))
@@ -366,11 +376,12 @@ function resourceMcpLayer(
     name?: string
     credentials?: Partial<Credential.Interface>
     bus?: Layer.Layer<Bus.Service>
+    /** `OPENCODE_FLAGS`, such as `-machines`. */
+    flags?: string
   },
 ) {
   const directory = AbsolutePath.make(overrides?.directory ?? import.meta.dir)
   const unusedIntegration = () => Effect.die("unused integration service")
-  const entries = overrides?.entries
   return Layer.effectDiscard(
     Effect.gen(function* () {
       const bus = yield* Bus.Service
@@ -385,13 +396,17 @@ function resourceMcpLayer(
   ).pipe(
     Layer.provideMerge(Mcp.layer(options)),
     Layer.provideMerge(Form.layer),
+    Layer.provideMerge(Flag.layer),
     Layer.provide(
       Layer.mergeAll(
         overrides?.pool ?? poolLayer,
-        entries
+        overrides?.entries
           ? Layer.succeed(
               Config.Service,
-              Config.Service.of({ entries, snapshot: () => Effect.runSync(entries()), changes: () => Stream.never }),
+              Config.Service.of({
+                entries: overrides.entries,
+                changes: () => Stream.never,
+              }),
             )
           : Config.testLayer([
               new Document({
@@ -410,6 +425,8 @@ function resourceMcpLayer(
               }),
             ]),
         Layer.succeed(Location.Service, Location.Service.of(location({ directory }))),
+        App.layer(),
+        Layer.succeed(Flag.Overrides, overrides?.flags),
         overrides?.bus ??
           Layer.mock(Bus.Service, {
             subscribe: overrides?.subscribe ?? (() => Stream.never),
@@ -603,7 +620,7 @@ const mcp = Layer.mock(Mcp.Service, {
       } satisfies Mcp.ToolResult
     }),
 })
-const permissions = Layer.mock(Permission.Service, {
+const permissions = permissionLayer({
   assert: (input) =>
     Effect.gen(function* () {
       if (!assertion) return yield* Effect.die("Permission test is not initialized")
@@ -615,10 +632,9 @@ const events = Layer.mock(Bus.Service, { subscribe: () => Stream.never })
 const outputData = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-mcp-output-"))
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node]), [
+    ...toolNodeReplacements(permissions),
     Mcp.node.replace(mcp),
-    Permission.node.replace(permissions),
     Bus.node.replace(events),
-    Image.node.replace(imagePassthrough),
     Global.node.replace(Global.layerWith({ data: outputData })),
   ]),
 )
@@ -863,7 +879,12 @@ test("reports a local MCP server as failed when the location has no execution pl
   const driver = Environment.makeMemoryDriver()
   const environment = Layer.succeed(
     Environment.Service,
-    Environment.Service.of({ files: Environment.makeFiles(driver), spawner: EnvironmentUnavailable.spawner }),
+    Environment.Service.of({
+      id: Environment.localID,
+      local: false,
+      files: Environment.makeFiles(driver),
+      spawner: EnvironmentUnavailable.spawner,
+    }),
   )
 
   await Effect.runPromise(
@@ -970,6 +991,8 @@ test("closes a stdio process that finishes spawning after close", async () => {
   const environment = Layer.succeed(
     Environment.Service,
     Environment.Service.of({
+      id: Environment.localID,
+      local: true,
       files: Environment.makeFiles(driver),
       spawner: ChildProcessSpawner.make(() =>
         Effect.gen(function* () {
@@ -1029,7 +1052,7 @@ test("falls back to legacy when a stdio server ignores the version probe", async
             type: "local",
             command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-legacy-silent.ts")],
             protocol: "auto",
-            // The probe waits out the startup timeout before falling back; Windows needs room to start Bun.
+            // The probe waits out the startup timeout, when shorter than the probe's own, before falling back; Windows needs room to start Bun.
             timeout: new ConfigMCP.Timeout({ startup: 1_000 }),
           }),
           import.meta.dir,
@@ -1195,6 +1218,7 @@ for (const entry of [
         url: server.url + entry.query,
         codemode: entry.codemode,
         oauth: false,
+        protocol: "legacy",
       })
       const error = yield* connect("resources", config, import.meta.dir).pipe(Effect.flip)
 
@@ -1316,7 +1340,7 @@ describe.each([
     )
   })
 
-  test("validates structured content against the called tool's output schema", async () => {
+  test("returns results that miss or break the called tool's output schema", async () => {
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
@@ -1324,33 +1348,40 @@ describe.each([
             modern: era === "modern",
             resources: false,
             tools: [
+              // Zoom's meeting_delete declares an empty object and returns nothing for the REST API's 204.
+              { name: "delete", inputSchema: { type: "object" }, outputSchema: { type: "object", properties: {} } },
               {
-                name: "typed",
+                name: "collaborators",
                 inputSchema: { type: "object" },
-                outputSchema: { type: "object", properties: { value: { type: "string" } }, required: ["value"] },
+                outputSchema: {
+                  type: "object",
+                  properties: { role: { type: "string", enum: ["owner", "editor"] } },
+                  required: ["role"],
+                },
               },
             ],
           })
           const connection = yield* connect(
-            "typed",
+            "lenient",
             new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, protocol }),
             import.meta.dir,
           )
           yield* connection.tools()
 
-          expect(yield* connection.callTool({ name: "typed", args: { structured: { value: "ok" } } })).toMatchObject({
-            structured: { value: "ok" },
+          expect(yield* connection.callTool({ name: "delete", args: { text: "Meeting deleted." } })).toEqual({
+            isError: false,
+            structured: undefined,
+            content: [{ type: "text", text: "Meeting deleted." }],
+          })
+          expect(yield* connection.callTool({ name: "delete" })).toEqual({
+            isError: false,
+            structured: undefined,
+            content: [],
           })
           expect(
-            (yield* connection.callTool({ name: "typed", args: { structured: { value: 42 } } }).pipe(Effect.flip))
-              .message,
-          ).toContain("Structured content does not match the tool's output schema")
-          expect((yield* connection.callTool({ name: "typed" }).pipe(Effect.flip)).message).toContain(
-            "has an output schema but did not return structured content",
-          )
-          expect(yield* connection.callTool({ name: "echo", args: { structured: { value: 42 } } })).toMatchObject({
-            structured: { value: 42 },
-          })
+            yield* connection.callTool({ name: "collaborators", args: { structured: { role: "commenter" } } }),
+          ).toMatchObject({ isError: false, structured: { role: "commenter" } })
+          expect(server.state.toolCalls.map((call) => call.name)).toEqual(["delete", "delete", "collaborators"])
         }),
       ),
     )
@@ -1765,7 +1796,8 @@ it.live("discovers and reads MCP resources through Code Mode", () =>
         metadata: { server: "resources", uri: "docs://readme" },
         sessionID,
         agent: toolIdentity.agent,
-        source: { type: "tool", messageID: toolIdentity.messageID, id: "call_resource" },
+        // The call's own ID. The real service shows the request on the execute call's row.
+        source: { type: "tool", messageID: toolIdentity.messageID, id: expect.not.stringMatching(/^call_resource$/) },
       })
 
       server.state.contents = [{ uri: "docs://readme", text: "line\n".repeat(20_000), mimeType: "text/plain" }]
@@ -2298,6 +2330,7 @@ const shutdownIt = testEffect(
       Form.node,
       Environment.node,
       Location.node,
+      Flag.node,
       McpPool.node,
     ]),
     [
@@ -2660,6 +2693,7 @@ testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog up
       Effect.provide(
         Layer.fresh(
           AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+            ...toolNodeReplacements(permissionLayer({ assert: () => Effect.void })),
             Mcp.node.replace(
               Layer.mock(Mcp.Service, {
                 awaitStartup: () => Effect.void,
@@ -2671,8 +2705,6 @@ testEffect(Layer.empty).live("preserves plugin transforms through MCP catalog up
                   } satisfies Mcp.ToolResult),
               }),
             ),
-            Permission.node.replace(Layer.mock(Permission.Service, { assert: () => Effect.void })),
-            Image.node.replace(imagePassthrough),
           ]),
         ),
       ),
@@ -2712,6 +2744,7 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
   }).pipe(
     Effect.provide(
       AppNodeBuilder.build(LayerNode.group([Tool.node, McpTool.node, Bus.node]), [
+        ...toolNodeReplacements(permissionLayer({ assert: () => Effect.void })),
         Mcp.node.replace(
           Layer.mock(Mcp.Service, {
             awaitStartup: () => Effect.void,
@@ -2722,8 +2755,6 @@ testEffect(Layer.empty).effect("coalesces queued MCP tool notifications after in
               }),
           }),
         ),
-        Permission.node.replace(Layer.mock(Permission.Service, { assert: () => Effect.void })),
-        Image.node.replace(imagePassthrough),
       ]),
     ),
   )
@@ -2747,10 +2778,9 @@ const gatedServer = Effect.gen(function* () {
 // The real Mcp layer behind the tool registry; the bus never delivers, so only flush can register tools.
 const startupRegistry = (url: string) =>
   AppNodeBuilder.build(LayerNode.group([Mcp.node, Tool.node, McpTool.node]), [
+    ...toolNodeReplacements(permissions),
     Mcp.node.replace(resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url, oauth: false, codemode: false }))),
-    Permission.node.replace(permissions),
     Bus.node.replace(events),
-    Image.node.replace(imagePassthrough),
     Global.node.replace(Global.layerWith({ data: outputData })),
   ])
 
@@ -3049,7 +3079,7 @@ it.effect("waits for permission before calling an MCP tool", () =>
       source: {
         type: "tool",
         messageID: toolIdentity.messageID,
-        id: "call_mcp_permission",
+        id: expect.not.stringMatching(/^call_mcp_permission$/),
       },
     })
     expect(calls).toBe(0)
@@ -3515,8 +3545,9 @@ describe("MCP pool", () => {
       expect((yield* status(a.mcp))?.status).toBe("failed")
       expect(probes).toHaveLength(1)
       // On Windows the spawn succeeds through the shell and the missing command shows up only as an exit
-      // during the handshake, which can't be told apart from a server refusing it, so it tries once more.
-      expect(spawns).toHaveLength(process.platform === "win32" ? 1 : 0)
+      // during the handshake, which can't be told apart from a server refusing it, so it connects on its own.
+      // That exit also looks like a legacy server quitting on the version probe, so it respawns once for initialize.
+      expect(spawns).toHaveLength(process.platform === "win32" ? 2 : 0)
     }),
   )
 
@@ -3926,6 +3957,428 @@ describe("MCP pool", () => {
       expect(Array.from(collected).toSorted()).toEqual(["forms", "mcp"])
       expect(yield* status(second.mcp)).toEqual({ status: "connected" })
       expect(server.state.toolLists).toBe(1)
+    }),
+  )
+})
+
+describe("MCP events", () => {
+  const ready = (mcp: Mcp.Interface) =>
+    mcp.awaitStartup().pipe(
+      Effect.andThen(mcp.servers()),
+      Effect.map((all) => all[0]?.status),
+    )
+
+  // Lists "job.finished", from the second listing on with its `job` argument mirrored into a header, rejects a stream
+  // without that header, and answers any other `events/stream` with one `active` notification, then closes the stream.
+  const eventServer = (input: { events?: boolean } = {}) => {
+    const streams: Array<{ name: string | null; job: string | null; params: unknown }> = []
+    let lists = 0
+    return resourceServer({
+      modern: true,
+      events: input.events,
+      respond: async (request) => {
+        if (request.method !== "POST") return undefined
+        const body: unknown = await request.clone().json()
+        if (!isRecord(body)) return undefined
+        if (body.method === "events/list" && ++lists)
+          return Response.json({
+            jsonrpc: "2.0",
+            id: body.id,
+            result: {
+              resultType: "complete",
+              events: [
+                {
+                  name: "job.finished",
+                  delivery: ["push"],
+                  inputSchema: {
+                    type: "object",
+                    properties: { job: { type: "string", ...(lists > 1 ? { "x-mcp-header": "Job" } : {}) } },
+                  },
+                  payloadSchema: { type: "object" },
+                },
+              ],
+            },
+          })
+        if (body.method !== "events/stream") return undefined
+        const job = request.headers.get("mcp-param-job")
+        streams.push({ name: request.headers.get("mcp-name"), job, params: body.params })
+        if (job === null)
+          return Response.json(
+            { jsonrpc: "2.0", id: body.id, error: { code: -32020, message: "Header mismatch" } },
+            { status: 400 },
+          )
+        const meta = { "io.modelcontextprotocol/subscriptionId": body.id }
+        const frame = (message: Record<string, unknown>) =>
+          `data: ${JSON.stringify({ jsonrpc: "2.0", ...message })}\n\n`
+        return new Response(
+          frame({
+            method: "notifications/events/active",
+            params: { cursor: "c1", truncated: false, heartbeatMs: 30_000, _meta: meta },
+          }) + frame({ id: body.id, result: { resultType: "complete", _meta: meta } }),
+          { headers: { "content-type": "text/event-stream" } },
+        )
+      },
+    }).pipe(Effect.map((server) => ({ ...server, streams })))
+  }
+  const layer = (url: string) =>
+    resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url, oauth: false, protocol: "2026-07-28" }))
+
+  testEffect(Layer.empty).live(
+    "streams a server's events over Streamable HTTP with Mcp-Name and Mcp-Param headers",
+    () =>
+      Effect.gen(function* () {
+        const server = yield* eventServer({ events: true })
+        yield* Effect.gen(function* () {
+          const mcp = yield* Mcp.Service
+          expect(yield* ready(mcp)).toEqual({ status: "connected" })
+          const events = yield* mcp.events("resources")
+          if (!events) throw new Error("expected MCP events")
+          const messages = yield* Stream.runCollect(events.stream({ name: "job.finished", arguments: { job: "j1" } }))
+          expect(messages).toEqual([{ type: "active", cursor: "c1", truncated: false }])
+          // The first listing has no annotation, so the stream relists after the server rejects it for the missing header.
+          const params = expect.objectContaining({ name: "job.finished", arguments: { job: "j1" } })
+          expect(server.streams).toEqual([
+            { name: "job.finished", job: null, params },
+            { name: "job.finished", job: "j1", params },
+          ])
+        }).pipe(Effect.provide(layer(server.url)))
+      }),
+  )
+
+  // Lists "job.finished" and holds each `events/stream` open so a test can send notifications on it or close it.
+  // The first `failedOpens` opens fail, each only once the test releases it with `failOpen`.
+  const streamServer = Effect.fnUntraced(function* (input: { events?: boolean; failedOpens?: number } = {}) {
+    const attempts: unknown[] = []
+    const failures = yield* Queue.unbounded<void>()
+    const streams = yield* Queue.unbounded<{
+      params: unknown
+      aborted: Effect.Effect<void>
+      send: (method: string, params: Record<string, unknown>) => void
+      close: () => void
+    }>()
+    const encode = (message: Record<string, unknown>) =>
+      new TextEncoder().encode(`data: ${JSON.stringify({ jsonrpc: "2.0", ...message })}\n\n`)
+    const server = yield* resourceServer({
+      modern: true,
+      events: input.events ?? true,
+      respond: async (request) => {
+        if (request.method !== "POST") return undefined
+        const body: unknown = await request.clone().json()
+        if (isRecord(body) && body.method === "events/list")
+          return Response.json({
+            jsonrpc: "2.0",
+            id: body.id,
+            result: {
+              resultType: "complete",
+              events: [{ name: "job.finished", delivery: ["push"], inputSchema: {}, payloadSchema: {} }],
+            },
+          })
+        if (!isRecord(body) || body.method !== "events/stream") return undefined
+        attempts.push(body.params)
+        if (attempts.length <= (input.failedOpens ?? 0)) {
+          await Effect.runPromise(Queue.take(failures))
+          return Response.json({ jsonrpc: "2.0", id: body.id, error: { code: -32603, message: "Temporary failure" } })
+        }
+        const meta = { "io.modelcontextprotocol/subscriptionId": body.id }
+        const controller = Promise.withResolvers<ReadableStreamDefaultController<Uint8Array>>()
+        const aborted = Deferred.makeUnsafe<void>()
+        const abort = () => Deferred.doneUnsafe(aborted, Exit.void)
+        Queue.offerUnsafe(streams, {
+          params: body.params,
+          aborted: Deferred.await(aborted),
+          send: (method: string, params: Record<string, unknown>) =>
+            void controller.promise.then((open) =>
+              open.enqueue(encode({ method, params: { ...params, _meta: meta } })),
+            ),
+          close: () =>
+            void controller.promise.then((open) => {
+              open.enqueue(encode({ id: body.id, result: { resultType: "complete", _meta: meta } }))
+              open.close()
+            }),
+        })
+        request.signal.addEventListener("abort", abort)
+        return new Response(
+          new ReadableStream<Uint8Array>({
+            start: (open) => controller.resolve(open),
+            cancel: () => void abort(),
+          }),
+          { headers: { "content-type": "text/event-stream" } },
+        )
+      },
+    })
+    return { url: server.url, attempts, opened: Queue.take(streams), failOpen: Queue.offer(failures, undefined) }
+  })
+
+  // A bus whose published events reach its subscribers, recorded in order.
+  const workingBus = Effect.gen(function* () {
+    const hub = yield* PubSub.unbounded<{ readonly type: string; readonly data: unknown }>()
+    const published: Array<{ readonly type: string; readonly data: unknown }> = []
+    const updates = yield* Queue.unbounded<void>()
+    const layer = Layer.mock(Bus.Service, {
+      publish: (definition, data) =>
+        Effect.suspend(() => {
+          const event = { id: ID.create(), type: definition.type, data } as Payload<typeof definition>
+          published.push({ type: definition.type, data })
+          Queue.offerUnsafe(updates, undefined)
+          return PubSub.publish(hub, event).pipe(Effect.as(event))
+        }),
+      subscribe: ((definition?: { readonly type: string }) =>
+        Stream.fromPubSub(hub).pipe(
+          Stream.filter((event) => !definition || event.type === definition.type),
+        )) as Bus.Interface["subscribe"],
+    })
+    // Recheck the snapshot on publication; buffer signals that arrived before the assertion.
+    const until = <A>(snapshot: Effect.Effect<A>, ready: (value: A) => boolean) =>
+      Effect.gen(function* () {
+        while (true) {
+          const value = yield* snapshot
+          if (ready(value)) return value
+          yield* Queue.take(updates)
+        }
+      })
+    const delivered = (count: number) =>
+      until(
+        Effect.sync(() => published.filter((event) => event.type === "experimental.mcp.event")),
+        (events) => events.length >= count,
+      )
+    return { layer, published, until, delivered }
+  })
+
+  const subscriptionLayer = (url: string, bus: Layer.Layer<Bus.Service>) =>
+    resourceMcpLayer(
+      new ConfigMCP.Remote({ type: "remote", url, oauth: false, protocol: "2026-07-28" }),
+      undefined,
+      undefined,
+      { bus },
+    )
+
+  const only = (mcp: Mcp.Interface) => mcp.subscriptions().pipe(Effect.map((all) => all[0]))
+
+  testEffect(Layer.empty).live("publishes a subscription's events on the bus and follows its status", () =>
+    Effect.gen(function* () {
+      const server = yield* streamServer()
+      const bus = yield* workingBus
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        expect(yield* ready(mcp)).toEqual({ status: "connected" })
+        const subscription = yield* mcp.subscribe("resources", {
+          name: "job.finished",
+          arguments: { job: "j1", filter: { a: 1, b: 2 } },
+        })
+        expect(subscription).toMatchObject({
+          id: "mcpsub_2c691983d6df57af6bb5e2e8",
+          server: "resources",
+          status: { status: "pending" },
+          cursor: null,
+        })
+        const stream = yield* server.opened
+        stream.send("notifications/events/active", { cursor: "c1", truncated: false, heartbeatMs: 30_000 })
+        yield* bus.until(only(mcp), (sub) => sub?.status.status === "active")
+        stream.send("notifications/events/event", {
+          eventId: "e1",
+          name: "job.finished",
+          timestamp: "2026-11-11T00:00:00Z",
+          data: { job: "j1", ok: false, note: null },
+          cursor: "c2",
+        })
+        expect(yield* bus.delivered(1)).toEqual([
+          {
+            type: "experimental.mcp.event",
+            data: {
+              id: subscription.id,
+              server: "resources",
+              name: "job.finished",
+              eventId: "e1",
+              timestamp: "2026-11-11T00:00:00Z",
+              data: { job: "j1", ok: false, note: null },
+              cursor: "c2",
+            },
+          },
+        ])
+        expect(bus.published).toContainEqual({
+          type: "experimental.mcp.subscription.changed",
+          data: { id: subscription.id },
+        })
+
+        // The same arguments in another key order are the same subscription.
+        const again = yield* mcp.subscribe("resources", {
+          name: "job.finished",
+          arguments: { filter: { b: 2, a: 1 }, job: "j1" },
+        })
+        expect(again.id).toBe(subscription.id)
+        expect(server.attempts).toHaveLength(1)
+
+        yield* mcp.unsubscribe(subscription.id)
+        expect(yield* mcp.subscriptions()).toEqual([])
+        yield* stream.aborted
+      }).pipe(Effect.provide(subscriptionLayer(server.url, bus.layer)))
+    }),
+  )
+
+  const finishedEvent = (eventId: string, cursor: string) => ({
+    eventId,
+    cursor,
+    name: "job.finished",
+    timestamp: "2026-11-11T00:00:00Z",
+    data: {},
+  })
+
+  testEffect(Layer.empty).effect(
+    "backs off failed opens, resets after active, and resumes with a replay gap once",
+    () =>
+      Effect.gen(function* () {
+        const server = yield* streamServer({ failedOpens: 2 })
+        const bus = yield* workingBus
+        yield* Effect.gen(function* () {
+          const mcp = yield* Mcp.Service
+          expect(yield* ready(mcp)).toEqual({ status: "connected" })
+          const events = yield* mcp.events("resources")
+          if (!events) throw new Error("expected MCP events")
+          const clock = yield* Clock.Clock
+          const openedAt: number[] = []
+          const failed = yield* Queue.unbounded<void>()
+          const open = events.stream
+          // A failed open stays pending. Wait for the client stream to fail, not just for the server to reply.
+          using observer = spyOn(events, "stream")
+          observer.mockImplementation((input) => {
+            openedAt.push(clock.currentTimeMillisUnsafe())
+            return open(input).pipe(Stream.onError(() => Queue.offer(failed, undefined)))
+          })
+          // Each reopen waits its backoff delay after the stream ended, jittered to between 0.8 and 1.2 times it.
+          // The test clock only moves when adjusted, so reading it once the end is seen gives the exact time. A failed
+          // open is released only after the adjust that started it returns: an HTTP reply that landed mid-adjust would
+          // start the next delay at an earlier clock time than the one read here.
+          const waited = (delay: number, since: number) => {
+            const gap = openedAt[openedAt.length - 1] - since
+            expect(gap).toBeGreaterThanOrEqual(delay * 0.8)
+            expect(gap).toBeLessThanOrEqual(delay * 1.2)
+          }
+          yield* mcp.subscribe("resources", { name: "job.finished" })
+          yield* server.failOpen
+          yield* Queue.take(failed)
+          const firstFailure = clock.currentTimeMillisUnsafe()
+          yield* TestClock.adjust("1200 millis")
+          expect(openedAt).toHaveLength(2)
+          waited(1000, firstFailure)
+          yield* server.failOpen
+          yield* Queue.take(failed)
+          const secondFailure = clock.currentTimeMillisUnsafe()
+          yield* TestClock.adjust("2400 millis")
+          expect(openedAt).toHaveLength(3)
+          waited(2000, secondFailure)
+          const first = yield* server.opened
+          first.send("notifications/events/active", { cursor: "c1", truncated: false, heartbeatMs: 30_000 })
+          yield* bus.until(only(mcp), (sub) => sub?.status.status === "active")
+          first.send("notifications/events/heartbeat", { cursor: "c5" })
+          const closedAt = clock.currentTimeMillisUnsafe()
+          first.close()
+          expect(yield* bus.until(only(mcp), (sub) => sub?.status.status === "pending")).toMatchObject({ cursor: "c5" })
+          yield* TestClock.adjust("1200 millis")
+          expect(openedAt).toHaveLength(4)
+          waited(1000, closedAt)
+          const reopened = yield* server.opened
+          expect(server.attempts).toHaveLength(4)
+          expect(reopened.params).toMatchObject({ name: "job.finished", cursor: "c5" })
+          reopened.send("notifications/events/active", { cursor: "c8", truncated: true, heartbeatMs: 30_000 })
+          reopened.send("notifications/events/event", finishedEvent("e9", "c9"))
+          reopened.send("notifications/events/event", finishedEvent("e10", "c10"))
+          const delivered = yield* bus.delivered(2)
+          expect(delivered).toMatchObject([{ data: { eventId: "e9", truncated: true } }, { data: { eventId: "e10" } }])
+          expect(delivered[1].data).not.toHaveProperty("truncated")
+          reopened.close()
+          expect(yield* bus.until(only(mcp), (sub) => sub?.status.status === "pending")).toMatchObject({
+            cursor: "c10",
+          })
+        }).pipe(Effect.provide(subscriptionLayer(server.url, bus.layer)))
+      }),
+  )
+
+  testEffect(Layer.empty).effect("ends a subscription the server terminates or rejects, without reopening it", () =>
+    Effect.gen(function* () {
+      const server = yield* streamServer()
+      const bus = yield* workingBus
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        expect(yield* ready(mcp)).toEqual({ status: "connected" })
+        const finished = yield* mcp.subscribe("resources", { name: "job.finished" })
+        const stream = yield* server.opened
+        stream.send("notifications/events/terminated", { error: { code: -32024, message: "Revoked" } })
+
+        const missing = yield* mcp.subscribe("resources", { name: "missing" })
+        const status = (id: string) =>
+          mcp.subscriptions().pipe(Effect.map((all) => all.find((sub) => sub.id === id)?.status))
+        expect(yield* bus.until(status(finished.id), (value) => value?.status === "ended")).toEqual({
+          status: "ended",
+          reason: "terminated",
+          error: { code: -32024, message: "Revoked" },
+        })
+        expect(yield* bus.until(status(missing.id), (value) => value?.status === "ended")).toMatchObject({
+          status: "ended",
+          reason: "rejected",
+          error: { code: -32023 },
+        })
+        yield* TestClock.adjust("30 seconds")
+        // "missing" isn't listed, so the client refuses it without asking the server.
+        expect(server.attempts).toMatchObject([{ name: "job.finished" }])
+      }).pipe(Effect.provide(subscriptionLayer(server.url, bus.layer)))
+    }),
+  )
+
+  testEffect(Layer.empty).live("reopens without a replay gap when cursorless, and ends when disabled", () =>
+    Effect.gen(function* () {
+      const server = yield* streamServer()
+      const bus = yield* workingBus
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        expect(yield* ready(mcp)).toEqual({ status: "connected" })
+        yield* mcp.subscribe("resources", { name: "job.finished" })
+        const first = yield* server.opened
+        first.send("notifications/events/active", { cursor: null, heartbeatMs: 30_000 })
+        yield* bus.until(only(mcp), (sub) => sub?.status.status === "active")
+
+        yield* mcp.connect("resources")
+        const reopened = yield* server.opened
+        yield* first.aborted
+        expect(reopened.params).toMatchObject({ cursor: null })
+        // The null cursor means replay is unsupported; reconnecting is not evidence of a gap.
+        reopened.send("notifications/events/active", { cursor: null, truncated: false, heartbeatMs: 30_000 })
+        reopened.send("notifications/events/event", finishedEvent("e2", "c2"))
+        const delivered = yield* bus.delivered(1)
+        expect(delivered).toMatchObject([{ data: { eventId: "e2" } }])
+        expect(delivered[0].data).not.toHaveProperty("truncated")
+
+        yield* mcp.disconnect("resources")
+        expect(yield* bus.until(only(mcp), (sub) => sub?.status.status === "ended")).toMatchObject({
+          status: { status: "ended", reason: "unavailable" },
+          cursor: "c2",
+        })
+      }).pipe(Effect.provide(subscriptionLayer(server.url, bus.layer)))
+    }),
+  )
+
+  testEffect(Layer.empty).live("ends a subscription at a server without events", () =>
+    Effect.gen(function* () {
+      const plain = yield* streamServer({ events: false })
+      const bus = yield* workingBus
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        expect(yield* ready(mcp)).toEqual({ status: "connected" })
+        yield* mcp.subscribe("resources", { name: "job.finished" })
+        expect(yield* bus.until(only(mcp), (sub) => sub?.status.status === "ended")).toMatchObject({
+          status: { status: "ended", reason: "unavailable" },
+        })
+      }).pipe(Effect.provide(subscriptionLayer(plain.url, bus.layer)))
+    }),
+  )
+
+  testEffect(Layer.empty).live("offers no events from a server without them", () =>
+    Effect.gen(function* () {
+      const plain = yield* eventServer()
+      yield* Effect.gen(function* () {
+        const mcp = yield* Mcp.Service
+        expect(yield* ready(mcp)).toEqual({ status: "connected" })
+        expect(yield* mcp.events("resources")).toBeUndefined()
+      }).pipe(Effect.provide(layer(plain.url)))
     }),
   )
 })

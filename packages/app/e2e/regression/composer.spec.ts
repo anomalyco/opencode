@@ -1,9 +1,47 @@
 import { expect, test, type Locator, type Page } from "@playwright/test"
-import { NO_PROVIDER, SERVER, T0, expectPath, holdRoute, provider, sessionHref } from "../utils/app"
+import { NO_PROVIDER, SERVER, T0, expectPath, holdRoute, pageMessagesFrom, provider, sessionHref } from "../utils/app"
 import { mockWorkspace, openDraft, openSession } from "../utils/workspace"
 import { mockPluginsActivating, type MockServerConfig } from "../utils/mock-server"
 
 test.use({ permissions: ["clipboard-read", "clipboard-write"] })
+
+test("the composer shows its caret, never a focus ring, however focus arrives", async ({ page }) => {
+  const view = await openSession(page, { name: "ComposerKeyboardFocus" })
+
+  const frame = page.locator('[data-component="composer"]').filter({ has: view.editor })
+
+  await expect(view.editor).toBeFocused()
+  await expect(frame).toHaveCSS("outline-style", "none")
+
+  await page.keyboard.press("Shift+Tab")
+  await expect(view.editor).not.toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(view.editor).toBeFocused()
+  await expect(frame).toHaveCSS("outline-style", "none")
+  await expect(view.editor).toHaveCSS("outline-style", "none")
+
+  const modifier = await page.evaluate(() => (/Mac/i.test(navigator.platform) ? "Meta" : "Control"))
+
+  const dialog = page.getByRole("dialog")
+
+  await page.keyboard.press(`${modifier}+Shift+p`)
+  await expect(dialog.getByRole("combobox")).toBeFocused()
+  await page.keyboard.press("Escape")
+  await expect(view.editor).toBeFocused()
+  await expect(frame).toHaveCSS("outline-style", "none")
+
+  await view.editor.click()
+  await expect(view.editor).toBeFocused()
+  await expect(frame).toHaveCSS("outline-style", "none")
+  await page.keyboard.type("Still quiet")
+  await expect(frame).toHaveCSS("outline-style", "none")
+  await page.keyboard.press(`${modifier}+Shift+p`)
+  await expect(dialog.getByRole("combobox")).toBeFocused()
+  await page.mouse.click(20, 200)
+  await expect(dialog).toBeHidden()
+  await expect(view.editor).toBeFocused()
+  await expect(frame).toHaveCSS("outline-style", "none")
+})
 
 test("mention a session by title, send its stable token, and open its own tab", async ({ page }) => {
   const target = "ses_0123456789abcdefghijklmnop"
@@ -32,11 +70,17 @@ test("mention a session by title, send its stable token, and open its own tab", 
   await view.editor.pressSequentially(" mid")
   await suggestions.getByRole("button", { name: /Auth middleware/ }).click()
   await expect(view.editor.locator('[data-mention="session"]')).toHaveText("@Auth middleware")
+  // The mention's context menu copies the ID it stands for; the rest of the editor keeps the native menu.
+  await view.editor.locator('[data-mention="session"]').click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Copy Session ID", exact: true }).click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(target)
+  await expect(page.getByRole("menu")).toHaveCount(0)
+  await view.editor.press("End")
   await view.editor.press("Enter")
   await expect.poll(() => prompts.length).toBe(1)
   expect(prompts[0]?.text).toBe(`Compare with @session:${target} `)
   const message = page.locator('[data-timeline-row="UserMessage"]')
-  const chip = message.getByRole("button", { name: "Auth middleware", exact: true })
+  const chip = message.getByRole("button", { name: "@Auth middleware", exact: true })
   await expect(chip).toBeVisible()
   await chip.click()
   await expect(page).toHaveURL(new RegExp(`${target}$`))
@@ -115,7 +159,35 @@ test("a bare @ lists sessions, and a multi-word title matches while file search 
   expect(prompts[1]?.text).toBe("@home now")
 })
 
-test("the free usage limit opens the Go dialog once, leaves a readable notice, and restores the prompt", async ({
+test("closing the @ menu aborts its session search", async ({ page }) => {
+  const view = await openSession(page, {
+    name: "SessionMentionAbort",
+    findFiles: () => [],
+    sessions: [{ id: "ses_mention_abort_source", title: "Review the plan" }],
+    seed: { tabs: ["ses_mention_abort_source"] },
+  })
+
+  const suggestions = page.locator('[data-component="composer-suggestions"]')
+  const search = await holdRoute(page, /\/api\/session\?.*search=auth(&|$)/)
+
+  try {
+    await view.editor.pressSequentially("@auth")
+    const request = await search.arrived
+
+    const failed = page.waitForEvent("requestfailed", {
+      predicate: (candidate) => candidate === request,
+      timeout: 10_000,
+    })
+
+    await view.editor.press("Escape")
+    await expect(suggestions).toBeHidden()
+    expect((await failed).failure()?.errorText).toBe("net::ERR_ABORTED")
+  } finally {
+    search.release()
+  }
+})
+
+test("the free usage limit opens the Go dialog once, swaps the composer for the free limit panel, and restores the prompt", async ({
   page,
   context,
 }) => {
@@ -147,8 +219,8 @@ test("the free usage limit opens the Go dialog once, leaves a readable notice, a
           ? [
               {
                 id: "opencode-go",
-                integrationID: "opencode-go",
-                name: "OpenCode Go",
+                integrationID: "opencode",
+                name: "Anomaly / OpenCode Go",
                 models: {
                   "glm-5-go": {
                     id: "glm-5-go",
@@ -167,21 +239,22 @@ test("the free usage limit opens the Go dialog once, leaves a readable notice, a
     integrations: () => [
       {
         id: "opencode",
-        name: "OpenCode Console",
-        methods: [{ id: "device", type: "oauth", label: "OpenCode Console account" }],
+        name: "OpenCode",
+        methods: [
+          { id: "device", type: "oauth", label: "OpenCode account" },
+          { type: "key", label: "API key (service account)" },
+        ],
         connections: state.authorized
           ? [{ type: "credential", id: "cred_console", label: "Anomaly", method: "oauth" }]
           : [],
       },
-      {
-        id: "opencode-go",
-        name: "OpenCode Go",
-        methods: [{ type: "key" }],
-        connections: state.authorized ? [{ type: "credential", id: "cred_go", label: "Go key", method: "key" }] : [],
-      },
+      { id: "opencode-go", name: "OpenCode Go", methods: [{ type: "key" }], connections: [] },
     ],
-    onConnectKey: (input) => {
-      if (input.integrationID === "opencode-go") state.authorized = true
+    onIntegrationOAuth: () => ({ url: "https://auth.example.test/device?user_code=GOGO-1234" }),
+    onIntegrationOAuthStatus: () => {
+      state.authorized = true
+
+      return "complete"
     },
     pageMessages: () => ({
       items: [
@@ -217,16 +290,20 @@ test("the free usage limit opens the Go dialog once, leaves a readable notice, a
   const upsell = page.getByRole("dialog", { name: "Free limit reached" })
   await expect(upsell).toContainText("Your free messages reset at")
   await expect(page.getByText(/^You've used today's free messages\. They reset at /)).toBeVisible()
-  await expect(view.editor).toHaveText("Refactor the parser")
+  // With no paid provider the panel stands in for the composer until Go is connected.
+  await expect(page.locator('[data-component="session-free-limit"]')).toContainText("Free usage resets at")
+  await expect(view.editor).toHaveCount(0)
   await expect(page.getByText("Free usage limit reached.")).toHaveCount(0)
 
-  // Subscribe -> Go API key -> Continue switches the model in the current session without opening a new draft tab.
+  // Subscribe -> OpenCode sign-in -> the workspace's Go model -> Continue switches the model in the current session
+  // without opening a new draft tab.
   await upsell.getByRole("button", { name: "Subscribe", exact: true }).click()
-  const connect = page.getByRole("dialog", { name: "Connect OpenCode Go", exact: true })
-  await connect.getByPlaceholder("API key").fill("sk-go-test")
-  await connect.getByRole("button", { name: "Continue", exact: true }).click()
-  const connected = page.getByRole("dialog", { name: "Connected to OpenCode Go" })
-  await expect(connected.getByRole("radio", { name: "GLM-5 Go", exact: true })).toHaveAttribute("aria-checked", "true")
+  const connect = page.getByRole("dialog", { name: "Connect OpenCode", exact: true })
+  await connect.getByRole("button", { name: "OpenCode account", exact: true }).click()
+  const connected = page.getByRole("dialog", { name: "Connected to OpenCode" })
+  const go = connected.getByRole("radio", { name: "GLM-5 Go", exact: true })
+  await go.click()
+  await expect(go).toHaveAttribute("aria-checked", "true")
   await connected.getByRole("button", { name: "Continue", exact: true }).click()
   await expect(page.getByRole("dialog")).toHaveCount(0)
   await expectPath(page, sessionHref(sessionID))
@@ -354,6 +431,9 @@ for (const action of ["tray", "picker"] as const) {
     })
 
     await expect(page.getByText("Refactor the parser", { exact: true })).toBeVisible()
+    // Loading the selected model clears the tray, just like switching models does.
+    const modelButton = page.locator('[data-action="composer-model"]')
+    await expect(modelButton).toContainText("GLM-5 Go")
 
     // The refusal OpenCode Console sends a Go subscriber at a limit, as core records it.
     const body = {
@@ -400,13 +480,13 @@ for (const action of ["tray", "picker"] as const) {
     if (action === "tray") await tray.getByRole("button", { name: "Switch to a free model", exact: true }).click()
 
     if (action === "picker") {
-      await page.locator('[data-action="composer-model"]').click()
+      await modelButton.click()
       const picker = page.getByRole("dialog", { name: "Select model", exact: true })
       await picker.getByRole("combobox", { name: "Search models", exact: true }).fill("Big Pickle")
       await picker.getByRole("option", { name: /Big Pickle/ }).click()
     }
 
-    await expect(page.locator('[data-action="composer-model"]')).toContainText("Big Pickle")
+    await expect(modelButton).toContainText("Big Pickle")
     await expect(tray).toHaveCount(0)
     await expect(view.editor).toHaveText("Refactor the parser")
   })
@@ -681,8 +761,15 @@ test("an opened session in another Location names its model from a loaded catalo
       }),
     )
 
+    // A click before the catalog loads waits for it, and Escape gives up the wait, so the dialog cannot pop up later.
+    await control.click()
+    await expect(control).toHaveAttribute("aria-busy", "true")
+    await page.keyboard.press("Escape")
+    await expect(control).not.toHaveAttribute("aria-busy")
+
     // A click before the catalog loads opens the dialog once it does.
     await control.click()
+    await expect(control).toHaveAttribute("aria-busy", "true")
     held.release()
     await Promise.all(loaded)
     await expect(page.getByRole("dialog")).toBeVisible()
@@ -883,7 +970,11 @@ test("keeps a line added at the end of a scrolling prompt clear of the bottom fa
         const viewport = element.closest('[data-component="composer-scroll"]')!
         const range = document.createRange()
         range.selectNodeContents(element)
-        const line = Array.from(range.getClientRects()).reduce((last, rect) => (rect.bottom > last.bottom ? rect : last))
+
+        const line = Array.from(range.getClientRects()).reduce((last, rect) =>
+          rect.bottom > last.bottom ? rect : last,
+        )
+
         const fade = parseFloat(getComputedStyle(viewport).getPropertyValue("--composer-fade-bottom"))
 
         return Math.max(0, Math.round(line.bottom - (viewport.getBoundingClientRect().bottom - fade)))
@@ -1138,6 +1229,33 @@ test("shows the dropzone and attaches a dropped file", async ({ page }) => {
   await expect(page.locator('[data-component="composer-attachments"]')).toContainText("dropzone.txt")
 })
 
+test("an attachment pasted mid-sentence leaves the text and the caret where they were", async ({ page }) => {
+  const { editor } = await openDraft(page, {
+    name: "ComposerDraft",
+    provider: NO_PROVIDER,
+    onFileWrite: () => undefined,
+  })
+
+  await editor.click()
+  await page.keyboard.type("Hello world")
+  await editor.press("Home")
+
+  for (let count = 0; count < "Hello".length; count++) await editor.press("ArrowRight")
+
+  const text = await editor.evaluateHandle((element) => element.firstChild)
+
+  await editor.evaluate((element) => {
+    const data = new DataTransfer()
+    data.items.add(new File(["Attachment fixture"], "notes.txt", { type: "text/plain" }))
+    element.dispatchEvent(new ClipboardEvent("paste", { clipboardData: data, bubbles: true, cancelable: true }))
+  })
+  await expect(page.locator('[data-component="composer-attachments"]')).toContainText("notes.txt")
+  // A rewrite of the editor would replace this node, even when it put the caret back in the same place.
+  expect(await editor.evaluate((element, node) => element.firstChild === node, text)).toBe(true)
+  await page.keyboard.type(",")
+  await expect(editor).toHaveText("Hello, world")
+})
+
 test("keeps one dropzone while a file drag crosses the composer, and none for a text drag", async ({ page }) => {
   const editor = await draft(page)
   await page.keyboard.type("worktree off the latest dev")
@@ -1287,6 +1405,7 @@ test("lists slash commands in their built-in order", async ({ page }) => {
     "/model",
     "/connect",
     "/reload",
+    "/agent",
     "/btw",
   ])
 })
@@ -1305,11 +1424,74 @@ test("/reload reloads the server's configuration once and reports it", async ({ 
   await expect(page.locator('[data-suggestion-id="config.reload"]')).toHaveAttribute("data-active", "")
   await editor.press("Enter")
   await expect(page.getByText("Reloading configuration…", { exact: true })).toBeVisible()
+  // A second /reload while the first runs joins it: no second request and no second toast.
+  await expect(editor).toBeEmpty()
+  await editor.fill("/reload")
+  await expect(page.locator('[data-suggestion-id="config.reload"]')).toHaveAttribute("data-active", "")
+  await editor.press("Enter")
+  await expect(editor).toBeEmpty()
+  await expect(page.getByText("Reloading configuration…", { exact: true })).toHaveCount(1)
   reloaded.resolve()
   await expect(page.getByText("Configuration reloaded", { exact: true })).toBeVisible()
   await expect(page.getByText("Reloading configuration…", { exact: true })).toBeHidden()
   await expect(editor).toBeEmpty()
   expect(reloads).toBe(1)
+})
+
+test("/fork forks once while its request is pending, can retry a failure, and restores the prompt", async ({
+  page,
+}) => {
+  const source = { id: "ses_fork_source", title: "Fork source" }
+  const forks: string[] = []
+  const answers = [Promise.withResolvers<void>(), Promise.withResolvers<void>()]
+
+  const { editor } = await openSession(page, {
+    name: "ComposerFork",
+    provider: NO_PROVIDER,
+    sessions: [source],
+    pageMessages: pageMessagesFrom({
+      [source.id]: [
+        { id: "msg_fork_first", type: "user", text: "First prompt", time: { created: T0 } },
+        { id: "msg_fork_second", type: "user", text: "Second prompt", time: { created: T0 + 1 } },
+      ],
+    }),
+    onFork: async ({ body }) => {
+      forks.push(String(body.before))
+      await answers[forks.length - 1]?.promise
+
+      if (forks.length === 1) return { status: 500, body: { message: "Fork failed" } }
+    },
+  })
+
+  await editor.fill("/fork")
+  await expect(page.locator('[data-suggestion-id="session.fork"]')).toHaveAttribute("data-active", "")
+  await editor.press("Enter")
+
+  const dialog = page.getByRole("dialog", { name: "Fork from message", exact: true })
+  const search = dialog.getByRole("searchbox")
+  const newest = dialog.getByRole("option", { name: /Second prompt/ })
+  await expect(search).toBeFocused()
+
+  // Enter forks from the newest prompt; a second Enter while the fork runs sends nothing.
+  await search.press("Enter")
+  await expect(newest).toHaveAttribute("aria-busy", "true")
+  await expect(dialog.getByRole("option", { name: /First prompt/ })).toBeDisabled()
+  await search.press("Enter")
+  answers[0].resolve()
+
+  await expect(page.getByText("Request failed", { exact: true })).toBeVisible()
+  await expect(newest).toBeEnabled()
+  await expect(newest).not.toHaveAttribute("aria-busy")
+  expect(forks).toEqual(["msg_fork_second"])
+
+  await search.press("Enter")
+  await expect(newest).toHaveAttribute("aria-busy", "true")
+  answers[1].resolve()
+
+  await expectPath(page, sessionHref(`${source.id}_fork`))
+  await expect(dialog).toBeHidden()
+  await expect(editor).toHaveText("Second prompt")
+  expect(forks).toEqual(["msg_fork_second", "msg_fork_second"])
 })
 
 const followUp = "Add follow-up, / for commands, @ for context…"
@@ -1379,6 +1561,33 @@ for (const row of [
     await expect(scroll).toHaveText("Enter shell command… git status")
   })
 }
+
+test("a sent shell command returns the composer to prompt mode, and ! enters shell mode again", async ({ page }) => {
+  const { editor } = await openSession(page, {
+    name: "ShellSend",
+    sessions: [{ id: "ses_shell_send", title: "Shell send" }],
+  })
+
+  const scroll = page.locator('[data-component="composer-scroll"]')
+  await expect(scroll).toHaveText("Ask anything, / for commands, @ for context…")
+  await editor.pressSequentially("!")
+  await expect(scroll).toHaveText("Enter shell command… git status")
+  await editor.pressSequentially("git status")
+
+  const sent = page.waitForRequest(
+    (request) => request.method() === "POST" && new URL(request.url()).pathname.endsWith("/ses_shell_send/shell"),
+  )
+
+  await editor.press("Enter")
+  expect((await sent).postDataJSON()).toMatchObject({ command: "git status" })
+  await expect(editor).toBeEmpty()
+  await expect(scroll).toHaveText("Ask anything, / for commands, @ for context…")
+  await expect(page.getByRole("button", { name: /^Exit/ })).toHaveCount(0)
+
+  // The editor reads the draft's mode, so it agrees with the draft the send reset.
+  await editor.pressSequentially("!")
+  await expect(scroll).toHaveText("Enter shell command… git status")
+})
 
 test("marks a Console provider with its workspace only when it is also connected directly", async ({ page }) => {
   const model = (id: string, name: string) => ({ [id]: { id, name, limit: { context: 200_000 } } })
@@ -1470,9 +1679,11 @@ test("shows thinking on hover or a non-default selection while preserving keyboa
   await expect(control).toHaveText("default")
   await expect(control).toHaveCSS("opacity", "0")
 
-  // The single-agent fixture has only Add and Model before the thinking trigger.
+  // The single-agent fixture has Add, Agent and Model before the thinking trigger.
   await page.keyboard.press("Tab")
   await expect(composer.getByRole("button", { name: "Add images and files" })).toBeFocused()
+  await page.keyboard.press("Tab")
+  await expect(composer.getByRole("button", { name: "Choose agent" })).toBeFocused()
   await page.keyboard.press("Tab")
   await expect(composer.getByRole("button", { name: "Thinking Model" })).toBeFocused()
   await page.keyboard.press("Tab")

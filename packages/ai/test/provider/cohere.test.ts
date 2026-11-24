@@ -14,7 +14,7 @@ test("Cohere exposes native and compatible endpoints without Core remapping", ()
   expect(cohere.chat("command-a-03-2025").route.endpoint.baseURL).toBe("https://api.cohere.ai/compatibility/v1")
   expect(
     Cohere.model("command-a-03-2025", { apiKey: "fixture", headers: { "X-Test": "yes" }, body: { temperature: 0 } })
-      .route.defaults?.http,
+      .options?.http,
   ).toMatchObject({ body: { temperature: 0 } })
 })
 

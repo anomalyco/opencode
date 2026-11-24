@@ -5,7 +5,6 @@ export default {
   "usage.usage": "İstifadə",
   "usage.cost": "Xərc",
   "usage.view": "Kontekst istifadəsinə bax",
-  "systemPrompt.title": "Sistem promptu",
   "rawMessages.title": "Xam mesajlar",
   "export.session": "Sessiyanı ixrac et",
   "stats.session": "Sessiya",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Sessiya {{filename}} faylına saxlanıldı",
   "export.failed.title": "Sessiya ixrac edilə bilmədi",
   "export.failed.description": "Sessiyanı ixrac edərkən xəta baş verdi",
+  "usage.toggle": "Sessiya kontekstini aç/bağla",
 }

@@ -25,8 +25,8 @@ describe("MiniMax Images recorded", () => {
       })
 
       expect(response.images).toHaveLength(1)
-      expect(response.image.mediaType).toMatch(/^image\/(jpeg|png)$/)
-      expect(dimensions(yield* response.image.bytes())).toEqual({ width: 512, height: 512 })
+      expect(response.images[0].mediaType).toMatch(/^image\/(jpeg|png)$/)
+      expect(dimensions(yield* response.images[0].bytes())).toEqual({ width: 512, height: 512 })
       expect(response.providerMetadata?.minimax).toBeDefined()
     }),
   )
@@ -46,7 +46,7 @@ describe("MiniMax Images recorded", () => {
       })
 
       expect(response.images).toHaveLength(1)
-      expect(dimensions(yield* response.image.bytes())).toEqual({ width: 512, height: 512 })
+      expect(dimensions(yield* response.images[0].bytes())).toEqual({ width: 512, height: 512 })
     }),
   )
 })

@@ -1,4 +1,4 @@
-import { useDialog } from "@opencode/ui/context/dialog"
+import { useDialog, useDialogLayer } from "@opencode/ui/context/dialog"
 import { startTransition } from "solid-js"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -7,13 +7,12 @@ import { isServerFailed } from "@/runtime/server/health-machine"
 import { useTabs } from "@/shell/tabs/tabs"
 import { createKnownServerSessions, createServerSessionEntries, type CommandPaletteEntry } from "./palette"
 import { CommandPaletteView } from "./dialog"
-import { errorMessage } from "@/shell/layout/helpers"
-import { showToast } from "@/shell/notifications/toast"
 
 const RECENT_LIMIT = 10
 
-export function DialogSessionSearch(props: { archived?: boolean }) {
+export function DialogSessionSearch() {
   const dialog = useDialog()
+  const layer = useDialogLayer()
   const global = useGlobal()
   const language = useLanguage()
   const tabs = useTabs()
@@ -28,19 +27,15 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
 
     const load = createServerSessionEntries({
       server: ServerConnection.key(conn),
-      archived: props.archived,
-      known: props.archived
-        ? () => ctx.data.session.list().filter((session) => !session.parentID)
-        : createKnownServerSessions(() => ctx),
+      known: createKnownServerSessions(() => ctx),
       apply: ctx.data.session.apply,
       projects: ctx.projects.list,
       load: (search, signal) =>
-        ctx.sdk.api.session.list({ parentID: null, search, archived: !!props.archived, limit: 50 }, { signal }),
+        ctx.sdk.api.session.list({ parentID: null, search, archived: false, limit: 50 }, { signal }),
       get: (sessionID, signal) => ctx.sdk.api.session.get({ sessionID }, { signal }),
       untitled: () => language.t("command.session.new"),
-      category: () => language.t(props.archived ? "sidebar.inbox.archived.title" : "command.category.session"),
-      recentCategory: () =>
-        language.t(props.archived ? "sidebar.inbox.archived.title" : "palette.group.recentSessions"),
+      category: () => language.t("command.category.session"),
+      recentCategory: () => language.t("palette.group.recentSessions"),
       recentLimit: RECENT_LIMIT,
     })
 
@@ -57,7 +52,7 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
     return [
       {
         items: (query: string) => format(load.items(query)),
-        search: (query: string) => load.search(query).then(format),
+        search: (query: string, signal: AbortSignal) => load.search(query, signal).then(format),
       },
     ]
   })
@@ -70,56 +65,39 @@ export function DialogSessionSearch(props: { archived?: boolean }) {
     return query ? entries : entries.slice(0, RECENT_LIMIT)
   }
 
-  const sessions = async (query: string) => {
-    const entries = (await Promise.all(loaders.map((loader) => loader.search(query))))
-      .flat()
-      .toSorted((a, b) => (b.updated ?? 0) - (a.updated ?? 0))
-
-    return query ? entries : entries.slice(0, RECENT_LIMIT)
-  }
-
   const select = (item: CommandPaletteEntry | undefined) => {
-    if (!item?.sessionID || !item.server) return
-    const sessionId = item.sessionID
-    const server = item.server
+    if (dialog.closing || !item?.sessionID || !item.server) return
+
+    const { server, sessionID } = item
     const directory = item.project?.worktree ?? item.directory
-    const conn = servers.find((conn) => ServerConnection.key(conn) === server)
 
-    const open = () => {
-      dialog.close()
+    dialog.close(layer?.id)
 
-      if (conn && directory) global.serverCtx(server)?.projects.touch(directory)
-      void startTransition(() => tabs.select(tabs.addSessionTab({ server, sessionId })))
-    }
-
-    if (!props.archived) return open()
-
-    const ctx = conn ? global.serverCtx(server) : undefined
-
-    if (!ctx) return
-
-    void ctx.sdk.api.session
-      .update({ sessionID: sessionId, archived: false })
-      .then(async () => {
-        ctx.data.session.remember(await ctx.sdk.api.session.get({ sessionID: sessionId }))
-        open()
-      })
-      .catch((cause) =>
-        showToast({
-          title: language.t("common.requestFailed"),
-          description: errorMessage(cause, language.t("common.requestFailed")),
-        }),
-      )
+    if (directory) global.serverCtx(server)?.projects.touch(directory)
+    void startTransition(() => tabs.select(tabs.addSessionTab({ server, sessionId: sessionID })))
   }
 
+  // Each server is its own source, so a slow or failing server never holds back or hides another's sessions.
   return (
     <CommandPaletteView
       placeholder={language.t("home.sessions.search.placeholder")}
       items={items}
-      sources={[sessions]}
+      sources={loaders.map((loader) => loader.search)}
       highlight={() => {}}
       select={select}
-      close={() => dialog.close()}
+      close={() => dialog.close(layer?.id)}
+      bare
+      unhide={(entry) => {
+        const server = entry.server
+        const id = entry.sessionID
+
+        if (!server || !id || !global.sessionPreferences.hidden(server, id)) return
+
+        return () => {
+          global.sessionPreferences.update("hidden", server, id, false)
+          dialog.close(layer?.id)
+        }
+      }}
     />
   )
 }

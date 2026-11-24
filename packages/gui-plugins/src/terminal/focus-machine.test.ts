@@ -95,6 +95,35 @@ describe("terminal focus machine", () => {
     expect(focusRequestToken(transitionFocus(plain, target("pty_2")), "ses_1", "pty_2")).toBe(2)
   })
 
+  // A second new-terminal request joins the create in flight; it used to replace the request, so the create's answer
+  // for the first one was stale and the new terminal took no focus.
+  test("asking again for a terminal being created keeps the request", () => {
+    const state = replay([pending()])
+
+    expect(transitionFocus(state, pending())).toBe(state)
+    expect(transitionFocus(state, pending(true))).toEqual({
+      status: "pending",
+      request: 1,
+      session: "ses_1",
+      overlay: true,
+    })
+    expect(
+      isFocusRequested(
+        replay([pending(), { type: "pending.resolved", request: 1, id: "pty_1" }], state),
+        "ses_1",
+        "pty_1",
+      ),
+    ).toBe(true)
+
+    // Once the user moved on, a new request starts again.
+    expect(replay([{ type: "cancelled" }, pending()], state)).toEqual({
+      status: "pending",
+      request: 2,
+      session: "ses_1",
+      overlay: false,
+    })
+  })
+
   test("the terminal taking focus, or a cancel for its session, ends the request", () => {
     const state = replay([target("pty_1")])
 

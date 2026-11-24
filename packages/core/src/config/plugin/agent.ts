@@ -4,7 +4,7 @@ import { define } from "@opencode/plugin/effect/plugin"
 import { Document, Info, type Entry } from "@opencode/schema/config"
 import { ConfigAgent } from "@opencode/schema/config/agent"
 import path from "path"
-import { Effect, Option, Schema } from "effect"
+import { Effect, Result, SchemaIssue, SchemaParser } from "effect"
 import { Agent } from "../../agent.js"
 import { Config } from "../../config.js"
 import { ConfigMarkdown } from "../markdown.js"
@@ -25,10 +25,10 @@ const legacySources = [
 ] as const
 // Keep in sync with the legacySources patterns and the name-strip regex in decode.
 const sourceDirectories = ["agent", "agents", "mode", "modes"] as const
-const decodeAgent = Schema.decodeUnknownOption(ConfigAgent.Info)
-const decodeLegacyAgent = Schema.decodeUnknownOption(ConfigAgentV1.Info)
+const decodeAgent = SchemaParser.decodeUnknownResult(ConfigAgent.Info)
+const decodeLegacyAgent = SchemaParser.decodeUnknownResult(ConfigAgentV1.Info)
+const formatIssue = SchemaIssue.makeFormatterDefault()
 type PathAction = FileAccess.ExternalDirectoryAuthorization["action"] | typeof ReadTool.name | typeof EditTool.name
-const pathActions = ["external_directory", "read", "edit"] as const satisfies readonly PathAction[]
 const agentKeys = new Set(["variant", ...Object.keys(ConfigAgent.Info.fields)])
 // Fields only V2 understands. A file that uses any of them is read as V2, whatever else it contains.
 const nativeKeys = ["permissions", "request", "system", "disabled"]
@@ -117,7 +117,7 @@ function expandPermissions(rules: Permission.Ruleset, home: string): Permission.
 }
 
 function isPathAction(action: string): action is PathAction {
-  return pathActions.some((item) => item === action)
+  return (Permission.pathActions satisfies readonly PathAction[]).some((item) => item === action)
 }
 
 function expandHome(resource: string, home: string) {
@@ -134,7 +134,7 @@ function expandHome(resource: string, home: string) {
 function discover(fs: FSUtil.Interface, directory: string) {
   return Effect.forEach(legacySources, (source) =>
     fs
-      .scan(source.pattern, { cwd: directory, absolute: true, dot: true, symlink: true })
+      .scan(source.pattern, { cwd: directory, absolute: true, dot: true, symlink: true, ignore: FSUtil.ignoreGlobs })
       .pipe(
         Effect.map((files) => files.toSorted().map((filepath) => ({ directory, filepath, primary: source.primary }))),
       ),
@@ -149,7 +149,10 @@ const decode = Effect.fnUntraced(function* (
   content: string,
 ) {
   const markdown = ConfigMarkdown.parseOption(content)
-  if (!markdown) return
+  if (!markdown) {
+    yield* Effect.logWarning("agent file skipped", { filepath: file.filepath, reason: "markdown" })
+    return
+  }
   const name = path
     .relative(file.directory, file.filepath)
     .replaceAll("\\", "/")
@@ -161,24 +164,27 @@ const decode = Effect.fnUntraced(function* (
   const legacy = unsupported.length > 0 && !keys.some((key) => nativeKeys.includes(key))
   if (!legacy && unsupported.length > 0)
     yield* Effect.logWarning("ignored unsupported agent fields", { path: file.filepath, fields: unsupported })
-  // Join legacy model + variant without sending native request/permissions through migration.
-  // Embedded and structured native selections, and a variant without a model, stay unchanged.
-  const data =
-    typeof markdown.data.model === "string" &&
-    !markdown.data.model.includes("#") &&
-    typeof markdown.data.variant === "string" &&
-    /^[^#]+$/.test(markdown.data.variant)
-      ? { ...markdown.data, model: `${markdown.data.model}#${markdown.data.variant}` }
-      : markdown.data
-  const agent = legacy
-    ? Option.getOrUndefined(
-        Option.map(
-          decodeLegacyAgent({ name, ...markdown.data, prompt: body }, { errors: "all" }),
-          ConfigMigrateV1.migrateAgent,
-        ),
+  // Native files join a legacy model + variant without sending request/permissions through migration.
+  const decoded = legacy
+    ? Result.map(
+        decodeLegacyAgent({ name, ...markdown.data, prompt: body }, { errors: "all" }),
+        ConfigMigrateV1.migrateAgent,
       )
-    : Option.getOrUndefined(decodeAgent({ ...data, system: body }, { errors: "all" }))
-  if (!agent) return
+    : decodeAgent({ ...ConfigMarkdown.joinLegacyVariant(markdown.data), system: body }, { errors: "all" })
+  if (Result.isFailure(decoded)) {
+    yield* Effect.logWarning("agent file skipped", {
+      filepath: file.filepath,
+      reason: "frontmatter",
+      issue: formatIssue(decoded.failure),
+    })
+    return
+  }
+  // Native rules may still name the media tools by their old experimental names.
+  const permissions = decoded.success.permissions?.map((rule) => ({
+    ...rule,
+    action: ConfigMigrateV1.renamedTool(rule.action),
+  }))
+  const agent = permissions ? ConfigAgent.Info.make({ ...decoded.success, permissions }) : decoded.success
   const info = Info.make({
     agents: { [name]: file.primary ? ConfigAgent.Info.make({ ...agent, mode: "primary" }) : agent },
   })

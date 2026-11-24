@@ -9,16 +9,21 @@ import type {
   Live,
   SessionRef,
   SessionScreen,
+  SetupContext,
 } from "@opencode/plugin/gui"
-import type { BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
+import type { BuiltinContext, BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import type { Bridge, BridgeMessage, EnableState, Installed } from "@opencode/plugin/gui/host"
-import type { mountCodeBlocks } from "./plugin-host.fixture"
+import type { JSHandle } from "@playwright/test"
+import type { mountCodeBlocks, mountThemes } from "./plugin-host.fixture"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const fixture = sourceURL(new URL("./plugin-host.fixture.tsx", import.meta.url))
 
 /** What the code block cases drive from the page. */
 type CodeBlocksHost = ReturnType<typeof mountCodeBlocks>
+
+/** What the theme preview case drives from the page. */
+type ThemesHost = ReturnType<typeof mountThemes>
 
 /** What the scoped-registration case keeps from inside its plugin. */
 type Scope = { owner?: Owner | null; end: () => void; ctx?: Context }
@@ -177,6 +182,66 @@ story("a dialog handle closes its own dialog, and a dialog closes with the scope
     closed: ["below", "scoped"],
     ended: ["below"],
   })
+})
+
+story("Escape closes the top dialog while a dialog below it plays its exit animation", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountPluginHost, until } = await import(fixture)
+    const host = mountPluginHost()
+    const text = (value: string) => () => Object.assign(document.createElement("p"), { textContent: value })
+    const shown = () => ["below", "middle", "top"].filter((value) => document.body.textContent?.includes(value))
+    const handles: DialogHandle[] = []
+    host.load((ctx: Context) => {
+      handles.push(ctx.dialogs.open(text("below")), ctx.dialogs.open(text("middle")), ctx.dialogs.open(text("top")))
+    }, 0)
+    await until(() => shown().length === 3)
+    handles[1]?.close()
+    // In the same tick, so the middle dialog is still playing its exit animation.
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+    await until(() => shown().length === 1)
+    const outcome = shown()
+    host.unmount()
+
+    return outcome
+  }, fixture)
+
+  expect(result).toEqual(["below"])
+})
+
+story("a dialog closes itself while the dialog above it exits, and a double close never reaches below", async ({
+  page,
+}) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { mountPluginHost, until, useDialog } = await import(fixture)
+    const host = mountPluginHost()
+    const shown = () => ["base", "middle", "top"].filter((value) => document.body.textContent?.includes(value))
+    const own = { close: () => {} }
+    host.load((ctx: Context) => {
+      ctx.dialogs.open(() => Object.assign(document.createElement("p"), { textContent: "base" }))
+      // A Cancel button inside the middle dialog: a plain close() from its own layer.
+      ctx.dialogs.open(() => {
+        const dialog = useDialog()
+        own.close = () => dialog.close()
+
+        return Object.assign(document.createElement("p"), { textContent: "middle" })
+      })
+      ctx.dialogs.open(() => Object.assign(document.createElement("p"), { textContent: "top" }))
+    }, 0)
+    await until(() => shown().length === 3)
+    document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }))
+    // In the same tick, while the top dialog is still playing its exit animation; twice, as a double click would.
+    own.close()
+    own.close()
+    await until(() => shown().length === 1)
+    // Past every exit animation, so a close that reached the base dialog would have removed it by now.
+    await new Promise((resolve) => setTimeout(resolve, 300))
+    const outcome = shown()
+    host.unmount()
+
+    return outcome
+  }, fixture)
+
+  expect(result).toEqual(["base"])
 })
 
 story("a dialog pushed in the same tick as a reload never mounts", async ({ page }) => {
@@ -1195,6 +1260,34 @@ story(
   },
 )
 
+story("a scoped contract binds the consuming instance, not the plugin that happens to call a saved method", async ({ page }) => {
+  const result = await page.evaluate(async (fixture) => {
+    const { Contract, mountPlugins, until } = await import(fixture)
+    const token: Contract<() => string> = Contract.define("provider.scoped")
+    const reads = new Map<string, () => Live<() => string>>()
+
+    const host = mountPlugins({ definitions: [
+      { id: "provider", windowEntry: async () => ({ default: (ctx: BuiltinContext) =>
+        ctx.provideFor(token, (consumer) => () => consumer) }) },
+      ...["one", "two"].map(id => ({ id, windowEntry: async () => ({ default: (ctx: Context) => { reads.set(id, ctx.use(token)) } }) })),
+    ] })
+
+    await until(() => ["one", "two"].every(id => reads.get(id)?.().status === "active"))
+
+    const owners = ["one", "two"].map(id => {
+      const value = reads.get(id)?.()
+
+      return value?.status === "active" && value.value()
+    })
+
+    host.unmount()
+
+    return owners
+  }, fixture)
+
+  expect(result).toEqual(["one", "two"])
+})
+
 story("a contract component reads its provider context and preserves reactive props", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { bindPlugin, createComponent, createSignal, Contract, mountPlugins, Slot, until, usePlugin } = await import(
@@ -1679,6 +1772,122 @@ story(
   },
 )
 
+story("a theme preview survives a system light/dark flip and a plugin theme arriving, and is never saved", async ({
+  page,
+}) => {
+  await page.emulateMedia({ colorScheme: "dark" })
+
+  const host: JSHandle<ThemesHost> = await page.evaluateHandle(async (fixture) => {
+    const { mountThemes, Theme } = await import(fixture)
+    // The frame's own provider saved its scheme; this window follows the system.
+    localStorage.setItem("opencode-color-scheme", "system")
+    localStorage.removeItem("opencode-theme-id")
+    localStorage.removeItem("opencode-theme-css-light")
+    localStorage.removeItem("opencode-theme-css-dark")
+
+    const variant = {
+      palette: {
+        neutral: "#101418",
+        ink: "#e6edf3",
+        primary: "#009fff",
+        success: "#3fb950",
+        warning: "#d29922",
+        error: "#f85149",
+        info: "#a371f7",
+      },
+    }
+
+    const host: ThemesHost = mountThemes({
+      definitions: [
+        {
+          id: "acme",
+          windowEntry: async () => ({
+            default: (ctx: Context) =>
+              void ctx.add(Theme, {
+                $schema: "https://opencode.ai/desktop-theme.json",
+                name: "Midnight",
+                id: "midnight",
+                light: variant,
+                dark: variant,
+              }),
+          }),
+        },
+      ],
+    })
+
+    host.previewScheme("light")
+
+    return host
+  }, fixture)
+
+  const read = () =>
+    host.evaluate((host) => ({
+      theme: document.documentElement.dataset.theme,
+      shown: document.documentElement.dataset.colorScheme,
+      mode: host.mode(),
+      scheme: localStorage.getItem("opencode-color-scheme"),
+      id: localStorage.getItem("opencode-theme-id"),
+      cached: [localStorage.getItem("opencode-theme-css-light"), localStorage.getItem("opencode-theme-css-dark")].map(
+        (css) => css !== null,
+      ),
+    }))
+
+  // A media change reaches the provider's listener before one added after it.
+  const flip = async (colorScheme: "light" | "dark") => {
+    const changed = await page.evaluateHandle(() => ({
+      done: new Promise<void>((resolve) =>
+        matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => resolve(), { once: true }),
+      ),
+    }))
+
+    await page.emulateMedia({ colorScheme })
+    await changed.evaluate((changed) => changed.done)
+  }
+
+  // The plugin's theme arrives while the preview is up.
+  await expect.poll(() => host.evaluate((host) => host.status("acme"))).toBe("active")
+  const previewed = await read()
+
+  await flip("light")
+  await flip("dark")
+  const flipped = await read()
+
+  await host.evaluate((host) => host.preview("acme:midnight"))
+  const midnight = await read()
+
+  await host.evaluate((host) => host.cancel())
+  const cancelled = await read()
+
+  await host.evaluate((host) => {
+    host.preview("acme:midnight")
+    host.commit()
+  })
+  const committed = await read()
+  await host.evaluate((host) => host.unmount())
+
+  expect({ previewed, flipped, midnight, cancelled, committed }).toEqual({
+    previewed: { theme: "oc-2", shown: "light", mode: "light", scheme: "system", id: null, cached: [false, false] },
+    flipped: { theme: "oc-2", shown: "light", mode: "light", scheme: "system", id: null, cached: [false, false] },
+    midnight: {
+      theme: "acme:midnight",
+      shown: "light",
+      mode: "light",
+      scheme: "system",
+      id: null,
+      cached: [false, false],
+    },
+    cancelled: { theme: "oc-2", shown: "dark", mode: "dark", scheme: "system", id: null, cached: [false, false] },
+    committed: {
+      theme: "acme:midnight",
+      shown: "dark",
+      mode: "dark",
+      scheme: "system",
+      id: "acme:midnight",
+      cached: [true, true],
+    },
+  })
+})
+
 story("a selected plugin theme that never returns shows the default theme once plugins settle", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { mountThemes, until } = await import(fixture)
@@ -1861,7 +2070,7 @@ story("composer pills show per session, open their rows, and fail only their own
   await expect(page.locator("body")).toHaveAttribute("data-picked", "12")
 })
 
-story("a composer pill with a menu opens the plugin's content under the host's heading", async ({ page }) => {
+story("a composer pill with a menu opens only the plugin's content, named by the view", async ({ page }) => {
   await page.evaluate(async (fixture) => {
     const { mountComposerPills, until, ComposerPill } = await import(fixture)
 
@@ -1897,7 +2106,9 @@ story("a composer pill with a menu opens the plugin's content under the host's h
 
   await pill.click()
   const popover = page.locator('[data-slot="session-plugin-pill-popover"]')
-  await expect(popover.getByText("Ship the release")).toBeVisible()
+  // The popover is the plugin's alone: the title names it but the host draws no heading.
+  await expect(popover).toHaveAttribute("aria-label", "Ship the release")
+  await expect(popover.getByText("Ship the release")).toHaveCount(0)
   await expect(popover.locator('[data-slot="session-plugin-pill-row"]')).toHaveCount(0)
   await expect(popover.getByTestId("goal-pause")).toHaveText("Pause /repo")
 
@@ -1908,6 +2119,100 @@ story("a composer pill with a menu opens the plugin's content under the host's h
   await pill.click()
   await expect(page.getByTestId("goal-pause")).toBeVisible()
 })
+
+story(
+  "a plugin's declared icons draw by name in SDK fields and in the app, move, and leave with the plugin",
+  async ({ page }) => {
+    await page.evaluate(async (fixture) => {
+      const { mountComposerPills, until, ComposerPill, createSignal } = await import(fixture)
+      const [round, setRound] = createSignal(1)
+      document.body.addEventListener("next-round", () => setRound(round() + 1))
+
+      const host = mountComposerPills({
+        definitions: [
+          {
+            id: "acme",
+            // Its core pulses; the first frame is the resting drawing.
+            icons: {
+              goal: `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="6.5" stroke="currentColor"/>
+              <circle data-testid="goal-core" cx="8" cy="8" r="2" fill="currentColor">
+                <animate attributeName="r" values="2;5;2" dur="0.4s" repeatCount="indefinite"/>
+              </circle>
+            </svg>`,
+            },
+            windowEntry: async () => ({
+              default: (ctx: SetupContext<{ readonly icons: { readonly goal: string } }>) =>
+                void ctx.add(ComposerPill, {
+                  id: "goal",
+                  show: () => ({ label: `Round ${round()}`, icon: ctx.icons.goal, tone: "warning" }),
+                }),
+            }),
+          },
+          // A declared icon that is not an SVG document fails its own plugin before setup.
+          {
+            id: "broken",
+            icons: { bad: "not an svg" },
+            windowEntry: async () => ({ default: () => void (document.body.dataset.brokenSetup = "ran") }),
+          },
+        ],
+      })
+
+      document.body.addEventListener("leave", () => host.unmount())
+      await until(() => host.status("acme") === "active" && host.status("broken") === "failed")
+      document.body.dataset.broken = host.failure("broken")?.error
+    }, fixture)
+
+    await expect(page.locator("body")).toHaveAttribute("data-broken", /Icon "broken:bad" is not an SVG document/)
+    expect(await page.evaluate(() => document.body.dataset.brokenSetup)).toBeUndefined()
+
+    const pill = page.getByTestId("composer-pills").locator('[data-slot="session-plugin-pill"]')
+    await expect(pill).toHaveText("Round 1")
+    // The host draws it as it draws its own icons, in the pill's tone.
+    await expect(pill.locator("svg")).toHaveClass(/text-v2-state-fg-warning/)
+
+    const href = (await pill.locator("use").getAttribute("href")) ?? ""
+    const symbol = page.locator(`symbol${href}`)
+    await expect(symbol).toHaveAttribute("viewBox", "0 0 16 16")
+    await expect(symbol.locator("circle")).toHaveCount(2)
+
+    const radius = () => symbol.getByTestId("goal-core").evaluate((core: SVGCircleElement) => core.r.animVal.value)
+
+    const clock = () =>
+      symbol.evaluate((element: SVGSymbolElement) => ({
+        paused: element.ownerSVGElement?.animationsPaused(),
+        time: element.ownerSVGElement?.getCurrentTime(),
+      }))
+
+    await page.evaluate(() => document.documentElement.setAttribute("data-motion", "full"))
+    await expect.poll(radius).toBeGreaterThan(2)
+
+    // The pill's view runs again. The artwork stays where it is, so its animation goes on.
+    await symbol.evaluate((element) => element.setAttribute("data-kept", ""))
+    await page.evaluate(() => document.body.dispatchEvent(new Event("next-round")))
+    await expect(pill).toHaveText("Round 2")
+    await expect(symbol).toHaveAttribute("data-kept", "")
+
+    // Under reduced motion the host holds every icon on its first frame.
+    await page.evaluate(() => document.documentElement.setAttribute("data-motion", "reduce"))
+    await expect.poll(clock).toEqual({ paused: true, time: 0 })
+    await expect.poll(radius).toBe(2)
+
+    // The app's own icon component, outside every plugin, draws the artwork by the same name.
+    await page.evaluate(async (fixture) => {
+      const { mountAppIcon } = await import(fixture)
+
+      mountAppIcon("acme:goal")
+    }, fixture)
+    await expect(page.getByTestId("app-icon").locator("use")).toHaveAttribute("href", href)
+
+    // The plugin goes away. The app's icon still names the artwork, and now draws nothing.
+    await page.evaluate(() => document.body.dispatchEvent(new Event("leave")))
+    await expect(pill).toHaveCount(0)
+    await expect(page.getByTestId("app-icon").locator("use")).toHaveAttribute("href", href)
+    await expect(symbol).toHaveCount(0)
+  },
+)
 
 story("code block content replaces complete blocks of its languages, and actions sit beside Copy", async ({ page }) => {
   const host = await page.evaluateHandle(async (fixture) => {
@@ -1995,10 +2300,14 @@ story("code block content replaces complete blocks of its languages, and actions
     status: "active",
   })
 
-  // Only the shell block gets the action, before its Copy button; the TypeScript block is untouched.
+  // Only the shell block gets the action, before its Wrap and Copy buttons; the TypeScript block is untouched.
   await expect(root.locator('[data-slot="markdown-code-actions"]')).toHaveCount(1)
   const shell = blocks.nth(3)
-  await expect(shell.locator('[data-slot="markdown-code-actions"] + [data-slot="markdown-copy-button"]')).toHaveCount(1)
+  await expect(
+    shell.locator(
+      '[data-slot="markdown-code-toolbar"] > [data-slot="markdown-code-actions"]:first-child + [data-slot="markdown-wrap-button"] + [data-slot="markdown-copy-button"]',
+    ),
+  ).toHaveCount(1)
   await shell.hover()
   await shell.getByRole("button", { name: "Run in terminal" }).click()
   await expect(page.locator("body")).toHaveAttribute("data-ran", "echo hi in /repo")

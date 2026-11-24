@@ -32,9 +32,7 @@ export const Input = Schema.Struct({
 })
 
 const Output = Schema.Struct({
-  url: Schema.String,
   contentType: Schema.String,
-  format: Input.fields.format,
   output: Schema.String,
 })
 type Format = (typeof Input.Type)["format"]
@@ -141,23 +139,18 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              // Rules are matched against the URL that is requested, so `HTTPS://EVIL.COM` meets a rule for
-              // `https://evil.com/*`.
-              const url = yield* Effect.try({
-                try: () => {
-                  const parsed = new URL(input.url)
-                  assertHttpUrl(parsed)
-                  // The fragment is never sent, and would keep a rule for the exact URL from matching.
-                  parsed.hash = ""
-                  return parsed.href
-                },
+              // Rules match the URL as written. The fragment is never sent, and would keep a rule for the exact
+              // URL from matching.
+              const url = input.url.split("#")[0]
+              yield* Effect.try({
+                try: () => assertHttpUrl(new URL(url)),
                 catch: (error) => error,
               })
 
               yield* permission.assert({
                 action: name,
                 resources: [url],
-                save: ["*"],
+                save: Permission.site(url),
                 metadata: input,
                 ...Permission.invocation(context),
               })
@@ -191,13 +184,7 @@ export const Plugin = {
                 try: () => convert(content, contentType, input.format),
                 catch: (error) => error,
               })
-              const result = {
-                url: input.url,
-                contentType,
-                format: input.format,
-                output,
-              }
-              return { output: result, content: result.output, metadata: { contentType: result.contentType } }
+              return { output: { contentType, output }, content: output, metadata: { contentType } }
             }).pipe(Effect.mapError((error) => new ToolFailure({ message: `Unable to fetch ${input.url}`, error }))),
         }),
       )

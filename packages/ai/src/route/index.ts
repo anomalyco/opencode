@@ -2,8 +2,6 @@ export { Route, LLMClient } from "./client.js"
 export type {
   RouteLanguageModelInput,
   RouteRoutedLanguageModelInput,
-  RouteDefaults,
-  RouteDefaultsInput,
   AnyRoute,
   LLMClientService,
   StreamOptions,

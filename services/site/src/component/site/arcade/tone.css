@@ -1,0 +1,373 @@
+/* The arcade's colour grade, shared by every version (Settings › 404 arcade › Saturation and White
+   balance). The stills are neutral-white-balance grades of the paintings (*-neutral) desaturated on
+   the GPU (`saturate()`) and balanced by a multiply layer; every UI colour here mixes its grey with
+   its colour (a soft teal, the hue the neutral grade leaves in the painted screen glow) by the same saturation, then leans
+   warm or cool. tone.ts sets the inputs on <html> before first paint. The coin's metal, the focus
+   ring and the games' own colours are not graded. */
+
+:root {
+  /* Inputs (tone.ts): saturation, and warm or cool balance, as percentages. */
+  --tone-sat-pct: 35%;
+  --tone-warm: 0%;
+  --tone-cool: 0%;
+  --tone-warm-tint: #ffb46a;
+  --tone-cool-tint: #6aa8ff;
+  /* The UI leans a quarter as far as the stills' balance layer. */
+  --tone-warm-ui: calc(var(--tone-warm) * 0.25);
+  --tone-cool-ui: calc(var(--tone-cool) * 0.25);
+  /* The multiply layer over the stills: white (no change) toward warm or cool channel gains. */
+  --tone-balance: color-mix(in srgb, color-mix(in srgb, #fff, #ffe2c2 var(--tone-warm)), #cfe0ff var(--tone-cool));
+  --tone-backdrop: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #1d1d1d, #161e21 var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-phosphor: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #d6d6d6, #8cd6d0 var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-phosphor-hot: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #ffffff, #e4fbf6 var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-glow-near: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #ebebeb, #78d2c8 var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-glow-far: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #969696, #288c87 var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-glow-line: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #d7d7d7, #82d7cd var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-tint: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #ececec, #dcf5f0 var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-screen-mid: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #444444, #163434 var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-screen-deep: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #242424, #081416 var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-screen-black: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #141414, #050a0b var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-panel-text: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #d6d6d6, #cfe0dc var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-panel-hint: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #a6a6a6, #9fc2bc var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-panel-line: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #969696, #5aaaa0 var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-panel-glow: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #c8c8c8, #1e968c var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-metal-top: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #19191a, #161c1d var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-metal-mid: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #0d0d0e, #0b0f10 var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-metal-bottom: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #09090a, #08090a var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-key-text: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #ececec, #dbf2ee var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-key-top: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #2b2b2b, #1d3434 var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-key-bottom: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #121212, #0c1a1a var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-socket: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #1c1c1d, #1a2224 var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-socket-dark: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #0e0e0f, #0a0e0f var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-socket-ring: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #262627, #22302f var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-shaft: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #a3a3a3, #9db0ad var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-button-ring: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #333334, #2a3a3a var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-button-ring-lit: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #bdbdbd, #5fc9bd var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-button-edge: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #222223, #1c2828 var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-ball-1: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #f4f4f4, #d4f6f0 var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-ball-2: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #a2a2a2, #4fc4b6 var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-ball-3: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #4e4e4e, #0f8f84 var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-ball-4: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #1b1b1b, #064a45 var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-button-1: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #161616, #0f1c1c var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-button-2: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #080808, #070d0d var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-lit-1: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #ffffff, #c4f4ec var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-lit-2: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #c4c4c4, #49cdbf var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-lit-3: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #707070, #0e9a8c var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-lit-4: color-mix(
+    in srgb,
+    color-mix(
+      in srgb,
+      color-mix(in srgb, #2c2c2c, #06504a var(--tone-sat-pct)),
+      var(--tone-warm-tint) var(--tone-warm-ui)
+    ),
+    var(--tone-cool-tint) var(--tone-cool-ui)
+  );
+  --tone-ball: radial-gradient(
+    circle at 35% 30%,
+    var(--tone-ball-1) 0 6%,
+    var(--tone-ball-2) 18%,
+    var(--tone-ball-3) 55%,
+    var(--tone-ball-4) 100%
+  );
+  --tone-button: radial-gradient(circle at 50% 60%, var(--tone-button-1), var(--tone-button-2));
+  --tone-button-lit: radial-gradient(
+    circle at 50% 40%,
+    var(--tone-lit-1) 0 8%,
+    var(--tone-lit-2) 30%,
+    var(--tone-lit-3) 62%,
+    var(--tone-lit-4) 100%
+  );
+}
+
+/* The three.js version renders its own colours (arcade3d): its picture gets the same saturation. */
+[data-component="arcade-404"][data-variant="3d"] :is([data-slot="canvas"], [data-slot="poster"]) {
+  filter: saturate(var(--tone-sat-pct));
+}

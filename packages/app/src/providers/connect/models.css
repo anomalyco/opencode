@@ -30,8 +30,9 @@
   }
 }
 
+/* The list clips its rows, so the ring sits inside the row. */
 .connected-model-row:focus-visible {
-  background-color: var(--v2-background-bg-layer-03);
+  outline-offset: -2px;
 }
 
 [data-component="first-provider-models"] [data-component="settings-list"] {

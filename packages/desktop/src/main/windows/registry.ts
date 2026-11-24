@@ -14,16 +14,12 @@ export function createWindowRegistry<W>(persistence: {
   write: (ids: string[]) => void
 }) {
   const windows = new Map<string, W>()
-  let quitting = false
   let lastFocusedID: string | undefined
 
   const persisted = () => persistedWindowIDs(persistence.read())
 
   return {
     persisted,
-    setQuitting(value = true) {
-      quitting = value
-    },
     register(id: string, window: W) {
       windows.set(id, window)
       const ids = persisted()
@@ -44,7 +40,8 @@ export function createWindowRegistry<W>(persistence: {
     list() {
       return [...windows.values()]
     },
-    closed(id: string) {
+    /** `quitting` is the app lifecycle's `isQuitting`. */
+    closed(id: string, quitting: boolean) {
       windows.delete(id)
 
       if (lastFocusedID === id) lastFocusedID = windows.keys().next().value

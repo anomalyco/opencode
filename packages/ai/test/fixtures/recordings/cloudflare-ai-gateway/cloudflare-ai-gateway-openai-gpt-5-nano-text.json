@@ -23,7 +23,7 @@
         "headers": {
           "content-type": "application/json"
         },
-        "body": "{\"model\":\"gpt-5-nano\",\"input\":[{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Reply exactly with: Hello!\"}]}],\"instructions\":\"You are concise.\",\"store\":false,\"include\":[\"reasoning.encrypted_content\"],\"max_output_tokens\":2000,\"stream\":true}"
+        "body": "{\"model\":\"gpt-5-nano\",\"input\":[{\"type\":\"message\",\"role\":\"developer\",\"content\":\"You are concise.\"},{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"Reply exactly with: Hello!\"}]}],\"store\":false,\"include\":[\"reasoning.encrypted_content\"],\"max_output_tokens\":2000,\"stream\":true}"
       },
       "response": {
         "status": 200,

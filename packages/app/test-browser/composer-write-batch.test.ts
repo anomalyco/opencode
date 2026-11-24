@@ -36,7 +36,8 @@ test("composer-write-batch: a burst of edits persists once with prompt, cursor a
   try {
     await value.state.ready.promise
     value.state.context.add({ type: "file", path: "src/queue.ts", preview: "await queue.flush()" })
-    value.state.retry.set({ id: SessionMessage.ID.create(), agent: "build", providerID: "test", modelID: "test" })
+    const retry = { id: SessionMessage.ID.create(), fingerprint: "42:abc" }
+    value.state.retry.set(retry)
     flushPersisted()
     value.writes.length = 0
     value.editor.setPrompt([{ type: "text", content: "keep ordering", start: 0, end: 13 }], 13)
@@ -49,7 +50,8 @@ test("composer-write-batch: a burst of edits persists once with prompt, cursor a
       cursor: 12,
       context: { items: [{ path: "src/queue.ts", preview: "await queue.flush()" }] },
     })
-    expect(value.writes[0].retry).toBeUndefined()
+    // An edit keeps the retry: its fingerprint, not the edit, decides whether a send may reuse the ID.
+    expect(value.writes[0].retry).toEqual(retry)
   } finally {
     value.dispose()
   }

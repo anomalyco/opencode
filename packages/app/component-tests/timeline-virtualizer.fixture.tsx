@@ -1,5 +1,5 @@
 import { TimelineRow } from "@opencode/session-ui/timeline/projection"
-import { onCleanup } from "solid-js"
+import { createComputed, createMemo, createSignal, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { render } from "solid-js/web"
 import { LanguageProvider } from "../src/runtime/i18n/language"
@@ -99,7 +99,7 @@ export function mountTimelineVirtualizer(input: {
     })
 
     return (
-      <div data-testid="timeline-controls" data-pinned={follow.following()}>
+      <div data-testid="timeline-controls" data-pinned={follow.following()} data-anchored={!!follow.anchor()}>
         <button type="button" onClick={() => setState("ready", true)}>
           Complete Markdown
         </button>
@@ -127,6 +127,15 @@ export function mountTimelineVirtualizer(input: {
         <button type="button" onClick={() => setState("grown", true)}>
           Grow last row
         </button>
+        {/* A tool inside a group of several, which names them all on the group, as a reveal anchors it. */}
+        <button
+          type="button"
+          onClick={() =>
+            follow.dispatch({ type: "anchor", anchor: { key: TimelineRow.key(rows[0]!), partID: "prt_grouped" } })
+          }
+        >
+          Anchor first row
+        </button>
         <div ref={container} style={{ height: `${input.viewportHeight ?? 180}px`, width: "400px" }}>
           <timeline.View
             header={null}
@@ -138,6 +147,7 @@ export function mountTimelineVirtualizer(input: {
                 style={{
                   height: `${input.rowHeight + (state.grown && row().userMessageID === `message-${input.count - 1}` ? 40 : 0)}px`,
                 }}
+                data-timeline-part-ids={row().userMessageID === "message-0" ? "prt_first,prt_grouped" : undefined}
               >
                 {row().userMessageID}
               </div>
@@ -156,4 +166,107 @@ export function mountTimelineVirtualizer(input: {
     ),
     host,
   )
+}
+
+/**
+ * Rows the test replaces. `replace(next, settled)` publishes `next` and then, in the same flush and after TanStack has
+ * read `next`, `settled`: what a projection does when its inputs settle in two steps. Each mounted row records any
+ * other key's row it is handed.
+ */
+export function mountTimelineRowChanges(ids: string[]) {
+  const host = document.createElement("main")
+  host.dataset.testid = "timeline-row-changes-fixture"
+  host.style.cssText = "position:fixed;top:24px;right:24px;width:400px;z-index:1000"
+  document.body.appendChild(host)
+  const list = (ids: string[]) => ids.map((id) => new TimelineRow.UserMessage({ userMessageID: id }))
+  const [rows, setRows] = createSignal(list(ids))
+  const errors: string[] = []
+  const foreign: string[] = []
+  let settled: string[] | undefined
+
+  function Fixture() {
+    const rowByKey = createMemo(() => new Map(rows().map((row) => [TimelineRow.key(row), row])))
+    const indexes = createMemo(() => new Map(rows().map((row, index) => [row.userMessageID, index])))
+
+    const timeline = createTimelineVirtualizer({
+      sessionKey: () => "row-changes-fixture",
+      projection: {
+        rows,
+        rowByKey,
+        activeMessageID: () => undefined,
+        messageByID: () => new Map(),
+        messageRowIndex: indexes,
+        messageLastRowIndex: indexes,
+      },
+      showHeader: () => false,
+      follow: createTimelineFollow(() => "row-changes-fixture"),
+      scroll: () => ({ overflow: false, jump: false }),
+      setScrollRef: () => {},
+      onContentResize: () => {},
+      onScheduleScrollState: () => {},
+      onResumeScroll: () => {},
+      onUserScroll: () => {},
+      onHistoryScroll: () => {},
+      canRenderImmediately: () => true,
+    })
+
+    // Created after the virtualizer, so it runs once TanStack has read the rows it follows.
+    createComputed(() => {
+      rows()
+      const next = settled
+
+      settled = undefined
+
+      if (next) setRows(list(next))
+    })
+
+    return (
+      <div style={{ height: "400px", width: "400px" }}>
+        <timeline.View
+          header={null}
+          deferred={() => false}
+          renderRow={(row) => {
+            const key = TimelineRow.key(row())
+
+            const read = () => {
+              const other = TimelineRow.key(row())
+
+              if (other !== key) foreign.push(`${key} read ${other}`)
+            }
+
+            // Renderers read their row while mounted and again as they unmount, as a row that stops growing in does.
+            createComputed(read)
+            onCleanup(read)
+
+            return <div style={{ height: "40px" }}>{key}</div>
+          }}
+        />
+      </div>
+    )
+  }
+
+  render(
+    () => (
+      <LanguageProvider locale="en">
+        <Fixture />
+      </LanguageProvider>
+    ),
+    host,
+  )
+
+  return {
+    errors,
+    foreign,
+    mounted: () =>
+      [...host.querySelectorAll<HTMLElement>("[data-timeline-key]")].map((element) => element.dataset.timelineKey),
+    replace: (next: string[], then?: string[]) => {
+      settled = then
+
+      try {
+        setRows(list(next))
+      } catch (error) {
+        errors.push(String(error))
+      }
+    },
+  }
 }

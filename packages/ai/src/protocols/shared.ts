@@ -10,6 +10,8 @@ import {
   AssistantMessage,
   type LLMRequest,
   Message,
+  SystemMessage,
+  ToolChoice,
   ToolDefinition,
   ToolMessage,
   type ContentPart,
@@ -24,6 +26,7 @@ import {
 } from "../schema/index.js"
 import { Json, decodeJson, encodeJson } from "../utils/json.js"
 import { isRecord } from "../utils/record.js"
+import { foldTools, toolsUpdate, withdrawnTools } from "../tool-updates.js"
 export { Json, decodeJson, encodeJson, isRecord }
 
 const isJson = Schema.is(Schema.Json)
@@ -54,12 +57,36 @@ export const ReportedBilling = Schema.Struct({
   cost: billedAmount,
 })
 
-/** Reads `ReportedBilling` from a raw usage object, which provider metadata keeps as the endpoint sent it. */
-export const reportedBilling = (usage: unknown) =>
-  Option.match(Schema.decodeUnknownOption(ReportedBilling)(usage), {
-    onNone: () => ({}),
-    onSome: (billing) => ({ cost: billing.cost }),
-  })
+/**
+ * GitHub Copilot reports its charge beside usage on the frame that carries it, as `copilot_usage.total_nano_aiu`:
+ * billionths of an AI credit, which costs $0.01.
+ */
+const CopilotBilling = Schema.Struct({
+  copilot_usage: Schema.Struct({ total_nano_aiu: Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0)) }),
+})
+const decodeCopilotBilling = Schema.decodeUnknownOption(CopilotBilling)
+
+/**
+ * Reads `ReportedBilling` from a raw usage object, which provider metadata keeps as the endpoint sent it, or
+ * Copilot's billing from the frames that carry the usage.
+ */
+export const reportedBilling = (usage: unknown, ...frames: ReadonlyArray<unknown>) => {
+  const reported = Option.getOrUndefined(Schema.decodeUnknownOption(ReportedBilling)(usage))?.cost
+  if (reported !== undefined) return { cost: reported }
+  const nanoAiu = frames
+    .map((frame) => Option.getOrUndefined(decodeCopilotBilling(frame))?.copilot_usage.total_nano_aiu)
+    .find((value) => value !== undefined)
+  return nanoAiu === undefined ? {} : { cost: nanoAiu / 100_000_000_000 }
+}
+
+/**
+ * The filter that blocked a response, from maps keyed by filter name: Azure's `content_filter_results`
+ * (`{ hate: { filtered: true } }`) or GitHub Copilot's `copilot_annotations` (`{ TextCopyright: [...] }`).
+ */
+export const contentFilterCategory = (...sources: ReadonlyArray<unknown>) =>
+  sources
+    .flatMap((source) => (isRecord(source) ? Object.entries(source) : []))
+    .find(([, value]) => (isRecord(value) && "filtered" in value ? value.filtered === true : Boolean(value)))?.[0]
 
 /**
  * Accepts stream frames that carry no `type`, alongside the typed event schema. Gateways inject such frames as
@@ -88,7 +115,7 @@ export const OPENAI_PROMPT_CACHE_KEY_MAX_LENGTH = 64
 // Body-level `prompt_cache_key` is off when caching is disabled or the model
 // explicitly rejects the field. Header-based affinity is unaffected.
 export const sendsPromptCacheKey = (request: LLMRequest) =>
-  request.cache !== "none" && request.model.compatibility?.supportsPromptCacheKey !== false
+  request.cache !== "none" && request.model.capabilities?.promptCacheKey !== false
 
 // OpenAI limits `prompt_cache_key` to 64 chars; DeepSeek and Zai inherit the same
 // limit via their OpenAI-compatible APIs. Clamp with unicode-aware slicing.
@@ -338,7 +365,8 @@ export const unsupportedOperation = (input: {
 /**
  * Lower namespaces to flat definitions for protocols without a native
  * namespace construct. Leaf names join their namespace path with `_` because
- * `.` is not broadly accepted in provider tool names.
+ * `.` is not broadly accepted in provider tool names. A no-op on tools `flattenRequest` already flattened; adapters call
+ * it to type their tools.
  */
 export const flattenTools = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArray<string> = []) => {
   const flat = tools.flatMap((tool): ReadonlyArray<ToolDefinition> => {
@@ -349,28 +377,84 @@ export const flattenTools = (tools: ReadonlyArray<ToolEntry>, path: ReadonlyArra
   return [...new Map(flat.map((tool) => [tool.name, tool])).values()]
 }
 
-export const flattenToolRequest = (request: LLMRequest) => {
+/**
+ * The request as a protocol without native namespaces sees it: tools, tool updates, past calls and a forced choice all
+ * use flattened names. `Protocol.make` applies it before `body.from` for such protocols, so adapters only see flat
+ * requests.
+ */
+export const flattenRequest = (request: LLMRequest): LLMRequest => {
+  const all = [...request.tools, ...request.messages.flatMap((message) => toolsUpdate(message)?.add ?? [])]
+  const declared = new Set(flattenTools(all).map((tool) => tool.name))
+  const flatten = <Part extends ToolCallPart | ToolResultPart>(part: Part) => flattenToolName(part, declared)
+  // A tool update that redefines a namespace drops the tools it leaves out, which only the namespace shows, so name
+  // them as explicit removals.
+  let tools = request.tools
   const messages = request.messages.map((message) => {
+    if (message.role === "system" && message.tools !== undefined) {
+      const next = foldTools(tools, message.tools.add, message.tools.remove)
+      const remove = withdrawnTools(tools, next)
+      tools = next
+      return new SystemMessage({ ...message, tools: { add: flattenTools(message.tools.add), remove } })
+    }
     if (message.role === "assistant") {
       const content = message.content.map((part) =>
-        part.type === "tool-call" || part.type === "tool-result" ? flattenToolName(part) : part,
+        part.type === "tool-call" || part.type === "tool-result" ? flatten(part) : part,
       )
       return sameParts(content, message.content) ? message : new AssistantMessage({ ...message, content })
     }
     if (message.role !== "tool") return message
-    const content = message.content.map(flattenToolName)
+    const content = message.content.map(flatten)
     return sameParts(content, message.content) ? message : new ToolMessage({ ...message, content })
   })
   return {
+    ...request,
     tools: flattenTools(request.tools),
-    request: messages.every((message, index) => message === request.messages[index])
-      ? request
-      : { ...request, messages },
+    messages,
+    toolChoice: flattenToolChoice(request.toolChoice, all, declared),
   }
 }
 
-const flattenToolName = <Part extends ToolCallPart | ToolResultPart>(part: Part): Part =>
-  part.namespace === undefined ? part : { ...part, name: `${part.namespace}_${part.name}`, namespace: undefined }
+/**
+ * @deprecated Routes without native namespaces already receive flattened requests; use `flattenRequest`. Removed in
+ * the next minor.
+ */
+export const flattenToolRequest = (request: LLMRequest) => {
+  const flat = flattenRequest(request)
+  return { tools: flattenTools(flat.tools), request: flat }
+}
+
+// A forced choice names a namespaced tool by its path (`crm.lookup`); point it at the flattened definition.
+const flattenToolChoice = (
+  choice: LLMRequest["toolChoice"],
+  tools: ReadonlyArray<ToolEntry>,
+  declared: ReadonlySet<string>,
+) => {
+  if (choice?.type !== "tool" || choice.name === undefined || declared.has(choice.name)) return choice
+  const name = new Map(namespacedPaths(tools)).get(choice.name)
+  return name === undefined ? choice : new ToolChoice({ ...choice, name })
+}
+
+// Each namespaced tool's path and the name flattenTools gives it.
+const namespacedPaths = (
+  tools: ReadonlyArray<ToolEntry>,
+  path: ReadonlyArray<string> = [],
+): ReadonlyArray<readonly [string, string]> =>
+  tools.flatMap((tool) => {
+    if (tool.type === "namespace") return namespacedPaths(tool.tools, [...path, tool.name])
+    return path.length === 0 ? [] : [[[...path, tool.name].join("."), [...path, tool.name].join("_")] as const]
+  })
+
+const flattenToolName = <Part extends ToolCallPart | ToolResultPart>(
+  part: Part,
+  declared: ReadonlySet<string>,
+): Part => {
+  const flat = part.namespace === undefined ? part.name : `${part.namespace}_${part.name}`
+  // Models sometimes call names no tool declares, such as a Code Mode path like `a.b.c`. Several providers (OpenAI
+  // Chat Completions, Bedrock Converse) reject those characters when the call is replayed, so replace them. A
+  // declared name is kept as is, so a provider that accepts it sees calls under the tool's own name.
+  const name = declared.has(flat) ? flat : flat.replace(/[^a-zA-Z0-9_-]/g, "_") || "_"
+  return name === part.name && part.namespace === undefined ? part : { ...part, name, namespace: undefined }
+}
 
 const sameParts = (next: ReadonlyArray<ContentPart>, previous: ReadonlyArray<ContentPart>) =>
   next.every((part, index) => part === previous[index])

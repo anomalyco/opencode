@@ -160,7 +160,7 @@ describe("llm constructors", () => {
     })
     const updated = LanguageModel.update(base, {
       route: responsesRoute,
-      defaults: { maxTokens: 20 },
+      options: { maxTokens: 20 },
       compatibility: { sanitizer: "gemini", requireFinishReason: false },
     })
     const updatedInput = LanguageModel.input(updated)
@@ -168,9 +168,9 @@ describe("llm constructors", () => {
     expect(updated).toBeInstanceOf(LanguageModel)
     expect(String(updated.id)).toBe("fake-model")
     expect(updated.route).toBe(responsesRoute)
-    expect(updated.defaults?.maxTokens).toBe(20)
+    expect(updated.options?.maxTokens).toBe(20)
     expect(updated.compatibility).toEqual({ sanitizer: "gemini", requireFinishReason: false })
-    expect(updatedInput.defaults).toBe(updated.defaults)
+    expect(updatedInput.options).toBe(updated.options)
     expect(updatedInput.compatibility).toBe(updated.compatibility)
     expect(String(updatedInput.provider)).toBe("fake")
     expect(LanguageModel.update(updated, {})).toBe(updated)
@@ -179,7 +179,7 @@ describe("llm constructors", () => {
   test("carries model defaults and compatibility through route model selection", () => {
     const model = chatRoute.model({
       id: "kimi-k2",
-      defaults: {
+      options: {
         maxTokens: 1_024,
         stop: ["END"],
         providerOptions: { parallelToolCalls: false },
@@ -189,9 +189,9 @@ describe("llm constructors", () => {
     })
     const request = ai.request({ model, prompt: "Say hello." })
 
-    expect(request.model.defaults).toMatchObject({ maxTokens: 1_024, stop: ["END"] })
-    expect(request.model.defaults?.providerOptions).toEqual({ parallelToolCalls: false })
-    expect(request.model.defaults?.http).toEqual({ body: { extra_body: true } })
+    expect(request.model.options).toMatchObject({ maxTokens: 1_024, stop: ["END"] })
+    expect(request.model.options?.providerOptions).toEqual({ parallelToolCalls: false })
+    expect(request.model.options?.http).toEqual({ body: { extra_body: true } })
     expect(request.model.compatibility).toEqual({ sanitizer: "moonshot" })
     expect(request.maxTokens).toBeUndefined()
     expect(request.providerOptions).toBeUndefined()

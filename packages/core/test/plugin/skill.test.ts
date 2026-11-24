@@ -5,6 +5,7 @@ import { Document, Info } from "@opencode/schema/config"
 import { Effect, Layer, Stream } from "effect"
 import { SkillPlugin } from "@opencode/core/plugin/skill"
 import { Skill } from "@opencode/core/skill"
+import { Flag } from "@opencode/core/flag"
 import { testEffect } from "../lib/effect"
 import { host } from "./host"
 
@@ -14,7 +15,6 @@ const config = (plugins: Info["plugins"] = []) =>
     Config.Service,
     Config.Service.of({
       entries: () => Effect.succeed([new Document({ type: "document", info: new Info({ plugins }) })]),
-      snapshot: () => [new Document({ type: "document", info: new Info({ plugins }) })],
       changes: () => Stream.never,
     }),
   )
@@ -32,7 +32,7 @@ describe("SkillPlugin.Plugin", () => {
             reload: skill.reload,
           },
         }),
-      ).pipe(Effect.provide(config()))
+      ).pipe(Effect.provide(config()), Effect.provide(Flag.testLayer()))
       const skills = yield* skill.list()
       const report = skills.find((item) => item.id === "report")
 
@@ -75,6 +75,7 @@ describe("SkillPlugin.Plugin", () => {
       Effect.provide(
         config(["package-plugin", "-disabled", "local.ts", { package: "package-plugin", options: { enabled: true } }]),
       ),
+      Effect.provide(Flag.testLayer()),
     ),
   )
 })

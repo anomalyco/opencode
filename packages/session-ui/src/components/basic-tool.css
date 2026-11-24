@@ -467,8 +467,9 @@
   }
 
   &:focus-visible {
-    outline: 1px solid var(--v2-text-text-accent);
+    outline: 2px solid var(--v2-border-border-focus);
     outline-offset: 2px;
+    border-radius: 4px;
 
     [data-slot="webfetch-link-text"] {
       text-decoration: underline;

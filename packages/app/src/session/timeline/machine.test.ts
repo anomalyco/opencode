@@ -1,12 +1,19 @@
 import { expect, test } from "bun:test"
 import {
+  CONTACT_LOST_EVENT,
   createFollowState,
+  createRouteRevealState,
   defersAdjustments,
   isFollowing,
+  isTouchHeld,
   needsEndProbe,
+  ROUTE_REVEAL_HISTORY_LIMIT,
+  routeRevealTarget,
   transitionFollow,
+  transitionRouteReveal,
   type FollowEvent,
   type FollowState,
+  type RouteRevealEvent,
 } from "./machine"
 
 const replay = (events: FollowEvent[], from = createFollowState()) => events.reduce(transitionFollow, from)
@@ -169,6 +176,69 @@ test("defers size compensation through detached touch momentum until the scroll 
   expect(defersAdjustments(replay([{ type: "touch.start", nested: false }]))).toBe(false)
 })
 
+test("revealing a tool mid-touch lets go of the finger, so the deferred translation flushes", () => {
+  const held = replay([{ type: "touch.start", nested: false }])
+  expect(isTouchHeld(held)).toBe(true)
+
+  const anchored = transitionFollow(held, { type: "anchor", anchor })
+  expect(isTouchHeld(anchored)).toBe(false)
+  expect(defersAdjustments(anchored)).toBe(false)
+})
+
+// A blur, hidden tab or deactivated view never delivers touchend. The blur used to report only a pointer release, so
+// the touch stayed held: the translation never flushed, the end probe never ran and a later pointer press was ignored.
+test("losing contact mid-touch ends the touch", () => {
+  const lost = transitionFollow(
+    replay([
+      { type: "touch.start", nested: false },
+      { type: "touch.drag", overflow: true },
+    ]),
+    CONTACT_LOST_EVENT,
+  )
+
+  expect(lost).toEqual({ type: "detached", endPending: false })
+  expect(isTouchHeld(lost)).toBe(false)
+  expect(defersAdjustments(lost)).toBe(false)
+  expect(transitionFollow(lost, { type: "pointer.down" })).toEqual({
+    type: "detached",
+    gesture: "pointer",
+    endPending: false,
+  })
+})
+
+test("losing contact keeps a pending zoomed end and probes it at once", () => {
+  const held = replay([
+    { type: "touch.start", nested: false },
+    { type: "touch.drag", overflow: true },
+    scroll(997, 900),
+  ])
+
+  const lost = transitionFollow(held, CONTACT_LOST_EVENT)
+
+  expect(needsEndProbe(held)).toBe(false)
+  expect(needsEndProbe(lost)).toBe(true)
+})
+
+test("losing contact ends touch momentum and a held pointer", () => {
+  const momentum = replay([
+    { type: "touch.start", nested: false },
+    { type: "touch.drag", overflow: true },
+    { type: "touch.end", scrolling: true },
+  ])
+
+  expect(defersAdjustments(transitionFollow(momentum, CONTACT_LOST_EVENT))).toBe(false)
+  expect(transitionFollow(replay([{ type: "pointer.down" }]), CONTACT_LOST_EVENT)).toEqual({ type: "following" })
+})
+
+test.each<{ name: string; state: FollowState }>([
+  { name: "following", state: createFollowState() },
+  { name: "detached", state: replay([{ type: "detach" }]) },
+  { name: "returning", state: replay([{ type: "return.start", attempt: 1 }]) },
+  { name: "anchored", state: replay([{ type: "anchor", anchor }]) },
+])("losing contact without any returns the same $name state", (input) => {
+  expect(transitionFollow(input.state, CONTACT_LOST_EVENT)).toBe(input.state)
+})
+
 test.each<{ name: string; state: FollowState; event: FollowEvent }>([
   { name: "following", state: createFollowState(), event: scroll(1000, 990) },
   { name: "detached", state: replay([{ type: "detach" }]), event: scroll(200, 300) },
@@ -176,4 +246,45 @@ test.each<{ name: string; state: FollowState; event: FollowEvent }>([
   { name: "settled following", state: createFollowState(), event: { type: "scroll.settled", atReachableEnd: false } },
 ])("a steady $name scroll returns the same state", (input) => {
   expect(transitionFollow(input.state, input.event)).toBe(input.state)
+})
+
+const reveal = (events: RouteRevealEvent[]) => events.reduce(transitionRouteReveal, createRouteRevealState())
+
+const synced = (entryKey: string, target: string | undefined) => ({ type: "route.synced", entryKey, target }) as const
+
+const attempted = (entryKey: string) => ({ type: "reveal.attempted", entryKey }) as const
+
+test.each<{ name: string; events: RouteRevealEvent[]; pending?: { entryKey: string; target: string } }>([
+  {
+    // A tool call that is not in the list was looked for again on every reattach.
+    name: "a missing tool call is attempted once per history entry",
+    events: [synced("k1", "sh_missing"), attempted("k1"), synced("k1", "sh_missing")],
+  },
+  {
+    // Only the last entry was remembered, so going Back revealed the first entry's tool again.
+    name: "going Back to an entry already revealed does not reveal it again",
+    events: [synced("k1", "sh_1"), attempted("k1"), synced("k2", "sh_2"), attempted("k2"), synced("k1", "sh_1")],
+  },
+  {
+    name: "navigating away before the attempt drops the reveal without consuming it",
+    events: [synced("k1", "sh_1"), synced("k2", undefined), synced("k1", "sh_1")],
+    pending: { entryKey: "k1", target: "sh_1" },
+  },
+  {
+    name: "an attempt for another entry leaves the pending reveal",
+    events: [synced("k2", "sh_2"), attempted("k1")],
+    pending: { entryKey: "k2", target: "sh_2" },
+  },
+])("$name", (input) => {
+  const target = routeRevealTarget(reveal(input.events))
+
+  expect(target && { entryKey: target.entryKey, target: target.target }).toEqual(input.pending)
+})
+
+test("a route reveal remembers only the latest entries it attempted", () => {
+  const keys = Array.from({ length: ROUTE_REVEAL_HISTORY_LIMIT + 1 }, (_, index) => `k${index}`)
+  const state = reveal(keys.flatMap((key) => [synced(key, "sh"), attempted(key)]))
+
+  expect(routeRevealTarget(transitionRouteReveal(state, synced("k0", "sh")))).toBeDefined()
+  expect(routeRevealTarget(transitionRouteReveal(state, synced("k1", "sh")))).toBeUndefined()
 })

@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}}が{{timeout}}ms後にタイムアウトしました",
   "error.failedPort": "ポートを取得できませんでした",
   "menu.remove": "削除",
+  "error.busy": "{{distro}}は別のタスクを実行中です。完了してから再試行してください。",
 }

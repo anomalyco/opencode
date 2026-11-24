@@ -4,6 +4,7 @@ import { makeLocationNode } from "@opencode/util/effect/app-node"
 import path from "path"
 import { Context, Effect, Layer, type Option, type PlatformError, Schema, type Stream } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
+import { Environment } from "./environment/index.js"
 import { Location } from "./location.js"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema.js"
 import { FileSystemSearch } from "./filesystem/search.js"
@@ -108,18 +109,18 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Fi
 const baseLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const environment = yield* Environment.Service
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const search = yield* FileSystemSearch.Service
-    // Workspace-placed directories exist only inside the workspace, so a host
-    // realpath probe at boot consults the wrong filesystem and would block
-    // construction on servers without a matching local directory. Treat the
-    // configured directory as canonical; local placements keep symlink
+    // Directories outside the server host do not live on the host filesystem,
+    // so a host realpath probe at boot would consult the wrong filesystem and
+    // block construction when no matching local directory exists. Treat the
+    // configured directory as canonical; host placements keep symlink
     // canonicalization. This skip is boot-only: resolve/read/list below still
     // access the host filesystem per operation (tracked in #44568).
-    const root = location.workspaceID
-      ? location.directory
-      : yield* fs.realPath(location.directory).pipe(
+    const root = environment.local
+      ? yield* fs.realPath(location.directory).pipe(
           // Linux realpath succeeds on an unreadable directory, so probe readability explicitly.
           Effect.tap((real) => fs.access(real, { readable: true })),
           Effect.catch((cause): Effect.Effect<never, DirectoryNotFoundError | DirectoryAccessDeniedError> => {
@@ -130,6 +131,7 @@ const baseLayer = Layer.effect(
             return Effect.die(cause)
           }),
         )
+      : location.directory
     const resolve = Effect.fnUntraced(function* (input: RelativePath) {
       if (input.includes("\u0000")) return yield* Effect.fail(new NotFoundError({ path: input }))
       const absolute = path.resolve(location.directory, input)
@@ -212,5 +214,5 @@ const baseLayer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer: baseLayer,
-  deps: [FSUtil.node, Location.node, FileSystemSearch.node],
+  deps: [Environment.node, FSUtil.node, Location.node, FileSystemSearch.node],
 })

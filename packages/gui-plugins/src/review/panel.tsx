@@ -1,4 +1,5 @@
-import { createMemo, createResource, createSignal, Match, Show, Switch, type JSX } from "solid-js"
+import { createMemo, createSignal, Match, onCleanup, Show, Switch, untrack, type JSX } from "solid-js"
+import { Loader } from "@opencode/ui/loader"
 import { Dynamic } from "solid-js/web"
 import type { FileDiffInfo } from "@opencode/client/promise"
 import {
@@ -10,6 +11,7 @@ import {
   type SessionReviewExpandMode,
 } from "@opencode/session-ui/v2/session-review-v2"
 import { SessionReviewFilePreviewV2 } from "@opencode/session-ui/v2/session-review-file-preview-v2"
+import type { LineCommentSendAction } from "@opencode/session-ui/v2/line-comment-annotations-v2"
 import { DiffChanges } from "@opencode/ui/diff-changes"
 import type {
   SessionReviewComment,
@@ -20,7 +22,14 @@ import type {
   SessionReviewFocus,
   SessionReviewLineComment,
 } from "@opencode/session-ui/session-review"
-import { usePlugin, usePanel, type MountedSession, type PanelSidebar, type SessionScreen } from "@opencode/plugin/gui"
+import {
+  createKeyed,
+  usePlugin,
+  usePanel,
+  type MountedSession,
+  type PanelSidebar,
+  type SessionScreen,
+} from "@opencode/plugin/gui"
 import { FileTree, OpenInApp } from "@opencode/plugin/gui/file"
 import type Review from "./index"
 import {
@@ -32,9 +41,21 @@ import {
   sortReviewPaths,
   type RenderDiff,
 } from "./kinds"
-import type { ReviewDiffView } from "./machine"
+import {
+  INITIAL_REVIEW_DETAIL_STATE,
+  reviewDetailView,
+  sameReviewDetailTarget,
+  transitionReviewDetail,
+  type ReviewDetailEffect,
+  type ReviewDetailEvent,
+  type ReviewDetailState,
+} from "./detail-machine"
+import { REVIEW_DIFF_TIMEOUT_MS, type ReviewDiffView } from "./machine"
 import type { ReviewModel } from "./model"
-import { ReviewPanelEmpty, ReviewTitle } from "./parts"
+import { ReviewFailure, ReviewPanelEmpty, ReviewTitle } from "./parts"
+
+/** A full patch request: its backoff, then its deadline, and its abort controller once it runs. */
+type DetailRequest = { controller?: AbortController; timer?: ReturnType<typeof setTimeout> }
 
 type ReviewPanelState = {
   sidebar: PanelSidebar
@@ -57,7 +78,8 @@ type ReviewPanelProps = {
   folderLabels?: ReadonlyMap<string, string>
   status: ReviewDiffView["status"]
   diffVersion?: number
-  loadDiff?: (path: string, version?: number) => Promise<RenderDiff | undefined>
+  /** Loads the full patch of a previewed file whose listed patch has no hunks. */
+  detail: ReviewModel["detail"]
   readFile: ReviewModel["readFile"]
   activeFile?: string
   onSelectFile: (path: string) => void
@@ -68,6 +90,7 @@ type ReviewPanelProps = {
   onLineCommentUpdate?: (comment: SessionReviewCommentUpdate) => void
   onLineCommentDelete?: (comment: SessionReviewCommentDelete) => void
   lineCommentActions?: SessionReviewCommentActions
+  lineCommentSend?: LineCommentSendAction
   comments?: SessionReviewComment[]
   focusedComment?: SessionReviewFocus | null
   onFocusedCommentChange?: (focus: SessionReviewFocus | null) => void
@@ -95,7 +118,7 @@ export default function ReviewPanelContent(props: {
       folderLabels={props.review.folderLabels()}
       status={props.review.diff().status}
       diffVersion={props.review.diffVersion()}
-      loadDiff={props.review.loadDiff}
+      detail={props.review.detail}
       readFile={props.review.readFile}
       activeFile={props.review.activeFile()}
       onSelectFile={props.review.focusFile}
@@ -112,6 +135,7 @@ export default function ReviewPanelContent(props: {
       onLineCommentUpdate={props.review.comments.update}
       onLineCommentDelete={props.review.comments.remove}
       lineCommentActions={props.review.comments.actions()}
+      lineCommentSend={props.review.comments.send()}
       comments={props.review.comments.all()}
       focusedComment={props.review.comments.focus()}
       onFocusedCommentChange={props.review.comments.changeFocus}
@@ -127,6 +151,12 @@ function ReviewPanel(props: ReviewPanelProps) {
 
     return live.status === "active" ? live.value : undefined
   }
+
+  const openInButton = () => (
+    <Show when={openIn()}>
+      {(openIn) => <Dynamic component={openIn().Button} screen={props.screen} session={props.session} />}
+    </Show>
+  )
 
   const diffs = () => props.diffs
 
@@ -170,33 +200,118 @@ function ReviewPanel(props: ReviewPanelProps) {
 
   const sourceActiveItem = createMemo(() => diffs().find((diff) => diff.file === activeDiff()))
 
-  const detailSource = createMemo(() => {
-    const diff = sourceActiveItem()
-    const load = props.loadDiff
+  // The previewed file's full patch, when its listed patch has no hunks. The request lives as long as the panel.
+  const [detailState, setDetailState] = createSignal<ReviewDetailState>(INITIAL_REVIEW_DETAIL_STATE)
+  const detailRequests = new Map<number, DetailRequest>()
 
-    if (!diff || !load || !reviewDiffNeedsLoad(diff)) return undefined
+  const dispatchDetail = (event: ReviewDetailEvent) => {
+    const next = transitionReviewDetail(untrack(detailState), event)
 
-    return { diff, load, version: props.diffVersion }
+    setDetailState(next.state)
+    next.effects.forEach(runDetailEffect)
+  }
+
+  const runDetailEffect = (effect: ReviewDetailEffect) => {
+    if (effect.type === "abort") {
+      const request = detailRequests.get(effect.attempt)
+
+      detailRequests.delete(effect.attempt)
+      clearTimeout(request?.timer)
+      request?.controller?.abort()
+
+      return
+    }
+
+    const detail = props.detail
+    const attempt = effect.attempt
+    const request: DetailRequest = {}
+
+    detailRequests.set(attempt, request)
+    // A retry waits out its backoff first; the request's own deadline starts with it.
+    request.timer = setTimeout(() => {
+      const controller = new AbortController()
+
+      request.controller = controller
+      request.timer = setTimeout(() => dispatchDetail({ type: "fetch.timed-out", attempt }), REVIEW_DIFF_TIMEOUT_MS)
+      void detail.load(effect.target, effect.stage, controller.signal).then(
+        (diff) => {
+          if (!detailRequests.delete(attempt)) return
+          clearTimeout(request.timer)
+          dispatchDetail({ type: "fetch.succeeded", attempt, diff })
+        },
+        (cause: unknown) => {
+          if (!detailRequests.delete(attempt)) return
+          clearTimeout(request.timer)
+          dispatchDetail({
+            type: "fetch.failed",
+            attempt,
+            message: cause instanceof Error ? cause.message : String(cause),
+          })
+        },
+      )
+    }, effect.delayMs)
+  }
+
+  const detailTarget = createMemo(
+    () => {
+      const diff = sourceActiveItem()
+
+      if (!diff || !reviewDiffNeedsLoad(diff)) return undefined
+
+      return props.detail.target(diff, props.diffVersion ?? 0)
+    },
+    undefined,
+    {
+      equals: (previous, next) => previous === next || (!!previous && !!next && sameReviewDetailTarget(previous, next)),
+    },
+  )
+
+  // Syncs the previewed file's patch request with the file and the server's connection.
+  createKeyed(
+    () => ({ target: detailTarget(), connected: props.session.server.connected }),
+    (current) =>
+      dispatchDetail({
+        type: "context.changed",
+        context: current.target
+          ? {
+              kind: "needed",
+              target: current.target,
+              connected: current.connected,
+              cached: props.detail.cached(current.target),
+            }
+          : { kind: "none" },
+      }),
+    { equals: (previous, next) => previous.target === next.target && previous.connected === next.connected },
+  )
+  onCleanup(() => dispatchDetail({ type: "disposed" }))
+
+  const detailView = createMemo(() => {
+    const target = detailTarget()
+
+    return target ? reviewDetailView(detailState(), target) : undefined
   })
 
-  const [loadedDiff] = createResource(detailSource, async ({ diff, load, version }) => {
-    const value = await load(diff.file, version)
+  const activeItem = () => {
+    const current = detailView()
 
-    if (value?.file !== diff.file) return undefined
+    return (current?.status === "ready" ? current.diff : undefined) ?? sourceActiveItem()
+  }
 
-    return { source: diff, version, value }
-  })
+  // While the full patch loads or failed, the preview keeps the file's header and shows why its diff is missing.
+  const placeholder = () => {
+    const current = detailView()
 
-  const activeItem = createMemo(() => {
-    const source = sourceActiveItem()
+    if (!current || current.status === "ready") return undefined
 
-    if (loadedDiff.state !== "ready") return source
-    const loaded = loadedDiff()
+    if (current.status === "loading") return <Loader />
 
-    if (loaded && loaded.source === source && loaded.version === props.diffVersion) return loaded.value
-
-    return source
-  })
+    return (
+      <ReviewFailure
+        failure={current.status === "error" ? current.failure : undefined}
+        onRetry={() => dispatchDetail({ type: "retry" })}
+      />
+    )
+  }
 
   return (
     <SessionReviewV2
@@ -204,14 +319,12 @@ function ReviewPanel(props: ReviewPanelProps) {
       stats={<DiffChanges changes={diffs()} />}
       empty={props.empty}
       sidebarOpen={props.state.sidebar.opened()}
+      sidebarSide={props.state.sidebar.side()}
+      onSidebarSideChange={props.state.sidebar.move}
       sidebarToggle={
         <SessionReviewV2SidebarToggle opened={props.state.sidebar.opened()} onToggle={props.state.sidebar.toggle} />
       }
-      toolbarAction={
-        <Show when={openIn()}>
-          {(openIn) => <Dynamic component={openIn().Button} screen={props.screen} session={props.session} />}
-        </Show>
-      }
+      toolbarAction={openInButton()}
       sidebar={
         // Always mounted: the sidebar header hosts the changes-mode dropdown,
         // which must stay reachable when the current mode has zero diffs.
@@ -228,6 +341,8 @@ function ReviewPanel(props: ReviewPanelProps) {
           kinds={treeKinds()}
           folderLabels={props.folderLabels}
           activeDiff={activeDiff()}
+          // Without diffs, the preview has no header while the tree is open.
+          actions={diffs().length === 0 ? openInButton() : undefined}
         />
       }
       activeFile={activeDiff()}
@@ -248,6 +363,7 @@ function ReviewPanel(props: ReviewPanelProps) {
                 <SessionReviewFilePreviewV2
                   file={file}
                   diff={diff()}
+                  placeholder={placeholder()}
                   diffStyle={props.diffStyle}
                   expandMode={props.state.expandMode()}
                   readFile={props.readFile}
@@ -255,6 +371,7 @@ function ReviewPanel(props: ReviewPanelProps) {
                   onLineCommentUpdate={props.onLineCommentUpdate}
                   onLineCommentDelete={props.onLineCommentDelete}
                   lineCommentActions={props.lineCommentActions}
+                  lineCommentSend={props.lineCommentSend}
                   comments={props.comments}
                   focusedComment={props.focusedComment}
                   onFocusedCommentChange={props.onFocusedCommentChange}
@@ -281,6 +398,7 @@ function ReviewPanelSidebar(props: {
   kinds: ReturnType<typeof reviewDiffKinds>
   folderLabels?: ReadonlyMap<string, string>
   activeDiff: string | undefined
+  actions?: JSX.Element
 }) {
   const ctx = usePlugin<typeof Review>()
 
@@ -317,8 +435,10 @@ function ReviewPanelSidebar(props: {
     <SessionReviewV2Sidebar
       open={props.state.sidebar.opened()}
       transition={props.state.sidebar.transition()}
+      side={props.state.sidebar.side()}
       title={props.title}
       stats={<DiffChanges changes={props.diffs} />}
+      actions={props.actions}
       filter={props.state.filter()}
       onFilterChange={props.state.setFilter}
       onFilterKeyDown={onFilterKeyDown}
@@ -339,6 +459,12 @@ function ReviewPanelSidebar(props: {
         </Match>
         <Match when={props.status === "error"}>
           <div class="px-2 py-2 text-12-regular text-text-weak">{ctx.t("load.failed")}</div>
+        </Match>
+        <Match when={!props.diffs.length}>
+          <div role="status" class="px-2 py-2 text-12-regular text-text-weak">{ctx.t("sidebar.noChanges")}</div>
+        </Match>
+        <Match when={!views()}>
+          <div role="status" class="px-2 py-2 text-12-regular text-text-weak">{ctx.t("sidebar.unavailable")}</div>
         </Match>
         <Match when={true}>
           <Show

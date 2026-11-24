@@ -135,7 +135,6 @@ function world() {
     },
     resume: () => Promise.all([...revisions.keys()].map((id) => lifecycle.activate(id))).then(() => undefined),
     exit: () => {},
-    quitting: () => {},
   })
 
   const lifecycle = createLifecycle({
@@ -437,6 +436,23 @@ describe("plugin lifecycle contracts", () => {
     await advance(10)
     expect(restart).toEqual({ settled: true, rejected: true })
     expect(ran.handoff).toBe(false)
+  })
+
+  test("a restart handoff ends the reload of the instance it keeps, so a failed handoff leaves that instance running", async () => {
+    const w = world()
+    w.revise("a")
+    await w.lifecycle.activate("a")
+    const a = w.made[0]
+    w.revise("a", { load: 100 })
+    const reload = settled(w.lifecycle.reload("a"))
+    await advance(10)
+    const restart = settled(w.lifecycle.restart(a.instance.scope, () => Promise.reject(new Error("install failed"))))
+    await advance(200)
+    expect(restart).toEqual({ settled: true, rejected: true })
+    expect(reload.settled).toBe(true)
+    // On dev the reload kept loading through the handoff and replaced the restart's caller once the app resumed.
+    expect(w.live("a")).toEqual([a])
+    check(w)
   })
 
   test.each([

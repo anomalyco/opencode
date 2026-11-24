@@ -12,6 +12,10 @@
 
 - Lifecycles follow the State Machines section of `packages/app/AGENTS.md`: one union, a pure `transition`, buttons and panels derived from selectors, and every action settling its attempt whether the host call returns, rejects or throws. Precedent: `src/message/action-machine.ts`.
 
+## Timeline stability
+
+- Everything here renders in timeline rows. Follow the Timeline stability section of `packages/app/AGENTS.md`: a `:has()` selector on anything that can contain rows ends at the `:has()` element, `:has()` never selects on `style`, and code that moves focus in a row passes `preventScroll: true` unless the reader must see that control next.
+
 ## Typography
 
 - Use `--line-height-compact` (`16px`) for `13px` transcript, tool, notice, and truncation text. Use `--line-height-base` (`20px`) for body text.

@@ -59,26 +59,25 @@ export function detailScale(fitRatio: number) {
 }
 
 /**
- * The `object-view-box` that shows `view` of media fitted at `size`, for media that must zoom inside its own box, such
- * as a video under its controls. The inset is in the media's natural pixels.
+ * The `object-view-box` that shows the view at `scale`, `x` and `y` of media fitted at `size`, for media that must zoom
+ * inside its own box, such as a video under its controls. The inset is in the media's natural pixels. It takes the view
+ * as numbers, so painting a frame of a glide allocates nothing but the string.
  */
 export function viewBox(
-  view: ZoomView,
+  scale: number,
+  x: number,
+  y: number,
   size: { width: number; height: number },
   natural: { width: number; height: number },
 ) {
-  if (view.scale <= 1) return "none"
+  if (scale <= 1) return "none"
 
-  const edge = (offset: number, fitted: number) => 0.5 - 0.5 / view.scale - offset / (view.scale * fitted)
+  const top = px(edge(y, size.height, scale) * natural.height)
+  const right = px(edge(-x, size.width, scale) * natural.width)
+  const bottom = px(edge(-y, size.height, scale) * natural.height)
+  const left = px(edge(x, size.width, scale) * natural.width)
 
-  const inset = [
-    edge(view.y, size.height) * natural.height,
-    edge(-view.x, size.width) * natural.width,
-    edge(-view.y, size.height) * natural.height,
-    edge(view.x, size.width) * natural.width,
-  ]
-
-  return `inset(${inset.map((value) => `${Math.max(0, Math.round(value * 100) / 100)}px`).join(" ")})`
+  return `inset(${top} ${right} ${bottom} ${left})`
 }
 
 /** The zoom factor for one wheel event, bounded so a coarse mouse-wheel notch is a step rather than a jump. */
@@ -86,11 +85,38 @@ export function wheelZoomFactor(deltaY: number) {
   return Math.exp(-clamp(deltaY, -30, 30) / 100)
 }
 
-function clampAxis(offset: number, size: number, viewport: number) {
+/** The zoom a Cmd/Ctrl shortcut asks for, from the key it is pressed with. */
+export function zoomShortcut(key: string) {
+  if (key === "=" || key === "+") return "in"
+
+  if (key === "-" || key === "_") return "out"
+
+  if (key === "0") return "fit"
+}
+
+/** A wheel event's delta in pixels, whether it counts in pixels, lines or pages. */
+export function wheelPixels(event: WheelEvent, delta: number) {
+  if (event.deltaMode === WheelEvent.DOM_DELTA_LINE) return delta * 16
+
+  if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) return delta * window.innerHeight
+
+  return delta
+}
+
+/** Keeps one axis of a zoomed image of `size` covering a `viewport` it overflows, and centered in one it fits. */
+export function clampAxis(offset: number, size: number, viewport: number) {
   const limit = Math.max(0, (size - viewport) / 2)
 
   // Adding zero turns -0 into 0.
   return clamp(offset, -limit, limit) + 0
+}
+
+function edge(offset: number, fitted: number, scale: number) {
+  return 0.5 - 0.5 / scale - offset / (scale * fitted)
+}
+
+function px(value: number) {
+  return `${Math.max(0, Math.round(value * 100) / 100)}px`
 }
 
 function clamp(value: number, min: number, max: number) {

@@ -3,6 +3,7 @@ import { expect, test, type Page } from "@playwright/test"
 import { REMOTE_SERVER, seed, sessionHref } from "../utils/app"
 import { fixture, mockStressTimeline } from "../utils/session-fixture"
 import { reviewTabs } from "../utils/side-panel"
+import { chooseUserMessageAction, openUserMessageMenu } from "../utils/timeline"
 import { expectSessionTitle } from "../utils/waits"
 import { mockRemoteServer, mockWorkspace, openSession } from "../utils/workspace"
 
@@ -42,9 +43,13 @@ for (const direction of ["ltr", "rtl"] as const) {
 
     expect(heights).toEqual([28, 28, 28, 28, 28, 28])
 
+    const rename = header.getByRole("heading").getByRole("button", { name: fixture.expected.targetTitle, exact: true })
+
     for (const editing of [false, true]) {
       if (editing) {
-        await header.getByRole("heading").click()
+        await project.press("Tab")
+        await expect(rename).toBeFocused()
+        await page.keyboard.press("Enter")
         await expect(header.getByRole("textbox")).toHaveValue(fixture.expected.targetTitle)
         await expect(header.getByRole("textbox")).toBeFocused()
       }
@@ -76,6 +81,13 @@ for (const direction of ["ltr", "rtl"] as const) {
 
     await header.getByRole("textbox").press("Escape")
     await expect(header.getByRole("heading")).toHaveText(fixture.expected.targetTitle)
+    await expect(rename).toBeFocused()
+    await page.keyboard.press("Shift+Tab")
+    await expect(project).toBeFocused()
+    await details.press("Tab")
+    await expect(review).toBeFocused()
+    await page.keyboard.press("Shift+Tab")
+    await expect(details).toBeFocused()
 
     // The header stays one row at every width.
     for (const width of [900, 1440]) {
@@ -105,6 +117,10 @@ for (const direction of ["ltr", "rtl"] as const) {
     await review.click()
     await expect(review).toHaveAttribute("aria-expanded", "true")
     await expect(page.locator("#review-panel")).toBeVisible()
+    // A settled panel shows its own copy of the toggle; a click that starts on the header's copy as they swap misses.
+    await expect(
+      page.locator("#review-panel").getByRole("button", { name: "Toggle review", exact: true }),
+    ).toBeVisible()
     await review.click()
     await expect(review).toHaveAttribute("aria-expanded", "false")
 
@@ -253,7 +269,12 @@ test.describe("location", () => {
       await expect(usageMenu).toBeVisible({ visible: !state.usage })
       await expect(header.locator(".session-location-worktree-icon")).toBeVisible()
       await expect
-        .poll(() => header.getByRole("heading").evaluate((element) => element.scrollWidth > element.clientWidth))
+        .poll(() =>
+          header
+            .getByRole("heading")
+            .getByRole("button")
+            .evaluate((element) => element.scrollWidth > element.clientWidth),
+        )
         .toBe(state.truncated)
       await expect(header.getByRole("button", { name: "More options", exact: true })).toBeInViewport()
       await header.getByRole("heading").hover()
@@ -289,6 +310,20 @@ test.describe("location", () => {
         .toBe(true)
       await header.screenshot({ path: test.info().outputPath(`location-${state.width}.png`) })
     }
+
+    // Find takes room from the title, so the usage details give way, and come back once Find closes.
+    const search = header.locator('[data-component="timeline-search-bar"] input')
+    await row.evaluate((element) => (element.style.inlineSize = "680px"))
+    await expect(usage).toBeVisible()
+    await page.keyboard.press("ControlOrMeta+f")
+    await expect(search).toBeFocused()
+    await expect(usageMenu).toBeVisible()
+    await header.screenshot({ path: test.info().outputPath("location-find-open.png") })
+    await search.press("Escape")
+    await expect(search).toHaveCount(0)
+    await expect(project).toBeVisible()
+    await expect(usage).toBeVisible()
+    await header.screenshot({ path: test.info().outputPath("location-find-closed.png") })
 
     await row.evaluate((element) => element.style.removeProperty("inline-size"))
     await review.click()
@@ -495,6 +530,41 @@ test.describe("location", () => {
     })
   }
 
+  test("an app launch that never answers releases the Open in controls", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+
+    const mock = await mockWorkspace(page, {
+      ...workspace,
+      seed: {
+        storage: { ...reviewTabs(worktree, "ses_location"), "opencode.global.dat:plugin.file.app": { app: "vscode" } },
+      },
+    })
+
+    // An editor that does not detach keeps its launch running until the user closes it.
+    await page.goto(
+      `/e2e/utils/windows-menu.html?${new URLSearchParams({
+        server: mock.server,
+        path: sessionHref("ses_location", "sidecar"),
+        os: "macos",
+        openApps: "1",
+        holdOpen: "1",
+      })}`,
+    )
+    await expectSessionTitle(page, "Location session")
+    await page.getByRole("button", { name: "Toggle review", exact: true }).click()
+    await expect(page.getByRole("complementary", { name: "Review and files", exact: true })).toBeFocused()
+    // Control the launch timeout, not the page's initial focus and panel animation.
+    await page.clock.install()
+    const open = page.getByRole("button", { name: "Open in VS Code", exact: true })
+    await open.click()
+    await expect(page.getByLabel("Opened paths")).toContainText("Visual Studio Code")
+    await expect(open).toBeDisabled()
+
+    await page.clock.fastForward(10_000)
+    await expect(open).toBeEnabled()
+    await expect(page.getByText("Request failed", { exact: true })).toHaveCount(0)
+  })
+
   test.describe("touch", () => {
     test.use({ hasTouch: true })
 
@@ -676,7 +746,6 @@ test.describe("revert", () => {
       if (step) settles.push(step)
     })
     const message = page.locator('[data-message-id="msg_second"]')
-    await message.hover()
 
     const response = page.waitForResponse(
       (response) =>
@@ -684,7 +753,8 @@ test.describe("revert", () => {
         new URL(response.url()).pathname === `/api/session/${session.id}/revert/stage`,
     )
 
-    await message.getByRole("button", { name: "Rewind to here" }).click()
+    // The newest prompt's revert undoes the last turn.
+    await chooseUserMessageAction(page, message, "Undo")
     expect((await response).ok()).toBe(true)
 
     await expect(page.getByRole("textbox", { name: "Prompt" })).toHaveText("Second prompt")
@@ -693,15 +763,14 @@ test.describe("revert", () => {
     expect(settles).toEqual(["/interrupt", "/wait", "/revert/stage"])
   })
 
-  test("Undo on the Rewound toast clears the revert and puts the draft back before the staged event arrives", async ({
+  test("Undo on the Reverted toast clears the revert and puts the draft back before the staged event arrives", async ({
     page,
   }) => {
     const { session, editor } = await openSession(page, workspace)
     const prompt = page.getByRole("textbox", { name: "Prompt" })
     await editor.pressSequentially("Unsent draft")
     const message = page.locator('[data-message-id="msg_second"]')
-    await message.hover()
-    await message.getByRole("button", { name: "Rewind to here" }).click()
+    await chooseUserMessageAction(page, message, "Undo")
     await expect(prompt).toHaveText("Second prompt")
 
     const cleared = page.waitForRequest(
@@ -713,6 +782,46 @@ test.describe("revert", () => {
     await page.getByRole("button", { name: "Undo", exact: true }).click()
     await cleared
     await expect(prompt).toHaveText("Unsent draft")
+  })
+
+  test("a second /undo before the staged event rewinds one prompt further, and /redo retires the toast", async ({
+    page,
+  }) => {
+    const staged: { sessionID: string; messageID: string }[] = []
+    const { session, editor } = await openSession(page, { ...workspace, onRevertStage: (input) => staged.push(input) })
+    const prompt = page.getByRole("textbox", { name: "Prompt" })
+    const undoToast = page.getByRole("button", { name: "Undo", exact: true })
+
+    const slash = async (command: string) => {
+      await editor.press("ControlOrMeta+a")
+      await editor.press("Backspace")
+      await editor.pressSequentially(`/${command}`)
+      await expect(
+        page.locator('[data-component="composer-suggestions"] [data-suggestion-id][data-active]'),
+      ).toContainText(`/${command}`)
+      await editor.press("Enter")
+    }
+
+    // The mock server never sends session.revert.staged, so each step must build on the last request's result.
+    await slash("undo")
+    await expect(prompt).toHaveText("Second prompt")
+    await expect(undoToast).toBeVisible()
+    await slash("undo")
+    await expect(prompt).toHaveText("First prompt")
+    expect(staged).toEqual([
+      { sessionID: session.id, messageID: "msg_second" },
+      { sessionID: session.id, messageID: "msg_first" },
+    ])
+
+    const cleared = page.waitForResponse(
+      (response) =>
+        response.request().method() === "DELETE" &&
+        new URL(response.url()).pathname === `/api/session/${session.id}/revert`,
+    )
+
+    await slash("redo")
+    expect((await cleared).ok()).toBe(true)
+    await expect(undoToast).toHaveCount(0)
   })
 
   test("Undo after switching tabs restages the earlier revert in the Session it came from", async ({ page }) => {
@@ -733,9 +842,9 @@ test.describe("revert", () => {
     })
     const prompt = page.getByRole("textbox", { name: "Prompt" })
     await editor.pressSequentially("Draft in source")
+    // The session is already reverted to msg_second, so msg_first is the newest prompt left.
     const message = page.locator('[data-timeline-row="UserMessage"][data-message-id="msg_first"]')
-    await message.hover()
-    await message.getByRole("button", { name: "Rewind to here" }).click()
+    await chooseUserMessageAction(page, message, "Undo")
     await expect(prompt).toHaveText("First prompt")
 
     await tabs(page).filter({ hasText: "Rewind other" }).click()
@@ -795,8 +904,7 @@ test.describe("revert", () => {
     })
     await page.goto(sessionHref("ses_child"))
     await expectSessionTitle(page, "Session message revert")
-    const message = page.locator('[data-message-id="msg_second"]')
-    await message.hover()
-    await expect(message.getByRole("button", { name: "Rewind to here" })).toHaveCount(0)
+    const menu = await openUserMessageMenu(page, page.locator('[data-message-id="msg_second"]'))
+    await expect(menu.getByRole("menuitem", { name: /^(Revert to here|Undo)$/ })).toHaveCount(0)
   })
 })

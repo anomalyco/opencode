@@ -1,4 +1,4 @@
-export * as V1Migration from "./v1-migration.js"
+export * as V1Migration from "./v1-migration.bun.js"
 
 import { Cause, Effect, Fiber, Layer, Option, Schema, Semaphore } from "effect"
 import { Database } from "./database.js"

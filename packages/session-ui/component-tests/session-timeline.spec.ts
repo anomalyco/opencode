@@ -105,6 +105,24 @@ story("preserves a collapsed context group through count and status updates", as
   await expect(trigger).toHaveAttribute("aria-expanded", "false")
 })
 
+// A failed turn diff load used to look like one still loading, with no way to retry until the row remounted.
+story("offers a retry for a turn diff that failed to load", async ({ mount }) => {
+  const timeline = await mount("current-session-file-changes--turn-change-summary-failed")
+  const summary = timeline.locator('[data-slot="session-turn-diffs"]')
+  const counts = summary.locator('[data-component="diff-changes"]')
+
+  await expect(summary).toContainText("2 Changed files")
+  await expect(summary).toContainText("Diff unavailable")
+  await expect(counts).toHaveCount(0)
+
+  const retry = summary.getByRole("button", { name: "Retry", exact: true })
+  await retry.click()
+  // The header totals the turn; each file row then shows its own counts.
+  await expect(counts.first()).toHaveText("+2-1")
+  await expect(summary).not.toContainText("Diff unavailable")
+  await expect(retry).toHaveCount(0)
+})
+
 // Moved from packages/app/e2e/regression/session-timeline-file-projection.spec.ts
 story("renders a completed write through the production file component", async ({ mount }) => {
   const timeline = await mount("current-session-file-changes--changing-files", { args: { scenario: "write" } })
@@ -119,9 +137,9 @@ story("renders a completed write through the production file component", async (
 story("keeps patch file disclosures independent", async ({ mount }) => {
   const timeline = await mount("current-session-file-changes--changing-files", { args: { scenario: "patch" } })
   const wrapper = timeline.locator('[data-timeline-part-id="prt_nested_patch"]')
-  const modified = wrapper.locator('[data-scope="apply-patch"] [data-type="update"] button')
-  const added = wrapper.locator('[data-scope="apply-patch"] [data-type="add"] button')
-  const deleted = wrapper.locator('[data-scope="apply-patch"] [data-type="delete"] button')
+  const modified = wrapper.locator('[data-scope="apply-patch"] [data-type="update"] [data-slot="accordion-trigger"]')
+  const added = wrapper.locator('[data-scope="apply-patch"] [data-type="add"] [data-slot="accordion-trigger"]')
+  const deleted = wrapper.locator('[data-scope="apply-patch"] [data-type="delete"] [data-slot="accordion-trigger"]')
   await expect(wrapper.locator('[data-scope="apply-patch"] [aria-expanded="false"]')).toHaveCount(3)
   await deleted.click()
   await expect(deleted).toHaveAttribute("aria-expanded", "true")

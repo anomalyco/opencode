@@ -7,13 +7,25 @@ export type SessionExportData = {
   messages: SessionMessageInfo[]
 }
 
+/** Bounds each request rather than the whole export, so a long history with large media still exports. */
+export const EXPORT_REQUEST_TIMEOUT_MS = 60_000
+
 export async function fetchSessionExport(input: {
   sessionID: string
   api: Pick<ServerApi, "session" | "message">
+  signal?: AbortSignal
 }): Promise<SessionExportData> {
+  const signal = () =>
+    input.signal
+      ? AbortSignal.any([input.signal, AbortSignal.timeout(EXPORT_REQUEST_TIMEOUT_MS)])
+      : AbortSignal.timeout(EXPORT_REQUEST_TIMEOUT_MS)
+
   const [info, first] = await Promise.all([
-    input.api.session.get({ sessionID: input.sessionID }),
-    input.api.message.list({ sessionID: input.sessionID, limit: 200, order: "asc" }, { mediaRefs: false }),
+    input.api.session.get({ sessionID: input.sessionID }, { signal: signal() }),
+    input.api.message.list(
+      { sessionID: input.sessionID, limit: 200, order: "asc" },
+      { mediaRefs: false, signal: signal() },
+    ),
   ])
 
   const pages = [first]
@@ -26,7 +38,7 @@ export async function fetchSessionExport(input: {
           limit: 200,
           cursor: pages.at(-1)!.cursor.next ?? undefined,
         },
-        { mediaRefs: false },
+        { mediaRefs: false, signal: signal() },
       ),
     )
   }
