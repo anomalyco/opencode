@@ -290,16 +290,23 @@ const normalize = Effect.fnUntraced(function* (
       return [
         { ...base, variants },
         ...tiers.flatMap((tier) => {
-          // "priority" is the tier people know as fast.
-          const name = tier === "priority" && !tiers.includes("fast") ? "fast" : tier
+          const mode = modes.find(([key, options]) => (options.service_tier ?? key) === tier)
+          // A mode for the tier keeps its ID, so a saved session asks for the same tier, unless another model already
+          // has that ID. Otherwise "priority" is the tier people know as fast.
+          const name =
+            mode && !ids.has(Model.ID.make(`${source.model.id}-${mode[0]}`))
+              ? mode[0]
+              : tier === "priority" && !tiers.includes("fast")
+                ? "fast"
+                : tier
           const speedID = Model.ID.make(`${source.model.id}-${name}`)
-          if (ids.has(speedID)) return []
-          // Until every tier has a multiplier, a mode for the tier may still carry its price.
-          const mode = modes.find(([key, options]) => (options.service_tier ?? key) === tier)?.[1]
+          // A mode's ID stays with the tier it asks for, even when another tier has that name.
+          if (ids.has(speedID) || (!mode && modes.some(([key]) => key === name))) return []
           return [
             modelInfo(providerID, { packageName, baseURL }, speedID, source, {
               ...speed(name, tier),
-              cost: modeCost(source.model, baseCost, tier, { cost: mode?.cost }),
+              // Until every tier has a multiplier, a mode for the tier may still carry its price.
+              cost: modeCost(source.model, baseCost, tier, { cost: mode?.[1].cost }),
               request: tierRequest(source.route.protocol, tier),
             }),
           ]
@@ -434,10 +441,8 @@ const zero = Money.USDPerMillionTokens.zero
 // no place in opencode's cost yet. Context overrides become tiers; other conditions
 // (service tier, time of day…) are left out.
 function cost(input: SourceCost | undefined): Model.Info["cost"] {
-  const text = input?.text
-  const perToken = (unit: string | undefined) => unit === undefined || unit === "token"
-  if (!text?.input || !text.output || !perToken(text.input.unit) || !perToken(text.output.unit))
-    return [{ input: zero, output: zero, cache: { read: zero, write: zero } }]
+  const text = perTokenText(input)
+  if (!text) return [{ input: zero, output: zero, cache: { read: zero, write: zero } }]
   const textInput = text.input
   const textOutput = text.output
   const base = {
@@ -474,6 +479,14 @@ function cost(input: SourceCost | undefined): Model.Info["cost"] {
   return [base, ...tiers.values()]
 }
 
+// Both text prices, when both are set and per token; otherwise opencode can't price the model.
+function perTokenText(source: SourceCost | undefined) {
+  const text = source?.text
+  const perToken = (unit: string | undefined) => unit === undefined || unit === "token"
+  if (!text?.input || !text.output || !perToken(text.input.unit) || !perToken(text.output.unit)) return undefined
+  return { input: text.input, output: text.output }
+}
+
 // opencode has one cache write price: the first TTL listed, else the explicit cache's.
 function cacheWrite(cache: typeof CachePrices.Type | undefined) {
   const first = (write: typeof CacheWrite.Type | undefined) =>
@@ -482,14 +495,14 @@ function cacheWrite(cache: typeof CachePrices.Type | undefined) {
 }
 
 // A mode (a speed, or a mode listed as its own model) without its own cost takes the base prices scaled by its
-// service tier's multiplier (the mode name by default), or else the tier's own prices. The base context tiers are kept
-// as they are.
+// service tier's multiplier (the mode name by default), or else the tier's own prices, context tiers included. The base
+// context tiers are otherwise kept as they are.
 function modeCost(model: SourceModel, base: Model.Info["cost"], name: string, mode: SourceMode): Model.Info["cost"] {
   const [baseDefault, ...baseTiers] = base
   if (mode.cost) return [cost(mode.cost)[0], ...baseTiers]
   const tier = mode.service_tier ?? name
   // A tier's multiplier may only hold for some dates (an introductory price); the one for today is used.
-  const today = new Date().toISOString().slice(0, 10)
+  const today = utcDay()
   const factor = model.cost?.multipliers?.find((multiplier) => {
     if (!Object.keys(multiplier.when).every((key) => key === "service_tier" || key === "date")) return false
     if (Option.getOrUndefined(decodeServiceTier(multiplier.when.service_tier))?.equals !== tier) return false
@@ -504,7 +517,7 @@ function modeCost(model: SourceModel, base: Model.Info["cost"], name: string, mo
     )
   })?.factor
   if (!baseDefault) return base
-  if (factor === undefined) return [tierPrices(model.cost, baseDefault, tier), ...baseTiers]
+  if (factor === undefined) return [baseDefault, ...baseTiers].map((prices) => tierPrices(model.cost, prices, tier))
   const scale = (price: Money.USDPerMillionTokens, path: readonly string[]) =>
     Money.USDPerMillionTokens.make(Math.round(price * factorAt(factor, path) * 1e10) / 1e10)
   return [
@@ -520,17 +533,33 @@ function modeCost(model: SourceModel, base: Model.Info["cost"], name: string, mo
   ]
 }
 
-// Hosts such as DigitalOcean list a tier's prices instead of a multiplier, as overrides of the base prices.
+// Hosts such as DigitalOcean list a tier's prices instead of a multiplier, as overrides of the base prices. A context
+// tier takes the overrides for both the service tier and its context size.
 function tierPrices(source: SourceCost | undefined, base: Model.Info["cost"][number], tier: string) {
-  const matches = (when: Record<string, unknown>) =>
-    Object.keys(when).length === 1 && Option.getOrUndefined(decodeServiceTier(when.service_tier))?.equals === tier
-  const input = source?.text?.input?.overrides?.find((override) => matches(override.when))
-  const output = source?.text?.output?.overrides?.find((override) => matches(override.when))
+  const matches = (when: Record<string, unknown>) => {
+    const context = Option.getOrUndefined(decodeContext(when.context))
+    return (
+      Object.keys(when).length === (base.tier ? 2 : 1) &&
+      Option.getOrUndefined(decodeServiceTier(when.service_tier))?.equals === tier &&
+      (!base.tier || (context?.gt ?? context?.gte) === base.tier.size)
+    )
+  }
+  // The base is free when its prices aren't per token, and so is every tier.
+  const text = perTokenText(source)
+  if (!text) return base
+  const input = text.input.overrides?.find((override) => matches(override.when))
+  const output = text.output.overrides?.find((override) => matches(override.when))
   return {
+    ...base,
     input: input?.price ?? base.input,
     output: output?.price ?? base.output,
     cache: { read: input?.cache?.read ?? base.cache.read, write: cacheWrite(input?.cache) ?? base.cache.write },
   }
+}
+
+// Prices are dated by the UTC day, so normalized models are only good until it changes.
+function utcDay() {
+  return new Date().toISOString().slice(0, 10)
 }
 
 const decodeServiceTier = Schema.decodeUnknownOption(Schema.Struct({ equals: Schema.optional(Schema.String) }))
@@ -672,18 +701,19 @@ export const decodeSnapshot = (text: string, recommended = false, speeds = false
 // packages/core/src/models-dev/snapshot.txt and refreshed via
 // `bun run script/update-models-snapshot.ts`. Release builds bundle the live
 // catalog in its place when it can be fetched. Decoded and normalized once per
-// flag value per isolate: the snapshot is a multi-MB module-level constant and one isolate can
+// flag value per isolate and day: the snapshot is a multi-MB module-level constant and one isolate can
 // host many runtimes (Cloudflare colocates Durable Object instances), so
 // per-runtime decoding would multiply the cost.
-const bundledCache = new Map<string, readonly Snapshot[]>()
+const bundledCache = new Map<string, { readonly day: string; readonly snapshot: readonly Snapshot[] }>()
 const bundledSnapshot = (recommended: boolean, speeds: boolean) =>
   Effect.suspend(() => {
     const key = `${recommended}:${speeds}`
+    const day = utcDay()
     const cached = bundledCache.get(key)
-    return cached
-      ? Effect.succeed(cached)
+    return cached?.day === day
+      ? Effect.succeed(cached.snapshot)
       : decodeSnapshot(snapshotText, recommended, speeds).pipe(
-          Effect.tap((snapshot) => Effect.sync(() => bundledCache.set(key, snapshot))),
+          Effect.tap((snapshot) => Effect.sync(() => bundledCache.set(key, { day, snapshot }))),
         )
   })
 
@@ -829,6 +859,13 @@ export const layer = (options?: Options) =>
         ([recommended, speeds]) => Effect.cachedInvalidateWithTTL(populate(recommended, speeds), Duration.infinity),
       )
       const get = (recommended = false, speeds = false) => caches[Number(recommended) * 2 + Number(speeds)][0]
+      // The UTC day the cached models were priced for.
+      const priced = { day: utcDay() }
+      const invalidate = Effect.gen(function* () {
+        priced.day = utcDay()
+        yield* Effect.forEach(caches, ([, invalidate]) => invalidate, { discard: true })
+        yield* bus.publish(ModelsDev.Event.Refreshed, {}, { global: true })
+      })
 
       const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
         yield* lock
@@ -850,14 +887,15 @@ export const layer = (options?: Options) =>
               if (!response) return
               yield* decodeCatalog(response.text)
               yield* writeCache(response.text, response.etag, digest)
-              yield* Effect.forEach(caches, ([, invalidate]) => invalidate, { discard: true })
-              yield* bus.publish(ModelsDev.Event.Refreshed, {}, { global: true })
+              yield* invalidate
             }),
           )
           .pipe(
             Effect.tapCause((cause) => Effect.logError("Failed to fetch models.dev", { cause: cause })),
             Effect.ignore,
           )
+        // An unchanged or unreachable catalog can still hold a price that started or ended today.
+        if (priced.day !== utcDay()) yield* invalidate
       })
 
       if (fetch && !process.argv.includes("--get-yargs-completions")) {

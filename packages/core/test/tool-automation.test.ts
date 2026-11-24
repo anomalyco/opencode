@@ -73,7 +73,13 @@ const memory = () => {
         return info
       }),
     list: (input) => Effect.sync(() => [...rows.values()].filter((info) => info.projectID === input?.projectID)),
-    get: find,
+    get: (id, options) =>
+      find(id).pipe(
+        Effect.filterOrFail(
+          (info) => options?.projectID === undefined || info.projectID === options.projectID,
+          () => new Automation.NotFoundError({ automationID: id }),
+        ),
+      ),
     pause: (id) => update(id, "paused"),
     resume: (id) => update(id, "active"),
     remove: (id) => find(id).pipe(Effect.map(() => void rows.delete(id))),

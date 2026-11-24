@@ -265,8 +265,11 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       function preferredSelection(model: ModelSelection): ModelSelection {
         const configured = agent.current()?.model
         const fallback = configuredModel()
-        // A model's speeds share its variant.
-        const preferred = preferences.variant[modelPreferenceKey(standardModel(model))]
+        // A model's speeds share its variant. Preferences saved before then may name one of its speeds instead.
+        const standard = standardModel(model)
+        const preferred = [standard, model, ...speeds(standard).map((item) => ({ providerID: item.providerID, modelID: item.id }))]
+          .map((item) => preferences.variant[modelPreferenceKey(item)])
+          .find((value) => value !== undefined)
         // An explicit choice wins, then the agent's own variant for its model, then the remembered one.
         const variant = normalizeModelVariant(
           model.variant ??
