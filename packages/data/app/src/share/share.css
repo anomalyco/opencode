@@ -254,9 +254,9 @@
     align-items: center;
     gap: 16px;
     min-height: 0;
-    /* The same 48px either side of the card's area: from the stage's left edge, and from the panel's (its width, its
-       1px borders and its inset). The section arrows sit in those margins. */
-    padding: 56px calc(var(--editor-inspector) + 2px + var(--editor-inset) + 48px) 20px 48px;
+    /* The same 48px either side of the card's area: from the stage's left edge, and from the panel's (its width and
+       its inset). The section arrows sit in those margins. */
+    padding: 56px calc(var(--editor-inspector) + var(--editor-inset) + 48px) 20px 48px;
     /* Grey on the light page; on the dark one a step lighter than the card (#0c0c0c), so it stands out, but well below
        the page's second layer, which glared. */
     background-color: light-dark(var(--stats-layer-2), #111111);
@@ -296,9 +296,9 @@
       left: 4px;
     }
 
-    /* ...and as far in from the stage's visible right edge, the panel's left edge (its width plus its 1px borders). */
+    /* ...and as far in from the stage's visible right edge, the panel's left edge. */
     &[data-side="next"] {
-      right: calc(var(--editor-inspector) + 2px + var(--editor-inset) + 4px);
+      right: calc(var(--editor-inspector) + var(--editor-inset) + 4px);
     }
   }
 
@@ -387,8 +387,9 @@
     width: var(--editor-inspector);
     overflow: hidden;
     background: var(--stats-bg);
-    border: 1px solid light-dark(var(--stats-line-strong), var(--stats-line));
+    /* No border: a 1px ring of shadow is its edge, over the panel's lift. */
     box-shadow:
+      0 0 0 1px light-dark(rgb(0 0 0 / 0.12), rgb(255 255 255 / 0.08)),
       0 1px 2px rgb(0 0 0 / 0.06),
       0 4px 12px -4px rgb(0 0 0 / 0.1),
       0 16px 32px -12px rgb(0 0 0 / 0.14);
