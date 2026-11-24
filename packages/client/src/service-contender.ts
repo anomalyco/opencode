@@ -15,10 +15,12 @@ export function spawnServiceContender(
   command: string,
   args: ReadonlyArray<string>,
   env?: Readonly<Record<string, string | undefined>>,
+  cwd?: string,
 ): ServiceContender {
   const child = spawn(command, args, {
     detached: true,
     windowsHide: true,
+    ...(cwd ? { cwd } : {}),
     stdio: ["ignore", "ignore", "pipe"],
     env: { ...process.env, ...env },
   })

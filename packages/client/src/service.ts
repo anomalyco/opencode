@@ -30,6 +30,8 @@ export type EnsureOptions = DiscoverOptions & {
   readonly command?: ReadonlyArray<string>
   /** Environment variables added to the inherited service process environment. */
   readonly env?: Readonly<Record<string, string>>
+  /** Working directory for a newly spawned service. Defaults to the caller's current directory. */
+  readonly cwd?: string
   /** Called once before spawning a new service process. */
   readonly onStart?: (reason: EnsureReason, previousVersion?: string) => void
 }
