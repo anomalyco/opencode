@@ -29,7 +29,7 @@ const context = {
   progress: () => Effect.void,
 }
 
-const allowAll = permissionService({ assert: () => Effect.void })
+const allowAll = permissionService({ assert: () => Effect.void, assertNotDenied: () => Effect.void })
 
 const createCodeMode = (
   tools: ReadonlyMap<string, Info>,
@@ -782,6 +782,52 @@ describe("Code Mode opencode:// fetch", () => {
         body: "",
       },
     ])
+  })
+
+  test("asks as the opencode api command, and a webfetch rule for the URL can only deny", async () => {
+    const asked: Array<{ action: string; resources: ReadonlyArray<string>; save?: ReadonlyArray<string> }> = []
+    const checked: Array<ReadonlyArray<string>> = []
+    const sent: Array<string> = []
+    const handle = api((request) => Effect.sync(() => (sent.push(request.url), Response.json({ ok: true }))))
+    const run = (permission: Permission.Interface) =>
+      Effect.runPromise(
+        createCodeMode(new Map(), permission, undefined, handle).execute(
+          {
+            code: `try { await fetch("opencode:///api/session/current/prompt", { method: "POST", body: "{}" }); return "sent" } catch (e) { return e.message }`,
+          },
+          context,
+        ),
+      ).then((result) => result.output.output)
+
+    expect(
+      await run(
+        permissionService({
+          assert: (input) => Effect.sync(() => void asked.push(input)),
+          assertNotDenied: (input) => Effect.sync(() => void checked.push(input.resources)),
+        }),
+      ),
+    ).toBe("sent")
+    expect(asked).toEqual([
+      expect.objectContaining({
+        action: "shell",
+        resources: [`opencode api post /api/session/${context.sessionID}/prompt`],
+        save: ["opencode *"],
+      }),
+    ])
+    expect(checked).toEqual([["opencode:///api/session/current/prompt"]])
+
+    expect(
+      await run(
+        permissionService({
+          assert: () => Effect.die("never asked"),
+          assertNotDenied: (input) =>
+            Effect.fail(
+              new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources }),
+            ),
+        }),
+      ),
+    ).toContain("Permission denied")
+    expect(sent).toHaveLength(1)
   })
 
   test("accepts only opencode:///api/... URLs, reports a disabled API, and fails without one", async () => {

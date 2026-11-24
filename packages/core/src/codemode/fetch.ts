@@ -87,13 +87,41 @@ const fetch = (input: string | URL, init: Init = {}) =>
 export const MAX_REDIRECTS = 20
 const redirectStatuses = new Set([301, 302, 303, 307, 308])
 
-// No permission check and no timeout: the request runs in this process and ends with the execute call.
+// No timeout: the request runs in this process and ends with the execute call.
 const fetchOpencode = (url: string, init: Init) =>
   Effect.gen(function* () {
     const execution = yield* CodeModeExecution.Service
+    const permission = yield* Permission.Service
     const path = yield* CodeModeApi.path(url, execution.sessionID)
     const api = Option.getOrElse(yield* Effect.serviceOption(CodeModeApi.Service), () => CodeModeApi.unavailable)
     const method = (init.method ?? "GET").toUpperCase()
+    const source = { type: "tool" as const, messageID: execution.messageID, id: execution.id }
+    // The call is checked as the `opencode api` command that would make it, so shell rules for that command cover it
+    // too, and saving approval saves what the shell tool saves for it. A webfetch rule for the URL can only deny: one
+    // call asks at most once.
+    yield* permission.assertNotDenied({
+      action: "webfetch",
+      resources: [url],
+      metadata: display([url, init]),
+      sessionID: execution.sessionID,
+      agent: execution.agent,
+      source,
+    })
+    yield* permission
+      .assert({
+        action: "shell",
+        resources: [`opencode api ${method.toLowerCase()} ${path}`],
+        save: ["opencode *"],
+        metadata: display([url, init]),
+        sessionID: execution.sessionID,
+        agent: execution.agent,
+        source,
+      })
+      .pipe(
+        Effect.catchTag("Permission.CorrectedError", (error) =>
+          Effect.fail(new Error(`The user rejected fetching ${url}: ${error.feedback}`)),
+        ),
+      )
     const headers = new Headers(init.headers)
     // Without a directory the server would answer for its own default Location, not the session's.
     const location = yield* Effect.serviceOption(Location.Service)
