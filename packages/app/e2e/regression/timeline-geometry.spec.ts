@@ -1002,18 +1002,23 @@ test("shows the match Find moves to between the session header and a tall draft"
 // when a late row pushes it out of the mounted rows. A reader who scrolled away in that time unmounted the row too,
 // and Find took the view back: End reached the latest message and the view returned to a match 2,659 to 4,882px up.
 // Ctrl+Home, a page key on a control in a row and the scrollbar send the timeline no input event.
-// Before Find's own scroll, the timeline is still scrolling to the match's row, and that scroll took the view back
-// too. An input the timeline hears of ends it with the seek.
-for (const { input, seek } of [
-  { input: "End", seek: "holds its match" },
-  { input: "Ctrl+Home", seek: "holds its match" },
-  { input: "PageUp on a control in a row", seek: "holds its match" },
-  { input: "the scrollbar", seek: "holds its match" },
-  { input: "the wheel", seek: "holds its match" },
-  { input: "End", seek: "brings its match in" },
-  { input: "the wheel", seek: "brings its match in" },
+// Before Find's own scroll, the timeline is still scrolling to the match's row. That scroll took the view back too,
+// and a write of Find's or the timeline's during the browser's own scroll ended it: End did nothing at all.
+for (const { input, when } of [
+  { input: "End", when: "once Find holds its match" },
+  { input: "Ctrl+Home", when: "once Find holds its match" },
+  { input: "PageUp on a control in a row", when: "once Find holds its match" },
+  { input: "the scrollbar", when: "once Find holds its match" },
+  { input: "the wheel", when: "once Find holds its match" },
+  { input: "End", when: 0 },
+  { input: "End", when: 1 },
+  { input: "End", when: 2 },
+  { input: "End", when: 3 },
+  { input: "the wheel", when: 0 },
 ] as const) {
-  test(`leaves the view where ${input} takes it while Find ${seek}`, async ({ page }) => {
+  const title = when === "once Find holds its match" ? when : `${when} frames into Find's seek`
+
+  test(`leaves the view where ${input} takes it ${title}`, async ({ page }) => {
     const history = historyMessages(40)
     const prompt = "msg_00009_seek_a_user"
     await page.clock.install({ time: 1_700_000_000_000 })
@@ -1037,6 +1042,7 @@ for (const { input, seek } of [
 
     const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
     const top = () => scroller.evaluate((element) => element.scrollTop)
+    const fromEnd = () => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)
 
     // How far the active match is from the middle of what the timeline shows.
     const offCentre = () =>
@@ -1059,7 +1065,7 @@ for (const { input, seek } of [
     await page.clock.pauseAt((await page.evaluate(() => Date.now())) + 1_000)
     await search.fill("needle rests")
 
-    if (seek === "holds its match") {
+    if (when === "once Find holds its match") {
       let frames = 0
       await expect
         .poll(
@@ -1074,12 +1080,24 @@ for (const { input, seek } of [
         .toBeLessThanOrEqual(16)
       // Find scrolled to its match, and its seek has frames left.
       expect(frames).toBeLessThan(10)
-    }
+    } else if (when) await page.clock.runFor(16 * when)
 
     const held = await top()
 
+    if (input === "End") {
+      // The rest of the seek's frames run while the browser's own scroll is still on its way. The key must take the
+      // view all the way to the end, and nothing may take it back.
+      await scroller.press("End")
+      await page.clock.runFor(16 * 24)
+      await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+      await page.clock.runFor(16 * 24)
+      expect(await fromEnd()).toBeLessThanOrEqual(1)
+      await expect(page.locator('[data-slot="timeline-search-count"]')).toHaveText("1/1")
+
+      return
+    }
+
     const scrolled = {
-      End: () => scroller.press("End"),
       "Ctrl+Home": () => scroller.press("Control+Home"),
       "PageUp on a control in a row": () =>
         scroller.getByRole("button", { name: "Used 1 Shell", exact: true }).press("PageUp"),
