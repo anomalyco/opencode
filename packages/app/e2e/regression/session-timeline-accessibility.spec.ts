@@ -1,6 +1,8 @@
+import type { SessionMessageInfo } from "@opencode/client/promise"
 import { expect, test } from "@playwright/test"
 import {
   assistantMessage,
+  historyMessages,
   renderedPartID,
   setupTimeline,
   shell,
@@ -198,6 +200,107 @@ for (const newTimeline of [false, true]) {
     await expect.poll(words).toBe("in place")
   })
 }
+
+test("an older page that lands leaves the reader where they were while a link in an events row has focus", async ({
+  page,
+}) => {
+  // On the New timeline a page that lands builds the links of an events row again. The focus rescue gave focus to the
+  // new link, which the reader had scrolled out of view, and the browser scrolled the timeline back to it.
+  const older = Promise.withResolvers<void>()
+  const requests: { before?: string; phase: "start" | "end" }[] = []
+  const later = "msg_1003_later_user"
+
+  const messages: SessionMessageInfo[] = [
+    ...historyMessages(20),
+    userMessage(),
+    assistantMessage([textPart("prt_events_started", "Started the server.")]),
+    {
+      id: "msg_1002_shell_finished",
+      type: "synthetic",
+      text: '<shell id="shell_notice" state="completed" command="bun serve.ts">\nlistening\n</shell>',
+      description: "bun serve.ts",
+      metadata: { source: "shell", shellID: "shell_notice", state: "completed" },
+      time: { created: 1700000003000 },
+    },
+    userMessage(undefined, { id: later, created: 1700000004000 }),
+    assistantMessage(
+      [
+        {
+          id: "prt_events_later",
+          type: "text",
+          text: Array.from({ length: 60 }, (_, index) => `Later line ${index + 1}.`).join("\n\n"),
+        },
+      ],
+      { id: "msg_1004_later_assistant", parentID: later, created: 1700000005000 },
+    ),
+  ]
+
+  // The latest page starts at the turn with the events row. Everything older is one more page, held until released.
+  const first = messages.findIndex((message) => message.id === userID)
+  await setupTimeline(page, {
+    sessionMessages: messages,
+    settings: { newTimeline: true },
+    pageMessages: (_, __, before) =>
+      before ? { items: messages.slice(0, first) } : { items: messages.slice(first), cursor: messages[first]!.id },
+    beforeMessagesResponse: ({ before }) => (before ? older.promise : Promise.resolve()),
+    onMessages: (request) => requests.push(request),
+  })
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const row = page.locator('[data-component="timeline-event-row"]')
+  const link = row.getByRole("button", { name: /bun serve\.ts$/ })
+
+  // How far down the screen the marked words are, read from the text itself.
+  const place = () =>
+    scroller.evaluate((element) => {
+      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+        const at = node.textContent?.indexOf("Later line 8.") ?? -1
+
+        if (at < 0) continue
+        const range = new Range()
+        range.setStart(node, at)
+        range.setEnd(node, at + "Later line 8.".length)
+
+        return Math.round(range.getBoundingClientRect().top)
+      }
+    })
+
+  await expect(page.getByText("Later line 60.", { exact: true })).toBeInViewport()
+  await scroller.hover()
+  await page.mouse.wheel(0, -100_000)
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0)
+  // At the top the timeline asks for the older page.
+  await expect.poll(() => requests.some((request) => request.before && request.phase === "start")).toBe(true)
+
+  // The reader opens the row, moves to its link with Tab and scrolls on: the link leaves the view, its row stays.
+  await row.getByRole("button", { name: /^Finished/ }).click()
+  await page.keyboard.press("Tab")
+  await expect(link).toBeFocused()
+  const view = (await scroller.boundingBox())!
+  const box = (await link.boundingBox())!
+  await page.mouse.wheel(0, Math.round(box.y + box.height - view.y) + 80)
+  await expect(link).not.toBeInViewport()
+  await expect(link).toBeFocused()
+  await expect(page.getByText("Later line 8.", { exact: true })).toBeInViewport()
+  const before = await place()
+  expect(before).toEqual(expect.any(Number))
+
+  const words = async () => {
+    const now = await place()
+
+    if (now === undefined) return "gone"
+
+    return Math.abs(now - Number(before)) <= 2 ? "in place" : `moved ${now - Number(before)} px`
+  }
+
+  const height = await scroller.evaluate((element) => element.scrollHeight)
+  older.resolve()
+  await expect.poll(() => requests.some((request) => request.before && request.phase === "end")).toBe(true)
+  // The older page has landed above the reader.
+  await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
+  await expect.poll(words).toBe("in place")
+})
 
 function lines(count: number) {
   return Array.from({ length: count }, (_, index) => `line ${index + 1}`).join("\n")
