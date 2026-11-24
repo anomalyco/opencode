@@ -322,7 +322,8 @@ export function ExaOutput(props: { output?: string }) {
     event.stopPropagation()
     setShowAll(true)
     requestAnimationFrame(() => {
-      firstRevealedRef?.focus()
+      // The first revealed link is where the button was, so it needs no scroll, and a click must not move the timeline.
+      firstRevealedRef?.focus({ preventScroll: true })
     })
   }
 
@@ -2078,8 +2079,10 @@ ToolRegistry.register({
       const list = event.currentTarget.parentElement
       setShown((count) => count + executeCallsRevealed)
 
-      // The button leaves with the last hidden call, so focus moves on to the first call rather than the page.
-      if (hidden() === 0) list?.querySelector<HTMLElement>('[data-slot="execute-tool-call"][tabindex]')?.focus()
+      // The button leaves with the last hidden call, so focus moves on to the first call rather than the page. That call
+      // is where the button was, so it needs no scroll, and a click must not move the timeline.
+      if (hidden() === 0)
+        list?.querySelector<HTMLElement>('[data-slot="execute-tool-call"][tabindex]')?.focus({ preventScroll: true })
     }
 
     const sawPending = pending()

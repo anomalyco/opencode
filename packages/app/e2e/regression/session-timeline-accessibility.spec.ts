@@ -118,6 +118,55 @@ test("jump to latest is reachable only while it is shown", async ({ page }) => {
   await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeFocused()
 })
 
+// Focus that rests nowhere is not handed to a control the reader cannot see: that would scroll the timeline to it. A
+// reader far up in history who opens or closes Review keeps the row they read.
+for (const newTimeline of [false, true]) {
+  test(`opening and closing Review leaves a reader of old history where they were (${newTimeline ? "New" : "current"} timeline)`, async ({
+    page,
+  }) => {
+    await setupTimeline(page, {
+      messages: [userMessage(), assistantMessage([textPart("prt_review_place_latest", "Latest response.")])],
+      settings: { newTimeline },
+      seedHistory: true,
+    })
+    const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+    const read = page.getByText(/^Historical response 0\./)
+    const panel = page.locator("#review-panel")
+    const toggle = page.getByRole("button", { name: "Toggle review", exact: true })
+    const search = page.locator('[data-component="timeline-search-bar"] input')
+    const offset = () => scroller.evaluate((element) => element.scrollTop)
+    const top = async () => Math.round((await read.boundingBox())?.y ?? Number.NaN)
+
+    await expect(page.getByText("Latest response.", { exact: true })).toBeInViewport()
+    await scroller.hover()
+    await page.mouse.wheel(0, -100_000)
+    await expect.poll(offset).toBe(0)
+    await expect(read).toBeInViewport()
+
+    // The reader clicks in the timeline, searches it and closes Find. Focus then rests on the page, and the timeline
+    // is what had it last. The latest reply's Copy is still mounted, far below.
+    await read.click()
+    await expect(scroller).toBeFocused()
+    await page.keyboard.press("ControlOrMeta+f")
+    await expect(search).toBeFocused()
+    await page.keyboard.press("Escape")
+    await expect(search).toHaveCount(0)
+    const before = await top()
+
+    await toggle.click()
+    await expect(toggle).toHaveAttribute("aria-expanded", "true")
+    await expect(panel.getByRole("button", { name: /^Review/ })).toBeVisible()
+    await expect.poll(offset).toBe(0)
+    await expect.poll(top).toBe(before)
+
+    await toggle.click()
+    await expect(toggle).toHaveAttribute("aria-expanded", "false")
+    await expect(panel).toHaveAttribute("aria-hidden", "true")
+    await expect.poll(offset).toBe(0)
+    await expect.poll(top).toBe(before)
+  })
+}
+
 function lines(count: number) {
   return Array.from({ length: count }, (_, index) => `line ${index + 1}`).join("\n")
 }

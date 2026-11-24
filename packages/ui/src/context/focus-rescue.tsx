@@ -1,6 +1,10 @@
 // Chromium leaves focus on <body> when the focused element is removed, disabled or stops being editable, and fires no
 // event. Inside a focus scope ([data-focus-scope]: a list, a tab strip, a chip row), move it to the next item, or to the
 // previous one when the last item went, and widen to the enclosing scope when the inner one has nothing left.
+//
+// A rescue never scrolls. Focus goes only to a control the reader can see, and when a scroll area holds none, to the
+// scroll area itself. Focusing a control out of view would scroll the page to it: in the session timeline that took a
+// reader of old history to the latest message.
 
 const FOCUSABLE = [
   'a[href]:not([tabindex="-1"])',
@@ -18,6 +22,9 @@ const FOCUSABLE = [
 ].join(",")
 
 const SCOPE = "[data-focus-scope]"
+
+// A scroll container (packages/app/AGENTS.md, Scrolling). One that takes focus does so as a whole, for the scroll keys.
+const SCROLL_AREA = "[data-scrollable]"
 
 // Where the element was: the gap its removal left, or the element itself when it stayed in place.
 type Spot =
@@ -109,7 +116,9 @@ function lose(entry: Entry, records: MutationRecord[]) {
   if (entry.spot) return
   const element = entry.element
 
-  // A panel or popover focused as a whole (tabindex -1) keeps focus when its page changes around it.
+  // Every ancestor reports its own changes, and most of them are about other elements. An element that is still in the
+  // page and can still take focus has lost nothing, whether it is a Tab stop or takes focus as a whole (tabindex -1: a
+  // panel, a popover, a scroll area), and whether or not it is the focused element now.
   if (usable(element) || holds(element)) return
 
   const record = records.find(
@@ -149,14 +158,14 @@ function rescue() {
     if (!entry.spot) return
     const target = pick(entry.spot)
 
-    if (target) return target.focus({ focusVisible: ring })
+    if (target) return target.focus({ focusVisible: ring, preventScroll: true })
 
     if (target === undefined) continue
 
     // A scope left with nothing to focus, such as the last toast, hands focus back to what had it before.
     const previous = entries.slice(index + 1).find((item) => !item.spot && usable(item.element))
 
-    if (previous) previous.element.focus({ focusVisible: ring })
+    if (previous) previous.element.focus({ focusVisible: ring, preventScroll: true })
 
     return
   }
@@ -165,7 +174,8 @@ function rescue() {
 // `undefined` outside any scope, `null` when nothing in the scope or around it can take focus.
 function pick(spot: Spot) {
   const anchor = spot.type === "removed" ? spot.parent : spot.element
-  const start = (anchor instanceof Element ? anchor : anchor.parentElement)?.closest<HTMLElement>(SCOPE)
+  const origin = anchor instanceof Element ? anchor : anchor.parentElement
+  const start = origin?.closest<HTMLElement>(SCOPE)
 
   if (!start) return
 
@@ -184,13 +194,25 @@ function pick(spot: Spot) {
   if (replacement) return replacement
 
   for (let scope: HTMLElement | null = start; scope; scope = scope.parentElement?.closest<HTMLElement>(SCOPE) ?? null) {
-    const items = within(scope, false)
+    const items = within(scope, false).filter(seen)
     const target = items.find((item) => after(spot, item)) ?? items.findLast((item) => !after(spot, item))
 
     if (target) return target
+    // No control of this scope is in view. A scroll area around the spot takes focus as it does from a click: the
+    // scroll keys keep working, and Tab goes on from where the reader is.
+    const area = scrollArea(origin, scope)
+
+    if (area) return area
   }
 
   return null
+}
+
+function scrollArea(origin: Element | null, scope: HTMLElement) {
+  for (let node = origin?.closest<HTMLElement>(SCROLL_AREA); node && scope.contains(node); ) {
+    if (holds(node) && seen(node)) return node
+    node = node.parentElement?.closest<HTMLElement>(SCROLL_AREA)
+  }
 }
 
 // Never into a Kobalte tab list: its tabs select themselves on focus, and with no tab left it never settles.
@@ -205,14 +227,18 @@ function usable(element: HTMLElement) {
   return element.matches(FOCUSABLE) && element.checkVisibility() && !element.closest("[inert]")
 }
 
-// Still the focused element and still able to keep focus, though not a Tab stop: lost focus would be on <body>.
+// Able to keep focus though not a Tab stop (tabindex -1): a panel, a popover or a scroll area focused as a whole.
 function holds(element: HTMLElement) {
-  return (
-    element === document.activeElement &&
-    element.matches('[tabindex]:not(:disabled)') &&
-    element.checkVisibility() &&
-    !element.closest("[inert]")
-  )
+  return element.matches("[tabindex]:not(:disabled)") && element.checkVisibility() && !element.closest("[inert]")
+}
+
+// In view: what is at the element's centre is the element or a part of it. A control that scrolled out of its scroll
+// area, lies under another layer, or is drawn fully transparent until its row is hovered, is not.
+function seen(element: HTMLElement) {
+  const box = element.getBoundingClientRect()
+  const hit = document.elementFromPoint(box.left + box.width / 2, box.top + box.height / 2)
+
+  return !!hit && element.contains(hit)
 }
 
 function after(spot: Spot, element: HTMLElement) {
