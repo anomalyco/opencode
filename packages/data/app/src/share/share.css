@@ -1221,7 +1221,8 @@
     height: 24px;
     overflow: hidden;
     color: var(--stats-faint);
-    background: var(--editor-control);
+    /* Light grey behind No music's speaker; a track's cover fills it. */
+    background: var(--stats-layer-2);
 
     img {
       width: 100%;
