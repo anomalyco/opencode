@@ -615,7 +615,9 @@ function drawIntro(
     ctx.font = `400 ${size}px ${font}`
     odometer(ctx, card.stat.value, pad - size * 0.04, y + gap + size * 0.8, size, time)
     ctx.font = `400 ${label}px ${font}`
-    const lines = balance(ctx, card.stat.label, max).slice(0, 2)
+    // A sentence of its own under the number, so it starts with a capital.
+    const caption = card.stat.label.charAt(0).toUpperCase() + card.stat.label.slice(1)
+    const lines = balance(ctx, caption, max).slice(0, 2)
     const first = y + gap + size * 0.8 + gap
     lines.forEach((line, index) =>
       rise(ctx, time, 0.3 + index * 0.07, first + index * leading, label, () => {
