@@ -31,7 +31,12 @@ const split = (text: string): Parsed | undefined => {
   return { environment: Environment.ID.make(environment), path: text.slice(colon + 1) }
 }
 
-const rooted = (path: string) => path.startsWith("/") || path.startsWith("~")
+// On a Windows host a drive path is rooted too, so `local:C:\…` reaches its files. Other environments and hosts
+// resolve one as relative, so it stays refused there.
+const rooted = (named: Parsed) =>
+  named.path.startsWith("/") ||
+  named.path.startsWith("~") ||
+  (named.environment === Environment.localID && process.platform === "win32" && /^[A-Za-z]:[\\/]/.test(named.path))
 
 /**
  * Splits `local:/a`, `gpu:/work/a`, `gpu:~/a`, or `wrk_...:/workspace` into an environment and the rest.
@@ -39,7 +44,7 @@ const rooted = (path: string) => path.startsWith("/") || path.startsWith("~")
  */
 export const parse = (text: string): Parsed | undefined => {
   const named = split(text)
-  if (!named || !rooted(named.path) || named.path.startsWith("//")) return
+  if (!named || !rooted(named) || named.path.startsWith("//")) return
   return named
 }
 
@@ -52,7 +57,7 @@ export const typed = Effect.fnUntraced(function* (text: string, machines: Machin
   const parsed = parse(text)
   if (parsed) return parsed
   const named = split(text)
-  if (!named || rooted(named.path)) return
+  if (!named || rooted(named)) return
   if (
     named.environment === Environment.localID ||
     Workspace.isID(named.environment) ||
