@@ -6,7 +6,7 @@ import { storyTool } from "../storybook/current-session-scenarios"
 type Outcome = {
   type: "event"
   id: string
-  event: { verb: "finished" | "stopped"; kind: "shell"; failed: boolean; shellID: string; title: string }
+  event: { id: string; verb: "finished" | "stopped"; kind: "shell"; failed: boolean; shellID: string; title: string }
 }
 
 export type GroupFixturePart =
@@ -21,7 +21,7 @@ const tool = storyTool
 const shellOutcome = (id: string, shellID: string, verb: "finished" | "stopped", failed = false): Outcome => ({
   type: "event",
   id,
-  event: { verb, kind: "shell", failed, shellID, title: "sleep 5" },
+  event: { id, verb, kind: "shell", failed, shellID, title: "sleep 5" },
 })
 
 export const labelGroups = {

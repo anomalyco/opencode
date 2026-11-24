@@ -14,7 +14,11 @@ export default {
   parameters: { layout: "fullscreen" },
 }
 
-const subagent = (event: Omit<TimelineEvent, "kind">): TimelineEvent => ({ kind: "subagent", ...event })
+const subagent = (event: Omit<TimelineEvent, "id" | "kind">): TimelineEvent => ({
+  id: "story",
+  kind: "subagent",
+  ...event,
+})
 
 const states = [
   {

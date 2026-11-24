@@ -1,6 +1,7 @@
 import { Badge } from "@opencode/ui/badge"
 import { useI18n } from "@opencode/ui/context/i18n"
-import { For, Show, createMemo } from "solid-js"
+import { For, Index, Show, createComputed, createMemo } from "solid-js"
+import { createStore, reconcile } from "solid-js/store"
 import { BasicTool } from "../components/basic-tool"
 import { useData } from "../context/data"
 import { taskAgentName } from "../tools/tool-renderer"
@@ -31,7 +32,19 @@ export function TimelineEventRow(props: {
       ).background,
   )
 
-  const items = createMemo(() => props.events.filter((event) => event.title))
+  // The events are built again whenever the session's messages change, a landing page of history included. The list
+  // keeps one object for each, by the call or notice it came from: a link is the same element for as long as its
+  // event is listed, wherever others join or leave, so it keeps focus and Enter opens what the reader chose. The
+  // store writes into the objects it holds, so it takes copies.
+  const [items, setItems] = createStore<TimelineEvent[]>([])
+  createComputed(() =>
+    setItems(
+      reconcile(
+        props.events.flatMap((event) => (event.title ? [{ ...event }] : [])),
+        { key: "id" },
+      ),
+    ),
+  )
 
   return (
     <Show when={summary().verbs.length > 0}>
@@ -39,25 +52,26 @@ export function TimelineEventRow(props: {
         <BasicTool
           icon="task"
           compact
-          hasContent={items().length > 0}
+          hasContent={items.length > 0}
           open={props.open}
           onOpenChange={props.onOpenChange}
           trigger={
             <div data-component="context-tool-group-trigger" data-timeline-event="">
               <span data-slot="context-tool-group-title" data-activity="">
-                <For each={summary().verbs}>
+                {/* The words of the summary have no place of their own to keep, so they go by position. */}
+                <Index each={summary().verbs}>
                   {(bucket, index) => (
                     <>
-                      <Show when={index() > 0}>
+                      <Show when={index > 0}>
                         <span data-slot="context-tool-group-separator">·</span>
                       </Show>
-                      <span data-slot="context-tool-group-verb">{i18n.t(verbKeys[bucket.verb])}</span>
+                      <span data-slot="context-tool-group-verb">{i18n.t(verbKeys[bucket().verb])}</span>
                       <span data-slot="context-tool-group-detail">
-                        {i18n.plural("ui.timeline.event.shells", bucket.count)}
+                        {i18n.plural("ui.timeline.event.shells", bucket().count)}
                       </span>
                     </>
                   )}
-                </For>
+                </Index>
                 {/* Where every one failed, the tag says so without counting them again. */}
                 <Show when={summary().failed}>
                   {(count) => (
@@ -73,9 +87,7 @@ export function TimelineEventRow(props: {
           }
         >
           <div data-component="timeline-event-list">
-            <For each={items()}>
-              {(event) => <TimelineEventItem event={event} onRevealShell={props.onRevealShell} />}
-            </For>
+            <For each={items}>{(event) => <TimelineEventItem event={event} onRevealShell={props.onRevealShell} />}</For>
           </div>
         </BasicTool>
       </div>
