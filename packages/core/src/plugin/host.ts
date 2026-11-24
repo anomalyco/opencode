@@ -326,12 +326,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
       },
       automation: {
         // A plugin has no UI listener to answer an interactive ask, so asks settle unattended, as they do over HTTP.
-        // A JavaScript plugin can pass any shape, so decode it as HTTP does before the service stores it.
+        // A JavaScript plugin can pass any shape, so validate it against the type-side schema before storing it.
         // Its setup may be what this Location's plugin activation, or this SDK instance's boot, is waiting on, so the
         // create must not wait on either: checks in this Location use what is loaded now, and this instance's own
         // selector serves its Sessions. Other Locations still wait for their plugins.
         create: (input) =>
-          Schema.decodeUnknownEffect(Automation.CreateInput)(input).pipe(
+          Schema.decodeUnknownEffect(Schema.toType(Automation.CreateInput))(input).pipe(
             Effect.mapError((error) => new Automation.InvalidError({ reason: error.message })),
             Effect.flatMap((decoded) => automations.create(decoded)),
             Effect.provideService(Permission.Unattended, []),
