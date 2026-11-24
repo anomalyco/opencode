@@ -7,6 +7,7 @@ import path from "path"
 import { useTuiPaths } from "./runtime"
 import { useArgs } from "./args"
 import { RGBA } from "@opentui/core"
+import { findModelByID, modelAlias } from "@opencode/core/model-lookup"
 import { readJson, writeJsonAtomic } from "../util/persistence"
 import {
   createModelPreferenceRepository,
@@ -46,7 +47,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const providers = () => data.location.provider.list(location.ref)
 
     function findModel(model: ModelPreferenceModel) {
-      return models()?.find((item) => item.providerID === model.providerID && item.id === model.modelID)
+      return findModelByID(models(), model.providerID, model.modelID)
     }
 
     function isModelValid(model: ModelPreferenceModel) {
@@ -282,7 +283,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         const info = findModel(model)
         // A model runs at the speed last used with it.
         const speed = preferences.speed[modelPreferenceKey(model)]
-        const remembered = speed && speeds(model).find((item) => item.experimental?.speed?.id === speed)
+        const choices = speed ? speeds(model) : []
+        const alias = speed && modelAlias(model.providerID, `${model.modelID}-${speed}`)
+        const remembered =
+          choices.find((item) => item.experimental?.speed?.id === speed) ?? choices.find((item) => item.id === alias)
         return {
           providerID: model.providerID,
           modelID: remembered ? remembered.id : model.modelID,
@@ -308,9 +312,10 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
           selectionState.selectionBySessionAgent[sessionID]?.[current.id] ??
           (!session?.agent || session.agent === current.id ? durableSelection(sessionID) : undefined)
         if (selected) {
-          const info = models()?.find((item) => item.providerID === selected.providerID && item.id === selected.modelID)
+          const info = findModel(selected)
           return {
             ...selected,
+            modelID: info?.id ?? selected.modelID,
             variant:
               !info || info.variants.some((variant) => variant.id === selected.variant) ? selected.variant : undefined,
           }
