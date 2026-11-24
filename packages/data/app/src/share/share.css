@@ -249,7 +249,7 @@
     &[data-card-theme="light"] {
       background-color: light-dark(#d6d6d6, #151515);
     }
-    background-image: radial-gradient(light-dark(var(--stats-line-strong), var(--stats-line)) 1px, transparent 1px);
+    background-image: radial-gradient(light-dark(var(--stats-line-strong), rgb(255 255 255 / 0.06)) 1px, transparent 1px);
     background-size: 16px 16px;
   }
 
@@ -391,7 +391,7 @@
     width: var(--editor-inspector);
     overflow: hidden;
     background: var(--stats-bg);
-    border: 1px solid var(--stats-line-strong);
+    border: 1px solid light-dark(var(--stats-line-strong), var(--stats-line));
     box-shadow:
       0 1px 2px rgb(0 0 0 / 0.06),
       0 4px 12px -4px rgb(0 0 0 / 0.1),

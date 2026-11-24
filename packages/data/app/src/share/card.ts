@@ -511,7 +511,7 @@ function drawBackground(
 // it, their pitch stretched by a fraction of a pixel to land there. The playing columns are those behind the chart,
 // never the gutters either side of it.
 function dotLayout(width: number, grid: { center: number; pitch: number }, end: number) {
-  const dot = Math.min(8, Math.max(4, Math.round(grid.pitch * 0.36)))
+  const dot = Math.min(6, Math.max(3, Math.round(grid.pitch * 0.28)))
   const first = grid.center - Math.floor(grid.center / grid.pitch) * grid.pitch
   const inset = Math.max(0, first - dot / 2)
   const columns = Array.from(
