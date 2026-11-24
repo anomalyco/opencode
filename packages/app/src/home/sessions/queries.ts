@@ -1,5 +1,5 @@
 import type { SessionInfo } from "@opencode/client/promise"
-import { containsDirectory } from "@opencode/util/path"
+import { containsDirectory, sameDirectory } from "@opencode/util/path"
 import { queryOptions, skipToken } from "@tanstack/solid-query"
 import type { ServerConnection } from "@/runtime/server/registry"
 import type { ServerCtx } from "@/runtime/server/runtime"
@@ -35,12 +35,22 @@ export function projectSessionDirectories(project: LocalProject, projects: reado
 
   if (project.id !== ProjectID.global) return [project.worktree, ...workspaces]
 
-  // The global inventory can contain directories owned by other added projects.
-  const otherProjects = projects.filter((item) => !containsDirectory(item.worktree, project.worktree))
+  // An added ancestor owns its own root, but must not mask workspaces inside the selected project.
+  const roots = projects.map((item) => ({
+    directory: item.worktree,
+    containsProject: containsDirectory(item.worktree, project.worktree),
+  }))
 
   return [
     project.worktree,
-    ...workspaces.filter((directory) => !otherProjects.some((item) => containsDirectory(item.worktree, directory))),
+    ...workspaces.filter(
+      (directory) =>
+        !roots.some((root) =>
+          root.containsProject
+            ? sameDirectory(root.directory, directory)
+            : containsDirectory(root.directory, directory),
+        ),
+    ),
   ]
 }
 
