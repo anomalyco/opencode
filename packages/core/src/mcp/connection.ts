@@ -51,8 +51,6 @@ export interface Input {
    */
   readonly shared?: boolean
   readonly clientInfo?: { readonly name: string; readonly version: string }
-  /** Declares MCP Events; see `McpClient.ConnectOptions.events`. */
-  readonly mcpEvents?: boolean
   /** Read on every attempt, so a credential change applies to the next one. */
   readonly authProvider: Effect.Effect<AuthProvider | undefined>
   readonly elicitation: McpClient.ElicitationHandler
@@ -186,7 +184,7 @@ export function make(input: Input): Connection {
         elicitation: input.elicitation,
         clientInfo: input.clientInfo,
         roots: !input.shared,
-        events: input.mcpEvents,
+        events: true,
       }).pipe(
         Effect.flatMap(
           (client): Effect.Effect<{ client: McpClient.Connection; tools?: ReadonlyArray<McpClient.Tool> }, Error> =>

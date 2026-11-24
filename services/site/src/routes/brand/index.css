@@ -71,7 +71,7 @@
          theme instead of the tile's. */
       &[data-tone="light"] {
         color-scheme: only light;
-        background: #f5f5f5;
+        background: var(--fixed-light);
         --logo-code: #1f1f1f;
         --logo-open: #626262;
         --logo-inner: #d2d2d2;
@@ -79,7 +79,7 @@
 
       &[data-tone="dark"] {
         color-scheme: only dark;
-        background: #0a0a0a;
+        background: var(--fixed-dark);
         box-shadow: inset 0 0 0 1px var(--border);
         --logo-code: #eeeeee;
         --logo-open: #aeaeae;
@@ -355,7 +355,7 @@
       > [data-variant="split"]
       [data-slot="chevron-button"][aria-expanded="true"] {
       background: var(--link);
-      color: #fff;
+      color: var(--on-accent);
     }
 
     /* Icons: square buttons, named by their tooltips and labels. */
@@ -931,7 +931,7 @@
 
     [data-slot="preview"] {
       &[data-variant="standard"][data-tone="light"] {
-        background: #f4f4f4;
+        background: var(--fixed-light);
       }
 
       /* Photo-like multicolor backgrounds: wide, heavily blurred color fields (the last listed field
@@ -1219,14 +1219,16 @@
 
       &[data-tone="light"] {
         color-scheme: only light;
-        background: #f4f4f4;
+        background: var(--fixed-light);
         --size-muted: #6b6b6b;
+        /* grey-ok: the logo's ink */
         --size-strong: #1f1f1f;
+        /* grey-ok-end */
       }
 
       &[data-tone="dark"] {
         color-scheme: only dark;
-        background: #0a0a0a;
+        background: var(--fixed-dark);
         box-shadow: inset 0 0 0 1px var(--border);
         --size-muted: #8f8f8f;
         --size-strong: #eeeeee;
@@ -1240,7 +1242,7 @@
 
       /* Cells: the tiles step away from the badge's grey cells (#eeeeee, #1f1f1f) so the cell edges
          and the gap between them read. */
-      /* White, so a faint inset edge shows where the tile ends. */
+      /* White, so a faint inset edge shows where the tile ends. grey-ok: the badge's own cell colours */
       &[data-badge="c"][data-tone="light"] {
         background: #ffffff;
         box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.1);
@@ -1252,6 +1254,7 @@
         --size-muted: #d0d0d0;
         --size-strong: #ffffff;
       }
+      /* grey-ok-end */
     }
 
     /* The size switcher: plain mono text in the tile's top-left corner, shown while the tile is
@@ -1394,9 +1397,11 @@
         height: 28px;
       }
 
+      /* grey-ok: a deliberately wrong example */
       &[data-example="low-contrast"] {
         background: #b0b0b0;
       }
+      /* grey-ok-end */
 
       &[data-example="color"] {
         background: var(--brand-dark-2);

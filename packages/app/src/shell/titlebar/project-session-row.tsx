@@ -1,4 +1,4 @@
-import { createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
+import { createMemo, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js"
 import { useQueryClient } from "@tanstack/solid-query"
 import type { SessionInfo } from "@opencode/client/promise"
 import { ActivityRing } from "@opencode/ui/activity-ring"
@@ -29,6 +29,7 @@ import {
 } from "./session-rename-dialog-machine"
 import type { Project } from "@/runtime/server/types"
 import { ProjectIcon } from "@/shell/layout/project-icon"
+import { MutedIcon } from "./tab-nav"
 import "./tab-nav.css"
 
 export function ProjectSessionRow(props: {
@@ -42,6 +43,10 @@ export function ProjectSessionRow(props: {
   depth?: number
   /** Shows the project avatar in the leading slot, where no project header names it. */
   project?: Project
+  /** Marks a session whose notifications are muted, in place of its unread dot. */
+  muted?: boolean
+  /** Menu items shown above the row's own. */
+  menuItems?: () => JSX.Element
   onOpen: () => void
 }) {
   const language = useLanguage()
@@ -129,7 +134,7 @@ export function ProjectSessionRow(props: {
         type="button"
         data-titlebar-tab-action
         data-state={props.active ? "pressed" : undefined}
-        class="relative flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] ps-8 pe-2 text-start text-[13px] leading-[var(--line-height-compact)] font-medium focus-visible:outline-none"
+        class="relative flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] ps-8 pe-2 text-start text-[13px] leading-[var(--line-height-compact)] font-medium"
         classList={{ "text-v2-text-text-base": props.active, "text-v2-text-text-faint": !props.active }}
         aria-current={props.active ? "page" : undefined}
         title={sessionLabel(props.session)}
@@ -167,8 +172,13 @@ export function ProjectSessionRow(props: {
           <Show
             when={status.loading()}
             fallback={
-              <Show when={status.unread() && !props.active}>
-                <span class="size-1.5 rounded-full bg-v2-text-text-base" />
+              <Show
+                when={!props.muted}
+                fallback={<MutedIcon class="text-v2-icon-icon-faint" />}
+              >
+                <Show when={status.unread() && !props.active}>
+                  <span class="size-1.5 rounded-full bg-v2-text-text-base" />
+                </Show>
               </Show>
             }
           >
@@ -182,6 +192,14 @@ export function ProjectSessionRow(props: {
             if (dialog.active) event.preventDefault()
           }}
         >
+          <Show when={props.menuItems}>
+            {(items) => (
+              <>
+                {items()()}
+                <Menu.Separator />
+              </>
+            )}
+          </Show>
           <Menu.Item
             disabled={!ctx()}
             onSelect={() =>

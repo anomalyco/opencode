@@ -5,6 +5,7 @@ import { Database } from "@opencode/core/database/database"
 import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { Provider } from "@opencode/core/provider"
@@ -28,6 +29,7 @@ const it = testEffect(PluginTestLayer)
 const alpha = { id: "test/alpha", name: "Alpha", released: 300, variants: ["fast"], cost: [], status: "beta" }
 const beta = { id: "other/beta", name: "Beta", released: 200, variants: [], cost: [], status: "active" }
 const gamma = { id: "other/gamma", name: "Gamma Flash", released: 100, variants: [], cost: [], status: "active" }
+const gammaFree = { ...gamma, id: "other/gamma-free", name: "Gamma Flash Free" }
 const gammaOld = {
   id: "other/gamma-old",
   name: "Gamma Flash Old",
@@ -60,6 +62,12 @@ it.effect("groups available models by provider with paging", () =>
       })
       editor.models.update(Provider.ID.make("other"), Model.ID.make("gamma"), (model) => {
         model.name = "Gamma Flash"
+        model.time.released = 100
+        model.family = Model.Family.make("gamma")
+      })
+      // Same family and release day as gamma, like a free and a paid offering of one model.
+      editor.models.update(Provider.ID.make("other"), Model.ID.make("gamma-free"), (model) => {
+        model.name = "Gamma Flash Free"
         model.time.released = 100
         model.family = Model.Family.make("gamma")
       })
@@ -96,9 +104,9 @@ it.effect("groups available models by provider with paging", () =>
     expect(yield* run({})).toEqual({
       providers: [
         { id: "test", name: "test", models: [alpha] },
-        { id: "other", name: "Other Provider", models: [beta, gamma] },
+        { id: "other", name: "Other Provider", models: [beta, gamma, gammaFree] },
       ],
-      total: 3,
+      total: 4,
       next: null,
     })
 
@@ -108,16 +116,16 @@ it.effect("groups available models by provider with paging", () =>
         { id: "test", name: "test", models: [alpha] },
         { id: "other", name: "Other Provider", models: [beta] },
       ],
-      total: 3,
+      total: 4,
       next: 2,
     })
     expect(yield* run({ limit: 2, offset: 2 })).toEqual({
-      providers: [{ id: "other", name: "Other Provider", models: [gamma] }],
-      total: 3,
+      providers: [{ id: "other", name: "Other Provider", models: [gamma, gammaFree] }],
+      total: 4,
       next: null,
     })
 
-    expect(yield* run({ provider: "other provider" })).toMatchObject({ total: 2, providers: [{ id: "other" }] })
+    expect(yield* run({ provider: "other provider" })).toMatchObject({ total: 3, providers: [{ id: "other" }] })
     expect(yield* run({ provider: "test" })).toEqual({
       providers: [{ id: "test", name: "test", models: [alpha] }],
       total: 1,
@@ -126,18 +134,21 @@ it.effect("groups available models by provider with paging", () =>
 
     // Every word of the query must appear somewhere in the reference or display name, ignoring case.
     expect(yield* run({ query: "GAMMA" })).toEqual({
-      providers: [{ id: "other", name: "Other Provider", models: [gamma] }],
-      total: 1,
+      providers: [{ id: "other", name: "Other Provider", models: [gamma, gammaFree, gammaOld] }],
+      total: 3,
       next: null,
     })
     expect(yield* run({ query: "test/" })).toMatchObject({ total: 1, providers: [{ id: "test" }] })
-    expect(yield* run({ query: "other flash" })).toMatchObject({ total: 1, providers: [{ models: [gamma] }] })
+    expect(yield* run({ query: "other flash" })).toMatchObject({
+      total: 3,
+      providers: [{ models: [gamma, gammaFree, gammaOld] }],
+    })
     expect(yield* run({ query: "gamma beta" })).toEqual({ providers: [], total: 0, next: null })
 
-    // Only the newest model of each family is listed unless `all` is set; the query is applied first.
+    // Browsing hides older versions of a family unless `all` is set; same-day siblings stay. Searches list every match.
     expect(yield* run({ all: true })).toMatchObject({
-      total: 4,
-      providers: [{ id: "test" }, { id: "other", models: [beta, gamma, gammaOld] }],
+      total: 5,
+      providers: [{ id: "test" }, { id: "other", models: [beta, gamma, gammaFree, gammaOld] }],
     })
     expect(yield* run({ query: "old" })).toMatchObject({ total: 1, providers: [{ models: [gammaOld] }] })
     expect(yield* run({ provider: "other", query: "alpha" })).toEqual({ providers: [], total: 0, next: null })
@@ -259,5 +270,34 @@ worktreeIt.live("creates, lists, and removes worktrees for the plugin's project"
       { action: "edit", resources: [resource], save: ["*"], sessionID: session.id },
     ])
     expect((yield* run("worktree_list", {})).worktrees).not.toContainEqual({ directory, strategy: "git" })
+  }),
+)
+
+it.effect("adapts the worktree session_move hint to execute, direct tools, or neither", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const hooks = yield* PluginHooks.Service
+    yield* OpenCodeTools.Plugin.effect(yield* PluginHost.make(plugins, "test"))
+    const model = Model.Ref.make({ providerID: Provider.ID.make("test"), id: Model.ID.make("alpha") })
+    const trigger = (tools: Record<string, { description: string; input: Record<string, never> }>) =>
+      hooks
+        .trigger("session", "context", {
+          sessionID: Session.ID.make("ses_opencode_hint"),
+          agent: toolIdentity.agent,
+          model,
+          system: [],
+          messages: [],
+          tools,
+          options: {},
+        })
+        .pipe(Effect.map((event) => event.system.map((part) => part.text)))
+
+    expect(yield* trigger({ execute: { description: "execute", input: {} } })).toEqual([
+      "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider using `execute` to call `tools.opencode.session.move` and make the worktree the session's working directory.",
+    ])
+    expect(yield* trigger({ opencode_session_move: { description: "move", input: {} } })).toEqual([
+      "When you create a worktree outside the current working directory and intend to use it as your primary working directory, consider calling `opencode_session_move` to make the worktree the session's working directory.",
+    ])
+    expect(yield* trigger({ read: { description: "read", input: {} } })).toEqual([])
   }),
 )

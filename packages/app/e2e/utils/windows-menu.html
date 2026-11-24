@@ -9,10 +9,11 @@
     <script type="module">
       import { mount } from "./windows-menu.fixture.tsx"
       const params = new URLSearchParams(location.search)
+      const os = params.get("os")
       mount({
         server: params.get("server"),
         path: params.get("path") ?? undefined,
-        os: params.get("os") === "macos" ? "macos" : undefined,
+        os: os === "macos" || os === "linux" ? os : undefined,
         openApps: params.get("openApps") === "1",
         holdOpen: params.get("holdOpen") === "1",
       })

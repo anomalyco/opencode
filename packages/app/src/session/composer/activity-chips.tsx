@@ -6,7 +6,9 @@ import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { SessionProgressIndicatorV2 } from "@opencode/session-ui/v2/session-progress-indicator-v2"
 import type { ShellOutputInput, ShellOutputOutput } from "@opencode/client/promise"
 import { stripAnsi } from "@opencode/session-ui/tools/ansi"
-import { createEffect, createMemo, createSignal, For, on, onCleanup, Show } from "solid-js"
+import { Key } from "@solid-primitives/keyed"
+import { Match } from "effect"
+import { createEffect, createMemo, createSignal, on, onCleanup, Show, untrack } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { useSettings } from "@/settings/model"
 import { composerLanePlacement, useComposerLaneAlignment } from "./composer-lane"
@@ -16,13 +18,69 @@ import "./activity-chips.css"
 
 export type SessionActivityItem = {
   key: string
-  type: "subagent" | "shell"
   label?: string
   agent?: string
-  sessionID?: string
   target: string
   // When the work started running, from the server's record of it.
   started: number
+} & (
+  | {
+      type: "subagent"
+      sessionID: string
+      // Running jobs in its tree, which its Stop cancels.
+      jobs?: readonly string[]
+    }
+  | { type: "shell" }
+  | { type: "script" }
+)
+
+/** Reuses unchanged item references (and the previous array when every entry matches) so keyed rows stay quiet. */
+export function reuseActivityItems(previous: SessionActivityItem[], next: SessionActivityItem[]) {
+  if (previous.length === 0 && next.length === 0) return previous
+
+  const byKey = new Map(previous.map((item) => [item.key, item]))
+  let unchanged = previous.length === next.length
+
+  const merged = next.map((item, index) => {
+    const existing = byKey.get(item.key)
+
+    if (existing && sameActivityItem(existing, item)) {
+      if (previous[index] !== existing) unchanged = false
+
+      return existing
+    }
+
+    unchanged = false
+
+    return item
+  })
+
+  return unchanged ? previous : merged
+}
+
+function sameActivityItem(a: SessionActivityItem, b: SessionActivityItem) {
+  if (
+    a.type !== b.type ||
+    a.key !== b.key ||
+    a.label !== b.label ||
+    a.agent !== b.agent ||
+    a.target !== b.target ||
+    a.started !== b.started
+  )
+    return false
+
+  if (a.type !== "subagent" || b.type !== "subagent") return true
+
+  if (a.sessionID !== b.sessionID) return false
+
+  const aJobs = a.jobs
+  const bJobs = b.jobs
+
+  if (aJobs === bJobs) return true
+
+  if (!aJobs || !bJobs || aJobs.length !== bJobs.length) return false
+
+  return aJobs.every((job, index) => job === bJobs[index])
 }
 
 type DurationKey =
@@ -53,12 +111,13 @@ export function formatElapsed(ms: number, t: (key: DurationKey, params: Record<s
 export function SessionActivityChips(props: {
   subagents: readonly SessionActivityItem[]
   shells: readonly SessionActivityItem[]
+  scripts?: readonly SessionActivityItem[]
   shell: {
     directory: string
     output: (input: ShellOutputInput) => Promise<ShellOutputOutput>
     ended: Parameters<typeof createShellPanel>[0]["ended"]
   }
-  onOpen: (item: SessionActivityItem) => void
+  onOpen: (item: Extract<SessionActivityItem, { type: "subagent" }>) => void
   onStop: (item: SessionActivityItem) => Promise<boolean>
   // The menu closed with nothing left running, so the capsule and its trigger are gone; focus goes to the composer.
   onEmpty: () => void
@@ -74,6 +133,7 @@ export function SessionActivityChips(props: {
     enabled: () => settings.general.backgroundActivity() !== "off",
     subagents: () => props.subagents,
     shells: () => props.shells,
+    scripts: () => props.scripts ?? [],
     stop: props.onStop,
     ended: props.shell.ended,
     focus: {
@@ -101,28 +161,42 @@ export function SessionActivityChips(props: {
   })
 
   const view = panel.view
-  const counts = () => view().counts
+
+  const counts = createMemo(() => view().counts, undefined, {
+    equals: (previous, next) =>
+      previous.subagents === next.subagents && previous.scripts === next.scripts && previous.shells === next.shells,
+  })
+
   const active = () => view().active
 
   const alignment = useComposerLaneAlignment()
 
-  // A subagent can only be interrupted once its child session exists.
-  const stoppable = (item: SessionActivityItem) => item.type === "shell" || !!item.sessionID
+  const row = (item: () => SessionActivityItem, closeOnSelect: boolean) => ({
+    // A shell opens its own panel in place; a subagent opens where it runs; a script has nowhere to open.
+    closeOnSelect,
+    onSelect: () => {
+      const current = item()
 
-  const row = (item: SessionActivityItem) => ({
-    "data-stoppable": stoppable(item) || undefined,
-    // A shell opens its own panel in place; a subagent opens where it runs.
-    closeOnSelect: item.type !== "shell",
-    onSelect: () => (item.type === "shell" ? panel.open(item) : props.onOpen(item)),
+      if (current.type === "shell") return panel.open(current)
+
+      if (current.type === "subagent") props.onOpen(current)
+    },
     onKeyDown: (event: KeyboardEvent) => {
-      if ((event.key !== "Delete" && event.key !== "Backspace") || !stoppable(item)) return
+      if (event.key !== "Delete" && event.key !== "Backspace") return
 
       event.preventDefault()
-      panel.stop(item)
+      panel.stop(item())
     },
   })
 
-  const rowStopping = (item: SessionActivityItem) => view().stoppingKeys[item.key] !== undefined
+  const rowStopping = (key: string) => view().stoppingKeys[key] !== undefined
+
+  const registerRow = (key: string) => (element: HTMLElement) => {
+    rows.set(key, element)
+    onCleanup(() => {
+      if (rows.get(key) === element) rows.delete(key)
+    })
+  }
 
   // One clock for every row, ticking only while the panel is open and something still runs.
   const [now, setNow] = createSignal(Date.now())
@@ -135,45 +209,51 @@ export function SessionActivityChips(props: {
     onCleanup(() => clearInterval(timer))
   })
 
-  // The run time and the stop button share the row's end; hovering a stoppable row swaps one for the other.
-  const end = (item: SessionActivityItem) => (
-    <span data-slot="session-activity-end">
-      <span
-        data-slot="session-activity-elapsed"
-        dir="auto"
-        class="text-[11px] tabular-nums whitespace-nowrap text-v2-text-text-muted"
-      >
-        {formatElapsed(now() - item.started, language.t)}
-      </span>
-      {stop(item)}
-    </span>
-  )
+  // The run time and the stop button share the row's end; hovering a row swaps one for the other.
+  const end = (item: () => SessionActivityItem) => {
+    const key = untrack(() => item().key)
 
-  const stop = (item: SessionActivityItem) => (
-    <Show when={stoppable(item)}>
-      {/* The row selects on press, so the stop button keeps its pointer events to itself. */}
-      <IconButton
-        type="button"
-        size="small"
-        variant="ghost-muted"
-        tabIndex={-1}
-        data-slot="session-activity-stop"
-        icon={rowStopping(item) ? <Loader /> : <Icon name="outline-xmark" size="small" />}
-        aria-label={language.t(item.type === "shell" ? "session.running.stop.shell" : "session.running.stop.subagent")}
-        aria-disabled={rowStopping(item) || undefined}
-        aria-busy={rowStopping(item) || undefined}
-        onPointerDown={(event) => {
-          event.preventDefault()
-          event.stopPropagation()
-        }}
-        onPointerUp={(event) => event.stopPropagation()}
-        onClick={(event) => {
-          event.stopPropagation()
-          panel.stop(item)
-        }}
-      />
-    </Show>
-  )
+    const stopLabel = language.t(
+      Match.value(untrack(() => item().type)).pipe(
+        Match.when("shell", () => "session.running.stop.shell" as const),
+        Match.when("script", () => "session.running.stop.script" as const),
+        Match.orElse(() => "session.running.stop.subagent" as const),
+      ),
+    )
+
+    return (
+      <span data-slot="session-activity-end">
+        <span
+          data-slot="session-activity-elapsed"
+          dir="auto"
+          class="text-[11px] tabular-nums whitespace-nowrap text-v2-text-text-muted"
+        >
+          {formatElapsed(now() - item().started, language.t)}
+        </span>
+        {/* The row selects on press, so the stop button keeps its pointer events to itself. */}
+        <IconButton
+          type="button"
+          size="small"
+          variant="ghost-muted"
+          tabIndex={-1}
+          data-slot="session-activity-stop"
+          icon={rowStopping(key) ? <Loader /> : <Icon name="close" />}
+          aria-label={stopLabel}
+          aria-disabled={rowStopping(key) || undefined}
+          aria-busy={rowStopping(key) || undefined}
+          onPointerDown={(event) => {
+            event.preventDefault()
+            event.stopPropagation()
+          }}
+          onPointerUp={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation()
+            panel.stop(item())
+          }}
+        />
+      </span>
+    )
+  }
 
   const label = () => language.activitySummary(counts())
 
@@ -192,7 +272,9 @@ export function SessionActivityChips(props: {
             class="tabular-nums duration-150 ease-out motion-reduce:animate-none"
             classList={{ "animate-in fade-in": view().enter }}
           >
-            <SessionProgressIndicatorV2 class="shrink-0" />
+            <span data-composer-pill-icon class="flex size-4 shrink-0 items-center justify-center">
+              <SessionProgressIndicatorV2 />
+            </span>
             <span data-slot="session-activity-summary" class="flex min-w-0 items-center gap-2 overflow-hidden">
               {language.activitySummaryRich(counts(), (text) => (
                 <span class="truncate">
@@ -204,6 +286,7 @@ export function SessionActivityChips(props: {
           <Menu.Portal>
             <Menu.Content
               data-slot="session-activity-panel"
+              data-focus-scope
               data-view={view().shell ? "shell" : "list"}
               aria-label={label()}
               ref={content}
@@ -212,38 +295,70 @@ export function SessionActivityChips(props: {
                 when={view().shell}
                 fallback={
                   <MenuScroll>
-                    <For each={props.subagents}>
-                      {(item) => (
-                        <Menu.Item {...row(item)}>
-                          <SessionProgressIndicatorV2 class="shrink-0 text-v2-icon-icon-muted" />
-                          <span class="shrink-0 font-[530]">
-                            <bdi>
-                              {item.agent
-                                ? `${item.agent[0].toUpperCase()}${item.agent.slice(1)}`
-                                : language.t("ui.tool.agent.default")}
-                            </bdi>
-                          </span>
-                          <span dir="auto" class="min-w-0 flex-1 truncate text-v2-text-text-muted">
-                            {item.label}
-                          </span>
-                          {end(item)}
-                        </Menu.Item>
-                      )}
-                    </For>
-                    <For each={props.shells}>
-                      {(item) => (
-                        <Menu.Item {...row(item)} ref={(el: HTMLElement) => rows.set(item.key, el)}>
-                          <Icon name="console" class="shrink-0 text-v2-icon-icon-muted" />
-                          <span
-                            dir="ltr"
-                            class="min-w-0 flex-1 truncate font-mono text-[13px] tracking-[-0.04px] text-v2-text-text-base"
-                          >
-                            {item.label}
-                          </span>
-                          {end(item)}
-                        </Menu.Item>
-                      )}
-                    </For>
+                    <Key each={props.subagents} by="key">
+                      {(item) => {
+                        const handlers = row(item, true)
+
+                        return (
+                          <Menu.Item {...handlers}>
+                            <SessionProgressIndicatorV2 class="shrink-0 text-v2-icon-icon-muted" />
+                            <span class="shrink-0 font-[530]">
+                              <bdi>
+                                {(() => {
+                                  const agent = item().agent
+
+                                  return agent
+                                    ? `${agent[0].toUpperCase()}${agent.slice(1)}`
+                                    : language.t("ui.tool.agent.default")
+                                })()}
+                              </bdi>
+                            </span>
+                            <span dir="auto" class="min-w-0 flex-1 truncate text-v2-text-text-muted">
+                              {item().label}
+                            </span>
+                            {end(item)}
+                          </Menu.Item>
+                        )
+                      }}
+                    </Key>
+                    <Key each={props.scripts} by="key">
+                      {(item) => {
+                        const handlers = row(item, false)
+                        const key = untrack(() => item().key)
+
+                        return (
+                          <Menu.Item {...handlers} ref={registerRow(key)}>
+                            <Icon name="code" class="shrink-0 text-v2-icon-icon-muted" />
+                            <span
+                              dir="ltr"
+                              class="min-w-0 flex-1 truncate font-mono text-[13px] tracking-[-0.04px] text-v2-text-text-base"
+                            >
+                              {item().label}
+                            </span>
+                            {end(item)}
+                          </Menu.Item>
+                        )
+                      }}
+                    </Key>
+                    <Key each={props.shells} by="key">
+                      {(item) => {
+                        const handlers = row(item, false)
+                        const key = untrack(() => item().key)
+
+                        return (
+                          <Menu.Item {...handlers} ref={registerRow(key)}>
+                            <Icon name="terminal" class="shrink-0 text-v2-icon-icon-muted" />
+                            <span
+                              dir="ltr"
+                              class="min-w-0 flex-1 truncate font-mono text-[13px] tracking-[-0.04px] text-v2-text-text-base"
+                            >
+                              {item().label}
+                            </span>
+                            {end(item)}
+                          </Menu.Item>
+                        )
+                      }}
+                    </Key>
                   </MenuScroll>
                 }
               >
@@ -257,7 +372,7 @@ export function SessionActivityChips(props: {
                         onSelect={panel.back}
                         ref={(el: HTMLElement) => (back = el)}
                       >
-                        <Icon name="arrow-left" size="small" />
+                        <Icon name="arrow-left" />
                       </Menu.Item>
                       <span dir="ltr" data-slot="session-activity-shell-command" class="min-w-0 flex-1 truncate">
                         {shell().label}

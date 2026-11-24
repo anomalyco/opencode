@@ -1,0 +1,32 @@
+[1mDESCRIPTION[0m
+  Run OpenCode with a message
+
+[1mUSAGE[0m
+  [36mopencode run [flags] [<message...>][0m
+
+[1mARGUMENTS[0m
+  [32mmessage...[0m [2mstring[0m    Message to send[2m (optional)[0m
+
+[1mFLAGS[0m
+  [32m--continue[0m, [32m-c[0m            Continue the last session
+  [32m--session[0m, [32m-s[0m [2mstring[0m      Session ID to continue, or to create if it does not exist
+  [32m--fork[0m                    Fork the session before continuing
+  [32m--worktree[0m, [32m-w[0m [2m[=name][0m    Start a new session in a new git worktree, optionally with this name
+  [32m--model[0m, [32m-m[0m [2mstring[0m        Model to use in the format provider/model#variant
+  [32m--agent[0m [2mstring[0m            Agent to use
+  [32m--format[0m [2mchoice[0m           Output format (choices: default, json)
+  [32m--file[0m, [32m-f[0m [2mstring[0m         File to attach to the message
+  [32m--title[0m [2mstring[0m            Session title
+  [32m--archived[0m                Create the session archived so it stays out of session lists (useful for scripted or CI runs)
+  [32m--thinking[0m                Show thinking blocks
+  [32m--auto[0m                    Auto-approve permissions that are not explicitly denied
+
+[1mGLOBAL FLAGS[0m
+  [32m--help[0m, [32m-h[0m                                                          Show help information
+  [32m--version[0m, [32m-v[0m                                                       Show version information
+  [32m--wizard[0m                                                            Start wizard mode for a command
+  [32m--completions[0m [2m<bash|zsh|fish|powershell|sh|pwsh>[0m                    Print shell completion script (choices: bash, zsh, fish, powershell, sh, pwsh)
+  [32m--log-level[0m [2m<all|trace|debug|info|warn|warning|error|fatal|none>[0m    Sets the minimum log level (choices: all, trace, debug, info, warn, warning, error, fatal, none)
+  [32m--print-logs[0m                                                        Print logs to stderr (server logs require --standalone)
+  [32m--standalone[0m                                                        Run with a private server instead of the background service
+  [32m--server[0m [2mstring[0m                                                     Connect to a server URL instead of the background service

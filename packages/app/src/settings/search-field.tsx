@@ -66,7 +66,7 @@ export function SettingsSearchField(props: {
         }}
         type="search"
         appearance="base"
-        leadingIcon={<Icon name="magnifying-glass" size="small" />}
+        leadingIcon={<Icon name="magnifying-glass" />}
         value={props.value}
         data-overflow-start={state.overflow.start}
         data-overflow-end={state.overflow.end}
@@ -89,7 +89,7 @@ export function SettingsSearchField(props: {
         placeholder={props.placeholder}
         aria-label={props.placeholder}
         showClearButton={!!props.value}
-        clearIcon="circle-xmark"
+        clearIcon="close"
         onClearClick={clear}
         spellcheck={false}
         autocorrect="off"

@@ -9,32 +9,46 @@ import "./settings.css"
 export default {
   title: "OpenCode/Settings/Timeline detail",
   id: "settings-timeline-detail",
+  args: { preset: "compact" },
+  argTypes: { preset: { options: [...timelinePresets.map((preset) => preset.id), "custom"] } },
+  render: (args: { preset: string }) => (
+    <Show when={args.preset} keyed>
+      {(preset) => <Preview preset={preset} />}
+    </Show>
+  ),
 }
 
-export const Interactive = {
-  render: () => {
-    const [state, setState] = createStore<{ value: TimelineDetail; visible: boolean }>({
-      value: structuredClone(timelinePresets[2].value),
-      visible: true,
-    })
+function Preview(props: { preset: string }) {
+  const [state, setState] = createStore<{ value: TimelineDetail; visible: boolean }>({
+    value: structuredClone(
+      timelinePresets.find((preset) => preset.id === props.preset)?.value ?? {
+        ...timelinePresets[2].value,
+        shell: { placement: "separate", details: "collapsed" },
+      },
+    ),
+    visible: true,
+  })
 
-    return (
-      <div class="flex w-[560px] max-w-full flex-col gap-4">
-        <Show when={state.visible}>
-          <SettingsList>
-            <div class="py-5">
-              <TimelineDetailControl value={state.value} onChange={(value) => setState("value", value)} />
-            </div>
-          </SettingsList>
-        </Show>
-        <Button onClick={() => setState("visible", !state.visible)}>
-          {state.visible ? "Leave settings" : "Return to settings"}
-        </Button>
-        <Button onClick={() => setState("value", structuredClone(timelinePresets[2].value))}>Reset</Button>
-        <output data-slot="timeline-detail-fixture-value" hidden>
-          {JSON.stringify(state.value)}
-        </output>
-      </div>
-    )
-  },
+  return (
+    <div class="flex w-[560px] max-w-full flex-col gap-4">
+      <Show when={state.visible}>
+        <SettingsList>
+          <div class="py-5">
+            <TimelineDetailControl value={state.value} onChange={(value) => setState("value", value)} />
+          </div>
+        </SettingsList>
+      </Show>
+      <Button onClick={() => setState("visible", !state.visible)}>
+        {state.visible ? "Leave settings" : "Return to settings"}
+      </Button>
+      <Button onClick={() => setState("value", structuredClone(timelinePresets[2].value))}>Reset</Button>
+      <output data-slot="timeline-detail-fixture-value" hidden>
+        {JSON.stringify(state.value)}
+      </output>
+    </div>
+  )
 }
+
+export const Interactive = {}
+
+export const Custom = { args: { preset: "custom" } }

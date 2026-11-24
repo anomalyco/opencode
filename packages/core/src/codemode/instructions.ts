@@ -158,7 +158,8 @@ export const make = (inventory?: CodeModeCatalog.Inventory): Instructions.List =
       // Rendered once, against the inventory that produced `current`, and stored with the update.
       changed: (previous, current) =>
         update(previous, current, inventory === undefined ? () => undefined : CodeModeCatalog.lookup(inventory)),
-      removed: () => "Code Mode tools are no longer available. Do not use any previously listed Code Mode tools.",
+      removed: () =>
+        "The `execute` tool is no longer available. Permitted tools are now available as direct tool calls.",
     },
   })
 }

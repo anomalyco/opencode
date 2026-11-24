@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Використання",
   "usage.cost": "Вартість",
   "usage.view": "Переглянути використання контексту",
-  "systemPrompt.title": "Системний запит",
   "rawMessages.title": "Необроблені повідомлення",
   "export.session": "Експортувати сесію",
   "stats.session": "Сесія",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Сесію збережено у файл {{filename}}",
   "export.failed.title": "Не вдалося експортувати сесію",
   "export.failed.description": "Під час експортування сесії сталася помилка",
+  "usage.toggle": "Перемкнути контекст сесії",
 }

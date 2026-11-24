@@ -34,6 +34,7 @@ import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol
 import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
 import {
   getCachedMarkdown,
+  enableMarkdownAppLinks,
   getReadyMarkdown,
   renderCachedMarkdown,
   touchCachedMarkdown,
@@ -69,6 +70,7 @@ import {
 } from "../context/markdown"
 import { createMarkdownImages } from "./markdown-image"
 import { createImagePreview } from "./image-preview"
+import { createDiagramPreview } from "./diagram-preview"
 import { setupFragmentLinks } from "./markdown-fragment-links"
 import { markSessionLinks, sessionReferenceClipboardText, setupSessionLinks } from "./markdown-session-links"
 import { markdownClipboardHtml } from "./markdown-clipboard"
@@ -144,18 +146,22 @@ async function code(text: string, language: string | undefined, key: string, com
   }
 }
 
-type CopyLabels = {
+type CodeLabels = {
   copy: string
   copied: string
+  maximize: string
+  wrap: string
+  unwrap: string
 }
 
-type CopyButtonState = {
-  setLabels: Setter<CopyLabels>
-  copy: (text: string) => void
+type CodeButtonState = {
+  setLabels: Setter<CodeLabels>
+  /** Only a copy button copies. */
+  copy?: (text: string) => void
   dispose: () => void
 }
 
-const copyButtonState = new WeakMap<HTMLElement, CopyButtonState>()
+const codeButtonState = new WeakMap<HTMLElement, CodeButtonState>()
 
 const urlPattern = /^https?:\/\/[^\s<>()`"']+$/
 
@@ -173,11 +179,11 @@ function codeUrl(text: string) {
   }
 }
 
-function createCopyButton(labels: CopyLabels) {
+function createCopyButton(labels: CodeLabels) {
   const host = document.createElement("div")
   host.setAttribute("data-slot", "markdown-copy-button")
 
-  const state: Partial<CopyButtonState> = {}
+  const state: Partial<CodeButtonState> = {}
 
   const dispose = render(() => {
     const [labelState, setLabels] = createSignal(labels, { equals: false })
@@ -194,16 +200,16 @@ function createCopyButton(labels: CopyLabels) {
 
   state.dispose = dispose
   // SAFETY: `render` runs its function synchronously, so `setLabels` and `copy` are assigned before this line.
-  copyButtonState.set(host, state as CopyButtonState)
+  codeButtonState.set(host, state as CodeButtonState)
 
   return host
 }
 
-function MarkdownCopyButton(props: { labels: CopyLabels; copied: boolean }) {
+function MarkdownCopyButton(props: { labels: CodeLabels; copied: boolean }) {
   const label = () => (props.copied ? props.labels.copied : props.labels.copy)
 
   return (
-    <Tooltip placement="top" value={label()}>
+    <Tooltip placement="top" value={label()} forceOpen={props.copied || undefined}>
       <IconButton
         type="button"
         size="normal"
@@ -211,7 +217,7 @@ function MarkdownCopyButton(props: { labels: CopyLabels; copied: boolean }) {
         aria-label={label()}
         icon={
           <>
-            <Icon name="outline-copy" data-copy-icon />
+            <Icon name="copy" data-copy-icon />
             <Icon name="check" data-check-icon />
           </>
         }
@@ -220,7 +226,108 @@ function MarkdownCopyButton(props: { labels: CopyLabels; copied: boolean }) {
   )
 }
 
-const codeHostSelector = '[data-slot="markdown-copy-button"], [data-component="markdown-code"]'
+// A block's own wrap choice lives in its `data-wrap`; without one it follows the provider's default.
+function createWrapButton(wrapper: HTMLElement, labels: CodeLabels, wrapDefault: () => boolean) {
+  const host = document.createElement("div")
+  host.setAttribute("data-slot", "markdown-wrap-button")
+
+  const state: Partial<CodeButtonState> = {}
+
+  const dispose = render(() => {
+    const [labelState, setLabels] = createSignal(labels, { equals: false })
+    const [override, setOverride] = createSignal<boolean>()
+    const wrapped = () => override() ?? wrapDefault()
+    const label = () => (wrapped() ? labelState().unwrap : labelState().wrap)
+    state.setLabels = setLabels
+
+    const toggle = () => {
+      const next = !wrapped()
+      // Choosing the default again follows the setting from then on.
+      const value = next === wrapDefault() ? undefined : next
+      setOverride(value)
+
+      if (value === undefined) return delete wrapper.dataset.wrap
+      wrapper.dataset.wrap = String(value)
+    }
+
+    return (
+      <Tooltip placement="top" value={label()}>
+        <IconButton
+          type="button"
+          size="normal"
+          variant="ghost-muted"
+          aria-label={label()}
+          icon={<Icon name="text-wrap" />}
+          onClick={toggle}
+        />
+      </Tooltip>
+    )
+  }, host)
+
+  state.dispose = dispose
+  // SAFETY: `render` runs its function synchronously, so the setter is assigned before this line.
+  codeButtonState.set(host, state as CodeButtonState)
+
+  return host
+}
+
+function appendCodeButtons(wrapper: HTMLElement, labels: CodeLabels, wrapDefault: () => boolean) {
+  const toolbar = document.createElement("div")
+  toolbar.setAttribute("data-slot", "markdown-code-toolbar")
+  toolbar.append(createWrapButton(wrapper, labels, wrapDefault), createCopyButton(labels))
+  wrapper.append(toolbar)
+  codeOverflow()?.observe(wrapper)
+}
+
+// The wrap button shows only on a block whose lines are wider than the block. Each check measures the blocks unwrapped
+// in one synchronous layout and restores them before the observer compares sizes again, so it reports no resize.
+let overflowObserver: ResizeObserver | undefined
+
+function codeOverflow() {
+  if (typeof ResizeObserver === "undefined") return
+  overflowObserver ??= new ResizeObserver((entries) =>
+    measureCodeOverflow(entries.map((entry) => entry.target).filter((el) => el instanceof HTMLElement)),
+  )
+
+  return overflowObserver
+}
+
+function measureCodeOverflow(wrappers: HTMLElement[]) {
+  wrappers.forEach((wrapper) => wrapper.toggleAttribute("data-code-measure", true))
+
+  const overflow = wrappers.map((wrapper) => {
+    const pre = wrapper.querySelector(":scope > pre")
+
+    return !!pre && pre.scrollWidth > pre.clientWidth
+  })
+
+  wrappers.forEach((wrapper, index) => {
+    wrapper.removeAttribute("data-code-measure")
+    wrapper.toggleAttribute("data-code-overflow", overflow[index])
+  })
+}
+
+// A line can grow wider without the block resizing, so a hovered block checks again before its buttons show.
+function setupCodeOverflow(root: HTMLDivElement) {
+  const handleOver = (event: PointerEvent) => {
+    if (!(event.target instanceof Element)) return
+    const wrapper = event.target.closest('[data-component="markdown-code"]')
+
+    if (!(wrapper instanceof HTMLElement)) return
+
+    if (event.relatedTarget instanceof Node && wrapper.contains(event.relatedTarget)) return
+    measureCodeOverflow([wrapper])
+  }
+
+  root.addEventListener("pointerover", handleOver)
+
+  return () => root.removeEventListener("pointerover", handleOver)
+}
+
+const codeButtons =
+  '[data-slot="markdown-copy-button"], [data-slot="markdown-mermaid-maximize"], [data-slot="markdown-wrap-button"]'
+
+const codeHostSelector = `${codeButtons}, [data-component="markdown-code"]`
 
 function disposeCodeHosts(root: Element) {
   const hosts = [
@@ -229,11 +336,48 @@ function disposeCodeHosts(root: Element) {
   ]
 
   hosts.forEach((host) => {
-    copyButtonState.get(host)?.dispose()
-    copyButtonState.delete(host)
+    disposeCodeButton(host)
+    overflowObserver?.unobserve(host)
     codeDrivers.get(host)?.dispatch({ type: "disposed" })
     codeDrivers.delete(host)
   })
+}
+
+function disposeCodeButton(host: HTMLElement) {
+  codeButtonState.get(host)?.dispose()
+  codeButtonState.delete(host)
+}
+
+// Opens the diagram in a maximized view, where it zooms and pans. The click is handled by the Markdown root.
+function createDiagramButton(labels: CodeLabels) {
+  const host = document.createElement("div")
+  host.setAttribute("data-slot", "markdown-mermaid-maximize")
+
+  const state: Partial<CodeButtonState> = {}
+
+  const dispose = render(() => {
+    const [labelState, setLabels] = createSignal(labels, { equals: false })
+    state.setLabels = setLabels
+
+    return (
+      <Tooltip placement="top" value={labelState().maximize}>
+        <IconButton
+          type="button"
+          size="normal"
+          variant="ghost-muted"
+          aria-label={labelState().maximize}
+          aria-haspopup="dialog"
+          icon={<Icon name="outline-maximize" />}
+        />
+      </Tooltip>
+    )
+  }, host)
+
+  state.dispose = dispose
+  // SAFETY: `render` runs its function synchronously, so the setter is assigned before this line.
+  codeButtonState.set(host, state as CodeButtonState)
+
+  return host
 }
 
 function disposeRenderedMarkdown(root: Element) {
@@ -271,8 +415,12 @@ function applyCodeMetadata(wrapper: HTMLElement, language: string | undefined) {
 
 type CodePlugins = { blocks: MarkdownCodeBlocks; match: MarkdownCodeBlockMatch }
 
-// The plugins are the driver's input for mounting; the block's phase lives only in the machine's state.
-type CodeDriver = { plugins: CodePlugins | undefined; dispatch: (event: CodeDecorationEvent) => void }
+// The plugins and labels are the driver's input for mounting; the block's phase lives only in the machine's state.
+type CodeDriver = {
+  plugins: CodePlugins | undefined
+  labels: CodeLabels
+  dispatch: (event: CodeDecorationEvent) => void
+}
 
 const codeDrivers = new WeakMap<HTMLElement, CodeDriver>()
 
@@ -282,15 +430,22 @@ type CodeContent = { host: HTMLElement; dispose?: () => void }
 // Content for a block's language replaces its code only once the closing fence arrived, so it never receives half a
 // block; until then, and when the content declines or fails, the block shows its code (or the built-in diagram).
 // Blocks of other languages take the plain path and never get a driver.
-function decorateCode(wrapper: HTMLElement, code: HTMLElement, complete: boolean, plugins: CodePlugins | undefined) {
+function decorateCode(
+  wrapper: HTMLElement,
+  code: HTMLElement,
+  complete: boolean,
+  plugins: CodePlugins | undefined,
+  labels: CodeLabels,
+) {
   const language = codeLanguage(wrapper.dataset.language)
   const existing = codeDrivers.get(wrapper)
 
   if (!existing && !plugins && language !== "mermaid") return
-  const driver = existing ?? createCodeDriver(wrapper)
+  const driver = existing ?? createCodeDriver(wrapper, labels)
 
   if (!existing) codeDrivers.set(wrapper, driver)
   driver.plugins = plugins
+  driver.labels = labels
   driver.dispatch({ type: "sync", language, source: code.textContent ?? "", complete, match: plugins?.match })
 }
 
@@ -299,7 +454,7 @@ function codeLanguage(language: string | undefined) {
   return (language ?? "").toLowerCase().replace(/[^\w#+.-]/g, "")
 }
 
-function createCodeDriver(wrapper: HTMLElement): CodeDriver {
+function createCodeDriver(wrapper: HTMLElement, labels: CodeLabels): CodeDriver {
   let state = INITIAL_CODE_DECORATION_STATE
   let actions: { host: HTMLElement; dispose: () => void } | undefined
   let content: CodeContent | undefined
@@ -310,7 +465,7 @@ function createCodeDriver(wrapper: HTMLElement): CodeDriver {
 
     if (next.state === previous) return
     state = next.state
-    showCodeDecoration(wrapper, viewCodeDecoration(previous), viewCodeDecoration(state))
+    showCodeDecoration(wrapper, viewCodeDecoration(previous), viewCodeDecoration(state), driver.labels)
     next.effects.forEach(run)
   }
 
@@ -345,7 +500,7 @@ function createCodeDriver(wrapper: HTMLElement): CodeDriver {
     if (effect.type === "mount-actions") {
       if (!blocks) return
       actions = createCodeActions(blocks, effect.block)
-      wrapper.insertBefore(actions.host, wrapper.querySelector(':scope > [data-slot="markdown-copy-button"]'))
+      wrapper.querySelector(':scope > [data-slot="markdown-code-toolbar"]')?.prepend(actions.host)
 
       return
     }
@@ -365,7 +520,7 @@ function createCodeDriver(wrapper: HTMLElement): CodeDriver {
     mounted.dispose = dispose
   }
 
-  const driver: CodeDriver = { plugins: undefined, dispatch }
+  const driver: CodeDriver = { plugins: undefined, labels, dispatch }
 
   return driver
 }
@@ -374,6 +529,7 @@ function showCodeDecoration(
   wrapper: HTMLElement,
   previous: ReturnType<typeof viewCodeDecoration>,
   view: ReturnType<typeof viewCodeDecoration>,
+  labels: CodeLabels,
 ) {
   if (view.pending) wrapper.dataset.mermaidPending = "true"
   else delete wrapper.dataset.mermaidPending
@@ -383,12 +539,22 @@ function showCodeDecoration(
   wrapper.toggleAttribute("data-code-content", view.content)
   const existing = wrapper.querySelector(':scope > [data-component="markdown-mermaid"]')
 
-  if (!view.diagram) return existing?.remove()
+  if (!view.diagram) {
+    existing?.remove()
+    const button = wrapper.querySelector<HTMLElement>(':scope > [data-slot="markdown-mermaid-maximize"]')
+
+    if (!button) return
+    disposeCodeButton(button)
+
+    return button.remove()
+  }
+
   const diagram = existing ?? document.createElement("div")
 
+  // The maximize button comes and goes with the diagram, and shows once it is drawn.
   if (!existing) {
     diagram.setAttribute("data-component", "markdown-mermaid")
-    wrapper.appendChild(diagram)
+    wrapper.append(diagram, createDiagramButton(labels))
   }
 
   if (!existing || view.svg !== previous.svg) diagram.innerHTML = view.svg ?? ""
@@ -425,24 +591,11 @@ function markCodeLinks(root: HTMLDivElement) {
   const codeNodes = Array.from(root.querySelectorAll(":not(pre) > code"))
 
   for (const code of codeNodes) {
+    // Code inside a link already goes where the link does.
+    if (code.closest("a")) continue
     const href = codeUrl(code.textContent ?? "")
 
-    const parentLink =
-      code.parentElement instanceof HTMLAnchorElement &&
-      code.parentElement.classList.contains("external-link") &&
-      !code.parentElement.hasAttribute("data-local-link")
-        ? code.parentElement
-        : null
-
-    if (!href) {
-      if (parentLink) parentLink.replaceWith(code)
-      continue
-    }
-
-    if (parentLink) {
-      parentLink.href = href
-      continue
-    }
+    if (!href) continue
 
     const link = document.createElement("a")
     link.href = href
@@ -643,7 +796,7 @@ function setupCodeCopy(root: HTMLDivElement) {
 
     if (!(button instanceof HTMLElement)) return
     const code = button.closest('[data-component="markdown-code"]')?.querySelector("code")
-    copyButtonState.get(button)?.copy(code?.textContent ?? "")
+    codeButtonState.get(button)?.copy?.(code?.textContent ?? "")
   }
 
   root.addEventListener("click", handleClick)
@@ -734,6 +887,8 @@ export function Markdown(
   const i18n = useI18n()
   const markdown = useMarkdown()
   const previewImages = createImagePreview()
+  const previewDiagrams = createDiagramPreview()
+  const wrapDefault = () => !!markdown?.codeWrap
   const [root, setRoot] = createSignal<HTMLDivElement>()
   const owner = createUniqueId()
   const lifetime = new AbortController()
@@ -742,7 +897,7 @@ export function Markdown(
   const settledMarkdown = new Map<string, Exclude<RenderedBlock, { mode: "code" }>>()
   let renderedBlocks: RenderedBlock[] = []
   let lastRender: { base: string | undefined; blocks: Block[]; rendered: RenderedBlock[] } | undefined
-  let appliedLabels: CopyLabels | undefined
+  let appliedLabels: CodeLabels | undefined
   // The code block languages the blocks were decorated for; false before the first run.
   let decoratedMatch: MarkdownCodeBlockMatch | undefined | false = false
   // Every streamed delta dispatches a rendered event, so the driver reuses its events and the machine returns the same
@@ -986,7 +1141,9 @@ export function Markdown(
   )
 
   let copyCleanup: (() => void) | undefined
+  let overflowCleanup: (() => void) | undefined
   let linkCleanup: (() => void) | undefined
+  let diagramCleanup: (() => void) | undefined
   let faviconCleanup: (() => void) | undefined
   let sessionLinkCleanup: (() => void) | undefined
   let fragmentLinkCleanup: (() => void) | undefined
@@ -1037,6 +1194,9 @@ export function Markdown(
     const labels = {
       copy: i18n.t("ui.message.copy"),
       copied: i18n.t("ui.message.copied"),
+      maximize: i18n.t("ui.diagramPreview.open"),
+      wrap: i18n.t("ui.message.wrapLines"),
+      unwrap: i18n.t("ui.message.unwrapLines"),
     }
 
     const nextCodeKeys = new Set(content.filter((block) => block.mode === "code").map((block) => block.key))
@@ -1058,7 +1218,18 @@ export function Markdown(
 
       const check = kept
         ? inlineCodeChecks.get(current)?.pending
-        : updateBlock(container, index, block, labels, plugins, sessionLinks, lifetime.signal, localFileExists)
+        : updateBlock(
+            container,
+            index,
+            block,
+            labels,
+            wrapDefault,
+            plugins,
+            sessionLinks,
+            lifetime.signal,
+            markdown?.appLinks,
+            localFileExists,
+          )
 
       return check ? [check] : []
     })
@@ -1070,7 +1241,8 @@ export function Markdown(
       container.querySelectorAll<HTMLElement>('[data-component="markdown-code"]').forEach((wrapper) => {
         const code = wrapper.querySelector<HTMLElement>(":scope > pre > code")
 
-        if (code) decorateCode(wrapper, code, wrapper.parentElement?.dataset.markdownComplete !== "false", plugins)
+        if (code)
+          decorateCode(wrapper, code, wrapper.parentElement?.dataset.markdownComplete !== "false", plugins, labels)
       })
 
     if (sessionLinks) markSessionLinks(container, sessionLinks)
@@ -1092,16 +1264,26 @@ export function Markdown(
 
     // A button gets the labels of the run that creates it, so the others only need new ones when the language changes.
     // Relabelling every button on each streamed delta re-rendered each one's tooltip and icon button.
-    if (appliedLabels?.copy !== labels.copy || appliedLabels?.copied !== labels.copied)
+    if (
+      appliedLabels?.copy !== labels.copy ||
+      appliedLabels?.copied !== labels.copied ||
+      appliedLabels?.maximize !== labels.maximize ||
+      appliedLabels?.wrap !== labels.wrap ||
+      appliedLabels?.unwrap !== labels.unwrap
+    )
       container
-        .querySelectorAll<HTMLElement>('[data-slot="markdown-copy-button"]')
-        .forEach((button) => copyButtonState.get(button)?.setLabels(labels))
+        .querySelectorAll<HTMLElement>(codeButtons)
+        .forEach((button) => codeButtonState.get(button)?.setLabels(labels))
 
     appliedLabels = labels
 
     if (!copyCleanup) copyCleanup = setupCodeCopy(container)
 
+    if (!overflowCleanup) overflowCleanup = setupCodeOverflow(container)
+
     if (!linkCleanup) linkCleanup = setupLocalLinks(container, () => markdown?.openLocalFile)
+
+    if (!diagramCleanup) diagramCleanup = previewDiagrams(container)
 
     if (!sessionLinkCleanup)
       sessionLinkCleanup = setupSessionLinks(
@@ -1126,7 +1308,11 @@ export function Markdown(
 
     if (copyCleanup) copyCleanup()
 
+    if (overflowCleanup) overflowCleanup()
+
     if (linkCleanup) linkCleanup()
+
+    if (diagramCleanup) diagramCleanup()
 
     if (sessionLinkCleanup) sessionLinkCleanup()
 
@@ -1148,6 +1334,7 @@ export function Markdown(
     <div
       data-component="markdown"
       data-streaming={local.streaming ? "" : undefined}
+      data-code-wrap={wrapDefault() ? "" : undefined}
       dir="auto"
       classList={{
         ...local.classList,
@@ -1207,16 +1394,18 @@ function updateBlock(
   container: HTMLDivElement,
   index: number,
   block: RenderedBlock,
-  labels: CopyLabels,
+  labels: CodeLabels,
+  wrapDefault: () => boolean,
   plugins: CodePlugins | undefined,
   sessionLinks: ((id: string) => string | undefined) | undefined,
   signal: AbortSignal,
+  appLinks: boolean | undefined,
   localFileExists?: MarkdownLocalFileExists,
 ) {
-  const current = container.children[index]
+    const current = container.children[index]
 
   if (block.mode === "code") {
-    updateCodeBlock(container, current, block, labels, plugins)
+    updateCodeBlock(container, current, block, labels, wrapDefault, plugins)
 
     return
   }
@@ -1249,6 +1438,8 @@ function updateBlock(
 
   if (source === next) disposeCodeHosts(next)
   source.innerHTML = block.html
+
+  if (appLinks) enableMarkdownAppLinks(source)
   const pending = markInlineCode(source, next, block.mode === "live", signal, localFileExists)
   markCodeLinks(source)
   wrapTables(source)
@@ -1284,8 +1475,8 @@ function updateBlock(
       )
       pre.replaceWith(wrapper)
       wrapper.appendChild(pre)
-      wrapper.appendChild(createCopyButton(labels))
-      decorateCode(wrapper, code, true, plugins)
+      appendCodeButtons(wrapper, labels, wrapDefault)
+      decorateCode(wrapper, code, true, plugins, labels)
     })
   }
 
@@ -1308,7 +1499,8 @@ function updateCodeBlock(
   container: HTMLDivElement,
   current: Element | undefined,
   block: Extract<RenderedBlock, { mode: "code" }>,
-  labels: CopyLabels,
+  labels: CodeLabels,
+  wrapDefault: () => boolean,
   plugins: CodePlugins | undefined,
 ) {
   const existing =
@@ -1358,7 +1550,7 @@ function updateCodeBlock(
       raw: block.raw,
     })
 
-    if (wrapper instanceof HTMLElement) decorateCode(wrapper, code, block.complete, plugins)
+    if (wrapper instanceof HTMLElement) decorateCode(wrapper, code, block.complete, plugins, labels)
 
     return
   }
@@ -1373,8 +1565,8 @@ function updateCodeBlock(
   ;[...block.stable, ...block.unstable].map(createTokenSpan).forEach((span) => codeElement.appendChild(span))
   pre.appendChild(codeElement)
   wrapper.appendChild(pre)
-  wrapper.appendChild(createCopyButton(labels))
-  decorateCode(wrapper, codeElement, block.complete, plugins)
+  appendCodeButtons(wrapper, labels, wrapDefault)
+  decorateCode(wrapper, codeElement, block.complete, plugins, labels)
   next.appendChild(wrapper)
   renderedCodeTokens.set(next, {
     language: block.language,

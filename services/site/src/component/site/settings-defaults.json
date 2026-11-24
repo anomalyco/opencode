@@ -352,8 +352,8 @@
   "consoleCopyColumns": "2 columns",
   "docsSwitcher": "lockup",
   "docsSubmenu": "flyout",
-  "docsNav": "split",
-  "docsVersionNotice": "frosted top",
+  "docsNav": "combined",
+  "docsVersionNotice": "inverted",
   "terminalInstall": "button",
   "carouselPreset": "four across",
   "carousel": {

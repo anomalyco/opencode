@@ -17,6 +17,36 @@ paid or Go model, and usage is billed to your workspace like any other request.
 Free-tier chat models are only available from within OpenCode. Other harnesses receive HTTP `403` for those models,
 even with a Console API key. Use paid models or a Go subscription.
 
+## Console CLI
+
+The [Console CLI](https://github.com/anomalyco/opencode-console-cli) connects a harness to your workspace with one
+command. It needs Node.js 22 or later.
+
+| Harness          | Command                                        |
+| ---------------- | ---------------------------------------------- |
+| Claude Code      | `npx @opencode/console setup claude-code`      |
+| Codex            | `npx @opencode/console setup codex`            |
+| Hermes           | `npx @opencode/console setup hermes`           |
+| Pi               | `npx @opencode/console setup pi`               |
+| DeepSeek Harness | `npx @opencode/console setup deepseek-harness` |
+
+Your browser opens Console, where you approve the sign-in and pick the workspace. The harness then gets
+
+- the workspace's models, through Console
+- the workspace's policies, checked before every tool call
+- the workspace's MCP servers, skills and instructions
+
+The CLI keeps the harness in sync with the workspace and updates itself.
+
+To keep a harness's own sign-in and models, such as a Claude or ChatGPT subscription, add `--keep-provider`. The harness
+still gets the workspace's policies, MCP servers, skills and instructions. It works with Claude Code, Codex and Hermes.
+
+```bash
+npx @opencode/console setup codex --keep-provider
+```
+
+To set up a harness by hand, or one the CLI doesn't cover, use an API key and the base URLs below.
+
 ## Get an API key
 
 Harnesses authenticate with a Console API key. The quickest option is a

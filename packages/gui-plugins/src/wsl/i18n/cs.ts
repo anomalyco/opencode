@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} vypršel po {{timeout}}ms",
   "error.failedPort": "Nepodařilo se získat port",
   "menu.remove": "Odebrat",
+  "error.busy": "{{distro}} je zaneprázdněna jinou úlohou. Zkuste to znovu, až skončí.",
 }

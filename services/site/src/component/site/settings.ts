@@ -1051,8 +1051,8 @@ function createSchema() {
     consoleCopyColumns: z.enum(sectionColumns).catch("2 columns"),
     docsSwitcher: z.enum(docsSwitchers).catch("lockup"),
     docsSubmenu: z.enum(docsSubmenus).catch("flyout"),
-    docsNav: z.enum(docsNavs).catch("split"),
-    docsVersionNotice: z.enum(docsVersionNotices).catch("frosted top"),
+    docsNav: z.enum(docsNavs).catch("combined"),
+    docsVersionNotice: z.enum(docsVersionNotices).catch("inverted"),
     terminalInstall: z.enum(terminalInstalls).catch("button"),
     carouselPreset: z.enum(carouselPresetNames).catch("four across"),
     carousel: z

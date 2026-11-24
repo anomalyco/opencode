@@ -126,6 +126,13 @@
   min-width: 0;
 }
 
+/* The floating file-tree toggle sits just 2px from the mode selector. Its fill can cover an outset ring. */
+[data-component="session-review-v2"][data-sidebar-toggle]
+  :is([data-slot="session-review-v2-sidebar-title"], [data-slot="session-review-v2-toolbar-title"])
+  [data-component="select-v2"]:focus-visible {
+  outline-offset: -2px;
+}
+
 [data-component="session-review-v2-sidebar-root"] [data-slot="session-review-v2-sidebar-filter"] {
   padding: 0 8px 4px;
   flex-shrink: 0;
@@ -574,4 +581,73 @@
   text-align: center;
   letter-spacing: -0.04px;
   color: var(--v2-text-text-muted);
+}
+
+[data-component="session-review-v2"] [data-slot="session-review-v2-side-menu-trigger"] {
+  display: contents;
+}
+
+/* The sidebar on the end edge mirrors the start layout: tree, toggle, border and resize handle all swap sides. */
+[data-component="session-review-v2"][data-sidebar-side="end"] [data-slot="session-review-v2-body"] {
+  flex-direction: row-reverse;
+}
+
+[data-component="session-review-v2"][data-sidebar-side="end"] [data-slot="session-review-v2-sidebar-toggle"] {
+  inset-inline-start: auto;
+  inset-inline-end: 8px;
+}
+
+[data-component="session-review-v2"][data-sidebar-side="end"] [data-slot="session-review-v2-sidebar"] {
+  border-inline-end: 0;
+  border-inline-start: 1px solid var(--v2-border-border-base);
+}
+
+[data-component="session-review-v2"][data-sidebar-side="end"]
+  [data-slot="session-review-v2-sidebar"][data-presence="closing"] {
+  border-inline-start-width: 0;
+}
+
+[data-component="session-review-v2"][data-sidebar-side="end"]
+  [data-slot="session-review-v2-sidebar"][data-transition]:not([data-resizing]) {
+  transition:
+    width 200ms cubic-bezier(0.22, 1, 0.36, 1),
+    border-inline-start-width 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+[data-component="session-review-v2"][data-sidebar-side="end"]
+  [data-slot="session-review-v2-sidebar"][data-presence="opening"] {
+  @starting-style {
+    width: 0;
+    border-inline-start-width: 0;
+  }
+}
+
+[data-component="session-review-v2"][data-sidebar-side="end"] [data-slot="session-review-v2-sidebar-resize"] {
+  inset-inline-end: auto;
+  inset-inline-start: 0;
+}
+
+[data-component="session-review-v2"][data-sidebar-toggle][data-sidebar-side="end"]
+  [data-slot="session-review-v2-sidebar-header"] {
+  padding-inline: 8px 46px;
+}
+
+[data-component="session-review-v2"][data-sidebar-toggle-gap="10"][data-sidebar-side="end"]
+  [data-slot="session-review-v2-sidebar-header"] {
+  padding-inline: 8px 54px;
+}
+
+[data-component="session-review-v2"][data-sidebar-toggle][data-sidebar-side="end"]
+  [data-slot="session-review-v2-sidebar-title"]:not(:has([data-component="select-v2-root"])) {
+  margin-inline-start: 8px;
+}
+
+[data-component="session-review-v2"][data-sidebar-toggle][data-sidebar-collapsed][data-sidebar-side="end"]
+  [data-slot="session-review-v2-toolbar"] {
+  padding-inline: 8px 46px;
+}
+
+[data-component="session-review-v2"][data-sidebar-toggle-gap="10"][data-sidebar-collapsed][data-sidebar-side="end"]
+  [data-slot="session-review-v2-toolbar"] {
+  padding-inline: 8px 54px;
 }

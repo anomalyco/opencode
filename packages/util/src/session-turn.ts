@@ -4,7 +4,13 @@ export * as SessionTurn from "./session-turn.js"
 export interface Message {
   readonly id: string
   readonly type: string
-  readonly time: { readonly created: number; readonly streamed?: number; readonly completed?: number }
+  readonly time: {
+    readonly created: number
+    /** When the provider streamed the first output token; steps recorded before this existed leave it unset. */
+    readonly firstToken?: number
+    readonly streamed?: number
+    readonly completed?: number
+  }
   readonly tokens?: { readonly output: number; readonly reasoning: number }
 }
 
@@ -27,14 +33,19 @@ export function duration(messages: readonly Message[], message: Message, options
   return Math.max(0, message.time.completed - (input?.time.created ?? message.time.created))
 }
 
-/** Output and reasoning tokens per second across the turn's steps up to `message`, or undefined until every step has streamed. */
+/**
+ * Output and reasoning tokens per second while the provider streamed them, or undefined until every step has streamed.
+ *
+ * Each step counts from its first streamed token to the end of the response body, so the wait for that first token
+ * (time to first token) is not divided into the output rate. Steps recorded before `time.firstToken` existed count
+ * from request dispatch instead, which is what this measured for them before the field existed.
+ */
 export function tokensPerSecond(messages: readonly Message[], message: Message, options: Options = {}) {
-  const index = options.index ?? messages.findIndex((item) => item.id === message.id)
-  const end = index === -1 ? messages.length : index + 1
-  const start = inputIndex(messages, end, options.legacy ?? legacy(messages))
-  const steps = messages.slice(start + 1, end).filter((item) => item.type === "assistant")
+  const steps = turnSteps(messages, message, options)
   const durations = steps.flatMap((step) =>
-    step.time.streamed === undefined ? [] : [Math.max(0, step.time.streamed - step.time.created)],
+    step.time.streamed === undefined
+      ? []
+      : [Math.max(0, step.time.streamed - (step.time.firstToken ?? step.time.created))],
   )
   if (steps.length === 0 || durations.length !== steps.length) return
   const output = steps.reduce((total, step) => total + (step.tokens?.output ?? 0) + (step.tokens?.reasoning ?? 0), 0)
@@ -46,6 +57,13 @@ export function tokensPerSecond(messages: readonly Message[], message: Message, 
 
 export function legacy(messages: readonly Message[]) {
   return !messages.some((message) => message.type === "idle")
+}
+
+function turnSteps(messages: readonly Message[], message: Message, options: Options) {
+  const index = options.index ?? messages.findIndex((item) => item.id === message.id)
+  const end = index === -1 ? messages.length : index + 1
+  const start = inputIndex(messages, end, options.legacy ?? legacy(messages))
+  return messages.slice(start + 1, end).filter((item) => item.type === "assistant")
 }
 
 function inputIndex(messages: readonly Message[], end: number, legacy: boolean) {

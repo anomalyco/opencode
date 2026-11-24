@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "Ďalej",
   "releaseNotes.action.hideFuture": "Nabudúce nezobrazovať",
   "releaseNotes.media.alt": "Ukážka vydania",
+  "action.reload": "Znova načítať a aktualizovať",
+  "action.reloading": "Znova sa načítava…",
+  "web.ready.title": "Aktualizácia je pripravená",
+  "web.ready.message":
+    "Nová verzia OpenCode je pripravená. Znova načítajte stránku, aby sa použila vo všetkých otvorených oknách.",
+  "web.reload": "Znova načítať",
+  "web.reset.title": "Znova načítať zo servera",
+  "web.reset.description": "Vymazať uloženú kópiu aplikácie a načítať aktuálnu verziu zo servera",
+  "web.reset.action": "Znova načítať zo servera",
 }

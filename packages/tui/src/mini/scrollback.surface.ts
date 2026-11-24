@@ -20,7 +20,7 @@ import { entryColor, entryLook, entrySyntax } from "./scrollback.shared"
 import { turnSummaryCommit } from "./turn-summary"
 import { entryWriter, sameEntryGroup, separatorRows, spacerWriter, turnSummaryWriter } from "./scrollback.writer"
 import { type RunTheme } from "./theme"
-import type { RunEntryBody, StreamCommit } from "./types"
+import type { RunEntryBody, ScrollbackOptions, StreamCommit } from "./types"
 
 type ActiveBody = Exclude<RunEntryBody, { type: "none" | "structured" }>
 
@@ -49,15 +49,18 @@ function commitMarkdownBlocks(input: {
     return false
   }
 
-  const first = input.renderable._blockStates[input.startBlock]
-  const last = input.renderable._blockStates[input.endBlockExclusive - 1]
+  // One child per top-level block, in order.
+  const blocks = input.renderable.getChildren()
+  const first = blocks[input.startBlock]
+  const last = blocks[input.endBlockExclusive - 1]
   if (!first || !last) {
     return false
   }
 
-  const next = input.renderable._blockStates[input.endBlockExclusive]
-  const start = first.renderable.y
-  const end = next ? next.renderable.y : last.renderable.y + last.renderable.height
+  // A block goes out with the gap above it; the gap below waits for the next block, which may never show one.
+  const previous = blocks[input.startBlock - 1]
+  const start = previous ? previous.y + previous.height : first.y
+  const end = last.y + last.height
 
   input.beforeCommit?.()
   input.surface.commitRows(start, end, {
@@ -95,6 +98,7 @@ export class RunScrollbackStream {
   private shellOutput: () => boolean
   private mono: boolean
   private imagePreview: boolean
+  private markdown: ScrollbackOptions["markdown"]
   private destroyed = false
   private pendingThemes: RunTheme[] = []
   private pendingStyles: SyntaxStyle[] = []
@@ -109,8 +113,10 @@ export class RunScrollbackStream {
       shellOutput?: () => boolean
       mono?: boolean
       imagePreview?: boolean
+      markdown?: ScrollbackOptions["markdown"]
     } = {},
   ) {
+    this.markdown = options.markdown
     this.treeSitterClient = options.treeSitterClient
     this.wrote = options.wrote ?? false
     this.shellOutput = options.shellOutput ?? (() => true)
@@ -208,8 +214,7 @@ export class RunScrollbackStream {
               syntaxStyle: syntax!,
               width: "100%",
               streaming: true,
-              internalBlockMode: "top-level",
-              tableOptions: this.mono ? monoMarkdownTableOptions : { widthMode: "content" },
+              tableOptions: this.mono ? monoMarkdownTableOptions : { style: "columns", widthMode: "content" },
               fg: entryColor(commit, this.theme),
               treeSitterClient,
             })
@@ -317,7 +322,10 @@ export class RunScrollbackStream {
     renderable.streaming = !done
     await active.surface.settle()
     this.releasePendingThemes()
-    const targetBlockCount = done ? renderable._blockStates.length : renderable._stableBlockCount
+    const blockCount = renderable.getChildren().length
+    // A committed block goes out once a block follows it, so its line ending is known; the last one waits for the
+    // caller's line ending at completion.
+    const targetBlockCount = done ? blockCount : Math.min(renderable.committedBlockCount, blockCount - 1)
     if (targetBlockCount <= active.committedBlocks) {
       return false
     }
@@ -328,7 +336,8 @@ export class RunScrollbackStream {
         renderable,
         startBlock: active.committedBlocks,
         endBlockExclusive: targetBlockCount,
-        trailingNewline: done && targetBlockCount === renderable._blockStates.length ? trailingNewline : false,
+        // Blocks followed by another end their rows; the gap above the next block goes out with that block.
+        trailingNewline: done ? trailingNewline : true,
         beforeCommit: () => this.flushPendingSpacer(active),
       })
     ) {
@@ -465,7 +474,7 @@ export class RunScrollbackStream {
       return
     }
 
-    const body = entryBody(commit, { shellOutput: this.shellOutput(), mono: this.mono })
+    const body = entryBody(commit, { shellOutput: this.shellOutput(), mono: this.mono, markdown: this.markdown })
     if (body.type === "none") {
       if (entryDone(commit)) {
         this.markRendered(await this.finishActive(false))

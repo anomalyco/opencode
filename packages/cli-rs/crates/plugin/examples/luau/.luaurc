@@ -1,0 +1,6 @@
+{
+    "languageMode": "strict",
+    "aliases": {
+        "opencode": "../../src/luau/opencode"
+    }
+}

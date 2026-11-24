@@ -5,7 +5,6 @@ export default {
   "usage.usage": "ការប្រើប្រាស់",
   "usage.cost": "តម្លៃ",
   "usage.view": "មើលការប្រើប្រាស់បរិបទ",
-  "systemPrompt.title": "ប្រអប់បញ្ចូលប្រព័ន្ធ",
   "rawMessages.title": "សារឆៅ",
   "export.session": "សម័យនាំចេញ",
   "stats.session": "សម័យ",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "បានរក្សាទុកសម័យទៅ {{filename}}",
   "export.failed.title": "បរាជ័យក្នុងការនាំចេញសម័យ",
   "export.failed.description": "កំហុសបានកើតឡើងខណៈពេលនាំចេញសម័យ",
+  "usage.toggle": "បិទ/បើកបរិបទសម័យ",
 }

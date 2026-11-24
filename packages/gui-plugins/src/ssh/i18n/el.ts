@@ -41,4 +41,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Προσθήκη διακομιστή",
   "menu.delete": "Διαγραφή",
+  "error.unavailable": "Το SSH δεν είναι διαθέσιμο",
 }

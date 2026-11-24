@@ -37,6 +37,7 @@ export function SessionUserMessage(props: {
   fold?: boolean
   expanded?: boolean
   onExpandedChange?: (expanded: boolean) => void
+  inlineQuotes?: boolean
 }) {
   return (
     <CurrentUserMessageDisplay
@@ -57,6 +58,7 @@ export function SessionUserMessage(props: {
       fold={props.fold}
       expanded={props.expanded}
       onExpandedChange={props.onExpandedChange}
+      inlineQuotes={props.inlineQuotes}
     />
   )
 }
@@ -66,6 +68,7 @@ export function SessionAssistantContent(props: {
   content: SessionMessageAssistant["content"][number]
   contentID: string
   showAssistantCopyPartID?: string | null
+  keepCopyVisible?: boolean
   turnDurationMs?: number | null
   turnTokensPerSecond?: number
   sources?: TurnSources
@@ -85,6 +88,7 @@ export function SessionAssistantContent(props: {
             text={content().text}
             message={props.message}
             showCopy={props.showAssistantCopyPartID === props.contentID}
+            keepCopyVisible={props.keepCopyVisible}
             turnDurationMs={props.turnDurationMs}
             turnTokensPerSecond={props.turnTokensPerSecond}
             sources={props.sources}

@@ -35,6 +35,7 @@ async function setup(width: number, output = "", newDesigns = false) {
   }
   const state = { output, missing: false, failure: false }
   const requests: { url: URL; method: string }[] = []
+  const copied: string[] = []
   const events = createEventStream()
   const envelope = (data: unknown) => json({ location, data })
   const api = createApi(
@@ -67,7 +68,11 @@ async function setup(width: number, output = "", newDesigns = false) {
 
   const app = await testRender(
     () => (
-      <TestTuiContexts directory={temporary.path} paths={{ state: temporary.path }}>
+      <TestTuiContexts
+        directory={temporary.path}
+        paths={{ state: temporary.path }}
+        clipboard={{ read: async () => undefined, write: async (text) => void copied.push(text) }}
+      >
         <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
           <StorageProvider>
             <ConfigProvider config={createTuiResolvedConfig({ experimental: { "new-designs": newDesigns } })}>
@@ -101,6 +106,7 @@ async function setup(width: number, output = "", newDesigns = false) {
     shell,
     location,
     requests,
+    copied,
     events,
     async [Symbol.asyncDispose]() {
       app.renderer.destroy()
@@ -233,4 +239,17 @@ test("new designs show footer actions instead of the legacy hint line", async ()
   expect(frame).toContain("copy command c")
   expect(frame).toContain("copy output o")
   expect(frame).not.toContain("back esc")
+})
+
+test("the retained 64 KiB tail starts on a whole character", async () => {
+  await using app = await setup(100, "😀", true)
+  app.mockInput.pressEnter()
+  await app.waitForFrame((frame) => frame.includes("Shell output") && frame.includes("😀"))
+  // The second page brings the text to 64 KiB + 1 code units, so the tail would start on the emoji's second half.
+  const rest = ("x".repeat(1023) + "\n").repeat(63) + "x".repeat(1023)
+  app.state.output += rest
+  await app.waitForFrame((frame) => frame.includes("Earlier output omitted"), { maxPasses: 100 })
+  app.mockInput.pressKey("o")
+  await app.waitFor(() => app.copied.length > 0)
+  expect(app.copied).toEqual([rest])
 })

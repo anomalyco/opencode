@@ -551,6 +551,98 @@ test("loads a running subagent's question without polling idle subagents on ever
   expect(forms.toSorted()).toEqual([`/api/session/${runningID}/form`, `/api/session/${sessionID}/form`].toSorted())
 })
 
+test("recovers a running child session's permission on load and across reconnects without polling idle subagents", async ({
+  page,
+}) => {
+  const childID = "ses_request_running_child"
+  const idleIDs = Array.from({ length: 5 }, (_, index) => `ses_request_idle_perm_${index}`)
+  const replies: { sessionID: string; permissionID: string; body: unknown }[] = []
+  const child = { idle: false }
+
+  const childPermission = (id: string, command: string) => ({
+    id,
+    sessionID: childID,
+    action: "shell",
+    resources: [command],
+    metadata: {},
+    save: [],
+  })
+
+  const childPermissions = [childPermission("perm_child_initial", "git status")]
+
+  const sessionPermissions = {
+    [sessionID]: [],
+    [childID]: childPermissions,
+  }
+
+  const transport = await installSseTransport(page, { server: SERVER, retry: 20 })
+  await mockWorkspace(page, {
+    name: "RequestDocks",
+    directory,
+    sessions: [
+      { id: sessionID, title },
+      { id: childID, title: "Running child", parentID: sessionID },
+      ...idleIDs.map((id) => ({ id, title: id, parentID: sessionID })),
+    ],
+    seed: { tabs: [sessionID] },
+    sessionStatus: () => ({ [childID]: { type: child.idle ? "idle" : "running" } }),
+    sessionPermissions,
+    onPermissionReply: (reply) => replies.push(reply),
+  })
+
+  // Idle subagents whose worktrees were deleted must not be polled for permissions.
+  await page.route(/\/api\/session\/ses_request_idle_perm_\d+\/permission$/, (route) =>
+    route.fulfill({ status: 404, json: { message: "Location not found" } }),
+  )
+
+  const permissionGets: string[] = []
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname
+
+    if (request.method() === "GET" && path.startsWith("/api/session/") && path.endsWith("/permission"))
+      permissionGets.push(path)
+  })
+
+  await page.goto(sessionHref(sessionID))
+  const first = await transport.waitForConnection()
+  await expectSessionTitle(page, title)
+
+  const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
+  const composer = page.locator('[data-component="composer"]')
+  await expect(permission).toBeVisible()
+  await expect(permission.getByText("git status")).toBeVisible()
+  await expect(composer).toHaveCount(0)
+
+  // Resolved while offline and the child finished: reconnect must clear the cached request.
+  childPermissions.length = 0
+  child.idle = true
+  await transport.disconnect()
+  const second = await transport.waitForConnection({ after: first.id })
+  await expect(permission).toHaveCount(0)
+  await expect(composer).toBeVisible()
+
+  // Asked while offline with no `permission.asked` event: reconnect must recover it for the child.
+  child.idle = false
+  childPermissions.push(childPermission("perm_child_reconnect", "git diff"))
+  await transport.disconnect()
+  await transport.waitForConnection({ after: second.id })
+  await expect(permission).toBeVisible()
+  await expect(permission.getByText("git diff")).toBeVisible()
+
+  const reply = page.waitForResponse(
+    (response) =>
+      response.request().method() === "POST" &&
+      new URL(response.url()).pathname === `/api/session/${childID}/permission/perm_child_reconnect/reply`,
+  )
+
+  await permission.getByRole("button", { name: "Allow once" }).click()
+  expect((await reply).status()).toBe(204)
+  expect(replies).toEqual([{ sessionID: childID, permissionID: "perm_child_reconnect", body: { decision: "once" } }])
+  await expect(permission).toHaveCount(0)
+  await expect(composer).toBeVisible()
+  expect(permissionGets.filter((path) => path.includes("ses_request_idle_perm_"))).toEqual([])
+})
+
 test("restores the draft caret before typing after a request dock closes", async ({ page }) => {
   const transport = await installSseTransport(page, { server: SERVER, retry: 20 })
   await mockServer(page, { forms: [] })

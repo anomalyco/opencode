@@ -18,17 +18,18 @@ export const ai = {
   image: Image,
   decision: Decision,
   embedding: Embedding,
+  video: Video,
   /** Experimental: may change without compatibility guarantees. */
   experimental: {
     speech: Speech,
     transcription: Transcription,
-    video: Video,
   },
 } as const
 
 export { AIClient } from "./ai-client.js"
 export { LLMClient } from "./route/client.js"
 export { ImageClient } from "./image-client.js"
+export { VideoClient } from "./video-client.js"
 export { Auth } from "./route/auth.js"
 export { ProviderPackage } from "./provider-package.js"
 export type { LLMClientService } from "./route/client.js"

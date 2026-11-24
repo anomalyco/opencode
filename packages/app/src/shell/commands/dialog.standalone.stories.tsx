@@ -13,7 +13,9 @@ import { useTabs } from "@/shell/tabs/tabs"
 import { CommandPaletteView, matchesCommandPaletteEntry } from "./dialog"
 import { createCommandPaletteFileEntry, type CommandPaletteEntry } from "./palette"
 
-function CommandPaletteStory(props: { query?: string }) {
+type Scenario = { query?: string; fileSearch?: "pending" | "failed" }
+
+function CommandPaletteStory(props: Scenario) {
   const dialog = useDialog()
 
   const language = useLanguage()
@@ -171,27 +173,44 @@ function CommandPaletteStory(props: { query?: string }) {
     ]
   }
 
+  const findFiles = async (query: string, signal: AbortSignal): Promise<CommandPaletteEntry[]> => {
+    if (!query) return []
+
+    if (props.fileSearch === "failed") throw new Error("File search unavailable")
+
+    if (props.fileSearch === "pending") {
+      return new Promise((_, reject) => signal.addEventListener("abort", () => reject(signal.reason), { once: true }))
+    }
+
+    return files().filter((entry) => matchesCommandPaletteEntry(entry, query))
+  }
+
   const open = () => {
     tabs.addSessionTab({ server: serverKey, sessionId: "ses_story_1" })
-    void dialog.show(() => (
-      <CommandPaletteView
-        placeholder={language.t("palette.search.placeholder")}
-        items={items}
-        sources={[async (query) => (query ? files().filter((entry) => matchesCommandPaletteEntry(entry, query)) : [])]}
-        highlight={() => {}}
-        select={() => dialog.close()}
-        close={() => dialog.close()}
-      />
-    ))
+    void dialog.show(() => {
+      let host!: HTMLDivElement
 
-    if (!props.query) return
-    const initial = props.query
-    queueMicrotask(() => {
-      const input = document.querySelector<HTMLInputElement>(".command-palette input[role='combobox']")
+      onMount(() => {
+        if (!props.query) return
+        const input = host.querySelector<HTMLInputElement>('input[role="combobox"]')
 
-      if (!input) return
-      input.value = initial
-      input.dispatchEvent(new InputEvent("input", { bubbles: true }))
+        if (!input) return
+        input.value = props.query
+        input.dispatchEvent(new InputEvent("input", { bubbles: true }))
+      })
+
+      return (
+        <div class="contents" ref={host}>
+          <CommandPaletteView
+            placeholder={language.t("palette.search.placeholder")}
+            items={items}
+            sources={[findFiles]}
+            highlight={() => {}}
+            select={() => dialog.close()}
+            close={() => dialog.close()}
+          />
+        </div>
+      )
     })
   }
 
@@ -209,18 +228,20 @@ export default {
   id: "app-dialog-command-palette",
 }
 
-export const Default = {
+const story = (scenario: Scenario = {}) => ({
   render: () => (
     <DialogStoryRuntime>
-      <CommandPaletteStory />
+      <CommandPaletteStory {...scenario} />
     </DialogStoryRuntime>
   ),
-}
+})
 
-export const Searching = {
-  render: () => (
-    <DialogStoryRuntime>
-      <CommandPaletteStory query="model" />
-    </DialogStoryRuntime>
-  ),
-}
+export const Default = story()
+
+export const Searching = story({ query: "model" })
+
+export const NoResults = story({ query: "changelog.md" })
+
+export const SearchingFiles = story({ query: "changelog.md", fileSearch: "pending" })
+
+export const FileSearchFailed = story({ query: "changelog.md", fileSearch: "failed" })

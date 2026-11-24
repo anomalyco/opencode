@@ -1,0 +1,31 @@
+{
+  "name": "opencode-data-sync-production",
+  "compatibilityDate": "2026-07-25",
+  "compatibilityFlags": ["nodejs_compat"],
+  "triggers": [
+    { "type": "scheduled", "schedule": "5 * * * *" },
+    { "type": "scheduled", "schedule": "20 3 * * *" }
+  ],
+  "limits": { "cpuMs": 300000 },
+  "observability": { "enabled": true },
+  "workersDev": false,
+  "previewUrls": false,
+  "env": {
+    "DataSyncWorkflow": {
+      "type": "workflow",
+      "name": "opencode-data-sync-production",
+      "worker": "opencode-data-sync-production",
+      "exportName": "DataSyncWorkflow"
+    },
+    "STAGE": { "type": "text", "value": "production" },
+    "DATA_DATABASE_HOST": { "type": "secret" },
+    "DATA_DATABASE_USERNAME": { "type": "secret" },
+    "DATA_DATABASE_PASSWORD": { "type": "secret" },
+    "R2_SQL_AUTH_TOKEN": { "type": "secret" },
+    "DATA_HIDDEN_MODELS": { "type": "secret" }
+  },
+  "exports": {
+    "DataSyncWorkflow": { "type": "workflow", "name": "opencode-data-sync-production" }
+  },
+  "manifest": { "type": "partial", "mainModule": "index.mjs", "modules": {} }
+}

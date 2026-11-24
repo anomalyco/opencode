@@ -407,6 +407,28 @@ describe("MCP OAuth", () => {
       })
     })
 
+    test("redeems the code with the localhost redirect a server sent the browser back to", async () => {
+      const { server, registrations, tokenRequests } = authorizationServer({})
+      const sent = await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const { authorization, url } = yield* start(server)
+            const redirect = new URL(url.searchParams.get("redirect_uri")!)
+            redirect.searchParams.set("code", "accepted")
+            redirect.searchParams.set("state", url.searchParams.get("state")!)
+            // Clerk's consent page rewrites 127.0.0.1 to localhost; the browser reaches the same listener.
+            yield* Effect.promise(() => fetch(redirect, { headers: { host: `localhost:${redirect.port}` } }))
+            yield* authorization.callback
+            return redirect
+          }),
+        ),
+      ).finally(() => server.stop(true))
+      expect(registrations[0]).toMatchObject({
+        redirect_uris: [`http://127.0.0.1:${sent.port}/callback`, `http://localhost:${sent.port}/callback`],
+      })
+      expect(tokenRequests[0]?.get("redirect_uri")).toBe(`http://localhost:${sent.port}/callback`)
+    })
+
     test("reuses the client registered by an earlier login", async () => {
       const { server, registrations } = authorizationServer({})
       const previous = credential({ access: "a", refresh: "r", url: server.url.href })
@@ -529,6 +551,8 @@ describe("MCP OAuth connections", () => {
             return new Response(null, { status: 401 })
           }
           const body = (await request.json()) as { id: number; method: string; params?: { protocolVersion?: string } }
+          if (body.method === "server/discover")
+            return Response.json({ jsonrpc: "2.0", id: body.id, error: { code: -32601, message: "Method not found" } })
           if (body.method !== "initialize") return new Response(null, { status: 202 })
           return Response.json({
             jsonrpc: "2.0",

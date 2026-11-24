@@ -5,8 +5,8 @@ import { Octokit } from "@octokit/rest"
 import { parseRepositoryClaim } from "./github"
 
 export interface Env {
-  GITHUB_APP_ID: string
-  GITHUB_APP_PRIVATE_KEY: string
+  GITHUB_APP_ID?: string
+  GITHUB_APP_PRIVATE_KEY?: string
 }
 
 export default new Hono<{ Bindings: Env }>()
@@ -15,6 +15,10 @@ export default new Hono<{ Bindings: Env }>()
    * Used by the GitHub action to get GitHub installation access token given the OIDC token
    */
   .post("/exchange_github_app_token", async (c) => {
+    if (!c.env.GITHUB_APP_ID || !c.env.GITHUB_APP_PRIVATE_KEY) {
+      const dev = new URL(c.req.url).hostname === "api.dev.opencode.ai"
+      return c.json({ error: dev ? "not configured on dev" : "GitHub App not configured" }, 503)
+    }
     const EXPECTED_AUDIENCE = "opencode-github-action"
     const GITHUB_ISSUER = "https://token.actions.githubusercontent.com"
     const JWKS_URL = `${GITHUB_ISSUER}/.well-known/jwks`

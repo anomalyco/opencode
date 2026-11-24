@@ -100,7 +100,7 @@ it.live(
         overrides: [
           llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
           SessionRunnerModel.node.replace(
-            Layer.succeed(SessionRunnerModel.Service, { resolve: () => Effect.succeed(model) }),
+            Layer.succeed(SessionRunnerModel.Service, { select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })), resolve: () => Effect.succeed(model) }),
           ),
         ],
       }
@@ -193,7 +193,7 @@ it.live(
           overrides: [
             llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
             SessionRunnerModel.node.replace(
-              Layer.succeed(SessionRunnerModel.Service, { resolve: () => Effect.succeed(model) }),
+              Layer.succeed(SessionRunnerModel.Service, { select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })), resolve: () => Effect.succeed(model) }),
             ),
           ],
         },

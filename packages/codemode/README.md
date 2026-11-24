@@ -1,8 +1,8 @@
 # @opencode/codemode
 
 This is our take on code mode: a lightweight, pure interpreter for a JavaScript-like language built around calling
-tools. It supports familiar JavaScript syntax with a few key differences and limitations. See the
-[interpreter support checklist](./interpreter-support.md) for more details.
+tools. The language itself is [psychoscript](https://github.com/anomalyco/psychoscript); see its interpreter support
+checklist for what is supported.
 
 Rather than trying to sandbox arbitrary JavaScript, CodeMode only runs the language features we implement. Programs
 cannot directly access the network, filesystem, processes, or application APIs. They can interact with the outside
@@ -21,8 +21,15 @@ The idea of code mode was originally introduced by Cloudflare. See
 - **REPL-style results.** Without an explicit `return`, the final top-level expression becomes the result. `undefined`
   becomes `null`.
 
-Unsupported syntax returns an `UnsupportedSyntax` diagnostic with a source location. Current gaps are tracked in the
-[interpreter support checklist](./interpreter-support.md).
+Unsupported syntax returns an `UnsupportedSyntax` diagnostic with a source location. Current gaps are tracked in
+psychoscript's interpreter support checklist.
+
+## Layout
+
+The language (compiler, VM, runtime, standard library, snapshots, and the Effect driver) is the
+[`psychoscript`](https://www.npmjs.com/package/psychoscript) package. `src/codemode/` is Code Mode, built on it: tools
+and their schemas, the catalog and namespaces, search, scanTools, OpenAPI, hooks, maxToolCalls, CodeMode.make,
+and Extension.make.
 
 ## Quick Start
 
@@ -101,13 +108,16 @@ runs before the call reaches the host, and a failing one denies it: the host fun
 catches the failure as a thrown error. A denied call fails the way the call itself would: a tool call or asynchronous
 global rejects its promise, and a synchronous global throws.
 
-### Bytecode VM and suspending/resuming a run (experimental, `engine: "vm"`)
+Tool arguments cross into the host the way extension arguments do, as copies (plain data, `Date`, `Map`, `Set`, `URL`,
+`Headers`, errors), and Code Mode then turns them into JSON next to the tool's schema: a `Date` is its ISO string, a
+`Set` its items, a `URLSearchParams` its query string, an `Error` `{ name, message, ...own fields }`, and `Map` and
+`RegExp` values `{}`. A `Uint8Array` asks to be encoded as text first. A program's own `toJSON` is not called, but its
+getters are: each runs once, before the host function does, and its value crosses as data; a property with only a setter
+is left out. A promise or function inside an argument fails the call: await it, or pass its data.
 
-Pass `engine: "vm"` to `CodeMode.make` or `CodeMode.execute` to run programs on the bytecode VM instead of the default
-`"legacy"` AST interpreter. `runtime.execute(code, bindings?)` keeps the same `Effect<CodeMode.Result>` signature on
-both engines.
+### Suspending and resuming a run
 
-On `engine: "vm"`, `CodeMode.make` returns a `CodeMode.VmRuntime`, which can also run a program step by step:
+`CodeMode.make` returns a `CodeMode.Runtime`, which can also run a program step by step:
 `runtime.program(code, bindings?, { runId }?)` makes a `CodeMode.Program`, and nothing runs until `program.run()`. Every
 host call gets a stable key `<runId>:<callId>` (using a generated UUID when `runId` is omitted), saved in the snapshot
 and passed to tools as `execute(input, { key })` and to hooks as `call.key`. `run()` runs the program in the current
@@ -119,7 +129,7 @@ type Suspended = {
   state: CodeMode.Snapshot // JSON; CodeMode.toBytes / CodeMode.fromBytes convert it
 }
 
-const runtime = CodeMode.make({ tools, engine: "vm" })
+const runtime = CodeMode.make({ tools })
 
 // inline
 const outcome = yield* runtime.program(code).run()
@@ -134,8 +144,7 @@ const outcome = yield* Fiber.join(fiber)
 yield* runtime.resume(CodeMode.toBytes(suspended.state)).run()
 ```
 
-The default runtime has no `program` or `resume`, and ignores `Tool.idempotent`, `Tool.durable`, and extension
-`snapshot` hooks. A program runs once: running it again is a defect, so make another with `runtime.program` or
+A program runs once: running it again is a defect, so make another with `runtime.program` or
 `runtime.resume`. `run()` owns the run's host calls: interrupting it interrupts the program and every call in progress
 (and cancels any started durable tool work).
 
@@ -177,8 +186,7 @@ Tool.make({
 - **`Tool.idempotent(execute)`:** idempotent/read-only work safe to run again. If a suspend lands while the call is
   running, the VM detaches and interrupts it without firing `tool.after`, saves the call in the snapshot as queued, and
   re-runs it on resume with the same `key` without double-counting it against `maxToolCalls`.
-- **`Tool.durable({ start, wait, cancel })`:** work that outlives a suspended run (when run without a suspend or on the
-  legacy engine, it runs `start` then `wait`):
+- **`Tool.durable({ start, wait, cancel })`:** work that outlives a suspended run:
   - `start(input, { key }) => Effect<Data /* Json */>` begins the work and returns JSON `data` (inferred into `wait`
     and `cancel`);
   - `wait(data, { key }) => Effect<Output>` connects to the running work and waits for its result;
@@ -204,13 +212,11 @@ the state, and checking it against `options.maxBytes` all happen before anything
 can't be saved or is too large fails the suspend the same way.
 
 A resumed run keeps the limits it was saved with: `timeoutMs` counts active time across every resume, and `maxToolCalls`
-counts every admitted call of the run. A state resumes only on the same build of this package and with the same
-extensions (and the same extension `snapshot` hooks). The state is checked when the resumed program runs: its `run()`
-fails with a `CodeMode.SnapshotError` when it can't be resumed here or is malformed. Built-ins are saved by name and
-only their changes are copied.
-
-Set `CODEMODE_ROUNDTRIP=1` (`bun run test:roundtrip`) to run the tests on the VM with every run saved to bytes and
-restored into a brand-new runtime at every host call and every few steps.
+counts every admitted call of the run (Code Mode keeps them in the run's `metadata`, saved with the state). A state
+resumes only on the same build of psychoscript and with the same host globals (the same extension globals, with the
+same `snapshot` hooks). The state is checked when the resumed program runs: its `run()` fails with a
+`CodeMode.SnapshotError` when it can't be resumed here or is malformed. Built-ins are saved by name and only their
+changes are copied.
 
 ### `Extension.make`
 
@@ -229,8 +235,9 @@ that returns a Promise or an Effect, so a denied call rejects its promise like a
 Extension.make({ name: "web", globals: { fetch: Extension.async((url: string) => globalThis.fetch(url)) } })
 ```
 
-A global may return a value, a Promise, or an Effect. An Effect's requirements join the runtime's environment the same
-way a tool's do, so the host can provide per-execution services such as the calling session:
+A global may return a value, a Promise, or an Effect. A synchronous global's Effect runs to completion before the call
+returns, so the host can offer blocking calls such as `fs.readFileSync`. An Effect's requirements join the runtime's
+environment the same way a tool's do, so the host can provide per-execution services such as the calling session:
 
 ```ts
 const web = Extension.make({
@@ -248,11 +255,20 @@ const web = Extension.make({
 const result = yield* CodeMode.make({ extensions: [web] }).execute(code).pipe(Effect.provideService(Session, session))
 ```
 
-Every value crossing in either direction is converted, never shared: arguments come in as copies, results go out as
-copies, and a function inside a result is callable the same way. A global that shadows a built-in or another
-extension throws at `CodeMode.make`.
+Every value crossing in either direction is converted, never shared: arguments come in as copies (a program getter runs
+and crosses as its value; a setter-only property is left out), results go out as copies, and a function inside a result is callable the same way. When the program passes such a function back to an
+extension, it arrives as the host function itself, so `copy(dest, file(src))` can tell what it was given. Globals and
+the program's own functions never cross back: they are left out, as in tool arguments. A global that shadows a
+built-in or another extension throws at `CodeMode.make`.
 
-Functions inside a result have no data form, so a suspended VM run loses them by default: after a resume, calling one
+Mark a global with `Extension.constructible` to let programs call it with `new`, as they would a class. `new` calls
+it the same way a plain call does, and the program gets what it returns:
+
+```ts
+Extension.make({ name: "glob", globals: { Glob: Extension.constructible((pattern: string) => makeGlob(pattern)) } })
+```
+
+Functions inside a result have no data form, so a suspended run loses them by default: after a resume, calling one
 throws a `TypeError`. An extension can preserve them across suspend and resume with `snapshot` hooks. `encode` receives
 a value one of the extension's functions returned, as the host function returned it, and returns plain data (JSON
 values and `Uint8Array`s); on resume, `decode` receives that data once per value and returns a host value of the same
@@ -281,13 +297,14 @@ const web = Extension.make({
 ```
 
 A suspend fails (and the run continues) when `encode` throws or returns non-plain data. A snapshot saved with an
-extension's hooks resumes only in a runtime whose extension of the same name also provides `snapshot` hooks.
+extension's hooks resumes only in a runtime whose globals of the same names also have `snapshot` hooks.
 
 A global can also be an object of functions, such as `fs`. Every function reachable from it is an entry point like a
 global, so calls fire the `extension` hooks with their path as the name (`fs.readFile`, `fs.promises.readFile`).
 
 Programs load globals the way Node code loads modules. `import` and `require` take a global by its Node module name,
-with or without `node:`; `fs/promises`, `url`, `util`, and `buffer` resolve to the globals that provide them. There are
+with or without `node:`; `fs/promises`, `url`, `util`, and `buffer` resolve to the globals that provide them, and an
+extension can add its own names (`modules: { bun: "Bun" }` makes `import { file } from "bun"` load `Bun`). There are
 no packages, so anything else throws.
 
 ```js
@@ -313,7 +330,12 @@ without JSON content, WebSocket or SSE semantics, or binary responses are report
 Authentication is resolved by the host and never shown to the model. Generated tools require `HttpClient.HttpClient`.
 Request signatures omit `readOnly` properties; response signatures omit `writeOnly` properties. These JSON Schemas
 shape model-visible signatures but do not filter runtime values: nested JSON body properties and decoded server
-responses pass through unchanged. See `src/openapi/types.ts` for option details.
+responses pass through unchanged. See `src/codemode/openapi/types.ts` for option details.
+
+## The language layer
+
+Code Mode is built on [psychoscript](https://github.com/anomalyco/psychoscript), which runs programs over any host
+globals given through Host and Runtime.make. See its README for that API.
 
 ## Results
 
@@ -370,7 +392,8 @@ and `CodeMode.toolExpression(path)` supply the exact callable forms.
 The synchronous `search(...)` built-in is always available. It supports exact-path lookup, namespace-scoped search,
 empty-query browsing, and pagination, and returns callable paths with full signatures. Its result can be used directly,
 awaited, or chained with `then`, `catch`, and `finally`, so programs work whichever way they treat it. Search counts toward
-`maxToolCalls`. Search also matches descriptions from enclosing `Namespace` values.
+`maxToolCalls`. Search also matches descriptions from enclosing `Namespace` values. A plain string is the query:
+`search("issues")` is `search({ query: "issues" })`.
 
 ## Execution Limits
 
