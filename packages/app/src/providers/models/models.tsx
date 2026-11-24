@@ -222,11 +222,14 @@ const createModelsController = (directory: Accessor<string | undefined>) => {
   const variantKey = (model: ModelKey) => `${model.providerID}/${model.modelID}`
 
   // A model's speeds share its variant. Preferences saved before then may name one of its speeds instead.
-  const getVariant = (model: ModelKey) => {
+  const getVariant = (model: ModelKey, options?: { siblingFallback: boolean }) => {
     const base = standard(model)
+    const saved = store.variant?.[variantKey(base)] ?? store.variant?.[variantKey(model)]
 
-    return [base, model, ...speeds(base).map((item) => ({ providerID: item.provider.id, modelID: item.id }))]
-      .map((item) => store.variant?.[variantKey(item)])
+    if (saved !== undefined || options?.siblingFallback === false) return saved
+
+    return speeds(base)
+      .map((item) => store.variant?.[variantKey({ providerID: item.provider.id, modelID: item.id })])
       .find((value) => value !== undefined)
   }
 
