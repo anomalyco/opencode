@@ -252,7 +252,7 @@ function drawBackground(
     const fade = kind === "band" ? Math.max(0, 1 - y / end) : Math.min(1, Math.max(0, (end - y) / (end - fadeStart)))
     columns.forEach((x, index) => {
       const on = rows - row < (lit[index] ?? 0)
-      ctx.globalAlpha = on ? 0.55 : fade
+      ctx.globalAlpha = on ? 0.35 : fade
       ctx.fillStyle = on ? colors.meter : colors.dot
       ctx.fillRect(x, y, dot, dot)
     })
