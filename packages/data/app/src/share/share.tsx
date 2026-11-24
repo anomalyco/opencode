@@ -287,6 +287,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   // The preview's clock. Changing the layout, size or style redraws on the same clock, so the animation and its
   // music carry on; only a new card, track, type or play state starts it again.
   let clock = { key: "", start: 0, loop: -1 }
+  // The running preview's loop, for seeking from the timeline under the card.
+  let loop: { length: number; sound: ShareTrack | undefined } = { length: 0, sound: undefined }
 
   // The preview: the still for an image; for a video, the animation on a loop with its soundtrack.
   createEffect(() => {
@@ -321,6 +323,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       return
     }
     const length = shareDuration(value, opts, timing()) + 0.6
+    loop = { length, sound }
     const key = [value.id, sound?.id ?? "none", format(), playing()].join(" ")
     if (clock.key !== key) clock = { key, start: performance.now(), loop: -1 }
     const frame = () => {
@@ -337,6 +340,29 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     let handle = requestAnimationFrame(frame)
     onCleanup(() => cancelAnimationFrame(handle))
   })
+
+  // Moves the video preview, and its music, to `fraction` of the way through; a paused preview plays from there.
+  const seek = (fraction: number) => {
+    if (format() !== "video") return
+    if (!playing()) setPlaying(true)
+    if (!loop.length) return
+    const at = Math.max(0, Math.min(1, fraction)) * loop.length
+    const turn = Math.max(0, clock.loop)
+    clock.loop = turn
+    clock.start = performance.now() - (turn * loop.length + at) * 1000
+    if (!loop.sound) return
+    restartAudio(loop.sound)
+    if (audio) audio.currentTime = at
+  }
+  const seekFrom = (event: PointerEvent, element: HTMLElement) => {
+    const box = element.getBoundingClientRect()
+    seek((event.clientX - box.left) / box.width)
+  }
+  const progress = () => {
+    if (!loop.length) return 0
+    const elapsed = (performance.now() - clock.start) / 1000
+    return (elapsed % loop.length) / loop.length
+  }
 
   const restartAudio = (sound: ShareTrack | undefined) => {
     if (!sound) return audio?.pause()
@@ -909,16 +935,36 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 />
                 {/* A video's playback: a thin bar just under the card, filling as the preview plays. */}
                 <Show when={format() === "video"}>
+                  {/* A timeline: press or drag along it to move the video and its music; the arrow keys step a second. */}
                   <div
                     data-slot="playback"
-                    aria-hidden="true"
+                    role="slider"
+                    tabIndex={0}
+                    aria-label="Video position"
+                    aria-valuemin={0}
+                    aria-valuemax={100}
+                    aria-valuenow={0}
                     style={{
                       left: `${cardBox().left}px`,
-                      top: `${cardBox().top + cardBox().height + 6}px`,
+                      top: `${cardBox().top + cardBox().height - 1}px`,
                       width: `${cardBox().width}px`,
                     }}
+                    onPointerDown={(event) => {
+                      event.currentTarget.setPointerCapture(event.pointerId)
+                      seekFrom(event, event.currentTarget)
+                    }}
+                    onPointerMove={(event) => {
+                      if (event.currentTarget.hasPointerCapture(event.pointerId)) seekFrom(event, event.currentTarget)
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return
+                      event.preventDefault()
+                      seek(progress() + (event.key === "ArrowLeft" ? -1 : 1) / Math.max(1, loop.length))
+                    }}
                   >
-                    <i ref={playhead} />
+                    <span data-slot="playback-track">
+                      <i ref={playhead} />
+                    </span>
                   </div>
                 </Show>
               </div>

@@ -297,13 +297,32 @@
     min-height: 0;
   }
 
-  /* The video preview's playback, a 2px line just under the card, its fill growing as it plays. */
+  /* The video preview's timeline: a 2px line 6px under the card, its fill growing as it plays, in a 16px band that takes
+     presses and drags to seek. Hovered, the line thickens a touch. */
   [data-slot="playback"] {
     position: absolute;
+    height: 16px;
+    cursor: pointer;
+    touch-action: none;
+    outline: none;
+
+    &:focus-visible [data-slot="playback-track"] {
+      box-shadow: 0 0 0 2px var(--stats-accent);
+    }
+  }
+
+  [data-slot="playback-track"] {
+    position: absolute;
+    top: 7px;
+    right: 0;
+    left: 0;
+    display: block;
     height: 2px;
     overflow: hidden;
-    pointer-events: none;
     background: var(--stats-line);
+    transition:
+      top 120ms ease,
+      height 120ms ease;
 
     i {
       display: block;
@@ -311,6 +330,17 @@
       background: var(--stats-faint);
       transform-origin: left;
       scale: 0 1;
+    }
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    [data-slot="playback"]:hover [data-slot="playback-track"] {
+      top: 6px;
+      height: 4px;
+
+      i {
+        background: var(--stats-muted);
+      }
     }
   }
 
