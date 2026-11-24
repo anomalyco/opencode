@@ -258,7 +258,8 @@
     align-items: center;
     gap: 12px;
     min-height: 0;
-    padding: 32px 48px 12px;
+    /* As much room under the section arrows as between the bar and the card. */
+    padding: 32px 48px;
     /* Grey on the light page; on the dark one a step lighter than the card (#0c0c0c), so it stands out, but well below
        the page's second layer, which glared. */
     background-color: light-dark(var(--stats-layer-2), color-mix(in srgb, var(--stats-bg) 50%, var(--stats-layer)));
@@ -942,9 +943,14 @@
     [data-slot="chevron"] {
       flex: none;
       color: var(--stats-faint);
+      transition: scale 160ms cubic-bezier(0.23, 1, 0.32, 1);
+
+      @media (prefers-reduced-motion: reduce) {
+        transition: none;
+      }
     }
 
-    /* Open: the chevron flips to point up, at once rather than turning. */
+    /* Open: the chevron flips over to point up, through flat rather than turning round. */
     &[aria-expanded="true"] [data-slot="chevron"] {
       scale: 1 -1;
     }
@@ -971,7 +977,7 @@
   }
 
   [data-slot="date-tool"] [data-slot="dropdown-trigger"] {
-    width: 224px;
+    width: 264px;
   }
 
   [data-slot="dropdown-menu"] {
@@ -1024,7 +1030,7 @@
       position: absolute;
       inset-block: 0;
       inset-inline-start: -1px;
-      width: 2px;
+      width: 3px;
       content: "";
       background: light-dark(#888888, #6a6a6a);
       opacity: 0;
