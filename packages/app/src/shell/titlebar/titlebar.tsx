@@ -25,6 +25,7 @@ import { SidebarInbox } from "@/shell/titlebar/inbox"
 import { SidebarCustomized, type SidebarStripGrouping } from "@/shell/titlebar/sidebar-customized"
 import { RecentSessions } from "@/shell/titlebar/recent-sessions"
 import { createNavigationSwitch } from "@/shell/tabs/navigation-switch"
+import { createTabAutoGroups } from "@/shell/titlebar/tab-auto-groups"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { createMediaQuery } from "@solid-primitives/media"
 import { readSessionTabsRemovedDetail, SESSION_TABS_REMOVED_EVENT } from "@/shell/titlebar/session-events"
@@ -249,6 +250,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
       }}
       data-tauri-drag-region
     >
+      <PinsProvider>
       <Switch>
         <Match when>
           {(_) => {
@@ -275,6 +277,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               if (tabs.preview()) tabs.keepPreview()
             })
             const tabsStoreActions = tabs
+            const pins = usePins()
 
             const routeSync = createRouteTabSync()
             const preparing = routeSync.preparing
@@ -543,6 +546,10 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               const current = currentTab()
 
               const closeCurrent = () => {
+                const pinned = pins.refOf(current)
+
+                if (settings.appearance.navigationPrototype() && pinned && pins.pinned(pinned)) return pins.close(pinned)
+
                 if (current === tabs.preview()) {
                   tabs.closePreview()
 
@@ -669,10 +676,8 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
             return (
               <TabGroupsProvider currentTab={currentTab}>
-                <PinsProvider currentTab={currentTab}>
                 {(() => {
                   const tabGroups = useTabGroups()
-                  const pins = usePins()
                   const prototype = () => settings.appearance.navigationPrototype()
                   const pinnedTop = createPinnedLeading("horizontal")
                   const pinnedSide = createPinnedLeading("vertical")
@@ -684,15 +689,17 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   }
 
                   const listPins = {
-                    content: () => (
-                      <Show when={pins.state.items.length > 0}>
-                        <PinnedArea orientation="vertical" />
+                    content: (detail: () => boolean) => (
+                      <Show when={pins.state.items.length > 0 || pins.preview()}>
+                        <PinnedArea orientation="vertical" detail={detail()} />
                       </Show>
                     ),
                     keys: pins.keys,
                     current: pins.currentKey,
                     unread: pins.unread,
                     navigate: pins.openKey,
+                    sortables: () => pins.sortables().length,
+                    drag: { start: pins.dragStart, move: pins.dragMove, end: pins.dragEnd },
                     holds: (server: string, sessionId: string) =>
                       pins.pinned({ server: ServerConnection.Key.make(server), sessionId }),
                     toggle: (server: string, sessionId: string) => {
@@ -703,11 +710,31 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                     },
                   }
 
+                  const autoGroups = createTabAutoGroups({
+                    tabs: () => tabsStore,
+                    hidden: pins.holds,
+                    current: currentTab,
+                  })
+
+                  const autoSide = autoGroups.sections("vertical")
+                  const autoTop = autoGroups.sections("horizontal")
+
+                  const listLayout = () => prototype() && settings.appearance.navigation() === "list"
+
+                  // Pins and tabs sort as one list; dropping before the divider pins, after it unpins.
+                  const pinDrag = {
+                    start: pins.dragStart,
+                    move: pins.dragMove,
+                    end: (point: { x: number; y: number } | undefined) => pins.dragging() && pins.dragEnd(point),
+                  }
+
                   const pinnedVerticalStrip = () => (
                     <TitlebarTabStrip
                       orientation="vertical"
+                      externalDrag={pinDrag}
                       leading={pinnedSide()}
                       hidden={pins.holds}
+                      sections={autoSide()}
                       tabContextMenu={pinMenu}
                       tabs={tabsStore}
                       currentTab={currentTab()}
@@ -911,12 +938,12 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                           when={props.verticalTabs}
                           fallback={
                             <>
-                              <Show when={prototype() && pins.state.items.length > 0}>
-                                <PinnedArea orientation="horizontal" />
-                              </Show>
                               <TitlebarTabStrip
                                 leading={prototype() ? pinnedTop() : undefined}
                                 hidden={prototype() ? pins.holds : undefined}
+                                sections={prototype() ? autoTop() : undefined}
+                                externalDrag={prototype() ? pinDrag : undefined}
+                                horizontalSections
                                 tabContextMenu={prototype() ? pinMenu : undefined}
                                 tabs={tabsStore}
                                 currentTab={currentTab()}
@@ -1008,13 +1035,30 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                   </div>
                                   <Show
                                     when={isGroupedSidebarList()}
-                                    fallback={<div class="h-4 w-full shrink-0" aria-hidden="true" />}
+                                    fallback={
+                                      <Show when={!listLayout()}>
+                                        <div class="h-4 w-full shrink-0" aria-hidden="true" />
+                                      </Show>
+                                    }
                                   >
                                     <VerticalTabGroupsControls />
                                   </Show>
-                                  <div class="flex min-h-0 flex-1 flex-col gap-1">
+                                  {/* List scrolls from just below the sidebar's actions down to the window's bottom edge, fading
+                                      at both ends; `--sidebar-list-bleed` is how far it runs past the sidebar's bottom padding. */}
+                                  <div
+                                    class="flex min-h-0 flex-1 flex-col gap-1"
+                                    style={
+                                      listLayout() && titlebarItems.ids().length === 0
+                                        ? {
+                                            "--sidebar-list-bleed":
+                                              "max(10px, var(--safe-area-inset-bottom, env(safe-area-inset-bottom, 0px)))",
+                                            "margin-bottom": "calc(-1 * var(--sidebar-list-bleed))",
+                                          }
+                                        : undefined
+                                    }
+                                  >
                                     <Switch fallback={defaultVerticalTabStrip()}>
-                                      <Match when={prototype() && settings.appearance.navigation() === "list"}>
+                                      <Match when={listLayout()}>
                                         <RecentSessions
                                           organize={{
                                             viewAll: () => {
@@ -1060,12 +1104,12 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                     </div>
                   )
                 })()}
-                </PinsProvider>
               </TabGroupsProvider>
             )
           }}
         </Match>
       </Switch>
+      </PinsProvider>
     </header>
   )
 }

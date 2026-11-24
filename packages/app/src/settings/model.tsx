@@ -156,6 +156,8 @@ const appearanceSchema = Persistence.struct({
   tabLayout: Schema.Literals(["horizontal", "vertical", "inbox"]),
   // Prototype (local/dev desktop builds): tabs at `tabLayout`'s position, or one list of every session.
   navigation: Persistence.optional(Schema.Literals(["tabs", "list"])),
+  // Prototype: how Tabs groups the tabs that aren't pinned.
+  tabGrouping: Persistence.optional(Schema.Literals(["none", "project", "server"])),
   sidebarOpen: Persistence.optional(Schema.Boolean),
   reduceMotion: Schema.Literals(["system", "on", "off"]),
 })
@@ -532,6 +534,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         ),
         setNavigation(value: "tabs" | "list") {
           setStore("appearance", "navigation", value)
+        },
+        tabGrouping: createMemo(() => store.appearance?.tabGrouping ?? "none"),
+        setTabGrouping(value: "none" | "project" | "server") {
+          setStore("appearance", "tabGrouping", value)
         },
         sidebarOpen: withFallback(() => store.appearance?.sidebarOpen, true),
         setSidebarOpen(value: boolean) {

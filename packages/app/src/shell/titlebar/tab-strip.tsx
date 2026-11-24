@@ -64,6 +64,12 @@ export const previousSessionCommand = { id: "session.previous", keybind: "alt+ar
 
 export const nextSessionCommand = { id: "session.next", keybind: "alt+arrowdown" }
 
+// A tab row accepts rows of its own section, and pinned rows coming out of the pinned area; pinned groups stay there.
+function acceptWithPins(group: string | undefined) {
+  return (source: { type?: unknown }) =>
+    source.type !== "pin-group" && (group === undefined || source.type === group || source.type === "pin")
+}
+
 // A row the For loop still renders for a tab just removed from the strip.
 const hiddenTabView: SessionTabView = {
   phase: "loading",
@@ -78,6 +84,10 @@ function SessionTabSlot(
     tab: SessionTab
     id: string
     index: number
+    /** The row's place among every sortable row, when pinned rows are numbered first. Defaults to `index`. */
+    sortIndex?: number
+    /** Pinned rows can sort among these rows, as they do in the navigation prototype. */
+    acceptPins?: boolean
     group?: string
     footer?: JSX.Element
     label?: string
@@ -110,7 +120,7 @@ function SessionTabSlot(
       return props.id
     },
     get index() {
-      return props.index
+      return props.sortIndex ?? props.index
     },
     group: "tab-items",
     // Rows only sort among rows of the same group, so a drag never crosses into another section.
@@ -118,7 +128,7 @@ function SessionTabSlot(
       return props.group
     },
     get accept() {
-      return props.group
+      return props.acceptPins ? acceptWithPins(props.group) : props.group
     },
     get disabled() {
       return !!props.customDrag
@@ -188,6 +198,10 @@ function SessionTabEntry(
     currentTab?: Tab
     id: string
     index: number
+    /** The row's place among every sortable row, when pinned rows are numbered first. Defaults to `index`. */
+    sortIndex?: number
+    /** Pinned rows can sort among these rows, as they do in the navigation prototype. */
+    acceptPins?: boolean
     group?: string
     footer?: JSX.Element
     label?: string
@@ -332,6 +346,8 @@ function SessionTabEntry(
         tab={props.tab}
         id={props.id}
         index={props.index}
+        sortIndex={props.sortIndex}
+        acceptPins={props.acceptPins}
         group={props.group}
         footer={props.footer}
         label={props.label}
@@ -535,6 +551,10 @@ function DraftTabSlot(
     tab: Extract<Tab, { type: "draft" }>
     id: string
     index: number
+    /** The row's place among every sortable row, when pinned rows are numbered first. Defaults to `index`. */
+    sortIndex?: number
+    /** Pinned rows can sort among these rows, as they do in the navigation prototype. */
+    acceptPins?: boolean
     group?: string
     footer?: JSX.Element
     label?: string
@@ -557,7 +577,7 @@ function DraftTabSlot(
       return props.id
     },
     get index() {
-      return props.index
+      return props.sortIndex ?? props.index
     },
     group: "tab-items",
     // Rows only sort among rows of the same group, so a drag never crosses into another section.
@@ -565,7 +585,7 @@ function DraftTabSlot(
       return props.group
     },
     get accept() {
-      return props.group
+      return props.acceptPins ? acceptWithPins(props.group) : props.group
     },
     get disabled() {
       return !!props.customDrag
@@ -650,6 +670,8 @@ export type CustomVerticalDragBinding = {
 
 export type TabStripLeading = {
   content: JSX.Element
+  /** How many sortable rows `content` renders, which the tabs are numbered after. */
+  sortables?: number
   /** Row keys in display order, in `tabKey` form so the current tab can match one. */
   keys: string[]
   unread: (key: string) => boolean
@@ -662,6 +684,18 @@ export function TitlebarTabStrip(props: {
   tabs: Tab[]
   /** Groups the rendered tabs under headers. Tabs in no section stay open but are not shown. */
   sections?: TabStripSection[]
+  /** Renders `sections` in top tabs too, each after its header. */
+  horizontalSections?: boolean
+  /**
+   * Lets a dragged tab leave the strip, for the pinned area: told where the pointer is, and on drop whether it took the
+   * tab, in which case the strip doesn't reorder.
+   */
+  externalDrag?: {
+    /** A drag began on a tab or a pinned row, by its sortable id. */
+    start: (id: string) => void
+    move: (point: { x: number; y: number }) => void
+    end: (point: { x: number; y: number } | undefined) => boolean
+  }
   customVerticalDrag?: CustomVerticalDragBinding
   tabContextMenu?: (tab: Tab) => JSX.Element | undefined
   /** Vertical only: extra content rendered right after a tab row (e.g. its subagent sessions). */
@@ -686,7 +720,8 @@ export function TitlebarTabStrip(props: {
   const language = useLanguage()
   const appTabs = useTabs()
   const vertical = () => props.orientation === "vertical"
-  const sections = () => (vertical() ? props.sections : undefined)
+  // Top tabs take sections only from the navigation prototype's automatic groups, which divide them with a line.
+  const sections = () => (vertical() || props.horizontalSections ? props.sections : undefined)
   const customDrag = () => (vertical() ? props.customVerticalDrag : undefined)
 
   const displayTabs = createMemo(
@@ -834,6 +869,9 @@ export function TitlebarTabStrip(props: {
 
   const leadingKeys = () => leading()?.keys ?? []
 
+  // Pinned rows sort in the same list as the tabs, numbered before them.
+  const pinRows = () => (props.externalDrag ? (leading()?.sortables ?? 0) : 0)
+
   // Tells the closed sidebar's toggle whether any row here shows its unread dot, which the current tab never does.
   createEffect(() => {
     if (!vertical()) return
@@ -912,6 +950,8 @@ export function TitlebarTabStrip(props: {
           currentTab={props.currentTab}
           id={id}
           index={visibleIndex()}
+          sortIndex={visibleIndex() + pinRows()}
+          acceptPins={!!props.externalDrag}
           group={group}
           footer={footer()}
           label={label()}
@@ -948,6 +988,8 @@ export function TitlebarTabStrip(props: {
         tab={tab}
         id={id}
         index={visibleIndex()}
+        sortIndex={visibleIndex() + pinRows()}
+        acceptPins={!!props.externalDrag}
         group={group}
         footer={footer()}
         label={label()}
@@ -1079,7 +1121,7 @@ export function TitlebarTabStrip(props: {
           }
         }}
       >
-        {vertical() ? leading()?.content : undefined}
+        <Show when={vertical() && (customDrag() || !props.externalDrag)}>{leading()?.content}</Show>
         <Show
           when={!customDrag()}
           fallback={renderList()}
@@ -1100,7 +1142,8 @@ export function TitlebarTabStrip(props: {
             ]}
             modifiers={[
               vertical() ? RestrictToVerticalAxis : RestrictToHorizontalAxis,
-              RestrictToElement.configure({ element: () => listRef }),
+              // With pinned rows in the same list, a drag ranges over them too.
+              RestrictToElement.configure({ element: () => (props.externalDrag ? scrollRef : listRef) }),
             ]}
             plugins={(defaults) => [
               ...defaults.filter((plugin) => plugin !== Accessibility),
@@ -1113,21 +1156,27 @@ export function TitlebarTabStrip(props: {
               if (!source) return
               const tab = props.tabs.find((item) => tabKey(item) === source.id.toString())
 
+              props.externalDrag?.start(source.id.toString())
+
               if (!tab) return
 
               if (vertical()) return
               const tabEl = source.element?.querySelector<HTMLDivElement>("[data-titlebar-tab]")
               props.onNavigate(tab, tabEl ?? undefined)
             }}
+            onDragMove={(event) => props.externalDrag?.move(event.operation.position.current)}
             onDragEnd={(event) => {
               const current = visibleTabIds()
               const source = event.operation.source
 
+              if (props.externalDrag?.end(event.canceled ? undefined : event.operation.position.current)) return
+
               if (event.canceled || !isSortable(source)) return
 
-              const { initialIndex, index } = source
+              const initialIndex = source.initialIndex - pinRows()
+              const index = source.index - pinRows()
 
-              if (initialIndex === index) return
+              if (initialIndex === index || initialIndex < 0 || index < 0) return
               const next = arrayMove(current, initialIndex, index)
 
               // Sections are contiguous, so a move within one keeps every position's section.
@@ -1135,6 +1184,8 @@ export function TitlebarTabStrip(props: {
               props.onReorder(mergeVisibleTabOrder(props.tabs.map(tabKey), current, next))
             }}
           >
+            {/* Pinned rows sort in the same list, so they render inside the drag context, before the tabs. */}
+            <Show when={props.externalDrag}>{leading()?.content}</Show>
             {renderList()}
           </DragDropProvider>
         </Show>

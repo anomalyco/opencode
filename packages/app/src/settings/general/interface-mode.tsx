@@ -4,6 +4,7 @@ import { Select } from "@opencode/ui/select"
 import { useLanguage } from "@/runtime/i18n/language"
 import { type TabLayout, useSettings } from "@/settings/model"
 import { SettingsRow } from "@/settings/row"
+import { useServers } from "@/runtime/server/registry"
 import "./interface-mode.css"
 
 const modes = [
@@ -15,6 +16,7 @@ const modes = [
 export function InterfaceModeSetting() {
   const language = useLanguage()
   const settings = useSettings()
+  const servers = useServers()
 
   return (
     <Show when={settings.appearance.navigationPrototype()} fallback={<TabLayoutSetting />}>
@@ -34,6 +36,22 @@ export function InterfaceModeSetting() {
             }
             onSelect={(value) =>
               (value === "horizontal" || value === "vertical") && settings.appearance.setTabLayout(value)
+            }
+            placement="bottom-end"
+            gutter={6}
+          />
+        </SettingsRow>
+        <SettingsRow title={language.t("settings.general.row.tabGrouping.title")} description="">
+          <Select
+            data-action="settings-tab-grouping"
+            options={
+              servers.visible.length > 1 ? (["none", "project", "server"] as const) : (["none", "project"] as const)
+            }
+            current={settings.appearance.tabGrouping()}
+            label={(value) => language.t(`settings.general.row.tabGrouping.${value}`)}
+            onSelect={(value) =>
+              (value === "none" || value === "project" || value === "server") &&
+              settings.appearance.setTabGrouping(value)
             }
             placement="bottom-end"
             gutter={6}

@@ -1,4 +1,4 @@
-import { createEffect, createMemo, For, Match, Show, startTransition, Switch, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, For, Match, onCleanup, Show, startTransition, Switch, untrack } from "solid-js"
 import { createOverlayFocus } from "@opencode/ui/context/overlay-focus"
 import { createStore } from "solid-js/store"
 import { Key } from "@solid-primitives/keyed"
@@ -17,8 +17,22 @@ import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
 import { sessionStatus, useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { projectSettingsKey, useSettings } from "@/settings/model"
 import { tabHref, tabKey, useTabs, type Tab } from "@/shell/tabs/tabs"
+import { useLayout } from "@/shell/state/layout"
+import { useDialog } from "@opencode/ui/context/dialog"
+import { sessionTreeIDs } from "@/session/requests/session-request-tree"
+import { errorMessage } from "@/shell/layout/helpers"
+import { showToast } from "@/shell/notifications/toast"
+import { DeleteSessionDialog } from "./recent-sessions"
+import { notifySessionTabsRemoved } from "./session-events"
+import { sessionTabTitle } from "./tab-title"
+import { createMinuteClock, SessionDetail, sessionAge } from "./session-detail"
+import { groupKey, pinDragSourceOf, pinDropTarget, sessionKey, stripDropBefore, type PinDragSource } from "./pin-drag"
+import { useSortable } from "@dnd-kit/solid/sortable"
 import {
   createGroup,
+  moveGroup,
+  place,
+  type PinTarget,
   EMPTY_PINS,
   groupOf,
   isPinned,
@@ -49,8 +63,9 @@ type Orientation = "horizontal" | "vertical"
 export const { use: usePins, provider: PinsProvider } = createSimpleContext({
   name: "Pins",
   gate: false,
-  init: (props: { currentTab: () => Tab | undefined }) => {
+  init: () => {
     const global = useGlobal()
+    const layout = useLayout()
     const settings = useSettings()
     const tabs = useTabs()
     const language = useLanguage()
@@ -97,7 +112,17 @@ export const { use: usePins, provider: PinsProvider } = createSimpleContext({
 
     const session = (ref: PinRef): SessionInfo | undefined => ctxOf(ref)?.data.session.get(ref.sessionId)
 
-    const current = createMemo(() => refOf(props.currentTab()))
+    // The pinned session on screen, by its root: a subagent's route still marks its parent's pin.
+    const current = createMemo((): PinRef | undefined => {
+      const route = layout.route()
+
+      if (route.type !== "session") return
+
+      return {
+        server: route.server,
+        sessionId: global.serverCtx(route.server)?.data.session.root(route.sessionId) ?? route.sessionId,
+      }
+    })
 
     const isCurrent = (ref: PinRef) => {
       const tab = current()
@@ -157,9 +182,110 @@ export const { use: usePins, provider: PinsProvider } = createSimpleContext({
 
     const groups = () => state.items.filter((item): item is PinGroup => item.type === "group")
 
+    // A pin, a group, or a tab being dragged: pins and tabs sort as one list, and where the drop lands relative to the
+    // pinned area decides whether it's pinned, where, and in which group.
+    const [drag, setDrag] = createStore<{ source: PinDragSource | undefined; target: PinTarget | undefined }>({
+      source: undefined,
+      target: undefined,
+    })
+
+    // A drag starts from a sortable id: a pinned row's or group's, or a tab's key.
+    const dragStart = (id: string) => {
+      const tab = tabs.store.find((item) => tabKey(item) === id)
+      const ref = tab ? refOf(tab) : undefined
+      const source = pinDragSourceOf(id) ?? (ref ? { kind: "session" as const, ref } : undefined)
+
+      if (source) setDrag({ source, target: undefined })
+    }
+
+    const dragMove = (point: { x: number; y: number }) => {
+      const source = drag.source
+
+      if (!source) return
+      const target = pinDropTarget(point, source)
+
+      setDrag("target", target === "outside" ? undefined : target)
+    }
+
+    // Drops the drag at `point`. Returns whether the pins took it, so a tab strip skips its own reorder.
+    const dragEnd = (point: { x: number; y: number } | undefined) => {
+      const source = drag.source
+
+      setDrag({ source: undefined, target: undefined })
+
+      if (!source || !point) return false
+      const target = pinDropTarget(point, source)
+
+      if (target !== "outside") {
+        if (source.kind === "group") {
+          if (!target.group) apply((value) => moveGroup(value, source.id, target.index))
+
+          return true
+        }
+
+        apply((value) => place(value, source.ref, target))
+
+        return true
+      }
+
+      if (source.kind !== "session" || !isPinned(state, source.ref)) return false
+      unpinTo(source.ref, stripDropBefore(point))
+
+      return true
+    }
+
+    // Unpins a session dropped among the tabs, opening its tab there if it had none.
+    const unpinTo = (ref: PinRef, before: string | undefined) => {
+      const key = keyOf(ref)
+
+      apply((value) => unpin(value, ref))
+
+      if (!tabs.store.some((tab) => tabKey(tab) === key)) {
+        // List shows every session, so an unpinned one is already in Recent; Tabs needs its tab back.
+        if (settings.appearance.navigation() === "list") return
+        tabs.addSessionTab({ server: ServerConnection.Key.make(ref.server), sessionId: ref.sessionId })
+
+        return
+      }
+
+      const rest = tabs.store.map(tabKey).filter((item) => item !== key)
+      const index = before ? rest.indexOf(before) : -1
+
+      tabs.reorder(index === -1 ? [...rest, key] : rest.toSpliced(index, 0, key))
+    }
+
+    // With nothing pinned, a drag slides the pinned area's header and divider in, to drag past; they stay a moment
+    // after the drag so they can animate away.
+    const [preview, setPreview] = createSignal<"open" | "closing" | undefined>()
+
+    createEffect(() => {
+      if (drag.source) return setPreview("open")
+
+      if (!untrack(preview)) return
+      setPreview("closing")
+      const timer = setTimeout(() => setPreview(undefined), 180)
+
+      onCleanup(() => clearTimeout(timer))
+    })
+
+    // Every sortable row the pinned area renders, in order: loose pins, and each group followed by its visible rows.
+    const sortables = createMemo(() =>
+      state.items.flatMap((item) =>
+        item.type === "session" ? [sessionKey(item)] : [`group:${item.id}`, ...visible(item).map(sessionKey)],
+      ),
+    )
+
     return {
       ready,
       state,
+      now: createMinuteClock(),
+      drag,
+      dragging: () => !!drag.source,
+      preview,
+      sortables,
+      dragStart,
+      dragMove,
+      dragEnd,
       groups,
       refOf,
       session,
@@ -168,6 +294,18 @@ export const { use: usePins, provider: PinsProvider } = createSimpleContext({
       keyOf,
       keys,
       open,
+      /** Closes a pinned session the way a browser closes a pinned tab: its tab goes, and so does the pin. */
+      close: (ref: PinRef) => {
+        const index = tabs.store.findIndex((tab) => {
+          const item = refOf(tab)
+
+          return !!item && item.server === ref.server && item.sessionId === ref.sessionId
+        })
+
+        apply((value) => unpin(value, ref))
+
+        if (index !== -1) tabs.closeTab(index)
+      },
       openKey: (key: string) => {
         const ref = state.items
           .flatMap((item) => (item.type === "session" ? [item] : item.sessions))
@@ -230,18 +368,18 @@ export function createPinnedLeading(orientation: Orientation): () => TabStripLea
   const settings = useSettings()
 
   // Built once here, so it only renders while the experiment is on.
-  const content =
-    orientation === "vertical" ? (
-      <Show when={settings.appearance.navigationPrototype()}>
-        <PinnedArea orientation="vertical" divider />
-      </Show>
-    ) : undefined
+  const content = (
+    <Show when={settings.appearance.navigationPrototype()}>
+      <PinnedArea orientation={orientation} divider={orientation === "vertical"} />
+    </Show>
+  )
 
   return () =>
-    pins.state.items.length === 0
+    pins.state.items.length === 0 && !pins.preview()
       ? undefined
       : {
           content,
+          sortables: pins.sortables().length,
           keys: pins.keys(),
           unread: pins.unread,
           navigate: pins.openKey,
@@ -252,15 +390,17 @@ export function createPinnedLeading(orientation: Orientation): () => TabStripLea
  * Pinned sessions and groups. Side layouts label it Pinned; side tabs (`divider`) end it with a divider before the
  * unpinned tabs, while List follows it with its own Recent section. Top tabs set it between two short dividers.
  */
-export function PinnedArea(props: { orientation: Orientation; divider?: boolean }) {
+export function PinnedArea(props: { orientation: Orientation; divider?: boolean; detail?: boolean }) {
   const pins = usePins()
   const tabs = useTabs()
   const language = useLanguage()
+  const empty = () => pins.state.items.length === 0
 
   return (
     <div
       data-component="pinned-area"
       data-orientation={props.orientation}
+      data-preview={empty() ? pins.preview() : undefined}
       class="flex shrink-0"
       classList={{
         // The titlebar row drags the window; like the tab strip, the pinned area has to opt out to take clicks.
@@ -270,20 +410,27 @@ export function PinnedArea(props: { orientation: Orientation; divider?: boolean 
         "pb-4": props.orientation === "vertical" && !props.divider,
       }}
     >
+      {/* With nothing pinned, a drag shows only the divider; the header appears once the drag crosses it. */}
       <Show
         when={props.orientation === "vertical"}
-        fallback={<div role="separator" aria-hidden="true" class="mx-1 h-4 w-px shrink-0 bg-v2-border-border-muted" />}
+        fallback={
+          <Show when={!empty()}>
+            <div role="separator" aria-hidden="true" class="mx-1 h-4 w-px shrink-0 bg-v2-border-border-muted" />
+          </Show>
+        }
       >
-        <SectionLabel label={language.t("sidebar.recent.pinned")} />
+        <Show when={!empty() || pins.drag.target}>
+          <SectionLabel label={language.t("sidebar.recent.pinned")} />
+        </Show>
       </Show>
       <Key each={pins.state.items} by={(item) => (item.type === "session" ? pinKey(item) : `group:${item.id}`)}>
         {(item) => (
           <Switch>
             <Match when={sessionItem(item())}>
-              {(ref) => <PinnedSession pin={ref()} orientation={props.orientation} />}
+              {(ref) => <PinnedSession pin={ref()} orientation={props.orientation} detail={props.detail} />}
             </Match>
             <Match when={groupItem(item())}>
-              {(group) => <PinnedGroupView group={group()} orientation={props.orientation} />}
+              {(group) => <PinnedGroupView group={group()} orientation={props.orientation} detail={props.detail} />}
             </Match>
           </Switch>
         )}
@@ -291,7 +438,7 @@ export function PinnedArea(props: { orientation: Orientation; divider?: boolean 
       <Show
         when={props.orientation === "horizontal"}
         fallback={
-          <Show when={props.divider && tabs.store.some((tab) => !pins.holds(tab))}>
+          <Show when={props.divider && (pins.preview() || tabs.store.some((tab) => !pins.holds(tab)))}>
             <div role="separator" aria-hidden="true" class="mx-2 my-3 h-px shrink-0 bg-v2-border-border-muted" />
           </Show>
         }
@@ -300,6 +447,24 @@ export function PinnedArea(props: { orientation: Orientation; divider?: boolean 
       </Show>
     </div>
   )
+}
+
+/** A pinned row or group sorts in the strip's drag list (or List's), numbered by its place among the pinned rows. */
+function usePinSortable(key: () => string, type: "pin" | "pin-group") {
+  const pins = usePins()
+
+  return useSortable({
+    get id() {
+      return key()
+    },
+    get index() {
+      return pins.sortables().indexOf(key())
+    },
+    group: "tab-items",
+    type,
+    // Groups never nest: a group sorts among the pins, and sessions sort anywhere in them.
+    accept: (source: { type?: unknown }) => (type === "pin-group" ? source.type === "pin-group" : source.type !== "pin-group"),
+  })
 }
 
 // Renaming or recoloring a group replaces its object, so these unwrap the live item instead of keying on it, which
@@ -322,13 +487,22 @@ function SectionLabel(props: { label: string; class?: string }) {
   )
 }
 
-function PinnedGroupView(props: { group: PinGroup; orientation: Orientation }) {
+function PinnedGroupView(props: {
+  group: PinGroup
+  orientation: Orientation
+  detail?: boolean
+}) {
   const pins = usePins()
   const language = useLanguage()
   const [menu, setMenu] = createStore({ open: false })
 
   const overlayFocus = createOverlayFocus()
   const open = () => !pins.state.collapsed[props.group.id]
+  const sortable = usePinSortable(() => groupKey(props.group.id), "pin-group")
+
+  // A session held over a closed group drops into it, so the group lights up like a folder row.
+  const into = () =>
+    pins.drag.source?.kind === "session" && pins.drag.target?.group === props.group.id && pins.visible(props.group).length === 0
 
   const trigger = (
     <button
@@ -340,7 +514,8 @@ function PinnedGroupView(props: { group: PinGroup; orientation: Orientation }) {
       class="flex shrink-0 items-center rounded-[6px] focus-visible:-outline-offset-2"
       classList={{
         "size-7 justify-center hover:bg-v2-overlay-simple-overlay-hover": props.orientation === "horizontal",
-        "h-7 w-full gap-2 ps-2 pe-8 text-start group-hover/row:bg-v2-overlay-simple-overlay-hover": props.orientation === "vertical",
+        "h-7 w-full gap-2 ps-2 pe-8 text-start group-hover/row:bg-v2-overlay-simple-overlay-hover":
+          props.orientation === "vertical",
       }}
       onClick={() => pins.toggle(props.group.id)}
       onContextMenu={(event) => {
@@ -365,7 +540,7 @@ function PinnedGroupView(props: { group: PinGroup; orientation: Orientation }) {
         </span>
         <Icon
           name="fill-triangle-down"
-          class="shrink-0 text-v2-icon-icon-muted transition-transform motion-reduce:transition-none"
+          class="shrink-0 text-v2-icon-icon-muted opacity-0 transition-[transform,opacity] group-hover/row:opacity-100 group-focus-within/row:opacity-100 motion-reduce:transition-none"
           classList={{ "-rotate-90 rtl:rotate-90": !open() }}
         />
       </Show>
@@ -377,6 +552,10 @@ function PinnedGroupView(props: { group: PinGroup; orientation: Orientation }) {
       data-component="pinned-group"
       data-orientation={props.orientation}
       data-group-color={props.group.color}
+      data-pin-item={`group:${props.group.id}`}
+      data-pin-group={props.group.id}
+      data-drop={into() ? "into" : undefined}
+      ref={sortable.ref}
       class="relative flex shrink-0"
       classList={{
         "flex-row items-center gap-1": props.orientation === "horizontal",
@@ -438,7 +617,9 @@ function PinnedGroupView(props: { group: PinGroup; orientation: Orientation }) {
         }}
       >
         <For each={pins.visible(props.group)}>
-          {(ref) => <PinnedSession pin={ref} orientation={props.orientation} grouped />}
+          {(ref) => (
+            <PinnedSession pin={ref} orientation={props.orientation} detail={props.detail} grouped />
+          )}
         </For>
       </div>
     </div>
@@ -494,9 +675,16 @@ export function GroupSquare(props: { color: TabGroupColor }) {
   return <span data-slot="pinned-group-rect" data-group-color={props.color} aria-hidden="true" />
 }
 
-function PinnedSession(props: { pin: PinRef; orientation: Orientation; grouped?: boolean }) {
+function PinnedSession(props: {
+  pin: PinRef
+  orientation: Orientation
+  grouped?: boolean
+  detail?: boolean
+}) {
   const pins = usePins()
+  const dialog = useDialog()
   const language = useLanguage()
+  const sortable = usePinSortable(() => sessionKey(props.pin), "pin")
   const server = () => ServerConnection.Key.make(props.pin.server)
   const key = () => pins.keyOf(props.pin)
   const session = () => pins.session(props.pin)
@@ -522,19 +710,41 @@ function PinnedSession(props: { pin: PinRef; orientation: Orientation; grouped?:
     syncInactiveSession(ctx, props.pin.sessionId)
   })
 
+  // List's metadata: what the session is doing when it needs you or runs, otherwise how long ago it was updated.
+  const meta = () => {
+    if (!props.detail) return
+
+    if (status.attention()) return language.t("sidebar.recent.meta.attention")
+
+    if (status.loading()) return language.t("sidebar.recent.meta.working")
+    const info = session()
+
+    return info ? sessionAge(language, pins.now(), info.time.updated ?? info.time.created) : undefined
+  }
+
   const shortcut = () => {
     const index = pins.keys().indexOf(key())
 
     return index !== -1 && index < 9 ? index + 1 : undefined
   }
 
-  const menu = (rename: () => void): JSX.Element => (
-    <>
-      <PinMenuItems pin={props.pin} />
-      <Menu.Separator />
-      <Menu.Item onSelect={rename}>{language.t("common.rename")}</Menu.Item>
-    </>
-  )
+  const remove = () => {
+    const ctx = global.serverCtx(server())
+    const info = session()
+
+    if (!ctx || !info) return
+    const ids = sessionTreeIDs(ctx.data.session.list(), info.id)
+
+    void ctx.data.session
+      .remove(info.id)
+      .then(() => notifySessionTabsRemoved({ server: server(), directory: info.location.directory, sessionIDs: ids }))
+      .catch((cause) =>
+        showToast({
+          title: language.t("session.delete.failed.title"),
+          description: errorMessage(cause, language.t("session.delete.failed.title")),
+        }),
+      )
+  }
 
   return (
     <div
@@ -542,6 +752,9 @@ function PinnedSession(props: { pin: PinRef; orientation: Orientation; grouped?:
       data-pinned-slot
       data-orientation={props.orientation}
       data-active={pins.isCurrent(props.pin)}
+      data-pin-item={props.grouped ? undefined : sessionKey(props.pin)}
+      data-pin-group-row={props.grouped ? sessionKey(props.pin) : undefined}
+      ref={sortable.ref}
       class="relative flex shrink-0"
       classList={{ "w-7": props.orientation === "horizontal", "w-full": props.orientation === "vertical" }}
     >
@@ -551,6 +764,8 @@ function PinnedSession(props: { pin: PinRef; orientation: Orientation; grouped?:
         session={session()}
         preparing={false}
         muted={muted()}
+        label={meta()}
+        detail={props.detail ? <SessionDetail server={props.pin.server} session={session()} /> : undefined}
         unread={unread()}
         attention={status.attention()}
         loading={status.loading()}
@@ -558,7 +773,16 @@ function PinnedSession(props: { pin: PinRef; orientation: Orientation; grouped?:
         onNavigate={() => pins.open(props.pin)}
         active={pins.isCurrent(props.pin)}
         orientation={props.orientation}
-        menu={menu}
+        menuItems={() => <PinMenuItems pin={props.pin} />}
+        onClose={() => pins.close(props.pin)}
+        onDelete={() =>
+          dialog.show(() => (
+            <DeleteSessionDialog
+              title={sessionTabTitle(session()?.title, language.t("command.session.new"))}
+              onConfirm={remove}
+            />
+          ))
+        }
       />
     </div>
   )
@@ -597,8 +821,8 @@ export function PinMenuItems(props: { pin: PinRef }) {
                     checked ? pins.moveToGroup(props.pin, item.id) : pins.removeFromGroup(props.pin)
                   }
                 >
-                  <span data-group-color={item.color} class="inline-flex items-center">
-                    <span data-group-swatch class="size-2.5 shrink-0 rounded-full" />
+                  <span class="flex size-4 shrink-0 items-center justify-center">
+                    <GroupSquare color={item.color} />
                   </span>
                   <span class="min-w-0 truncate" dir="auto">
                     {item.name}
