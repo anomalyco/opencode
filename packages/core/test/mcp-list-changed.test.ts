@@ -15,7 +15,7 @@ const catalogServer = Effect.fnUntraced(function* () {
   const [transport, server] = InMemoryTransport.createLinkedPair()
   const state = {
     tools: [] as Array<{ name: string; inputSchema: Record<string, unknown> }>,
-    listens: [] as Array<{ id: string | number; params: unknown }>,
+    listens: [] as Array<{ id: string | number; params: unknown; at: number }>,
     refuse: false,
     hangUp: false,
   }
@@ -43,7 +43,7 @@ const catalogServer = Effect.fnUntraced(function* () {
       // The result, like every 2026-07-28 listing, carries a cache envelope.
       void reply(message.id, { tools: state.tools, ttlMs: 0, cacheScope: "private" })
     if (message.method === "subscriptions/listen") {
-      state.listens.push({ id: message.id, params })
+      state.listens.push({ id: message.id, params, at: Date.now() })
       // A refusal is a ProtocolError, which the follow loop must not retry.
       if (state.refuse) {
         void server.send({ jsonrpc: "2.0", id: message.id, error: { code: -32600, message: "refused" } })
@@ -87,6 +87,9 @@ const until = (check: () => boolean) =>
     }
   })
 
+const gaps = (listens: ReadonlyArray<{ at: number }>) =>
+  listens.slice(1).map((listen, index) => listen.at - listens[index].at)
+
 describe("MCP list changes", () => {
   it.live("reopens the list change stream a server ended, so the catalog keeps updating", () =>
     Effect.gen(function* () {
@@ -102,28 +105,47 @@ describe("MCP list changes", () => {
       })
       expect(yield* connection.tools()).toEqual([])
 
-      // The SDK opens a list change stream of its own; opencode takes the stream over so it can reopen it.
-      yield* until(() => server.state.listens.length === 2)
+      // The first stream is the SDK's own, so it is not refreshed and no second stream is opened for it.
+      yield* until(() => server.state.listens.length === 1)
+      expect(changes.tools).toBe(0)
       const filter = server.state.listens[0].params
-      expect(server.state.listens[1].params).toEqual(filter)
-      yield* until(() => changes.tools >= 1)
-      const opened = changes.tools
 
       // A stream the server ended must come back with the filter it honored, instead of leaving the server
       // "connected" with a frozen catalog.
-      yield* server.end(server.state.listens[1].id)
-      yield* until(() => server.state.listens.length === 3)
-      expect(server.state.listens[2].params).toEqual(filter)
+      yield* server.end(server.state.listens[0].id)
+      yield* until(() => server.state.listens.length === 2)
+      expect(server.state.listens[1].params).toEqual(filter)
 
       // Reopening refreshes once, so a change announced while the stream was down is not lost.
-      yield* until(() => changes.tools > opened)
+      yield* until(() => changes.tools >= 1)
       const caughtUp = changes.tools
 
       // And the reopened stream delivers changes again.
       yield* server.add("added")
-      yield* server.change(server.state.listens[2].id)
+      yield* server.change(server.state.listens[1].id)
       yield* until(() => changes.tools > caughtUp)
       expect((yield* connection.tools()).map((tool) => tool.name)).toEqual(["added"])
+    }),
+  )
+
+  it.live("waits out the backoff between reopens when a server ends every stream at once", () =>
+    Effect.gen(function* () {
+      const server = yield* catalogServer()
+      server.state.hangUp = true
+      const connection = yield* McpClient.connect({
+        server: "catalog",
+        config: { type: "attached", transport: server.transport, protocol: "2026-07-28" },
+        directory: import.meta.dir,
+      })
+      yield* connection.tools()
+
+      // Every open is acknowledged and then ended by the server. Without the schedule covering the close as well as
+      // a refused open, this reopens as fast as the transport allows; with it, the gaps grow from about a second.
+      // The first gap is the handover from the SDK's stream to ours, which is immediate by design.
+      yield* until(() => server.state.listens.length >= 4)
+      const observed = gaps(server.state.listens).slice(1)
+      expect(observed.every((gap) => gap >= 800)).toBe(true)
+      expect(observed[1]).toBeGreaterThan(observed[0])
     }),
   )
 
@@ -136,32 +158,15 @@ describe("MCP list changes", () => {
         directory: import.meta.dir,
       })
       yield* connection.tools()
-      yield* until(() => server.state.listens.length === 2)
+      yield* until(() => server.state.listens.length === 1)
 
       // The reopen is refused, as when access was revoked or the server dropped the capability. Retrying a refusal
       // would hammer the server for the life of the connection, so the follow loop ends after the first one.
       server.state.refuse = true
-      yield* server.end(server.state.listens[1].id)
-      yield* until(() => server.state.listens.length === 3)
-      yield* Effect.sleep("3 seconds")
-      expect(server.state.listens.length).toBe(3)
-    }),
-  )
-
-  it.live("waits out the backoff when a server ends every stream at once", () =>
-    Effect.gen(function* () {
-      const server = yield* catalogServer()
-      server.state.hangUp = true
-      const connection = yield* McpClient.connect({
-        server: "catalog",
-        config: { type: "attached", transport: server.transport, protocol: "2026-07-28" },
-        directory: import.meta.dir,
-      })
-      yield* connection.tools()
-      // Every open is acknowledged and then ended by the server. Without the schedule covering the close as well as
-      // a refused open, this reopens as fast as the transport allows.
+      yield* server.end(server.state.listens[0].id)
+      yield* until(() => server.state.listens.length === 2)
       yield* Effect.sleep("2 seconds")
-      expect(server.state.listens.length).toBeLessThan(10)
+      expect(server.state.listens.length).toBe(2)
     }),
   )
 })

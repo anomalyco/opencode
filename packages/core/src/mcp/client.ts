@@ -1017,21 +1017,24 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     }
     // A modern connection carries tool, prompt and resource changes on a `subscriptions/listen` stream the SDK opens
     // for us behind the list-changed handlers, and the SDK never reopens it. A stream the server ends or drops leaves
-    // the catalog frozen while the server still reports connected, so own the stream: close the SDK's copy and open
-    // ours, refreshing after each open because a change announced while the stream was down is not replayed (#66072).
+    // the catalog frozen while the server still reports connected, so keep it open: follow the SDK's own stream, and
+    // after it ends reopen with the filter the server honored, refreshing each time because a change announced while
+    // the stream was down is not replayed (#66072).
     const autoOpened = client.autoOpenedSubscription
     if (autoOpened) {
-      const filter = autoOpened.honoredFilter
-      yield* Effect.sync(() => void autoOpened.close().catch(() => {}))
-      const follow = Effect.acquireRelease(
+      // Reopens only. The first stream is the SDK's, and nothing can have been missed while it was open, so a refresh
+      // there would only relist what the connection just listed.
+      const attempt = Effect.acquireRelease(
         Effect.tryPromise({
-          try: (signal) => client.listen(filter, { timeout: catalog.timeout, signal }),
+          try: (signal) => client.listen(autoOpened.honoredFilter, { timeout: catalog.timeout, signal }),
           catch: (error) => error,
         }),
         (subscription) => Effect.sync(() => void subscription.close().catch(() => {})),
         // Opening waits for the server's ack; without this, closing the connection would wait for it too.
         { interruptible: true },
       ).pipe(
+        // One scope per attempt, so its release runs when the attempt ends instead of accumulating on the connection.
+        Effect.scoped,
         Effect.tap(() =>
           Effect.sync(() => {
             changed.tools()
@@ -1050,12 +1053,18 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
           ),
         ),
       )
-      yield* follow.pipe(
-        Effect.retry(
-          reopen.pipe(
-            Schedule.setInputType<unknown>(),
-            Schedule.while(({ input }) => !(input instanceof ProtocolError)),
-          ),
+      yield* Effect.promise(() => autoOpened.closed).pipe(
+        Effect.flatMap((reason) =>
+          reason === "local"
+            ? Effect.void
+            : attempt.pipe(
+                Effect.retry(
+                  reopen.pipe(
+                    Schedule.setInputType<unknown>(),
+                    Schedule.while(({ input }) => !(input instanceof ProtocolError)),
+                  ),
+                ),
+              ),
         ),
         Effect.tapError((error) =>
           Effect.logWarning("MCP list change listener stopped", { server, error: describe(error) }),
