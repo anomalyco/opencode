@@ -101,6 +101,7 @@ test("shows the parent session's side panel tabs in a subagent", async ({ page }
 
   const side = page.locator('[data-pane-content="side"]')
   const strip = side.getByRole("tab")
+
   const expectParentStrip = async () => {
     await expect(strip).toHaveText(["README.md", "notes.md"])
     await expect(side.getByRole("tab", { name: "notes.md", exact: true })).toHaveAttribute("aria-selected", "true")
