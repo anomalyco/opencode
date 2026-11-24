@@ -31,6 +31,7 @@ import { httpFetch } from "@opencode/util/effect/app-node-platform"
 import { Credential } from "../credential.js"
 import { Bus } from "../bus.js"
 import { Environment } from "../environment/index.js"
+import { Flag } from "../flag.js"
 import { Form } from "../form.js"
 import { Integration } from "../integration.js"
 import { KeyedMutex } from "../effect/keyed-mutex.js"
@@ -1266,6 +1267,7 @@ export function configured(options?: Options) {
     deps: [
       Location.node,
       Environment.node,
+      Flag.node,
       Bus.node,
       Form.node,
       Integration.node,

@@ -12,10 +12,12 @@ import { Environment } from "@opencode/core/environment/index"
 import { FileAccess } from "@opencode/core/file-access"
 import { Flag } from "@opencode/core/flag"
 import { Image } from "@opencode/core/image"
+import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Integration } from "@opencode/core/integration"
 import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
 import { Permission } from "@opencode/core/permission"
+import { PermissionPolicy } from "@opencode/core/permission/policy"
 import { McpSkillPlugin } from "@opencode/core/plugin/mcp-skill"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
@@ -26,7 +28,6 @@ import { Tool } from "@opencode/core/tool"
 import { McpTool } from "@opencode/core/tool/mcp"
 import { ReadTool } from "@opencode/core/tool/plugin/read"
 import { SkillTool } from "@opencode/core/tool/plugin/skill"
-import { ReadToolFileSystem } from "@opencode/core/tool/read-filesystem"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -59,15 +60,17 @@ const readToolNode = makeLocationNode({
   layer: Layer.effectDiscard(registerToolPlugin(ReadTool.Plugin)),
   deps: [
     Tool.node,
-    ReadToolFileSystem.node,
     FileAccess.node,
     Image.node,
     Permission.node,
     SessionInstructions.node,
+    InstructionDiscovery.node,
     Skill.node,
     FSUtil.node,
     Environment.node,
     Location.node,
+    Config.node,
+    Flag.node,
   ],
 })
 
@@ -239,7 +242,9 @@ describe("MCP skills", () => {
       const skills = yield* Skill.Service
       yield* mcp.add("team", new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false }))
       yield* eventually(mcp.servers(), (servers) => servers[0]?.status.status === "connected")
-      expect(server.state.capabilities).not.toMatchObject({ extensions: expect.anything() })
+      expect(server.state.capabilities).not.toMatchObject({
+        extensions: { "io.modelcontextprotocol/skills": expect.anything() },
+      })
       expect(yield* mcp.skills()).toEqual([])
       expect(yield* skills.list({ content: false })).toEqual([])
       expect(server.state.lists).toBe(0)
@@ -265,7 +270,7 @@ describe("MCP skills", () => {
       expect(yield* skills.list()).toEqual([])
       expect(yield* skills.files(Skill.ID.make("team:deploy"))).toEqual(["references/guide.md", "scripts/run.sh"])
       const instructions = yield* SkillInstructions.Service
-      expect((yield* instructions.load([]).pipe(Effect.flatMap(readInitial))).text).toContain("<id>team:deploy</id>")
+      expect((yield* instructions.load(PermissionPolicy.empty).pipe(Effect.flatMap(readInitial))).text).toContain("<id>team:deploy</id>")
       expect(reads).toEqual([])
     }),
   )
@@ -277,10 +282,10 @@ describe("MCP skills", () => {
       yield* connect(server.url, ["team:deploy"])
       yield* eventually(mcp.tools(), (tools) => tools.length === 1)
       const instructions = yield* SkillInstructions.Service
-      const shown = yield* instructions.load([]).pipe(Effect.flatMap(readInitial))
+      const shown = yield* instructions.load(PermissionPolicy.empty).pipe(Effect.flatMap(readInitial))
       expect(shown.text).toContain("<id>team:deploy</id>")
       const denied = yield* instructions
-        .load([{ action: McpTool.name("team", "ping"), resource: "*", effect: "deny" }])
+        .load(PermissionPolicy.fromRules([{ action: McpTool.name("team", "ping"), resource: "*", effect: "deny" }]))
         .pipe(Effect.flatMap(readInitial))
       expect(denied.text).not.toContain("team:deploy")
       expect(reads).toEqual([])
