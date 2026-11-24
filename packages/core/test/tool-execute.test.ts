@@ -4,11 +4,14 @@ import path from "path"
 import { CodeModeDiffs } from "@opencode/core/codemode/diffs"
 import { CodeModeApi } from "@opencode/core/codemode/api"
 import { CodeModeTool } from "@opencode/core/codemode/tool"
+import { ai } from "@opencode/ai/effect"
+import { OpenAI } from "@opencode/ai/providers"
+import { compileRequest } from "@opencode/ai/testing"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Permission } from "@opencode/core/permission"
 import { Tool } from "@opencode/core/tool"
-import { execute } from "@opencode/core/tool/runtime"
+import { definition, execute } from "@opencode/core/tool/runtime"
 import { Agent } from "@opencode/schema/agent"
 import { Session } from "@opencode/schema/session"
 import { SessionMessage } from "@opencode/schema/session-message"
@@ -53,7 +56,7 @@ test("execute takes raw code as freeform text, and Code Mode calls freeform tool
     ["send", { ...send, freeform: { type: "text" } }],
   ])
   const codeMode = createCodeMode(tools)
-  expect(codeMode.freeform).toEqual({ type: "text" })
+  expect(codeMode.freeform).toEqual({ type: "text", field: "code" })
   expect(CodeModeTool.catalog({ tools }).tools.map((tool) => "signature" in tool && tool.signature)).toEqual([
     "tools.echo({\n  /** @minLength 1 */\n  text: string,\n}): Promise<string>",
     "tools.send(/** @minLength 1 */ text: string): Promise<string>",
@@ -63,6 +66,37 @@ test("execute takes raw code as freeform text, and Code Mode calls freeform tool
   )
   expect(JSON.parse(calls.output.output)).toEqual(["first", "second"])
   expect(calls.output.toolCalls.map((call) => call.input)).toEqual([{ text: "first" }, { text: "second" }])
+})
+
+test("with full_codemode, raw-text models set execute's timeout and background on a first line", async () => {
+  const codeMode = createCodeMode(new Map(), allowAll, codeModeServices(process.cwd()))
+  const prepared = await Effect.runPromise(
+    compileRequest(
+      ai.request({
+        model: OpenAI.model("gpt-5.4", { apiKey: "test" }),
+        prompt: "Run it.",
+        tools: [definition(codeMode)],
+      }),
+    ),
+  )
+  const [tool] = prepared.body.tools
+  expect(tool).toMatchObject({ type: "custom", name: "execute", format: { type: "grammar", syntax: "lark" } })
+  expect(tool.description).toContain(
+    "To set the parameters below, start with a `// @options:` line holding a JSON object of them",
+  )
+  expect(tool.format.definition).toContain('ff_pair: "\\"timeout\\"" " "* ":" " "* /[1-9][0-9]*/')
+  expect(tool.format.definition).toContain('| "\\"background\\"" " "* ":" " "* ("true" | "false")')
+  // Without `full_codemode` the code is the only parameter, and goes out as plain text.
+  const plain = await Effect.runPromise(
+    compileRequest(
+      ai.request({
+        model: OpenAI.model("gpt-5.4", { apiKey: "test" }),
+        prompt: "Run it.",
+        tools: [definition(createCodeMode(new Map()))],
+      }),
+    ),
+  )
+  expect(plain.body.tools[0]).toMatchObject({ type: "custom", name: "execute", format: { type: "text" } })
 })
 
 test("execute describes invariant Code Mode behavior", () => {

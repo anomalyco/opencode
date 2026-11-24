@@ -251,11 +251,15 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
     try: () => {
       const runtime = module.model(resolved.modelID ?? resolved.id, settings)
       const timeouts = Provider.timeouts(configured)
+      const base = resolved.compatibility
+        ? capabilities(runtime.capabilities, resolved.compatibility)
+        : runtime.capabilities
       return LanguageModel.update(runtime, {
         provider: resolved.canonical ?? resolved.providerID,
-        capabilities: resolved.compatibility
-          ? capabilities(runtime.capabilities, resolved.compatibility)
-          : runtime.capabilities,
+        // The catalog's freeform formats tell the AI package whether a custom tool may carry a Lark grammar.
+        capabilities: model.capabilities.freeform
+          ? { ...base, tools: { ...base?.tools, freeform: model.capabilities.freeform } }
+          : base,
         compatibility: resolved.compatibility
           ? Object.assign({}, runtime.compatibility, Struct.omit(resolved.compatibility, CAPABILITY_KEYS))
           : runtime.compatibility,
