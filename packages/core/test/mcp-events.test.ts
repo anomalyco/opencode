@@ -293,7 +293,7 @@ describe("MCP events", () => {
       expect((yield* eventServer({ protocol: "legacy" })).events).toBeUndefined()
       const undeclared = yield* eventServer({ declares: false })
       expect(undeclared.events).toBeUndefined()
-      expect(undeclared.state.capabilities).not.toHaveProperty("extensions")
+      expect(undeclared.state.capabilities).not.toHaveProperty(["extensions", "io.modelcontextprotocol/events"])
     }),
   )
 })

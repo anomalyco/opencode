@@ -343,6 +343,9 @@ export const layer = Layer.effect(
         get prompts() {
           return live().prompts
         },
+        get skills() {
+          return live().skills
+        },
         start: Effect.gen(function* () {
           if (input.config.type === "local" && input.config.cwd === undefined && !unfixed.has(input.name)) {
             unfixed.add(input.name)
@@ -365,6 +368,7 @@ export const layer = Layer.effect(
           yield* input.events.changed("tools")
           yield* input.events.changed("resources")
           yield* input.events.changed("prompts")
+          yield* input.events.changed("skills")
         }),
         recovering: (client, request) =>
           state.shared

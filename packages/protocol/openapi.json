@@ -10236,6 +10236,111 @@
         "summary": "List skills"
       }
     },
+    "/api/experimental/skill/{skillID}/file/*": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.skill.file",
+        "parameters": [
+          {
+            "name": "skillID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Skill.ID"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Absolute path of the directory."
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SkillNotFoundError | FileNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FileNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "SkillLoadError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillLoadErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read one file of a skill, loading it when the skill serves it on demand. SKILL.md returns the body without frontmatter. Experimental: may change without compatibility guarantees.",
+        "summary": "Read skill file"
+      }
+    },
     "/api/rpc/{rpcID}/{method}": {
       "post": {
         "tags": ["rpc"],
@@ -26249,7 +26354,8 @@
             "$ref": "#/components/schemas/AbsolutePath"
           },
           "content": {
-            "type": "string"
+            "type": "string",
+            "description": "The SKILL.md body. Empty for a skill whose body loads on demand, such as an MCP skill."
           }
         },
         "required": ["id", "name", "path", "content"],
@@ -26257,6 +26363,23 @@
       },
       "Skill.Name": {
         "type": "string"
+      },
+      "SkillLoadErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["SkillLoadError"]
+          },
+          "skill": {
+            "$ref": "#/components/schemas/Skill.ID"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "skill", "message"],
+        "additionalProperties": false
       },
       "SkillNotFoundErrorEncoded": {
         "type": "object",

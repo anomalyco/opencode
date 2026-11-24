@@ -3347,6 +3347,10 @@ export type FileNotFoundError = { readonly _tag: "FileNotFoundError"; readonly p
 export const isFileNotFoundError = (value: unknown): value is FileNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FileNotFoundError"
 
+export type SkillLoadError = { readonly _tag: "SkillLoadError"; readonly skill: string; readonly message: string }
+export const isSkillLoadError = (value: unknown): value is SkillLoadError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SkillLoadError"
+
 export type RpcError = {
   readonly _tag: "RpcError"
   readonly type: string
@@ -4516,6 +4520,14 @@ export type CommandListOutput = { location: LocationPublicRef; data: Array<Comma
 export type SkillListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
 export type SkillListOutput = { location: LocationPublicRef; data: Array<SkillInfo> }
+
+export type ExperimentalSkillFileInput = {
+  readonly skillID: string
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly path: string
+}
+
+export type ExperimentalSkillFileOutput = globalThis.Uint8Array
 
 export type RpcCallInput = {
   readonly rpcID: string
