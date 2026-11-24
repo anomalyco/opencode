@@ -1447,6 +1447,29 @@ describe("ModelsDev Service", () => {
     }).pipe(Effect.ensuring(Effect.sync(() => setSystemTime()))),
   )
 
+  it.live("re-prices the bundled snapshot's introductory prices when the day changes", () =>
+    Effect.gen(function* () {
+      setSystemTime(new Date("2027-02-28T23:59:00Z"))
+      const state = yield* Ref.make({ ...initialState, status: 404 })
+      const price = (snapshots: readonly ModelsDev.Snapshot[]) =>
+        snapshots
+          .find((snapshot) => snapshot.info.id === Provider.ID.openai)
+          ?.models.find((model) => model.id === "gpt-6.2-sol-ultrafast")?.cost[0]?.input
+      yield* provided(
+        state,
+        makeCache(),
+        Effect.gen(function* () {
+          const svc = yield* ModelsDev.Service
+          expect(price(yield* svc.get())).toBe(Money.USDPerMillionTokens.make(6))
+          setSystemTime(new Date("2027-03-01T00:01:00Z"))
+          // The catalog can't be fetched, so the bundled snapshot stays in use.
+          yield* svc.refresh(false)
+          expect(price(yield* svc.get())).toBe(Money.USDPerMillionTokens.make(12))
+        }),
+      )
+    }).pipe(Effect.ensuring(Effect.sync(() => setSystemTime()))),
+  )
+
   it.live("frees and ignores catalogs cached under earlier keys", () =>
     Effect.gen(function* () {
       const cache = makeCache()
