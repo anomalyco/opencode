@@ -269,9 +269,12 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   const exportFile = () =>
     run(async () => {
       const kind = format()
+      // The button says Copied for a moment instead of a notice.
       if (kind === "embed") {
         await navigator.clipboard.writeText(snippet())
-        return "Embed code copied"
+        setCopied(true)
+        setTimeout(() => setCopied(false), 1600)
+        return undefined
       }
       const value = card()
       const shared = await file(kind)
@@ -524,19 +527,11 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     </Row>
                     <Row label="Code" variant="list">
                       <div data-slot="embed-code">
-                        <code>{snippet()}</code>
-                        <button
-                          type="button"
-                          data-slot="embed-copy"
-                          onClick={() =>
-                            void navigator.clipboard.writeText(snippet()).then(() => {
-                              setCopied(true)
-                              setTimeout(() => setCopied(false), 1600)
-                            })
-                          }
-                        >
-                          {copied() ? "Copied" : "Copy"}
-                        </button>
+                        <code>
+                          <For each={tokens(snippet())}>
+                            {(token) => <span data-token={token.kind}>{token.text}</span>}
+                          </For>
+                        </code>
                       </div>
                     </Row>
                   </Show>
@@ -552,7 +547,9 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 >
                   {rendering() !== undefined
                     ? "Rendering video…"
-                    : { image: "Export image", video: "Export video", embed: "Copy embed code" }[format()]}
+                    : { image: "Export image", video: "Export video", embed: copied() ? "Copied" : "Copy embed code" }[
+                        format()
+                      ]}
                 </button>
               </div>
             </aside>
@@ -564,6 +561,24 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
 }
 
 // One option row: its label on the left, its choices inline on the right.
+// The embed code split for highlighting: the tag's name, each attribute's name and quoted value, and the brackets.
+function tokens(code: string) {
+  return [...code.matchAll(/(<\/?)([\w-]+)|([\w-]+)(=)("[^"]*")|(>)|(\s+)/g)].flatMap((match) => {
+    if (match[2])
+      return [
+        { kind: "punctuation", text: match[1]! },
+        { kind: "tag", text: match[2] },
+      ]
+    if (match[3])
+      return [
+        { kind: "attribute", text: match[3] },
+        { kind: "punctuation", text: match[4]! },
+        { kind: "string", text: match[5]! },
+      ]
+    return [{ kind: match[6] ? "punctuation" : "space", text: match[0] }]
+  })
+}
+
 function Row(props: { label: string; variant?: "list"; children: JSX.Element }) {
   return (
     <div data-slot="row" data-variant={props.variant} role="group" aria-label={props.label}>

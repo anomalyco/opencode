@@ -443,11 +443,10 @@
     }
   }
 
-  /* The code to paste: the whole snippet, wrapped, as tall as it needs; a Copy button in its corner. */
+  /* The code to paste: the whole snippet, wrapped, as tall as it needs, on the option buttons' fill and highlighted. */
   [data-slot="embed-code"] {
-    position: relative;
-    padding: 10px 64px 10px 10px;
-    background: var(--stats-layer-2);
+    padding: 10px;
+    background: var(--stats-layer);
     border: 1px solid var(--stats-line-strong);
 
     code {
@@ -458,24 +457,21 @@
       word-break: break-all;
       user-select: all;
     }
-  }
 
-  [data-slot="embed-copy"] {
-    position: absolute;
-    top: 6px;
-    right: 6px;
-    min-width: 52px;
-    height: 24px;
-    padding: 0 8px;
-    font-size: 11px;
-    color: var(--stats-text);
-    background: var(--stats-bg);
-    border: 1px solid var(--stats-line-strong);
+    [data-token="tag"] {
+      color: var(--stats-accent);
+    }
 
-    @media (hover: hover) and (pointer: fine) {
-      &:hover {
-        border-color: var(--stats-text);
-      }
+    [data-token="attribute"] {
+      color: light-dark(#8b3fd9, #c4a5ff);
+    }
+
+    [data-token="string"] {
+      color: light-dark(#0b7a55, #3ddbb8);
+    }
+
+    [data-token="punctuation"] {
+      color: var(--stats-faint);
     }
   }
 
