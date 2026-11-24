@@ -175,12 +175,11 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     setLead("top")
   })
   // A bar chart over its range drawn as bars, or as a race of the leaders overtaking each other (card.ts drawRace).
-  // Over a range: bars, a race or a terminal running top; for one day: bars, a ranked list or a dot matrix. A style that doesn't
+  // Over a range: bars or a race; for one day: bars, a ranked list or a dot matrix. A style that doesn't
   // suit the chart shows as its bars.
-  const [chartStyle, setChartStyle] = createSignal<"bars" | "race" | "terminal" | "list" | "dots">("bars")
+  const [chartStyle, setChartStyle] = createSignal<"bars" | "race" | "list" | "dots">("bars")
   const raceable = () => starts().length > 1
-  const chartStyles = () =>
-    day() === undefined ? (["bars", "race", "terminal"] as const) : (["bars", "list", "dots"] as const)
+  const chartStyles = () => (day() === undefined ? (["bars", "race"] as const) : (["bars", "list", "dots"] as const))
   const style = () => ((chartStyles() as readonly string[]).includes(chartStyle()) ? chartStyle() : "bars")
   const leads = createMemo(() => request()?.id === "top-models" && !!request()?.variant)
   // The first days of the columns the date picker can choose from: a bar chart's, when its section can make a card
@@ -203,7 +202,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     const chosen = focus.day === undefined && focus.lead === "top" ? value : (value.variant?.(focus) ?? value)
     const chart =
       style() !== "bars" && chosen.chart.kind === "stacked"
-        ? { ...chosen.chart, style: style() as "race" | "terminal" | "list" | "dots" }
+        ? { ...chosen.chart, style: style() as "race" | "list" | "dots" }
         : chosen.chart
     return { ...chosen, chart, variant: undefined, updatedAt: props.updatedAt, url: props.url }
   })
@@ -407,8 +406,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
       // Never an explicit track: those are for choosing on purpose.
       setTrack(pick(shareTracks.filter((item) => !item.explicit)).id)
       setLead(pick(["top", "total"] as const))
-      // Live top is only ever chosen, never shuffled to.
-      setChartStyle(pick(chartStyles().filter((item) => item !== "terminal")))
+      setChartStyle(pick(chartStyles()))
       setPlaying(true)
     })
 
@@ -737,7 +735,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     value={style()}
                     options={chartStyles().map((item) => ({
                       value: item,
-                      label: { bars: "Bars", race: "Race", terminal: "Live top", list: "List", dots: "Dots" }[item],
+                      label: { bars: "Bars", race: "Race", list: "List", dots: "Dots" }[item],
                       icon: <ChartGlyph style={item} />,
                     }))}
                     onSelect={setChartStyle}
@@ -1152,7 +1150,7 @@ function parseSettings(raw: string | null) {
   const one = <T extends string>(key: string, choices: readonly T[]) => choices.find((choice) => choice === item[key])
   const format = one("format", ["video", "image", "embed"] as const)
   const lead = one("lead", ["top", "total"] as const)
-  const chart = one("chart", ["bars", "race", "terminal", "list", "dots"] as const)
+  const chart = one("chart", ["bars", "race", "list", "dots"] as const)
   const layout = one(
     "layout",
     layouts.map((entry) => entry.value),
@@ -1437,8 +1435,8 @@ function AspectGlyph(props: { size: ShareOptions["size"] }) {
   )
 }
 
-// The chart's style: columns rising for bars, rows of different lengths for a race, a prompt for a terminal.
-function ChartGlyph(props: { style: "bars" | "race" | "terminal" | "list" | "dots" }) {
+// The chart's style: columns rising for bars, rows of different lengths for a race.
+function ChartGlyph(props: { style: "bars" | "race" | "list" | "dots" }) {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
       <Show when={props.style === "list"}>
@@ -1450,9 +1448,6 @@ function ChartGlyph(props: { style: "bars" | "race" | "terminal" | "list" | "dot
             [0, 1, 2, 3].map((column) => <rect x={2.5 + column * 3} y={2.5 + row * 3} width="2" height="2" />),
           )}
         </g>
-      </Show>
-      <Show when={props.style === "terminal"}>
-        <path d="M3 4.5L6.5 8L3 11.5M8 12h5" fill="none" stroke="currentColor" stroke-width="1.5" />
       </Show>
       <Show when={props.style === "bars" || props.style === "race"}>
         <Show

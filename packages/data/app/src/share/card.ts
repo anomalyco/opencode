@@ -21,10 +21,9 @@ export type ShareChart =
       // A card about one column (a day or a week): its index. The other columns go grey, and the series values, the
       // total and the leader are that column's.
       day?: number
-      // Drawn as an animation over the days instead of bars: a race of horizontal bars overtaking each other
-      // (drawRace), or a terminal running `top` (drawTerminal).
-      // A one-day chart (day set) may instead be a ranked list or a dot matrix (drawDay).
-      style?: "race" | "terminal" | "list" | "dots"
+      // Drawn as a race of horizontal bars overtaking each other day by day instead of bars (drawRace); a one-day
+      // chart (day set) may instead be a ranked list or a dot matrix (drawDay).
+      style?: "race" | "list" | "dots"
     }
   | {
       kind: "ranked"
@@ -272,7 +271,7 @@ export function mainLength(card: ShareCard, options: ShareOptions, timing = free
   return timing.length ?? intro + timing.start + play
 }
 
-// A stacked chart over its whole range drawn as an animation over the days (a race or a terminal), which takes its own
+// A stacked chart over its whole range drawn as an animation over the days (a race), which takes its own
 // time and needs no legend or highlights.
 function isRace(card: ShareCard) {
   return card.chart.kind === "stacked" && !!card.chart.style && card.chart.day === undefined
@@ -397,21 +396,9 @@ export function drawShareCard(
   drawLogo(ctx, options.logo, colors, pad, pad, logo)
 
   const focus = focusAt(card, options, time, timing)
-  // Live top takes the whole card between the logo and the footer, with no title over it.
-  const terminal = card.chart.kind === "stacked" && race && card.chart.style === "terminal"
-  const top = terminal ? pad + 88 + 48 * logo : drawIntro(ctx, card, options, colors, width, pad + 88 + 48 * logo, time)
+  const top = drawIntro(ctx, card, options, colors, width, pad + 88 + 48 * logo, time)
   const progress = Math.min(1, time / timing.build)
 
-  if (card.chart.kind === "stacked" && terminal)
-    drawTerminal(
-      ctx,
-      card.chart,
-      colors,
-      { x: pad, y: top, width: width - pad * 2, height: chartBottom - top },
-      time,
-      timing,
-      raceLength(card, timing),
-    )
   if (card.chart.kind === "stacked" && race && card.chart.style === "race")
     drawRace(
       ctx,
@@ -1107,119 +1094,6 @@ function drawRace(
     ctx.restore()
     ctx.restore()
   })
-}
-
-// Live top: the chart as a terminal running `top`. The command types itself out under the intro, then the table
-// refreshes eight times a second, re-sorted on every refresh as `top` does: a row a series, with an htop meter of its
-// share of the day, the leader's row selected. The header counts the clock and day on, and a graph under the table
-// fills in each day's total, on one scale for the whole range, as the days go by.
-function drawTerminal(
-  ctx: CanvasRenderingContext2D,
-  chart: Extract<ShareChart, { kind: "stacked" }>,
-  colors: Palette,
-  box: Box,
-  time: number,
-  timing: ShareTiming,
-  length: number,
-) {
-  const named = chart.series.map((_, index) => index).filter((index) => chart.series[index]?.key !== "other")
-  const days = chart.columns.length
-  if (days === 0 || named.length === 0) return
-  const tick = Math.floor(time * 8) / 8
-  const at = Math.max(0, Math.min(1, (tick - timing.start) / length)) * (days - 1)
-  const from = Math.floor(at)
-  const to = Math.min(days - 1, from + 1)
-  const step = at - from
-  const value = (day: number, series: number) => chart.columns[day]?.values[series] ?? 0
-  const total = (day: number) => chart.columns[day]?.values.reduce((sum, item) => sum + item, 0) ?? 0
-  const now = (series: number) => value(from, series) + (value(to, series) - value(from, series)) * step
-  const whole = total(from) + (total(to) - total(from)) * step || 1
-  const rows = Math.min(6, named.length)
-  const order = named.toSorted((a, b) => now(b) - now(a)).slice(0, rows)
-
-  // A line each for the prompt, the header, a gap, the column heads, the rows and a gap, set as large as 40 columns
-  // allow; the graph takes the rest, at least three lines.
-  ctx.save()
-  ctx.font = `400 100px ${font}`
-  const em = ctx.measureText("0").width / 100
-  const size = Math.floor(Math.min((box.height / (rows + 8)) * 0.6, box.width / (40 * em)))
-  const line = Math.min(box.height / (rows + 8), size * 2.2)
-  const cell = size * em
-  const columns = Math.floor(box.width / cell)
-  ctx.font = `400 ${size}px ${font}`
-  ctx.textBaseline = "middle"
-  const write = (text: string, column: number, row: number, fill: string) => {
-    ctx.fillStyle = fill
-    ctx.fillText(text, box.x + column * cell, box.y + row * line + line / 2)
-  }
-  const clip = (text: string, width: number) =>
-    text.length > width ? text.slice(0, Math.max(0, width - 1)) + "…" : text
-
-  // The command types itself out, a block cursor blinking after it, until the table comes up.
-  const command = "opencode data --top"
-  const typed = Math.floor(Math.max(0, Math.min(1, (time - 0.1) / (timing.start * 0.6))) * command.length)
-  write("$", 0, 0, colors.faint)
-  write(command.slice(0, typed), 2, 0, colors.text)
-  const up = time >= timing.start * 0.8
-  if (!up && Math.floor(time * 3) % 2 === 0) {
-    ctx.fillStyle = colors.text
-    ctx.fillRect(box.x + (2 + typed) * cell, box.y + line * 0.2, cell, line * 0.6)
-  }
-  if (!up) return ctx.restore()
-
-  const minutes = Math.min(24 * 60 - 1, Math.floor(step * 24 * 60))
-  const clock = `${String(Math.floor(minutes / 60)).padStart(2, "0")}:${String(minutes % 60).padStart(2, "0")}`
-  write(
-    clip(`top - ${clock} ${chart.columns[from]?.label ?? ""} · day ${from + 1}/${days}`, columns),
-    0,
-    1,
-    colors.muted,
-  )
-
-  const name = Math.min(
-    20,
-    columns - 16,
-    Math.max(5, ...order.map((series) => (chart.series[series]?.label ?? "").length)),
-  )
-  const meter = 3 + name + 1
-  // The meter runs true to scale, its share after it rather than over its bars.
-  const inner = columns - meter - 2 - 6
-  ctx.fillStyle = colors.text
-  ctx.fillRect(box.x, box.y + line * 3 + line * 0.08, box.width, line * 0.84)
-  write(" #", 0, 3, colors.background)
-  write("MODEL", 3, 3, colors.background)
-  write("SHARE", columns - 5, 3, colors.background)
-
-  order.forEach((series, index) => {
-    const row = 4 + index
-    const item = chart.series[series]
-    const share = now(series) / whole
-    if (index === 0) {
-      ctx.fillStyle = colors.line
-      ctx.fillRect(box.x, box.y + row * line + line * 0.08, box.width, line * 0.84)
-    }
-    write(String(index + 1).padStart(2, "0"), 0, row, colors.faint)
-    write(clip(item?.label ?? "", name), 3, row, colors.text)
-    const percent = `${(share * 100).toFixed(1)}%`
-    // Two bars a column, for twice the resolution of a narrow meter.
-    const bars = Math.round(share * inner * 2)
-    write("[", meter, row, colors.faint)
-    Array.from({ length: bars }, (_, bar) => write("|", meter + 0.75 + bar / 2, row, item?.color ?? colors.idle))
-    write(percent, columns - percent.length, row, colors.muted)
-    write("]", meter + 1 + inner, row, colors.faint)
-  })
-
-  // Each day's total so far, as columns on one scale, today's in the text colour.
-  const graph = { y: box.y + line * (rows + 5), height: box.height - line * (rows + 5) }
-  const max = Math.max(1e-9, ...chart.columns.map((_, day) => total(day)))
-  const slot = box.width / days
-  const gap = Math.max(1, slot * 0.25)
-  chart.columns.forEach((_, day) => {
-    const height = day <= from ? Math.max(2, (total(day) / max) * graph.height) : 2
-    ctx.fillStyle = day > from ? colors.line : day === from ? colors.text : colors.faint
-    ctx.fillRect(box.x + day * slot, graph.y + graph.height - height, slot - gap, height)
-  })
-  ctx.restore()
 }
 
 // A colour's relative brightness (0 to 1), to set dark or white text on it.
