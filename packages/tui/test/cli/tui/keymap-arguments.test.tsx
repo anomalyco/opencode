@@ -43,3 +43,40 @@ test("dispatch passes slash input through the registered command", async () => {
     app.renderer.destroy()
   }
 })
+
+test("dispatch executes slash command without explicit arguments option", async () => {
+  let executed = false
+  let dispatch: ReturnType<typeof Keymap.use>["dispatch"]
+
+  function Commands() {
+    const keymap = Keymap.use()
+    dispatch = keymap.dispatch
+    Keymap.createLayer(() => ({
+      mode: "global",
+      commands: [
+        {
+          id: "project.console",
+          slash: { name: "console" },
+          run: () => {
+            executed = true
+          },
+        },
+      ],
+    }))
+    return <box />
+  }
+
+  const app = await testRender(() => (
+    <ConfigProvider config={createTuiResolvedConfig()}>
+      <Keymap.Provider>
+        <Commands />
+      </Keymap.Provider>
+    </ConfigProvider>
+  ))
+  try {
+    dispatch!("project.console")
+    expect(executed).toBe(true)
+  } finally {
+    app.renderer.destroy()
+  }
+})

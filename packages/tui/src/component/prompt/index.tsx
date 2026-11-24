@@ -176,7 +176,7 @@ function argumentSlash(input: string, commands: readonly KeymapCommand[]) {
   if (!head) return
   const command = commands.find(
     (command) =>
-      command.slash?.arguments &&
+      command.slash &&
       (command.slash.name === head.name || command.slash.aliases?.includes(head.name) === true),
   )
   if (!command) return
