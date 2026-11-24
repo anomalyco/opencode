@@ -236,10 +236,12 @@ export function drawShareCard(
       ? scaled(meter(time, timing.beat, timing.spectrum), settle(time, timing.build, timing.beat))
       : undefined,
   )
-  drawLogo(ctx, options.logo, colors, pad, pad)
+  // The tall story card is seen smaller in a feed, so its lockup sets larger, and the intro moves down to match.
+  const logo = height > 1350 ? 1.5 : 1
+  drawLogo(ctx, options.logo, colors, pad, pad, logo)
 
   const focus = focusAt(card, options, time, timing)
-  const top = drawIntro(ctx, card, options, colors, width, pad + 136, time)
+  const top = drawIntro(ctx, card, options, colors, width, pad + 88 + 48 * logo, time)
   const progress = Math.min(1, time / timing.build)
 
   if (card.chart.kind === "stacked") {
@@ -395,8 +397,15 @@ function dotGrid(chart: ShareChart, width: number) {
 }
 
 // The header lockup: the OpenCode mark, then DATA (or OPENCODE DATA), set like the site's header.
-function drawLogo(ctx: CanvasRenderingContext2D, kind: ShareOptions["logo"], colors: Palette, x: number, y: number) {
-  const size = 48
+function drawLogo(
+  ctx: CanvasRenderingContext2D,
+  kind: ShareOptions["logo"],
+  colors: Palette,
+  x: number,
+  y: number,
+  zoom: number,
+) {
+  const size = 48 * zoom
   const scale = size / 300
   ctx.save()
   ctx.translate(x, y)
@@ -408,8 +417,8 @@ function drawLogo(ctx: CanvasRenderingContext2D, kind: ShareOptions["logo"], col
   ctx.restore()
   ctx.fillStyle = colors.text
   ctx.textBaseline = "middle"
-  ctx.font = `700 34px ${font}`
-  spaced(ctx, kind === "full" ? "OPENCODE DATA" : "DATA", x + 40 + 24, y + size / 2 + 1, 34 * 0.08)
+  ctx.font = `700 ${34 * zoom}px ${font}`
+  spaced(ctx, kind === "full" ? "OPENCODE DATA" : "DATA", x + (40 + 24) * zoom, y + size / 2 + zoom, 34 * zoom * 0.08)
 }
 
 // The eyebrow, then the headline, the big number or the title; returns where the chart starts.
