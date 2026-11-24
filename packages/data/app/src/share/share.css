@@ -499,6 +499,11 @@
       font-size: 13px;
     }
 
+    /* More air between a size's shape and its ratio. */
+    &:has([data-slot="aspect"]) {
+      gap: 10px;
+    }
+
     /* Type: the label alone, centred, as tall as the wide choices. */
     &[data-variant="text"] {
       height: 36px;
