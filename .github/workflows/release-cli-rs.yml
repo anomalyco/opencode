@@ -25,9 +25,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          # The Linux builds need the runner's glibc, 2.35, or newer.
-          - { runner: ubuntu-22.04, target: x86_64-unknown-linux-gnu }
-          - { runner: ubuntu-22.04-arm, target: aarch64-unknown-linux-gnu }
+          # Zig links Linux against glibc 2.17, OpenTUI's floor. zig_sha is the archive's, from ziglang.org.
+          - runner: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            zig: x86_64-linux-gnu.2.17
+            zig_sha: 3581863e3cbcfd0fce0efc682ce7e9e93da96668a977791d356a26d2a7e9b17a
+          - runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            zig: aarch64-linux-gnu.2.17
+            zig_sha: a1546d5646eb184437918d6635ca6b762a0e889eac09cef720ee7a1ed3fe7795
           - { runner: macos-15-intel, target: x86_64-apple-darwin }
           - { runner: macos-15, target: aarch64-apple-darwin }
           - { runner: windows-2025, target: x86_64-pc-windows-msvc, exe: .exe }
@@ -56,14 +62,40 @@ jobs:
           version=0.0.0-$GITHUB_SHA
           if [[ $GITHUB_REF == refs/tags/cli-rs-v* ]]; then version=${GITHUB_REF_NAME#cli-rs-v}; fi
           echo "OPENCODE_VERSION=$version" >> "$GITHUB_ENV"
+      # Zig 0.17.1 as the C and C++ compiler and the linker. The wrapper drops flags zig rejects: cc's --target, and
+      # rustc's Cortex-A53 erratum fix on aarch64.
+      - if: matrix.zig
+        working-directory: ${{ runner.temp }}
+        run: |
+          file=zig-$(uname -m)-linux-0.17.1
+          curl -fsSL --retry 3 -o zig.tar.xz "https://ziglang.org/download/0.17.1/$file.tar.xz"
+          echo "${{ matrix.zig_sha }}  zig.tar.xz" | sha256sum -c
+          tar -xJf zig.tar.xz
+          for tool in cc c++; do
+            cat > "zig-$tool" <<EOF
+          #!/bin/sh
+          for a; do shift; case \$a in --target=*|-Wl,--fix-cortex-a53-843419) ;; *) set -- "\$@" "\$a" ;; esac; done
+          exec "$PWD/$file/zig" $tool -target ${{ matrix.zig }} "\$@"
+          EOF
+            chmod +x "zig-$tool"
+          done
+          triple=$(tr a-z- A-Z_ <<< "${{ matrix.target }}")
+          { echo "CARGO_TARGET_${triple}_LINKER=$PWD/zig-cc"; echo "CC_${triple,,}=$PWD/zig-cc"
+            echo "CXX_${triple,,}=$PWD/zig-c++"; echo "CXXSTDLIB_${triple,,}=c++"; } >> "$GITHUB_ENV"
       # rustup reads rust-toolchain.toml; `bun run cargo` first fetches OpenTUI's native library from its release.
       - run: rustup toolchain install
       - run: bun run cargo build --locked --profile dist --bin opencode-native
+      - name: Check glibc 2.17 and no libstdc++
+        if: matrix.zig
+        run: "! readelf -dV target/dist/opencode-native | grep -E 'GLIBC_2\\.(1[89]|[2-9][0-9])|libstdc\\+\\+'"
       - name: Package
         run: |
           name=opencode-native-$OPENCODE_VERSION-${{ matrix.target }}
           mkdir -p "dist/$name"
           cp "target/dist/opencode-native${{ matrix.exe }}" "dist/$name/"
+          # Our licence, and OpenTUI's licences (FFmpeg's among them) from its native release zip.
+          cp ../../LICENSE "dist/$name/"
+          cp -r .opentui/*/host/licenses "dist/$name/"
           tar -C dist -czf "dist/$name.tar.gz" "$name"
           ls -l "dist/$name" "dist/$name.tar.gz"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
