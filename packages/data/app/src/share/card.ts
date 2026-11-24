@@ -79,7 +79,7 @@ const palettes = {
     muted: "#3a3a3a",
     faint: "#6b6b6b",
     line: "#0000001a",
-    dot: "#e4e4e4",
+    dot: "#ececec",
     meter: "#b4b4b4",
     idle: "#e2e2e2",
     track: "#eeeeee",
