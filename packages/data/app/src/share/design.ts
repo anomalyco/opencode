@@ -14,7 +14,7 @@ export const shareControls = [
     label: "Layout",
     options: [
       ["headline", "Headline"],
-      ["number", "Big number"],
+      ["number", "Number"],
       ["chart", "Chart"],
     ],
   },

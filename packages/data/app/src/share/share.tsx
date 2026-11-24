@@ -58,7 +58,7 @@ const sizes = [
 
 const layouts = [
   { value: "headline", label: "Headline" },
-  { value: "number", label: "Big number" },
+  { value: "number", label: "Number" },
   { value: "chart", label: "Chart" },
 ] as const
 
