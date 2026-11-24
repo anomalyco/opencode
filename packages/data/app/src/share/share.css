@@ -1022,6 +1022,11 @@
     }
   }
 
+  /* The badge keeps its size; the name gives way to it. */
+  [data-slot="dropdown-trigger"] [data-slot="explicit"] {
+    flex: none;
+  }
+
   [data-slot="dropdown-value"] {
     flex: 1;
     min-width: 0;

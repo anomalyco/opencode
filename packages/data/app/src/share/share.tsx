@@ -884,6 +884,17 @@ function Dropdown<T extends string>(props: {
   let element: HTMLDivElement | undefined
   const open = () => props.open === props.id
   const current = () => props.options.find((item) => item.value === props.value)
+  // The Explicit badge in the button: the whole word when the name still fits beside it, E when it would be cut off.
+  const [short, setShort] = createSignal(false)
+  createEffect(() => {
+    if (!current()?.explicit) return
+    setShort(false)
+    const frame = requestAnimationFrame(() => {
+      const value = element?.querySelector<HTMLElement>("[data-slot=dropdown-trigger] [data-slot=dropdown-value]")
+      setShort(!!value && value.scrollWidth > value.clientWidth)
+    })
+    onCleanup(() => cancelAnimationFrame(frame))
+  })
   const close = (focus: boolean) => {
     props.onOpen(undefined)
     if (focus) element?.querySelector<HTMLElement>("[data-slot=dropdown-trigger]")?.focus()
@@ -926,7 +937,7 @@ function Dropdown<T extends string>(props: {
         </Show>
         <Show when={current()?.explicit}>
           <em data-slot="explicit" title="Explicit lyrics">
-            E
+            {short() ? "E" : "Explicit"}
           </em>
         </Show>
         <Chevron />
