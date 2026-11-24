@@ -94,6 +94,15 @@ export type Error = BlockedError | CorrectedError
 
 export { ignoresCase, pathActions } from "./permission/policy.js"
 
+/**
+ * What "Allow always" saves for a web URL: its site, so approving one page doesn't allow every URL. Rules match the URL
+ * as written, so the site is kept as written too, with and without a path.
+ */
+export function site(url: string) {
+  const origin = /^https?:\/\/[^/?#]+/i.exec(url)?.[0]
+  return origin ? [origin, `${origin}/*`] : ["*"]
+}
+
 export function evaluate(action: string, resource: string, ...rulesets: Permission.Ruleset[]): Permission.Rule {
   return PermissionPolicy.evaluate(PermissionPolicy.fromRules(...rulesets), action, resource)
 }

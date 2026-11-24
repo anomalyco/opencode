@@ -672,7 +672,7 @@ describe("fetch permissions", () => {
       {
         action: "webfetch",
         resources: [url],
-        save: ["*"],
+        save: [server.url.origin, `${server.url.origin}/*`],
         metadata: { method: "POST", url },
         sessionID: context.sessionID,
         agent: context.agent,

@@ -50,7 +50,7 @@ const fetch = (input: string | URL, given: Init = {}) =>
       .assert({
         action: "webfetch",
         resources: [url],
-        save: ["*"],
+        save: Permission.site(url),
         metadata: display([input, init]),
         sessionID: execution.sessionID,
         agent: execution.agent,
