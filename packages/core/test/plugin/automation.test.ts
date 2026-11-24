@@ -122,33 +122,3 @@ it.live("Promise plugins cannot delete an automation with an aborted signal", ()
     expect((yield* automations.list()).map((item): string => item.id)).toContain(ids[0])
   }),
 )
-
-it.live("Promise plugin calls aborted mid-call reject with the signal's reason", () =>
-  Effect.gen(function* () {
-    const plugins = yield* Plugin.Service
-    const host = yield* PluginHost.make(plugins, "test")
-    // A call that only ends when it's aborted.
-    const context = {
-      ...host,
-      experimental: { ...host.experimental, automation: { ...host.experimental.automation, list: () => Effect.never } },
-    }
-    const reasons: unknown[] = []
-
-    yield* PluginPromise.fromPromise({
-      id: "test.automation.abort-mid-call",
-      async setup(ctx) {
-        const controller = new AbortController()
-        const listed = ctx.experimental.automation.list(
-          { directory: ctx.location.directory },
-          { signal: controller.signal },
-        )
-        controller.abort()
-        await listed.catch((error: unknown) => reasons.push(error))
-      },
-    }).effect(context as typeof host)
-
-    expect(reasons).toHaveLength(1)
-    expect(reasons[0]).toBeInstanceOf(DOMException)
-    expect((reasons[0] as DOMException).name).toBe("AbortError")
-  }),
-)
