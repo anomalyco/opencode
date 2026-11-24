@@ -860,23 +860,28 @@ function MusicCover(props: { cover?: string; state?: "playing" | "paused" }) {
   )
 }
 
-// Lead with: rising bars for the top model, one block for the total.
+// Lead with: a trophy for the top model, the sum sign for the total.
 function LeadGlyph(props: { lead: "top" | "total" }) {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-      <Show when={props.lead === "top"} fallback={<path d="M3 3h10v10H3z" fill="currentColor" />}>
-        <path d="M3 13V7h3v6zM6.5 13V3h3v10zM10 13V9h3v4z" fill="currentColor" />
-      </Show>
+      <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
+        <Show when={props.lead === "top"} fallback={<path d="M12 3.25H4.25L8.5 8l-4.25 4.75H12" />}>
+          <path d="M4.75 2.75h6.5v3a3.25 3.25 0 0 1-6.5 0zM4.75 4H2.75v.75a2.25 2.25 0 0 0 2.25 2.25M11.25 4h2v.75A2.25 2.25 0 0 1 11 7M8 9v3.25M5.25 13.25h5.5" />
+        </Show>
+      </g>
     </svg>
   )
 }
 
-// The type icons: a play triangle in a frame, a picture, and the angle brackets of code.
+// The type icons: a video camera, a picture, and the angle brackets of code.
 function TypeGlyph(props: { format: "video" | "image" | "embed" }) {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
       <Show when={props.format === "video"}>
-        <path d="M5.5 4.5v7l6-3.5z" fill="currentColor" />
+        <g fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
+          <rect x="1.75" y="4.25" width="8.5" height="7.5" rx="1" />
+          <path d="m10.25 7 4-2.25v6.5l-4-2.25" />
+        </g>
       </Show>
       <Show when={props.format === "image"}>
         <g fill="none" stroke="currentColor" stroke-width="1.5">
