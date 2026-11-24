@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import path from "node:path"
 import { Effect, Layer } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -268,14 +269,16 @@ describe("Environments", () => {
         const wrkID = yield* workspaces.create({ provider: "fake" })
         const sandbox = yield* environments.get(Environment.ID.make(wrkID))
 
-        const localTarget = yield* access.resolve({ path: `local:${tmp.path}/spill.txt`, kind: "file" }).pipe(
+        // Environment paths are rooted at `/`: a Windows host path is written as `/C:/...`, like a shell path.
+        const hostPath = process.platform === "win32" ? `/${tmp.path.replaceAll("\\", "/")}` : tmp.path
+        const localTarget = yield* access.resolve({ path: `local:${hostPath}/spill.txt`, kind: "file" }).pipe(
           Effect.provideService(Environment.CurrentWorkingDirectory, {
             absolute: AbsolutePath.make("/workspace"),
             environment: sandbox,
           }),
         )
         expect(localTarget.environment.id).toBe(Environment.localID)
-        expect(`${localTarget.absolute}`).toBe(`${tmp.path}/spill.txt`)
+        expect(`${localTarget.absolute}`).toBe(path.join(tmp.path, "spill.txt"))
 
         for (const bad of [`${wrkID}:~/notes`, `${wrkID}:relative`, "local:relative"]) {
           const err = yield* access.locate(bad).pipe(Effect.flip)
@@ -351,11 +354,11 @@ describe("Environments", () => {
         const access = yield* FileAccess.Service
         const localPrefixed = yield* access.resolve({ path: "local:/x", kind: "file" })
         expect(localPrefixed.environment.id).toBe(Environment.localID)
-        expect(`${localPrefixed.absolute}`).toBe(`${tmp.path}/local:/x`)
+        expect(`${localPrefixed.absolute}`).toBe(path.join(tmp.path, "local:/x"))
 
         const wrkPrefixed = yield* access.resolve({ path: "wrk_other:/x", kind: "file" })
         expect(wrkPrefixed.environment.id).toBe(Environment.localID)
-        expect(`${wrkPrefixed.absolute}`).toBe(`${tmp.path}/wrk_other:/x`)
+        expect(`${wrkPrefixed.absolute}`).toBe(path.join(tmp.path, "wrk_other:/x"))
         expect(calls).toEqual([])
       }).pipe(Effect.provide(layer))
     }),
