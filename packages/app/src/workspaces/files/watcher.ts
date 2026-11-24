@@ -1,4 +1,3 @@
-import type { FileNode } from "@/runtime/server/types"
 import type { OpenCodeEvent } from "@opencode/client/promise"
 
 type WatcherEvent = Extract<OpenCodeEvent, { type: "filesystem.changed" }>
@@ -8,7 +7,6 @@ type WatcherOps = {
   hasFile: (path: string) => boolean
   isOpen?: (path: string) => boolean
   loadFile: (path: string) => void
-  node: (path: string) => FileNode | undefined
   isDirLoaded: (path: string) => boolean
   refreshDir: (path: string) => void
 }
@@ -16,7 +14,12 @@ type WatcherOps = {
 export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
   const path = ops.normalize(event.data.file)
 
-  if (!path) return
+  if (!path) {
+    // The normalized workspace root is "", and has no node in the tree.
+    if (event.data.event === "change" && ops.isDirLoaded(path)) ops.refreshDir(path)
+
+    return
+  }
 
   if (path.startsWith(".git/") || path.startsWith(".git\\")) return
 
@@ -25,8 +28,7 @@ export function invalidateFromWatcher(event: WatcherEvent, ops: WatcherOps) {
   }
 
   if (event.data.event === "change") {
-    if (ops.node(path)?.type !== "directory") return
-
+    // Directory state uses normalized keys, unlike nodes whose paths end in a separator.
     if (!ops.isDirLoaded(path)) return
     ops.refreshDir(path)
 

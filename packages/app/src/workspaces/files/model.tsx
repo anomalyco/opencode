@@ -318,7 +318,6 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
           loadFile: (file) => {
             void load(file, { force: true, silent: true })
           },
-          node: tree.node,
           isDirLoaded: tree.isLoaded,
           refreshDir: (dir) => {
             void tree.listDir(dir, { force: true })
@@ -346,7 +345,10 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
     }
 
     createEffect(() => {
-      const stop = serverSDK.event.on("server.connected", () => attachment.files.opened().forEach(watch))
+      const stop = serverSDK.event.on("server.connected", () => {
+        attachment.files.opened().forEach(watch)
+        tree.refresh()
+      })
 
       onCleanup(stop)
     })

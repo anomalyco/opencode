@@ -429,6 +429,54 @@ test("open file tab browses, searches, and tracks missing files", async ({ page 
   await expect(panel.locator("#session-side-panel-review-tab")).toHaveAttribute("aria-selected", "true")
 })
 
+test("the file browser refreshes directory entries and rereads a reopened file", async ({ page }) => {
+  const directory = "C:/OpenCode/FileBrowserRefresh"
+  const files = { names: ["notes.txt"], nested: ["old.txt"], content: "before edit" }
+
+  const workspace = await openSession(page, {
+    name: "FileBrowserRefresh",
+    fileList: (path) =>
+      path.replace(/\\/g, "/").replace(/\/$/, "") === "src"
+        ? files.nested.map((name) => fileNode(directory, `src/${name}`))
+        : [...files.names.map((name) => fileNode(directory, name)), fileNode(directory, "src/", "directory")],
+    fileContent: () => ({ type: "text", content: files.content }),
+    seed: { panes: { ses_filebrowserrefresh: { review: true } } },
+  })
+
+  const panel = page.locator("#review-panel")
+
+  await openFileLauncher(panel)
+  await panel.getByRole("treeitem", { name: "notes.txt", exact: true }).click()
+  await expect(panel.getByText("before edit", { exact: true })).toBeVisible()
+  const tab = panel.getByRole("tab", { name: "notes.txt", exact: true })
+
+  await tab.locator("..").getByRole("button", { name: "Close tab" }).click()
+  await expect(tab).toHaveCount(0)
+
+  // There is no file watch after closing; reopening must not trust the cached bytes.
+  files.content = "after edit while closed"
+  await openFileLauncher(panel)
+  await panel.getByRole("treeitem", { name: "notes.txt", exact: true }).click()
+  await expect(panel.getByText("after edit while closed", { exact: true })).toBeVisible()
+
+  await openFileLauncher(panel)
+  await expect(panel.getByRole("treeitem", { name: "notes.txt", exact: true })).toBeVisible()
+  files.names.push("context.txt")
+  await workspace.push([filesystemEvent(directory, directory, "change")])
+  await expect(panel.getByRole("treeitem", { name: "context.txt", exact: true })).toBeVisible()
+  files.names = ["context.txt"]
+  await workspace.push([filesystemEvent(directory, directory, "change")])
+  await expect(panel.getByRole("treeitem", { name: "notes.txt", exact: true })).toHaveCount(0)
+
+  // Real server directory entries end in a separator; directory watch events do not.
+  await panel.getByRole("treeitem", { name: "src", exact: true }).click()
+  await expect(panel.getByRole("treeitem", { name: "old.txt", exact: true })).toBeVisible()
+  files.nested = ["new.txt"]
+  await workspace.push([filesystemEvent(directory, `${directory}/src`, "change")])
+  await expect(panel.getByRole("treeitem", { name: "new.txt", exact: true })).toBeVisible()
+  await expect(panel.getByRole("treeitem", { name: "old.txt", exact: true })).toHaveCount(0)
+})
+
 for (const listed of [false, true]) {
   test(`the open file heading names a subfolder session ${listed ? "after its sidebar project" : "after its folder"}`, async ({
     page,

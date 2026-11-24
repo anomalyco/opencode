@@ -33,6 +33,7 @@ export type Update = ParcelWatcher.Event
 
 export type WatchInput =
   | { readonly path: string; readonly type: "file" }
+  | { readonly path: string; readonly type: "children" }
   | { readonly path: string; readonly type: "entries"; readonly names: readonly string[] }
   | { readonly path: string; readonly type: "directory"; readonly ignore?: readonly string[] }
 
@@ -47,7 +48,7 @@ type Target = {
   readonly ignore: readonly string[]
 } & (
   | { readonly type: "entries"; readonly names: readonly string[] }
-  | { readonly type: "file" | "directory"; readonly names?: readonly string[] }
+  | { readonly type: "file" | "directory" | "children"; readonly names?: readonly string[] }
 )
 
 export interface NativeInterface {
@@ -159,11 +160,13 @@ export const testLayer = Layer.effectContext(
           subscriptions.push(
             input.type === "file"
               ? { path: input.target, type: "file" }
-              : input.type === "entries"
-                ? { path: input.target, type: "entries", names: input.names }
-                : input.ignore.length > 0
-                  ? { path: input.target, type: "directory", ignore: input.ignore }
-                  : { path: input.target, type: "directory" },
+              : input.type === "children"
+                ? { path: input.target, type: "children" }
+                : input.type === "entries"
+                  ? { path: input.target, type: "entries", names: input.names }
+                  : input.ignore.length > 0
+                    ? { path: input.target, type: "directory", ignore: input.ignore }
+                    : { path: input.target, type: "directory" },
           )
           // Ignore entries resolve against the target like the parcel wrapper's
           // literal paths. Glob entries resolve to paths nothing lives under, so
@@ -171,6 +174,7 @@ export const testLayer = Layer.effectContext(
           const ignored = input.ignore.map((entry) => path.resolve(input.target, entry))
           active.set(input.publish, (target) => {
             if (input.type === "file") return target === input.target
+            if (input.type === "children") return path.dirname(target) === input.target
             if (input.type === "entries")
               return path.dirname(target) === input.target && input.names.includes(path.basename(target))
             return FSUtil.contains(input.target, target) && !ignored.some((entry) => FSUtil.contains(entry, target))
@@ -203,12 +207,19 @@ export const nativeLayer = Layer.succeed(
   Native,
   Native.of({
     subscribe: (input) => {
-      if (input.type === "file" || input.type === "entries") {
+      if (input.type === "file" || input.type === "entries" || input.type === "children") {
         const directory = input.type === "file" ? path.dirname(input.target) : input.target
         const names = new Set(input.type === "file" ? [path.basename(input.target)] : input.names)
         return Effect.try({
           try: () =>
-            watch(directory, { recursive: false }, (_event, file) => {
+            watch(directory, { recursive: false }, (event, file) => {
+              if (input.type === "children") {
+                // Content writes leave a directory's entries unchanged; only creation,
+                // deletion, and renames invalidate a listing.
+                if (event === "change") return
+                input.publish({ path: directory, type: "update" })
+                return
+              }
               if (file && !names.has(file)) return
               for (const name of file ? [file] : names) {
                 input.publish({ path: path.join(directory, name), type: "update" })

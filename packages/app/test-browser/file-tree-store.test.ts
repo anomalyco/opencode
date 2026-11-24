@@ -2,6 +2,7 @@ import { afterEach, describe, expect, test, vi } from "bun:test"
 import { createComputed, createRoot } from "solid-js"
 import type { FileNode } from "@/runtime/server/types"
 import { createFileTreeStore } from "@/workspaces/files/tree-store"
+import { DIRECTORY_REFRESH_INTERVAL_MS } from "@/workspaces/files/tree-machine"
 
 // Runs under the browser build: the server build of Solid neither re-runs computations nor runs cleanups.
 
@@ -34,6 +35,28 @@ afterEach(() => {
 })
 
 describe("file tree store", () => {
+  test("periodic revalidation renews expanded listings and stops on disposal", async () => {
+    vi.useFakeTimers()
+    const tree = setup()
+    const loaded = tree.store.listDir("")
+    tree.calls[0]!.resolve([file("a.ts")])
+    await loaded
+
+    vi.advanceTimersByTime(DIRECTORY_REFRESH_INTERVAL_MS - 1)
+    expect(tree.calls).toHaveLength(1)
+    vi.advanceTimersByTime(1)
+    expect(tree.calls.map((call) => call.dir)).toEqual(["", ""])
+    expect(paths(tree.store.children(""))).toEqual(["a.ts"])
+    const refreshed = tree.store.listDir("")
+    tree.calls[1]!.resolve([file("a.ts"), file("b.ts")])
+    await refreshed
+    expect(paths(tree.store.children(""))).toEqual(["a.ts", "b.ts"])
+
+    tree.dispose()
+    vi.advanceTimersByTime(DIRECTORY_REFRESH_INTERVAL_MS)
+    expect(tree.calls).toHaveLength(2)
+  })
+
   test("a forced reload during a listing resolves after a fresh listing", async () => {
     const tree = setup()
     void tree.store.listDir("src")
