@@ -679,13 +679,11 @@ for (const way of [
               return row ? place(row) : `${key} is not mounted`
             })
 
-          return mounted
-            .filter((row) => {
-              const rect = row.getBoundingClientRect()
+          return mounted.flatMap((row) => {
+            const rect = row.getBoundingClientRect()
 
-              return rect.bottom > view.top && rect.top < view.bottom
-            })
-            .map(place)
+            return rect.bottom > view.top && rect.top < view.bottom ? [place(row)] : []
+          })
         }, keys)
 
       // Rows that a scroll or an older page mounts are measured once it comes to rest.
