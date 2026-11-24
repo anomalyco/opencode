@@ -56,8 +56,17 @@ export type TimelineCursorEvent =
   | { readonly type: "view.unready" }
   /** The route hash changed. `hash` is `location.hash` without its `#`. */
   | { readonly type: "hash.changed"; readonly hash: string; readonly viewReady: boolean }
-  /** The frame an apply waited for. `reveal`: the route opens the session on a tool call instead. */
-  | { readonly type: "hash.applied"; readonly attempt: number; readonly hash: string; readonly reveal: boolean }
+  /**
+   * The frame an apply waited for. `reveal`: the route opens the session on a tool call instead. `placed`: the reader
+   * had scrolled up when they were last in the session, and comes back to that place.
+   */
+  | {
+      readonly type: "hash.applied"
+      readonly attempt: number
+      readonly hash: string
+      readonly reveal: boolean
+      readonly placed: boolean
+    }
   /** What decides whether a pending target can still load: the transcript, the revert boundary and history paging. */
   | {
       readonly type: "target.synced"
@@ -343,7 +352,12 @@ function hashApplied(
 
   if (event.hash) return changed({ status: "none", attempt }, [{ type: "anchor.scroll", id: event.hash }])
 
-  return changed({ status: "none", attempt }, event.reveal ? NO_EFFECTS : [FOLLOW_END])
+  // A session opened without a hash goes to its end, unless a reveal or the reader's own place holds it elsewhere.
+  // A hash that goes away later, as on browser Back, returns to the end.
+  return changed(
+    { status: "none", attempt },
+    event.reveal || (state.initial && event.placed) ? NO_EFFECTS : [FOLLOW_END],
+  )
 }
 
 function targetSynced(

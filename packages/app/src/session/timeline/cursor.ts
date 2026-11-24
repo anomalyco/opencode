@@ -88,6 +88,7 @@ export function createTimelineCursor(input: {
           attempt: effect.attempt,
           hash: location.hash.slice(1),
           reveal: input.revealing(),
+          placed: !input.following(),
         })
       })
 
