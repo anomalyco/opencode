@@ -323,7 +323,13 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
       },
       automation: {
         // A plugin has no UI listener to answer an interactive ask, so asks settle unattended, as they do over HTTP.
-        create: (input) => automations.create(input).pipe(Effect.provideService(Permission.Unattended, [])),
+        // A JavaScript plugin can pass any shape, so decode it as HTTP does before the service stores it.
+        create: (input) =>
+          Schema.decodeUnknownEffect(Automation.CreateInput)(input).pipe(
+            Effect.mapError((error) => new Automation.InvalidError({ reason: error.message })),
+            Effect.flatMap((decoded) => automations.create(decoded)),
+            Effect.provideService(Permission.Unattended, []),
+          ),
         list: (input) => automations.list(input),
         delete: (input) => automations.remove(input.automationID),
       },

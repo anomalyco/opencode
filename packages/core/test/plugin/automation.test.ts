@@ -37,6 +37,28 @@ it.live("Effect plugins can create, list and delete automations", () =>
   }),
 )
 
+it.live("Effect plugins cannot store an automation with an invalid target", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const automations = yield* Automation.Service
+    const context = yield* PluginHost.make(plugins, "test")
+    const session = yield* context.session.create({ title: "Effect invalid automation" })
+
+    // A JavaScript plugin is not held to the input type.
+    const exit = yield* context.experimental.automation
+      .create({
+        sessionID: session.id,
+        name: "empty target",
+        trigger: { type: "every", every: "1 hour" },
+        action: { type: "prompt", prompt: "Check in.", to: {} as never },
+      })
+      .pipe(Effect.exit)
+
+    expect(exit._tag).toBe("Failure")
+    expect((yield* automations.list()).map((item) => item.name)).not.toContain("empty target")
+  }),
+)
+
 it.live("Promise plugins can create, list and delete automations", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
