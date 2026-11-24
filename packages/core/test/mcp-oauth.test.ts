@@ -605,6 +605,22 @@ describe("MCP OAuth connections", () => {
     expect(guarded.state.scopes).toEqual(["files.read"])
   })
 
+  test("falls back to the configured scope when the token response omits one", async () => {
+    // RFC 6749 §5.1 lets a token response leave `scope` out, and #58319 shows servers that do. The login still
+    // requested a scope, so the refresh has to send that one (#66175).
+    const guarded = guardedServer()
+    await using processes = await setup(guarded.url, {
+      config: new ConfigMCP.Remote({ type: "remote", url: guarded.url, oauth: { client_id: "client", scope: "files.read" } }),
+    })
+
+    const exit = await connect(await processes.provider(processes.first), guarded.url).finally(() =>
+      guarded.server.stop(true),
+    )
+
+    expect(Exit.isSuccess(exit)).toBe(true)
+    expect(guarded.state.scopes).toEqual(["files.read"])
+  })
+
   describe("ahead of expiry", () => {
     // An authorization server whose token endpoint the test switches, and the discovery a login saves for it.
     const issuerServer = () => {

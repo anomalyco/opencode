@@ -388,8 +388,10 @@ const exchange = (input: {
       if (typeof issuer === "string" && found.replace(/\/$/, "") !== issuer.replace(/\/$/, ""))
         throw new IssuerChanged({ message: `issued by ${issuer}, but discovery names ${found}` })
       const resource = saved?.resource ?? selectResource(input.config, server.resourceMetadata?.resource).toString()
-      // Entra rejects a refresh that names no scope (AADSTS90023), so keep the scope the grant was issued with.
-      const scope = typeof input.current.metadata?.scope === "string" ? input.current.metadata.scope : undefined
+      // Entra rejects a refresh that names no scope (AADSTS90023). Servers may leave `scope` out of the token
+      // response (RFC 6749 §5.1), so fall back to the configured scope the login requested (#58319).
+      const stored = typeof input.current.metadata?.scope === "string" ? input.current.metadata.scope : undefined
+      const scope = stored ?? oauth?.scope
       const tokens = await refreshAuthorization(server.authorizationServerUrl, {
         metadata: server.authorizationServerMetadata,
         clientInformation: client,
@@ -404,6 +406,8 @@ const exchange = (input: {
         tokens: {
           refresh_token: input.current.refresh,
           ...tokens,
+          // A response that omits `scope` must not drop the one this credential already carries.
+          scope: tokens.scope ?? scope,
           issuer: found,
         },
         client: clientFromCredential(input.current),
