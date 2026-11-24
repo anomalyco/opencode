@@ -17,6 +17,7 @@ import {
   userID,
   userMessage,
   validateTimelineMessages,
+  waitForVisualSettle,
 } from "../utils/timeline"
 import { expectSessionTitle } from "../utils/waits"
 import { openSession } from "../utils/workspace"
@@ -632,7 +633,7 @@ test.describe("timeline history", () => {
     })
   }
 
-  test("pages the timeline from the composer, resuming follow at the end and loading history at the top", async ({
+  test("pages the timeline from the composer and the transcript by what shows between them and the header, resuming follow at the end and loading history at the top", async ({
     page,
   }) => {
     const messages = validateTimelineMessages([
@@ -693,20 +694,58 @@ test.describe("timeline history", () => {
 
     await page.keyboard.type("keep this draft")
 
-    const pageHeight = await page
-      .locator('[data-slot="session-timeline-visible"]')
-      .evaluate((element) => element.clientHeight)
+    // The viewport runs on under the session header and the composer region; the reader sees what is between them.
+    const shown = await page.evaluate(() => {
+      const header = document.querySelector("[data-session-title]")!.getBoundingClientRect()
+      const visible = document.querySelector('[data-slot="session-timeline-visible"]')!.getBoundingClientRect()
 
+      return visible.bottom - header.bottom
+    })
+
+    // How far the first row below the header moves down the screen. The scroll offset would also count the rows that
+    // measure above the view.
+    const paged = async (press: () => Promise<void>) => {
+      const key = await scroller.evaluate((element) => {
+        const header = document.querySelector("[data-session-title]")!.getBoundingClientRect().bottom
+
+        return [...element.querySelectorAll<HTMLElement>("[data-timeline-key]")].find(
+          (row) => row.getBoundingClientRect().top >= header,
+        )!.dataset.timelineKey!
+      })
+
+      const row = scroller.locator(`[data-timeline-key="${key}"]`)
+      const from = (await row.boundingBox())!.y
+      await press()
+
+      return () => row.boundingBox().then((box) => Math.round(box!.y - from))
+    }
+
+    const toEnd = async () => {
+      for (let index = 0; index < 10 && (await fromEnd()) > 1; index++) await editor.press("PageDown")
+      await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+    }
+
+    // A first visit measures the rows above, which moves the rows in view further. Visit them once before measuring.
     await editor.press("PageUp")
-    await expect.poll(top).toBeLessThan(resting - pageHeight * 0.6)
-    expect(resting - (await top())).toBeLessThan(pageHeight)
+    await expect.poll(top).toBeLessThan(resting)
+    await toEnd()
+
+    const fromComposer = await paged(() => editor.press("PageUp"))
+    await expect.poll(fromComposer).toBeGreaterThan(shown * 0.6)
+    const distance = await fromComposer()
+    expect(distance).toBeLessThanOrEqual(shown)
     await expect(editor).toBeFocused()
     await expect(editor).toHaveText("keep this draft")
     expect(await caret()).toBe("keep this draft".length)
+    await toEnd()
+
+    // The same key pressed in the transcript moves the same page, not one that counts what the composer covers.
+    await scroller.focus()
+    const fromTranscript = await paged(() => page.keyboard.press("PageUp"))
+    await expect.poll(async () => Math.abs((await fromTranscript()) - distance)).toBeLessThanOrEqual(1)
 
     // Paging back to the end follows new content again, as a wheel scroll there does.
-    for (let index = 0; index < 10 && (await fromEnd()) > 1; index++) await editor.press("PageDown")
-    await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+    await toEnd()
     await timeline.send(partUpdated(textPart("prt_page_keys_tail", "Arrived after paging down.\n\n".repeat(20))))
     await timeline.waitForPart("prt_page_keys_tail")
     await expect.poll(fromEnd).toBeLessThanOrEqual(1)
@@ -718,7 +757,9 @@ test.describe("timeline history", () => {
     await expect(editor).toHaveText("keep this draft")
   })
 
-  test("a message hash and message navigation keep the prompt in view and the hash in step", async ({ page }) => {
+  test("a message hash and message navigation land the prompt below the session header and keep the hash in step", async ({
+    page,
+  }) => {
     const messages = validateTimelineMessages([
       ...historyMessages(20),
       userMessage(),
@@ -726,20 +767,39 @@ test.describe("timeline history", () => {
     ])
 
     const prompt = (index: number) => messages.filter((message) => message.type === "user")[index]!.id
-    const row = (index: number) => page.locator(`[data-timeline-row="UserMessage"][data-message-id="${prompt(index)}"]`)
+    const selector = (index: number) => `[data-timeline-row="UserMessage"][data-message-id="${prompt(index)}"]`
+    const row = (index: number) => page.locator(selector(index))
     const hash = () => page.evaluate(() => location.hash)
+
+    // Where the prompt rests, against the lower edge of the session header and its fade, which cover the viewport's
+    // top. Several scrolls land a prompt one after another, so only the place it stays at counts.
+    const belowHeader = async (index: number) => {
+      await waitForVisualSettle(page, [selector(index)], 6)
+
+      return row(index).evaluate((element) =>
+        Math.round(
+          element.getBoundingClientRect().top -
+            document.querySelector("[data-session-title]")!.getBoundingClientRect().bottom,
+        ),
+      )
+    }
 
     await setupTimeline(page, { sessionMessages: messages })
     await expect(page.getByText("Latest answer", { exact: true })).toBeInViewport()
     await page.evaluate((id) => (location.hash = `#message-${id}`), prompt(10))
-    await expect(row(10)).toBeInViewport()
+    expect(await belowHeader(10)).toBe(0)
 
     await page.keyboard.press("Control+Alt+BracketLeft")
     await expect.poll(hash).toBe(`#message-${prompt(9)}`)
-    await expect(row(9)).toBeInViewport()
+    expect(await belowHeader(9)).toBe(0)
     await page.keyboard.press("Control+Alt+BracketRight")
     await expect.poll(hash).toBe(`#message-${prompt(10)}`)
-    await expect(row(10)).toBeInViewport()
+    expect(await belowHeader(10)).toBe(0)
+
+    // A link to a prompt whose rows are mounted and measured: nothing measures afterwards to correct where it lands.
+    await page.evaluate((id) => (location.hash = `#message-${id}`), prompt(9))
+    await expect.poll(hash).toBe(`#message-${prompt(9)}`)
+    expect(await belowHeader(9)).toBe(0)
 
     await page.getByRole("button", { name: "Jump to latest" }).click()
     await expect.poll(hash).toBe("")

@@ -8,6 +8,7 @@ import {
 } from "@tanstack/solid-virtual"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner, ScrollView } from "@opencode/ui/scroll-view"
 import { ownScroll } from "@opencode/ui/hold-scroll"
+import { scrollPage } from "@opencode/ui/scroll-port"
 import { Predicate } from "effect"
 import { Timeline, TimelineRow } from "@opencode/session-ui/timeline/projection"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -824,9 +825,9 @@ export function createTimelineVirtualizer(input: Input) {
       dispatchIntent(direction < 0)
       readScroll(root)
       const from = seen.top
-      // Like the timeline's own PageUp: 80% of a page, measured above the composer that covers its bottom. The scroll
-      // event then pins at the end or loads older history near the top, as a wheel scroll does.
-      virtualizer.scrollToOffset(root.scrollTop + direction * (visibleArea()?.clientHeight || root.clientHeight) * 0.8)
+      // The page the timeline's own PageUp moves. The scroll event then pins at the end or loads older history near
+      // the top, as a wheel scroll does.
+      virtualizer.scrollToOffset(root.scrollTop + direction * scrollPage(root))
       // The page is the reader's scroll, as the same key in the transcript is: it leaves the end, and arrives at it.
       seen.reader += seen.top - from
     })
