@@ -9,6 +9,7 @@ import {
   extractSearchableParts,
   findMatchesInParts,
   normalizeSearchQuery,
+  sameTimelineSearchView,
   timelineSearchView,
   transitionTimelineSearch,
   type SearchablePart,
@@ -93,6 +94,14 @@ function collectRanges(
   return { hits, active }
 }
 
+// The active match alone. A seek probes on every one of its frames, so the probe reads the match's own part and not
+// the text of every mounted row.
+function activeRange(root: HTMLElement, query: string, partID: string, occurrence: number) {
+  const part = root.querySelector<HTMLElement>(`[data-timeline-part-id="${CSS.escape(partID)}"]`)
+
+  return part ? collectRanges(part, query, partID, occurrence).active[0] : undefined
+}
+
 function applyHighlights(
   root: HTMLElement,
   query: string,
@@ -109,7 +118,11 @@ type TimelineSearchInput = {
   sessionID: () => string | undefined
   scrollRef: () => HTMLDivElement | undefined
   revealMessage: (id: string, partID?: string) => void
+  /** Ends the scroll `revealMessage` started. */
+  stopReveal: () => void
   pauseAutoScroll: () => void
+  /** Hands the timeline Find's seek, which the reader's scroll ends: it calls `stop` while a seek is `active`. */
+  registerSeek: (seek: { readonly active: () => boolean; readonly stop: () => void }) => void
 }
 
 export function createTimelineSearchController(input: TimelineSearchInput) {
@@ -135,8 +148,10 @@ export function createTranscriptSearch(
   input: TimelineSearchInput & { messages: (id: string) => readonly SessionMessageInfo[] },
 ) {
   const language = useLanguage()
-  const [searchState, setSearchState] = createSignal(createTimelineSearchState())
-  const view = createMemo(() => timelineSearchView(searchState()))
+  // Not a signal: a seek advances the state on every one of its frames, and each write would have every reader of
+  // Find check itself again. Readers follow the view, which those frames leave as it is.
+  let state = createTimelineSearchState()
+  const [view, setView] = createSignal(timelineSearchView(state), { equals: sameTimelineSearchView })
   const visible = createMemo(() => view().visible)
   const query = createMemo(() => view().query)
   const searching = createMemo(() => query() !== "")
@@ -162,12 +177,10 @@ export function createTranscriptSearch(
     on(
       corpus,
       (next) => {
-        const current = searchState()
-
-        if (current.status === "closed") return
-        const matches = findMatchesInParts(next.parts, current.query)
+        if (state.status === "closed") return
+        const matches = findMatchesInParts(next.parts, state.query)
         dispatch({
-          type: next.sessionID === current.sessionID ? "matches.synced" : "session.changed",
+          type: next.sessionID === state.sessionID ? "matches.synced" : "session.changed",
           sessionID: next.sessionID,
           matches,
         })
@@ -207,6 +220,10 @@ export function createTranscriptSearch(
     })
   })
 
+  input.registerSeek({
+    active: () => state.status === "seeking",
+    stop: () => dispatch({ type: "reader.scrolled" }),
+  })
   onCleanup(() => dispatch({ type: "disposed" }))
 
   function open() {
@@ -214,10 +231,13 @@ export function createTranscriptSearch(
   }
 
   function dispatch(event: TimelineSearchEvent) {
-    const current = untrack(searchState)
-    const next = transitionTimelineSearch(current, event)
+    const next = transitionTimelineSearch(state, event)
 
-    if (next.state !== current) setSearchState(next.state)
+    if (next.state !== state) {
+      state = next.state
+      setView(timelineSearchView(state))
+    }
+
     next.effects.forEach(run)
   }
 
@@ -249,6 +269,12 @@ export function createTranscriptSearch(
       return
     }
 
+    if (effect.type === "reveal.stop") {
+      input.stopReveal()
+
+      return
+    }
+
     if (effect.type === "seek.schedule") {
       cancelSeekFrame()
       seekFrame = requestAnimationFrame(() => {
@@ -269,6 +295,9 @@ export function createTranscriptSearch(
     }
 
     if (effect.type === "scroll") {
+      // The reveal scrolls to the middle of the match's row and keeps at it for up to five seconds. Find goes to the
+      // match itself, so that scroll would only move the view away again.
+      input.stopReveal()
       input.scrollRef()?.scrollTo({ top: effect.top, behavior: "auto" })
 
       return
@@ -284,10 +313,10 @@ export function createTranscriptSearch(
   function probeSeek(effect: Extract<TimelineSearchEffect, { type: "seek.schedule" }>): TimelineSearchEvent {
     const root = input.scrollRef()
 
-    if (!root) return { type: "seek.missing", attempt: effect.attempt }
-    const range = collectRanges(root, effect.query, effect.partID, effect.occurrence).active[0]
+    if (!root) return { type: "seek.missing", attempt: effect.attempt, at: undefined }
+    const range = activeRange(root, effect.query, effect.partID, effect.occurrence)
 
-    if (!range) return { type: "seek.missing", attempt: effect.attempt }
+    if (!range) return { type: "seek.missing", attempt: effect.attempt, at: root.scrollTop }
     const rect = range.getBoundingClientRect()
 
     // A match in or past a folded message's fading last lines opens the message, then scrolls to it.
@@ -305,9 +334,16 @@ export function createTranscriptSearch(
 
     // Centred between the header and the composer region, not in the viewport that runs on under both.
     const port = scrollPort(root)
-    const top = root.scrollTop + rect.top - port.top - (port.bottom - port.top - rect.height) / 2
+    const at = root.scrollTop
+    const top = at + rect.top - port.top - (port.bottom - port.top - rect.height) / 2
 
-    return { type: "seek.ready", attempt: effect.attempt, top: Math.max(0, top) }
+    // Kept inside the scroll range, so the offset Find scrolls to is the offset the next probe finds the view at.
+    return {
+      type: "seek.ready",
+      attempt: effect.attempt,
+      top: Math.min(Math.max(0, top), root.scrollHeight - root.clientHeight),
+      at,
+    }
   }
 
   function cancelFocusFrame() {
@@ -321,19 +357,18 @@ export function createTranscriptSearch(
   }
 
   function setValue(value: string) {
-    const current = untrack(searchState)
-
-    if (current.status === "closed") return
+    if (state.status === "closed") return
     const next = normalizeSearchQuery(value)
 
-    if (next === current.query) {
-      dispatch({ type: "query.changed", value, matches: current.matches })
+    if (next === state.query) {
+      dispatch({ type: "query.changed", value, matches: state.matches })
 
       return
     }
 
     // The corpus holds parts only once a query exists, so the first character reads the transcript directly.
-    const parts = current.query ? untrack(corpus).parts : untrack(() => searchableParts(current.sessionID))
+    const sessionID = state.sessionID
+    const parts = state.query ? untrack(corpus).parts : untrack(() => searchableParts(sessionID))
     dispatch({ type: "query.changed", value, matches: findMatchesInParts(parts, next) })
   }
 

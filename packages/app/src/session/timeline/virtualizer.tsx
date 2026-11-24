@@ -128,7 +128,8 @@ type Input = {
     row: TimelineRow.TimelineRow,
     disclosure: Readonly<Record<string, boolean | undefined>>,
   ) => boolean
-  setRevealMessage?: (fn: (id: string, partID?: string) => void) => void
+  /** Registers the reveal of a message's row, and the call that ends the scroll a reveal started. */
+  setRevealMessage?: (fn: (id: string, partID?: string) => void, stop: () => void) => void
   setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
   /** Pages the timeline for keys pressed outside it, such as PageUp in the composer. */
   setPage?: (fn: (direction: 1 | -1) => void) => void
@@ -153,7 +154,10 @@ export function createTimelineVirtualizer(input: Input) {
   const language = useLanguage()
   const active = () => input.active?.() !== false
   const isDesktop = createMediaQuery("(min-width: 768px)")
-  const topOffset = () => (input.showHeader() ? 64 : isDesktop() ? 0 : 16)
+  // The session header is one 48px row over the top of the viewport (session-identity-header.css), and its fade takes
+  // 16px more. The header inset inside the viewport reserves both.
+  const headerHeight = 48
+  const topOffset = () => (input.showHeader() ? headerHeight + 16 : isDesktop() ? 0 : 16)
   // Reserved below the last row: a 36px lane for the live status row and its background hint, a 14px gap, then the
   // activity pill and its 10px composer gap. Without hover the pill grows from 32px to its 44px touch size
   // (composer-lane.css), and the tail grows with it. Both come and go inside it, so neither moves the rows above.
@@ -291,7 +295,6 @@ export function createTimelineVirtualizer(input: Input) {
   // layout. While a batch of sizes is applied, a request replaces the one before it, and the last is written once.
   let scrollHeld = false
   let heldScroll: (() => void) | undefined
-  const [headerHeight, setHeaderHeight] = createSignal(48)
 
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
     get count() {
@@ -301,16 +304,8 @@ export function createTimelineVirtualizer(input: Input) {
     // The viewport runs on under the composer region. The virtualizer sees only the part above it, which the
     // inset spacer below the rows keeps consistent with the native scroll range.
     observeElementRect: (instance, callback) => {
-      reportRect = (rect) => {
-        const root = listRoot()
-        batch(() => {
-          // The container-responsive header can be 48px or 80px.
-          setHeaderHeight(
-            root ? parseFloat(getComputedStyle(root).getPropertyValue("--session-header-height")) || 48 : 48,
-          )
-          callback({ width: rect.width, height: Math.max(0, rect.height - bottomInset()) })
-        })
-      }
+      reportRect = (rect) =>
+        batch(() => callback({ width: rect.width, height: Math.max(0, rect.height - bottomInset()) }))
 
       return observeElementRect(instance, (rect) => {
         if (active()) reportRect?.(rect)
@@ -415,7 +410,7 @@ export function createTimelineVirtualizer(input: Input) {
     },
     // Revealed prompts sit below the solid header and its 16px fade.
     get scrollPaddingStart() {
-      return input.showHeader() ? headerHeight() + 16 : 0
+      return input.showHeader() ? headerHeight + 16 : 0
     },
     get rangeExtractor() {
       return rangeExtractor()
@@ -633,6 +628,13 @@ export function createTimelineVirtualizer(input: Input) {
     flushTouchAdjustment()
   }
 
+  // Ends TanStack's scroll to a revealed row. It writes its target again for up to five seconds, whenever a
+  // measurement moves the row, and so takes the view back from a reader who scrolled on. TanStack has no call for
+  // this. Its declaration names the field, so a rename fails the type check rather than leaving the scroll running.
+  function stopReveal() {
+    virtualizer["scrollState"] = null
+  }
+
   function flushTouchAdjustment() {
     touchAdjustment = 0
     const adjustment = rendering.scrollAdjustment
@@ -704,7 +706,7 @@ export function createTimelineVirtualizer(input: Input) {
       if (index === undefined) return
       prepareNavigation()
       virtualizer.scrollToIndex(index, { align: partIndex >= 0 ? "center" : "start" })
-    })
+    }, stopReveal)
     input.setScrollToEnd?.((behavior) => {
       const root = listRoot()
 
@@ -1234,7 +1236,7 @@ export function createTimelineVirtualizer(input: Input) {
             if (window.getSelection()?.toString()) input.follow.dispatch({ type: "detach" })
           }}
           class="relative min-w-0 w-full h-full"
-          style={{ "--sticky-accordion-top": input.showHeader() ? "var(--session-header-height, 48px)" : "0px" }}
+          style={{ "--sticky-accordion-top": input.showHeader() ? `${headerHeight}px` : "0px" }}
         >
           <Show when={input.showHeader()} fallback={<div aria-hidden="true" class="h-4 md:hidden" />}>
             {props.headerInset}
@@ -1300,7 +1302,10 @@ export function createTimelineVirtualizer(input: Input) {
 
     if (active()) {
       input.setScrollRef(undefined)
-      input.setRevealMessage?.(() => {})
+      input.setRevealMessage?.(
+        () => {},
+        () => {},
+      )
       input.setScrollToEnd?.(() => {})
       input.setPage?.(() => {})
     }

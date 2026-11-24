@@ -65,11 +65,33 @@ function replay(events: TimelineSearchEvent[], from = createTimelineSearchState(
 
 const opened = (...events: TimelineSearchEvent[]) => replay([{ type: "open", sessionID: "ses_1" }, ...events])
 
-const ready = (attempt: number, top: number): TimelineSearchEvent => ({ type: "seek.ready", attempt, top })
+// A probe that found the match where `top` centres it, with the view at `at`: on the match unless a test says where.
+const ready = (attempt: number, top: number, at = top): TimelineSearchEvent => ({
+  type: "seek.ready",
+  attempt,
+  top,
+  at,
+})
 
-const missing = (attempt: number): TimelineSearchEvent => ({ type: "seek.missing", attempt })
+const missing = (attempt: number, at?: number): TimelineSearchEvent => ({ type: "seek.missing", attempt, at })
 
 const folded = (attempt: number, foldID = "fold_1"): TimelineSearchEvent => ({ type: "seek.folded", attempt, foldID })
+
+// A whole seek on a match that rests at `top` from the first frame it renders.
+const landed = (attempt: number, top: number) =>
+  Array.from({ length: TIMELINE_SEARCH_SEEK_LIMIT + 1 }, () => ready(attempt, top))
+
+// The scrolls a seek on the first match makes for these probe results, the probes it asks for, and how it ends.
+function scrolls(...events: TimelineSearchEvent[]) {
+  const start = opened(typed("prompt"))
+  const effects = events.flatMap((_, index) => replay(events.slice(0, index + 1), start.state).effects)
+
+  return {
+    state: replay(events, start.state).state,
+    tops: effects.flatMap((effect) => (effect.type === "scroll" ? [effect.top] : [])),
+    probes: [...start.effects, ...effects].filter((effect) => effect.type === "seek.schedule").length,
+  }
+}
 
 function seeking(state: TimelineSearchState) {
   if (state.status !== "seeking") throw new Error(`expected seeking, got ${state.status}`)
@@ -96,10 +118,97 @@ test("a late result from an earlier seek never scrolls back to its match", () =>
     expect(result.effects).toEqual([])
   }
 
-  const settled = transitionTimelineSearch(second.state, ready(2, 540))
+  const settled = replay(landed(2, 540), second.state)
   expect(settled.state).toMatchObject({ status: "open", activeIndex: 1 })
-  expect(settled.effects).toEqual([{ type: "scroll", top: 540 }])
   expect(timelineSearchView(settled.state)).toMatchObject({ activeDisplay: 2, count: 4 })
+})
+
+// Find used to scroll to the match on the first frame it rendered, while the timeline was still bringing its row in
+// and the rows above it were being measured. The timeline then scrolled on to the row's centre, away from the match.
+test("Find scrolls to a match once it rests, not while its row is still moving", () => {
+  expect(scrolls(ready(1, 74)).tops).toEqual([])
+  expect(scrolls(ready(1, 74), ready(1, 305)).tops).toEqual([])
+  expect(scrolls(ready(1, 74), ready(1, 305), ready(1, 305)).tops).toEqual([305])
+
+  // The seek goes on to its last frame, and a match that stays where Find put it is not scrolled to again.
+  const whole = scrolls(ready(1, 74), ...landed(1, 305).slice(1))
+  expect(whole.tops).toEqual([305])
+  expect(whole.probes).toBe(TIMELINE_SEARCH_SEEK_LIMIT + 1)
+  expect(whole.state).toMatchObject({ status: "open", activeIndex: 0 })
+  expect(whole.state).not.toHaveProperty("top")
+})
+
+// A reply above the match rendered its Markdown two frames after the match's own row, and grew by 647px in view. The
+// seek had ended at its one scroll, so the match stayed where the reply pushed it, out of sight.
+test("Find scrolls again when a row above the match renders late and moves it", () => {
+  // The view is still where Find put it. The match is 647px further down.
+  expect(scrolls(ready(1, 305), ready(1, 305), ready(1, 952, 305)).tops).toEqual([305])
+  expect(scrolls(ready(1, 305), ready(1, 305), ready(1, 952, 305), ready(1, 952, 305)).tops).toEqual([305, 952])
+})
+
+// The same push can take the match's row out of the mounted rows, and then no probe finds the match again.
+test("Find brings back a match that a row above it pushed out of the mounted rows", () => {
+  const pushed = replay([ready(1, 305), ready(1, 305), missing(1, 305)], opened(typed("prompt")).state)
+  expect(pushed.state).toMatchObject({ status: "seeking", retries: 3 })
+  expect(pushed.effects).toEqual([
+    { type: "reveal", revealID: "msg_u1", partID: "msg_u1:text:0" },
+    { type: "seek.schedule", attempt: 1, query: "prompt", partID: "msg_u1:text:0", occurrence: 0, allowUnfold: true },
+  ])
+
+  // Its row is brought in once, not on every frame it takes to mount.
+  expect(transitionTimelineSearch(pushed.state, missing(1, 74)).effects).toEqual([
+    { type: "seek.schedule", attempt: 1, query: "prompt", partID: "msg_u1:text:0", occurrence: 0, allowUnfold: true },
+  ])
+
+  // Back in the place Find scrolled to before, it is scrolled to again: the timeline went to its row since.
+  expect(
+    scrolls(ready(1, 305), ready(1, 305), missing(1, 305), ready(1, 305, 74), ready(1, 305, 74)).tops,
+  ).toEqual([305, 305])
+})
+
+// Find held its match for the rest of twelve frames after it scrolled there, and took a missing row for one that a
+// late row had pushed out. A reader who pressed End in that time unmounted the row, and Find brought it back: the
+// view returned to a match 2,659 to 4,882px from the latest message.
+test.each<{ name: string; probe: TimelineSearchEvent }>([
+  { name: "and the match's row is gone", probe: missing(1, 4200) },
+  { name: "and the match rests where it was", probe: ready(1, 305, 4200) },
+  { name: "while a late row moved the match", probe: ready(1, 952, 4200) },
+])("Find leaves the view to a reader who moved it after Find scrolled, $name", ({ probe }) => {
+  const result = scrolls(ready(1, 305), ready(1, 305), probe)
+  expect(result.tops).toEqual([305])
+  expect(result.state).toMatchObject({ status: "open", activeIndex: 0 })
+  expect(replay([ready(1, 305), ready(1, 305), probe], opened(typed("prompt")).state).effects).toEqual([])
+})
+
+// A row above the fold that measures moves the scroll offset and the match's place by the same distance.
+test("Find keeps a match whose view a size correction moved with it", () => {
+  const result = scrolls(ready(1, 305), ready(1, 305), ready(1, 952, 952), ready(1, 952, 952))
+  expect(result.tops).toEqual([305, 952])
+  expect(result.state).toMatchObject({ status: "seeking", landed: 952 })
+})
+
+test("the reader's scroll ends a seek and keeps the match and the count", () => {
+  const start = opened(typed("prompt"), ready(1, 305))
+  const moved = transitionTimelineSearch(start.state, { type: "reader.scrolled" })
+  expect(moved.state).toMatchObject({ status: "open", activeIndex: 0 })
+  expect(moved.effects).toEqual([{ type: "seek.cancel" }, { type: "reveal.stop" }])
+  expect(timelineSearchView(moved.state)).toMatchObject({ activeDisplay: 1, count: 4, activePartID: "msg_u1:text:0" })
+
+  // The seek's probes are stale, and a scroll with no seek under way changes nothing.
+  for (const event of [ready(1, 305), missing(1, 305), { type: "reader.scrolled" } as const]) {
+    const result = transitionTimelineSearch(moved.state, event)
+    expect(result.state).toBe(moved.state)
+    expect(result.effects).toEqual([])
+  }
+})
+
+test("a match that never rests is scrolled to on the seek's last frame", () => {
+  const moving = Array.from({ length: TIMELINE_SEARCH_SEEK_LIMIT }, (_, index) => ready(1, index * 40))
+  expect(scrolls(...moving).tops).toEqual([])
+
+  const result = scrolls(...moving, ready(1, 900))
+  expect(result.tops).toEqual([900])
+  expect(result.state).toMatchObject({ status: "open", activeIndex: 0 })
 })
 
 // A fold toggle that did not open the message used to be clicked again on every frame while Find stayed open.
@@ -118,12 +227,22 @@ test("a fold that stays closed settles instead of clicking its toggle every fram
 })
 
 test.each([
-  { name: "right away", retries: 0 },
-  { name: "after the row took every retry to mount", retries: TIMELINE_SEARCH_SEEK_LIMIT },
-])("an unfolded match scrolls into view $name", ({ retries }) => {
-  const result = opened(typed("prompt"), ...Array.from({ length: retries }, () => missing(1)), folded(1), ready(1, 640))
-  expect(result.state).toMatchObject({ status: "open", activeIndex: 0 })
-  expect(result.effects).toEqual([{ type: "scroll", top: 640 }])
+  { name: "once it rests", retries: 0, probes: 2, status: "seeking" },
+  {
+    name: "at once after the row took every retry to mount",
+    retries: TIMELINE_SEARCH_SEEK_LIMIT,
+    probes: 1,
+    status: "open",
+  },
+])("an unfolded match scrolls into view $name", ({ retries, probes, status }) => {
+  const result = scrolls(
+    ...Array.from({ length: retries }, () => missing(1)),
+    folded(1),
+    ...Array.from({ length: probes }, () => ready(1, 640)),
+  )
+
+  expect(result.tops).toEqual([640])
+  expect(result.state).toMatchObject({ status, activeIndex: 0 })
 })
 
 test("a seek gives up after its retry budget without scrolling", () => {
@@ -157,7 +276,7 @@ test("a seek gives up after its retry budget without scrolling", () => {
 // The selected index used to survive in the store past the end of a shorter list, and came back once
 // the list grew again.
 test("a match list that shrinks and grows again keeps the first match selected", () => {
-  const fourth = opened(typed("prompt"), { type: "move", delta: 3 }, ready(2, 0))
+  const fourth = opened(typed("prompt"), { type: "move", delta: 3 }, ...landed(2, 0))
   expect(timelineSearchView(fourth.state)).toMatchObject({ activeDisplay: 4, count: 4 })
 
   // A revert removes the last turn, and the selected fourth match with it.
@@ -307,7 +426,7 @@ test.each([
   { name: "seeking", state: opened(typed("prompt")).state, visible: true, showCount: true, display: "1/4" },
   {
     name: "settled",
-    state: opened(typed("prompt"), ready(1, 0)).state,
+    state: opened(typed("prompt"), ...landed(1, 0)).state,
     visible: true,
     showCount: true,
     display: "1/4",
