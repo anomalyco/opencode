@@ -439,7 +439,7 @@ const makeMockWebSocketPair = (initialReadyState = 1) => {
 }
 
 describe("WorkerClient.fromWebSocket", () => {
-  const id = Workspace.ID.make("wrk_ws")
+  const id = Workspace.ID.make("wrk_01TestUpperCase_Ws")
 
   it.effect("completes a full Noise XX WorkerClient.dial over an already-open WebSocket and closes on scope exit", () =>
     Effect.gen(function* () {
@@ -461,6 +461,7 @@ describe("WorkerClient.fromWebSocket", () => {
           Effect.scoped(
             Effect.gen(function* () {
               const linked = yield* Link.connect(workerCarrier, { home: homeKey.publicKey, identity: workerKey })
+              expect(linked.machine).toBe("wrk-01testuppercase-ws")
               linked.send(connection.hello)
               yield* Effect.raceFirst(
                 Stream.runForEach(linked.messages, (message) => Effect.sync(() => connection.send(message))),
