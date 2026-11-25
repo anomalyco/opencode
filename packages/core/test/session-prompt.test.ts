@@ -133,6 +133,7 @@ const harness = (channel?: string) =>
         Bus.node,
         SessionProjector.node,
         SessionStore.node,
+        SessionInbox.node,
         Session.node,
         SessionTransfer.node,
       ]),
