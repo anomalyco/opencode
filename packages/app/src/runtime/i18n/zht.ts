@@ -884,7 +884,7 @@ export const dict = {
   "desktop.removableVolumesUsage": "OpenCode 會使用卸除式磁碟區上的檔案，以處理你在其中開啟的專案和執行的命令。",
   "desktop.contextMenu.spellcheck": "拼字檢查",
   "desktop.contextMenu.spellcheckLanguages": "拼字檢查語言",
-  "desktop.contextMenu.openLink": "在瀏覽器中開啟連結",
+  "desktop.contextMenu.openLink": "在外部瀏覽器中開啟連結",
   "desktop.contextMenu.copyLink": "複製連結",
   "session.location.unavailable": "無法使用工作階段位置",
   "session.location.description": "選擇其他目錄以繼續此工作階段。",

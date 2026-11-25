@@ -852,7 +852,7 @@ export const dict = {
     "OpenCode käyttää siirrettävien asemien tiedostoja projekteissa, jotka avaat, ja komennoissa, jotka suoritat siellä.",
   "desktop.contextMenu.spellcheck": "Oikeinkirjoituksen tarkistus",
   "desktop.contextMenu.spellcheckLanguages": "Oikeinkirjoituksen kielet",
-  "desktop.contextMenu.openLink": "Avaa linkki selaimessa",
+  "desktop.contextMenu.openLink": "Avaa linkki ulkoisessa selaimessa",
   "desktop.contextMenu.copyLink": "Kopioi linkki",
   "session.location.unavailable": "Istunnon sijainti ei ole käytettävissä",
   "session.location.description": "Jatka tätä istuntoa valitsemalla toinen hakemisto.",

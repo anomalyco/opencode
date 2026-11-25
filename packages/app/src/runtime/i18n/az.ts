@@ -857,7 +857,7 @@ export const dict = {
     "OpenCode açdığınız layihələr və orada işlətdiyiniz əmrlər üçün çıxarıla bilən disklərdəki fayllardan istifadə edir.",
   "desktop.contextMenu.spellcheck": "Orfoqrafiya yoxlanışı",
   "desktop.contextMenu.spellcheckLanguages": "Orfoqrafiya yoxlanışı dilləri",
-  "desktop.contextMenu.openLink": "Keçidi brauzerdə aç",
+  "desktop.contextMenu.openLink": "Keçidi xarici brauzerdə aç",
   "desktop.contextMenu.copyLink": "Keçidi kopyala",
   "session.location.unavailable": "Sessiyanın yeri əlçatan deyil",
   "session.location.description": "Bu sessiyaya davam etmək üçün başqa qovluq seçin.",

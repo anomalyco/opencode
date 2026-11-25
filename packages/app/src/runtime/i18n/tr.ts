@@ -924,7 +924,7 @@ export const dict = {
     "OpenCode, açtığınız projeler ve orada çalıştırdığınız komutlar için çıkarılabilir birimlerdeki dosyaları kullanır.",
   "desktop.contextMenu.spellcheck": "Yazım denetimi",
   "desktop.contextMenu.spellcheckLanguages": "Yazım Denetimi Dilleri",
-  "desktop.contextMenu.openLink": "Bağlantıyı Tarayıcıda Aç",
+  "desktop.contextMenu.openLink": "Bağlantıyı Harici Tarayıcıda Aç",
   "desktop.contextMenu.copyLink": "Bağlantıyı Kopyala",
   "session.location.unavailable": "Oturum konumu kullanılamıyor",
   "session.location.description": "Bu oturuma devam etmek için başka bir dizin seçin.",

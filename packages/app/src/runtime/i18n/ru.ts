@@ -942,7 +942,7 @@ export const dict = {
     "OpenCode использует файлы на съёмных носителях для открытых вами проектов и запускаемых в них команд.",
   "desktop.contextMenu.spellcheck": "Проверка орфографии",
   "desktop.contextMenu.spellcheckLanguages": "Языки проверки орфографии",
-  "desktop.contextMenu.openLink": "Открыть ссылку в браузере",
+  "desktop.contextMenu.openLink": "Открыть ссылку во внешнем браузере",
   "desktop.contextMenu.copyLink": "Копировать ссылку",
   "session.location.unavailable": "Расположение сессии недоступно",
   "session.location.description": "Выберите другой каталог, чтобы продолжить эту сессию.",

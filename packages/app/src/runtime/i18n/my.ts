@@ -860,7 +860,7 @@ export const dict = {
     "OpenCode သည် သင်ဖွင့်သော ပရောဂျက်များနှင့် ထိုနေရာတွင် သင်လုပ်ဆောင်သော အမိန့်များအတွက် ဖြုတ်တပ်နိုင်သော သိုလှောင်ကိရိယာများပေါ်ရှိ ဖိုင်များကို အသုံးပြုသည်။",
   "desktop.contextMenu.spellcheck": "စာလုံးပေါင်း စစ်ဆေးခြင်း",
   "desktop.contextMenu.spellcheckLanguages": "စာလုံးပေါင်းစစ်ဆေးရန် ဘာသာစကားများ",
-  "desktop.contextMenu.openLink": "လင့်ခ်ကို ဘရောက်ဇာတွင် ဖွင့်ရန်",
+  "desktop.contextMenu.openLink": "လင့်ခ်ကို ပြင်ပဘရောက်ဇာတွင် ဖွင့်ရန်",
   "desktop.contextMenu.copyLink": "လင့်ခ်ကို ကူးယူရန်",
   "session.location.unavailable": "စက်ရှင်တည်နေရာ မရရှိနိုင်ပါ",
   "session.location.description": "ဤစက်ရှင်ကို ဆက်လုပ်ရန် အခြားဖိုင်တွဲတစ်ခုကို ရွေးပါ။",

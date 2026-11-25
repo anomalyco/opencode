@@ -854,7 +854,7 @@ export const dict = {
     "OpenCode зөөврийн диск дээрх файлуудыг тэнд нээсэн төсөл болон ажиллуулсан командуудад ашигладаг.",
   "desktop.contextMenu.spellcheck": "Зөв бичгийн шалгалт",
   "desktop.contextMenu.spellcheckLanguages": "Зөв бичгийн шалгалтын хэлүүд",
-  "desktop.contextMenu.openLink": "Холбоосыг хөтөч дээр нээх",
+  "desktop.contextMenu.openLink": "Холбоосыг гадаад хөтөч дээр нээх",
   "desktop.contextMenu.copyLink": "Холбоосыг хуулах",
   "session.location.unavailable": "Сессийн байршил боломжгүй",
   "session.location.description": "Энэ сессийг үргэлжлүүлэхийн тулд өөр хавтас сонгоно уу.",

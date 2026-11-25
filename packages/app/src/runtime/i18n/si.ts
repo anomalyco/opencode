@@ -851,7 +851,7 @@ export const dict = {
     "ඔබ විවෘත කරන ව්‍යාපෘති සහ එහි ධාවනය කරන විධාන සඳහා OpenCode ඉවත් කළ හැකි වෙළුම්වල ගොනු භාවිතා කරයි.",
   "desktop.contextMenu.spellcheck": "අක්ෂර වින්‍යාස පරීක්ෂාව",
   "desktop.contextMenu.spellcheckLanguages": "අක්ෂර වින්‍යාස පරීක්ෂා භාෂා",
-  "desktop.contextMenu.openLink": "සබැඳිය බ්‍රවුසරයේ විවෘත කරන්න",
+  "desktop.contextMenu.openLink": "සබැඳිය බාහිර බ්‍රවුසරයේ විවෘත කරන්න",
   "desktop.contextMenu.copyLink": "සබැඳිය පිටපත් කරන්න",
   "session.location.unavailable": "සැසියේ ස්ථානය නොමැත",
   "session.location.description": "මෙම සැසිය දිගටම කරගෙන යාමට වෙනත් නාමාවලියක් තෝරන්න.",

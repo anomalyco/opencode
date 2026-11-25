@@ -936,7 +936,7 @@ export const dict = {
     "OpenCode usa archivos de volúmenes extraíbles para los proyectos que abres y los comandos que ejecutas en ellos.",
   "desktop.contextMenu.spellcheck": "Revisión ortográfica",
   "desktop.contextMenu.spellcheckLanguages": "Idiomas de revisión ortográfica",
-  "desktop.contextMenu.openLink": "Abrir enlace en el navegador",
+  "desktop.contextMenu.openLink": "Abrir enlace en un navegador externo",
   "desktop.contextMenu.copyLink": "Copiar enlace",
   "session.location.unavailable": "Ubicación de la sesión no disponible",
   "session.location.description": "Elige otro directorio para continuar esta sesión.",

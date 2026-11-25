@@ -910,7 +910,7 @@ export const dict = {
     "OpenCode bruger filer på flytbare drev til projekter, du åbner, og kommandoer, du kører der.",
   "desktop.contextMenu.spellcheck": "Stavekontrol",
   "desktop.contextMenu.spellcheckLanguages": "Sprog til stavekontrol",
-  "desktop.contextMenu.openLink": "Åbn link i browser",
+  "desktop.contextMenu.openLink": "Åbn link i ekstern browser",
   "desktop.contextMenu.copyLink": "Kopier link",
   "session.location.unavailable": "Sessionens placering er ikke tilgængelig",
   "session.location.description": "Vælg en anden mappe for at fortsætte denne session.",

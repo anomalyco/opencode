@@ -875,7 +875,7 @@ export const dict = {
     "OpenCode utilitza fitxers de volums extraïbles per als projectes que hi obriu i les ordres que hi executeu.",
   "desktop.contextMenu.spellcheck": "Correcció ortogràfica",
   "desktop.contextMenu.spellcheckLanguages": "Idiomes de la correcció ortogràfica",
-  "desktop.contextMenu.openLink": "Obre l'enllaç al navegador",
+  "desktop.contextMenu.openLink": "Obre l'enllaç al navegador extern",
   "desktop.contextMenu.copyLink": "Copia l'enllaç",
   "session.location.unavailable": "La ubicació de la sessió no està disponible",
   "session.location.description": "Trieu un altre directori per continuar aquesta sessió.",

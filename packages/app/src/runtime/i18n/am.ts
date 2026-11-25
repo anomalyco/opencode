@@ -822,7 +822,7 @@ export const dict = {
   "desktop.removableVolumesUsage": "OpenCode በተነቃይ ድራይቮች ላይ ያሉ ፋይሎችን እዚያ ለሚከፍቷቸው ፕሮጀክቶች እና ለሚያሂዷቸው ትዕዛዞች ይጠቀማል።",
   "desktop.contextMenu.spellcheck": "የፊደል ማረሚያ",
   "desktop.contextMenu.spellcheckLanguages": "የፊደል ማረሚያ ቋንቋዎች",
-  "desktop.contextMenu.openLink": "ሊንኩን በአሳሽ ክፈት",
+  "desktop.contextMenu.openLink": "ሊንኩን በውጫዊ አሳሽ ክፈት",
   "desktop.contextMenu.copyLink": "ሊንኩን ቅዳ",
   "session.location.unavailable": "የክፍለ ጊዜው አካባቢ አይገኝም",
   "session.location.description": "ይህን ክፍለ ጊዜ ለመቀጠል ሌላ ማውጫ ይምረጡ።",

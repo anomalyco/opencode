@@ -851,7 +851,7 @@ export const dict = {
     "OpenCode იყენებს ფაილებს მოსახსნელ დისკებზე იმ პროექტებისთვის, რომლებსაც ხსნით, და იქ გაშვებული ბრძანებებისთვის.",
   "desktop.contextMenu.spellcheck": "მართლწერის შემოწმება",
   "desktop.contextMenu.spellcheckLanguages": "მართლწერის შემოწმების ენები",
-  "desktop.contextMenu.openLink": "ბმულის ბრაუზერში გახსნა",
+  "desktop.contextMenu.openLink": "ბმულის გარე ბრაუზერში გახსნა",
   "desktop.contextMenu.copyLink": "ბმულის კოპირება",
   "session.location.unavailable": "სესიის მდებარეობა მიუწვდომელია",
   "session.location.description": "ამ სესიის გასაგრძელებლად აირჩიეთ სხვა საქაღალდე.",

@@ -853,7 +853,7 @@ export const dict = {
     "OpenCode përdor skedarët në vëllimet e lëvizshme për projektet që hapni dhe komandat që ekzekutoni atje.",
   "desktop.contextMenu.spellcheck": "Kontrolli drejtshkrimor",
   "desktop.contextMenu.spellcheckLanguages": "Gjuhët e kontrollit drejtshkrimor",
-  "desktop.contextMenu.openLink": "Hap lidhjen në shfletues",
+  "desktop.contextMenu.openLink": "Hap lidhjen në shfletues të jashtëm",
   "desktop.contextMenu.copyLink": "Kopjo lidhjen",
   "session.location.unavailable": "Vendndodhja e sesionit nuk është e disponueshme",
   "session.location.description": "Zgjidhni një drejtori tjetër për të vazhduar këtë sesion.",

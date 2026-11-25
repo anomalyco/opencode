@@ -850,7 +850,7 @@ export const dict = {
     "OpenCode-ն օգտագործում է շարժական կրիչների ֆայլերը այնտեղ բացվող նախագծերի և գործարկվող հրամանների համար։",
   "desktop.contextMenu.spellcheck": "Ուղղագրության ստուգում",
   "desktop.contextMenu.spellcheckLanguages": "Ուղղագրության ստուգման լեզուներ",
-  "desktop.contextMenu.openLink": "Բացել հղումը դիտարկիչում",
+  "desktop.contextMenu.openLink": "Բացել հղումը արտաքին դիտարկիչում",
   "desktop.contextMenu.copyLink": "Պատճենել հղումը",
   "session.location.unavailable": "Նիստի գտնվելու վայրն անհասանելի է",
   "session.location.description": "Ընտրեք այլ գրացուցակ՝ այս նիստը շարունակելու համար։",

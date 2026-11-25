@@ -857,7 +857,7 @@ export const dict = {
   "desktop.picker.error.sizeLimit": "A kiválasztott mellékletek meghaladják a(z) {{limit}} MB-os korlátot",
   "desktop.contextMenu.spellcheck": "Helyesírás-ellenőrzés",
   "desktop.contextMenu.spellcheckLanguages": "Helyesírás-ellenőrzés nyelvei",
-  "desktop.contextMenu.openLink": "Hivatkozás megnyitása böngészőben",
+  "desktop.contextMenu.openLink": "Hivatkozás megnyitása külső böngészőben",
   "desktop.contextMenu.copyLink": "Hivatkozás másolása",
   "session.location.unavailable": "A munkamenet helye nem érhető el",
   "session.location.description": "Válasszon egy másik könyvtárat a munkamenet folytatásához.",

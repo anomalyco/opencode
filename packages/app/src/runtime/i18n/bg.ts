@@ -857,7 +857,7 @@ export const dict = {
     "OpenCode използва файлове на преносими томове за проектите, които отваряте, и командите, които изпълнявате там.",
   "desktop.contextMenu.spellcheck": "Проверка на правописа",
   "desktop.contextMenu.spellcheckLanguages": "Езици за проверка на правописа",
-  "desktop.contextMenu.openLink": "Отваряне на връзката в браузъра",
+  "desktop.contextMenu.openLink": "Отваряне на връзката във външен браузър",
   "desktop.contextMenu.copyLink": "Копиране на връзката",
   "session.location.unavailable": "Местоположението на сесията е недостъпно",
   "session.location.description": "Изберете друга директория, за да продължите тази сесия.",

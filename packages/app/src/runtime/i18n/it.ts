@@ -876,7 +876,7 @@ export const dict = {
     "OpenCode usa i file sui volumi rimovibili per i progetti che apri e i comandi che esegui lì.",
   "desktop.contextMenu.spellcheck": "Controllo ortografico",
   "desktop.contextMenu.spellcheckLanguages": "Lingue del controllo ortografico",
-  "desktop.contextMenu.openLink": "Apri link nel browser",
+  "desktop.contextMenu.openLink": "Apri link nel browser esterno",
   "desktop.contextMenu.copyLink": "Copia link",
   "session.location.unavailable": "Posizione della sessione non disponibile",
   "session.location.description": "Scegli un'altra directory per continuare questa sessione.",

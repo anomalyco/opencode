@@ -843,7 +843,7 @@ export const dict = {
     "OpenCode kasutab eemaldatavatel ketastel olevaid faile projektide jaoks, mida seal avad, ja käskude jaoks, mida seal käivitad.",
   "desktop.contextMenu.spellcheck": "Õigekirjakontroll",
   "desktop.contextMenu.spellcheckLanguages": "Õigekirjakontrolli keeled",
-  "desktop.contextMenu.openLink": "Ava link brauseris",
+  "desktop.contextMenu.openLink": "Ava link välises brauseris",
   "desktop.contextMenu.copyLink": "Kopeeri link",
   "session.location.unavailable": "Seansi asukoht pole saadaval",
   "session.location.description": "Seansi jätkamiseks vali teine kataloog.",

@@ -857,7 +857,7 @@ export const dict = {
     "OpenCode siz ochgan loyihalar va u yerda ishga tushirgan buyruqlaringiz uchun olinadigan disklardagi fayllardan foydalanadi.",
   "desktop.contextMenu.spellcheck": "Imlo tekshiruvi",
   "desktop.contextMenu.spellcheckLanguages": "Imlo tekshiruvi tillari",
-  "desktop.contextMenu.openLink": "Havolani brauzerda ochish",
+  "desktop.contextMenu.openLink": "Havolani tashqi brauzerda ochish",
   "desktop.contextMenu.copyLink": "Havolani nusxalash",
   "session.location.unavailable": "Sessiya joylashuvi mavjud emas",
   "session.location.description": "Ushbu sessiyani davom ettirish uchun boshqa katalogni tanlang.",

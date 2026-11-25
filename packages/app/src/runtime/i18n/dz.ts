@@ -867,7 +867,7 @@ export const dict = {
     "OpenCode གིས་ ཁྱོད་ཀྱིས་ཁ་ཕྱེ་མི་ལས་གཞི་དང་ དེ་ནང་གཡོག་བཀོལ་མི་བརྡ་བཀོད་ཚུ་གི་དོན་ལུ་ བཏོན་བཏུབ་པའི་བམ་པོ་གུ་གི་ཡིག་སྣོད་ཚུ་ལག་ལེན་འཐབ་ཨིན།",
   "desktop.contextMenu.spellcheck": "ཡིག་སྦྱོར་ཞིབ་དཔྱད།",
   "desktop.contextMenu.spellcheckLanguages": "ཡིག་སྦྱོར་ཞིབ་དཔྱད་སྐད་ཡིག་ཚུ།",
-  "desktop.contextMenu.openLink": "འབྲེལ་མཐུད་བརྡ་འཚོལ་ནང་ཁ་ཕྱེ།",
+  "desktop.contextMenu.openLink": "འབྲེལ་མཐུད་ཕྱི་ཁའི་བརྡ་འཚོལ་ནང་ཁ་ཕྱེ།",
   "desktop.contextMenu.copyLink": "འབྲེལ་མཐུད་འདྲ་བཤུས།",
   "session.location.unavailable": "ལཱ་ཡུན་གྱི་ས་གནས་འཐོབ་མི་ཚུགས།",
   "session.location.description": "ལཱ་ཡུན་འདི་འཕྲོ་མཐུད་ནིའི་དོན་ལུ་ སྣོད་ཐོ་གཞན་ཅིག་གདམ་ཁ་རྐྱབས།",

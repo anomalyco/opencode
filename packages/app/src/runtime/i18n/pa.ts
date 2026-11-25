@@ -866,7 +866,7 @@ export const dict = {
     "OpenCode ہٹان جوگ والیوم دیاں فائلاں اوہناں پروجیکٹاں لئی ورتدا اے جیہڑے تسیں کھولدے او تے اوتھے چلائیاں کمانڈاں لئی۔",
   "desktop.contextMenu.spellcheck": "ہجے دی جانچ",
   "desktop.contextMenu.spellcheckLanguages": "ہجے دی جانچ دیاں بولیاں",
-  "desktop.contextMenu.openLink": "لنک براؤزر وچ کھولو",
+  "desktop.contextMenu.openLink": "لنک باہرلے براؤزر وچ کھولو",
   "desktop.contextMenu.copyLink": "لنک کاپی کرو",
   "session.location.unavailable": "سیشن دی تھاں دستیاب نئیں",
   "session.location.description": "ایہہ سیشن جاری رکھن لئی کوئی ہور ڈائریکٹری چنو۔",

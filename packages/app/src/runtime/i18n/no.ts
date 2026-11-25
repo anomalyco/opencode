@@ -917,7 +917,7 @@ export const dict = {
     "OpenCode bruker filer på flyttbare volumer for prosjekter du åpner og kommandoer du kjører der.",
   "desktop.contextMenu.spellcheck": "Stavekontroll",
   "desktop.contextMenu.spellcheckLanguages": "Språk for stavekontroll",
-  "desktop.contextMenu.openLink": "Åpne lenke i nettleser",
+  "desktop.contextMenu.openLink": "Åpne lenke i ekstern nettleser",
   "desktop.contextMenu.copyLink": "Kopier lenke",
   "session.location.unavailable": "Øktens plassering er utilgjengelig",
   "session.location.description": "Velg en annen mappe for å fortsette denne økten.",

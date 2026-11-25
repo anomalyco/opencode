@@ -863,7 +863,7 @@ export const dict = {
   "desktop.picker.error.sizeLimit": "Odabrani prilozi premašuju ograničenje od {{limit}} MB",
   "desktop.contextMenu.spellcheck": "Provjera pravopisa",
   "desktop.contextMenu.spellcheckLanguages": "Jezici provjere pravopisa",
-  "desktop.contextMenu.openLink": "Otvori poveznicu u pregledniku",
+  "desktop.contextMenu.openLink": "Otvori poveznicu u vanjskom pregledniku",
   "desktop.contextMenu.copyLink": "Kopiraj poveznicu",
   "session.location.unavailable": "Lokacija sesije nije dostupna",
   "session.location.description": "Odaberite drugi direktorij za nastavak ove sesije.",

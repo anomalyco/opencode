@@ -875,7 +875,7 @@ export const dict = {
     "OpenCode uporablja datoteke na izmenljivih nosilcih za projekte, ki jih odprete, in ukaze, ki jih tam izvajate.",
   "desktop.contextMenu.spellcheck": "Črkovalnik",
   "desktop.contextMenu.spellcheckLanguages": "Jeziki črkovalnika",
-  "desktop.contextMenu.openLink": "Odpri povezavo v brskalniku",
+  "desktop.contextMenu.openLink": "Odpri povezavo v zunanjem brskalniku",
   "desktop.contextMenu.copyLink": "Kopiraj povezavo",
   "session.location.unavailable": "Lokacija seje ni na voljo",
   "session.location.description": "Za nadaljevanje te seje izberite drug imenik.",
