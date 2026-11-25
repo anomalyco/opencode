@@ -95,7 +95,7 @@ const layer = Layer.effectDiscard(
     )
 
     // An answer on any client makes the notification stale, and so does a new prompt or a view for a finished turn.
-    // A deleted session has nothing left to open.
+    // A deleted session has nothing left to open, and an archived one has been dealt with.
     yield* bus
       .subscribe([
         Permission.Event.Replied,
@@ -104,9 +104,11 @@ const layer = Layer.effectDiscard(
         SessionEvent.InboxEnqueued,
         SessionEvent.Viewed,
         SessionEvent.Deleted,
+        SessionEvent.Archived,
       ])
       .pipe(
         Stream.runForEach((event) => {
+          if (event.type === "session.archived") return sender.clearSession(event.data.sessionID)
           if (event.type === "session.deleted") {
             stepped.delete(event.data.sessionID)
             asking.delete(event.data.sessionID)

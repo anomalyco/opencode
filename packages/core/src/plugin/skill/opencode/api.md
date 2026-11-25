@@ -35,7 +35,6 @@ Call any endpoint below from Code Mode with `fetch("opencode:///api/...")`. Each
 ## api/generate.md
 
 - POST /api/experimental/generate/text (experimental): Generate text
-- POST /api/experimental/generate (experimental): Generate text (deprecated path)
 - POST /api/experimental/generate/image (experimental): Generate images
 - POST /api/experimental/generate/video (experimental): Create a video generation
 - GET /api/experimental/generate/video/{id} (experimental): Read a video generation

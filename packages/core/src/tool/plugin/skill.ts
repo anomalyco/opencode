@@ -44,7 +44,9 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              const skill = yield* skills.get(input.id)
+              const skill = yield* skills
+                .resolve(input.id)
+                .pipe(Effect.mapError((error) => unableToLoad(input.id, error)))
               if (!skill) return yield* unableToLoad(input.id)
               return yield* Effect.gen(function* () {
                 yield* permission.assert({
