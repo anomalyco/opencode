@@ -190,3 +190,20 @@ test("scrolling clears the remembered message before a tab switch", async () => 
     expect(topPrompt(app, scroll)).toBeGreaterThan(3)
   })
 }, 30000)
+
+test("resizing clears the remembered message before a tab switch", async () => {
+  await withTabs(async (app, scroll) => {
+    await jumpToFifth(app, scroll)
+    app.resize(100, 40)
+    await waitForHighlightedFrame(app, (frame) => frame.includes("Message 04"))
+    await nudge(app, scroll, 2)
+
+    await switchAwayAndBack(app)
+    await waitForHighlightedFrame(app, (frame) => frame.includes("Reply 4"))
+    await previous(app)
+    await app.waitForVisualIdle({ quietFrames: 3 })
+
+    // The cached fifth would have moved to Message 03. After a resize, navigation follows the viewport.
+    expect(topPrompt(app, scroll)).toBe(4)
+  })
+}, 30000)

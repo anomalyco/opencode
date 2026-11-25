@@ -308,6 +308,10 @@ export function Session(props: {
   const [synced, setSynced] = createSignal(false)
   const sessionTabs = useSessionTabs()
   const rememberMessage = (messageID: string | undefined) => sessionTabs.setNavigationMessage(sessionID, messageID)
+  const applyNavigationMessage = (messageID: string | undefined) => {
+    setNavigationMessage(messageID)
+    rememberMessage(messageID)
+  }
   const [awayFromBottom, setAwayFromBottom] = createSignal(false)
   const [latestHovered, setLatestHovered] = createSignal(false)
   let ensureAllRowsPending: (() => void)[] | undefined
@@ -315,13 +319,14 @@ export function Session(props: {
     if (!awayFromBottom()) setLatestHovered(false)
   })
 
-  const clearMessageNavigation = () => {
+  const clearMessageNavigation = (clearSaved = false) => {
     ensureAllRowsPending?.splice(0)
     prependHistory.cancel()
     firstJump()?.()
     setFirstJump(undefined)
     setNavigationSlack(0)
     setNavigationMessage(undefined)
+    if (clearSaved) rememberMessage(undefined)
   }
 
   createEffect(
@@ -329,7 +334,7 @@ export function Session(props: {
       () => [dimensions().width, dimensions().height, props.verticalTabsWidth] as const,
       (_, previous) => {
         if (!previous) return
-        clearMessageNavigation()
+        clearMessageNavigation(true)
         if (scroll && !scroll.isDestroyed) updateAwayFromBottom()
       },
     ),
@@ -504,7 +509,7 @@ export function Session(props: {
   }
   /** Message navigation needs the full transcript mounted before walking or jumping. */
   const ensureAllRows = (continuation: () => void) => {
-    if (firstJump()) clearMessageNavigation()
+    if (firstJump()) clearMessageNavigation(true)
     if (!ensureAllRowsPending && hidden() === 0 && visibleEnd() === rows.length) return continuation()
     if (ensureAllRowsPending) {
       ensureAllRowsPending.push(continuation)
@@ -584,12 +589,12 @@ export function Session(props: {
     const anchor = sessionTabs.scrollAnchor(sessionID)
     const index = anchor ? rows.findIndex((row) => containsAnchor(row, anchor.target)) : -1
     if (!anchor || index === -1) {
-      rememberMessage(undefined)
+      applyNavigationMessage(undefined)
       scroll.scrollTo(scroll.scrollHeight)
       setAwayFromBottom(false)
       return
     }
-    rememberMessage(sessionTabs.navigationMessage(sessionID))
+    applyNavigationMessage(sessionTabs.navigationMessage(sessionID))
     setHiddenRows(rowsBefore(weights(), index, TRANSCRIPT_BACKFILL_CHUNK))
     const end = rowsAfter(weights(), index, TRANSCRIPT_BACKFILL_CHUNK)
     setVisibleRowsEnd(end === rows.length ? undefined : end)
@@ -599,7 +604,7 @@ export function Session(props: {
         const boundary = anchors.get(anchor.target)
         if (!boundary) {
           sessionTabs.setScrollAnchor(sessionID, undefined)
-          rememberMessage(undefined)
+          applyNavigationMessage(undefined)
           scroll.stickyScroll = true
           scroll.scrollTo(scroll.scrollHeight)
           setAwayFromBottom(false)
@@ -856,8 +861,7 @@ export function Session(props: {
     ))
   const alignMessage = (messageID: string, top: number) => {
     scroll.stickyScroll = false
-    setNavigationMessage(messageID)
-    rememberMessage(messageID)
+    applyNavigationMessage(messageID)
     updateAwayFromBottom()
     setNavigationSlack(
       messageNavigationSlack({
@@ -907,8 +911,7 @@ export function Session(props: {
     })
 
   function toBottom() {
-    clearMessageNavigation()
-    rememberMessage(undefined)
+    clearMessageNavigation(true)
     ensureAllRowsPending = undefined
     if (awayTimer) clearTimeout(awayTimer)
     awayTimer = undefined
@@ -924,8 +927,7 @@ export function Session(props: {
   }
 
   function moveTranscript(delta: number) {
-    clearMessageNavigation()
-    rememberMessage(undefined)
+    clearMessageNavigation(true)
     if (delta < 0 && revealOlderRows(delta)) {
       dialog.clear()
       return
@@ -1044,8 +1046,7 @@ export function Session(props: {
               },
               (error) => {
                 if (firstJump() !== restore || scroll.isDestroyed) return
-                clearMessageNavigation()
-                rememberMessage(undefined)
+                clearMessageNavigation(true)
                 toast.error(error)
                 updateAwayFromBottom()
               },
@@ -1482,6 +1483,7 @@ export function Session(props: {
       () => route.sessionID,
       () => {
         setComposer("open", false)
+        // Keep the per-session message here: a tab switch re-creates this view and restores it.
         clearMessageNavigation()
       },
     ),
@@ -1576,7 +1578,7 @@ export function Session(props: {
                 flexGrow={1}
                 scrollAcceleration={scrollAcceleration()}
                 onMouseScroll={(event) => {
-                  if (firstJump()) clearMessageNavigation()
+                  if (firstJump()) clearMessageNavigation(true)
                   if (event.scroll?.direction === "up" || event.scroll?.direction === "down")
                     rememberMessage(undefined)
                   if (event.scroll?.direction === "up" && revealOlderRows()) return
