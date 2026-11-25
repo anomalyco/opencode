@@ -1,5 +1,5 @@
 [data-component="dock-prompt"][data-kind="question"]:not([data-variant="experimental"]) {
-  --v2-question-answer-bg-selected: var(--v2-background-bg-layer-01);
+  --v2-question-answer-bg-selected: var(--v2-background-bg-layer-02);
   --question-feedback-duration: 120ms;
 
   position: relative;
@@ -485,7 +485,7 @@
     }
 
     [data-slot="question-option"]:hover:not(:disabled):not([data-disabled="true"]):not([data-picked="true"]) {
-      background-color: var(--v2-background-bg-layer-02);
+      background-color: var(--v2-background-bg-layer-01);
     }
   }
 
