@@ -1,7 +1,7 @@
 import { WebSocket as NodeWebSocket } from "@effect/platform-node/NodeWS"
 import type { ServerEndpoint } from "@opencode/plugin/gui/main"
 import type { Session } from "@opencode/schema/session"
-import { BrowserTunnelHost, StreamWire } from "@opencode/plugin-browser/stream"
+import { BrowserTunnelHost, StreamWire } from "@opencode/plugin-browser/experimental/stream"
 import { Predicate } from "effect"
 
 export const TUNNEL_TICKET_HEADER = "x-opencode-browser-ticket"

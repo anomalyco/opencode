@@ -11,7 +11,7 @@ import {
   BROWSER_TUNNEL_PROTOCOL_HEADER,
   BROWSER_TUNNEL_SESSION_HEADER,
   BROWSER_TUNNEL_TICKET_HEADER,
-} from "@opencode/protocol/groups/browser-tunnel"
+} from "@opencode/protocol/groups/experimental/browser-tunnel"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { Deferred, Effect, Fiber, Schedule, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpServer } from "effect/http"

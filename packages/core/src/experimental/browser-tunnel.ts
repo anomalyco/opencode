@@ -1,8 +1,8 @@
 export * as BrowserTunnelGateway from "./browser-tunnel.js"
 
 import { randomBytes } from "node:crypto"
-import { StreamWire } from "@opencode/plugin-browser/stream"
-import { BrowserTunnelHost } from "@opencode/plugin-browser/tunnel-host"
+import { StreamWire } from "@opencode/plugin-browser/experimental/stream"
+import { BrowserTunnelHost } from "@opencode/plugin-browser/experimental/tunnel-host"
 
 export type BinarySocket = BrowserTunnelHost.BinarySocket
 export const MAX_WS_FRAME_BYTES = StreamWire.MAX_WS_FRAME_BYTES

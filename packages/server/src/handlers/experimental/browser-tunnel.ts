@@ -1,6 +1,6 @@
 import { NodeHttpServerRequest } from "@effect/platform-node"
 import { type WebSocket, WebSocketServer } from "@effect/platform-node-shared/NodeWS"
-import { BrowserTunnelGateway } from "@opencode/core/browser-tunnel"
+import { BrowserTunnelGateway } from "@opencode/core/experimental/browser-tunnel"
 import { LocationLifecycle } from "@opencode/core/location-lifecycle"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import {
@@ -9,14 +9,14 @@ import {
   BROWSER_TUNNEL_PROTOCOL_VERSION,
   BROWSER_TUNNEL_SESSION_HEADER,
   BROWSER_TUNNEL_TICKET_HEADER,
-} from "@opencode/protocol/groups/browser-tunnel"
+} from "@opencode/protocol/groups/experimental/browser-tunnel"
 import { isWebSocketUpgrade } from "@opencode/protocol/groups/machine"
 import { Session } from "@opencode/schema/session"
 import { Effect, Option, Schema, Scope } from "effect"
 import { HttpMiddleware, type HttpServerRequest, HttpServerResponse } from "effect/http"
 import { IncomingMessage } from "node:http"
-import { CorsConfig, isAllowedRequestOrigin } from "../cors"
-import { locationErrors, requestRef } from "../location"
+import { CorsConfig, isAllowedRequestOrigin } from "../../cors"
+import { locationErrors, requestRef } from "../../location"
 
 const STOPPING = "1 second"
 const CLOSING = "5 seconds"

@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { once } from "node:events"
 import { createServer } from "node:http"
 import { WebSocketServer } from "@effect/platform-node/NodeWS"
-import { BrowserTunnelHost } from "@opencode/plugin-browser/stream"
+import { BrowserTunnelHost } from "@opencode/plugin-browser/experimental/stream"
 import { SessionID } from "@opencode/schema/session-id"
 import { Predicate } from "effect"
 import {

@@ -5,7 +5,7 @@ import type { ServerEndpoint } from "@opencode/plugin/gui/main"
 import type { Session } from "@opencode/schema/session"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { BrowserProxy } from "@opencode/plugin-browser/proxy"
-import { BrowserTunnelHost, StreamMux } from "@opencode/plugin-browser/stream"
+import { BrowserTunnelHost, StreamMux } from "@opencode/plugin-browser/experimental/stream"
 import { Effect, Predicate } from "effect"
 import { Base64 } from "effect/encoding"
 import {

@@ -5,7 +5,7 @@ import { Match, Predicate } from "effect"
 import type { BuiltinMainStorage } from "@opencode/plugin/gui/builtin"
 import type { Embeds } from "@opencode/plugin/gui/main"
 import type { Browser } from "@opencode/plugin-browser/rpc"
-import { BrowserTunnelHost, EgressPolicy, StreamMux, StreamWire } from "@opencode/plugin-browser/stream"
+import { BrowserTunnelHost, EgressPolicy, StreamMux, StreamWire } from "@opencode/plugin-browser/experimental/stream"
 import type { PaneEvent } from "./ipc"
 import type { Profile } from "./profile"
 

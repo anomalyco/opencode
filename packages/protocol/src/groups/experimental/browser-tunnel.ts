@@ -1,7 +1,7 @@
 import { Schema } from "effect"
 import { HttpApiEndpoint, OpenApi } from "effect/http-api"
-import { ForbiddenError } from "../errors.js"
-import { isWebSocketUpgrade } from "./machine.js"
+import { ForbiddenError } from "../../errors.js"
+import { isWebSocketUpgrade } from "../machine.js"
 
 export const BROWSER_TUNNEL_PATH = "/api/experimental/browser/tunnel"
 export const BROWSER_TUNNEL_TICKET_HEADER = "x-opencode-browser-ticket"
