@@ -331,6 +331,10 @@ describe("PatchTool", () => {
         )
         expect(settled.status).toBe("completed")
         if (settled.status !== "completed") return
+        expect(settled.content?.[1]).toMatchObject({
+          type: "text",
+          text: expect.stringContaining("A formatter changed these files"),
+        })
         expect(settled.metadata?.files?.[0]?.patch).toContain("+FORMATTED")
         expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("FORMATTED\n")
       })
@@ -450,7 +454,10 @@ describe("PatchTool", () => {
         expect(yield* Effect.promise(() => fs.readFile(latin1))).toEqual(bytes)
         // Deleting does not rewrite the bytes, so it stays allowed.
         expect(
-          yield* executeTool(registry, call("*** Begin Patch\n*** Delete File: Old.java\n*** End Patch", "call-delete")),
+          yield* executeTool(
+            registry,
+            call("*** Begin Patch\n*** Delete File: Old.java\n*** End Patch", "call-delete"),
+          ),
         ).toMatchObject({ status: "completed" })
         expect(yield* exists(doomed)).toBe(false)
       }),
@@ -464,7 +471,9 @@ describe("PatchTool", () => {
         expect(
           yield* executeTool(
             registry,
-            call("*** Begin Patch\n*** Update File: same.txt\n*** Move to: Same.txt\n@@\n-before\n+after\n*** End Patch"),
+            call(
+              "*** Begin Patch\n*** Update File: same.txt\n*** Move to: Same.txt\n@@\n-before\n+after\n*** End Patch",
+            ),
           ),
         ).toMatchObject({ status: "completed" })
         expect(yield* Effect.promise(() => fs.readdir(directory))).toEqual(["Same.txt"])
@@ -483,7 +492,9 @@ describe("PatchTool", () => {
         expect(
           yield* executeTool(
             registry,
-            call("*** Begin Patch\n*** Update File: Foo/a.txt\n*** Move to: foo/a.txt\n@@\n-before\n+after\n*** End Patch"),
+            call(
+              "*** Begin Patch\n*** Update File: Foo/a.txt\n*** Move to: foo/a.txt\n@@\n-before\n+after\n*** End Patch",
+            ),
           ),
         ).toMatchObject({ status: "completed" })
         expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "foo", "a.txt"), "utf8"))).toBe("after\n")

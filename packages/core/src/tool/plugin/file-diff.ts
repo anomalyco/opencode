@@ -40,3 +40,24 @@ function whole(file: string, before: string, after: string, status: typeof FileD
     deletions: added ? 0 : count,
   }
 }
+
+export function formatterResult(files: ReadonlyArray<typeof FileDiff.Info.Type>) {
+  if (files.length === 0) return []
+  const maxLines = 40
+  const maxLineLength = 300
+  const patches = files.flatMap((file) => {
+    const lines = file.patch.split("\n")
+    const shown = lines
+      .slice(0, maxLines)
+      .map((line) => (line.length > maxLineLength ? `${line.slice(0, maxLineLength)}…` : line))
+    const truncated = lines.length > maxLines || shown.some((line) => line.endsWith("…"))
+    if (truncated) shown.push(`[formatter diff truncated for ${file.file}; re-read the file before editing]`)
+    return shown
+  })
+  return [
+    {
+      type: "text" as const,
+      text: ["A formatter changed these files after this call. Re-read before the next edit.", ...patches].join("\n"),
+    },
+  ]
+}

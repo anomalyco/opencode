@@ -9,6 +9,7 @@ export * as EditTool from "./edit.js"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
+import path from "path"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
@@ -16,7 +17,7 @@ import { toolFailure } from "../runtime.js"
 import { FileMutation } from "../../file-mutation.js"
 import { FileWrite } from "../../file-write.js"
 import { Permission } from "../../permission.js"
-import { fileDiff } from "./file-diff.js"
+import { fileDiff, formatterResult } from "./file-diff.js"
 
 export const name = "edit"
 
@@ -159,11 +160,195 @@ const alignLines = (before: string[], after: string[]) => {
   return result
 }
 
+/** JS and TS horizontal whitespace outside literals can change without changing the code's meaning. */
+const tokenExtensions = new Set([".js", ".mjs", ".cjs", ".ts", ".mts", ".cts"])
+
+interface Token {
+  readonly text: string
+  readonly start: number
+  readonly end: number
+}
+
+const operators = [
+  ">>>=",
+  "===",
+  "!==",
+  "**=",
+  "<<=",
+  ">>=",
+  "&&=",
+  "||=",
+  "??=",
+  "...",
+  ">>>",
+  "=>",
+  "==",
+  "!=",
+  "<=",
+  ">=",
+  "&&",
+  "||",
+  "??",
+  "?.",
+  "++",
+  "--",
+  "+=",
+  "-=",
+  "*=",
+  "/=",
+  "%=",
+  "&=",
+  "|=",
+  "^=",
+  "**",
+  "<<",
+  ">>",
+]
+
+const regexPrefixes = new Set([
+  "(",
+  "[",
+  "{",
+  ",",
+  ";",
+  ":",
+  "=",
+  "=>",
+  "==",
+  "!=",
+  "===",
+  "!==",
+  "!",
+  "?",
+  "&&",
+  "||",
+  "??",
+  "return",
+  "throw",
+  "case",
+  "new",
+  "delete",
+  "typeof",
+  "void",
+  "in",
+  "of",
+  "instanceof",
+  "yield",
+  "await",
+])
+
+const tokenize = (value: string) => {
+  const result: Token[] = []
+  let index = 0
+  let previous: Token | undefined
+  const push = (start: number, end: number, text = value.slice(start, end)) => {
+    const token = { text, start, end }
+    result.push(token)
+    previous = token
+  }
+  while (index < value.length) {
+    const char = value[index]!
+    if (char === "\n") {
+      push(index, ++index)
+      continue
+    }
+    if (/[^\S\n]/u.test(char)) {
+      index++
+      continue
+    }
+    if (char === "/" && value[index + 1] === "/") {
+      const start = index
+      const close = value.indexOf("\n", index)
+      index = close === -1 ? value.length : close
+      push(start, index)
+      continue
+    }
+    if (char === "/" && value[index + 1] === "*") {
+      const start = index
+      const close = value.indexOf("*/", index + 2)
+      index = close === -1 ? value.length : close + 2
+      push(start, index)
+      continue
+    }
+    if (char === "'" || char === '"') {
+      const start = index
+      index++
+      while (index < value.length) {
+        if (value[index] === "\\") index += 2
+        else if (value[index] === char) {
+          index++
+          break
+        } else index++
+      }
+      push(start, index)
+      continue
+    }
+    if (/[\p{L}\p{N}_$]/u.test(char)) {
+      const start = index
+      while (index < value.length && /[\p{L}\p{N}_$]/u.test(value[index]!)) index++
+      push(start, index)
+      continue
+    }
+    if (char === "/" && (previous === undefined || regexPrefixes.has(previous.text))) {
+      const start = index
+      index++
+      let inClass = false
+      while (index < value.length && value[index] !== "\n") {
+        const current = value[index]!
+        if (current === "\\") index += 2
+        else if (current === "[") {
+          inClass = true
+          index++
+        } else if (current === "]") {
+          inClass = false
+          index++
+        } else if (current === "/" && !inClass) {
+          index++
+          break
+        } else index++
+      }
+      while (index < value.length && /[a-z]/iu.test(value[index]!)) index++
+      push(start, index)
+      continue
+    }
+    const operator = operators.find((item) => value.startsWith(item, index))
+    if (operator) {
+      push(index, index + operator.length, operator)
+      index += operator.length
+      continue
+    }
+    push(index, ++index)
+  }
+  return result
+}
+
+/** Matches token sequences only. Line breaks stay significant; only horizontal whitespace can differ. */
+const findTokenOccurrences = (content: string, search: string) => {
+  if (content.includes("`") || search.includes("`")) return []
+  const pattern = tokenize(search)
+  if (pattern.length === 0) return []
+  const leading = search.slice(0, pattern[0]!.start)
+  const trailing = search.slice(pattern.at(-1)!.end)
+  if (!/^[ \t]*$/u.test(leading) || !/^[ \t]*$/u.test(trailing)) return []
+  const source = tokenize(content)
+  const result: Match[] = []
+  let index = 0
+  while (index + pattern.length <= source.length) {
+    if (pattern.every((token, offset) => source[index + offset]!.text === token.text)) {
+      result.push({ start: source[index]!.start, end: source[index + pattern.length - 1]!.end })
+      index += pattern.length
+      continue
+    }
+    index++
+  }
+  return result
+}
+
 /**
  * Matches against the LF view Read shows the model, then maps offsets back to the source, so CRLF and mixed line
  * endings neither block matches nor leak into untouched regions.
  */
-const matchView = (source: string, oldString: string, newString: string) => {
+const matchView = (source: string, oldString: string, newString: string, extension: string) => {
   const view = source.replaceAll(crlf, "\n")
   const removed = [...source.matchAll(/\r\n/g)].map((match, index) => match.index - index)
   const fileEnding = lineEnding(source, "\n")
@@ -173,11 +358,17 @@ const matchView = (source: string, oldString: string, newString: string) => {
   // These one-to-one mappings preserve offsets into the LF view.
   const unicode = exact.length > 0 ? [] : findOccurrences(normalizeForMatch(view), normalizeForMatch(search))
   const trailing = exact.length > 0 || unicode.length > 0 ? [] : findLineOccurrences(view, search)
+  const tokens =
+    exact.length > 0 || unicode.length > 0 || trailing.length > 0 || !tokenExtensions.has(extension)
+      ? []
+      : findTokenOccurrences(view, search)
   return {
-    matches: (exact.length > 0 ? exact : unicode.length > 0 ? unicode : trailing).map((match) => ({
-      start: match.start + countBefore(removed, match.start),
-      end: match.end + countBefore(removed, match.end),
-    })),
+    matches: (exact.length > 0 ? exact : unicode.length > 0 ? unicode : trailing.length > 0 ? trailing : tokens).map(
+      (match) => ({
+        start: match.start + countBefore(removed, match.start),
+        end: match.end + countBefore(removed, match.end),
+      }),
+    ),
     replace: (match: Match) => {
       const region = source.slice(match.start, match.end)
       return withRegionEndings(region, replacement, lineEnding(region, fileEnding))
@@ -274,13 +465,13 @@ export const Plugin = {
                 codemode: {
                   pinned: true,
                   description:
-                    "Edit a file by replacing `oldString` with `newString` (must differ). Preserve exact indentation without line-number prefixes. Use `\\n` for line breaks; existing LF/CRLF endings are preserved unless `oldString` and `newString` differ only in `\\r`. `oldString` must match once unless `replaceAll` is true; add context to disambiguate.",
+                    "Edit a file by replacing `oldString` with `newString` (must differ). Preserve exact indentation without line-number prefixes. Use `\\n` for line breaks; existing LF/CRLF endings are preserved unless `oldString` and `newString` differ only in `\\r`. `oldString` must match once unless `replaceAll` is true; add context to disambiguate. After an exact miss, JS/TS files also retry a unique token match that differs only in horizontal whitespace; line breaks and literal contents stay significant.",
                 },
                 permission: "edit",
               }
             : { codemode: false, permission: "edit" },
           description:
-            "Edit the contents of a file by finding and replacing exact text. When editing text from Read output, preserve the exact indentation (tabs or spaces) and omit the line-number prefix, such as `1: `. Never include the prefix in oldString or newString. Write line breaks as \\n; the file's existing CRLF or LF line endings are matched and preserved. To change line endings themselves, make oldString and newString differ only in \\r; that edit applies to the exact bytes. If there is no exact match, the edit retries while ignoring typographic quote, dash, and space variants, then trailing whitespace on each line. The edit fails if oldString is not found. By default, oldString must identify a UNIQUE location. Multiple matches FAIL unless replaceAll is true. Add more surrounding context to disambiguate, or set replaceAll to true to replace every occurrence. Use replaceAll when the change should apply to every occurrence, such as renaming a variable.",
+            "Edit the contents of a file by finding and replacing exact text. When editing text from Read output, preserve the exact indentation (tabs or spaces) and omit the line-number prefix, such as `1: `. Never include the prefix in oldString or newString. Write line breaks as \\n; the file's existing CRLF or LF line endings are matched and preserved. To change line endings themselves, make oldString and newString differ only in \\r; that edit applies to the exact bytes. If there is no exact match, the edit retries while ignoring typographic quote, dash, and space variants, then trailing whitespace on each line. JS/TS files then retry a unique token match that differs only in horizontal whitespace; line breaks and literal contents stay significant. The edit fails if oldString is not found. By default, oldString must identify a UNIQUE location. Multiple matches FAIL unless replaceAll is true. Add more surrounding context to disambiguate, or set replaceAll to true to replace every occurrence. Use replaceAll when the change should apply to every occurrence, such as renaming a variable.",
           input: Input,
           output: Output,
           execute: (input, context) => {
@@ -317,7 +508,7 @@ export const Plugin = {
               const endingsOnly = input.oldString.replaceAll("\r", "") === input.newString.replaceAll("\r", "")
               const { matches, replace } = endingsOnly
                 ? { matches: findOccurrences(source, input.oldString), replace: () => input.newString }
-                : matchView(source, input.oldString, input.newString)
+                : matchView(source, input.oldString, input.newString, path.extname(target.absolute).toLowerCase())
               const replacements = matches.length
               const replaced = (input.replaceAll === true ? matches : matches.slice(0, 1))
                 .toReversed()
@@ -340,7 +531,7 @@ export const Plugin = {
                 })
                 const hint = readable ? missHint(source, input.oldString, input.newString) : undefined
                 return yield* new ToolFailure({
-                  message: `Could not find oldString in ${input.path}. It must match exactly, including whitespace and indentation.${hint ? `\n\n${hint}` : ""}`,
+                  message: `Could not find oldString in ${input.path}. It must match the file text. JS/TS files also accept a unique token match that differs only in horizontal whitespace.${hint ? `\n\n${hint}` : ""}`,
                 })
               }
               if (replacements > 1 && input.replaceAll !== true) {
@@ -358,9 +549,16 @@ export const Plugin = {
               const result = yield* fileWrite.commit(target, replaced)
               const formatted =
                 result.formatted ?? (yield* FileMutation.readText(target.environment.files, target.absolute)).text
+              const diff = fileDiff(result.resource, source, formatted)
+              const changes =
+                result.formatted !== undefined && result.formatted !== replaced
+                  ? [fileDiff(result.resource, replaced, result.formatted)]
+                  : []
+              const message = `Edited ${result.resource} (${replacements} replacement${replacements === 1 ? "" : "s"})`
               return {
-                output: `Edited ${result.resource} (${replacements} replacement${replacements === 1 ? "" : "s"})`,
-                metadata: { files: [fileDiff(result.resource, source, formatted)] },
+                output: message,
+                content: [{ type: "text" as const, text: message }, ...formatterResult(changes)],
+                metadata: { files: [diff] },
               }
             }).pipe(fileMutation.withLock([input.path]), Effect.mapError(toolFailure(`Unable to edit ${input.path}`)))
           },

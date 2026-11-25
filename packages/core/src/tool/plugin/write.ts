@@ -9,10 +9,12 @@ export * as WriteTool from "./write.js"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
+import { Bom } from "@opencode/util/bom"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { FileWrite } from "../../file-write.js"
 import { Flag } from "../../flag.js"
+import { fileDiff, formatterResult } from "./file-diff.js"
 
 export const name = "write"
 
@@ -60,9 +62,18 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             fileWrite.write(input, context).pipe(
-              Effect.map((written) => ({
-                output: `${written.existed ? "Wrote" : "Created"} file successfully: ${written.resource}`,
-              })),
+              Effect.map((written) => {
+                const before = Bom.split(input.content).text
+                const changes =
+                  written.formatted !== undefined && written.formatted !== before
+                    ? [fileDiff(written.resource, before, written.formatted)]
+                    : []
+                const message = `${written.existed ? "Wrote" : "Created"} file successfully: ${written.resource}`
+                return {
+                  output: message,
+                  content: [{ type: "text" as const, text: message }, ...formatterResult(changes)],
+                }
+              }),
               Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error })),
             ),
         }),
