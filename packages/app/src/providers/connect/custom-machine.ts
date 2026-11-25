@@ -58,42 +58,45 @@ export function validateCustomProvider(
   const name = fields.name.trim()
   const id = fields.id.trim()
   const baseURL = fields.baseURL.trim()
+
   const models = fields.models
     .map((model) => ({ key: model.key, id: model.id.trim(), name: model.name.trim() }))
     .filter((model) => model.id || model.name)
+
   const headers = fields.headers
     .map((header) => ({ key: header.key, name: header.name.trim(), value: header.value.trim() }))
     .filter((header) => header.name || header.value)
+
+  const errors = new Map<string, CustomProviderError>()
   const seen = new Set<string>()
 
-  const errors: Record<string, CustomProviderError> = {
-    ...(!name ? { name: "required" } : {}),
-    ...(!id
-      ? { id: "required" }
-      : !ID_PATTERN.test(id)
-        ? { id: "id.invalid" }
-        : taken.has(id)
-          ? { id: "id.taken" }
-          : {}),
-    ...(!baseURL ? { baseURL: "required" } : !isHttpURL(baseURL) ? { baseURL: "url.invalid" } : {}),
-    ...(models.length === 0 ? { models: "models.required" } : {}),
-    ...Object.fromEntries(
-      models.flatMap((model): [string, CustomProviderError][] => {
-        if (!model.id) return [[`models.${model.key}`, "required"]]
-        if (seen.has(model.id)) return [[`models.${model.key}`, "model.duplicate"]]
-        seen.add(model.id)
-        return []
-      }),
-    ),
-    ...Object.fromEntries(
-      headers
-        .filter((header) => !header.name || !header.value)
-        .map((header): [string, CustomProviderError] => [`headers.${header.key}`, "header.incomplete"]),
-    ),
-  }
+  if (!name) errors.set("name", "required")
 
-  if (Object.keys(errors).length > 0) return { type: "invalid", errors }
+  const idError = idProblem(id, taken)
 
+  if (idError) errors.set("id", idError)
+
+  const urlError = urlProblem(baseURL)
+
+  if (urlError) errors.set("baseURL", urlError)
+
+  if (models.length === 0) errors.set("models", "models.required")
+
+  models.forEach((model) => {
+    const key = `models.${model.key}`
+
+    if (!model.id) return void errors.set(key, "required")
+
+    if (seen.has(model.id)) return void errors.set(key, "model.duplicate")
+    seen.add(model.id)
+  })
+  headers.forEach((header) => {
+    if (!header.name || !header.value) errors.set(`headers.${header.key}`, "header.incomplete")
+  })
+
+  if (errors.size > 0) return { type: "invalid", errors: Object.fromEntries(errors) }
+
+  // Undefined optional fields are left out of the request body.
   return {
     type: "valid",
     input: {
@@ -101,18 +104,32 @@ export function validateCustomProvider(
       name,
       package: fields.package,
       baseURL,
-      ...(fields.apiKey.trim() ? { apiKey: fields.apiKey.trim() } : {}),
-      ...(headers.length > 0
-        ? { headers: Object.fromEntries(headers.map((header) => [header.name, header.value])) }
-        : {}),
-      models: models.map((model) => ({ id: model.id, ...(model.name ? { name: model.name } : {}) })),
+      apiKey: fields.apiKey.trim() || undefined,
+      headers:
+        headers.length > 0 ? Object.fromEntries(headers.map((header) => [header.name, header.value])) : undefined,
+      models: models.map((model) => ({ id: model.id, name: model.name || undefined })),
     },
   }
+}
+
+function idProblem(id: string, taken: ReadonlySet<string>): CustomProviderError | undefined {
+  if (!id) return "required"
+
+  if (!ID_PATTERN.test(id)) return "id.invalid"
+
+  if (taken.has(id)) return "id.taken"
+}
+
+function urlProblem(url: string): CustomProviderError | undefined {
+  if (!url) return "required"
+
+  if (!isHttpURL(url)) return "url.invalid"
 }
 
 function isHttpURL(value: string) {
   if (/\s/u.test(value)) return false
   const url = URL.parse(value)
+
   return url?.protocol === "http:" || url?.protocol === "https:"
 }
 
@@ -197,11 +214,19 @@ export function transitionCustomSubmit(state: CustomSubmitState, event: CustomSu
   }
 }
 
+// What the submit button area shows while the form is busy.
+const SUBMIT_PHASE = {
+  editing: undefined,
+  saving: "saving",
+  loading: "loading",
+  done: "saving",
+  disposed: "saving",
+} as const satisfies Record<CustomSubmitState["status"], "saving" | "loading" | undefined>
+
 export function selectCustomSubmitView(state: CustomSubmitState) {
   return {
     busy: state.status !== "editing",
-    phase:
-      state.status === "loading" ? ("loading" as const) : state.status === "editing" ? undefined : ("saving" as const),
+    phase: SUBMIT_PHASE[state.status],
     error: state.status === "editing" ? state.error : undefined,
   }
 }

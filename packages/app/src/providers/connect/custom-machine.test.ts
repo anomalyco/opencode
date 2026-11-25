@@ -9,6 +9,7 @@ import {
   type CustomProviderFields,
   type CustomSubmitEvent,
   type CustomSubmitState,
+  type CustomSubmitTransition,
 } from "./custom-machine"
 
 const fields: CustomProviderFields = {
@@ -110,12 +111,13 @@ describe("validateCustomProvider", () => {
 
 describe("transitionCustomSubmit", () => {
   const run = (events: readonly CustomSubmitEvent[], state: CustomSubmitState = CUSTOM_SUBMIT_IDLE) =>
-    events.reduce(
+    events.reduce<CustomSubmitTransition>(
       (result, event) => {
         const next = transitionCustomSubmit(result.state, event)
+
         return { state: next.state, effects: [...result.effects, ...next.effects] }
       },
-      { state, effects: [] as ReturnType<typeof transitionCustomSubmit>["effects"][number][] },
+      { state, effects: [] },
     )
 
   test("saves, waits for the models, then hands over the first one", () => {
@@ -179,6 +181,7 @@ describe("transitionCustomSubmit", () => {
       { type: "submitted", input },
       { type: "save.succeeded", attempt: 1 },
     ]).state
+
     const disposed = transitionCustomSubmit(loading, { type: "disposed" })
 
     expect(disposed).toEqual({ state: { status: "disposed", attempt: 1 }, effects: [{ type: "timer.stop" }] })

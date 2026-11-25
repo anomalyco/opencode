@@ -855,6 +855,7 @@ function created(
     step: { kind: "models", selectedModel: event.firstModel ?? "", collapsed: {} },
     closed: false,
   }
+
   const finished = finish(next, event.firstModel)
 
   return {

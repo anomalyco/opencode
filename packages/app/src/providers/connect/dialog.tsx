@@ -156,12 +156,13 @@ export const DialogConnectProvider: Component<{
                     const last = () => index() === view().crumbs.length - 1
                     const target = () => crumb.target
 
-                    const label = () =>
-                      crumb.kind === "root"
-                        ? language.t("provider.connect.breadcrumb.root")
-                        : crumb.kind === "custom"
-                          ? language.t("provider.custom.title")
-                          : providerName()
+                    const label = () => {
+                      if (crumb.kind === "root") return language.t("provider.connect.breadcrumb.root")
+
+                      if (crumb.kind === "custom") return language.t("provider.custom.title")
+
+                      return providerName()
+                    }
 
                     const content = () => (
                       <>
@@ -391,7 +392,7 @@ function ProviderPicker(props: {
   const disabled = (row: IntegrationInfo) => connectMethods(row).length === 0 && providerAccounts(row).length === 0
 
   const rows = createMemo(() => [
-    ...[...connected(), ...popular(), ...services()].filter((row) => !disabled(row)).map((row) => row.id),
+    ...[...connected(), ...popular(), ...services()].flatMap((row) => (disabled(row) ? [] : [row.id])),
     ...(custom() ? [CUSTOM_ROW] : []),
   ])
 

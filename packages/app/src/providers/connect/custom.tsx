@@ -77,6 +77,7 @@ export function CustomProviderForm(props: {
     headers: [],
     errors: {},
   })
+
   const [submit, setSubmit] = createSignal(CUSTOM_SUBMIT_IDLE)
   const view = createMemo(() => selectCustomSubmitView(submit()))
   let timer: ReturnType<typeof setTimeout> | undefined
@@ -114,6 +115,7 @@ export function CustomProviderForm(props: {
     const state = submit()
 
     if (state.status !== "loading") return
+
     const model = (data.location.model.list(props.location) ?? []).find(
       (item) => item.providerID === state.providerID && item.enabled,
     )
@@ -186,7 +188,9 @@ export function CustomProviderForm(props: {
             readOnly={view().busy}
             ref={(el) => (name = el)}
             onInput={(value) => {
-              setStore({ name: value, ...(store.idEdited ? {} : { id: customProviderID(value) }) })
+              setStore("name", value)
+
+              if (!store.idEdited) setStore("id", customProviderID(value))
               clear("name", ...(store.idEdited ? [] : ["id"]))
             }}
           />
