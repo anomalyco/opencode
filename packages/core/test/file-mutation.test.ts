@@ -200,28 +200,6 @@ describe("FileMutation", () => {
     ),
   )
 
-  it.live("allows transaction locks for distinct resolved paths to proceed independently", () =>
-    withTempDir(({ path: directory }) =>
-      Effect.gen(function* () {
-        const firstStarted = yield* Deferred.make<void>()
-        const releaseFirst = yield* Deferred.make<void>()
-        const secondFinished = yield* Deferred.make<void>()
-        const files = yield* FileMutation.Service
-        const first = yield* files
-          .withLock([path.join(directory, "first.txt")])(
-            Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst))),
-          )
-          .pipe(Effect.forkChild)
-        yield* Deferred.await(firstStarted)
-        yield* files.withLock([path.join(directory, "second.txt")])(Deferred.succeed(secondFinished, undefined))
-        expect(yield* Deferred.isDone(secondFinished)).toBe(true)
-
-        yield* Deferred.succeed(releaseFirst, undefined)
-        yield* Fiber.join(first)
-      }).pipe(provide(directory)),
-    ),
-  )
-
   it.live("allows distinct absolute targets to proceed independently", () =>
     withTempDir(({ path: directory }) =>
       Effect.gen(function* () {

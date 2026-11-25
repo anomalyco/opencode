@@ -9,7 +9,17 @@ export type Target =
   | { kind: "model"; lab: string; model: string }
   | { kind: "compare"; params: string[] }
 
-const reservedSegments = new Set(["api", "_server", "_build", "stats", "sitemap.xml", "banner.jpg", "banner.png"])
+const reservedSegments = new Set([
+  "api",
+  "_server",
+  "_build",
+  "stats",
+  "embed",
+  "oembed",
+  "sitemap.xml",
+  "banner.jpg",
+  "banner.png",
+])
 const extensionFormats = { ".md": "markdown", ".json": "json" } as const satisfies Record<string, TextFormat>
 const ogSegment = "og.png"
 

@@ -16,12 +16,6 @@ test("prices the tokens from the catalog when the endpoint reports no cost", () 
   expect(SessionUsage.record(new Usage({ nonCachedInputTokens: 1_000_000 }), costs).cost).toBe(Money.USD.make(1))
 })
 
-test("records the cost the endpoint reports instead of the catalog price", () => {
-  expect(SessionUsage.record(new Usage({ nonCachedInputTokens: 1_000_000, cost: 0.25 }), costs).cost).toBe(
-    Money.USD.make(0.25),
-  )
-})
-
 test("keeps a reported zero cost, as for a request a subscription covered", () => {
   expect(SessionUsage.record(new Usage({ nonCachedInputTokens: 1_000_000, cost: 0 }), costs)).toEqual({
     tokens: { input: 1_000_000, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },

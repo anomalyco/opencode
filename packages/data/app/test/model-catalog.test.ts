@@ -14,6 +14,23 @@ const listing = (overrides: Record<string, unknown> = {}) => ({
   ...overrides,
 })
 
+describe("free models", () => {
+  test("lists current $0 OpenCode offerings and drops ended or paid ones", () => {
+    const catalog = buildModelCatalog([], {
+      opencode: {
+        models: {
+          "hy4-flash-free": listing({ id: "hy4-flash-free" }),
+          "ended-free": listing({ id: "ended-free", status: "deprecated" }),
+          paid: listing({ id: "paid", cost: { input: 1, output: 2 } }),
+        },
+      },
+      openrouter: { models: { "other-free": listing({ id: "other-free" }) } },
+    })
+
+    expect(catalog.freeModels).toEqual(["hy4-flash"])
+  })
+})
+
 describe("stealth model specs", () => {
   test("reads public specs for stealth models from OpenCode provider listings", () => {
     const catalog = buildModelCatalog([], {

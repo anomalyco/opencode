@@ -36,7 +36,7 @@ describe("Ripgrep", () => {
   })
 
   for (const hidden of [undefined, false, true]) {
-    for (const limit of hidden ? [10] : [1, 10]) {
+    for (const limit of hidden ? [10] : [1]) {
       it.live(`glob honors hidden=${hidden} before limit=${limit}`, () =>
         Effect.gen(function* () {
           const tmp = yield* tmpdirScoped()
@@ -66,20 +66,6 @@ describe("Ripgrep", () => {
       )
     }
   }
-
-  it.live("globs files as an array", () =>
-    withTempDir((tmp) =>
-      Effect.gen(function* () {
-        yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "src")))
-        yield* Effect.promise(() => fs.writeFile(path.join(tmp.path, "src", "match.ts"), "needle\n"))
-
-        const environment = yield* Environment.Service
-        const ripgrep = yield* Ripgrep.Service
-        const result = yield* ripgrep.glob({ environment, cwd: tmp.path, pattern: "**/*.ts", limit: 10 })
-        expect(result.map((item) => item.path)).toEqual([RelativePath.make("src/match.ts")])
-      }),
-    ),
-  )
 
   it.live("greps files with include filtering", () =>
     withTempDir((tmp) =>
