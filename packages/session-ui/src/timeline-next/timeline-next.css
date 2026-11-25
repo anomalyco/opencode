@@ -479,6 +479,15 @@
     }
   }
 
+  /* An open group's header stands as far above its first item as blocks stand apart (after the rule above, which
+     would give it the small gap). */
+  [data-component="collapsed-tool-group"]
+    > [data-component="collapsible"].tool-collapsible
+    > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+    height: calc(var(--line-height-compact) + 6px + var(--timeline-gap-m));
+    padding-bottom: var(--timeline-gap-m);
+  }
+
   /* A script's static title starts the same gap above its calls, which always show. */
   [data-component="collapsible"].tool-collapsible:has(
       > [data-slot="collapsible-content"] > [data-component="execute-tool-calls"]

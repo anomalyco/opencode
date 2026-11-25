@@ -2184,3 +2184,36 @@
   border-color: var(--v2-border-border-base);
   color: var(--v2-text-text-faint);
 }
+
+/* In the current timeline, as in the New timeline, a block is as tall as its text, so the gaps between blocks are the
+   gaps that show and every pair of blocks stands the same 16px apart. A row's 28px click area stays: 6px of padding
+   above and below, taken back by margins of the same size. An open row keeps its header's room above its content. */
+[data-timeline-row="AssistantPart"]:not([data-timeline="next"]) {
+  [data-component="collapsible"] > [data-slot="collapsible-trigger"] {
+    box-sizing: border-box;
+    height: calc(var(--line-height-compact) + 12px);
+    padding-block: 6px;
+    margin-block: -6px;
+  }
+
+  [data-component="collapsible"] > [data-slot="collapsible-trigger"]:is([aria-expanded="true"], [data-locked]) {
+    margin-bottom: 0;
+  }
+
+  /* An open group's header stands as far above its first item as blocks stand apart. */
+  [data-component="collapsed-tool-group"]
+    > [data-component="collapsible"]
+    > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+    height: calc(var(--line-height-compact) + 22px);
+    padding-bottom: 16px;
+  }
+
+  [data-component="context-tool-group-list"] [data-slot="context-tool-group-item"] {
+    min-height: var(--line-height-compact);
+  }
+
+  /* A row's action stays centred on its click area, which reaches 6px above the row, without making the row taller. */
+  [data-component="collapsible"] > [data-slot="basic-tool-action"] {
+    margin-top: -4px;
+  }
+}
