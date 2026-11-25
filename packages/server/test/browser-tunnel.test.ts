@@ -224,6 +224,13 @@ it.live(
       expect(issued.path).toBe(BROWSER_TUNNEL_PATH)
       expect(issued.protocol).toBe(1)
 
+      // A tunnel ticket is not a credential for the existing HTTP API.
+      const info = yield* Effect.promise(() =>
+        fetch(new URL("/api/info", env.base), { headers: { [BROWSER_TUNNEL_TICKET_HEADER]: issued.ticket } }),
+      )
+      expect(info.status).toBe(401)
+      yield* Effect.promise(() => info.text())
+
       const wsUrl = new URL(issued.path, env.base)
       wsUrl.protocol = "ws:"
       wsUrl.searchParams.set("location[directory]", env.directory)
@@ -429,27 +436,42 @@ it.live(
   20_000,
 )
 
-it.live("disabling browser_stream_tunnel omits capability, refuses ticket, and preserves legacy RPC with egress policy", () =>
+it.live("with browser_stream_tunnel off, a v4 attachment can relay bytes but cannot issue a ticket or grant", () =>
   Effect.gen(function* () {
     const env = yield* bootServer(JSON.stringify({ experimental: { browser_stream_tunnel: false } }))
-    const conn = "conn_legacy_1"
-    const att = yield* attachBrowser(env, conn)
+    const attachment = { sessionID: env.sessionID, connectionID: "conn_legacy_1" }
+    const options = { location: env.location }
+    const att = yield* attachBrowser(env, attachment.connectionID)
     expect(att.capabilities).not.toContain(BrowserTunnelHost.STREAM_CAPABILITY)
 
-    // Ticket RPC fails when flag is off
-    const ticketExit = yield* env.rpc["tunnel.ticket"](
-      { sessionID: env.sessionID, connectionID: conn, protocol: 1 },
-      { location: env.location },
-    ).pipe(Effect.exit)
-    expect(ticketExit._tag).toBe("Failure")
+    const echo = yield* Effect.acquireRelease(
+      Effect.sync(() =>
+        Bun.listen({
+          hostname: "127.0.0.1",
+          port: 0,
+          socket: {
+            data(socket, chunk) {
+              socket.end(chunk)
+            },
+          },
+        }),
+      ),
+      (listener) => Effect.sync(() => listener.stop(true)),
+    )
+    const target = { host: "127.0.0.1", port: echo.port }
+    expect(yield* env.rpc["tunnel.ticket"]({ ...attachment, protocol: 1 }, options).pipe(Effect.flip)).toMatchObject({
+      type: "unavailable",
+    })
+    expect(yield* env.rpc["tunnel.grant"]({ ...attachment, target }, options).pipe(Effect.flip)).toMatchObject({
+      type: "unavailable",
+    })
 
-    // Legacy RPC still blocks OpenCode's own port and metadata endpoints
-    const blockedExit = yield* env.rpc["tunnel.open"](
-      { sessionID: env.sessionID, connectionID: conn, target: { host: "127.0.0.1", port: env.serverPort } },
-      { location: env.location },
-    ).pipe(Effect.exit)
-    expect(blockedExit._tag).toBe("Failure")
-
+    const tunnelID = yield* env.rpc["tunnel.open"]({ ...attachment, target }, options)
+    const tunnel = { ...attachment, tunnelID }
+    yield* env.rpc["tunnel.write"]({ ...tunnel, data: "eA==" }, options)
+    const response = yield* env.rpc["tunnel.read"](tunnel, options)
+    expect(Buffer.from(response.data).toString()).toBe("x")
+    yield* env.rpc["tunnel.close"](tunnel, options)
     yield* Fiber.interrupt(att.attachFiber)
   }),
   20_000,
