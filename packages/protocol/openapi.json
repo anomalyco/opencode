@@ -18534,6 +18534,9 @@
               "todo": {
                 "type": "boolean"
               },
+              "advisor": {
+                "type": "boolean"
+              },
               "media_blob": {
                 "type": "boolean"
               },

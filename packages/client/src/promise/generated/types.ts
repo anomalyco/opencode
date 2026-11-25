@@ -2699,6 +2699,7 @@ export type ConfigEntry =
           codemode_vm?: boolean
           all_flags?: boolean
           todo?: boolean
+          advisor?: boolean
           media_blob?: boolean
           artifacts?: boolean
           console_watches?: boolean
