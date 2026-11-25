@@ -709,12 +709,11 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 onClick={() => setSheet(true)}
               >
                 <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                  <path
-                    d="M2 4.5h6M12 4.5h2M2 11.5h2M8 11.5h6M10 4.5a1.75 1.75 0 1 1 0 .01M6 11.5a1.75 1.75 0 1 1 0 .01"
-                    fill="none"
-                    stroke="currentColor"
-                    stroke-width="1.5"
-                  />
+                  <g fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M2 4.5h6M12 4.5h2M2 11.5h2M8 11.5h6" />
+                    <circle cx="10" cy="4.5" r="2" />
+                    <circle cx="6" cy="11.5" r="2" />
+                  </g>
                 </svg>
                 <span>{i18n.t("share.settings")}</span>
               </button>
@@ -994,12 +993,11 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                 <Show when={!customizing()}>
                   <button type="button" data-slot="bar-button" data-variant="customize" onClick={customize}>
                     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
-                      <path
-                        d="M2 4.5h6M12 4.5h2M2 11.5h2M8 11.5h6M10 4.5a1.75 1.75 0 1 1 0 .01M6 11.5a1.75 1.75 0 1 1 0 .01"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="1.5"
-                      />
+                      <g fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M2 4.5h6M12 4.5h2M2 11.5h2M8 11.5h6" />
+                        <circle cx="10" cy="4.5" r="2" />
+                        <circle cx="6" cy="11.5" r="2" />
+                      </g>
                     </svg>
                     {i18n.t("share.customize")}
                   </button>
