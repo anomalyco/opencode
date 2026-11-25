@@ -14,7 +14,7 @@ import { useNewDesigns } from "../config"
 import { DialogFreeModels } from "./dialog-model-free"
 import { FavoriteMarker, isFreeModel, prioritizeFavorites, sortModelOptions } from "./model-options"
 
-export function DialogModel(props: { providerID?: string }) {
+export function DialogModel(props: { integrationID?: string }) {
   const local = useLocal()
   const dialog = useDialog()
   const newDesigns = useNewDesigns()
@@ -37,14 +37,16 @@ export function DialogModel(props: { providerID?: string }) {
 
   function connect() {
     dialog.replace(() => (
-      <DialogIntegration onConnected={(providerID) => dialog.replace(() => <DialogModel providerID={providerID} />)} />
+      <DialogIntegration
+        onConnected={(integrationID) => dialog.replace(() => <DialogModel integrationID={integrationID} />)}
+      />
     ))
   }
 
   return (
     <Show
-      when={newDesigns() && !connected() && !props.providerID}
-      fallback={<DialogConnectedModels providerID={props.providerID} onSelect={select} onConnect={connect} />}
+      when={newDesigns() && !connected() && !props.integrationID}
+      fallback={<DialogConnectedModels integrationID={props.integrationID} onSelect={select} onConnect={connect} />}
     >
       <DialogFreeModels onSelect={select} onConnect={connect} />
     </Show>
@@ -52,7 +54,8 @@ export function DialogModel(props: { providerID?: string }) {
 }
 
 function DialogConnectedModels(props: {
-  providerID?: string
+  // Lists only the models of this integration's providers, such as OpenCode's workspace and OpenCode Go.
+  integrationID?: string
   onSelect: (providerID: string, modelID: string) => void
   onConnect: () => void
 }) {
@@ -74,7 +77,7 @@ function DialogConnectedModels(props: {
   }
   // OpenCode's own free models get their own group at the end of the list instead of joining "OpenCode".
   const freeGroup = (model: ModelInfo) =>
-    newDesigns() && !props.providerID && model.providerID === "opencode" && isFreeModel(model)
+    newDesigns() && !props.integrationID && model.providerID === "opencode" && isFreeModel(model)
 
   const connected = useConnected()
   const providers = createMemo(
@@ -82,7 +85,7 @@ function DialogConnectedModels(props: {
   )
   const models = createMemo(() => data.location.model.list(location.ref) ?? [])
 
-  const showExtra = createMemo(() => connected() && !props.providerID)
+  const showExtra = createMemo(() => connected() && !props.integrationID)
 
   const options = createMemo(() => {
     const needle = query().trim()
@@ -124,7 +127,12 @@ function DialogConnectedModels(props: {
     const modelOptions = sortModelOptions(
       models()
         .filter((model) => model.status !== "deprecated")
-        .filter((model) => (props.providerID ? model.providerID === props.providerID : true))
+        .filter(
+          (model) =>
+            !props.integrationID ||
+            model.providerID === props.integrationID ||
+            providers().get(model.providerID)?.integrationID === props.integrationID,
+        )
         // A model's faster and slower speeds are chosen with the speed selector.
         .filter((model) => !local.model.isSpeed({ providerID: model.providerID, modelID: model.id }))
         .map((model) => {
@@ -187,13 +195,12 @@ function DialogConnectedModels(props: {
     ]
   })
 
-  const provider = createMemo(() => (props.providerID ? providers().get(props.providerID) : undefined))
-
-  const title = createMemo(() => {
-    const value = provider()
-    if (!value) return "Select model"
-    return value.name
-  })
+  const title = createMemo(
+    () =>
+      (props.integrationID &&
+        data.location.integration.list(location.ref)?.find((item) => item.id === props.integrationID)?.name) ||
+      "Select model",
+  )
 
   return (
     <DialogSelect<ReturnType<typeof options>[number]["value"]>
