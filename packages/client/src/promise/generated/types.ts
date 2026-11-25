@@ -3164,6 +3164,10 @@ export type ConflictError = {
 export const isConflictError = (value: unknown): value is ConflictError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "ConflictError"
 
+export type SkillLoadError = { readonly _tag: "SkillLoadError"; readonly skill: string; readonly message: string }
+export const isSkillLoadError = (value: unknown): value is SkillLoadError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SkillLoadError"
+
 export type CommandNotFoundError = {
   readonly _tag: "CommandNotFoundError"
   readonly command: string
@@ -3347,10 +3351,6 @@ export const isPermissionNotFoundError = (value: unknown): value is PermissionNo
 export type FileNotFoundError = { readonly _tag: "FileNotFoundError"; readonly path: string; readonly message: string }
 export const isFileNotFoundError = (value: unknown): value is FileNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "FileNotFoundError"
-
-export type SkillLoadError = { readonly _tag: "SkillLoadError"; readonly skill: string; readonly message: string }
-export const isSkillLoadError = (value: unknown): value is SkillLoadError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "SkillLoadError"
 
 export type RpcError = {
   readonly _tag: "RpcError"
