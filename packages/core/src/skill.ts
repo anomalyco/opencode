@@ -8,6 +8,7 @@ import { Skill } from "@opencode/schema/skill"
 import { Bus } from "./bus.js"
 import { PermissionPolicy } from "./permission/policy.js"
 import { State } from "./state.js"
+import { SkillDiscovery } from "./skill/discovery.js"
 
 export const DirectorySource = Skill.DirectorySource
 export type DirectorySource = Skill.DirectorySource
@@ -63,8 +64,34 @@ export const uri = (id: string, file?: string) => (file ? `skill://${id}/${file}
 
 export const isUri = (value: string) => value.startsWith("skill://")
 
+/** Where a skill's files live: a folder on disk, or only in the registry under `skill://<id>/`. */
+export type Location = { readonly _tag: "disk"; readonly directory: string } | { readonly _tag: "virtual" }
+
+export const locate = (skill: Pick<Info, "path">): Location =>
+  isUri(skill.path) ? { _tag: "virtual" } : { _tag: "disk", directory: path.dirname(skill.path) }
+
+/** A `skill://<id>/<file>` path, parsed. `file` is `""` for the skill's folder. */
+export interface Address {
+  readonly id: ID
+  readonly file: string
+  /** The canonical form, so `skill://id/file/` can't slip past a rule for `skill://id/file`. */
+  readonly uri: string
+}
+
+export const parseAddress = (value: string): Address | undefined => {
+  if (!isUri(value)) return undefined
+  const trimmed = value.slice("skill://".length).replace(/\/+$/, "")
+  const slash = trimmed.indexOf("/")
+  const id = slash === -1 ? trimmed : trimmed.slice(0, slash)
+  const file = slash === -1 ? "" : trimmed.slice(slash + 1)
+  if (!SkillDiscovery.isSafeSegment(id)) return undefined
+  if (file !== "" && !file.split("/").every(SkillDiscovery.isSafeSegment)) return undefined
+  return { id: ID.make(id), file, uri: uri(id, file || undefined) }
+}
+
 export const toModelOutput = (skill: Info, files: ReadonlyArray<string>) => {
-  const directory = isUri(skill.path) ? uri(skill.id) : path.dirname(skill.path)
+  const location = locate(skill)
+  const directory = location._tag === "virtual" ? uri(skill.id) : location.directory
   return [
     `<skill_content name="${skill.name}">`,
     `# Skill: ${skill.name}`,
@@ -87,7 +114,8 @@ export const prepare = Effect.fn("Skill.prepare")(function* (
   skill: Info,
   virtualFiles?: ReadonlyArray<string>,
 ) {
-  if (isUri(skill.path)) {
+  const location = locate(skill)
+  if (location._tag === "virtual") {
     const directory = uri(skill.id)
     const files = (virtualFiles ?? [])
       .filter((file) => file !== "SKILL.md")
@@ -99,7 +127,7 @@ export const prepare = Effect.fn("Skill.prepare")(function* (
       output: toModelOutput(skill, files),
     }
   }
-  const directory = path.dirname(skill.path)
+  const directory = location.directory
   const files =
     path.basename(skill.path) === "SKILL.md"
       ? (yield* fs.scan("**/*", {
@@ -119,11 +147,19 @@ export const prepare = Effect.fn("Skill.prepare")(function* (
   }
 })
 
+/** A skill's SKILL.md body: `info.content`, or loaded on first use while `info.content` is empty. */
+type Body = { readonly _tag: "inline" } | { readonly _tag: "lazy"; readonly load: Effect.Effect<string, LoadError> }
+
+type Entry = {
+  readonly info: Types.DeepMutable<Info>
+  readonly body: Body
+  /** Virtual files besides SKILL.md, by path relative to the skill's folder. */
+  readonly files: ReadonlyMap<string, File>
+  readonly origin?: Origin
+}
+
 export type Data = {
-  skills: Map<ID, Types.DeepMutable<Info>>
-  files: Map<ID, ReadonlyMap<string, File>>
-  loaders: Map<ID, Effect.Effect<string, LoadError>>
-  origins: Map<ID, Origin>
+  entries: Map<ID, Entry>
   resolvers: Resolver[]
 }
 
@@ -168,101 +204,89 @@ const layer = Layer.effect(
 
     const state = State.create<Data, Editor>({
       name: "skill",
-      initial: () => ({ skills: new Map(), files: new Map(), loaders: new Map(), origins: new Map(), resolvers: [] }),
+      initial: () => ({ entries: new Map(), resolvers: [] }),
       editor: (editor) => ({
-        list: () => Array.from(editor.skills.values()),
-        get: (id) => editor.skills.get(ID.make(id)),
+        list: () => Array.from(editor.entries.values(), (entry) => entry.info),
+        get: (id) => editor.entries.get(ID.make(id))?.info,
         add: (skill, files, origin) => {
           const content = skill.content
-          editor.skills.set(skill.id, { ...skill, content: typeof content === "string" ? content : "" })
-          editor.loaders.delete(skill.id)
-          if (typeof content !== "string") editor.loaders.set(skill.id, content)
-          editor.origins.delete(skill.id)
-          if (origin) editor.origins.set(skill.id, origin)
-          const entries = files
-            ? Object.entries(files)
+          editor.entries.set(skill.id, {
+            info: { ...skill, content: typeof content === "string" ? content : "" },
+            body: typeof content === "string" ? { _tag: "inline" } : { _tag: "lazy", load: content },
+            files: new Map(
+              Object.entries(files ?? {})
                 .filter(([file]) => file !== "SKILL.md")
-                .toSorted(([a], [b]) => a.localeCompare(b))
-            : []
-          if (entries.length === 0) {
-            editor.files.delete(skill.id)
-            return
-          }
-          editor.files.set(skill.id, new Map(entries))
+                .toSorted(([a], [b]) => a.localeCompare(b)),
+            ),
+            origin,
+          })
         },
         update: (id, update) => {
           const key = ID.make(id)
-          const current = editor.skills.get(key)
+          const current = editor.entries.get(key)?.info
           if (!current) return
           update(current)
           current.id = key
         },
         remove: (id) => {
-          const key = ID.make(id)
-          editor.skills.delete(key)
-          editor.files.delete(key)
-          editor.loaders.delete(key)
-          editor.origins.delete(key)
+          editor.entries.delete(ID.make(id))
         },
         resolve: (resolver) => {
           editor.resolvers.push(resolver)
         },
       }),
       notify: State.changes(
-        (data) => [
-          Array.from(data.skills.values()),
-          Array.from(data.files, ([id, entries]) => [
-            id,
-            Array.from(entries, ([file, value]) => [file, Effect.isEffect(value) ? null : value]),
+        (data) =>
+          Array.from(data.entries.values(), (entry) => [
+            entry.info,
+            Array.from(entry.files, ([file, value]) => [file, Effect.isEffect(value) ? null : value]),
           ]),
-        ],
         () => bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid),
       ),
     })
 
     const content = Effect.fn("Skill.content")(function* (id: ID) {
-      const current = state.get()
-      const loader = current.loaders.get(id)
-      const inline = current.skills.get(id)?.content ?? ""
-      if (inline || !loader) return inline
-      return yield* loader
+      const entry = state.get().entries.get(id)
+      if (!entry) return ""
+      // A plugin can set `content` on a lazy skill, and what it set wins.
+      if (entry.body._tag === "inline" || entry.info.content) return entry.info.content
+      return yield* entry.body.load
     })
 
     return Service.of({
       transform: state.transform,
       reload: state.reload,
       get: Effect.fn("Skill.get")(function* (id) {
-        return state.get().skills.get(id)
+        return state.get().entries.get(id)?.info
       }),
       content,
       files: Effect.fn("Skill.files")(function* (id) {
-        const current = state.get()
-        if (!current.skills.has(id)) return undefined
-        return Array.from(current.files.get(id)?.keys() ?? [])
+        const entry = state.get().entries.get(id)
+        return entry && Array.from(entry.files.keys())
       }),
       read: Effect.fn("Skill.read")(function* (id, file) {
-        const current = state.get()
-        if (!current.skills.has(id)) return yield* new NotFoundError({ skill: id })
-        const value = file === "SKILL.md" ? yield* content(id) : current.files.get(id)?.get(file)
+        const entry = state.get().entries.get(id)
+        if (!entry) return yield* new NotFoundError({ skill: id })
+        const value = file === "SKILL.md" ? yield* content(id) : entry.files.get(file)
         if (value === undefined) return yield* new FileNotFoundError({ skill: id, file })
         const loaded = typeof value === "string" || value instanceof Uint8Array ? value : yield* value
         return typeof loaded === "string" ? new TextEncoder().encode(loaded) : loaded
       }),
       list: Effect.fn("Skill.list")(function* () {
-        return Array.from(state.get().skills.values())
+        return Array.from(state.get().entries.values(), (entry) => entry.info)
       }),
       resolve: Effect.fn("Skill.resolve")(function* (id) {
-        const known = state.get().skills.get(ID.make(id))
-        if (known) return known
+        const known = state.get().entries.get(ID.make(id))
+        if (known) return known.info
         for (const resolver of state.get().resolvers) {
           const found = yield* resolver(id)
-          if (found) return state.get().skills.get(found)
+          if (found) return state.get().entries.get(found)?.info
         }
         return undefined
       }),
       instructions: Effect.fn("Skill.instructions")(function* (id) {
         const body = yield* content(id)
-        const origin = state.get().origins.get(id)
+        const origin = state.get().entries.get(id)?.origin
         if (!origin) return body
         return `This skill comes from MCP server "${origin.server}", not from this machine.\n\n${body}`
       }),

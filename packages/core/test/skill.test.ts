@@ -1,4 +1,4 @@
-import { describe, expect } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { PermissionPolicy } from "@opencode/core/permission/policy"
@@ -31,6 +31,32 @@ const info = (id: string, description: string) =>
     path: AbsolutePath.make(`/skills/${id}/SKILL.md`),
     content: `# ${id}`,
   })
+
+describe("Skill.parseAddress", () => {
+  test("parses skill:// paths into an ID, a file and the canonical URI", () => {
+    expect(Skill.parseAddress("skill://docs:pdf/references/FORMS.md")).toEqual({
+      id: Skill.ID.make("docs:pdf"),
+      file: "references/FORMS.md",
+      uri: "skill://docs:pdf/references/FORMS.md",
+    })
+    expect(Skill.parseAddress("skill://docs:pdf/references/")).toMatchObject({
+      file: "references",
+      uri: "skill://docs:pdf/references",
+    })
+    expect(Skill.parseAddress("skill://docs:pdf")).toMatchObject({ file: "", uri: "skill://docs:pdf" })
+  })
+
+  test("refuses anything that isn't a safe skill:// path", () => {
+    for (const value of [
+      "/skills/pdf/SKILL.md",
+      "skill://",
+      "skill://../x",
+      "skill://pdf/../secret",
+      "skill://pdf/a\\b",
+    ])
+      expect(Skill.parseAddress(value)).toBeUndefined()
+  })
+})
 
 describe("Skill", () => {
   it.live("hides and refuses denied skills while organization policy overrides local allows", () =>
