@@ -12,6 +12,8 @@ export interface WorkspaceReadScope {
 export interface WorkspaceReadScopeHook {
   readonly sessionID: Session.ID
   readonly directory: string
+  readonly action: "read" | "shell-cwd"
+  readonly source: Permission.Request["source"]
   readonly scopes: Array<WorkspaceReadScope | null>
 }
 

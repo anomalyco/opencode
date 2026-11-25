@@ -51,11 +51,15 @@ export interface Target {
   readonly environment: Environment.Interface
   /** The machine the file is on, when it is not on this server. */
   readonly machine?: Environment.ID
-  readonly workspaceFile?: {
-    readonly root: string
-    readonly relative: string
-    readonly verify: () => Effect.Effect<void, Environment.Failed>
-  }
+  readonly workspace?: WorkspaceTarget
+}
+
+export interface WorkspaceTarget {
+  readonly root: string
+  readonly relative: string
+  readonly absolute: AbsolutePath
+  readonly resources: readonly string[]
+  readonly verify: () => Effect.Effect<void, Environment.Failed>
 }
 
 export function externalDirectoryRequest(targets: readonly Target[]) {
@@ -86,7 +90,7 @@ export type Invocation = Pick<Tool.Context, "sessionID" | "agent" | "messageID" 
 export interface ReadOptions {
   /** A target already authorized by this invocation, used for filename recovery. */
   readonly siblingOf?: Target
-  /** The caller can consume an opened, scoped regular file without reopening its pathname. */
+  /** The caller can consume a guarded target without reopening its pathname. */
   readonly workspaceScope?: boolean
 }
 
@@ -99,6 +103,12 @@ export interface Interface {
   readonly locate: (path: string, base?: Environment.Place) => Effect.Effect<Environment.Place, Environment.Failed>
   /** Resolve a lexical path and its permission resources, without requesting approval. */
   readonly resolve: (input: ResolveInput) => Effect.Effect<Target, Environment.Failed>
+  /** Verify membership for this invocation. Only consume the result through a guarded operation. */
+  readonly scope: (
+    target: Target,
+    context: Invocation,
+    action: "read" | "shell-cwd",
+  ) => Effect.Effect<Target, Environment.Failed>
   /** Approve external directories in one batch, preserving first-seen resource order. */
   readonly authorizeExternal: (
     targets: readonly Target[],
@@ -318,6 +328,80 @@ const layer = Layer.effect(
       })
     })
 
+    const scope = Effect.fn("FileAccess.scope")(function* (
+      target: Target,
+      context: Invocation,
+      action: "read" | "shell-cwd",
+    ) {
+      if (
+        process.platform !== "linux" ||
+        target.environment.id !== Environment.localID ||
+        !(yield* flags.enabled("workspace_read_scope"))
+      )
+        return target
+
+      const assignment = Effect.fnUntraced(function* () {
+        const result = yield* hooks.trigger("permission", "experimental.workspace.readScope", {
+          ...Permission.invocation(context),
+          directory: location.directory,
+          action,
+          scopes: [],
+        })
+        if (result.scopes.length === 0) return
+        const scope = result.scopes[0]
+        if (
+          result.scopes.length !== 1 ||
+          !scope ||
+          scope.members.length === 0 ||
+          scope.members.some(
+            (member) =>
+              !path.isAbsolute(member.physical) ||
+              member.physical === "/" ||
+              path.resolve(member.physical) !== member.physical ||
+              path.resolve(member.logical) !== member.logical ||
+              member.logical === location.directory ||
+              !FSUtil.contains(location.directory, member.logical),
+          )
+        )
+          return yield* new Environment.Failed({ path: target.absolute, cause: "Unverified workspace assignment" })
+
+        const members = scope.members.filter(
+          (member) =>
+            FSUtil.contains(member.physical, target.absolute) || FSUtil.contains(member.logical, target.absolute),
+        )
+        if (members.length > 1)
+          return yield* new Environment.Failed({ path: target.absolute, cause: "Ambiguous workspace assignment" })
+        const member = members[0]
+        if (!member) return
+        return member
+      })
+      const member = yield* assignment()
+      if (!member) return target
+      const selectedRoot = FSUtil.contains(member.physical, target.absolute) ? member.physical : member.logical
+      const relative = path.relative(selectedRoot, target.absolute)
+      const absolute = AbsolutePath.make(path.join(member.physical, relative))
+      const resource = slash(path.relative(location.directory, path.join(member.logical, relative)))
+      const verify = Effect.fnUntraced(function* () {
+        const current = yield* assignment()
+        if (current?.physical !== member.physical || current.logical !== member.logical)
+          return yield* new Environment.Failed({
+            path: target.absolute,
+            cause: "Workspace assignment or policy changed",
+          })
+      })
+      return {
+        ...target,
+        resource,
+        workspace: {
+          root: member.physical,
+          absolute,
+          relative,
+          resources: [resource, slash(absolute)],
+          verify,
+        },
+      }
+    })
+
     const authorizeRead = Effect.fn("FileAccess.authorizeRead")(function* (
       file: string,
       context: Invocation,
@@ -334,66 +418,21 @@ const layer = Layer.effect(
               absolute: AbsolutePath.make(siblingPath.dirname(siblingOf.absolute)),
               environment: siblingOf.environment,
             }
-      const target = yield* resolve({ path: file, base, kind: siblingOf ? "file" : undefined })
-      if (
-        options?.workspaceScope &&
-        process.platform === "linux" &&
-        target.environment.id === Environment.localID &&
-        (yield* flags.enabled("workspace_read_scope"))
-      ) {
-        const assignedMember = Effect.fnUntraced(function* () {
-          const result = yield* hooks.trigger("permission", "experimental.workspace.readScope", {
-            sessionID: context.sessionID,
-            directory: location.directory,
-            scopes: [],
-          })
-          if (result.scopes.length === 0) return
-          const scope = result.scopes[0]
-          if (
-            result.scopes.length !== 1 ||
-            !scope ||
-            scope.members.length === 0 ||
-            scope.members.some(
-              (member) =>
-                !path.isAbsolute(member.physical) ||
-                member.physical === "/" ||
-                path.resolve(member.physical) !== member.physical ||
-                path.resolve(member.logical) !== member.logical ||
-                member.logical === location.directory ||
-                !FSUtil.contains(location.directory, member.logical),
-            )
-          )
-            return yield* new Environment.Failed({ path: target.absolute, cause: "Unverified workspace assignment" })
-
-          const members = scope.members.filter((member) => FSUtil.contains(member.physical, target.absolute))
-          if (members.length > 1)
-            return yield* new Environment.Failed({ path: target.absolute, cause: "Ambiguous workspace assignment" })
-          const member = members[0]
-          if (!member || member.physical === target.absolute || !target.externalDirectory) return
-          return member
-        })
-        const member = yield* assignedMember()
-        const type = member
-          ? yield* environment.files.stat(target.absolute).pipe(
-              Effect.map((info) => info.type),
-              Effect.catchTag("Environment.NotFound", () => Effect.undefined),
-            )
-          : undefined
-        if (member && type === "file") {
-          const relative = path.relative(member.physical, target.absolute)
-          const resource = slash(path.relative(location.directory, path.join(member.logical, relative)))
-          yield* permission.assert({
-            action: "read",
-            resources: [resource, target.resource],
+      const target: Target = yield* resolve({ path: file, base, kind: siblingOf ? "file" : undefined })
+      const scoped = options?.workspaceScope ? yield* scope(target, context, "read") : target
+      if (scoped.workspace) {
+        const physical =
+          target.absolute === scoped.workspace.absolute ? target : yield* resolve({ path: scoped.workspace.absolute })
+        const external = externalDirectoryRequest([target, physical])
+        if (external)
+          yield* permission.assertNotDenied({
+            action: external.action,
+            resources: external.resources,
             ...Permission.invocation(context),
           })
-          const verify = Effect.fnUntraced(function* () {
-            const current = yield* assignedMember()
-            if (current?.physical !== member.physical || current.logical !== member.logical)
-              return yield* new Environment.Failed({ path: target.absolute, cause: "Workspace assignment changed" })
-          })
-          return { ...target, resource, workspaceFile: { root: member.physical, relative, verify } }
-        }
+        const resources = scoped.workspace.resources
+        yield* permission.assert({ action: "read", resources, ...Permission.invocation(context) })
+        return scoped
       }
       const sibling =
         siblingOf !== undefined &&
@@ -411,7 +450,7 @@ const layer = Layer.effect(
       return target
     })
 
-    return Service.of({ locate, resolve, authorizeExternal, authorizeRead })
+    return Service.of({ locate, resolve, scope, authorizeExternal, authorizeRead })
   }),
 )
 

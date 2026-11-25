@@ -26,13 +26,19 @@ const invocation = {
 }
 const slash = (file: string) => file.replaceAll("\\", "/")
 
-function provide(requests: Permission.AssertInput[], denied?: string, flags?: string) {
+function provide(requests: Permission.AssertInput[], denied?: string, flags?: string, deniedBoundary?: string) {
   return Effect.provide(
     AppNodeBuilder.build(LayerNode.group([FileAccess.node, Location.node, PluginHooks.node]), [
       Location.node.replace(tempLocationLayer),
       ...(flags ? [Flag.node.replace(Flag.testLayer([], { overrides: flags }))] : []),
       Permission.node.replace(
         permissionLayer({
+          assertNotDenied: (input) =>
+            deniedBoundary && input.resources.some((resource) => resource.endsWith(deniedBoundary))
+              ? Effect.fail(
+                  new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources }),
+                )
+              : Effect.void,
           assert: (input) =>
             Effect.gen(function* () {
               requests.push(input)
@@ -70,15 +76,10 @@ describe("FileAccess.authorizeRead", () => {
         }),
       )
       const target = yield* access.authorizeRead(file, invocation, { workspaceScope: true })
-      if (!target.workspaceFile) throw new Error("Expected a guarded file")
+      if (!target.workspace) throw new Error("Expected a guarded file")
       expect(requests).toMatchObject([{ action: "read", resources: ["member/scope.txt", file] }])
       expect(requests[0].save).toBeUndefined()
-      const output = yield* ReadToolFileSystem.readWorkspaceFile(
-        target.workspaceFile,
-        target.absolute,
-        target.resource,
-        {},
-      )
+      const output = yield* ReadToolFileSystem.readWorkspace(target.workspace, target.absolute, target.resource, {})
       expect(output).toMatchObject({ type: "text", content: "bound workspace content" })
 
       yield* access.authorizeRead(
@@ -90,23 +91,67 @@ describe("FileAccess.authorizeRead", () => {
 
       const nested = path.join(physical.path, "nested")
       yield* Effect.promise(() => fs.mkdir(nested))
+      yield* Effect.promise(() => fs.mkdir(path.join(nested, "subdirectory")))
+      yield* Effect.promise(() => fs.writeFile(path.join(nested, "regular.txt"), "example"))
+      yield* Effect.promise(() => fs.symlink("regular.txt", path.join(nested, "alias")))
       const directory = yield* access.authorizeRead(nested, invocation, { workspaceScope: true })
-      expect(directory.workspaceFile).toBeUndefined()
-      expect(requests.at(-2)?.action).toBe("external_directory")
+      if (!directory.workspace) throw new Error("Expected a guarded directory")
+      expect(requests.at(-1)?.action).toBe("read")
+      const listing = yield* ReadToolFileSystem.readWorkspace(
+        directory.workspace,
+        directory.absolute,
+        directory.resource,
+        {},
+      )
+      expect(listing).toMatchObject({ type: "directory", entries: ["subdirectory/", "alias", "regular.txt"] })
+      const logicalDirectory = yield* access.authorizeRead(path.join(logical, "nested"), invocation, {
+        workspaceScope: true,
+      })
+      expect(logicalDirectory.workspace?.absolute).toBe(AbsolutePath.make(nested))
+
+      const missing = yield* access.authorizeRead(path.join(logical, "missing"), invocation, { workspaceScope: true })
+      if (!missing.workspace) throw new Error("Expected a guarded file target")
+      const absent = yield* ReadToolFileSystem.readWorkspace(
+        missing.workspace,
+        missing.absolute,
+        missing.resource,
+        {},
+      ).pipe(Effect.flip)
+      expect(absent._tag).toBe("Environment.NotFound")
 
       yield* hooks.register("permission", "experimental.workspace.readScope", (event) =>
         Effect.sync(() => {
           event.scopes.push(null)
         }),
       )
-      const rejected = yield* ReadToolFileSystem.readWorkspaceFile(
-        target.workspaceFile,
+      const rejected = yield* ReadToolFileSystem.readWorkspace(
+        target.workspace,
         target.absolute,
         target.resource,
         {},
       ).pipe(Effect.flip)
       expect(rejected._tag).toBe("Environment.Failed")
     }).pipe(provide(requests, undefined, "workspace_read_scope"))
+  })
+
+  scopedRead("checks the native external deny when a logical path maps to a physical member", () => {
+    const requests: Permission.AssertInput[] = []
+    return Effect.gen(function* () {
+      const access = yield* FileAccess.Service
+      const hooks = yield* PluginHooks.Service
+      const location = yield* Location.Service
+      const directory = yield* tmpdirScoped()
+      const physical = path.join(directory.path, "blocked-capsule")
+      const logical = path.join(location.directory, "member")
+      yield* hooks.register("permission", "experimental.workspace.readScope", (event) =>
+        Effect.sync(() => void event.scopes.push({ members: [{ logical, physical }] })),
+      )
+      const blocked = yield* access
+        .authorizeRead(path.join(logical, "file.txt"), invocation, { workspaceScope: true })
+        .pipe(Effect.flip)
+      expect(blocked._tag).toBe("Permission.BlockedError")
+      expect(requests).toEqual([])
+    }).pipe(provide(requests, undefined, "workspace_read_scope", "/blocked-capsule/*"))
   })
 
   it.live("returns an absolute target and preserves invocation identity on the read assertion", () => {

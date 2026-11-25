@@ -131,8 +131,8 @@ export const Plugin = {
 
               const page = { offset: input.offset, limit: input.limit }
               const read = (target: FileAccess.Target) =>
-                target.workspaceFile
-                  ? ReadToolFileSystem.readWorkspaceFile(target.workspaceFile, target.absolute, target.resource, page)
+                target.workspace
+                  ? ReadToolFileSystem.readWorkspace(target.workspace, target.absolute, target.resource, page)
                   : ReadToolFileSystem.read(target.environment.files, target.absolute, target.resource, page)
 
               const requested = yield* access.authorizeRead(input.path, context, { workspaceScope: true })
@@ -142,6 +142,8 @@ export const Plugin = {
                   (error) => error instanceof Environment.NotFound,
                   () =>
                     Effect.gen(function* () {
+                      if (requested.workspace)
+                        return yield* new ToolFailure({ message: `File not found: ${input.path}` })
                       const alternate = yield* alternatePath(requested).pipe(Effect.orElseSucceed(() => undefined))
                       if (!alternate) return yield* missing({ input: input.path, requested, context })
                       const target = yield* access.authorizeRead(alternate, context, {
@@ -169,7 +171,7 @@ export const Plugin = {
               // is discovered); for a file it starts at the file's dirname. External reads are
               // skipped, and discovery failures never fail the read.
               yield* Effect.gen(function* () {
-                if (result.target.externalDirectory !== undefined) return
+                if (result.target.externalDirectory !== undefined || result.target.workspace) return
                 // Discovery walks this server's files, so it follows only a target on the Location's own environment.
                 // A cwd on a paired machine brings its instructions with it in a later change.
                 if (result.target.environment.id !== environment.id) return

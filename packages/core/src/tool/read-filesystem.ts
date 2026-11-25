@@ -6,7 +6,7 @@ import { TextBoundary } from "@opencode/util/text-boundary"
 import { Effect, Schema } from "effect"
 import { Environment } from "../environment/index.js"
 import type { Files } from "../environment/index.js"
-import { openWorkspaceFile } from "../environment/guarded-read.js"
+import { openWorkspaceEntry } from "../environment/guarded-read.js"
 import type { FileAccess } from "../file-access.js"
 import { Mime } from "../mime.js"
 import { AbsolutePath, NonNegativeInt, PositiveInt } from "../schema.js"
@@ -162,41 +162,71 @@ export const read = Effect.fn("ReadTool.read")(function* (
   return yield* textPage(files, input, resource, first, page)
 })
 
-export const readWorkspaceFile = (
-  workspace: NonNullable<FileAccess.Target["workspaceFile"]>,
+export const readWorkspace = (
+  workspace: FileAccess.WorkspaceTarget,
   input: AbsolutePath,
   resource: string,
   page: PageInput,
 ) => {
   const attempt = <A>(operation: () => Promise<A>) =>
-    Effect.tryPromise({ try: operation, catch: (cause) => new Environment.Failed({ path: input, cause }) })
+    Effect.tryPromise({
+      try: operation,
+      catch: (cause) =>
+        typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT"
+          ? new Environment.NotFound({ path: input })
+          : new Environment.Failed({ path: input, cause }),
+    })
 
   return Effect.acquireUseRelease(
-    workspace.verify().pipe(Effect.andThen(attempt(() => openWorkspaceFile(workspace.root, workspace.relative)))),
-    (file) =>
-      read(
-        {
-          list: () => Effect.fail(new Environment.Failed({ path: input, cause: "Expected a regular workspace file" })),
-          read: (_, range) =>
-            attempt(async () => {
-              const stat = await file.stat()
-              if (range === undefined && stat.size > MAX_MEDIA_INGEST_BYTES)
-                throw new Error("Workspace file grew beyond the read limit")
-              const offset = range?.offset ?? 0
-              const size = Math.max(0, stat.size - offset)
-              const buffer = Buffer.alloc(Math.min(range?.length ?? size, size))
-              const { bytesRead } = await file.read(buffer, 0, buffer.length, offset)
-              return {
-                info: { type: "file", size: stat.size, mtimeMs: stat.mtimeMs },
-                bytes: buffer.subarray(0, bytesRead),
-              }
-            }),
-        },
-        input,
-        resource,
-        page,
-      ),
-    (file) => attempt(() => file.close()).pipe(Effect.ignore),
+    workspace
+      .verify()
+      .pipe(Effect.flatMap(() => attempt(() => openWorkspaceEntry(workspace.root, workspace.relative)))),
+    (entry) =>
+      Effect.gen(function* () {
+        if (entry.type === "file") {
+          const { file } = entry
+          return yield* read(
+            {
+              list: () =>
+                Effect.fail(new Environment.Failed({ path: input, cause: "Expected a regular workspace file" })),
+              read: (_, range) =>
+                attempt(async () => {
+                  const stat = await file.stat()
+                  if (range === undefined && stat.size > MAX_MEDIA_INGEST_BYTES)
+                    throw new Error("Workspace file grew beyond the read limit")
+                  const offset = range?.offset ?? 0
+                  const size = Math.max(0, stat.size - offset)
+                  const buffer = Buffer.alloc(Math.min(range?.length ?? size, size))
+                  const { bytesRead } = await file.read(buffer, 0, buffer.length, offset)
+                  return {
+                    info: { type: "file", size: stat.size, mtimeMs: stat.mtimeMs },
+                    bytes: buffer.subarray(0, bytesRead),
+                  }
+                }),
+            },
+            input,
+            resource,
+            page,
+          )
+        }
+        if (page.offset !== undefined && page.offset < 0) return yield* new DirectoryOffsetError({ resource })
+        const entries = yield* attempt(() => entry.directory.readEntries())
+        return list(
+          entries.map((entry) => ({
+            name: entry.name,
+            type: entry.isDirectory()
+              ? "directory"
+              : entry.isFile()
+                ? "file"
+                : entry.isSymbolicLink()
+                  ? "symlink"
+                  : "other",
+          })),
+          page,
+          path.sep,
+        )
+      }),
+    (entry) => attempt(() => (entry.type === "file" ? entry.file : entry.directory).close()).pipe(Effect.ignore),
   )
 }
 
