@@ -38,7 +38,15 @@ export type RetentionEntry = {
   rank: number | null
 }
 export type CountryEntry = { country: string; continent: string; tokens: number; share: number; rank: number }
-export type NewModelDay = { date: string; tokens: number; users: number; sessions: number }
+export type NewModelDay = {
+  date: string
+  tokens: number
+  users: number
+  sessions: number
+  // Of all tokens that day, and among individual models.
+  share: number
+  rank: number
+}
 // A model used in the recent window, with the day it first had usage. The site decides which ones are new.
 export type NewModelCandidate = {
   model: string
@@ -571,7 +579,14 @@ function buildNewModelCandidates(rows: StatMetricRow[], latest: number): NewMode
   }, new Map())
   const start = latest - (NEW_MODEL_WINDOW_DAYS - 1) * DAY_MS
   const days = Array.from({ length: NEW_MODEL_WINDOW_DAYS }, (_, index) => start + index * DAY_MS)
-  return aggregateByModelName(productRows.filter((row) => row.periodStart >= start))
+  const recentRows = productRows.filter((row) => row.periodStart >= start)
+  const tokensByDay = new Map(
+    days.map((day) => [
+      day,
+      aggregateByModelName(recentRows.filter((row) => row.periodStart === day)).map((item) => item.totalTokens),
+    ]),
+  )
+  return aggregateByModelName(recentRows)
     .map((item) => {
       const modelRows = productRows.filter((row) => row.model === item.model && row.periodStart >= start)
       const first = firstSeen.get(item.model) ?? start
@@ -582,11 +597,15 @@ function buildNewModelCandidates(rows: StatMetricRow[], latest: number): NewMode
             item.model,
             modelRows.filter((row) => row.periodStart === day),
           )
+          const dayTokens = tokensByDay.get(day) ?? []
+          const dayTotal = dayTokens.reduce((sum, tokens) => sum + tokens, 0)
           return {
             date: periodKey(day),
             tokens: aggregate.totalTokens,
             users: aggregate.uniqueUsers,
             sessions: aggregate.sessions,
+            share: dayTotal > 0 ? aggregate.totalTokens / dayTotal : 0,
+            rank: dayTokens.filter((tokens) => tokens > aggregate.totalTokens).length + 1,
           }
         })
       return {
