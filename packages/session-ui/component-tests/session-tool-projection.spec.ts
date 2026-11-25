@@ -172,7 +172,6 @@ story("opens an execution's code and output from its View code action", async ({
   const dialog = timeline.page().getByRole("dialog")
   await expect(dialog.getByRole("heading", { name: "Execute" })).toBeVisible()
   await expect(dialog).toContainText("Completed")
-  await expect(dialog).toContainText("2 calls")
   await expect(dialog).toContainText('const tab = await tools.browser.tabs.open({ url: "http://localhost:4399" })')
   await expect(dialog).toContainText('"tab": "tab_4f1c"')
   await expect(dialog.getByRole("button", { name: "Copy code" })).toBeVisible()

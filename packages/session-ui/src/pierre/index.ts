@@ -96,6 +96,11 @@ const unsafeCSS = `
   :host::highlight(opencode-find-current) {
     background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
   }
+
+  :host-context([data-tone="danger"]) [data-line],
+  :host-context([data-tone="danger"]) [data-line] span {
+    color: var(--v2-state-fg-danger) !important;
+  }
 }
 
 @supports not selector(:host-context(*)) {
