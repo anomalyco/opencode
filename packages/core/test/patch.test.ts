@@ -11,7 +11,7 @@ describe("Patch", () => {
         "*** Begin Patch\n*** Add File: add.txt\n+added\n*** Update File: update.txt\n@@ section\n-old\n+new\n*** Delete File: delete.txt\n*** End Patch",
       ),
     ).toEqual([
-      { type: "add", path: "add.txt", contents: "added" },
+      { type: "add", path: "add.txt", contents: "added\n" },
       {
         type: "update",
         path: "update.txt",
@@ -26,10 +26,17 @@ describe("Patch", () => {
     expect(parse("*** Begin Patch\n*** End Patch")).toEqual([])
   })
 
+  test("keeps a final empty + line of an added file", () => {
+    const add = (lines: string) => parse(`*** Begin Patch\n*** Add File: a.md\n${lines}*** End Patch`)
+    expect(add("+# Title\n+\n")).toEqual([{ type: "add", path: "a.md", contents: "# Title\n\n" }])
+    expect(add("+\n")).toEqual([{ type: "add", path: "a.md", contents: "\n" }])
+    expect(add("")).toEqual([{ type: "add", path: "a.md", contents: "" }])
+  })
+
   test("ignores a Codex environment preamble", () => {
     expect(
       parse("*** Begin Patch\n*** Environment ID: remote\n*** Add File: file.txt\n+content\n*** End Patch"),
-    ).toEqual([{ type: "add", path: "file.txt", contents: "content" }])
+    ).toEqual([{ type: "add", path: "file.txt", contents: "content\n" }])
   })
 
   test("parses an update followed by an add", () => {
@@ -42,7 +49,7 @@ describe("Patch", () => {
         movePath: undefined,
         chunks: [{ oldLines: [], newLines: ["line"], changeContext: undefined }],
       },
-      { type: "add", path: "add.txt", contents: "content" },
+      { type: "add", path: "add.txt", contents: "content\n" },
     ])
   })
 
@@ -74,26 +81,26 @@ describe("Patch", () => {
 
   test("allows whitespace after the end marker", () => {
     expect(parse("*** Begin Patch\n*** Add File: add.txt\n+added\n*** End Patch\n \t\n")).toEqual([
-      { type: "add", path: "add.txt", contents: "added" },
+      { type: "add", path: "add.txt", contents: "added\n" },
     ])
   })
 
   test("strips a heredoc wrapper", () => {
     expect(parse("cat <<'EOF'\n*** Begin Patch\n*** Add File: add.txt\n+added\n*** End Patch\nEOF")).toEqual([
-      { type: "add", path: "add.txt", contents: "added" },
+      { type: "add", path: "add.txt", contents: "added\n" },
     ])
   })
 
   test("strips a heredoc wrapper without cat", () => {
     expect(parse("<<EOF\n*** Begin Patch\n*** Add File: add.txt\n+added\n*** End Patch\nEOF")).toEqual([
-      { type: "add", path: "add.txt", contents: "added" },
+      { type: "add", path: "add.txt", contents: "added\n" },
     ])
   })
 
   test("strips quoted heredoc wrappers", () => {
     const patch = "*** Begin Patch\n*** Add File: add.txt\n+added\n*** End Patch"
-    expect(parse(`<<'EOF'\n${patch}\nEOF`)).toEqual([{ type: "add", path: "add.txt", contents: "added" }])
-    expect(parse(`<<\"EOF\"\n${patch}\nEOF`)).toEqual([{ type: "add", path: "add.txt", contents: "added" }])
+    expect(parse(`<<'EOF'\n${patch}\nEOF`)).toEqual([{ type: "add", path: "add.txt", contents: "added\n" }])
+    expect(parse(`<<\"EOF\"\n${patch}\nEOF`)).toEqual([{ type: "add", path: "add.txt", contents: "added\n" }])
   })
 
   test("rejects malformed heredoc wrappers", () => {
@@ -143,7 +150,7 @@ describe("Patch", () => {
         "*** Begin Patch\n*** Add File: relative.txt\n+content\n*** Delete File: /tmp/delete.txt\n*** Update File: /tmp/update.txt\n@@\n-old\n+new\n*** End Patch",
       ),
     ).toEqual([
-      { type: "add", path: "relative.txt", contents: "content" },
+      { type: "add", path: "relative.txt", contents: "content\n" },
       { type: "delete", path: "/tmp/delete.txt" },
       {
         type: "update",
