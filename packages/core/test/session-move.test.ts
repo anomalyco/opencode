@@ -87,7 +87,7 @@ const itWithUnavailableDestination = testEffect(
   ),
 )
 const itWithExecution = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Session.node, Bus.node, SessionExecution.node]), [
+  AppNodeBuilder.build(LayerNode.group([Session.node, SessionExecution.node]), [
     Global.node.replace(tempGlobalLayer),
     offlineModels,
   ]),
@@ -550,35 +550,6 @@ describe("Session.move", () => {
       ),
     )
   }
-
-  itWithExecution.live(
-    "runs a child left in a removed directory where its parent now is",
-    () =>
-      Effect.gen(function* () {
-        const tmp = yield* tmpdirScoped()
-        const source = AbsolutePath.make(path.join(tmp.path, "source"))
-        const destination = AbsolutePath.make(path.join(tmp.path, "destination"))
-        yield* Effect.promise(() => Promise.all([mkdir(source), mkdir(destination)]))
-        const session = yield* Session.Service
-        const execution = yield* SessionExecution.Service
-        const bus = yield* Bus.Service
-        const parent = yield* session.create({ location: Location.Ref.make({ directory: source }) })
-        const child = yield* session.create({ parentID: parent.id })
-        yield* bus.publish(SessionEvent.Moved, {
-          sessionID: parent.id,
-          location: Location.Ref.make({ directory: destination }),
-          projectID: parent.projectID,
-        })
-        yield* Effect.promise(() => rm(source, { recursive: true }))
-
-        yield* execution.wake(child.id)
-        yield* execution.awaitIdle(child.id)
-
-        expect(yield* session.inbox(parent.id)).toEqual([])
-        expect((yield* session.get(child.id)).location.directory).toBe(destination)
-      }),
-    { timeout: 15_000 },
-  )
 
   itWithActiveExecution.live("defers an active move when the source directory no longer exists", () =>
     tmpdirScoped().pipe(

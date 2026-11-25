@@ -2230,7 +2230,6 @@ function buildExecution(
         Layer.provide(Layer.succeed(Bus.Service, bus)),
         Layer.provide(Layer.succeed(SessionStore.Service, store)),
         Layer.provide(Layer.succeed(Job.Service, jobs)),
-        Layer.provide(LayerNode.compile(FSUtil.node)),
         Layer.provide(
           Layer.succeed(
             Shell.Daemon,

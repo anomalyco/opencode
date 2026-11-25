@@ -26,7 +26,6 @@ import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { FSUtil } from "@opencode/util/fs-util"
 import { Cause, Context, DateTime, Deferred, Effect, Exit, Layer, LayerMap, Schema, Scope } from "effect"
 import { eq, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -741,7 +740,6 @@ function buildExecution(scope: Scope.Scope, drain: Drain) {
         Layer.provide(Layer.succeed(SessionStore.Service, store)),
         Layer.provide(Layer.succeed(SessionInbox.Service, inbox)),
         Layer.provide(Layer.succeed(Job.Service, jobs)),
-        Layer.provide(LayerNode.compile(FSUtil.node)),
         Layer.provide(
           AppNodeBuilder.build(Instance.node, [LocationServiceMap.node.replace(locations)]).pipe(Layer.fresh),
         ),

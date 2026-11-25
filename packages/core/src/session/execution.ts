@@ -7,7 +7,6 @@ import { Database } from "../database/database.js"
 import { Job } from "../job.js"
 import { Instance } from "../instance/service.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
-import { FSUtil } from "@opencode/util/fs-util"
 import { SessionEvent } from "./event.js"
 import { SessionInbox } from "./inbox.js"
 import { SubagentReport } from "./execution/subagent-report.js"
@@ -65,7 +64,6 @@ export const layer = Layer.effect(
     const inbox = yield* SessionInbox.Service
     const scope = yield* Effect.scope
     const db = (yield* Database.Service).db
-    const fs = yield* FSUtil.Service
     const reportLifecycle = <A>(sessionID: SessionSchema.ID, effect: Effect.Effect<A>) =>
       effect.pipe(
         Effect.tapCause((cause) =>
@@ -104,19 +102,6 @@ export const layer = Layer.effect(
     })
     // Why a Session's execution is being interrupted, read from the coordinator once it exists.
     let interruption: (sessionID: SessionSchema.ID) => InterruptReason | undefined = () => undefined
-    // A child left behind in a removed directory runs where its parent now is.
-    const followParent = Effect.fnUntraced(function* (session: SessionSchema.Info) {
-      if (!session.parentID || (yield* fs.isDir(session.location.directory))) return session
-      const parent = yield* store.get(session.parentID)
-      if (!parent || !(yield* fs.isDir(parent.location.directory))) return session
-      yield* bus.publish(SessionEvent.Moved, {
-        sessionID: session.id,
-        location: parent.location,
-        projectID: parent.projectID,
-        subpath: parent.subpath,
-      })
-      return (yield* store.get(session.id)) ?? session
-    })
     const drain = Effect.fnUntraced(function* (
       sessionID: SessionSchema.ID,
       force: boolean,
@@ -124,9 +109,8 @@ export const layer = Layer.effect(
       promotable: SessionInbox.Promotable = "input",
       stepped = false,
     ): Effect.fn.Return<void, SessionRunner.RunError> {
-      const stored = yield* store.get(sessionID)
-      if (!stored) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
-      const session = yield* followParent(stored)
+      const session = yield* store.get(sessionID)
+      if (!session) return yield* Effect.die(new Error(`Session not found: ${sessionID}`))
       const result = yield* SessionRunner.Service.use((runner) =>
         runner.drain({
           sessionID,
@@ -240,7 +224,7 @@ function publishTerminal(
 export const node = makeGlobalNode({
   service: Service,
   layer,
-  deps: [SessionStore.node, Instance.node, Bus.node, Database.node, Job.node, SessionInbox.node, FSUtil.node],
+  deps: [SessionStore.node, Instance.node, Bus.node, Database.node, Job.node, SessionInbox.node],
 })
 
 /** Low-level compatibility layer for callers that only need durable Session recording. */
