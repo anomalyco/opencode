@@ -117,7 +117,8 @@ const mimeFrom = (contentType: string) => contentType.split(";", 1)[0]?.trim().t
 const isImageAttachment = (mime: string) =>
   mime.startsWith("image/") && mime !== "image/svg+xml" && mime !== "image/vnd.fastbidsheet"
 const convert = (content: string, contentType: string, format: Format) => {
-  if (!contentType.includes("text/html")) return content
+  const mime = mimeFrom(contentType)
+  if (mime !== "text/html" && mime !== "application/xhtml+xml") return content
   if (format === "markdown") return convertHTMLToMarkdown(content)
   if (format === "text") return extractTextFromHTML(content)
   return content
