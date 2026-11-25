@@ -261,3 +261,78 @@ for (const scenario of scenarios) {
     })
   }
 }
+
+for (const next of [false, true]) {
+  test(`a file header pressed while it is stuck stays where it was pressed${next ? " in the New timeline" : ""}`, async ({
+    page,
+  }) => {
+    // Deep inside an open file its header sticks to the top. Closing the file from there sent the header back to its own
+    // place in the row, screens above, and left the reader past the file.
+    await setupTimeline(page, {
+      messages: [
+        userMessage(),
+        assistantMessage([
+          toolPart("prt_sticky_patch", "patch", "completed", {}, { metadata: { files } }),
+          // Enough that the timeline still scrolls this far once the file has closed.
+          textPart("prt_after_patch", "Following explanation.\n\n".repeat(60)),
+        ]),
+      ],
+      settings: {
+        newTimeline: next,
+        timelineDetail: { ...timelinePresets[2].value, edit: { placement: "separate", details: "collapsed" } },
+      },
+      reducedMotion: true,
+    })
+
+    const scroller = page.locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport')
+    const patch = page.locator('[data-scope="apply-patch"]')
+    const trigger = patch.getByRole("button", { name: /a\.ts/ })
+    const content = patch.getByRole("region", { name: /a\.ts/ })
+    await trigger.click()
+    await expect(trigger).toHaveAttribute("aria-expanded", "true")
+    await expect.poll(() => content.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThan(1800)
+    // Leave follow-latest mode before positioning the viewport inside this file.
+    await scroller.hover()
+    await page.mouse.wheel(0, -100)
+    await content.evaluate((element) => {
+      const viewport = element.closest<HTMLElement>(".scroll-view__viewport")!
+      viewport.scrollTop += element.getBoundingClientRect().top - viewport.getBoundingClientRect().top + 900
+    })
+
+    // The header's distance from the place it was pressed, once it has come to rest.
+    const pressed = { y: Number.NaN }
+    const seen = { y: Number.NaN }
+
+    const rest = () =>
+      expect
+        .poll(
+          async () => {
+            const y = (await trigger.boundingBox())?.y ?? Number.NaN
+            const still = y === seen.y
+            seen.y = y
+
+            return still
+          },
+          { intervals: [200] },
+        )
+        .toBe(true)
+
+    const press = async () => {
+      await rest()
+      const box = (await trigger.boundingBox())!
+      pressed.y = box.y
+      // A locator click first scrolls the header's own place in the row into view, which a reader's click does not.
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2)
+    }
+
+    await press()
+    await expect(trigger).toHaveAttribute("aria-expanded", "false")
+    await rest()
+    expect(Math.round(seen.y - pressed.y)).toBe(0)
+    // Still under the pointer, so the same place opens the file again.
+    await press()
+    await expect(trigger).toHaveAttribute("aria-expanded", "true")
+    await rest()
+    expect(Math.round(seen.y - pressed.y)).toBe(0)
+  })
+}

@@ -4,11 +4,17 @@ import { DiffChanges } from "@opencode/ui/diff-changes"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
 import { getFilename } from "@opencode/util/path"
-import { batch, createMemo, createUniqueId, For, Index, Match, Show, Switch, type JSX } from "solid-js"
+import { createMemo, For, Index, Match, Show, Switch } from "solid-js"
 import { Dynamic } from "solid-js/web"
 import { patchFileGroups } from "../../components/apply-patch-file"
 import { createDisclosure } from "../../components/disclosure"
-import { displayDirectory, FileAccordionGroup, FileTool, type ToolProps } from "../../tools/tool-renderer"
+import {
+  displayDirectory,
+  FileAccordionGroup,
+  FileAccordionItem,
+  FileTool,
+  type ToolProps,
+} from "../../tools/tool-renderer"
 
 // One unchanged line around each change places it without a wall of context.
 const context = 1
@@ -118,56 +124,6 @@ export function PatchTool(props: ToolProps) {
             }}
           </Index>
         </FileAccordionGroup>
-      </Show>
-    </div>
-  )
-}
-
-function FileAccordionItem(props: {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  type?: string
-  header: JSX.Element
-  children: JSX.Element
-}) {
-  const id = createUniqueId()
-
-  return (
-    <div
-      data-slot="accordion-item"
-      data-type={props.type}
-      data-expanded={props.open ? "" : undefined}
-      data-closed={!props.open ? "" : undefined}
-    >
-      <h3
-        data-slot="accordion-header"
-        data-component="sticky-accordion-header"
-        data-expanded={props.open ? "" : undefined}
-        data-closed={!props.open ? "" : undefined}
-      >
-        <button
-          type="button"
-          id={`${id}-trigger`}
-          data-slot="accordion-trigger"
-          data-expanded={props.open ? "" : undefined}
-          data-closed={!props.open ? "" : undefined}
-          aria-expanded={props.open}
-          aria-controls={props.open ? `${id}-content` : undefined}
-          onClick={() => batch(() => props.onOpenChange(!props.open))}
-        >
-          {props.header}
-        </button>
-      </h3>
-      <Show when={props.open}>
-        <div
-          id={`${id}-content`}
-          role="region"
-          aria-labelledby={`${id}-trigger`}
-          data-slot="accordion-content"
-          data-expanded=""
-        >
-          {props.children}
-        </div>
       </Show>
     </div>
   )

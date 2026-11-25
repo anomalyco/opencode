@@ -1373,7 +1373,7 @@ export function FileAccordionGroup(props: { children: JSX.Element }) {
   )
 }
 
-function FileAccordionItem(props: {
+export function FileAccordionItem(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
   type?: string
@@ -1381,6 +1381,19 @@ function FileAccordionItem(props: {
   children: JSX.Element
 }) {
   const id = createUniqueId()
+
+  // The header sticks while the reader is deep inside the file. When the file closes, the header goes back to its own
+  // place, which can be many screens up, and the reader is left past the file. So the header that was pressed stays
+  // where it was pressed. Opening grows the file downward, and the header stays put by itself.
+  const toggle = (trigger: HTMLElement) => {
+    const before = trigger.getBoundingClientRect().top
+    batch(() => props.onOpenChange(!props.open))
+    const moved = before - trigger.getBoundingClientRect().top
+    const scroller = moved > 1 ? scrollParent(trigger) : undefined
+
+    // Through `holdScroll`, so a timeline that follows its end does not take the scroll for the reader leaving it.
+    if (scroller) holdScroll(scroller, () => scroller.scrollBy({ top: -moved, behavior: "instant" }))
+  }
 
   return (
     <div
@@ -1403,7 +1416,7 @@ function FileAccordionItem(props: {
           data-closed={!props.open ? "" : undefined}
           aria-expanded={props.open}
           aria-controls={props.open ? `${id}-content` : undefined}
-          onClick={() => batch(() => props.onOpenChange(!props.open))}
+          onClick={(event) => toggle(event.currentTarget)}
         >
           {props.header}
         </button>
