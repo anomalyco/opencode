@@ -55,7 +55,7 @@ export const Plugin = {
                 })
                 const { directory, output: content } = yield* Skill.prepare(
                   fs,
-                  { ...skill, content: yield* skills.content(skill.id) },
+                  { ...skill, content: yield* skills.instructions(skill.id) },
                   yield* skills.files(skill.id),
                 )
                 return {

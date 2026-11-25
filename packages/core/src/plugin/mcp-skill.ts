@@ -83,6 +83,7 @@ export const Plugin = define({
               read(skill, id, item.digest, item.file).pipe(Effect.map((result) => result.bytes)),
             ]),
           ),
+          { type: "mcp", server: skill.server },
         )
       }
     })
