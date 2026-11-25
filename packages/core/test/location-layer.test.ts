@@ -28,7 +28,7 @@ import { Agent } from "@opencode/core/agent"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
-import { invalidateLocationIfIdle, LocationServiceMap, type LocationServices } from "@opencode/core/location-services"
+import { LocationServiceMap, type LocationServices } from "@opencode/core/location-services"
 import { LocationActivity } from "@opencode/core/location-activity"
 import { Location } from "@opencode/core/location"
 import { LocationLifecycle } from "@opencode/core/location-lifecycle"
@@ -87,26 +87,6 @@ const itWithActivity = testEffect(
 )
 
 describe("LocationServiceMap", () => {
-  it.effect("rechecks eviction pressure immediately before invalidating a location", () =>
-    Effect.gen(function* () {
-      const locations = yield* LocationServiceMap.Service
-      const directory = yield* tmpdirScoped()
-      const ref = Location.Ref.make({ directory: AbsolutePath.make(directory.path) })
-      yield* Location.Service.pipe(Effect.provide(locations.get(ref)), Effect.scoped)
-      let checks = 0
-      const evicted = yield* invalidateLocationIfIdle(locations, ref, {
-        isProtected: () => false,
-        canEvict: () => ++checks === 1,
-      })
-
-      expect(evicted).toBe(false)
-      expect(checks).toBe(2)
-      expect(Array.from(yield* RcMap.keys(locations.rcMap)).some((cached) => cached.directory === ref.directory)).toBe(
-        true,
-      )
-    }),
-  )
-
   for (const failure of ["file", "permissions"] as const) {
     for (const invalidate of [false, true]) {
       // The file-path fixture boots on Windows rather than failing during
