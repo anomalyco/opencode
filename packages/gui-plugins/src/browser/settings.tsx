@@ -1,3 +1,4 @@
+import { Badge } from "@opencode/ui/badge"
 import { children, createMemo, createSignal, For, getOwner, runWithOwner, Show, untrack, type JSX } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createLatest, usePlugin, type IconName } from "@opencode/plugin/gui"
@@ -31,7 +32,9 @@ export default function BrowserSettings(props: { target?: string }) {
   // its rows shows it open as the page arrives. After that the person's own toggle wins: the search's target stays set
   // for the whole visit, so the one they closed it over no longer opens it.
   const [closedOver, setClosedOver] = createSignal<string>()
-  const advanced = () => advancedOpen(preferences.value.advanced, props.target === closedOver() ? undefined : props.target)
+
+  const advanced = () =>
+    advancedOpen(preferences.value.advanced, props.target === closedOver() ? undefined : props.target)
 
   const jobs = createProfileJobs({
     cookies: true,
@@ -65,7 +68,9 @@ export default function BrowserSettings(props: { target?: string }) {
 
   const chooseSites = (choice: Choice) =>
     runWithOwner(owner, () =>
-      ctx.dialogs.open((dialog) => <SiteChooser choices={choices()} initial={choice} jobs={jobs} close={() => dialog.close()} />),
+      ctx.dialogs.open((dialog) => (
+        <SiteChooser choices={[choice]} initial={choice} jobs={jobs} close={() => dialog.close()} />
+      )),
     )
 
   const addExtension = () =>
@@ -111,13 +116,20 @@ export default function BrowserSettings(props: { target?: string }) {
                   name={choice.source.name}
                   aside={choice.source.profiles.length > 1 ? choice.profile.name : undefined}
                   message={
-                    jobs.importing(choice) ? jobs.notice() : results().get(resultKey(choice.source.id, choice.profile.id))
+                    jobs.importing(choice)
+                      ? jobs.notice()
+                      : results().get(resultKey(choice.source.id, choice.profile.id))
                   }
                 />
               }
             >
               {/* One action: its dialog brings everything, or lets the person choose sites. */}
-              <ui.Button size="small" disabled={blocked() || unsaved()} busy={jobs.importing(choice)} onClick={() => chooseSites(choice)}>
+              <ui.Button
+                size="small"
+                disabled={blocked() || unsaved()}
+                busy={jobs.importing(choice)}
+                onClick={() => chooseSites(choice)}
+              >
                 {ctx.t("settings.import.open")}
               </ui.Button>
             </ui.SettingsRow>
@@ -187,7 +199,9 @@ export default function BrowserSettings(props: { target?: string }) {
           >
             <span class="shrink-0">{ctx.t("settings.advanced")}</span>
             <Show when={!advanced()}>
-              <span class="ms-2 min-w-0 truncate font-[440] text-v2-text-text-muted">{ctx.t("settings.advanced.summary")}</span>
+              <span class="ms-2 min-w-0 truncate font-[440] text-v2-text-text-muted">
+                {ctx.t("settings.advanced.summary")}
+              </span>
             </Show>
             <span class={ADVANCED_CHEVRON}>
               <ui.Icon name={advanced() ? "outline-chevron-down" : "outline-chevron-right"} />
@@ -263,7 +277,9 @@ export default function BrowserSettings(props: { target?: string }) {
                 when={clearMessage()}
                 fallback={
                   // Show runs its children once; the count lives in an expression so a new summary updates it.
-                  <Show when={jobs.summary()}>{(value) => <>{ctx.plural("settings.cookies.count", value().cookies)}</>}</Show>
+                  <Show when={jobs.summary()}>
+                    {(value) => <>{ctx.plural("settings.cookies.count", value().cookies)}</>}
+                  </Show>
                 }
               >
                 {(message) => message().text}
@@ -288,7 +304,8 @@ export default function BrowserSettings(props: { target?: string }) {
 }
 
 /** The Advanced heading's chevron: faint at rest, full strength under the pointer and on keyboard focus. */
-const ADVANCED_CHEVRON = "flex shrink-0 opacity-40 group-hover:opacity-100 group-focus-visible:opacity-100 rtl:-scale-x-100"
+const ADVANCED_CHEVRON =
+  "flex shrink-0 opacity-40 group-hover:opacity-100 group-focus-visible:opacity-100 rtl:-scale-x-100"
 
 /**
  * The decisions the user kept for sites, one row per site and feature: the site, the feature under it, and its setting
@@ -311,11 +328,11 @@ function SitePermissionsSection() {
   const failed = () => showToast({ title: ctx.t("settings.sites.failed") })
 
   return (
-    <ui.SettingsSection
-      title={ctx.t("settings.sites.title")}
-      footer={<Note>{ctx.t("settings.sites.note")}</Note>}
-    >
-      <For each={decisions()} fallback={<ui.SettingsRow id="settings-browser-sites" title={<Muted>{ctx.t("settings.sites.none")}</Muted>} />}>
+    <ui.SettingsSection title={ctx.t("settings.sites.title")} footer={<Note>{ctx.t("settings.sites.note")}</Note>}>
+      <For
+        each={decisions()}
+        fallback={<ui.SettingsRow id="settings-browser-sites" title={<Muted>{ctx.t("settings.sites.none")}</Muted>} />}
+      >
         {(decision, index) => {
           const names = () => ({
             permission: ctx.t(`settings.sites.permission.${decision.permission}`),
@@ -329,7 +346,9 @@ function SitePermissionsSection() {
                 <span class="flex min-w-0 items-center gap-3">
                   <Glyph fallback="outline-globe" />
                   <span class="flex min-w-0 flex-col gap-1">
-                    <span dir="ltr" class="[overflow-wrap:anywhere]">{site(decision.origin)}</span>
+                    <span dir="ltr" class="[overflow-wrap:anywhere]">
+                      {site(decision.origin)}
+                    </span>
                     <Muted>{names().permission}</Muted>
                   </span>
                 </span>
@@ -346,7 +365,9 @@ function SitePermissionsSection() {
                   value={decision.setting}
                   disabled={!client()}
                   onChange={(setting) =>
-                    void client()?.set({ origin: decision.origin, permission: decision.permission, setting }).catch(failed)
+                    void client()
+                      ?.set({ origin: decision.origin, permission: decision.permission, setting })
+                      .catch(failed)
                   }
                 />
                 <ui.Tooltip value={ctx.t("settings.sites.remove", names())}>
@@ -608,7 +629,10 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
                               <div class="-me-1 shrink-0">
                                 <ui.Select
                                   label={ctx.t("settings.extensions.browser.select")}
-                                  options={choices().map((item) => ({ value: choiceValue(item), label: choiceLabel(item) }))}
+                                  options={choices().map((item) => ({
+                                    value: choiceValue(item),
+                                    label: choiceLabel(item),
+                                  }))}
                                   value={choiceValue(choice())}
                                   onChange={(profile) => setForm("profile", profile)}
                                 />
@@ -787,7 +811,9 @@ function InstallReview(props: { review: PendingReview["result"]; job: InstallJob
                 )}
               </For>
               <Show
-                when={added().hosts.length && !added().access.some((item) => item === "someSites" || item === "allSites")}
+                when={
+                  added().hosts.length && !added().access.some((item) => item === "someSites" || item === "allSites")
+                }
               >
                 <li>{ctx.t("review.moreSites")}</li>
               </Show>
@@ -858,10 +884,14 @@ function Identity(props: {
     <span class="flex min-w-0 items-center gap-3">
       <Glyph image={props.image} fallback={props.fallback} />
       <span class="flex min-w-0 flex-col gap-1">
-        <span class="flex min-w-0 items-baseline gap-1.5">
+        <span class="flex min-w-0 items-center gap-1.5">
           <span class="truncate">{props.name}</span>
           <Show when={props.aside}>
-            {(aside) => <span class="min-w-0 truncate font-[440] text-v2-text-text-muted">{aside()}</span>}
+            {(aside) => (
+              <Badge class="min-w-0 shrink">
+                <span class="truncate">{aside()}</span>
+              </Badge>
+            )}
           </Show>
         </span>
         <Show
@@ -935,7 +965,9 @@ function CompatibilityDetails(props: { compatibility: ExtensionCompatibility }) 
 
   return (
     <span class="flex flex-col gap-1">
-      <Show when={props.compatibility.cause}>{(cause) => <span>{ctx.t(`extensions.compat.cause.${cause()}`)}</span>}</Show>
+      <Show when={props.compatibility.cause}>
+        {(cause) => <span>{ctx.t(`extensions.compat.cause.${cause()}`)}</span>}
+      </Show>
       <Show when={props.compatibility.missing.length > 0}>
         <span>{ctx.t("extensions.compat.missing")}</span>
         <For each={props.compatibility.missing}>

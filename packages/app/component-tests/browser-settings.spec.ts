@@ -91,7 +91,7 @@ story("no setting decides what an import brings: the import section has its brow
   const section = view.root.getByRole("region", { name: "Import from another browser", exact: true })
 
   // The section is its title and one row per browser, whose button opens the import dialog with its two boxes.
-  await expect(section.getByRole("button", { name: "Import…", exact: true })).toHaveCount(2)
+  await expect(section.getByRole("button", { name: "Import", exact: true })).toHaveCount(2)
   await expect(section.locator("p")).toHaveCount(0)
   await expect(view.advanced).toHaveAttribute("aria-expanded", "true")
   // Advanced holds two switches, neither of them about importing.
