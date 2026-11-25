@@ -4,7 +4,7 @@ import { once } from "node:events"
 import { createServer as createHttpServer, request as httpRequest } from "node:http"
 import { createServer as createNetServer, type Socket } from "node:net"
 import { connect as netConnect } from "node:net"
-import type { Duplex } from "node:stream"
+import { PassThrough, type Duplex } from "node:stream"
 import { Effect, Fiber, Schedule, Schema, Stream } from "effect"
 import { Session } from "@opencode/schema/session"
 import { BrowserConnection } from "../src/connection.js"
@@ -17,14 +17,17 @@ import { BrowserTunnel } from "../src/tunnel.js"
 import { BrowserTunnelHost } from "../src/tunnel-host.js"
 
 /**
- * In-memory paired BinarySockets with configurable send latency / backpressure simulation
- * for deterministic multiplexer tests without network flakes.
+ * In-memory paired BinarySockets with optional deterministic manual flush and backpressure
+ * simulation for multiplexer tests without timers or wall-clock races.
  */
-function createSocketPair(options: { readonly delayMs?: number; readonly simulateBuffered?: boolean } = {}) {
+function createSocketPair(options: { readonly simulateBuffered?: boolean; readonly gateServerSends?: boolean } = {}) {
   type Listener<T> = (value: T) => void
   type Side = {
     readyState: number
     bufferedAmount: number
+    maxBufferedAmount: number
+    readonly pendingSends: Array<() => void>
+    readonly sentFrames: StreamWire.Frame[]
     readonly messageListeners: Set<Listener<Uint8Array | string>>
     readonly closeListeners: Set<(code: number, reason: string) => void>
     readonly errorListeners: Set<Listener<Error>>
@@ -34,7 +37,7 @@ function createSocketPair(options: { readonly delayMs?: number; readonly simulat
     finishClose(code: number, reason: string): void
     toSocket(): BrowserTunnelHost.BinarySocket
   }
-  const makeSide = (): Side => {
+  const makeSide = (gated: boolean): Side => {
     const messageListeners = new Set<Listener<Uint8Array | string>>()
     const closeListeners = new Set<(code: number, reason: string) => void>()
     const errorListeners = new Set<Listener<Error>>()
@@ -42,6 +45,9 @@ function createSocketPair(options: { readonly delayMs?: number; readonly simulat
     const side: Side = {
       readyState: 1,
       bufferedAmount: 0,
+      maxBufferedAmount: 0,
+      pendingSends: [],
+      sentFrames: [],
       messageListeners,
       closeListeners,
       errorListeners,
@@ -71,14 +77,20 @@ function createSocketPair(options: { readonly delayMs?: number; readonly simulat
               return
             }
             const copy = new Uint8Array(data)
-            if (options.simulateBuffered) self.bufferedAmount += copy.byteLength
+            if (gated) self.sentFrames.push(StreamWire.decodeFrame(copy))
+            if (options.simulateBuffered || gated) {
+              self.bufferedAmount += copy.byteLength
+              if (self.bufferedAmount > self.maxBufferedAmount) self.maxBufferedAmount = self.bufferedAmount
+            }
             const dispatch = () => {
-              if (options.simulateBuffered) self.bufferedAmount = Math.max(0, self.bufferedAmount - copy.byteLength)
+              if (options.simulateBuffered || gated) {
+                self.bufferedAmount = Math.max(0, self.bufferedAmount - copy.byteLength)
+              }
               onWritten?.()
               if (self.peer.readyState === 1) self.peer.deliver(copy)
             }
-            if (options.delayMs && options.delayMs > 0) {
-              setTimeout(dispatch, options.delayMs)
+            if (gated) {
+              self.pendingSends.push(dispatch)
             } else {
               queueMicrotask(dispatch)
             }
@@ -119,8 +131,8 @@ function createSocketPair(options: { readonly delayMs?: number; readonly simulat
     }
     return side
   }
-  const a = makeSide()
-  const b = makeSide()
+  const a = makeSide(false)
+  const b = makeSide(options.gateServerSends === true)
   a.peer = b
   b.peer = a
   return {
@@ -128,6 +140,12 @@ function createSocketPair(options: { readonly delayMs?: number; readonly simulat
     serverRaw: b,
     client: a.toSocket(),
     server: b.toSocket(),
+    flushOneServerFrame() {
+      const next = b.pendingSends.shift()
+      if (!next) return false
+      next()
+      return true
+    },
   }
 }
 
@@ -246,12 +264,12 @@ describe("EgressPolicy protection and dev loopback support", () => {
     })
 
     // Dev loopback & HMR ports work out of the box
-    expect(await policy.resolveTarget({ host: "localhost", port: 5173 })).toEqual({ address: "127.0.0.1", family: 4 })
-    expect(await policy.resolveTarget({ host: "127.0.0.1", port: 5174 })).toEqual({ address: "127.0.0.1", family: 4 })
-    expect(await policy.resolveTarget({ host: "app.localhost", port: 24678 })).toEqual({ address: "127.0.0.1", family: 4 })
-    expect(await policy.resolveTarget({ host: "::1", port: 5173 })).toEqual({ address: "::1", family: 6 })
+    expect(await policy.resolveTarget({ host: "localhost", port: 5173 })).toEqual([{ address: "127.0.0.1", family: 4 }])
+    expect(await policy.resolveTarget({ host: "127.0.0.1", port: 5174 })).toEqual([{ address: "127.0.0.1", family: 4 }])
+    expect(await policy.resolveTarget({ host: "app.localhost", port: 24678 })).toEqual([{ address: "127.0.0.1", family: 4 }])
+    expect(await policy.resolveTarget({ host: "::1", port: 5173 })).toEqual([{ address: "::1", family: 6 }])
     // Public web works
-    expect(await policy.resolveTarget({ host: "example.com", port: 443 })).toEqual({ address: "93.184.216.34", family: 4 })
+    expect(await policy.resolveTarget({ host: "example.com", port: 443 })).toEqual([{ address: "93.184.216.34", family: 4 }])
 
     // OpenCode's own server port and SSH/Docker/K8s ports on loopback are blocked
     await expect(policy.resolveTarget({ host: "127.0.0.1", port: 4096 })).rejects.toThrow(EgressPolicy.EgressDeniedError)
@@ -271,14 +289,12 @@ describe("EgressPolicy protection and dev loopback support", () => {
       EgressPolicy.EgressDeniedError,
     )
     policy.grant("intranet.local", 5173, [24678])
-    expect(await policy.resolveTarget({ host: "intranet.local", port: 5173 })).toEqual({
-      address: "192.168.1.50",
-      family: 4,
-    })
-    expect(await policy.resolveTarget({ host: "intranet.local", port: 24678 })).toEqual({
-      address: "192.168.1.50",
-      family: 4,
-    })
+    expect(await policy.resolveTarget({ host: "intranet.local", port: 5173 })).toEqual([
+      { address: "192.168.1.50", family: 4 },
+    ])
+    expect(await policy.resolveTarget({ host: "intranet.local", port: 24678 })).toEqual([
+      { address: "192.168.1.50", family: 4 },
+    ])
     // Ungranted port on the same private host stays blocked
     await expect(policy.resolveTarget({ host: "intranet.local", port: 9999 })).rejects.toThrow(
       EgressPolicy.EgressDeniedError,
@@ -658,82 +674,132 @@ describe("StreamMux flow control, fairness, half-close, and RESET cancellation",
     }
   }, 15_000)
 
-  test("fair bounded writer lets small interactive echo finish ahead of a concurrent bulk download", async () => {
-    const bulkSize = 512 * 1024
-    const bulkData = Buffer.alloc(bulkSize, 0xab)
+  test("fair bounded writer interleaves small interactive echo ahead of remaining bulk download deterministically", async () => {
+    const chunkSize = 16 * 1024
+    const bulkChunks = 8
+    const bulkSize = chunkSize * bulkChunks
+    const maxWsBufferedBytes = 32 * 1024
 
-    const bulkServer = createNetServer((socket) => {
-      socket.end(bulkData)
-    })
-    const echoServer = createNetServer((socket) => {
-      socket.on("data", (chunk) => socket.end(chunk))
-    })
-    await Promise.all([
-      once(bulkServer.listen(0, "127.0.0.1"), "listening"),
-      once(echoServer.listen(0, "127.0.0.1"), "listening"),
-    ])
-    const bulkAddr = bulkServer.address()
-    const echoAddr = echoServer.address()
-    if (!bulkAddr || typeof bulkAddr === "string" || !echoAddr || typeof echoAddr === "string") {
-      throw new Error("No TCP address")
+    // Deterministic in-process target sockets so scheduling order depends solely on StreamMux's
+    // bounded writer and credit/priority rules—never wall-clock timers or OS TCP buffers.
+    // A plain PassThrough natively echoes written bytes and half-closes on end().
+    const bulkTarget = new PassThrough({ highWaterMark: bulkSize })
+    const echoTarget = new PassThrough()
+
+    const flushTurns = async () => {
+      for (let i = 0; i < 4; i++) await new Promise<void>((resolve) => setImmediate(resolve))
     }
 
-    // Add 2 ms send latency and tight 32 KiB WS bufferedAmount cap to expose any unfair queueing.
-    const pair = createSocketPair({ delayMs: 2, simulateBuffered: true })
+    const pair = createSocketPair({ gateServerSends: true })
     const serverMux = StreamMux.createServerMux(pair.server, {
       policy: EgressPolicy.makePolicy(),
       streamWindowBytes: 128 * 1024,
       creditBatchBytes: 32 * 1024,
-      maxWsBufferedBytes: 32 * 1024,
+      frameChunkBytes: chunkSize,
+      maxWsBufferedBytes,
       heartbeatIntervalMs: 0,
+      connect: async (target) => (target.port === 10001 ? bulkTarget : echoTarget) as unknown as Socket,
     })
     const clientMux = StreamMux.createClientMux(pair.client, {
       streamWindowBytes: 128 * 1024,
       creditBatchBytes: 32 * 1024,
-      maxWsBufferedBytes: 32 * 1024,
+      frameChunkBytes: chunkSize,
+      maxWsBufferedBytes,
       heartbeatIntervalMs: 0,
     })
 
     try {
-      const bulkStream = await clientMux.openStream({ host: "127.0.0.1", port: bulkAddr.port })
+      // 1. Open bulk stream (stream 1) and deliver its OPENED control frame.
+      const bulkOpen = clientMux.openStream({ host: "127.0.0.1", port: 10001 })
+      await flushTurns()
+      expect(pair.flushOneServerFrame()).toBe(true)
+      const bulkStream = await bulkOpen
+
       let bulkReceived = 0
       let bulkBytesWhenEchoDone = -1
-      let echoStarted = false
-      const echoDone = Promise.withResolvers<string>()
       const bulkDone = Promise.withResolvers<void>()
-
       bulkStream.on("data", (chunk: Buffer) => {
         bulkReceived += chunk.byteLength
-        if (!echoStarted) {
-          echoStarted = true
-          void clientMux.openStream({ host: "127.0.0.1", port: echoAddr.port }).then((echoStream) => {
-            const parts: Buffer[] = []
-            echoStream.on("data", (d: Buffer) => parts.push(d))
-            echoStream.once("end", () => {
-              bulkBytesWhenEchoDone = bulkReceived
-              echoDone.resolve(Buffer.concat(parts).toString())
-            })
-            echoStream.end("hmr-ping")
-          })
-        }
       })
       bulkStream.once("end", () => bulkDone.resolve())
+
+      // 2. Push the entire 128 KiB bulk payload on the server target socket while server sends are gated.
+      // FrameWriter must stop at maxWsBufferedBytes (2 × 16 KiB frames) instead of dumping all 128 KiB.
+      for (let i = 0; i < bulkChunks; i++) bulkTarget.write(Buffer.alloc(chunkSize, i + 1))
+      bulkTarget.end()
+      await flushTurns()
+
+      const bulkQueuedBeforeEcho = pair.serverRaw.sentFrames.filter(
+        (frame) => frame.type === StreamWire.FrameType.DATA && frame.streamID === 1,
+      ).length
+      expect(bulkQueuedBeforeEcho).toBe(2)
+      expect(pair.serverRaw.bufferedAmount).toBeGreaterThanOrEqual(maxWsBufferedBytes)
+      expect(pair.serverRaw.bufferedAmount).toBeLessThan(bulkSize)
+
+      // 3. Open interactive echo stream (stream 2) while bulk is saturated at maxWsBufferedBytes.
+      // Priority control (OPENED) still enqueues immediately ahead of the remaining 6 bulk chunks.
+      let echoReady = false
+      const echoOpen = clientMux.openStream({ host: "127.0.0.1", port: 10002 }).then((stream) => {
+        echoReady = true
+        return stream
+      })
+      await flushTurns()
+      // Verify OPENED(2) was queued immediately ahead of the remaining bulk DATA frames while bulk was paused.
+      const openedEchoIndex = pair.serverRaw.sentFrames.findIndex(
+        (frame) => frame.type === StreamWire.FrameType.OPENED && frame.streamID === 2,
+      )
+      expect(openedEchoIndex).toBe(3) // [OPENED(1), DATA(1), DATA(1), OPENED(2)]
+      // Flush only until OPENED(2) is delivered to the client so echoStream opens while bulk still has chunks queued.
+      while (!echoReady && pair.flushOneServerFrame()) {
+        await flushTurns()
+      }
+      const echoStream = await echoOpen
+
+      const echoDone = Promise.withResolvers<string>()
+      const echoParts: Buffer[] = []
+      echoStream.on("data", (chunk: Buffer) => echoParts.push(chunk))
+      echoStream.once("end", () => {
+        bulkBytesWhenEchoDone = bulkReceived
+        echoDone.resolve(Buffer.concat(echoParts).toString())
+      })
+      echoStream.end("hmr-ping")
+      await flushTurns()
+
+      // 4. Deterministically pump one server frame at a time until both echo and bulk complete.
+      for (let steps = 0; steps < 200; steps++) {
+        const flushed = pair.flushOneServerFrame()
+        await flushTurns()
+        if (!flushed) {
+          if (bulkReceived === bulkSize && bulkBytesWhenEchoDone >= 0) break
+          await flushTurns()
+          if (!pair.flushOneServerFrame()) break
+        }
+      }
 
       expect(await echoDone.promise).toBe("hmr-ping")
       await bulkDone.promise
       expect(bulkReceived).toBe(bulkSize)
-      // Interactive echo finished well before the bulk download completed!
+
+      // Verify wire scheduling order and bounded bufferedAmount directly:
+      // echo DATA was transmitted ahead of the remaining bulk DATA frames, and ws.bufferedAmount stayed bounded.
+      const echoDataIndex = pair.serverRaw.sentFrames.findIndex(
+        (frame) => frame.type === StreamWire.FrameType.DATA && frame.streamID === 2,
+      )
+      const lastBulkDataIndex = pair.serverRaw.sentFrames.findLastIndex(
+        (frame) => frame.type === StreamWire.FrameType.DATA && frame.streamID === 1,
+      )
+      expect(echoDataIndex).toBeGreaterThan(0)
+      expect(lastBulkDataIndex).toBeGreaterThan(echoDataIndex)
       expect(bulkBytesWhenEchoDone).toBeGreaterThan(0)
       expect(bulkBytesWhenEchoDone).toBeLessThan(bulkSize)
+      expect(pair.serverRaw.maxBufferedAmount).toBeLessThan(bulkSize)
     } finally {
       clientMux.close()
       serverMux.close()
-      await Promise.all([
-        new Promise<void>((resolve) => bulkServer.close(() => resolve())),
-        new Promise<void>((resolve) => echoServer.close(() => resolve())),
-      ])
+      bulkTarget.destroy()
+      echoTarget.destroy()
     }
-  }, 15_000)
+  })
 
   test("destroying a client stream mid-transfer sends RESET and destroys the server target socket", async () => {
     const accepted = Promise.withResolvers<Socket>()
