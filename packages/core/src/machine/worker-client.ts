@@ -1,6 +1,6 @@
 export * as WorkerClient from "./worker-client.js"
 
-import { Cause, Deferred, Effect, Exit, Queue, Result, Sink, Stream } from "effect"
+import { Cause, Deferred, Effect, Queue, Result, Sink, Stream } from "effect"
 import { Environment } from "../environment/index.js"
 import type { Workspace } from "../workspace.js"
 import { Frames } from "./frames.js"
@@ -131,24 +131,19 @@ const toBytes = (data: unknown): Uint8Array | undefined => {
  * socket when the owning scope exits.
  */
 export const fromWebSocket = Effect.fn("WorkerClient.fromWebSocket")(function* (socket: WebSocketLike) {
+  if (socket.readyState >= 2) return yield* new Link.Closed()
   const inbound = yield* Queue.unbounded<Uint8Array, Cause.Done>()
   const opened = yield* Deferred.make<void, Link.Closed>()
   let queuedBytes = 0
 
-  const end = (code?: number) => {
-    Queue.endUnsafe(inbound)
-    Deferred.doneUnsafe(opened, Exit.fail(new Link.Closed()))
-    if (socket.readyState < 2) socket.close(code)
-  }
-
   const onOpen = () => {
-    Deferred.doneUnsafe(opened, Exit.void)
+    Deferred.doneUnsafe(opened, Effect.void)
   }
 
   const onMessage = (event: { readonly data: unknown }) => {
     const bytes = toBytes(event.data)
     if (!bytes || bytes.byteLength > MAX_FRAME || queuedBytes + bytes.byteLength > MAX_WEBSOCKET_WAITING) {
-      end(POLICY_CLOSE)
+      close(POLICY_CLOSE)
       return
     }
     queuedBytes += bytes.byteLength
@@ -156,31 +151,33 @@ export const fromWebSocket = Effect.fn("WorkerClient.fromWebSocket")(function* (
   }
 
   const onClose = () => {
-    end()
+    close()
   }
 
-  const detachAndEnd = (code?: number) => {
+  const close = (code?: number) => {
     socket.removeEventListener?.("open", onOpen)
     socket.removeEventListener?.("message", onMessage)
     socket.removeEventListener?.("error", onClose)
     socket.removeEventListener?.("close", onClose)
-    end(code)
+    Queue.endUnsafe(inbound)
+    Deferred.doneUnsafe(opened, Effect.fail(new Link.Closed()))
+    if (socket.readyState < 2) socket.close(code)
   }
 
   yield* Effect.acquireRelease(
     Effect.sync(() => {
+      if (socket.readyState >= 2) return close()
       if ("binaryType" in socket) socket.binaryType = "arraybuffer"
-      socket.addEventListener("open", onOpen)
       socket.addEventListener("message", onMessage)
       socket.addEventListener("error", onClose)
       socket.addEventListener("close", onClose)
-      if (socket.readyState === 1) Deferred.doneUnsafe(opened, Exit.void)
-      else if (socket.readyState >= 2) detachAndEnd()
+      if (socket.readyState === 1) return onOpen()
+      socket.addEventListener("open", onOpen)
     }),
-    () => Effect.sync(() => detachAndEnd(NORMAL_CLOSE)),
+    () => Effect.sync(() => close(NORMAL_CLOSE)),
   )
 
-  yield* Deferred.await(opened).pipe(Effect.onError(() => Effect.sync(() => detachAndEnd(NORMAL_CLOSE))))
+  yield* Deferred.await(opened).pipe(Effect.onError(() => Effect.sync(() => close(NORMAL_CLOSE))))
 
   return {
     describe: () => ({ kind: "websocket" }),
@@ -190,11 +187,10 @@ export const fromWebSocket = Effect.fn("WorkerClient.fromWebSocket")(function* (
         socket.send(new Uint8Array(message))
       }),
     receive: Queue.take(inbound).pipe(
-      Effect.tap((bytes) =>
-        Effect.sync(() => {
-          queuedBytes -= bytes.byteLength
-        }),
-      ),
+      Effect.map((bytes) => {
+        queuedBytes -= bytes.byteLength
+        return bytes
+      }),
       Effect.mapError(() => new Link.Closed()),
     ),
   } satisfies Link.Carrier

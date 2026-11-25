@@ -74,8 +74,8 @@ export async function createWithHost(
   }
 }
 
-export async function create(options: CreateOptions = {}, embed: EmbeddedHost.EmbedOptions = {}): Promise<Interface> {
-  return (await createWithHost(options, embed)).sdk
+export async function create(options: CreateOptions = {}): Promise<Interface> {
+  return (await createWithHost(options)).sdk
 }
 
 async function adaptPlugins(plugins: ReadonlyArray<Plugin.Plugin> | undefined) {

@@ -1,6 +1,5 @@
 export * as OpenCodeWorkerd from "./workerd"
 
-import { Effect } from "effect"
 import { WorkerdProfile } from "./internal/workerd"
 import type { LogOptions } from "./logging"
 import { PromiseSdk } from "./promise"
@@ -37,14 +36,16 @@ export type Interface = PromiseSdk.Interface & {
  * stream — served over an in-process fetch transport, so no request leaves the
  * isolate.
  */
-export const create = async ({ log, plugins, instances, ...options }: CreateOptions): Promise<Interface> => {
+export const create = async (options: CreateOptions): Promise<Interface> => {
   const profile = WorkerdProfile.make(options)
-  const { sdk, host } = await PromiseSdk.createWithHost(
-    { ...profile.options, log, plugins, instances },
+  const created = await PromiseSdk.createWithHost(
+    { ...profile.options, log: options.log, plugins: options.plugins, instances: options.instances },
     { overrides: profile.replacements },
   )
   return {
-    ...sdk,
-    alarm: () => host.runtime.runPromise(Effect.asVoid(host.workspace.suspendIdle())),
+    ...created.sdk,
+    alarm: async () => {
+      await created.host.runtime.runPromise(created.host.workspace.suspendIdle())
+    },
   }
 }

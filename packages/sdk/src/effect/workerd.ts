@@ -19,16 +19,18 @@ export type Interface = OpenCode.Interface & {
   readonly alarm: Effect.Effect<void>
 }
 
-export const create = <R = never>({
-  log,
-  plugins,
-  workspaceProviders,
-  instances,
-  ...options
-}: CreateOptions<R>): Effect.Effect<Interface, Config.ConfigError | Error, Scope.Scope | R> => {
+export const create = <R = never>(
+  options: CreateOptions<R>,
+): Effect.Effect<Interface, Config.ConfigError | Error, Scope.Scope | R> => {
   const profile = WorkerdProfile.make(options)
   return OpenCode.create(
-    { ...profile.options, log, plugins, workspaceProviders, instances },
+    {
+      ...profile.options,
+      log: options.log,
+      plugins: options.plugins,
+      workspaceProviders: options.workspaceProviders,
+      instances: options.instances,
+    },
     { overrides: profile.replacements },
   ).pipe(
     Effect.map((opencode) => ({

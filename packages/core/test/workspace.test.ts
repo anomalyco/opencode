@@ -606,6 +606,7 @@ const makeAlarmHarness = (
   options: {
     readonly keepWarm?: Workspace.Options["keepWarm"]
     readonly pollInterval?: Workspace.Options["pollInterval"]
+    readonly create?: WorkspaceDriver.Interface["create"]
     readonly connect?: WorkspaceDriver.Interface["connect"]
   } = {},
 ) => {
@@ -616,7 +617,10 @@ const makeAlarmHarness = (
   const state = { openCount: 0, closeCount: 0, failSuspend: false }
 
   const alarmDriver = WorkspaceDriver.make({
-    create: (input) => Effect.succeed({ binding: { workspaceID: input.workspaceID, generation: 0 } }),
+    create: (input) =>
+      options.create
+        ? options.create(input)
+        : Effect.succeed({ binding: { workspaceID: input.workspaceID, generation: 0 } }),
     connect: (input) =>
       Effect.acquireRelease(
         Effect.sync(() => {
@@ -830,19 +834,19 @@ bareIt.effect(
     Effect.gen(function* () {
       const keys: Uint8Array[] = []
       const seedErrors: Identity.InvalidKey[] = []
+      const checkIdentity = Effect.gen(function* () {
+        const identity = yield* Identity.Service
+        keys.push(yield* identity.publicKey().pipe(Effect.orDie))
+        seedErrors.push(yield* identity.seed().pipe(Effect.flip, Effect.orDie))
+      })
       const harness = makeAlarmHarness({
-        connect: () =>
-          Effect.gen(function* () {
-            const identity = yield* Identity.Service
-            keys.push(yield* identity.publicKey().pipe(Effect.orDie))
-            seedErrors.push(yield* identity.seed().pipe(Effect.flip, Effect.orDie))
-            return memory
-          }),
+        create: (input) => Effect.as(checkIdentity, { binding: { workspaceID: input.workspaceID } }),
+        connect: () => Effect.as(checkIdentity, memory),
       })
 
       const workspaceID = yield* harness.run((workspace) =>
         Effect.gen(function* () {
-          const id = yield* workspace.attach({ provider: "fake", binding: { host: "vm" } })
+          const id = yield* workspace.create({ provider: "fake" })
           yield* makeFiles(yield* workspace.connect(id)).mkdir("/identity-check")
           return id
         }),
@@ -853,10 +857,11 @@ bareIt.effect(
         Effect.flatMap(workspace.connect(workspaceID), (driver) => makeFiles(driver).mkdir("/identity-check-2")),
       )
 
-      expect(keys).toHaveLength(2)
+      expect(keys).toHaveLength(3)
       expect(keys[0]?.length).toBe(32)
       expect(keys[1]).toEqual(keys[0])
-      expect(seedErrors).toHaveLength(2)
-      expect(seedErrors[0]).toBeInstanceOf(Identity.InvalidKey)
+      expect(keys[2]).toEqual(keys[0])
+      expect(seedErrors).toHaveLength(3)
+      expect(seedErrors.every((err) => err instanceof Identity.InvalidKey)).toBe(true)
     }),
 )

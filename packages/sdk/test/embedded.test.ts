@@ -12,7 +12,6 @@ import { Plugin } from "@opencode/plugin/effect"
 import { makeDurableObjectStorage } from "../../core/test/fixture/durable-object-storage"
 import { AbsolutePath, Identity, Location } from "../src/effect"
 import { OpenCodeWorkerd } from "../src/effect/workerd"
-import { OpenCodeWorkerd as PromiseOpenCodeWorkerd } from "../src/workerd"
 import { Deferred, Effect, Fiber, Latch, Layer, Option, Schedule, Stream } from "effect"
 import { testEffect } from "../../core/test/lib/effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
@@ -699,20 +698,14 @@ it.live("OpenCodeWorkerd exposes alarm(), workspace.attach, and KV-backed Identi
     const memory = makeMemoryDriver()
     const seenKeys: Uint8Array[] = []
     const suspended: string[] = []
+    const recordKey = Effect.gen(function* () {
+      const identity = yield* Identity.Service
+      seenKeys.push(yield* identity.publicKey().pipe(Effect.orDie))
+    })
     const driver = WorkspaceDriver.make({
-      create: ({ workspaceID }) =>
-        Effect.gen(function* () {
-          const identity = yield* Identity.Service
-          seenKeys.push(yield* identity.publicKey().pipe(Effect.orDie))
-          return { binding: { workspaceID } }
-        }),
-      connect: () =>
-        Effect.gen(function* () {
-          const identity = yield* Identity.Service
-          seenKeys.push(yield* identity.publicKey().pipe(Effect.orDie))
-          return memory
-        }),
-      suspendForIdle: ({ workspaceID }) => Effect.sync(() => void suspended.push(workspaceID)),
+      create: (input) => Effect.as(recordKey, { binding: { workspaceID: input.workspaceID } }),
+      connect: () => Effect.as(recordKey, memory),
+      suspendForIdle: (input) => Effect.sync(() => void suspended.push(input.workspaceID)),
       destroy: () => Effect.void,
     })
 
@@ -745,13 +738,11 @@ it.live("OpenCodeWorkerd exposes alarm(), workspace.attach, and KV-backed Identi
     expect(yield* opencode.workspace.suspendIdle()).toEqual([])
     expect(suspended).toEqual([])
 
-    // Promise OpenCodeWorkerd also exposes alarm(): Promise<void>.
-    const promiseSdk = yield* Effect.acquireRelease(
-      Effect.promise(() =>
-        PromiseOpenCodeWorkerd.create({ storage: makeDurableObjectStorage(), models: { fetch: false } }),
-      ),
-      (sdk) => Effect.promise(() => sdk.close()),
-    )
-    yield* Effect.promise(() => promiseSdk.alarm())
+    // Promise OpenCodeWorkerd also exposes alarm(): Promise<void> and Symbol.asyncDispose.
+    yield* Effect.promise(async () => {
+      const { OpenCodeWorkerd } = await import("../src/workerd")
+      await using sdk = await OpenCodeWorkerd.create({ storage: makeDurableObjectStorage(), models: { fetch: false } })
+      await sdk.alarm()
+    })
   }),
 )

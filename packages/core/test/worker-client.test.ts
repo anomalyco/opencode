@@ -371,74 +371,59 @@ describe("WorkerClient.stdio", () => {
   )
 })
 
-interface MockWebSocketSide extends WorkerClient.WebSocketLike {
-  readyState: number
-  binaryType: string
-  closeCalls: number
-  lastCloseCode: number | undefined
-  link(other: MockWebSocketSide): void
-  open(): void
-  deliverRaw(data: unknown): void
-  listenerCount(): number
-}
-
 const makeMockWebSocketPair = (initialReadyState = 1) => {
-  const makeSide = (): MockWebSocketSide => {
-    let peer: MockWebSocketSide | undefined
-    const listeners = {
-      open: new Set<() => void>(),
-      message: new Set<(event: { readonly data: unknown }) => void>(),
-      error: new Set<() => void>(),
-      close: new Set<() => void>(),
+  type Listener = (event: { readonly data: unknown }) => void
+  const makeSide = () => {
+    let lastCloseCode: number | undefined
+    let onSend: (buffer: ArrayBuffer) => void = () => {}
+    let onClose: (code?: number) => void = () => {}
+    const listeners: Record<"open" | "message" | "error" | "close", Set<Listener>> = {
+      open: new Set(),
+      message: new Set(),
+      error: new Set(),
+      close: new Set(),
     }
-    const side: MockWebSocketSide = {
+    const side = {
       readyState: initialReadyState,
       binaryType: "blob",
-      closeCalls: 0,
-      lastCloseCode: undefined,
-      link(other) {
-        peer = other
+      get lastCloseCode() {
+        return lastCloseCode
+      },
+      link(peer: { readyState: number; deliverRaw(data: unknown): void; close(code?: number): void }) {
+        onSend = (buffer) => {
+          if (peer.readyState === 1) peer.deliverRaw(buffer)
+        }
+        onClose = (code) => {
+          if (peer.readyState < 2) peer.close(code)
+        }
       },
       open() {
         if (side.readyState !== 0) return
         side.readyState = 1
-        for (const fn of [...listeners.open]) fn()
+        Array.from(listeners.open, (fn) => fn({ data: undefined }))
       },
       deliverRaw(data: unknown) {
-        for (const fn of [...listeners.message]) fn({ data })
+        Array.from(listeners.message, (fn) => fn({ data }))
       },
-      send(data: ArrayBufferLike | ArrayBufferView) {
-        if (side.readyState !== 1 || !peer || peer.readyState !== 1) return
-        const bytes = ArrayBuffer.isView(data)
-          ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength).slice()
-          : new Uint8Array(data).slice()
-        peer.deliverRaw(bytes.buffer)
+      send(data: Uint8Array<ArrayBuffer>) {
+        if (side.readyState === 1) onSend(data.slice().buffer)
       },
       close(code?: number) {
         // Mirror the WHATWG WebSocket API (Node 22+ throws InvalidAccessError for codes outside 1000 and 3000–4999).
         if (code !== undefined && code !== 1000 && (code < 3000 || code > 4999)) {
           throw new RangeError(`Invalid WebSocket close code: ${code}`)
         }
-        side.closeCalls++
-        side.lastCloseCode = code
+        lastCloseCode = code
         if (side.readyState >= 2) return
         side.readyState = 3
-        for (const fn of [...listeners.close]) fn()
-        if (peer && peer.readyState < 2) peer.close(code)
+        Array.from(listeners.close, (fn) => fn({ data: undefined }))
+        onClose(code)
       },
-      addEventListener(type: "open" | "close" | "error" | "message", fn: (...args: never[]) => void) {
-        if (type === "message") {
-          listeners.message.add(fn as (event: { readonly data: unknown }) => void)
-          return
-        }
-        listeners[type].add(fn as () => void)
+      addEventListener(type: "open" | "close" | "error" | "message", fn: Listener) {
+        listeners[type].add(fn)
       },
-      removeEventListener(type: "open" | "close" | "error" | "message", fn: (...args: never[]) => void) {
-        if (type === "message") {
-          listeners.message.delete(fn as (event: { readonly data: unknown }) => void)
-          return
-        }
-        listeners[type].delete(fn as () => void)
+      removeEventListener(type: "open" | "close" | "error" | "message", fn: Listener) {
+        listeners[type].delete(fn)
       },
       listenerCount() {
         return Object.values(listeners).reduce((sum, set) => sum + set.size, 0)
@@ -504,6 +489,7 @@ describe("WorkerClient.fromWebSocket", () => {
     Effect.gen(function* () {
       const closed = makeMockWebSocketPair(3)
       expect(yield* WorkerClient.fromWebSocket(closed.a).pipe(Effect.flip)).toEqual(new Link.Closed())
+      expect(closed.a.listenerCount()).toBe(0)
 
       const connecting = makeMockWebSocketPair(0)
       const fiber = yield* Effect.forkChild(WorkerClient.fromWebSocket(connecting.a), { startImmediately: true })
@@ -513,13 +499,15 @@ describe("WorkerClient.fromWebSocket", () => {
       connecting.a.deliverRaw("not-binary")
       expect(yield* carrier.receive.pipe(Effect.flip)).toEqual(new Link.Closed())
       expect(connecting.a.lastCloseCode).toBe(4008)
+      expect(connecting.a.listenerCount()).toBe(0)
 
-      // Oversized frames (>65535B) close with WHATWG-valid policy code 4008.
+      // Oversized frames (>65535B) close with WHATWG-valid policy code 4008 and immediately detach listeners.
       const over = makeMockWebSocketPair(1)
       const overCarrier = yield* WorkerClient.fromWebSocket(over.a)
       over.a.deliverRaw(new Uint8Array(65_536))
       expect(yield* overCarrier.receive.pipe(Effect.flip)).toEqual(new Link.Closed())
       expect(over.a.lastCloseCode).toBe(4008)
+      expect(over.a.listenerCount()).toBe(0)
 
       // Closing while still CONNECTING fails with Link.Closed and immediately detaches listeners.
       const dying = makeMockWebSocketPair(0)
