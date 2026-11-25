@@ -117,6 +117,28 @@ test("measures a marker-era turn from its first prompt across steers", () => {
   expect(SessionTurn.tokensPerSecond(messages, final, { index: 6, legacy: true })).toBe(20)
 })
 
+test.each([false, true])("excludes pre-fork wait from new replies (legacy: %s)", (legacy) => {
+  const old = step("old-reply", { created: 2_000, completed: 3_000 })
+  const forkCreatedAt = 100_000
+  const final = step("new-reply", { created: 120_000, completed: 125_000 })
+  const history: Message[] = [
+    input("old-prompt", 1_000),
+    old,
+    ...(legacy ? [] : [{ type: "idle", id: "idle", time: { created: 3_500 } }]),
+    input("dangling-prompt", 4_000),
+  ]
+  const options = { legacy, forkCreatedAt }
+
+  // A new prompt in a fork starts its own turn even if an inherited prompt had no idle marker.
+  const newPrompt = input("new-prompt", 119_000)
+  expect(SessionTurn.duration([...history, newPrompt, final], final, options)).toBe(6_000)
+  // A reply to the inherited prompt counts only from the fork boundary.
+  expect(SessionTurn.duration([...history, final], final, options)).toBe(25_000)
+  // The copied footer keeps its original duration, and normal sessions keep existing semantics.
+  expect(SessionTurn.duration([...history, final], old, options)).toBe(2_000)
+  expect(SessionTurn.duration([...history, final], final, { legacy })).toBe(121_000)
+})
+
 function input(id: string, created: number): Message {
   return { type: "user", id, time: { created } }
 }
