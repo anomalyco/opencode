@@ -394,17 +394,17 @@ export function fromPromise(plugin: Plugin) {
                 register(
                   host.experimental.artifact.transform((editor) => {
                     callback({
-                      add: (definition) =>
+                      add: (definition) => {
+                        const read = definition.read
                         editor.add({
-                          id: definition.id,
-                          name: definition.name,
-                          capabilities: definition.capabilities,
-                          prompt: definition.prompt,
+                          ...definition,
+                          destination: (target) => attempt((signal) => definition.destination(target, { signal })),
                           create: (input) => attempt((signal) => definition.create(input, { signal })),
-                          read: (id) => attempt((signal) => definition.read(id, { signal })),
+                          read: read && ((id, receipt) => attempt((signal) => read(id, receipt, { signal }))),
                           update: (id, input) => attempt((signal) => definition.update(id, input, { signal })),
-                          delete: (id) => attempt((signal) => definition.delete(id, { signal })),
-                        }),
+                          delete: (id, receipt) => attempt((signal) => definition.delete(id, receipt, { signal })),
+                        })
+                      },
                       remove: editor.remove,
                       default: editor.default,
                     })

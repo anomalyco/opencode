@@ -47,6 +47,10 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           \`title\` text NOT NULL,
           \`entry\` text NOT NULL,
           \`url\` text NOT NULL,
+          \`visibility\` text,
+          \`destination\` text,
+          \`manifest\` text DEFAULT '{"spa":false,"bindings":[],"crons":[]}' NOT NULL,
+          \`receipt\` text,
           \`time_created\` integer NOT NULL,
           \`time_updated\` integer NOT NULL
         );

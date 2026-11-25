@@ -44,9 +44,14 @@ export default {
         id: "s3",
         name: "S3 Static",
         capabilities: ["static"],
+        audiences: ["public"],
+        defaultAudience: "public",
         prompt: "Artifacts go to a static S3 bucket.",
+        async destination() {
+          return "s3:bucket"
+        },
         async create(input) {
-          store.set(input.id, Object.fromEntries(Object.entries(input.files).map(([k, v]) => [k, decoder.decode(v)])))
+          store.set(input.id, Object.fromEntries(Object.entries(input.assets).map(([k, v]) => [k, decoder.decode(v.bytes)])))
           return { url: "https://artifacts.example.test/" + input.id + "/" }
         },
         async read(id) {
@@ -54,7 +59,7 @@ export default {
           return Object.fromEntries(Object.entries(item).map(([k, v]) => [k, encoder.encode(v)]))
         },
         async update(id, input) {
-          store.set(id, Object.fromEntries(Object.entries(input.files).map(([k, v]) => [k, decoder.decode(v)])))
+          store.set(id, Object.fromEntries(Object.entries(input.assets).map(([k, v]) => [k, decoder.decode(v.bytes)])))
           return { url: "https://artifacts.example.test/" + id + "/" }
         },
         async delete(id) {
@@ -101,8 +106,8 @@ export default {
       // Providers list includes built-in local (default) and plugin-registered s3
       const providers = await api.experimental.artifacts.providers({ location: { directory: enabled } })
       expect(providers.data).toEqual([
-        { id: "local", name: "Local", capabilities: ["static"], default: true },
-        { id: "s3", name: "S3 Static", capabilities: ["static"], default: false },
+        { id: "local", name: "Local", capabilities: ["static"], audiences: ["local"], defaultAudience: "local", default: true },
+        { id: "s3", name: "S3 Static", capabilities: ["static"], audiences: ["public"], defaultAudience: "public", default: false },
       ])
 
       const session = await api.session.create({ location: { directory: enabled } })

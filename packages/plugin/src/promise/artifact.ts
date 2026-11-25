@@ -1,45 +1,28 @@
 import type { Artifact } from "@opencode/schema/artifact"
-import type { Session } from "@opencode/schema/session"
+import type { Schema } from "effect"
+import type { ArtifactPublished, ArtifactPublishInput, ArtifactTarget } from "../effect/artifact.js"
 import type { Transform } from "./registration.js"
 
-export interface ArtifactProviderCreateInput {
-  readonly id: Artifact.ID
-  readonly title: string
-  readonly entry: string
-  readonly files: Readonly<Record<string, Uint8Array>>
-  readonly sessionID?: Session.ID
-}
+export type { ArtifactFile, ArtifactPublished, ArtifactPublishInput, ArtifactTarget } from "../effect/artifact.js"
 
-export interface ArtifactProviderUpdateInput {
-  readonly title: string
-  readonly entry: string
-  readonly files: Readonly<Record<string, Uint8Array>>
-  readonly sessionID?: Session.ID
-}
-
-export interface ArtifactProviderResult {
-  readonly url?: string
-}
+type Signal = { readonly signal: AbortSignal }
 
 export interface ArtifactProviderDefinition {
   readonly id: string
   readonly name: string
   readonly capabilities: readonly Artifact.Capability[]
+  readonly audiences: readonly Artifact.Visibility[]
+  readonly defaultAudience: Artifact.Visibility
   readonly prompt: string
-  readonly create: (
-    input: ArtifactProviderCreateInput,
-    context: { readonly signal: AbortSignal },
-  ) => Promise<ArtifactProviderResult>
-  readonly read: (
+  readonly destination: (target: ArtifactTarget, context: Signal) => Promise<string>
+  readonly create: (input: ArtifactPublishInput, context: Signal) => Promise<ArtifactPublished>
+  readonly update: (id: Artifact.ID, input: ArtifactPublishInput, context: Signal) => Promise<ArtifactPublished>
+  readonly read?: (
     id: Artifact.ID,
-    context: { readonly signal: AbortSignal },
+    receipt: Schema.Json | undefined,
+    context: Signal,
   ) => Promise<Readonly<Record<string, Uint8Array>>>
-  readonly update: (
-    id: Artifact.ID,
-    input: ArtifactProviderUpdateInput,
-    context: { readonly signal: AbortSignal },
-  ) => Promise<ArtifactProviderResult>
-  readonly delete: (id: Artifact.ID, context: { readonly signal: AbortSignal }) => Promise<void>
+  readonly delete: (id: Artifact.ID, receipt: Schema.Json | undefined, context: Signal) => Promise<void>
 }
 
 export interface ArtifactEditor {

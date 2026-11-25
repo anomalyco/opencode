@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "dae43762-b5fd-4902-a9da-1ef64c7909d2",
-  "prevIds": ["6fdb1fc8-74cd-4f15-8faa-e109d3030da9"],
+  "id": "c8936297-41d1-49e5-ac46-fcf972eeb2ee",
+  "prevIds": ["dae43762-b5fd-4902-a9da-1ef64c7909d2"],
   "ddl": [
     {
       "name": "account_state",
@@ -371,6 +371,46 @@
       "default": null,
       "generated": null,
       "name": "url",
+      "entityType": "columns",
+      "table": "artifact"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "visibility",
+      "entityType": "columns",
+      "table": "artifact"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "destination",
+      "entityType": "columns",
+      "table": "artifact"
+    },
+    {
+      "type": "text",
+      "notNull": true,
+      "autoincrement": false,
+      "default": "'{\"spa\":false,\"bindings\":[],\"crons\":[]}'",
+      "generated": null,
+      "name": "manifest",
+      "entityType": "columns",
+      "table": "artifact"
+    },
+    {
+      "type": "text",
+      "notNull": false,
+      "autoincrement": false,
+      "default": null,
+      "generated": null,
+      "name": "receipt",
       "entityType": "columns",
       "table": "artifact"
     },

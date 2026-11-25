@@ -2508,6 +2508,7 @@ export type ExperimentalArtifactsCreateInput = {
   readonly files: { readonly [x: string]: string }
   readonly entry?: string | undefined
   readonly provider?: Artifact.ProviderID | undefined
+  readonly visibility?: Artifact.Visibility | undefined
   readonly sessionID?: Session.ID | undefined
 }
 export type ExperimentalArtifactsCreateOutput = { readonly location: Location.PublicRef; readonly data: Artifact.Info }

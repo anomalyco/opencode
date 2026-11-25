@@ -19,6 +19,17 @@ export function isUniversalPattern(pattern: string): boolean {
   return /^\*+(?: \*)?$/.test(pattern)
 }
 
+/**
+ * Actions only an allow rule naming them grants, such as one saved by "Allow always". A blanket allow, like
+ * `"permission": "allow"`, asks for them instead; a deny or ask by any pattern still applies.
+ */
+export const explicitActions = ["artifact_publish"]
+
+function matchesAction(rule: Permission.Rule, action: string) {
+  if (rule.effect === "allow" && rule.action !== action && explicitActions.includes(action)) return false
+  return Wildcard.match(action, rule.action)
+}
+
 export interface Deny {
   readonly action: string
   readonly resource: string
@@ -73,9 +84,7 @@ export function fallback(base: Policy, secondary: Policy): Policy {
 
 function matchLast(rules: Permission.Ruleset, action: string, resource: string): Permission.Rule | undefined {
   const ignoreCase = ignoresCase(action)
-  return rules.findLast(
-    (rule) => Wildcard.match(action, rule.action) && Wildcard.match(resource, rule.resource, ignoreCase),
-  )
+  return rules.findLast((rule) => matchesAction(rule, action) && Wildcard.match(resource, rule.resource, ignoreCase))
 }
 
 function evaluateRule(policy: Policy, action: string, resource: string): Permission.Rule | undefined {
@@ -119,7 +128,7 @@ function foldReachable(
 ): Set<Permission.Effect> {
   const reachable = new Set<Permission.Effect>(initial)
   for (const rule of rules) {
-    if (!Wildcard.match(action, rule.action)) continue
+    if (!matchesAction(rule, action)) continue
     if (isUniversalPattern(rule.resource)) {
       reachable.clear()
       reachable.add(rule.effect)
@@ -181,9 +190,9 @@ export function hasDeny(policy: Policy, action: string): boolean {
 export function relevant(policy: Policy, action: string): Permission.Ruleset {
   switch (policy._tag) {
     case "rules":
-      return policy.rules.filter((rule) => Wildcard.match(action, rule.action))
+      return policy.rules.filter((rule) => matchesAction(rule, action))
     case "override":
-      return [...relevant(policy.base, action), ...policy.next.filter((rule) => Wildcard.match(action, rule.action))]
+      return [...relevant(policy.base, action), ...policy.next.filter((rule) => matchesAction(rule, action))]
     case "restrict":
       return [
         ...relevant(policy.base, action),
@@ -204,7 +213,7 @@ export function relevant(policy: Policy, action: string): Permission.Ruleset {
 function liveScoped(initial: Permission.Ruleset, rules: Permission.Ruleset, action: string): Permission.Ruleset {
   return rules.reduce<Permission.Rule[]>(
     (acc, rule) => {
-      if (!Wildcard.match(action, rule.action)) return acc
+      if (!matchesAction(rule, action)) return acc
       if (isUniversalPattern(rule.resource)) return []
       acc.push(rule)
       return acc
