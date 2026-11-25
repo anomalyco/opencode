@@ -18,7 +18,7 @@ import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Job } from "@opencode/core/job"
 import { Location } from "@opencode/core/location"
 import { Machine } from "@opencode/core/machine/index"
-import { MachinePath } from "@opencode/core/machine/path"
+import { EnvironmentPath } from "@opencode/core/environment/path"
 import { Machines } from "@opencode/core/machine/machines"
 import { Permission } from "@opencode/core/permission"
 import { PersistentPty } from "@opencode/core/persistent-pty"
@@ -258,21 +258,21 @@ on.live("reads, writes and runs commands on a paired machine without requesting 
   ),
 )
 
-describe("MachinePath", () => {
-  const machinePaths: ReadonlyArray<readonly [string, { machine: string; path: string } | undefined]> = [
-    ["gpu:/work/train.py", { machine: "gpu", path: "/work/train.py" }],
-    ["gpu:/work/../a", { machine: "gpu", path: "/work/../a" }],
-    ["gpu-2:/x", { machine: "gpu-2", path: "/x" }],
-    ["gpu:/a//b", { machine: "gpu", path: "/a//b" }],
-    ["gpu:/", { machine: "gpu", path: "/" }],
-    ["gpu:~/notes", { machine: "gpu", path: "~/notes" }],
-    ["gpu:~", { machine: "gpu", path: "~" }],
+describe("EnvironmentPath", () => {
+  const environmentPaths: ReadonlyArray<readonly [string, { environment: string; path: string } | undefined]> = [
+    ["gpu:/work/train.py", { environment: "gpu", path: "/work/train.py" }],
+    ["gpu:/work/../a", { environment: "gpu", path: "/work/../a" }],
+    ["gpu-2:/x", { environment: "gpu-2", path: "/x" }],
+    ["gpu:/a//b", { environment: "gpu", path: "/a//b" }],
+    ["gpu:/", { environment: "gpu", path: "/" }],
+    ["gpu:~/notes", { environment: "gpu", path: "~/notes" }],
+    ["gpu:~", { environment: "gpu", path: "~" }],
+    ["local:/x", { environment: "local", path: "/x" }],
     ["C:/Users/x", undefined],
     ["C:\\x", undefined],
     ["skill://thing", undefined],
     ["file:///x", undefined],
     ["https://host/x", undefined],
-    ["local:/x", undefined],
     ["gpu:relative", undefined],
     ["gpu:", undefined],
     ["/plain/path", undefined],
@@ -282,11 +282,11 @@ describe("MachinePath", () => {
     ["todo:list.txt", undefined],
   ]
 
-  const plain = (parsed: ReturnType<typeof MachinePath.parse>) =>
-    parsed && { machine: `${parsed.machine}`, path: `${parsed.path}` }
+  const plain = (parsed: ReturnType<typeof EnvironmentPath.parse>) =>
+    parsed && { environment: `${parsed.environment}`, path: `${parsed.path}` }
 
-  for (const [input, expected] of machinePaths)
-    test(`parse ${JSON.stringify(input)}`, () => expect(plain(MachinePath.parse(input))).toEqual(expected))
+  for (const [input, expected] of environmentPaths)
+    test(`parse ${JSON.stringify(input)}`, () => expect(plain(EnvironmentPath.parse(input))).toEqual(expected))
 })
 
 off.effect("resolves a machine-shaped path exactly as a local path with the flag off", () =>
@@ -327,7 +327,7 @@ off.effect("refuses a home on a base in another environment with the flag off, a
         expect(
           (yield* access.locate(text, { absolute: AbsolutePath.make("/work"), environment: { id } }).pipe(Effect.flip))
             .cause,
-        ).toBeInstanceOf(MachinePath.NotAbsolute)
+        ).toBeInstanceOf(EnvironmentPath.NotAbsolute)
     }).pipe(Effect.provide(graph(tools)))
   }),
 )
@@ -342,8 +342,8 @@ on.effect("locates a machine path from its text, rejecting another user's home t
       expect(place.environment.id).toBe(Environment.ID.make("gpu"))
 
       for (const refused of ["gpu:~other/notes", "gpu:~+", "gpu:~+/notes", "gpu:~~"])
-        expect((yield* access.locate(refused).pipe(Effect.flip)).cause).toBeInstanceOf(MachinePath.NotAbsolute)
-      // A home is asked of the machine list, which knows no gpu here.
+        expect((yield* access.locate(refused).pipe(Effect.flip)).cause).toBeInstanceOf(EnvironmentPath.NotAbsolute)
+      // A home is asked of the target environment, which knows no gpu here.
       expect((yield* access.locate("gpu:~/notes").pipe(Effect.flip)).cause).toBeInstanceOf(Machines.NotFound)
 
       // Only `name:/` and `name:~` are read as a machine: a relative rest stays this server's own path.

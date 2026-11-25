@@ -49,7 +49,7 @@ export function createLocalProviderPlugin<Discovered>(input: {
         const http = HttpClient.filterStatusOk(yield* HttpClient.HttpClient)
         const config = yield* Config.Service
         const environment = yield* Effect.serviceOption(Environment.Service)
-        const remote = Option.isSome(environment) && !environment.value.hostsServer
+        const remote = Option.isSome(environment) && !environment.value.local
         const defaultOrigin = origin ?? (photonWasm === "" || remote ? undefined : input.origin)
         const source = { current: configured(yield* config.entries(), input.providerID, defaultOrigin, suffix) }
         const loaded = { models: [] as readonly Discovered[], connected: false, hash: "[]", failing: false }
