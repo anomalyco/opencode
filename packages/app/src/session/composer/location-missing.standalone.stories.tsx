@@ -14,12 +14,29 @@ import { ToastRegion } from "@/shell/notifications/toast"
 import { SessionLocationMissing } from "./location-missing"
 import { RecoverySession, RestoredComposer } from "./recovery-story"
 
-const worktrees: WorktreeDirectory[] = ["timeline", "review", "settings"].map((name) => ({
-  directory: `${STORY_DIRECTORY}-${name}`,
-  strategy: "git",
-}))
+const worktree = (name: string): WorktreeDirectory => ({ directory: `${STORY_DIRECTORY}-${name}`, strategy: "git" })
 
-type Args = { directory: string; git: boolean; worktrees: "available" | "none"; failFirstMove: boolean }
+// Ten or more other worktrees add a search field to the list.
+const worktrees = {
+  available: ["timeline", "review", "settings"].map(worktree),
+  many: [
+    "timeline",
+    "review",
+    "settings",
+    "sidebar",
+    "terminal",
+    "composer",
+    "palette",
+    "markdown",
+    "history",
+    "search",
+    "theme",
+    "tooltip",
+  ].map(worktree),
+  none: [],
+}
+
+type Args = { directory: string; git: boolean; worktrees: keyof typeof worktrees; failFirstMove: boolean }
 
 function RecoveryStory(props: Args) {
   const session: SessionInfo = {
@@ -47,7 +64,7 @@ function RecoveryStory(props: Args) {
     if (path === "/api/worktree" && request.method === "POST")
       return Response.json({ directory: `${STORY_DIRECTORY}-new` })
 
-    if (path === "/api/worktree") return Response.json(props.worktrees === "available" ? worktrees : [])
+    if (path === "/api/worktree") return Response.json(worktrees[props.worktrees])
 
     if (path === `/api/session/${session.id}/move`) {
       if (props.failFirstMove && !failed) {
@@ -129,7 +146,7 @@ export default {
   title: "OpenCode/Session/Missing location",
   id: "session-missing-location",
   args: { directory: `${STORY_DIRECTORY}-old`, git: true, worktrees: "available", failFirstMove: false } satisfies Args,
-  argTypes: { worktrees: { options: ["available", "none"] } },
+  argTypes: { worktrees: { options: ["available", "many", "none"] } },
   render: (args: Args) => <Replay {...args} />,
 }
 
@@ -138,5 +155,7 @@ export const MissingWorktree = {}
 export const DirectoryOnly = { args: { git: false } }
 
 export const NoWorktrees = { args: { worktrees: "none" } }
+
+export const ManyWorktrees = { args: { worktrees: "many" } }
 
 export const RetryMove = { args: { failFirstMove: true } }

@@ -6,6 +6,7 @@ import { Effect, Option } from "effect"
 import { Location } from "../location.js"
 import { Permission } from "../permission.js"
 import { CodeModeApi } from "./api.js"
+import { CodeModeBun } from "./bun.js"
 import { CodeModeExecution } from "./execution.js"
 
 const TIMEOUT_MS = 30_000
@@ -13,11 +14,24 @@ const TIMEOUT_MS = 30_000
 type Init = {
   readonly method?: string
   readonly headers?: Record<string, string> | Array<[string, string]>
-  readonly body?: string | Uint8Array<ArrayBuffer> | URLSearchParams
+  readonly body?: string | Uint8Array<ArrayBuffer> | URLSearchParams | Blob
 }
 
-const fetch = (input: string | URL, init: Init = {}) =>
+const fetch = (input: string | URL, given: Init = {}) =>
   Effect.gen(function* () {
+    // A BunFile reaches here as a plain copy, which `globalThis.fetch` would send as "[object Object]", as it would any
+    // other object, such as a response or its stream.
+    const init: Init = { ...given, body: yield* CodeModeBun.body(given.body) }
+    if (
+      typeof init.body === "object" &&
+      init.body !== null &&
+      !(init.body instanceof Uint8Array) &&
+      !(init.body instanceof URLSearchParams) &&
+      !(init.body instanceof Blob)
+    )
+      return yield* Effect.fail(
+        new TypeError("A fetch body must be a string, a Uint8Array, URLSearchParams, or a file from Bun.file()."),
+      )
     // Rules match the URL as written. The fragment is never sent, and would keep a rule for the exact URL from
     // matching.
     const url = String(input).split("#")[0]
@@ -36,7 +50,7 @@ const fetch = (input: string | URL, init: Init = {}) =>
       .assert({
         action: "webfetch",
         resources: [url],
-        save: ["*"],
+        save: Permission.site(url),
         metadata: display([input, init]),
         sessionID: execution.sessionID,
         agent: execution.agent,
@@ -87,13 +101,32 @@ const fetch = (input: string | URL, init: Init = {}) =>
 export const MAX_REDIRECTS = 20
 const redirectStatuses = new Set([301, 302, 303, 307, 308])
 
-// No permission check and no timeout: the request runs in this process and ends with the execute call.
+// No timeout: the request runs in this process and ends with the execute call.
 const fetchOpencode = (url: string, init: Init) =>
   Effect.gen(function* () {
     const execution = yield* CodeModeExecution.Service
+    const permission = yield* Permission.Service
     const path = yield* CodeModeApi.path(url, execution.sessionID)
     const api = Option.getOrElse(yield* Effect.serviceOption(CodeModeApi.Service), () => CodeModeApi.unavailable)
     const method = (init.method ?? "GET").toUpperCase()
+    const source = { type: "tool" as const, messageID: execution.messageID, id: execution.id }
+    // The call is checked as the `opencode api` command that would make it, so shell rules for that command cover it
+    // too, and saving approval saves what the shell tool saves for it.
+    yield* permission
+      .assert({
+        action: "shell",
+        resources: [`opencode api ${method.toLowerCase()} ${path}`],
+        save: ["opencode *"],
+        metadata: display([url, init]),
+        sessionID: execution.sessionID,
+        agent: execution.agent,
+        source,
+      })
+      .pipe(
+        Effect.catchTag("Permission.CorrectedError", (error) =>
+          Effect.fail(new Error(`The user rejected fetching ${url}: ${error.feedback}`)),
+        ),
+      )
     const headers = new Headers(init.headers)
     // Without a directory the server would answer for its own default Location, not the session's.
     const location = yield* Effect.serviceOption(Location.Service)

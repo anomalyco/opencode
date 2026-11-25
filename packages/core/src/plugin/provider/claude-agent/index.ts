@@ -23,7 +23,7 @@ export const make = (io: ClaudeIO.Interface, registry = ClaudeSessions.registry(
     effect: Effect.fn("ClaudeAgent.Plugin")(function* (ctx) {
       // Claude Agent runs the local `claude` binary, so skip it where opencode cannot start local processes.
       const environment = yield* Effect.serviceOption(Environment.Service)
-      const remote = Option.isSome(environment) && !environment.value.hostsServer
+      const remote = Option.isSome(environment) && !environment.value.local
       if (remote) return
 
       const status = yield* ClaudeStatus.make(

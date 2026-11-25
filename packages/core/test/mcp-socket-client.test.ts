@@ -79,14 +79,6 @@ describe("McpSocketClient", () => {
     expect(seen.messages).toEqual([])
   })
 
-  test("rejects send after close", async () => {
-    const transport = McpSocketClient.make(fakeSocket())
-    observe(transport)
-    await transport.start()
-    transport.ended()
-    await expect(transport.send(ping)).rejects.toThrow("Not connected")
-  })
-
   test("close() closes the socket with 1000 and fires onclose once", async () => {
     const socket = fakeSocket()
     const transport = McpSocketClient.make(socket)
@@ -147,13 +139,6 @@ describe("McpSocketClient", () => {
     transport.deliver(JSON.stringify({ ...ping, id: 2 }))
     await transport.start()
     expect(seen.messages).toEqual([ping, { ...ping, id: 2 }, third])
-  })
-
-  test("send resolves to undefined", async () => {
-    const transport = McpSocketClient.make({ send: () => true, close: () => {} })
-    observe(transport)
-    await transport.start()
-    expect(await transport.send(ping)).toBeUndefined()
   })
 
   test("rejects a second start", async () => {

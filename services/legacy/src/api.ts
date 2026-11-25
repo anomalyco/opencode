@@ -48,10 +48,25 @@ export default new Hono<{ Bindings: Env }>()
       })
       const appAuth = await auth({ type: "app" })
       const octokit = new Octokit({ auth: appAuth.token })
-      const { data: installation } = await octokit.apps.getRepoInstallation({
-        owner: repository.owner,
-        repo: repository.repo,
-      })
+      const installation = await octokit.apps
+        .getRepoInstallation({
+          owner: repository.owner,
+          repo: repository.repo,
+        })
+        .then((response) => response.data)
+        .catch((error: { status?: number }) => {
+          if (error.status === 404) return undefined
+          throw error
+        })
+      if (!installation) {
+        console.warn(`GitHub App is not installed on ${repository.owner}/${repository.repo}`)
+        return c.json(
+          {
+            error: `The OpenCode GitHub App is not installed on ${repository.owner}/${repository.repo}. Install it at https://github.com/apps/opencode-agent`,
+          },
+          { status: 404 },
+        )
+      }
       const installationAuth = await auth({
         type: "installation",
         installationId: installation.id,

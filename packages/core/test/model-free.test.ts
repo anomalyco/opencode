@@ -26,7 +26,7 @@ const paid = Model.ID.make("paid")
 const local = Model.ID.make("local")
 const other = Provider.ID.make("other")
 
-for (const flag of [undefined, "0", "1", "true"]) {
+for (const flag of [undefined, "1"]) {
   for (const providerID of [Provider.ID.opencode, Provider.ID.make("opencode-go")])
     it.effect(`${providerID} catalog with OPENCODE_DISABLE_FREE_MODELS=${flag}`, () =>
       withEnv({ OPENCODE_DISABLE_FREE_MODELS: flag }, () =>

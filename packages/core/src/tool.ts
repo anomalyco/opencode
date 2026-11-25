@@ -15,6 +15,7 @@ import { CodeModeTool } from "./codemode/tool.js"
 import { Flag } from "./flag.js"
 import { Image } from "./image.js"
 import { Permission } from "./permission.js"
+import { PermissionPolicy } from "./permission/policy.js"
 import { PluginHooks } from "./plugin/hooks.js"
 import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
@@ -78,7 +79,7 @@ export interface SnapshotOptions {
 export interface Interface extends State.Transformable<Editor> {
   readonly list: () => Effect.Effect<ReadonlyArray<RegisteredTool>>
   readonly codeModeTools: (paths: ReadonlyArray<string>) => Effect.Effect<ReadonlyMap<string, RegisteredTool>>
-  readonly snapshot: (permissions?: Permission.Ruleset, options?: SnapshotOptions) => Effect.Effect<Snapshot>
+  readonly snapshot: (policy?: PermissionPolicy.Policy, options?: SnapshotOptions) => Effect.Effect<Snapshot>
   /**
    * Runs a Code Mode program with no model step over only the Code Mode tools named in `tools` (still subject to
    * whole-tool permission filtering and each tool's own executor policy).
@@ -90,7 +91,7 @@ export interface CheckInput {
   readonly code: string
   readonly tools: ReadonlyArray<string>
   readonly bindings: Readonly<Record<string, CodeMode.DataValue>>
-  readonly permissions: Permission.Ruleset
+  readonly policy: PermissionPolicy.Policy
   readonly limits: CodeMode.ExecutionLimits
   readonly services?: Context.Context<CodeModeTool.Services>
   readonly context: Omit<Tool.Context, "id">
@@ -306,11 +307,11 @@ const layer = Layer.effect(
       reload: state.reload,
       list: () => Effect.sync(() => Array.from(state.get().tools.values())),
       codeModeTools: (paths) => Effect.sync(() => new Map(codeModeTools(state.get().tools, paths))),
-      snapshot: Effect.fn("Tool.snapshot")((permissions, options) =>
+      snapshot: Effect.fn("Tool.snapshot")((input, options) =>
         Effect.gen(function* () {
-          const rules = permissions ?? []
+          const policy = input ?? PermissionPolicy.empty
           // Without Code Mode its tools would be unreachable, so expose them as direct tools instead.
-          const codeModeEnabled = codeModeAvailable(rules)
+          const codeModeEnabled = codeModeAvailable(policy)
           const full = codeModeEnabled && options?.services !== undefined && (yield* flags.enabled("full_codemode"))
           const data = state.get()
           if (catalogData !== data) {
@@ -323,7 +324,7 @@ const layer = Layer.effect(
           const codemodeEntries: Array<[string, Tool.Info]> = []
           for (const [name, tool] of data.tools) {
             if (hidden?.has(name)) continue
-            if (Permission.isActionDenied(tool.options?.permission ?? name, rules)) continue
+            if (PermissionPolicy.isActionDenied(policy, tool.options?.permission ?? name)) continue
             if (codeModeEnabled && defaultCodeMode(tool) && !keepDirect?.has(name)) {
               codemodeEntries.push([name, tool])
               continue
@@ -345,6 +346,7 @@ const layer = Layer.effect(
                 const inventory = cached?.inventory ?? {
                   tools: new Map(codemodeEntries),
                   namespaces: data.namespaces,
+                  definitions: data.definitions,
                 }
                 const tool = CodeModeTool.create(
                   inventory,
@@ -422,7 +424,7 @@ const layer = Layer.effect(
         }),
       ),
       check: Effect.fn("Tool.check")(function* (input) {
-        if (Permission.isActionDenied("execute", input.permissions)) {
+        if (PermissionPolicy.isActionDenied(input.policy, "execute")) {
           return {
             ok: false,
             error: { kind: "ExecutionFailure", message: "Code Mode is disabled for this agent" },
@@ -432,13 +434,13 @@ const layer = Layer.effect(
         const data = state.get()
         const tools = new Map(
           codeModeTools(data.tools, input.tools)
-            .filter(([, tool]) => !Permission.isActionDenied(tool.options?.permission ?? tool.id, input.permissions))
+            .filter(([, tool]) => !PermissionPolicy.isActionDenied(input.policy, tool.options?.permission ?? tool.id))
             .map(([, tool]) => [tool.id, tool] as const),
         )
         const callSeq = yield* Ref.make(0)
         const full = input.services !== undefined && (yield* flags.enabled("full_codemode"))
         return yield* CodeModeTool.check(
-          { tools, namespaces: data.namespaces },
+          { tools, namespaces: data.namespaces, definitions: data.definitions },
           {
             ...input,
             context: { ...input.context, id: Tool.CallID.make(`call_${input.context.messageID}_execute`) },
@@ -496,8 +498,9 @@ function* codeModeTools(registered: Data["tools"], paths: ReadonlyArray<string>)
   }
 }
 
-/** Whether the rules leave Code Mode's `execute` reachable, as `snapshot` decides it. */
-export const codeModeAvailable = (rules: Permission.Ruleset) => !Permission.isActionDenied("execute", rules)
+/** Whether the policy leaves Code Mode's `execute` reachable, as `snapshot` decides it. */
+export const codeModeAvailable = (policy: PermissionPolicy.Policy) =>
+  !PermissionPolicy.isActionDenied(policy, "execute")
 
 const CATALOG_CACHE_LIMIT = 5
 

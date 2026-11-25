@@ -6,6 +6,7 @@ import { eq } from "drizzle-orm"
 import { Context, Effect, Layer, Option, Result, Schema } from "effect"
 import { join } from "path"
 import { Database } from "../database/database.js"
+import { Environments } from "../environment/environments.js"
 import { Environment } from "../environment/index.js"
 import { InstructionDiscovery } from "../instruction-discovery.js"
 import { Instructions } from "../instructions/index.js"
@@ -60,6 +61,7 @@ const layer = Layer.effect(
     const database = Option.getOrUndefined(yield* Effect.serviceOption(Database.Service))
     const discovery = yield* InstructionDiscovery.Service
     const environment = yield* Environment.Service
+    const environments = yield* Environments.Service
     const location = yield* Location.Service
 
     const hasStoredInstructions = (sessionID: SessionSchema.ID | undefined) => {
@@ -125,6 +127,13 @@ const layer = Layer.effect(
         sessionID?: SessionSchema.ID,
       ) {
         if (!cwd || !discovery.project || coveredByDiscovery(cwd)) return source(Effect.succeed(Instructions.removed))
+        // Do not wake a cold or lazy sandbox just to probe for AGENTS.md before the model calls a tool.
+        if (!(yield* environments.ready(cwd.environment.id)))
+          return source(
+            hasStoredInstructions(sessionID).pipe(
+              Effect.map((stored) => (stored ? Instructions.unavailable : Instructions.removed)),
+            ),
+          )
         return source(read(cwd, sessionID))
       }),
     })
@@ -134,5 +143,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Database.node, Environment.node, InstructionDiscovery.node, Location.node],
+  deps: [Database.node, Environment.node, Environments.node, InstructionDiscovery.node, Location.node],
 })

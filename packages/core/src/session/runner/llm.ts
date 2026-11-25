@@ -8,7 +8,7 @@ import { Bus } from "../../bus.js"
 import { Environment } from "../../environment/index.js"
 import { Flag } from "../../flag.js"
 import { LocationLifecycle } from "../../location-lifecycle.js"
-import { Machines } from "../../machine/machines.js"
+import { Environments } from "../../environment/environments.js"
 import { SessionCwd } from "../cwd.js"
 import { InstructionState } from "../instruction-state.js"
 import { SessionCompaction } from "../compaction.js"
@@ -463,7 +463,7 @@ export const node = makeLocationNode({
     Environment.node,
     Flag.node,
     LocationLifecycle.node,
-    Machines.node,
+    Environments.node,
     llmClient,
     SessionContext.node,
     SessionModelTransport.node,

@@ -47,6 +47,38 @@ test("daily rankings use yesterday while weekly rankings retain seven days and t
   expect(rankings["2M"]).toEqual(rankings["1W"])
 })
 
+test("new model days rank individual models and take their share of all tokens", () => {
+  const rows = [
+    { model: "leader", totalTokens: 50 },
+    { model: "launch", totalTokens: 30 },
+    { model: "small-a", totalTokens: 10 },
+    { model: "small-b", totalTokens: 10 },
+  ].map(
+    (item) =>
+      ({
+        periodKey: "2026-11-22",
+        updatedAt: new Date(Date.UTC(2026, 10, 22)),
+        tier: "Go",
+        provider: "test",
+        model: item.model,
+        sessions: 1,
+        uniqueUsers: 1,
+        inputTokens: item.totalTokens,
+        outputTokens: 0,
+        reasoningTokens: 0,
+        cacheReadTokens: 0,
+        totalTokens: item.totalTokens,
+        inputCostMicrocents: 0,
+        outputCostMicrocents: 0,
+        totalCostMicrocents: 0,
+      }) satisfies ModelStatMetric,
+  )
+
+  const launch = buildStatsHomeData(rows, [], [], []).newModels.find((item) => item.model === "launch")
+
+  expect(launch?.daily.at(-1)).toMatchObject({ share: 0.3, rank: 2 })
+})
+
 describe("weekly series", () => {
   const days = Array.from({ length: 18 }, (_, index) => `2026-11-${String(index + 1).padStart(2, "0")}`).flatMap(
     (key) => [metric(key, "model-a", 1_000_000_000_000, 4), metric(key, "model-b", 2_000_000_000_000, 4)],
@@ -81,6 +113,17 @@ describe("weekly series", () => {
       { model: "model-a", value: 3 },
       { model: "Other", value: 0 },
     ])
+  })
+
+  test("colors past leaders that fell out of the past 7 days' top models", () => {
+    const past = buildStatsHomeData(days, [...weeks, metric("2026-W32", "model-c", 50_000_000_000_000, 9)], [], [])
+    expect(past.weekly.usage.find((point) => point.start === "2026-08-03")?.segments).toEqual([
+      { model: "model-b", value: 0 },
+      { model: "model-a", value: 0 },
+      { model: "model-c", value: 50 },
+      { model: "Other", value: 0 },
+    ])
+    expect(past.usage.Go["2M"].at(-1)?.segments.map((segment) => segment.model)).toEqual(["model-b", "model-a", "Other"])
   })
 
   test("parses ISO week keys across year boundaries", () => {

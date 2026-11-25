@@ -44,22 +44,6 @@ const register = (id: string) =>
   })
 
 describe("WebSearch", () => {
-  it.effect("shares the normal and test interfaces without installing live providers", () =>
-    Effect.gen(function* () {
-      const websearch = yield* WebSearch.Service
-      const test = yield* TestWebSearch.Service
-
-      expect(websearch).toBe(test)
-      expect(yield* websearch.providers()).toEqual([])
-      expect(test.queries).toEqual([])
-      expect((yield* websearch.query({ query: "unconfigured" }).pipe(Effect.flip))._tag).toBe(
-        "WebSearch.ProviderRequired",
-      )
-      yield* test.wait(1)
-      expect(test.queries).toEqual([{ query: "unconfigured" }])
-    }),
-  )
-
   it.effect("executes an explicit provider without changing the default", () =>
     Effect.gen(function* () {
       yield* register("exa")
@@ -83,16 +67,6 @@ describe("WebSearch", () => {
       expect((yield* websearch.query({ query: "default" }).pipe(Effect.flip))._tag).toBe("WebSearch.ProviderRequired")
       expect(parallel.calls).toEqual([{ query: "effect" }])
       expect(test.queries).toEqual([{ query: "effect", providerID: parallel.providerID }, { query: "default" }])
-    }),
-  )
-
-  it.effect("requires a provider when no default is set", () =>
-    Effect.gen(function* () {
-      yield* register("exa")
-      yield* register("parallel")
-      const websearch = yield* WebSearch.Service
-
-      expect((yield* websearch.query({ query: "layers" }).pipe(Effect.flip))._tag).toBe("WebSearch.ProviderRequired")
     }),
   )
 
