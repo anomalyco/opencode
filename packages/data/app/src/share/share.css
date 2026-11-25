@@ -1524,23 +1524,22 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
   scale: -1 1;
 }
 
-/* Until Customize: the card alone, the modal hugging it (share.tsx hug), with Close, Customize and Export in the bar.
-   Customize grows the modal to its full size and reveals the settings, then Mute and Shuffle, one after another.
-   Phones keep their sheet. */
+/* Until Customize: the card alone, the modal hugging it (share.tsx hug), with Close, Mute, Shuffle, Customize and Export
+   in the bar. Customize grows the modal to its full size and reveals the settings one after another. Phones keep their
+   sheet. */
 @media (min-width: 761px) {
   [data-page="stats"] dialog[data-component="share-editor"] {
     &:not([data-customize]) {
       width: var(--hug-width, min(1200px, calc(100vw - 160px)));
       height: var(--hug-height, min(800px, calc(100dvh - 128px)));
 
-      :is([data-slot="bar-settings"], [data-slot="bar-end"] > [data-slot="icon-button"]) {
+      [data-slot="bar-settings"] {
         display: none;
       }
     }
 
-    &[data-customize] :is([data-slot="bar-settings"] > *, [data-slot="bar-end"] > [data-slot="icon-button"]) {
+    &[data-customize] [data-slot="bar-settings"] > * {
       animation: share-reveal 280ms cubic-bezier(0.23, 1, 0.32, 1) both;
-      animation-delay: 300ms;
     }
 
     &[data-customize] [data-slot="bar-settings"] > * {
@@ -1568,10 +1567,13 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
       &:nth-child(9) {
         animation-delay: 275ms;
       }
+      &:nth-child(10) {
+        animation-delay: 300ms;
+      }
     }
 
     @media (prefers-reduced-motion: reduce) {
-      &[data-customize] :is([data-slot="bar-settings"] > *, [data-slot="bar-end"] > [data-slot="icon-button"]) {
+      &[data-customize] [data-slot="bar-settings"] > * {
         animation: none;
       }
     }

@@ -144,8 +144,8 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   const [hovered, setHovered] = createSignal<string>()
   // The open dropdown or the date picker, by id; one at a time.
   const [menu, setMenu] = createSignal<string>()
-  // The editor opens on the card alone, the modal hugging it, with Close, Customize and Export; Customize reveals every
-  // setting, Mute and Shuffle, and the modal grows to its full size around them.
+  // The editor opens on the card alone, the modal hugging it, with Close, Mute, Shuffle, Customize and Export; Customize
+  // reveals every setting, and the modal grows to its full size around them.
   const [customizing, setCustomizing] = createSignal(false)
   const [viewport, setViewport] = createSignal<{ width: number; height: number }>()
   onMount(() => {
