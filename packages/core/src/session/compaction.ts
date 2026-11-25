@@ -960,7 +960,7 @@ export const layer = Layer.effect(
       const lists = (yield* flags.enabled("compaction_jobs"))
         ? {
             subagents: yield* SessionCompactionSubagents.collect(store, jobs, sessionID),
-            background: yield* SessionCompactionBackground.collect(jobs, store, sessionID),
+            background: yield* SessionCompactionBackground.collect(jobs, sessionID),
           }
         : {}
       const listed = Object.fromEntries(Object.entries(lists).filter(([, items]) => items.length > 0))

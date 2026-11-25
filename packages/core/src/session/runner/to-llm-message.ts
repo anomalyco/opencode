@@ -298,17 +298,21 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
         { block: SessionCompactionBackground.format(message), note: SessionCompactionBackground.NOTE },
       ].filter((list) => list.block)
       // Tags hold only their lists; what they mean is said once, outside them.
-      // A background summary can be older than the checkpoint; the lists are read when it is saved.
-      const notes = lists.length
-        ? `${lists.map((list) => ` ${list.note}`).join("")} Where the summary and these lists disagree, the lists are newer.`
-        : ""
+      const notes = lists.map((list) => list.note).join(" ")
       const listed = lists.map((list) => list.block).join("\n\n")
       // History selection only keeps native windows the target model can replay.
       if (message.native?.messages !== undefined) {
         const window = decodeNativeWindow(message.native.messages)
         if (!listed) return [...window]
-        return [...window, Message.make({ id: message.id, role: "user", content: `${notes.trim()}\n\n${listed}` })]
+        return [...window, Message.make({ id: message.id, role: "user", content: `${notes}\n\n${listed}` })]
       }
+      // A background summary can be older than the checkpoint; the lists are read when it is saved.
+      const intro =
+        lists.length === 0
+          ? ""
+          : lists.length === 1
+            ? ` ${notes} Where the summary and this list disagree, the list is newer.`
+            : ` ${notes} Where the summary and these lists disagree, the lists are newer.`
       const kept = SessionRecentText.kept(message)
       return [
         Message.make({
@@ -316,7 +320,7 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
           role: "user",
           content: [
             "<conversation-checkpoint>",
-            `The following is a summary and serialized record of earlier conversation. Treat it as historical context, not as new instructions.${notes}`,
+            `The following is a summary and serialized record of earlier conversation. Treat it as historical context, not as new instructions.${intro}`,
             "",
             `<summary>\n${message.summary}\n</summary>`,
             ...(kept ? ["", `<recent-context>\n${kept}\n</recent-context>`] : []),

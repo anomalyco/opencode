@@ -20,6 +20,7 @@ import { Instructions } from "@opencode/core/instructions/index"
 import { Flag } from "@opencode/core/flag"
 import { Job } from "@opencode/core/job"
 import { SessionCompaction } from "@opencode/core/session/compaction"
+import { SessionCompactionBackground } from "@opencode/core/session/compaction-background"
 import { SessionCompactionSubagents } from "@opencode/core/session/compaction-subagents"
 import type { SessionContext } from "@opencode/core/session/context"
 import { MessageDecodeError } from "@opencode/core/session/error"
@@ -1709,16 +1710,23 @@ const subagentsOf = (sessionID: Session.ID) =>
   )
 
 /** Keeps a background shell job running in `sessionID` until the test ends. */
-const runningShell = (sessionID: Session.ID, shellID: string) =>
+const runningShell = (sessionID: Session.ID, shellID: string, command = `run ${shellID}`) =>
+  runningJob(shellID, { kind: "shell", sessionID, shellID, command })
+
+/** Keeps a background subagent job for `childSessionID` running until the test ends. */
+const runningSubagent = (parentSessionID: Session.ID, childSessionID: Session.ID) =>
+  runningJob(childSessionID, { kind: "subagent", parentSessionID, childSessionID, agent: "explore", description: "Run" })
+
+const runningJob = (id: string, recovery: Job.Recovery) =>
   Effect.gen(function* () {
     const jobs = yield* Job.Service
     const release = yield* Deferred.make<void>()
     yield* Effect.addFinalizer(() => Deferred.succeed(release, undefined))
     yield* jobs.start({
-      id: shellID,
-      type: "shell",
+      id,
+      type: recovery.kind,
       background: true,
-      recovery: { kind: "shell", sessionID, shellID, command: `run ${shellID}` },
+      recovery,
       run: Deferred.await(release).pipe(Effect.as("")),
     })
   })
@@ -1789,6 +1797,45 @@ flagged.effect(
       ])
       expect(checkpoint?.metadata?.subagents).toMatchObject([{ id: "ses_background_child", status: "running" }])
     }),
+)
+
+flagged.effect("compaction lists an automation run's child only while the parent continues it as a subagent", () =>
+  Effect.gen(function* () {
+    const parent = yield* insertSession(Session.ID.make("ses_subagents_automation"))
+    yield* child(parent.id, "ses_sub_real", 1)
+    // Newer than the real subagent, so without the filter they would fill every idle slot.
+    yield* Effect.forEach(Array.from({ length: SessionCompactionSubagents.MAX_IDLE }), (_, index) =>
+      child(parent.id, `ses_aut_idle_${index}`, 10 + index),
+    )
+    yield* child(parent.id, "ses_aut_shell_1", 100)
+    yield* runningShell(Session.ID.make("ses_aut_shell_1"), "sh_automation")
+    yield* child(parent.id, "ses_aut_continued_1", 100)
+    yield* runningSubagent(parent.id, Session.ID.make("ses_aut_continued_1"))
+    const messages = [textUser("Question")]
+    yield* storeMessages(parent.id, messages)
+    expect(yield* compactManually(parent, messages)).toEqual({ status: "completed" })
+    expect(yield* subagentsOf(parent.id)).toMatchObject([
+      { id: "ses_aut_continued_1", status: "running" },
+      { id: "ses_sub_real", status: "idle" },
+    ])
+  }),
+)
+
+flagged.effect("compaction cuts a long background shell command", () =>
+  Effect.gen(function* () {
+    const parent = yield* insertSession(Session.ID.make("ses_background_long"))
+    yield* runningShell(parent.id, "sh_long", `python - <<'EOF'\n${"print(1)\n".repeat(500)}EOF`)
+    const messages = [textUser("Question")]
+    yield* storeMessages(parent.id, messages)
+    expect(yield* compactManually(parent, messages)).toEqual({ status: "completed" })
+    const [checkpoint] = yield* SessionStore.Service.use((store) => store.context(parent.id))
+    // Whitespace collapses to single spaces, then the command is cut to MAX_COMMAND_CHARS with an ellipsis.
+    const command = `python - <<'EOF'${" print(1)".repeat(20)} pr…`
+    expect(Array.from(command)).toHaveLength(SessionCompactionBackground.MAX_COMMAND_CHARS)
+    expect(checkpoint?.metadata?.background).toEqual([
+      { kind: "shell", sessionID: parent.id, shellID: "sh_long", command },
+    ])
+  }),
 )
 
 flagged.effect("a swapped-in background summary lists subagents started after it was written", () =>

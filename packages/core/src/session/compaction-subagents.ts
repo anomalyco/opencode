@@ -1,5 +1,6 @@
 export * as SessionCompactionSubagents from "./compaction-subagents.js"
 
+import { Automation } from "@opencode/schema/automation"
 import { DateTime, Effect, Option, Schema } from "effect"
 import type { Job } from "../job.js"
 import { SessionBackground } from "./background.js"
@@ -37,20 +38,25 @@ export const collect = Effect.fnUntraced(function* (
   const children = yield* store.list({ parentID: sessionID, archived: false, order: "desc" })
   if (children.length === 0) return []
   // A child that went idle with its own shell or subagent still running has not finished its work.
+  const outstanding = yield* SessionBackground.outstanding(jobs, store, sessionID)
   const working = new Set(
-    yield* Effect.forEach(yield* SessionBackground.outstanding(jobs, store, sessionID), (item) =>
+    yield* Effect.forEach(outstanding, (item) =>
       directChild(store, item.kind === "subagent" ? item.childSessionID : item.sessionID, sessionID),
     ),
   )
-  const entries = children.map((child): Entry => {
-    const title = formatTitle(child.title)
-    return {
-      id: child.id,
-      ...(child.agent ? { agent: child.agent } : {}),
-      ...(title ? { title } : {}),
-      status: working.has(child.id) || isBusy(child) ? "running" : "idle",
-    }
-  })
+  // An automation run's child reports to no one, so it is listed only while the parent continues it as a subagent.
+  const delegated = new Set(outstanding.flatMap((item) => (item.kind === "subagent" ? [item.childSessionID] : [])))
+  const entries = children
+    .filter((child) => !Automation.isRunSession(child.id) || delegated.has(child.id))
+    .map((child): Entry => {
+      const title = child.title ? SubagentCompletion.truncate(SubagentCompletion.clean(child.title), MAX_TITLE_CHARS) : ""
+      return {
+        id: child.id,
+        ...(child.agent ? { agent: child.agent } : {}),
+        ...(title ? { title } : {}),
+        status: working.has(child.id) || isBusy(child) ? "running" : "idle",
+      }
+    })
   const running = entries.filter((entry) => entry.status === "running")
   const idle = entries.filter((entry) => entry.status === "idle").slice(0, MAX_IDLE)
   return [...running, ...idle].slice(0, MAX)
@@ -89,14 +95,6 @@ const isBusy = (session: SessionSchema.Info) =>
   session.time.busy !== undefined &&
   (session.time.idle === undefined ||
     DateTime.toEpochMillis(session.time.busy) > DateTime.toEpochMillis(session.time.idle))
-
-const formatTitle = (value: string | undefined) => {
-  if (!value) return undefined
-  const cleaned = SubagentCompletion.clean(value)
-  if (!cleaned) return undefined
-  const chars = Array.from(cleaned)
-  return chars.length <= MAX_TITLE_CHARS ? cleaned : `${chars.slice(0, MAX_TITLE_CHARS - 1).join("")}…`
-}
 
 const formatEntry = (entry: Entry) => {
   const details = [entry.agent, entry.status].filter(Boolean).join(", ")
