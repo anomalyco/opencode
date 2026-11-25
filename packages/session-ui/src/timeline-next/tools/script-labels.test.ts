@@ -116,6 +116,7 @@ describe("script labels", () => {
   test("a loop's repeated calls count once", () => {
     const poll = { tool: "shell", status: "completed", input: { command: "gh pr checks" } }
     const push = { tool: "shell", status: "completed", input: { command: "git push" } }
+
     const loop = storyTool(
       "exec_loop",
       "execute",

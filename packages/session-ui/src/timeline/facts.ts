@@ -270,6 +270,7 @@ export function scriptCalls(tool: Tool, id = tool.id) {
     Option.toArray(decodeScriptCall(value)).map((call) => {
       const name = toolName(scriptToolNames.get(call.tool) ?? call.tool)
       const path = call.input?.path
+
       const fact: CallFact = {
         kind: "call",
         id: `${id}:call:${index}`,
