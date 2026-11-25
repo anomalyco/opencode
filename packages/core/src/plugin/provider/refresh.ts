@@ -18,7 +18,7 @@ export const onSwitch = <E, R>(integrationID: string, effect: Effect.Effect<unkn
     yield* Bus.restartOnOverflow(
       (onSubscribed) =>
         bus.subscribe(Credential.Event.Switched, {
-          overflow: "backpressure",
+          overflow: "fail",
           where: (event) => event.data.integrationID === integrationID,
           onSubscribed,
         }),

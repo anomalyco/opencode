@@ -1173,25 +1173,22 @@ const layer = Layer.effectDiscard(
         yield* SessionBlob.releaseFrom(db, event.data.sessionID, boundary.seq)
       }),
     )
-    const reconcileUsage = db
-      .select({ sessionID: SessionTable.id })
-      .from(SessionTable)
-      .all()
-      .pipe(
-        Effect.orDie,
-        Effect.flatMap((rows) =>
-          Effect.forEach(rows, (row) => publishSessionUsage(db, bus, row.sessionID), { discard: true }),
-        ),
-      )
+    // Only sessions that produced an event in this subscription can have drifted during a gap.
+    // Replaying every session in the database would burst UsageUpdated to all subscribers.
+    const seen = new Set<SessionSchema.ID>()
+    const reconcileUsage = Effect.suspend(() =>
+      Effect.forEach(Array.from(seen), (sessionID) => publishSessionUsage(db, bus, sessionID), { discard: true }),
+    )
     yield* Bus.restartOnOverflow(
       (onSubscribed) =>
         bus.subscribe([SessionEvent.Step.Ended, SessionEvent.Step.Failed, SessionEvent.UsageRecorded], {
-          overflow: "backpressure",
+          overflow: "fail",
           onSubscribed,
         }),
       reconcileUsage,
     ).pipe(
       Stream.runForEach((event) => {
+        seen.add(event.data.sessionID)
         if (
           event.type === SessionEvent.Step.Failed.type &&
           (event.data.cost === undefined || event.data.tokens === undefined)

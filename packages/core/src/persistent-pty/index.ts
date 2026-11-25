@@ -446,7 +446,7 @@ const makeLayer = (options: Options = {}) =>
 
       // Errors are handled per event so one failed cleanup does not end the subscription.
       yield* Bus.restartOnOverflow(
-        (onSubscribed) => bus.subscribe(SessionEvent.Deleted, { overflow: "backpressure", onSubscribed }),
+        (onSubscribed) => bus.subscribe(SessionEvent.Deleted, { overflow: "fail", onSubscribed }),
         reconcileSessions,
       ).pipe(
         Stream.runForEach((event) => removeSession(event.data.sessionID)),

@@ -993,7 +993,7 @@ export const layer = (options?: Options) =>
         Bus.restartOnOverflow(
           (onSubscribed) =>
             bus.subscribe(Credential.Event.Switched, {
-              overflow: "backpressure",
+              overflow: "fail",
               where: (event) =>
                 Array.from(entries).some(([, entry]) => entry.integrationID === event.data.integrationID),
               onSubscribed,

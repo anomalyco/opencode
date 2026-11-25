@@ -101,7 +101,7 @@ const layer = Layer.effect(
     })
     yield* Bus.restartOnOverflow(
       (onSubscribed) =>
-        bus.subscribe([SessionEvent.Deleted, SessionEvent.Moved], { overflow: "backpressure", onSubscribed }),
+        bus.subscribe([SessionEvent.Deleted, SessionEvent.Moved], { overflow: "fail", onSubscribed }),
       reconcileAffinity,
     ).pipe(
       Stream.runForEach((event) =>

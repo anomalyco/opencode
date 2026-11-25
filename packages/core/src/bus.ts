@@ -640,6 +640,8 @@ export function configured(options?: Options) {
               if (subscriber.overflow === "backpressure" && !immediate) continue
               if (!Queue.offerUnsafe(subscriber.queue, event)) yield* overflow(subscriber, event)
             }
+            // PubSub.publish yielded after delivery; keep that scheduling point so consumers observe the same order.
+            yield* Effect.yieldNow
             if (immediate) return
             const backpressure = subscribers.filter((subscriber) => subscriber.overflow === "backpressure")
             // An interrupted offer may have missed the event; fail the subscriber so it can recover.
@@ -903,7 +905,7 @@ export function configured(options?: Options) {
                   ? yield* Queue.bounded<Event.Payload, SubscriberOverflowError>(capacity)
                   : overflow === "slide"
                     ? yield* Queue.sliding<Event.Payload, SubscriberOverflowError>(capacity)
-                    : yield* Queue.dropping<Event.Payload, SubscriberOverflowError>(capacity)
+                    : yield* Queue.bounded<Event.Payload, SubscriberOverflowError>(capacity)
               const location = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
               const subscriber: LiveSubscriber = {
                 queue,
