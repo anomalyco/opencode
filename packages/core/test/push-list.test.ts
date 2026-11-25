@@ -102,6 +102,7 @@ describe("PushList", () => {
         "https://relay.example.com/v2/notify/x",
         `${PushList.relays[0]}/v1/notify/x`,
         `${PushList.relays[0]}/v2/notify/x?debug=1`,
+        `${PushList.relays[0]}/v2/notify/x.`,
         "https://user:pass@opencode-notify-relay.anomalyco.workers.dev/v2/notify/x",
       ]
       for (const url of urls) {
@@ -212,6 +213,17 @@ describe("PushList", () => {
       yield* TestClock.adjust(2_000)
       expect((yield* list.info()).settings).toEqual({ paused: false })
       expect(yield* list.setSettings({ paused: false, until: 9_000 })).toEqual({ paused: false })
+      expect(yield* list.setSettings({ paused: false, until: 1_000 })).toEqual({ paused: false })
+    }),
+  )
+
+  it.effect("leaves expired bells out of an updated phone", () =>
+    Effect.gen(function* () {
+      const list = yield* PushList.Service
+      yield* list.register(id, input(phoneKey()))
+      yield* list.setDeviceBell(id, sessionID, { level: "none", until: 5_000 })
+      yield* TestClock.adjust(5_000)
+      expect((yield* list.update(id, { paused: true })).sessions).toEqual({})
     }),
   )
 

@@ -70,7 +70,7 @@ export interface Targets {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/PushList") {}
 
-const deviceKey = (id: string) => `push:device:${id}`
+const deviceKey = (id: Push.DeviceID) => `push:device:${id}`
 const devicePrefix = "push:device:"
 const settingsKey = "push:settings"
 const sessionKey = (sessionID: string) => `push:session:${sessionID}`
@@ -83,7 +83,8 @@ const decodeBell = Schema.decodeUnknownOption(Push.Bell)
 /** The production and dev notification relays, the only origins a phone's callback URL may be on. */
 export const relays = ["https://opencode-notify-relay.anomalyco.workers.dev", "https://notify.dev.opencode.ai"]
 
-const notifyPath = /^\/v2\/notify\/[^/]+$/
+// The token is base64url, the only characters the relay routes.
+const notifyPath = /^\/v2\/notify\/[A-Za-z0-9_-]+$/
 
 const validURL = (callbackURL: string) => {
   const url = URL.parse(callbackURL)
@@ -134,7 +135,7 @@ const layer = Layer.effect(
       }
     })
 
-    const readDevice = Effect.fn("PushList.readDevice")(function* (id: string) {
+    const readDevice = Effect.fn("PushList.readDevice")(function* (id: Push.DeviceID) {
       return decodeStored(yield* kv.get(deviceKey(id)))
     })
 
@@ -259,11 +260,13 @@ const layer = Layer.effect(
 
     const update = Effect.fn("PushList.update")(function* (id: Push.DeviceID, patch: Push.DevicePatch) {
       const stored = yield* requireDevice(id)
+      const now = yield* Clock.currentTimeMillis
       const updated: Stored = {
         ...stored,
         paused: patch.paused ?? stored.paused,
         settings: patch.settings ?? stored.settings,
-        updatedAt: yield* Clock.currentTimeMillis,
+        sessions: liveBells(stored.sessions, now),
+        updatedAt: now,
       }
       yield* kv.set(deviceKey(id), updated)
       yield* changed
@@ -310,7 +313,7 @@ const layer = Layer.effect(
 
     const setSettings = Effect.fn("PushList.setSettings")(function* (input: Push.Settings) {
       const now = yield* Clock.currentTimeMillis
-      if (input.until !== undefined && input.until <= now)
+      if (input.paused && input.until !== undefined && input.until <= now)
         return yield* new InvalidError({ reason: "until must be in the future" })
       const saved: Push.Settings = input.paused ? input : { paused: false }
       yield* kv.set(settingsKey, saved)

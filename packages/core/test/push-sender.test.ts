@@ -156,7 +156,7 @@ describe("PushSender", () => {
         body: "Finished",
         data: { outcome: "succeeded" },
       })
-      const devices = (yield* list.info()).devices.map((device) => device.id)
+      const devices: string[] = (yield* list.info()).devices.map((device) => device.id)
       expect(devices.toSorted()).toEqual([ids.ok, ids.broken, ids.quiet, ids.busy].toSorted())
     }),
   )

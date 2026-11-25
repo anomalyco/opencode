@@ -6,7 +6,10 @@ import { NonNegativeInt, optional } from "./schema.js"
 
 export const DeviceID = Schema.String.check(
   Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/),
-).annotate({ identifier: "Push.DeviceID", description: "A lowercase canonical UUID chosen by the phone" })
+).pipe(
+  Schema.brand("Push.DeviceID"),
+  Schema.annotate({ identifier: "Push.DeviceID", description: "A lowercase canonical UUID chosen by the phone" }),
+)
 export type DeviceID = typeof DeviceID.Type
 
 export const Time = NonNegativeInt.annotate({
