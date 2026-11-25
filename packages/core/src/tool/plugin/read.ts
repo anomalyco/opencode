@@ -80,7 +80,7 @@ export const Plugin = {
                 const skill = yield* skills.get(id)
                 if (!skill || !Skill.isUri(skill.path))
                   return yield* new ToolFailure({ message: `File not found: ${input.path}` })
-                const extra = yield* skills.files(id)
+                const files = ["SKILL.md", ...((yield* skills.files(id)) ?? [])]
                 yield* permission.assert({
                   action: "skill",
                   resources: [skill.id],
@@ -94,11 +94,22 @@ export const Plugin = {
                   ...Permission.invocation(context),
                 })
                 const virtualFs = Environment.makeFiles(Environment.makeMemoryDriver())
-                const encoder = new TextEncoder()
-                yield* virtualFs.write(AbsolutePath.make("/SKILL.md"), encoder.encode(skill.content))
+                // Only the requested file is loaded. The rest stay empty, which is enough for directory listings.
                 yield* Effect.forEach(
-                  extra ? Array.from(extra) : [],
-                  ([rel, text]) => virtualFs.write(AbsolutePath.make(`/${rel}`), encoder.encode(text)),
+                  files,
+                  (file) =>
+                    (file === parsed.target.slice(1) ? skills.read(id, file) : Effect.succeed(new Uint8Array())).pipe(
+                      Effect.mapError(
+                        (error) =>
+                          new ToolFailure({
+                            message:
+                              error._tag === "Skill.LoadError"
+                                ? `Unable to read ${input.path}: ${error.message}`
+                                : `File not found: ${input.path}`,
+                          }),
+                      ),
+                      Effect.flatMap((bytes) => virtualFs.write(AbsolutePath.make(`/${file}`), bytes)),
+                    ),
                   { discard: true },
                 )
                 const output = yield* ReadToolFileSystem.read(virtualFs, AbsolutePath.make(parsed.target), input.path, {
