@@ -20,6 +20,8 @@ test(
         upgrades: number
         rejectedUpgrades: number
         legacyTunnelCalls: number
+        ticketCalls: number
+        grantCalls: number
         ticketHeaderPresent: boolean
       }
       blockedOutcome: string
@@ -28,6 +30,16 @@ test(
         upgrades: number
         rejectedUpgrades: number
         legacyTunnelCalls: number
+        ticketCalls: number
+        grantCalls: number
+        ticketHeaderPresent: boolean
+      }
+      legacyCounters: {
+        upgrades: number
+        rejectedUpgrades: number
+        legacyTunnelCalls: number
+        ticketCalls: number
+        grantCalls: number
         ticketHeaderPresent: boolean
       }
       directHitsDuringBlocked: number
@@ -48,11 +60,14 @@ test(
     // Client-side redirect during load commits cleanly without false ERR_ABORTED (-3).
     expect(result.redirectOutcome).toBe("success")
     expect(result.redirectUrl).toEndWith("/redirect-target")
-    // Exactly one prewarmed binary WebSocket upgrade using ticket header; zero legacy chunked RPC calls.
+    // Exactly one prewarmed binary WebSocket upgrade using ticket header; zero legacy chunked RPC calls;
+    // user navigation on an advertised stream attachment sends tunnel.grant.
     expect(result.okCounters).toEqual({
       upgrades: 1,
       rejectedUpgrades: 0,
       legacyTunnelCalls: 0,
+      ticketCalls: 1,
+      grantCalls: 1,
       ticketHeaderPresent: true,
     })
     // Rejected upgrade (403) surfaces proxy 502 without ever downgrading to legacy RPC or direct desktop network.
@@ -61,6 +76,10 @@ test(
     expect(result.blockedCounters.rejectedUpgrades).toBeGreaterThanOrEqual(1)
     expect(result.blockedCounters.legacyTunnelCalls).toBe(0)
     expect(result.directHitsDuringBlocked).toBe(0)
+    // Unadvertised/disabled server receives zero tunnel.ticket and zero tunnel.grant RPCs on user navigation.
+    expect(result.legacyCounters.upgrades).toBe(0)
+    expect(result.legacyCounters.ticketCalls).toBe(0)
+    expect(result.legacyCounters.grantCalls).toBe(0)
   },
   60_000,
 )

@@ -41,6 +41,7 @@ export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function*
   const resetListeners = new Set<() => void>()
   const streamEnded = Promise.withResolvers<"closed" | "replaced">()
   let disposed = false
+  let serverAdvertisedStream = false
   const initialReady = Promise.withResolvers<void>()
   // Prewarm can settle before any page opens a stream; consume the rejection here while `openStream` throws `mode.error`.
   void initialReady.promise.catch(() => undefined)
@@ -178,9 +179,10 @@ export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function*
     activate(capabilities) {
       if (disposed || mode.kind !== "pending") return
 
+      serverAdvertisedStream = capabilities.includes(BrowserTunnelHost.STREAM_CAPABILITY)
       const forcedLegacy = process.env.OPENCODE_BROWSER_TUNNEL_TRANSPORT?.trim().toLowerCase() === "legacy"
 
-      if (!forcedLegacy && capabilities.includes(BrowserTunnelHost.STREAM_CAPABILITY)) {
+      if (!forcedLegacy && serverAdvertisedStream) {
         void prewarmStream()
 
         return
@@ -191,7 +193,8 @@ export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function*
       ready.resolve()
     },
     async grantPrivateTarget(url, extraPorts) {
-      if (disposed) return
+      // Only send experimental private-target grants when this attachment advertised the stream tunnel experiment.
+      if (disposed || !serverAdvertisedStream) return
 
       const parsed = URL.parse(url)
 

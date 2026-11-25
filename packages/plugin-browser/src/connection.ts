@@ -22,7 +22,10 @@ type Attachment = {
   readonly connectionID: string
   readonly attempt: number
   readonly closed: Deferred.Deferred<"closed" | "replaced", "unavailable">
-  readonly policy: EgressPolicy.AttachmentPolicy
+  /** Snapped once at attachment start so capabilities, tickets, grants, and egress stay coherent. */
+  readonly streamEnabled: boolean
+  /** Defined strictly when `streamEnabled` is true; enforced across both WS streams and legacy RPC. */
+  readonly policy: EgressPolicy.AttachmentPolicy | undefined
   readonly tunnels: BrowserTunnel.Tunnels
   stream?: StreamMux.ServerMux
   streamAttached: boolean
@@ -155,7 +158,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
         if (!attachment) return
         attachment.disposed = true
         attachments.delete(effect.attempt)
-        if (tunnelHost) {
+        if (tunnelHost && attachment.streamEnabled) {
           yield* tunnelHost
             .revokeAttachment(attachment.sessionID, attachment.connectionID, attachment.attempt)
             .pipe(Effect.ignore)
@@ -175,17 +178,13 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       })
     if (effect.type === "emit-control") {
       const control = effect.control
-      if (control.type === "attached" && tunnelHost) {
-        return tunnelHost.enabled.pipe(
-          Effect.orElseSucceed(() => false),
-          Effect.flatMap((streamEnabled) =>
-            rpc.events.emit(
-              "control",
-              streamEnabled
-                ? { ...control, capabilities: [BrowserTunnelHost.STREAM_CAPABILITY] }
-                : control,
-            ),
-          ),
+      if (control.type === "attached") {
+        const live = Array.from(attachments.values()).find(
+          (candidate) => !candidate.disposed && candidate.connectionID === control.connectionID,
+        )
+        return rpc.events.emit(
+          "control",
+          live?.streamEnabled ? { ...control, capabilities: [BrowserTunnelHost.STREAM_CAPABILITY] } : control,
         )
       }
       return rpc.events.emit("control", control)
@@ -271,20 +270,27 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
             .pipe(Effect.mapError(() => call.error("unavailable", "Session not found.", {})))
           if (session.location.directory !== ctx.location.directory)
             return yield* Effect.fail(call.error("unavailable", "Session belongs to another location.", {}))
+          // Select experimental streaming + egress policy once at attachment start so disabled releases
+          // preserve pre-PR legacy tunnel behavior and active attachments stay coherent across RPCs.
+          const streamEnabled = tunnelHost
+            ? yield* tunnelHost.enabled.pipe(Effect.orElseSucceed(() => false))
+            : false
           return yield* Effect.acquireUseRelease(
             lock.withPermit(
               Effect.suspend(() => {
                 if (BrowserMachine.isConnectionDisposed(machine.state))
                   return Effect.fail(call.error("unavailable", "Browser is unavailable.", {}))
                 const attempt = BrowserMachine.selectNextAttempt(machine.state)
-                const policy = EgressPolicy.makePolicy({
-                  reservedLocalPorts: tunnelHost?.reservedLocalPorts,
-                })
+                const policy =
+                  streamEnabled && tunnelHost
+                    ? EgressPolicy.makePolicy({ reservedLocalPorts: tunnelHost.reservedLocalPorts })
+                    : undefined
                 const attachment: Attachment = {
                   sessionID: input.sessionID,
                   connectionID: input.connectionID,
                   attempt,
                   closed: Deferred.makeUnsafe(),
+                  streamEnabled,
                   policy,
                   tunnels: BrowserTunnel.make(policy),
                   streamAttached: false,
@@ -345,12 +351,13 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
         ),
       "tunnel.ticket": (input, call) =>
         Effect.gen(function* () {
-          if (!tunnelHost || !(yield* tunnelHost.enabled.pipe(Effect.orElseSucceed(() => false)))) {
-            return yield* Effect.fail(call.error("unavailable", "Browser stream tunnel is disabled.", {}))
-          }
           const attachment = yield* liveAttachment(input).pipe(
             Effect.mapError((error) => call.error("unavailable", error.message, {})),
           )
+          const policy = attachment.policy
+          if (!tunnelHost || !attachment.streamEnabled || !policy) {
+            return yield* Effect.fail(call.error("unavailable", "Browser stream tunnel is disabled.", {}))
+          }
           const issued = yield* tunnelHost
             .issueTicket({
               location: locationRef,
@@ -365,7 +372,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
                     return
                   }
                   const previous = attachment.stream
-                  const mux = StreamMux.createServerMux(socket, { policy: attachment.policy })
+                  const mux = StreamMux.createServerMux(socket, { policy })
                   attachment.stream = mux
                   attachment.streamAttached = true
                   if (previous) previous.close(BrowserTunnelHost.CLOSE_ATTACHMENT_CLOSED, "superseded")
@@ -398,12 +405,16 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
         }),
       "tunnel.grant": (input, call) =>
         liveAttachment(input).pipe(
-          Effect.flatMap((attachment) =>
-            Effect.try({
-              try: () => attachment.policy.grant(input.target.host, input.target.port, input.ports ?? []),
+          Effect.flatMap((attachment) => {
+            const policy = attachment.policy
+            if (!attachment.streamEnabled || !policy) {
+              return Effect.fail(new Error("Browser stream tunnel is disabled."))
+            }
+            return Effect.try({
+              try: () => policy.grant(input.target.host, input.target.port, input.ports ?? []),
               catch: (error) => (error instanceof Error ? error : new Error(String(error))),
-            }),
-          ),
+            })
+          }),
           Effect.mapError((error) => call.error("unavailable", error.message, {})),
         ),
       "tunnel.open": (input, call) =>

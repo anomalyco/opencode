@@ -15,7 +15,7 @@ import type { Profile } from "./profile"
 // binary WebSocket, then verifies a 403-rejected upgrade never downgrades to legacy RPC or direct network.
 
 type ControlPayload =
-  | { readonly type: "attached"; readonly connectionID: string; readonly version: 4; readonly capabilities: readonly string[] }
+  | { readonly type: "attached"; readonly connectionID: string; readonly version: 4; readonly capabilities?: readonly string[] }
   | { readonly type: "command"; readonly connectionID: string; readonly requestID: string }
 
 type EventFrame =
@@ -195,13 +195,22 @@ function adaptServerWs(ws: ServerWs): BrowserTunnelHost.BinarySocket {
   }
 }
 
-function createRemoteServer(directory: string, rejectUpgrade: boolean) {
+function createRemoteServer(directory: string, mode: "stream" | "reject-upgrade" | "legacy-unadvertised") {
   const streams = new Set<ServerResponse>()
   const commands = new Map<string, Browser.Action>()
   const results = new Map<string, (outcome: RpcOutcome) => void>()
   const tickets = new Map<string, { sessionID: string; connectionID: string }>()
   const attached = { connectionID: "" }
-  const counters = { upgrades: 0, rejectedUpgrades: 0, legacyTunnelCalls: 0, ticketHeaderPresent: false }
+
+  const counters = {
+    upgrades: 0,
+    rejectedUpgrades: 0,
+    legacyTunnelCalls: 0,
+    ticketCalls: 0,
+    grantCalls: 0,
+    ticketHeaderPresent: false,
+  }
+
   const wss = new WebSocketServer({ noServer: true, perMessageDeflate: false, maxPayload: StreamWire.MAX_WS_FRAME_BYTES })
   const muxes = new Set<StreamMux.ServerMux>()
 
@@ -266,17 +275,22 @@ function createRemoteServer(directory: string, rejectUpgrade: boolean) {
 
       if (pathname.endsWith("/attach")) {
         attached.connectionID = input.connectionID ?? ""
-        control({
-          type: "attached",
-          connectionID: attached.connectionID,
-          version: 4,
-          capabilities: [BrowserTunnelHost.STREAM_CAPABILITY],
-        })
+        control(
+          mode === "legacy-unadvertised"
+            ? { type: "attached", connectionID: attached.connectionID, version: 4 }
+            : {
+                type: "attached",
+                connectionID: attached.connectionID,
+                version: 4,
+                capabilities: [BrowserTunnelHost.STREAM_CAPABILITY],
+              },
+        )
 
         return
       }
 
       if (pathname.endsWith("/tunnel.ticket")) {
+        counters.ticketCalls += 1
         const ticket = `tkt_${crypto.randomUUID()}`
         tickets.set(ticket, { sessionID: input.sessionID ?? "", connectionID: input.connectionID ?? "" })
         res.writeHead(200, { "content-type": "application/json" })
@@ -290,6 +304,7 @@ function createRemoteServer(directory: string, rejectUpgrade: boolean) {
       }
 
       if (pathname.endsWith("/tunnel.grant")) {
+        counters.grantCalls += 1
         res.writeHead(200, { "content-type": "application/json" })
         res.end("{}")
 
@@ -327,7 +342,7 @@ function createRemoteServer(directory: string, rejectUpgrade: boolean) {
       counters.ticketHeaderPresent = true
     }
 
-    if (rejectUpgrade || !Predicate.isString(ticket) || !tickets.has(ticket)) {
+    if (mode !== "stream" || !Predicate.isString(ticket) || !tickets.has(ticket)) {
       counters.rejectedUpgrades += 1
       socket.end("HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
 
@@ -388,13 +403,15 @@ void electron.app.whenReady().then(async () => {
   const { createSystemMedia } = await import("./system-media")
 
   const target = createTargetSite()
-  const okServer = createRemoteServer("/remote/work", false)
-  const blockedServer = createRemoteServer("/remote/blocked", true)
+  const okServer = createRemoteServer("/remote/work", "stream")
+  const blockedServer = createRemoteServer("/remote/blocked", "reject-upgrade")
+  const legacyServer = createRemoteServer("/remote/legacy", "legacy-unadvertised")
 
-  const [targetOrigin, okServerUrl, blockedServerUrl] = await Promise.all([
+  const [targetOrigin, okServerUrl, blockedServerUrl, legacyServerUrl] = await Promise.all([
     listen(target.server),
     listen(okServer.server),
     listen(blockedServer.server),
+    listen(legacyServer.server),
   ])
 
   const win = new electron.BrowserWindow({ show: false, width: 800, height: 600 })
@@ -458,6 +475,12 @@ void electron.app.whenReady().then(async () => {
         headers: { authorization: "Basic dGVzdDp0ZXN0" },
         sameMachine: false,
       })),
+      Match.when("remote-legacy", () => ({
+        id,
+        url: legacyServerUrl,
+        headers: { authorization: "Basic dGVzdDp0ZXN0" },
+        sameMachine: false,
+      })),
       Match.orElse(() => undefined),
     )
 
@@ -503,6 +526,9 @@ void electron.app.whenReady().then(async () => {
 
   // SAFETY: `navigate` resolves with the committed Tab record when successful.
   const redirectedTab = redirected.result?.value as { url?: string; loadError?: string } | undefined
+
+  // 1c. Trusted user navigation on an advertised stream attachment sends tunnel.grant.
+  await pane.command(win.id, "b-ok", { type: "navigate", tabID: openedTab.id, url: `${targetOrigin}/redirect-target` })
   const targetStatsAfterOk = target.stats()
 
   // 2. Negative path: 403-rejected upgrade must NEVER downgrade to legacy RPC or direct desktop network
@@ -512,11 +538,16 @@ void electron.app.whenReady().then(async () => {
   const blockedTab = blockedOpen.result?.value as { loadError?: string; title?: string } | undefined
   const targetStatsAfterBlocked = target.stats()
 
+  // 3. Unadvertised / disabled server: trusted user navigation must NOT send tunnel.ticket or tunnel.grant RPCs.
+  await pane.register(win.id, "b-legacy", { server: "remote-legacy", session: "ses_remote_tunnel" })
+  await pane.command(win.id, "b-legacy", { type: "tabs.open", url: `${targetOrigin}/redirect-target` }).catch(() => undefined)
+
   await pane.dispose()
   lifetime.abort()
   win.destroy()
   okServer.close()
   blockedServer.close()
+  legacyServer.close()
   target.close()
 
   process.stdout.write(
@@ -528,6 +559,7 @@ void electron.app.whenReady().then(async () => {
       blockedOutcome: blockedOpen.type,
       blockedLoadError: blockedTab?.loadError ?? "",
       blockedCounters: blockedServer.counters,
+      legacyCounters: legacyServer.counters,
       directHitsDuringBlocked: targetStatsAfterBlocked.hits - targetStatsAfterOk.hits,
     })}\n`,
   )

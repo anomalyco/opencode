@@ -5,7 +5,9 @@ import { createServer as createHttpServer, request as httpRequest } from "node:h
 import { createServer as createNetServer, type Socket } from "node:net"
 import { connect as netConnect } from "node:net"
 import type { Duplex } from "node:stream"
-import { Effect, Schema } from "effect"
+import { Effect, Fiber, Schedule, Schema, Stream } from "effect"
+import { Session } from "@opencode/schema/session"
+import { BrowserConnection } from "../src/connection.js"
 import { EgressPolicy } from "../src/egress-policy.js"
 import { Browser } from "../src/rpc.js"
 import { BrowserProxy } from "../src/proxy.js"
@@ -287,16 +289,318 @@ describe("EgressPolicy protection and dev loopback support", () => {
     expect(() => policy.grant("192.168.1.50", 22)).toThrow(EgressPolicy.EgressDeniedError)
   })
 
-  test("legacy RPC BrowserTunnel enforces the exact same egress policy", async () => {
-    const policy = EgressPolicy.makePolicy({ reservedLocalPorts: () => new Set([4096]) })
-    const tunnel = BrowserTunnel.make(policy)
+  test("BrowserTunnel restores pre-PR legacy connect when policy is omitted and enforces policy when enabled", async () => {
+    const echo = createNetServer((socket) => socket.pipe(socket))
+    await once(echo.listen(0, "127.0.0.1"), "listening")
+    const addr = echo.address()
+    if (!addr || typeof addr === "string") throw new Error("No TCP address")
+
+    const openPort = createNetServer((socket) => socket.pipe(socket))
+    await once(openPort.listen(0, "127.0.0.1"), "listening")
+    const openAddr = openPort.address()
+    if (!openAddr || typeof openAddr === "string") throw new Error("No TCP address")
+
+    // Policy reserves echo's loopback port and maps a synthetic sentinel host to openPort's loopback IP.
+    let sentinelResolved = 0
+    const policy = EgressPolicy.makePolicy({
+      reservedLocalPorts: () => new Set([addr.port]),
+      resolve: async (host) => {
+        if (host === "fixture-sentinel.invalid") {
+          sentinelResolved += 1
+          return [{ address: "127.0.0.1", family: 4 }]
+        }
+        return []
+      },
+    })
+    policy.grant("fixture-sentinel.invalid", openAddr.port)
+
+    const legacyOff = BrowserTunnel.make()
+    const policyOn = BrowserTunnel.make(policy)
     try {
-      await expect(Effect.runPromise(tunnel.open({ host: "169.254.169.254", port: 80 }))).rejects.toThrow("blocked")
-      await expect(Effect.runPromise(tunnel.open({ host: "127.0.0.1", port: 4096 }))).rejects.toThrow("blocked")
+      // Experiment OFF (no policy): pre-PR legacy net.createConnection dials 127.0.0.1:<addr.port> directly.
+      const legacyID = await Effect.runPromise(legacyOff.open({ host: "127.0.0.1", port: addr.port }))
+      await Effect.runPromise(legacyOff.write(legacyID, new TextEncoder().encode("hi"), true))
+      const echoed = await Effect.runPromise(legacyOff.read(legacyID))
+      expect(new TextDecoder().decode(echoed.data)).toBe("hi")
+      await Effect.runPromise(legacyOff.close(legacyID))
+
+      // Experiment ON (policy provided): legacy RPC enforces policy (blocks reserved port, uses policy resolver).
+      await expect(Effect.runPromise(policyOn.open({ host: "127.0.0.1", port: addr.port }))).rejects.toThrow("blocked")
+      const sentinelID = await Effect.runPromise(
+        policyOn.open({ host: "fixture-sentinel.invalid", port: openAddr.port }),
+      )
+      expect(sentinelResolved).toBe(1)
+      await Effect.runPromise(policyOn.close(sentinelID))
     } finally {
-      tunnel.dispose()
+      legacyOff.dispose()
+      policyOn.dispose()
+      await Promise.all([
+        new Promise<void>((resolve) => echo.close(() => resolve())),
+        new Promise<void>((resolve) => openPort.close(() => resolve())),
+      ])
     }
   })
+})
+
+describe("BrowserConnection experiment attachment-boundary selection", () => {
+  type Control = { type: string; connectionID: string; version?: number; capabilities?: readonly string[] }
+
+  function makeConnectionFixture(host?: BrowserTunnelHost.Interface) {
+    const sessionID = Session.ID.make("ses_00000000000000000000000001")
+    const sessionRow = { id: sessionID, agent: "build", permissions: [] as unknown[], location: { directory: "/work" } }
+    const controls: Control[] = []
+    let handlers: Record<string, (input: object, call: object) => Effect.Effect<unknown, unknown>> = {}
+    const call = { error: (code: string, message: string) => new Error(`${code}: ${message}`) }
+
+    const ctx = {
+      agent: { transform: () => Effect.void },
+      permission: { hook: () => Effect.void, assert: () => Effect.void },
+      session: {
+        get: () => Effect.succeed(sessionRow),
+        update: (req: { permissions?: unknown[] }) =>
+          Effect.sync(() => {
+            sessionRow.permissions = req.permissions ?? []
+          }),
+        hook: () => Effect.void,
+      },
+      storage: {
+        scan: () => Effect.succeed({ entries: [] }),
+        set: () => Effect.void,
+        remove: () => Effect.void,
+      },
+      location: { directory: "/work" },
+      rpc: {
+        register: (_def: unknown, registered: typeof handlers) =>
+          Effect.sync(() => {
+            handlers = registered
+            return {
+              events: {
+                emit: (_name: string, control: Control) =>
+                  Effect.sync(() => {
+                    controls.push(control)
+                  }),
+              },
+            }
+          }),
+      },
+      event: { subscribe: () => Stream.empty },
+    }
+
+    const start = () =>
+      BrowserConnection.make(ctx as unknown as Parameters<typeof BrowserConnection.make>[0]).pipe(
+        host ? Effect.provideService(BrowserTunnelHost.Reference, host) : (effect) => effect,
+      )
+
+    const attach = (connectionID: string) =>
+      Effect.gen(function* () {
+        const fiber = yield* Effect.forkChild(handlers.attach({ sessionID, connectionID, version: 4 }, call), {
+          startImmediately: true,
+        })
+        yield* Effect.suspend(() =>
+          controls.some((c) => c.type === "attached" && c.connectionID === connectionID)
+            ? Effect.void
+            : Effect.fail("waiting"),
+        ).pipe(Effect.retry(Schedule.spaced("5 millis")), Effect.timeout("5 seconds"))
+        const attachedEvent = controls.find((c) => c.type === "attached" && c.connectionID === connectionID)!
+        return { fiber, attachedEvent }
+      })
+
+    return { sessionID, controls, getHandlers: () => handlers, call, start, attach }
+  }
+
+  test("disabled flag or absent host preserves legacy tunnel connect and refuses tickets/grants without minting", async () => {
+    const reservedEcho = createNetServer((socket) => socket.pipe(socket))
+    await once(reservedEcho.listen(0, "127.0.0.1"), "listening")
+    const reservedAddr = reservedEcho.address()
+    if (!reservedAddr || typeof reservedAddr === "string") throw new Error("No TCP address")
+
+    let ticketsIssued = 0
+    const disabledHost: BrowserTunnelHost.Interface = {
+      enabled: Effect.succeed(false),
+      reservedLocalPorts: () => new Set([reservedAddr.port]),
+      issueTicket: () =>
+        Effect.sync(() => {
+          ticketsIssued += 1
+          return { ticket: "tkt_should_not_mint", expiresIn: 30, protocol: 1, path: BrowserTunnelHost.BROWSER_TUNNEL_PATH }
+        }),
+      revokeAttachment: () => Effect.void,
+    }
+
+    try {
+      for (const host of [undefined, disabledHost] as const) {
+        const fx = makeConnectionFixture(host)
+        await Effect.runPromise(
+          Effect.gen(function* () {
+            yield* fx.start()
+            const { fiber, attachedEvent } = yield* fx.attach("conn_off")
+            expect(attachedEvent.capabilities).toBeUndefined()
+
+            const ticketExit = yield* fx
+              .getHandlers()
+              ["tunnel.ticket"]({ sessionID: fx.sessionID, connectionID: "conn_off", protocol: 1 }, fx.call)
+              .pipe(Effect.exit)
+            expect(ticketExit._tag).toBe("Failure")
+            expect(ticketsIssued).toBe(0)
+
+            const grantExit = yield* fx
+              .getHandlers()
+              ["tunnel.grant"](
+                { sessionID: fx.sessionID, connectionID: "conn_off", target: { host: "127.0.0.1", port: 5173 } },
+                fx.call,
+              )
+              .pipe(Effect.exit)
+            expect(grantExit._tag).toBe("Failure")
+
+            // Pre-PR legacy tunnel.open still connects to ordinary loopback even if port is in disabledHost.reservedLocalPorts
+            const id = (yield* fx
+              .getHandlers()
+              ["tunnel.open"](
+                { sessionID: fx.sessionID, connectionID: "conn_off", target: { host: "127.0.0.1", port: reservedAddr.port } },
+                fx.call,
+              )) as string
+            yield* fx.getHandlers()["tunnel.close"]({ sessionID: fx.sessionID, connectionID: "conn_off", tunnelID: id }, fx.call)
+            yield* Fiber.interrupt(fiber)
+          }).pipe(Effect.scoped),
+        )
+      }
+    } finally {
+      await new Promise<void>((resolve) => reservedEcho.close(() => resolve()))
+    }
+  }, 15_000)
+
+  test("enabled attachment enforces policy on legacy RPC, supports ticket/grant, and keeps boundary coherent across flag toggle", async () => {
+    const reservedEcho = createNetServer((socket) => socket.pipe(socket))
+    const allowedEcho = createNetServer((socket) => socket.pipe(socket))
+    await Promise.all([
+      once(reservedEcho.listen(0, "127.0.0.1"), "listening"),
+      once(allowedEcho.listen(0, "127.0.0.1"), "listening"),
+    ])
+    const reservedAddr = reservedEcho.address()
+    const allowedAddr = allowedEcho.address()
+    if (!reservedAddr || typeof reservedAddr === "string" || !allowedAddr || typeof allowedAddr === "string") {
+      throw new Error("No TCP address")
+    }
+
+    let flagEnabled = true
+    let ticketsIssued = 0
+    const host: BrowserTunnelHost.Interface = {
+      enabled: Effect.sync(() => flagEnabled),
+      reservedLocalPorts: () => new Set([reservedAddr.port]),
+      issueTicket: () =>
+        Effect.sync(() => {
+          ticketsIssued += 1
+          return {
+            ticket: `tkt_${ticketsIssued}`,
+            expiresIn: 30,
+            protocol: 1,
+            path: BrowserTunnelHost.BROWSER_TUNNEL_PATH,
+          }
+        }),
+      revokeAttachment: () => Effect.void,
+    }
+
+    try {
+      const fx = makeConnectionFixture(host)
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          yield* fx.start()
+
+          // 1. Attachment A starts while experiment is ON
+          const attA = yield* fx.attach("conn_on")
+          expect(attA.attachedEvent.capabilities).toEqual([BrowserTunnelHost.STREAM_CAPABILITY])
+
+          // Ticket & grant succeed on enabled attachment
+          const ticketA = yield* fx
+            .getHandlers()
+            ["tunnel.ticket"]({ sessionID: fx.sessionID, connectionID: "conn_on", protocol: 1 }, fx.call)
+          expect(ticketA).toMatchObject({ ticket: "tkt_1", protocol: 1, path: BrowserTunnelHost.BROWSER_TUNNEL_PATH })
+
+          yield* fx
+            .getHandlers()
+            ["tunnel.grant"](
+              { sessionID: fx.sessionID, connectionID: "conn_on", target: { host: "127.0.0.1", port: allowedAddr.port } },
+              fx.call,
+            )
+
+          // Policy is enforced even on legacy tunnel.open for an enabled attachment (no downgrade!)
+          const blockedLegacy = yield* fx
+            .getHandlers()
+            ["tunnel.open"](
+              { sessionID: fx.sessionID, connectionID: "conn_on", target: { host: "127.0.0.1", port: reservedAddr.port } },
+              fx.call,
+            )
+            .pipe(Effect.exit)
+          expect(blockedLegacy._tag).toBe("Failure")
+
+          const okLegacy = (yield* fx
+            .getHandlers()
+            ["tunnel.open"](
+              { sessionID: fx.sessionID, connectionID: "conn_on", target: { host: "127.0.0.1", port: allowedAddr.port } },
+              fx.call,
+            )) as string
+          yield* fx.getHandlers()["tunnel.close"]({ sessionID: fx.sessionID, connectionID: "conn_on", tunnelID: okLegacy }, fx.call)
+
+          // 2. Toggle flag OFF: already-active attachment A stays coherent until detach, while new attachment B uses legacy off mode
+          flagEnabled = false
+          const stillBlockedOnA = yield* fx
+            .getHandlers()
+            ["tunnel.open"](
+              { sessionID: fx.sessionID, connectionID: "conn_on", target: { host: "127.0.0.1", port: reservedAddr.port } },
+              fx.call,
+            )
+            .pipe(Effect.exit)
+          expect(stillBlockedOnA._tag).toBe("Failure")
+
+          // New attachment B replaces A under the disabled flag
+          const attB = yield* fx.attach("conn_after_toggle")
+          expect(yield* Fiber.join(attA.fiber)).toBe("replaced")
+          expect(attB.attachedEvent.capabilities).toBeUndefined()
+
+          const issuedBeforeB = ticketsIssued
+          const ticketB = yield* fx
+            .getHandlers()
+            ["tunnel.ticket"]({ sessionID: fx.sessionID, connectionID: "conn_after_toggle", protocol: 1 }, fx.call)
+            .pipe(Effect.exit)
+          expect(ticketB._tag).toBe("Failure")
+          expect(ticketsIssued).toBe(issuedBeforeB)
+
+          const grantB = yield* fx
+            .getHandlers()
+            ["tunnel.grant"](
+              {
+                sessionID: fx.sessionID,
+                connectionID: "conn_after_toggle",
+                target: { host: "127.0.0.1", port: allowedAddr.port },
+              },
+              fx.call,
+            )
+            .pipe(Effect.exit)
+          expect(grantB._tag).toBe("Failure")
+
+          // Newly attached B restores legacy pre-PR connect (reaches reservedAddr.port with no EgressPolicy)
+          const reopened = (yield* fx
+            .getHandlers()
+            ["tunnel.open"](
+              {
+                sessionID: fx.sessionID,
+                connectionID: "conn_after_toggle",
+                target: { host: "127.0.0.1", port: reservedAddr.port },
+              },
+              fx.call,
+            )) as string
+          yield* fx
+            .getHandlers()
+            ["tunnel.close"]({ sessionID: fx.sessionID, connectionID: "conn_after_toggle", tunnelID: reopened }, fx.call)
+          yield* Fiber.interrupt(attB.fiber)
+        }).pipe(Effect.scoped),
+      )
+    } finally {
+      await Promise.all([
+        new Promise<void>((resolve) => reservedEcho.close(() => resolve())),
+        new Promise<void>((resolve) => allowedEcho.close(() => resolve())),
+      ])
+    }
+  }, 15_000)
 })
 
 describe("StreamMux flow control, fairness, half-close, and RESET cancellation", () => {
