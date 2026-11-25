@@ -3,6 +3,7 @@ import {
   CLEAR_WITHOUT_HASH_EVENT,
   createTimelineCursorState,
   CURSOR_SEEK_LIMIT,
+  cursorLanding,
   cursorMessageID,
   DISPOSED_CURSOR_EVENT,
   freshCursorMessageID,
@@ -342,6 +343,40 @@ describe("cursor machine", () => {
       status: "pending",
       endOnMiss: true,
     })
+  })
+
+  // The timeline stays hidden on a cold open while the cursor still has a place to put under it. A session that
+  // opened on a link showed its end for about 60 ms first.
+  test("the cursor has a place to land from a link's hash until its seek lands, gives up or is taken over", () => {
+    const opening = createTimelineCursorState()
+    expect(cursorLanding(opening, "message-msg_5")).toBe("soon")
+    // A session opened without a link has nothing to wait for.
+    expect(cursorLanding(opening, "")).toBeUndefined()
+
+    // History pages toward a prompt for as long as its pages take.
+    const paging = replay([changed("#message-msg_5")], idle())
+    const pending = transitionTimelineCursor(paging, applied(paging, "#message-msg_5")).state
+    expect(pendingCursorMessageID(pending)).toBe("msg_5")
+    expect(cursorLanding(pending, "message-msg_5")).toBe("paging")
+
+    const seeking = replay([jump("msg_5")], idle())
+    expect(cursorLanding(seeking, "message-msg_5")).toBe("soon")
+
+    const landed = transitionTimelineCursor(seeking, { type: "seek.landed", attempt: seeking.attempt }).state
+    expect(cursorLanding(landed, "message-msg_5")).toBeUndefined()
+
+    const taken = transitionTimelineCursor(seeking, SCROLL_MOVED_EVENT).state
+    expect(cursorLanding(taken, "message-msg_5")).toBeUndefined()
+
+    // A timeline that is not on screen probes nothing, so nothing waits for it.
+    const away = transitionTimelineCursor(seeking, VIEW_UNREADY_EVENT).state
+    expect(cursorLanding(away, "message-msg_5")).toBeUndefined()
+
+    const gaveUp = Array.from({ length: CURSOR_SEEK_LIMIT + 1 }).reduce<TimelineCursorState>(
+      (state) => transitionTimelineCursor(state, { type: "seek.missing", attempt: state.attempt }).state,
+      seeking,
+    )
+    expect(cursorLanding(gaveUp, "message-msg_5")).toBeUndefined()
   })
 
   // The virtualizer went on scrolling to the prompt's row for up to five seconds after the cursor had put the prompt

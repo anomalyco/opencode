@@ -1,6 +1,6 @@
 import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/client/promise"
 import { expect, test, type Page } from "@playwright/test"
-import { sessionHref } from "../utils/app"
+import { holdRoute, sessionHref } from "../utils/app"
 import { trackPageErrors } from "../utils/errors"
 import { fixture, installTimelineSettings, mockStressTimeline } from "../utils/session-fixture"
 import {
@@ -1080,6 +1080,229 @@ test.describe("timeline history", () => {
     await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
     expect(await top()).toBe(place)
     expect(await page.evaluate(() => location.hash)).toBe(`#message-${userID}`)
+  })
+
+  // A session that opens on a link waits for two things: its rows, and the link's prompt under the view. With a short
+  // newest reply the rows were ready first, and the timeline showed the session's end for about 60 ms before it went
+  // to the prompt.
+  for (const newTimeline of [false, true]) {
+    test(`a link that opens the session shows its prompt in place from the first frame (${newTimeline ? "New" : "current"} timeline)`, async ({
+      page,
+    }) => {
+      const messages = validateTimelineMessages([
+        ...historyMessages(20),
+        userMessage(),
+        assistantMessage([textPart("prt_first_frame_tail", "Latest answer")]),
+      ])
+
+      const prompt = messages.filter((message) => message.type === "user")[5]!.id
+      const selector = `[data-timeline-row="UserMessage"][data-message-id="${prompt}"]`
+
+      // Where the prompt is against the header's lower edge, in each frame from the first one that shows a row: one
+      // that a click in the upper part of the timeline would reach.
+      await page.addInitScript((selector) => {
+        if (!sessionStorage.getItem("first-frames")) return
+        const frames: (number | null)[] = []
+        Object.assign(window, { firstFrames: frames })
+
+        const sample = () => {
+          const content = document.querySelector("[data-timeline-virtual-content]")
+          const view = content?.closest(".scroll-view__viewport")
+          const box = view?.getBoundingClientRect()
+
+          const shown =
+            box &&
+            document.elementFromPoint(box.x + box.width / 2, box.y + box.height * 0.35)?.closest("[data-timeline-key]")
+
+          if (content && view && shown && view.contains(shown) && getComputedStyle(content).visibility === "visible") {
+            const row = document.querySelector(selector)
+            const title = document.querySelector("[data-session-title]")
+            frames.push(
+              row && title ? Math.round(row.getBoundingClientRect().top - title.getBoundingClientRect().bottom) : null,
+            )
+          }
+
+          if (frames.length < 12) requestAnimationFrame(sample)
+        }
+
+        requestAnimationFrame(sample)
+      }, selector)
+      await setupTimeline(page, { sessionMessages: messages, settings: { newTimeline } })
+      await expect(page.getByText("Latest answer", { exact: true })).toBeInViewport()
+
+      // The same session again from a link, with nothing measured.
+      await page.evaluate((id) => {
+        sessionStorage.setItem("first-frames", "1")
+        location.hash = `#message-${id}`
+      }, prompt)
+      await page.reload()
+      const frames = () => page.evaluate(() => (window as unknown as { firstFrames?: (number | null)[] }).firstFrames)
+      await expect.poll(async () => (await frames())?.length).toBe(12)
+      expect(await frames()).toEqual(Array.from({ length: 12 }, () => 0))
+      expect(await page.evaluate(() => location.hash)).toBe(`#message-${prompt}`)
+    })
+  }
+
+  // At phone width a link that opened a session lost its fragment in 1 of 6 opens of the new timeline: the session
+  // showed its end, and a history.replaceState had cleared the link.
+  test("a link that opens the session at phone width keeps its fragment and shows its prompt (New timeline)", async ({
+    page,
+  }) => {
+    const messages = validateTimelineMessages([
+      ...historyMessages(20),
+      userMessage(),
+      // Taller than the window, so the prompt is not within sight of the end once the reply has its size.
+      assistantMessage([
+        textPart("prt_phone_tail", Array.from({ length: 120 }, (_, index) => `Paragraph ${index}.`).join("\n\n")),
+      ]),
+    ])
+
+    const selector = `[data-timeline-row="UserMessage"][data-message-id="${userID}"]`
+
+    await setupTimeline(page, {
+      sessionMessages: messages,
+      viewport: { width: 590, height: 850 },
+      deviceScaleFactor: 1.5,
+      settings: { newTimeline: true },
+    })
+    await expect(page.getByText("Paragraph 119.", { exact: true })).toBeInViewport()
+
+    // The same session again from a link, with nothing measured.
+    await page.evaluate((id) => (location.hash = `#message-${id}`), userID)
+    await page.reload()
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    await expect(page.locator(selector)).toBeInViewport()
+    await waitForVisualSettle(page, [selector], 6)
+    expect(await page.evaluate(() => location.hash)).toBe(`#message-${userID}`)
+
+    // The prompt is at the top of the part the timeline shows.
+    expect(
+      await page.locator(selector).evaluate((element) => {
+        const view = element.closest(".scroll-view__viewport")!
+
+        // The viewport declares no scroll padding where no header lies over it.
+        return Math.round(
+          element.getBoundingClientRect().top -
+            view.getBoundingClientRect().top -
+            (parseFloat(getComputedStyle(view).scrollPaddingTop) || 0),
+        )
+      }),
+    ).toBe(0)
+  })
+
+  // The timeline shows after three seconds whatever has rendered. A link's prompt near the session's end then stands
+  // short of its place, because the reply after it has no height yet. The timeline's scroll to the prompt was over
+  // by then, and the prompt stayed 473px below its place when the reply rendered.
+  test("a link lands its prompt once a reply that was slow to render has its height", async ({ page }) => {
+    const messages = validateTimelineMessages([
+      ...historyMessages(20),
+      userMessage(),
+      // Long enough to need the Markdown worker, and taller than the window.
+      assistantMessage([
+        textPart("prt_slow_tail", Array.from({ length: 120 }, (_, index) => `Paragraph ${index}.`).join("\n\n")),
+      ]),
+    ])
+
+    const selector = `[data-timeline-row="UserMessage"][data-message-id="${userID}"]`
+    const content = page.locator("[data-timeline-virtual-content]")
+    await setupTimeline(page, { sessionMessages: messages })
+    await expect(page.getByText("Paragraph 119.", { exact: true })).toBeInViewport()
+
+    // The same session again from a link, with nothing measured, and with the Markdown worker held.
+    const worker = await holdRoute(page, /markdown\.worker(?:-[^/?]+\.js|\.ts)(?:\?.*)?$/)
+
+    try {
+      await page.evaluate((id) => (location.hash = `#message-${id}`), userID)
+      await page.reload()
+      await worker.arrived
+      // With the reply still unrendered, only the timeline's fallback shows it.
+      await expect(content).toHaveCSS("visibility", "visible")
+      await expect(page.getByText("Paragraph 119.", { exact: true })).toHaveCount(0)
+      worker.release()
+      await expect(page.getByText("Paragraph 119.", { exact: true })).toBeAttached()
+      await waitForVisualSettle(page, [selector], 6)
+      expect(await page.evaluate(() => location.hash)).toBe(`#message-${userID}`)
+
+      expect(
+        await page
+          .locator(selector)
+          .evaluate((element) =>
+            Math.round(
+              element.getBoundingClientRect().top -
+                document.querySelector("[data-session-title]")!.getBoundingClientRect().bottom,
+            ),
+          ),
+      ).toBe(0)
+    } finally {
+      worker.release()
+    }
+  })
+
+  // The viewport scrolls while its rows are still hidden. A wheel then ended the timeline's scroll to the link's
+  // prompt, and the timeline made the reveal again when it showed: the view went 735 to 771px back to the prompt.
+  test("a wheel before the timeline shows keeps the view where the reader took it from a link's prompt", async ({
+    page,
+  }) => {
+    const history = historyMessages(30)
+    const prompt = "msg_00014_linked_a_user"
+    // Long enough to need the Markdown worker. The timeline stays hidden while a mounted reply waits for it.
+    const long = (name: string) => Array.from({ length: 60 }, (_, index) => `${name} paragraph ${index}.`).join("\n\n")
+
+    const messages = validateTimelineMessages([
+      ...history.slice(0, 30),
+      userMessage(undefined, { id: prompt, created: 1690000145000 }),
+      assistantMessage([textPart("prt_hidden_wheel_reply", long("Linked"))], {
+        id: "msg_00014_linked_b_assistant",
+        parentID: prompt,
+        created: 1690000146000,
+      }),
+      ...history.slice(30),
+      userMessage(),
+      assistantMessage([textPart("prt_hidden_wheel_tail", long("Latest"))]),
+    ])
+
+    const selector = `[data-timeline-row="UserMessage"][data-message-id="${prompt}"]`
+    const content = page.locator("[data-timeline-virtual-content]")
+
+    const belowHeader = () =>
+      page.evaluate((selector) => {
+        const row = document.querySelector(selector)
+
+        return (
+          row &&
+          Math.round(
+            row.getBoundingClientRect().top -
+              document.querySelector("[data-session-title]")!.getBoundingClientRect().bottom,
+          )
+        )
+      }, selector)
+
+    await setupTimeline(page, { sessionMessages: messages })
+    await expect(page.getByText("Latest paragraph 59.", { exact: true })).toBeInViewport()
+
+    // The same session again from a link, with nothing measured, and with the Markdown worker held.
+    const worker = await holdRoute(page, /markdown\.worker(?:-[^/?]+\.js|\.ts)(?:\?.*)?$/)
+
+    try {
+      await page.evaluate((id) => (location.hash = `#message-${id}`), prompt)
+      await page.reload()
+      await worker.arrived
+      // The link's prompt is in its place, in rows that do not show yet.
+      await expect.poll(belowHeader).toBe(0)
+      await expect(content).toHaveCSS("visibility", "hidden")
+      await timelineScroller(page).hover()
+      await page.mouse.wheel(0, -520)
+      // The wheel took the view 520px up, so the prompt is that far below its place.
+      await expect.poll(belowHeader).toBeGreaterThan(400)
+      await expect(content).toHaveCSS("visibility", "hidden")
+      worker.release()
+      await expect(content).toHaveCSS("visibility", "visible")
+      await waitForVisualSettle(page, [selector], 6)
+      // It still is, now that the timeline shows.
+      expect(await belowHeader()).toBeGreaterThan(400)
+    } finally {
+      worker.release()
+    }
   })
 
   // The timeline scrolls to a row by its index, for up to five seconds. A page of history that arrived above in that

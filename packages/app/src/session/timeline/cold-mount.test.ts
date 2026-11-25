@@ -39,7 +39,7 @@ describe("cold mount", () => {
       { type: "mounted", active: true },
       CHECK_REQUESTED,
       SIZES_FLUSHING,
-      { type: "timeout", attempt: 1 },
+      { type: "timeout", attempt: 1, landing: false },
       DISPOSED,
     ] satisfies ColdMountEvent[]) {
       const next = transitionColdMount(state, event)
@@ -94,12 +94,37 @@ describe("cold mount", () => {
       expect(stuck.state).toMatchObject({ type: phase, checking: false })
       expect(coldMountHidden(stuck.state)).toBe(true)
 
-      const next = transitionColdMount(stuck.state, { type: "timeout", attempt: 1 })
+      const next = transitionColdMount(stuck.state, { type: "timeout", attempt: 1, landing: false })
       expect(next.state).toEqual({ type: "revealed" })
       expect(next.effects).toEqual([{ type: "release" }, { type: "pin" }])
       expect(transitionColdMount(next.state, CHECK_REQUESTED).state).toBe(next.state)
     },
   )
+
+  // On a machine slow enough for the fallback to fire before a link's prompt was in place, the session's end showed
+  // and the view then jumped to the prompt.
+  test("the fallback waits once more for a link that is a few frames from landing", () => {
+    const stuck = run(mounted, ...check(1, "pinned"), ...check(1, "waiting"))
+    const waited = transitionColdMount(stuck.state, { type: "timeout", attempt: 1, landing: true })
+    expect(coldMountHidden(waited.state)).toBe(true)
+    expect(waited.effects).toEqual([{ type: "timer.start", attempt: 1 }])
+
+    // The link landed in that time: the next settled pass reveals.
+    const landed = run(waited.state, ...check(1, "settled"))
+    expect(landed.state).toEqual({ type: "revealed" })
+    expect(landed.effects).toEqual([{ type: "release" }])
+
+    // It did not: the second fallback reveals, whatever the link is doing.
+    const again = transitionColdMount(waited.state, { type: "timeout", attempt: 1, landing: true })
+    expect(again.state).toEqual({ type: "revealed" })
+    expect(again.effects).toEqual([{ type: "release" }, { type: "pin" }])
+
+    // A view that left the screen and came back starts over, with one more wait to give.
+    const back = run(waited.state, DEACTIVATED, ACTIVATED)
+    const next = transitionColdMount(back.state, { type: "timeout", attempt: 2, landing: true })
+    expect(coldMountHidden(next.state)).toBe(true)
+    expect(next.effects).toEqual([{ type: "timer.start", attempt: 2 }])
+  })
 
   test("joins check requests while one is running", () => {
     const next = transitionColdMount(mounted, CHECK_REQUESTED)
@@ -116,7 +141,7 @@ describe("cold mount", () => {
       CHECK_REQUESTED,
       { type: "check.ready", attempt: 1 },
       { type: "check.sampled", attempt: 1, sample: "settled" },
-      { type: "timeout", attempt: 1 },
+      { type: "timeout", attempt: 1, landing: false },
     ] satisfies ColdMountEvent[])
       expect(transitionColdMount(hidden.state, event).state).toBe(hidden.state)
 
@@ -130,10 +155,12 @@ describe("cold mount", () => {
     // The first activation's microtask and timer arrive late, and only the current attempt's count.
     for (const event of [
       { type: "check.ready", attempt: 1 },
-      { type: "timeout", attempt: 1 },
+      { type: "timeout", attempt: 1, landing: false },
     ] satisfies ColdMountEvent[])
       expect(transitionColdMount(shown.state, event).state).toBe(shown.state)
-    expect(transitionColdMount(shown.state, { type: "timeout", attempt: 2 }).state).toEqual({ type: "revealed" })
+    expect(transitionColdMount(shown.state, { type: "timeout", attempt: 2, landing: false }).state).toEqual({
+      type: "revealed",
+    })
   })
 
   test("an inactive mount observes but neither checks nor times out until activated", () => {

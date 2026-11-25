@@ -316,6 +316,19 @@ export function hasFreshCursorOrSeek(state: TimelineCursorState) {
   return state.status === "selected" && (state.fresh || (!!state.seek && !state.seek.paused))
 }
 
+/**
+ * Whether the cursor still has a place to put under the view. `soon`: a route hash that waits to apply, or a prompt
+ * that a seek is bringing in, both a few frames from done. `paging`: a prompt that history still pages toward, for as
+ * long as the pages take. `hash` is `location.hash` without its `#`.
+ */
+export function cursorLanding(state: TimelineCursorState, hash: string) {
+  if (state.status === "applying") return hash ? "soon" : undefined
+
+  if (state.status === "pending") return "paging"
+
+  return state.status === "selected" && state.seek && !state.seek.paused ? "soon" : undefined
+}
+
 function hashChanged(
   state: TimelineCursorState,
   event: Extract<TimelineCursorEvent, { type: "hash.changed" }>,

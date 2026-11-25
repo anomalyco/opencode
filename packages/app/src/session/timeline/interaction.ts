@@ -453,6 +453,7 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
     follow,
     view: {
       anchor,
+      landing: cursor.landing,
       markUserScroll,
       onHistoryScroll,
       scheduleScrollState,
