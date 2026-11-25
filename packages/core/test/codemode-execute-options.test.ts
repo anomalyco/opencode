@@ -148,4 +148,37 @@ describe("execute timeout and background", () => {
       expect(h.notices[0]?.text).toContain("done")
     }),
   )
+  it.live("a foreground script's output is bounded once, for both its result and its job", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const truncated: Array<Tool.NormalizedResult> = []
+      let finished: Job.Info | undefined
+      const run = yield* CodeModeJob.make(
+        {
+          ...jobs,
+          block: (input) =>
+            jobs.block(input).pipe(Effect.tap((blocked) => Effect.sync(() => void (finished = blocked?.info)))),
+        },
+        () => Effect.die("no notice expected"),
+        yield* Scope.make(),
+      ).pipe(
+        Effect.provideService(ToolOutput.Service, {
+          truncate: (result: Tool.NormalizedResult) =>
+            Effect.sync(() => {
+              truncated.push(result)
+              return {
+                ...result,
+                content: [{ type: "text" as const, text: "bounded" }],
+                metadata: { ...result.metadata, truncated: true },
+              }
+            }),
+        } as unknown as ToolOutput.Interface),
+      )
+      if (!run) throw new Error("no job runner")
+      const result = yield* run(context("ses_bounded"), script(0))
+      expect(truncated).toHaveLength(1)
+      expect(result).toMatchObject({ content: [{ type: "text", text: "bounded" }], metadata: { truncated: true } })
+      expect(finished?.output).toBe("bounded")
+    }),
+  )
 })
