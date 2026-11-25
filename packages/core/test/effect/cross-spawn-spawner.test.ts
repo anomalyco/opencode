@@ -338,11 +338,11 @@ describe("cross-spawn spawner", () => {
       Effect.gen(function* () {
         if (process.platform === "win32") return
 
-        // The leader exits on SIGTERM. Its child ignores SIGTERM and lets go of the output, so "close" doesn't wait
-        // for it.
+        // The leader exits on SIGTERM. Its child installs the SIGTERM trap before reporting its PID and redirects
+        // stdio before sleeping, so "close" doesn't wait for it.
         const handle = yield* ChildProcess.make(
           "sh",
-          ["-c", '(trap "" TERM; sleep 30) >/dev/null 2>&1 & echo $!; wait'],
+          ["-c", 'sh -c \'trap "" TERM; echo $$; exec >/dev/null 2>&1; exec sleep 30\' & wait'],
           { stdin: "ignore" },
         )
         yield* Effect.addFinalizer(() =>
@@ -351,7 +351,8 @@ describe("cross-spawn spawner", () => {
         const child = Number(new TextDecoder().decode(Option.getOrThrow(yield* Stream.runHead(handle.stdout))))
         expect(alive(child)).toBe(true)
 
-        yield* handle.kill({ forceKillAfter: 100 })
+        // Exceeds the 30 s test timeout so only the post-close group SIGKILL can stop the child.
+        yield* handle.kill({ forceKillAfter: 35_000 })
 
         // With no reaping init the killed child stays a zombie, which alive() still reports, so "Z" in /proc counts as
         // stopped. macOS has no /proc but always reaps orphans.
