@@ -23,6 +23,7 @@ import {
   type SessionRevertState,
 } from "./revert-machine"
 import { selectSessionUserMessages } from "./session-domain"
+import { withdrawPrompt } from "./withdraw-prompt"
 
 const IDLE = createSessionRevertState()
 
@@ -236,9 +237,16 @@ export function createSessionRevert(input: {
       // local copies of its media first; if they cannot load, the prompt stays queued.
       const restored = await pinPromptMedia(messageDraft(operation.message, target.directory))
       signal.throwIfAborted()
-      await server.api.session.inbox.cancel({ sessionID, inboxID: operation.message.id }, { signal })
+      const messageID = operation.message.id
+      const result = await data.session.sequence(sessionID, () =>
+        withdrawPrompt(server.api, sessionID, messageID, { signal }),
+      )
+      signal.throwIfAborted()
+      if (result === "withdrawn")
+        return { type: "withdraw.succeeded", attempt, prompt: restored, ...snapshot(sessionID) }
 
-      return { type: "withdraw.succeeded", attempt, prompt: restored, ...snapshot(sessionID) }
+      dispatch(sessionID, { type: "withdraw.delivered", attempt })
+      operation = { ...operation, type: "rewind" }
     }
 
     if (operation.type === "rewind") {

@@ -682,6 +682,7 @@ export const dict = {
   "session.queue.steerTooltip": "Send without interrupting",
   "session.queue.remove": "Remove",
   "session.queue.undo": "Undo",
+  "session.queue.alreadySent": "This prompt was already sent",
   "session.queue.undoShell": "Leave shell mode before undoing a queued prompt",
   "session.queue.reorder": "Reorder queued prompt",
   "session.queue.reverted": "Redo the revert before you reorder or edit queued prompts",

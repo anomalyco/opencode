@@ -288,6 +288,29 @@ describe("replaced inbox IDs", () => {
 })
 
 describe("optimistic rows", () => {
+  test("a delivered undo hides the sent row and leaves the draft alone", () => {
+    const requested = transitionQueue(createQueueState([one, two]), {
+      type: "undo.requested",
+      id: "inb_1",
+      mode: "normal",
+    })
+    const attempt = runs(requested.effects)[0].attempt
+    const event = { type: "mutation.delivered", attempt } satisfies QueueEvent
+
+    expect(transitionQueue(requested.state, { ...event, attempt: attempt + 1 }).state).toBe(requested.state)
+
+    const delivered = transitionQueue(requested.state, event)
+    expect(delivered.state.status).toBe("idle")
+    expect(rowIDs(delivered.state)).toEqual(["inb_2"])
+    expect(delivered.effects.filter((effect) => effect.type === "toast")).toEqual([
+      { type: "toast", key: "session.queue.alreadySent" },
+    ])
+    expect(delivered.effects.some((effect) => effect.type === "draft.merge")).toBe(false)
+
+    const disposed = transitionQueue(requested.state, { type: "dispose" }).state
+    expect(transitionQueue(disposed, event)).toEqual({ state: { status: "disposed" }, effects: [] })
+  })
+
   test("a steer hides its row until the server confirms or refuses it", () => {
     const requested = transitionQueue(createQueueState([one, two]), { type: "steer.requested", id: "inb_1" })
     const attempt = runs(requested.effects)[0].attempt
