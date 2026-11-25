@@ -87,7 +87,7 @@ const itWithUnavailableDestination = testEffect(
   ),
 )
 const itWithExecution = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Session.node, SessionExecution.node]), [
+  AppNodeBuilder.build(LayerNode.group([Session.node, Bus.node, SessionExecution.node]), [
     Global.node.replace(tempGlobalLayer),
     offlineModels,
   ]),
@@ -510,6 +510,74 @@ describe("Session.move", () => {
         }),
       ),
     ),
+  )
+
+  for (const removed of [false, true]) {
+    it.effect(`moves children from the ${removed ? "removed" : "same"} source with their parent`, () =>
+      tmpdirScoped().pipe(
+        Effect.flatMap((tmp) =>
+          Effect.gen(function* () {
+            const session = yield* Session.Service
+            const bus = yield* Bus.Service
+            const source = AbsolutePath.make(path.join(tmp.path, "source"))
+            const other = AbsolutePath.make(path.join(tmp.path, "other"))
+            const destination = AbsolutePath.make(tmp.path)
+            yield* Effect.promise(() => Promise.all([mkdir(source), mkdir(other)]))
+            const parent = yield* session.create({ location: Location.Ref.make({ directory: source }) })
+            const child = yield* session.create({ parentID: parent.id })
+            const grandchild = yield* session.create({ parentID: child.id })
+            const elsewhere = yield* session.create({ parentID: parent.id })
+            yield* bus.publish(SessionEvent.Moved, {
+              sessionID: elsewhere.id,
+              location: Location.Ref.make({ directory: other }),
+              projectID: Project.ID.global,
+            })
+            if (removed) yield* Effect.promise(() => rm(source, { recursive: true }))
+
+            yield* session.move({ sessionID: parent.id, directory: destination })
+
+            for (const id of [parent.id, child.id, grandchild.id]) {
+              if (removed) expect((yield* session.get(id)).location.directory).toBe(destination)
+              else
+                expect(yield* session.inbox(id)).toMatchObject([
+                  { type: "move", payload: { location: { directory: destination } } },
+                ])
+            }
+            expect((yield* session.get(elsewhere.id)).location.directory).toBe(other)
+            expect(yield* session.inbox(elsewhere.id)).toEqual([])
+          }),
+        ),
+      ),
+    )
+  }
+
+  itWithExecution.live(
+    "runs a child left in a removed directory where its parent now is",
+    () =>
+      Effect.gen(function* () {
+        const tmp = yield* tmpdirScoped()
+        const source = AbsolutePath.make(path.join(tmp.path, "source"))
+        const destination = AbsolutePath.make(path.join(tmp.path, "destination"))
+        yield* Effect.promise(() => Promise.all([mkdir(source), mkdir(destination)]))
+        const session = yield* Session.Service
+        const execution = yield* SessionExecution.Service
+        const bus = yield* Bus.Service
+        const parent = yield* session.create({ location: Location.Ref.make({ directory: source }) })
+        const child = yield* session.create({ parentID: parent.id })
+        yield* bus.publish(SessionEvent.Moved, {
+          sessionID: parent.id,
+          location: Location.Ref.make({ directory: destination }),
+          projectID: parent.projectID,
+        })
+        yield* Effect.promise(() => rm(source, { recursive: true }))
+
+        yield* execution.wake(child.id)
+        yield* execution.awaitIdle(child.id)
+
+        expect(yield* session.inbox(parent.id)).toEqual([])
+        expect((yield* session.get(child.id)).location.directory).toBe(destination)
+      }),
+    { timeout: 15_000 },
   )
 
   itWithActiveExecution.live("defers an active move when the source directory no longer exists", () =>
