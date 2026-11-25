@@ -33,6 +33,7 @@ type Parameter = {
 type Operation = {
   readonly summary?: string
   readonly description?: string
+  readonly deprecated?: boolean
   readonly parameters?: ReadonlyArray<Parameter>
   readonly requestBody?: { readonly content?: Readonly<Record<string, { readonly schema?: Schema }>> }
   readonly responses?: Readonly<
@@ -126,7 +127,7 @@ export async function render(): Promise<Record<string, string>> {
       METHODS.flatMap((method) => {
         const operation = methods[method]
         const experimental = route.startsWith("/api/experimental/")
-        if (!operation || !SHOWN.some((pattern) => matches(pattern, `${method.toUpperCase()} ${route}`))) return []
+        if (!operation || operation.deprecated || !SHOWN.some((pattern) => matches(pattern, `${method.toUpperCase()} ${route}`))) return []
         return [
           {
             method: method.toUpperCase(),
