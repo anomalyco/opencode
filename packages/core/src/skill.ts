@@ -92,10 +92,10 @@ export const parseAddress = (value: string): Address | undefined => {
   const trimmed = value.slice("skill://".length).replace(/\/+$/, "")
   const slash = trimmed.indexOf("/")
   const id = slash === -1 ? trimmed : trimmed.slice(0, slash)
-  const file = slash === -1 ? "" : trimmed.slice(slash + 1)
   if (!SkillDiscovery.isSafeSegment(id)) return undefined
-  if (file !== "" && !file.split("/").every(SkillDiscovery.isSafeSegment)) return undefined
-  return { id: ID.make(id), ...(file ? { file: FilePath(file) } : {}), uri: uri(id, file || undefined) }
+  if (slash === -1) return { id: ID.make(id), uri: uri(id) }
+  const file = parseFilePath(trimmed.slice(slash + 1))
+  return file && { id: ID.make(id), file, uri: uri(id, file) }
 }
 
 export const toModelOutput = (skill: Info, files: ReadonlyArray<string>, location = locate(skill)) => {

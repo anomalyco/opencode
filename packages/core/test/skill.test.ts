@@ -270,6 +270,19 @@ describe("Skill", () => {
     }),
   )
 
+  it.effect("drops file names that aren't safe paths when a skill is added", () =>
+    Effect.gen(function* () {
+      const skill = yield* Skill.Service
+      yield* skill.transform((editor) =>
+        editor.add(
+          { ...info("bundle", "Bundle"), path: AbsolutePath.make(Skill.uri("bundle", "SKILL.md")) },
+          { "references/a.md": "A", "../secret": "no", "/etc/passwd": "no", "a?b": "no" },
+        ),
+      )
+      expect((yield* skill.files(Skill.ID.make("bundle")))?.map(String)).toEqual(["references/a.md"])
+    }),
+  )
+
   it.effect("filters values by agent permissions", () =>
     Effect.gen(function* () {
       const agents = yield* Agent.Service
