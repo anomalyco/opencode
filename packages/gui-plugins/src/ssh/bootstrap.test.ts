@@ -87,7 +87,7 @@ const service = `case "$2" in
 esac`
 
 const unavailable = `if [ "$2" = "start" ] || [ "$2" = "restart" ]; then
-  printf '%s\\n' "OPENCODE_SERVICE_PORT_OWNER=opencode" "OPENCODE_SERVICE_PORT_OWNER_PID=999999" "Managed service port 49374 on 0.0.0.0 is already in use by another process." >&2
+  printf '%s\\n' "Failed to start the service: permission denied" >&2
   exit 1
 fi
 if [ "$1" = "--version" ]; then printf '%s\\n' "${VERSION}"; else printf '%s\\n' stopped; fi`
@@ -172,7 +172,8 @@ bootTest(
         Effect.flip,
       )
 
-      expect(error.code).toBe("service")
+      expect(error.code).toBe("port")
+      expect(error.detail).toContain("another profile")
       expect(
         yield* Effect.promise(() => Bun.file(path.join(machine.home, ".local/state/opencode/free-port")).exists()),
       ).toBe(false)
@@ -194,7 +195,7 @@ bootTest(
 
       expect(error).toBeInstanceOf(SshFailure)
       expect(error.code).toBe("service")
-      expect(error.detail).toContain("already in use")
+      expect(error.detail).toContain("permission denied")
     } finally {
       yield* Effect.promise(() => fs.rm(machine.home, { recursive: true, force: true }))
     }
@@ -323,13 +324,14 @@ bootTest(
 
     const reclaimable = `case "$2" in
   status)
-    if [ -f "$HOME/.local/state/opencode/service.json" ]; then printf '%s\\n' "${FIXED_URL}"; else printf '%s\\n' stopped; fi
+    if [ -f "$HOME/.local/state/opencode/started" ]; then printf '%s\\n' "${FIXED_URL}"; else printf '%s\\n' stopped; fi
     ;;
   start|restart)
     if kill -0 ${holder.pid} 2>/dev/null; then
       printf '%s\\n' "Managed service port 49374 on 0.0.0.0 is already in use by PID ${holder.pid} (opencode serve --service)." >&2
       exit 1
     fi
+    touch "$HOME/.local/state/opencode/started"
     printf '%s' '{"url":"${FIXED_URL}","password":"secret","version":"${VERSION}","pid":7}' > "$HOME/.local/state/opencode/service.json"
     printf '%s\\n' "${FIXED_URL}"
     ;;
@@ -341,8 +343,13 @@ esac`
     const machine = yield* Effect.promise(() => remote(reclaimable))
 
     try {
-      // lsof names the holder; ps proves it is a managed service before anything is killed.
+      // lsof names the holder; ps proves it is a managed service, and this home's registration
+      // proving it is this profile's own, before anything is killed.
       yield* Effect.promise(async () => {
+        await fs.writeFile(
+          path.join(machine.home, ".local/state/opencode/service.json"),
+          JSON.stringify({ url: FIXED_URL, password: "secret", version: VERSION, pid: holder.pid }),
+        )
         await fs.writeFile(path.join(machine.home, "bin/lsof"), `#!/bin/sh\nprintf '%s\\n' ${holder.pid}\n`, {
           mode: 0o755,
         })
@@ -361,6 +368,55 @@ esac`
       })
 
       expect(endpoint).toEqual({ host: "127.0.0.1", port: 49374, password: "secret" })
+    } finally {
+      holder.kill()
+      yield* Effect.promise(() => fs.rm(machine.home, { recursive: true, force: true }))
+    }
+  }),
+)
+
+bootTest(
+  "refuses to stop an OpenCode service from another profile",
+  Effect.gen(function* () {
+    const holder = Bun.spawn(["sleep", "30"])
+
+    const guarded = `case "$2" in
+  status) printf '%s\\n' stopped ;;
+  start|restart)
+    printf '%s\\n' "Managed service port 49374 on 0.0.0.0 is already in use by PID ${holder.pid} (opencode serve --service)." >&2
+    exit 1
+    ;;
+  *)
+    if [ "$1" = "--version" ]; then printf '%s\\n' "${VERSION}"; fi
+    ;;
+esac`
+
+    const machine = yield* Effect.promise(() => remote(guarded))
+
+    try {
+      // No registration in this home records the holder, so it belongs to another profile.
+      yield* Effect.promise(async () => {
+        await fs.writeFile(path.join(machine.home, "bin/lsof"), `#!/bin/sh\nprintf '%s\\n' ${holder.pid}\n`, {
+          mode: 0o755,
+        })
+        await fs.writeFile(
+          path.join(machine.home, "bin/ps"),
+          `#!/bin/sh\nprintf '%s\\n' 'opencode serve --service'\n`,
+          { mode: 0o755 },
+        )
+      })
+
+      const error = yield* bootstrap({
+        target: parseTarget("devbox"),
+        version: VERSION,
+        env: machine.env,
+        port: "reclaim",
+      }).pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(SshFailure)
+      expect(error.code).toBe("port")
+      expect(error.detail).toContain("another profile")
+      expect(() => process.kill(holder.pid, 0)).not.toThrow()
     } finally {
       holder.kill()
       yield* Effect.promise(() => fs.rm(machine.home, { recursive: true, force: true }))

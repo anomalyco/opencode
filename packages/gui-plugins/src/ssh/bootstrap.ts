@@ -85,6 +85,17 @@ kill_service() {
   done
   kill -9 "$1" 2>/dev/null || true
 }
+# Only a service recorded by a registration in this state directory is this home's own leftover.
+# The same port can be held by another profile's or XDG_STATE_HOME's service, and stopping that
+# would cut off its sessions and running tools.
+owns() {
+  for file in "\${XDG_STATE_HOME:-$HOME/.local/state}"/opencode/service*.json; do
+    if [ -f "$file" ] && grep -Eq "\\"pid\\"[[:space:]]*:[[:space:]]*$1([^0-9]|$)" "$file"; then
+      return 0
+    fi
+  done
+  return 1
+}
 pick_port() {
   awk -v seed="$$$1" 'BEGIN { srand(seed); print 20000 + int(rand() * 30000) }'
 }
@@ -118,8 +129,11 @@ reclaim() {
     *opencode*serve*--service*) ;;
     *) report_port "$port" "Port $port is held by PID $pid ($command), which is not an OpenCode service. Use \\"Use another port\\" instead." ;;
   esac
+  if ! owns "$pid"; then
+    report_port "$port" "Port $port is held by an OpenCode service from another profile (PID $pid). It was not stopped; use \\"Use another port\\" instead."
+  fi
   if ! kill "$pid" 2>/dev/null; then
-    report_port "$port" "Could not stop PID $pid on port $port. Start on another port."
+    report_port "$port" "Could not stop PID $pid on port $port. Use \\"Use another port\\" instead."
   fi
   i=0
   while kill -0 "$pid" 2>/dev/null && [ "$i" -lt 5 ]; do
@@ -146,14 +160,7 @@ case "$mode" in
       case "$output" in
         *"OPENCODE_SERVICE_PORT_OWNER=opencode"*)
           pid=$(printf '%s\\n' "$output" | sed -n 's/^OPENCODE_SERVICE_PORT_OWNER_PID=//p')
-          own=
-          for file in "\${XDG_STATE_HOME:-$HOME/.local/state}"/opencode/service*.json; do
-            if [ -f "$file" ] && grep -Eq "\\"pid\\"[[:space:]]*:[[:space:]]*$pid([^0-9]|$)" "$file"; then
-              own=1
-              break
-            fi
-          done
-          if [ "$own" = 1 ]; then
+          if owns "$pid"; then
             verify=$(ps -o command= -p "$pid" 2>/dev/null || true)
             case "$verify" in
               *opencode*serve*--service*) kill_service "$pid" ;;
@@ -163,8 +170,8 @@ case "$mode" in
               exit 1
             fi
           else
-            printf '%s\\n' "$output" >&2
-            exit 1
+            port=$(conflict_port "$output")
+            report_port "$port" "Port $port is held by an OpenCode service from another profile (PID $pid). It was not stopped; use another port."
           fi
           ;;
         *"OPENCODE_SERVICE_PORT_OWNER=foreign"*|*"OPENCODE_SERVICE_PORT_OWNER=none"*)
