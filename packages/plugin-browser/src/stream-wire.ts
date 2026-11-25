@@ -8,8 +8,14 @@ export const FRAME_DATA_CHUNK_BYTES = 16 * 1024
 export const MAX_FRAME_PAYLOAD_BYTES = 64 * 1024
 /** Hard WebSocket maxPayload cap including header overhead. */
 export const MAX_WS_FRAME_BYTES = MAX_FRAME_PAYLOAD_BYTES + FRAME_HEADER_BYTES + 1024
-/** Default per-stream receive window (1.5 MiB: fills ~100 Mbit/s at 100 ms RTT without stalling). */
+/** Default server-side per-stream receive window for uploads (1.5 MiB). */
 export const DEFAULT_STREAM_WINDOW_BYTES = 1536 * 1024
+/**
+ * Default desktop-side per-stream receive window for downloads (512 KiB; derives a 128 KiB credit batch).
+ * Asymmetric against the 1.5 MiB server receive window to bound downstream queueing ahead of concurrent
+ * interactive streams such as WebSocket echoes and HMR updates.
+ */
+export const DEFAULT_CLIENT_STREAM_WINDOW_BYTES = 512 * 1024
 /** Hard upper bound on any stream window to prevent credit overflow attacks. */
 export const MAX_STREAM_WINDOW_BYTES = 4 * 1024 * 1024
 /** Bound WebSocket library write buffer so control/HMR frames are never buried behind a bulk download. */

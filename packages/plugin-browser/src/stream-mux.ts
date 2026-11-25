@@ -710,7 +710,10 @@ export function createServerMux(socket: BrowserTunnelHost.BinarySocket, options:
  * credit backpressure, half-close, RESET cancellation, and zero automatic replay of writes.
  */
 export function createClientMux(socket: BrowserTunnelHost.BinarySocket, options: MuxOptions = {}): ClientMux {
-  const cfg = resolveConfig(options)
+  const cfg = resolveConfig({
+    streamWindowBytes: StreamWire.DEFAULT_CLIENT_STREAM_WINDOW_BYTES,
+    ...options,
+  })
   const closedDeferred = Promise.withResolvers<MuxCloseInfo>()
   let closed = false
   let closeReason = "Browser tunnel disconnected."
