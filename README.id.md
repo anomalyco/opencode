@@ -7,7 +7,7 @@
     </picture>
   </a>
 </p>
-<p align="center">Agen pemrograman AI sumber terbuka.</p>
+<p align="center">Open Source AI Agent untuk Programming</p>
 <p align="center">
   <a href="https://opencode.ai/discord"><img alt="Discord" src="https://img.shields.io/discord/1391832426048651334?style=flat-square&label=discord" /></a>
   <a href="https://www.npmjs.com/package/@opencode/cli"><img alt="npm" src="https://img.shields.io/npm/v/@opencode/cli?style=flat-square" /></a>
@@ -85,7 +85,7 @@ Skrip instalasi memasang OpenCode ke `$HOME/.opencode/bin`.
 
 ### Agen
 
-OpenCode menyertakan dua agen bawaan yang bisa Anda ganti dengan tombol `Tab`.
+OpenCode menyertakan dua agen bawaan yang bisa Kamu ganti dengan tombol `Tab`.
 
 - **build** - Default, agen dengan akses penuh untuk pekerjaan pengembangan
 - **plan** - Agen baca-saja untuk analisis dan eksplorasi kode
@@ -104,11 +104,11 @@ Untuk informasi lebih lanjut tentang cara mengonfigurasi OpenCode, [**kunjungi d
 
 ### Berkontribusi
 
-Jika Anda tertarik berkontribusi ke OpenCode, silakan baca [dokumen kontribusi](./CONTRIBUTING.md) kami sebelum mengirim pull request.
+Jika Kamu tertarik berkontribusi ke OpenCode, silakan baca [dokumen kontribusi](./CONTRIBUTING.md) kami sebelum mengirim pull request.
 
 ### Membangun di atas OpenCode
 
-Jika Anda mengerjakan proyek yang berkaitan dengan OpenCode dan menggunakan "opencode" sebagai bagian dari namanya, misalnya "opencode-dashboard" atau "opencode-mobile", silakan tambahkan catatan di README Anda untuk menjelaskan bahwa proyek tersebut tidak dibuat oleh tim OpenCode dan tidak berafiliasi dengan kami dengan cara apa pun.
+Jika Kamu mengerjakan proyek yang berkaitan dengan OpenCode dan menggunakan "opencode" sebagai bagian dari namanya, misalnya "opencode-dashboard" atau "opencode-mobile", silakan tambahkan catatan di README Kamu untuk menjelaskan bahwa proyek tersebut tidak dibuat oleh tim OpenCode dan tidak berafiliasi dengan kami dengan cara apa pun.
 
 ---
 
