@@ -29,6 +29,7 @@ import { SessionSchema } from "./schema.js"
 import { SessionStored } from "./stored.js"
 import { SessionInboxTable, SessionMessageTable } from "./sql.js"
 import { SessionHistory } from "./history.js"
+import { SessionRedact } from "./redact.js"
 
 type DatabaseService = Database.Interface["db"]
 
@@ -315,9 +316,9 @@ export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(functio
   if (message !== undefined) return yield* Effect.die(new LifecycleConflict({ id: request.id }))
   const payload =
     request.item.type === "user"
-      ? encodeStoredUser(yield* SessionBlob.externalizePayload(db, request.item.payload))
+      ? encodeStoredUser(yield* SessionBlob.externalizePayload(db, SessionRedact.userPayload(request.item.payload)))
       : request.item.type === "synthetic"
-        ? encodeSynthetic(request.item.payload)
+        ? encodeSynthetic(SessionRedact.syntheticPayload(request.item.payload))
         : request.item.type === "compaction"
           ? encodeCompaction(request.item.payload)
           : encodeMove(request.item.payload)

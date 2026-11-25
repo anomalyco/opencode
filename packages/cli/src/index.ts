@@ -18,6 +18,7 @@ import { EffectFlock } from "@opencode/util/effect-flock"
 import { Heap } from "./heap"
 import { CpuProfile } from "./cpu-profile"
 import { ShutdownDeadline } from "./shutdown-deadline"
+import { loggedArgs } from "./logged-args"
 
 // Keep requests to the local service off any proxy. Bun reads lowercase `no_proxy` alone whenever it is set, so both
 // spellings get the same merged list.
@@ -41,12 +42,7 @@ if (process.env.OPENCODE_SSH_ASKPASS_PORT) {
 
 let terminated = false
 
-// `service set <key> <value>` and `service set env <name> <value>` carry secrets such as the password or a provider
-// key; keep values out of the logged arguments. Flags and their values may come first, so find the pair anywhere.
-const args = process.argv.slice(2)
-const set = args.findIndex((arg, index) => arg === "service" && args[index + 1] === "set")
-const kept = set === -1 ? args.length : set + (args[set + 2] === "env" ? 4 : 3)
-const loggedArgs = args.map((arg, index) => (index < kept ? arg : "<redacted>"))
+const logged = loggedArgs(process.argv.slice(2))
 
 const Handlers = Runtime.handlers(Commands, {
   $: () => import("./commands/handlers/default"),
@@ -138,14 +134,14 @@ Effect.gen(function* () {
     version: OPENCODE_VERSION,
     channel: OPENCODE_CHANNEL,
     local: OPENCODE_LOCAL,
-    args: loggedArgs,
+    args: logged,
   })
   return yield* Runtime.run(Commands, Handlers, { version: OPENCODE_VERSION })
 }).pipe(
   Effect.catchCause((cause) =>
     Effect.logError("cli process failed", {
       cause,
-      args: loggedArgs,
+      args: logged,
     }).pipe(Effect.andThen(Effect.failCause(cause))),
   ),
   Effect.annotateLogs({ role: "cli" }),

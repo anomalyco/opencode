@@ -1,6 +1,7 @@
 import { Effect, FileSystem, Formatter, Logger, Option, Schedule, Stream, type LogLevel } from "effect"
 import path from "path"
 import { Global } from "../global.js"
+import { redactSecrets } from "../redact.js"
 import { runID } from "./shared.js"
 
 // One log file is shared by every opencode process on the machine and only ever appended to, so it
@@ -52,7 +53,7 @@ function plain(input: unknown): input is Record<string, unknown> {
 }
 
 function format(input: unknown) {
-  const value = typeof input === "string" ? input : Formatter.format(input)
+  const value = redactSecrets(typeof input === "string" ? input : Formatter.format(input))
   return /^[^\s="\\]+$/.test(value) ? value : JSON.stringify(value)
 }
 

@@ -23,6 +23,7 @@ import { InstructionEntry } from "./instruction-entry.js"
 import type { SQLiteUpdateSetSource } from "drizzle-orm/sqlite-core/query-builders/update"
 import { Slug } from "../util/slug.js"
 import { FSUtil } from "@opencode/util/fs-util"
+import { redactSecrets } from "@opencode/util/redact"
 import { Money } from "@opencode/schema/money"
 import type { TokenUsage } from "@opencode/schema/token-usage"
 import { Worktree } from "@opencode/schema/worktree"
@@ -30,6 +31,7 @@ import { Project } from "@opencode/schema/project"
 import { AbsolutePath, RelativePath } from "../schema.js"
 import type { SessionSchema } from "./schema.js"
 import { SessionHistory } from "./history.js"
+import { SessionRedact } from "./redact.js"
 import { ProjectTable } from "../project/sql.js"
 
 type DatabaseService = Database.Interface["db"]
@@ -548,7 +550,8 @@ function messageWrites(db: DatabaseService, event: MessageEvent): Writes {
         .pipe(Effect.orDie)
   })
   const updateMessage = Effect.fnUntraced(function* (message: SessionMessage.Info) {
-    const stored = yield* SessionBlob.externalize(db, message)
+    const redacted = SessionRedact.message(message)
+    const stored = yield* SessionBlob.externalize(db, redacted)
     const { id: _, type, ...data } = encodeStored(stored)
     const parts = message.type === "assistant" && "content" in data ? yield* partRows(message.id) : []
     const updated = yield* db
@@ -568,7 +571,7 @@ function messageWrites(db: DatabaseService, event: MessageEvent): Writes {
     // Most updates only carry existing refs forward; a content rewrite may also drop some. `externalize` returns
     // the same message when it extracted nothing, so streaming updates skip the ref tables entirely.
     if (event.type === SessionEvent.MessageContentUpdated.type) yield* SessionBlob.syncRefs(db, owner, data)
-    else if (stored !== message) yield* SessionBlob.recordRefs(db, owner, data)
+    else if (stored !== redacted) yield* SessionBlob.recordRefs(db, owner, data)
   })
   const reads = assistantReads(db, event, (row) =>
     SessionHistory.withParts(db, [row]).pipe(
@@ -684,11 +687,12 @@ function partRowWrites(db: DatabaseService, event: MessageEvent): Writes {
   // keep whatever content the row already holds: inline for a legacy row that was never split, [] once it was.
   // json_extract rather than `->`, which the system SQLite on macOS 12 (3.37) can't parse.
   const updateMessage = (message: SessionMessage.Info) => {
+    const redacted = SessionRedact.message(message)
     const {
       id: _,
       type: __,
       ...data
-    } = encodeMessage(message.type === "assistant" ? { ...message, content: [] } : message)
+    } = encodeMessage(redacted.type === "assistant" ? { ...redacted, content: [] } : redacted)
     return db
       .update(SessionMessageTable)
       .set({
@@ -711,7 +715,9 @@ function partRowWrites(db: DatabaseService, event: MessageEvent): Writes {
       return Effect.gen(function* () {
         const owner = yield* prepareAssistantParts(messageID, true)
         if (!owner) return
-        const data = SessionHistory.encodePart(yield* SessionBlob.externalizePart(db, part))
+        const data = SessionHistory.encodePart(
+          yield* SessionBlob.externalizePart(db, SessionRedact.assistantPart(part)),
+        )
         const next = yield* db
           .select({ ordinal: sql<number>`coalesce(max(${SessionPartTable.ordinal}) + 1, 0)` })
           .from(SessionPartTable)
@@ -765,8 +771,9 @@ function partRowWrites(db: DatabaseService, event: MessageEvent): Writes {
         >
         const updated = produce(current, recipe)
         if (updated === current) return
+        const redacted = SessionRedact.assistantPart(updated)
         // `externalizePart` returns the same part when it moved nothing, so streaming updates skip the ref tables.
-        const stored = yield* SessionBlob.externalizePart(db, updated)
+        const stored = yield* SessionBlob.externalizePart(db, redacted)
         const data = SessionHistory.encodePart(stored)
         yield* db
           .update(SessionPartTable)
@@ -774,7 +781,7 @@ function partRowWrites(db: DatabaseService, event: MessageEvent): Writes {
           .where(and(eq(SessionPartTable.message_id, messageID), eq(SessionPartTable.ordinal, row.ordinal)))
           .run()
           .pipe(Effect.orDie)
-        if (stored !== updated) yield* SessionBlob.recordRefs(db, owner, { content: [data] })
+        if (stored !== redacted) yield* SessionBlob.recordRefs(db, owner, { content: [data] })
       })
     },
     replaceAssistantParts(messageID, parts) {
@@ -782,7 +789,9 @@ function partRowWrites(db: DatabaseService, event: MessageEvent): Writes {
         const owner = yield* prepareAssistantParts(messageID, false)
         if (!owner) return
         yield* db.delete(SessionPartTable).where(eq(SessionPartTable.message_id, messageID)).run().pipe(Effect.orDie)
-        const stored = yield* Effect.forEach(parts, (part) => SessionBlob.externalizePart(db, part))
+        const stored = yield* Effect.forEach(parts, (part) =>
+          SessionBlob.externalizePart(db, SessionRedact.assistantPart(part)),
+        )
         const partRows = stored.map((part, ordinal) => ({
           message_id: messageID,
           session_id: event.data.sessionID,
@@ -812,7 +821,7 @@ const insertMessage = Effect.fnUntraced(function* (
   event: SessionEvent.DurableEvent,
   message: SessionMessage.Info | SessionStored.User,
 ) {
-  const stored = yield* SessionBlob.externalize(db, message)
+  const stored = yield* SessionBlob.externalize(db, SessionRedact.message(message))
   const { id: _, type, ...data } = encodeStored(stored)
   const timeCreated = DateTime.toEpochMillis(message.time.created)
   // Assistant content goes to session_part rows; the message row keeps an empty envelope.
@@ -889,7 +898,7 @@ const layer = Layer.effectDiscard(
             slug: event.data.slug,
             directory: event.data.location.directory,
             path: event.data.subpath,
-            title: event.data.title,
+            title: event.data.title === undefined ? undefined : redactSecrets(event.data.title),
             agent: event.data.agent,
             model: event.data.model,
             metadata: SessionCwdStore.writeStored(event.data.metadata, undefined),
@@ -991,7 +1000,7 @@ const layer = Layer.effectDiscard(
       }),
     )
     yield* bus.project(SessionEvent.Renamed, (event) =>
-      setSession(db, event.data.sessionID, { title: event.data.title, time_updated: event.created }),
+      setSession(db, event.data.sessionID, { title: redactSecrets(event.data.title), time_updated: event.created }),
     )
     yield* bus.project(SessionEvent.MetadataUpdated, (event) =>
       Effect.gen(function* () {
