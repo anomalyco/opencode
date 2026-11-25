@@ -70,19 +70,6 @@ const view = (state: SessionRevertState, revertMessageID?: string) =>
   viewSessionRevert(state, { messages, revertMessageID })
 
 describe("transitionSessionRevert", () => {
-  test("a committing rewind restores the prompt and settles idle, with no toast and nothing to redo", () => {
-    const step = last([
-      { type: "rewind.to", messageID: "msg_3", revertMessageID: undefined, commit: true, ...delivered },
-      { type: "revert.staged", messageID: "msg_3" },
-      rewound(1, ""),
-    ])
-
-    expect(step.state).toEqual({ status: "idle", attempt: 1, echoes: [] })
-    expect(step.effects.map((effect) => effect.type)).toEqual(["draft.restoreMessage", "cursor.select"])
-    expect(last([{ type: "revert.committed" }], step.state).state).toEqual(step.state)
-    expect(view(step.state).canRedo).toBe(false)
-  })
-
   test("refuses every request while an operation runs, so two pipelines never share a Session", () => {
     const running = last([undo()]).state
 

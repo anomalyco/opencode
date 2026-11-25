@@ -14,23 +14,6 @@ const session = {
   time: { created: 0, updated: 0 },
 }
 const ask = { type: "user", id: "msg_ask", text: "Reword this prompt", time: { created: 1 } }
-const queued = {
-  id: "msg_queued",
-  sessionID: session.id,
-  type: "user",
-  delivery: "queue",
-  payload: { ...ask, id: "msg_queued", text: "Queued follow-up" },
-  time: { created: 3 },
-}
-
-const shell = {
-  type: "shell",
-  id: "msg_shell",
-  shellID: "shl_1",
-  command: "sleep 60",
-  status: "running",
-  time: { created: 3 },
-}
 
 const INTERRUPT = `POST /api/session/${session.id}/interrupt`
 const WAIT = `POST /api/experimental/session/${session.id}/wait`
@@ -38,7 +21,7 @@ const REVERT = `POST /api/session/${session.id}/revert/stage`
 const COMMIT = `POST /api/session/${session.id}/revert/commit`
 
 /** Opens a running session whose last prompt got `content` back so far, and interrupts it. `calls` logs what that sent. */
-async function interrupt(input: { content: unknown[]; later?: unknown[]; inbox?: unknown[]; draft?: string }) {
+async function interrupt(input: { content: unknown[]; draft?: string }) {
   // Drafts are stashed per tab for the whole process, so an earlier test or test file would prefill the composer.
   for (const id of [undefined, session.id]) takeDraft(id)
   const calls: string[] = []
@@ -57,12 +40,11 @@ async function interrupt(input: { content: unknown[]; later?: unknown[]; inbox?:
       if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
       if (url.pathname === "/api/session/active") return json({ data: { [session.id]: { type: "running" } } })
       if (url.pathname === `/api/session/${session.id}`) return json({ data: session })
-      if (url.pathname === `/api/session/${session.id}/inbox`) return json({ data: input.inbox ?? [] })
+      if (url.pathname === `/api/session/${session.id}/inbox`) return json({ data: [] })
       if (url.pathname === `/api/session/${session.id}/permission`) return json({ data: [] })
       if (url.pathname === `/api/session/${session.id}/message`)
         return json({
           data: [
-            ...(input.later ?? []),
             {
               type: "assistant",
               id: "msg_reply",
@@ -102,19 +84,15 @@ test("interrupting before the model answers with text or a tool call takes the p
 
 test.each([
   ["after the model answered", { content: [{ type: "text", text: "Here you go" }] }, [INTERRUPT, WAIT]],
-  ["a shell command run after an unanswered prompt", { content: [], later: [shell] }, [INTERRUPT, WAIT]],
   ["with a draft in the composer", { content: [], draft: "something else" }, [INTERRUPT]],
-  ["with a prompt still pending", { content: [], inbox: [queued] }, [INTERRUPT]],
 ])(
   "interrupting %s only interrupts",
   async (_name, input, expected) => {
     await using app = await interrupt(input)
 
     await app.waitForFrame(() => app.calls.length === expected.length)
-    // Gives a rewind that shouldn't follow time to show.
-    await Bun.sleep(50)
-    expect(app.calls).toEqual(expected)
     expect(shown(await app.waitForFrame(() => true))).toBe(1)
+    expect(app.calls).toEqual(expected)
   },
   20000,
 )

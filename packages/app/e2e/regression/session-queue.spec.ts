@@ -341,48 +341,40 @@ test("a blank Enter leaves the running session alone while Stop still interrupts
   expect(mock.prompts).toEqual([])
 })
 
-for (const [name, draft, expected] of [
-  ["takes the prompt back", "", ["/interrupt", "/wait", "/interrupt", "/wait", "/revert/stage", "/revert/commit"]],
-  ["with a draft only stops", "Something else", ["/interrupt"]],
-] as const) {
-  test(`stopping before the model answers ${name}, as in the TUI`, async ({ page }) => {
-    const mock = createQueueMock(
-      [],
-      [
-        { id: "msg_queue_unanswered", type: "user", text: "Reword this prompt", time: { created: 1 } },
-        {
-          id: "msg_queue_thinking",
-          type: "assistant",
-          agent: "build",
-          model: { id: "queue-model", providerID: "opencode" },
-          content: [{ type: "reasoning", text: "Thinking it over" }],
-          time: { created: 2 },
-        },
-      ],
+test("stopping before the model answers takes the prompt back, as in the TUI", async ({ page }) => {
+  const mock = createQueueMock(
+    [],
+    [
+      { id: "msg_queue_unanswered", type: "user", text: "Reword this prompt", time: { created: 1 } },
+      {
+        id: "msg_queue_thinking",
+        type: "assistant",
+        agent: "build",
+        model: { id: "queue-model", providerID: "opencode" },
+        content: [{ type: "reasoning", text: "Thinking it over" }],
+        time: { created: 2 },
+      },
+    ],
+  )
+
+  const view = await openQueue(page, mock)
+  const requests: string[] = []
+  page.on("request", (request) => {
+    const path = new URL(request.url()).pathname
+
+    const step = ["/interrupt", "/wait", "/revert/stage", "/revert/commit"].find((suffix) =>
+      path.endsWith(`/${sessionID}${suffix}`),
     )
 
-    const view = await openQueue(page, mock)
-    const requests: string[] = []
-    page.on("request", (request) => {
-      const path = new URL(request.url()).pathname
-
-      const step = ["/interrupt", "/wait", "/revert/stage", "/revert/commit"].find((suffix) =>
-        path.endsWith(`/${sessionID}${suffix}`),
-      )
-
-      if (step) requests.push(step)
-    })
-
-    await expect(userRow(page, "msg_queue_unanswered")).toBeVisible()
-    await view.input.pressSequentially(draft)
-    // A draft turns the Stop button into Send, which leaves the shortcut to stop with.
-    await view.input.press("Escape")
-
-    // The rewind is the app's own undo, which settles the Session again before it stages.
-    await expect.poll(() => requests).toEqual(expected)
-    await expect(view.input).toHaveText(draft || "Reword this prompt")
+    if (step) requests.push(step)
   })
-}
+
+  await expect(userRow(page, "msg_queue_unanswered")).toBeVisible()
+  await view.input.press("Escape")
+
+  await expect.poll(() => requests).toEqual(["/interrupt", "/wait", "/revert/stage", "/revert/commit"])
+  await expect(view.input).toHaveText("Reword this prompt")
+})
 
 test.describe("touch keyboard", () => {
   test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true })

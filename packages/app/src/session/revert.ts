@@ -15,6 +15,7 @@ import type { SessionModel } from "./model"
 import {
   createSessionRevertState,
   REVERT_TIMEOUT_MS,
+  selectCursorAfterRevert,
   transitionSessionRevert,
   viewSessionRevert,
   type SessionRevertEffect,
@@ -249,8 +250,6 @@ export function createSessionRevert(input: {
       await server.api.experimental.session.wait({ sessionID }, { signal })
       await server.api.session.revert.stage({ sessionID, messageID: operation.message.id }, { signal })
 
-      if (operation.commit) await server.api.session.revert.commit({ sessionID }, { signal })
-
       // Like the TUI, pending inputs are left alone: the revert hides them, committing it drops them, and redo
       // delivers them.
       return {
@@ -279,27 +278,34 @@ export function createSessionRevert(input: {
     return { type: "undo-rewind.succeeded", attempt, ...snapshot(sessionID) }
   }
 
-  const to = (messageID: string, sessionID = input.session.identity.params.id, commit = false) =>
-    request(sessionID, (id) => ({
-      type: "rewind.to",
-      messageID,
-      revertMessageID: data.session.get(id)?.revert?.messageID,
-      commit,
-      ...snapshot(id),
-    }))
-
   return {
-    to: (messageID: string, sessionID?: string) => to(messageID, sessionID),
+    to: (messageID: string, sessionID = input.session.identity.params.id) =>
+      request(sessionID, (id) => ({
+        type: "rewind.to",
+        messageID,
+        revertMessageID: data.session.get(id)?.revert?.messageID,
+        ...snapshot(id),
+      })),
     /**
      * After Stop interrupted the Session: takes its latest prompt back if the model had not answered it yet. Nothing
-     * of an answer is lost, so the rewind commits instead of offering an Undo.
+     * of an answer is lost, so the revert commits straight away instead of offering an Undo.
      */
     takeBack: async (sessionID: string) => {
+      const target = { composer: prompt.capture(), directory: location().directory }
       // Interrupt acknowledges before the execution settles, so the start of an answer may still be on its way.
       await server.api.experimental.session.wait({ sessionID })
       const message = selectUnansweredPrompt(data.session.message.list(sessionID))
 
-      if (message) await to(message.id, sessionID, true)
+      if (!message) return
+      // The commit releases the prompt's blob refs, so the draft takes local copies of its media first.
+      const restored = await pinPromptMedia(messageDraft(message, target.directory))
+      // The model called no tool, so any file that changed meanwhile is the user's own edit.
+      await server.api.session.revert.stage({ sessionID, messageID: message.id, files: false })
+      await server.api.session.revert.commit({ sessionID })
+      restore(target, message, restored)
+
+      if (input.session.identity.params.id === sessionID)
+        input.setActiveMessage(selectCursorAfterRevert(snapshot(sessionID), message.id))
     },
     undo: () =>
       request(input.session.identity.params.id, (id) => ({
