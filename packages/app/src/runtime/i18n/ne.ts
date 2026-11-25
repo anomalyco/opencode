@@ -263,8 +263,6 @@ export const dict = {
   "error.page.description.localServerStartup": "स्थानीय सर्भर सुरु गर्दा त्रुटि भयो।",
   "error.page.details.label": "त्रुटि विवरण",
   "error.page.action.restart": "पुन: सुरु गर्नुहोस्",
-  "error.page.action.report": "त्रुटि रिपोर्ट गर्नुहोस्",
-  "error.page.action.reported": "त्रुटि रिपोर्ट गरियो",
   "error.page.action.exportLogs": "लग निर्यात गर्नुहोस्",
   "error.page.action.checking": "जाँच गर्दै…",
   "error.page.action.checkUpdates": "अपडेटहरूको लागि जाँच गर्नुहोस्",

@@ -62,7 +62,7 @@ export default bench({
     install: app("opencode", { gpuCache: "cold" }),
     // A contributor's `bun dev:desktop` in each variant's checkout, isolated under the launch's home.
     dev: command("bun dev:desktop", {
-      unset: ["OPENCODE_*", "OTEL_*", "SENTRY_*"],
+      unset: ["OPENCODE_*", "OTEL_*"],
       env: {
         OPENCODE_CONFIG_DIR: "{home}/config",
         OPENCODE_DB: "{home}/data/opencode.db",

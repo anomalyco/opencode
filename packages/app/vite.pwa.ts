@@ -36,7 +36,6 @@ export function serviceWorker(directory: string) {
       },
     },
     workbox: {
-      // Workbox runs after Sentry's upload and cleanup, so do not publish an unuploaded map.
       sourcemap: false,
       globDirectory: directory,
       clientsClaim: false,

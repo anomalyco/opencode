@@ -267,8 +267,6 @@ export const dict = {
   "error.page.description.localServerStartup": "स्थानीय सर्वर शुरू करते समय एक त्रुटि हुई।",
   "error.page.details.label": "त्रुटि विवरण",
   "error.page.action.restart": "पुनः आरंभ करें",
-  "error.page.action.report": "त्रुटि की रिपोर्ट करें",
-  "error.page.action.reported": "त्रुटि रिपोर्ट की गई",
   "error.page.action.exportLogs": "लॉग निर्यात करें",
   "error.page.action.checking": "जाँच हो रही है…",
   "error.page.action.checkUpdates": "अद्यतन के लिए जाँच",

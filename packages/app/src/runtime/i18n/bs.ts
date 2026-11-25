@@ -289,8 +289,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Došlo je do greške pri pokretanju lokalnog servera.",
   "error.page.details.label": "Detalji greške",
   "error.page.action.restart": "Ponovo pokreni",
-  "error.page.action.report": "Prijavi grešku",
-  "error.page.action.reported": "Greška prijavljena",
   "error.page.action.exportLogs": "Izvezi logove",
   "error.page.action.checking": "Provjera…",
   "error.page.action.checkUpdates": "Provjeri ažuriranja",
@@ -1435,8 +1433,7 @@ export const dict = {
     "Prikaži podagente odvojeno. Grupiši ostale aktivnosti sa sažetim detaljima.",
   "settings.timeline.description.quiet": "Prikaži podagente odvojeno i grupiši uređivanja. Sakrij ostale aktivnosti.",
   "settings.timeline.row.foldUserMessages.title": "Skupi duge poruke",
-  "settings.timeline.row.foldUserMessages.description":
-    "Skupi vaše poruke duže od 12 linija iza dugmeta Pročitaj više",
+  "settings.timeline.row.foldUserMessages.description": "Skupi vaše poruke duže od 12 linija iza dugmeta Pročitaj više",
   "settings.timeline.row.turnDiffs.title": "Izmijenjene datoteke",
   "settings.timeline.row.turnDiffs.description": "Prikaži datoteke koje je svaki potez izmijenio kada završi",
   "settings.timeline.category.commentary": "Komentari",

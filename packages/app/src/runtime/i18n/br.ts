@@ -477,8 +477,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Ocorreu um erro ao iniciar o servidor local.",
   "error.page.details.label": "Detalhes do erro",
   "error.page.action.restart": "Reiniciar",
-  "error.page.action.report": "Reportar erro",
-  "error.page.action.reported": "Erro reportado",
   "error.page.action.exportLogs": "Exportar logs",
   "error.page.action.checking": "Verificando…",
   "error.page.action.checkUpdates": "Verificar atualizações",

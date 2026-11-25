@@ -298,8 +298,6 @@ export const dict = {
   "error.page.description.localServerStartup": "เกิดข้อผิดพลาดขณะเริ่มเซิร์ฟเวอร์ในเครื่อง",
   "error.page.details.label": "รายละเอียดข้อผิดพลาด",
   "error.page.action.restart": "รีสตาร์ท",
-  "error.page.action.report": "รายงานข้อผิดพลาด",
-  "error.page.action.reported": "รายงานข้อผิดพลาดแล้ว",
   "error.page.action.exportLogs": "ส่งออกบันทึก",
   "error.page.action.checking": "กำลังตรวจสอบ…",
   "error.page.action.checkUpdates": "ตรวจสอบการอัปเดต",
@@ -1383,8 +1381,7 @@ export const dict = {
   "settings.timeline.description.compact": "แสดงเอเจนต์ย่อยแยกกัน จัดกลุ่มกิจกรรมอื่นโดยย่อรายละเอียดไว้",
   "settings.timeline.description.quiet": "แสดงเอเจนต์ย่อยแยกกันและจัดกลุ่มการแก้ไข ซ่อนกิจกรรมอื่น",
   "settings.timeline.row.foldUserMessages.title": "พับข้อความยาว",
-  "settings.timeline.row.foldUserMessages.description":
-    "พับข้อความของคุณที่ยาวเกิน 12 บรรทัดไว้หลังปุ่ม อ่านเพิ่มเติม",
+  "settings.timeline.row.foldUserMessages.description": "พับข้อความของคุณที่ยาวเกิน 12 บรรทัดไว้หลังปุ่ม อ่านเพิ่มเติม",
   "settings.timeline.row.turnDiffs.title": "ไฟล์ที่เปลี่ยนแปลง",
   "settings.timeline.row.turnDiffs.description": "แสดงรายการไฟล์ที่แต่ละเทิร์นเปลี่ยนแปลงเมื่อเทิร์นเสร็จสิ้น",
   "settings.timeline.category.commentary": "คำอธิบาย",

@@ -259,8 +259,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Възникна грешка при стартиране на локалния сървър.",
   "error.page.details.label": "Подробности за грешката",
   "error.page.action.restart": "Рестартирайте",
-  "error.page.action.report": "Докладване за грешка",
-  "error.page.action.reported": "Съобщава се за грешка",
   "error.page.action.exportLogs": "Експортиране на регистрационни файлове",
   "error.page.action.checking": "Проверка…",
   "error.page.action.checkUpdates": "Проверете за актуализации",

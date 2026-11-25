@@ -272,8 +272,6 @@ export const dict = {
   "error.page.description.localServerStartup": "ローカルサーバーの起動中にエラーが発生しました。",
   "error.page.details.label": "エラー詳細",
   "error.page.action.restart": "再起動",
-  "error.page.action.report": "エラーを報告",
-  "error.page.action.reported": "エラーを報告しました",
   "error.page.action.exportLogs": "ログをエクスポート",
   "error.page.action.checking": "確認中…",
   "error.page.action.checkUpdates": "アップデートを確認",
@@ -1362,8 +1360,7 @@ export const dict = {
   "settings.timeline.description.quiet":
     "サブエージェントを個別に表示し、編集をグループ化します。他のアクティビティは非表示にします。",
   "settings.timeline.row.foldUserMessages.title": "長いメッセージを折りたたむ",
-  "settings.timeline.row.foldUserMessages.description":
-    "12行を超えるメッセージを「続きを読む」ボタンで折りたたみます",
+  "settings.timeline.row.foldUserMessages.description": "12行を超えるメッセージを「続きを読む」ボタンで折りたたみます",
   "settings.timeline.row.turnDiffs.title": "変更されたファイル",
   "settings.timeline.row.turnDiffs.description": "各ターンの完了時に、そのターンで変更されたファイルを一覧表示します",
   "settings.timeline.category.commentary": "コメント",

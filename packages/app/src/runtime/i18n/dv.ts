@@ -262,8 +262,6 @@ export const dict = {
   "error.page.description.localServerStartup": "ލޯކަލް ސަރވަރ ސްޓާޓް ކުރަމުން ދިޔައިރު ގޯހެއް ދިމާވިއެވެ.",
   "error.page.details.label": "އެރަރ ޑީޓެއިލްސް",
   "error.page.action.restart": "އަލުން ފަށާށެވެ",
-  "error.page.action.report": "ރިޕޯޓް އެރަރ",
-  "error.page.action.reported": "އެރަރ ރިޕޯޓް ކުރެވިއްޖެއެވެ",
   "error.page.action.exportLogs": "އެކްސްޕޯޓް ލޮގްސް",
   "error.page.action.checking": "ޗެކް ކުރަމުން…",
   "error.page.action.checkUpdates": "އަޕްޑޭޓްތައް ހުރިތޯ ބަލާށެވެ",

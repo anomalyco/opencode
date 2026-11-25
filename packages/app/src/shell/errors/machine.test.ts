@@ -7,8 +7,6 @@ import {
   selectCheckUpdatesDisabled,
   selectExportDisabled,
   selectInstallUpdateDisabled,
-  selectReportDisabled,
-  selectReported,
   transitionErrorPage,
   type ErrorPageEffect,
   type ErrorPageEvent,
@@ -111,21 +109,11 @@ describe("error page actions", () => {
     expect(transitionErrorPage(timedOut.state, check).state.status).toBe("checking")
   })
 
-  test("a new error resets the report and the action error, and records the new crash", () => {
-    const reported = replay([
-      presented,
-      { type: "sentry.loaded", enabled: true },
-      { type: "report.clicked" },
-      check,
-      { type: "action.failed", attempt: 1, error: "Check failed" },
-    ])
+  test("a new error resets the action error and records the new crash", () => {
+    const failed = replay([presented, check, { type: "action.failed", attempt: 1, error: "Check failed" }])
 
-    expect(reported.effects).toContainEqual({ type: "sentry.capture" })
-    expect(selectReported(reported.state)).toBe(true)
-    expect(selectReportDisabled(reported.state)).toBe(true)
-
-    const next = transitionErrorPage(reported.state, presented)
-    expect(next.state).toEqual({ status: "idle", attempt: 1, fatalAttempt: 2, fatal: "recording", report: "ready" })
+    const next = transitionErrorPage(failed.state, presented)
+    expect(next.state).toEqual({ status: "idle", attempt: 1, fatalAttempt: 2, fatal: "recording" })
     expect(selectActionError(next.state)).toBeUndefined()
     expect(next.effects).toEqual([{ type: "fatal.record", attempt: 2, timeoutMs: FATAL_RECORD_TIMEOUT_MS }])
     // The previous crash's record answers late.
@@ -136,10 +124,10 @@ describe("error page actions", () => {
 
   test("an action still running when a new error arrives keeps the page busy until it settles", () => {
     for (const start of [check, install, exportLogs]) {
-      const busy = replay([presented, { type: "sentry.loaded", enabled: true }, { type: "report.clicked" }, start])
+      const busy = replay([presented, start])
       const next = transitionErrorPage(busy.state, presented)
 
-      expect(next.state).toMatchObject({ status: busy.state.status, attempt: 1, fatalAttempt: 2, report: "ready" })
+      expect(next.state).toMatchObject({ status: busy.state.status, attempt: 1, fatalAttempt: 2 })
       expect(selectExportDisabled(next.state)).toBe(true)
       expect(selectCheckUpdatesDisabled(next.state, undefined)).toBe(true)
       expect(selectInstallUpdateDisabled(next.state, undefined)).toBe(true)
@@ -158,14 +146,6 @@ describe("error page actions", () => {
         transitionErrorPage(next.state, { type: "action.timed-out", attempt: 1, error: "Request failed" }).state,
       ).toMatchObject({ status: "failed", error: "Request failed" })
     }
-  })
-
-  test("Report stays hidden until Sentry is enabled, and sends once", () => {
-    const idle = replay([presented, { type: "sentry.loaded", enabled: false }]).state
-    expect(transitionErrorPage(idle, { type: "report.clicked" }).effects).toEqual([])
-
-    const reported = replay([{ type: "sentry.loaded", enabled: true }, { type: "report.clicked" }], idle).state
-    expect(transitionErrorPage(reported, { type: "report.clicked" }).effects).toEqual([])
   })
 
   test("disposal ignores every later event", () => {

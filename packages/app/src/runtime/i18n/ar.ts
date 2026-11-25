@@ -272,8 +272,6 @@ export const dict = {
   "error.page.description.localServerStartup": "حدث خطأ أثناء بدء تشغيل الخادم المحلي.",
   "error.page.details.label": "تفاصيل الخطأ",
   "error.page.action.restart": "إعادة تشغيل",
-  "error.page.action.report": "الإبلاغ عن الخطأ",
-  "error.page.action.reported": "تم الإبلاغ عن الخطأ",
   "error.page.action.exportLogs": "تصدير السجلات",
   "error.page.action.checking": "جارٍ التحقق…",
   "error.page.action.checkUpdates": "التحقق من وجود تحديثات",

@@ -269,8 +269,6 @@ export const dict = {
   "error.page.description.localServerStartup": "مقامی سرور شروع کرتے وقت ایک خرابی پیش آگئی۔",
   "error.page.details.label": "خرابی کی تفصیلات",
   "error.page.action.restart": "دوبارہ شروع کریں۔",
-  "error.page.action.report": "خرابی کی اطلاع دیں",
-  "error.page.action.reported": "خرابی کی اطلاع دی گئی۔",
   "error.page.action.exportLogs": "لاگز برآمد کریں۔",
   "error.page.action.checking": "چیک کر رہا ہے…",
   "error.page.action.checkUpdates": "اپ ڈیٹس کے لیے چیک کریں۔",

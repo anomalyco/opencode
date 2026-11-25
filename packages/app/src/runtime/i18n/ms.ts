@@ -267,8 +267,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Ralat berlaku semasa memulakan pelayan setempat.",
   "error.page.details.label": "Butiran Ralat",
   "error.page.action.restart": "Mulakan semula",
-  "error.page.action.report": "Laporkan Ralat",
-  "error.page.action.reported": "Ralat Dilaporkan",
   "error.page.action.exportLogs": "Eksport Log",
   "error.page.action.checking": "Sedang menyemak…",
   "error.page.action.checkUpdates": "Semak kemas kini",

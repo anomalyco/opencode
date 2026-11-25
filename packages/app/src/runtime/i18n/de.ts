@@ -410,8 +410,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Beim Starten des lokalen Servers ist ein Fehler aufgetreten.",
   "error.page.details.label": "Fehlerdetails",
   "error.page.action.restart": "Neustart",
-  "error.page.action.report": "Fehler melden",
-  "error.page.action.reported": "Fehler gemeldet",
   "error.page.action.exportLogs": "Protokolle exportieren",
   "error.page.action.checking": "Prüfen…",
   "error.page.action.checkUpdates": "Nach Updates suchen",

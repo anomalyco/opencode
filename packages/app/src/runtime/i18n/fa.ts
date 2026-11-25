@@ -268,8 +268,6 @@ export const dict = {
   "error.page.description.localServerStartup": "هنگام راه اندازی سرور محلی خطایی روی داد.",
   "error.page.details.label": "جزئیات خطا",
   "error.page.action.restart": "راه اندازی مجدد",
-  "error.page.action.report": "گزارش خطا",
-  "error.page.action.reported": "خطا گزارش شده است",
   "error.page.action.exportLogs": "صادرات سیاهههای مربوط",
   "error.page.action.checking": "در حال بررسی…",
   "error.page.action.checkUpdates": "به روز رسانی را بررسی کنید",
@@ -1348,8 +1346,7 @@ export const dict = {
   "settings.timeline.description.quiet":
     "عامل‌های فرعی را جداگانه نشان بده و ویرایش‌ها را گروه‌بندی کن. فعالیت‌های دیگر را پنهان کن.",
   "settings.timeline.row.foldUserMessages.title": "جمع کردن پیام‌های طولانی",
-  "settings.timeline.row.foldUserMessages.description":
-    "پیام‌های بیش از ۱۲ خط شما پشت دکمه «ادامه مطلب» جمع می‌شوند",
+  "settings.timeline.row.foldUserMessages.description": "پیام‌های بیش از ۱۲ خط شما پشت دکمه «ادامه مطلب» جمع می‌شوند",
   "settings.timeline.row.turnDiffs.title": "فایل‌های تغییریافته",
   "settings.timeline.row.turnDiffs.description": "فهرست کردن فایل‌هایی که هر نوبت تغییر داده است، پس از پایان آن",
   "settings.timeline.category.commentary": "توضیحات",

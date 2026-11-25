@@ -467,8 +467,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Er is een fout opgetreden bij het starten van de lokale server.",
   "error.page.details.label": "Foutdetails",
   "error.page.action.restart": "Opnieuw opstarten",
-  "error.page.action.report": "Rapporteer fout",
-  "error.page.action.reported": "Fout gerapporteerd",
   "error.page.action.exportLogs": "Logboeken exporteren",
   "error.page.action.checking": "Controleren…",
   "error.page.action.checkUpdates": "Controleer op updates",
@@ -1367,8 +1365,7 @@ export const dict = {
   "settings.timeline.description.quiet":
     "Subagents afzonderlijk tonen en bewerkingen groeperen. Andere activiteit verbergen.",
   "settings.timeline.row.foldUserMessages.title": "Lange berichten inklappen",
-  "settings.timeline.row.foldUserMessages.description":
-    "Klap je berichten na 12 regels in achter een knop Meer lezen",
+  "settings.timeline.row.foldUserMessages.description": "Klap je berichten na 12 regels in achter een knop Meer lezen",
   "settings.timeline.row.turnDiffs.title": "Gewijzigde bestanden",
   "settings.timeline.row.turnDiffs.description":
     "De bestanden tonen die elke beurt heeft gewijzigd wanneer die klaar is",

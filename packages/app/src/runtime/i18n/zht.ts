@@ -298,8 +298,6 @@ export const dict = {
   "error.page.description.localServerStartup": "啟動本機伺服器時發生錯誤。",
   "error.page.details.label": "錯誤詳情",
   "error.page.action.restart": "重新啟動",
-  "error.page.action.report": "回報錯誤",
-  "error.page.action.reported": "已回報錯誤",
   "error.page.action.exportLogs": "匯出記錄檔",
   "error.page.action.checking": "檢查中…",
   "error.page.action.checkUpdates": "檢查更新",

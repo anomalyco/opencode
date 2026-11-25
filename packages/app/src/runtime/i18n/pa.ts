@@ -268,8 +268,6 @@ export const dict = {
   "error.page.description.localServerStartup": "لوکل سرور شروع کردے ویلے غلطی ہوئی۔",
   "error.page.details.label": "غلطی دی تفصیلات",
   "error.page.action.restart": "دوبارہ شروع کرو",
-  "error.page.action.report": "غلطی دی رپورٹ کرو",
-  "error.page.action.reported": "غلطی رپورٹ ہو گئی",
   "error.page.action.exportLogs": "لاگ برآمد کرو",
   "error.page.action.checking": "چیک کر رہیا واں…",
   "error.page.action.checkUpdates": "اپ ڈیٹس لئی چیک کرو",

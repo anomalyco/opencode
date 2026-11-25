@@ -268,8 +268,6 @@ export const dict = {
   "error.page.description.localServerStartup": "אירעה שגיאה בעת הפעלת השרת המקומי.",
   "error.page.details.label": "פרטי שגיאה",
   "error.page.action.restart": "הפעל מחדש",
-  "error.page.action.report": "דווח על שגיאה",
-  "error.page.action.reported": "שגיאה דווחה",
   "error.page.action.exportLogs": "ייצוא יומנים",
   "error.page.action.checking": "בודק…",
   "error.page.action.checkUpdates": "בדוק אם יש עדכונים",
@@ -1333,8 +1331,7 @@ export const dict = {
   "settings.timeline.description.compact": "הצג סוכני משנה בנפרד. קבץ פעילות אחרת עם פרטים מכווצים.",
   "settings.timeline.description.quiet": "הצג סוכני משנה בנפרד וקבץ עריכות. הסתר פעילות אחרת.",
   "settings.timeline.row.foldUserMessages.title": "קיפול הודעות ארוכות",
-  "settings.timeline.row.foldUserMessages.description":
-    "קפל את ההודעות שלך שארוכות מ-12 שורות מאחורי כפתור „קרא עוד”",
+  "settings.timeline.row.foldUserMessages.description": "קפל את ההודעות שלך שארוכות מ-12 שורות מאחורי כפתור „קרא עוד”",
   "settings.timeline.row.turnDiffs.title": "קבצים שהשתנו",
   "settings.timeline.row.turnDiffs.description": "בסוף כל תגובה, הצג את הקבצים שהיא שינתה",
   "settings.timeline.category.commentary": "הערות",

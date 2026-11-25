@@ -7,7 +7,7 @@
         "windows": "%LOCALAPPDATA%/Programs/ai.opencode.desktop/OpenCode.exe",
         "macos": "/Applications/OpenCode.app/Contents/MacOS/OpenCode"
       },
-      "unset": ["OPENCODE_*", "OTEL_*", "SENTRY_*"],
+      "unset": ["OPENCODE_*", "OTEL_*"],
       "env": {
         "OPENCODE_DB": "{home}/.local/share/opencode/opencode.db",
         "OPENCODE_CONFIG_DIR": "{home}/.config/opencode",

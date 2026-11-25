@@ -288,8 +288,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Произошла ошибка при запуске локального сервера.",
   "error.page.details.label": "Детали ошибки",
   "error.page.action.restart": "Перезапустить",
-  "error.page.action.report": "Сообщить об ошибке",
-  "error.page.action.reported": "Об ошибке сообщено",
   "error.page.action.exportLogs": "Экспортировать журналы",
   "error.page.action.checking": "Проверка…",
   "error.page.action.checkUpdates": "Проверить обновления",

@@ -270,8 +270,6 @@ export const dict = {
   "error.page.description.localServerStartup": "ཉེ་གནས་སར་བར་ འགོ་བཙུགས་པའི་སྐབས་ འཛོལ་བ་ཅིག་བྱུང་ནུག།",
   "error.page.details.label": "འཛོལ་བའི་ཁ་གསལ།",
   "error.page.action.restart": "ལོག་འགོ་བཙུགས།",
-  "error.page.action.report": "འཛོལ་བ་སྙན་ཞུ།",
-  "error.page.action.reported": "འཛོལ་བ་སྙན་ཞུ་འབད་ཡོདཔ།",
   "error.page.action.exportLogs": "ཕྱིར་འདྲེན་དྲན་དེབ་ཚུ།",
   "error.page.action.checking": "ཞིབ་དཔྱད་འབད་དོ།",
   "error.page.action.checkUpdates": "དུས་མཐུན་ཚུ་ཞིབ་དཔྱད་འབད།",

@@ -260,8 +260,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Παρουσιάστηκε σφάλμα κατά την εκκίνηση του τοπικού διακομιστή.",
   "error.page.details.label": "Λεπτομέρειες σφάλματος",
   "error.page.action.restart": "Επανεκκίνηση",
-  "error.page.action.report": "Αναφορά σφάλματος",
-  "error.page.action.reported": "Αναφέρθηκε σφάλμα",
   "error.page.action.exportLogs": "Εξαγωγή αρχείων καταγραφής",
   "error.page.action.checking": "Έλεγχος…",
   "error.page.action.checkUpdates": "Έλεγχος για ενημερώσεις",

@@ -258,8 +258,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Kohaliku serveri käivitamisel ilmnes viga.",
   "error.page.details.label": "Vea üksikasjad",
   "error.page.action.restart": "Taaskäivitage",
-  "error.page.action.report": "Teata veast",
-  "error.page.action.reported": "Teatatud viga",
   "error.page.action.exportLogs": "Ekspordi logid",
   "error.page.action.checking": "Kontrollimine…",
   "error.page.action.checkUpdates": "Kontrollige värskendusi",

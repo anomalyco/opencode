@@ -259,8 +259,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Дотоод серверийг эхлүүлэх явцад алдаа гарлаа.",
   "error.page.details.label": "Алдааны дэлгэрэнгүй мэдээлэл",
   "error.page.action.restart": "Дахин эхлүүлэх",
-  "error.page.action.report": "Алдаа мэдээлэх",
-  "error.page.action.reported": "Алдаа мэдээлсэн",
   "error.page.action.exportLogs": "Экспортын бүртгэл",
   "error.page.action.checking": "Шалгаж байна…",
   "error.page.action.checkUpdates": "Шинэчлэлт байгаа эсэхийг шалгана уу",

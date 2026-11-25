@@ -284,8 +284,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Pri spúšťaní lokálneho servera došlo k chybe.",
   "error.page.details.label": "Podrobnosti o chybe",
   "error.page.action.restart": "Reštartovať",
-  "error.page.action.report": "Nahlásiť chybu",
-  "error.page.action.reported": "Chyba nahlásená",
   "error.page.action.exportLogs": "Exportovať logy",
   "error.page.action.checking": "Kontroluje sa…",
   "error.page.action.checkUpdates": "Skontrolovať aktualizácie",

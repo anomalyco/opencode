@@ -259,8 +259,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Mahalliy serverni ishga tushirishda xatolik yuz berdi.",
   "error.page.details.label": "Xato tafsilotlari",
   "error.page.action.restart": "Qayta ishga tushirish",
-  "error.page.action.report": "Xato haqida xabar berish",
-  "error.page.action.reported": "Xato haqida xabar berildi",
   "error.page.action.exportLogs": "Jurnallarni eksport qilish",
   "error.page.action.checking": "Tekshirilmoqda…",
   "error.page.action.checkUpdates": "Yangilanishlarni tekshiring",

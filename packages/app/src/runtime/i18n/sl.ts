@@ -284,8 +284,6 @@ export const dict = {
   "error.page.description.localServerStartup": "Med zagonom lokalnega strežnika je prišlo do napake.",
   "error.page.details.label": "Podrobnosti o napaki",
   "error.page.action.restart": "Znova zaženite",
-  "error.page.action.report": "Prijavi napako",
-  "error.page.action.reported": "Prijavljena napaka",
   "error.page.action.exportLogs": "Izvozi dnevnike",
   "error.page.action.checking": "Preverjanje …",
   "error.page.action.checkUpdates": "Preverite posodobitve",

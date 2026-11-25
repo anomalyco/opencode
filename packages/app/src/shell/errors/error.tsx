@@ -1,8 +1,7 @@
 import { TextField } from "@opencode/ui/text-field"
-import type { captureException } from "@sentry/solid"
 import { Logo } from "@opencode/ui/logo"
 import { Button } from "@opencode/ui/button"
-import { Component, createEffect, createSignal, on, onCleanup, onMount, Show, untrack } from "solid-js"
+import { Component, createEffect, createSignal, on, onCleanup, Show, untrack } from "solid-js"
 import { Predicate } from "effect"
 import { Updater } from "@opencode/plugin/gui/updater"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -14,13 +13,10 @@ import {
   INITIAL_ERROR_PAGE_STATE,
   isUpdaterBusy,
   selectActionError,
-  selectCanReport,
   selectCheckingUpdates,
   selectCheckUpdatesDisabled,
   selectExportDisabled,
   selectInstallUpdateDisabled,
-  selectReportDisabled,
-  selectReported,
   selectUpdateVersion,
   transitionErrorPage,
   type ErrorPageEffect,
@@ -273,7 +269,6 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   const formattedError = () => formatError(props.error, language.t)
   const status = () => errorStatus(props.error)
   const [pageState, setPageState] = createSignal(INITIAL_ERROR_PAGE_STATE)
-  let capture: typeof captureException | undefined
   // The crash record in flight, which Export Logs waits for instead of recording the crash twice.
   let recording: Promise<boolean> | undefined
   const timers = new Set<ReturnType<typeof setTimeout>>()
@@ -292,8 +287,6 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
   }
 
   function run(effect: ErrorPageEffect) {
-    if (effect.type === "sentry.capture") return capture?.(props.error)
-
     if (effect.type === "fatal.record") {
       const attempt = effect.attempt
       void record(attempt)
@@ -382,17 +375,6 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
     ),
   )
 
-  onMount(() => {
-    void import("@sentry/solid")
-      .then(({ captureException, isEnabled }) => {
-        const enabled = isEnabled()
-
-        if (enabled) capture = captureException
-        dispatch({ type: "sentry.loaded", enabled })
-      })
-      .catch(() => undefined)
-  })
-
   onCleanup(() => {
     ipcs.dispose()
     timers.forEach(clearTimeout)
@@ -437,15 +419,6 @@ export const ErrorPage: Component<ErrorPageProps> = (props) => {
               onClick={() => dispatch({ type: "export.clicked", available: !!platform.exportDebugLogs })}
             >
               {language.t("error.page.action.exportLogs")}
-            </Button>
-          </Show>
-          <Show when={selectCanReport(pageState())}>
-            <Button
-              size="large"
-              disabled={selectReportDisabled(pageState())}
-              onClick={() => dispatch({ type: "report.clicked" })}
-            >
-              {language.t(selectReported(pageState()) ? "error.page.action.reported" : "error.page.action.report")}
             </Button>
           </Show>
           <Show when={updater()}>
