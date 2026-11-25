@@ -38,8 +38,9 @@ const messages: SessionMessageInfo[] = Array.from({ length: 10 }, (_, index) => 
 ]).flat()
 
 type App = Awaited<ReturnType<typeof createAppFixture>>
+type Scroll = () => ScrollBoxRenderable
 
-async function withTabs(run: (app: App, scroll: () => ScrollBoxRenderable) => Promise<void>) {
+async function withTabs(run: (app: App, scroll: Scroll) => Promise<void>) {
   await using state = await tmpdir()
   await mkdir(`${state.path}/test/tui`, { recursive: true })
   await Bun.write(
@@ -58,6 +59,7 @@ async function withTabs(run: (app: App, scroll: () => ScrollBoxRenderable) => Pr
       animations: false,
       tabs: { enabled: true, scope: "global" },
       keybinds: {
+        "session.messages_last_user": "ctrl+shift+l",
         "session.message.user.previous": "ctrl+shift+u",
         "session.message.user.next": "ctrl+shift+n",
       },
@@ -79,7 +81,7 @@ async function withTabs(run: (app: App, scroll: () => ScrollBoxRenderable) => Pr
   await app.ready
   await waitForHighlightedFrame(app, (frame) => frame.includes("Message 09"))
   await app.waitForVisualIdle({ quietFrames: 3 })
-  const scroll = () => {
+  const scroll: Scroll = () => {
     const find = (node: Renderable): ScrollBoxRenderable | undefined =>
       node instanceof ScrollBoxRenderable && node.getRenderable("user-0")
         ? node
@@ -97,46 +99,94 @@ const rowOf = (app: App, text: string) =>
     .split("\n")
     .findIndex((line) => line.includes(text))
 
+const topPrompt = (app: App, scroll: Scroll) => {
+  const lines = app.captureCharFrame().split("\n")
+  for (let y = scroll().viewport.y; y < lines.length; y++) {
+    const match = lines[y]?.match(/Message (\d+)/)
+    if (match) return Number(match[1])
+  }
+  return -1
+}
+
+const previous = async (app: App) => {
+  app.mockInput.pressKey("u", { ctrl: true, shift: true })
+  await app.waitForVisualIdle({ quietFrames: 3 })
+}
+
+const next = async (app: App) => {
+  app.mockInput.pressKey("n", { ctrl: true, shift: true })
+  await app.waitForVisualIdle({ quietFrames: 3 })
+}
+
+const jumpToFifth = async (app: App, scroll: Scroll) => {
+  // Start from the last user message so the setup does not depend on the viewport fallback.
+  app.mockInput.pressKey("l", { ctrl: true, shift: true })
+  await app.waitForVisualIdle({ quietFrames: 3 })
+  for (let step = 0; step < 5; step++) await previous(app)
+  await waitForHighlightedFrame(app, (frame) => frame.includes("Message 04"))
+  expect(rowOf(app, "Message 04")).toBe(scroll().viewport.y + 1)
+}
+
+const switchAwayAndBack = async (app: App) => {
+  app.mockInput.pressKey("2", { ctrl: true })
+  await app.waitForFrame((frame) => frame.includes("Other session marker"))
+  app.mockInput.pressKey("1", { ctrl: true })
+  await app.waitForVisualIdle({ quietFrames: 3 })
+}
+
+const wheel = async (app: App, scroll: Scroll, direction: "up" | "down") => {
+  await app.mockMouse.scroll(scroll().viewport.x + 2, scroll().viewport.y + 2, direction)
+  await app.waitForVisualIdle({ quietFrames: 3 })
+}
+
+const nudge = async (app: App, scroll: Scroll, delta: number) => {
+  scroll().scrollTo(Math.max(0, scroll().scrollTop + delta))
+  await app.waitForVisualIdle({ quietFrames: 3 })
+}
+
+test("previous user message steps from the restored current message after a tab switch", async () => {
+  await withTabs(async (app, scroll) => {
+    await jumpToFifth(app, scroll)
+    // Move the viewport edge into the fifth prompt, so the viewport fallback would repeat it.
+    await nudge(app, scroll, 2)
+    await switchAwayAndBack(app)
+    await waitForHighlightedFrame(app, (frame) => frame.includes("Reply 4"))
+
+    await previous(app)
+    await waitForHighlightedFrame(app, (frame) => frame.includes("Message 03"))
+    expect(rowOf(app, "Message 03")).toBe(scroll().viewport.y + 1)
+  })
+}, 30000)
+
 test("next user message steps from the restored current message after a tab switch", async () => {
   await withTabs(async (app, scroll) => {
-    // From the bottom, walk up to the fifth prompt.
-    for (let index = 0; index < 5; index++) {
-      app.mockInput.pressKey("u", { ctrl: true, shift: true })
-      await app.waitForVisualIdle({ quietFrames: 3 })
-    }
-    // Put the viewport edge inside the previous prompt. Navigation still starts from the fifth.
-    scroll().scrollTo(Math.max(0, scroll().scrollTop - 2))
-    await app.waitForVisualIdle({ quietFrames: 3 })
+    await jumpToFifth(app, scroll)
+    // Move the viewport edge above the fifth prompt, so the viewport fallback would return it.
+    await nudge(app, scroll, -2)
+    await switchAwayAndBack(app)
+    await waitForHighlightedFrame(app, (frame) => frame.includes("Message 04"))
 
-    app.mockInput.pressKey("2", { ctrl: true })
-    await app.waitForFrame((frame) => frame.includes("Other session marker"))
-    app.mockInput.pressKey("1", { ctrl: true })
-    await waitForHighlightedFrame(app, (frame) => frame.includes("Message 04") || frame.includes("Message 05"))
-    await app.waitForVisualIdle({ quietFrames: 3 })
-
-    app.mockInput.pressKey("n", { ctrl: true, shift: true })
+    await next(app)
     await waitForHighlightedFrame(app, (frame) => frame.includes("Message 05"))
-    await app.waitForVisualIdle({ quietFrames: 3 })
     expect(rowOf(app, "Message 05")).toBe(scroll().viewport.y + 1)
   })
 }, 30000)
 
-test("the last message stays current at the bottom after a tab switch", async () => {
+test("scrolling clears the remembered message before a tab switch", async () => {
   await withTabs(async (app, scroll) => {
-    app.mockInput.pressKey("2", { ctrl: true })
-    await app.waitForFrame((frame) => frame.includes("Other session marker"))
-    app.mockInput.pressKey("1", { ctrl: true })
-    await waitForHighlightedFrame(app, (frame) => frame.includes("Message 09"))
+    await jumpToFifth(app, scroll)
+
+    const node = scroll().getRenderable("user-8")
+    if (!node) throw new Error("Missing prompt renderable 8")
+    scroll().scrollTo(scroll().scrollTop + node.y - scroll().viewport.y + 2)
+    await app.waitForVisualIdle({ quietFrames: 3 })
+    await wheel(app, scroll, "down")
+
+    await switchAwayAndBack(app)
+    await previous(app)
     await app.waitForVisualIdle({ quietFrames: 3 })
 
-    const bottom = scroll().scrollTop
-    app.mockInput.pressKey("n", { ctrl: true, shift: true })
-    await app.waitForVisualIdle({ quietFrames: 3 })
-    expect(scroll().scrollTop).toBe(bottom)
-
-    app.mockInput.pressKey("u", { ctrl: true, shift: true })
-    await waitForHighlightedFrame(app, (frame) => frame.includes("Message 08"))
-    await app.waitForVisualIdle({ quietFrames: 3 })
-    expect(rowOf(app, "Message 08")).toBe(scroll().viewport.y + 1)
+    // The cached fifth would have moved to Message 03. After a scroll, navigation follows the viewport.
+    expect(topPrompt(app, scroll)).toBeGreaterThan(3)
   })
 }, 30000)

@@ -25,7 +25,6 @@ export function findMessageBoundary(input: {
   userOnly?: boolean
 }) {
   const messages = new Map(input.messages.map((message) => [message.id, message]))
-  const messageIndexes = new Map(input.messages.map((message, index) => [message.id, index]))
   const visible = input.children
     .flatMap((child) => {
       if (!child.id) return []
@@ -44,13 +43,6 @@ export function findMessageBoundary(input: {
 
   const current = visible.findIndex((child) => child.id === input.currentID)
   if (current !== -1) return visible[current + (input.direction === "next" ? 1 : -1)] ?? null
-  // A user-only walk can start from an assistant message, such as the reply the bottom is resting on.
-  // Map that base to the last user message before it instead of falling back to the viewport edge.
-  const currentIndex = input.currentID === undefined ? undefined : messageIndexes.get(input.currentID)
-  if (input.userOnly && currentIndex !== undefined) {
-    const mapped = visible.findLastIndex((child) => (messageIndexes.get(child.id) ?? -1) <= currentIndex)
-    if (mapped !== -1) return visible[mapped + (input.direction === "next" ? 1 : -1)] ?? null
-  }
   if (input.direction === "next") return visible.find((child) => child.y > input.scrollTop) ?? null
   return visible.findLast((child) => child.y < input.scrollTop) ?? null
 }

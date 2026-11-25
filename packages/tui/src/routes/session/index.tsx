@@ -134,7 +134,7 @@ import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDis
 import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/session"
 import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
-import { containsAnchor, createTimelineAnchors, groupID, targetMessageID } from "./anchors"
+import { containsAnchor, createTimelineAnchors, groupID } from "./anchors"
 import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
 export { InlineToolRow } from "./message-parts"
 export { toolDisplay } from "./message-parts"
@@ -307,6 +307,7 @@ export function Session(props: {
   const [firstJump, setFirstJump] = createSignal<() => void>()
   const [synced, setSynced] = createSignal(false)
   const sessionTabs = useSessionTabs()
+  const rememberMessage = (messageID: string | undefined) => sessionTabs.setNavigationMessage(sessionID, messageID)
   const [awayFromBottom, setAwayFromBottom] = createSignal(false)
   const [latestHovered, setLatestHovered] = createSignal(false)
   let ensureAllRowsPending: (() => void)[] | undefined
@@ -583,12 +584,12 @@ export function Session(props: {
     const anchor = sessionTabs.scrollAnchor(sessionID)
     const index = anchor ? rows.findIndex((row) => containsAnchor(row, anchor.target)) : -1
     if (!anchor || index === -1) {
-      rememberMessage(lastMessageID())
+      rememberMessage(undefined)
       scroll.scrollTo(scroll.scrollHeight)
       setAwayFromBottom(false)
       return
     }
-    rememberMessage(sessionTabs.navigationMessage(sessionID) ?? targetMessageID(anchor.target))
+    rememberMessage(sessionTabs.navigationMessage(sessionID))
     setHiddenRows(rowsBefore(weights(), index, TRANSCRIPT_BACKFILL_CHUNK))
     const end = rowsAfter(weights(), index, TRANSCRIPT_BACKFILL_CHUNK)
     setVisibleRowsEnd(end === rows.length ? undefined : end)
@@ -598,7 +599,7 @@ export function Session(props: {
         const boundary = anchors.get(anchor.target)
         if (!boundary) {
           sessionTabs.setScrollAnchor(sessionID, undefined)
-          rememberMessage(lastMessageID())
+          rememberMessage(undefined)
           scroll.stickyScroll = true
           scroll.scrollTo(scroll.scrollHeight)
           setAwayFromBottom(false)
@@ -853,10 +854,6 @@ export function Session(props: {
         footerHints={[{ title: "steer", label: "enter", group: "primary" }]}
       />
     ))
-  const rememberMessage = (messageID: string | undefined) => sessionTabs.setNavigationMessage(sessionID, messageID)
-  const lastMessageID = () =>
-    messages().findLast((message) => message.type === "user" || message.type === "assistant")?.id ??
-    anchors.messagePositions().at(-1)?.id
   const alignMessage = (messageID: string, top: number) => {
     scroll.stickyScroll = false
     setNavigationMessage(messageID)
@@ -911,7 +908,7 @@ export function Session(props: {
 
   function toBottom() {
     clearMessageNavigation()
-    rememberMessage(lastMessageID())
+    rememberMessage(undefined)
     ensureAllRowsPending = undefined
     if (awayTimer) clearTimeout(awayTimer)
     awayTimer = undefined
@@ -1549,6 +1546,18 @@ export function Session(props: {
                   props.scrollRef?.(r)
                   scroll.verticalScrollBar.on("change", updateAwayFromBottom)
                 }}
+                onMouseDown={(event) => {
+                  if (event.button !== 0) return
+                  const bar = scroll.verticalScrollBar
+                  if (
+                    bar.visible &&
+                    event.x >= bar.x &&
+                    event.x < bar.x + bar.width &&
+                    event.y >= bar.y &&
+                    event.y < bar.y + bar.height
+                  )
+                    rememberMessage(undefined)
+                }}
                 viewportOptions={{
                   paddingRight: showScrollbar() ? 1 : 0,
                 }}
@@ -1568,6 +1577,8 @@ export function Session(props: {
                 scrollAcceleration={scrollAcceleration()}
                 onMouseScroll={(event) => {
                   if (firstJump()) clearMessageNavigation()
+                  if (event.scroll?.direction === "up" || event.scroll?.direction === "down")
+                    rememberMessage(undefined)
                   if (event.scroll?.direction === "up" && revealOlderRows()) return
                   if (event.scroll?.direction === "down" && revealNewerRows()) return
                   updateAwayFromBottom()
