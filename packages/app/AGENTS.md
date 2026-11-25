@@ -120,6 +120,13 @@ This section is the single source for scroll containers across `app`, `ui`, `ses
 
 This section is the single source for what may move or restyle the session timeline. It applies to every component and stylesheet that renders in or around the timeline, across `app`, `ui`, `session-ui` and `gui-plugins`. Each rule comes from a regression that shipped.
 
+### Transcript size
+
+- A session keeps every history page the reader loads, so a pass over the whole transcript costs more with each page. A history page that lands shifts every index of the message list, and each memo that reads the list runs again and reads every message through the store.
+- Read a message's parts through a memo for that message (`mapArray` over the messages with a `createMemo` inside, as `messageParts` in `packages/session-ui/src/timeline/projection.ts` and `createSessionBackground` do), and fold over the memos. A page that lands, or a tool that updates, then reads that page or that message.
+- Do not read the transcript for something that cannot show: the todo pill reads it only while a turn runs and todos are on.
+- Still whole-transcript: `Timeline.constructSessionMessageRows` and its indexes. It was 24 of 68 ms of script when a page landed with 30 pages loaded.
+
 ### Scroll position
 
 - The timeline moves when the reader scrolls it or asks to go somewhere (a jump, a search hit, a link). Nothing else scrolls it: not focus, not an update, not a row that mounts.
