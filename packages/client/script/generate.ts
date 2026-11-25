@@ -43,6 +43,7 @@ import { Question } from "@opencode/schema/question"
 import { Reference } from "@opencode/schema/reference"
 import { AbsolutePath, RelativePath } from "@opencode/schema/schema"
 import { Session } from "@opencode/schema/session"
+import { SessionAttention } from "@opencode/schema/session-attention"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { SessionInbox } from "@opencode/schema/session-inbox"
 import { Shell } from "@opencode/schema/shell"
@@ -102,6 +103,7 @@ const effectTypeReferences = [
   ...namespaceTypes("Question", "@opencode/schema/question", Question),
   ...namespaceTypes("Reference", "@opencode/schema/reference", Reference),
   ...namespaceTypes("Session", "@opencode/schema/session", Session),
+  ...namespaceTypes("SessionAttention", "@opencode/schema/session-attention", SessionAttention),
   ...namespaceTypes("SessionMessage", "@opencode/schema/session-message", SessionMessage),
   ...namespaceTypes("SessionInbox", "@opencode/schema/session-inbox", SessionInbox),
   ...namespaceTypes("Shell", "@opencode/schema/shell", Shell),

@@ -347,6 +347,8 @@ import type {
   WebsearchQueryOutput,
   ExperimentalUsageLimitsInput,
   ExperimentalUsageLimitsOutput,
+  ExperimentalAttentionListInput,
+  ExperimentalAttentionListOutput,
   ConfigGetInput,
   ConfigGetOutput,
   ConfigShellsOutput,
@@ -1994,6 +1996,20 @@ export function make(options: ClientOptions) {
             requestOptions,
           ),
       },
+      attention: {
+        list: (input?: ExperimentalAttentionListInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalAttentionListOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/attention`,
+              query: { location: input?.["location"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
+              empty: false,
+            },
+            requestOptions,
+          ),
+      },
       config: {
         update: (input: ExperimentalConfigUpdateInput, requestOptions?: RequestOptions) =>
           request<ExperimentalConfigUpdateOutput>(
@@ -3042,6 +3058,11 @@ export function make(options: ClientOptions) {
     usage: {
       /** @deprecated Use `client.experimental.usage.limits`. Removed in the next minor. */
       limits: client.experimental.usage.limits,
+    },
+    /** @deprecated Use `client.experimental.attention`. Removed in the next minor. */
+    attention: {
+      /** @deprecated Use `client.experimental.attention.list`. Removed in the next minor. */
+      list: client.experimental.attention.list,
     },
     config: {
       ...client.config,

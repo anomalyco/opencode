@@ -2,7 +2,7 @@ export * as SessionRunnerLLM from "./llm.js"
 
 import { Message } from "@opencode/ai/effect"
 import { and, desc, eq, inArray, sql } from "drizzle-orm"
-import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
+import { Cause, Effect, Exit, FiberMap, Layer, Result } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
 import { Environment } from "../../environment/index.js"
@@ -15,6 +15,7 @@ import { SessionCompaction } from "../compaction.js"
 import { SessionContext } from "../context.js"
 import { SessionEvent } from "../event.js"
 import { SessionInbox } from "../inbox.js"
+import { SessionAttention } from "../attention.js"
 import { SessionBackground } from "../background.js"
 import { Job } from "../../job.js"
 import { SessionHistory } from "../history.js"
@@ -56,6 +57,7 @@ const layer = Layer.effect(
     const compaction = yield* SessionCompaction.Service
     const plugins = yield* Plugin.Service
     const hooks = yield* PluginHooks.Service
+    const attention = yield* SessionAttention.Service
     const jobs = yield* Job.Service
     const title = yield* SessionTitle.Service
     const steps = yield* SessionStep.make
@@ -190,8 +192,9 @@ const layer = Layer.effect(
                     ),
                   ),
                 )
-                if (!(yield* SessionInbox.has(db, sessionID, "input"))) return DrainResult.Complete()
-                continue
+                if (yield* SessionInbox.has(db, sessionID, "input")) continue
+                yield* restore(classifyAttention(sessionID))
+                return DrainResult.Complete()
               }
               const ready = yield* restore(
                 Effect.gen(function* () {
@@ -227,6 +230,18 @@ const layer = Layer.effect(
         force = false
         entering = false
       }
+    })
+
+    // The finished response's plugin attention replaces the previous response's, even when no plugin sets any.
+    const classifyAttention = Effect.fn("SessionRunner.classifyAttention")(function* (sessionID: SessionSchema.ID) {
+      const message = yield* store.lastAssistantAfter({ sessionID }).pipe(Effect.result)
+      if (Result.isFailure(message) || message.success === undefined) return
+      const event = yield* hooks.trigger("session", "experimental.attention", {
+        sessionID,
+        messageID: message.success.id,
+        attention: [],
+      })
+      yield* attention.setPlugin({ sessionID, messageID: message.success.id, attention: event.attention })
     })
 
     const prepareContext = Effect.fn("SessionRunner.prepareContext")(function* (sessionID: SessionSchema.ID) {
@@ -471,6 +486,7 @@ export const node = makeLocationNode({
     SessionCompaction.node,
     Plugin.node,
     PluginHooks.node,
+    SessionAttention.node,
     Job.node,
     SessionTitle.node,
     Snapshot.node,
