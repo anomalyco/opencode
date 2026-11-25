@@ -764,6 +764,7 @@ export function createClientMux(socket: BrowserTunnelHost.BinarySocket, options:
     stream: ClientStream,
     input: {
       readonly error?: Error
+      readonly normalClose?: boolean
       readonly sendReset?: StreamWire.ResetCodeValue
       readonly resetReason?: string
     } = {},
@@ -789,8 +790,6 @@ export function createClientMux(socket: BrowserTunnelHost.BinarySocket, options:
     stream.writeResume = undefined
     const finalCallback = stream.finalCallback
     stream.finalCallback = undefined
-    if (writeResume) writeResume(input.error ?? new Error("Browser tunnel stream closed."))
-    if (finalCallback) finalCallback(input.error ?? new Error("Browser tunnel stream closed."))
 
     if (input.sendReset !== undefined && !closed) {
       writer.enqueueControl({
@@ -805,10 +804,29 @@ export function createClientMux(socket: BrowserTunnelHost.BinarySocket, options:
     }
     const duplex = stream.duplex
     stream.duplex = undefined
-    if (duplex && !duplex.destroyed) {
-      if (input.error && duplex.listenerCount("error") > 0) duplex.destroy(input.error)
-      else duplex.destroy()
+
+    if (input.normalClose) {
+      // On clean desktop detach, destroy live/idle streams without synthesizing an asynchronous
+      // 'error' event whose listeners (e.g. http.Agent pool or pipe) may be removed before nextTick.
+      if (duplex && !duplex.destroyed) duplex.destroy()
+      if (writeResume) writeResume()
+      if (finalCallback) finalCallback()
+      return
     }
+
+    const streamError = input.error ?? new Error("Browser tunnel stream closed.")
+    if (duplex && !duplex.destroyed) {
+      // Settle pending write/final callbacks with the genuine error before destroying, or destroy with error.
+      if (writeResume) writeResume(streamError)
+      if (finalCallback) finalCallback(streamError)
+      if (!duplex.destroyed) {
+        if (input.error && duplex.listenerCount("error") > 0) duplex.destroy(input.error)
+        else duplex.destroy()
+      }
+      return
+    }
+    if (writeResume) writeResume(streamError)
+    if (finalCallback) finalCallback(streamError)
   }
 
   const maybeFinishStream = (stream: ClientStream) => {
@@ -1063,7 +1081,7 @@ export function createClientMux(socket: BrowserTunnelHost.BinarySocket, options:
     shutdown(1006, error.message || "Browser tunnel socket error.", true)
   })
 
-  function shutdown(code: number, reason: string, terminate: boolean) {
+  function shutdown(code: number, reason: string, terminate: boolean, normalClose = false) {
     if (closed) return
     closed = true
     closeReason = reason || "Browser tunnel disconnected."
@@ -1073,7 +1091,7 @@ export function createClientMux(socket: BrowserTunnelHost.BinarySocket, options:
     offError()
     const err = new Error(closeReason)
     for (const stream of Array.from(streams.values())) {
-      cleanupStream(stream, { error: err })
+      cleanupStream(stream, { error: err, normalClose })
     }
     writer.close()
     try {
@@ -1204,7 +1222,7 @@ export function createClientMux(socket: BrowserTunnelHost.BinarySocket, options:
           // Best-effort GOAWAY.
         }
       }
-      shutdown(code, reason, false)
+      shutdown(code, reason, false, true)
     },
   }
 }

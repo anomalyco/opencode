@@ -3,8 +3,11 @@ import { createHash } from "node:crypto"
 import { once } from "node:events"
 import { createServer as createHttpServer, request as httpRequest } from "node:http"
 import { createServer as createNetServer, type Socket } from "node:net"
-import { Effect } from "effect"
+import { connect as netConnect } from "node:net"
+import type { Duplex } from "node:stream"
+import { Effect, Schema } from "effect"
 import { EgressPolicy } from "../src/egress-policy.js"
+import { Browser } from "../src/rpc.js"
 import { BrowserProxy } from "../src/proxy.js"
 import { StreamMux } from "../src/stream-mux.js"
 import { StreamWire } from "../src/stream-wire.js"
@@ -606,6 +609,276 @@ describe("BrowserProxy safe per-origin HTTP/1.1 connection pooling", () => {
       await proxy.close()
       clientMux.close()
       serverMux.close()
+      await new Promise<void>((resolve) => target.close(() => resolve()))
+    }
+  }, 15_000)
+
+  test("TunnelTicket schema accepts only the fixed experimental browser tunnel path", () => {
+    expect(
+      Schema.decodeUnknownSync(Browser.TunnelTicket)({
+        ticket: "tkt_1",
+        expiresIn: 30,
+        protocol: 1,
+        path: BrowserTunnelHost.BROWSER_TUNNEL_PATH,
+      }).path,
+    ).toBe("/api/experimental/browser/tunnel")
+    for (const bad of ["https://evil.example/api/experimental/browser/tunnel", "//evil.example/x", "/api/other"]) {
+      expect(() =>
+        Schema.decodeUnknownSync(Browser.TunnelTicket)({
+          ticket: "tkt_1",
+          expiresIn: 30,
+          protocol: 1,
+          path: bad,
+        }),
+      ).toThrow()
+    }
+  })
+
+  test("normal detach tears down idle pooled HTTP sockets and active upgraded WebSocket without uncaught errors", async () => {
+    const target = createHttpServer((req, res) => {
+      if (req.url === "/big") {
+        const body = Buffer.alloc(512 * 1024, 0x44)
+        res.writeHead(200, { "content-type": "application/octet-stream", "content-length": String(body.length) })
+        res.end(body)
+        return
+      }
+      res.writeHead(200, { "content-length": "2" })
+      res.end("ok")
+    })
+    const upgradedTargetSockets = new Set<Duplex>()
+    target.on("upgrade", (_req, socket) => {
+      upgradedTargetSockets.add(socket)
+      socket.once("close", () => upgradedTargetSockets.delete(socket))
+      socket.write(
+        "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n",
+      )
+      socket.on("error", () => socket.destroy())
+    })
+    await once(target.listen(0, "127.0.0.1"), "listening")
+    const addr = target.address()
+    if (!addr || typeof addr === "string") throw new Error("No HTTP address")
+
+    const pair = createSocketPair({ simulateBuffered: true })
+    const serverMux = StreamMux.createServerMux(pair.server, {
+      policy: EgressPolicy.makePolicy(),
+      heartbeatIntervalMs: 0,
+    })
+    const clientMux = StreamMux.createClientMux(pair.client, { heartbeatIntervalMs: 0 })
+    const resetListeners = new Set<() => void>()
+    const proxy = await BrowserProxy.make({
+      openStream: (destination, signal) => clientMux.openStream(destination, signal),
+      onReset(listener) {
+        resetListeners.add(listener)
+        return () => void resetListeners.delete(listener)
+      },
+    })
+    void clientMux.closed.then(() => resetListeners.forEach((fn) => fn()))
+
+    const auth = `Basic ${Buffer.from(`${proxy.credentials.username}:${proxy.credentials.password}`).toString("base64")}`
+    const uncaught: Error[] = []
+    const onUncaught = (error: Error) => {
+      uncaught.push(error)
+    }
+    process.on("uncaughtException", onUncaught)
+
+    try {
+      // 1. Run a 512 KiB HTTP transfer leaving an idle pooled socket in BrowserProxy's http.Agent
+      const bigBytes = await new Promise<number>((resolve, reject) => {
+        const req = httpRequest(
+          {
+            hostname: proxy.host,
+            port: proxy.port,
+            method: "GET",
+            path: `http://127.0.0.1:${addr.port}/big`,
+            headers: { "Proxy-Authorization": auth },
+          },
+          (res) => {
+            let total = 0
+            res.on("data", (chunk: Buffer) => {
+              total += chunk.byteLength
+            })
+            res.once("end", () => resolve(total))
+          },
+        )
+        req.once("error", reject)
+        req.end()
+      })
+      expect(bigBytes).toBe(512 * 1024)
+
+      // 2. Open a concurrent upgraded WebSocket tunnel and keep it open across detach
+      const upgraded = await new Promise<Socket>((resolve, reject) => {
+        const sock = netConnect(proxy.port, proxy.host, () => {
+          sock.write(
+            `GET http://127.0.0.1:${addr.port}/ws HTTP/1.1\r\n` +
+              `Host: 127.0.0.1:${addr.port}\r\n` +
+              `Proxy-Authorization: ${auth}\r\n` +
+              `Connection: Upgrade\r\n` +
+              `Upgrade: websocket\r\n` +
+              `Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n` +
+              `Sec-WebSocket-Version: 13\r\n\r\n`,
+          )
+        })
+        let head = ""
+        let resolved = false
+        sock.on("data", (chunk: Buffer) => {
+          if (resolved) return
+          head += chunk.toString("latin1")
+          if (head.includes("\r\n\r\n")) {
+            resolved = true
+            resolve(sock)
+          }
+        })
+        sock.once("error", reject)
+      })
+      const upgradedClosed = new Promise<void>((resolve) => upgraded.once("close", () => resolve()))
+
+      // 3. Reproduce exact BrowserNetwork release sequence: close mux ("desktop detached"), then close proxy.
+      clientMux.close(1000, "desktop detached")
+      await proxy.close()
+      await upgradedClosed
+      await new Promise<void>((resolve) => setTimeout(resolve, 30))
+
+      expect(uncaught).toEqual([])
+      expect(serverMux.activeStreams()).toBe(0)
+    } finally {
+      process.off("uncaughtException", onUncaught)
+      clientMux.close()
+      serverMux.close()
+      upgradedTargetSockets.forEach((socket) => socket.destroy())
+      target.closeAllConnections()
+      await new Promise<void>((resolve) => target.close(() => resolve()))
+    }
+  }, 15_000)
+
+  test("abnormal tunnel drop fails active pending HTTP request while keeping idle pooled and upgraded sockets crash-free", async () => {
+    const hungStarted = Promise.withResolvers<void>()
+    const target = createHttpServer((req, res) => {
+      if (req.url === "/stall") {
+        hungStarted.resolve()
+        return
+      }
+      res.writeHead(200, { "content-length": "2" })
+      res.end("ok")
+    })
+    const upgradedTargetSockets = new Set<Duplex>()
+    target.on("upgrade", (_req, socket) => {
+      upgradedTargetSockets.add(socket)
+      socket.once("close", () => upgradedTargetSockets.delete(socket))
+      socket.write(
+        "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n",
+      )
+      socket.on("error", () => socket.destroy())
+    })
+    await once(target.listen(0, "127.0.0.1"), "listening")
+    const addr = target.address()
+    if (!addr || typeof addr === "string") throw new Error("No HTTP address")
+
+    const pair = createSocketPair({ simulateBuffered: true })
+    const serverMux = StreamMux.createServerMux(pair.server, {
+      policy: EgressPolicy.makePolicy(),
+      heartbeatIntervalMs: 0,
+    })
+    const clientMux = StreamMux.createClientMux(pair.client, { heartbeatIntervalMs: 0 })
+    const resetListeners = new Set<() => void>()
+    const proxy = await BrowserProxy.make({
+      openStream: (destination, signal) => clientMux.openStream(destination, signal),
+      onReset(listener) {
+        resetListeners.add(listener)
+        return () => void resetListeners.delete(listener)
+      },
+    })
+    void clientMux.closed.then(() => resetListeners.forEach((fn) => fn()))
+    const auth = `Basic ${Buffer.from(`${proxy.credentials.username}:${proxy.credentials.password}`).toString("base64")}`
+
+    const uncaught: Error[] = []
+    const onUncaught = (error: Error) => {
+      uncaught.push(error)
+    }
+    process.on("uncaughtException", onUncaught)
+
+    try {
+      // 1. Create an idle pooled HTTP socket on origin
+      await new Promise<void>((resolve, reject) => {
+        const req = httpRequest(
+          {
+            hostname: proxy.host,
+            port: proxy.port,
+            method: "GET",
+            path: `http://127.0.0.1:${addr.port}/warm`,
+            headers: { "Proxy-Authorization": auth },
+          },
+          (res) => {
+            res.resume()
+            res.once("end", () => resolve())
+          },
+        )
+        req.once("error", reject)
+        req.end()
+      })
+
+      // 2. Keep an active upgraded WebSocket open
+      const upgraded = await new Promise<Socket>((resolve, reject) => {
+        const sock = netConnect(proxy.port, proxy.host, () => {
+          sock.write(
+            `GET http://127.0.0.1:${addr.port}/ws HTTP/1.1\r\n` +
+              `Host: 127.0.0.1:${addr.port}\r\n` +
+              `Proxy-Authorization: ${auth}\r\n` +
+              `Connection: Upgrade\r\n` +
+              `Upgrade: websocket\r\n` +
+              `Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n` +
+              `Sec-WebSocket-Version: 13\r\n\r\n`,
+          )
+        })
+        let head = ""
+        let resolved = false
+        sock.on("data", (chunk: Buffer) => {
+          if (resolved) return
+          head += chunk.toString("latin1")
+          if (head.includes("\r\n\r\n")) {
+            resolved = true
+            resolve(sock)
+          }
+        })
+        sock.once("error", reject)
+      })
+      const upgradedClosed = new Promise<void>((resolve) => upgraded.once("close", () => resolve()))
+
+      // 3. Start an active pending HTTP request (in-flight read)
+      const pendingStatus = new Promise<number | string>((resolve) => {
+        const req = httpRequest(
+          {
+            hostname: proxy.host,
+            port: proxy.port,
+            method: "GET",
+            path: `http://127.0.0.1:${addr.port}/stall`,
+            headers: { "Proxy-Authorization": auth },
+          },
+          (res) => {
+            res.resume()
+            resolve(res.statusCode ?? 0)
+          },
+        )
+        req.once("error", (err) => resolve(err.message))
+        req.end()
+      })
+      await hungStarted.promise
+
+      // 4. Abnormally drop the tunnel from the server side while pool + upgraded WS + pending read all exist
+      pair.server.terminate()
+
+      const outcome = await pendingStatus
+      // Active pending request genuinely failed (502 from proxy or socket error, never silently succeeded)
+      expect(outcome === 502 || typeof outcome === "string").toBe(true)
+      await upgradedClosed
+      await new Promise<void>((resolve) => setTimeout(resolve, 30))
+      expect(uncaught).toEqual([])
+    } finally {
+      process.off("uncaughtException", onUncaught)
+      await proxy.close()
+      clientMux.close()
+      serverMux.close()
+      upgradedTargetSockets.forEach((socket) => socket.destroy())
+      target.closeAllConnections()
       await new Promise<void>((resolve) => target.close(() => resolve()))
     }
   }, 15_000)

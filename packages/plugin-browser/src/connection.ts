@@ -393,7 +393,7 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
             ticket: issued.ticket,
             expiresIn: issued.expiresIn,
             protocol: 1 as const,
-            path: issued.path,
+            path: BrowserTunnelHost.BROWSER_TUNNEL_PATH,
           }
         }),
       "tunnel.grant": (input, call) =>

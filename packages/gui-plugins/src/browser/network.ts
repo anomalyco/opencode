@@ -1,43 +1,21 @@
 import { Duplex } from "node:stream"
-import { WebSocket as NodeWebSocket } from "@effect/platform-node/NodeWS"
 import { net, session, type WebContents } from "electron"
 import type { RpcClient } from "@opencode/client/effect/api"
 import type { ServerEndpoint } from "@opencode/plugin/gui/main"
 import type { Session } from "@opencode/schema/session"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { BrowserProxy } from "@opencode/plugin-browser/proxy"
-import { BrowserTunnelHost, StreamMux, StreamWire } from "@opencode/plugin-browser/stream"
+import { BrowserTunnelHost, StreamMux } from "@opencode/plugin-browser/stream"
 import { Effect, Predicate } from "effect"
 import { Base64 } from "effect/encoding"
+import {
+  openAuthenticatedWebSocket,
+  PREWARM_WAIT_TIMEOUT_MS,
+  TUNNEL_PROTOCOL_VERSION,
+  TunnelUpgradeError,
+} from "./tunnel-client"
 
-const TUNNEL_TICKET_HEADER = "x-opencode-browser-ticket"
-
-const TUNNEL_SESSION_HEADER = "x-opencode-browser-session"
-
-const TUNNEL_CONNECTION_HEADER = "x-opencode-browser-connection"
-
-const TUNNEL_PROTOCOL_HEADER = "x-opencode-browser-protocol"
-
-const TUNNEL_PROTOCOL_VERSION = 1 as const
-
-const PREWARM_WAIT_TIMEOUT_MS = 15_000
-
-export type TunnelUpgradeFailureKind = "auth" | "tls" | "blocked" | "protocol" | "ticket" | "transport"
-
-/**
- * Explicit non-downgrading failure raised when a server advertises binary stream tunneling
- * (`tunnel.ws.v1`) and the WebSocket upgrade is rejected, blocked, or fails TLS/auth checks.
- */
-export class TunnelUpgradeError extends Error {
-  constructor(
-    readonly kind: TunnelUpgradeFailureKind,
-    message: string,
-    readonly statusCode?: number,
-  ) {
-    super(message)
-    this.name = "TunnelUpgradeError"
-  }
-}
+export { resolveBrowserTunnelUrl, TunnelUpgradeError, type TunnelUpgradeFailureKind } from "./tunnel-client"
 
 export type BrowserNetwork = {
   attach(contents: WebContents): () => void
@@ -272,199 +250,6 @@ export const createBrowserNetwork = Effect.fn("BrowserNetwork.create")(function*
   return network
 })
 
-/**
- * Opens one authenticated binary WebSocket in Electron main using a short-lived single-use ticket
- * in the `x-opencode-browser-ticket` header. Verified TLS is strictly enforced and redirects are rejected.
- */
-async function openAuthenticatedWebSocket(input: {
-  readonly server: ServerEndpoint
-  readonly location: { readonly directory: string; readonly workspace?: string }
-  readonly attachment: { readonly sessionID: Session.ID; readonly connectionID: string }
-  readonly ticket: string
-  readonly path: string
-  readonly protocol: number
-}): Promise<BrowserTunnelHost.BinarySocket> {
-  const base = new URL(input.server.url)
-
-  if (base.protocol !== "http:" && base.protocol !== "https:") {
-    throw new TunnelUpgradeError("protocol", `Unsupported server URL protocol for browser tunnel: ${base.protocol}`)
-  }
-
-  const wsUrl = new URL(input.path, base)
-  wsUrl.protocol = base.protocol === "https:" ? "wss:" : "ws:"
-  wsUrl.searchParams.set("location[directory]", input.location.directory)
-
-  if (input.location.workspace) wsUrl.searchParams.set("location[workspace]", input.location.workspace)
-
-  // Forward only non-cookie configured endpoint headers (for authenticating reverse proxies if present);
-  // never put the ticket in URLs, and never send browser cookies.
-  const headers: Record<string, string> = {}
-
-  for (const [key, value] of Object.entries(input.server.headers)) {
-    if (key.toLowerCase() === "cookie") continue
-    headers[key] = value
-  }
-
-  headers[TUNNEL_TICKET_HEADER] = input.ticket
-  headers[TUNNEL_SESSION_HEADER] = input.attachment.sessionID
-  headers[TUNNEL_CONNECTION_HEADER] = input.attachment.connectionID
-  headers[TUNNEL_PROTOCOL_HEADER] = String(input.protocol)
-
-  return await new Promise<BrowserTunnelHost.BinarySocket>((resolve, reject) => {
-    const ws = new NodeWebSocket(wsUrl.toString(), {
-      headers,
-      perMessageDeflate: false,
-      followRedirects: false,
-      maxPayload: StreamWire.MAX_WS_FRAME_BYTES,
-      handshakeTimeout: PREWARM_WAIT_TIMEOUT_MS,
-    })
-
-    let settled = false
-
-    const finish = (fn: () => void) => {
-      if (settled) return
-
-      settled = true
-      ws.off("open", onOpen)
-      ws.off("unexpected-response", onUnexpectedResponse)
-      ws.off("error", onError)
-      ws.off("close", onClose)
-      fn()
-    }
-
-    const onOpen = () => {
-      finish(() => resolve(adaptNodeWebSocket(ws)))
-    }
-
-    const onUnexpectedResponse = (_request: { readonly path?: string }, response: { readonly statusCode?: number }) => {
-      const status = response.statusCode ?? 0
-      finish(() => {
-        // Keep a silent error sink because `ws.terminate()` during CONNECTING emits an asynchronous error event.
-        ws.on("error", () => undefined)
-        ws.terminate()
-
-        if (status === 401 || status === 403) {
-          reject(
-            new TunnelUpgradeError(
-              "auth",
-              `Browser stream tunnel upgrade was rejected (HTTP ${status}). Check server credentials and attachment state.`,
-              status,
-            ),
-          )
-
-          return
-        }
-
-        reject(
-          new TunnelUpgradeError(
-            "blocked",
-            `Browser stream tunnel WebSocket upgrade was blocked (HTTP ${status}). Ensure the server or reverse proxy permits WebSocket upgrades.`,
-            status,
-          ),
-        )
-      })
-    }
-
-    const onError = (error: Error) => {
-      finish(() => {
-        ws.on("error", () => undefined)
-        ws.terminate()
-        reject(classifySocketError(error))
-      })
-    }
-
-    const onClose = (code: number, reason: Buffer) => {
-      finish(() =>
-        reject(
-          new TunnelUpgradeError(
-            code === 1002 || code === 1008 || code === 1009 ? "protocol" : "transport",
-            reason.toString("utf8") || `Browser stream tunnel closed during handshake (code ${code}).`,
-          ),
-        ),
-      )
-    }
-
-    ws.once("open", onOpen)
-    ws.once("unexpected-response", onUnexpectedResponse)
-    ws.once("error", onError)
-    ws.once("close", onClose)
-  })
-}
-
-function adaptNodeWebSocket(ws: NodeWebSocket): BrowserTunnelHost.BinarySocket {
-  return {
-    get readyState() {
-      return ws.readyState
-    },
-    get bufferedAmount() {
-      return ws.bufferedAmount
-    },
-    send(data, onWritten) {
-      ws.send(data, { binary: true, compress: false }, (error) => onWritten?.(error ?? undefined))
-    },
-    ping() {
-      if (ws.readyState === ws.OPEN) ws.ping()
-    },
-    close(code, reason) {
-      if (ws.readyState === ws.OPEN || ws.readyState === ws.CONNECTING) ws.close(code, reason)
-    },
-    terminate() {
-      ws.terminate()
-    },
-    onMessage(listener) {
-      const handler = (raw: Buffer | ArrayBuffer | Buffer[], isBinary: boolean) => {
-        if (!isBinary) {
-          listener(String(raw))
-
-          return
-        }
-
-        if (raw instanceof Uint8Array) {
-          listener(raw)
-
-          return
-        }
-
-        if (raw instanceof ArrayBuffer) {
-          listener(new Uint8Array(raw))
-
-          return
-        }
-
-        listener(Buffer.concat(raw))
-      }
-
-      ws.on("message", handler)
-
-      return () => {
-        ws.off("message", handler)
-      }
-    },
-    onClose(listener) {
-      const handler = (code: number, reason: Buffer) => listener(code, reason.toString("utf8"))
-      ws.on("close", handler)
-
-      return () => {
-        ws.off("close", handler)
-      }
-    },
-    onError(listener) {
-      ws.on("error", listener)
-
-      return () => {
-        ws.off("error", listener)
-      }
-    },
-    onPong(listener) {
-      ws.on("pong", listener)
-
-      return () => {
-        ws.off("pong", listener)
-      }
-    },
-  }
-}
-
 function classifyTicketError(cause: Error): TunnelUpgradeError {
   const message = cause.message
 
@@ -477,19 +262,6 @@ function classifyTicketError(cause: Error): TunnelUpgradeError {
   }
 
   return new TunnelUpgradeError("ticket", `Could not obtain browser stream upgrade ticket: ${message}`)
-}
-
-function classifySocketError(error: Error): TunnelUpgradeError {
-  const code = Predicate.hasProperty(error, "code") && Predicate.isString(error.code) ? error.code : ""
-
-  if (/CERT|TLS|SSL|HOSTNAME_MISMATCH|UNABLE_TO_VERIFY|SELF_SIGNED/i.test(`${code} ${error.message}`)) {
-    return new TunnelUpgradeError(
-      "tls",
-      `Browser stream tunnel TLS verification failed (${code || error.message}). Check the server certificate.`,
-    )
-  }
-
-  return new TunnelUpgradeError("transport", `Browser stream tunnel connection failed: ${error.message}`)
 }
 
 async function waitWithAbort(promise: Promise<void>, signal: AbortSignal, timeoutMs: number) {

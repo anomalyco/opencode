@@ -725,7 +725,7 @@ export const TunnelTicket = Schema.Struct({
   ticket: short,
   expiresIn: count,
   protocol: Schema.Literal(1),
-  path: short,
+  path: Schema.Literal("/api/experimental/browser/tunnel"),
 })
 export type TunnelTicket = typeof TunnelTicket.Type
 const portNumber = Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 65_535 }))

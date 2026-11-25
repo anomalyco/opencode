@@ -127,6 +127,12 @@ export async function make(transport: ProxyTransport) {
       if (!callback) throw new Error("Browser proxy pool requires async createConnection callback")
       void connect(destination, abort.signal).then(
         (socket) => {
+          // Keep an error sink on pooled sockets so an async nextTick error after `agent.destroy()`
+          // removes http.Agent's own listener cannot surface as an uncaught exception; active
+          // ClientRequests still receive the same error via their own socket error listener.
+          socket.on("error", () => {
+            if (!socket.destroyed) socket.destroy()
+          })
           // Half-open sockets whose upstream server closes them while idle must leave the pool immediately.
           socket.once("end", () => {
             if (!socket.destroyed) socket.destroy()
@@ -216,6 +222,9 @@ export async function make(transport: ProxyTransport) {
           )
         }
         if (head.byteLength) tunnel.write(head)
+        // Attach explicit error handlers before `pipe()` so Node's pipe error handler never rethrows on teardown.
+        socket.on("error", () => tunnel.destroy())
+        tunnel.on("error", () => socket.destroy())
         socket.once("close", () => tunnel.destroy())
         tunnel.once("close", () => socket.destroy())
         socket.pipe(tunnel)

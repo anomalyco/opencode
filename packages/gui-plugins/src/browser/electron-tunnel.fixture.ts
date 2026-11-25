@@ -92,8 +92,9 @@ window.__run = async () => {
   const big = await (await fetch("/big")).arrayBuffer()
   const wsReply = await new Promise((resolve, reject) => {
     const ws = new WebSocket("ws://" + location.host + "/hmr")
+    window.__keepWs = ws
     ws.onopen = () => ws.send("ping")
-    ws.onmessage = (e) => { ws.close(); resolve(String(e.data)) }
+    ws.onmessage = (e) => { resolve(String(e.data)) }
     ws.onerror = () => reject(new Error("ws failed"))
   })
   return { assetsCount: assets.length, firstAsset: assets[0], lastAsset: assets[7], bigBytes: big.byteLength, wsReply }
