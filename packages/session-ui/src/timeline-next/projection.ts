@@ -315,14 +315,20 @@ function constructRows(input: Input) {
       ),
   )
 
+  const leadingRows = leading
+    .filter(noticeShows)
+    .map((message) => new TimelineRow.Notice({ userMessageID: turns[0]?.id ?? message.id, messageID: message.id }))
+
+  // A turn gap holds the gap above its turn. A turn the user started stays a turn when older history loads, so it has
+  // its gap unless it is the first row: after leading notices too, which then join the turn that loads above them.
+  const gapped = (turn: Turn, index: number) => index > 0 || (leadingRows.length > 0 && !!(turn.user || turn.shell))
+
   const rows: TimelineRow.TimelineRow[] = [
-    ...leading
-      .filter(noticeShows)
-      .map((message) => new TimelineRow.Notice({ userMessageID: turns[0]?.id ?? message.id, messageID: message.id })),
+    ...leadingRows,
     ...visibleTurns.flatMap((turn, index) => {
       if (turn.shell)
         return [
-          ...(index > 0 ? [new TimelineRow.TurnGap({ userMessageID: turn.id })] : []),
+          ...(gapped(turn, index) ? [new TimelineRow.TurnGap({ userMessageID: turn.id })] : []),
           new TimelineRow.Shell({ userMessageID: turn.id, messageID: turn.shell.id }),
           ...turn.entries.flatMap((entry) =>
             entry.type === "notice" && noticeShows(entry.message)
@@ -331,7 +337,16 @@ function constructRows(input: Input) {
           ),
         ]
 
-      return turnRows(turn, index > 0, phaseOf(turn), input.detail, visible, commentary, input.place, input.factOf)
+      return turnRows(
+        turn,
+        gapped(turn, index),
+        phaseOf(turn),
+        input.detail,
+        visible,
+        commentary,
+        input.place,
+        input.factOf,
+      )
     }),
   ]
 

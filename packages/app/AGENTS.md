@@ -142,6 +142,26 @@ This section is the single source for what may move or restyle the session timel
 - `scrollToFn` in `src/session/timeline/virtualizer.tsx` holds the corrections made while a batch of sizes is applied and writes the last one once. Keep scroll writes for size changes on that path, and call `flushHeldScroll` before code inside the batch reads the native offset.
 - Keeper: "corrects the scroll position once for each batch of rows an older page measures" in `e2e/regression/timeline-history.spec.ts`.
 
+### Scroll events
+
+- A scroll event must read before it writes. A style write followed by a read of `scrollTop`, `scrollHeight` or a rect, in the same event, makes the browser recalculate style (and lay out, when the write changed a size) inside the event.
+- `ScrollView` (`packages/ui/src/components/scroll-view.tsx`) therefore reads the thumb's geometry first (`readThumb`), forwards the event to the timeline, and writes the thumb in the next animation frame (`applyThumb`). Keep that order when you add work to a scroll handler.
+- Keeper: "handles a scroll event without a forced style or layout pass" in `e2e/regression/timeline-geometry.spec.ts`, for both timelines. It counts the passes in a Chrome trace; the old order forced one in every scroll event.
+
+### Rows that load above the reader
+
+- Older history loads above rows the reader is looking at. The virtualizer keeps the first row in view where it was, so the rows stay still only if no mounted row changes when the row before it arrives.
+- Never give a row space, a divider or a label above its content that depends on the row before it. That row grows on top when its predecessor loads, and everything in view moves down: 16 to 32px on every page of the New timeline while its rows took their gap on top.
+- The row directly above holds the space between two rows, below its own content. A row that starts a turn gets a row of its own for it, the turn gap, which arrives and leaves with the turn. `timelineGaps` in `packages/session-ui/src/timeline-next/spacing.ts` decides this for the New timeline.
+- Keeper: "keeps the New timeline's rows fixed while older pages land in a turn and above a prompt" in `e2e/regression/timeline-history.spec.ts`.
+- To check by hand: scroll to the top of the loaded history with the network throttled, and watch the first rows while the older page lands.
+
+### Stuck headers
+
+- An open group's header sticks under the session title. Collapsing the group from there scrolls the timeline first, by how far the header is stuck, so the header stays under the pointer.
+- Measure that distance from where the header rests, not from the group's top. A header with a margin rests that margin away from the top: the New timeline's rests 6px above it, and the header moved up 6px on every collapse.
+- Keeper: "collapsing a group from its stuck header leaves the header where it was" in `e2e/regression/patch-sticky-header.spec.ts`.
+
 ### Transcript reads
 
 - The reader keeps their place only while the rows in view stay in the transcript. `session.message.sync` (`packages/client/src/solid/data.ts`) reads the newest page again on every reconnect of the event stream, and when a turn ends with a tool still running. It once replaced the transcript with that page: a reader further back than the page jumped 3,400 to 8,100 px, and the older pages were gone.

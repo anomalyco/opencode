@@ -7,8 +7,6 @@ import { Database } from "@opencode/core/database/database"
 import { sqliteLayer } from "@opencode/core/database/sqlite.workerd"
 import type { DurableObjectStorage } from "@opencode/core/database/sqlite.workerd"
 import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
-import { FileSystem } from "@opencode/core/filesystem"
-import { FileSystemSearch } from "@opencode/core/filesystem/search"
 import { Identity } from "@opencode/core/machine/identity"
 import { Pty } from "@opencode/core/pty"
 import { Snapshot } from "@opencode/core/snapshot"
@@ -35,10 +33,11 @@ import { withoutParentSpan } from "./request-tracing"
  * - Watcher and fff are disabled through their existing option flags; pty, fff,
  *   and photon native modules resolve to inert stubs under the `workerd` bundle
  *   condition.
- * - Bare locations use a typed no-execution-plane process spawner; FileSystem,
- *   FileSystemSearch, and Pty fail with a clear defect until a remote sandbox
- *   backs them; Npm fails package installs with a typed workerd error; Snapshot
- *   and Vcs degrade to no-op results.
+ * - Bare locations use a typed no-execution-plane process spawner; FileSystem
+ *   and FileSystemSearch route through Environment (working on attached remote
+ *   workspaces and failing cleanly on bare locations). Pty fails with a clear
+ *   defect; Npm fails package installs with a typed workerd error; Snapshot and
+ *   Vcs degrade to no-op results.
  * - Blob storage and video generation report themselves unsupported: blobs are files on a local disk.
  * - Config is injected as a string (no filesystem); plugin discovery is
  *   precompiled-only, and stdio MCP reports the same no-plane failure as Shell.
@@ -126,8 +125,6 @@ export function replacements(options: Options): LayerNode.Replacements {
     CrossSpawnSpawner.node.replace(EnvironmentUnavailable.layer),
     Snapshot.node.replace(Snapshot.noopLayer),
     Vcs.node.replace(vcsLayer),
-    FileSystem.node.replace(fileSystemLayer),
-    FileSystemSearch.node.replace(fileSystemSearchLayer),
     Pty.node.replace(ptyLayer),
     Npm.node.replace(npmLayer),
     // Blobs need a local `blobs/` folder, which a Durable Object doesn't have.
@@ -176,25 +173,6 @@ const vcsLayer = Layer.succeed(
     branches: () => Effect.succeed([]),
     status: () => Effect.succeed([]),
     diff: () => Effect.succeed([]),
-  }),
-)
-
-// The Location-scoped filesystem has no local worktree to serve until a remote
-// sandbox backs it.
-const fileSystemLayer = Layer.succeed(
-  FileSystem.Service,
-  FileSystem.Service.of({
-    read: () => unavailable("FileSystem.read"),
-    list: () => unavailable("FileSystem.list"),
-    find: () => unavailable("FileSystem.find"),
-    write: () => unavailable("FileSystem.write"),
-  }),
-)
-
-const fileSystemSearchLayer = Layer.succeed(
-  FileSystemSearch.Service,
-  FileSystemSearch.Service.of({
-    find: () => unavailable("FileSystemSearch.find"),
   }),
 )
 

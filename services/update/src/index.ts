@@ -70,7 +70,7 @@ export default {
             cf_colo: request.cf?.colo,
           },
         },
-      ]).catch(() => console.error("Failed to send update request event to the data lake")),
+      ]).catch((error) => console.error("Failed to send update request event to the data lake", error)),
     )
 
     if (pathname === "/") return json({ service: "opencode-update" })
@@ -84,7 +84,9 @@ export default {
     if (pathname === "/admin/minimum" && request.method === "POST") return markArtifact(request, env, "minimum")
     if (pathname === "/admin/rollout" && request.method === "POST") return configureRollout(request, env)
     if (pathname === "/api/publish" && request.method === "POST") return publishArtifact(request, env)
-    if (request.method !== "GET") return new Response("Method not allowed", { status: 405 })
+    // Download managers probe with HEAD before downloading; the runtime drops the body from HEAD responses.
+    const head = request.method === "HEAD" && pathname.startsWith("/api/")
+    if (request.method !== "GET" && !head) return new Response("Method not allowed", { status: 405 })
 
     const [root, ...path] = pathname.split("/").filter(Boolean)
     if (root !== "api" || path.length < 1 || path.length > 4 || !path.every(validIdentifier)) {
