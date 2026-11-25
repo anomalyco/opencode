@@ -6,7 +6,7 @@ import { Bus } from "./bus.js"
 import { Config } from "./config.js"
 import { Job } from "./job.js"
 import { Location } from "./location.js"
-import { LocationLifecycle } from "./location-lifecycle.js"
+import { invalidateLocationIfIdle } from "./location-services.js"
 import { LocationServiceMap } from "./location-service-map.js"
 import { SessionEvent } from "./session/event.js"
 import { SessionExecution } from "./session/execution.js"
@@ -14,10 +14,17 @@ import { SessionStore } from "./session/store.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 
 const isSessionEvent = Schema.is(SessionEvent.Durable)
+const DEFAULT_LOCATION_LIMIT = 16
 
 export class Service extends Context.Service<Service, {}>()("@opencode/LocationActivity") {}
 
-export function layer(options: { readonly timeToLive?: Duration.Input; readonly sweepInterval?: Duration.Input } = {}) {
+export function layer(
+  options: {
+    readonly timeToLive?: Duration.Input
+    readonly sweepInterval?: Duration.Input
+    readonly limit?: number | false
+  } = {},
+) {
   return Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -28,11 +35,14 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
       const jobs = yield* Job.Service
       const sessions = yield* SessionStore.Service
       const timeToLive = Duration.fromInputUnsafe(options.timeToLive ?? "60 minutes")
+      const limit = options.limit === false ? Number.POSITIVE_INFINITY : (options.limit ?? DEFAULT_LOCATION_LIMIT)
       const entries = new Map<string, { readonly ref: Location.Ref; touchedAt: number }>()
       const key = (ref: Location.Ref) => `${LocationServiceMap.canonical(ref).directory}\0${ref.workspaceID ?? ""}`
       const touch = (ref: Location.Ref) =>
         Effect.sync(() => {
-          entries.set(key(ref), { ref, touchedAt: clock.currentTimeMillisUnsafe() })
+          const id = key(ref)
+          entries.delete(id)
+          entries.set(id, { ref, touchedAt: clock.currentTimeMillisUnsafe() })
         })
 
       // Read per location so project config can override the global value.
@@ -50,22 +60,6 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
           Effect.scoped,
           Effect.orElseSucceed(() => timeToLive),
         )
-
-      // An open terminal or client MCP socket keeps its Location loaded: eviction would end the shell under the user,
-      // and the client would reconnect and boot a fresh Location right away.
-      const retained = (ref: Location.Ref) =>
-        locations
-          .contextEffectOption(ref)
-          .pipe(
-            Effect.map(
-              Option.exists((context) =>
-                Option.exists(Context.getOption(context, LocationLifecycle.Service), (lifecycle) =>
-                  lifecycle.isRetained(),
-                ),
-              ),
-            ),
-            Effect.scoped,
-          )
 
       const unsubscribe = yield* bus.listen((event) => {
         if (!isSessionEvent(event) || !event.location) return Effect.void
@@ -89,7 +83,8 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
             Effect.map((timeout) => timeout !== false && entry.touchedAt + Duration.toMillis(timeout) <= now),
           ),
         )
-        if (expired.length === 0) return
+        const expiredIDs = new Set(expired.map((entry) => key(entry.ref)))
+        if (expiredIDs.size === 0 && refs.length <= limit) return
         // Waiting on a question, a long tool call, or a background job emits no durable activity.
         const owners = [
           ...(yield* execution.active),
@@ -103,16 +98,38 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
           ),
         )
         yield* Effect.forEach(
-          expired,
+          Array.from(entries.values()),
           (entry) =>
             Effect.gen(function* () {
-              if (occupied.has(key(entry.ref)) || (yield* retained(entry.ref))) return yield* touch(entry.ref)
-              entries.delete(key(entry.ref))
+              const id = key(entry.ref)
+              if (entries.get(id) !== entry) return
+              const isExpired = expiredIDs.has(id)
+              const remaining = Array.from(yield* RcMap.keys(locations.rcMap)).length
+              if (!isExpired && remaining <= limit) return
+              if (occupied.has(id)) {
+                if (isExpired) yield* touch(entry.ref)
+                return
+              }
+              // A per-Location timeout of false is a promise never to unload it.
+              if (!isExpired && (yield* idleTimeout(entry.ref)) === false) return
+              const evicted = yield* invalidateLocationIfIdle(locations, entry.ref, {
+                isProtected: () => occupied.has(id),
+                protectBorrowers: !isExpired,
+                canEvict: () =>
+                  entries.get(id) === entry &&
+                  (isExpired ||
+                    (locations.rcMap.state._tag === "Open" && Array.from(locations.rcMap.state.map).length > limit)),
+              })
+              if (!evicted) {
+                if (isExpired) yield* touch(entry.ref)
+                return
+              }
+              entries.delete(id)
               yield* Effect.logInfo("location services evicted", {
                 directory: entry.ref.directory,
                 workspaceID: entry.ref.workspaceID,
+                reason: isExpired ? "idle" : "limit",
               })
-              yield* locations.invalidate(entry.ref)
             }),
           { discard: true },
         )
