@@ -346,6 +346,7 @@ const layer = Layer.effect(
                 const inventory = cached?.inventory ?? {
                   tools: new Map(codemodeEntries),
                   namespaces: data.namespaces,
+                  definitions: data.definitions,
                 }
                 const tool = CodeModeTool.create(
                   inventory,
@@ -439,7 +440,7 @@ const layer = Layer.effect(
         const callSeq = yield* Ref.make(0)
         const full = input.services !== undefined && (yield* flags.enabled("full_codemode"))
         return yield* CodeModeTool.check(
-          { tools, namespaces: data.namespaces },
+          { tools, namespaces: data.namespaces, definitions: data.definitions },
           {
             ...input,
             context: { ...input.context, id: Tool.CallID.make(`call_${input.context.messageID}_execute`) },

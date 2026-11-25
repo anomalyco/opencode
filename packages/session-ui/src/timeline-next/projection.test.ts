@@ -4,7 +4,7 @@ import { Predicate } from "effect"
 import { createRoot } from "solid-js"
 import { commentaryRuns, subagentReport } from "../storybook/current-session-fixtures"
 import { timelinePresets, type TimelineDetail } from "../timeline/detail"
-import type { TimelineRow } from "../timeline/timeline-row"
+import { TimelineRow } from "../timeline/timeline-row"
 import { createNextTimelineProjection, workedDuration } from "./projection"
 import { replayScript, scenarios } from "./stories/session-replay"
 
@@ -323,6 +323,40 @@ describe("New timeline projection", () => {
     })
 
     expect(notices).toEqual(["into", "back"])
+  })
+
+  // The turn gap holds the gap above the prompt. Without it the notice would hold that gap, and give it up, on
+  // screen, when the page above loads and puts the turn gap between them.
+  test("a prompt after leading notices has its turn gap before older history loads above them", () => {
+    const loaded: SessionMessageInfo[] = [
+      {
+        id: "moved",
+        type: "location-switched",
+        location: { directory: "/repo-worktree" },
+        previous: { location: { directory: "/repo" } },
+        time: { created: 2 },
+      },
+      { id: "next", type: "user", text: "Continue", time: { created: 3 } },
+    ]
+
+    const keys = (messages: SessionMessageInfo[]) =>
+      createRoot((dispose) => {
+        const projection = createNextTimelineProjection({
+          sessionMessages: () => messages,
+          status: () => ({ type: "idle" }),
+          timelineDetail: () => detailed,
+        })
+
+        const result = projection.rows().map(TimelineRow.key)
+        dispose()
+
+        return result
+      })
+
+    expect(keys(loaded)).toEqual(["notice:moved", "turn-gap:next", "user-message:next"])
+    expect(keys([{ id: "user", type: "user", text: "Go", time: { created: 0 } }, ...loaded]).slice(-3)).toEqual(
+      keys(loaded),
+    )
   })
 })
 

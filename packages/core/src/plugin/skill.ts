@@ -9,6 +9,7 @@ import { AbsolutePath } from "../schema.js"
 import { Skill } from "../skill.js"
 import { Config } from "../config.js"
 import { Flag } from "../flag.js"
+import { Global } from "@opencode/util/global"
 import os from "os"
 import opencodeContent from "./skill/opencode.md" with { type: "text" }
 import reportContent from "./skill/report.md" with { type: "text" }
@@ -75,6 +76,7 @@ const reportContentWithDiagnostics = Effect.fn("SkillPlugin.reportContentWithDia
     `- Terminal: ${terminal()}`,
     `- Shell: ${shell()}`,
     `- Active plugins: ${plugins.length === 0 ? "None found in config" : plugins.join(", ")}`,
+    `- Log directory: ${Global.Path.log}`,
   ].join("\n")
 })
 

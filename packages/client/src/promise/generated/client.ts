@@ -286,6 +286,23 @@ import type {
   ExperimentalMachineAddOutput,
   ExperimentalMachineRemoveInput,
   ExperimentalMachineRemoveOutput,
+  ExperimentalPushGetOutput,
+  ExperimentalPushDeviceRegisterInput,
+  ExperimentalPushDeviceRegisterOutput,
+  ExperimentalPushDeviceRemoveInput,
+  ExperimentalPushDeviceRemoveOutput,
+  ExperimentalPushDeviceUpdateInput,
+  ExperimentalPushDeviceUpdateOutput,
+  ExperimentalPushDeviceSessionSetInput,
+  ExperimentalPushDeviceSessionSetOutput,
+  ExperimentalPushDeviceSessionRemoveInput,
+  ExperimentalPushDeviceSessionRemoveOutput,
+  ExperimentalPushSessionSetInput,
+  ExperimentalPushSessionSetOutput,
+  ExperimentalPushSessionRemoveInput,
+  ExperimentalPushSessionRemoveOutput,
+  ExperimentalPushSettingsSetInput,
+  ExperimentalPushSettingsSetOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1826,6 +1843,127 @@ export function make(options: ClientOptions) {
             },
             requestOptions,
           ),
+      },
+      push: {
+        get: (requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalPushGetOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/push`,
+              successStatus: 200,
+              declaredStatuses: [400, 401],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        device: {
+          register: (input: ExperimentalPushDeviceRegisterInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalPushDeviceRegisterOutput }>(
+              {
+                method: "PUT",
+                path: `/api/experimental/push/device/${encodeURIComponent(input.deviceID)}`,
+                body: {
+                  callbackURL: input["callbackURL"],
+                  expiresAt: input["expiresAt"],
+                  publicKey: input["publicKey"],
+                  platform: input["platform"],
+                  name: input["name"],
+                  settings: input["settings"],
+                },
+                successStatus: 200,
+                declaredStatuses: [400, 401],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+          remove: (input: ExperimentalPushDeviceRemoveInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalPushDeviceRemoveOutput>(
+              {
+                method: "DELETE",
+                path: `/api/experimental/push/device/${encodeURIComponent(input.deviceID)}`,
+                successStatus: 204,
+                declaredStatuses: [400, 401],
+                empty: true,
+              },
+              requestOptions,
+            ),
+          update: (input: ExperimentalPushDeviceUpdateInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalPushDeviceUpdateOutput }>(
+              {
+                method: "PATCH",
+                path: `/api/experimental/push/device/${encodeURIComponent(input.deviceID)}`,
+                body: { paused: input["paused"], settings: input["settings"] },
+                successStatus: 200,
+                declaredStatuses: [400, 401, 404],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+          session: {
+            set: (input: ExperimentalPushDeviceSessionSetInput, requestOptions?: RequestOptions) =>
+              request<{ readonly data: ExperimentalPushDeviceSessionSetOutput }>(
+                {
+                  method: "PUT",
+                  path: `/api/experimental/push/device/${encodeURIComponent(input.deviceID)}/session/${encodeURIComponent(input.sessionID)}`,
+                  body: { level: input["level"], until: input["until"] },
+                  successStatus: 200,
+                  declaredStatuses: [400, 401, 404],
+                  empty: false,
+                },
+                requestOptions,
+              ).then((value) => value.data),
+            remove: (input: ExperimentalPushDeviceSessionRemoveInput, requestOptions?: RequestOptions) =>
+              request<ExperimentalPushDeviceSessionRemoveOutput>(
+                {
+                  method: "DELETE",
+                  path: `/api/experimental/push/device/${encodeURIComponent(input.deviceID)}/session/${encodeURIComponent(input.sessionID)}`,
+                  successStatus: 204,
+                  declaredStatuses: [400, 401, 404],
+                  empty: true,
+                },
+                requestOptions,
+              ),
+          },
+        },
+        session: {
+          set: (input: ExperimentalPushSessionSetInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalPushSessionSetOutput }>(
+              {
+                method: "PUT",
+                path: `/api/experimental/push/session/${encodeURIComponent(input.sessionID)}`,
+                body: { level: input["level"], until: input["until"] },
+                successStatus: 200,
+                declaredStatuses: [400, 401],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+          remove: (input: ExperimentalPushSessionRemoveInput, requestOptions?: RequestOptions) =>
+            request<ExperimentalPushSessionRemoveOutput>(
+              {
+                method: "DELETE",
+                path: `/api/experimental/push/session/${encodeURIComponent(input.sessionID)}`,
+                successStatus: 204,
+                declaredStatuses: [400, 401],
+                empty: true,
+              },
+              requestOptions,
+            ),
+        },
+        settings: {
+          set: (input: ExperimentalPushSettingsSetInput, requestOptions?: RequestOptions) =>
+            request<{ readonly data: ExperimentalPushSettingsSetOutput }>(
+              {
+                method: "PUT",
+                path: `/api/experimental/push/settings`,
+                body: { paused: input["paused"], until: input["until"] },
+                successStatus: 200,
+                declaredStatuses: [400, 401],
+                empty: false,
+              },
+              requestOptions,
+            ).then((value) => value.data),
+        },
       },
       migration: {
         v1: {

@@ -100,6 +100,11 @@ export class OpenCodeDO {
     const opencode = await this.opencode
     return Response.json(await opencode.server.info())
   }
+
+  async alarm() {
+    const opencode = await this.opencode
+    await opencode.alarm()
+  }
 }
 ```
 
@@ -116,7 +121,7 @@ const opencode = yield * OpenCode.create()
 const session = yield * opencode.sessions.get({ sessionID })
 ```
 
-The Effect Workerd entrypoint is `@opencode/sdk/workerd/effect`.
+The Effect Workerd entrypoint is `@opencode/sdk/workerd/effect` (forward the Durable Object's `alarm()` method to `opencode.alarm`, or `opencode.workspace.suspendIdle()` when consuming `OpenCodeWorkerd.layer`).
 
 Effect configuration uses the same keys and lifetime rules, with canonical `Session.Info` values and an Effect-returning factory. `configure` may require services; `OpenCode.create` and `OpenCode.layer` carry those requirements, so the application satisfies them where it builds the SDK, as with any other Effect callback:
 

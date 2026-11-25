@@ -1,48 +1,16 @@
 import { describe, expect } from "bun:test"
-import { Deferred, Effect, Exit, Fiber, Layer, Option, Schema, Stream } from "effect"
+import { Deferred, Effect, Exit, Fiber, Option, Schema, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
-import { Location } from "@opencode/core/location"
-import { Project } from "@opencode/core/project"
-import { AbsolutePath } from "@opencode/core/schema"
-import { Workspace } from "@opencode/core/workspace"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Event } from "@opencode/schema/event"
-import { Session } from "@opencode/schema/session"
-import { SessionEvent } from "@opencode/schema/session-event"
 import { testEffect } from "./lib/effect"
 
 const Message = Bus.ephemeral({ type: "test.overflow.message", schema: { text: Schema.String } })
-const Count = Bus.ephemeral({ type: "test.overflow.count", schema: { count: Schema.Number } })
-const Durable = SessionEvent.Renamed
-
-const locationLayer = Layer.succeed(
-  Location.Service,
-  Location.Service.of({
-    directory: AbsolutePath.make("/project-a"),
-    workspaceID: Workspace.ID.make("wrk_a"),
-    project: {
-      id: Project.ID.make("prj_test"),
-      directory: AbsolutePath.make("/project-a"),
-      canonical: AbsolutePath.make("/project-a"),
-    },
-  }),
-)
 
 const it = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node])))
-const itWithLocation = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, Location.node]), [
-    Location.node.replace(locationLayer),
-  ]),
-)
-const itPersisted = testEffect(
-  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
-    Bus.node.replace(Bus.configured({ persist: true })),
-  ]),
-)
-
 describe("Bus subscriber bounds", () => {
   for (const wildcard of [false, true]) {
     it.effect(`fails only a slow ${wildcard ? "wildcard" : "typed"} subscriber`, () =>
