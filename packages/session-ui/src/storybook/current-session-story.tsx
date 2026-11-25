@@ -11,13 +11,15 @@ import { CURRENT_SESSION_ID, STORY_TIME } from "./current-session-fixtures"
 
 export function CurrentSessionProviders(props: {
   document: SessionDocument
+  /** The session's directory, which paths in the timeline are shown relative to. */
+  directory?: string
   readMedia?: ReadMediaUrlFn
   turnDiff?: TurnDiffSource
   children: JSX.Element
 }) {
   return (
     <DataProvider
-      directory="C:/workspaces/opencode"
+      directory={props.directory ?? "C:/workspaces/opencode"}
       sessionID={props.document.sessionID}
       readMedia={props.readMedia}
       data={{
