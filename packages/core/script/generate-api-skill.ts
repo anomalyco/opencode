@@ -116,6 +116,7 @@ const GROUP_OVERRIDES: ReadonlyArray<readonly [string, string]> = [
   ["/api/session/{sessionID}/form*", "session/form"],
   ["/api/session/{sessionID}/permission*", "session/permission"],
   ["/api/session*", "session/index"],
+  ["/api/experimental/session*", "session/index"],
 ]
 
 const INDEX_HEADER = [
