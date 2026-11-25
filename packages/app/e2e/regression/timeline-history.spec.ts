@@ -12,6 +12,7 @@ import {
   session,
   sessionID,
   setupTimeline,
+  shell,
   status,
   textPart,
   userID,
@@ -329,6 +330,160 @@ test.describe("timeline history", () => {
     const writes = await page.evaluate(() => window.__scrollWrites ?? [])
     expect(writes.length).toBeGreaterThan(0)
     expect(Math.max(...writes)).toBe(1)
+  })
+
+  // The New timeline spaces rows by what the row before each one is. A page lands above a row the reader is looking
+  // at, in the middle of a turn or at a prompt, and that row must not take the space on top of what it shows.
+  test("keeps the New timeline's rows fixed while older pages land in a turn and above a prompt", async ({ page }) => {
+    const reply = (name: string) => Array.from({ length: 40 }, (_, index) => `${name} paragraph ${index}.`).join("\n\n")
+
+    const messages = [
+      userMessage([textPart("prt_gap_0", "Oldest prompt")], { id: "msg_gap_0", created: 1 }),
+      assistantMessage([textPart("prt_gap_1", "Oldest reply.")], {
+        id: "msg_gap_1",
+        parentID: "msg_gap_0",
+        created: 2,
+      }),
+      userMessage([textPart("prt_gap_2", "Middle prompt")], { id: "msg_gap_2", created: 3 }),
+      assistantMessage([shell("prt_gap_3", "completed", "ok")], { id: "msg_gap_3", parentID: "msg_gap_2", created: 4 }),
+      assistantMessage([textPart("prt_gap_4", reply("Middle"))], {
+        id: "msg_gap_4",
+        parentID: "msg_gap_2",
+        created: 5,
+      }),
+      userMessage([textPart("prt_gap_5", "Latest prompt")], { id: "msg_gap_5", created: 6 }),
+      assistantMessage([textPart("prt_gap_6", reply("Latest"))], {
+        id: "msg_gap_6",
+        parentID: "msg_gap_5",
+        created: 7,
+      }),
+    ]
+
+    const held = { turn: Promise.withResolvers<void>(), prompt: Promise.withResolvers<void>() }
+    const requests: { before?: string; phase: "start" | "end" }[] = []
+    await setupTimeline(page, {
+      settings: { newTimeline: true },
+      sessionMessages: messages,
+      // The newest page starts inside the middle turn, at its reply; the page before it starts at that turn's prompt.
+      pageMessages: (_, _limit, before) => {
+        if (before === "prompt") return { items: messages.slice(0, 2) }
+
+        if (before === "turn") return { items: messages.slice(2, 4), cursor: "prompt" }
+
+        return { items: messages.slice(4), cursor: "turn" }
+      },
+      beforeMessagesResponse: ({ before }) =>
+        before === "turn" || before === "prompt" ? held[before].promise : Promise.resolve(),
+      onMessages: (request) => requests.push(request),
+    })
+    const scroller = timelineScroller(page)
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+
+    const lands = async (before: "turn" | "prompt", older: string, visible: string[]) => {
+      // One upward gesture to the top of what is loaded, where the row the page lands above is in view.
+      await scroller.evaluate((element) => {
+        element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1 }))
+        element.scrollTop = 0
+      })
+      await expect.poll(() => requests.some((request) => request.before === before)).toBe(true)
+      await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBe(0)
+      const rows = visible.map((text) => scroller.getByText(text, { exact: true }))
+      await Promise.all(rows.map((row) => expect(row).toBeInViewport()))
+
+      const positions = async () =>
+        (await Promise.all(rows.map((row) => row.boundingBox()))).map((box) => box && Math.round(box.y))
+
+      const settled = await positions()
+      expect(requests.some((request) => request.before === before && request.phase === "end")).toBe(false)
+
+      held[before].resolve()
+      // The older page has landed above the visible rows.
+      await expect(scroller.getByText(older, { exact: true })).toBeAttached()
+      await expect.poll(positions).toEqual(settled)
+    }
+
+    await lands("turn", "Middle prompt", ["Middle paragraph 0.", "Middle paragraph 4."])
+    await lands("prompt", "Oldest reply.", ["Middle prompt", "Middle paragraph 0."])
+  })
+
+  test("a reconnect of the event stream keeps a reader in older history where they were", async ({ page }) => {
+    const messages: SessionMessageInfo[] = historyMessages(30)
+
+    const timeline = await setupTimeline(page, {
+      sessionMessages: messages,
+      pageMessages: (_, limit, before) => {
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        const start = Math.max(0, end - limit)
+
+        return { items: messages.slice(start, end), cursor: start ? messages[start]!.id : undefined }
+      },
+    })
+
+    const scroller = timelineScroller(page)
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+
+    // Load the older page, then rest at its start: further back than the newest page reaches.
+    const top = () =>
+      scroller.evaluate((element) => {
+        element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1 }))
+        element.scrollTop = 0
+      })
+
+    await top()
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(200)
+    await top()
+    await expect(scroller.getByText(/^Historical response 0\./)).toBeInViewport()
+    await expect(scroller.getByText(/^Historical response 1\./)).toBeInViewport()
+
+    const keys = await scroller.evaluate((element) => {
+      const view = element.getBoundingClientRect()
+
+      return [...element.querySelectorAll<HTMLElement>("[data-timeline-part-id]")]
+        .filter((row) => {
+          const rect = row.getBoundingClientRect()
+
+          return rect.bottom > view.top && rect.top < view.bottom
+        })
+        .flatMap((row) => (row.dataset.timelinePartId ? [row.dataset.timelinePartId] : []))
+        .slice(0, 3)
+    })
+
+    expect(keys).toHaveLength(3)
+
+    const positions = () =>
+      scroller.evaluate((element, keys) => {
+        const top = element.getBoundingClientRect().top
+
+        return keys.map((key) => {
+          const row = element.querySelector<HTMLElement>(`[data-timeline-part-id="${key}"]`)
+
+          if (!row) return undefined
+
+          return Math.round((row.getBoundingClientRect().top - top) * devicePixelRatio) / devicePixelRatio
+        })
+      }, keys)
+
+    const before = await positions()
+    const height = await scroller.evaluate((element) => element.scrollHeight)
+    const connection = await timeline.transport.waitForConnection()
+
+    // The client gets no event for this turn, so it hears of it only when the reconnect reads the newest page again.
+    messages.push(
+      userMessage([textPart("prt_missed_prompt", "Ship it")], {
+        id: "msg_09000_missed_a_user",
+        created: 1700000000000,
+      }),
+      assistantMessage([textPart("prt_missed_reply", "Shipped.")], {
+        id: "msg_09000_missed_b_assistant",
+        parentID: "msg_09000_missed_a_user",
+        created: 1700000001000,
+      }),
+    )
+    await timeline.transport.disconnect()
+    await timeline.transport.waitForConnection({ after: connection.id })
+    // The newest page was read again: the missed turn makes the transcript taller.
+    await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
+    await expect.poll(positions).toEqual(before)
   })
 
   test("mounts every part once and in order while paging to the start", async ({ page }) => {

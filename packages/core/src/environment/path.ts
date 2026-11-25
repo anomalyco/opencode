@@ -53,17 +53,12 @@ export const parse = (text: string): Parsed | undefined => {
  * Non-rooted `name:relative` text is refused for reserved environment prefixes (`local:`, `wrk_...:`) and
  * known paired machines so typos never silently misroute to another environment's relative path.
  */
-export const typed = Effect.fnUntraced(function* (text: string, machines: Machines.Interface) {
+export const typed = Effect.fnUntraced(function* (text: string, has: (id: Environment.ID) => Effect.Effect<boolean>) {
   const parsed = parse(text)
   if (parsed) return parsed
   const named = split(text)
   if (!named || rooted(named)) return
-  if (
-    named.environment === Environment.localID ||
-    Workspace.isID(named.environment) ||
-    (yield* machines.list()).some((info) => info.id === named.environment)
-  )
-    return yield* new NotAbsolute({ machine: named.environment })
+  if (yield* has(named.environment)) return yield* new NotAbsolute({ machine: named.environment })
 })
 
 /** An environment path's text: what `parse` reads back. */
