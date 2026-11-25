@@ -625,6 +625,14 @@ const layer = Layer.effect(
           runs: row.run_count,
           ...(event && { event: AutomationEvent.input(event) }),
         }).pipe(inDirectory(row.directory))
+        if (!outcome.ok && outcome.unavailable)
+          return yield* settle(row, {
+            last_outcome: "skipped",
+            last_output: `skipped: ${outcome.error}`,
+            retry_at: null,
+            ...advance(row, yield* Clock.currentTimeMillis, false, event),
+            time_updated: now,
+          })
         if (!outcome.ok) return yield* codeFailed(row, now, outcome)
 
         const values = {

@@ -105,6 +105,7 @@ const slack = { replies: 0, reads: 0, posts: [] as string[], failing: false, mes
 let agentRules: Permission.Ruleset = [{ action: "*", resource: "*", effect: "allow" }]
 let activationGate: Effect.Effect<void> = Effect.void
 let helperGone = false
+let threadGone = false
 
 const configureAgent = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -149,6 +150,7 @@ const configureAgent = Layer.effectDiscard(
               }),
             ),
       })
+      if (threadGone) editor.remove("slack_read_thread")
       editor.add({
         name: "automation",
         description: "The automation making the call, if any",
@@ -309,6 +311,7 @@ const setup = (directory = enabledDirectory) =>
     agentRules = [{ action: "*", resource: "*", effect: "allow" }]
     activationGate = Effect.void
     helperGone = false
+    threadGone = false
     return yield* Automation.Service
   })
 
@@ -1441,6 +1444,58 @@ describe("Automation", () => {
           lastOutcome: "failed",
           lastOutput: expect.stringContaining("must return nothing or { state?, done?, send? }"),
         })
+      }),
+    )
+
+    it.effect("skips runs while a tool its program names is unavailable, then runs once it is back", () =>
+      Effect.gen(function* () {
+        const automations = yield* setup()
+        const automation = yield* automations.create({
+          sessionID,
+          name: "thread",
+          trigger: every("1 minute"),
+          action: code(`const t = await tools.slack.read_thread({}); return { state: { replies: t.replies } }`),
+        })
+        const map = yield* LocationServiceMap.Service
+        const ref = Location.Ref.make({ directory: AbsolutePath.make(enabledDirectory) })
+        threadGone = true
+        yield* map.invalidate(ref)
+        const failures = Database.Service.use(({ db }) =>
+          db
+            .select({ failures: AutomationTable.failures })
+            .from(AutomationTable)
+            .where(eq(AutomationTable.id, automation.id))
+            .get()
+            .pipe(Effect.orDie),
+        )
+        // More skips than the failures that would pause it.
+        for (const minute of [2, 3, 4]) {
+          yield* TestClock.adjust("1 minute")
+          yield* automations.tick
+          const skipped = yield* automations.get(automation.id)
+          expect(skipped).toMatchObject({
+            status: "active",
+            runCount: 0,
+            lastOutcome: "skipped",
+            lastOutput: "skipped: slack.read_thread unavailable",
+          })
+          expect(iso(skipped.nextDueAt)).toBe(new Date(minute * 60_000).toISOString())
+          expect(yield* failures).toEqual({ failures: 0 })
+        }
+        expect(slack.reads).toBe(0)
+
+        threadGone = false
+        yield* map.invalidate(ref)
+        slack.replies = 2
+        yield* TestClock.adjust("1 minute")
+        yield* automations.tick
+        expect(yield* automations.get(automation.id)).toMatchObject({
+          status: "active",
+          runCount: 1,
+          lastOutcome: "fired",
+          state: { replies: 2 },
+        })
+        expect(slack.reads).toBe(1)
       }),
     )
 

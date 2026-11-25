@@ -59,6 +59,8 @@ export type Outcome =
       readonly output?: string
       /** The program cannot succeed on a retry, e.g. a parse error or an unknown tool. */
       readonly invalid?: boolean
+      /** A tool the program names is missing from the catalog right now, so the run is skipped. */
+      readonly unavailable?: boolean
     }
 
 type ProgramScan = { readonly tools: ReadonlyArray<string>; readonly actions: ReadonlySet<string> }
@@ -101,7 +103,9 @@ export const authorize = Effect.fnUntraced(function* (
   const agent = yield* agents.select(session.agent)
   if (invocation && !matchesAuthor(session, agent.info, invocation))
     return yield* Effect.fail("Create the automation with the session's current agent")
-  const actions = (yield* resolveCapabilities(scanned)).actions
+  const actions = (yield* resolveCapabilities(scanned).pipe(
+    Effect.mapError(({ path }) => `Unknown Code Mode tool: ${path}`),
+  )).actions
   const policy = Permission.Policy.fromRules(agent.info?.permissions ?? [], session.permissions ?? [])
   // A rule scoped to some resources (`vault:*: ask`) must prompt too, not only the catch-all `*`.
   const request = (item: string) => ({
@@ -151,7 +155,7 @@ const resolveCapabilities = Effect.fnUntraced(function* (scanned: ProgramScan) {
     const selected = yield* tools.codeModeTools(scanned.tools)
     for (const path of scanned.tools) {
       const tool = selected.get(path)
-      if (!tool) return yield* Effect.fail(`Unknown Code Mode tool: ${path}`)
+      if (!tool) return yield* Effect.fail({ path })
       actions.add(tool.options?.permission ?? tool.id)
     }
   }
@@ -195,7 +199,8 @@ export const run = Effect.fnUntraced(
     if (Result.isFailure(scanned)) return { ok: false as const, error: scanned.failure, invalid: true }
 
     const resolved = yield* Effect.result(resolveCapabilities(scanned.success))
-    if (Result.isFailure(resolved)) return { ok: false as const, error: resolved.failure, invalid: true }
+    if (Result.isFailure(resolved))
+      return { ok: false as const, error: `${resolved.failure.path} unavailable`, unavailable: true }
 
     const actions = ["execute", ...resolved.success.actions]
     const policy = Permission.Policy.fromRules(agent.info.permissions, session.permissions ?? [])
