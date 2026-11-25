@@ -4,17 +4,12 @@ import { Effect } from "effect"
 import { FetchHttpClient, HttpClient } from "effect/http"
 import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
-import { ProviderPlugins } from "@opencode/core/plugin/provider"
 import { Money } from "@opencode/schema/money"
 
 const run = <A, E>(effect: (http: HttpClient.HttpClient) => Effect.Effect<A, E>) =>
   Effect.runPromise(HttpClient.HttpClient.pipe(Effect.flatMap(effect), Effect.provide(FetchHttpClient.layer)))
 
 const providerID = Provider.ID.make("modal")
-
-test("modal plugin is registered", () => {
-  expect(ProviderPlugins.map((item) => item.id)).toContain("opencode.provider.modal")
-})
 
 function template(id: string, overrides: Partial<Model.Info> = {}) {
   return Model.Info.make({

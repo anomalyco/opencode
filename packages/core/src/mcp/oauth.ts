@@ -201,10 +201,16 @@ const selectResource = (config: typeof ConfigMCP.Remote.Type, resource: string |
   if (!checkResourceAllowed({ requestedResource: identity, configuredResource: resource }))
     throw new Error(`Protected resource ${resource} does not cover ${identity}`)
   const canonical = new URL(resource)
-  // The transport dials the configured URL with extra query parameters and some servers echo
-  // that back as the resource. Query is transport detail, not identity: the token stays bound
-  // to the configured URL so a later refresh names the same resource the login did.
-  if (canonical.origin === identity.origin && canonical.pathname === identity.pathname) return identity
+  // The transport adds ?codemode=false when dialing and some servers echo that query back as
+  // the protected resource. Strip only that transport parameter so refresh names the same
+  // resource login did, without overwriting a queryless canonical resource with config.url.
+  if (
+    canonical.origin === identity.origin &&
+    canonical.pathname === identity.pathname &&
+    canonical.searchParams.has("codemode") &&
+    !identity.searchParams.has("codemode")
+  )
+    canonical.searchParams.delete("codemode")
   return canonical
 }
 

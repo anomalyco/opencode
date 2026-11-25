@@ -110,3 +110,74 @@ test("names the new theme opencode and the previous one opencode-classic", async
     app.renderer.destroy()
   }
 })
+
+test("removing theme or theme.name from config reverts to opencode", async () => {
+  await using temporary = await tmpdir()
+  let settings: Info = { theme: { name: "gruvbox", mode: "light" } }
+  let config!: ReturnType<typeof useConfig>
+  let themes!: ReturnType<typeof useThemes>
+  let theme!: ReturnType<typeof useTheme>
+  function Probe() {
+    config = useConfig()
+    themes = useThemes()
+    theme = useTheme()
+    return null
+  }
+  const app = await testRender(
+    () => (
+      <TestTuiContexts paths={{ state: temporary.path }}>
+        <ConfigProvider
+          config={createTuiResolvedConfig(settings)}
+          service={{
+            get: async () => structuredClone(settings),
+            update: async (update) => {
+              const next = structuredClone(settings)
+              update(next)
+              settings = next
+              return structuredClone(settings)
+            },
+          }}
+        >
+          <ThemeProvider mode="dark" source={emptyThemeSource}>
+            <Probe />
+          </ThemeProvider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 20, height: 2 },
+  )
+
+  try {
+    await app.renderOnce()
+    const opencodeLight = resolveThemeDocument(getOpenCodeTheme(), "light").background.base
+    expect(themes.selected).toBe("gruvbox")
+    expect(themes.mode()).toBe("light")
+    expect(theme.background.base.equals(opencodeLight)).toBeFalse()
+
+    // Removing theme.name reverts to opencode while preserving pinned mode.
+    await config.update((draft) => {
+      delete draft.theme?.name
+    })
+    await app.renderOnce()
+    expect(themes.selected).toBe("opencode")
+    expect(themes.mode()).toBe("light")
+    expect(theme.background.base.equals(opencodeLight)).toBeTrue()
+
+    // Re-applying a theme and removing the entire theme block also reverts to opencode.
+    await config.update((draft) => {
+      draft.theme = { name: "gruvbox", mode: "light" }
+    })
+    await app.renderOnce()
+    expect(themes.selected).toBe("gruvbox")
+    expect(theme.background.base.equals(opencodeLight)).toBeFalse()
+
+    await config.update((draft) => {
+      delete draft.theme
+    })
+    await app.renderOnce()
+    expect(themes.selected).toBe("opencode")
+    expect(theme.background.base.equals(opencodeLight)).toBeTrue()
+  } finally {
+    app.renderer.destroy()
+  }
+})

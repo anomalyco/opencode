@@ -33,8 +33,8 @@ type Range = { readonly offset: number; readonly length: number }
 type Handle = { readonly name: string; readonly target: FileAccess.Target; readonly range?: Range }
 
 // A BunFile reaches a program as a copy and comes back as another, but its functions come back as themselves: its
-// `bytes` function says which file a value passed to `Bun.write` is.
-const handles = new WeakMap<Function, Handle>()
+// `bytes` function says which file a value passed to `Bun.write` or `fetch` is, and its type.
+const handles = new WeakMap<Function, Handle & { readonly type: string }>()
 
 // A run gets `Bun` only with the session's file services (see `CodeModeTool.create`).
 const service = <I, S>(key: Context.Key<I, S>) =>
@@ -88,7 +88,7 @@ const later =
 // The part of Bun's BunFile that is implemented.
 const file = (handle: Handle, type: string, size: number, lastModified: number) => {
   const bytes = later(() => read(handle))
-  handles.set(bytes, handle)
+  handles.set(bytes, { ...handle, type })
   const unlink = later(() => remove(handle))
   // As Blob.slice: a negative index counts from the end, and a string in any position is the new type.
   const index = (value: number | string | undefined, fallback: number) => {
@@ -258,6 +258,19 @@ const typeOf = (files: Environment.Files, absolute: string) =>
 const text = (bytes: Uint8Array) =>
   isUtf8(bytes) ? Buffer.from(bytes.buffer, bytes.byteOffset, bytes.byteLength).toString() : undefined
 
+/** A BunFile given as a `fetch` body, read to a Blob of its type, which Bun sends as the Content-Type. Any other value is left as it is. */
+export const body = <A>(value: A) => {
+  const from = handleOf(value)
+  if (!from) return Effect.succeed(value)
+  return Effect.map(read(from), (bytes) => new Blob([owned(bytes)], { type: from.type }))
+}
+
+// A Blob part can't be backed by a SharedArrayBuffer, which a workspace provider's driver may return. Other bytes go in as they are: Blob copies them itself.
+const owned = (bytes: Uint8Array) =>
+  bytes.buffer instanceof ArrayBuffer
+    ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    : new Uint8Array(bytes)
+
 const handleOf = (value: unknown) => {
   const bytes = method(value, "bytes")
   return bytes && handles.get(bytes)
@@ -283,7 +296,8 @@ const unwritable = () =>
 
 // A value from a program is a plain copy, so its functions are among its own entries.
 const method = (value: unknown, key: string) => {
-  if (typeof value !== "object" || value === null) return undefined
+  if (typeof value !== "object" || value === null || ArrayBuffer.isView(value) || value instanceof ArrayBuffer)
+    return undefined
   const found: unknown = Object.entries(value).find(([name]) => name === key)?.[1]
   return typeof found === "function" ? found : undefined
 }
@@ -396,12 +410,13 @@ const glob = (host: Host, given: string, cwd: string, dot: boolean) =>
         () => Effect.succeed([]),
       ),
     )
+    const matches = Glob.matcher(pattern, { dot })
     return entries
       .map((entry) => ({
         path: path.isAbsolute(pattern) ? path.join(base, entry.path) : path.join(path.relative(cwd, base), entry.path),
         type: entry.type,
       }))
-      .filter((entry) => Glob.match(pattern, entry.path, { dot }))
+      .filter((entry) => matches(entry.path))
   })
 
 type Entry = { readonly path: string; readonly type: Environment.FileType }
@@ -512,11 +527,12 @@ export const extension = Extension.make({
       write: Extension.async(writeTo),
       Glob: Extension.constructible((pattern: string) => {
         if (typeof pattern !== "string") throw new TypeError("Bun.Glob expects a pattern string.")
+        const matches = Glob.matcher(pattern)
         return {
           scan: (options?: string | ScanOptions) => scan(pattern, options),
           scanSync: (options?: string | ScanOptions) => scan(pattern, options),
           // As in Bun, `match` takes a dot file that a scan without `dot` leaves out.
-          match: (name: string) => Glob.match(pattern, name),
+          match: (name: string) => matches(name),
         }
       }),
     },

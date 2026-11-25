@@ -51,9 +51,10 @@ export const key = (input: {
   /** The active OAuth credential's ID, which a token refresh keeps and a sign-in replaces. */
   readonly credential?: string
   readonly clientInfo?: { readonly name: string; readonly version: string }
+  readonly skills?: boolean
 }) => {
   const config = input.config
-  const common = [config.protocol, config.timeout ?? null, input.clientInfo ?? null]
+  const common = [config.protocol, config.timeout ?? null, input.clientInfo ?? null, input.skills ?? false]
   if (config.type === "remote")
     return JSON.stringify([
       "remote",
@@ -343,6 +344,9 @@ export const layer = Layer.effect(
         get prompts() {
           return live().prompts
         },
+        get skills() {
+          return live().skills
+        },
         start: Effect.gen(function* () {
           if (input.config.type === "local" && input.config.cwd === undefined && !unfixed.has(input.name)) {
             unfixed.add(input.name)
@@ -365,6 +369,7 @@ export const layer = Layer.effect(
           yield* input.events.changed("tools")
           yield* input.events.changed("resources")
           yield* input.events.changed("prompts")
+          yield* input.events.changed("skills")
         }),
         recovering: (client, request) =>
           state.shared

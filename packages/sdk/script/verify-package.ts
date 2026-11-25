@@ -150,7 +150,13 @@ export class OpenCodeDO {
     if (this.configurations !== 1 || admitted.some(item => item.payload.text !== "Packed prompt:packed-thread")) {
       throw new Error("Packed instance configuration did not share or prepare prompts correctly")
     }
+    await opencode.alarm()
     return Response.json(await opencode.server.info())
+  }
+
+  async alarm() {
+    const opencode = await this.opencode
+    await opencode.alarm()
   }
 }
 

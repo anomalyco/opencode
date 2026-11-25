@@ -151,10 +151,7 @@ function patchPreviews(input: ToolInput, cwd: string) {
     (hunk) =>
       Effect.gen(function* () {
         const path = absolutePath(hunk.path, cwd)
-        if (hunk.type === "add") {
-          const newText = hunk.contents.endsWith("\n") || hunk.contents === "" ? hunk.contents : `${hunk.contents}\n`
-          return diff(path, null, newText)
-        }
+        if (hunk.type === "add") return diff(path, null, hunk.contents)
         const oldText = yield* Effect.tryPromise(() => Bun.file(path).text())
         if (hunk.type === "delete") return diff(path, oldText, "")
         const derived = yield* Effect.try(() => Patch.derive(hunk.path, hunk.chunks, oldText))

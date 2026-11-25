@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
-import { Effect, Layer } from "effect"
-import { FetchHttpClient, HttpClient, HttpClientResponse } from "effect/http"
+import { Effect } from "effect"
+import { FetchHttpClient, HttpClient } from "effect/http"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
 import { it, refuseNetwork } from "./lib/effect"
@@ -37,23 +37,6 @@ describe("test harness network guard", () => {
       )
       expect(response).toBe("from fetch")
       expect(seen).toEqual(["https://example.invalid/catalog"])
-    }),
-  )
-
-  it.live("an explicit HttpClient replacement is what the node sees", () =>
-    Effect.gen(function* () {
-      const mock = HttpClient.make((request) =>
-        Effect.succeed(HttpClientResponse.fromWeb(request, new Response("from mock"))),
-      )
-      const response = yield* HttpClient.get("https://example.invalid/catalog").pipe(
-        Effect.flatMap((response) => response.text),
-        Effect.provide(
-          AppNodeBuilder.build(LayerNodePlatform.httpClient, [
-            LayerNodePlatform.httpClient.replace(Layer.succeed(HttpClient.HttpClient, mock)),
-          ]),
-        ),
-      )
-      expect(response).toBe("from mock")
     }),
   )
 

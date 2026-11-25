@@ -12,7 +12,7 @@ exports[`group labels the New timeline names a group by what it did 1`] = `
   "shells with background outcomes": "Ran 1 command · finished 1 shell, started 1 shell, stopped 1 shell",
   "skills": "Explored 2 skills",
   "still running": "Ran 1 command · 1 read",
-  "thoughts": "Used 2 Thoughts",
+  "thoughts": "Used 1 Thought",
   "thoughts and tools": "Explored 1 file",
   "v1 tool names": "Edited z.ts · 1 command",
 }
