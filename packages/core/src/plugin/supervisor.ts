@@ -96,15 +96,22 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
     ...[...packages.values()].filter((plugin) => enabled.has(plugin.id)),
     ...post.filter((plugin) => enabled.has(plugin.id)),
   ]
-  // Registry activation dies on a duplicate ID, which would drop the whole generation including builtins.
-  // Keep the first occurrence in boot order and report later ones like any other plugin setup failure.
+  return {
+    ...deduplicate(ordered, [...failures.values()]),
+    packages: new Map([...packages].filter(([, plugin]) => enabled.has(plugin.id))),
+    pending: [...pending],
+  }
+})
+
+// Registry activation dies on a duplicate ID, which would drop the whole generation including builtins.
+// Keep the first occurrence in boot order and report later ones like any other plugin setup failure.
+function deduplicate(ordered: readonly Plugin.Generation[], failures: readonly Plugin.Failure[]) {
   const duplicate = (plugin: Plugin.Generation, index: number) =>
     ordered.findIndex((other) => other.id === plugin.id) !== index
   return {
     plugins: ordered.filter((plugin, index) => !duplicate(plugin, index)),
-    packages: new Map([...packages].filter(([, plugin]) => enabled.has(plugin.id))),
     failures: [
-      ...failures.values(),
+      ...failures,
       ...ordered.filter(duplicate).map((plugin) => ({
         id: Plugin.ID.make(plugin.id),
         source: plugin.source ?? { type: "builtin" as const },
@@ -112,9 +119,8 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
         features: plugin.features ?? { server: true as const },
       })),
     ],
-    pending: [...pending],
   }
-})
+}
 
 export const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -134,6 +140,10 @@ export const layer = Layer.effectDiscard(
     let packages = new Set<string>()
     // Last generation handed to the registry per target; a failed reload keeps it in place.
     let running = new Map<string, Plugin.Generation>()
+    // Last successfully applied plugin set; a failed reload keeps it active and surfaces the error.
+    let applied:
+      | { readonly plugins: readonly Plugin.Generation[]; readonly failures: readonly Plugin.Failure[] }
+      | undefined
     let outdated = new Set<string>()
     const updating = new Set<string>()
     // The check interval in which each outdated plugin was last considered for updating on its own. Once per interval,
@@ -142,6 +152,24 @@ export const layer = Layer.effectDiscard(
     let cycle = 0
     let generation = 0
     let observed = 0
+
+    const source = (source: Plugin.Source) =>
+      source.type === "package"
+        ? {
+            ...source,
+            ...(outdated.has(source.target) ? { outdated: true as const } : {}),
+            ...(updating.has(source.target) ? { updating: true as const } : {}),
+          }
+        : source
+
+    const apply = (resolved: {
+      readonly plugins: readonly Plugin.Generation[]
+      readonly failures: readonly Plugin.Failure[]
+    }) =>
+      registry.activate(
+        resolved.plugins.map((plugin) => (plugin.source ? { ...plugin, source: source(plugin.source) } : plugin)),
+        resolved.failures.map((failure) => ({ ...failure, source: source(failure.source) })),
+      )
 
     const activate = Effect.fn("PluginSupervisor.activate")(function* () {
       const current = ++generation
@@ -153,24 +181,16 @@ export const layer = Layer.effectDiscard(
       const operations = yield* sources.operations()
       // Activate everything available locally before waiting on missing package installs.
       const immediate = yield* resolve(modules, pre, post, operations, false, running)
-      const source = (source: Plugin.Source) =>
-        source.type === "package"
-          ? {
-              ...source,
-              ...(outdated.has(source.target) ? { outdated: true as const } : {}),
-              ...(updating.has(source.target) ? { updating: true as const } : {}),
-            }
-          : source
-      const apply = (resolved: typeof immediate) =>
-        registry.activate(
-          resolved.plugins.map((plugin) => (plugin.source ? { ...plugin, source: source(plugin.source) } : plugin)),
-          resolved.failures.map((failure) => ({ ...failure, source: source(failure.source) })),
-        )
       yield* apply(immediate)
+      applied = { plugins: immediate.plugins, failures: immediate.failures }
+      running = immediate.packages
       const resolved = immediate.pending.length
         ? yield* resolve(modules, pre, post, operations, true, running)
         : immediate
-      if (resolved !== immediate) yield* apply(resolved)
+      if (resolved !== immediate) {
+        yield* apply(resolved)
+        applied = { plugins: resolved.plugins, failures: resolved.failures }
+      }
       running = resolved.packages
       // A newer version that fails to load leaves the running one in place. Stop using the newer one on disk too, so a
       // restart loads the version that works.
@@ -261,7 +281,31 @@ export const layer = Layer.effectDiscard(
     yield* Stream.concat(Stream.succeed(0), Stream.fromQueue(triggers).pipe(Stream.debounce("100 millis"))).pipe(
       Stream.runForEach((target) =>
         Effect.gen(function* () {
-          yield* activate().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload plugins", { cause })))
+          yield* activate().pipe(
+            Effect.catchCause((cause) => {
+              if (Cause.hasInterruptsOnly(cause)) return Effect.failCause(cause)
+              const ref = `err_${crypto.randomUUID().slice(0, 8)}`
+              const error = Cause.squash(cause)
+              const detail = error instanceof Error && error.message ? error.message : String(error)
+              const failure: Plugin.Failure = {
+                source: { type: "builtin" },
+                state: { status: "failed", error: `Failed to reload plugins: ${detail}`, ref },
+                features: { server: true },
+              }
+              const retained =
+                applied ?? deduplicate([...internal.pre, ...sdk.all(), ...instance.all(), ...internal.post], [])
+              return Effect.logError("failed to reload plugins", { ref, cause }).pipe(
+                Effect.andThen(
+                  apply({ plugins: retained.plugins, failures: [...retained.failures, failure] }).pipe(
+                    Effect.tap(() => Effect.sync(() => (applied = retained))),
+                    Effect.catchCause((restoreCause) =>
+                      Effect.logError("failed to retain previous plugins", { ref, cause: restoreCause }),
+                    ),
+                  ),
+                ),
+              )
+            }),
+          )
           if (observed !== target) return
           const settled = release
           release = undefined

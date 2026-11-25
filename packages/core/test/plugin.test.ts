@@ -754,3 +754,47 @@ it.effect("unknown event type warnings name the subscribing plugin", () =>
     expect(warnings).toEqual([["ignoring unknown event types", { pluginID: "probe", types: ["test.unknown"] }]])
   }),
 )
+
+it.effect("restores the previous working plugin and keeps later plugins active when a reload fails setup", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const commands = yield* Command.Service
+    const builtin: Plugin.Generation = {
+      id: "opencode.config.agent",
+      revision: "internal",
+      source: { type: "builtin" },
+      effect: (ctx) =>
+        ctx.command
+          .transform((editor) => editor.add({ name: "builtin-cmd", execute: () => Effect.void }))
+          .pipe(Effect.asVoid),
+    }
+    const working: Plugin.Generation = {
+      id: "custom",
+      revision: "1",
+      effect: (ctx) =>
+        ctx.command
+          .transform((editor) => editor.add({ name: "custom-v1", execute: () => Effect.void }))
+          .pipe(Effect.asVoid),
+    }
+    const broken: Plugin.Generation = {
+      id: "custom",
+      revision: "2",
+      effect: () => Effect.die(new Error("broken reload")),
+    }
+
+    yield* plugins.activate([working, builtin])
+    expect(yield* commands.get("custom-v1")).toBeDefined()
+    expect(yield* commands.get("builtin-cmd")).toBeDefined()
+
+    yield* plugins.activate([broken, builtin])
+    expect(yield* commands.get("custom-v1")).toBeDefined()
+    expect(yield* commands.get("builtin-cmd")).toBeDefined()
+    expect((yield* plugins.list()).find((plugin) => plugin.id === "custom")?.state).toMatchObject({
+      status: "failed",
+      error: expect.stringContaining("broken reload"),
+    })
+    expect((yield* plugins.list()).find((plugin) => plugin.id === "opencode.config.agent")?.state).toEqual({
+      status: "active",
+    })
+  }),
+)

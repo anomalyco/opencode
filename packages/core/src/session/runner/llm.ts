@@ -3,6 +3,7 @@ export * as SessionRunnerLLM from "./llm.js"
 import { Message } from "@opencode/ai/effect"
 import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
+import { Agent } from "../../agent.js"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
 import { CodeModeAgents } from "../../codemode/agents.js"
@@ -10,6 +11,8 @@ import { Environment } from "../../environment/index.js"
 import { Flag } from "../../flag.js"
 import { LocationLifecycle } from "../../location-lifecycle.js"
 import { Environments } from "../../environment/environments.js"
+import { Provider } from "../../provider.js"
+import { SessionRunnerModel } from "./model.js"
 import { SessionCwd } from "../cwd.js"
 import { InstructionState } from "../instruction-state.js"
 import { SessionCompaction } from "../compaction.js"
@@ -48,6 +51,8 @@ type DrainInput = Parameters<Interface["drain"]>[0]
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const agents = yield* Agent.Service
+    const providers = yield* Provider.Service
     const bus = yield* Bus.Service
     const flags = yield* Flag.Service
     const lifecycle = yield* LocationLifecycle.Service
@@ -207,7 +212,7 @@ const layer = Layer.effect(
                       onlyIfMissing: true,
                     })
                   if (promoted > 0) step = 1
-                  return { _tag: "Ready" as const, context: yield* context.load(selected) }
+                  return { _tag: "Ready" as const, context: yield* loadContext(selected) }
                 }),
               )
               if (ready) return ready
@@ -227,10 +232,38 @@ const layer = Layer.effect(
       }
     })
 
+    const requireProviders = (sessionID: SessionSchema.ID) =>
+      providers.all().pipe(
+        Effect.flatMap((registered) =>
+          registered.length === 0
+            ? Effect.logError("location has no registered providers; builtin provider plugins are missing", {
+                sessionID,
+              }).pipe(Effect.andThen(Effect.fail(new SessionRunnerModel.NoProvidersError({ sessionID }))))
+            : Effect.void,
+        ),
+      )
+
+    const loadContext = (selected: SessionContext.Selection) =>
+      context.load(selected).pipe(
+        Effect.catchTags({
+          "SessionRunnerModel.ModelUnavailableError": (error) =>
+            requireProviders(selected.session.id).pipe(Effect.andThen(Effect.fail(error))),
+          "SessionRunnerModel.ModelNotSelectedError": (error) =>
+            requireProviders(selected.session.id).pipe(Effect.andThen(Effect.fail(error))),
+        }),
+      )
+
     const prepareContext = Effect.fn("SessionRunner.prepareContext")(function* (sessionID: SessionSchema.ID) {
       // Plugins can reload mid-turn; each step and retry must read the settled agents, models and skills.
       yield* plugins.awaitActivation
-      const selected = yield* context.select(sessionID)
+      const selected = yield* context.select(sessionID).pipe(
+        Effect.catchTag("Session.AgentNotFoundError", (error) =>
+          Effect.gen(function* () {
+            if ((yield* agents.list()).length === 0) yield* requireProviders(sessionID)
+            return yield* error
+          }),
+        ),
+      )
       // A blocked initial instruction baseline must leave admitted input pending.
       yield* InstructionState.prepare(db, bus, selected.instructions, sessionID)
       return selected
@@ -251,7 +284,7 @@ const layer = Layer.effect(
       let retryAttempt: number | undefined
       while (true) {
         // Reuse boundary preparation once; retries refresh context without delivering more input.
-        const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(context.load)))
+        const loaded = initial ?? (yield* prepareContext(sessionID).pipe(Effect.flatMap(loadContext)))
         initial = undefined
         const estimate = SessionCompaction.estimatePrompt(loaded)
         const compacted = yield* compaction.compact({ reason: "auto", context: loaded, estimate })
@@ -463,12 +496,14 @@ export const node = makeLocationNode({
   service: Service,
   layer,
   deps: [
+    Agent.node,
     Bus.node,
     Environment.node,
     Flag.node,
     LocationLifecycle.node,
     Environments.node,
     llmClient,
+    Provider.node,
     SessionContext.node,
     SessionModelTransport.node,
     SessionStore.node,

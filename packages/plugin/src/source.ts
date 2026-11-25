@@ -3,6 +3,38 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 import path from "node:path"
 import { Hash } from "@opencode/util/hash"
 
+// Serialize process-global module invalidation and imports per entrypoint across locations so
+// concurrent reloads never race on `require.cache`, and reuse an unchanged load when the runtime
+// loader has no per-instance hook to dispose.
+const inflight = new Map<string, Promise<unknown>>()
+const shared = new Map<string, Shared>()
+
+type Shared = {
+  readonly loaded: { readonly version: string; readonly module: unknown }
+  readonly files: Map<string, { readonly digest: string; readonly directory: boolean }>
+}
+
+function unchanged(files: ReadonlyMap<string, { readonly digest: string; readonly directory: boolean }>) {
+  return [...files].every(([file, item]) => item.digest === digest(file, item.directory))
+}
+
+async function serialized<A>(key: string, work: () => Promise<A>): Promise<A> {
+  const previous = inflight.get(key)
+  let release!: () => void
+  const gate = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  const tail = (previous ?? Promise.resolve()).then(() => gate)
+  inflight.set(key, tail)
+  if (previous) await previous
+  try {
+    return await work()
+  } finally {
+    release()
+    if (inflight.get(key) === tail) inflight.delete(key)
+  }
+}
+
 // Keep source fingerprints and import attempts together. Filesystem events
 // should reload changed local graphs, not repeat unchanged evaluations.
 export function createPluginSources(watch: (file: string) => Promise<void>) {
@@ -13,30 +45,50 @@ export function createPluginSources(watch: (file: string) => Promise<void>) {
     read: async (entrypoint: string) => {
       await Promise.all(watching)
       const previous = sources.get(entrypoint)
-      if (previous && [...previous.files].every(([file, item]) => item.digest === digest(file, item.directory)))
-        return previous.loaded
+      if (previous && unchanged(previous.files)) return previous.loaded
 
-      const files: Source["files"] = new Map()
-      const track = (file: string, directory = false) => {
-        if (files.has(file)) return
-        files.set(file, { digest: digest(file, directory), directory })
-        const pending = watch(file).finally(() => watching.delete(pending))
-        watching.add(pending)
-        // Watch setup can be interrupted while module evaluation is still pending.
-        void pending.catch(() => {})
+      try {
+        return await serialized(entrypoint, async () => {
+          const cached = sources.get(entrypoint)
+          if (cached && unchanged(cached.files)) return cached.loaded
+
+          const files: Source["files"] = new Map()
+          const track = (file: string, directory = false) => {
+            if (files.has(file)) return
+            files.set(file, { digest: digest(file, directory), directory })
+            const pending = watch(file).finally(() => watching.delete(pending))
+            watching.add(pending)
+            // Watch setup can be interrupted while module evaluation is still pending.
+            void pending.catch(() => {})
+          }
+
+          const existing = shared.get(entrypoint)
+          if (existing && unchanged(existing.files)) {
+            for (const [file, item] of existing.files) track(file, item.directory)
+            const loaded = Promise.resolve(existing.loaded)
+            sources.set(entrypoint, { loaded, files })
+            return existing.loaded
+          }
+          if (existing) shared.delete(entrypoint)
+
+          track(fileURLToPath(entrypoint))
+          const { prepareSource } = await import("#plugin-source")
+          const prepared: { version: string; load: () => Promise<unknown>; dispose?: () => void } = await prepareSource(
+            entrypoint,
+            track,
+          )
+          if (prepared.dispose) cleanups.push(prepared.dispose)
+          // Cache the attempt before evaluating it: unchanged failing modules must
+          // not repeat import-time effects on every filesystem notification.
+          const loaded = prepared.load().then((module) => ({ version: prepared.version, module }))
+          sources.set(entrypoint, { loaded, files })
+          const resolved = await loaded
+          if (!prepared.dispose) shared.set(entrypoint, { loaded: resolved, files: new Map(files) })
+          return resolved
+        })
+      } finally {
+        await Promise.all(watching)
       }
-      track(fileURLToPath(entrypoint))
-      const { prepareSource } = await import("#plugin-source")
-      const prepared: { version: string; load: () => Promise<unknown>; dispose?: () => void } = await prepareSource(
-        entrypoint,
-        track,
-      )
-      if (prepared.dispose) cleanups.push(prepared.dispose)
-      // Cache the attempt before evaluating it: unchanged failing modules must
-      // not repeat import-time effects on every filesystem notification.
-      const loaded = prepared.load().then((module) => ({ version: prepared.version, module }))
-      sources.set(entrypoint, { loaded, files })
-      return loaded.finally(() => Promise.all(watching))
     },
     dispose: () => {
       for (const cleanup of cleanups.splice(0)) cleanup()

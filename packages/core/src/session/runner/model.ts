@@ -11,6 +11,14 @@ import { ModelResolver } from "../../model-resolver.js"
 import { PluginHooks } from "../../plugin/hooks.js"
 import { SessionSchema } from "../schema.js"
 
+export class NoProvidersError extends Schema.TaggedError<NoProvidersError>()("SessionRunnerModel.NoProvidersError", {
+  sessionID: SessionSchema.ID,
+}) {
+  override get message() {
+    return `No providers are registered for session ${this.sessionID}; builtin provider plugins failed to load`
+  }
+}
+
 export class ModelNotSelectedError extends Schema.TaggedError<ModelNotSelectedError>()(
   "SessionRunnerModel.ModelNotSelectedError",
   { sessionID: SessionSchema.ID },
@@ -32,7 +40,7 @@ export class ModelUnavailableError extends Schema.TaggedError<ModelUnavailableEr
     return `Model unavailable: ${this.providerID}/${this.modelID}`
   }
 }
-export type Error = ModelNotSelectedError | ModelUnavailableError | ModelResolver.Error
+export type Error = NoProvidersError | ModelNotSelectedError | ModelUnavailableError | ModelResolver.Error
 export type Resolved = ModelResolver.Resolved
 
 export interface Interface {
@@ -41,7 +49,7 @@ export interface Interface {
     available: () => Effect.Effect<ReadonlyArray<Model.Info>>,
   ) => Effect.Effect<
     { readonly info: Model.Info; readonly variant: Model.VariantID | undefined },
-    ModelNotSelectedError | ModelUnavailableError
+    NoProvidersError | ModelNotSelectedError | ModelUnavailableError
   >
   /** Availability is sampled lazily for each explicitly selected model resolution. */
   readonly resolve: (

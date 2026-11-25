@@ -76,14 +76,18 @@ const layer = Layer.effect(
           release: holdUnsafe(),
         })
       })
-      const host = yield* PluginHost.make({ list }, plugin.id).pipe(Effect.provideContext(hostContext))
-      const exit = yield* Effect.suspend(() => plugin.effect(host)).pipe(
-        grouped,
-        inherit,
-        Effect.updateContext((context: Context.Context<never>) =>
-          Context.make(Scope.Scope, activation.scope).pipe(
-            Context.add(Logger.CurrentLoggers, Context.get(context, Logger.CurrentLoggers)),
-            Context.add(References.MinimumLogLevel, Context.get(context, References.MinimumLogLevel)),
+      const exit = yield* PluginHost.make({ list }, plugin.id).pipe(
+        Effect.provideContext(hostContext),
+        Effect.flatMap((host) =>
+          Effect.suspend(() => plugin.effect(host)).pipe(
+            grouped,
+            inherit,
+            Effect.updateContext((context: Context.Context<never>) =>
+              Context.make(Scope.Scope, activation.scope).pipe(
+                Context.add(Logger.CurrentLoggers, Context.get(context, Logger.CurrentLoggers)),
+                Context.add(References.MinimumLogLevel, Context.get(context, References.MinimumLogLevel)),
+              ),
+            ),
           ),
         ),
         Effect.withSpan("Plugin.load", { attributes: { "plugin.id": plugin.id } }),

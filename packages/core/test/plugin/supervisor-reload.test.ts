@@ -19,6 +19,7 @@ import { Instance } from "@opencode/core/instance"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { Location } from "@opencode/core/location"
 import { Plugin } from "@opencode/core/plugin"
+import { Provider } from "@opencode/core/provider"
 import { Rpc } from "@opencode/core/rpc"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -339,6 +340,97 @@ describe("PluginSupervisor reload", () => {
         Effect.scoped,
         Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
       )
+    }),
+  )
+
+  it.live("reloads a shared local plugin across multiple locations concurrently without corrupting builtins", () =>
+    Effect.gen(function* () {
+      const shared = yield* tmpdirScoped()
+      const dirA = yield* tmpdirScoped()
+      const dirB = yield* tmpdirScoped()
+      const dirC = yield* tmpdirScoped()
+      const pluginRoot = path.join(shared.path, "shared-greeter")
+      const entry = path.join(pluginRoot, "index.ts")
+      const helper = path.join(pluginRoot, "helper.ts")
+      const writeHelper = (command: string) =>
+        Effect.promise(() =>
+          Bun.write(
+            helper,
+            `await Bun.sleep(10)
+export default {
+  id: "shared-greeter",
+  async setup(ctx) {
+    await ctx.command.transform((editor) => editor.add({ name: ${JSON.stringify(command)}, execute: async () => {} }))
+  },
+}`,
+          ),
+        )
+      yield* Effect.promise(() => Bun.write(entry, 'export { default } from "./helper.ts"'))
+      yield* writeHelper("shared-v1")
+      for (const dir of [dirA, dirB, dirC]) {
+        yield* Effect.promise(() =>
+          Bun.write(path.join(dir.path, ".opencode/opencode.json"), JSON.stringify({ plugins: [pluginRoot] })),
+        )
+      }
+
+      const watcher = yield* Watcher.Test
+      const locations = yield* LocationServiceMap.Service
+      const refs = [dirA, dirB, dirC].map((dir) => Location.Ref.make({ directory: AbsolutePath.make(dir.path) }))
+
+      // Boot all locations concurrently against the same local plugin.
+      const booted = yield* Effect.forEach(
+        refs,
+        (ref) =>
+          Effect.gen(function* () {
+            const plugins = yield* Plugin.Service
+            const providers = yield* Provider.Service
+            const commands = yield* Command.Service
+            yield* plugins.awaitActivation
+            return {
+              command: yield* commands.get("shared-v1"),
+              providers: (yield* providers.all()).length,
+              failed: (yield* plugins.list()).filter((plugin) => plugin.state.status === "failed"),
+            }
+          }).pipe(Effect.scoped, Effect.provide(locations.get(ref))),
+        { concurrency: "unbounded" },
+      )
+      for (const state of booted) {
+        expect(state.command).toBeDefined()
+        expect(state.providers).toBeGreaterThan(0)
+        expect(state.failed).toEqual([])
+      }
+
+      // Edit the shared helper and trigger concurrent reloads across all three locations.
+      yield* writeHelper("shared-v2")
+      yield* watcher.emit({ path: helper, type: "update" })
+
+      const reloaded = yield* Effect.forEach(
+        refs,
+        (ref) =>
+          Effect.gen(function* () {
+            const plugins = yield* Plugin.Service
+            const providers = yield* Provider.Service
+            const commands = yield* Command.Service
+            yield* commands.get("shared-v2").pipe(
+              Effect.flatMap((command) => (command ? Effect.void : Effect.fail("reload pending"))),
+              Effect.retry({ times: 100, schedule: Schedule.spaced("25 millis") }),
+            )
+            yield* plugins.awaitActivation
+            return {
+              oldCommand: yield* commands.get("shared-v1"),
+              newCommand: yield* commands.get("shared-v2"),
+              providers: (yield* providers.all()).length,
+              failed: (yield* plugins.list()).filter((plugin) => plugin.state.status === "failed"),
+            }
+          }).pipe(Effect.scoped, Effect.provide(locations.get(ref))),
+        { concurrency: "unbounded" },
+      )
+      for (const state of reloaded) {
+        expect(state.oldCommand).toBeUndefined()
+        expect(state.newCommand).toBeDefined()
+        expect(state.providers).toBeGreaterThan(0)
+        expect(state.failed).toEqual([])
+      }
     }),
   )
 })

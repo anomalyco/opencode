@@ -20,6 +20,8 @@ import { Permission } from "@opencode/core/permission"
 import { ID } from "@opencode/core/model"
 import { ModelResolver } from "@opencode/core/model-resolver"
 import { Provider } from "@opencode/core/provider"
+import { Session } from "@opencode/core/session"
+import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { Tool } from "@opencode/schema/tool"
 import { toSessionError } from "@opencode/core/session/to-session-error"
 import { SessionRunnerRetry } from "@opencode/core/session/runner/retry"
@@ -85,7 +87,8 @@ describe("toSessionError", () => {
     expect(SessionRunnerRetry.isRetryable(free)).toBe(false)
     expect(toSessionError(free)).toEqual({
       type: "provider.free-limit",
-      message: "Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models.",
+      message:
+        "Free usage limit reached. Connect a provider or subscribe to OpenCode Go to keep going, or switch models.",
       status: 429,
       response: { body: JSON.stringify(freeBody) },
       retryAfterMs: 3_600_000,
@@ -327,6 +330,13 @@ describe("toSessionError", () => {
     expect(toSessionError(initialization)).toEqual({
       type: "provider.no-route",
       message: "Cannot initialize custom/model: Provider package @opencode/ai/providers/custom is broken",
+    })
+    const missingProviders = new SessionRunnerModel.NoProvidersError({
+      sessionID: Session.ID.make("ses_no_providers"),
+    })
+    expect(toSessionError(missingProviders)).toEqual({
+      type: "provider.no-route",
+      message: "No providers are registered for session ses_no_providers; builtin provider plugins failed to load",
     })
   })
 

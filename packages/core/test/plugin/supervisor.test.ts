@@ -3,6 +3,7 @@ import { Clock, Deferred, Duration, Effect, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
 import { define } from "@opencode/plugin/effect/plugin"
+import { Event } from "@opencode/schema/config"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
@@ -38,14 +39,18 @@ const greeter = (command: string, plugin: string = id) =>
   })
 
 // Every supervisor activation scans the config plugin operations once, so counting scans counts activations.
-const source: { activations: number; operations: ConfigPluginSource.Operation[] } = { activations: 0, operations: [] }
+const source: { activations: number; operations: ConfigPluginSource.Operation[]; fail?: Error } = {
+  activations: 0,
+  operations: [],
+}
 const sourceLayer = Layer.succeed(
   ConfigPluginSource.Service,
   ConfigPluginSource.Service.of({
     operations: () =>
-      Effect.sync(() => {
+      Effect.suspend(() => {
         source.activations++
-        return source.operations
+        if (source.fail) return Effect.die(source.fail)
+        return Effect.succeed(source.operations)
       }),
     changes: () => Stream.never,
   }),
@@ -415,9 +420,7 @@ describe("PluginSupervisor", () => {
 
       expect(source.activations).toBe(2)
 
-      yield* sdk
-        .register(greeter("greet-cross-location", "cross-location"))
-        .pipe(Effect.provide(locations.get(refA)))
+      yield* sdk.register(greeter("greet-cross-location", "cross-location")).pipe(Effect.provide(locations.get(refA)))
 
       yield* advance(() => source.activations === 4)
 
@@ -480,6 +483,102 @@ describe("PluginSupervisor", () => {
         Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
       )
       expect(language).toBe(fakeLanguageModel)
+    }),
+  )
+
+  it.effect("keeps builtins active and reports an error when initial activation fails", () =>
+    Effect.gen(function* () {
+      source.activations = 0
+      source.fail = new Error("broken plugin config")
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      const result = yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        const providers = yield* Provider.Service
+        const commands = yield* Command.Service
+        yield* plugins.awaitActivation
+        return {
+          inventory: yield* plugins.list(),
+          providers: yield* providers.all(),
+          command: yield* commands.get("instance-greet"),
+        }
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+        Effect.ensuring(Effect.sync(() => (source.fail = undefined))),
+      )
+
+      expect(result.providers.length).toBeGreaterThan(0)
+      expect(result.command).toBeDefined()
+      expect(result.inventory).toContainEqual(
+        expect.objectContaining({
+          source: { type: "builtin" },
+          state: expect.objectContaining({
+            status: "failed",
+            error: expect.stringContaining("broken plugin config"),
+            ref: expect.stringMatching(/^err_/),
+          }),
+        }),
+      )
+    }),
+  )
+
+  it.effect("keeps the previous working plugin set and reports the error when a reload fails", () =>
+    Effect.gen(function* () {
+      source.activations = 0
+      source.fail = undefined
+      const bus = yield* Bus.Service
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        const providers = yield* Provider.Service
+        const commands = yield* Command.Service
+        yield* plugins.awaitActivation
+        const beforeProviders = (yield* providers.all()).length
+        expect(beforeProviders).toBeGreaterThan(0)
+        expect(yield* commands.get("instance-greet")).toBeDefined()
+
+        let updated = 0
+        yield* Effect.acquireRelease(
+          bus.listen((event) => Effect.sync(() => void (event.type === Plugin.Event.Updated.type && updated++))),
+          (unsubscribe) => unsubscribe,
+        )
+
+        source.fail = new Error("reload boom")
+        const activations = source.activations
+        yield* bus.publish(Event.Updated, {})
+        yield* advance(() => source.activations > activations)
+        yield* plugins.awaitActivation
+
+        expect((yield* providers.all()).length).toBe(beforeProviders)
+        expect(yield* commands.get("instance-greet")).toBeDefined()
+        expect(updated).toBeGreaterThan(0)
+        expect(yield* plugins.list()).toContainEqual(
+          expect.objectContaining({
+            source: { type: "builtin" },
+            state: expect.objectContaining({
+              status: "failed",
+              error: expect.stringContaining("reload boom"),
+              ref: expect.stringMatching(/^err_/),
+            }),
+          }),
+        )
+
+        // Fixing the error and reloading clears the reported failure.
+        source.fail = undefined
+        const nextActivations = source.activations
+        yield* bus.publish(Event.Updated, {})
+        yield* advance(() => source.activations > nextActivations)
+        yield* plugins.awaitActivation
+
+        expect((yield* plugins.list()).filter((plugin) => plugin.state.status === "failed")).toEqual([])
+        expect((yield* providers.all()).length).toBe(beforeProviders)
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+        Effect.ensuring(Effect.sync(() => (source.fail = undefined))),
+      )
     }),
   )
 })
