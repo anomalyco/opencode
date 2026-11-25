@@ -126,6 +126,16 @@
     {
       "type": "peer-closed",
       "link": "l1"
+    },
+    {
+      "type": "hello",
+      "protocol": 3,
+      "os": "linux",
+      "arch": "x64",
+      "home": "/home/worker",
+      "instance": "i1",
+      "processes": [],
+      "links": ["l1"]
     }
   ]
 }

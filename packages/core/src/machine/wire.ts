@@ -24,6 +24,10 @@ const exit = { type: Schema.Literal("exit"), id: ProcessID, bytes: Schema.Number
 /** A file call and its reply carry the same `req`. */
 const fs = { type: Schema.Literal("fs"), req: Schema.Number }
 
+/** A peer link between two workers, named by the home. */
+export const PeerLink = Schema.String.pipe(Schema.brand("Machine.PeerLink"))
+export type PeerLink = typeof PeerLink.Type
+
 /**
  * The first message of every connection, reconnects included. It names no machine: which machine sent it is the link's
  * to prove, never the worker's to say.
@@ -48,12 +52,10 @@ export const Hello = Schema.Struct({
       signal: Schema.optionalKey(Schema.String),
     }),
   ),
+  /** The peer links that are up: they outlive the worker's connection to the home. */
+  links: Schema.optionalKey(Schema.Array(PeerLink)),
 })
 export type Hello = typeof Hello.Type
-
-/** A peer link between two workers, named by the home. */
-export const PeerLink = Schema.String.pipe(Schema.brand("Machine.PeerLink"))
-export type PeerLink = typeof PeerLink.Type
 
 /** The home's grant for one file or one forward on a peer link. */
 const Token = Schema.String

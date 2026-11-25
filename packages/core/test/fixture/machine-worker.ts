@@ -84,6 +84,8 @@ export const makeWorker = (
     /** Processes the next hello still lists, then forgets before the home can attach. */
     const forgetting = new Set<Machine.ProcessID>()
     let link: Link | undefined
+    /** Peer links that are up. Like the worker's, they outlive its connection to the home. */
+    let up = new Set<Machine.PeerLink>()
 
     const dropped = (direction: Direction, type: string) => {
       const index = drops.findIndex((drop) => drop.direction === direction && drop.type === type)
@@ -190,6 +192,7 @@ export const makeWorker = (
       switch (message.type) {
         case "peer-accept":
         case "peer-connect": {
+          up.add(message.link)
           const other = peers.waiting.get(message.link)
           if (!other) return peers.waiting.set(message.link, answer)
           peers.waiting.delete(message.link)
@@ -231,6 +234,7 @@ export const makeWorker = (
           peers.forwards.delete(message.token)
           return answer()
         case "peer-close":
+          up.delete(message.link)
           answer()
           return emit({ type: "peer-closed", link: message.link })
       }
@@ -320,6 +324,7 @@ export const makeWorker = (
           bytes: process.output.length,
           ...(process.ended ? { state: "exited" as const, ...process.ended } : { state: "running" as const }),
         })),
+        ...(up.size > 0 ? { links: [...up] } : {}),
       }
       forgetting.forEach((processID) => table.delete(processID))
       forgetting.clear()
@@ -354,6 +359,7 @@ export const makeWorker = (
         yield* cut
         instance = Machine.Instance.make(crypto.randomUUID())
         table = new Map()
+        up = new Set()
         yield* dial
       }),
       /** Forgets a process, as a worker may once it has run a while. */

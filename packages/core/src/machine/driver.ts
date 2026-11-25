@@ -92,7 +92,7 @@ export interface Interface {
   readonly describe: () => typeof ConnectionInfo.Type | undefined
   /** Sends one peer request on the current connection and waits for its answer. */
   readonly peer: (request: PeerRequest) => Effect.Effect<void, PeerFailed | NotSent | Unknown>
-  /** The peer links that are up on the current connection. A lost connection takes them with it. */
+  /** The peer links that are up, as the current connection's hello and messages since report them. */
   readonly links: () => ReadonlySet<PeerLink>
 }
 
@@ -185,7 +185,7 @@ export const make = (id: Environment.ID): Interface => {
         calls: new Map(),
         inputs: new Map(),
         peers: new Map(),
-        links: new Set(),
+        links: new Set(connection.hello.links),
       }
       const restarted = connection.hello.instance !== instance
       instance = connection.hello.instance

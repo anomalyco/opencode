@@ -741,7 +741,7 @@ const pairedPeer = (machines: Machines.Interface, name: string, peers: Peers) =>
     return { id, worker, key: key.toString("base64url"), files: Environment.makeFiles(worker.files) }
   })
 
-it.effect("links two machines once, the sender dialling the receiver's key, and links again after it closes", () =>
+it.effect("links two machines once, the sender dialling the receiver's key, keeping the link across reconnects", () =>
   Effect.gen(function* () {
     const tmp = yield* tmpdirScoped()
     yield* Effect.scoped(
@@ -759,9 +759,13 @@ it.effect("links two machines once, the sender dialling the receiver's key, and 
         expect(connects).toEqual([expect.objectContaining({ key: pro.key })])
         expect(accepts).toEqual([expect.objectContaining({ key: gpu.key, link: connects[0]?.link })])
 
-        // A lost connection takes its links with it, so the next copy links the two again.
+        // The link outlives the worker's connection to the home: the next hello lists it, so it is used again.
         yield* pro.worker.restore
         yield* machines.copy({ machine: gpu.id, path: "/a" }, { machine: pro.id, path: "/d" })
+        expect(gpu.worker.received.filter((message) => message.type === "peer-connect")).toHaveLength(1)
+        // A new worker process has none, so the two are linked again.
+        yield* pro.worker.restart
+        yield* machines.copy({ machine: gpu.id, path: "/a" }, { machine: pro.id, path: "/e" })
         expect(gpu.worker.received.filter((message) => message.type === "peer-connect")).toHaveLength(2)
       }),
     ).pipe(Effect.provide(tempLayers(tmp.path), { local: true }))
@@ -804,6 +808,33 @@ it.effect("refuses a peer link to the same machine or to one that never paired",
           .forward({ machine: gpu.id, port: 3000 }, { machine: pro, port: 8000 })
           .pipe(Effect.flip)
         expect(unpaired).toMatchObject({ _tag: "Machine.PeerFailed", machine: pro, reason: "not paired" })
+      }),
+    ).pipe(Effect.provide(tempLayers(tmp.path), { local: true }))
+  }),
+)
+
+it.effect("lets a transfer finish when the sender's answer is lost, without revoking it", () =>
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const machines = yield* Machines.Service
+        const peers = makePeers()
+        const gpu = yield* pairedPeer(machines, "gpu", peers)
+        const pro = yield* pairedPeer(machines, "pro", peers)
+        yield* gpu.files.write("/a", bytes("one"))
+        // Link first, so the next answer gpu gives is the one to its send.
+        yield* machines.copy({ machine: gpu.id, path: "/a" }, { machine: pro.id, path: "/b" })
+        gpu.worker.drop("home", "peer")
+        const copying = yield* Effect.forkChild(
+          machines.copy({ machine: gpu.id, path: "/a" }, { machine: pro.id, path: "/c" }),
+          { startImmediately: true },
+        )
+        while (Option.isNone(yield* pro.files.stat("/c").pipe(Effect.option))) yield* Effect.yieldNow
+        yield* gpu.worker.cut
+        expect(yield* Fiber.join(copying).pipe(Effect.flip)).toBeInstanceOf(Machine.Unknown)
+        expect(text((yield* pro.files.read("/c")).bytes)).toBe("one")
+        expect(pro.worker.received.map((message) => message.type)).not.toContain("peer-revoke")
       }),
     ).pipe(Effect.provide(tempLayers(tmp.path), { local: true }))
   }),

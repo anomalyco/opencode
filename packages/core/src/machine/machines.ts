@@ -183,6 +183,9 @@ const layer = Layer.effect(
       { readonly from: Machine.Interface; readonly to: Machine.Interface; readonly token: string }
     >()
 
+    const revoke = (machine: Machine.Interface, grant: string) =>
+      machine.peer({ type: "peer-revoke", token: grant }).pipe(Effect.ignore)
+
     const paired = (id: Environment.ID) =>
       Effect.gen(function* () {
         const machine = instances.get(id)
@@ -362,7 +365,10 @@ const layer = Layer.effect(
             shared.from.peer({ type: "peer-send", link: shared.id, token: grant, path: from.path }),
           ],
           { concurrency: "unbounded" },
-        ).pipe(Effect.onError(() => shared.to.peer({ type: "peer-revoke", token: grant }).pipe(Effect.ignore)))
+          // A lost answer is no failure: the transfer goes on between the workers.
+        ).pipe(
+          Effect.tapError((error) => (error._tag === "Machine.PeerFailed" ? revoke(shared.to, grant) : Effect.void)),
+        )
       }),
       forward: Effect.fn("Machines.forward")(function* (from, to) {
         const shared = yield* link(from.machine, to.machine)
@@ -370,7 +376,9 @@ const layer = Layer.effect(
         yield* shared.to.peer({ type: "peer-allow", link: shared.id, token: grant, port: to.port })
         yield* shared.from
           .peer({ type: "peer-forward", link: shared.id, token: grant, port: from.port })
-          .pipe(Effect.onError(() => shared.to.peer({ type: "peer-revoke", token: grant }).pipe(Effect.ignore)))
+          .pipe(
+            Effect.tapError((error) => (error._tag === "Machine.PeerFailed" ? revoke(shared.to, grant) : Effect.void)),
+          )
         const id = crypto.randomUUID()
         forwards.set(id, { from: shared.from, to: shared.to, token: grant })
         return id
@@ -380,9 +388,7 @@ const layer = Layer.effect(
         if (!forward) return false
         forwards.delete(id)
         yield* Effect.all(
-          [forward.from, forward.to].map((side) =>
-            side.peer({ type: "peer-revoke", token: forward.token }).pipe(Effect.ignore),
-          ),
+          [forward.from, forward.to].map((side) => revoke(side, forward.token)),
           { concurrency: "unbounded" },
         )
         return true
