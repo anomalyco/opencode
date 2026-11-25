@@ -294,3 +294,52 @@ it.effect("repairs nested Code Mode calls against the Code Mode input schema", (
     expect(executed).toEqual([{ count: 3, detail: true }, { count: 4 }])
   }),
 )
+
+it.effect("fails a Code Mode shell call with keys its input doesn't take instead of dropping them", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const registry = yield* Tool.Service
+    const executed: unknown[] = []
+    yield* plugins.activate([{ ...ToolInputRepairPlugin.Plugin, revision: "1" }])
+    yield* registry.transform((draft) =>
+      draft.add({
+        name: "shell",
+        description: "Shell",
+        input: Schema.Struct({ command: Schema.String, background: Schema.optionalKey(Schema.Boolean) }),
+        options: { codemode: { input: Schema.Struct({ command: Schema.String }) } },
+        execute: (input) => Effect.sync(() => executed.push(input)).pipe(Effect.as({ content: "ok" })),
+      }),
+    )
+    const snapshot = yield* registry.snapshot()
+    const result = yield* snapshot.execute({
+      ...identity,
+      call: {
+        type: "tool-call",
+        id: "call-strict-shell",
+        name: "execute",
+        input: {
+          code: 'try { await tools.shell({ command: "ls", background: true, nohup: 1, description: "List" }) } catch (e) { return String(e.message ?? e) }',
+        },
+      },
+    })
+    expect(executed).toEqual([])
+    const text = result.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+    expect(text).toContain("<tool-repair>")
+    expect(text).toContain(
+      "tools.shell takes only `command`, `workdir`, `timeout`, `yield_ms` in Code Mode, so this call with `background`, `nohup` did not run.",
+    )
+    expect(text).toContain("execute's `background` option")
+
+    // Declared keys still run, and a key that changes nothing about the command is dropped.
+    yield* snapshot.execute({
+      ...identity,
+      call: {
+        type: "tool-call",
+        id: "call-plain-shell",
+        name: "execute",
+        input: { code: 'return await tools.shell({ command: "ls", description: "List" })' },
+      },
+    })
+    expect(executed).toEqual([{ command: "ls" }])
+  }),
+)
