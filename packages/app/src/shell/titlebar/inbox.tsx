@@ -33,7 +33,7 @@ import { sessionLabel, sessionTitle } from "@/session/title"
 import { createSessionExporter } from "@/session/commands/export-session"
 import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { RenameDialog } from "./project-session-row"
-import { createSessionInbox, inboxArchived, type InboxEntry, type InboxStatus } from "./inbox-model"
+import { createSessionInbox, inboxArchived, inboxWaiting, type InboxEntry, type InboxStatus } from "./inbox-model"
 import { compareWorking, workingSince } from "./inbox-working"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useLayout } from "@/shell/state/layout"
@@ -136,11 +136,10 @@ export function SidebarInbox() {
 
     const rest = list.filter((entry) => !order.has(entry.key))
 
-    const active = rest.filter((entry) => !inboxArchived(entry))
+    // An archived session that asks for something joins Needs attention until it's answered, then goes back to Archived.
+    const needs = rest.filter(inboxWaiting).toSorted((a, b) => (a.since ?? Infinity) - (b.since ?? Infinity))
 
-    const needs = active
-      .filter((entry) => entry.status === "approval" || entry.status === "input")
-      .toSorted((a, b) => (a.since ?? Infinity) - (b.since ?? Infinity))
+    const active = rest.filter((entry) => !inboxArchived(entry))
 
     // Unread results stay in Recent at their own place, so reading one doesn't move it.
     const settled = active
@@ -153,7 +152,7 @@ export function SidebarInbox() {
     const working = active.filter((entry) => entry.status === "working").toSorted(compareWorking)
 
     const archived = rest
-      .filter(inboxArchived)
+      .filter((entry) => inboxArchived(entry) && !inboxWaiting(entry))
       .toSorted((a, b) => (b.session.time.archived ?? 0) - (a.session.time.archived ?? 0))
 
     const shown = [...needs, ...recent, ...working, ...(state.archivedExpanded ? archived : [])]
@@ -849,7 +848,7 @@ export function InboxSessionCard(props: {
         class="group flex h-[54px] w-full shrink-0 flex-col gap-1.5 rounded-[6px] p-2 text-start hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2 data-[state=active]:bg-v2-overlay-simple-overlay-pressed"
         classList={{
           "transition-opacity hover:opacity-100 focus-visible:opacity-100": !props.selected,
-          "opacity-50": props.archived && !props.selected,
+          "opacity-50": props.archived && !props.selected && !inboxWaiting(props),
         }}
         onClick={props.onOpen}
       >

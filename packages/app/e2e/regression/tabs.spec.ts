@@ -2426,6 +2426,88 @@ test("the inbox lists archived sessions in a collapsed section and pins sessions
   await expect(recent).toHaveText([/Active inbox session/, /Older inbox session/])
 })
 
+test("an archived session that asks a question joins Needs attention and goes back to Archived once answered", async ({
+  page,
+}) => {
+  await page.clock.install({ time: T0 + 10 * 60_000 })
+  const workspace = await mockWorkspace(page, {
+    name: "ArchivedQuestion",
+    sessions: [
+      { id: "ses_asking_read", title: "Read inbox session", time: { created: T0, updated: T0, idle: T0, viewed: T0 } },
+      {
+        id: "ses_asking_archived",
+        title: "Clean email inbox",
+        time: { created: T0, updated: T0 + 1, busy: T0 + 60_000, archived: T0 + 10 },
+      },
+    ],
+    sessionStatus: { ses_asking_archived: { type: "running" } },
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: [],
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
+    },
+  })
+  await page.goto("/")
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const list = inbox.locator('[data-slot="sidebar-inbox-scroll"]')
+
+  const needs = inbox
+    .getByRole("group", { name: "Needs attention", exact: true })
+    .locator('[data-slot="sidebar-inbox-item"]')
+
+  const archived = inbox.getByRole("button", { name: "Archived", exact: true })
+
+  await expect(list.locator('[data-slot="sidebar-inbox-item"]')).toHaveText([/Read inbox session/])
+  await expect(archived).toBeVisible()
+
+  workspace.push([
+    {
+      id: "evt_archived_question",
+      type: "form.created",
+      created: T0 + 9 * 60_000,
+      location: { directory: workspace.directory },
+      data: {
+        form: {
+          id: "form_archived_question",
+          sessionID: "ses_asking_archived",
+          title: "Unsubscribe from these?",
+          metadata: { kind: "question" },
+          fields: [{ key: "answer", type: "string", title: "Answer" }],
+        },
+      },
+    } satisfies Extract<OpenCodeEvent, { type: "form.created" }>,
+  ])
+
+  await expect(needs).toHaveText([/Clean email inbox/])
+  await expect(needs.first()).not.toHaveClass(/opacity-50/)
+  // It was the only archived session, so Archived has nothing left to show.
+  await expect(archived).toHaveCount(0)
+
+  // Still archived: the menu offers to unarchive it.
+  await needs.first().click({ button: "right" })
+  await expect(page.getByRole("menuitem", { name: "Unarchive", exact: true })).toBeVisible()
+  await page.keyboard.press("Escape")
+
+  workspace.push([
+    {
+      id: "evt_archived_question_replied",
+      type: "form.replied",
+      created: T0 + 10 * 60_000,
+      location: { directory: workspace.directory },
+      data: { sessionID: "ses_asking_archived", id: "form_archived_question", answer: { answer: "yes" } },
+    } satisfies Extract<OpenCodeEvent, { type: "form.replied" }>,
+  ])
+
+  await expect(needs).toHaveCount(0)
+  await expect(archived).toBeVisible()
+  await archived.click()
+  await expect(list.locator('[data-slot="sidebar-inbox-item"]').filter({ hasText: "Clean email inbox" })).toHaveClass(
+    /opacity-50/,
+  )
+})
+
 test("the inbox list's own menu moves Working between the bottom shelf and above Archived", async ({ page }) => {
   await mockWorkspace(page, {
     name: "WorkingPlacement",
