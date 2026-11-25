@@ -1031,13 +1031,17 @@ const reasoningDelta = (
   return undefined
 }
 
-const detailText = (details: ReadonlyArray<ReasoningDetail>, hideKimiSummary: boolean) => {
+// Details can echo text that also streamed as scalar reasoning: OpenRouter repeats it in the same
+// frame, and gateways that sign thinking (for example Claude through an OpenAI-compatible proxy)
+// send the whole block in a later frame. The details stay in the message for replay either way;
+// only the display text is skipped, so a streamed thought is never shown twice.
+const detailText = (details: ReadonlyArray<ReasoningDetail>, streamedReasoning: boolean) => {
   const text = details.flatMap((detail) => {
-    if (detail.type === "reasoning.text") return detail.text ? [detail.text] : []
+    if (detail.type === "reasoning.text") return detail.text && !streamedReasoning ? [detail.text] : []
     if (detail.type === "reasoning.summary") return detail.summary ? [detail.summary] : []
     // Kimi streams the full thinking through `reasoning_content` and a separate
     // summary through details; show the summary only when nothing else does.
-    if (detail.type === "summary") return detail.summary && !hideKimiSummary ? [detail.summary] : []
+    if (detail.type === "summary") return detail.summary && !streamedReasoning ? [detail.summary] : []
     return []
   })
   if (text.length > 0) return text.join("")
