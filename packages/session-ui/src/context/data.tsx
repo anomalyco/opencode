@@ -8,7 +8,7 @@ import type {
 import { createSimpleContext } from "@opencode/ui/context"
 import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 
-export type SessionSummary = Pick<SessionInfo, "id" | "parentID" | "title" | "time">
+export type SessionSummary = Pick<SessionInfo, "id" | "parentID" | "title" | "time" | "fork">
 
 type ProviderCatalog = {
   all: Map<string, { models: Record<string, { name: string; speed?: { base: string; id: string } }> }>
