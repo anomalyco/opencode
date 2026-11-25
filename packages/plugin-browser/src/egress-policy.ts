@@ -163,9 +163,9 @@ export function makePolicy(options: AttachmentPolicyOptions = {}) {
 
     /**
      * Resolves `target.host` once on the server, validates EVERY resolved address against policy,
-     * and returns the exact verified IP + family to connect to so DNS cannot rebind between check and dial.
+     * and returns the complete verified list so the socket can try another address without resolving again.
      */
-    async resolveTarget(target: Browser.TunnelTarget): Promise<ResolvedAddress> {
+    async resolveTarget(target: Browser.TunnelTarget): Promise<readonly ResolvedAddress[]> {
       const normalized = normalizeHost(target.host)
       if (!normalized) throw new EgressDeniedError("Target host is empty.")
       if (isMetadataHost(normalized)) {
@@ -182,14 +182,13 @@ export function makePolicy(options: AttachmentPolicyOptions = {}) {
         const decision = this.evaluateAddress(normalized, target.port, candidate.address)
         if (!decision.allowed) throw new EgressDeniedError(decision.reason)
       }
-      return resolved[0]
+      return resolved
     },
   }
 }
 
 /**
- * Resolves `target`, enforces the attachment's egress policy on the final IP(s), and connects
- * directly to the verified IP address with `allowHalfOpen: true` and `TCP_NODELAY`.
+ * Connects only to verified IPs. The socket selects a reachable address when a host has several.
  */
 export async function resolveAndConnect(
   target: Browser.TunnelTarget,
@@ -201,8 +200,12 @@ export async function resolveAndConnect(
   if (options.signal?.aborted) throw new Error("Browser tunnel connection was cancelled.")
   const { createConnection } = await import("node:net")
   const socket = createConnection({
-    host: verified.address,
-    family: verified.family,
+    host: verified.length === 1 ? verified[0].address : target.host,
+    autoSelectFamily: true,
+    lookup: (_host, options, callback) => {
+      if (options.all) return callback(null, [...verified])
+      callback(null, verified[0].address, verified[0].family)
+    },
     port: target.port,
     allowHalfOpen: true,
   })
