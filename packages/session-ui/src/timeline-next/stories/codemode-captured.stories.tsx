@@ -66,11 +66,20 @@ const names = codeModeScenarios.map((scenario) => scenario.name)
 // Each state of the scenario's tool parts, then the whole session.
 const steps = (name: CodeModeScenario): Step[] => {
   const states = codeModeStates(name)
-  const tools = new Set(states.map((state) => state.part.id)).size
+  const calls = [...new Map(states.map((state) => [state.part.id, state.part.name])).entries()]
+
+  // A session of several calls labels each state with its call, numbered where a tool runs more than once.
+  const call = (state: CodeModeState) => {
+    const named = calls.filter(([, tool]) => tool === state.part.name)
+
+    if (named.length < 2) return state.part.name
+
+    return `${state.part.name} ${named.findIndex(([id]) => id === state.part.id) + 1}`
+  }
 
   return [
     ...states.map((state) => ({
-      label: tools > 1 ? `${state.part.name} · ${state.reason}` : state.reason,
+      label: calls.length > 1 ? `${call(state)} · ${state.reason}` : state.reason,
       file: state.file,
       state,
     })),
@@ -184,7 +193,7 @@ export const Captured = {
         >
           <div class="px-2 pt-1 pb-2">
             <div class="text-14-medium">Code Mode</div>
-            <div class="text-12-regular text-v2-text-text-muted">Captured on dev 7b8a065e29</div>
+            <div class="text-12-regular text-v2-text-text-muted">Captured on dev 7b8a065e29 and b6973f1b7b</div>
           </div>
           <For each={codeModeScenarios}>
             {(scenario) => (

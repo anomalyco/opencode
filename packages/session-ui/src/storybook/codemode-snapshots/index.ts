@@ -2,10 +2,11 @@ import type { SessionMessageInfo } from "@opencode/client/promise"
 import type { SessionDocument } from "../../document"
 
 /**
- * Code Mode `execute` parts captured from real core and server runs (origin/dev 7b8a065e29, opencode-drive with its
- * simulated model). Each scenario holds `GET /api/session/:id/message` as returned (newest first) and the tool part as
- * the client store held it after each event that changed it. The drive run directory is shortened to `/repo`, and the
- * 300 KB string literal in `large-patch`'s script is replaced by the expression that builds it.
+ * Code Mode `execute` parts captured from real core and server runs (origin/dev 7b8a065e29, and b6973f1b7b for
+ * `interleaved`; opencode-drive with its simulated model). Each scenario holds `GET /api/session/:id/message` as
+ * returned (newest first) and the tool part as the client store held it after each event that changed it. The drive run
+ * directory is shortened to `/repo`, and the 300 KB string literal in `large-patch`'s script is replaced by the
+ * expression that builds it.
  */
 export type CodeModeToolPart = Extract<
   Extract<SessionMessageInfo, { type: "assistant" }>["content"][number],
@@ -36,6 +37,10 @@ const captures = new Map(
 
 export const codeModeScenarios = [
   { name: "running", description: "Sleeps between writes, so files grow 1, 2, 3 while it runs and 4 at the end." },
+  {
+    name: "interleaved",
+    description: "Ten rounds of a thought and a script in one turn: reads, shells, edits, a failed read, a delete.",
+  },
   { name: "edits-patch", description: "Two patches to one file, a Bun write and a delete. app.ts is listed twice." },
   { name: "edits-editwrite", description: "Inner edit and write calls. Too fast for files to show before the final." },
   { name: "appends", description: "Writer flushes, one entry each with no patch, and a binary logo.png." },
