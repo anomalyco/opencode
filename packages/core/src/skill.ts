@@ -155,14 +155,10 @@ export const prepare = Effect.fn("Skill.prepare")(function* (
   }
 })
 
-/** A skill's SKILL.md body: `info.content`, or loaded on first use while `info.content` is empty. */
-type Body = { readonly _tag: "inline" } | { readonly _tag: "lazy"; readonly load: Effect.Effect<string, LoadError> }
-
 type Entry = {
   readonly info: Types.DeepMutable<Info>
-  /** Parsed from `info.path` when the skill is added or updated. */
-  location: Location
-  readonly body: Body
+  /** Loads the SKILL.md body on first use while `info.content` is empty. */
+  readonly load?: Effect.Effect<string, LoadError>
   /** Virtual files besides SKILL.md. */
   readonly files: ReadonlyMap<FilePath, File>
   readonly origin?: Origin
@@ -224,8 +220,7 @@ const layer = Layer.effect(
           const content = skill.content
           editor.entries.set(skill.id, {
             info: { ...skill, content: typeof content === "string" ? content : "" },
-            location: locate(skill),
-            body: typeof content === "string" ? { _tag: "inline" } : { _tag: "lazy", load: content },
+            ...(typeof content === "string" ? {} : { load: content }),
             // Files are named by whoever adds the skill, so unsafe paths are dropped here.
             files: new Map(
               Object.entries(files ?? {})
@@ -244,7 +239,6 @@ const layer = Layer.effect(
           if (!entry) return
           update(entry.info)
           entry.info.id = key
-          entry.location = locate(entry.info)
         },
         remove: (id) => {
           editor.entries.delete(ID.make(id))
@@ -267,8 +261,8 @@ const layer = Layer.effect(
       const entry = state.get().entries.get(id)
       if (!entry) return ""
       // A plugin can set `content` on a lazy skill, and what it set wins.
-      if (entry.body._tag === "inline" || entry.info.content) return entry.info.content
-      return yield* entry.body.load
+      if (!entry.load || entry.info.content) return entry.info.content
+      return yield* entry.load
     })
 
     return Service.of({
@@ -283,7 +277,9 @@ const layer = Layer.effect(
         return entry && Array.from(entry.files.keys())
       }),
       location: Effect.fn("Skill.location")(function* (id) {
-        return state.get().entries.get(id)?.location
+        // Worked out from `path` on each call, since plugins can change `path` on the skill they're given.
+        const entry = state.get().entries.get(id)
+        return entry && locate(entry.info)
       }),
       read: Effect.fn("Skill.read")(function* (id, file) {
         const entry = state.get().entries.get(id)

@@ -283,6 +283,19 @@ describe("Skill", () => {
     }),
   )
 
+  it.effect("follows the skill's path for where its files live, however the path changes", () =>
+    Effect.gen(function* () {
+      const skill = yield* Skill.Service
+      const id = Skill.ID.make("moving")
+      yield* skill.transform((editor) => {
+        editor.add({ ...info("moving", "Moving"), path: AbsolutePath.make(Skill.uri("moving", "SKILL.md")) })
+        const current = editor.get("moving")
+        if (current) current.path = AbsolutePath.make("/skills/moving/SKILL.md")
+      })
+      expect(yield* skill.location(id)).toEqual({ _tag: "disk", directory: "/skills/moving" })
+    }),
+  )
+
   it.effect("filters values by agent permissions", () =>
     Effect.gen(function* () {
       const agents = yield* Agent.Service
