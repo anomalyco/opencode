@@ -113,6 +113,14 @@ type FinishResult = {
 type BackgroundResult = {
   info?: Info
   backgrounded?: Deferred.Deferred<Info>
+  // The job had already settled and the caller asked for its result instead of a notification.
+  settled?: Scope.Closeable
+}
+
+export type BackgroundOptions = {
+  // Report settled work as finished instead of marking it for a notification. The foreground timeout path
+  // returns the command's own result, so a marker there only produces a notice nobody can match to a call.
+  reportSettled?: boolean
 }
 
 type StartResult = { info: Info } | { info: Info; job: Active }
@@ -170,7 +178,7 @@ export interface Interface {
   readonly start: (input: StartInput) => Effect.Effect<Info>
   readonly wait: (input: WaitInput) => Effect.Effect<WaitResult>
   readonly block: (input: BlockInput) => Effect.Effect<BlockResult | undefined>
-  readonly background: (id: string) => Effect.Effect<Info | undefined>
+  readonly background: (id: string, options?: BackgroundOptions) => Effect.Effect<Info | undefined>
   readonly backgroundAll: (input: BackgroundAllInput) => Effect.Effect<Info[]>
   readonly cancel: (id: string) => Effect.Effect<Info | undefined>
   readonly cancelSession: (sessionID: SessionSchema.ID) => Effect.Effect<Info[]>
@@ -504,7 +512,7 @@ export const make = Effect.gen(function* () {
     return next
   })
 
-  const background: Interface["background"] = Effect.fn("Job.background")(function* (id) {
+  const background: Interface["background"] = Effect.fn("Job.background")(function* (id, options) {
     let moved: JobSchema.Info | undefined
     const result = yield* SynchronizedRef.modifyEffect(
       state.jobs,
@@ -513,12 +521,18 @@ export const make = Effect.gen(function* () {
         // Recoverable work may finish before the caller backgrounds it.
         if (!job || (job.info.status !== "running" && !job.recovery)) return [{}, jobs]
         if (job.isBackgrounded) return [{ info: snapshot(job) }, jobs]
+        // The job settled between the caller's timeout and this move. Marking it would hand back a background
+        // result whose completion notice was already written, so the caller could not report the command's own
+        // output. Consumers that read the settlement themselves ask for that here.
+        if (options?.reportSettled && job.info.status !== "running")
+          return [{ info: snapshot(job), settled: job.scope }, jobs]
         const next = yield* markBackground(job)
         moved = listed(next.info, next.recovery)
         return [{ info: snapshot(next), backgrounded: job.backgrounded }, new Map(jobs).set(id, next)]
       }),
     )
     if (result.info && result.backgrounded) yield* Deferred.succeed(result.backgrounded, result.info)
+    if (result.settled) yield* consume(id, result.settled)
     yield* updated(moved)
     return result.info
   })
@@ -528,9 +542,9 @@ export const make = Effect.gen(function* () {
     const result = yield* SynchronizedRef.modifyEffect(
       state.jobs,
       Effect.fnUntraced(function* (jobs): Effect.fn.Return<
-        readonly [Required<BackgroundResult>[], Map<string, Active>]
+        readonly [{ info: Info; backgrounded: Deferred.Deferred<Info> }[], Map<string, Active>]
       > {
-        const results: Required<BackgroundResult>[] = []
+        const results: { info: Info; backgrounded: Deferred.Deferred<Info> }[] = []
         const next = new Map(jobs)
         for (const [id, job] of jobs) {
           if (job.info.status !== "running") continue
