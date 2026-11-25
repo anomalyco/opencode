@@ -675,6 +675,29 @@ test("passes session IDs as MCP request metadata", async () => {
   )
 })
 
+test("describes a no-argument MCP tool input as an empty properties map", async () => {
+  const schemas = await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const connection = yield* connect(
+          "noargs",
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-output-schema.ts")],
+          }),
+          import.meta.dir,
+        )
+        return (yield* connection.tools()).map((tool) => tool.inputSchema)
+      }),
+    ),
+  )
+
+  expect(schemas).toEqual([
+    { type: "object", properties: {} },
+    { type: "object", properties: {} },
+  ])
+})
+
 test("accepts legacy MCP tools whose output schema is not a root object", async () => {
   const result = await Effect.runPromise(
     Effect.scoped(
@@ -1197,13 +1220,13 @@ describe.each([
           // A malformed optional field or top-level `required` is dropped, not the tool. Valid fields are
           // kept except icons; a modern server's SDK strips `execution` before sending.
           expect(tools.slice(0, 3)).toEqual([
-            { name: "bad-required", inputSchema: { type: "object" } },
-            { name: "bad-fields", inputSchema: { type: "object" } },
+            { name: "bad-required", inputSchema: { type: "object", properties: {} } },
+            { name: "bad-fields", inputSchema: { type: "object", properties: {} } },
             {
               name: "full",
               title: "Full",
               description: "Every field",
-              inputSchema: { type: "object" },
+              inputSchema: { type: "object", properties: {} },
               annotations: { readOnlyHint: true },
               ...(era === "legacy" ? { execution: { taskSupport: "optional" } } : {}),
               _meta: { "example/key": 1 },

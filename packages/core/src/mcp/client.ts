@@ -875,11 +875,12 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                       title: typeof tool.title === "string" ? tool.title : undefined,
                       description: typeof tool.description === "string" ? tool.description : undefined,
                       // Providers that check tool parameters against the JSON Schema metaschema reject the
-                      // whole request over a malformed top level. Nested property schemas are left as sent.
+                      // whole request over a malformed top level, and some require a `properties` map even
+                      // for a tool that takes no arguments. Nested property schemas are left as sent.
                       inputSchema: {
                         ...inputSchema,
                         type: "object",
-                        ...(isRecord(properties) ? { properties } : {}),
+                        properties: isRecord(properties) ? properties : {},
                         ...(Array.isArray(required) && required.every((key): key is string => typeof key === "string")
                           ? { required }
                           : {}),
