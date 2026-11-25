@@ -10,6 +10,7 @@ export class SshFailure extends Schema.TaggedError<SshFailure>()("SshFailure", {
     "version",
     "install",
     "service",
+    "port",
     "unpublished",
     "ssh-missing",
   ]),

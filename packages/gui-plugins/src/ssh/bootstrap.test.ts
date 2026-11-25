@@ -200,3 +200,170 @@ bootTest(
     }
   }),
 )
+
+// A released CLI without the port-owner markers only prints the user-facing message.
+// `service set port` is its supported way to move off a taken port; `--port` is newer.
+const unmarked = `case "$2" in
+  status)
+    if [ -f "$HOME/.local/state/opencode/service.json" ]; then
+      port=$(cat "$HOME/.local/state/opencode/port")
+      printf 'http://127.0.0.1:%s\\n' "$port"
+    else
+      printf '%s\\n' stopped
+    fi
+    ;;
+  set)
+    printf '%s' "$4" > "$HOME/.local/state/opencode/port"
+    ;;
+  start|restart)
+    if [ -f "$HOME/.local/state/opencode/port" ]; then
+      port=$(cat "$HOME/.local/state/opencode/port")
+      printf '{"url":"http://127.0.0.1:%s","password":"secret","version":"${VERSION}","pid":7}' "$port" > "$HOME/.local/state/opencode/service.json"
+      printf 'http://127.0.0.1:%s\\n' "$port"
+    else
+      printf '%s\\n' "Managed service port 49374 on 0.0.0.0 is already in use by another process." >&2
+      exit 1
+    fi
+    ;;
+  *)
+    if [ "$1" = "--version" ]; then printf '%s\\n' "${VERSION}"; fi
+    ;;
+esac`
+
+bootTest(
+  "offers a port choice when the remote CLI has no port-owner markers",
+  Effect.gen(function* () {
+    const machine = yield* Effect.promise(() => remote(unmarked))
+
+    try {
+      const error = yield* bootstrap({ target: parseTarget("devbox"), version: VERSION, env: machine.env }).pipe(
+        Effect.flip,
+      )
+
+      expect(error).toBeInstanceOf(SshFailure)
+      expect(error.code).toBe("port")
+      expect(error.detail).toContain("already in use")
+      expect(
+        yield* Effect.promise(() => Bun.file(path.join(machine.home, ".local/state/opencode/port")).exists()),
+      ).toBe(false)
+    } finally {
+      yield* Effect.promise(() => fs.rm(machine.home, { recursive: true, force: true }))
+    }
+  }),
+)
+
+bootTest(
+  "persists a chosen port when the port choice asks for another one",
+  Effect.gen(function* () {
+    const machine = yield* Effect.promise(() => remote(unmarked))
+
+    try {
+      const endpoint = yield* bootstrap({
+        target: parseTarget("devbox"),
+        version: VERSION,
+        env: machine.env,
+        port: "free",
+      })
+
+      const port = Number(
+        yield* Effect.promise(() => Bun.file(path.join(machine.home, ".local/state/opencode/port")).text()),
+      )
+
+      expect(port).toBeGreaterThanOrEqual(20000)
+      expect(endpoint).toEqual({ host: "127.0.0.1", port, password: "secret" })
+    } finally {
+      yield* Effect.promise(() => fs.rm(machine.home, { recursive: true, force: true }))
+    }
+  }),
+)
+
+bootTest(
+  "names the no-listener case instead of retrying the same port",
+  Effect.gen(function* () {
+    const portless = `case "$2" in
+  status) printf '%s\\n' stopped ;;
+  start|restart)
+    printf '%s\\n' "Managed service port 59999 on 127.0.0.1 is already in use by another process." >&2
+    exit 1
+    ;;
+  *)
+    if [ "$1" = "--version" ]; then printf '%s\\n' "${VERSION}"; fi
+    ;;
+esac`
+
+    const machine = yield* Effect.promise(() => remote(portless))
+
+    try {
+      yield* Effect.promise(async () => {
+        await fs.writeFile(path.join(machine.home, "bin/lsof"), "#!/bin/sh\nexit 1\n", { mode: 0o755 })
+        await fs.writeFile(path.join(machine.home, "bin/ss"), "#!/bin/sh\nexit 0\n", { mode: 0o755 })
+      })
+
+      const error = yield* bootstrap({
+        target: parseTarget("devbox"),
+        version: VERSION,
+        env: machine.env,
+        port: "reclaim",
+      }).pipe(Effect.flip)
+
+      expect(error).toBeInstanceOf(SshFailure)
+      expect(error.code).toBe("port")
+      expect(error.detail).toContain("No process is listening on port 59999")
+      expect(error.detail).toContain("Use another port")
+    } finally {
+      yield* Effect.promise(() => fs.rm(machine.home, { recursive: true, force: true }))
+    }
+  }),
+)
+
+bootTest(
+  "kills an OpenCode service holding the port when the port choice asks for it",
+  Effect.gen(function* () {
+    const holder = Bun.spawn(["sleep", "30"])
+
+    const reclaimable = `case "$2" in
+  status)
+    if [ -f "$HOME/.local/state/opencode/service.json" ]; then printf '%s\\n' "${FIXED_URL}"; else printf '%s\\n' stopped; fi
+    ;;
+  start|restart)
+    if kill -0 ${holder.pid} 2>/dev/null; then
+      printf '%s\\n' "Managed service port 49374 on 0.0.0.0 is already in use by PID ${holder.pid} (opencode serve --service)." >&2
+      exit 1
+    fi
+    printf '%s' '{"url":"${FIXED_URL}","password":"secret","version":"${VERSION}","pid":7}' > "$HOME/.local/state/opencode/service.json"
+    printf '%s\\n' "${FIXED_URL}"
+    ;;
+  *)
+    if [ "$1" = "--version" ]; then printf '%s\\n' "${VERSION}"; fi
+    ;;
+esac`
+
+    const machine = yield* Effect.promise(() => remote(reclaimable))
+
+    try {
+      // lsof names the holder; ps proves it is a managed service before anything is killed.
+      yield* Effect.promise(async () => {
+        await fs.writeFile(path.join(machine.home, "bin/lsof"), `#!/bin/sh\nprintf '%s\\n' ${holder.pid}\n`, {
+          mode: 0o755,
+        })
+        await fs.writeFile(
+          path.join(machine.home, "bin/ps"),
+          `#!/bin/sh\nprintf '%s\\n' 'opencode serve --service'\n`,
+          { mode: 0o755 },
+        )
+      })
+
+      const endpoint = yield* bootstrap({
+        target: parseTarget("devbox"),
+        version: VERSION,
+        env: machine.env,
+        port: "reclaim",
+      })
+
+      expect(endpoint).toEqual({ host: "127.0.0.1", port: 49374, password: "secret" })
+    } finally {
+      holder.kill()
+      yield* Effect.promise(() => fs.rm(machine.home, { recursive: true, force: true }))
+    }
+  }),
+)

@@ -33,6 +33,7 @@ export const SshError = Schema.Literals([
   "version",
   "install",
   "service",
+  "port",
   "host-key",
   "ssh-missing",
   "unpublished",
@@ -47,6 +48,8 @@ export const SshItem = Schema.Struct({
   stage: SshStage,
   /** Set only while `stage` is `ready`. */
   http: Schema.optional(SshHttp),
+  /** The remote service port, while `stage` is `ready`. */
+  port: Schema.optional(Schema.Number),
   prompt: Schema.optional(SshPrompt),
   authenticatingElsewhere: Schema.optional(Schema.Boolean),
   /** A `failed` server that main reconnects by itself; without it, the server waits for the user. */
@@ -68,6 +71,8 @@ export const SshStart = Schema.Struct({
   name: Schema.String,
   replace: Schema.optional(Schema.Boolean),
   background: Schema.optional(Schema.Boolean),
+  /** How to resolve a port the service cannot bind: reclaim it or start on a free one. */
+  port: Schema.optional(Schema.Literals(["reclaim", "free"])),
 })
 
 export type SshStart = typeof SshStart.Type
