@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test"
-import { Message, Media } from "@opencode/ai/effect"
+import { ai, Auth, Message, Media } from "@opencode/ai/effect"
+import { route } from "@opencode/ai/protocols/openai-chat"
+import { compileRequest } from "@opencode/ai/testing"
 import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { SessionMessage } from "@opencode/core/session/message"
@@ -10,7 +12,7 @@ import { Agent } from "@opencode/core/agent"
 import { Shell } from "@opencode/schema/shell"
 import { Location } from "@opencode/schema/location"
 import { AbsolutePath } from "@opencode/schema/schema"
-import { DateTime } from "effect"
+import { DateTime, Effect } from "effect"
 import path from "path"
 import { pathToFileURL } from "url"
 
@@ -1271,6 +1273,86 @@ Earlier work
       },
     ])
   })
+
+  test.each([model.providerID, Provider.ID.make("other-provider")])(
+    "can continue on an OpenAI Chat model after a hosted tool ran (%s)",
+    async (providerID) => {
+      const target = Model.Ref.make({ id: Model.ID.make("chat-model"), providerID })
+      const messages = toLLMMessages(
+        [
+          SessionMessage.User.make({
+            id: id("hosted-request"),
+            type: "user",
+            text: "Find an example",
+            time: { created },
+          }),
+          SessionMessage.Assistant.make({
+            id: id("hosted-reply"),
+            type: "assistant",
+            agent: build,
+            model,
+            finish: "stop",
+            time: { created, completed: created },
+            content: [
+              SessionMessage.AssistantText.make({ type: "text", text: "Looking it up." }),
+              SessionMessage.AssistantTool.make({
+                type: "tool",
+                id: "hosted-search",
+                name: "web_search",
+                executed: true,
+                native: { itemId: "native-provider-state" },
+                state: SessionMessage.ToolStateCompleted.make({
+                  status: "completed",
+                  input: { query: "Effect" },
+                  content: [{ type: "text", text: "Found an Effect example." }],
+                }),
+                time: { created, ran: created, completed: created },
+              }),
+              SessionMessage.AssistantTool.make({
+                type: "tool",
+                id: "local-read",
+                name: "read",
+                state: SessionMessage.ToolStateCompleted.make({
+                  status: "completed",
+                  input: { path: "README.md" },
+                  content: [{ type: "text", text: "Local README" }],
+                }),
+                time: { created, ran: created, completed: created },
+              }),
+              SessionMessage.AssistantText.make({ type: "text", text: "Here is the example." }),
+            ],
+          }),
+          SessionMessage.User.make({
+            id: id("hosted-followup"),
+            type: "user",
+            text: "Tell me more",
+            time: { created },
+          }),
+        ],
+        target,
+      )
+      const chat = route.with({ endpoint: { baseURL: "https://chat.test/v1" }, auth: Auth.bearer("test") })
+      const prepared = await Effect.runPromise(
+        compileRequest(ai.request({ model: chat.model({ id: target.id }), messages })),
+      )
+
+      expect(JSON.stringify(prepared.body)).not.toContain("native-provider-state")
+      expect(prepared.body).toMatchObject({
+        messages: [
+          { role: "user", content: "Find an example" },
+          {
+            role: "assistant",
+            content: expect.stringMatching(
+              /Looking it up\.\n\n[\s\S]*web_search[\s\S]*"query":"Effect"[\s\S]*Found an Effect example\.\n\nHere is the example\./,
+            ),
+            tool_calls: [{ id: "local-read", function: { name: "read" } }],
+          },
+          { role: "tool", tool_call_id: "local-read", content: "Local README" },
+          { role: "user", content: "Tell me more" },
+        ],
+      })
+    },
+  )
 
   test("preserves provider metadata for a catalog alias with a different API model ID", () => {
     const messages = toLLMMessages(

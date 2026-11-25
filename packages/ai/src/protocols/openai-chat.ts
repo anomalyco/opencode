@@ -545,6 +545,28 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
   const reasoning: ReasoningPart[] = []
   const toolCalls: OpenAIChatAssistantToolCall[] = []
   for (const part of message.content) {
+    // Chat has no native blocks for tools another route already ran. Keep their
+    // context in the assistant text without creating calls for the client to run.
+    if (part.type === "tool-call" && part.providerExecuted) {
+      const input = ProviderShared.encodeJson(part.input === undefined ? {} : part.input)
+      content.push({ type: "text", text: `\n\nProvider tool ${part.name} called with: ${input}\n\n` })
+      continue
+    }
+    if (part.type === "tool-result" && part.providerExecuted) {
+      const text =
+        part.result.type === "content"
+          ? part.result.value
+              .map((item) => (item.type === "text" ? item.text : `[File: ${item.name ?? item.mime}]`))
+              .join("\n")
+          : ProviderShared.toolResultText(part)
+      const outcome = part.result.type === "error" ? "failed" : "returned"
+      content.push({
+        type: "text",
+        text: `\n\nProvider tool ${part.name} ${outcome}:\n${text}\n\n`,
+        cache_control: options.cacheControl?.(part.cache),
+      })
+      continue
+    }
     if (!ProviderShared.supportsContent(part, ["text", "reasoning", "tool-call"]))
       return yield* ProviderShared.unsupportedContent("OpenAI Chat", "assistant", ["text", "reasoning", "tool-call"])
     if (part.type === "text") {
@@ -757,10 +779,10 @@ const lowerMessages = Effect.fnUntraced(function* (
 // Anthropic via LiteLLM and Amazon Bedrock require `tools` to be present
 // whenever the conversation history contains tool calls/results. Send an
 // explicit empty array when we have history but no active tools.
-const hasToolHistory = (messages: ReadonlyArray<LLMRequest["messages"][number]>) => {
+const hasToolHistory = (messages: readonly OpenAIChatMessage[]) => {
   for (const message of messages) {
     if (message.role === "tool") return true
-    if (message.role === "assistant" && message.content.some((part) => part.type === "tool-call")) return true
+    if (message.role === "assistant" && message.tool_calls?.length) return true
   }
   return false
 }
@@ -890,16 +912,16 @@ export const fromRequest = Effect.fn("OpenAIChat.fromRequest")(function* (
   const supportsStrictMode = request.model.capabilities?.tools?.strict ?? detectSupportsStrictMode(provider, baseURL)
   const zaiToolStream =
     request.model.compatibility?.zaiToolStream ?? detectZaiToolStream(provider, baseURL, request.model.id)
-  const hasHistory = hasToolHistory(request.messages)
   const hasActiveTools = definitions.length > 0
   const custom = OpenAIFreeform.tools(request)
   const lowering = { ...options, cacheControl: options.cacheControl ?? declaredCacheControl(request), custom }
+  const messages = yield* lowerMessages(request, lowering)
   return {
     model: request.model.id,
-    messages: yield* lowerMessages(request, lowering),
+    messages,
     tools:
       definitions.length === 0
-        ? hasHistory
+        ? hasToolHistory(messages)
           ? []
           : undefined
         : definitions.map((tool) => lowerTool(tool, lowering, supportsStrictMode, custom.get(tool.name))),

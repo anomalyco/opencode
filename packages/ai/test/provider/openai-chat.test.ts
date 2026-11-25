@@ -11,6 +11,7 @@ import {
   Message,
   ToolCallPart,
   ToolDefinition,
+  ToolResultPart,
   Usage,
 } from "../../src/effect.js"
 import * as Azure from "../../src/providers/azure.js"
@@ -616,6 +617,63 @@ describe("OpenAI Chat route", () => {
         stream_options: { include_usage: true },
         store: false,
       })
+    }),
+  )
+
+  it.effect("keeps hosted tool context readable without sending it as active Chat tool history", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [
+            Message.assistant([
+              ToolCallPart.make({ id: "hosted", name: "image_generation", input: {}, providerExecuted: true }),
+              ToolResultPart.make({
+                id: "hosted",
+                name: "image_generation",
+                providerExecuted: true,
+                result: {
+                  type: "content",
+                  value: [
+                    { type: "text", text: "Generated an icon." },
+                    { type: "file", uri: "data:image/png;base64,YWJj", mime: "image/png", name: "icon.png" },
+                  ],
+                },
+              }),
+              ToolResultPart.make({
+                id: "failed",
+                name: "web_search",
+                providerExecuted: true,
+                resultType: "error",
+                result: { message: "Search timed out" },
+              }),
+            ]),
+            Message.user("Continue"),
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toBeUndefined()
+      const assistant = prepared.body.messages[0]
+      expect(assistant.role).toBe("assistant")
+      expect(assistant.content).toContain("Generated an icon.\n[File: icon.png]")
+      expect(assistant.content).toContain("Search timed out")
+      expect(assistant.content).not.toContain("YWJj")
+      expect(assistant.tool_calls).toBeUndefined()
+      expect(prepared.body.messages[1]).toMatchObject({ role: "user", content: "Continue" })
+    }),
+  )
+
+  it.effect("still rejects ordinary tool results in an assistant message", () =>
+    Effect.gen(function* () {
+      const error = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [Message.assistant([ToolResultPart.make({ id: "local", name: "read", result: "file" })])],
+        }),
+      ).pipe(Effect.flip)
+
+      expect(error.reason._tag).toBe("InvalidRequest")
     }),
   )
 
