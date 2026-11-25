@@ -21,13 +21,21 @@ type Ended = {
 test(
   "a page whose process ends is logged once with Electron's reason and exit code and its origin only, and the agent hears the reason",
   async () => {
-    const result: { origin: string; refused: string; lines: Line[]; crashed: Ended; killed: Ended; child: string; gone: string[]; platform: string } = JSON.parse(
-      await runElectronFixture({ fixture: path.join(import.meta.dir, "electron-crash.fixture.ts") }),
-    )
+    const result: {
+      origin: string
+      refused: string
+      lines: Line[]
+      crashed: Ended
+      killed: Ended
+      disposed: Pick<Ended, "signals" | "ends">
+      child: string
+      gone: string[]
+      platform: string
+    } = JSON.parse(await runElectronFixture({ fixture: path.join(import.meta.dir, "electron-crash.fixture.ts") }))
 
     const lines = (message: string, tab?: string) => result.lines.filter((line) => line.message === message && (!tab || line.data.tab === tab))
 
-    // A forced crash: one line, although the debugger, the process and the debugger's detach each reported it.
+    // A renderer crash via DevTools Page.crash: one line, although the debugger, the process and the debugger's detach each reported it.
     expect(result.crashed.signals.filter((signal) => signal.startsWith("render-process-gone"))).toEqual(["render-process-gone crashed " + result.crashed.ends[0]?.exitCode])
     expect(result.crashed.ends).toMatchObject([{ cause: "renderer-gone", reason: "crashed" }])
     const crashed = lines("browser page ended", "tab_11111111-1111-1111-1111-111111111111")
@@ -67,6 +75,10 @@ test(
     const failed = lines("browser page load failed", "tab_33333333-3333-3333-3333-333333333333")
     expect(failed.length).toBe(1)
     expect(failed[0]).toMatchObject({ level: "warn", data: { code: -102, error: "ERR_CONNECTION_REFUSED", origin: result.refused } })
+
+    // A healthy tab closed normally: no page-end callback and no "browser page ended" log line.
+    expect(result.disposed.ends).toEqual([])
+    expect(lines("browser page ended", "tab_44444444-4444-4444-4444-444444444444")).toEqual([])
 
     // The child process the fixture ended, as Electron reported it. Another one may end by itself on a loaded runner.
     const child = lines("browser child process gone").find((line) => line.data.type === result.child)

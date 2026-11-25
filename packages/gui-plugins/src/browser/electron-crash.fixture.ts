@@ -8,9 +8,9 @@ import type { TabActivity } from "./policy"
 import type { Profile } from "./profile"
 
 // The Electron main process of `electron-crash.test.ts`, bundled and run by the pinned Electron. It opens pane pages
-// on a private-looking address, ends their renderers for real (a forced crash, then a kill), fails one load, and ends
-// a child process of the browser. It prints every line the product wrote to the desktop log, with what Electron itself
-// reported, as one JSON line.
+// on a private-looking address, ends their renderers for real (a DevTools `Page.crash`, then a kill), closes a healthy
+// tab normally, fails one load, and ends a child process of the browser. It prints every line the product wrote to the
+// desktop log, with what Electron itself reported, as one JSON line.
 
 // What a bug report must never carry: the path, the query, the fragment, the title and the page's text.
 const path = "/mail/inbox/alex?token=s3cret-token#message-42"
@@ -130,12 +130,15 @@ void electron.app.whenReady().then(async () => {
   const failure = (id: BrowserRpc.TabID, end: PageEnd | undefined) =>
     end ? browserFailure({ type: "snapshot", tabID: id }, new PageEndedError(end)).message : undefined
 
-  // A forced crash, after the pane noted the page's memory as its timer does.
+  // A renderer crash via DevTools `Page.crash`, after the pane noted the page's memory as its timer does.
+  // Unlike `forcefullyCrashRenderer()`, which may report `killed` on macOS ARM64, `Page.crash` reliably crashes the renderer.
   const crashedID = Browser.TabID.make("tab_11111111-1111-1111-1111-111111111111")
   const crashed = await open(crashedID, origin + path)
   crashed.page.sampleMemory(electron.app.getAppMetrics())
   await crashed.page.execute({ action: { type: "snapshot", tabID: crashedID }, files: [] }, signal, "agent")
-  crashed.page.contents.forcefullyCrashRenderer()
+
+  if (!crashed.page.contents.debugger.isAttached()) crashed.page.contents.debugger.attach("1.3")
+  void crashed.page.contents.debugger.sendCommand("Page.crash").catch(() => undefined)
   await until(() => crashed.ends.length > 0, 10_000)
   // Every later signal of the same crash has arrived by now.
   await settle(500)
@@ -158,6 +161,12 @@ void electron.app.whenReady().then(async () => {
   await until(() => lines.some((line) => line.message === "browser page load failed"), 10_000)
   await settle(500)
   await failed.page.dispose()
+
+  // A healthy tab closed normally: disposing it must not report a page end or write a "browser page ended" log line.
+  const disposedID = Browser.TabID.make("tab_44444444-4444-4444-4444-444444444444")
+  const disposed = await open(disposedID, origin + path)
+  await disposed.page.dispose()
+  await settle(500)
 
   // A child process of the browser that ends: the pane logs it, with no page of its own open here.
   // SAFETY: a pane with no binding reads only the profile's partition, previews, downloads and permissions.
@@ -205,6 +214,7 @@ void electron.app.whenReady().then(async () => {
       lines,
       crashed: { signals: crashed.signals, ends: crashed.ends, failure: failure(crashedID, crashed.ends[0]) },
       killed: { signals: killed.signals, ends: killed.ends, failure: failure(killedID, killed.ends[0]) },
+      disposed: { signals: disposed.signals, ends: disposed.ends },
       child: child?.type ?? "",
       gone,
       platform: process.platform,
