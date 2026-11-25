@@ -1,6 +1,6 @@
 import { Environment } from "@opencode/core/environment/index"
 import { Machine } from "@opencode/core/machine/index"
-import { Cause, Deferred, Effect, Fiber, Queue, Stream } from "effect"
+import { Cause, Deferred, Effect, Fiber, Queue, Schema, Stream } from "effect"
 
 /** A process the fake worker ran. The test decides what it prints and when it exits. */
 export interface Run {
@@ -38,14 +38,39 @@ interface Link {
 
 type Direction = "home" | "worker"
 
+type Answer = (failure?: string) => void
+
+/**
+ * The network between fake workers: a link is up once one worker accepted it and the other dialled it, and a file a
+ * worker sends lands in the files of the worker that holds the token's receive.
+ */
+export const makePeers = () => ({
+  waiting: new Map<Machine.PeerLink, Answer>(),
+  receives: new Map<
+    string,
+    {
+      readonly link: Machine.PeerLink
+      readonly path: string
+      readonly files: Environment.Files
+      readonly answer: Answer
+    }
+  >(),
+  allows: new Map<string, { readonly link: Machine.PeerLink; readonly port: number }>(),
+  forwards: new Map<string, { readonly link: Machine.PeerLink; readonly port: number }>(),
+})
+export type Peers = ReturnType<typeof makePeers>
+
 /**
  * A worker in memory that keeps the worker's rules: files on a memory driver, scripted processes, and controls to
  * cut, restore and redial the connection, drop the next message of a type heading either way, and restart. Its
  * connections are served in the caller's scope.
  */
-export const makeWorker = (host: {
-  readonly connect: (connection: Machine.Connection) => Effect.Effect<void, unknown>
-}) =>
+export const makeWorker = (
+  host: {
+    readonly connect: (connection: Machine.Connection) => Effect.Effect<void, unknown>
+  },
+  peers = makePeers(),
+) =>
   Effect.gen(function* () {
     const scope = yield* Effect.scope
     const files = Environment.makeMemoryDriver()
@@ -155,10 +180,67 @@ export const makeWorker = (host: {
       }
     }
 
+    const peer = (message: Machine.PeerCall) => {
+      const answer: Answer = (failure) =>
+        emit(
+          failure === undefined
+            ? { type: "peer", req: message.req, ok: true }
+            : { type: "peer", req: message.req, ok: false, message: failure },
+        )
+      switch (message.type) {
+        case "peer-accept":
+        case "peer-connect": {
+          const other = peers.waiting.get(message.link)
+          if (!other) return peers.waiting.set(message.link, answer)
+          peers.waiting.delete(message.link)
+          other()
+          return answer()
+        }
+        case "peer-receive":
+          return peers.receives.set(message.token, { link: message.link, path: message.path, files: fs, answer })
+        case "peer-send": {
+          const grant = peers.receives.get(message.token)
+          if (!grant || grant.link !== message.link) return answer("unknown token")
+          peers.receives.delete(message.token)
+          return Effect.runSync(
+            fs.read(message.path).pipe(
+              Effect.flatMap((file) => grant.files.write(grant.path, file.bytes)),
+              Effect.match({
+                onSuccess: () => {
+                  grant.answer()
+                  answer()
+                },
+                onFailure: (error) => {
+                  grant.answer(error.message)
+                  answer(error.message)
+                },
+              }),
+            ),
+          )
+        }
+        case "peer-allow":
+          peers.allows.set(message.token, { link: message.link, port: message.port })
+          return answer()
+        case "peer-forward":
+          peers.forwards.set(message.token, { link: message.link, port: message.port })
+          return answer()
+        case "peer-revoke":
+          peers.receives.get(message.token)?.answer("revoked")
+          peers.receives.delete(message.token)
+          peers.allows.delete(message.token)
+          peers.forwards.delete(message.token)
+          return answer()
+        case "peer-close":
+          answer()
+          return emit({ type: "peer-closed", link: message.link })
+      }
+    }
+
     const receive = (message: Machine.ToWorker) => {
       if (dropped("worker", message.type)) return
       received.push(message)
       if (message.type === "start") return start(message)
+      if (Schema.is(Machine.PeerCall)(message)) return peer(message)
       if (message.type === "fs")
         return emit(
           // The memory driver answers synchronously.
@@ -227,7 +309,7 @@ export const makeWorker = (host: {
       const current: Link = { open: true, queue: yield* Queue.unbounded<Message, Cause.Done>() }
       const hello: Machine.Hello = {
         type: "hello",
-        protocol: 2,
+        protocol: 3,
         os: "linux",
         arch: "x64",
         home: "/home/worker",
