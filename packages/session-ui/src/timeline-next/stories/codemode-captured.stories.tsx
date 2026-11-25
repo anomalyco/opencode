@@ -1,7 +1,6 @@
 import { Button } from "@opencode/ui/button"
 import { Collapsible } from "@opencode/ui/collapsible"
 import { SegmentedControl, SegmentedControlItem } from "@opencode/ui/segmented-control"
-import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { For, Show, createEffect, createMemo, onCleanup, onMount, type JSX } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import type { SessionDocument } from "../../document"
@@ -17,8 +16,8 @@ import {
 import { CurrentSessionProviders } from "../../storybook/current-session-story"
 import { timelinePresets } from "../../timeline/detail"
 import { SessionTimeline } from "../../timeline/session-timeline"
-import { StatusLane } from "../status-line"
 import { NextSessionTimeline } from "./session-timeline"
+import { SessionStatusLane, sessionTimelineSettings } from "./session-status-lane"
 
 /**
  * Code Mode `execute` parts captured from real runs, drawn by the real timelines at each state the client store held:
@@ -101,8 +100,6 @@ export const Captured = {
       setView("document", reconcile(codeModeDocument(state.scenario, step().file, { now: Date.now() }))),
     )
 
-    const busy = () => view.document.status.type === "busy"
-
     createEffect(() => {
       const address = new URLSearchParams(location.search)
 
@@ -150,30 +147,25 @@ export const Captured = {
     onMount(() => window.addEventListener("keydown", keys))
     onCleanup(() => window.removeEventListener("keydown", keys))
 
+    // As MessageTimeline lays out a session: rows the width of the session column, then the status lane below them.
     const pane = (next: boolean) => (
-      <div class="mx-auto w-full max-w-[720px] py-6">
+      <div class="w-full py-6 md:mx-auto md:max-w-session">
         <CurrentSessionProviders document={view.document} directory={session().directory}>
           <Show
             when={next}
-            fallback={<SessionTimeline document={view.document} timelineDetail={detail()} turnDiffs={false} />}
+            fallback={
+              <SessionTimeline
+                document={view.document}
+                timelineDetail={detail()}
+                turnDiffs={false}
+                {...sessionTimelineSettings(detail())}
+              />
+            }
           >
             <NextSessionTimeline document={view.document} timelineDetail={detail()} />
           </Show>
         </CurrentSessionProviders>
-        <Show
-          when={next}
-          fallback={
-            <Show when={busy()}>
-              <div class="flex h-9 items-center px-4 pt-3 text-[13px] font-[530] leading-text-compact md:px-6">
-                <div data-component="session-working" role="status">
-                  <TextShimmer text="Working" active />
-                </div>
-              </div>
-            </Show>
-          }
-        >
-          <StatusLane class="px-4 md:px-6" label={busy() ? "Working" : undefined} />
-        </Show>
+        <SessionStatusLane document={view.document} timelineDetail={detail()} next={next} />
       </div>
     )
 
