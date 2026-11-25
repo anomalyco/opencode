@@ -1065,6 +1065,11 @@
   margin-top: 12px;
 }
 
+/* A script's Output row, after its last change when its changes are drawn right after it, keeps the block's tight gap. */
+[data-script-changes] > [data-script-output] {
+  margin-top: 8px;
+}
+
 [data-component="execute-tool-calls"] {
   display: flex;
   flex-direction: column;

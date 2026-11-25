@@ -7,6 +7,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  createContext,
   createUniqueId,
   For,
   Match,
@@ -17,6 +18,7 @@ import {
   Index,
   on,
   untrack,
+  useContext,
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -1048,6 +1050,31 @@ export function CurrentFileToolGroup(props: {
   )
 }
 
+/**
+ * Where a script's Output row goes, from the timeline's rows (`scriptOutputLayout`): after its last change when its
+ * changes are drawn right after it, else under its steps.
+ */
+export type ScriptOutputPlacement = {
+  afterChanges: (partID: string) => boolean
+  outputAfter: (fileID: string) => SessionMessageAssistantTool | undefined
+}
+
+const ScriptOutputContext = createContext<ScriptOutputPlacement>({
+  afterChanges: () => false,
+  outputAfter: () => undefined,
+})
+
+export const ScriptOutputProvider = ScriptOutputContext.Provider
+
+// What a script returned, shown as its Output row. A failure shows on its failing row instead.
+function scriptOutputText(status: string | undefined, output: string | undefined, metadata: ToolProps["metadata"]) {
+  if (status === "error" || metadata.error === true) return ""
+
+  return stripAnsi(output ?? "")
+    .replace(/\r\n?/g, "\n")
+    .trim()
+}
+
 /** A file group holding a script's changes: each run in order, direct calls drawn as their own group. */
 export function FileChangeRuns(props: {
   runs: readonly FileRun[]
@@ -1115,6 +1142,16 @@ export function ScriptChanges(props: {
   onSizeChange?: () => void
 }) {
   const i18n = useI18n()
+  const placement = useContext(ScriptOutputContext)
+
+  // The Output row of a script whose last change this is, when its changes are drawn right after it.
+  const outputAfter = (file: FileFact) => {
+    const script = placement.outputAfter(file.id)
+
+    return script
+      ? scriptOutputText(script.state.status, currentToolOutput(script), currentToolMetadata(script))
+      : undefined
+  }
 
   // One wrapper, as a direct patch's files share one, so the turn's gap falls around the list and not between changes.
   return (
@@ -1209,6 +1246,13 @@ export function ScriptChanges(props: {
           )
         }}
       </Index>
+      <Show when={props.files.at(-1) && outputAfter(props.files.at(-1)!)}>
+        {(value) => (
+          <div data-component="execute-tool-calls" data-script-output="">
+            <ExecuteOutputRow output={value()} />
+          </div>
+        )}
+      </Show>
     </div>
   )
 }
@@ -1272,6 +1316,8 @@ function currentContextToolTrigger(tool: SessionMessageAssistantTool, i18n: Retu
 // SAFETY: tool input and metadata are open per-tool records. GenericTool shows arbitrary input keys, and
 // renderers decode the fields they read with `toolInput` and `toolMetadata`.
 export interface ToolProps {
+  /** The call's part id, where the timeline passes it. */
+  id?: string
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- see SAFETY above
   input: Record<string, unknown>
   error?: string
@@ -2069,13 +2115,10 @@ ToolRegistry.register({
       return text.replace(/^Error:\s*/, "").trim() || fallback
     })
 
-    const output = createMemo(() =>
-      error()
-        ? ""
-        : stripAnsi(props.output ?? "")
-            .replace(/\r\n?/g, "\n")
-            .trim(),
-    )
+    const output = createMemo(() => scriptOutputText(props.status, props.output, props.metadata))
+    // When its changes are drawn right after it, its Output row follows them: steps, changes, then Output.
+    const placement = useContext(ScriptOutputContext)
+    const outputHere = () => !!output() && !(props.id && placement.afterChanges(props.id))
 
     // A runtime failure belongs to the call that raised it; scripts can also fail outside any call.
     const owner = createMemo(() => executeToolErrorIndex(props.metadata))
@@ -2109,7 +2152,7 @@ ToolRegistry.register({
         {...props}
         icon="terminal"
         rail={false}
-        hasContent={count() > 0 || !!error() || !!output()}
+        hasContent={count() > 0 || !!error() || outputHere()}
         compact
         locked
         open
@@ -2155,7 +2198,7 @@ ToolRegistry.register({
           </Index>
           {/* A failure with no call, or one that belongs to a call still hidden above, shows on its own. */}
           <Show when={owner() < hidden() && error()}>{(text) => <ExecuteCallRow error={text()} />}</Show>
-          <Show when={output()}>{(value) => <ExecuteOutputRow output={value()} />}</Show>
+          <Show when={outputHere() && output()}>{(value) => <ExecuteOutputRow output={value()} />}</Show>
         </div>
       </BasicTool>
     )

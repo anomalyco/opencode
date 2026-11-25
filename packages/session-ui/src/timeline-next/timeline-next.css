@@ -49,6 +49,11 @@
   margin-top: var(--timeline-gap-s);
 }
 
+/* A script's Output row after its last change sits as far below it as its changes sit from each other. */
+[data-timeline="next"] [data-script-changes] > [data-script-output] {
+  margin-top: var(--timeline-gap-s);
+}
+
 /* Each changed file is its own accordion, rather than one stacked group, as far from the next
    as any two rows. */
 [data-timeline="next"] [data-component="accordion"][data-scope="apply-patch"] {
