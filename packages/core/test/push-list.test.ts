@@ -16,7 +16,7 @@ const it = testEffect(LayerNode.compile(LayerNode.group([PushList.node, KV.node,
 
 const id = Push.DeviceID.make("12345678-1234-1234-1234-123456789abc")
 const sessionID = Session.ID.make("ses_push_bells")
-const callbackURL = `${PushList.relay}/v2/notify/sealed-ref`
+const callbackURL = `${PushList.relays[0]}/v2/notify/sealed-ref`
 
 const phoneKey = () => {
   const phone = createECDH("prime256v1")
@@ -83,15 +83,25 @@ describe("PushList", () => {
     }),
   )
 
-  it.effect("rejects callback URLs off the relay and bad phone keys", () =>
+  it.effect("accepts callback URLs on the production and dev relays", () =>
+    Effect.gen(function* () {
+      const list = yield* PushList.Service
+      expect(PushList.relays).toHaveLength(2)
+      for (const relay of PushList.relays) {
+        yield* list.register(id, { ...input(phoneKey()), callbackURL: `${relay}/v2/notify/x` })
+      }
+    }),
+  )
+
+  it.effect("rejects callback URLs off the relays and bad phone keys", () =>
     Effect.gen(function* () {
       const list = yield* PushList.Service
       const key = phoneKey()
       const urls = [
         "http://opencode-notify-relay.anomalyco.workers.dev/v2/notify/x",
         "https://relay.example.com/v2/notify/x",
-        `${PushList.relay}/v1/notify/x`,
-        `${PushList.relay}/v2/notify/x?debug=1`,
+        `${PushList.relays[0]}/v1/notify/x`,
+        `${PushList.relays[0]}/v2/notify/x?debug=1`,
         "https://user:pass@opencode-notify-relay.anomalyco.workers.dev/v2/notify/x",
       ]
       for (const url of urls) {

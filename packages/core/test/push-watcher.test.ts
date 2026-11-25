@@ -89,7 +89,7 @@ const phone = Effect.fn(function* () {
   const keys = createECDH("prime256v1")
   keys.generateKeys()
   const registered = yield* list.register(Push.DeviceID.make(id), {
-    callbackURL: `${PushList.relay}/v2/notify/ok`,
+    callbackURL: `${PushList.relays[0]}/v2/notify/ok`,
     expiresAt: Date.now() + 86_400_000,
     publicKey: keys.getPublicKey("base64"),
     platform: "android",

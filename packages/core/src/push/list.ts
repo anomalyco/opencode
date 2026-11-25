@@ -80,8 +80,8 @@ const decodeStored = Schema.decodeUnknownOption(Stored)
 const decodeSettings = Schema.decodeUnknownOption(Push.Settings)
 const decodeBell = Schema.decodeUnknownOption(Push.Bell)
 
-/** The notification relay, the only origin a phone's callback URL may be on. */
-export const relay = "https://opencode-notify-relay.anomalyco.workers.dev"
+/** The production and dev notification relays, the only origins a phone's callback URL may be on. */
+export const relays = ["https://opencode-notify-relay.anomalyco.workers.dev", "https://notify.dev.opencode.ai"]
 
 const notifyPath = /^\/v2\/notify\/[^/]+$/
 
@@ -90,7 +90,7 @@ const validURL = (callbackURL: string) => {
   if (!url || url.href !== callbackURL) return false
   if (url.protocol !== "https:") return false
   if (url.username || url.password || url.search || url.hash) return false
-  if (url.origin !== relay) return false
+  if (!relays.includes(url.origin)) return false
   return notifyPath.test(url.pathname)
 }
 
@@ -182,7 +182,7 @@ const layer = Layer.effect(
     const register = Effect.fn("PushList.register")(function* (id: Push.DeviceID, input: Push.Register) {
       const now = yield* Clock.currentTimeMillis
       if (!validURL(input.callbackURL))
-        return yield* new InvalidError({ reason: "callbackURL must be a /v2/notify/ URL on the notification relay" })
+        return yield* new InvalidError({ reason: "callbackURL must be a /v2/notify/ URL on a notification relay" })
       if (input.expiresAt <= now) return yield* new InvalidError({ reason: "expiresAt must be in the future" })
 
       const existing = Option.filter(yield* readDevice(id), (stored) => stored.expiresAt > now)
