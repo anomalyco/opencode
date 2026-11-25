@@ -276,6 +276,16 @@ describe("PushSender", () => {
       )
       expect(dropped.data.question.options).toEqual(labels.slice(0, dropped.data.question.options.length))
       expect(dropped.data.truncated).toBe(true)
+      const titled = PushSender.message({
+        ...question,
+        data: { formID: "frm_1", question: { key: "q0", type: "string", title: "t".repeat(4_000) } },
+      })
+      expect(Buffer.byteLength(titled, "utf8")).toBeLessThanOrEqual(2600)
+      expect(JSON.parse(titled).data).toEqual({
+        formID: "frm_1",
+        question: { key: "q0", type: "string" },
+        truncated: true,
+      })
       const answer = PushSender.message({ ...finished, data: { outcome: "succeeded", text: "\u0000".repeat(500) } })
       expect(Buffer.byteLength(answer, "utf8")).toBeLessThanOrEqual(2600)
       expect(JSON.parse(answer).data).toEqual({ outcome: "succeeded", truncated: true })

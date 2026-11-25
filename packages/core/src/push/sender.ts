@@ -145,7 +145,7 @@ const shortenOptions = (data: Data, over: Over) => {
 /**
  * The JSON the phone decrypts, shortened so the box stays within the relay's limit. Bulk goes before small facts: a
  * turn's text is dropped, then a failed turn's error message is cut, then a permission's resources (its `save` is
- * dropped only when that isn't enough), then the body, a question's text and its options. Anything cut or left out of
+ * dropped only when that isn't enough), then the body, a question's text, its options and its title. Anything cut or left out of
  * `data` sets `truncated: true`. Ids are never cut.
  */
 export const message = (notification: Notification) => {
@@ -172,7 +172,11 @@ export const message = (notification: Notification) => {
       ? resources
       : shortenResources({ ...error, save: undefined, truncated: true }, over)
   const body = over(save) <= 0 ? notification.body : (shorten(notification.body, over(save)) ?? "")
-  const data = shortenOptions(shortenQuestion(save, overWith(body)), overWith(body))
+  const options = shortenOptions(shortenQuestion(save, overWith(body)), overWith(body))
+  const data =
+    options.question?.title === undefined || overWith(body)(options) <= 0
+      ? options
+      : { ...options, question: { ...options.question, title: undefined }, truncated: true as const }
   return make(data, body)
 }
 
