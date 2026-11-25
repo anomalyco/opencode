@@ -323,6 +323,23 @@ test("Search projects opens the full location picker from a session, draft, and 
   await expect(projects.filter({ hasText: "Add project" })).toBeVisible()
 })
 
+for (const home of [true, false]) {
+  test(`Search projects chosen in the command palette opens the location picker from ${home ? "Home" : "a session"}`, async ({
+    page,
+  }) => {
+    const errors: string[] = []
+    page.on("pageerror", (error) => errors.push(error.message))
+    const { dialog, input } = await openCommandPalette(page, home)
+    await input.fill("search projects")
+    await dialog.getByRole("option", { name: /^Search projects/ }).click()
+    await expect(page).toHaveURL(/\/new-session\?draftId=.+$/)
+    const picker = page.getByRole("combobox", { name: "Search projects", exact: true })
+    await expect(picker).toBeFocused()
+    await expect(page.getByRole("dialog").getByRole("option").filter({ hasText: "Add project" })).toBeVisible()
+    expect(errors).toEqual([])
+  })
+}
+
 declare global {
   interface Window {
     __paletteOrders?: string[][]
