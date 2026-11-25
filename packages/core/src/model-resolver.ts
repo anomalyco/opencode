@@ -257,9 +257,7 @@ const resolveCatalogModel = Effect.fn("ModelResolver.resolveCatalogModel")(funct
       return LanguageModel.update(runtime, {
         provider: resolved.canonical ?? resolved.providerID,
         // The catalog's freeform formats decide whether the AI package sends a tool as raw text, and with which grammar.
-        capabilities: model.capabilities.freeform
-          ? { ...base, tools: { ...base?.tools, freeform: model.capabilities.freeform } }
-          : base,
+        capabilities: { ...base, tools: { ...base?.tools, freeform: model.capabilities.freeform ?? [] } },
         compatibility: resolved.compatibility
           ? Object.assign({}, runtime.compatibility, Struct.omit(resolved.compatibility, CAPABILITY_KEYS))
           : runtime.compatibility,

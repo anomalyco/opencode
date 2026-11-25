@@ -64,14 +64,14 @@ function withConfigEnv<A, E, R>(env: Record<string, string>, effect: () => Effec
 }
 
 describe("ModelResolver", () => {
-  it.effect("gives the AI model the catalog's freeform formats", () =>
+  it.effect("gives the AI model the catalog's freeform formats, and none when the catalog lists none", () =>
     Effect.gen(function* () {
       const formats = (freeform?: Info["capabilities"]["freeform"]) =>
         ModelResolver.fromCatalogModel(model(Provider.aisdk("@ai-sdk/openai"), { freeform })).pipe(
           Effect.map((resolved) => resolved.capabilities?.tools?.freeform),
         )
       expect(yield* formats(["text", "lark"])).toEqual(["text", "lark"])
-      expect(yield* formats()).toBeUndefined()
+      expect(yield* formats()).toEqual([])
     }),
   )
 
