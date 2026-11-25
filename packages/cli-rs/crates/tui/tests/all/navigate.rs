@@ -917,3 +917,275 @@ fn freed_rows_go_back_to_the_system_once_the_reader_stops() {
     h.app.advance(Duration::from_secs(30));
     assert_eq!(runs(), start + 2, "no release 30 s after the first");
 }
+
+// ─── Resize scroll anchoring ────────────────────────────────────────────────
+
+/// `count` turns with wrapping text in both user prompts and assistant replies, long enough to exercise the bounded
+/// transcript window.
+fn wrapping_turns(count: u64) -> Vec<Value> {
+    let filler = "the quick brown fox jumps over the lazy dog while resizing the terminal window across widths";
+    (1..=count)
+        .flat_map(|turn| {
+            let created = turn * 10_000;
+            [
+                user(&format!("msg_{turn:03}a"), created, &format!("Question {turn} {filler}")),
+                assistant(
+                    &format!("msg_{turn:03}b"),
+                    created + 1000,
+                    json!([{
+                        "type": "text",
+                        "text": format!("Paragraph {turn}.1 {filler}.\n\nParagraph {turn}.2 {filler}."),
+                    }]),
+                ),
+            ]
+        })
+        .collect()
+}
+
+/// Opens a wrapping session of `width`x`height`, waiting for `shown`.
+fn open_resize(messages: Vec<Value>, width: u16, height: u16, shown: &str) -> Nav {
+    let older = Arc::new(AtomicUsize::new(0));
+    let failing = Arc::new(AtomicBool::new(false));
+    let fake = fake(messages, older.clone(), failing.clone());
+    let deps = Deps {
+        config: support::config(Info::default()),
+        route: support::session_route("ses_n"),
+        ..support::deps(Arc::new(fake))
+    };
+    let h = Nav { harness: support::mount(width, height, deps), older, failing };
+    h.wait_for(shown);
+    h
+}
+
+/// Resizes `h` and settles pending frames and animations.
+fn resize_settle(h: &Nav, width: u16, height: u16) -> String {
+    h.app.resize(width, height);
+    h.app.advance(Duration::from_millis(1));
+    h.idle()
+}
+
+/// First visible paragraph or question marker in the transcript, with its screen row.
+fn top_marker(screen: &str) -> Option<(usize, String)> {
+    screen.lines().enumerate().skip(TOP).take_while(|(_, line)| !line.contains('╹')).find_map(|(row, line)| {
+        for prefix in ["Paragraph ", "Question "] {
+            if let Some(rest) = line.split_once(prefix).map(|(_, rest)| rest) {
+                let id = rest.split_whitespace().next()?;
+                return Some((row, format!("{prefix}{id}")));
+            }
+        }
+        None
+    })
+}
+
+/// Steps up by single lines until a reply's first paragraph sits on `TOP`, returning that marker.
+fn align_top_paragraph(h: &Nav) -> (String, String) {
+    for _ in 0..40 {
+        if h.app
+            .text()
+            .lines()
+            .nth(TOP)
+            .is_some_and(|line| line.trim_start().starts_with("Paragraph ") && line.contains(".1 "))
+        {
+            break;
+        }
+        h.press("ctrl+alt+y");
+    }
+    let screen = h.idle();
+    let (row, marker) = top_marker(&screen).unwrap_or_else(|| panic!("no top marker:\n{screen}"));
+    assert_eq!(row, TOP, "expected marker on top row:\n{screen}");
+    (screen, marker)
+}
+
+/// Asserts `marker` stays at the top of the transcript (within rewrap tolerance) and away from the bottom.
+fn assert_top_held(screen: &str, marker: &str, label: &str) {
+    assert!(screen.contains("Jump to latest ↓"), "{label} lost away state:\n{screen}");
+    let found = Nav::row(screen, marker);
+    assert!(
+        found.is_some_and(|at| (TOP..=TOP + 2).contains(&at)),
+        "{label}: {marker:?} moved from row {TOP} to {found:?}:\n{screen}"
+    );
+}
+
+#[test]
+fn resize_in_the_middle_keeps_the_top_row_across_width_and_height_changes() {
+    // 1. Long session scrolled to the middle from the bottom, widening without crossing the 120-column sidebar
+    // breakpoint (reproduces the bounded-window #65826 regression: rows dropped below shrink max_y below scroll_y).
+    let h = open_resize(wrapping_turns(150), 60, 25, "Paragraph 150.2");
+    for _ in 0..70 {
+        h.press("pageup");
+    }
+    for _ in 0..45 {
+        h.press("pagedown");
+    }
+    let (before, marker) = align_top_paragraph(&h);
+    assert!(before.contains("Jump to latest ↓"), "{before}");
+    for (width, height) in [(115, 25), (115, 45), (50, 25), (115, 45), (60, 25)] {
+        assert_top_held(&resize_settle(&h, width, height), &marker, &format!("bounded {width}x{height}"));
+    }
+
+    // 2. Width narrower/wider (crossing the 120-column sidebar breakpoint) and height larger/smaller, plus a massive
+    // enlargement that hits the artificial end of the bounded window and must mount newer rows rather than clamping.
+    for (width, height) in [(45, 25), (140, 25), (140, 45), (50, 18), (160, 120), (50, 16), (80, 25)] {
+        assert_top_held(&resize_settle(&h, width, height), &marker, &format!("middle {width}x{height}"));
+    }
+
+    // 3. Rapid drag burst crossing the 120-column sidebar breakpoint both ways without settling between steps.
+    for width in (80..=140).step_by(4).chain((52..=140).step_by(4).rev()).chain((52..=80).step_by(4)) {
+        h.app.resize(width, 25);
+        h.app.render();
+    }
+    assert_top_held(&h.idle(), &marker, "after drag burst");
+
+    // 4. Mid-row anchor (second paragraph of a wrapped reply on TOP) across width and height changes.
+    for _ in 0..40 {
+        if h.app
+            .text()
+            .lines()
+            .nth(TOP)
+            .is_some_and(|line| line.trim_start().starts_with("Paragraph ") && line.contains(".2 "))
+        {
+            break;
+        }
+        h.press("ctrl+alt+y");
+    }
+    let before = h.idle();
+    let (row, mid_marker) = top_marker(&before).unwrap_or_else(|| panic!("no mid marker:\n{before}"));
+    assert_eq!(row, TOP, "{before}");
+    for (width, height) in [(50, 25), (120, 25), (140, 40), (45, 16), (80, 25)] {
+        assert_top_held(&resize_settle(&h, width, height), &mid_marker, &format!("mid-row {width}x{height}"));
+    }
+
+    // 5. From the head via Page Down into the middle (rows dropped above the view).
+    h.press("ctrl+g");
+    h.wait_for("Question 1 ");
+    for _ in 0..45 {
+        h.press("pagedown");
+    }
+    let (_, head_marker) = align_top_paragraph(&h);
+    for (width, height) in [(50, 25), (120, 25), (120, 40), (50, 18), (80, 25)] {
+        assert_top_held(&resize_settle(&h, width, height), &head_marker, &format!("from head {width}x{height}"));
+    }
+
+    // 6. Scrolling mid-resize releases the old anchor so the next resize holds the new position, and paging back down
+    // to the bottom resumes following new messages.
+    h.app.resize(60, 25);
+    h.app.render();
+    for _ in 0..5 {
+        h.press("pageup");
+    }
+    let (_, moved_marker) = align_top_paragraph(&h);
+    assert_ne!(moved_marker, head_marker);
+    assert_top_held(&resize_settle(&h, 130, 30), &moved_marker, "after scroll mid-resize");
+    h.press("end");
+    let end = h.wait_for("Paragraph 150.2");
+    assert!(!end.contains("Jump to latest"), "{end}");
+    h.deliver(1, "After returning from resize");
+    let screen = h.wait_for("After returning from resize");
+    assert!(!screen.contains("Jump to latest"), "{screen}");
+}
+
+#[test]
+fn resize_at_the_bottom_keeps_following() {
+    let h = open_resize(wrapping_turns(80), 80, 25, "Paragraph 80.2");
+    for (width, height) in [(50, 25), (120, 40), (60, 16), (130, 35), (80, 25)] {
+        let screen = resize_settle(&h, width, height);
+        assert!(
+            screen.contains("Paragraph 80.2") && !screen.contains("Jump to latest"),
+            "{width}x{height} stopped following bottom:\n{screen}"
+        );
+    }
+    h.deliver(1, "Question after resize");
+    let screen = h.wait_for("Question after resize");
+    assert!(!screen.contains("Jump to latest"), "{screen}");
+}
+
+#[test]
+fn resize_during_streaming_holds_the_middle_and_follows_at_the_bottom() {
+    let mut messages = wrapping_turns(80);
+    messages.push(user("msg_livea", 9_000_000, "Question live"));
+    messages.push(json!({
+        "id": "msg_liveb", "type": "assistant", "agent": "build",
+        "model": { "providerID": "provider", "id": "model" },
+        "time": { "created": 9_001_000 }, "content": [],
+    }));
+    let h = open_resize(messages, 80, 25, "Question live");
+    let seq = std::cell::Cell::new(0);
+    let stream = |kind: &str, data: Value| {
+        seq.set(seq.get() + 1);
+        let ids = json!({ "sessionID": "ses_n", "assistantMessageID": "msg_liveb", "ordinal": 0 });
+        h.tui.data.apply(vec![support::event("ses_n", kind, seq.get(), support::merge(ids, data))]);
+    };
+    let filler = "streaming text long enough to wrap when the terminal gets narrower";
+    let line = |n: usize| stream("session.text.delta", json!({ "delta": format!("Streamed {n} {filler}.\n\n") }));
+    stream("session.text.started", json!({}));
+
+    // At the bottom, streaming + resizes stays at the bottom.
+    for (index, (width, height)) in [(50, 25), (120, 35), (60, 16), (80, 25)].into_iter().enumerate() {
+        line(index + 1);
+        let screen = resize_settle(&h, width, height);
+        assert!(
+            screen.contains(&format!("Streamed {} ", index + 1)) && !screen.contains("Jump to latest"),
+            "streaming at bottom {width}x{height}:\n{screen}"
+        );
+    }
+
+    // Scrolled to the middle, streaming + resizes holds the reader's top row.
+    for _ in 0..35 {
+        h.press("pageup");
+    }
+    let (_, marker) = align_top_paragraph(&h);
+    for (index, (width, height)) in [(50, 25), (120, 38), (55, 16), (110, 30), (80, 25)].into_iter().enumerate() {
+        let n = index * 2 + 10;
+        line(n);
+        h.app.resize(width, height);
+        line(n + 1);
+        h.app.advance(Duration::from_millis(1));
+        assert_top_held(&h.idle(), &marker, &format!("streaming away {width}x{height}"));
+    }
+}
+
+#[test]
+fn resize_right_after_page_up_keeps_the_scrolled_position() {
+    let h = open_resize(wrapping_turns(80), 80, 25, "Paragraph 80.2");
+
+    // Right after a single Page Up from the bottom: resizing must not jump back to the bottom or overshoot upward.
+    let after_one = h.press("pageup");
+    assert!(after_one.contains("Jump to latest ↓"), "{after_one}");
+    let (one_row, one_marker) =
+        top_marker(&after_one).unwrap_or_else(|| panic!("no marker after 1 pageup:\n{after_one}"));
+    for (width, height) in [(50, 25), (120, 25), (120, 18), (80, 25)] {
+        let screen = resize_settle(&h, width, height);
+        assert!(screen.contains("Jump to latest ↓"), "after 1 pageup {width}x{height} snapped to bottom:\n{screen}");
+        let found = Nav::row(&screen, &one_marker);
+        assert!(
+            found.is_some_and(|at| at.abs_diff(one_row) <= 3),
+            "after 1 pageup {width}x{height}: {one_marker:?} moved from {one_row} to {found:?}:\n{screen}"
+        );
+    }
+
+    // Immediate same-frame resize right after Page Up across the backfill/drop boundary:
+    // page up one step at a time, resizing width/height right after every press before settling.
+    let mut prev_turn = 80u64;
+    let sizes = [(55, 25), (110, 25), (110, 32), (65, 18), (80, 25)];
+    for step in 0..40 {
+        let before = h.idle();
+        let before_marker = top_marker(&before).unwrap_or_else(|| panic!("step {step} no marker before:\n{before}"));
+        let before_turn: u64 =
+            before_marker.1.split_whitespace().nth(1).unwrap().split('.').next().unwrap().parse().unwrap();
+        h.app.press("pageup");
+        let (width, height) = sizes[step % sizes.len()];
+        let after = resize_settle(&h, width, height);
+        assert!(after.contains("Jump to latest ↓"), "step {step} ({width}x{height}) snapped to bottom:\n{after}");
+        let after_marker = top_marker(&after).unwrap_or_else(|| panic!("step {step} no marker after:\n{after}"));
+        let after_turn: u64 =
+            after_marker.1.split_whitespace().nth(1).unwrap().split('.').next().unwrap().parse().unwrap();
+        assert!(
+            after_turn <= before_turn && before_turn - after_turn <= 3,
+            "step {step} ({width}x{height}): jumped from turn {before_turn} ({}) to turn {after_turn} ({}):\n{before}\n=====\n{after}",
+            before_marker.1,
+            after_marker.1,
+        );
+        prev_turn = after_turn;
+    }
+    assert!(prev_turn < 60, "did not move up through the session, still at turn {prev_turn}");
+}
