@@ -519,6 +519,9 @@ impl Transcript {
 
     /// Releases any active resize anchor when the reader explicitly moves the view.
     pub fn clear_resize_pin(&self) {
+        if self.0.model.borrow().resize.is_none() {
+            return;
+        }
         let restore = {
             let mut model = self.0.model.borrow_mut();
             model.resize.take().is_some() && model.at_end() && !model.navigating
@@ -725,7 +728,7 @@ impl Model {
     }
 
     fn at_end(&self) -> bool {
-        self.window_end() >= self.specs.len()
+        self.end.is_none() || self.window_end() >= self.specs.len()
     }
 
     fn content_width(&self, tui: &Tui) -> u16 {
@@ -882,14 +885,16 @@ impl Inner {
 
     /// Whether a live mount-above [`Pin`] holds the view.
     fn mount_pinned(&self) -> bool {
-        let Some(tui) = self.tui.upgrade() else { return false };
-        self.model.borrow().pin.as_ref().is_some_and(|pin| pin.live(tui.app.frame_number()))
+        let model = self.model.borrow();
+        let Some(pin) = model.pin.as_ref() else { return false };
+        self.tui.upgrade().is_some_and(|tui| pin.live(tui.app.frame_number()))
     }
 
     /// Whether a live [`ResizePin`] holds the reader's row across a resize.
     fn resizing(&self) -> bool {
-        let Some(tui) = self.tui.upgrade() else { return false };
-        self.model.borrow().resize.as_ref().is_some_and(|pin| pin.live(tui.app.frame_number()))
+        let model = self.model.borrow();
+        let Some(pin) = model.resize.as_ref() else { return false };
+        self.tui.upgrade().is_some_and(|tui| pin.live(tui.app.frame_number()))
     }
 
     /// The first laid-out mounted row that overlaps the viewport (or the first laid-out row if all start below), with
@@ -1047,7 +1052,7 @@ impl Inner {
             }
             let (_, top) = inner.scroll.scroll_position();
             let (content, viewport) = (inner.scroll.content_view().rect().height, inner.scroll.rect().height);
-            if inner.model.borrow().at_end() && top >= f64::from((content - viewport).max(0.0)).floor() {
+            if top >= f64::from((content - viewport).max(0.0)).floor() && inner.model.borrow().at_end() {
                 return;
             }
             let Some((anchor, y, screen_y, height)) = inner.resize_anchor(frame) else { return };
@@ -1466,26 +1471,29 @@ impl Inner {
         let laid = Cell::new(None);
         wrapper.on_resize(bind!(self.this, |inner, cx, rect| {
             let before = laid.replace(Some(rect.height));
+            if inner.model.borrow().resize.is_none() {
+                return;
+            }
             let frame = cx.app().frame_number();
             let target = {
                 let mut model = inner.model.borrow_mut();
-                let at_end = model.at_end();
                 let Some(pin) = model.resize.as_mut().filter(|pin| pin.live(frame)) else { return };
                 if pin.anchor == key && rect.height > 0.0 {
                     let y = rect.screen_y - inner.scroll.content_view().rect().screen_y;
                     pin.y = y;
                     pin.current_height = rect.height;
-                    Some((pin.target(y, rect.height), at_end))
+                    Some(pin.target(y, rect.height))
                 } else if pin.above.contains(&key)
                     && let Some(before) = before.filter(|before| *before != rect.height)
                 {
                     pin.y += f64::from(rect.height - before);
-                    Some((pin.target(pin.y, pin.current_height), at_end))
+                    Some(pin.target(pin.y, pin.current_height))
                 } else {
                     None
                 }
             };
-            if let Some((target, at_end)) = target {
+            if let Some(target) = target {
+                let at_end = inner.model.borrow().at_end();
                 inner.scroll_to_resize(target, at_end);
             }
         }));
