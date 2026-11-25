@@ -72,8 +72,9 @@ const pendingMarkdown = '[data-component="markdown"]:not([data-markdown-ready])'
 
 const upwardKeys = new Set(["up", "page-up", "home"])
 
-// How long after a press the growth of its row still counts as what the press opened.
-const pressHold = 1000
+// How long after a press the growth of its row still counts as what the press opened. What a control opens can render
+// late: a long summary took more than a frame.
+const pressHold = 3000
 
 const settledEvent = { type: "scroll.settled", atReachableEnd: false } as const
 
@@ -92,10 +93,10 @@ const pointerDownEvent = { type: "pointer.down" } as const
 const pointerUpEvent = { type: "pointer.up" } as const
 
 /**
- * The row that holds the control the reader pressed, with its height at the press. `grew`: whether the row was taller
- * by the next frame, which is when the control's own handlers have run.
+ * The row that holds the control the reader pressed, with its height at the press. `opened`: whether the press opened
+ * something there, known by the next frame, which is when the control's own handlers have run.
  */
-type Press = { key: string; height: number; at: number; grew?: boolean }
+type Press = { key: string; height: number; at: number; opened?: boolean }
 
 /** A row on screen: its key, the row it draws and where TanStack places it. */
 type MountedRow = { key: string; row: TimelineRow.TimelineRow; item: VirtualItem }
@@ -527,19 +528,15 @@ export function createTimelineVirtualizer(input: Input) {
       const root = listRoot()
       const press = pressed
 
-      if (press && sizes.some(([, value]) => value.key === press.key)) {
+      if (press && (press.opened === false || performance.now() - press.at >= pressHold)) pressed = undefined
+      else if (press && sizes.some(([, value]) => value.key === press.key && value.size > press.height)) {
         pressed = undefined
 
         // The reader pressed a control, and its row grows for what the press opened. A view that follows its end would
         // scroll there and take the control away from under the pointer, so the view lets the end go first, as it
         // does for the reader's scroll up: Jump to latest shows, and a scroll back to the end follows again. A row
         // that closes at the end leaves the view there, and it goes on following.
-        if (
-          press.grew !== false &&
-          performance.now() - press.at < pressHold &&
-          sizes.some(([, value]) => value.key === press.key && value.size > press.height) &&
-          input.follow.following()
-        ) {
+        if (input.follow.following()) {
           intentEvent.upward = true
           // Also where nothing overflows yet: what opens is about to.
           intentEvent.overflow = true
@@ -1318,11 +1315,16 @@ export function createTimelineVirtualizer(input: Input) {
 
     if (!row?.dataset.timelineKey || !(content instanceof HTMLElement) || !control || !row.contains(control)) return
     const press: Press = { key: row.dataset.timelineKey, height: content.offsetHeight, at: performance.now() }
+    // A control that opens a menu says so too, and that grows nothing in the row.
+    const disclosure = control.closest("[aria-expanded]:not([aria-haspopup])")
+    const closed = !!disclosure && row.contains(disclosure) && disclosure.getAttribute("aria-expanded") === "false"
     pressed = press
-    // A row that is no taller by the next frame was not opened by the press: what grows it later is a reply that
-    // streams in it.
+    // A row that is no taller by the next frame, under a control that does not say it opened, was not opened by the
+    // press: what grows it later is a reply that streams in it. What a control opens can render after that frame.
     requestAnimationFrame(() => {
-      press.grew = content.isConnected && content.offsetHeight > press.height
+      press.opened =
+        content.isConnected &&
+        (content.offsetHeight > press.height || (closed && disclosure?.getAttribute("aria-expanded") === "true"))
     })
   }
 
