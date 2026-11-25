@@ -1,7 +1,7 @@
 import { Effect } from "effect"
 import { HttpApiSchema } from "effect/http-api"
 import { PushList } from "@opencode/core/push/list"
-import { InvalidRequestError, PushNotFoundError } from "@opencode/protocol/errors"
+import { InvalidRequestError, PushDeviceNotFoundError } from "@opencode/protocol/errors"
 import type { Push } from "@opencode/schema/push"
 import type { Session } from "@opencode/schema/session"
 
@@ -10,7 +10,7 @@ export const makePush = Effect.gen(function* () {
 
   const invalid = (error: PushList.InvalidError) => new InvalidRequestError({ message: error.reason })
   const notFound = (error: PushList.NotFoundError) =>
-    new PushNotFoundError({ deviceID: error.id, message: error.message })
+    new PushDeviceNotFoundError({ deviceID: error.id, message: error.message })
 
   return {
     get: Effect.fn("PushHandler.get")(function* () {

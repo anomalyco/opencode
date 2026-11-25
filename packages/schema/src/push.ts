@@ -79,5 +79,5 @@ export const Info = Schema.Struct({
   sessions: Schema.Record(Schema.String, Bell),
 }).annotate({ identifier: "Push.Info" })
 
-const Updated = ephemeral({ type: "push.updated", schema: {} })
+const Updated = ephemeral({ type: "experimental.push.updated", schema: {} })
 export const Event = { Updated, Definitions: inventory(Updated) }

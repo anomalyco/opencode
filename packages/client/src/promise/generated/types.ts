@@ -2068,11 +2068,11 @@ export type WebsearchUpdated = {
   data: {}
 }
 
-export type PushUpdated = {
+export type ExperimentalPushUpdated = {
   id: EventID
   created: number
   metadata?: { [x: string]: any }
-  type: "push.updated"
+  type: "experimental.push.updated"
   location?: LocationRef
   data: {}
 }
@@ -3108,7 +3108,7 @@ export type V2Event =
   | FormReplied
   | FormCancelled
   | WebsearchUpdated
-  | PushUpdated
+  | ExperimentalPushUpdated
   | ArtifactUpdated
   | SessionStatusUpdated
   | SessionIdle
@@ -3451,13 +3451,13 @@ export type MachineNotFoundError = {
 export const isMachineNotFoundError = (value: unknown): value is MachineNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "MachineNotFoundError"
 
-export type PushNotFoundError = {
-  readonly _tag: "PushNotFoundError"
+export type PushDeviceNotFoundError = {
+  readonly _tag: "PushDeviceNotFoundError"
   readonly deviceID: string
   readonly message: string
 }
-export const isPushNotFoundError = (value: unknown): value is PushNotFoundError =>
-  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PushNotFoundError"
+export const isPushDeviceNotFoundError = (value: unknown): value is PushDeviceNotFoundError =>
+  typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PushDeviceNotFoundError"
 
 export type ShellNotFoundError = { readonly _tag: "ShellNotFoundError"; readonly id: string; readonly message: string }
 export const isShellNotFoundError = (value: unknown): value is ShellNotFoundError =>
@@ -4673,7 +4673,7 @@ export type EventSubscribeInput = {
         | "form.replied"
         | "form.cancelled"
         | "websearch.updated"
-        | "push.updated"
+        | "experimental.push.updated"
         | "artifact.updated"
         | "session.status"
         | "session.idle"
@@ -4940,7 +4940,7 @@ export type ExperimentalMachineRemoveOutput = void
 export type ExperimentalPushGetOutput = { data: PushInfo }["data"]
 
 export type ExperimentalPushDeviceRegisterInput = {
-  readonly id: string
+  readonly deviceID: string
   readonly callbackURL: string
   readonly expiresAt: number
   readonly publicKey: string
@@ -4951,12 +4951,12 @@ export type ExperimentalPushDeviceRegisterInput = {
 
 export type ExperimentalPushDeviceRegisterOutput = { data: PushRegistered }["data"]
 
-export type ExperimentalPushDeviceRemoveInput = { readonly id: string }
+export type ExperimentalPushDeviceRemoveInput = { readonly deviceID: string }
 
 export type ExperimentalPushDeviceRemoveOutput = void
 
 export type ExperimentalPushDeviceUpdateInput = {
-  readonly id: string
+  readonly deviceID: string
   readonly paused?: boolean | undefined
   readonly settings?: { readonly default: "all" | "attention" | "none" } | undefined
 }
@@ -4964,7 +4964,7 @@ export type ExperimentalPushDeviceUpdateInput = {
 export type ExperimentalPushDeviceUpdateOutput = { data: PushDevice }["data"]
 
 export type ExperimentalPushDeviceSessionSetInput = {
-  readonly id: string
+  readonly deviceID: string
   readonly sessionID: string
   readonly level: "all" | "attention" | "none"
   readonly until?: number | undefined
@@ -4972,7 +4972,7 @@ export type ExperimentalPushDeviceSessionSetInput = {
 
 export type ExperimentalPushDeviceSessionSetOutput = { data: PushBell }["data"]
 
-export type ExperimentalPushDeviceSessionRemoveInput = { readonly id: string; readonly sessionID: string }
+export type ExperimentalPushDeviceSessionRemoveInput = { readonly deviceID: string; readonly sessionID: string }
 
 export type ExperimentalPushDeviceSessionRemoveOutput = void
 

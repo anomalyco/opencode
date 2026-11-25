@@ -1861,7 +1861,7 @@ export function make(options: ClientOptions) {
             request<{ readonly data: ExperimentalPushDeviceRegisterOutput }>(
               {
                 method: "PUT",
-                path: `/api/experimental/push/device/${encodeURIComponent(input.id)}`,
+                path: `/api/experimental/push/device/${encodeURIComponent(input.deviceID)}`,
                 body: {
                   callbackURL: input["callbackURL"],
                   expiresAt: input["expiresAt"],
@@ -1880,7 +1880,7 @@ export function make(options: ClientOptions) {
             request<ExperimentalPushDeviceRemoveOutput>(
               {
                 method: "DELETE",
-                path: `/api/experimental/push/device/${encodeURIComponent(input.id)}`,
+                path: `/api/experimental/push/device/${encodeURIComponent(input.deviceID)}`,
                 successStatus: 204,
                 declaredStatuses: [400, 401],
                 empty: true,
@@ -1891,7 +1891,7 @@ export function make(options: ClientOptions) {
             request<{ readonly data: ExperimentalPushDeviceUpdateOutput }>(
               {
                 method: "PATCH",
-                path: `/api/experimental/push/device/${encodeURIComponent(input.id)}`,
+                path: `/api/experimental/push/device/${encodeURIComponent(input.deviceID)}`,
                 body: { paused: input["paused"], settings: input["settings"] },
                 successStatus: 200,
                 declaredStatuses: [400, 401, 404],
@@ -1904,7 +1904,7 @@ export function make(options: ClientOptions) {
               request<{ readonly data: ExperimentalPushDeviceSessionSetOutput }>(
                 {
                   method: "PUT",
-                  path: `/api/experimental/push/device/${encodeURIComponent(input.id)}/session/${encodeURIComponent(input.sessionID)}`,
+                  path: `/api/experimental/push/device/${encodeURIComponent(input.deviceID)}/session/${encodeURIComponent(input.sessionID)}`,
                   body: { level: input["level"], until: input["until"] },
                   successStatus: 200,
                   declaredStatuses: [400, 401, 404],
@@ -1916,7 +1916,7 @@ export function make(options: ClientOptions) {
               request<ExperimentalPushDeviceSessionRemoveOutput>(
                 {
                   method: "DELETE",
-                  path: `/api/experimental/push/device/${encodeURIComponent(input.id)}/session/${encodeURIComponent(input.sessionID)}`,
+                  path: `/api/experimental/push/device/${encodeURIComponent(input.deviceID)}/session/${encodeURIComponent(input.sessionID)}`,
                   successStatus: 204,
                   declaredStatuses: [400, 401, 404],
                   empty: true,

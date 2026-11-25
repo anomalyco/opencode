@@ -2183,7 +2183,7 @@ export type EventSubscribeInput = {
         | "form.replied"
         | "form.cancelled"
         | "websearch.updated"
-        | "push.updated"
+        | "experimental.push.updated"
         | "artifact.updated"
         | "session.status"
         | "session.idle"
@@ -2604,7 +2604,7 @@ export type ExperimentalPushGetOutput = Push.Info
 export type ExperimentalPushGetOperation<E = never> = () => Effect.Effect<ExperimentalPushGetOutput, E>
 
 export type ExperimentalPushDeviceRegisterInput = {
-  readonly id: Push.DeviceID
+  readonly deviceID: Push.DeviceID
   readonly callbackURL: string
   readonly expiresAt: number
   readonly publicKey: string
@@ -2617,14 +2617,14 @@ export type ExperimentalPushDeviceRegisterOperation<E = never> = (
   input: ExperimentalPushDeviceRegisterInput,
 ) => Effect.Effect<ExperimentalPushDeviceRegisterOutput, E>
 
-export type ExperimentalPushDeviceRemoveInput = { readonly id: Push.DeviceID }
+export type ExperimentalPushDeviceRemoveInput = { readonly deviceID: Push.DeviceID }
 export type ExperimentalPushDeviceRemoveOutput = void
 export type ExperimentalPushDeviceRemoveOperation<E = never> = (
   input: ExperimentalPushDeviceRemoveInput,
 ) => Effect.Effect<ExperimentalPushDeviceRemoveOutput, E>
 
 export type ExperimentalPushDeviceUpdateInput = {
-  readonly id: Push.DeviceID
+  readonly deviceID: Push.DeviceID
   readonly paused?: boolean | undefined
   readonly settings?: Push.DeviceSettings | undefined
 }
@@ -2634,7 +2634,7 @@ export type ExperimentalPushDeviceUpdateOperation<E = never> = (
 ) => Effect.Effect<ExperimentalPushDeviceUpdateOutput, E>
 
 export type ExperimentalPushDeviceSessionSetInput = {
-  readonly id: Push.DeviceID
+  readonly deviceID: Push.DeviceID
   readonly sessionID: Session.ID
   readonly level: Push.Level
   readonly until?: number | undefined
@@ -2644,7 +2644,10 @@ export type ExperimentalPushDeviceSessionSetOperation<E = never> = (
   input: ExperimentalPushDeviceSessionSetInput,
 ) => Effect.Effect<ExperimentalPushDeviceSessionSetOutput, E>
 
-export type ExperimentalPushDeviceSessionRemoveInput = { readonly id: Push.DeviceID; readonly sessionID: Session.ID }
+export type ExperimentalPushDeviceSessionRemoveInput = {
+  readonly deviceID: Push.DeviceID
+  readonly sessionID: Session.ID
+}
 export type ExperimentalPushDeviceSessionRemoveOutput = void
 export type ExperimentalPushDeviceSessionRemoveOperation<E = never> = (
   input: ExperimentalPushDeviceSessionRemoveInput,

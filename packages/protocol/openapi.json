@@ -10581,7 +10581,7 @@
                     "form.replied",
                     "form.cancelled",
                     "websearch.updated",
-                    "push.updated",
+                    "experimental.push.updated",
                     "artifact.updated",
                     "session.status",
                     "session.idle",
@@ -10694,7 +10694,7 @@
                           "form.replied",
                           "form.cancelled",
                           "websearch.updated",
-                          "push.updated",
+                          "experimental.push.updated",
                           "artifact.updated",
                           "session.status",
                           "session.idle",
@@ -14359,13 +14359,13 @@
         "summary": "Get push settings"
       }
     },
-    "/api/experimental/push/device/{id}": {
+    "/api/experimental/push/device/{deviceID}": {
       "put": {
         "tags": ["experimental"],
         "operationId": "experimental.push.device.register",
         "parameters": [
           {
-            "name": "id",
+            "name": "deviceID",
             "in": "path",
             "schema": {
               "$ref": "#/components/schemas/Push.DeviceID"
@@ -14431,7 +14431,7 @@
         "operationId": "experimental.push.device.remove",
         "parameters": [
           {
-            "name": "id",
+            "name": "deviceID",
             "in": "path",
             "schema": {
               "$ref": "#/components/schemas/Push.DeviceID"
@@ -14473,7 +14473,7 @@
         "operationId": "experimental.push.device.update",
         "parameters": [
           {
-            "name": "id",
+            "name": "deviceID",
             "in": "path",
             "schema": {
               "$ref": "#/components/schemas/Push.DeviceID"
@@ -14521,11 +14521,11 @@
             }
           },
           "404": {
-            "description": "PushNotFoundError",
+            "description": "PushDeviceNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PushNotFoundErrorEncoded"
+                  "$ref": "#/components/schemas/PushDeviceNotFoundErrorEncoded"
                 }
               }
             }
@@ -14545,13 +14545,13 @@
         }
       }
     },
-    "/api/experimental/push/device/{id}/session/{sessionID}": {
+    "/api/experimental/push/device/{deviceID}/session/{sessionID}": {
       "put": {
         "tags": ["experimental"],
         "operationId": "experimental.push.device.session.set",
         "parameters": [
           {
-            "name": "id",
+            "name": "deviceID",
             "in": "path",
             "schema": {
               "$ref": "#/components/schemas/Push.DeviceID"
@@ -14607,11 +14607,11 @@
             }
           },
           "404": {
-            "description": "PushNotFoundError",
+            "description": "PushDeviceNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PushNotFoundErrorEncoded"
+                  "$ref": "#/components/schemas/PushDeviceNotFoundErrorEncoded"
                 }
               }
             }
@@ -14635,7 +14635,7 @@
         "operationId": "experimental.push.device.session.remove",
         "parameters": [
           {
-            "name": "id",
+            "name": "deviceID",
             "in": "path",
             "schema": {
               "$ref": "#/components/schemas/Push.DeviceID"
@@ -14677,11 +14677,11 @@
             }
           },
           "404": {
-            "description": "PushNotFoundError",
+            "description": "PushDeviceNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PushNotFoundErrorEncoded"
+                  "$ref": "#/components/schemas/PushDeviceNotFoundErrorEncoded"
                 }
               }
             }
@@ -24724,12 +24724,12 @@
         "required": ["paused"],
         "additionalProperties": false
       },
-      "PushNotFoundErrorEncoded": {
+      "PushDeviceNotFoundErrorEncoded": {
         "type": "object",
         "properties": {
           "_tag": {
             "type": "string",
-            "enum": ["PushNotFoundError"]
+            "enum": ["PushDeviceNotFoundError"]
           },
           "deviceID": {
             "type": "string"
@@ -27729,7 +27729,7 @@
             "$ref": "#/components/schemas/websearch.updated"
           },
           {
-            "$ref": "#/components/schemas/push.updated"
+            "$ref": "#/components/schemas/experimental.push.updated"
           },
           {
             "$ref": "#/components/schemas/artifact.updated"
@@ -28604,6 +28604,34 @@
         "required": ["id", "created", "type", "data"],
         "additionalProperties": false
       },
+      "experimental.push.updated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.push.updated"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "not": {
+              "type": "null"
+            }
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
       "filesystem.changed": {
         "type": "object",
         "properties": {
@@ -29445,34 +29473,6 @@
             },
             "required": ["info"],
             "additionalProperties": false
-          }
-        },
-        "required": ["id", "created", "type", "data"],
-        "additionalProperties": false
-      },
-      "push.updated": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "$ref": "#/components/schemas/Event.ID"
-          },
-          "created": {
-            "type": "number"
-          },
-          "metadata": {
-            "type": "object"
-          },
-          "type": {
-            "type": "string",
-            "enum": ["push.updated"]
-          },
-          "location": {
-            "$ref": "#/components/schemas/Location.Ref"
-          },
-          "data": {
-            "not": {
-              "type": "null"
-            }
           }
         },
         "required": ["id", "created", "type", "data"],

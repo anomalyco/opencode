@@ -199,11 +199,11 @@ impl Client {
         data,
         ExperimentalPushGetOutput
     );
-    endpoint!(" `PUT /api/experimental/push/device/:id` (`push.device.register`)", experimental_push_device_register, experimental_push_device_register_call, data, ExperimentalPushDeviceRegisterOutput, input: ExperimentalPushDeviceRegisterInput);
-    endpoint!(" `DELETE /api/experimental/push/device/:id` (`push.device.remove`)", experimental_push_device_remove, experimental_push_device_remove_call, empty, (), input: ExperimentalPushDeviceRemoveInput);
-    endpoint!(" `PATCH /api/experimental/push/device/:id` (`push.device.update`)", experimental_push_device_update, experimental_push_device_update_call, data, ExperimentalPushDeviceUpdateOutput, input: ExperimentalPushDeviceUpdateInput);
-    endpoint!(" `PUT /api/experimental/push/device/:id/session/:sessionID` (`push.device.session.set`)", experimental_push_device_session_set, experimental_push_device_session_set_call, data, ExperimentalPushDeviceSessionSetOutput, input: ExperimentalPushDeviceSessionSetInput);
-    endpoint!(" `DELETE /api/experimental/push/device/:id/session/:sessionID` (`push.device.session.remove`)", experimental_push_device_session_remove, experimental_push_device_session_remove_call, empty, (), input: ExperimentalPushDeviceSessionRemoveInput);
+    endpoint!(" `PUT /api/experimental/push/device/:deviceID` (`push.device.register`)", experimental_push_device_register, experimental_push_device_register_call, data, ExperimentalPushDeviceRegisterOutput, input: ExperimentalPushDeviceRegisterInput);
+    endpoint!(" `DELETE /api/experimental/push/device/:deviceID` (`push.device.remove`)", experimental_push_device_remove, experimental_push_device_remove_call, empty, (), input: ExperimentalPushDeviceRemoveInput);
+    endpoint!(" `PATCH /api/experimental/push/device/:deviceID` (`push.device.update`)", experimental_push_device_update, experimental_push_device_update_call, data, ExperimentalPushDeviceUpdateOutput, input: ExperimentalPushDeviceUpdateInput);
+    endpoint!(" `PUT /api/experimental/push/device/:deviceID/session/:sessionID` (`push.device.session.set`)", experimental_push_device_session_set, experimental_push_device_session_set_call, data, ExperimentalPushDeviceSessionSetOutput, input: ExperimentalPushDeviceSessionSetInput);
+    endpoint!(" `DELETE /api/experimental/push/device/:deviceID/session/:sessionID` (`push.device.session.remove`)", experimental_push_device_session_remove, experimental_push_device_session_remove_call, empty, (), input: ExperimentalPushDeviceSessionRemoveInput);
     endpoint!(" `PUT /api/experimental/push/session/:sessionID` (`push.session.set`)", experimental_push_session_set, experimental_push_session_set_call, data, ExperimentalPushSessionSetOutput, input: ExperimentalPushSessionSetInput);
     endpoint!(" `DELETE /api/experimental/push/session/:sessionID` (`push.session.remove`)", experimental_push_session_remove, experimental_push_session_remove_call, empty, (), input: ExperimentalPushSessionRemoveInput);
     endpoint!(" `PUT /api/experimental/push/settings` (`push.settings.set`)", experimental_push_settings_set, experimental_push_settings_set_call, data, ExperimentalPushSettingsSetOutput, input: ExperimentalPushSettingsSetInput);

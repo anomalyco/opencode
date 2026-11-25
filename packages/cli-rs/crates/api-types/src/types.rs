@@ -8765,19 +8765,19 @@ pub struct WebsearchUpdated {
 }
 
 /// Any value but `null`.
-pub type PushUpdatedData = crate::de::NotNull;
+pub type ExperimentalPushUpdatedData = crate::de::NotNull;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct PushUpdated {
+pub struct ExperimentalPushUpdated {
     pub id: EventID,
     #[serde(serialize_with = "crate::ser::number")]
     pub created: f64,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub metadata: Option<IndexMap<String, serde_json::Value>>,
-    pub r#type: tag::PushUpdated,
+    pub r#type: tag::ExperimentalPushUpdated,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location: Option<LocationRef>,
-    pub data: PushUpdatedData,
+    pub data: ExperimentalPushUpdatedData,
 }
 
 /// Any value but `null`.
@@ -9206,7 +9206,7 @@ pub enum V2Event {
     FormReplied(FormReplied),
     FormCancelled(FormCancelled),
     WebsearchUpdated(WebsearchUpdated),
-    PushUpdated(PushUpdated),
+    ExperimentalPushUpdated(ExperimentalPushUpdated),
     ArtifactUpdated(ArtifactUpdated),
     SessionStatus(SessionStatusUpdated),
     SessionIdle(SessionIdle),
@@ -9321,7 +9321,7 @@ impl V2Event {
             Some("form.replied") => raw.variant().map(Self::FormReplied),
             Some("form.cancelled") => raw.variant().map(Self::FormCancelled),
             Some("websearch.updated") => raw.variant().map(Self::WebsearchUpdated),
-            Some("push.updated") => raw.variant().map(Self::PushUpdated),
+            Some("experimental.push.updated") => raw.variant().map(Self::ExperimentalPushUpdated),
             Some("artifact.updated") => raw.variant().map(Self::ArtifactUpdated),
             Some("session.status") => raw.variant().map(Self::SessionStatus),
             Some("session.idle") => raw.variant().map(Self::SessionIdle),
@@ -9432,7 +9432,7 @@ impl V2Event {
             Self::FormReplied(value) => value.r#type.as_str(),
             Self::FormCancelled(value) => value.r#type.as_str(),
             Self::WebsearchUpdated(value) => value.r#type.as_str(),
-            Self::PushUpdated(value) => value.r#type.as_str(),
+            Self::ExperimentalPushUpdated(value) => value.r#type.as_str(),
             Self::ArtifactUpdated(value) => value.r#type.as_str(),
             Self::SessionStatus(value) => value.r#type.as_str(),
             Self::SessionIdle(value) => value.r#type.as_str(),
@@ -9541,7 +9541,7 @@ impl V2Event {
             Self::FormReplied(value) => value.id.as_str(),
             Self::FormCancelled(value) => value.id.as_str(),
             Self::WebsearchUpdated(value) => value.id.as_str(),
-            Self::PushUpdated(value) => value.id.as_str(),
+            Self::ExperimentalPushUpdated(value) => value.id.as_str(),
             Self::ArtifactUpdated(value) => value.id.as_str(),
             Self::SessionStatus(value) => value.id.as_str(),
             Self::SessionIdle(value) => value.id.as_str(),
@@ -9650,7 +9650,7 @@ impl V2Event {
             Self::FormReplied(value) => Some(value.created),
             Self::FormCancelled(value) => Some(value.created),
             Self::WebsearchUpdated(value) => Some(value.created),
-            Self::PushUpdated(value) => Some(value.created),
+            Self::ExperimentalPushUpdated(value) => Some(value.created),
             Self::ArtifactUpdated(value) => Some(value.created),
             Self::SessionStatus(value) => Some(value.created),
             Self::SessionIdle(value) => Some(value.created),
@@ -9758,7 +9758,7 @@ impl V2Event {
             Self::FormReplied(value) => value.metadata.as_ref(),
             Self::FormCancelled(value) => value.metadata.as_ref(),
             Self::WebsearchUpdated(value) => value.metadata.as_ref(),
-            Self::PushUpdated(value) => value.metadata.as_ref(),
+            Self::ExperimentalPushUpdated(value) => value.metadata.as_ref(),
             Self::ArtifactUpdated(value) => value.metadata.as_ref(),
             Self::SessionStatus(value) => value.metadata.as_ref(),
             Self::SessionIdle(value) => value.metadata.as_ref(),
@@ -9867,7 +9867,7 @@ impl V2Event {
             | Self::FormReplied(_)
             | Self::FormCancelled(_)
             | Self::WebsearchUpdated(_)
-            | Self::PushUpdated(_)
+            | Self::ExperimentalPushUpdated(_)
             | Self::ArtifactUpdated(_)
             | Self::SessionStatus(_)
             | Self::SessionIdle(_)
@@ -9976,7 +9976,7 @@ impl V2Event {
             | Self::FormReplied(_)
             | Self::FormCancelled(_)
             | Self::WebsearchUpdated(_)
-            | Self::PushUpdated(_)
+            | Self::ExperimentalPushUpdated(_)
             | Self::ArtifactUpdated(_)
             | Self::SessionStatus(_)
             | Self::SessionIdle(_)
@@ -10085,7 +10085,7 @@ impl V2Event {
             | Self::FormReplied(_)
             | Self::FormCancelled(_)
             | Self::WebsearchUpdated(_)
-            | Self::PushUpdated(_)
+            | Self::ExperimentalPushUpdated(_)
             | Self::ArtifactUpdated(_)
             | Self::SessionStatus(_)
             | Self::SessionIdle(_)
@@ -10196,7 +10196,7 @@ pub enum EventKind {
     FormReplied,
     FormCancelled,
     WebsearchUpdated,
-    PushUpdated,
+    ExperimentalPushUpdated,
     ArtifactUpdated,
     SessionStatus,
     SessionIdle,
@@ -10308,7 +10308,7 @@ impl EventKind {
             "form.replied" => Self::FormReplied,
             "form.cancelled" => Self::FormCancelled,
             "websearch.updated" => Self::WebsearchUpdated,
-            "push.updated" => Self::PushUpdated,
+            "experimental.push.updated" => Self::ExperimentalPushUpdated,
             "artifact.updated" => Self::ArtifactUpdated,
             "session.status" => Self::SessionStatus,
             "session.idle" => Self::SessionIdle,
@@ -10424,7 +10424,7 @@ impl V2Event {
             Self::FormReplied(_) => EventKind::FormReplied,
             Self::FormCancelled(_) => EventKind::FormCancelled,
             Self::WebsearchUpdated(_) => EventKind::WebsearchUpdated,
-            Self::PushUpdated(_) => EventKind::PushUpdated,
+            Self::ExperimentalPushUpdated(_) => EventKind::ExperimentalPushUpdated,
             Self::ArtifactUpdated(_) => EventKind::ArtifactUpdated,
             Self::SessionStatus(_) => EventKind::SessionStatus,
             Self::SessionIdle(_) => EventKind::SessionIdle,
@@ -11393,7 +11393,7 @@ pub type ExperimentalPushGetOutput = PushInfo;
 /// Input of `Client::experimental_push_device_register`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExperimentalPushDeviceRegisterInput {
-    pub id: PushDeviceID,
+    pub device_id: PushDeviceID,
     pub callback_url: String,
     pub expires_at: i64,
     pub public_key: String,
@@ -11414,13 +11414,13 @@ pub type ExperimentalPushDeviceRegisterOutput = PushRegistered;
 /// Input of `Client::experimental_push_device_remove`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalPushDeviceRemoveInput {
-    pub id: PushDeviceID,
+    pub device_id: PushDeviceID,
 }
 
 /// Input of `Client::experimental_push_device_update`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalPushDeviceUpdateInput {
-    pub id: PushDeviceID,
+    pub device_id: PushDeviceID,
     pub paused: Option<bool>,
     pub settings: Option<PushDeviceSettings>,
 }
@@ -11431,7 +11431,7 @@ pub type ExperimentalPushDeviceUpdateOutput = PushDevice;
 /// Input of `Client::experimental_push_device_session_set`.
 #[derive(Debug, Clone, PartialEq)]
 pub struct ExperimentalPushDeviceSessionSetInput {
-    pub id: PushDeviceID,
+    pub device_id: PushDeviceID,
     pub session_id: SessionID,
     pub level: PushLevel,
     pub until: Option<i64>,
@@ -11443,7 +11443,7 @@ pub type ExperimentalPushDeviceSessionSetOutput = PushBell;
 /// Input of `Client::experimental_push_device_session_remove`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalPushDeviceSessionRemoveInput {
-    pub id: PushDeviceID,
+    pub device_id: PushDeviceID,
     pub session_id: SessionID,
 }
 
@@ -13580,7 +13580,7 @@ impl crate::TaggedError for MachineNotFoundError {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct PushNotFoundError {
+pub struct PushDeviceNotFoundError {
     #[serde(rename = "_tag")]
     pub tag: String,
     #[serde(rename = "deviceID")]
@@ -13588,8 +13588,8 @@ pub struct PushNotFoundError {
     pub message: String,
 }
 
-impl crate::TaggedError for PushNotFoundError {
-    const TAG: &'static str = "PushNotFoundError";
+impl crate::TaggedError for PushDeviceNotFoundError {
+    const TAG: &'static str = "PushDeviceNotFoundError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -13820,13 +13820,13 @@ pub mod tag {
         CredentialUpdated = "credential.updated", Cron = "cron", Detail = "detail", Directory = "directory",
         Disabled = "disabled", Document = "document", Env = "env", Error = "error", Event = "event", Every = "every",
         ExperimentalJobUpdated = "experimental.job.updated", ExperimentalMcpEvent = "experimental.mcp.event",
-        Expired = "expired", External = "external", Failed = "failed", File = "file",
-        FilesystemChanged = "filesystem.changed", FormCancelled = "form.cancelled", FormCreated = "form.created",
-        FormReplied = "form.replied", Git = "git", Idle = "idle", Image = "image", Inline = "inline",
-        InstallationUpdateAvailable = "installation.update-available", InstallationUpdated = "installation.updated",
-        Integer = "integer", IntegrationUpdated = "integration.updated", Iroh = "iroh", Json = "json", Key = "key",
-        Local = "local", LocationShutdown = "location.shutdown", LocationSwitched = "location-switched",
-        LogSynced = "log.synced", McpResourcesChanged = "mcp.resources.changed",
+        ExperimentalPushUpdated = "experimental.push.updated", Expired = "expired", External = "external",
+        Failed = "failed", File = "file", FilesystemChanged = "filesystem.changed", FormCancelled = "form.cancelled",
+        FormCreated = "form.created", FormReplied = "form.replied", Git = "git", Idle = "idle", Image = "image",
+        Inline = "inline", InstallationUpdateAvailable = "installation.update-available",
+        InstallationUpdated = "installation.updated", Integer = "integer", IntegrationUpdated = "integration.updated",
+        Iroh = "iroh", Json = "json", Key = "key", Local = "local", LocationShutdown = "location.shutdown",
+        LocationSwitched = "location-switched", LogSynced = "log.synced", McpResourcesChanged = "mcp.resources.changed",
         McpStatusChanged = "mcp.status.changed", ModelSwitched = "model-switched", ModelUpdated = "model.updated",
         ModelsDevRefreshed = "models-dev.refreshed", Move = "move", Multiselect = "multiselect", Native = "native",
         NeedsAuth = "needs_auth", None = "none", Number = "number", Oauth = "oauth", Package = "package",
@@ -13835,13 +13835,13 @@ pub mod tag {
         PersistentPtyUpdated = "persistent-pty.updated", PluginUpdated = "plugin.updated", Predicate = "predicate",
         ProjectUpdated = "project.updated", Prompt = "prompt", ProviderUpdated = "provider.updated",
         PtyCreated = "pty.created", PtyDeleted = "pty.deleted", PtyExited = "pty.exited", PtyUpdated = "pty.updated",
-        PushUpdated = "push.updated", Reasoning = "reasoning", ReferenceUpdated = "reference.updated",
-        Remote = "remote", Retry = "retry", Running = "running", Score = "score", Sdk = "sdk",
-        ServerConnected = "server.connected", SessionAgentSelected = "session.agent.selected",
-        SessionArchived = "session.archived", SessionCompactionDelta = "session.compaction.delta",
-        SessionCompactionEnded = "session.compaction.ended", SessionCompactionFailed = "session.compaction.failed",
-        SessionCompactionStarted = "session.compaction.started", SessionCreated = "session.created",
-        SessionDeleted = "session.deleted", SessionExecutionFailed = "session.execution.failed",
+        Reasoning = "reasoning", ReferenceUpdated = "reference.updated", Remote = "remote", Retry = "retry",
+        Running = "running", Score = "score", Sdk = "sdk", ServerConnected = "server.connected",
+        SessionAgentSelected = "session.agent.selected", SessionArchived = "session.archived",
+        SessionCompactionDelta = "session.compaction.delta", SessionCompactionEnded = "session.compaction.ended",
+        SessionCompactionFailed = "session.compaction.failed", SessionCompactionStarted = "session.compaction.started",
+        SessionCreated = "session.created", SessionDeleted = "session.deleted",
+        SessionExecutionFailed = "session.execution.failed",
         SessionExecutionInterrupted = "session.execution.interrupted",
         SessionExecutionStarted = "session.execution.started",
         SessionExecutionSucceeded = "session.execution.succeeded", SessionForked = "session.forked",

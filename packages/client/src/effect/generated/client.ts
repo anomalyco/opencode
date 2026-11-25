@@ -1815,7 +1815,7 @@ const EndpointExperimentalPushDeviceRegister =
   (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceRegisterInput) =>
     preserveEffect<ExperimentalPushDeviceRegisterOutput>()(
       raw["push.device.register"]({
-        params: { id: input["id"] },
+        params: { deviceID: input["deviceID"] },
         payload: {
           callbackURL: input["callbackURL"],
           expiresAt: input["expiresAt"],
@@ -1833,14 +1833,14 @@ const EndpointExperimentalPushDeviceRegister =
 const EndpointExperimentalPushDeviceRemove =
   (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceRemoveInput) =>
     preserveEffect<ExperimentalPushDeviceRemoveOutput>()(
-      raw["push.device.remove"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError)),
+      raw["push.device.remove"]({ params: { deviceID: input["deviceID"] } }).pipe(Effect.mapError(mapClientError)),
     )
 
 const EndpointExperimentalPushDeviceUpdate =
   (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceUpdateInput) =>
     preserveEffect<ExperimentalPushDeviceUpdateOutput>()(
       raw["push.device.update"]({
-        params: { id: input["id"] },
+        params: { deviceID: input["deviceID"] },
         payload: { paused: input["paused"], settings: input["settings"] },
       }).pipe(
         Effect.mapError(mapClientError),
@@ -1852,7 +1852,7 @@ const EndpointExperimentalPushDeviceSessionSet =
   (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceSessionSetInput) =>
     preserveEffect<ExperimentalPushDeviceSessionSetOutput>()(
       raw["push.device.session.set"]({
-        params: { id: input["id"], sessionID: input["sessionID"] },
+        params: { deviceID: input["deviceID"], sessionID: input["sessionID"] },
         payload: { level: input["level"], until: input["until"] },
       }).pipe(
         Effect.mapError(mapClientError),
@@ -1863,9 +1863,9 @@ const EndpointExperimentalPushDeviceSessionSet =
 const EndpointExperimentalPushDeviceSessionRemove =
   (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceSessionRemoveInput) =>
     preserveEffect<ExperimentalPushDeviceSessionRemoveOutput>()(
-      raw["push.device.session.remove"]({ params: { id: input["id"], sessionID: input["sessionID"] } }).pipe(
-        Effect.mapError(mapClientError),
-      ),
+      raw["push.device.session.remove"]({
+        params: { deviceID: input["deviceID"], sessionID: input["sessionID"] },
+      }).pipe(Effect.mapError(mapClientError)),
     )
 
 const EndpointExperimentalPushSessionSet =

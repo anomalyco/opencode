@@ -1799,12 +1799,12 @@ pub fn experimental_push_get() -> Call<ExperimentalPushGetOutput> {
     Call::new("GET", "/api/experimental/push".to_owned(), Reply::Data, 200, &[400, 401])
 }
 
-/// `PUT /api/experimental/push/device/:id` (`push.device.register`)
+/// `PUT /api/experimental/push/device/:deviceID` (`push.device.register`)
 pub fn experimental_push_device_register(
     input: &ExperimentalPushDeviceRegisterInput,
 ) -> Call<ExperimentalPushDeviceRegisterOutput> {
     let mut call = Call::new("PUT", String::new(), Reply::Data, 200, &[400, 401]);
-    call.path = format!("/api/experimental/push/device/{}", call.param(&input.id));
+    call.path = format!("/api/experimental/push/device/{}", call.param(&input.device_id));
     call.object();
     call.field("callbackURL", &input.callback_url);
     call.field("expiresAt", &input.expires_at);
@@ -1817,19 +1817,19 @@ pub fn experimental_push_device_register(
     call
 }
 
-/// `DELETE /api/experimental/push/device/:id` (`push.device.remove`)
+/// `DELETE /api/experimental/push/device/:deviceID` (`push.device.remove`)
 pub fn experimental_push_device_remove(input: &ExperimentalPushDeviceRemoveInput) -> Call<()> {
     let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401]);
-    call.path = format!("/api/experimental/push/device/{}", call.param(&input.id));
+    call.path = format!("/api/experimental/push/device/{}", call.param(&input.device_id));
     call
 }
 
-/// `PATCH /api/experimental/push/device/:id` (`push.device.update`)
+/// `PATCH /api/experimental/push/device/:deviceID` (`push.device.update`)
 pub fn experimental_push_device_update(
     input: &ExperimentalPushDeviceUpdateInput,
 ) -> Call<ExperimentalPushDeviceUpdateOutput> {
     let mut call = Call::new("PATCH", String::new(), Reply::Data, 200, &[400, 401, 404]);
-    call.path = format!("/api/experimental/push/device/{}", call.param(&input.id));
+    call.path = format!("/api/experimental/push/device/{}", call.param(&input.device_id));
     call.object();
     if let Some(value) = &input.paused {
         call.field("paused", value);
@@ -1840,13 +1840,16 @@ pub fn experimental_push_device_update(
     call
 }
 
-/// `PUT /api/experimental/push/device/:id/session/:sessionID` (`push.device.session.set`)
+/// `PUT /api/experimental/push/device/:deviceID/session/:sessionID` (`push.device.session.set`)
 pub fn experimental_push_device_session_set(
     input: &ExperimentalPushDeviceSessionSetInput,
 ) -> Call<ExperimentalPushDeviceSessionSetOutput> {
     let mut call = Call::new("PUT", String::new(), Reply::Data, 200, &[400, 401, 404]);
-    call.path =
-        format!("/api/experimental/push/device/{}/session/{}", call.param(&input.id), call.param(&input.session_id));
+    call.path = format!(
+        "/api/experimental/push/device/{}/session/{}",
+        call.param(&input.device_id),
+        call.param(&input.session_id)
+    );
     call.object();
     call.field("level", &input.level);
     if let Some(value) = &input.until {
@@ -1855,11 +1858,14 @@ pub fn experimental_push_device_session_set(
     call
 }
 
-/// `DELETE /api/experimental/push/device/:id/session/:sessionID` (`push.device.session.remove`)
+/// `DELETE /api/experimental/push/device/:deviceID/session/:sessionID` (`push.device.session.remove`)
 pub fn experimental_push_device_session_remove(input: &ExperimentalPushDeviceSessionRemoveInput) -> Call<()> {
     let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401, 404]);
-    call.path =
-        format!("/api/experimental/push/device/{}/session/{}", call.param(&input.id), call.param(&input.session_id));
+    call.path = format!(
+        "/api/experimental/push/device/{}/session/{}",
+        call.param(&input.device_id),
+        call.param(&input.session_id)
+    );
     call
 }
 
@@ -3106,7 +3112,7 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
         "experimental.push.get" => Some((|| Ok(experimental_push_get().cast()))()),
         "experimental.push.device.register" => Some((|| {
             Ok(experimental_push_device_register(&ExperimentalPushDeviceRegisterInput {
-                id: field(input, "id")?,
+                device_id: field(input, "deviceID")?,
                 callback_url: field(input, "callbackURL")?,
                 expires_at: field(input, "expiresAt")?,
                 public_key: field(input, "publicKey")?,
@@ -3117,11 +3123,14 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
             .cast())
         })()),
         "experimental.push.device.remove" => Some((|| {
-            Ok(experimental_push_device_remove(&ExperimentalPushDeviceRemoveInput { id: field(input, "id")? }).cast())
+            Ok(experimental_push_device_remove(&ExperimentalPushDeviceRemoveInput {
+                device_id: field(input, "deviceID")?,
+            })
+            .cast())
         })()),
         "experimental.push.device.update" => Some((|| {
             Ok(experimental_push_device_update(&ExperimentalPushDeviceUpdateInput {
-                id: field(input, "id")?,
+                device_id: field(input, "deviceID")?,
                 paused: field(input, "paused")?,
                 settings: field(input, "settings")?,
             })
@@ -3129,7 +3138,7 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
         })()),
         "experimental.push.device.session.set" => Some((|| {
             Ok(experimental_push_device_session_set(&ExperimentalPushDeviceSessionSetInput {
-                id: field(input, "id")?,
+                device_id: field(input, "deviceID")?,
                 session_id: field(input, "sessionID")?,
                 level: field(input, "level")?,
                 until: field(input, "until")?,
@@ -3138,7 +3147,7 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
         })()),
         "experimental.push.device.session.remove" => Some((|| {
             Ok(experimental_push_device_session_remove(&ExperimentalPushDeviceSessionRemoveInput {
-                id: field(input, "id")?,
+                device_id: field(input, "deviceID")?,
                 session_id: field(input, "sessionID")?,
             })
             .cast())
