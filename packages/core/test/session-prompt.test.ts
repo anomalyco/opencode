@@ -401,6 +401,29 @@ describe("Session.prompt", () => {
     }),
   )
 
+  it.effect("rejects staging a revert while the session is executing", () =>
+    Effect.gen(function* () {
+      yield* setup
+      const session = yield* Session.Service
+
+      const boundary = yield* session.prompt({
+        sessionID,
+        text: "boundary",
+        resume: false,
+      })
+      activeSessions.add(sessionID)
+      expect(yield* session.revert.stage({ sessionID, messageID: boundary.id }).pipe(Effect.flip)).toEqual(
+        new Session.BusyError({ sessionID }),
+      )
+      activeSessions.delete(sessionID)
+
+      const reverted = yield* session.revert.stage({ sessionID, messageID: boundary.id })
+      expect(reverted.messageID).toBe(boundary.id)
+      yield* session.revert.clear(sessionID)
+      expect((yield* session.get(sessionID)).revert).toBeUndefined()
+    }).pipe(Effect.ensuring(Effect.sync(() => activeSessions.clear()))),
+  )
+
   it.effect("holds synthetic input behind a staged revert and discards it when committed", () =>
     Effect.gen(function* () {
       yield* setup

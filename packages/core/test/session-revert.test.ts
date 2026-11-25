@@ -14,6 +14,7 @@ import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
+import { MessageNotFoundError } from "@opencode/core/session/error"
 import { SessionExecution } from "@opencode/core/session/execution"
 import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionMessage } from "@opencode/core/session/message"
@@ -29,7 +30,7 @@ import { testEffect } from "./lib/effect"
 
 const it = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, SessionProjector.node, Session.node, LocationServiceMap.node]),
+    LayerNode.group([Database.node, Bus.node, SessionProjector.node, Session.node, SessionInbox.node, LocationServiceMap.node]),
     [
       Bus.node.replace(Bus.configured({ persist: true })),
       Global.node.replace(tempGlobalLayer),
@@ -38,6 +39,119 @@ const it = testEffect(
     ],
   ),
 )
+
+describe("Session.revert admitted boundaries", () => {
+  const admitted = (id: SessionMessage.ID) => Database.Service.use(({ db }) => SessionInbox.find(db, id))
+
+  const setupSession = Effect.fn(function* (tmp: { path: string }) {
+    const directory = path.join(tmp.path, "project")
+    yield* Effect.promise(async () => {
+      await fs.mkdir(directory)
+      await Bun.write(path.join(directory, "file.txt"), "Content.\n")
+      await $`git init -q`.cwd(directory).quiet()
+      await $`git -c core.fsmonitor=false add .`.cwd(directory).quiet()
+    })
+    const session = yield* Session.Service
+    const created = yield* session.create({ location: { directory: AbsolutePath.make(directory) } })
+    return { session, created }
+  })
+
+  it.live("stages an admitted-but-unpromoted user message with no file restore", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const { session, created } = yield* setupSession(tmp)
+
+      const prompt = yield* session.prompt({ sessionID: created.id, text: "Undo me", resume: false })
+      expect(yield* session.messages({ sessionID: created.id })).toEqual([])
+      expect(yield* admitted(prompt.id)).toMatchObject({ id: prompt.id, type: "user" })
+
+      const reverted = yield* session.revert.stage({ sessionID: created.id, messageID: prompt.id })
+      expect(reverted.messageID).toBe(prompt.id)
+      expect(reverted.files).toEqual([])
+      // Staging must not promote the input early.
+      expect(yield* admitted(prompt.id)).toMatchObject({ id: prompt.id, type: "user" })
+      expect(yield* session.messages({ sessionID: created.id })).toEqual([])
+    }),
+  )
+
+  it.live("stages a promoted user message as before", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const { session, created } = yield* setupSession(tmp)
+      const database = yield* Database.Service
+      const bus = yield* Bus.Service
+
+      const prompt = yield* session.prompt({ sessionID: created.id, text: "Undo me", resume: false })
+      yield* SessionInbox.promote(database.db, bus, created.id, "steer")
+
+      const reverted = yield* session.revert.stage({ sessionID: created.id, messageID: prompt.id })
+      expect(reverted.messageID).toBe(prompt.id)
+      expect(yield* admitted(prompt.id)).toBeUndefined()
+      expect((yield* session.messages({ sessionID: created.id })).map((message) => message.id)).toContain(
+        prompt.id,
+      )
+    }),
+  )
+
+  it.live("commits a staged revert on an unpromoted boundary and drops only the inbox suffix", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const { session, created } = yield* setupSession(tmp)
+
+      const earlier = yield* session.prompt({ sessionID: created.id, text: "Keep me", resume: false })
+      const boundary = yield* session.prompt({ sessionID: created.id, text: "Undo me", resume: false })
+      const later = yield* session.prompt({ sessionID: created.id, text: "Drop me", resume: false })
+      yield* session.revert.stage({ sessionID: created.id, messageID: boundary.id })
+
+      yield* session.revert.commit(created.id)
+
+      expect((yield* session.get(created.id)).revert).toBeUndefined()
+      expect(yield* admitted(earlier.id)).toMatchObject({ id: earlier.id })
+      expect(yield* admitted(boundary.id)).toBeUndefined()
+      expect(yield* admitted(later.id)).toBeUndefined()
+      expect(yield* session.messages({ sessionID: created.id })).toEqual([])
+    }),
+  )
+
+  it.live("rejects a compaction inbox item as a revert boundary", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const { session, created } = yield* setupSession(tmp)
+      const inbox = yield* SessionInbox.Service
+
+      const compaction = yield* inbox.admitCompaction({
+        id: SessionMessage.ID.create(),
+        sessionID: created.id,
+        delivery: "queue",
+      })
+      expect(yield* admitted(compaction.id)).toMatchObject({ type: "compaction" })
+
+      expect(
+        yield* session.revert
+          .stage({ sessionID: created.id, messageID: compaction.id })
+          .pipe(Effect.flip),
+      ).toEqual(new MessageNotFoundError({ sessionID: created.id, messageID: compaction.id }))
+    }),
+  )
+
+  it.live("does not touch another session's inbox entries when committing", () =>
+    Effect.gen(function* () {
+      const tmpA = yield* tmpdirScoped()
+      const tmpB = yield* tmpdirScoped()
+      const { session, created: first } = yield* setupSession(tmpA)
+      const { created: second } = yield* setupSession(tmpB)
+
+      const kept = yield* session.prompt({ sessionID: second.id, text: "Other session", resume: false })
+      const boundary = yield* session.prompt({ sessionID: first.id, text: "Undo me", resume: false })
+      yield* session.revert.stage({ sessionID: first.id, messageID: boundary.id })
+
+      yield* session.revert.commit(first.id)
+
+      expect(yield* admitted(kept.id)).toMatchObject({ id: kept.id })
+      expect(yield* admitted(boundary.id)).toBeUndefined()
+    }),
+  )
+})
 
 describe("Session.revert files", () => {
   it.live(
