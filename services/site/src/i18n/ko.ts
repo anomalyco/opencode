@@ -192,7 +192,7 @@ export const dict = {
   "go.faq.a5.grokRetention": "ZDR은 저장된 데이터에 의존하는 중요한 API 기능(상태 저장형 Responses API, Files and Collections, Batch API 포함)을 비활성화합니다.",
   "go.faq.a5.gptRetention": "모든 API 기능 사용에 대해 악용 모니터링 로그가 생성되며 최대 30일 동안 보존됩니다.",
   "go.faq.a5.learnMore": "자세히 알아보기",
-  "go.faq.a5.deepseekRetention": "ZDR 계약은 매월 갱신됩니다. 현재 계약은 2026년 11월 30일까지 유효합니다.",
+  "go.faq.a5.deepseekRetention": "ZDR 계약은 매월 갱신됩니다. 현재 계약은 2026년 12월 31일까지 유효합니다.",
   "go.faq.q6": "크레딧을 충전할 수 있나요?",
   "go.faq.a6": "사용량이 더 필요한 경우 계정에서 크레딧을 충전할 수 있습니다.",
   "go.faq.q7": "취소할 수 있나요?",
