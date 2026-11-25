@@ -98,7 +98,8 @@ export const parseAddress = (value: string): Address | undefined => {
   return file && { id: ID.make(id), file, uri: uri(id, file) }
 }
 
-export const toModelOutput = (skill: Info, files: ReadonlyArray<string>, location = locate(skill)) => {
+export const toModelOutput = (skill: Info, files: ReadonlyArray<string>) => {
+  const location = locate(skill)
   const directory = location._tag === "virtual" ? uri(skill.id) : location.directory
   return [
     `<skill_content name="${skill.name}">`,
@@ -120,19 +121,19 @@ export const toModelOutput = (skill: Info, files: ReadonlyArray<string>, locatio
 export const prepare = Effect.fn("Skill.prepare")(function* (
   fs: FSUtil.Interface,
   skill: Info,
-  location: Location,
   virtualFiles?: ReadonlyArray<FilePath>,
 ) {
+  const location = locate(skill)
   if (location._tag === "virtual") {
     const directory = uri(skill.id)
     const files = (virtualFiles ?? [])
-      .filter((file) => file !== "SKILL.md")
+      .filter((file) => file !== manifest)
       .toSorted()
       .slice(0, 10)
       .map((file) => uri(skill.id, file))
     return {
       directory,
-      output: toModelOutput(skill, files, location),
+      output: toModelOutput(skill, files),
     }
   }
   const directory = location.directory
@@ -151,7 +152,7 @@ export const prepare = Effect.fn("Skill.prepare")(function* (
       : []
   return {
     directory,
-    output: toModelOutput(skill, files, location),
+    output: toModelOutput(skill, files),
   }
 })
 
@@ -189,8 +190,6 @@ export interface Interface extends State.Transformable<Editor> {
   readonly content: (id: ID) => Effect.Effect<string, LoadError>
   /** Paths of the skill's virtual files besides SKILL.md. */
   readonly files: (id: ID) => Effect.Effect<ReadonlyArray<FilePath> | undefined>
-  /** Where the skill's files live. */
-  readonly location: (id: ID) => Effect.Effect<Location | undefined>
   /**
    * One file of a skill by its path relative to the skill's folder, loaded when it isn't inline. `SKILL.md` is the
    * body without frontmatter. Any path that isn't one of the skill's files is not found.
@@ -275,11 +274,6 @@ const layer = Layer.effect(
       files: Effect.fn("Skill.files")(function* (id) {
         const entry = state.get().entries.get(id)
         return entry && Array.from(entry.files.keys())
-      }),
-      location: Effect.fn("Skill.location")(function* (id) {
-        // Worked out from `path` on each call, since plugins can change `path` on the skill they're given.
-        const entry = state.get().entries.get(id)
-        return entry && locate(entry.info)
       }),
       read: Effect.fn("Skill.read")(function* (id, file) {
         const entry = state.get().entries.get(id)

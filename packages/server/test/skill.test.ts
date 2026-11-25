@@ -46,6 +46,11 @@ it.live("lists configured skills and reads their files", () =>
     const missingFile = yield* file("demo", "other.md")
     expect(missingFile.status).toBe(404)
     expect(yield* Effect.promise(() => missingFile.json())).toMatchObject({ _tag: "FileNotFoundError" })
+    for (const unsafe of ["..%2Fsecret", "%ZZ"]) {
+      const refused = yield* file("demo", unsafe)
+      expect(refused.status).toBe(404)
+      expect(yield* Effect.promise(() => refused.json())).toMatchObject({ _tag: "FileNotFoundError" })
+    }
     const missingSkill = yield* file("missing", "SKILL.md")
     expect(missingSkill.status).toBe(404)
     expect(yield* Effect.promise(() => missingSkill.json())).toMatchObject({ _tag: "SkillNotFoundError" })

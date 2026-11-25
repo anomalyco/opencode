@@ -69,7 +69,11 @@ const it = testEffect(
 const DEPLOY = "---\nname: deploy\ndescription: Deploy the app\n---\n# Deploy\n\nRun scripts/run.sh.\n"
 const deploy = { "SKILL.md": DEPLOY, "scripts/run.sh": "echo run" }
 const id = Skill.ID.make("team:deploy")
-const script = Skill.parseFilePath("scripts/run.sh") ?? Skill.manifest
+const script = (() => {
+  const parsed = Skill.parseFilePath("scripts/run.sh")
+  if (!parsed) throw new Error("scripts/run.sh should be a safe skill file path")
+  return parsed
+})()
 
 /**
  * A Streamable HTTP MCP server publishing skills through the SDK's skills extension. Keys are skill folders below

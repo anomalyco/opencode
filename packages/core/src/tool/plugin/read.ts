@@ -77,7 +77,7 @@ export const Plugin = {
                 if (!parsed) return yield* new ToolFailure({ message: `File not found: ${input.path}` })
                 const id = parsed.id
                 const skill = yield* skills.get(id)
-                if (!skill || (yield* skills.location(id))?._tag !== "virtual")
+                if (!skill || Skill.locate(skill)._tag !== "virtual")
                   return yield* new ToolFailure({ message: `File not found: ${input.path}` })
                 const files = [Skill.manifest, ...((yield* skills.files(id)) ?? [])]
                 yield* permission.assert({

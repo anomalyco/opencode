@@ -42,9 +42,10 @@ describe("Skill.parseAddress", () => {
   test("parses skill:// paths into an ID, a file and the canonical URI", () => {
     const address = Skill.parseAddress("skill://docs:pdf/references/FORMS.md")
     expect(address?.id).toBe(Skill.ID.make("docs:pdf"))
-    expect(address?.file).toBe(file("references/FORMS.md"))
+    expect(String(address?.file)).toBe("references/FORMS.md")
     expect(address?.uri).toBe("skill://docs:pdf/references/FORMS.md")
     expect(Skill.parseAddress("skill://docs:pdf/references/")?.uri).toBe("skill://docs:pdf/references")
+    expect(Skill.parseAddress("skill://docs:pdf/")?.uri).toBe("skill://docs:pdf")
     const folder = Skill.parseAddress("skill://docs:pdf")
     expect(folder?.file).toBeUndefined()
     expect(folder?.uri).toBe("skill://docs:pdf")
@@ -64,8 +65,20 @@ describe("Skill.parseAddress", () => {
 
 describe("Skill.parseFilePath", () => {
   test("accepts paths inside a skill's folder and nothing else", () => {
-    expect(Skill.parseFilePath("references/FORMS.md")).toBe(file("references/FORMS.md"))
-    for (const value of ["", "../secret", "a/../../b", "/etc/passwd", "C:\\x", "https://x/y", "a\\b"])
+    expect(String(Skill.parseFilePath("references/FORMS.md"))).toBe("references/FORMS.md")
+    for (const value of [
+      "",
+      ".",
+      "../secret",
+      "a/../../b",
+      "%2e%2e/x",
+      "a#b",
+      "a?b",
+      "/etc/passwd",
+      "C:\\x",
+      "https://x/y",
+      "a\\b",
+    ])
       expect(Skill.parseFilePath(value)).toBeUndefined()
   })
 })
@@ -283,16 +296,16 @@ describe("Skill", () => {
     }),
   )
 
-  it.effect("follows the skill's path for where its files live, however the path changes", () =>
+  it.effect("uses content a plugin sets on a lazy skill instead of loading it", () =>
     Effect.gen(function* () {
       const skill = yield* Skill.Service
-      const id = Skill.ID.make("moving")
       yield* skill.transform((editor) => {
-        editor.add({ ...info("moving", "Moving"), path: AbsolutePath.make(Skill.uri("moving", "SKILL.md")) })
-        const current = editor.get("moving")
-        if (current) current.path = AbsolutePath.make("/skills/moving/SKILL.md")
+        editor.add({ ...info("remote", "Remote"), content: Effect.die("loaded") })
+        editor.update("remote", (draft) => {
+          draft.content = "# Set by a plugin"
+        })
       })
-      expect(yield* skill.location(id)).toEqual({ _tag: "disk", directory: "/skills/moving" })
+      expect(yield* skill.content(Skill.ID.make("remote"))).toBe("# Set by a plugin")
     }),
   )
 
@@ -337,7 +350,6 @@ describe("Skill", () => {
         const prepared = yield* Skill.prepare(
           { ...fs, scan: () => Effect.die(new Error("unexpected disk scan")) },
           virtual,
-          Skill.locate(virtual),
           files,
         )
         expect(prepared).toEqual({

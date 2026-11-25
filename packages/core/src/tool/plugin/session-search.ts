@@ -73,10 +73,12 @@ export const Plugin = {
           output: SessionSearch.SearchOutput,
           options: { namespace: "opencode.session", codemode: true },
           execute: (input) =>
-            search.search({ ...input, projectID: input.scope === "all" ? undefined : ctx.location.project.id }).pipe(
-              Effect.map((output) => ({ output })),
-              Effect.mapError(failure),
-            ),
+            search
+              .search({ ...input, projectID: input.scope === "all" ? undefined : ctx.location.project.id })
+              .pipe(
+                Effect.map((output) => ({ output })),
+                Effect.mapError(failure),
+              ),
         })
         editor.add({
           name: "read",
