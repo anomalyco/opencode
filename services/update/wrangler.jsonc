@@ -30,6 +30,13 @@
       "migrations_dir": "migrations",
     },
   ],
+  "kv_namespaces": [
+    {
+      "binding": "MANIFESTS",
+      // Replace with the namespace id from `wrangler kv namespace create MANIFESTS` before deploying.
+      "id": "REPLACE_WITH_KV_NAMESPACE_ID",
+    },
+  ],
   "observability": {
     "enabled": true,
   },

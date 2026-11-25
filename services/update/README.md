@@ -1,6 +1,7 @@
 # OpenCode Update
 
-The update Worker serves all selected artifacts for a channel.
+The update Worker serves all selected artifacts for a channel from Cloudflare KV manifests
+written at publish time.
 
 ```sh
 curl 'https://opencode.ai/update/api/latest'
@@ -8,7 +9,23 @@ curl 'https://opencode.ai/update/api/latest/cli'
 curl 'https://opencode.ai/update/api/latest/cli/npm'
 ```
 
-The Worker serves only `opencode.ai/update/*`; any other host or path returns 404.
+The Worker serves only `opencode.ai/update/*` (and `dev.opencode.ai/update/*`); any other host
+or path returns 404. `HEAD` lookups on `/update/api/*` answer with the same status and headers
+as `GET`.
+
+## Architecture
+
+- **Reads (`GET` / `HEAD /update/api/*`):** Read only from the `MANIFESTS` KV namespace behind
+  a 60-second per-isolate settled-value cache (bounded to 1,000 entries, no in-flight promise
+  sharing). The read path never touches D1.
+  - Per-distribution manifest key: `manifest:<channel>/<name>/<distribution>` containing
+    `{ active, minimum? }` where each entry stores `{ version, metadata, time_created, time_updated }`.
+  - Per-channel index key: `index:<channel>` containing `{ entries: [{ name, distribution }] }`
+    sorted by `(name, distribution)` for `/api/<channel>` and `/api/<channel>/<name>` listings.
+- **Writes (`POST /update/api/publish`):** Authenticated via GitHub Actions OIDC. Writes the
+  release row to D1 (`DB`) for release history and authoritative active/minimum state, then writes
+  the updated distribution manifest and channel index to KV. If a KV write fails, publish returns
+  500 so the release workflow retries cleanly.
 
 ## Desktop update feeds
 
@@ -21,42 +38,18 @@ curl 'https://opencode.ai/update/api/beta/desktop/opencode/latest-mac.yml'
 Use `latest.yml` for Windows, `latest-mac.yml` for macOS, `latest-linux.yml` for Linux x64,
 and `latest-linux-arm64.yml` for Linux ARM64. The distribution selects the stored download
 URLs (`opencode` or `github`). Each manifest includes the selected artifact's version,
-file URLs, SHA-512 checksums, sizes, and release date. Existing minimum-version selection
-and `current`/User-Agent handling also apply to these feeds.
-
-## Channel rollouts
-
-Set each channel's rollout duration in hours on the admin page. All channels default
-to `0` (immediate); fractional hours are supported. For example, `6` makes a release
-available to roughly half of IPs after three hours and all IPs after six hours.
-
-Eligibility uses the original publication time (`time_created`) and a SHA-256 hash
-of the channel and Cloudflare's `CF-Connecting-IP`. Each IP keeps the same rollout
-position across releases in that channel. Requests without this header wait for
-the full duration. The retired `next` channel is not configurable; `/api/next`
-remains a compatibility alias for `/api/beta`, including its rollout settings.
-
-Until the active release is eligible, callers receive the newest eligible artifact
-published before it, for the same name and distribution. This also handles overlapping
-rollouts. Earlier inactive releases can be fallbacks, including manually deactivated
-releases; releases newer than the active release cannot. If no eligible artifact
-exists, it is omitted from listings and individual artifact requests return 404.
-
-Minimum releases bypass rollout for clients that need them, and identified clients
-are not sent a fallback below their configured minimum. Rollout applies to all JSON
-endpoints and desktop manifests. Responses, including unavailable artifacts, are not cached.
-
-Duration changes apply immediately to existing releases. Manual activation uses the
-original publication time too; set the duration to `0` to make it immediate.
-Apply the `0004_channel_rollout.sql` migration before deploying.
+file URLs, SHA-512 checksums, sizes, and release date. Minimum-version selection
+and `current`/User-Agent handling also apply to these feeds. Other fourth-segment paths look up
+`metadata.files[filename]` and return a `302` redirect to the file URL.
 
 ## Minimum releases
 
-Each `latest` name/distribution can mark one retained artifact as `minimum`, independently
-of its `active` artifact. Set or clear it from the admin page. Publishing a new active
-release preserves the minimum marker. Preview build numbers reset, so `dev` and `beta`
-cannot set a minimum and lookups ignore any existing preview minimum; the admin page
-still lets you clear one.
+Each `latest` name/distribution can mark one release as `minimum`, independently of its
+`active` artifact. Pass `"minimum": true` in the `POST /update/api/publish` payload to set the
+published artifact as the minimum (requires `channel: "latest"` and a comparable semver version),
+omit `minimum` on subsequent publishes to preserve the existing minimum, or pass `"minimum": false`
+to clear it. Preview build numbers reset, so `dev` and `beta` cannot set a minimum and lookups
+ignore any existing non-`latest` minimum.
 
 Clients send their running version as `?current=<version>` and use the CLI's default
 `User-Agent: opencode/<channel>/<version>/cli`. When `current` is absent, the service
@@ -65,11 +58,10 @@ The caller's channel comes from the default User-Agent, or from a preview versio
 such as `0.0.0-beta-18955` when that channel is absent. If an identified caller channel
 differs from the requested channel, the service serves the active release without
 applying the minimum. Historical `next` and `beta` count as the same channel.
-A caller below the minimum receives that exact
-artifact; callers at or above it receive the active artifact. An unparseable caller
-version receives the minimum. Requests with neither version source receive the active
-artifact. All three public API paths apply the same selection and use `Cache-Control:
-no-store` because responses can depend on the User-Agent.
+A caller below the minimum receives that exact artifact; callers at or above it receive the active
+artifact. An unparseable caller version receives the minimum. Requests with neither version source
+receive the active artifact. All public API paths apply the same selection and use
+`Cache-Control: no-store` because responses can depend on the User-Agent.
 
 Version comparison uses semver, normalizing preview run numbers to numeric prerelease
 identifiers and historical `next` versions to `beta`. The retired `/api/next`
@@ -78,12 +70,6 @@ channel transparently resolves to `beta` for older clients.
 Choose a minimum that older clients can install and that can itself consume the active
 release. For the CLI package migration, retain a package-aware release published as
 `@opencode-ai/cli` as the minimum before activating releases under `@opencode/cli`.
-
-The admin pages are protected by the `update-admin-production` Cloudflare Access application
-on `opencode.ai/update/admin*`. The Worker also verifies the Access JWT
-(`Cf-Access-Jwt-Assertion` or the `CF_Authorization` cookie) against that application's
-audience on every admin route and returns 403 without a valid one. Admin mutations log
-the authenticated email.
 
 The Worker has `workers_dev` and preview URLs disabled; it is exposed only through the
 `/update` routes.
@@ -94,8 +80,9 @@ Every request reaching the Worker emits an unsampled event at request start to t
 Cloudflare lake stream through the `EVENTS` Pipelines binding. Events use
 `source: "update"`, `type: "request"`, an ISO `timestamp`, and a `payload` containing
 the method, path, `useragent`, `ip` (from Cloudflare's `CF-Connecting-IP` header),
-country, and Cloudflare colo. The path is recorded without the `/update` prefix. Query strings, request bodies, cookies, and authorization
-headers are not included. Response status and duration are not recorded.
+country, and Cloudflare colo. The path is recorded without the `/update` prefix. Query strings,
+request bodies, cookies, and authorization headers are not included. Response status and duration
+are not recorded.
 
 Delivery runs in `waitUntil` without delaying the response. Delivery failures are
 logged but do not fail requests or retry; this is not lossless audit logging.
@@ -108,7 +95,7 @@ has a single public deployment.
 
 ## Publishing
 
-The release workflow also registers direct binary downloads with distribution
+The release workflow registers direct binary downloads with distribution
 `opencode`, after uploading every file to the public files bucket:
 
 ```sh
@@ -130,6 +117,22 @@ GitHub for repository ID `975734319`, owner ID `66570915`, `.github/workflows/re
 and environment `release`. Pushes to `dev` may publish only to `dev`; only a
 `workflow_dispatch` on `dev` (a versioned release) may publish to `latest`, and `beta`
 publishes only to `beta`.
+
+## Backfill and deploy
+
+Before deploying the KV-backed Worker to production for the first time, create the `MANIFESTS`
+KV namespace, set its `id` in both `services/update/wrangler.jsonc` and
+`.github/release/targets/update/production/wrangler.json`, and backfill current active and
+minimum rows from D1 into KV:
+
+```sh
+npx wrangler kv namespace create MANIFESTS
+bun run kv:backfill -- --remote --dry-run
+bun run kv:backfill -- --remote
+```
+
+The backfill script is idempotent and can also target a namespace ID directly with
+`--namespace-id <id>` or local wrangler state with `--local`.
 
 Apply migrations and deploy from this directory:
 

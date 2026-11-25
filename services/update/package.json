@@ -8,6 +8,7 @@
     "deploy": "wrangler deploy",
     "dev": "wrangler dev",
     "db:migrate": "wrangler d1 migrations apply DB --remote",
+    "kv:backfill": "bun run script/backfill-manifests.ts",
     "test": "bun test",
     "typecheck": "bun check --no-script",
     "typecheck:tsc": "tsc --noEmit"

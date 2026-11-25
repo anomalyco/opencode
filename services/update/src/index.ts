@@ -2,32 +2,43 @@ import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose"
 import type { Pipeline } from "cloudflare:pipelines"
 import semver from "semver"
 import { stringify } from "yaml"
+import {
+  compareEntries,
+  indexKey,
+  manifestKey,
+  parseMetadata,
+  toManifestEntry,
+  type ArtifactRow,
+  type ChannelIndex,
+  type DistributionManifest,
+  type ManifestEntry,
+} from "./manifest"
 
 interface Env {
   DB: D1Database
+  MANIFESTS: KVNamespace
   EVENTS: Pipeline
 }
 
-type ArtifactRow = {
+type Artifact = {
   channel: string
   name: string
   distribution: string
   version: string
-  metadata: string
-  active: number
-  minimum: number
+  metadata: unknown
+  active: boolean
+  minimum: boolean
   time_created: number
   time_updated: number
 }
 
-type Artifact = Omit<ArtifactRow, "metadata" | "active" | "minimum"> & {
-  metadata: unknown
-  active: boolean
-  minimum: boolean
-}
-
-type ArtifactInput = Pick<ArtifactRow, "channel" | "name" | "distribution" | "version"> & {
-  metadata: unknown
+type PublishInput = {
+  channel: string
+  name: string
+  distribution: string
+  version: string
+  metadata: Record<string, unknown>
+  minimum?: boolean
 }
 
 const identifier = /^[a-zA-Z0-9._-]{1,64}$/
@@ -38,12 +49,9 @@ const audience = "https://update.opencode.ai"
 const githubKeys = createRemoteJWKSet(new URL("https://token.actions.githubusercontent.com/.well-known/jwks"))
 const hosts = ["opencode.ai", "dev.opencode.ai"]
 const prefix = "/update"
-// Cloudflare Access sits in front of the admin routes; the Worker also verifies the identity it asserts.
-const accessTeam = "https://anomalyco.cloudflareaccess.com"
-const accessAudience = "d369a93ad5ce8cf96eebe30620488dd2537427c92fed439c310288832a282987"
-const accessKeys = createRemoteJWKSet(new URL(`${accessTeam}/cdn-cgi/access/certs`))
-// Clients poll every lookup path, and querying D1 on each request overloaded it.
-// Cache the caller-independent reads per isolate; caller-specific selection still runs per request.
+// KV reads are billed per read and this worker handles ~65M requests/day.
+// Cache parsed KV reads per isolate for 60s so each isolate reads each hot key about once a minute;
+// caller-specific selection still runs per request.
 const readTtl = 60_000
 const reads = new Map<string, { expires: number; value: unknown }>()
 
@@ -74,15 +82,6 @@ export default {
     )
 
     if (pathname === "/") return json({ service: "opencode-update" })
-    if (pathname === "/admin" || pathname.startsWith("/admin/")) {
-      const email = await verifyAccess(request)
-      if (!email) return json({ error: "Forbidden" }, 403)
-      if (request.method !== "GET") console.log("Admin mutation", { email, method: request.method, path: pathname })
-    }
-    if (pathname === "/admin" && request.method === "GET") return admin(request, env)
-    if (pathname === "/admin/activate" && request.method === "POST") return markArtifact(request, env, "active")
-    if (pathname === "/admin/minimum" && request.method === "POST") return markArtifact(request, env, "minimum")
-    if (pathname === "/admin/rollout" && request.method === "POST") return configureRollout(request, env)
     if (pathname === "/api/publish" && request.method === "POST") return publishArtifact(request, env)
     // Download managers probe with HEAD before downloading; the runtime drops the body from HEAD responses.
     const head = request.method === "HEAD" && pathname.startsWith("/api/")
@@ -93,215 +92,135 @@ export default {
       return new Response("Not found", { status: 404 })
     }
 
-    // D1 rejects queries while the database is overloaded. Return a retryable 503 instead of a 1101 exception page.
-    return lookup(request, env, url, path).catch((error) => {
+    return lookup(request, env.MANIFESTS, url, path).catch((error) => {
       console.error("Update lookup failed", error)
       return json({ error: "Update service temporarily unavailable" }, 503, { "Retry-After": "60" })
     })
   },
 } satisfies ExportedHandler<Env>
 
-async function lookup(request: Request, env: Env, url: URL, path: string[]) {
+async function lookup(request: Request, kv: KVNamespace, url: URL, path: string[]) {
   const resolved = resolveChannel(path[0])
   const agent = request.headers.get("User-Agent")?.match(/^opencode\/(?:([^/]+)\/([^/]+)\/cli|(.*))$/)
   const current = url.searchParams.get("current") ?? agent?.[2] ?? agent?.[3]
   const source = agent?.[1] ?? current?.match(/^v?0\.0\.0-(.+)-\d+(?:\.\d+)?(?:\+.*)?$/)?.[1]
   const caller = source === undefined || resolveChannel(source) === resolved ? current : undefined
-  const rollout = await cachedRead(`rollout:${resolved}`, () =>
-    env.DB.prepare("SELECT duration_hours FROM channel_rollout WHERE channel = ?")
-      .bind(resolved)
-      .first<{ duration_hours: number }>(),
+  if (path.length === 4) return artifactDistribution(kv, resolved, path[1], path[2], caller, path[3])
+  if (path.length === 1) return channel(kv, resolved, caller)
+  if (path.length === 2) return artifactName(kv, resolved, path[1], caller)
+  return artifactDistribution(kv, resolved, path[1], path[2], caller)
+}
+
+async function channel(kv: KVNamespace, channel: string, current: string | undefined) {
+  const index = await readIndex(kv, channel)
+  if (!index?.entries.length) return json({ error: "Channel not found" }, 404)
+  const manifests = await Promise.all(
+    index.entries.map(async (entry) => ({
+      entry,
+      manifest: await readManifest(kv, channel, entry.name, entry.distribution),
+    })),
   )
-  const duration = (rollout?.duration_hours ?? 0) * 3_600_000
-  const ip = request.headers.get("CF-Connecting-IP")
-  const hash =
-    duration && ip
-      ? new DataView(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`${resolved}:${ip}`))).getUint32(0)
-      : undefined
-  // Missing IPs wait for full rollout. The same IP keeps its position across releases.
-  const now = Date.now()
-  const cutoff = now - duration * (hash === undefined ? 1 : (hash + 1) / 2 ** 32)
-  if (path.length === 4) {
-    return artifactDistribution(env.DB, resolved, path[1], path[2], caller, cutoff, duration, now, path[3])
-  }
-  if (path.length === 1) return channel(env.DB, resolved, caller, cutoff, duration, now)
-  if (path.length === 2) return artifactName(env.DB, resolved, path[1], caller, cutoff, duration, now)
-  return artifactDistribution(env.DB, resolved, path[1], path[2], caller, cutoff, duration, now)
-}
-
-async function channel(
-  db: D1Database,
-  channel: string,
-  current: string | undefined,
-  cutoff: number,
-  duration: number,
-  now: number,
-) {
-  const rows = await candidates(db, "channel = ?", [channel])
-  const artifacts = await selectArtifacts(db, rows, current, cutoff, duration, now)
+  const artifacts = manifests.flatMap((item) =>
+    item.manifest ? [selectArtifact(channel, item.entry.name, item.entry.distribution, item.manifest, current)] : [],
+  )
   if (!artifacts.length) return json({ error: "Channel not found" }, 404)
-  return updateResponse({ channel, artifacts: artifacts.map(decodeArtifact) })
+  return updateResponse({ channel, artifacts })
 }
 
-async function artifactName(
-  db: D1Database,
-  channel: string,
-  name: string,
-  current: string | undefined,
-  cutoff: number,
-  duration: number,
-  now: number,
-) {
-  const rows = await candidates(db, "channel = ? AND name = ?", [channel, name])
-  const artifacts = await selectArtifacts(db, rows, current, cutoff, duration, now)
+async function artifactName(kv: KVNamespace, channel: string, name: string, current: string | undefined) {
+  const index = await readIndex(kv, channel)
+  const entries = index?.entries.filter((entry) => entry.name === name) ?? []
+  if (!entries.length) return json({ error: "Artifact not found" }, 404)
+  const manifests = await Promise.all(
+    entries.map(async (entry) => ({
+      entry,
+      manifest: await readManifest(kv, channel, entry.name, entry.distribution),
+    })),
+  )
+  const artifacts = manifests.flatMap((item) =>
+    item.manifest ? [selectArtifact(channel, item.entry.name, item.entry.distribution, item.manifest, current)] : [],
+  )
   if (!artifacts.length) return json({ error: "Artifact not found" }, 404)
-  return updateResponse({ channel, name, artifacts: artifacts.map(decodeArtifact) })
+  return updateResponse({ channel, name, artifacts })
 }
 
 async function artifactDistribution(
-  db: D1Database,
+  kv: KVNamespace,
   channel: string,
   name: string,
   distribution: string,
   current: string | undefined,
-  cutoff: number,
-  duration: number,
-  now: number,
-  manifest?: string,
+  file?: string,
 ) {
-  const rows = await candidates(db, "channel = ? AND name = ? AND distribution = ?", [channel, name, distribution])
-  const artifact = (await selectArtifacts(db, rows, current, cutoff, duration, now))[0]
-  if (!artifact) return json({ error: "Artifact not found" }, 404)
-  if (manifest) {
-    const metadata = decodeMetadata(artifact.metadata)
-    if (name === "desktop" && /^latest(?:-mac|-linux(?:-arm64)?)?\.yml$/.test(manifest)) {
+  const manifest = await readManifest(kv, channel, name, distribution)
+  if (!manifest) return json({ error: "Artifact not found" }, 404)
+  const artifact = selectArtifact(channel, name, distribution, manifest, current)
+  if (file) {
+    if (name === "desktop" && /^latest(?:-mac|-linux(?:-arm64)?)?\.yml$/.test(file)) {
       const value =
-        isRecord(metadata) && isRecord(metadata.manifests)
-          ? metadata.manifests[manifest.replace(/^latest/, "desktop")]
+        isRecord(artifact.metadata) && isRecord(artifact.metadata.manifests)
+          ? artifact.metadata.manifests[file.replace(/^latest/, "desktop")]
           : undefined
       if (!isRecord(value)) return json({ error: "Manifest not found" }, 404)
       return new Response(stringify({ ...value, version: artifact.version }), {
         headers: { "Content-Type": "application/yaml; charset=utf-8", "Cache-Control": "no-store" },
       })
     }
-    const file = isRecord(metadata) && isRecord(metadata.files) ? metadata.files[manifest] : undefined
-    if (!isRecord(file) || typeof file.url !== "string") return json({ error: "File not found" }, 404)
-    return new Response(null, { status: 302, headers: { Location: file.url, "Cache-Control": "no-store" } })
+    const entry =
+      isRecord(artifact.metadata) && isRecord(artifact.metadata.files) ? artifact.metadata.files[file] : undefined
+    if (!isRecord(entry) || typeof entry.url !== "string") return json({ error: "File not found" }, 404)
+    return new Response(null, { status: 302, headers: { Location: entry.url, "Cache-Control": "no-store" } })
   }
-  return updateResponse(decodeArtifact(artifact))
+  return updateResponse(artifact)
 }
 
-// `active = 1 OR minimum = 1` scanned every published build under the primary-key prefix.
-// Reading each partial index separately keeps the read proportional to the selected artifacts.
-function candidates(db: D1Database, filter: string, values: string[]) {
-  return cachedRead(`artifacts:${values.join("/")}`, () =>
-    db
-      .prepare(
-        `${select} INDEXED BY artifact_active WHERE ${filter} AND active = 1
-         UNION ALL
-         ${select} INDEXED BY artifact_minimum WHERE ${filter} AND minimum = 1 AND active = 0
-         ORDER BY name, distribution`,
-      )
-      .bind(...values, ...values)
-      .all<ArtifactRow>()
-      .then((result) => result.results),
-  )
+function readIndex(kv: KVNamespace, channel: string) {
+  const key = indexKey(channel)
+  return cachedRead<ChannelIndex | null>(key, () => kv.get<ChannelIndex>(key, "json"))
 }
 
-async function selectArtifacts(
-  db: D1Database,
-  rows: ArtifactRow[],
+function readManifest(kv: KVNamespace, channel: string, name: string, distribution: string) {
+  const key = manifestKey(channel, name, distribution)
+  return cachedRead<DistributionManifest | null>(key, () => kv.get<DistributionManifest>(key, "json"))
+}
+
+function selectArtifact(
+  channel: string,
+  name: string,
+  distribution: string,
+  manifest: DistributionManifest,
   current: string | undefined,
-  cutoff: number,
-  duration: number,
-  now: number,
-) {
+): Artifact {
+  // Preview build numbers reset, so a minimum outside latest can send clients back to a build they passed.
+  const minimum = channel === "latest" ? manifest.minimum : undefined
+  const floor = minimum && releaseVersion(minimum.version)
   const caller = current === undefined ? undefined : releaseVersion(current)
-  const artifacts = await Promise.all(
-    rows
-      .filter((row) => row.active === 1)
-      .map(async (active) => {
-        // Preview build numbers reset, so a minimum outside latest can send clients back to a build they passed.
-        const minimum =
-          active.channel === "latest"
-            ? rows.find(
-                (row) => row.minimum === 1 && row.name === active.name && row.distribution === active.distribution,
-              )
-            : undefined
-        const floor = minimum && releaseVersion(minimum.version)
-        if (current !== undefined && minimum && (!floor || !caller || semver.lt(caller, floor))) return minimum
-        if (active.time_created <= cutoff) return active
-        const start = now >= active.time_created ? active.time_created : Math.floor(now / readTtl) * readTtl
-        const windowFloor = Math.min(active.time_created - 1, Math.floor(start - duration))
-        const previous =
-          (await rolloutCandidates(db, active, windowFloor)).find((row) => row.time_created <= cutoff) ?? null
-        // A rollout must not send an identified client back below its compatibility floor.
-        if (current !== undefined && minimum) {
-          const version = previous && releaseVersion(previous.version)
-          if (!version || !floor || semver.lt(version, floor)) return minimum
-        }
-        return previous
-      }),
-  )
-  return artifacts.filter((artifact) => artifact !== null)
-}
-
-function rolloutCandidates(db: D1Database, active: ArtifactRow, floor: number) {
-  return cachedRead(
-    `history:${active.channel}/${active.name}/${active.distribution}/${active.time_created}/${floor}`,
-    () =>
-      db
-        .prepare(
-          `SELECT * FROM (
-             ${select} INDEXED BY artifact_rollout
-             WHERE channel = ? AND name = ? AND distribution = ? AND time_created < ? AND time_created > ?
-             ORDER BY time_created DESC, version DESC
-           )
-           UNION ALL
-           SELECT * FROM (
-             ${select} INDEXED BY artifact_rollout
-             WHERE channel = ? AND name = ? AND distribution = ? AND time_created <= ?
-             ORDER BY time_created DESC, version DESC LIMIT 1
-           )`,
-        )
-        .bind(
-          active.channel,
-          active.name,
-          active.distribution,
-          active.time_created,
-          floor,
-          active.channel,
-          active.name,
-          active.distribution,
-          floor,
-        )
-        .all<ArtifactRow>()
-        .then((result) => result.results),
-  )
-}
-
-async function configureRollout(request: Request, env: Env) {
-  const invalid = validMutation(request)
-  if (invalid) return invalid
-  const form = await request.formData()
-  const channel = form.get("channel")
-  const input = form.get("duration_hours")
-  const duration = typeof input === "string" && input.trim() ? Number(input) : NaN
-  if (
-    !validIdentifier(channel) ||
-    channel === "next" ||
-    !Number.isFinite(duration) ||
-    duration < 0 ||
-    !Number.isFinite(duration * 3_600_000)
-  ) {
-    return json({ error: "Channel and a non-negative rollout duration in hours are required" }, 400)
+  const same = manifest.minimum !== undefined && manifest.minimum.version === manifest.active.version
+  if (current !== undefined && minimum && (!floor || !caller || semver.lt(caller, floor))) {
+    return toArtifact(channel, name, distribution, minimum, same, true)
   }
-  await env.DB.prepare(
-    "INSERT INTO channel_rollout (channel, duration_hours) VALUES (?, ?) ON CONFLICT (channel) DO UPDATE SET duration_hours = excluded.duration_hours",
-  )
-    .bind(channel, duration)
-    .run()
-  return Response.redirect(new URL(`${prefix}/admin`, request.url), 303)
+  return toArtifact(channel, name, distribution, manifest.active, true, same)
+}
+
+function toArtifact(
+  channel: string,
+  name: string,
+  distribution: string,
+  entry: ManifestEntry,
+  active: boolean,
+  minimum: boolean,
+): Artifact {
+  return {
+    channel,
+    name,
+    distribution,
+    version: entry.version,
+    metadata: entry.metadata,
+    active,
+    minimum,
+    time_created: entry.time_created,
+    time_updated: entry.time_updated ?? entry.time_created,
+  }
 }
 
 function releaseVersion(input: string) {
@@ -315,269 +234,163 @@ function releaseVersion(input: string) {
   )
 }
 
-async function admin(request: Request, env: Env) {
-  const url = new URL(request.url)
-  const rollouts = await env.DB.prepare(
-    `SELECT channels.channel, COALESCE(channel_rollout.duration_hours, 0) AS duration_hours
-     FROM (SELECT channel FROM artifact UNION SELECT channel FROM channel_rollout) AS channels
-     LEFT JOIN channel_rollout ON channel_rollout.channel = channels.channel
-     WHERE channels.channel != 'next' ORDER BY channels.channel`,
-  ).all<{ channel: string; duration_hours: number }>()
-  const requestedPage = Number.parseInt(url.searchParams.get("page") ?? "1", 10)
-  const page = Number.isSafeInteger(requestedPage) && requestedPage > 0 ? requestedPage : 1
-  const pageSize = 100
-  const count = await env.DB.prepare("SELECT COUNT(*) AS total FROM artifact").first<{ total: number }>()
-  const pages = Math.max(1, Math.ceil((count?.total ?? 0) / pageSize))
-  const currentPage = Math.min(page, pages)
-  const result = await env.DB.prepare(`${select} ORDER BY time_created DESC LIMIT ? OFFSET ?`)
-    .bind(pageSize, (currentPage - 1) * pageSize)
-    .all<ArtifactRow>()
-  const rows = result.results
-    .map(
-      (artifact) => `<tr>
-        <td><code>${escape(artifact.channel)}</code></td>
-        <td><code>${escape(artifact.name)}</code></td>
-        <td><code>${escape(artifact.distribution)}</code></td>
-        <td><code>${escape(artifact.version)}</code></td>
-        <td>${new Date(artifact.time_created).toISOString()}</td>
-        <td>${artifact.active ? '<span class="badge">Active</span>' : '<span class="badge" data-variant="secondary">Inactive</span>'}
-          ${artifact.minimum ? '<span class="badge">Minimum</span>' : ""}</td>
-        <td>
-          ${
-            artifact.active
-              ? ""
-              : `<form action="${prefix}/admin/activate" method="post">
-                  <input type="hidden" name="channel" value="${escape(artifact.channel)}">
-                  <input type="hidden" name="name" value="${escape(artifact.name)}">
-                  <input type="hidden" name="distribution" value="${escape(artifact.distribution)}">
-                  <input type="hidden" name="version" value="${escape(artifact.version)}">
-                  <button class="btn" data-size="sm" data-variant="outline" type="submit">Activate</button>
-                </form>`
-          }
-          ${
-            artifact.channel === "latest" || artifact.minimum
-              ? `<form action="${prefix}/admin/minimum" method="post">
-                  <input type="hidden" name="channel" value="${escape(artifact.channel)}">
-                  <input type="hidden" name="name" value="${escape(artifact.name)}">
-                  <input type="hidden" name="distribution" value="${escape(artifact.distribution)}">
-                  <input type="hidden" name="version" value="${escape(artifact.version)}">
-                  <input type="hidden" name="enabled" value="${artifact.minimum ? "0" : "1"}">
-                  <button class="btn" data-size="sm" data-variant="outline" type="submit">${artifact.minimum ? "Clear minimum" : "Set minimum"}</button>
-                </form>`
-              : ""
-          }
-        </td>
-      </tr>`,
-    )
-    .join("")
-
-  return new Response(
-    `<!doctype html>
-<html lang="en" class="dark">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>OpenCode Update</title>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/basecoat-css@1.0.2/dist/basecoat.cdn.min.css">
-  <style>
-    body { min-height: 100vh; background: var(--background); }
-    main { width: min(1180px, calc(100% - 2rem)); margin: 0 auto; padding: 4rem 0; }
-    .masthead { display: flex; align-items: end; justify-content: space-between; gap: 1rem; margin-bottom: 2rem; }
-    .masthead h1 { font-size: clamp(2.25rem, 6vw, 4.5rem); line-height: .95; letter-spacing: -.055em; }
-    .masthead p { color: var(--muted-foreground); }
-    .table-wrap { overflow-x: auto; }
-    table { width: 100%; border-collapse: collapse; }
-    th, td { padding: .8rem 1rem; border-bottom: 1px solid var(--border); text-align: left; white-space: nowrap; }
-    th { color: var(--muted-foreground); font-size: .75rem; font-weight: 500; text-transform: uppercase; letter-spacing: .08em; }
-    tbody tr:last-child td { border-bottom: 0; }
-    td form { margin: 0; display: inline-block; }
-    .pagination { display: flex; align-items: center; justify-content: space-between; gap: 1rem; border-top: 1px solid var(--border); padding: 1rem; }
-    .pagination p { color: var(--muted-foreground); font-size: .875rem; }
-    .pagination nav { display: flex; gap: .5rem; }
-    @media (max-width: 760px) { main { padding: 2rem 0; } .masthead { align-items: start; flex-direction: column; } }
-  </style>
-</head>
-<body>
-  <main>
-    <header class="masthead">
-      <div><p>Release control</p><h1>Artifacts</h1></div>
-      <span class="badge" data-variant="outline">${escape(request.headers.get("Cf-Access-Authenticated-User-Email") ?? "Cloudflare Access pending")}</span>
-    </header>
-    <article class="card" style="margin-bottom: 2rem">
-      <header><h2>Channel rollouts</h2><p>Hours from publication to full availability. Zero is immediate. Changes apply immediately to existing releases.</p></header>
-      <section>
-        ${
-          rollouts.results
-            .map(
-              (rollout) => `<form action="${prefix}/admin/rollout" method="post">
-          <input type="hidden" name="channel" value="${escape(rollout.channel)}">
-          <label>${escape(rollout.channel)} — hours <input class="input" type="number" name="duration_hours" min="0" step="any" required value="${rollout.duration_hours}"></label>
-          <button class="btn" type="submit">Save</button>
-        </form>`,
-            )
-            .join("") || "<p>Publish a release to configure its channel.</p>"
-        }
-      </section>
-    </article>
-    <article class="card">
-      <header><h2>Published builds</h2><p>Every build received from the trusted publishing workflow, newest first.</p></header>
-      <section class="table-wrap">
-        <table>
-          <thead><tr><th>Channel</th><th>Name</th><th>Distribution</th><th>Version</th><th>Created</th><th>Status</th><th></th></tr></thead>
-          <tbody>${rows || '<tr><td colspan="7">No builds have been published yet.</td></tr>'}</tbody>
-        </table>
-      </section>
-      <footer class="pagination">
-        <p>Page ${currentPage} of ${pages} · ${count?.total ?? 0} builds</p>
-        <nav aria-label="Pagination">
-          ${currentPage > 1 ? `<a class="btn" data-size="sm" data-variant="outline" href="${prefix}/admin?page=${currentPage - 1}">Previous</a>` : ""}
-          ${currentPage < pages ? `<a class="btn" data-size="sm" data-variant="outline" href="${prefix}/admin?page=${currentPage + 1}">Next</a>` : ""}
-        </nav>
-      </footer>
-    </article>
-  </main>
-</body>
-</html>`,
-    { headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" } },
-  )
-}
-
 async function publishArtifact(request: Request, env: Env) {
   const claims = await verifyGitHub(request)
   if (claims instanceof Response) return claims
   const input: unknown = await request.json().catch(() => undefined)
+  return applyPublish(env, input, claims)
+}
+
+export async function applyPublish(env: Env, input: unknown, claims: GitHubClaims) {
   const artifact = parseArtifact(isRecord(input) ? input : {})
   if (artifact instanceof Response) return artifact
   if (!allowedChannels(claims).includes(artifact.channel)) return json({ error: "Channel is not allowed" }, 403)
-  if (!isRecord(artifact.metadata)) return json({ error: "Metadata must be an object" }, 400)
-  await activate(env.DB, [
-    {
-      ...artifact,
-      metadata: {
-        ...artifact.metadata,
-        github: {
-          sha: claims.sha,
-          run_id: claims.run_id,
-          run_attempt: claims.run_attempt,
-          actor: claims.actor,
-          ref: claims.ref,
-        },
+  if (artifact.minimum === true && artifact.channel !== "latest") {
+    return json({ error: "Minimum is only supported on the latest channel" }, 400)
+  }
+  if (artifact.minimum === true && !releaseVersion(artifact.version)) {
+    return json({ error: "Minimum must have a comparable release version" }, 400)
+  }
+
+  const record: PublishInput = {
+    ...artifact,
+    metadata: {
+      ...artifact.metadata,
+      github: {
+        sha: claims.sha,
+        run_id: claims.run_id,
+        run_attempt: claims.run_attempt,
+        actor: claims.actor,
+        ref: claims.ref,
       },
     },
-  ])
+  }
+
+  try {
+    await writeArtifact(env.DB, record)
+    await syncManifest(env.DB, env.MANIFESTS, record.channel, record.name, record.distribution)
+  } catch (error) {
+    console.error("Failed to publish artifact", error)
+    return json({ error: "Failed to publish artifact" }, 500)
+  }
+
   return json({ published: true })
 }
 
-export async function markArtifact(request: Request, env: Env, flag: "active" | "minimum") {
-  const invalid = validMutation(request)
-  if (invalid) return invalid
-  const form = await request.formData()
-  const key = parseKey({
-    channel: form.get("channel"),
-    name: form.get("name"),
-    distribution: form.get("distribution"),
-    version: form.get("version"),
-  })
-  if (key instanceof Response) return key
-  const enabled = flag === "minimum" && form.get("enabled") === "0" ? 0 : 1
-  if (flag === "minimum" && enabled && key.channel !== "latest") {
-    return json({ error: "Minimum is only supported on the latest channel" }, 400)
-  }
-  if (flag === "minimum" && enabled && !releaseVersion(key.version)) {
-    return json({ error: "Minimum must have a comparable release version" }, 400)
-  }
-  const exists = await env.DB.prepare(
-    "SELECT 1 FROM artifact WHERE channel = ? AND name = ? AND distribution = ? AND version = ?",
-  )
-    .bind(key.channel, key.name, key.distribution, key.version)
-    .first()
-  if (!exists) return json({ error: "Artifact not found" }, 404)
-  await env.DB.batch([
-    ...(enabled
+function writeArtifact(db: D1Database, artifact: PublishInput) {
+  const time = Date.now()
+  const statements = [
+    db
+      .prepare("UPDATE artifact SET active = 0 WHERE channel = ? AND name = ? AND distribution = ? AND active = 1")
+      .bind(artifact.channel, artifact.name, artifact.distribution),
+    ...(artifact.minimum === undefined
       ? [
-          env.DB.prepare(
-            `UPDATE artifact SET ${flag} = 0 WHERE channel = ? AND name = ? AND distribution = ? AND ${flag} = 1`,
-          ).bind(key.channel, key.name, key.distribution),
+          db
+            .prepare(
+              `INSERT INTO artifact (channel, name, distribution, version, metadata, active, time_created, time_updated)
+               VALUES (?, ?, ?, ?, ?, 1, ?, ?)
+               ON CONFLICT (channel, name, distribution, version) DO UPDATE SET
+                 metadata = excluded.metadata, active = 1, time_updated = excluded.time_updated`,
+            )
+            .bind(
+              artifact.channel,
+              artifact.name,
+              artifact.distribution,
+              artifact.version,
+              JSON.stringify(artifact.metadata),
+              time,
+              time,
+            ),
         ]
-      : []),
-    env.DB.prepare(
-      `UPDATE artifact SET ${flag} = ?, time_updated = ? WHERE channel = ? AND name = ? AND distribution = ? AND version = ?`,
-    ).bind(enabled, Date.now(), key.channel, key.name, key.distribution, key.version),
+      : [
+          db
+            .prepare(
+              "UPDATE artifact SET minimum = 0 WHERE channel = ? AND name = ? AND distribution = ? AND minimum = 1",
+            )
+            .bind(artifact.channel, artifact.name, artifact.distribution),
+          db
+            .prepare(
+              `INSERT INTO artifact (channel, name, distribution, version, metadata, active, minimum, time_created, time_updated)
+               VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
+               ON CONFLICT (channel, name, distribution, version) DO UPDATE SET
+                 metadata = excluded.metadata, active = 1, minimum = excluded.minimum, time_updated = excluded.time_updated`,
+            )
+            .bind(
+              artifact.channel,
+              artifact.name,
+              artifact.distribution,
+              artifact.version,
+              JSON.stringify(artifact.metadata),
+              artifact.minimum ? 1 : 0,
+              time,
+              time,
+            ),
+        ]),
+  ]
+  return db.batch(statements)
+}
+
+async function syncManifest(db: D1Database, kv: KVNamespace, channel: string, name: string, distribution: string) {
+  const [rows, indexRows] = await Promise.all([
+    db
+      .prepare(
+        `${select} INDEXED BY artifact_active WHERE channel = ? AND name = ? AND distribution = ? AND active = 1
+         UNION ALL
+         ${select} INDEXED BY artifact_minimum WHERE channel = ? AND name = ? AND distribution = ? AND minimum = 1 AND active = 0`,
+      )
+      .bind(channel, name, distribution, channel, name, distribution)
+      .all<ArtifactRow>(),
+    db
+      .prepare(
+        `SELECT name, distribution FROM artifact INDEXED BY artifact_active
+         WHERE channel = ? AND active = 1 ORDER BY name, distribution`,
+      )
+      .bind(channel)
+      .all<{ name: string; distribution: string }>(),
   ])
-  return Response.redirect(new URL(`${prefix}/admin`, request.url), 303)
+
+  const activeRow = rows.results.find((row) => row.active === 1)
+  if (!activeRow) throw new Error(`Missing active artifact after publish: ${channel}/${name}/${distribution}`)
+  const minimumRow = rows.results.find((row) => row.minimum === 1)
+  const manifest: DistributionManifest = minimumRow
+    ? { active: toManifestEntry(activeRow), minimum: toManifestEntry(minimumRow) }
+    : { active: toManifestEntry(activeRow) }
+  const index: ChannelIndex = {
+    entries: indexRows.results.map((row) => ({ name: row.name, distribution: row.distribution })).sort(compareEntries),
+  }
+
+  const mKey = manifestKey(channel, name, distribution)
+  const iKey = indexKey(channel)
+  // Write the manifest before the channel index so an index never points to an unwritten manifest.
+  await kv.put(mKey, JSON.stringify(manifest))
+  await kv.put(iKey, JSON.stringify(index))
+  reads.delete(mKey)
+  reads.delete(iKey)
 }
 
-function activate(db: D1Database, artifacts: ArtifactInput[]) {
-  return db.batch(
-    artifacts.flatMap((artifact) => {
-      const time = Date.now()
-      return [
-        deactivateStatement(db, artifact),
-        db
-          .prepare(
-            `INSERT INTO artifact (channel, name, distribution, version, metadata, active, time_created, time_updated)
-             VALUES (?, ?, ?, ?, ?, 1, ?, ?)
-             ON CONFLICT (channel, name, distribution, version) DO UPDATE SET
-               metadata = excluded.metadata, active = 1, time_updated = excluded.time_updated`,
-          )
-          .bind(
-            artifact.channel,
-            artifact.name,
-            artifact.distribution,
-            artifact.version,
-            JSON.stringify(artifact.metadata),
-            time,
-            time,
-          ),
-      ]
-    }),
-  )
-}
-
-function deactivateStatement(db: D1Database, artifact: Pick<ArtifactInput, "channel" | "name" | "distribution">) {
-  return db
-    .prepare("UPDATE artifact SET active = 0 WHERE channel = ? AND name = ? AND distribution = ? AND active = 1")
-    .bind(artifact.channel, artifact.name, artifact.distribution)
-}
-
-function parseArtifact(input: Record<string, unknown>): ArtifactInput | Response {
-  const key = parseKey(input)
-  if (key instanceof Response) return key
-  const metadata = typeof input.metadata === "string" ? parseMetadata(input.metadata) : input.metadata
-  if (metadata === undefined) return json({ error: "Metadata must be valid JSON" }, 400)
-  return { ...key, metadata }
-}
-
-function parseKey(input: Record<string, unknown>): Omit<ArtifactInput, "metadata"> | Response {
+function parseArtifact(input: Record<string, unknown>): PublishInput | Response {
   if (
     !validIdentifier(input.channel) ||
     input.channel === "next" ||
     !validIdentifier(input.name) ||
     !validIdentifier(input.distribution) ||
     !validVersion(input.version)
-  )
+  ) {
     return json({ error: "Invalid artifact" }, 400)
+  }
+  const metadata = typeof input.metadata === "string" ? parseMetadata(input.metadata) : input.metadata
+  if (metadata === undefined) return json({ error: "Metadata must be valid JSON" }, 400)
+  if (!isRecord(metadata)) return json({ error: "Metadata must be an object" }, 400)
+  if (input.minimum !== undefined && typeof input.minimum !== "boolean") {
+    return json({ error: "Minimum must be a boolean" }, 400)
+  }
   return {
     channel: input.channel,
     name: input.name,
     distribution: input.distribution,
     version: input.version,
-  }
-}
-
-function decodeArtifact(row: ArtifactRow): Artifact {
-  return { ...row, metadata: decodeMetadata(row.metadata), active: row.active === 1, minimum: row.minimum === 1 }
-}
-
-function decodeMetadata(input: string) {
-  return parseMetadata(input) ?? null
-}
-
-function parseMetadata(input: string): unknown | undefined {
-  try {
-    return JSON.parse(input)
-  } catch {
-    return
+    metadata,
+    minimum: input.minimum,
   }
 }
 
@@ -592,7 +405,7 @@ async function verifyGitHub(request: Request) {
   return result.payload
 }
 
-type GitHubClaims = JWTPayload & {
+export type GitHubClaims = JWTPayload & {
   repository: string
   repository_id: string
   repository_owner_id: string
@@ -638,9 +451,9 @@ async function cachedRead<T>(key: string, load: () => Promise<T>) {
       return hit.value as T
     }
   }
-  // Workers ties a D1 result stream to the request that started the query, so sharing an in-flight
+  // Workers ties I/O streams to the request that started the call, so sharing an in-flight
   // promise fails other requests with "Cannot perform I/O on behalf of a different request".
-  // Only settled results are shared. Failed reads throw before they are cached, so the next request retries D1.
+  // Only settled results are shared. Failed reads throw before they are cached, so the next request retries KV.
   const value = await load()
   const now = Date.now()
   // Lookup paths are caller-controlled identifiers, so bound the number of retained entries.
@@ -655,28 +468,6 @@ async function cachedRead<T>(key: string, load: () => Promise<T>) {
   }
   reads.set(key, { expires: now + readTtl, value })
   return value
-}
-
-async function verifyAccess(request: Request) {
-  const token =
-    request.headers.get("Cf-Access-Jwt-Assertion") ??
-    request.headers
-      .get("Cookie")
-      ?.split(";")
-      .map((part) => part.trim())
-      .find((part) => part.startsWith("CF_Authorization="))
-      ?.slice("CF_Authorization=".length)
-  if (!token) return
-  const result = await jwtVerify(token, accessKeys, { issuer: accessTeam, audience: accessAudience }).catch(
-    () => undefined,
-  )
-  if (typeof result?.payload.email !== "string") return
-  return result.payload.email
-}
-
-function validMutation(request: Request) {
-  const origin = request.headers.get("Origin")
-  if (origin && origin !== new URL(request.url).origin) return json({ error: "Invalid origin" }, 403)
 }
 
 function validIdentifier(input: unknown): input is string {
@@ -697,14 +488,4 @@ function updateResponse(value: unknown) {
 
 function json(value: unknown, status = 200, headers?: HeadersInit) {
   return Response.json(value, { status, headers: { "Cache-Control": "no-store", ...headers } })
-}
-
-function escape(value: string) {
-  return value.replace(/[&<>"']/g, (character) => {
-    if (character === "&") return "&amp;"
-    if (character === "<") return "&lt;"
-    if (character === ">") return "&gt;"
-    if (character === '"') return "&quot;"
-    return "&#39;"
-  })
 }
