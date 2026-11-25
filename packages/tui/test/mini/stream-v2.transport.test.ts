@@ -2352,11 +2352,14 @@ describe("V2 mini transport", () => {
     },
   )
 
-  test.each(["overlap", "no overlap", "exact limit"])(
+  test.each(["overlap", "no overlap", "no overlap resumed", "no overlap finished", "no overlap idle", "exact limit"])(
     "resize keeps the replay window and live output (%s)",
     async (scenario) => {
       const events = feed()
       events.push(connected())
+      const noOverlap = scenario.startsWith("no overlap")
+      const stopped = scenario === "no overlap finished" || scenario === "no overlap idle"
+      let active = true
       const messages = Array.from(
         { length: scenario === "exact limit" ? 10 : 12 },
         (_, index) =>
@@ -2369,7 +2372,11 @@ describe("V2 mini transport", () => {
             time: { created: index * 2, completed: index * 2 + 1 },
           }) satisfies SessionMessages[number],
       )
-      const client = sdk({ streams: [events], messages: { ses_1: messages } })
+      const client = sdk({
+        streams: [events],
+        messages: { ses_1: messages },
+        active: (): Record<string, { type: "running" }> => (active ? { ses_1: { type: "running" } } : {}),
+      })
       spyOn(client.message, "list").mockImplementation((request) =>
         ok({
           data: request.cursor
@@ -2378,7 +2385,7 @@ describe("V2 mini transport", () => {
                 .slice(-10)
                 .toReversed()
                 .map((message) =>
-                  scenario === "no overlap"
+                  noOverlap
                     ? {
                         ...message,
                         content: [
@@ -2397,6 +2404,7 @@ describe("V2 mini transport", () => {
         }),
       )
       const ui = footer()
+      const started = defer<void>()
       const transport = await createSessionTransport({
         sdk: client,
         sessionID: "ses_1",
@@ -2405,14 +2413,19 @@ describe("V2 mini transport", () => {
         replayLimit: 10,
         tools: false,
         footer: ui.api,
+        trace: {
+          write(type) {
+            if (type === "recv.event") started.resolve()
+          },
+        },
       })
       const localRows = [
         { commit: { kind: "system", source: "system", phase: "start", text: "LOCAL_NOTICE" } as const },
-        ...messages.slice(0, scenario === "no overlap" ? 2 : messages.length).map((message) => ({
+        ...messages.slice(0, noOverlap ? 2 : messages.length).map((message) => ({
           commit: {
             kind: "assistant",
             source: "assistant",
-            phase: "final",
+            phase: "progress",
             messageID: message.id,
             partID: "text:0",
             text: message.content[0].text,
@@ -2430,6 +2443,53 @@ describe("V2 mini transport", () => {
         },
       ]
       try {
+        const ended = defer<void>()
+        const emit = ui.api.event.bind(ui.api)
+        spyOn(ui.api, "event").mockImplementation((event) => {
+          emit(event)
+          if (event.type !== "stream.patch") return
+          if (event.patch.usage) ended.resolve()
+        })
+        events.push(
+          scenario === "no overlap resumed"
+            ? {
+                id: "evt_live_delta",
+                type: "session.text.delta",
+                created: 30,
+                data: { sessionID: "ses_1", assistantMessageID: "msg_live", ordinal: 0, delta: "STREAMING" },
+              }
+            : {
+                id: "evt_live_started",
+                type: "session.step.started",
+                created: 30,
+                durable: durable("ses_1", 1),
+                data: {
+                  sessionID: "ses_1",
+                  assistantMessageID: "msg_live",
+                  started: 30,
+                  agent: "build",
+                  model: { providerID: "test", id: "model" },
+                },
+              },
+        )
+        await started.promise
+        if (scenario === "no overlap finished") {
+          events.push({
+            id: "evt_live_ended",
+            type: "session.step.ended",
+            created: 31,
+            durable: durable("ses_1", 2),
+            data: {
+              sessionID: "ses_1",
+              assistantMessageID: "msg_live",
+              finish: "stop",
+              cost: 0,
+              tokens: { input: 0, output: 1, reasoning: 0, cache: { read: 0, write: 0 } },
+            },
+          })
+          await ended.promise
+        }
+        if (scenario === "no overlap idle") active = false
         for (let resize = 0; resize < 2; resize++) {
           await transport.replayOnResize({
             localRows: () => localRows,
@@ -2439,11 +2499,11 @@ describe("V2 mini transport", () => {
           })
           const visible = ui.commits.filter((commit) => commit.text).map((commit) => commit.text)
           expect(visible).toEqual([
-            ...(scenario === "no overlap" ? [] : messages.slice(-10).map((message) => message.content[0].text)),
+            ...(noOverlap ? [] : messages.slice(-10).map((message) => message.content[0].text)),
             ...(scenario === "overlap" ? [] : ["LOCAL_NOTICE"]),
-            "STREAMING",
+            ...(stopped ? [] : ["STREAMING"]),
           ])
-          expect(ui.commits.at(-1)?.phase).toBe("progress")
+          if (!stopped) expect(ui.commits.at(-1)?.phase).toBe("progress")
           expect(client.message.list).toHaveBeenLastCalledWith(
             { sessionID: "ses_1", limit: 1, cursor: "older" },
             { signal: expect.any(AbortSignal) },
