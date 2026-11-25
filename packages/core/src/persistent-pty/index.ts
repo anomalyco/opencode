@@ -471,9 +471,28 @@ const makeLayer = (options: Options = {}) =>
             },
             true,
           )
-          .pipe(Effect.mapError(pipeError))
+          .pipe(
+            Effect.catchIf(
+              (error) => error.kind === "response",
+              (error) => recoverPipe(input.outputPath, error),
+            ),
+            Effect.mapError(pipeError),
+          )
         if (response.type !== "created") return yield* unexpectedPipe(response)
         return toPipeInfo(response.process)
+      })
+
+      // A lost reply does not mean the command did not start: the daemon may have registered it anyway.
+      const recoverPipe = Effect.fnUntraced(function* (outputPath: string, error: DaemonError) {
+        const listed = yield* daemon
+          .requestIfRunning({ op: "list", mode: "pipe" })
+          .pipe(Effect.orElseSucceed(() => undefined))
+        const process =
+          listed?.type === "processes"
+            ? listed.processes.find((item) => item.pipe?.output_path === outputPath)
+            : undefined
+        if (!process) return yield* error
+        return { type: "created" as const, process }
       })
 
       const waitPipe = Effect.fn("PersistentPty.waitPipe")(function* (id: number) {

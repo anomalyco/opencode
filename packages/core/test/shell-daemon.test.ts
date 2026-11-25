@@ -306,6 +306,54 @@ describe("Shell on the process daemon", () => {
     }),
   )
 
+  // On the test clock: the create request's timeout passes without waiting for it.
+  it.effect("keeps a command the daemon started even though its create reply never came", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      env.daemon.stallCreate.register = true
+      yield* env.withShell(env.directory, (shell) =>
+        Effect.gen(function* () {
+          const creating = yield* shell.create({ shell: "/bin/sh", command: "echo hi" }).pipe(Effect.forkChild)
+          yield* until(() => env.created().length > 0)
+          yield* TestClock.adjust("5 seconds")
+          const info = yield* Fiber.join(creating)
+          expect(info).toMatchObject({ status: "running", pid: 1001 })
+          env.daemon.output(1, "hi\n")
+          env.daemon.exit(1, 0)
+          expect(yield* shell.result(info)).toMatchObject({
+            info: { status: "exited", exit: 0 },
+            capture: { output: "hi\n" },
+          })
+          expect(env.created()).toHaveLength(1)
+          expect(env.daemon.processes).toHaveLength(1)
+          expect(env.spawned()).toBe(0)
+        }),
+      )
+    }),
+  )
+
+  it.effect("fails a command whose create reply never came when the daemon has no such command", () =>
+    Effect.gen(function* () {
+      const env = yield* daemonShells()
+      env.daemon.stallCreate.register = false
+      yield* env.withShell(env.directory, (shell) =>
+        Effect.gen(function* () {
+          const creating = yield* shell.create({ shell: "/bin/sh", command: "echo hi" }).pipe(Effect.forkChild)
+          yield* until(() => env.created().length > 0)
+          yield* TestClock.adjust("5 seconds")
+          const error = yield* Fiber.join(creating).pipe(Effect.flip)
+          expect(error).toBeInstanceOf(AppProcess.AppProcessError)
+          expect(error.cause).toBeInstanceOf(PersistentPty.RequestError)
+          expect(error.message).toBe("Command failed: echo hi: opencode-pty request timed out")
+          expect(env.daemon.ops).toContain("list")
+          expect(env.created()).toHaveLength(1)
+          expect(env.spawned()).toBe(0)
+          expect(yield* shell.list()).toEqual([])
+        }),
+      )
+    }),
+  )
+
   // On the test clock: the timeout and the grace period pass without waiting for them.
   it.effect("stops a timed-out command with SIGTERM, then SIGKILL after the grace period, and keeps it", () =>
     Effect.gen(function* () {

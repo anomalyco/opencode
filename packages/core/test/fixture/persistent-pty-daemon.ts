@@ -142,6 +142,8 @@ export const fakeDaemon = Effect.fn(function* () {
   const handoffTTL = { ms: 60_000 }
   // While set, `create_pipe` answers only once it resolves, like a daemon slow to start a command.
   const holdCreate: { until?: Promise<void> } = {}
+  // While set, `create_pipe` never answers, like a daemon whose reply is lost; `register` still starts the command.
+  const stallCreate: { register?: boolean } = {}
   // While set, `list` answers only once it resolves, like a busy daemon.
   const holdList: { until?: Promise<void> } = {}
   const ops: string[] = []
@@ -207,6 +209,10 @@ export const fakeDaemon = Effect.fn(function* () {
         processes.push(created)
         return { type: "created", process: created }
       }
+      if (stallCreate.register !== undefined) {
+        if (stallCreate.register) create()
+        return undefined
+      }
       return holdCreate.until ? holdCreate.until.then(create) : create()
     }
     if (request.op === "control") return { type: "ok" }
@@ -269,6 +275,7 @@ export const fakeDaemon = Effect.fn(function* () {
     failTerminate,
     failCreate,
     holdCreate,
+    stallCreate,
     holdList,
     handoffTTL,
     trap,
