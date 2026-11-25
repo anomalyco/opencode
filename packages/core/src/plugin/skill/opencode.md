@@ -7,10 +7,10 @@ as the source of truth. Follow links from that page for detail, or fetch
 
 ## Version policy
 
-Answer for OpenCode V2 unless the user asks about V1 or migrating from V1.
-
-Use <https://opencode.ai/docs/> for V2. Do not use <https://opencode.ai/v1/docs/>
-(V1), and do not use web search when the V2 docs cover the question.
+Answer for OpenCode V2. Use <https://opencode.ai/docs/> for V2, and do not use
+web search when the V2 docs cover the question. Consult
+<https://opencode.ai/v1/docs/> (V1) only when the user asks about V1 or as
+migration input, and still produce V2 output unless they ask for V1.
 <https://opencode.ai/config.json> still accepts deprecated V1 fields; never
 recommend fields it marks deprecated. If V2 docs are missing or contradictory,
 say so instead of falling back to V1.
