@@ -98,7 +98,7 @@ function SessionFilePanelV2SideMenu(
 
               if (event.defaultPrevented || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return
 
-              if (event.key !== "ContextMenu" && (event.key !== "F10" || !event.shiftKey)) return
+              if (event.key !== "F10" || !event.shiftKey) return
 
               const target = event.target
 
