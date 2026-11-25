@@ -4,10 +4,11 @@ import type { DurableObjectStorage } from "@opencode/core/database/sqlite.worker
 // Emulates the Durable Object storage API over bun:sqlite so the workerd
 // adapter and the workerd server profile can be verified without workerd or
 // Cloudflare runtime dependencies.
-export const makeDurableObjectStorage = (): DurableObjectStorage => {
+export const makeDurableObjectStorage = () => {
   const native = new Database(":memory:")
   // Durable Object SQLite compiles with SQLITE_DEFAULT_FOREIGN_KEYS=1 and rejects toggling it via PRAGMA.
   native.run("PRAGMA foreign_keys = ON")
+  let alarmAt: number | null = null
   const toSqlStorageValue = (value: unknown) => {
     if (!(value instanceof Uint8Array)) return value as ArrayBuffer | string | number | null
     const buffer = new ArrayBuffer(value.byteLength)
@@ -47,5 +48,11 @@ export const makeDurableObjectStorage = (): DurableObjectStorage => {
     transactionSync<T>(closure: () => T): T {
       return native.transaction(closure)()
     },
-  }
+    async setAlarm(scheduledTime: number | Date): Promise<void> {
+      alarmAt = scheduledTime instanceof Date ? scheduledTime.getTime() : scheduledTime
+    },
+    async getAlarm(): Promise<number | null> {
+      return alarmAt
+    },
+  } satisfies DurableObjectStorage & { getAlarm(): Promise<number | null> }
 }

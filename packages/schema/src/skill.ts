@@ -30,7 +30,9 @@ export const Info = Schema.Struct({
   description: Schema.String.pipe(optional),
   autoinvoke: Schema.Boolean.pipe(optional),
   path: AbsolutePath,
-  content: Schema.String,
+  content: Schema.String.annotate({
+    description: "The SKILL.md body. Empty for a skill whose body loads on demand, such as an MCP skill.",
+  }),
 }).annotate({ identifier: "Skill.Info" })
 
 const Updated = ephemeral({ type: "skill.updated", schema: {} })

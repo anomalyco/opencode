@@ -59,7 +59,7 @@ export const Plugin = {
               // Authorize leaving the current boundary before probing the target filesystem so denied calls
               // cannot probe external paths or cold-wake a lazy sandbox. Only host-local project worktrees are exempt.
               if (target.externalDirectory) {
-                const worktrees = target.environment.hostsServer
+                const worktrees = target.environment.local
                   ? yield* ctx.worktree.list({ projectID: ctx.location.project.id })
                   : []
                 if (!worktrees.some((worktree) => FSUtil.contains(worktree.directory, target.absolute)))

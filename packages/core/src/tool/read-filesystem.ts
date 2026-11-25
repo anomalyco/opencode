@@ -75,13 +75,14 @@ export type PageInput = typeof PageInput.Type
 export const TextContent = Schema.Struct({
   type: Schema.Literal("text"),
   offset: PositiveInt,
-  lineCount: NonNegativeInt,
   next: Schema.optionalKey(PositiveInt).annotate({
     description: "The line to continue reading from. Absent when the content reaches the end of the file.",
   }),
   content: Schema.String,
 }).annotate({ identifier: "ReadTool.TextContent" })
 export type TextContent = typeof TextContent.Type
+// The line count stays out of the tool output, which reads like a file length; formatting needs it to place a trailing newline.
+export type TextPage = TextContent & { readonly lineCount: number }
 
 export const DirectoryContent = Schema.Struct({
   type: Schema.Literal("directory"),

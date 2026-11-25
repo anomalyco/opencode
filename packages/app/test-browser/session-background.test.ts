@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { JobInfo, SessionInfo, SessionMessageAssistantTool, ShellInfo } from "@opencode/client/promise"
-import { createRoot } from "solid-js"
+import { createRoot, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSessionBackground } from "@/session/requests/background"
 
@@ -62,6 +62,44 @@ const notification = (id: string, metadata: Record<string, string>) => ({
 })
 
 describe("createSessionBackground", () => {
+  // A history page shifts every message's index; the messages already loaded did not change.
+  test("reads only the messages of a history page that lands", () => {
+    createRoot((dispose) => {
+      const reads: Record<string, number> = {}
+
+      const message = (id: string) => {
+        const content = [tool(`${id}-part`, "subagent", { sessionID: id }, { description: `${id} call` })]
+
+        return {
+          ...assistant(id, content, 1),
+          get content() {
+            reads[id] = (reads[id] ?? 0) + 1
+
+            return content
+          },
+        }
+      }
+
+      const [messages, setMessages] = createSignal([message("later"), message("latest")])
+
+      const background = createSessionBackground({
+        sessionID: () => "root",
+        messages,
+        sessions: () => [session("older", "root", 1), session("later", "root", 2), session("latest", "root", 3)],
+        status: () => "running",
+        shells: () => [],
+      })
+
+      expect(background.tasks().map((task) => task.label)).toEqual(["older", "later call", "latest call"])
+      const before = { ...reads }
+      setMessages((loaded) => [message("older"), ...loaded])
+      expect(background.tasks().map((task) => task.label)).toEqual(["older call", "later call", "latest call"])
+      expect(reads).toEqual({ ...before, older: reads.older })
+      expect(reads.older).toBeGreaterThan(0)
+      dispose()
+    })
+  })
+
   test("counts a subagent from its session status, whatever its call or completion notices say", () => {
     createRoot((dispose) => {
       const [store, setStore] = createStore<{ status: Record<string, "idle" | "running"> }>({

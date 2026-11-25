@@ -470,7 +470,13 @@ export const make = (id: Environment.ID): Interface => {
       },
       // A worker is a POSIX machine with none of this server's shell paths, and its driver runs only argv, cwd and
       // env: `sh -c` is the contract every worker can meet.
-      { path: posix, shell: "sh" },
+      {
+        path: posix,
+        shell: "sh",
+        home: Effect.suspend(() =>
+          link ? Effect.succeed(link.hello.home) : Effect.fail(new NotSent({ machine: id })),
+        ),
+      },
     ),
   }
 }

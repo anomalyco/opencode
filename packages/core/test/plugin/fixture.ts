@@ -20,7 +20,6 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Form } from "@opencode/core/form"
 import { Generate } from "@opencode/core/generate"
-import { Instance } from "@opencode/core/instance/service"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Integration } from "@opencode/core/integration"
 import { Job } from "@opencode/core/job"
@@ -136,7 +135,6 @@ export const makePluginTestLayer = (
       Model.node,
       ModelsDev.node,
       Command.node,
-      Instance.node,
       InstructionDiscovery.node,
       Integration.node,
       Job.node,

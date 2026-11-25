@@ -1,5 +1,5 @@
 import type { SessionMessageInfo } from "@opencode/client/promise"
-import { expect, test } from "@playwright/test"
+import { expect, test, type Locator } from "@playwright/test"
 import {
   assistantMessage,
   historyMessages,
@@ -119,6 +119,73 @@ test("jump to latest is reachable only while it is shown", async ({ page }) => {
   await expect(latest).toBeInViewport()
   await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeFocused()
 })
+
+// A working turn shows controls the reader can use, such as a tool header and a link in a reply. The keyboard stops
+// on each one where the reader can see it, and none is hidden from a screen reader.
+for (const newTimeline of [false, true]) {
+  test(`every Tab stop of a working turn can be seen and read (${newTimeline ? "New" : "current"} timeline)`, async ({
+    page,
+  }) => {
+    await setupTimeline(page, {
+      messages: [
+        userMessage(),
+        assistantMessage(
+          [
+            shell("prt_working_stop_shell", "completed", lines(5)),
+            textPart("prt_working_stop_text", "See [the notes](https://example.com/notes) while this runs."),
+          ],
+          { completed: false },
+        ),
+      ],
+      settings: { newTimeline, shellToolPartsExpanded: false },
+    })
+    await expect(page.getByRole("button", { name: "Stop" })).toBeVisible()
+    await expect(page.getByText("while this runs.")).toBeVisible()
+
+    // The timeline's stops in the order the key reaches them, from the control it starts on to the first stop outside.
+    const walk = async (key: "Tab" | "Shift+Tab", from: Locator) => {
+      await from.focus()
+      const stops: { name: string; tool: boolean; hidden: boolean; shown: boolean }[] = []
+
+      for (let press = 0; press < 20; press++) {
+        await page.keyboard.press(key)
+
+        const stop = await page.evaluate(() => {
+          const element = document.activeElement
+
+          if (!(element instanceof HTMLElement) || !element.closest("[data-timeline-row]")) return undefined
+          const box = element.getBoundingClientRect()
+
+          return {
+            name: (element.getAttribute("aria-label") ?? element.textContent ?? "").trim().replace(/\s+/g, " "),
+            tool: element.matches("button[aria-expanded]"),
+            hidden: element.closest('[aria-hidden="true"]') !== null,
+            shown:
+              element.checkVisibility({ opacityProperty: true, visibilityProperty: true }) &&
+              box.bottom > 0 &&
+              box.top < innerHeight,
+          }
+        })
+
+        if (stop) stops.push(stop)
+
+        if (!stop && stops.length > 0) break
+      }
+
+      return stops
+    }
+
+    const forward = await walk("Tab", page.getByRole("button", { name: "More actions", exact: true }))
+    const back = await walk("Shift+Tab", page.getByRole("textbox", { name: "Prompt", exact: true }))
+
+    for (const stops of [forward, back]) {
+      expect(stops.filter((stop) => stop.hidden || !stop.shown)).toEqual([])
+      // The walk passed the turn's tool header and its link.
+      expect(stops.some((stop) => stop.tool)).toBe(true)
+      expect(stops.map((stop) => stop.name)).toContain("the notes")
+    }
+  })
+}
 
 // Focus that rests nowhere is not handed to a control the reader cannot see: that would scroll the timeline to it. A
 // reader far up in history who opens or closes Review keeps the words they read where they are.
