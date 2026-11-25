@@ -341,6 +341,7 @@ describe("createSessionBackground", () => {
   test("keeps a running script's shells out of background tasks unless their call has ended", () => {
     createRoot((dispose) => {
       const [jobs, setJobs] = createSignal<JobInfo[]>([])
+
       const own = {
         ...shell("test", "test"),
         metadata: { sessionID: "root", callID: "script-part" },
