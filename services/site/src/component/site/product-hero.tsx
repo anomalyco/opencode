@@ -184,7 +184,7 @@ export function ProductHero(props: {
 /**
  * A hero with a still per theme and no video yet, framed like the themed heroes in videos.ts. Browse's
  * (product-videos/heroes/browse-landscape-*.webp) is an HTML scene of OpenCode driving an agent tab,
- * rendered with Playwright.
+ * captured to a still.
  */
 export function heroStills(slug: string) {
   const file = (theme: string) => `/product-videos/heroes/${slug}-landscape-${theme}.webp`

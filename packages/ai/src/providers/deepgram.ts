@@ -1,7 +1,7 @@
 import { Auth } from "../route/auth.js"
 import { AuthOptions, type ProviderAuthOption } from "../route/auth-options.js"
 import { MediaRoute } from "../route/media.js"
-import { type HttpOptions, ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, type ModelID, type TransportOptions } from "../schema/index.js"
 import { DeepgramSpeech } from "../protocols/deepgram-speech.js"
 import { DeepgramTranscription } from "../protocols/deepgram-transcription.js"
 
@@ -10,11 +10,10 @@ export type { DeepgramTranscriptionOptions } from "../protocols/deepgram-transcr
 
 export const id = ProviderID.make("deepgram")
 
-export type Config = ProviderAuthOption<"optional"> & {
-  readonly baseURL?: string
-  readonly headers?: Record<string, string>
-  readonly http?: HttpOptions
-}
+export type Config = TransportOptions &
+  ProviderAuthOption<"optional"> & {
+    readonly baseURL?: string
+  }
 
 const auth = (options: ProviderAuthOption<"optional">) =>
   AuthOptions.apiKey(options, "DEEPGRAM_API_KEY", Auth.scheme("Token"))

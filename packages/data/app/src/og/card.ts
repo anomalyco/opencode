@@ -50,9 +50,13 @@ function modelCard(card: Extract<OgCard, { kind: "model" }>, sprite: string) {
       lab
         ? el(
             "div",
-            { display: "flex", alignItems: "center", gap: 20 },
+            { display: "flex", alignItems: "center", gap: 20, minWidth: 0, marginRight: 48 },
             ...(lab.icon ? [labAvatar(sprite, lab.icon)] : []),
-            el("div", { fontSize: 32, color: colors.faint }, lab.name),
+            el(
+              "div",
+              { fontSize: 32, color: colors.faint, overflow: "hidden", whiteSpace: "nowrap", textOverflow: "ellipsis" },
+              lab.name,
+            ),
           )
         : el("div", {}),
       brand(),
@@ -95,13 +99,14 @@ function frame(...children: SatoriElement[]) {
       width,
       height,
       backgroundColor: colors.background,
-      fontFamily: "OpenTUI Mono",
+      fontFamily: "OpenMono",
       color: colors.text,
     },
     dots(),
     el(
       "div",
-      { display: "flex", flexDirection: "column", position: "absolute", left: pad, top: 72, right: pad, bottom: 72 },
+      // The bottom inset clears the title X overlays on the card's bottom-left corner.
+      { display: "flex", flexDirection: "column", position: "absolute", left: pad, top: 72, right: pad, bottom: 146 },
       ...children,
     ),
   )
@@ -113,9 +118,10 @@ function row(...children: SatoriElement[]) {
 }
 
 function title(text: string) {
-  // One line up to 104px; a name that would set smaller than 76px takes two lines at up to 88px.
+  // One line up to 104px; a name that would set smaller than 76px takes two lines at up to 72px, which leaves room
+  // above and below it.
   const one = fitSize(text, width - pad * 2, 104, 1, 0)
-  const size = one >= 76 ? one : fitSize(text, width - pad * 2, 88, 2, 40)
+  const size = one >= 76 ? one : fitSize(text, width - pad * 2, 72, 2, 40)
   return el(
     "div",
     { display: "flex", flexGrow: 1, alignItems: "center" },
@@ -130,15 +136,15 @@ function stats(items: SatoriElement[]) {
 function stat(value: string, label: string) {
   return el(
     "div",
-    { display: "flex", flexDirection: "column", gap: 18, flexShrink: 0, whiteSpace: "nowrap" },
+    { display: "flex", flexDirection: "column", gap: 8, flexShrink: 0, whiteSpace: "nowrap" },
     el("div", { fontSize: 76, lineHeight: 1, letterSpacing: -2 }, value),
-    el("div", { fontSize: 28, lineHeight: 1, color: colors.faint }, label),
+    el("div", { fontSize: 32, lineHeight: 1, color: colors.faint }, label),
   )
 }
 
-// The OpenCode mark and DATA, the Data site's header lockup.
+// The OpenCode mark and DATA, the Data site's header lockup, its mark as tall as the lab avatar.
 function brand() {
-  const size = 24
+  const size = 40
   return el(
     "div",
     { display: "flex", alignItems: "center", gap: size * 0.62 },
@@ -188,19 +194,25 @@ export function iconSvg(sprite: string, id: string, color: string) {
 
 // The largest size up to `max` that sets `text` on `lines` lines within `width`.
 function fitSize(text: string, width: number, max: number, lines: number, min: number) {
-  const words = text.split(" ")
+  // Lines break at spaces and after a hyphen that a letter follows, as Satori breaks them, so a slug such as
+  // deepseek-r1-distill can wrap.
+  const words = text
+    .split(" ")
+    .flatMap((word) => word.split(/(?<=-)(?=\p{L})/u).map((part, index) => ({ part, space: index === 0 })))
   const sizes = Array.from({ length: Math.ceil((max - min) / 2) }, (_, index) => max - index * 2)
-  // OpenTUI Mono advances 0.6em per character.
+  // OpenMono advances 0.6em per character.
   return sizes.find((size) => lineCount(words, Math.floor(width / (size * 0.6))) <= lines) ?? min
 }
 
-function lineCount(words: string[], perLine: number) {
-  if (words.some((word) => word.length > perLine)) return Infinity
+function lineCount(words: { part: string; space: boolean }[], perLine: number) {
+  if (words.some((word) => word.part.length > perLine)) return Infinity
   return words.reduce(
-    (state, word) =>
-      state.current + 1 + word.length > perLine
-        ? { lines: state.lines + 1, current: word.length }
-        : { lines: state.lines, current: state.current + 1 + word.length },
+    (state, word) => {
+      const next = state.current + (word.space ? 1 : 0) + word.part.length
+      return next > perLine
+        ? { lines: state.lines + 1, current: word.part.length }
+        : { lines: state.lines, current: next }
+    },
     { lines: 1, current: -1 },
   ).lines
 }

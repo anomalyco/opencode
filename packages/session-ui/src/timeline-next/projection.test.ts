@@ -2,8 +2,9 @@ import { describe, expect, test } from "bun:test"
 import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
 import { Predicate } from "effect"
 import { createRoot } from "solid-js"
-import { subagentReport } from "../storybook/current-session-fixtures"
+import { commentaryRuns, subagentReport } from "../storybook/current-session-fixtures"
 import { timelinePresets, type TimelineDetail } from "../timeline/detail"
+import { TimelineRow } from "../timeline/timeline-row"
 import { createNextTimelineProjection, workedDuration } from "./projection"
 import { replayScript, scenarios } from "./stories/session-replay"
 
@@ -150,7 +151,7 @@ describe("New timeline projection", () => {
     ])
   })
 
-  test("a subagent finishes in the group that started it only when nothing comes between; otherwise it reports in its own row", () => {
+  test("each subagent event stays in order in both visible placements, even without a title or visible launch", () => {
     const launched: SessionMessageInfo[] = [
       { id: "user", type: "user", text: "Go", time: { created: 0 } },
       step("launch", 1, {
@@ -195,13 +196,15 @@ describe("New timeline projection", () => {
           timelineDetail: () => detail,
         })
 
-        const result = projection
-          .rows()
-          .flatMap((row) =>
-            Predicate.isTagged(row, "AssistantPart") && row.group.type !== "part"
-              ? [`${row.group.type}:${row.group.refs.map((ref) => ref.messageID).join("+")}`]
-              : [],
-          )
+        const result = projection.rows().flatMap((row) => {
+          if (Predicate.isTagged(row, "Notice")) return [`notice:${row.messageID}`]
+
+          if (!Predicate.isTagged(row, "AssistantPart")) return []
+
+          if (row.group.type === "part") return [`part:${row.group.ref.messageID}`]
+
+          return [`${row.group.type}:${row.group.refs.map((ref) => ref.messageID).join("+")}`]
+        })
 
         dispose()
 
@@ -210,9 +213,84 @@ describe("New timeline projection", () => {
 
     const grouped = { ...detailed, subagents: { placement: "grouped" as const } }
 
-    expect(groups([...launched, report], grouped)).toEqual(["context:launch+report"])
-    expect(groups([...launched, said, report], grouped)).toEqual(["context:launch", "events:report"])
-    expect(groups([...launched, report], detailed)).toEqual(["events:launch", "events:report"])
+    for (const detail of [grouped, detailed]) {
+      expect(groups([...launched, report], detail)).toEqual(["subagent:launch", "subagent:report"])
+      expect(groups([...launched, said, report], detail)).toEqual(["subagent:launch", "part:said", "subagent:report"])
+      expect(groups([launched[0]!, report], detail)).toEqual(["subagent:report"])
+
+      if (report.type !== "synthetic") throw new Error("Expected a subagent report")
+      expect(groups([...launched, report, { ...report, id: "untitled", description: undefined }], detail)).toEqual([
+        "subagent:launch",
+        "subagent:report",
+        "subagent:untitled",
+      ])
+    }
+
+    expect(groups([...launched, report], messagesOnly)).toEqual([])
+  })
+
+  test.each(["grouped", "hidden"] as const)("%s commentary keeps the answer of each run", (placement) => {
+    const runs = commentaryRuns()
+    const detail = { ...timelinePresets[2].value, commentary: { placement } }
+
+    const rows = (messages: SessionMessageInfo[], type: "idle" | "busy") =>
+      createRoot((dispose) => {
+        const projection = createNextTimelineProjection({
+          sessionMessages: () => messages,
+          status: () => ({ type }),
+          timelineDetail: () => detail,
+        })
+
+        const result = projection.rows()
+        dispose()
+
+        return result
+      })
+
+    const groups = (rows: TimelineRow.TimelineRow[]) =>
+      rows.flatMap((row) => {
+        if (!Predicate.isTagged(row, "AssistantPart")) return []
+
+        if (row.group.type === "part") return [`part:${row.group.ref.partID}`]
+
+        return [`${row.group.type}:${row.group.refs.map((ref) => ref.partID).join("+")}`]
+      })
+
+    const complete = [
+      "part:reply:text:0",
+      ...[1, 2, 3].flatMap((index) => [
+        placement === "grouped"
+          ? `context:notice-${index}+work-${index}:text:0+tool-${index}`
+          : `context:notice-${index}+tool-${index}`,
+        `part:reply-${index}:text:0`,
+      ]),
+    ]
+
+    expect(groups(rows(runs.complete, "idle"))).toEqual(complete)
+    expect(groups(rows(runs.toolOnly, "busy"))).toEqual([...complete, "context:tool-only-notice+tool-only-call"])
+
+    const live = [
+      "part:prior:text:0",
+      placement === "grouped" ? "context:wake+working:text:0+running" : "context:wake+running",
+    ]
+
+    expect(groups(rows(runs.busy, "busy"))).toEqual(live)
+    expect(groups(rows(runs.failed, "busy"))).toEqual(live)
+
+    expect({
+      justClosed: groups(rows(runs.busy.slice(0, -2), "busy")),
+      beforeStep: groups(rows(runs.busy.slice(0, -1), "busy")),
+    }).toEqual({
+      justClosed: ["part:prior:text:0"],
+      beforeStep: ["part:prior:text:0", "context:wake"],
+    })
+
+    const withoutIdle = runs.complete.filter((message) => message.type !== "idle").slice(0, 5)
+
+    expect(groups(rows(withoutIdle, "idle"))).toEqual([
+      placement === "grouped" ? "context:reply:text:0+notice-1+work-1:text:0+tool-1" : "context:notice-1+tool-1",
+      "part:reply-1:text:0",
+    ])
   })
 
   test("a move shows only when it changes where the session is", () => {
@@ -245,6 +323,40 @@ describe("New timeline projection", () => {
     })
 
     expect(notices).toEqual(["into", "back"])
+  })
+
+  // The turn gap holds the gap above the prompt. Without it the notice would hold that gap, and give it up, on
+  // screen, when the page above loads and puts the turn gap between them.
+  test("a prompt after leading notices has its turn gap before older history loads above them", () => {
+    const loaded: SessionMessageInfo[] = [
+      {
+        id: "moved",
+        type: "location-switched",
+        location: { directory: "/repo-worktree" },
+        previous: { location: { directory: "/repo" } },
+        time: { created: 2 },
+      },
+      { id: "next", type: "user", text: "Continue", time: { created: 3 } },
+    ]
+
+    const keys = (messages: SessionMessageInfo[]) =>
+      createRoot((dispose) => {
+        const projection = createNextTimelineProjection({
+          sessionMessages: () => messages,
+          status: () => ({ type: "idle" }),
+          timelineDetail: () => detailed,
+        })
+
+        const result = projection.rows().map(TimelineRow.key)
+        dispose()
+
+        return result
+      })
+
+    expect(keys(loaded)).toEqual(["notice:moved", "turn-gap:next", "user-message:next"])
+    expect(keys([{ id: "user", type: "user", text: "Go", time: { created: 0 } }, ...loaded]).slice(-3)).toEqual(
+      keys(loaded),
+    )
   })
 })
 

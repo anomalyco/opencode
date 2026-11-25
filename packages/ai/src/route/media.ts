@@ -16,8 +16,9 @@ import {
   mergeProviderOptions,
   mergeTransport,
   type BaseRequest,
-  type HttpOptions,
   type ProviderOptions,
+  type RequestTimeout,
+  type TransportOptions,
 } from "../schema/index.js"
 import { encodeJson } from "../utils/json.js"
 import { sanitizeSurrogates } from "../utils/sanitize.js"
@@ -28,29 +29,29 @@ export type Execute = Interface["execute"]
 export type MediaRequest = BaseRequest<{
   readonly id: string
   readonly provider: ProviderID
-  readonly http?: HttpOptions
+  readonly transport?: TransportOptions
   readonly providerOptions?: ProviderOptions
 }>
 
 /** What every HTTP exchange of one generation shares. */
-type Exchange = Pick<MediaRequest, "headers" | "http" | "fetch">
+type Exchange = Pick<MediaRequest, "headers" | "timeout" | "http" | "fetch">
 
 /** Deployment inputs every media model factory accepts; provider facades fill these from `configure(...)`. */
 export interface ModelInput {
   readonly id: string
   readonly auth: Auth.Definition
   readonly baseURL?: string
-  readonly headers?: Record<string, string>
-  readonly http?: HttpOptions
+  /** Deployment headers, timeouts and `http` overlays every request of the model starts from. */
+  readonly transport?: TransportOptions
   /** Defaults under each request's `providerOptions`. */
   readonly providerOptions?: ProviderOptions
 }
 
 /** A provider facade's `configure(...)` input as the `ModelInput` every media selector shares, minus the model id. */
 export const deployment = (
-  input: { readonly baseURL?: string; readonly headers?: Record<string, string>; readonly http?: HttpOptions },
+  input: TransportOptions & { readonly baseURL?: string },
   auth: Auth.Definition,
-): Omit<ModelInput, "id"> => ({ auth, baseURL: input.baseURL, headers: input.headers, http: input.http })
+): Omit<ModelInput, "id"> => ({ auth, baseURL: input.baseURL, transport: mergeTransport(input) })
 
 // ---------------------------------------------------------------------------
 // Routes
@@ -104,7 +105,7 @@ export type AnyRoute<Request extends MediaRequest, Event, Response> =
 export interface Composition<Request extends MediaRequest> {
   readonly endpoint: Endpoint.Definition<MediaProtocol.Body, Request>
   readonly auth: Auth.Definition
-  /** Deployment headers applied before transport authentication. */
+  /** Headers the protocol requires on every call; the model's transport headers win. */
   readonly headers?: Record<string, string>
 }
 
@@ -205,7 +206,16 @@ export const queued = <Request extends MediaRequest, Response, Token>(
     }) =>
       get(operation.path(token)).pipe(
         Effect.flatMap((response) =>
-          operation.decode(response, { token, get, headers: (url) => transport.headers(url, exchange) }),
+          operation.decode(response, {
+            token,
+            get,
+            credentials: (url) =>
+              Effect.gen(function* () {
+                const headers = yield* transport.headers(url, exchange)
+                if (headers === undefined) return {}
+                return { headers, middleware: yield* RequestExecutor.CurrentMiddleware }
+              }),
+          }),
         ),
       )
     const status = poll(protocol.status)
@@ -334,6 +344,7 @@ const makeTransport = <Request extends MediaRequest>(
       readonly headers: Headers.Headers
       readonly request: AuthInput["request"]
       readonly body?: MediaProtocol.Body
+      readonly timeout?: RequestTimeout
     },
     fetch: typeof globalThis.fetch | undefined,
     execute: Execute,
@@ -347,7 +358,10 @@ const makeTransport = <Request extends MediaRequest>(
       body: encoded.text,
       headers: encoded.headers,
     })
-    const response = yield* RequestExecutor.withTls(execute, call.request.http?.tls)(
+    const response = yield* RequestExecutor.withTimeout(
+      RequestExecutor.withTls(execute, call.request.http?.tls),
+      call.timeout,
+    )(
       encoded.apply(HttpClientRequest.make(call.method)(url).pipe(HttpClientRequest.setHeaders(headers))),
       RequestExecutor.withFetch(fetch),
     )
@@ -355,7 +369,7 @@ const makeTransport = <Request extends MediaRequest>(
   })
   return {
     /** Route and model overlays; `start` additionally merges the request's own. */
-    exchange: (model: MediaRequest["model"]): Exchange => mergeTransport({ headers: input.headers, http: model.http }),
+    exchange: (model: MediaRequest["model"]): Exchange => mergeTransport({ headers: input.headers }, model.transport),
     /** POST the protocol body to the route endpoint. */
     submit: Effect.fn("MediaRoute.submit")(function* (
       request: Request,
@@ -367,8 +381,12 @@ const makeTransport = <Request extends MediaRequest>(
       execute: Execute,
     ) {
       yield* rejectUnsupported(input.protocol.id, input.protocol.provider, request, protocol.unsupported)
-      const { headers: merged, http } = mergeTransport({ headers: input.headers, http: request.model.http }, request)
-      const exchange = { headers: merged, http, fetch: request.fetch }
+      const {
+        headers: merged,
+        timeout,
+        http,
+      } = mergeTransport({ headers: input.headers }, request.model.transport, request)
+      const exchange = { headers: merged, timeout, http, fetch: request.fetch }
       const providerOptions = mergeProviderOptions(request.model.providerOptions, request.providerOptions)
       const headers = Headers.fromInput(merged)
       const prepared =
@@ -376,7 +394,7 @@ const makeTransport = <Request extends MediaRequest>(
           ? request
           : yield* protocol.prepare(request, (path, body) =>
               send(
-                { method: "POST", url: baseURL(path), headers, request: { ...request, http }, body },
+                { method: "POST", url: baseURL(path), headers, request: { ...request, http }, body, timeout },
                 request.fetch,
                 execute,
               ).pipe(Effect.map((sent) => sent.response)),
@@ -394,12 +412,16 @@ const makeTransport = <Request extends MediaRequest>(
         ),
         http?.query,
       )
-      const sent = yield* send({ method: "POST", url, headers, request: resolved, body }, request.fetch, execute)
+      const sent = yield* send(
+        { method: "POST", url, headers, request: resolved, body, timeout },
+        request.fetch,
+        execute,
+      )
       return { response: sent.response, context: { request: resolved, body }, exchange }
     }),
     /**
      * The headers a follow-up GET of `url` sends, for result URLs that only download with the same credentials. A URL
-     * on another origin than the route's base URL gets none, so credentials never leave the provider's host.
+     * on another origin than the route's base URL gets undefined, so credentials never leave the provider's host.
      */
     headers: (url: string, exchange: Exchange) =>
       URL.canParse(url) && new URL(url).origin === baseURL("").origin
@@ -409,15 +431,19 @@ const makeTransport = <Request extends MediaRequest>(
             url,
             body: "",
             headers: Headers.fromInput(exchange.headers),
-          }).pipe(Effect.map((headers): Record<string, string> => ({ ...headers })))
-        : Effect.succeed({}),
+          }).pipe(Effect.map((headers): Record<string, string> | undefined => ({ ...headers })))
+        : Effect.succeed(undefined),
     /** Bodiless follow-up call (status, result, cancel) with the same auth and headers as `submit`. */
     call: (method: AuthInput["method"], path: string, exchange: Exchange, execute: Execute) => {
       // Provider-issued absolute URLs are used as-is; everything else resolves against the base.
       const url = withQuery(/^https?:\/\//.test(path) ? new URL(path) : baseURL(path), exchange.http?.query)
       for (const [key, value] of Object.entries(input.endpoint.query ?? {})) url.searchParams.set(key, value)
       const headers = Headers.fromInput(exchange.headers)
-      return send({ method, url, headers, request: { http: exchange.http } }, exchange.fetch, execute)
+      return send(
+        { method, url, headers, request: { http: exchange.http }, timeout: exchange.timeout },
+        exchange.fetch,
+        execute,
+      )
     },
   }
 }

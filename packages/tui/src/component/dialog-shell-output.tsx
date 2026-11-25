@@ -58,6 +58,7 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
       }
       const page = await client.api.shell.output({ id, location, cursor, limit: PAGE_BYTES })
       if (disposed) return false
+      const advanced = page.data.cursor > cursor
       cursor = page.data.cursor
       setOutput((previous) => {
         const next = (previous ?? "") + page.data.output
@@ -65,7 +66,7 @@ export function DialogShellOutput(props: { shell: ShellInfo; location: LocationR
         return TextBoundary.tail(next, PAGE_BYTES)
       })
       setError("")
-      return cursor < page.data.size
+      return advanced && cursor < page.data.size
     }
 
     const poll = () => {

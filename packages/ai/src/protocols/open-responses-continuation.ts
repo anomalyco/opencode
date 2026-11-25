@@ -87,6 +87,8 @@ const comparable = (value: unknown) => {
       name: value.name,
       arguments: json(value.arguments),
     }
+  if (value.type === "custom_tool_call")
+    return { type: value.type, call_id: value.call_id, name: value.name, input: value.input }
   if (value.type === "reasoning")
     return {
       type: value.type,

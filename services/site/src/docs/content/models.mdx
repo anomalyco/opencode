@@ -1,5 +1,6 @@
 ---
 title: "Models"
+description: "Choose a model per session or run, set a default, and configure variants, reasoning, prompt caching, and local models."
 ---
 
 Choose a model for the current session with `/models`:
@@ -74,6 +75,8 @@ opencode service set env OPENCODE_DISABLE_FREE_MODELS 1
 Free means an `opencode` or `opencode-go` model with no input price. These models disappear from the catalog and defaults;
 explicitly selecting one fails with `Model unavailable`. Signed out, the `opencode` provider is absent until you connect
 an OpenCode Console account or set `OPENCODE_API_KEY`, which restores its paid models.
+
+To block free models for everyone in an organization, use a policy instead. See [Enterprise](/enterprise#block-free-models).
 
 ## Variants
 

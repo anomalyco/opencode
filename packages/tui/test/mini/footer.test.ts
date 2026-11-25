@@ -102,6 +102,7 @@ async function setup(
     startup?: { version: string; detail: string }
     cursorRow?: number
     update?: (change: MiniSettingChange) => Promise<MiniSettings>
+    markdown?: "source" | "rendered"
   } = {},
 ) {
   const mono = input.mono ?? true
@@ -140,7 +141,7 @@ async function setup(
     startup: input.startup,
     wrote: !!input.startup,
     theme: mono ? RUN_THEME_MONO : RUN_THEME_FALLBACK,
-    tuiConfig: createTuiResolvedConfig({ theme: input.theme }),
+    tuiConfig: createTuiResolvedConfig({ theme: input.theme, session: { markdown: input.markdown } }),
     miniSettings: {
       current: { ...resolveMiniSettings(), mono, ...(input.tools ? { tools: input.tools } : {}) },
       update: input.update,
@@ -153,6 +154,28 @@ async function setup(
   })
   return { ...app, footer, output }
 }
+
+// Rendered reasoning draws a table as columns; source reasoning keeps its pipes.
+test.each([
+  ["rendered", false],
+  ["source", true],
+] as const)("reasoning in scrollback follows session.markdown %s", async (markdown, pipes) => {
+  const app = await setup({ mono: false, markdown })
+  try {
+    const text = "| step | risk |\n| --- | --- |\n| check | low |\n\nDone."
+    app.footer.append({ kind: "reasoning", text, phase: "progress", source: "reasoning" })
+    app.footer.append({ kind: "reasoning", text: "", phase: "final", source: "reasoning" })
+    await app.footer.idle()
+    await app.renderOnce()
+    const rows = app.externalOutput.take().flatMap((event) => event.rows)
+    const row = rows.find((row) => row.includes("check"))
+    expect(row).toBeDefined()
+    expect(row!.includes("|")).toBe(pipes)
+  } finally {
+    app.footer.destroy()
+    app.renderer.destroy()
+  }
+})
 
 test.each([1, 5, 24])("startup preserves the terminal prompt row from cursor row %s", async (cursorRow) => {
   const app = await setup({ mono: false, startup: { version: "test", detail: "/project" }, cursorRow })

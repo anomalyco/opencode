@@ -15,30 +15,47 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
   }),
   all_flags: Schema.Boolean.pipe(optional).annotate({
     description:
-      "Turn every feature flag on regardless of the build channel, like OPENCODE_FLAGS=all; explicit per-flag settings still win, and false is not a kill switch.",
+      "Enable all flags except opt-in-only flags on any build channel, like OPENCODE_FLAGS=all. Per-flag config settings take precedence over all_flags; false leaves the build defaults in effect.",
   }),
-  ...Record.map(ConfigFlag.registry, (description) =>
+  ...Record.map(ConfigFlag.registry, (description, key) =>
     Schema.Boolean.pipe(optional).annotate({
-      description: `${description} Defaults to on in local and dev builds and off in releases.`,
+      description:
+        ConfigFlag.optInOnly.has(key) || ConfigFlag.localOnly.has(key)
+          ? description
+          : `${description} Defaults to on in local and dev builds and off in releases.`,
     }),
   ),
-  part_rows: Schema.Boolean.pipe(optional).annotate({
-    description:
-      "Write each assistant part as its own session_part row instead of rewriting the whole message on every event. Defaults to false.",
-  }),
-  image_generate: Schema.Union([
+  video_generate: Schema.Union([
     Schema.Boolean,
     Schema.Struct({
       model: ConfigModel.Selection.pipe(optional).annotate({
         description:
-          "Default model for the experimental_image_generate tool when the agent doesn't choose one, as providerID/modelID. Falls back to automatic selection when it isn't available.",
+          "Default model for the generate_video tool when the agent doesn't choose one, as providerID/modelID. Falls back to automatic selection when it isn't available.",
       }),
     }),
   ])
     .pipe(optional)
     .annotate({
       description:
-        "Settings for the experimental_image_generate tool, which is offered while a connected provider has an image model.",
+        "Settings for the generate_video tool, which is offered while a connected provider has a video model.",
+    }),
+  part_rows: Schema.Boolean.pipe(optional).annotate({
+    description:
+      "Write each assistant part as its own session_part row instead of rewriting the whole message on every event. Defaults to true; set false to fall back to whole-message writes.",
+  }),
+  image_generate: Schema.Union([
+    Schema.Boolean,
+    Schema.Struct({
+      model: ConfigModel.Selection.pipe(optional).annotate({
+        description:
+          "Default model for the generate_image tool when the agent doesn't choose one, as providerID/modelID. Falls back to automatic selection when it isn't available.",
+      }),
+    }),
+  ])
+    .pipe(optional)
+    .annotate({
+      description:
+        "Settings for the generate_image tool, which is offered while a connected provider has an image model.",
     }),
   subagent_depth: NonNegativeInt.pipe(optional).annotate({
     description: "Maximum subagent nesting depth. Defaults to 1.",

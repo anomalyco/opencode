@@ -281,9 +281,9 @@ export const content = {
       body: "Fai usare agli agenti il tuo vero browser.",
       title: "OpenCode | Browse, il tuo vero browser per agenti di coding",
       description:
-        "Browse permette a OpenCode e ad altri client MCP di usare il tuo vero browser. Gli agenti guidano schede in background con Playwright e ti ripassano login e 2FA.",
+        "Browse permette a OpenCode e ad altri client MCP di usare il tuo vero browser. Gli agenti leggono, cliccano, digitano, fanno screenshot, registrano schede e ti ripassano login e 2FA.",
       intro:
-        "Un server MCP e un'estensione Chromium che permettono ai tuoi agenti di usare il tuo vero browser, con le tue schede, i tuoi login e le tue estensioni. Aprono e guidano le schede con Playwright, fanno screenshot e registrano lo schermo, in schede in background raggruppate e fuori dai piedi. Quando tocca a te, per un login, una richiesta 2FA o un pagamento, ti ripassano la scheda e continuano appena fai clic su Continua.",
+        "Un server MCP e un'estensione Chromium che permettono ai tuoi agenti di usare il tuo vero browser, con le tue schede, i tuoi login e le tue estensioni. Aprono schede in background, raggruppate e fuori dai piedi, e leggono le pagine, cliccano, digitano, fanno screenshot e registrano schede. Quando tocca a te, per un login, una richiesta 2FA o un pagamento, ti ripassano la scheda e continuano appena fai clic su Continua.",
       features: {
         "your-real-browser": {
           title: "Il tuo vero browser",
@@ -303,7 +303,7 @@ export const content = {
         },
         "record-and-capture": {
           title: "Registra e cattura",
-          body: "Screenshot, registrazioni dello schermo e traffico di rete in formato HAR.",
+          body: "Screenshot, registrazioni di schede e traffico di rete.",
         },
         "any-mcp-client": {
           title: "Ogni client MCP",
@@ -313,9 +313,9 @@ export const content = {
           title: "Tutti i tuoi accessi",
           body: "Gli agenti usano i siti a cui hai già effettuato l'accesso. Niente chiavi, niente configurazione.",
         },
-        allowlists: {
-          title: "Allowlist",
-          body: "Limita le schede di una sessione ai siti che indichi.",
+        "allowed-sites": {
+          title: "Siti consentiti",
+          body: "Mantieni la scheda di un agente sui siti che indichi.",
         },
       },
       install:

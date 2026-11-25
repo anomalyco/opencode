@@ -249,6 +249,29 @@ const logged = RequestExecutor.middleware((request, next) =>
 const everything = AIClient.layerWith(logged) // or AI.make({ layer: logged })
 ```
 
+To hook only some calls, such as adding a per-user header, scope middleware to them. It runs on every provider request
+they make, whatever the modality: submits, polls, results and cancels. Executor-wide middleware wraps it.
+
+```ts
+const signed: HttpMiddleware = (request, next) => next(HttpClientRequest.setHeader(request, "x-user", "user-1"))
+
+// Effect: an Effect or a Stream
+const video =
+  yield *
+  Effect.gen(function* () {
+    const job = yield* ai.video.start({ model, prompt: "A red balloon floats up" })
+    return yield* ai.video.result(model, job.id)
+  }).pipe(RequestExecutor.withMiddleware(signed))
+
+// Promise: `http` on any call's options; a handle it returns keeps it
+await AI.ai.video.start({ model, prompt: "A red balloon floats up" }, { http: signed })
+```
+
+Downloading a `url` asset never uses the caller's scoped middleware, so hooks that add credentials can't reach another
+host such as a CDN or a presigned storage URL. A result URL on the provider's own origin carries the middleware of the
+call that returned it (`asset.middleware`), so it downloads the same way later. Set `middleware` yourself with
+`Media.url(url, { middleware })`.
+
 ## Venice AI
 
 `Venice` provides native Chat Completions with streaming tools and reasoning. `model` and `chat`
@@ -1077,7 +1100,8 @@ const program = Effect.gen(function* () {
   job.id // the provider's job ID: store it with the provider and model ID
 
   const status = yield* ai.video.status(model, job.id)
-  status.status // "queued" | "running" | "completed" | "failed" | "cancelled" | "expired"
+  status.status // "running" | "completed" | "error"
+  status.reason // "failed" | "cancelled" | "expired", only when status is "error"
   status.progress // 0..1, only when the provider reports it
 
   const response = yield* ai.video.result(model, job.id)
@@ -1328,8 +1352,8 @@ const program = Effect.gen(function* () {
 })
 ```
 
-Inline routes emit only `finish` from `stream` (no faked deltas); queued routes emit `generation-queued` /
-`generation-progress` before it.
+Inline routes emit only `finish` from `stream` (no faked deltas); queued routes emit `generation-progress`
+before it.
 
 Provider notes:
 

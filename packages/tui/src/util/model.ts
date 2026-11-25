@@ -9,13 +9,25 @@ export function formatRef(model: { providerID: string; id: string; variant?: str
 
 export function switchLabel(
   model: { providerID: string; id: string; variant?: string },
-  models?: readonly { providerID: string; id: string; name: string }[],
+  models?: readonly {
+    providerID: string
+    id: string
+    name: string
+    experimental?: { speed?: { base: string; id: string } }
+  }[],
   previous?: { providerID: string; id: string; variant?: string },
 ) {
   if (previous?.providerID === model.providerID && previous.id === model.id)
     return `Switched variant to ${model.variant ?? "default"}`
-  const display = models?.find((item) => item.providerID === model.providerID && item.id === model.id)?.name
-  if (display === undefined) return `Switched model to ${formatRef(model)}`
+  const find = (ref: { providerID: string; id: string }) =>
+    models?.find((item) => item.providerID === ref.providerID && item.id === ref.id)
+  const info = find(model)
+  if (info === undefined) return `Switched model to ${formatRef(model)}`
+  // A model's faster and slower speeds are models of their own ("gpt-5.5-fast"), so moving between them is a
+  // change of speed.
+  const before = previous?.providerID === model.providerID ? find(previous) : undefined
+  if (before && (before.experimental?.speed?.base ?? before.id) === (info.experimental?.speed?.base ?? info.id))
+    return `Switched speed to ${info.experimental?.speed?.id ?? "standard"}`
   const variant = model.variant && model.variant !== "default" ? ` (${model.variant})` : ""
-  return `Switched model to ${display}${variant}`
+  return `Switched model to ${info.name}${variant}`
 }

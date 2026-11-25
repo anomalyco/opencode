@@ -38,4 +38,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Sunucu ekle",
   "menu.delete": "Sil",
+  "error.unavailable": "SSH kullanılamıyor",
 }

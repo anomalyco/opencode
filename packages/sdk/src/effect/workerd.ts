@@ -1,6 +1,6 @@
 export * as OpenCodeWorkerd from "./workerd"
 
-import { Layer } from "effect"
+import { Effect, Layer } from "effect"
 import type { Config, Scope } from "effect"
 import { WorkerdProfile } from "../internal/workerd"
 import { OpenCode } from "./opencode"
@@ -14,11 +14,29 @@ export interface CreateOptions<R = never> extends WorkerdProfile.Options {
   readonly instances?: OpenCode.CreateOptions<R>["instances"]
 }
 
-export const create = <R = never>({ log, plugins, workspaceProviders, instances, ...options }: CreateOptions<R>) => {
+export type Interface = OpenCode.Interface & {
+  /** Suspends any workspaces past their idle threshold; run from the Durable Object's `alarm()` method. */
+  readonly alarm: Effect.Effect<void>
+}
+
+export const create = <R = never>(
+  options: CreateOptions<R>,
+): Effect.Effect<Interface, Config.ConfigError | Error, Scope.Scope | R> => {
   const profile = WorkerdProfile.make(options)
   return OpenCode.create(
-    { ...profile.options, log, plugins, workspaceProviders, instances },
+    {
+      ...profile.options,
+      log: options.log,
+      plugins: options.plugins,
+      workspaceProviders: options.workspaceProviders,
+      instances: options.instances,
+    },
     { overrides: profile.replacements },
+  ).pipe(
+    Effect.map((opencode) => ({
+      ...opencode,
+      alarm: Effect.asVoid(opencode.workspace.suspendIdle()),
+    })),
   )
 }
 
@@ -27,5 +45,4 @@ export const layer = <R = never>(
 ): Layer.Layer<OpenCode.Service, Config.ConfigError | Error, Exclude<R, Scope.Scope>> =>
   Layer.effect(OpenCode.Service, create(options))
 
-export type Interface = OpenCode.Interface
 export type Requirements = Scope.Scope

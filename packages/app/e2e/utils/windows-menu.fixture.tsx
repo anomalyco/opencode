@@ -8,7 +8,13 @@ import { PlatformProvider, type Platform } from "../../src/runtime/platform/plat
 // The app on a Windows desktop platform, so the titlebar shows the app menu. Menu actions are listed in an output.
 // `path` opens a route other than Home. `holdOpen` records an opened path but never answers, like an editor that keeps
 // the launch running until it exits.
-export function mount(input: { server: string; path?: string; os?: "macos"; openApps?: boolean; holdOpen?: boolean }) {
+export function mount(input: {
+  server: string
+  path?: string
+  os?: "macos" | "linux"
+  openApps?: boolean
+  holdOpen?: boolean
+}) {
   const root = document.getElementById("root")
 
   if (!root) throw new Error("Missing fixture root")

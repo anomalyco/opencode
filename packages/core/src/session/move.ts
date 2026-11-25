@@ -115,7 +115,7 @@ const layer = Layer.effect(
       )
     })
 
-    return Service.of({
+    const service: Interface = Service.of({
       move: Effect.fn("SessionMove.move")(function* (input) {
         const session = yield* get(input.sessionID)
         const destination = yield* resolveDestination(session, input)
@@ -155,8 +155,27 @@ const layer = Layer.effect(
           }),
         )
         yield* execution.wake(input.sessionID)
+        const children = yield* store.list({ directory: session.location.directory, parentID: session.id })
+        yield* Effect.forEach(
+          children.filter((child) => child.location.workspaceID === session.location.workspaceID),
+          (child) =>
+            service
+              .move({
+                sessionID: child.id,
+                directory: destination.location.directory,
+                workspaceID: input.workspaceID,
+                delivery: input.delivery,
+              })
+              .pipe(
+                Effect.catch((error) =>
+                  Effect.logWarning("session move did not reach child", { sessionID: child.id, error }),
+                ),
+              ),
+          { discard: true },
+        )
       }),
     })
+    return service
   }),
 )
 

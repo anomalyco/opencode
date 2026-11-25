@@ -80,9 +80,12 @@ describe("SubagentCompletion", () => {
 
       yield* SubagentCompletion.deliver(sessions, jobs, {
         status: "completed",
-        output: "All green\n\nBackground work still running:\n- shell (shell_1): bun test",
+        output: "All green",
         notificationID,
-        recovery,
+        recovery: {
+          ...recovery,
+          outstanding: [{ kind: "shell", sessionID: recovery.childSessionID, shellID: "shell_1", command: "bun test" }],
+        },
       })
       yield* SubagentCompletion.deliver(sessions, jobs, { status: "error", error: "boom", recovery })
       yield* SubagentCompletion.deliver(sessions, jobs, { status: "cancelled", recovery })
@@ -93,32 +96,34 @@ describe("SubagentCompletion", () => {
       expect(sent).toHaveLength(4)
       expect(sent[0]?.text).toBe(
         [
-          '<subagent sessionID="ses_deliver_child" state="running" description="Deliver report">',
+          '<background-result kind="subagent" sessionID="ses_deliver_child" state="running" description="Deliver report">',
           "All green",
           "",
           "Background work still running:",
           "- shell (shell_1): bun test",
-          "</subagent>",
+          "</background-result>",
         ].join("\n"),
       )
       expect(sent[0]?.metadata?.state).toBe("completed")
       expect(sent[3]?.text).toBe(
-        ['<subagent sessionID="ses_deliver_child" state="completed" description="Deliver report">', "All done", "</subagent>"].join(
-          "\n",
-        ),
+        [
+          '<background-result kind="subagent" sessionID="ses_deliver_child" state="completed" description="Deliver report">',
+          "All done",
+          "</background-result>",
+        ].join("\n"),
       )
       expect(sent[1]?.text).toBe(
         [
-          '<subagent sessionID="ses_deliver_child" state="error" description="Deliver report">',
+          '<background-result kind="subagent" sessionID="ses_deliver_child" state="error" description="Deliver report">',
           "boom",
-          "</subagent>",
+          "</background-result>",
         ].join("\n"),
       )
       expect(sent[2]?.text).toBe(
         [
-          '<subagent sessionID="ses_deliver_child" state="cancelled" description="Deliver report">',
+          '<background-result kind="subagent" sessionID="ses_deliver_child" state="cancelled" description="Deliver report">',
           "Subagent cancelled",
-          "</subagent>",
+          "</background-result>",
         ].join("\n"),
       )
       expect(completed).toEqual([notificationID])
@@ -148,16 +153,16 @@ describe("SubagentCompletion", () => {
 
       expect(sent[0]?.text).toBe(
         [
-          '<subagent sessionID="ses_deliver_child" state="cancelled" description="Deliver report">',
+          '<background-result kind="subagent" sessionID="ses_deliver_child" state="cancelled" description="Deliver report">',
           output,
-          "</subagent>",
+          "</background-result>",
         ].join("\n"),
       )
       expect(sent[1]?.text).toBe(
         [
-          '<subagent sessionID="ses_deliver_child" state="cancelled" description="Deliver report">',
+          '<background-result kind="subagent" sessionID="ses_deliver_child" state="cancelled" description="Deliver report">',
           "Cancel failed",
-          "</subagent>",
+          "</background-result>",
         ].join("\n"),
       )
     }),

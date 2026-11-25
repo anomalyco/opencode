@@ -58,19 +58,18 @@ import {
   type ViewerRenderRequest,
   type ViewerTarget,
 } from "../pierre/render-machine"
-import { restoreShadowTextSelection } from "../pierre/selection-bridge"
 import {
   createFileSelectionState,
   selectPointerTracking,
   selectSelectedRange,
-  selectTextSelectionTracking,
   transitionFileSelection,
   type FileSelectionEffect,
   type FileSelectionEvent,
-  type FileSelectionMode,
 } from "../pierre/selection-machine"
+import type { CommentSelectionSample } from "../pierre/comment-selection-machine"
 import { acquireVirtualizer, virtualizeLineThreshold, virtualMetrics } from "../pierre/virtualizer"
 import { getWorkerPool } from "../pierre/worker"
+import { FileCommentSelection } from "./file-comment-selection"
 import { FileMedia, type FileMediaOptions } from "./file-media"
 import { FileSearchBar } from "./file-search"
 
@@ -85,6 +84,8 @@ type SharedProps<T> = {
   selectedLines?: SelectedLineRange | null
   commentedLines?: SelectedLineRange[]
   onLineNumberSelectionEnd?: (selection: SelectedLineRange | null) => void
+  /** Offers an Add comment button on text selected in the code, and reports the lines it covers. */
+  onCommentSelection?: (range: SelectedLineRange) => void
   onRendered?: () => void
   class?: string
   classList?: ComponentProps<"div">["classList"]
@@ -146,6 +147,7 @@ const sharedKeys = [
   "onLineSelected",
   "onLineSelectionEnd",
   "onLineNumberSelectionEnd",
+  "onCommentSelection",
   "onRendered",
   "preloadedDiff",
 ] as const
@@ -171,7 +173,6 @@ type SelectionCallbacks = {
 }
 
 type ViewerConfig = {
-  mode: FileSelectionMode
   enableLineSelection: () => boolean
   selectedLines: () => SelectedLineRange | null | undefined
   callbacks: SelectionCallbacks
@@ -191,25 +192,20 @@ type PointerMove = {
   type: "pointer.move"
   buttons: number
   line: number | undefined
-  side: DiffSelectionSide | undefined
 }
 
 const POINTER_UP: FileSelectionEvent = Object.freeze({ type: "pointer.up" })
 
-const SELECTION_CHANGED: FileSelectionEvent = Object.freeze({ type: "selection.changed" })
+const POINTER_CANCELLED: FileSelectionEvent = Object.freeze({ type: "pointer.cancelled" })
 
 function useFileViewer(config: ViewerConfig) {
   let wrapper!: HTMLDivElement
   let container!: HTMLDivElement
   let overlay!: HTMLDivElement
-  let selection = createFileSelectionState(config.mode)
-  let dragFrame: number | undefined
-  let selectionFrame: number | undefined
-  let finishFrame: number | undefined
-  let shadowText: { root: ShadowRoot; text: Range } | undefined
+  let selection = createFileSelectionState()
   // Pointer moves reuse one hit and one event so hovering and dragging allocate nothing per move.
   const hit: MouseHit = { line: undefined, numberColumn: false, side: undefined }
-  const moveEvent: PointerMove = { type: "pointer.move", buttons: 0, line: undefined, side: undefined }
+  const moveEvent: PointerMove = { type: "pointer.move", buttons: 0, line: undefined }
 
   const getRoot = () => getViewerRoot(container)
   const getHost = () => getViewerHost(container)
@@ -222,79 +218,8 @@ function useFileViewer(config: ViewerConfig) {
 
   // -- selection machine --
 
-  const readSelection = (preserveTextSelection: boolean) => {
-    const root = getRoot()
-
-    if (!root) return
-
-    const selected = readShadowLineSelection({
-      root,
-      lineForNode: config.lineForNode,
-      sideForNode: config.sideForNode,
-      preserveTextSelection,
-    })
-
-    if (!selected) return
-
-    return { root, range: selected.range, text: selected.text }
-  }
-
-  const cancelFrames = () => {
-    if (dragFrame !== undefined) cancelAnimationFrame(dragFrame)
-
-    if (selectionFrame !== undefined) cancelAnimationFrame(selectionFrame)
-
-    if (finishFrame !== undefined) cancelAnimationFrame(finishFrame)
-    dragFrame = undefined
-    selectionFrame = undefined
-    finishFrame = undefined
-    shadowText = undefined
-  }
-
   const run = (effect: FileSelectionEffect) => {
-    if (effect.type === "cancel-frames") return cancelFrames()
-
-    if (effect.type === "schedule-drag") {
-      if (dragFrame !== undefined) return
-      dragFrame = requestAnimationFrame(() => {
-        dragFrame = undefined
-        dispatch({ type: "drag.frame", attempt: effect.attempt })
-      })
-
-      return
-    }
-
-    if (effect.type === "schedule-selection") {
-      if (selectionFrame !== undefined) return
-      selectionFrame = requestAnimationFrame(() => {
-        selectionFrame = undefined
-        const selected = readSelection(false)
-
-        if (selected) dispatch({ type: "selection.frame", attempt: effect.attempt, range: selected.range })
-      })
-
-      return
-    }
-
-    if (effect.type === "schedule-finish") {
-      finishFrame = requestAnimationFrame(() => {
-        finishFrame = undefined
-        const selected = readSelection(true)
-        shadowText = selected?.text ? { root: selected.root, text: selected.text } : undefined
-        dispatch({ type: "finish.frame", attempt: effect.attempt, range: selected?.range })
-      })
-
-      return
-    }
-
-    if (effect.type === "apply-selection") {
-      const text = effect.preserveText ? shadowText : undefined
-      shadowText = undefined
-      config.applySelection(effect.range)
-      restoreShadowTextSelection(text?.root, text?.text)
-
-      return
-    }
+    if (effect.type === "apply-selection") return config.applySelection(effect.range)
 
     if (effect.type === "notify-line-selected") return config.callbacks.onLineSelected?.(effect.range)
 
@@ -319,9 +244,9 @@ function useFileViewer(config: ViewerConfig) {
     return next === undefined ? range : next
   }
 
-  // -- mouse handlers --
+  // -- pointer handlers --
 
-  const handleMouseDown = (event: MouseEvent) => {
+  const handlePointerDown = (event: PointerEvent) => {
     if (event.button !== 0) return
     fillMouseHit(hit, event, config.lineForElement, config.sideForElement)
     dispatch({
@@ -330,35 +255,31 @@ function useFileViewer(config: ViewerConfig) {
       column: hit.numberColumn ? "numbers" : "text",
       line: hit.line,
       side: hit.side,
+      touch: event.pointerType === "touch",
     })
   }
 
-  const handleMouseMove = (event: MouseEvent) => {
+  const handlePointerMove = (event: PointerEvent) => {
     if (!selectPointerTracking(selection)) return
     moveEvent.buttons = event.buttons
     moveEvent.line = undefined
-    moveEvent.side = undefined
 
     if ((event.buttons & 1) !== 0) {
-      fillMouseHit(hit, event, config.lineForElement, config.sideForElement)
+      fillMouseHit(hit, event, config.lineForElement)
       moveEvent.line = hit.line
-      moveEvent.side = hit.side
     }
 
     dispatch(moveEvent)
   }
 
-  const handleMouseUp = () => {
+  const handlePointerUp = () => {
     if (!selectPointerTracking(selection)) return
     dispatch(POINTER_UP)
   }
 
-  const handleSelectionChange = () => {
-    if (!selectTextSelectionTracking(selection)) return
-    const current = window.getSelection()
-
-    if (!current || current.isCollapsed) return
-    dispatch(SELECTION_CHANGED)
+  const handlePointerCancel = () => {
+    if (!selectPointerTracking(selection)) return
+    dispatch(POINTER_CANCELLED)
   }
 
   // -- shared effects --
@@ -379,10 +300,10 @@ function useFileViewer(config: ViewerConfig) {
       return
     }
 
-    makeEventListener(container, "mousedown", handleMouseDown)
-    makeEventListener(container, "mousemove", handleMouseMove)
-    makeEventListener(window, "mouseup", handleMouseUp)
-    makeEventListener(document, "selectionchange", handleSelectionChange)
+    makeEventListener(container, "pointerdown", handlePointerDown)
+    makeEventListener(container, "pointermove", handlePointerMove)
+    makeEventListener(window, "pointerup", handlePointerUp)
+    makeEventListener(window, "pointercancel", handlePointerCancel)
   })
 
   onCleanup(() => dispatch({ type: "disposed" }))
@@ -409,6 +330,31 @@ function useFileViewer(config: ViewerConfig) {
     getRoot,
     getHost,
     find,
+    /** The text selected in the code, as the lines it covers and where it sits on screen. */
+    sampleTextSelection: (): CommentSelectionSample | undefined => {
+      const root = getRoot()
+
+      if (!root || !wrapper) return
+
+      const selected = readShadowLineSelection({
+        root,
+        lineForNode: config.lineForNode,
+        sideForNode: config.sideForNode,
+      })
+
+      const range = selected && normalize(selected.range)
+
+      if (!selected || !range) return
+
+      const bounds = visibleBounds(wrapper)
+      const anchor = selectionAnchor(selected.text, selected.backward)
+
+      return {
+        range,
+        bounds,
+        anchor: anchor && anchor.bottom > bounds.top && anchor.top < bounds.bottom ? anchor : undefined,
+      }
+    },
     /** Shows the current range again once Pierre has drawn fresh rows. */
     reapplySelection: () => config.applySelection(selectSelectedRange(selection)),
     /** Pierre's own line-number selection, passed in its options. */
@@ -703,6 +649,8 @@ function useViewerRender<I extends RenderTarget, O>(config: ViewerRenderConfig<I
 }
 
 function preserve(viewer: Viewer) {
+  if (!viewer.container.firstElementChild) return () => {}
+
   const root = scrollParent(viewer.wrapper)
 
   if (!root) return () => {}
@@ -854,6 +802,64 @@ function fillMouseHit(
   }
 }
 
+/** The part of `el` left on screen by the window and every ancestor that clips it. */
+function visibleBounds(el: HTMLElement) {
+  const box = el.getBoundingClientRect()
+
+  const bounds = {
+    top: Math.max(box.top, 0),
+    bottom: Math.min(box.bottom, window.innerHeight),
+    left: box.left,
+    right: box.right,
+  }
+
+  for (let parent = el.parentElement; parent; parent = parent.parentElement) {
+    if (getComputedStyle(parent).overflowY === "visible") continue
+    const clip = parent.getBoundingClientRect()
+    bounds.top = Math.max(bounds.top, clip.top)
+    bounds.bottom = Math.min(bounds.bottom, clip.bottom)
+    bounds.left = Math.max(bounds.left, clip.left)
+    bounds.right = Math.min(bounds.right, clip.right)
+  }
+
+  return bounds
+}
+
+/** The selected text's box, from its first and last glyphs rather than the line boxes the range also covers. */
+function selectionAnchor(range: Range, backward: boolean) {
+  const first = edgeRect(range, false)
+  const last = edgeRect(range, true)
+
+  if (!first || !last) return
+
+  return {
+    top: first.top,
+    bottom: last.bottom,
+    start: first.left,
+    end: last.right,
+    single: last.top < first.bottom - first.height / 2,
+    backward,
+  }
+}
+
+function edgeRect(range: Range, end: boolean) {
+  const node = end ? range.endContainer : range.startContainer
+  const offset = end ? range.endOffset : range.startOffset
+
+  if (node instanceof Text) {
+    const glyph = new Range()
+    glyph.setStart(node, end ? Math.max(0, offset - 1) : offset)
+    glyph.setEnd(node, end ? offset : Math.min(node.length, offset + 1))
+    const rect = glyph.getBoundingClientRect()
+
+    if (rect.height > 0) return rect
+  }
+
+  const rects = [...range.getClientRects()].filter((rect) => rect.height > 0)
+
+  return end ? rects.at(-1) : rects[0]
+}
+
 function diffMouseSide(node: HTMLElement) {
   const type = node.dataset.lineType
 
@@ -883,6 +889,7 @@ function ViewerShell(props: {
   viewer: ReturnType<typeof useFileViewer>
   class: string | undefined
   classList: ComponentProps<"div">["classList"] | undefined
+  onCommentSelection: ((range: SelectedLineRange) => void) | undefined
 }) {
   return (
     <div
@@ -890,13 +897,13 @@ function ViewerShell(props: {
       data-mode={props.mode}
       dir="ltr"
       style={styleVariables}
-      class="relative select-text outline-none"
+      class="relative select-text"
       classList={{
         ...props.classList,
         [props.class ?? ""]: !!props.class,
       }}
       ref={(el) => (props.viewer.wrapper = el)}
-      tabIndex={0}
+      tabIndex={-1}
       onPointerDown={props.viewer.find.onPointerDown}
       onFocus={props.viewer.find.onFocus}
     >
@@ -916,6 +923,15 @@ function ViewerShell(props: {
       </Show>
       <div ref={(el) => (props.viewer.container = el)} />
       <div ref={(el) => (props.viewer.overlay = el)} class="pointer-events-none absolute inset-0 z-0" />
+      <Show when={props.onCommentSelection}>
+        {(onComment) => (
+          <FileCommentSelection
+            wrapper={props.viewer.wrapper}
+            sample={props.viewer.sampleTextSelection}
+            onComment={(range) => onComment()(range)}
+          />
+        )}
+      </Show>
     </div>
   )
 }
@@ -981,7 +997,6 @@ function TextViewer<T>(props: TextFileProps<T>) {
   }
 
   viewer = useFileViewer({
-    mode: "text",
     enableLineSelection: () => props.enableLineSelection === true,
     selectedLines: () => local.selectedLines,
     callbacks: local,
@@ -1054,7 +1069,15 @@ function TextViewer<T>(props: TextFileProps<T>) {
     onRendered: () => local.onRendered?.(),
   })
 
-  return <ViewerShell mode="text" viewer={viewer} class={local.class} classList={local.classList} />
+  return (
+    <ViewerShell
+      mode="text"
+      viewer={viewer}
+      class={local.class}
+      classList={local.classList}
+      onCommentSelection={local.onCommentSelection}
+    />
+  )
 }
 
 // ---------------------------------------------------------------------------
@@ -1086,7 +1109,6 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
   }
 
   viewer = useFileViewer({
-    mode: "diff",
     enableLineSelection: () => props.enableLineSelection === true,
     selectedLines: () => local.selectedLines,
     callbacks: local,
@@ -1254,7 +1276,15 @@ function DiffViewer<T>(props: DiffFileProps<T>) {
     ),
   )
 
-  return <ViewerShell mode="diff" viewer={viewer} class={local.class} classList={local.classList} />
+  return (
+    <ViewerShell
+      mode="diff"
+      viewer={viewer}
+      class={local.class}
+      classList={local.classList}
+      onCommentSelection={local.onCommentSelection}
+    />
+  )
 }
 
 // ---------------------------------------------------------------------------

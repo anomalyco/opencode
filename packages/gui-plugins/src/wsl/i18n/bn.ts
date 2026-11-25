@@ -52,4 +52,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} {{timeout}}ms পরে সময় শেষ হয়েছে",
   "error.failedPort": "পোর্ট পেতে ব্যর্থ",
   "menu.remove": "সরান",
+  "error.busy": "{{distro}} অন্য একটি কাজে ব্যস্ত। এটি শেষ হলে আবার চেষ্টা করুন।",
 }

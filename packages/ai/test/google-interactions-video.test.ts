@@ -209,14 +209,14 @@ describe("ai.video.status / result / cancel / Google Interactions", () => {
             .status(model, id)
             .pipe(Effect.provide(layer((input) => Effect.succeed(json(input, { id: "v1_abc", status }))))),
       )
-      expect(statuses.map((value) => value.status)).toEqual([
-        "running",
-        "completed",
-        "completed",
-        "failed",
-        "cancelled",
-        "running",
-        "running",
+      expect(statuses).toEqual([
+        { status: "running" },
+        { status: "completed" },
+        { status: "completed" },
+        { status: "error", reason: "failed" },
+        { status: "error", reason: "cancelled" },
+        { status: "running" },
+        { status: "running" },
       ])
     }),
   )

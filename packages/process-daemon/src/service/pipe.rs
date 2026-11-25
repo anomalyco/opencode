@@ -1,10 +1,8 @@
 //! Non-PTY ("pipe") processes: a command with no terminal, stdin closed and
 //! stdout and stderr sharing one pipe so their bytes keep their order.
 //!
-//! The platform modules own the child, its process tree and the output pipe:
-//! Unix keeps a zombie so the PID and process group stay reserved, and Windows
-//! keeps the process and its kill-on-close job. Everything the two must do the
-//! same way lives here:
+//! The platform waiters clean up a failed command's tree and release the
+//! child at exit. The actor keeps its record available for late waiters.
 //!
 //! - The reader writes every byte to the output file before handing it to the
 //!   actor, which keeps no replay buffer: the file is the only copy of the
@@ -105,7 +103,7 @@ impl OutputSink {
 /// How a pipe child ended.
 enum Exit {
     Code(u32),
-    /// The daemon terminated the process; the value is the signal it sent.
+    /// The Unix terminating signal, or the signal sent by the daemon on Windows.
     Signal(String),
 }
 
@@ -149,16 +147,8 @@ fn new_pipe_info(id: TerminalId, pid: u32, request: CreatePipe) -> ProcessInfo {
     }
 }
 
-/// The waiter's result, and something dropped only after the exit message is
-/// sent (Unix starts the reader's drain by dropping a pipe writer).
-struct Waiter {
-    exit: io::Result<Exit>,
-    after: Box<dyn Send>,
-}
-
 /// Registers a spawned pipe process with its actor, then runs the platform's
-/// reader and waiter. Both are started in that order, and the waiter last, so
-/// it is joined before the process is reaped.
+/// reader and waiter. If startup fails before the waiter starts, reap here.
 fn start_pipe(
     id: TerminalId,
     order: u64,
@@ -166,7 +156,7 @@ fn start_pipe(
     process: Arc<Process>,
     cancel: Box<dyn Send>,
     reader: impl FnOnce(Sender<ActorMessage>) + Send + 'static,
-    waiter: impl FnOnce() -> Waiter + Send + 'static,
+    waiter: impl FnOnce(Sender<ActorMessage>) + Send + 'static,
 ) -> Result<TerminalHandle> {
     let info = Arc::new(RwLock::new(new_pipe_info(id, process.pid(), request)));
     // Nothing is ever written to a pipe process; a disconnected queue
@@ -213,11 +203,7 @@ fn start_pipe(
     let wait_actor_tx = actor_tx.clone();
     let waiter = thread::Builder::new()
         .name(format!("opencode-pty-wait-{id}"))
-        .spawn(move || {
-            let Waiter { exit, after } = waiter();
-            let _ = wait_actor_tx.send(exit_message(exit));
-            drop(after);
-        })
+        .spawn(move || waiter(wait_actor_tx))
         .context("failed to spawn terminal child waiter");
     let waiter = match waiter {
         Ok(waiter) => waiter,
@@ -227,7 +213,6 @@ fn start_pipe(
         }
     };
     joins.push(waiter);
-    let reap = Arc::clone(&process);
     Ok(TerminalHandle {
         order,
         mode: ProcessMode::Pipe,
@@ -236,7 +221,6 @@ fn start_pipe(
         shutdown_tx: Mutex::new(Some(shutdown_tx)),
         killer: Mutex::new(Box::new(ProcessKiller(Arc::clone(&process)))),
         cancel: Mutex::new(Some(cancel)),
-        reap: Mutex::new(Some(Box::new(move || reap.reap()))),
         process: Some(process),
         info,
         joins: Mutex::new(Some(joins)),

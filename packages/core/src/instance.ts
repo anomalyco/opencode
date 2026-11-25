@@ -12,6 +12,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Node } from "@opencode/util/effect/app-node"
 import { FileMutation } from "./file-mutation.js"
 import { FileWrite } from "./file-write.js"
+import { Environments } from "./environment/environments.js"
 import { Environment } from "./environment/index.js"
 import { Formatter } from "./formatter.js"
 import { FileSystem } from "./filesystem.js"
@@ -53,7 +54,6 @@ import { InstructionDiscovery } from "./instruction-discovery.js"
 import { InstructionBuiltIns } from "./instructions/builtins.js"
 import { SessionInstructions } from "./session/instructions.js"
 import { McpTool } from "./tool/mcp.js"
-import { ReadToolFileSystem } from "./tool/read-filesystem.js"
 import { Tool } from "./tool.js"
 import { ToolOutput } from "./tool-output.js"
 import { Vcs } from "./vcs.js"
@@ -66,6 +66,7 @@ const nodes = [
   Location.node,
   LocationLifecycle.node,
   Environment.node,
+  Environments.node,
   Config.node,
   Flag.node,
   Agent.node,
@@ -107,7 +108,6 @@ const nodes = [
   Generate.node,
   Voice.node,
   UsageLimits.node,
-  ReadToolFileSystem.node,
   McpTool.node,
   SessionInstructions.node,
   SessionRunnerModel.node,

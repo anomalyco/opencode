@@ -9,9 +9,9 @@ use crate::service::{
     PipeMetadata, ProcessExit, ProcessInfo, ProcessMode, ProcessSignal, TerminalId,
 };
 
-pub const PROTOCOL_VERSION: u32 = 8;
+pub const PROTOCOL_VERSION: u32 = 9;
 /// Additive capabilities of this daemon. Breaking changes bump
-/// `PROTOCOL_VERSION`; everything in protocol 8 needs no feature.
+/// `PROTOCOL_VERSION`; everything in protocol 9 needs no feature.
 pub const FEATURES: &[&str] = &[];
 
 pub fn features() -> Vec<String> {
@@ -363,18 +363,18 @@ mod tests {
     }
 
     #[test]
-    fn version_8_has_no_features() {
-        assert_eq!(PROTOCOL_VERSION, 8);
+    fn version_9_has_no_features() {
+        assert_eq!(PROTOCOL_VERSION, 9);
         assert!(features().is_empty());
         // `features` is required.
         assert!(
             serde_json::from_value::<Response>(
-                json!({"type": "pong", "instance_id": "a", "pid": 1, "protocol": 8})
+                json!({"type": "pong", "instance_id": "a", "pid": 1, "protocol": 9})
             )
             .is_err()
         );
         round_trip::<Response>(
-            json!({"type": "pong", "instance_id": "a", "pid": 1, "protocol": 8, "features": []}),
+            json!({"type": "pong", "instance_id": "a", "pid": 1, "protocol": 9, "features": []}),
         );
     }
 

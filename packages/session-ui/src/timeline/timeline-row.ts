@@ -18,8 +18,8 @@ export type PartGroup =
     }
   | {
       key: string
-      /** `events`: subagents and background shells counted in one row, in the New timeline. */
-      type: "file" | "read" | "events"
+      /** A subagent row holds one call or report; events count background shells. */
+      type: "file" | "read" | "events" | "subagent"
       refs: PartRef[]
     }
 

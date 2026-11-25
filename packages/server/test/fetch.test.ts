@@ -237,6 +237,16 @@ it.live("activates credentials through the HttpApi", () =>
   }),
 )
 
+it.live("removes credentials through the HttpApi", () =>
+  Effect.gen(function* () {
+    const handler = yield* ServerFetch.make(options)
+    const response = yield* Effect.promise(() =>
+      handler(new Request("http://opencode.local/api/credential/cred_missing", { method: "DELETE" })),
+    )
+    expect(response.status).toBe(204)
+  }),
+)
+
 it.live("serves unauthenticated and answers CORS preflight when no password is configured", () =>
   Effect.gen(function* () {
     const handler = yield* ServerFetch.make(options)

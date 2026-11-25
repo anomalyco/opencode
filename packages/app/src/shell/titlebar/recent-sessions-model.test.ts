@@ -611,34 +611,11 @@ test("a reload supersedes Show more's page and keeps the older rows already load
   })
 })
 
-test("run ends reload Recent except a known subagent's or a shutdown, as do new root sessions and archiving", () => {
-  const sessions = new Map([
-    ["ses_root", session("ses_root", 10)],
-    ["ses_child", session("ses_child", 10, { parentID: "ses_root" })],
-  ])
-
+test("only a new root session reloads Recent", () => {
   const envelope = (sessionID: string) => ({
     id: `evt_${sessionID}`,
     created: 1,
     durable: { aggregateID: sessionID, seq: 1, version: 1 as const },
-  })
-
-  const ended = (sessionID: string) => ({
-    ...envelope(sessionID),
-    type: "session.execution.succeeded" as const,
-    data: { sessionID },
-  })
-
-  const failed = (sessionID: string) => ({
-    ...envelope(sessionID),
-    type: "session.execution.failed" as const,
-    data: { sessionID, error: { type: "unknown", message: "failed" } },
-  })
-
-  const interrupted = (sessionID: string, reason: "user" | "shutdown") => ({
-    ...envelope(sessionID),
-    type: "session.execution.interrupted" as const,
-    data: { sessionID, reason },
   })
 
   const created = (sessionID: string, parentID?: string) => ({
@@ -648,24 +625,27 @@ test("run ends reload Recent except a known subagent's or a shutdown, as do new 
   })
 
   const cases: [OpenCodeEvent, boolean][] = [
-    [ended("ses_root"), true],
-    [failed("ses_root"), true],
-    [interrupted("ses_root", "user"), true],
-    [ended("ses_unknown"), true],
-    [ended("ses_child"), false],
-    [failed("ses_child"), false],
-    [interrupted("ses_child", "user"), false],
-    [interrupted("ses_root", "shutdown"), false],
     [created("ses_new"), true],
     [created("ses_sub", "ses_root"), false],
-    [{ ...envelope("ses_root"), type: "session.archived", data: { sessionID: "ses_root" } }, true],
-    [{ ...envelope("ses_root"), type: "session.unarchived", data: { sessionID: "ses_root" } }, true],
+    [{ ...envelope("ses_root"), type: "session.execution.succeeded", data: { sessionID: "ses_root" } }, false],
+    [
+      {
+        ...envelope("ses_root"),
+        type: "session.execution.failed",
+        data: { sessionID: "ses_root", error: { type: "unknown", message: "failed" } },
+      },
+      false,
+    ],
+    [
+      { ...envelope("ses_root"), type: "session.execution.interrupted", data: { sessionID: "ses_root", reason: "user" } },
+      false,
+    ],
+    [{ ...envelope("ses_root"), type: "session.archived", data: { sessionID: "ses_root" } }, false],
+    [{ ...envelope("ses_root"), type: "session.unarchived", data: { sessionID: "ses_root" } }, false],
     [{ ...envelope("ses_root"), type: "session.renamed", data: { sessionID: "ses_root", title: "Renamed" } }, false],
   ]
 
-  expect(cases.map(([value]) => recentReloadsOn(value, (id) => sessions.get(id)))).toEqual(
-    cases.map(([, expected]) => expected),
-  )
+  expect(cases.map(([value]) => recentReloadsOn(value))).toEqual(cases.map(([, expected]) => expected))
 })
 
 test("removing a server clears its page", () => {

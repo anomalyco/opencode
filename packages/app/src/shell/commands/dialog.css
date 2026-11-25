@@ -76,6 +76,8 @@
 
 .command-palette-meta {
   flex-shrink: 0;
+  font-size: 11px;
+  letter-spacing: 0.05px;
   font-variant-numeric: tabular-nums;
 }
 
@@ -100,7 +102,7 @@
 .command-palette-file-name {
   flex-shrink: 0;
   color: var(--v2-text-text-base);
-  font-weight: 530;
+  font-weight: 440;
   white-space: nowrap;
 }
 
@@ -128,17 +130,31 @@
   }
 }
 
+/* A list with one category needs no header naming it; the header returns once a second section shows. */
+.command-palette-bare
+  [data-slot="search-list-results"]:not(:has(> [data-slot="search-list-section"] ~ [data-slot="search-list-section"]))
+  [data-slot="search-list-header"] {
+  display: none;
+}
+
+.command-palette-bare
+  [data-slot="search-list-results"]:not(:has(> [data-slot="search-list-section"] ~ [data-slot="search-list-section"])) {
+  padding-top: 4px;
+}
+
 .command-palette-compact {
   [data-slot="search-list-search"] {
-    position: relative;
-    padding: 6px 6px 17px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px 6px 2px;
 
     &::after {
-      position: absolute;
-      inset-inline: 0;
-      bottom: 8px;
-      border-top: 0.5px solid var(--v2-border-border-base);
+      height: 1px;
+      margin-inline: -6px;
+      background: var(--v2-border-border-base);
       content: "";
+      transform: scaleY(0.5);
     }
 
     [data-component="text-input-v2"] {
@@ -170,24 +186,37 @@
   }
 
   [data-slot="search-list-section"] {
-    gap: 4px;
+    gap: 2px;
 
     &:not(:last-child) {
       padding-bottom: 4px;
     }
   }
 
-  [data-slot="search-list-header"] {
-    padding-inline: 12px;
+  &.command-palette [data-slot="search-list-header"] {
+    height: auto;
+    padding-block: 10px 2px;
+    padding-inline: 14px;
+    color: var(--v2-text-text-faint);
+    font-size: 12px;
+    line-height: 18px;
+    letter-spacing: 0.05px;
   }
 
-  [data-slot="search-list-row"] {
-    padding-inline: 6px;
+  /* Outranks the list's compact row height. */
+  &.command-palette [data-slot="search-list-row"],
+  &.command-palette [data-slot="search-list-row"][data-size="compact"] {
+    height: 32px;
+    padding-inline: 8px 6px;
 
     &:is([data-active], :focus-visible) {
       background: var(--v2-overlay-simple-overlay-hover);
       outline: none;
     }
+  }
+
+  .palette-menu-title {
+    font-weight: 440;
   }
 
   .command-palette-row-text {

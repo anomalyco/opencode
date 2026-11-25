@@ -1,3 +1,4 @@
+import { Environment } from "@opencode/core/environment/index"
 import { FileSystem } from "@opencode/core/filesystem"
 import { FileWatch } from "@opencode/core/filesystem/file-watch"
 import { Location } from "@opencode/core/location"
@@ -10,6 +11,7 @@ import path from "path"
 import { Api } from "../api"
 import { ContentHeaders } from "../content-headers"
 import { response } from "../location"
+import { ByteRange } from "../range"
 
 export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handlers) =>
   Effect.gen(function* () {
@@ -61,6 +63,12 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
       )
       .handle("fs.watch", (ctx) =>
         Effect.gen(function* () {
+          const environment = yield* Environment.Service
+          if (!environment.local)
+            return yield* new ServiceUnavailableError({
+              service: "filewatcher",
+              message: "File watching is not available for this location",
+            })
           const fs = yield* FileSystem.Service
           const location = yield* Location.Service
           // Same confinement as read: the file must exist inside the location.
@@ -85,6 +93,8 @@ export const FileSystemHandler = HttpApiBuilder.group(Api, "server.fs", (handler
       )
       .handle("fs.unwatch", (ctx) =>
         Effect.gen(function* () {
+          const environment = yield* Environment.Service
+          if (!environment.local) return
           const location = yield* Location.Service
           yield* fileWatch.unwatch({
             location: { directory: location.directory, workspaceID: location.workspaceID },
@@ -125,7 +135,7 @@ function serveFile(
   const rangeHeader = request.method === "GET" ? request.headers["range"] : undefined
   const range =
     rangeHeader !== undefined && matchesIfRange(request.headers["if-range"], etag, lastModified)
-      ? parseRange(rangeHeader, file.size)
+      ? ByteRange.parse(rangeHeader, file.size)
       : undefined
   if (range === "unsatisfiable")
     return HttpServerResponse.empty({
@@ -167,18 +177,4 @@ function matchesIfRange(ifRange: string | undefined, etag: string, lastModified:
 
 function stripWeak(etag: string) {
   return etag.trim().replace(/^w\//i, "")
-}
-
-function parseRange(header: string, size: number) {
-  const match = /^bytes=\s*(\d*)\s*-\s*(\d*)\s*$/i.exec(header.trim())
-  if (match === null || (match[1] === "" && match[2] === "")) return undefined
-  if (match[1] === "") {
-    const suffix = Number(match[2])
-    if (suffix === 0 || size === 0) return "unsatisfiable"
-    return { start: Math.max(size - suffix, 0), end: size - 1 }
-  }
-  const start = Number(match[1])
-  const end = match[2] === "" ? size - 1 : Number(match[2])
-  if (start > end || start >= size) return "unsatisfiable"
-  return { start, end: Math.min(end, size - 1) }
 }

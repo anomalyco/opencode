@@ -1,6 +1,5 @@
 import { Duration, Effect, Schema } from "effect"
 import type { HttpClientResponse } from "effect/http"
-import type { Status } from "../generation.js"
 import { Media } from "../media.js"
 import { MediaProtocol } from "../route/media-protocol.js"
 import { MediaRoute } from "../route/media.js"
@@ -89,13 +88,13 @@ const Task = Schema.Struct({
 })
 
 const STATUS = {
-  queued: "queued",
+  queued: "running",
   running: "running",
   succeeded: "completed",
   failed: "failed",
   cancelled: "cancelled",
   expired: "expired",
-} as const satisfies Record<string, Status>
+} as const satisfies Record<string, MediaProtocol.State>
 
 // ---------------------------------------------------------------------------
 // 3. Failures
@@ -196,7 +195,7 @@ const make = (provider: Provider) => {
 
   const decodeStart = route.decodeStarted(StartResponse, (value) => ({
     token: value.id,
-    snapshot: { id: value.id, status: "queued" },
+    snapshot: { id: value.id, status: "running" },
   }))
 
   const decodeTask = route.decodeJson(Task)
@@ -206,7 +205,7 @@ const make = (provider: Provider) => {
     context: MediaProtocol.PollContext<Token>,
   ) {
     const output = yield* decodeTask(response)
-    return { id: context.token, status: MediaProtocol.status(STATUS, output.value.status) }
+    return { id: context.token, ...MediaProtocol.status(STATUS, output.value.status) }
   })
 
   const decodeResult = Effect.fn("SeedanceVideo.decodeResult")(function* (
@@ -215,8 +214,8 @@ const make = (provider: Provider) => {
   ) {
     const output = yield* decodeTask(response)
     const task = output.value
-    const status = MediaProtocol.status(STATUS, task.status)
-    if (status === "queued" || status === "running") return yield* output.pending(context.token)
+    const status = MediaProtocol.state(STATUS, task.status)
+    if (status === "running") return yield* output.pending(context.token)
     if (status === "failed") {
       const code = task.error?.code ?? undefined
       const detail = task.error?.message ?? undefined
