@@ -3,7 +3,7 @@ import { $ } from "bun"
 import fs from "fs/promises"
 import path from "path"
 import { and, eq, isNull } from "drizzle-orm"
-import { Context, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
+import { Context, Effect, Exit, Fiber, Layer, Logger, Queue, Scope, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -142,6 +142,28 @@ function stored(projectID: Project.ID) {
 }
 
 describe("Worktree", () => {
+  it.live("refreshes a non-git project without discovery warnings", () =>
+    Effect.gen(function* () {
+      const input = yield* setup()
+      yield* Effect.promise(() => fs.rm(path.join(input.root.path, ".git"), { recursive: true, force: true }))
+      const worktrees = yield* fixtureWorktree()
+      const warnings: string[] = []
+
+      yield* worktrees.refresh().pipe(
+        Effect.provide(
+          Logger.layer([
+            Logger.make((entry) => {
+              if (entry.logLevel === "Warn") warnings.push(Bun.inspect(entry.message))
+            }),
+          ]),
+        ),
+      )
+
+      expect(warnings).toEqual([])
+      expect(yield* stored(input.projectID)).toEqual([{ directory: input.sourceDirectory, strategy: null }])
+    }),
+  )
+
   projectIt.live("tracks canonical and linked worktrees when a project resolves", () =>
     Effect.gen(function* () {
       const root = yield* tmpdirScoped()

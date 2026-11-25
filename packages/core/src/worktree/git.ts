@@ -26,7 +26,12 @@ export const make = Effect.gen(function* () {
     }),
     list: Effect.fn("Worktree.Git.list")(function* (directory) {
       const repository = yield* git.repo.discover(directory)
-      if (!repository) return yield* new DirectoryUnavailableError({ directory })
+      if (!repository) {
+        // An existing directory that is not a Git repository simply has no Git worktrees; refresh
+        // asks every root, so treating that as an error spams the log for every non-Git project.
+        if (!(yield* fs.isDir(directory))) return yield* new DirectoryUnavailableError({ directory })
+        return []
+      }
       const entries = yield* git.worktree.list(repository)
       return yield* Effect.forEach(entries, (entry) =>
         canonical(fs, entry.directory).pipe(
