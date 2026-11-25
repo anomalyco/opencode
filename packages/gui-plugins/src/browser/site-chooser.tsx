@@ -364,7 +364,7 @@ export function SiteChooser(props: {
               <span class="flex min-w-0 items-center gap-1.5">
                 <span class="truncate">{ctx.t("signins.import", { browser: choice().source.name })}</span>
                 <Show when={choice().source.profiles.length > 1}>
-                  <Badge appearance="standard" class="min-w-0 shrink">
+                  <Badge class="min-w-0 shrink">
                     <span class="truncate">{choice().profile.name}</span>
                   </Badge>
                 </Show>

@@ -888,7 +888,7 @@ function Identity(props: {
           <span class="truncate">{props.name}</span>
           <Show when={props.aside}>
             {(aside) => (
-              <Badge appearance="standard" class="min-w-0 shrink">
+              <Badge class="min-w-0 shrink">
                 <span class="truncate">{aside()}</span>
               </Badge>
             )}
