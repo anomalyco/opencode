@@ -825,12 +825,13 @@ test.describe("timeline history", () => {
         )
         .toBe(true)
       expect(await output.evaluate((element) => element.scrollTop)).toBe(0)
-      // Up by nearly the height of the output, with the pointer near its bottom: the prompt before the chosen one
-      // comes into view, and the pointer is still over the output when the timeline has moved.
+      // Up by three quarters of the height of the output, with the pointer near its bottom: the turn before the chosen
+      // one comes to the top of the view, and the pointer is still well inside the output when the timeline has moved.
+      // Both by some 50px: a row above that is measured late moves them by a line.
       const bounds = (await output.boundingBox())!
-      const point = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height - 12 }
+      const point = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height - 10 }
       await page.mouse.move(point.x, point.y)
-      await page.mouse.wheel(0, -Math.round(bounds.height - 30))
+      await page.mouse.wheel(0, -Math.round(bounds.height * 0.75))
       await expect(row(chosen - 1)).toBeInViewport()
       expect(
         await output.evaluate((element, point) => element.contains(document.elementFromPoint(point.x, point.y)), point),
