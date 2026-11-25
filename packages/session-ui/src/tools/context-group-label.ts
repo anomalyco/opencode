@@ -4,6 +4,7 @@ import type { ContextGroupPart } from "./tool-renderer"
 
 const webSearchProviderNames = new Map([
   ["tinyfish", "TinyFish"],
+  ["youcom", "You.com"],
   ["opencode", "OpenCode"],
 ])
 
