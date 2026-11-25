@@ -83,6 +83,8 @@ describe("OptimizePlugin", () => {
           "gpt-6.2-astra",
           "gpt-sol-latest",
           "gpt-latest",
+          "gpt-6.3-sol",
+          "gpt-7",
         ])
           editor.models.update(Provider.ID.make("test"), Model.ID.make(id), () => {})
         editor.models.update(Provider.ID.make("test"), Model.ID.make("meta/muse-spark-1.1"), (model) => {
@@ -112,6 +114,8 @@ describe("OptimizePlugin", () => {
         ["gpt-6.2-astra", PROMPT_GPT_6_2],
         ["gpt-sol-latest", PROMPT_GPT_6_2],
         ["gpt-latest", PROMPT_GPT_6_2],
+        ["gpt-6.3-sol", fallback],
+        ["gpt-7", fallback],
         ["gemini-2.5-pro", fallback],
         ["claude-sonnet-4", appended],
         ["kimi-k2", PROMPT_KIMI],

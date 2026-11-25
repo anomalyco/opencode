@@ -28,12 +28,16 @@ const GPT_6_2 = [
   "gpt-pro-latest",
 ]
 
+const GPT_LEGACY = ["gpt-3", "gpt-4", "gpt-5", "gpt-oss", "gpt-6.0", "gpt-6.1", "gpt-6-1", "gpt-61"]
+
 export const OpenAIPlugin = make("opencode.prompt.openai", (model) => {
   const id = model.id.toLowerCase()
-  if (!id.includes("gpt")) return undefined
   // Derived from Codex's prompts, where GPT-6.2 Sol and Astra share the same core instructions.
   if (GPT_6_2.some((prefix) => id.includes(prefix))) return PROMPT_GPT_6_2
-  return id.includes("astra") ? PROMPT_ASTRA : PROMPT_GPT
+  if (GPT_LEGACY.some((prefix) => id.includes(prefix)) || /gpt-6(?:$|-[a-z])/.test(id))
+    return id.includes("astra") ? PROMPT_ASTRA : PROMPT_GPT
+  // Unknown GPT models keep the default system prompt until they get a tuned one.
+  return undefined
 })
 
 export const AnthropicPlugin = make(
