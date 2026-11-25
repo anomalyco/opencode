@@ -1,22 +1,22 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { define } from "@opencode/plugin/effect/plugin"
-// import { Deferred, Duration, Effect, Option, Schema, Semaphore, Stream } from "effect"
 import { Deferred, Effect, Equal, Option, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import type { Server, ServerResponse } from "node:http"
 import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
-// import { IntegrationConnection } from "../../integration/connection.js"
+import { IntegrationConnection } from "../../integration/connection.js"
 import { Model } from "../../model.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
 import { OauthRedirect } from "../../oauth/redirect.js"
 import { Provider } from "../../provider.js"
 import { SessionAffinity } from "../../session/affinity.js"
+import { SharedCache } from "../../shared-cache.js"
 import type { PluginInternal } from "../internal.js"
 import { configuredSettings } from "./configured.js"
-import { storedCredential } from "./credential-settings.js"
+import { activeCredential, storedCredential } from "./credential-settings.js"
 import { OpenAISubscriptionModels } from "./openai-subscription-models.js"
 import { ProviderRefresh } from "./refresh.js"
 
@@ -31,8 +31,7 @@ const tokenSharingScope = "chatgpt.tokens.use.direct"
 const providerID = Provider.ID.openai
 const integrationID = Integration.ID.make("openai")
 const methodID = Integration.MethodID.make("chatgpt-token-sharing")
-const modelCacheKey = (clientID: string) => `models:${clientID}`
-// Used when the catalog has no Sign in with ChatGPT list. gpt-5.5 is rejected there.
+// Used when neither the account's list nor the catalog's list is available. gpt-5.5 is rejected there.
 const fallbackModels = new Set([
   "gpt-5.6-luna",
   "gpt-5.6-luna-fast",
@@ -89,7 +88,6 @@ const RemoteModel = Schema.Struct({
 })
 type RemoteModel = typeof RemoteModel.Type
 const RemoteModels = Schema.Struct({ models: Schema.Array(RemoteModel) })
-const decodeCachedModels = Schema.decodeUnknownOption(Schema.Array(RemoteModel))
 
 const decodeInvalidGrant = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Struct({ error: Schema.Literal("invalid_grant") })),
@@ -98,7 +96,6 @@ const decodeMetadata = Schema.decodeUnknownOption(
   Schema.Struct({
     clientID: Schema.String,
     scopes: Schema.optional(Schema.Array(Schema.String)),
-    models: Schema.optional(Schema.Array(RemoteModel)),
   }),
 )
 
@@ -229,22 +226,17 @@ export const ChatGPTPlugin = define({
   id: "opencode.provider.chatgpt",
   effect: Effect.fn(function* (ctx) {
     const credentials = yield* Credential.Service
+    const cache = yield* SharedCache.Service
+    const http = yield* HttpClient.HttpClient
     const loading = Semaphore.makeUnsafe(1)
     let chatgpt: Credential.OAuth | undefined
-    // let available: ReadonlyArray<RemoteModel> | undefined
     let source: Effect.Success<ReturnType<typeof ctx.integration.connection.active>>
 
     const load = Effect.fn("ChatGPTPlugin.load")(function* () {
-      // const previous = IntegrationConnection.key(source)
       const { connection, credential } = yield* storedCredential(ctx, integrationID)
       chatgpt = credential?.type === "oauth" && credential.methodID === methodID ? credential : undefined
       const previous = source
       source = chatgpt ? connection : undefined
-      // if (previous !== IntegrationConnection.key(source)) {
-      //   const metadata = Option.getOrUndefined(decodeMetadata(chatgpt?.metadata))
-      //   const stored = metadata ? yield* ctx.storage.get(modelCacheKey(metadata.clientID)) : undefined
-      //   available = Option.getOrUndefined(decodeCachedModels(stored))
-      // }
       return !Equal.equals(previous, source)
     })
 
@@ -259,16 +251,10 @@ export const ChatGPTPlugin = define({
         const value = entry.value
         if (value.type !== "oauth" || value.methodID !== Integration.MethodID.make("chatgpt-browser"))
           return Effect.void
-        const metadata = Option.getOrUndefined(decodeMetadata(value.metadata))
-        if (!metadata) return Effect.void
-        return Effect.gen(function* () {
-          const saved = yield* ctx.storage.get(modelCacheKey(metadata.clientID))
-          if (!Option.isSome(decodeCachedModels(saved)) && metadata.models)
-            yield* ctx.storage.set(modelCacheKey(metadata.clientID), metadata.models)
-          const { models: _, ...rest } = value.metadata ?? {}
-          yield* credentials.update(entry.id, {
-            value: Credential.OAuth.make({ ...value, methodID, metadata: rest }),
-          })
+        if (Option.isNone(decodeMetadata(value.metadata))) return Effect.void
+        const { models: _, ...rest } = value.metadata ?? {}
+        return credentials.update(entry.id, {
+          value: Credential.OAuth.make({ ...value, methodID, metadata: rest }),
         })
       },
       { discard: true },
@@ -276,6 +262,30 @@ export const ChatGPTPlugin = define({
     yield* load()
     // Temporary: the Sign in with ChatGPT list from models.dev, see openai-subscription-models.ts.
     const plan = yield* OpenAISubscriptionModels.track("openai-chatgpt", ctx.provider.reload())
+    // The account's own model list, loaded and refreshed like GitHub Copilot's and shared across Locations. A failed or
+    // empty load keeps the last good list; with none yet, the models.dev list stands in.
+    const discovered = yield* ProviderRefresh.start({
+      integrationID,
+      initial: undefined as ReadonlyArray<RemoteModel> | undefined,
+      active: ctx.integration.connection.active(integrationID),
+      reload: ctx.provider.reload(),
+      load: Effect.fn("ChatGPTPlugin.loadModels")(function* (_, options) {
+        const { connection, credential } = yield* activeCredential(ctx, integrationID)
+        if (!connection || credential?.type !== "oauth" || credential.methodID !== methodID)
+          return { connection, value: undefined }
+        const models = yield* cache
+          .get({
+            key: `chatgpt-models:${IntegrationConnection.key(connection)}`,
+            ...options,
+            load: fetchModels(credential.access, ctx.app).pipe(
+              Effect.timeout("15 seconds"),
+              Effect.provideService(HttpClient.HttpClient, http),
+            ),
+          })
+          .pipe(Effect.orElseSucceed(() => undefined))
+        return { connection, value: models }
+      }),
+    })
     yield* ctx.session.hook(
       "retry",
       (event) =>
@@ -319,10 +329,17 @@ export const ChatGPTPlugin = define({
       if (!updated) return
       providers.add({
         info: updated.provider,
-        // models: available
-        //   ? deriveModels(available, Array.from(item.models.values()))
-        //   : Array.from(item.models.values()).filter((model) => fallbackModels.has(model.id)),
-        models: Array.from(item.models.values()).filter((model) => (plan.current ?? fallbackModels).has(model.id)),
+        // The account's live list decides which models show, like GitHub Copilot's; the models.dev list, then the
+        // built-in one, stand in until it loads or when it fails. Variants (fast, pro, ...) come from the catalog list:
+        // the live list only names base models, and this route rejects some service tiers (flex).
+        models: discovered.current
+          ? deriveModels(
+              discovered.current,
+              Array.from(item.models.values()).filter(
+                (model) => (model.modelID ?? model.id) === model.id || (plan.current ?? fallbackModels).has(model.id),
+              ),
+            )
+          : Array.from(item.models.values()).filter((model) => (plan.current ?? fallbackModels).has(model.id)),
         sourceConnection: source,
       })
     })
@@ -337,51 +354,14 @@ export const ChatGPTPlugin = define({
             draft.enabled = false
             return
           }
-          // if (available && !available.some((remote) => remote.slug === (draft.modelID ?? draft.id))) {
-          //   draft.enabled = false
-          //   return
-          // }
           draft.cost = []
         })
       }
     })
-    // const refreshModels = Effect.fn("ChatGPTPlugin.refreshModels")(function* () {
-    //   const connection = source
-    //   const credential =
-    //     connection?.type === "credential"
-    //       ? (yield* credentials.get(Credential.ID.make(connection.id)))?.value
-    //       : undefined
-    //   if (credential?.type !== "oauth" || credential.methodID !== methodID || credential.expires <= Date.now() + 60_000)
-    //     return
-    //   const metadata = Option.getOrUndefined(decodeMetadata(credential.metadata))
-    //   if (!metadata) return
-    //   const models = yield* fetchModels(credential.access, ctx.app).pipe(
-    //     Effect.timeout(15_000),
-    //     Effect.catch(() => Effect.logWarning("failed to refresh ChatGPT models").pipe(Effect.as(undefined))),
-    //   )
-    //   if (!models) return
-    //   yield* loading.withPermit(
-    //     Effect.gen(function* () {
-    //       if (
-    //         IntegrationConnection.key(connection) !== IntegrationConnection.key(source) ||
-    //         IntegrationConnection.key(connection) !==
-    //           IntegrationConnection.key(yield* ctx.integration.connection.active(integrationID))
-    //       )
-    //         return
-    //       if (JSON.stringify(models) === JSON.stringify(available)) return
-    //       yield* ctx.storage.set(modelCacheKey(metadata.clientID), models)
-    //       available = models
-    //       yield* ctx.provider.reload()
-    //     }),
-    //   )
-    // })
-    // .pipe(Effect.andThen(refreshModels().pipe(Effect.forkScoped, Effect.asVoid)))
     yield* ProviderRefresh.onSwitch(
       integrationID,
       loading.withPermit(ProviderRefresh.reloadIfChanged(load(), ctx.provider.reload())),
     )
-    // yield* refreshModels().pipe(Effect.forkScoped)
-    // yield* Effect.sleep(Duration.minutes(15)).pipe(Effect.andThen(refreshModels), Effect.forever, Effect.forkScoped)
   }),
 } satisfies PluginInternal.InternalPlugin)
 
