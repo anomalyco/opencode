@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { JobInfo, SessionInfo, SessionMessageAssistantTool, ShellInfo } from "@opencode/client/promise"
+import type { JobInfo, JsonValue, SessionInfo, SessionMessageAssistantTool, ShellInfo } from "@opencode/client/promise"
 import { createRoot, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSessionBackground } from "@/session/requests/background"
@@ -7,7 +7,7 @@ import { createSessionBackground } from "@/session/requests/background"
 const tool = (
   id: string,
   name: string,
-  metadata: Record<string, string | boolean>,
+  metadata: Record<string, JsonValue>,
   input: Record<string, string> = {},
   status: "completed" | "running" = "completed",
   time: SessionMessageAssistantTool["time"] = { created: 0 },
@@ -333,6 +333,36 @@ describe("createSessionBackground", () => {
         { type: "shell", partID: "shell-part", id: undefined, label: "build", agent: undefined, started: 31 },
       ])
       expect(background.tasks()).toEqual([{ id: "serve", type: "shell", label: "serve", started: 50 }])
+      dispose()
+    })
+  })
+
+  test("keeps a running script's shell out of background tasks before the script lists its call", () => {
+    createRoot((dispose) => {
+      const call = (command: string, status: string) => ({ tool: "shell", status, input: { command } })
+
+      const script = (toolCalls: JsonValue[]) =>
+        assistant("current", [
+          tool("script-part", "execute", { toolCalls }, { code: "await build()" }, "running", { created: 10, ran: 11 }),
+        ])
+
+      const [messages, setMessages] = createSignal([script([call("build", "completed")])])
+
+      const background = createSessionBackground({
+        sessionID: () => "root",
+        messages,
+        sessions: () => [],
+        status: () => "idle",
+        shells: () => [{ ...shell("test", "test"), time: { started: 20 } }],
+      })
+
+      // The shell is live before the script's next progress update lists its call.
+      expect(background.tasks()).toEqual([])
+      setMessages([script([call("build", "completed"), call("test", "running")])])
+      expect(background.tasks()).toEqual([])
+      // Its call timed out and left it running in the background.
+      setMessages([script([call("build", "completed"), call("test", "completed")])])
+      expect(background.tasks()).toEqual([{ id: "test", type: "shell", label: "test", started: 20 }])
       dispose()
     })
   })
