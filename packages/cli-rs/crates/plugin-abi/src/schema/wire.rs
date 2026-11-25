@@ -263,7 +263,7 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
                 Models { } { location: nullable(reference("LocationRef")) },
                 Model { } { },
                 Limits { } { },
-                Providers { } { },
+                Providers { } { location: nullable(reference("LocationRef")) },
                 Info { } { },
                 McpServers { } { location: nullable(reference("LocationRef")) },
                 Integrations { } { location: nullable(reference("LocationRef")) },
@@ -424,7 +424,7 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
             } {
                 size: reference("PanelSize"), subtitle: nullable(string()), actions: array(reference("PanelAction")),
                 binds: array(reference("PanelBind")), bleed: boolean(), centered: boolean(), bare: boolean(),
-                close: nullable(string()), height: nullable(uint16()),
+                close: nullable(string()), height: nullable(uint16()), fit_screen: boolean(),
             }),
         ),
         ("PanelSize", unit!(PanelSize { Medium, Large, XLarge })),
