@@ -370,11 +370,11 @@ export function SiteChooser(props: {
           <div data-component="browser-site-chooser" class="flex h-full min-h-0 flex-col gap-4">
             {/* Where it comes from, only where the person has not picked a profile already, as a Settings row does. */}
             <Show when={props.choices.length > 1}>
-              <div class="flex shrink-0 items-center gap-3">
-                <span class="w-14 shrink-0 text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-text-text-muted">
+              <div class="flex shrink-0 items-center gap-2">
+                <span class="shrink-0 text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-text-text-muted">
                   {ctx.t("import.from")}
                 </span>
-                <div class="min-w-0 flex-1">
+                <div class="min-w-0">
                   <Select
                     appearance="base"
                     aria-label={ctx.t("sites.profile")}
@@ -385,7 +385,8 @@ export function SiteChooser(props: {
                     disabled={busy()}
                     placement="bottom-start"
                     gutter={6}
-                    class="!w-full"
+                    // As wide as the profile's name, up to the row.
+                    class="!w-fit max-w-full"
                     onSelect={(option) => option && switchProfile(option.value)}
                   />
                 </div>

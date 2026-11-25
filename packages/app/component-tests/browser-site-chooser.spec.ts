@@ -230,8 +230,8 @@ story("starts from the site a passkey request came from, brings its sign-in alon
       topClearanceSearch: body && search ? Math.round(search.top - body.top) : -1,
       topClearanceSelect: body && select ? Math.round(select.top - body.top) : -1,
       leftDeltas: title && search && msg ? [search.left - title.left, msg.left - title.left].map((v) => Math.round(v)) : [],
-      rightDeltas:
-        importBtn && closeSvg && select ? [closeSvg.right - importBtn.right, select.right - importBtn.right].map((v) => Math.round(v)) : [],
+      // The profile picker is as wide as its name, so only the close button ends on the buttons' edge.
+      rightDeltas: importBtn && closeSvg ? [Math.round(closeSvg.right - importBtn.right)] : [],
     }
   })
 
@@ -239,7 +239,7 @@ story("starts from the site a passkey request came from, brings its sign-in alon
   expect(layout.topClearanceSearch).toBeGreaterThanOrEqual(4)
   expect(layout.topClearanceSelect).toBeGreaterThanOrEqual(4)
   expect(layout.leftDeltas).toEqual([0, 0])
-  expect(layout.rightDeltas).toEqual([0, 0])
+  expect(layout.rightDeltas).toEqual([0])
 })
 
 story("opened for a site, moves on to the browser profile that has exactly it, and chooses only that one", async ({ page }) => {
