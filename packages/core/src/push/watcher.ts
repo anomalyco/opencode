@@ -81,7 +81,12 @@ const layer = Layer.effectDiscard(
         title: session.title || "OpenCode",
         body: `Needs permission: ${request.action}`,
         // A reply has to name the session that asked, which may be a subagent's.
-        data: { requestID: request.id, sessionID: request.sessionID, action: request.action },
+        data: {
+          requestID: request.id,
+          sessionID: request.sessionID,
+          action: request.action,
+          resources: request.resources,
+        },
         attention: true,
       })
     })

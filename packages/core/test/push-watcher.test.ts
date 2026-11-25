@@ -205,7 +205,7 @@ describe("PushWatcher", () => {
           sessionID: parentID,
           title: "Fix the login bug",
           body: "Needs permission: bash",
-          data: { requestID: "per_1", sessionID: childID, action: "bash" },
+          data: { requestID: "per_1", sessionID: childID, action: "bash", resources: ["git push"] },
         },
       ])
     }),
