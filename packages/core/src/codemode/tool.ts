@@ -1,6 +1,6 @@
 export * as CodeModeTool from "./tool.js"
 
-import { ToolFailure } from "@opencode/ai/effect"
+import { ToolFailure, type ToolDefinition } from "@opencode/ai/effect"
 import { CodeMode, Namespace, Tool } from "@opencode/codemode"
 import type {
   Content,
@@ -92,6 +92,8 @@ export type Api = CodeModeApi.Service | Location.Service
 export type Inventory = {
   readonly tools: ReadonlyMap<string, Info>
   readonly namespaces?: ReadonlyMap<string, ToolNamespace>
+  /** Each tool's registered direct definition, by registry ID. */
+  readonly definitions?: ReadonlyMap<string, ToolDefinition>
 }
 
 const extensions = [CodeModeFetch.extension, CodeModePath.extension, CodeModeBun.extension] as const
@@ -410,7 +412,11 @@ function inventoryTools(inventory: Inventory) {
   const root: ToolNode = { children: new Map() }
   for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
   for (const [name, registration] of inventory.tools) {
-    const child = definition(registration, true)
+    const codemode = registration.options?.codemode
+    // Without Code Mode overrides, the Code Mode definition is the direct one.
+    const child =
+      (typeof codemode === "object" && codemode !== null ? undefined : inventory.definitions?.get(name)) ??
+      definition(registration, true)
     getNode(root, qualifiedName(registration)).tool = Tool.make({
       description: child.description,
       input: child.inputSchema,

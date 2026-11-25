@@ -262,7 +262,7 @@ const text = (bytes: Uint8Array) =>
 export const body = <A>(value: A) => {
   const from = handleOf(value)
   if (!from) return Effect.succeed(value)
-  return Effect.map(read(from), (bytes) => new Blob([new Uint8Array(bytes)], { type: from.type }))
+  return Effect.map(read(from), (bytes) => new Blob([bytes], { type: from.type }))
 }
 
 const handleOf = (value: unknown) => {
