@@ -42,7 +42,6 @@ import { PluginUpdate } from "@opencode/core/plugin/update"
 import { SdkPlugins } from "@opencode/core/plugin/sdk"
 import { WellKnown } from "@opencode/core/wellknown"
 import { PushList } from "@opencode/core/push/list"
-import { PushOptions } from "@opencode/core/push/options"
 import { PushSender } from "@opencode/core/push/sender"
 import { PushWatcher } from "@opencode/core/push/watcher"
 import { Workspace } from "@opencode/core/workspace"
@@ -112,7 +111,6 @@ const applicationServiceNodes = [
   Identity.node,
   FileWatch.node,
   PushList.node,
-  PushOptions.node,
   PushSender.node,
   PushWatcher.node,
 ] as const

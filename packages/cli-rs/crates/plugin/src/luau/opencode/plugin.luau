@@ -1997,8 +1997,8 @@ export type ConfigInfoEncoded = {
         home_memory: boolean?,
         project_overlay: boolean?,
         opencode_api: boolean?,
+        mcp_skills: boolean?,
         sqlite_fts: boolean?,
-        push: boolean?,
         video_generate: (boolean | {
             model: (string | {
                 providerID: string,
@@ -5426,6 +5426,13 @@ export type Client = {
             wait: (input: {
                 sessionID: string,
             }) -> (nil, string?),
+        },
+        skill: {
+            file: (input: {
+                skillID: string,
+                location: { directory: string? }?,
+                path: string,
+            }) -> (string?, string?),
         },
         usage: {
             limits: (input: {

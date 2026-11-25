@@ -10,7 +10,7 @@ const authorization = `Basic ${btoa("opencode:secret")}`
 const id = "12345678-1234-1234-1234-123456789abc"
 const relay = "https://opencode-notify-relay.anomalyco.workers.dev"
 
-const start = Effect.fnUntraced(function* (push: boolean) {
+const start = Effect.fnUntraced(function* () {
   const directory = (yield* tmpdirScoped("opencode-push-routes-")).path
   const started = yield* ServerProcess.start<never, never>({
     password: "secret",
@@ -20,7 +20,6 @@ const start = Effect.fnUntraced(function* (push: boolean) {
     config: {
       directory,
       project: false,
-      content: JSON.stringify({ experimental: { push } }),
     },
     fs: { filewatcher: false },
     hostname: "127.0.0.1",
@@ -47,20 +46,9 @@ const phoneKey = () => {
   return phone.getPublicKey("base64")
 }
 
-it.live("refuses every push route when the flag is off", () =>
-  Effect.gen(function* () {
-    const request = yield* start(false)
-    expect((yield* request("/api/experimental/push")).status).toBe(403)
-    expect(
-      (yield* request(`/api/experimental/push/device/${id}`, { method: "PUT", body: register(phoneKey()) })).status,
-    ).toBe(403)
-    expect((yield* request(`/api/experimental/push/device/${id}`, { method: "DELETE" })).status).toBe(403)
-  }),
-)
-
 it.live("registers, lists and removes a phone", () =>
   Effect.gen(function* () {
-    const request = yield* start(true)
+    const request = yield* start()
     const registered = yield* request(`/api/experimental/push/device/${id}`, {
       method: "PUT",
       body: register(phoneKey()),
@@ -92,7 +80,7 @@ it.live("registers, lists and removes a phone", () =>
 
 it.live("updates phones and sets session bells", () =>
   Effect.gen(function* () {
-    const request = yield* start(true)
+    const request = yield* start()
     const device = `/api/experimental/push/device/${id}`
     const until = Date.now() + 3_600_000
 

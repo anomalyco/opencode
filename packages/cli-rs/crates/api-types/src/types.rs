@@ -7682,6 +7682,14 @@ pub struct SkillListOutput {
     pub data: Vec<SkillInfo>,
 }
 
+/// Input of `Client::experimental_skill_file`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalSkillFileInput {
+    pub skill_id: SkillID,
+    pub location: Option<LocationQueryInput>,
+    pub path: String,
+}
+
 /// Input of `Client::rpc_call`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct RpcCallInput {
@@ -12851,9 +12859,9 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub opencode_api: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub sqlite_fts: Option<bool>,
+    pub mcp_skills: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub push: Option<bool>,
+    pub sqlite_fts: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub video_generate: Option<ConfigEntryDocumentInfoExperimentalVideoGenerate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -13131,6 +13139,18 @@ pub struct ConflictError {
 
 impl crate::TaggedError for ConflictError {
     const TAG: &'static str = "ConflictError";
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SkillLoadError {
+    #[serde(rename = "_tag")]
+    pub tag: String,
+    pub skill: SkillID,
+    pub message: String,
+}
+
+impl crate::TaggedError for SkillLoadError {
+    const TAG: &'static str = "SkillLoadError";
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]

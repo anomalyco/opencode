@@ -2711,7 +2711,6 @@ export type ConfigEntry =
           opencode_api?: boolean
           mcp_skills?: boolean
           sqlite_fts?: boolean
-          push?: boolean
           video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }

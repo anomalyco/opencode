@@ -10,7 +10,6 @@ import { Project } from "@opencode/core/project"
 import { Provider } from "@opencode/core/provider"
 import { PushCrypto } from "@opencode/core/push/crypto"
 import { PushList } from "@opencode/core/push/list"
-import { PushOptions } from "@opencode/core/push/options"
 import { PushSender } from "@opencode/core/push/sender"
 import { PushWatcher } from "@opencode/core/push/watcher"
 import { Session } from "@opencode/core/session"
@@ -63,14 +62,6 @@ const it = testEffect(
   LayerNode.compile(LayerNode.group([PushWatcher.node, PushSender.node, PushList.node, KV.node, Bus.node]), {
     replacements: [
       LayerNodePlatform.httpFetch.replace(LayerNodePlatform.fetchLayer(relay)),
-      PushOptions.node.replace(
-        Layer.succeed(
-          PushOptions.Service,
-          PushOptions.Service.of({
-            enabled: () => Effect.succeed(true),
-          }),
-        ),
-      ),
       Session.node.replace(
         Layer.mock(Session.Service, {
           get: (id) => Effect.succeed(sessions.get(id)!),

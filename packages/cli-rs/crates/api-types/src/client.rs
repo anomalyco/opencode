@@ -244,7 +244,7 @@ pub fn session_move(input: &SessionMoveInput) -> Call<()> {
 
 /// `POST /api/session/:sessionID/prompt` (`prompt`)
 pub fn session_prompt(input: &SessionPromptInput) -> Call<SessionPromptOutput> {
-    let mut call = Call::new("POST", String::new(), Reply::Data, 200, &[400, 401, 404, 409]);
+    let mut call = Call::new("POST", String::new(), Reply::Data, 200, &[400, 401, 404, 409, 502]);
     call.path = format!("/api/session/{}/prompt", call.param(&input.session_id));
     call.object();
     if let Some(value) = &input.id {
@@ -562,7 +562,7 @@ pub fn experimental_session_export(input: &ExperimentalSessionExportInput) -> Ca
 
 /// `POST /api/experimental/session/:sessionID/skill` (`skill`)
 pub fn experimental_session_skill(input: &ExperimentalSessionSkillInput) -> Call<()> {
-    let mut call = Call::new("POST", String::new(), Reply::Empty, 204, &[400, 401, 404]);
+    let mut call = Call::new("POST", String::new(), Reply::Empty, 204, &[400, 401, 404, 502]);
     call.path = format!("/api/experimental/session/{}/skill", call.param(&input.session_id));
     call.object();
     call.field("id", &input.id);
@@ -1327,6 +1327,16 @@ pub fn skill_list(input: &SkillListInput) -> Call<SkillListOutput> {
     call
 }
 
+/// `GET /api/experimental/skill/:skillID/file/*` (`file`)
+pub fn experimental_skill_file(input: &ExperimentalSkillFileInput) -> Call<bytes::Bytes> {
+    let mut call = Call::new("GET", String::new(), Reply::Binary, 200, &[400, 401, 404, 502]);
+    call.path = format!("/api/experimental/skill/{}/file/{}", call.param(&input.skill_id), path_wildcard(&input.path));
+    if let Some(value) = &input.location {
+        call.query("location", value);
+    }
+    call
+}
+
 /// `POST /api/rpc/:rpcID/:method` (`call`)
 pub fn rpc_call(input: &RpcCallInput) -> Call<RpcCallOutput> {
     let mut call = Call::new("POST", String::new(), Reply::Json, 200, &[400, 401, 404, 500]);
@@ -1786,14 +1796,14 @@ pub fn experimental_machine_remove(input: &ExperimentalMachineRemoveInput) -> Ca
 
 /// `GET /api/experimental/push` (`push.get`)
 pub fn experimental_push_get() -> Call<ExperimentalPushGetOutput> {
-    Call::new("GET", "/api/experimental/push".to_owned(), Reply::Data, 200, &[400, 401, 403])
+    Call::new("GET", "/api/experimental/push".to_owned(), Reply::Data, 200, &[400, 401])
 }
 
 /// `PUT /api/experimental/push/device/:id` (`push.device.register`)
 pub fn experimental_push_device_register(
     input: &ExperimentalPushDeviceRegisterInput,
 ) -> Call<ExperimentalPushDeviceRegisterOutput> {
-    let mut call = Call::new("PUT", String::new(), Reply::Data, 200, &[400, 401, 403]);
+    let mut call = Call::new("PUT", String::new(), Reply::Data, 200, &[400, 401]);
     call.path = format!("/api/experimental/push/device/{}", call.param(&input.id));
     call.object();
     call.field("callbackURL", &input.callback_url);
@@ -1809,7 +1819,7 @@ pub fn experimental_push_device_register(
 
 /// `DELETE /api/experimental/push/device/:id` (`push.device.remove`)
 pub fn experimental_push_device_remove(input: &ExperimentalPushDeviceRemoveInput) -> Call<()> {
-    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401, 403]);
+    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401]);
     call.path = format!("/api/experimental/push/device/{}", call.param(&input.id));
     call
 }
@@ -1818,7 +1828,7 @@ pub fn experimental_push_device_remove(input: &ExperimentalPushDeviceRemoveInput
 pub fn experimental_push_device_update(
     input: &ExperimentalPushDeviceUpdateInput,
 ) -> Call<ExperimentalPushDeviceUpdateOutput> {
-    let mut call = Call::new("PATCH", String::new(), Reply::Data, 200, &[400, 401, 403, 404]);
+    let mut call = Call::new("PATCH", String::new(), Reply::Data, 200, &[400, 401, 404]);
     call.path = format!("/api/experimental/push/device/{}", call.param(&input.id));
     call.object();
     if let Some(value) = &input.paused {
@@ -1834,7 +1844,7 @@ pub fn experimental_push_device_update(
 pub fn experimental_push_device_session_set(
     input: &ExperimentalPushDeviceSessionSetInput,
 ) -> Call<ExperimentalPushDeviceSessionSetOutput> {
-    let mut call = Call::new("PUT", String::new(), Reply::Data, 200, &[400, 401, 403, 404]);
+    let mut call = Call::new("PUT", String::new(), Reply::Data, 200, &[400, 401, 404]);
     call.path =
         format!("/api/experimental/push/device/{}/session/{}", call.param(&input.id), call.param(&input.session_id));
     call.object();
@@ -1847,7 +1857,7 @@ pub fn experimental_push_device_session_set(
 
 /// `DELETE /api/experimental/push/device/:id/session/:sessionID` (`push.device.session.remove`)
 pub fn experimental_push_device_session_remove(input: &ExperimentalPushDeviceSessionRemoveInput) -> Call<()> {
-    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401, 403, 404]);
+    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401, 404]);
     call.path =
         format!("/api/experimental/push/device/{}/session/{}", call.param(&input.id), call.param(&input.session_id));
     call
@@ -1857,7 +1867,7 @@ pub fn experimental_push_device_session_remove(input: &ExperimentalPushDeviceSes
 pub fn experimental_push_session_set(
     input: &ExperimentalPushSessionSetInput,
 ) -> Call<ExperimentalPushSessionSetOutput> {
-    let mut call = Call::new("PUT", String::new(), Reply::Data, 200, &[400, 401, 403]);
+    let mut call = Call::new("PUT", String::new(), Reply::Data, 200, &[400, 401]);
     call.path = format!("/api/experimental/push/session/{}", call.param(&input.session_id));
     call.object();
     call.field("level", &input.level);
@@ -1869,7 +1879,7 @@ pub fn experimental_push_session_set(
 
 /// `DELETE /api/experimental/push/session/:sessionID` (`push.session.remove`)
 pub fn experimental_push_session_remove(input: &ExperimentalPushSessionRemoveInput) -> Call<()> {
-    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401, 403]);
+    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401]);
     call.path = format!("/api/experimental/push/session/{}", call.param(&input.session_id));
     call
 }
@@ -1878,7 +1888,7 @@ pub fn experimental_push_session_remove(input: &ExperimentalPushSessionRemoveInp
 pub fn experimental_push_settings_set(
     input: &ExperimentalPushSettingsSetInput,
 ) -> Call<ExperimentalPushSettingsSetOutput> {
-    let mut call = Call::new("PUT", "/api/experimental/push/settings".to_owned(), Reply::Data, 200, &[400, 401, 403]);
+    let mut call = Call::new("PUT", "/api/experimental/push/settings".to_owned(), Reply::Data, 200, &[400, 401]);
     call.object();
     call.field("paused", &input.paused);
     if let Some(value) = &input.until {
@@ -2848,6 +2858,14 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
             Some((|| Ok(command_list(&CommandListInput { location: field(input, "location")? }).cast()))())
         }
         "skill.list" => Some((|| Ok(skill_list(&SkillListInput { location: field(input, "location")? }).cast()))()),
+        "experimental.skill.file" => Some((|| {
+            Ok(experimental_skill_file(&ExperimentalSkillFileInput {
+                skill_id: field(input, "skillID")?,
+                location: field(input, "location")?,
+                path: field(input, "path")?,
+            })
+            .cast())
+        })()),
         "rpc.call" => Some((|| {
             Ok(rpc_call(&RpcCallInput {
                 rpc_id: field(input, "rpcID")?,

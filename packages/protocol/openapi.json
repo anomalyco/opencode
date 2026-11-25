@@ -14353,19 +14353,9 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
           }
         },
-        "description": "List the registered phones with their choices, bells and pauses, the server-wide pause, the shared session bells and the relays a phone may register with. Never returns callback URLs or keys. Behind the push flag. Experimental: may change without compatibility guarantees.",
+        "description": "List the registered phones with their choices, bells and pauses, the server-wide pause and the shared session bells. Never returns callback URLs or keys. Experimental: may change without compatibility guarantees.",
         "summary": "Get push settings"
       }
     },
@@ -14421,19 +14411,9 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
           }
         },
-        "description": "Register or renew a phone's relay callback URL and public key, and answer with the server's public key for it. Keeps the phone's pause, session bells and, unless given, its level. Behind the push flag. Experimental: may change without compatibility guarantees.",
+        "description": "Register or renew a phone's relay callback URL and public key, and answer with the server's public key for it. Keeps the phone's pause, session bells and, unless given, its level. Experimental: may change without compatibility guarantees.",
         "summary": "Register a phone",
         "requestBody": {
           "content": {
@@ -14483,19 +14463,9 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
           }
         },
-        "description": "Stop sending notifications to a phone. Behind the push flag. Experimental: may change without compatibility guarantees.",
+        "description": "Stop sending notifications to a phone. Experimental: may change without compatibility guarantees.",
         "summary": "Remove a phone"
       },
       "patch": {
@@ -14550,16 +14520,6 @@
               }
             }
           },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
-          },
           "404": {
             "description": "PushNotFoundError",
             "content": {
@@ -14571,7 +14531,7 @@
             }
           }
         },
-        "description": "Pause or resume notifications to one phone, or change the level it gets by default. Behind the push flag. Experimental: may change without compatibility guarantees.",
+        "description": "Pause or resume notifications to one phone, or change the level it gets by default. Experimental: may change without compatibility guarantees.",
         "summary": "Update a phone",
         "requestBody": {
           "content": {
@@ -14646,16 +14606,6 @@
               }
             }
           },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
-          },
           "404": {
             "description": "PushNotFoundError",
             "content": {
@@ -14667,7 +14617,7 @@
             }
           }
         },
-        "description": "Choose what one phone gets for one session. Behind the push flag. Experimental: may change without compatibility guarantees.",
+        "description": "Choose what one phone gets for one session. Experimental: may change without compatibility guarantees.",
         "summary": "Set a phone's session bell",
         "requestBody": {
           "content": {
@@ -14726,16 +14676,6 @@
               }
             }
           },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
-          },
           "404": {
             "description": "PushNotFoundError",
             "content": {
@@ -14747,7 +14687,7 @@
             }
           }
         },
-        "description": "Let one phone follow the shared bell or its default for one session again. Behind the push flag. Experimental: may change without compatibility guarantees.",
+        "description": "Let one phone follow the shared bell or its default for one session again. Experimental: may change without compatibility guarantees.",
         "summary": "Clear a phone's session bell"
       }
     },
@@ -14803,19 +14743,9 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
           }
         },
-        "description": "Choose what every phone gets for one session. Behind the push flag. Experimental: may change without compatibility guarantees.",
+        "description": "Choose what every phone gets for one session. Experimental: may change without compatibility guarantees.",
         "summary": "Set a session bell",
         "requestBody": {
           "content": {
@@ -14865,19 +14795,9 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
           }
         },
-        "description": "Let every phone follow its default for one session again. Behind the push flag. Experimental: may change without compatibility guarantees.",
+        "description": "Let every phone follow its default for one session again. Experimental: may change without compatibility guarantees.",
         "summary": "Clear a session bell"
       }
     },
@@ -14924,19 +14844,9 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "ForbiddenError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
-                }
-              }
-            }
           }
         },
-        "description": "Pause or resume notifications to every phone. Behind the push flag. Experimental: may change without compatibility guarantees.",
+        "description": "Pause or resume notifications to every phone. Experimental: may change without compatibility guarantees.",
         "summary": "Pause all notifications",
         "requestBody": {
           "content": {
@@ -18658,9 +18568,6 @@
                 "type": "boolean"
               },
               "sqlite_fts": {
-                "type": "boolean"
-              },
-              "push": {
                 "type": "boolean"
               },
               "video_generate": {

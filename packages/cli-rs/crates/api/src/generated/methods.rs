@@ -135,6 +135,7 @@ impl Client {
     endpoint!(" `DELETE /api/experimental/fs/watch` (`unwatch`)", experimental_file_unwatch, experimental_file_unwatch_call, empty, (), input: ExperimentalFileUnwatchInput);
     endpoint!(" `GET /api/command` (`list`)", command_list, command_list_call, json, CommandListOutput, input: CommandListInput);
     endpoint!(" `GET /api/skill` (`list`)", skill_list, skill_list_call, json, SkillListOutput, input: SkillListInput);
+    endpoint!(" `GET /api/experimental/skill/:skillID/file/*` (`file`)", experimental_skill_file, experimental_skill_file_call, binary, bytes::Bytes, input: ExperimentalSkillFileInput);
     endpoint!(" `POST /api/rpc/:rpcID/:method` (`call`)", rpc_call, rpc_call_call, json, RpcCallOutput, input: RpcCallInput);
     endpoint!(" `GET /api/event` (`subscribe`)", event_subscribe, event_subscribe_call, sse, SseResponse<EventSubscribeOutput>, input: EventSubscribeInput);
     endpoint!(" `GET /api/pty` (`list`)", pty_list, pty_list_call, json, PtyListOutput, input: PtyListInput);

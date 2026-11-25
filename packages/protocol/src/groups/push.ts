@@ -2,9 +2,9 @@ import { Push } from "@opencode/schema/push"
 import { Session } from "@opencode/schema/session"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiSchema, OpenApi } from "effect/http-api"
-import { ForbiddenError, InvalidRequestError, PushNotFoundError } from "../errors.js"
+import { InvalidRequestError, PushNotFoundError } from "../errors.js"
 
-const EXPERIMENTAL = "Behind the push flag. Experimental: may change without compatibility guarantees."
+const EXPERIMENTAL = "Experimental: may change without compatibility guarantees."
 
 const annotations = (identifier: string, summary: string, description: string) =>
   OpenApi.annotations({
@@ -18,19 +18,18 @@ const annotations = (identifier: string, summary: string, description: string) =
 export const PushEndpoints = [
   HttpApiEndpoint.get("push.get", "/api/experimental/push", {
     success: Schema.Struct({ data: Push.Info }),
-    error: [ForbiddenError],
   }).annotateMerge(
     annotations(
       "get",
       "Get push settings",
-      "List the registered phones with their choices, bells and pauses, the server-wide pause, the shared session bells and the relays a phone may register with. Never returns callback URLs or keys.",
+      "List the registered phones with their choices, bells and pauses, the server-wide pause and the shared session bells. Never returns callback URLs or keys.",
     ),
   ),
   HttpApiEndpoint.put("push.device.register", "/api/experimental/push/device/:id", {
     params: { id: Push.DeviceID },
     payload: Push.Register,
     success: Schema.Struct({ data: Push.Registered }),
-    error: [ForbiddenError, InvalidRequestError],
+    error: [InvalidRequestError],
   }).annotateMerge(
     annotations(
       "device.register",
@@ -41,13 +40,12 @@ export const PushEndpoints = [
   HttpApiEndpoint.delete("push.device.remove", "/api/experimental/push/device/:id", {
     params: { id: Push.DeviceID },
     success: HttpApiSchema.NoContent,
-    error: [ForbiddenError],
   }).annotateMerge(annotations("device.remove", "Remove a phone", "Stop sending notifications to a phone.")),
   HttpApiEndpoint.patch("push.device.update", "/api/experimental/push/device/:id", {
     params: { id: Push.DeviceID },
     payload: Push.DevicePatch,
     success: Schema.Struct({ data: Push.Device }),
-    error: [ForbiddenError, PushNotFoundError],
+    error: [PushNotFoundError],
   }).annotateMerge(
     annotations(
       "device.update",
@@ -59,14 +57,14 @@ export const PushEndpoints = [
     params: { id: Push.DeviceID, sessionID: Session.ID },
     payload: Push.Bell,
     success: Schema.Struct({ data: Push.Bell }),
-    error: [ForbiddenError, InvalidRequestError, PushNotFoundError],
+    error: [InvalidRequestError, PushNotFoundError],
   }).annotateMerge(
     annotations("device.session.set", "Set a phone's session bell", "Choose what one phone gets for one session."),
   ),
   HttpApiEndpoint.delete("push.device.session.remove", "/api/experimental/push/device/:id/session/:sessionID", {
     params: { id: Push.DeviceID, sessionID: Session.ID },
     success: HttpApiSchema.NoContent,
-    error: [ForbiddenError, PushNotFoundError],
+    error: [PushNotFoundError],
   }).annotateMerge(
     annotations(
       "device.session.remove",
@@ -78,19 +76,18 @@ export const PushEndpoints = [
     params: { sessionID: Session.ID },
     payload: Push.Bell,
     success: Schema.Struct({ data: Push.Bell }),
-    error: [ForbiddenError, InvalidRequestError],
+    error: [InvalidRequestError],
   }).annotateMerge(annotations("session.set", "Set a session bell", "Choose what every phone gets for one session.")),
   HttpApiEndpoint.delete("push.session.remove", "/api/experimental/push/session/:sessionID", {
     params: { sessionID: Session.ID },
     success: HttpApiSchema.NoContent,
-    error: [ForbiddenError],
   }).annotateMerge(
     annotations("session.remove", "Clear a session bell", "Let every phone follow its default for one session again."),
   ),
   HttpApiEndpoint.put("push.settings.set", "/api/experimental/push/settings", {
     payload: Push.Settings,
     success: Schema.Struct({ data: Push.Settings }),
-    error: [ForbiddenError, InvalidRequestError],
+    error: [InvalidRequestError],
   }).annotateMerge(
     annotations("settings.set", "Pause all notifications", "Pause or resume notifications to every phone."),
   ),

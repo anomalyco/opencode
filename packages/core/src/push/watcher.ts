@@ -8,7 +8,6 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "../bus.js"
 import { Session } from "../session.js"
 import { PushList } from "./list.js"
-import { PushOptions } from "./options.js"
 import { PushSender } from "./sender.js"
 
 const bodies = {
@@ -22,17 +21,11 @@ const layer = Layer.effectDiscard(
     const sessions = yield* Session.Service
     const list = yield* PushList.Service
     const sender = yield* PushSender.Service
-    const options = yield* PushOptions.Service
     const stepped = new Set<Session.ID>()
     // Permission requests each session is waiting on. An interrupted request gets no reply, so the end of the
     // session's execution clears its notification instead.
     const asking = new Map<Session.ID, Set<string>>()
 
-    // Reading the flag starts the configuration's Location, so a server with no phones never does.
-    const wanted = Effect.gen(function* () {
-      if (!(yield* list.hasDevices())) return false
-      return yield* options.enabled()
-    })
 
     const topLevel = Effect.fn("PushWatcher.topLevel")(function* (sessionID: Session.ID) {
       let session = yield* sessions.get(sessionID)
@@ -41,7 +34,7 @@ const layer = Layer.effectDiscard(
     })
 
     const finished = Effect.fn("PushWatcher.finished")(function* (sessionID: Session.ID, outcome: keyof typeof bodies) {
-      if (!(yield* wanted)) return
+      if (!(yield* list.hasDevices())) return
       const session = yield* sessions.get(sessionID)
       if (session.parentID) return
       yield* sender.send({
@@ -59,7 +52,7 @@ const layer = Layer.effectDiscard(
       if (form.metadata?.kind !== "question") return
       const sessionID = Schema.decodeUnknownOption(Session.ID)(form.sessionID)
       if (Option.isNone(sessionID)) return
-      if (!(yield* wanted)) return
+      if (!(yield* list.hasDevices())) return
       const session = yield* topLevel(sessionID.value)
       const field = form.fields[0]
       yield* sender.send({
@@ -75,7 +68,7 @@ const layer = Layer.effectDiscard(
     })
 
     const permission = Effect.fn("PushWatcher.permission")(function* (request: Permission.Request) {
-      if (!(yield* wanted)) return
+      if (!(yield* list.hasDevices())) return
       const session = yield* topLevel(request.sessionID)
       asking.set(request.sessionID, (asking.get(request.sessionID) ?? new Set()).add(request.id))
       yield* sender.send({
@@ -150,5 +143,5 @@ const layer = Layer.effectDiscard(
 export const node = makeGlobalNode({
   name: "push-watcher",
   layer,
-  deps: [Bus.node, PushList.node, PushOptions.node, PushSender.node, Session.node],
+  deps: [Bus.node, PushList.node, PushSender.node, Session.node],
 })

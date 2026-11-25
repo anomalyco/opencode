@@ -108,6 +108,7 @@
 "experimental.file.unwatch":{"location":{"directory":"s3"},"path":"s0"},
 "command.list":{"location":{"directory":"s3"}},
 "skill.list":{"location":{"directory":"s3"}},
+"experimental.skill.file":{"skillID":"s0","location":{"directory":"s3"},"path":"a/b c"},
 "rpc.call":{"rpcID":"s0","method":"s0","location":{"directory":"s3"},"input":"any"},
 "event.subscribe":{"types":["location.shutdown"]},
 "pty.list":{"location":{"directory":"s3"}},
