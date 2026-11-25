@@ -589,3 +589,49 @@ fn a_finished_subagent_leaves_the_selection_on_its_row_index() {
     harness.app.press("up");
     assert!(harness.wait(|harness| !harness.app.text().contains("Subagents")));
 }
+
+/// A subagent leaves the footer's count and the Subagents tab each time it goes idle, also after a resume, against a
+/// server that lists running jobs but sends no job events (before `experimental.job.updated`).
+#[test]
+fn a_finished_subagent_leaves_the_active_count_each_time_it_goes_idle() {
+    let job = |child: &str| {
+        json!({ "kind": "subagent", "id": child, "sessionID": "ses_a", "childSessionID": child, "agent": "explore",
+                "description": child, "status": "running", "time": { "started": 1 } })
+    };
+    let sessions = [
+        session("ses_a", None, "Fix the parser", 3),
+        session("ses_c", Some("ses_a"), "Scan (@explore subagent)", 2),
+        session("ses_d", Some("ses_a"), "Lint (@explore subagent)", 2),
+    ];
+    let running = json!({ "ses_c": { "type": "running" }, "ses_d": { "type": "running" } });
+    let mut routes = vec![
+        MemoryRoute::json("GET", "/api/session", 200, &json!({ "data": sessions, "cursor": {} })),
+        MemoryRoute::json("GET", "/api/session/active", 200, &json!({ "data": running })),
+        MemoryRoute::json("GET", "/api/experimental/job", 200, &json!({ "data": [job("ses_c"), job("ses_d")] })),
+    ];
+    routes.extend(self::routes());
+    let harness = mount_routes(None, routes);
+    // Waits for a job list read after the `after`th, and returns how many there were.
+    let listed = |after: usize| {
+        let reads = |harness: &Harness| harness.requests("GET", "/api/experimental/job").len();
+        assert!(harness.wait(|harness| reads(harness) > after));
+        harness.settle();
+        reads(&harness)
+    };
+    let count = |expected: &str| {
+        assert!(harness.wait(|harness| harness.app.text().contains(expected)), "{}", harness.app.text());
+    };
+    let reads = listed(0);
+    count("2 subagents");
+    harness.emit("session.execution.succeeded", "ses_c");
+    count("1 subagent");
+    // Resumed, the child runs a new job under the same ID, which the reconnect lists.
+    harness.emit("session.execution.started", "ses_c");
+    harness.memory.emit(&json!({ "id": "evt_again", "type": "server.connected", "data": {} }));
+    listed(reads);
+    count("2 subagents");
+    harness.emit("session.execution.succeeded", "ses_c");
+    count("1 subagent");
+    harness.app.press("down");
+    assert!(harness.wait(|harness| harness.rows() == ["Lint"]), "{}", harness.app.text());
+}

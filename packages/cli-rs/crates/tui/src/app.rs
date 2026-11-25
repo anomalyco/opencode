@@ -870,6 +870,8 @@ fn app_commands() -> Vec<String> {
             "agent.cycle",
             "variant.cycle",
             "variant.list",
+            "speed.cycle",
+            "speed.list",
             "agent.cycle.reverse",
             "provider.connect",
             "opencode.highlights",

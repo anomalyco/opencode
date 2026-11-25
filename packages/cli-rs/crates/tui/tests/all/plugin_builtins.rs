@@ -490,13 +490,18 @@ fn a_change_of_the_hosts_state_is_local_once() {
     settle(&harness);
     heard();
     harness.tui.local.set_variant(Some("high"));
-    settle(&harness);
+    // The change reaches each mounted view as it is made, once. Catalog reads it starts finish later and tell the
+    // views of the host's state again, which is their own change; they are no second hearing of this one.
     let changed = heard();
-    assert!(changed.len() >= 2 && changed.iter().all(|line| line.ends_with(" local")), "{changed:?}");
+    assert_eq!(changed.len(), 2, "{changed:?}");
+    assert!(changed.iter().all(|line| line.ends_with(" local")), "{changed:?}");
+    settle(&harness);
+    heard();
     let delta = json!({ "sessionID": "ses_a", "assistantMessageID": "msg_live", "ordinal": 0, "delta": "x" });
     harness.tui.data.apply(vec![event("session.text.delta", 3, delta)]);
     settle(&harness);
-    let deltas = heard();
+    // A delta is a message change, never a local one; other changes may draw beside it.
+    let deltas: Vec<String> = heard().into_iter().filter(|line| line.contains("ses_a/msg_live")).collect();
     assert!(deltas.len() == 2 && deltas.iter().all(|line| line.ends_with("shell false ses_a/msg_live")), "{deltas:?}");
 }
 

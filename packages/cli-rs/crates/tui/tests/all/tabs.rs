@@ -81,11 +81,31 @@ impl Tabs {
     fn ids(&self) -> Vec<String> {
         self.tui.tabs.tabs(&self.tui).iter().map(|tab| tab.session_id.clone()).collect()
     }
+
+    /// Waits for the work a tab change started to land before a measurement: the tab file it wrote lists `tabs`, the
+    /// storage watch's debounced reload has run, and the reads the tabs prefetch are answered. Their replies are
+    /// output, not idle; counting them would make a measurement depend on when those threads ran.
+    fn settled(&self, tabs: &Value) {
+        self.wait_file("tabs", |file| file["cwd"][cwd()]["tabs"] == *tabs);
+        // The watch debounces a write by 50 ms and nothing says when it reloads, so that time passes here, while the
+        // app's mail is drained.
+        self.app.wait_until(std::time::Duration::from_millis(100), || false);
+        let quiet = self.app.wait_until(WAIT, || {
+            self.app.render();
+            self.memory.in_flight() == 0 && !self.app.needs_frame()
+        });
+        assert!(quiet, "the work the app started did not land");
+    }
 }
 
 /// The stored tabs once both sessions are open and their titles have loaded.
 fn both_tabs() -> Value {
     json!([{ "sessionID": "ses_a", "title": "Fix the parser" }, { "sessionID": "ses_b", "title": "Write the docs" }])
+}
+
+/// The stored tabs once the busy session's tab is closed.
+fn only_b() -> Value {
+    json!([{ "sessionID": "ses_b", "title": "Write the docs" }])
 }
 
 fn cwd() -> String {
@@ -342,8 +362,8 @@ fn a_closed_busy_tab_stops_the_pulse_ticks() {
     let h = mount(100, json!({}));
     h.open("ses_b");
     h.wait_for("Write the docs");
-    // The app at rest, after the startup's one-off timers.
-    h.app.idle(std::time::Duration::from_secs(8));
+    // The app at rest, after the startup's one-off timers, its tab write and the reads it prefetched.
+    h.settled(&both_tabs());
     let rest = h.app.idle(std::time::Duration::from_secs(8));
     let event = json!({
         "id": "evt_1", "created": 10_000, "type": "session.execution.started",
@@ -362,11 +382,13 @@ fn a_closed_busy_tab_stops_the_pulse_ticks() {
         !h.app.needs_frame()
     });
     assert!(still, "a closed tab still ticks");
-    // The same in `App::run`'s loop: once the close's one-off timers have run, a closed tab costs what the app costs
-    // at rest, or a fixture retry's frame.
-    h.app.idle(std::time::Duration::from_secs(8));
+    // The same in `App::run`'s loop: once the close's one-off timers have run and its writes and reads have landed,
+    // a closed tab costs what the app costs at rest. A pulse wakes the loop every 50 ms (about 160 times in 8 s); a
+    // reply that lands late costs a frame or two, so the window is bounded well under a pulse, not at an exact count.
+    h.settled(&only_b());
     let closed = h.app.idle(std::time::Duration::from_secs(8));
-    assert!(closed.frames <= 1 && closed.wakeups <= rest.wakeups + closed.frames, "{closed:?}, at rest {rest:?}");
+    assert!(closed.frames <= 4, "{closed:?}, at rest {rest:?}");
+    assert!(closed.wakeups <= rest.wakeups + closed.frames, "{closed:?}, at rest {rest:?}");
 }
 
 #[test]

@@ -6,6 +6,7 @@ Single-select options using Kobalte RadioGroup.
 
 ### API
 - \`RadioGroup\` forwards Kobalte RadioGroup props (\`value\`, \`defaultValue\`, \`onChange\`, \`name\`, \`required\`, \`validationState\`, \`disabled\`).
+- \`surface\`: \`base\` (default) or \`layer-1\`, the background of the group's controls.
 - \`RadioItem\` forwards Kobalte item props (\`value\`, \`disabled\`), and adds \`label\` and optional \`description\`.
 
 ### Behavior
@@ -23,6 +24,7 @@ export default {
     label: "Notification frequency",
     description: "",
     hideLabel: false,
+    surface: "base",
     disabled: false,
     readOnly: false,
     orientation: "vertical",
@@ -31,6 +33,7 @@ export default {
   } satisfies RadioGroupProps,
   argTypes: {
     validationState: { options: ["valid", "invalid"] },
+    surface: { options: ["base", "layer-1"] },
     orientation: { options: ["vertical", "horizontal"] },
   },
   tags: ["autodocs"],
@@ -114,5 +117,29 @@ export const HiddenItemLabels = {
       <RadioItem value="daily" label="Daily" hideLabel />
       <RadioItem value="weekly" label="Weekly" hideLabel />
     </RadioGroup>
+  ),
+}
+
+export const Surfaces = {
+  render: () => (
+    <div style={{ display: "grid", "grid-template-columns": "repeat(2, max-content)", gap: "32px" }}>
+      {(["base", "layer-1"] as const).map((surface) => (
+        <div style={{ display: "grid", gap: "20px" }}>
+          <RadioGroup
+            label={surface === "base" ? "Base" : "Layer 1"}
+            surface={surface}
+            defaultValue="selected"
+            name={`surface-${surface}`}
+          >
+            <RadioItem value="default" label="Default" />
+            <RadioItem value="selected" label="Selected" />
+            <RadioItem value="disabled" label="Disabled" disabled />
+          </RadioGroup>
+          <RadioGroup label="Invalid" surface={surface} validationState="invalid" name={`surface-${surface}-invalid`}>
+            <RadioItem value="default" label="Invalid" />
+          </RadioGroup>
+        </div>
+      ))}
+    </div>
   ),
 }

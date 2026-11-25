@@ -26,6 +26,7 @@ interface RequestOptions {
   readonly body?: Info["body"]
   readonly variants?: Info["variants"]
   readonly limit?: Info["limit"]
+  readonly freeform?: Info["capabilities"]["freeform"]
 }
 
 function model(packageName: string | undefined, options: RequestOptions = {}) {
@@ -40,7 +41,7 @@ function model(packageName: string | undefined, options: RequestOptions = {}) {
     settings: options.settings ?? {},
     headers: options.headers ?? { "x-test": "header" },
     body: options.body ?? { custom_extension: { enabled: true } },
-    capabilities: { tools: true, input: ["text"], output: ["text"] },
+    capabilities: { tools: true, input: ["text"], output: ["text"], freeform: options.freeform?.slice() },
     variants: structuredClone(options.variants ?? []) as Model.MutableInfo["variants"],
     time: { released: 0 },
     cost: [],
@@ -63,6 +64,17 @@ function withConfigEnv<A, E, R>(env: Record<string, string>, effect: () => Effec
 }
 
 describe("ModelResolver", () => {
+  it.effect("gives the AI model the catalog's freeform formats, and none when the catalog lists none", () =>
+    Effect.gen(function* () {
+      const formats = (freeform?: Info["capabilities"]["freeform"]) =>
+        ModelResolver.fromCatalogModel(model(Provider.aisdk("@ai-sdk/openai"), { freeform })).pipe(
+          Effect.map((resolved) => resolved.capabilities?.tools?.freeform),
+        )
+      expect(yield* formats(["text", "lark"])).toEqual(["text", "lark"])
+      expect(yield* formats()).toEqual([])
+    }),
+  )
+
   it.effect("constructs native Azure requests with deployment IDs and projected resource URLs", () =>
     Effect.gen(function* () {
       const responses = yield* ModelResolver.fromCatalogModel(

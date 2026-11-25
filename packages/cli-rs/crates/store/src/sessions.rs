@@ -703,6 +703,7 @@ impl State {
             Outcome::Failed(error) => (SessionInfoOutcome::Failed, Some(error.clone())),
             Outcome::Interrupted { .. } => (SessionInfoOutcome::Interrupted, None),
         };
+        self.end_subagent_jobs(id);
         // Mirror the projected idle marker so turn boundaries match before the next read.
         let row = SessionMessageIdle {
             id: from_event(event_id),

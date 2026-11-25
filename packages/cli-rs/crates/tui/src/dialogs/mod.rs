@@ -24,6 +24,7 @@ pub mod session_list;
 pub mod settings;
 pub mod shell_output;
 pub mod skill;
+pub mod speed;
 pub mod stash;
 pub mod status;
 pub mod theme_list;

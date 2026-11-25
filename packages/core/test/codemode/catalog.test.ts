@@ -278,6 +278,20 @@ describe("CodeModeInstructions.update", () => {
   test("counts new tools past the update budget", () => {
     const bulk = Array.from({ length: 300 }, (_, index) => entry(`bulk.tool${index}`, `Tool ${index}`))
     expect(update([bulk[0]!], bulk)).toMatch(/ {2}- \d+ more; search for them\n/)
+    const listings = CodeModeCatalog.summarize({ tools: bulk }, { budget: Infinity }).namespaces[0]!.entries.filter(
+      (item) => item.path !== "bulk.tool0",
+    )
+    const fits = listings.findIndex(
+      (_, index) =>
+        listings.slice(0, index + 1).reduce((total, item) => total + CodeModeCatalog.cost(item.line), 0) > 1_000,
+    )
+    expect(update([bulk[0]!], bulk)).toContain(
+      [
+        "New tools are available in addition to those previously listed:",
+        ...listings.slice(0, fits).map((item) => item.line),
+        `  - ${listings.length - fits} more; search for them`,
+      ].join("\n"),
+    )
   })
 
   test("shows a changed signature the model was shown even when the tool is no longer shown", () => {

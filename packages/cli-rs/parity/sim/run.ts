@@ -12,7 +12,6 @@ import { Schema } from "effect"
 import { Frontend, Handshake } from "@opencode/protocol/simulation"
 import { applyMasks } from "../lib/app"
 import { writeFixture, type Fixture } from "../lib/cells"
-import { freePort } from "../lib/port"
 import { buildRust, command, parseSides, parityRoot, sandbox, type Sandbox, type Side } from "../cli/client"
 import { startBackend, type Invocation, type Reply } from "./backend"
 import { allows, compareFixtures, compareRequests, text, toFixture } from "./compare"
@@ -189,22 +188,23 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
     const cmd = command(side, args)
     return side === "ts" && scenario.now !== undefined ? [cmd[0]!, `--preload=${CLOCK}`, ...cmd.slice(1)] : cmd
   }
-  const [serverPort, backendPort, serverUiPort, uiPort] = Array.from({ length: 4 }, freePort)
-  const backendUrl = `ws://127.0.0.1:${backendPort}`
   const viewport = { cols: scenario.width ?? 100, rows: scenario.height ?? 30 }
+  // Every endpoint asks the kernel for its port at bind time: a port checked and then bound seconds later can be taken
+  // in between by another parity run (flakes-n). Each process prints the endpoint it bound, and the runner reads it
+  // there. The server's own UI endpoint is unused, but the manifest schema requires it.
   await Bun.write(
     path.join(registry, "server.json"),
-    JSON.stringify({ endpoints: { ui: `ws://127.0.0.1:${serverUiPort}`, backend: backendUrl } }),
+    JSON.stringify({ endpoints: { ui: "ws://127.0.0.1:0", backend: "ws://127.0.0.1:0" } }),
   )
   await Bun.write(
     path.join(registry, `${side}.json`),
-    JSON.stringify({ endpoints: { ui: `ws://127.0.0.1:${uiPort}`, backend: backendUrl }, viewport }),
+    JSON.stringify({ endpoints: { ui: "ws://127.0.0.1:0", backend: "ws://127.0.0.1:0" }, viewport }),
   )
   const log = (file: string) => path.join(box.root, `${label}.${file}`)
   const stopped: (() => void)[] = []
   const debug: { screen?: () => Promise<Fixture>; model?: unknown; requests?: Logged[] } = {}
   try {
-    const server = spawn(start("ts", ["serve", "--port", String(serverPort)]), box, log("server.stderr"), {
+    const server = spawn(start("ts", ["serve", "--port", "0"]), box, log("server.stderr"), log("server.stdout"), {
       ...clock,
       OPENCODE_SIMULATE: "1",
       OPENCODE_DRIVE: "server",
@@ -213,9 +213,16 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
       OPENCODE_CONFIG_DIR: configDir,
     })
     stopped.push(() => server.kill(9))
-    const serverUrl = `http://127.0.0.1:${serverPort}`
-    await waitFor(
+    const serverUrl = await waitFor(
       `${label} server`,
+      async () => {
+        const match = /server listening on (http:\/\/\S+)/.exec(await readText(log("server.stdout")))
+        return match?.[1] ?? false
+      },
+      60_000,
+    )
+    await waitFor(
+      `${label} server health`,
       () =>
         fetch(`${serverUrl}/api/health`).then(
           () => true,
@@ -223,9 +230,12 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
         ),
       60_000,
     )
-    await waitFor(
+    const backendUrl = await waitFor(
       `${label} backend endpoint`,
-      async () => (await readText(log("server.stderr"))).includes("opencode drive backend websocket:"),
+      async () => {
+        const match = /opencode drive backend websocket: (ws:\/\/\S+)/.exec(await readText(log("server.stderr")))
+        return match?.[1] ?? false
+      },
       60_000,
     )
     const model: { url: string; kind: string; reply: number | null; tools?: string[] }[] = []
@@ -248,20 +258,30 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
     const args = (scenario.args ?? []).map((arg) =>
       arg.startsWith("$session:") ? sessions[Number(arg.slice("$session:".length))] : arg,
     )
-    const client = spawn(start(side, [...args, "--server", proxy.url]), box, log("client.stderr"), {
-      ...clock,
-      OPENCODE_DRIVE: side,
-      DRIVE_REGISTRY_DIR: registry,
-      OPENCODE_DRIVE_RENDERER: "headless",
-      TERM: "xterm-256color",
-    })
+    const client = spawn(
+      start(side, [...args, "--server", proxy.url]),
+      box,
+      log("client.stderr"),
+      log("client.stdout"),
+      {
+        ...clock,
+        OPENCODE_DRIVE: side,
+        DRIVE_REGISTRY_DIR: registry,
+        OPENCODE_DRIVE_RENDERER: "headless",
+        TERM: "xterm-256color",
+      },
+    )
     stopped.push(() => client.kill(9))
-    await waitFor(
+    // Both clients print the endpoint they bound, which is the kernel's port now that the manifest asks for 0.
+    const driveUrl = await waitFor(
       `${label} drive endpoint`,
-      async () => (await readText(log("client.stderr"))).includes("opencode drive ui websocket:"),
+      async () => {
+        const match = /opencode drive ui websocket: (ws:\/\/\S+)/.exec(await readText(log("client.stderr")))
+        return match?.[1] ?? false
+      },
       60_000,
     )
-    const drive = await connectDrive(`ws://127.0.0.1:${uiPort}`, label)
+    const drive = await connectDrive(driveUrl, label)
     stopped.push(drive.close)
     const result = async (method: string, params?: unknown) => {
       const response = await drive.call(method, params)
@@ -278,18 +298,20 @@ async function runSide(box: Sandbox, side: Side, label: string, scenario: SimSce
         optionalCapabilities: [],
       }),
     )
-    const until = (needle: string) =>
-      waitFor(
+    const until = async (needle: string) => {
+      await waitFor(
         `${label} screen to show ${JSON.stringify(needle)}`,
         async () => (await result("ui.matches", { text: needle })) === true,
         WAIT,
       )
-    const gone = (needle: string) =>
-      waitFor(
+    }
+    const gone = async (needle: string) => {
+      await waitFor(
         `${label} screen to stop showing ${JSON.stringify(needle)}`,
         async () => (await result("ui.matches", { text: needle })) === false,
         WAIT,
       )
+    }
     const capture = async () => toFixture(Schema.decodeUnknownSync(Frontend.CapturedFrame)(await result("ui.capture")))
     const captures: Record<string, Fixture> = {}
     debug.screen = capture
@@ -445,12 +467,12 @@ function toolNames(invocation: Invocation) {
   return (body?.tools ?? []).flatMap((tool) => (tool.function?.name ? [tool.function.name] : []))
 }
 
-function spawn(cmd: string[], box: Sandbox, stderr: string, env: Record<string, string>) {
+function spawn(cmd: string[], box: Sandbox, stderr: string, stdout: string, env: Record<string, string>) {
   const child = Bun.spawn(cmd, {
     cwd: box.cwd,
     env: { ...box.env, ...env },
     stdin: "ignore",
-    stdout: "ignore",
+    stdout: Bun.file(stdout),
     stderr: Bun.file(stderr),
   })
   children.add(child)
@@ -458,10 +480,11 @@ function spawn(cmd: string[], box: Sandbox, stderr: string, env: Record<string, 
   return child
 }
 
-async function waitFor(what: string, check: () => Promise<boolean>, ms: number) {
+async function waitFor<T>(what: string, check: () => Promise<T | false | undefined>, ms: number): Promise<T> {
   const deadline = Date.now() + ms
   while (Date.now() < deadline) {
-    if (await check()) return
+    const value = await check()
+    if (value) return value
     await Bun.sleep(100)
   }
   throw new Error(`timed out waiting for ${what}`)

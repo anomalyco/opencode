@@ -1,6 +1,8 @@
 //! Finished entries are painted once; streaming entries commit only their settled rows. Text written to terminal
 //! scrollback cannot be rewritten.
 
+use std::sync::Arc;
+
 use opencode_api::generated::{SessionMessageAssistantTool, SessionMessageAssistantToolState};
 use opentui::prelude::*;
 use opentui::split::{Scrollback, ScrollbackSurface, SnapshotOptions, SplitFooter, SplitSnapshot};
@@ -816,7 +818,7 @@ fn entry_markdown(app: &App, theme: &RunTheme, commit: &Commit, body: &Body, str
                 marker: color,
                 rule: color,
             },
-            SyntaxTheme::new().first_part_fallback().style("default", Style::new().fg(color)),
+            Arc::new(SyntaxTheme::new().first_part_fallback().style("default", Style::new().fg(color))),
         )
     } else {
         let syntax = theme.syntax.clone().unwrap_or_default();
@@ -831,7 +833,6 @@ fn entry_markdown(app: &App, theme: &RunTheme, commit: &Commit, body: &Body, str
         width_mode: Some(ColumnWidthMode::Content),
         ..MarkdownTableOptions::default()
     };
-    let syntax = if code { recolor(syntax, color) } else { syntax };
     opencode_ui::grammars::register();
     Markdown::new(app)
         .colors(colors)
@@ -840,17 +841,6 @@ fn entry_markdown(app: &App, theme: &RunTheme, commit: &Commit, body: &Body, str
         .conceal(true)
         .table_options(table)
         .streaming(streaming)
-}
-
-/// Every style of `syntax` in `color`, keeping attributes.
-fn recolor(mut syntax: SyntaxTheme, color: Color) -> SyntaxTheme {
-    let names: Vec<String> = syntax.names().map(str::to_owned).collect();
-    for name in names {
-        if let Some(style) = syntax.get(&name) {
-            syntax.set(name, style.fg(color));
-        }
-    }
-    syntax
 }
 
 /// `staticBody`: a completed tool's output already spaced from its title drops its leading newline.

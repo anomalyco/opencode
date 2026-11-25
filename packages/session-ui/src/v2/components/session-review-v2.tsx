@@ -19,7 +19,11 @@ import {
   transitionSidebarPresence,
   type SidebarPresenceEvent,
 } from "./sidebar-presence-machine"
-import { SessionFilePanelV2, SessionFilePanelV2Empty } from "./session-file-panel-v2"
+import {
+  SessionFilePanelV2,
+  SessionFilePanelV2Empty,
+  type SessionFilePanelV2SidebarSide,
+} from "./session-file-panel-v2"
 
 export const SESSION_REVIEW_V2_SIDEBAR_WIDTH_DEFAULT = 240
 
@@ -36,6 +40,9 @@ export type SessionReviewV2Props = {
   sidebarOpen?: boolean
   sidebar?: JSX.Element
   sidebarToggle?: JSX.Element
+  /** Defaults to `start`. */
+  sidebarSide?: SessionFilePanelV2SidebarSide
+  onSidebarSideChange?: (side: SessionFilePanelV2SidebarSide) => void
   activeFile?: string
   files: string[]
   onSelectFile: (file: string) => void
@@ -51,6 +58,8 @@ export type SessionReviewV2Props = {
 export type SessionReviewV2SidebarProps = {
   open: boolean
   transition: boolean
+  /** The edge of the panel the sidebar sits on, which its resize handle faces away from. Defaults to `start`. */
+  side?: SessionFilePanelV2SidebarSide
   title?: JSX.Element
   stats?: JSX.Element
   /** Controls at the header's end, after the stats. */
@@ -176,6 +185,7 @@ export function SessionReviewV2Sidebar(props: SessionReviewV2SidebarProps) {
         <div data-slot="session-review-v2-sidebar-resize">
           <ResizeHandle
             direction="horizontal"
+            edge={props.side === "end" ? "start" : "end"}
             size={width()}
             min={minWidth()}
             max={maxWidth()}
@@ -376,6 +386,8 @@ export function SessionReviewV2(props: SessionReviewV2Props) {
       sidebar={props.sidebar}
       sidebarToggle={props.sidebarToggle}
       sidebarCollapsed={props.sidebarOpen === false}
+      sidebarSide={props.sidebarSide}
+      onSidebarSideChange={props.onSidebarSideChange}
       toolbar={props.hasDiffs || props.sidebarOpen === false}
       toolbarStart={toolbarStart()}
       toolbarEnd={toolbarEnd()}

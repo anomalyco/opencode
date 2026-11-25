@@ -160,14 +160,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -281,14 +283,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -378,14 +382,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -471,14 +477,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -560,14 +568,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "id",
@@ -661,14 +671,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -773,14 +785,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -866,10 +880,10 @@
                 {
                   "type": "string"
                 }
-              ],
-              "description": "Maximum number of sessions to return. Defaults to the newest 50 sessions."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Maximum number of sessions to return. Defaults to the newest 50 sessions."
           },
           {
             "name": "order",
@@ -880,10 +894,10 @@
                   "type": "string",
                   "enum": ["asc", "desc"]
                 }
-              ],
-              "description": "Session order for the first page. Use desc for newest first or asc for oldest first."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Session order for the first page. Use desc for newest first or asc for oldest first."
           },
           {
             "name": "search",
@@ -891,7 +905,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Only sessions whose title contains this text, ignoring case. % and _ act as wildcards."
           },
           {
             "name": "parentID",
@@ -905,10 +920,10 @@
                   "type": "string",
                   "enum": ["null"]
                 }
-              ],
-              "description": "Filter by parent session. Use null to return only root sessions."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Filter by parent session. Use null to return only root sessions."
           },
           {
             "name": "archived",
@@ -917,7 +932,8 @@
               "type": "string",
               "enum": ["true", "false"]
             },
-            "required": false
+            "required": false,
+            "description": "Filter by archive state. Use true to return only archived sessions or false to exclude them. Omit to include both."
           },
           {
             "name": "directory",
@@ -925,7 +941,8 @@
             "schema": {
               "$ref": "#/components/schemas/AbsolutePath"
             },
-            "required": false
+            "required": false,
+            "description": "Only sessions whose directory is exactly this absolute path."
           },
           {
             "name": "project",
@@ -941,7 +958,8 @@
             "schema": {
               "$ref": "#/components/schemas/RelativePath"
             },
-            "required": false
+            "required": false,
+            "description": "With project, only sessions at this path relative to the project directory."
           },
           {
             "name": "cursor",
@@ -949,7 +967,8 @@
             "schema": {
               "$ref": "#/components/schemas/SessionsCursor"
             },
-            "required": false
+            "required": false,
+            "description": "Opaque cursor from a previous page's cursor.next or cursor.previous. It carries that page's filters and order, so other filters are ignored."
           }
         ],
         "security": [],
@@ -1065,7 +1084,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "If a session with this ID already exists, it is returned unchanged, so retries are safe."
                   },
                   "parentID": {
                     "anyOf": [
@@ -1076,7 +1096,7 @@
                         "type": "null"
                       }
                     ],
-                    "description": "Set parentID to create a subagent session at the parent's location; set agent to choose its agent (otherwise it uses the default) and start it with session.prompt. After each completed round, the child sends a `<background-result kind=\"subagent\">` report to the parent's inbox and wakes the parent unless it has a staged revert."
+                    "description": "Creates a child session at the parent's location. Each time the child finishes running, it sends its last reply to the parent as a `<background-result kind=\"subagent\">` message and wakes the parent, unless the parent has a staged revert."
                   },
                   "title": {
                     "anyOf": [
@@ -1116,7 +1136,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "Defaults to the server's working directory. Ignored when parentID is set."
                   },
                   "metadata": {
                     "anyOf": [
@@ -1126,7 +1147,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "Opaque to OpenCode. Child sessions inherit the parent's metadata unless you pass your own."
                   },
                   "permissions": {
                     "anyOf": [
@@ -1136,7 +1158,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "Applied on top of the agent's rules. Child sessions inherit the parent's rules unless you pass your own."
                   }
                 },
                 "additionalProperties": false
@@ -1158,7 +1181,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Start of the range in Unix milliseconds, inclusive. Defaults to the earliest recorded message."
           },
           {
             "name": "to",
@@ -1166,7 +1190,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "End of the range in Unix milliseconds, exclusive. Defaults to now."
           },
           {
             "name": "project",
@@ -1182,7 +1207,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "IANA time zone used to group activity by day. Defaults to UTC."
           },
           {
             "name": "tools",
@@ -1191,7 +1217,8 @@
               "type": "string",
               "enum": ["none", "summary", "detail"]
             },
-            "required": false
+            "required": false,
+            "description": "How much tool usage to report: none, summary totals, or per-tool detail. Defaults to summary."
           }
         ],
         "security": [],
@@ -1357,7 +1384,8 @@
               "type": "string",
               "enum": ["true", "false"]
             },
-            "required": false
+            "required": false,
+            "description": "Set to true to redact titles, message text, file data, paths and metadata from the export."
           }
         ],
         "security": [],
@@ -1475,7 +1503,7 @@
             }
           }
         },
-        "description": "Retrieve foreground Session drains currently owned by this OpenCode process. Sessions absent from the result are inactive.",
+        "description": "List the sessions whose agent is running right now in this server process. Sessions missing from the result are idle.",
         "summary": "List active sessions"
       }
     },
@@ -1783,7 +1811,7 @@
             }
           }
         },
-        "description": "Create a child session by copying projected history before a message. Omit before to copy the full history.",
+        "description": "Create a child session with this session's history before a message. Omit before to copy the full history.",
         "summary": "Fork session",
         "requestBody": {
           "content": {
@@ -1860,7 +1888,7 @@
             }
           }
         },
-        "description": "Switch the agent used by subsequent provider turns.",
+        "description": "Change the agent the session uses from its next model call on.",
         "summary": "Switch session agent",
         "requestBody": {
           "content": {
@@ -1931,7 +1959,7 @@
             }
           }
         },
-        "description": "Switch the model used by subsequent provider turns.",
+        "description": "Change the model the session uses from its next model call on.",
         "summary": "Switch session model",
         "requestBody": {
           "content": {
@@ -2112,9 +2140,19 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "SkillLoadError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillLoadErrorEncoded"
+                }
+              }
+            }
           }
         },
-        "description": "Durably admit one session input and schedule agent-loop execution unless resume is false.",
+        "description": "Send a user message and start the agent unless resume is false. Returns once the message is queued, not when the agent finishes: wait with POST /api/experimental/session/:sessionID/wait or the session.execution.* events, then read the reply with GET /api/session/:sessionID/message.",
         "summary": "Send message",
         "requestBody": {
           "content": {
@@ -2130,7 +2168,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "Sending the same ID again returns the original item instead of adding a second one, so retries are safe. Reusing it in another session or for another kind of item fails with 409."
                   },
                   "text": {
                     "type": "string"
@@ -2154,7 +2193,8 @@
                     }
                   },
                   "metadata": {
-                    "type": "object"
+                    "type": "object",
+                    "description": "Stored on the message. The model doesn't see it."
                   },
                   "delivery": {
                     "anyOf": [
@@ -2174,7 +2214,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "false adds the message to the inbox without starting the agent; it is delivered the next time the session runs."
                   }
                 },
                 "required": ["text"],
@@ -2256,7 +2297,7 @@
             }
           }
         },
-        "description": "Execute a slash command callback immediately.",
+        "description": "Run a named command in the session. Most commands send a prompt, so like session.prompt this returns before the agent finishes.",
         "summary": "Run command",
         "requestBody": {
           "content": {
@@ -2268,7 +2309,8 @@
                     "type": "string"
                   },
                   "text": {
-                    "type": "string"
+                    "type": "string",
+                    "description": "The command's arguments."
                   },
                   "files": {
                     "type": "array",
@@ -2363,6 +2405,16 @@
                       "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
                     }
                   ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "SkillLoadError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillLoadErrorEncoded"
                 }
               }
             }
@@ -2473,7 +2525,7 @@
             }
           }
         },
-        "description": "Durably admit synthetic session input and schedule execution unless resume is false.",
+        "description": "Add a message the model reads as user input but the user didn't type, such as a notification. Starts the agent unless resume is false or the session has a staged revert.",
         "summary": "Add synthetic message",
         "requestBody": {
           "content": {
@@ -2489,7 +2541,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "Sending the same ID again returns the original item instead of adding a second one, so retries are safe. Reusing it in another session or for another kind of item fails with 409."
                   },
                   "text": {
                     "type": "string"
@@ -2502,10 +2555,12 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "Short label shown in the transcript instead of the full text."
                   },
                   "metadata": {
-                    "type": "object"
+                    "type": "object",
+                    "description": "Stored on the message. The model doesn't see it."
                   },
                   "delivery": {
                     "anyOf": [
@@ -2525,7 +2580,8 @@
                       {
                         "type": "null"
                       }
-                    ]
+                    ],
+                    "description": "false adds the message to the inbox without starting the agent; it is delivered the next time the session runs."
                   }
                 },
                 "required": ["text"],
@@ -2699,7 +2755,7 @@
             }
           }
         },
-        "description": "Durably admit a session compaction request. Steers by default: it runs at the next step boundary instead of waiting behind queued prompts.",
+        "description": "Queue a summary of the session's history. Steers by default: it runs before the next model call, ahead of queued messages.",
         "summary": "Compact session",
         "requestBody": {
           "content": {
@@ -2796,7 +2852,7 @@
             }
           }
         },
-        "description": "Wait for a session agent loop to become idle.",
+        "description": "Wait until the session's agent stops running in this server process. Returns at once when idle. Experimental: may change without compatibility guarantees.",
         "summary": "Wait for session"
       }
     },
@@ -3170,10 +3226,10 @@
                 {
                   "$ref": "#/components/schemas/Session.Message.ID"
                 }
-              ],
-              "description": "User message whose turn to diff. Defaults to the turn of the newest user message."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "User message whose turn to diff. Defaults to the turn of the newest user message."
           },
           {
             "name": "to",
@@ -3183,10 +3239,10 @@
                 {
                   "$ref": "#/components/schemas/Session.Message.ID"
                 }
-              ],
-              "description": "Later user message whose turn ends the range. Defaults to the turn of `from` alone."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Later user message whose turn ends the range. Defaults to the turn of `from` alone."
           },
           {
             "name": "context",
@@ -3196,10 +3252,10 @@
                 {
                   "type": "string"
                 }
-              ],
-              "description": "Unchanged lines around each hunk. Omit for full-file patches."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Unchanged lines around each hunk. Omit for full-file patches."
           }
         ],
         "security": [],
@@ -3346,7 +3402,7 @@
             }
           }
         },
-        "description": "List durable enqueued session work not yet delivered, ordered by enqueue sequence. Includes user, synthetic, compaction, and move items.",
+        "description": "List user, synthetic, compaction and move items not yet delivered to the agent, oldest first. Delivered user and synthetic items move to session.message.list.",
         "summary": "List session inbox"
       }
     },
@@ -3831,7 +3887,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Only return events after this sequence number."
           },
           {
             "name": "follow",
@@ -3840,7 +3897,8 @@
               "type": "string",
               "enum": ["true", "false"]
             },
-            "required": false
+            "required": false,
+            "description": "Set to true to keep the stream open and send live events after the stored ones."
           }
         ],
         "security": [],
@@ -3991,7 +4049,8 @@
               "type": "string",
               "enum": ["true", "false"]
             },
-            "required": false
+            "required": false,
+            "description": "Set to true to resume pending steering input and next-in-line control items after interrupting."
           }
         ],
         "security": [],
@@ -4037,7 +4096,7 @@
             }
           }
         },
-        "description": "Interrupt active execution owned by this OpenCode process. Returns interrupted=true when an active execution was interrupted and false for the idle no-op. When resume=true, execution resumes pending steering input and next-in-line control items (manual compaction, moves) while queued prompts remain parked.",
+        "description": "Stop the session's agent if it is running in this server process; interrupted=false means nothing was running. With resume=true it continues with pending steer items, compaction and moves, while queued messages keep waiting.",
         "summary": "Interrupt session execution"
       }
     },
@@ -4174,7 +4233,7 @@
             }
           }
         },
-        "description": "Retrieve one projected message owned by the Session.",
+        "description": "Retrieve one message of the session by ID.",
         "summary": "Get session message"
       }
     },
@@ -4460,7 +4519,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Why the form was not answered, passed on to the asker."
           }
         ],
         "security": [],
@@ -4788,10 +4848,10 @@
                 {
                   "type": "string"
                 }
-              ],
-              "description": "Maximum number of messages to return. When omitted, the endpoint returns its default page size."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Maximum number of messages to return. When omitted, the endpoint returns its default page size."
           },
           {
             "name": "order",
@@ -4802,19 +4862,19 @@
                   "type": "string",
                   "enum": ["asc", "desc"]
                 }
-              ],
-              "description": "Message order for the first page. Use desc for newest first or asc for oldest first."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Message order for the first page. Use desc for newest first or asc for oldest first."
           },
           {
             "name": "cursor",
             "in": "query",
             "schema": {
-              "type": "string",
-              "description": "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order."
+              "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Opaque pagination cursor returned as cursor.previous or cursor.next in the previous response. Do not combine with order."
           },
           {
             "name": "type",
@@ -4837,10 +4897,10 @@
                     "idle"
                   ]
                 }
-              ],
-              "description": "Filter by message type before pagination. When omitted, all message types are returned. Pass the same type when following cursors."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Filter by message type before pagination. When omitted, all message types are returned. Pass the same type when following cursors."
           }
         ],
         "security": [],
@@ -4903,7 +4963,7 @@
             }
           }
         },
-        "description": "Retrieve projected messages for a session, optionally filtered by type. Items keep the requested order across pages; use cursor.next or cursor.previous to move through the ordered timeline, passing the same type filter on each page.",
+        "description": "List a session's messages, optionally filtered by type. Follow cursor.next or cursor.previous with the same type filter. Items still in the inbox aren't included.",
         "summary": "Get session messages"
       }
     },
@@ -4926,14 +4986,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "types",
@@ -4949,10 +5011,10 @@
                     "$ref": "#/components/schemas/Model.Type"
                   }
                 }
-              ],
-              "description": "Only list models of these types. Defaults to chat, the only type offered for sessions."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Only list models of these types. Defaults to chat, the only type offered for sessions."
           }
         ],
         "security": [],
@@ -5044,14 +5106,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -5914,14 +5978,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6021,14 +6087,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6124,14 +6192,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6221,14 +6291,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6314,14 +6386,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6408,14 +6482,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6529,14 +6605,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6650,14 +6728,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6789,14 +6869,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6899,14 +6981,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -6984,14 +7068,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7094,14 +7180,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7233,14 +7321,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7343,14 +7433,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7412,14 +7504,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7509,14 +7603,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7608,14 +7704,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7692,14 +7790,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7776,14 +7876,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7852,14 +7954,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -7930,7 +8034,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Must be 1; requests without it are refused."
           },
           {
             "name": "location",
@@ -7946,14 +8051,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "name",
@@ -7961,7 +8068,8 @@
             "schema": {
               "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "Name of the MCP server the client hosts."
           }
         ],
         "security": [],
@@ -8050,12 +8158,14 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "name",
@@ -8063,7 +8173,8 @@
             "schema": {
               "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "Name of the MCP server the client hosts."
           },
           {
             "name": "ticket",
@@ -8071,7 +8182,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Single-use ticket from experimental.mcp.client.token, which authorizes the connection without the usual credentials."
           }
         ],
         "security": [],
@@ -8410,7 +8522,8 @@
               "type": "string",
               "enum": ["true", "false"]
             },
-            "required": false
+            "required": false,
+            "description": "Set to true to include archived projects."
           }
         ],
         "security": [],
@@ -8558,14 +8671,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -8647,14 +8762,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -8728,7 +8845,8 @@
             "schema": {
               "$ref": "#/components/schemas/Project.ID"
             },
-            "required": false
+            "required": false,
+            "description": "Project whose saved permissions to list. Defaults to the project of the requested location."
           }
         ],
         "security": [],
@@ -9361,14 +9479,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -9445,14 +9565,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "path",
@@ -9462,10 +9584,10 @@
                 {
                   "type": "string"
                 }
-              ],
-              "description": "An absolute path or a path relative to the requested location. Defaults to the location directory."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "An absolute path or a path relative to the requested location. Defaults to the location directory."
           }
         ],
         "security": [],
@@ -9554,14 +9676,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "query",
@@ -9668,23 +9792,25 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "path",
             "in": "query",
             "schema": {
-              "type": "string",
-              "description": "An absolute path or a path relative to the requested location. Missing parent directories are created."
+              "type": "string"
             },
-            "required": true
+            "required": true,
+            "description": "An absolute path or a path relative to the requested location. Missing parent directories are created."
           }
         ],
         "security": [],
@@ -9774,14 +9900,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -9876,14 +10004,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -9963,14 +10093,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -10052,14 +10184,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -10122,6 +10256,111 @@
         "summary": "List skills"
       }
     },
+    "/api/experimental/skill/{skillID}/file/*": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.skill.file",
+        "parameters": [
+          {
+            "name": "skillID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Skill.ID"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Absolute path of the directory."
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SkillNotFoundError | FileNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FileNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "SkillLoadError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillLoadErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read one file of a skill, loading it when the skill serves it on demand. SKILL.md returns the body without frontmatter. Experimental: may change without compatibility guarantees.",
+        "summary": "Read skill file"
+      }
+    },
     "/api/rpc/{rpcID}/{method}": {
       "post": {
         "tags": ["rpc"],
@@ -10157,14 +10396,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -10340,6 +10581,7 @@
                     "form.replied",
                     "form.cancelled",
                     "websearch.updated",
+                    "experimental.push.updated",
                     "artifact.updated",
                     "session.status",
                     "session.idle",
@@ -10452,6 +10694,7 @@
                           "form.replied",
                           "form.cancelled",
                           "websearch.updated",
+                          "experimental.push.updated",
                           "artifact.updated",
                           "session.status",
                           "session.idle",
@@ -10474,10 +10717,10 @@
                     ]
                   }
                 }
-              ],
-              "description": "Only send events of these types, plus the initial server.connected event. When omitted, all events are sent."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Only send events of these types, plus the initial server.connected event. When omitted, all events are sent."
           }
         ],
         "security": [],
@@ -10617,14 +10860,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -10704,14 +10949,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -10832,14 +11079,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -10931,14 +11180,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -11063,14 +11314,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -11139,7 +11392,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Must be 1; requests without it are refused."
           },
           {
             "name": "location",
@@ -11155,14 +11409,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -11255,6 +11511,7 @@
           {
             "in": "query",
             "name": "location[directory]",
+            "description": "Absolute path of the location directory. Omit to use the server's default location.",
             "schema": {
               "type": "string"
             }
@@ -11262,6 +11519,7 @@
           {
             "in": "query",
             "name": "cursor",
+            "description": "Output offset to replay from. Use -1 to start at the current end; omit to replay all retained output.",
             "schema": {
               "type": "string"
             }
@@ -11269,6 +11527,7 @@
           {
             "in": "query",
             "name": "ticket",
+            "description": "Single-use ticket from pty.connect.token, which authorizes the connection without the usual credentials.",
             "schema": {
               "type": "string"
             }
@@ -11358,7 +11617,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Number of trailing rows to read, up to 65535. Defaults to the live terminal height; larger counts include retained history."
           }
         ],
         "security": [],
@@ -11998,7 +12258,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "Must be 1; requests without it are refused."
           }
         ],
         "security": [],
@@ -12088,20 +12349,6 @@
           },
           {
             "in": "query",
-            "name": "cursor",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "role",
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
             "name": "attachment_id",
             "schema": {
               "type": "string"
@@ -12109,7 +12356,24 @@
           },
           {
             "in": "query",
+            "name": "cursor",
+            "description": "Output offset to replay from. Defaults to 0.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "role",
+            "description": "Attach as controller (the default) or observer.",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
             "name": "takeover",
+            "description": "Set to true to take over control of the terminal.",
             "schema": {
               "type": "string"
             }
@@ -12117,6 +12381,7 @@
           {
             "in": "query",
             "name": "input_protocol",
+            "description": "Set to 1 to send framed input messages instead of raw terminal input.",
             "schema": {
               "type": "string"
             }
@@ -12124,6 +12389,7 @@
           {
             "in": "query",
             "name": "ticket",
+            "description": "Single-use ticket from experimental.persistentPty.connectToken, which authorizes the connection without the usual credentials.",
             "schema": {
               "type": "string"
             }
@@ -12411,10 +12677,10 @@
                 {
                   "$ref": "#/components/schemas/Session.ID"
                 }
-              ],
-              "description": "Only automations created by this Session."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Only automations created by this Session."
           },
           {
             "name": "directory",
@@ -12424,10 +12690,10 @@
                 {
                   "type": "string"
                 }
-              ],
-              "description": "Only automations in the project that owns this directory."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Only automations in the project that owns this directory."
           }
         ],
         "security": [],
@@ -12812,12 +13078,14 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -12919,12 +13187,14 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "sessionID",
@@ -13047,12 +13317,14 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -13179,12 +13451,14 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -13296,12 +13570,14 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -13426,12 +13702,14 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -13528,12 +13806,14 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
-            "required": false
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -13627,10 +13907,10 @@
                 {
                   "$ref": "#/components/schemas/Session.ID"
                 }
-              ],
-              "description": "Filter to background jobs owned by this session."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Filter to background jobs owned by this session."
           },
           {
             "name": "kind",
@@ -13640,10 +13920,10 @@
                 {
                   "$ref": "#/components/schemas/Job.Kind"
                 }
-              ],
-              "description": "Filter by background job kind."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Filter by background job kind."
           },
           {
             "name": "status",
@@ -13653,10 +13933,10 @@
                 {
                   "$ref": "#/components/schemas/Job.Status"
                 }
-              ],
-              "description": "Filter by job status (running, completed, error, or cancelled)."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Filter by job status (running, completed, error, or cancelled)."
           },
           {
             "name": "descendants",
@@ -13667,10 +13947,10 @@
                   "type": "string",
                   "enum": ["true", "false"]
                 }
-              ],
-              "description": "When sessionID is set, also include background jobs owned by child and nested subagent sessions."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "When sessionID is set, also include background jobs owned by child and nested subagent sessions."
           }
         ],
         "security": [],
@@ -14030,6 +14310,556 @@
         "summary": "Remove a machine"
       }
     },
+    "/api/experimental/push": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.get",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Push.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List the registered phones with their choices, bells and pauses, the server-wide pause and the shared session bells. Never returns callback URLs or keys. Experimental: may change without compatibility guarantees.",
+        "summary": "Get push settings"
+      }
+    },
+    "/api/experimental/push/device/{deviceID}": {
+      "put": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.register",
+        "parameters": [
+          {
+            "name": "deviceID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Push.Registered"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Register or renew a phone's relay callback URL and public key, and answer with the server's public key for it. Keeps the phone's pause, session bells and, unless given, its level. Experimental: may change without compatibility guarantees.",
+        "summary": "Register a phone",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.Register"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.remove",
+        "parameters": [
+          {
+            "name": "deviceID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Stop sending notifications to a phone. Experimental: may change without compatibility guarantees.",
+        "summary": "Remove a phone"
+      },
+      "patch": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.update",
+        "parameters": [
+          {
+            "name": "deviceID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Push.Device"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PushDeviceNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushDeviceNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Pause or resume notifications to one phone, or change the level it gets by default. Experimental: may change without compatibility guarantees.",
+        "summary": "Update a phone",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.DevicePatch"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/push/device/{deviceID}/session/{sessionID}": {
+      "put": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.session.set",
+        "parameters": [
+          {
+            "name": "deviceID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Push.Bell"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PushDeviceNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushDeviceNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Choose what one phone gets for one session. Experimental: may change without compatibility guarantees.",
+        "summary": "Set a phone's session bell",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.Bell"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.session.remove",
+        "parameters": [
+          {
+            "name": "deviceID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PushDeviceNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushDeviceNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Let one phone follow the shared bell or its default for one session again. Experimental: may change without compatibility guarantees.",
+        "summary": "Clear a phone's session bell"
+      }
+    },
+    "/api/experimental/push/session/{sessionID}": {
+      "put": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.session.set",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Push.Bell"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Choose what every phone gets for one session. Experimental: may change without compatibility guarantees.",
+        "summary": "Set a session bell",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.Bell"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.session.remove",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Let every phone follow its default for one session again. Experimental: may change without compatibility guarantees.",
+        "summary": "Clear a session bell"
+      }
+    },
+    "/api/experimental/push/settings": {
+      "put": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.settings.set",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Push.Settings"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Pause or resume notifications to every phone. Experimental: may change without compatibility guarantees.",
+        "summary": "Pause all notifications",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.Settings"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
     "/api/shell": {
       "get": {
         "tags": ["shell"],
@@ -14049,14 +14879,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -14136,14 +14968,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -14258,14 +15092,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -14357,14 +15193,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -14434,14 +15272,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "cursor",
@@ -14450,7 +15290,8 @@
               "type": "string",
               "pattern": "^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?$"
             },
-            "required": false
+            "required": false,
+            "description": "Byte offset to read from, such as the cursor of the previous page. Defaults to 0."
           },
           {
             "name": "limit",
@@ -14459,7 +15300,8 @@
               "type": "string",
               "pattern": "^[+-]?(?:\\d+(?:\\.\\d+)?|\\.\\d+)(?:[Ee][+-]?\\d+)?$"
             },
-            "required": false
+            "required": false,
+            "description": "Maximum number of bytes to return. Defaults to 65536."
           }
         ],
         "security": [],
@@ -14565,14 +15407,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -14911,14 +15755,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "provider",
@@ -14926,7 +15772,8 @@
             "schema": {
               "type": "string"
             },
-            "required": false
+            "required": false,
+            "description": "VCS provider to initialize. Defaults to git."
           }
         ],
         "security": [],
@@ -15018,14 +15865,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -15104,14 +15953,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -15207,14 +16058,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -15296,14 +16149,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "search",
@@ -15398,14 +16253,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           },
           {
             "name": "mode",
@@ -15523,10 +16380,10 @@
                 {
                   "type": "string"
                 }
-              ],
-              "description": "Absolute server-local directory to write the snapshot into, created when missing. Defaults to the server's log directory."
+              ]
             },
-            "required": false
+            "required": false,
+            "description": "Absolute server-local directory to write the snapshot into, created when missing. Defaults to the server's log directory."
           }
         ],
         "security": [],
@@ -15713,14 +16570,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -15885,14 +16744,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -15984,14 +16845,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -16100,14 +16963,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -16203,14 +17068,16 @@
                     {
                       "type": "null"
                     }
-                  ]
+                  ],
+                  "description": "Absolute path of the directory."
                 }
               },
               "additionalProperties": false
             },
             "required": false,
             "style": "deepObject",
-            "explode": true
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
           }
         ],
         "security": [],
@@ -16402,6 +17269,26 @@
           },
           "system": {
             "type": "string"
+          },
+          "instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "selected": {
+                    "type": "string"
+                  },
+                  "unselected": {
+                    "type": "string"
+                  }
+                },
+                "required": ["selected", "unselected"],
+                "additionalProperties": false
+              }
+            ]
           },
           "description": {
             "type": "string"
@@ -16683,7 +17570,7 @@
           "code": {
             "type": "string",
             "minLength": 1,
-            "description": "Code Mode JavaScript run on each trigger with no model (32 KB output cap). Call tools statically as tools.<ns>.<tool>(...) or tools[\"ns-name\"].tool(...); each is authorized once at creation to run unattended. Receives input = { state, now, runs, args } (also globals): state starts null, now is epoch ms, runs counts earlier runs. Event triggers also receive input.event = { id, timestamp, data }; data follows the event type's payloadSchema. Return nothing, or { state?, done?, send? }. JSON state is kept for the next run; done: true stops. lastOutput shows the delivery target and any logs. Return at most one send per run. { send: { prompt } } steers the creating session; { send: { prompt, to: { subagent } } } starts a permitted child that does not report back. No session IDs. Omit send to stay quiet. A rejected send commits neither state nor done. Example code string: if (runs < 2) return; return { done: true, send: { prompt: \"Three checks elapsed. Review the build.\" } }"
+            "description": "Code Mode JavaScript run on each trigger with no model (32 KB output cap). Call tools statically as tools.<ns>.<tool>(...) or tools[\"ns-name\"].tool(...); each is authorized once at creation to run unattended. A shell command still running at its timeout is stopped and the call throws; it never moves to the background. Receives input = { state, now, runs, args } (also globals): state starts null, now is epoch ms, runs counts earlier runs. Event triggers also receive input.event = { id, timestamp, data }; data follows the event type's payloadSchema. Return nothing, or { state?, done?, send? }. JSON state is kept for the next run; done: true stops. lastOutput shows the delivery target and any logs. Return at most one send per run. { send: { prompt } } steers the creating session; { send: { prompt, to: { subagent } } } starts a permitted child that does not report back. No session IDs. Omit send to stay quiet. A rejected send commits neither state nor done. Example code string: if (runs < 2) return; return { done: true, send: { prompt: \"Three checks elapsed. Review the build.\" } }"
           },
           "args": {}
         },
@@ -17675,6 +18562,9 @@
                 "type": "boolean"
               },
               "opencode_api": {
+                "type": "boolean"
+              },
+              "mcp_skills": {
                 "type": "boolean"
               },
               "sqlite_fts": {
@@ -23119,7 +24009,8 @@
           }
         },
         "required": ["name"],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "description": "An agent @-mentioned in the prompt, such as @explore, to suggest the model use it. Only the @name in text reaches the model; this records which agent it names and doesn't change the session's own agent."
       },
       "Prompt.Base64": {
         "type": "string",
@@ -23218,7 +24109,8 @@
         "type": "object",
         "properties": {
           "uri": {
-            "type": "string"
+            "type": "string",
+            "description": "A file: URL on the server (a file, a directory, or ?start=N&end=M for lines of a text file), a data: URL, or a media: ref from a message. Up to 20 MB."
           },
           "source": {
             "$ref": "#/components/schemas/Prompt.FileSource"
@@ -23651,6 +24543,202 @@
           }
         },
         "required": ["ticket", "expires_in"],
+        "additionalProperties": false
+      },
+      "Push.Bell": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "$ref": "#/components/schemas/Push.Level"
+          },
+          "until": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch"
+          }
+        },
+        "required": ["level"],
+        "additionalProperties": false
+      },
+      "Push.Device": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Push.DeviceID"
+          },
+          "name": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Push.Platform"
+          },
+          "expiresAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Push.DeviceSettings"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "sessions": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Push.Bell"
+            }
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Milliseconds since the Unix epoch"
+              },
+              "updated": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Milliseconds since the Unix epoch"
+              }
+            },
+            "required": ["created", "updated"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "name", "platform", "expiresAt", "settings", "paused", "sessions", "time"],
+        "additionalProperties": false
+      },
+      "Push.DeviceID": {
+        "type": "string",
+        "description": "A lowercase canonical UUID chosen by the phone"
+      },
+      "Push.DevicePatch": {
+        "type": "object",
+        "properties": {
+          "paused": {
+            "type": "boolean"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Push.DeviceSettings"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Push.DeviceSettings": {
+        "type": "object",
+        "properties": {
+          "default": {
+            "$ref": "#/components/schemas/Push.Level"
+          }
+        },
+        "required": ["default"],
+        "additionalProperties": false
+      },
+      "Push.Info": {
+        "type": "object",
+        "properties": {
+          "settings": {
+            "$ref": "#/components/schemas/Push.Settings"
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Push.Device"
+            }
+          },
+          "sessions": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Push.Bell"
+            }
+          }
+        },
+        "required": ["settings", "devices", "sessions"],
+        "additionalProperties": false
+      },
+      "Push.Level": {
+        "type": "string",
+        "enum": ["all", "attention", "none"]
+      },
+      "Push.Platform": {
+        "type": "string",
+        "enum": ["android", "ios"]
+      },
+      "Push.Register": {
+        "type": "object",
+        "properties": {
+          "callbackURL": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch"
+          },
+          "publicKey": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Push.Platform"
+          },
+          "name": {
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Push.DeviceSettings"
+          }
+        },
+        "required": ["callbackURL", "expiresAt", "publicKey", "platform", "name"],
+        "additionalProperties": false
+      },
+      "Push.Registered": {
+        "type": "object",
+        "properties": {
+          "publicKey": {
+            "type": "string"
+          }
+        },
+        "required": ["publicKey"],
+        "additionalProperties": false
+      },
+      "Push.Settings": {
+        "type": "object",
+        "properties": {
+          "paused": {
+            "type": "boolean"
+          },
+          "until": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch"
+          }
+        },
+        "required": ["paused"],
+        "additionalProperties": false
+      },
+      "PushDeviceNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["PushDeviceNotFoundError"]
+          },
+          "deviceID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "deviceID", "message"],
         "additionalProperties": false
       },
       "Reference.GitSource": {
@@ -24096,7 +25184,8 @@
       },
       "Session.Inbox.Delivery": {
         "type": "string",
-        "enum": ["steer", "queue"]
+        "enum": ["steer", "queue"],
+        "description": "steer delivers before the agent's next model call, even mid-work. queue waits until the agent finishes its current work, then delivers one queued item at a time. Sending defaults to steer."
       },
       "Session.Inbox.Info": {
         "anyOf": [
@@ -26036,7 +27125,8 @@
             "$ref": "#/components/schemas/AbsolutePath"
           },
           "content": {
-            "type": "string"
+            "type": "string",
+            "description": "The SKILL.md body. Empty for a skill whose body loads on demand, such as an MCP skill."
           }
         },
         "required": ["id", "name", "path", "content"],
@@ -26044,6 +27134,23 @@
       },
       "Skill.Name": {
         "type": "string"
+      },
+      "SkillLoadErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["SkillLoadError"]
+          },
+          "skill": {
+            "$ref": "#/components/schemas/Skill.ID"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "skill", "message"],
+        "additionalProperties": false
       },
       "SkillNotFoundErrorEncoded": {
         "type": "object",
@@ -26620,6 +27727,9 @@
           },
           {
             "$ref": "#/components/schemas/websearch.updated"
+          },
+          {
+            "$ref": "#/components/schemas/experimental.push.updated"
           },
           {
             "$ref": "#/components/schemas/artifact.updated"
@@ -27489,6 +28599,34 @@
             },
             "required": ["id", "server", "name", "eventId", "timestamp", "data", "cursor"],
             "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.push.updated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.push.updated"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "not": {
+              "type": "null"
+            }
           }
         },
         "required": ["id", "created", "type", "data"],

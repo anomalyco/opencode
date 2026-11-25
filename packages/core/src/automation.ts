@@ -104,8 +104,14 @@ export interface Interface {
   ) => Effect.Effect<Info, InvalidError | DisabledError | Session.NotFoundError | Permission.Error>
   /** Oldest first, leaving out automations whose directory has automations off. */
   readonly list: (input?: ListInput) => Effect.Effect<Info[], InvalidError | DisabledError | Session.NotFoundError>
-  /** These fail with DisabledError when the automation's directory has automations off. */
-  readonly get: (id: ID) => Effect.Effect<Info, NotFoundError | DisabledError>
+  /**
+   * These fail with DisabledError when the automation's directory has automations off. `get` with a `projectID`
+   * treats an automation in another project as missing, whatever its directory's config.
+   */
+  readonly get: (
+    id: ID,
+    options?: { readonly projectID?: ProjectID },
+  ) => Effect.Effect<Info, NotFoundError | DisabledError>
   readonly pause: (id: ID) => Effect.Effect<Info, NotFoundError | DisabledError>
   readonly resume: (id: ID) => Effect.Effect<Info, NotFoundError | DisabledError>
   readonly remove: (id: ID) => Effect.Effect<void, NotFoundError | DisabledError>
@@ -316,10 +322,15 @@ const layer = Layer.effect(
         Effect.catchTag("FileSystem.DirectoryNotFoundError", () => Effect.succeed(true)),
       )
 
-    /** The row of an automation callers may manage: it exists and its directory has automations on. */
-    const findVisible = (id: ID) =>
+    /**
+     * The row of an automation callers may manage: it exists, is in `projectID` when given, and its directory has
+     * automations on. Ownership is checked first so another project's config is never read.
+     */
+    const findVisible = (id: ID, projectID?: ProjectID) =>
       Effect.gen(function* () {
         const row = yield* find(id)
+        if (projectID !== undefined && row.project_id !== projectID)
+          return yield* new NotFoundError({ automationID: id })
         if (!(yield* visible(row.directory))) return yield* new DisabledError()
         return row
       })
@@ -607,6 +618,7 @@ const layer = Layer.effect(
             "The session that authorized this automation's tools moved to another project",
           )
         const outcome = yield* AutomationCode.run(owner, action, {
+          automationID: row.id,
           messageID: SessionMessage.ID.make(id),
           state: row.state,
           now,
@@ -1215,8 +1227,8 @@ const layer = Layer.effect(
         )
         return matching.filter((row) => shown.has(row.directory)).map(toInfo)
       }),
-      get: Effect.fn("Automation.get")(function* (id) {
-        return toInfo(yield* findVisible(id))
+      get: Effect.fn("Automation.get")(function* (id, options) {
+        return toInfo(yield* findVisible(id, options?.projectID))
       }),
       pause: Effect.fn("Automation.pause")(function* (id) {
         const row = yield* findVisible(id)

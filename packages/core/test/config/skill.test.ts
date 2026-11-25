@@ -3,7 +3,7 @@ import path from "path"
 import { describe, expect, test } from "bun:test"
 import { Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
 import { Config } from "@opencode/core/config"
-import { Directory, Document, type Entry, Info } from "@opencode/schema/config"
+import { Directory, Document, type Entry, Event, Info } from "@opencode/schema/config"
 import { ConfigSkillPlugin } from "@opencode/core/config/plugin/skill"
 import { ConfigCompatibilityPlugin } from "@opencode/core/config/plugin/compatibility"
 import { SkillFile } from "@opencode/core/config/plugin/skill-file"
@@ -425,6 +425,128 @@ describe("ConfigSkillPlugin.Plugin", () => {
           yield* emitAndWait({ type: "create", path: source })
           expect((yield* skill.list()).map((item) => item.id)).toEqual([Skill.ID.make("deploy")])
         }),
+      ),
+    ),
+  )
+
+  it.effect("rescans on a config update only when the skill sources changed", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const directory = path.join(tmp.path, "skills")
+          const added = path.join(tmp.path, "added")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(directory, "probe"), { recursive: true })
+            await fs.mkdir(path.join(added, "review"), { recursive: true })
+            await write(directory, "probe", "Initial")
+            await write(added, "review", "Review")
+          })
+          const config = yield* Config.Test
+          const watcher = yield* Watcher.Test
+          const bus = yield* Bus.Service
+          const service = yield* Skill.Service
+          const entry = (shell: string, skills = [directory]) =>
+            new Document({ type: "document", info: decode({ shell, skills }) })
+          yield* config.setEntries([entry("first")])
+          let reloads = 0
+          yield* ConfigSkillPlugin.Plugin.effect(
+            host({
+              event: { subscribe: () => bus.subscribe(Event.Updated) },
+              skill: {
+                list: () => Effect.die("unused skill.list"),
+                transform: service.transform,
+                reload: () => service.reload().pipe(Effect.tap(() => Effect.sync(() => reloads++))),
+              },
+            }),
+          )
+          yield* drain
+          const subscriptions = yield* watcher.subscriptions()
+
+          yield* config.setEntries([entry("second")])
+          yield* bus.publish(Event.Updated, {})
+          yield* drain
+          expect(reloads).toBe(0)
+          expect(yield* watcher.subscriptions()).toEqual(subscriptions)
+
+          // The watches left in place still deliver file changes.
+          yield* Effect.promise(() => write(directory, "probe", "Updated"))
+          yield* watcher.emit({ type: "update", path: path.join(directory, "probe", "SKILL.md") })
+          yield* advance(() => reloads === 1)
+          expect((yield* service.list()).map((skill) => skill.description)).toEqual(["Updated"])
+
+          yield* config.setEntries([entry("second", [directory, added])])
+          yield* bus.publish(Event.Updated, {})
+          yield* advance(() => reloads === 2)
+          expect((yield* service.list()).map((skill) => skill.description)).toEqual(["Updated", "Review"])
+        }).pipe(
+          Effect.provide(Config.testLayer()),
+          Effect.provideService(SkillDiscovery.Service, emptyDiscovery),
+          Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home: tmp.path })),
+          Effect.provideService(
+            Location.Service,
+            Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
+          ),
+        ),
+      ),
+    ),
+  )
+
+  it.effect("retries a remote source that loaded nothing on the next config update", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const url = "https://example.test/skills/"
+          const review = path.join(tmp.path, "remote", "review")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(review, { recursive: true })
+            await write(path.dirname(review), "review", "Review")
+          })
+          let pulls = 0
+          const discovery = SkillDiscovery.Service.of({
+            pull: () =>
+              Effect.suspend(() =>
+                pulls++ === 0 ? Effect.die("offline") : Effect.succeed([AbsolutePath.make(review)]),
+              ),
+          })
+          const config = yield* Config.Test
+          const bus = yield* Bus.Service
+          const service = yield* Skill.Service
+          const entry = (shell: string) => new Document({ type: "document", info: decode({ shell, skills: [url] }) })
+          yield* config.setEntries([entry("first")])
+          let reloads = 0
+          yield* ConfigSkillPlugin.Plugin.effect(
+            host({
+              event: { subscribe: () => bus.subscribe(Event.Updated) },
+              skill: {
+                list: () => Effect.die("unused skill.list"),
+                transform: service.transform,
+                reload: () => service.reload().pipe(Effect.tap(() => Effect.sync(() => reloads++))),
+              },
+            }),
+          ).pipe(Effect.provideService(SkillDiscovery.Service, discovery))
+          expect(yield* service.list()).toEqual([])
+          expect(pulls).toBe(1)
+
+          yield* config.setEntries([entry("second")])
+          yield* bus.publish(Event.Updated, {})
+          yield* advance(() => reloads === 1)
+          expect((yield* service.list()).map((skill) => skill.description)).toEqual(["Review"])
+          expect(pulls).toBe(2)
+
+          // Once the source has loaded, an unrelated update leaves it alone.
+          yield* config.setEntries([entry("third")])
+          yield* bus.publish(Event.Updated, {})
+          yield* drain
+          expect(reloads).toBe(1)
+          expect(pulls).toBe(2)
+        }).pipe(
+          Effect.provide(Config.testLayer()),
+          Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), home: tmp.path })),
+          Effect.provideService(
+            Location.Service,
+            Location.Service.of(location({ directory: AbsolutePath.make(tmp.path) })),
+          ),
+        ),
       ),
     ),
   )

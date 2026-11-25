@@ -232,7 +232,7 @@ export const Plugin = {
             yield* permission.assert({
               action: "webfetch",
               resources: [value],
-              save: ["*"],
+              save: Permission.site(value),
               metadata: { url: value },
               ...Permission.invocation(context),
             })
