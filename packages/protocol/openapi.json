@@ -2140,6 +2140,16 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "SkillLoadError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillLoadErrorEncoded"
+                }
+              }
+            }
           }
         },
         "description": "Send a user message and start the agent unless resume is false. Returns once the message is queued, not when the agent finishes: wait with experimental.session.wait or the session.execution.* events, then read the reply with session.message.list.",
@@ -2395,6 +2405,16 @@
                       "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
                     }
                   ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "SkillLoadError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillLoadErrorEncoded"
                 }
               }
             }
