@@ -3,10 +3,11 @@ import { fileURLToPath, pathToFileURL } from "node:url"
 import path from "node:path"
 import { Hash } from "@opencode/util/hash"
 
-// Serialize process-global module invalidation and imports per entrypoint across locations so
-// concurrent reloads never race on `require.cache`, and reuse an unchanged load when the runtime
-// loader has no per-instance hook to dispose.
-const inflight = new Map<string, Promise<unknown>>()
+// Serialize process-global module invalidation and imports across entrypoints and locations so
+// concurrent reloads never race on `require.cache` (including when different entrypoints import
+// the same local helper), and reuse an unchanged load when the runtime loader has no per-instance
+// hook to dispose.
+let queue: Promise<void> | undefined
 const shared = new Map<string, Shared>()
 
 type Shared = {
@@ -18,20 +19,20 @@ function unchanged(files: ReadonlyMap<string, { readonly digest: string; readonl
   return [...files].every(([file, item]) => item.digest === digest(file, item.directory))
 }
 
-async function serialized<A>(key: string, work: () => Promise<A>): Promise<A> {
-  const previous = inflight.get(key)
+async function serialized<A>(work: () => Promise<A>): Promise<A> {
+  const previous = queue
   let release!: () => void
   const gate = new Promise<void>((resolve) => {
     release = resolve
   })
   const tail = (previous ?? Promise.resolve()).then(() => gate)
-  inflight.set(key, tail)
+  queue = tail
   if (previous) await previous
   try {
     return await work()
   } finally {
     release()
-    if (inflight.get(key) === tail) inflight.delete(key)
+    if (queue === tail) queue = undefined
   }
 }
 
@@ -48,7 +49,7 @@ export function createPluginSources(watch: (file: string) => Promise<void>) {
       if (previous && unchanged(previous.files)) return previous.loaded
 
       try {
-        return await serialized(entrypoint, async () => {
+        return await serialized(async () => {
           const cached = sources.get(entrypoint)
           if (cached && unchanged(cached.files)) return cached.loaded
 

@@ -1,4 +1,5 @@
 import { describe, expect } from "bun:test"
+import path from "path"
 import { Clock, Deferred, Duration, Effect, Layer, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import type { LanguageModelV3 } from "@ai-sdk/provider"
@@ -10,9 +11,10 @@ import { Global } from "@opencode/util/global"
 import { Npm } from "@opencode/util/npm"
 import { AISDK } from "@opencode/core/aisdk"
 import { Command } from "@opencode/core/command"
+import { Config } from "@opencode/core/config"
 import { ConfigPluginSource } from "@opencode/core/config/plugin/source"
 import { Instance } from "@opencode/core/instance"
-import { LocationServiceMap } from "@opencode/core/location-services"
+import { LocationServiceMap, buildLocationServiceMap } from "@opencode/core/location-services"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
@@ -516,6 +518,133 @@ describe("PluginSupervisor", () => {
           state: expect.objectContaining({
             status: "failed",
             error: expect.stringContaining("broken plugin config"),
+            ref: expect.stringMatching(/^err_/),
+          }),
+        }),
+      )
+    }),
+  )
+
+  testEffect(Layer.empty).live("keeps a disabled builtin provider off when initial activation fails", () =>
+    Effect.gen(function* () {
+      source.activations = 0
+      source.fail = new Error("broken plugin config")
+      const directory = yield* tmpdirScoped()
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(directory.path, ".opencode/opencode.json"),
+          JSON.stringify({ plugins: ["-opencode.provider.ollama"] }),
+        ),
+      )
+      const layer = AppNodeBuilder.build(
+        LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]),
+        [
+          Global.node.replace(tempGlobalLayer),
+          offlineModels,
+          LocationServiceMap.node.replace(
+            buildLocationServiceMap([
+              Global.node.replace(tempGlobalLayer),
+              offlineModels,
+              ConfigPluginSource.node.replace(sourceLayer),
+            ]),
+          ),
+        ],
+      )
+      const inventory = yield* Effect.gen(function* () {
+        const locations = yield* LocationServiceMap.Service
+        return yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          yield* plugins.awaitActivation
+          return yield* plugins.list()
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+        )
+      }).pipe(Effect.provide(layer), Effect.scoped, Effect.ensuring(Effect.sync(() => (source.fail = undefined))))
+
+      const status = (pluginID: string) => inventory.find((plugin) => plugin.id === pluginID)?.state.status
+      expect(status("opencode.provider.ollama")).toBeUndefined()
+      expect(status("opencode.provider.opencode")).toBe("active")
+      expect(status("opencode.config.policy")).toBe("active")
+      expect(status("opencode.provider.openai")).toBe("active")
+      expect(inventory).toContainEqual(
+        expect.objectContaining({
+          source: { type: "builtin" },
+          state: expect.objectContaining({
+            status: "failed",
+            error: expect.stringContaining("broken plugin config"),
+            ref: expect.stringMatching(/^err_/),
+          }),
+        }),
+      )
+    }),
+  )
+
+  testEffect(Layer.empty).live("falls back only to guarded builtins when config cannot be read on boot", () =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      let failConfig = false
+      const brokenConfigLayer = AppNodeBuilder.build(
+        LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]),
+        [
+          Global.node.replace(tempGlobalLayer),
+          offlineModels,
+          LocationServiceMap.node.replace(
+            buildLocationServiceMap([
+              Global.node.replace(tempGlobalLayer),
+              offlineModels,
+              Config.node.replace(
+                Layer.succeed(
+                  Config.Service,
+                  Config.Service.of({
+                    entries: () =>
+                      Effect.suspend(() =>
+                        failConfig ? Effect.die(new Error("unreadable config")) : Effect.succeed([]),
+                      ),
+                    changes: () => Stream.never,
+                  }),
+                ),
+              ),
+              ConfigPluginSource.node.replace(
+                Layer.succeed(
+                  ConfigPluginSource.Service,
+                  ConfigPluginSource.Service.of({
+                    operations: () =>
+                      Effect.suspend(() => {
+                        failConfig = true
+                        return Effect.die(new Error("unreadable config"))
+                      }),
+                    changes: () => Stream.never,
+                  }),
+                ),
+              ),
+            ]),
+          ),
+        ],
+      )
+      const inventory = yield* Effect.gen(function* () {
+        const locations = yield* LocationServiceMap.Service
+        return yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          yield* plugins.awaitActivation
+          return yield* plugins.list()
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+        )
+      }).pipe(Effect.provide(brokenConfigLayer), Effect.scoped)
+
+      const loadedIDs = inventory.flatMap((plugin) => (plugin.id ? [plugin.id] : []))
+      expect(loadedIDs).toEqual([
+        Plugin.ID.make("opencode.provider.opencode"),
+        Plugin.ID.make("opencode.config.policy"),
+      ])
+      expect(inventory).toContainEqual(
+        expect.objectContaining({
+          source: { type: "builtin" },
+          state: expect.objectContaining({
+            status: "failed",
+            error: expect.stringContaining("unreadable config"),
             ref: expect.stringMatching(/^err_/),
           }),
         }),

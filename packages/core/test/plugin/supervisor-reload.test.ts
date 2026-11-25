@@ -433,6 +433,42 @@ export default {
       }
     }),
   )
+
+  it.live("keeps a disabled builtin provider off when initial config plugin scan fails", () =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      yield* Effect.promise(() =>
+        Bun.write(
+          path.join(directory.path, ".opencode/opencode.json"),
+          JSON.stringify({ plugins: ["-opencode.provider.ollama", "-"] }),
+        ),
+      )
+      const locations = yield* LocationServiceMap.Service
+      const inventory = yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
+        return yield* plugins.list()
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+
+      const status = (pluginID: string) => inventory.find((plugin) => plugin.id === pluginID)?.state.status
+      expect(status("opencode.provider.ollama")).toBeUndefined()
+      expect(status("opencode.provider.opencode")).toBe("active")
+      expect(status("opencode.provider.openai")).toBe("active")
+      expect(inventory).toContainEqual(
+        expect.objectContaining({
+          source: { type: "builtin" },
+          state: expect.objectContaining({
+            status: "failed",
+            error: expect.stringContaining("Plugin remove operation requires a target"),
+            ref: expect.stringMatching(/^err_/),
+          }),
+        }),
+      )
+    }),
+  )
 })
 
 it.live("applies organization integration changes to running external plugins", () =>
