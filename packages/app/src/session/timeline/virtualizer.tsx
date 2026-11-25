@@ -211,7 +211,13 @@ export function createTimelineVirtualizer(input: Input) {
     ),
   )
 
-  const [rendering, setRendering] = createStore({ scrollAdjustment: 0 })
+  // `leftByPress`: a press on a control took the view off its end, and the view has not followed again since.
+  const [rendering, setRendering] = createStore({ scrollAdjustment: 0, leftByPress: false })
+
+  // A reader whom a press took off the end sees Jump to latest however near the end is, until the view follows again.
+  createEffect(() => {
+    if (input.follow.following()) setRendering("leftByPress", false)
+  })
 
   const rows = input.projection.rows
   const rowByKey = input.projection.rowByKey
@@ -527,6 +533,7 @@ export function createTimelineVirtualizer(input: Input) {
 
       const root = listRoot()
       const press = pressed
+
       // The press closed something in its row.
       const closed =
         !!press &&
@@ -547,6 +554,7 @@ export function createTimelineVirtualizer(input: Input) {
           intentEvent.overflow = true
           input.follow.dispatch(intentEvent)
           stopScroll()
+          setRendering("leftByPress", true)
         }
       }
 
@@ -1486,6 +1494,9 @@ export function createTimelineVirtualizer(input: Input) {
       )
     }
 
+    // The end is a screen away, or a press took the view off it: then any distance is one the reader cannot see.
+    const jump = () => input.scroll().overflow && (input.scroll().jump || rendering.leftByPress)
+
     return (
       <div
         ref={setViewRoot}
@@ -1496,13 +1507,12 @@ export function createTimelineVirtualizer(input: Input) {
         <div
           class="absolute left-1/2 -translate-x-1/2 z-[60] pointer-events-none transition-[opacity,translate]"
           classList={{
-            "opacity-100 translate-y-0 duration-150 ease-[cubic-bezier(.2,.8,.2,1)]":
-              input.scroll().overflow && input.scroll().jump,
+            "opacity-100 translate-y-0 duration-150 ease-[cubic-bezier(.2,.8,.2,1)]": jump(),
             "opacity-0 translate-y-1 motion-reduce:translate-y-0 duration-[110ms] ease-[cubic-bezier(.4,0,1,1)]":
-              !input.scroll().overflow || !input.scroll().jump,
+              !jump(),
           }}
           style={{ bottom: `${bottomInset() + 32}px` }}
-          inert={!input.scroll().overflow || !input.scroll().jump}
+          inert={!jump()}
           on:wheel={{ passive: false, handleEvent: handleOverWheel }}
         >
           <button
