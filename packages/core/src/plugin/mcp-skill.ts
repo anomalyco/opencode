@@ -1,6 +1,7 @@
 export * as McpSkillPlugin from "./mcp-skill.js"
 
 import { define } from "@opencode/plugin/effect/plugin"
+import { Hash } from "@opencode/util/hash"
 import { Effect, Stream } from "effect"
 import { Bus } from "../bus.js"
 import type { McpClient } from "../mcp/client.js"
@@ -52,10 +53,9 @@ export const Plugin = define({
     )
 
     yield* skills.transform((editor) => {
-      for (const skill of state.listed) {
+      for (const { skill, id } of ids(state.listed)) {
         // Dynamic skills list no files, so nothing they serve can be verified.
         if (skill.entry.resources === "dynamic") continue
-        const id = Skill.ID.make(`${skill.server}:${skill.entry.frontmatter.name}`)
         if (!SkillDiscovery.isSafeSegment(id) || editor.get(id)) continue
         const root = skill.entry.uri.slice(0, skill.entry.uri.lastIndexOf("/") + 1)
         const files = skill.entry.resources.flatMap((resource) => {
@@ -88,3 +88,33 @@ export const Plugin = define({
     })
   }),
 })
+
+/**
+ * `<server>:<name>` for each skill. Same-named skills of one server are told apart by the trailing segments of their
+ * paths that differ, joined with `.`, which a skill name can't contain: `acme/billing/refunds` and
+ * `acme/support/refunds` become `docs:billing.refunds` and `docs:support.refunds`. Paths that never differ, such as
+ * one skill under two URI schemes, also get a hash of the URI.
+ */
+function ids(listed: ReadonlyArray<Mcp.Skill>) {
+  return Array.from(
+    Map.groupBy(
+      listed.filter((skill) => skill.entry.resources !== "dynamic"),
+      (skill) => `${skill.server}:${skill.entry.frontmatter.name}`,
+    ),
+  ).flatMap(([id, group]) => {
+    if (group.length === 1) return group.map((skill) => ({ skill, id: Skill.ID.make(id) }))
+    const segments = group.map((skill) =>
+      skill.entry.uri
+        .replace(/^[A-Za-z][A-Za-z0-9+.-]*:\/\//, "")
+        .replace(/\/SKILL\.md$/, "")
+        .split("/"),
+    )
+    const longest = Math.max(...segments.map((parts) => parts.length))
+    const labels =
+      Array.from({ length: longest - 1 }, (_, index) =>
+        segments.map((parts) => parts.slice(-(index + 2)).join(".")),
+      ).find((candidate) => new Set(candidate).size === candidate.length) ??
+      group.map((skill, index) => `${segments[index]?.join(".")}.${Hash.sha256(skill.entry.uri).slice(0, 8)}`)
+    return group.map((skill, index) => ({ skill, id: Skill.ID.make(`${skill.server}:${labels[index]}`) }))
+  })
+}
