@@ -157,6 +157,12 @@
     color: var(--v2-markdown-emphasis, currentColor);
   }
 
+  /* Italic text in a link label keeps the link color. */
+  a em,
+  a i {
+    color: inherit;
+  }
+
   /* Paragraphs */
   p {
     margin-bottom: 12px;
