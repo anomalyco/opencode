@@ -101,6 +101,23 @@ const SHOWN = [
   "GET /api/experimental/blob/*",
 ]
 
+// Large domains split into a folder so callers load only the endpoints and types they need.
+const GROUP_OVERRIDES: ReadonlyArray<readonly [string, string]> = [
+  ["/api/session/{sessionID}/prompt", "session/prompt"],
+  ["/api/session/{sessionID}/command", "session/prompt"],
+  ["/api/session/{sessionID}/synthetic", "session/prompt"],
+  ["/api/session/{sessionID}/compact", "session/prompt"],
+  ["/api/experimental/session/{sessionID}/wait", "session/prompt"],
+  ["/api/session/{sessionID}/interrupt", "session/prompt"],
+  ["/api/session/{sessionID}/generate", "session/prompt"],
+  ["/api/session/{sessionID}/message*", "session/message"],
+  ["/api/session/{sessionID}/context", "session/message"],
+  ["/api/session/{sessionID}/inbox*", "session/inbox"],
+  ["/api/session/{sessionID}/form*", "session/form"],
+  ["/api/session/{sessionID}/permission*", "session/permission"],
+  ["/api/session*", "session/index"],
+]
+
 const INDEX_HEADER = [
   "# OpenCode HTTP API",
   "",
@@ -132,7 +149,9 @@ export async function render(): Promise<Record<string, string>> {
           {
             method: method.toUpperCase(),
             path: route,
-            group: route.slice(experimental ? "/api/experimental/".length : "/api/".length).split("/")[0]!,
+            group:
+              GROUP_OVERRIDES.find(([pattern]) => matches(pattern, route))?.[1] ??
+              route.slice(experimental ? "/api/experimental/".length : "/api/".length).split("/")[0]!,
             experimental,
             operation,
           },
