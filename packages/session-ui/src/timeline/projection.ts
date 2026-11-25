@@ -14,6 +14,7 @@ import { turnCommentary } from "./commentary"
 import { TimelineRow, type PartGroup, type PartRef, type TimelineRowMap } from "./timeline-row"
 import { timelineNoticeRequired, type TimelineDetail } from "./detail"
 import { placeFactOf, type PlaceFact } from "./facts"
+import { unwrapExecuteMessages } from "./unwrap-execute"
 import {
   placeContent,
   placeNotice,
@@ -158,18 +159,22 @@ export function createReactiveTimelineProjection(input: {
   queuedCompactionIDs?: Accessor<readonly string[]>
   /** Summarize each finished turn's changed files after it. */
   turnDiffs?: Accessor<boolean>
+  /** Draw each Code Mode script as the calls it made (a desktop prototype; see `unwrap-execute.ts`). */
+  unwrapExecute?: boolean
 }) {
+  const sessionMessages = input.unwrapExecute ? unwrapExecuteMessages(input.sessionMessages) : input.sessionMessages
+
   const sessionMessageByID = createMemo(
-    () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
+    () => new Map(sessionMessages().map((message) => [message.id, message] as const)),
   )
 
-  const userContextByID = createMemo(() => indexUserContext(input.sessionMessages()))
-  const assistantMessagesByParent = createMemo(() => indexAssistantMessages(input.sessionMessages()))
+  const userContextByID = createMemo(() => indexUserContext(sessionMessages()))
+  const assistantMessagesByParent = createMemo(() => indexAssistantMessages(sessionMessages()))
 
   // Row structure depends on the empty/non-empty boundary, not each text delta.
   // Keep the original content objects so row renderers still read live text.
   const textParts = mapArray(
-    messageParts(input.sessionMessages, (message) =>
+    messageParts(sessionMessages, (message) =>
       message.type === "assistant" ? message.content.filter((content) => content.type !== "tool") : [],
     ),
     (content) => {
@@ -184,11 +189,11 @@ export function createReactiveTimelineProjection(input: {
   )
 
   const textVisible = createMemo(() => new Map<Content, Accessor<boolean>>(textParts()))
-  const factOf = placeFacts(input.sessionMessages)
+  const factOf = placeFacts(sessionMessages)
 
   const projection = createMemo(() =>
     Timeline.constructSessionMessageRows(
-      input.sessionMessages(),
+      sessionMessages(),
       input.reasoningMode() !== "hidden",
       input.status(),
       input.pendingInputIDs?.(),

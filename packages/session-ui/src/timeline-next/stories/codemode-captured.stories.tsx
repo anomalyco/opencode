@@ -1,7 +1,10 @@
 import { Button } from "@opencode/ui/button"
 import { Collapsible } from "@opencode/ui/collapsible"
 import { SegmentedControl, SegmentedControlItem } from "@opencode/ui/segmented-control"
-import { For, Show, createEffect, createMemo, onCleanup, onMount, type JSX } from "solid-js"
+import { TextShimmer } from "@opencode/ui/text-shimmer"
+import { Predicate } from "effect"
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount, type JSX } from "solid-js"
+import { BackgroundMoveHint } from "../../../../app/src/session/timeline/message-timeline"
 import { createStore, reconcile } from "solid-js/store"
 import type { SessionDocument } from "../../document"
 import {
@@ -14,10 +17,14 @@ import {
   type CodeModeState,
 } from "../../storybook/codemode-snapshots"
 import { CurrentSessionProviders } from "../../storybook/current-session-story"
-import { timelinePresets } from "../../timeline/detail"
+import { timelinePresets, type TimelineDetail } from "../../timeline/detail"
+import { Timeline, createReactiveTimelineProjection, type ReasoningMode } from "../../timeline/projection"
 import { SessionTimeline } from "../../timeline/session-timeline"
+import { createNextTimelineProjection } from "../projection"
+import { laneGap } from "../spacing"
+import { timelineStatus } from "../status"
+import { StatusLane } from "../status-line"
 import { NextSessionTimeline } from "./session-timeline"
-import { SessionStatusLane, sessionTimelineSettings } from "./session-status-lane"
 
 /**
  * Code Mode `execute` parts captured from real runs, drawn by the real timelines at each state the client store held:
@@ -25,7 +32,8 @@ import { SessionStatusLane, sessionTimelineSettings } from "./session-status-lan
  * with what came after the call. Play steps through them once a second, as the live updates arrived.
  *
  * The controls live in the address: `?id=codemode-captured-states--captured&scenario=running&step=3&metadata=open`.
- * Left and right arrows step too.
+ * Left and right arrows step too. `execute=unwrapped` (or `both`) draws each script as the calls it made, the
+ * `unwrapExecute` prototype, with `boundary=divider|rail` to try marking where a script's rows run.
  */
 export default {
   title: "Code Mode/Captured states",
@@ -51,6 +59,18 @@ const presetLabels = {
 const segments = { width: "auto" }
 
 const segment = { flex: "none" }
+
+const executes = [
+  { id: "wrapped", label: "Wrapped" },
+  { id: "unwrapped", label: "Unwrapped" },
+  { id: "both", label: "Side by side" },
+] as const
+
+const boundaries = [
+  { id: "none", label: "None" },
+  { id: "divider", label: "Divider" },
+  { id: "rail", label: "Rail" },
+] as const
 
 type Step = { label: string; file?: string; state: CodeModeState }
 
@@ -80,6 +100,8 @@ export const Captured = {
       step: query.has("step") ? Number(query.get("step")) : Number.MAX_SAFE_INTEGER,
       timeline: timelines.find((item) => item.id === query.get("timeline"))?.id ?? timelines[2].id,
       preset: timelinePresets.find((item) => item.id === query.get("preset"))?.id ?? timelinePresets[1].id,
+      execute: executes.find((item) => item.id === query.get("execute"))?.id ?? executes[0].id,
+      boundary: boundaries.find((item) => item.id === query.get("boundary"))?.id ?? boundaries[0].id,
       playing: false,
       metadata: query.get("metadata") === "open",
     })
@@ -107,6 +129,8 @@ export const Captured = {
       address.set("step", String(index()))
       address.set("timeline", state.timeline)
       address.set("preset", state.preset)
+      address.set("execute", state.execute)
+      address.set("boundary", state.boundary)
 
       if (state.metadata) address.set("metadata", "open")
       else address.delete("metadata")
@@ -147,27 +171,43 @@ export const Captured = {
     onMount(() => window.addEventListener("keydown", keys))
     onCleanup(() => window.removeEventListener("keydown", keys))
 
-    // As MessageTimeline lays out a session: rows the width of the session column, then the status lane below them.
-    const pane = (next: boolean) => (
-      <div class="w-full py-6 md:mx-auto md:max-w-session">
-        <CurrentSessionProviders document={view.document} directory={session().directory}>
-          <Show
-            when={next}
-            fallback={
-              <SessionTimeline
-                document={view.document}
-                timelineDetail={detail()}
-                turnDiffs={false}
-                {...sessionTimelineSettings(detail())}
-              />
-            }
-          >
-            <NextSessionTimeline document={view.document} timelineDetail={detail()} />
-          </Show>
-        </CurrentSessionProviders>
-        <SessionStatusLane document={view.document} timelineDetail={detail()} next={next} />
-      </div>
+    // Each timeline the toolbar asks for, wrapped and unwrapped as it asks. A pane reads `unwrapExecute` once, so a
+    // change of it mounts a new pane.
+    const panes = createMemo(() =>
+      (state.timeline === "both" ? [false, true] : [state.timeline === "new"]).flatMap((next) =>
+        (state.execute === "both" ? [false, true] : [state.execute === "unwrapped"]).map(
+          (unwrap) => `${next ? "new" : "old"}:${unwrap ? "unwrapped" : "wrapped"}`,
+        ),
+      ),
     )
+
+    // As MessageTimeline lays out a session: rows the width of the session column, then the status lane below them.
+    const pane = (key: string) => {
+      const next = key.startsWith("new")
+      const unwrap = key.endsWith(":unwrapped")
+
+      return (
+        <div class="w-full py-6 md:mx-auto md:max-w-session" data-script-boundary={unwrap ? state.boundary : undefined}>
+          <CurrentSessionProviders document={view.document} directory={session().directory}>
+            <Show
+              when={next}
+              fallback={
+                <SessionTimeline
+                  document={view.document}
+                  timelineDetail={detail()}
+                  turnDiffs={false}
+                  unwrapExecute={unwrap}
+                  {...sessionTimelineSettings(detail())}
+                />
+              }
+            >
+              <NextSessionTimeline document={view.document} timelineDetail={detail()} unwrapExecute={unwrap} />
+            </Show>
+          </CurrentSessionProviders>
+          <SessionStatusLane document={view.document} timelineDetail={detail()} next={next} unwrapExecute={unwrap} />
+        </div>
+      )
+    }
 
     return (
       <div class="flex h-screen min-h-0 bg-v2-background-bg-base text-v2-text-text-base">
@@ -237,6 +277,50 @@ export const Captured = {
               </SegmentedControl>
             </Labeled>
           </div>
+          <div class="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-v2-border-border-base px-4 py-2 text-13-regular">
+            <Labeled label="Execute">
+              <SegmentedControl
+                aria-label="Execute"
+                style={segments}
+                value={state.execute}
+                onChange={(value) => {
+                  const item = executes.find((execute) => execute.id === value)
+
+                  if (item) setState("execute", item.id)
+                }}
+              >
+                <For each={executes}>
+                  {(item) => (
+                    <SegmentedControlItem value={item.id} style={segment}>
+                      {item.label}
+                    </SegmentedControlItem>
+                  )}
+                </For>
+              </SegmentedControl>
+            </Labeled>
+            <Show when={state.execute !== "wrapped"}>
+              <Labeled label="Script boundary">
+                <SegmentedControl
+                  aria-label="Script boundary"
+                  style={segments}
+                  value={state.boundary}
+                  onChange={(value) => {
+                    const item = boundaries.find((boundary) => boundary.id === value)
+
+                    if (item) setState("boundary", item.id)
+                  }}
+                >
+                  <For each={boundaries}>
+                    {(item) => (
+                      <SegmentedControlItem value={item.id} style={segment}>
+                        {item.label}
+                      </SegmentedControlItem>
+                    )}
+                  </For>
+                </SegmentedControl>
+              </Labeled>
+            </Show>
+          </div>
           <div class="flex flex-col gap-2 border-b border-v2-border-border-base px-4 py-2">
             <div class="flex items-center gap-2">
               <Button
@@ -296,29 +380,26 @@ export const Captured = {
               onOpenChange={(open) => setState("metadata", open)}
             />
           </div>
-          <Show
-            when={state.timeline === "both"}
-            fallback={
-              <div class="min-h-0 flex-1 overflow-y-auto" data-scrollable>
-                {pane(state.timeline === "new")}
-              </div>
-            }
+          <style>{boundaryStyles}</style>
+          <div
+            class="grid min-h-0 flex-1 divide-x divide-v2-border-border-base"
+            style={{ "grid-template-columns": `repeat(${panes().length}, minmax(0, 1fr))` }}
           >
-            <div class="grid min-h-0 flex-1 grid-cols-2 divide-x divide-v2-border-border-base">
-              <For each={[false, true]}>
-                {(next) => (
-                  <div class="flex min-h-0 flex-col">
+            <For each={panes()}>
+              {(key) => (
+                <div class="flex min-h-0 flex-col">
+                  <Show when={panes().length > 1}>
                     <div class="border-b border-v2-border-border-base px-4 py-1.5 text-12-medium text-v2-text-text-muted">
-                      {next ? "New timeline" : "Old timeline"}
+                      {paneLabel(key)}
                     </div>
-                    <div class="min-h-0 flex-1 overflow-y-auto" data-scrollable>
-                      {pane(next)}
-                    </div>
+                  </Show>
+                  <div class="min-h-0 flex-1 overflow-y-auto" data-scrollable>
+                    {pane(key)}
                   </div>
-                )}
-              </For>
-            </div>
-          </Show>
+                </div>
+              )}
+            </For>
+          </div>
         </div>
       </div>
     )
@@ -418,5 +499,219 @@ function Metadata(props: {
         </div>
       </Collapsible.Content>
     </Collapsible>
+  )
+}
+
+function paneLabel(key: string) {
+  return `${key.startsWith("new") ? "New" : "Old"} timeline · ${key.endsWith(":unwrapped") ? "unwrapped" : "wrapped"}`
+}
+
+// Where a script's rows begin and what they span, in an unwrapped pane, to try ways of marking a script's run.
+const scriptRows = (suffix = "") =>
+  [":call:", ":result", ":file:", ":background"]
+    .map((id) => `[data-script-boundary="rail"] [data-timeline-part-id*="${id}"]${suffix}`)
+    .join(", ")
+
+const boundaryStyles = `
+${scriptRows()} { position: relative; }
+${scriptRows("::before")} {
+  content: ""; position: absolute; left: -12px; top: 0; bottom: 0; width: 2px; border-radius: 1px;
+  background: var(--v2-border-border-base);
+}
+[data-script-boundary="divider"] [data-timeline-part-id$=":call:0"]::before {
+  content: "Script"; display: block; margin-bottom: 6px; font-size: 12px; line-height: 16px;
+  color: var(--v2-text-text-faint);
+}
+`
+
+const padding = "px-4 md:px-6"
+
+const statusLabels = {
+  waitingApproval: "Waiting for approval",
+  waitingAnswer: "Waiting for your answer",
+  waitingShell: "Waiting for shell",
+  working: "Working",
+} as const
+
+/** The old timeline's settings as the app's timeline controller derives them from the detail setting. */
+function sessionTimelineSettings(detail: TimelineDetail) {
+  const reasoningMode: ReasoningMode =
+    detail.thinking.placement === "hidden" ? "hidden" : detail.thinking.details === "expanded" ? "full" : "compact"
+
+  return {
+    reasoningMode,
+    shellToolDefaultOpen: detail.shell.details === "expanded",
+    editToolDefaultOpen: detail.edit.details === "expanded",
+  }
+}
+
+/**
+ * The line below a working turn, as `MessageTimeline` in the app draws it at the bottom of the timeline: the New
+ * timeline's status lane spaced like the turn's next row, or the old 36px lane, each with Working when the app shows
+ * it and the offer to move a blocking call to the background. A story session has no permissions, questions, queued
+ * input or background tasks, so those cases are left out.
+ */
+function SessionStatusLane(props: {
+  document: SessionDocument
+  timelineDetail: TimelineDetail
+  next: boolean
+  unwrapExecute?: boolean
+}) {
+  const input = {
+    sessionMessages: () => props.document.messages,
+    status: () => props.document.status,
+    timelineDetail: () => props.timelineDetail,
+    turnDiffs: () => false,
+    unwrapExecute: props.unwrapExecute,
+  }
+
+  const settings = () => sessionTimelineSettings(props.timelineDetail)
+
+  const projection = props.next
+    ? createNextTimelineProjection(input)
+    : createReactiveTimelineProjection({
+        ...input,
+        reasoningMode: () => settings().reasoningMode,
+        shellToolDefaultOpen: () => settings().shellToolDefaultOpen,
+        editToolDefaultOpen: () => settings().editToolDefaultOpen,
+      })
+
+  const busy = () => props.document.status.type === "busy"
+
+  const assistant = () => {
+    const active = projection.activeMessageID()
+
+    return active ? projection.assistantMessagesByParent().get(active)?.at(-1) : undefined
+  }
+
+  const laneSpacing = createMemo(() => {
+    const active = projection.activeMessageID()
+
+    return props.next && active ? laneGap(projection.rows(), active, projection.messageByID()) : undefined
+  })
+
+  // MessageTimeline's showWorking, the old timeline's Working.
+  const showWorking = createMemo(() => {
+    if (!busy()) return false
+    const active = projection.activeMessageID()
+
+    if (!active) return false
+    const last = assistant()
+
+    if (last?.retry || last?.error) return false
+    const content = last?.content.at(-1)
+
+    if (
+      last?.time.completed === undefined &&
+      last?.time.streamed === undefined &&
+      content?.type === "text" &&
+      content.text.trim()
+    )
+      return false
+
+    return !projection.rows().some((row) => {
+      if (row.userMessageID !== active) return false
+
+      if (Predicate.isTagged(row, "Thinking")) return true
+
+      if (Predicate.isTagged(row, "Notice")) {
+        const message = projection.messageByID().get(row.messageID)
+
+        return message?.type === "compaction" && message.status === "running"
+      }
+
+      if (!Predicate.isTagged(row, "AssistantPart")) return false
+
+      if (row.group.type === "context" && projection.lastAssistantGroupKey().get(active) === row.group.key)
+        return row.group.refs.every(
+          (ref) =>
+            Timeline.resolveContent(projection.messageByID().get(ref.messageID), ref.partID)?.type === "reasoning",
+        )
+
+      if (row.group.type === "context" || row.group.type === "read") return false
+
+      return (row.group.type === "part" ? [row.group.ref] : row.group.refs).some((ref) => {
+        const content = Timeline.resolveContent(projection.messageByID().get(ref.messageID), ref.partID)
+
+        return content?.type === "tool" && (content.state.status === "streaming" || content.state.status === "running")
+      })
+    })
+  })
+
+  const nextStatus = createMemo(() =>
+    busy() && projection.activeMessageID() ? timelineStatus({ content: assistant()?.content ?? [] }) : undefined,
+  )
+
+  const liveThought = createMemo(() =>
+    projection
+      .rows()
+      .some((row) => Predicate.isTagged(row, "Thinking") && row.userMessageID === projection.activeMessageID()),
+  )
+
+  const working = () => {
+    if (!props.next) return showWorking()
+    const status = nextStatus()
+
+    return !!status && (status !== "working" || !liveThought())
+  }
+
+  // The app offers the move for a foreground shell, subagent or Code Mode script, which its background service
+  // reports as blocking; the New timeline waits until the call has run for 300ms.
+  const blocking = createMemo(() => {
+    if (!busy()) return
+    const last = assistant()
+
+    return last?.content.findLast(
+      (part): part is Extract<typeof part, { type: "tool" }> =>
+        part.type === "tool" && part.state.status === "running" && ["shell", "subagent", "execute"].includes(part.name),
+    )
+  })
+
+  const [hint, setHint] = createSignal(false)
+
+  createEffect(() => {
+    const part = blocking()
+
+    if (!part) return setHint(false)
+
+    const wait = props.next ? Math.max(0, (part.time.ran ?? part.time.created) + 300 - Date.now()) : 0
+    const timer = setTimeout(() => setHint(true), wait)
+
+    onCleanup(() => clearTimeout(timer))
+  })
+
+  const move = () => (
+    <Show when={hint()}>
+      <div data-component="session-background-hint-row">
+        <BackgroundMoveHint keybind={["Ctrl", "B"]} />
+      </div>
+    </Show>
+  )
+
+  return (
+    <div class="w-full min-w-0 max-w-full md:mx-auto md:max-w-session">
+      <Show
+        when={props.next}
+        fallback={
+          <div class={`flex h-9 items-center gap-2 pt-3 text-[13px] font-[530] leading-text-compact ${padding}`}>
+            <Show when={showWorking()}>
+              <div data-component="session-working" role="status">
+                <TextShimmer text="Working" active />
+              </div>
+            </Show>
+            {move()}
+          </div>
+        }
+      >
+        <StatusLane
+          class={padding}
+          spacing={laneSpacing()}
+          label={working() ? statusLabels[nextStatus() ?? "working"] : undefined}
+          collapsed={liveThought() && !working() && !hint()}
+        >
+          {move()}
+        </StatusLane>
+      </Show>
+    </div>
   )
 }

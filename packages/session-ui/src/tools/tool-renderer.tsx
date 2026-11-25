@@ -28,6 +28,7 @@ import { type SessionSummary, useData } from "../context"
 import { useFileComponent } from "@opencode/ui/context/file"
 import { type UiI18n, useI18n } from "@opencode/ui/context/i18n"
 import { BasicTool, GenericTool } from "../components/basic-tool"
+import { scriptBackgroundTool, scriptFileTool, scriptResultTool } from "../timeline/unwrap-execute"
 import { createDisclosure } from "../components/disclosure"
 import { FileIcon } from "@opencode/ui/file-icon"
 import { Icon } from "@opencode/ui/icon"
@@ -2045,6 +2046,85 @@ export function ConsoleCopy(props: { text: string; label: string }) {
   )
 }
 
+const decodeScriptFile = Schema.decodeUnknownOption(
+  Schema.Struct({
+    file: Schema.String,
+    status: Schema.optional(Schema.Literals(["added", "deleted", "modified"])),
+    additions: Schema.optional(Schema.Number),
+    deletions: Schema.optional(Schema.Number),
+    patch: Schema.optional(Schema.String),
+  }),
+)
+
+// Rows of a script drawn as its calls (`unwrapExecute`): how its run ended, or that it moved to the background.
+ToolRegistry.register({
+  name: scriptResultTool,
+  render(props) {
+    const i18n = useI18n()
+    const failed = () => props.metadata.error === true
+
+    const text = createMemo(() =>
+      stripAnsi(props.output ?? "")
+        .replace(/^Error:\s*/, "")
+        .trim(),
+    )
+
+    return (
+      <BasicTool
+        icon="code"
+        status={props.status}
+        trigger={{
+          title: i18n.t(failed() ? "ui.script.failed" : "ui.script.returned"),
+          subtitle: text() || undefined,
+          subtitleClass: failed() ? "text-v2-state-fg-danger" : undefined,
+        }}
+        hideDetails
+      />
+    )
+  },
+})
+
+ToolRegistry.register({
+  name: scriptFileTool,
+  render(props) {
+    const file = createMemo((): FileFact[] => {
+      const files = props.metadata.files
+      const entry = Array.isArray(files) ? Option.getOrUndefined(decodeScriptFile(files[0])) : undefined
+
+      if (!entry) return []
+      const change = entry.status ?? "modified"
+
+      return [
+        {
+          kind: "file",
+          id: entry.file,
+          path: entry.file,
+          status: props.status === "completed" ? "completed" : "running",
+          additions: entry.additions,
+          deletions: entry.deletions,
+          change,
+          patch: entry.patch,
+          by: entry.file,
+          via: "script",
+        },
+      ]
+    })
+
+    return <ScriptChanges files={file()} render={ToolRegistry.render("patch") ?? GenericTool} />
+  },
+})
+
+ToolRegistry.register({
+  name: scriptBackgroundTool,
+  render(props) {
+    const i18n = useI18n()
+
+    return (
+      <BasicTool icon="code" status={props.status} trigger={{ title: i18n.t("ui.script.background") }} hideDetails />
+    )
+  },
+})
+
 ToolRegistry.register({
   name: "execute",
   render(props) {
@@ -2255,12 +2335,7 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; s
   )
 }
 
-function ExecuteDetailsSection(props: {
-  label: string
-  copy: string
-  copyLabel: string
-  children: JSX.Element
-}) {
+function ExecuteDetailsSection(props: { label: string; copy: string; copyLabel: string; children: JSX.Element }) {
   const i18n = useI18n()
   const copy = createCopyFeedback()
 

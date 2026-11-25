@@ -11,12 +11,14 @@ export function NextSessionTimeline(props: {
   document: SessionDocument
   timelineDetail: TimelineDetail
   turnDiffs?: boolean
+  unwrapExecute?: boolean
 }) {
   const projection = createNextTimelineProjection({
     sessionMessages: () => props.document.messages,
     status: () => props.document.status,
     timelineDetail: () => props.timelineDetail,
     turnDiffs: () => props.turnDiffs ?? false,
+    unwrapExecute: props.unwrapExecute,
   })
 
   const [disclosure, setDisclosure] = createStore<Record<string, boolean | undefined>>({})

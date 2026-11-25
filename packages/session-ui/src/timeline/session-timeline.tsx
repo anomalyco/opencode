@@ -18,6 +18,8 @@ export type SessionTimelineProps = {
   timelineDetail?: TimelineDetail
   turnDiffs?: boolean
   inlineQuotes?: boolean
+  /** Draw each Code Mode script as the calls it made, a desktop prototype. Read once. */
+  unwrapExecute?: boolean
   class?: string
 }
 
@@ -30,6 +32,7 @@ export function SessionTimeline(props: SessionTimelineProps) {
     editToolDefaultOpen: () => props.editToolDefaultOpen ?? false,
     timelineDetail: props.timelineDetail && (() => props.timelineDetail!),
     turnDiffs: () => props.turnDiffs ?? false,
+    unwrapExecute: props.unwrapExecute,
   })
 
   const [toolOpen, setToolOpen] = createStore<Record<string, boolean | undefined>>({})

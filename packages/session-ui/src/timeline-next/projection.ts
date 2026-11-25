@@ -34,6 +34,7 @@ import {
   type PlaceFactOf,
 } from "../timeline/place"
 import { placeFacts } from "../timeline/projection"
+import { unwrapExecuteMessages } from "../timeline/unwrap-execute"
 import { noticeEvent, workKey, type TimelineEvent } from "./events"
 import { echoesUserShell, liveThinkingShows, movedInPlace, textShows } from "./rules"
 
@@ -110,23 +111,25 @@ export function createNextTimelineProjection(input: {
   queuedCompactionIDs?: Accessor<readonly string[]>
   /** Summarize each finished turn's changed files after it. */
   turnDiffs?: Accessor<boolean>
+  /** Draw each Code Mode script as the calls it made (a desktop prototype; see `unwrap-execute.ts`). */
+  unwrapExecute?: boolean
 }) {
+  const sessionMessages = input.unwrapExecute ? unwrapExecuteMessages(input.sessionMessages) : input.sessionMessages
+
   const sessionMessageByID = createMemo(
-    () => new Map(input.sessionMessages().map((message) => [message.id, message] as const)),
+    () => new Map(sessionMessages().map((message) => [message.id, message] as const)),
   )
 
-  const userContextByID = createMemo(() => indexUserContext(input.sessionMessages()))
-  const assistantMessagesByParent = createMemo(() => indexAssistantMessages(input.sessionMessages()))
+  const userContextByID = createMemo(() => indexUserContext(sessionMessages()))
+  const assistantMessagesByParent = createMemo(() => indexAssistantMessages(sessionMessages()))
 
   // Row structure depends on the empty/non-empty boundary, not each text delta.
   // Keep the original content objects so row renderers still read live text.
   const textParts = mapArray(
     () =>
-      input
-        .sessionMessages()
-        .flatMap((message) =>
-          message.type === "assistant" ? message.content.filter((content) => content.type !== "tool") : [],
-        ),
+      sessionMessages().flatMap((message) =>
+        message.type === "assistant" ? message.content.filter((content) => content.type !== "tool") : [],
+      ),
     (content) => {
       // A memo here went stale on every streamed delta, which marked the projection below pending; Solid then
       // re-checked each of its thousands of sources to find nothing changed. A signal set from a computation
@@ -141,14 +144,14 @@ export function createNextTimelineProjection(input: {
   )
 
   const textVisible = createMemo(() => new Map<Content, Accessor<boolean>>(textParts()))
-  const factOf = placeFacts(input.sessionMessages)
+  const factOf = placeFacts(sessionMessages)
 
   const projection = createMemo(() => {
     const detail = input.timelineDetail()
     const place = placer(detail, "next", factOf)
 
     return constructRows({
-      messages: input.sessionMessages(),
+      messages: sessionMessages(),
       status: input.status(),
       detail,
       pendingInputIDs: input.pendingInputIDs?.(),

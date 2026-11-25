@@ -59,6 +59,7 @@ import { SessionRetry } from "../components/session-retry"
 import { SessionError } from "../components/session-error"
 import type { TimelineDetail } from "./detail"
 import { scriptFileFact, type FileFact } from "./facts"
+import { scriptFileTool } from "./unwrap-execute"
 import { diffOpens, placeContent } from "./place"
 import { userMessageRuns, userRunSpring } from "./user-runs"
 import { attached } from "../components/message-file"
@@ -538,7 +539,8 @@ export function createSessionTimelineRowRenderer(input: {
             (ref) => {
               const content = contents.get(ref.messageID)?.get(ref.partID)
 
-              if (content?.type === "tool") return [content]
+              // A script's change drawn as its own part (`unwrapExecute`) runs with the script's changes.
+              if (content?.type === "tool" && content.name !== scriptFileTool) return [content]
               const message = input.projection.messageByID().get(ref.messageID)
 
               const file =
