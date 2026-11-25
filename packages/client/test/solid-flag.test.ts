@@ -68,7 +68,7 @@ test("syncs a location's flags with the location and reads them", async () => {
   }
 })
 
-test("refreshes flags on config.updated, location.shutdown and reconnect", async () => {
+test("refreshes flags on config.updated and reconnect", async () => {
   const state = { enabled: false }
   const app = setup((directory) => Response.json({ location: { directory }, data: { full_codemode: state.enabled } }))
   const location = { directory: "/project" }
@@ -81,13 +81,34 @@ test("refreshes flags on config.updated, location.shutdown and reconnect", async
     await until(() => app.data.location.flag("full_codemode", location))
 
     state.enabled = false
-    app.emit({ id: "evt_shutdown", created: 2, type: "location.shutdown", location, data: {} })
+    app.emit({ id: "evt_connected", created: 2, type: "server.connected", data: {} } as OpenCodeEvent)
     await until(() => !app.data.location.flag("full_codemode", location))
+    expect(app.count()).toBe(3)
+  } finally {
+    app.dispose()
+  }
+})
 
-    state.enabled = true
-    app.emit({ id: "evt_connected", created: 3, type: "server.connected", data: {} } as OpenCodeEvent)
-    await until(() => app.data.location.flag("full_codemode", location))
-    expect(app.count()).toBe(4)
+test("location.shutdown invalidates flags without fetching, so an evicted location isn't booted again", async () => {
+  const state = { enabled: true }
+  const app = setup((directory) => Response.json({ location: { directory }, data: { full_codemode: state.enabled } }))
+  const location = { directory: "/project" }
+  try {
+    await app.data.location.flags.sync(location)
+    expect(app.count()).toBe(1)
+
+    state.enabled = false
+    app.emit({ id: "evt_shutdown", created: 1, type: "location.shutdown", location, data: {} })
+    app.emit({ id: "evt_connected", created: 2, type: "server.connected", data: {} } as OpenCodeEvent)
+    app.emit({ id: "evt_config", created: 3, type: "config.updated", location, data: {} })
+    await Bun.sleep(50)
+    expect(app.count()).toBe(1)
+    // The last value stays until the location syncs again.
+    expect(app.data.location.flag("full_codemode", location)).toBe(true)
+
+    await app.data.location.sync(location)
+    expect(app.count()).toBe(2)
+    expect(app.data.location.flag("full_codemode", location)).toBe(false)
   } finally {
     app.dispose()
   }

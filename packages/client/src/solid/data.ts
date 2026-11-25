@@ -859,7 +859,7 @@ export function createData(config: CreateDataInput) {
         refresh(() => result.location.vcs.sync())
         refresh(() => result.project.sync())
         Object.entries(store.location).forEach(([key, data]) => {
-          if (data.flags === undefined) return
+          if (data.flags === undefined || dormantFlags.has(key)) return
           const ref = JSON.parse(key) as [string, string | null]
           const location = { directory: ref[0], workspaceID: ref[1] ?? undefined }
           flags.invalidate(location)
@@ -1573,7 +1573,7 @@ export function createData(config: CreateDataInput) {
       }
       case "config.updated":
         refreshLocation("config", result.location.config, location)
-        refreshLocation("flags", flags, location)
+        if (!dormantFlags.has(locationKey(location))) refreshLocation("flags", flags, location)
         if (hasLocation("websearch", location)) refresh(() => result.location.websearch.refresh(location))
         break
       case "websearch.updated":
@@ -1591,8 +1591,11 @@ export function createData(config: CreateDataInput) {
       case "mcp.resources.changed":
         refreshLocation("mcpResource", result.location.mcp.resource, location)
         break
+      // Fetching here would boot the location again, so a location that was evicted for being idle never stays
+      // down. Its flags keep their last value until the next sync of the location.
       case "location.shutdown":
-        refreshLocation("flags", flags, location)
+        dormantFlags.add(locationKey(location))
+        flags.invalidate(location)
         break
     }
   }
@@ -1649,7 +1652,9 @@ export function createData(config: CreateDataInput) {
   const vcs = locationResource("vcs", (location) => api().vcs.get({ location }))
   const usageLimits = locationResource("usageLimits", (location) => api().experimental.usage.limits({ location }))
   // A server older than the flag endpoint answers it with a 404 and no JSON body: every flag is off there.
-  const flags = locationResource(
+  // Locations whose flags were invalidated by location.shutdown; refreshes skip them until something syncs them again.
+  const dormantFlags = new Set<string>()
+  const flagResource = locationResource(
     "flags",
     (location) =>
       api()
@@ -1660,6 +1665,13 @@ export function createData(config: CreateDataInput) {
         }),
     { alias: true },
   )
+  const flags = {
+    ...flagResource,
+    sync: (ref?: LocationRef) => {
+      dormantFlags.delete(locationKey(ref ?? defaultLocation()))
+      return flagResource.sync(ref)
+    },
+  }
   const shells = locationResource("shell", async (location) => {
     const response = await api().shell.list({ location })
     const ref = { directory: response.location.directory }
