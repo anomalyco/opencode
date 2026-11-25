@@ -1,23 +1,24 @@
 export * as ServerWorkerd from "./workerd"
 
-import { Effect, Layer } from "effect"
+import { Context, Effect, Layer } from "effect"
+import { BlobStore } from "@opencode/core/blob-store"
 import { ConfigPluginSource } from "@opencode/core/config/plugin/source"
 import { Database } from "@opencode/core/database/database"
 import { sqliteLayer } from "@opencode/core/database/sqlite.workerd"
 import type { DurableObjectStorage } from "@opencode/core/database/sqlite.workerd"
 import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
-import { FileSystem } from "@opencode/core/filesystem"
-import { FileSystemSearch } from "@opencode/core/filesystem/search"
-import { BlobStore } from "@opencode/core/blob-store"
-import { VideoGeneration } from "@opencode/core/video-generation"
+import { Identity } from "@opencode/core/machine/identity"
 import { Pty } from "@opencode/core/pty"
 import { Snapshot } from "@opencode/core/snapshot"
 import { Vcs } from "@opencode/core/vcs"
+import { VideoGeneration } from "@opencode/core/video-generation"
+import { Workspace } from "@opencode/core/workspace"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import type { LayerNode } from "@opencode/util/effect/layer-node"
 import { Npm } from "@opencode/util/npm"
 import { ServerFetch } from "./fetch"
 import type { ServerOptions } from "./options"
+import { withoutParentSpan } from "./request-tracing"
 
 /**
  * The workerd runtime profile: boots opencode core and server inside a
@@ -25,13 +26,18 @@ import type { ServerOptions } from "./options"
  * or disabled.
  *
  * - Database runs on the injected `DurableObjectStorage` SQLite.
+ * - `ServerWorkerd.create` configures `Workspace` with `keepWarm: 0`,
+ *   `pollInterval: null`, and `storage.setAlarm` scheduling, exposing `handler.alarm()`
+ *   so the Durable Object can hibernate at zero idle cost. (Kept out of base
+ *   `replacements()` until SDK embedders wire `alarm()` too.)
  * - Watcher and fff are disabled through their existing option flags; pty, fff,
  *   and photon native modules resolve to inert stubs under the `workerd` bundle
  *   condition.
- * - Bare locations use a typed no-execution-plane process spawner; FileSystem,
- *   FileSystemSearch, and Pty fail with a clear defect until a remote sandbox
- *   backs them; Npm fails package installs with a typed workerd error; Snapshot
- *   and Vcs degrade to no-op results.
+ * - Bare locations use a typed no-execution-plane process spawner; FileSystem
+ *   and FileSystemSearch route through Environment (working on attached remote
+ *   workspaces and failing cleanly on bare locations). Pty fails with a clear
+ *   defect; Npm fails package installs with a typed workerd error; Snapshot and
+ *   Vcs degrade to no-op results.
  * - Blob storage and video generation report themselves unsupported: blobs are files on a local disk.
  * - Config is injected as a string (no filesystem); plugin discovery is
  *   precompiled-only, and stdio MCP reports the same no-plane failure as Shell.
@@ -53,17 +59,48 @@ export interface Options {
   readonly fetch?: ServerOptions["fetch"]
 }
 
+export interface Handler {
+  (request: Request): Promise<Response>
+  /** Suspends any workspaces past their idle threshold; call from the Durable Object's `alarm()` method. */
+  readonly alarm: () => Promise<void>
+}
+
 /**
- * Builds the web-standard fetch handler for a Durable Object's `fetch()`. The
+ * Workspace replacement for Durable Object hosts that wire `alarm()`: closes connections immediately when idle
+ * (`keepWarm: 0`), disables background polling (`pollInterval: null`), and schedules idle suspension via `storage.setAlarm`.
+ */
+export const alarmWorkspaceReplacement = (storage: DurableObjectStorage): LayerNode.Replacement =>
+  Workspace.node.replace(
+    Workspace.configured({
+      keepWarm: 0,
+      pollInterval: null,
+      onIdleScheduled: (atMs) => Effect.tryPromise(() => storage.setAlarm(atMs)),
+    }),
+  )
+
+/**
+ * Builds the web-standard fetch + alarm handler for a Durable Object. The
  * application layer builds eagerly in the caller's scope, so hold it in the
  * Durable Object instance rather than per request.
+ *
+ * Callers must forward the Durable Object's `alarm()` lifecycle method to
+ * `handler.alarm()`: this profile disables background idle polling so the
+ * isolate can hibernate at zero idle cost.
  */
-export function create(options: Options) {
+export const create = Effect.fn("ServerWorkerd.create")(function* (options: Options) {
   // Eviction can kill the isolate between a turn's Started and terminal events with no
   // teardown. The write-ahead execution claim plus ServerFetch.make's boot-time resume
   // recovers such orphaned turns by replaying the drain from durable history on the next wake.
-  return ServerFetch.make(serverOptions(options), { overrides: replacements(options) })
-}
+  const server = yield* ServerFetch.makeWithContext(serverOptions(options), {
+    overrides: [...replacements(options), alarmWorkspaceReplacement(options.storage)],
+  })
+  const run = Effect.runPromiseWith(yield* withoutParentSpan(Effect.context()))
+  const workspace = Context.get(server.context, Workspace.Service)
+  const handler: Handler = Object.assign(server.handler, {
+    alarm: () => run(Effect.asVoid(workspace.suspendIdle())),
+  })
+  return handler
+})
 
 export function serverOptions(options: Options): ServerOptions {
   return {
@@ -84,11 +121,10 @@ export function serverOptions(options: Options): ServerOptions {
 export function replacements(options: Options): LayerNode.Replacements {
   return [
     Database.node.replace(Database.configuredClient(sqliteLayer({ storage: options.storage }))),
+    Identity.node.replace(Identity.kvNode),
     CrossSpawnSpawner.node.replace(EnvironmentUnavailable.layer),
     Snapshot.node.replace(Snapshot.noopLayer),
     Vcs.node.replace(vcsLayer),
-    FileSystem.node.replace(fileSystemLayer),
-    FileSystemSearch.node.replace(fileSystemSearchLayer),
     Pty.node.replace(ptyLayer),
     Npm.node.replace(npmLayer),
     // Blobs need a local `blobs/` folder, which a Durable Object doesn't have.
@@ -137,25 +173,6 @@ const vcsLayer = Layer.succeed(
     branches: () => Effect.succeed([]),
     status: () => Effect.succeed([]),
     diff: () => Effect.succeed([]),
-  }),
-)
-
-// The Location-scoped filesystem has no local worktree to serve until a remote
-// sandbox backs it.
-const fileSystemLayer = Layer.succeed(
-  FileSystem.Service,
-  FileSystem.Service.of({
-    read: () => unavailable("FileSystem.read"),
-    list: () => unavailable("FileSystem.list"),
-    find: () => unavailable("FileSystem.find"),
-    write: () => unavailable("FileSystem.write"),
-  }),
-)
-
-const fileSystemSearchLayer = Layer.succeed(
-  FileSystemSearch.Service,
-  FileSystemSearch.Service.of({
-    find: () => unavailable("FileSystemSearch.find"),
   }),
 )
 

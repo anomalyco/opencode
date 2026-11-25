@@ -10,8 +10,8 @@ import { permissionLayer } from "../lib/permission"
 import { hostEnvironmentLayer } from "./environment"
 import { location } from "./location"
 
-/** What a paired machine's environment says about itself. */
-export const machineFacts = { path: posix, shell: "sh" }
+/** Options for a paired machine's environment in tests. */
+export const machineOptions = { local: false, path: posix, shell: "sh" } as const
 
 /**
  * A session on the host at `directory` whose resolved targets all live in another environment, in memory
@@ -20,7 +20,7 @@ export const machineFacts = { path: posix, shell: "sh" }
  */
 export const elsewhere = (
   directory: string,
-  environment = Environment.make(Environment.ID.make("elsewhere"), Environment.makeMemoryDriver(), machineFacts),
+  environment = Environment.make(Environment.ID.make("elsewhere"), Environment.makeMemoryDriver(), machineOptions),
 ) => {
   const assertions: Permission.AssertInput[] = []
   const checked: Permission.AssertInput[] = []
