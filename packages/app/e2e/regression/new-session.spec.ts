@@ -233,6 +233,9 @@ for (const binding of ["custom", "none"]) {
 
     await view.editor.press(`${modifier}+Alt+k`)
     await expect(newSessionBaseBranch(page)).toHaveText("from main")
+    await newSessionBaseBranch(page).hover()
+    await expect(tooltip).toContainText("Choose worktree")
+    await expect(keys).toHaveText([/X$/, /B$/])
     await view.editor.press(`${modifier}+Alt+x`)
     const search = page.getByRole("combobox", { name: "Search worktrees", exact: true })
 
@@ -448,9 +451,15 @@ test("the checkout branch opens the current project's worktree step", async ({ p
   await search.press("ArrowDown")
   await expect(create).toHaveAttribute("data-active")
   await expect(selected).toHaveAccessibleName(main)
-  // "Run session in" is the list's heading, not a Tab stop; the back arrow in the search field steps back.
+  // "Run session in" is the list's heading, not a Tab stop, and neither are the rows the search field names.
   await search.press("Tab")
   await expect(dialog.getByText("Run session in", { exact: true })).not.toBeFocused()
+  await expect(dialog.locator('[role="option"]:focus')).toHaveCount(0)
+  // The back arrow in the search field is, and it shows the ring.
+  await search.focus()
+  await search.press("Shift+Tab")
+  await expect(back).toBeFocused()
+  await expect(back).toHaveCSS("outline-style", "solid")
 
   // Stepping back lands on the projects step with the drilled project active, as after drilling in with →.
   await back.click()
@@ -507,8 +516,8 @@ test("the branch shortcut chooses a base branch and stays inactive on the main c
 
   await expect(base).toHaveAccessibleName("Choose base branch")
   await base.hover()
-  await expect(page.getByRole("tooltip")).toContainText("Choose base branch")
-  await expect(page.getByRole("tooltip").locator('[data-component="keybind-v2"]')).toContainText("B")
+  await expect(page.getByRole("tooltip")).toContainText(/Choose worktree.*Choose base branch/)
+  await expect(page.getByRole("tooltip").locator('[data-component="keybind-v2"]')).toHaveText([/O$/, /B$/])
   await expect(view.editor).toBeFocused()
   await view.editor.press(shortcut)
   await expect(search).toBeFocused()

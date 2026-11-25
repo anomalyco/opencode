@@ -1083,6 +1083,7 @@ export function RecentSessions(
                       collapsible={arrangement().groupBy !== "none"}
                       collapsed={collapsed(group())}
                       mark={hiddenMark(group())}
+                      hoverReveal={settings.appearance.navigationPrototype()}
                       onToggle={() => toggleGroup(group().key)}
                       menu={
                         <RecentViewMenu
@@ -1175,6 +1176,8 @@ function GroupHeader(props: {
   collapsible: boolean
   collapsed: boolean
   mark: "attention" | "unread" | undefined
+  /** Shows the chevron only on hover or focus (Consolidated). */
+  hoverReveal: boolean
   onToggle: () => void
   menu: JSX.Element
 }) {
@@ -1195,7 +1198,7 @@ function GroupHeader(props: {
           type="button"
           id={props.id}
           aria-expanded={!props.collapsed}
-          class="flex h-6 min-w-0 flex-1 items-center gap-1 rounded-[6px] ps-2 pe-8 text-start text-[13px] leading-4 font-medium text-v2-text-text-muted hover:text-v2-text-text-base focus-visible:-outline-offset-2"
+          class="group/toggle flex h-6 min-w-0 flex-1 items-center gap-1 rounded-[6px] ps-2 pe-8 text-start text-[13px] leading-4 font-medium text-v2-text-text-muted hover:text-v2-text-text-base focus-visible:-outline-offset-2"
           onClick={props.onToggle}
         >
           <span class="min-w-0 truncate">{props.label}</span>
@@ -1216,8 +1219,12 @@ function GroupHeader(props: {
           </Show>
           <Icon
             name="fill-triangle-down"
-            class="shrink-0 text-v2-icon-icon-muted transition-transform motion-reduce:transition-none"
-            classList={{ "-rotate-90 rtl:rotate-90": props.collapsed }}
+            class="shrink-0 text-v2-icon-icon-muted transition-[transform,opacity] motion-reduce:transition-none"
+            classList={{
+              "-rotate-90 rtl:rotate-90": props.collapsed,
+              "opacity-0 group-hover/header:opacity-100 group-focus-visible/toggle:opacity-100 [@media(hover:none)]:opacity-100":
+                props.hoverReveal,
+            }}
           />
         </button>
       </Show>

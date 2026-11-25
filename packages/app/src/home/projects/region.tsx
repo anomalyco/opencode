@@ -1,6 +1,7 @@
 import type { HomeProjectsController } from "./controller"
 import { HomeProjectsView } from "./view"
 import type { HomeScrollController } from "../scroll"
+import { useSettings } from "@/settings/model"
 
 export function HomeProjects(props: {
   projects: HomeProjectsController
@@ -10,10 +11,13 @@ export function HomeProjects(props: {
   /** Runs after a project or server is picked, or a project is added (which selects it). */
   onPick?: () => void
 }) {
+  const settings = useSettings()
+
   return (
     <HomeProjectsView
       dropdown={props.dropdown}
       scope={props.scope}
+      serverScope={settings.appearance.navigationPrototype()}
       language={props.projects.copy.language}
       servers={props.projects.server.list()}
       projects={props.projects.project.list()}

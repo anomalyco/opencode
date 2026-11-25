@@ -824,7 +824,7 @@ test.each(["show", "hide"] as const)(
   },
 )
 
-test("keeps assistant footer metrics current after prepend, same-length refresh, and revert", async () => {
+test("keeps assistant footer metrics current after prepend, refresh, and revert", async () => {
   await using state = await tmpdir()
   const session = {
     id: "ses_footer",
@@ -927,18 +927,16 @@ test("keeps assistant footer metrics current after prepend, same-length refresh,
   expect(prepended).toContain("Original answer")
   expect(prepended).toContain("4.0s \u00b7 40.0 tok/s")
 
-  // Refresh the latest page: length stays four, but the retained assistant moves from index three to one.
+  // Refresh the latest page: it brings a later turn and keeps the prepended history.
   refresh = true
   setup.events.disconnect()
   const refreshed = await waitForHighlightedFrame(
     setup,
-    (frame) =>
-      frame.includes("Later input") &&
-      frame.includes("Later answer") &&
-      !frame.includes("Prepended input") &&
-      !frame.includes("Prepended instructions"),
+    (frame) => frame.includes("Later input") && frame.includes("Later answer"),
     { maxPasses: 120 },
   )
+  expect(refreshed).toContain("Prepended input")
+  expect(refreshed).toContain("Prepended instructions")
   expect(refreshed).toContain("Current input")
   expect(refreshed).toContain("Original answer")
   expect(refreshed).toContain("4.0s \u00b7 40.0 tok/s")

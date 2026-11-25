@@ -44,7 +44,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Money } from "@opencode/schema/money"
 import { Skill } from "@opencode/schema/skill"
 import { Shell } from "@opencode/schema/shell"
-import { DateTime, Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { DateTime, Deferred, Effect, Fiber, Layer, Schema, Stream, Tracer } from "effect"
 import { TestClock } from "effect/testing"
 import { asc, eq, inArray, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -1370,6 +1370,41 @@ it.effect("automatic compaction waits for a background summary still being writt
 
     expect(yield* Fiber.join(compacting)).toEqual({ status: "completed" })
     expect(requests).toHaveLength(1)
+  }).pipe(Effect.ensuring(Effect.sync(() => (beforeResponse = Effect.void)))),
+)
+
+it.effect("traces the background summary and the wait for it", () =>
+  Effect.gen(function* () {
+    requests = []
+    const spans: Tracer.NativeSpan[] = []
+    const tracer = Tracer.make({
+      span(options) {
+        const span = new Tracer.NativeSpan(options)
+        spans.push(span)
+        return span
+      },
+    })
+    const release = yield* Deferred.make<void>()
+    beforeResponse = Deferred.await(release)
+    const compaction = yield* SessionCompaction.Service
+    const session = yield* insertSession(Session.ID.make("ses_precompute_traced"))
+    const history = precomputeHistory()
+
+    yield* compaction.precompute(Effect.succeed(loaded(session, history.near))).pipe(Effect.withTracer(tracer))
+    const compacting = yield* compaction
+      .compact({ reason: "auto", context: loaded(session, history.due) })
+      .pipe(Effect.withTracer(tracer), Effect.forkChild({ startImmediately: true }))
+    yield* Deferred.succeed(release, undefined)
+    expect(yield* Fiber.join(compacting)).toEqual({ status: "completed" })
+
+    const background = spans.find((span) => span.name === "SessionCompaction.background")
+    expect(background?.attributes.get("session.id")).toBe(session.id)
+    expect(background?.attributes.get("compaction.keep_id")).toBe(history.anchor.id)
+    expect(background?.status._tag).toBe("Ended")
+    const compact = spans.find((span) => span.name === "SessionCompaction.compact")
+    expect(compact?.attributes.get("compaction.background.pending")).toBe(true)
+    expect(compact?.attributes.get("compaction.background.failed")).toBe(false)
+    expect(typeof compact?.attributes.get("compaction.background.wait_ms")).toBe("number")
   }).pipe(Effect.ensuring(Effect.sync(() => (beforeResponse = Effect.void)))),
 )
 

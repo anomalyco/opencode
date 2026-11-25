@@ -893,7 +893,6 @@ export const dict = {
   "session.location.description": "Wybierz inny katalog, aby kontynuować tę sesję.",
   "session.location.choose": "Wybierz katalog",
   "session.location.worktree": "Wybierz drzewo robocze",
-  "session.location.worktreesFailed": "Nie udało się wczytać drzew roboczych",
   "session.rewind.toast.title": "Cofnięto",
   "session.rewind.toast.undo": "Cofnij",
   "session.location.moving": "Przenoszenie sesji…",

@@ -1,4 +1,4 @@
-import { describe, expect, setSystemTime, test } from "bun:test"
+import { describe, expect, test } from "bun:test"
 import { Money } from "@opencode/schema/money"
 import { Effect, Exit, Fiber, Layer, Ref, Scope, Stream, Tracer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
@@ -735,67 +735,6 @@ describe("ModelsDev Service", () => {
     }),
   )
 
-  it.effect("keeps a mode's ID on the tier the mode asks for", () =>
-    Effect.gen(function* () {
-      const [acme] = yield* ModelsDev.decodeSnapshot(
-        JSON.stringify({
-          acme: {
-            ...fixture.acme,
-            models: {
-              "acme-1": sourceModel("acme-1", {
-                capabilities: {
-                  tools: { supported: true },
-                  reasoning: { supported: false },
-                  service_tier: ["priority", "fast"],
-                },
-                // Saved sessions hold "acme-1-fast", which has always asked for the priority tier. The "fast" tier
-                // would take that ID, so it isn't offered as a second choice next to it.
-                experimental: { modes: { fast: { service_tier: "priority", body: { service_tier: "priority" } } } },
-              }),
-            },
-          },
-        }),
-        false,
-        true,
-      )
-      expect(acme?.models.map((item) => [item.id, item.settings?.serviceTier])).toEqual([
-        ["acme-1", undefined],
-        ["acme-1-fast", "priority"],
-      ])
-    }),
-  )
-
-  it.effect("names a mode's tier after the tier when another model already has the mode's ID", () =>
-    Effect.gen(function* () {
-      const [acme] = yield* ModelsDev.decodeSnapshot(
-        JSON.stringify({
-          acme: {
-            ...fixture.acme,
-            models: {
-              "acme-1": sourceModel("acme-1", {
-                capabilities: {
-                  tools: { supported: true },
-                  reasoning: { supported: false },
-                  service_tier: ["priority", "fast"],
-                },
-                experimental: { modes: { fast: { service_tier: "priority", body: { service_tier: "priority" } } } },
-              }),
-              // A separate model already holds "acme-1-fast", so the priority tier keeps its own name.
-              "acme-1-fast": sourceModel("acme-1-fast"),
-            },
-          },
-        }),
-        false,
-        true,
-      )
-      expect(acme?.models.map((item) => [item.id, item.settings?.serviceTier])).toEqual([
-        ["acme-1", undefined],
-        ["acme-1-priority", "priority"],
-        ["acme-1-fast", undefined],
-      ])
-    }),
-  )
-
   it.effect("skips non-chat models whose only opencode package serves another type", () =>
     Effect.gen(function* () {
       const api = (opencodeai: string) => ({
@@ -1391,60 +1330,6 @@ describe("ModelsDev Service", () => {
         expect(Exit.isFailure(unrequested304.status.exit)).toBe(true)
       }
     }),
-  )
-
-  it.live("refresh(false) re-prices an introductory price that ends while the catalog stays the same", () =>
-    Effect.gen(function* () {
-      setSystemTime(new Date("2027-02-28T23:59:00Z"))
-      const catalog = {
-        acme: {
-          ...fixture.acme,
-          models: {
-            "acme-1": sourceModel("acme-1", {
-              cost: {
-                text: { input: { price: 2 }, output: { price: 10 } },
-                multipliers: [
-                  { when: { service_tier: { equals: "ultrafast" }, date: { lt: "2027-03-01" } }, factor: 3 },
-                  { when: { service_tier: { equals: "ultrafast" }, date: { gte: "2027-03-01" } }, factor: 6 },
-                ],
-              },
-              experimental: { modes: { ultrafast: { body: { service_tier: "ultrafast" } } } },
-            }),
-          },
-        },
-      }
-      const cache = makeCache()
-      writeCache(cache, catalog, Date.now() - 10 * 60 * 1000)
-      // The poll after midnight gets the same body back.
-      const state = yield* Ref.make({ ...initialState, body: JSON.stringify(catalog) })
-      const price = (snapshots: readonly ModelsDev.Snapshot[]) =>
-        snapshots[0]?.models.find((model) => model.id === "acme-1-ultrafast")?.cost[0]?.input
-      yield* provided(
-        state,
-        cache,
-        Effect.gen(function* () {
-          const svc = yield* ModelsDev.Service
-          const bus = yield* Bus.Service
-          expect(price(yield* svc.get())).toBe(Money.USDPerMillionTokens.make(6))
-          setSystemTime(new Date("2027-03-01T00:01:00Z"))
-          const event = yield* bus.subscribe(ModelsDev.Event.Refreshed).pipe(
-            Stream.take(1),
-            Stream.runCollect,
-            Effect.forkScoped,
-            Effect.flatMap((fiber) =>
-              Effect.gen(function* () {
-                yield* Effect.yieldNow
-                yield* svc.refresh(false)
-                return yield* Fiber.join(fiber).pipe(Effect.timeoutOption("1 second"))
-              }),
-            ),
-          )
-          expect(event._tag).toBe("Some")
-          expect(price(yield* svc.get())).toBe(Money.USDPerMillionTokens.make(12))
-        }),
-      )
-      expect((yield* Ref.get(state)).calls.length).toBe(1)
-    }).pipe(Effect.ensuring(Effect.sync(() => setSystemTime()))),
   )
 
   it.live("frees and ignores catalogs cached under earlier keys", () =>

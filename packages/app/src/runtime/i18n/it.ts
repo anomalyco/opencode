@@ -880,7 +880,6 @@ export const dict = {
   "session.location.description": "Scegli un'altra directory per continuare questa sessione.",
   "session.location.choose": "Scegli directory",
   "session.location.worktree": "Scegli worktree",
-  "session.location.worktreesFailed": "Impossibile caricare i worktree",
   "session.rewind.toast.title": "Ripristinato",
   "session.rewind.toast.undo": "Annulla",
   "session.location.moving": "Spostamento della sessione…",

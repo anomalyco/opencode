@@ -263,6 +263,10 @@ function MessageTimelineView(
         )
       }
 
+      // Finished thoughts one after another start closed like one thought, and open as their first does.
+      if (Predicate.isTagged(row, "AssistantPart") && row.group.type === "thought")
+        return !disclosure[row.group.refs[0]!.partID]
+
       if (!Predicate.isTagged(row, "AssistantPart") || row.group.type !== "part") return false
       const message = messageByID().get(row.group.ref.messageID)
 
@@ -345,14 +349,16 @@ function MessageTimelineView(
     revealPart: virtualized.revealPart,
   }
 
-  const rowRenderer = props.next
-    ? createNextTimelineRowRenderer(rowInput)
-    : createSessionTimelineRowRenderer({
-        ...rowInput,
-        reasoningMode: props.data.reasoningMode,
-        shellToolDefaultOpen: props.data.shellToolPartsExpanded,
-        editToolDefaultOpen: props.data.editToolPartsExpanded,
-      })
+  const nextRenderer = props.next ? createNextTimelineRowRenderer(rowInput) : undefined
+
+  const rowRenderer =
+    nextRenderer ??
+    createSessionTimelineRowRenderer({
+      ...rowInput,
+      reasoningMode: props.data.reasoningMode,
+      shellToolDefaultOpen: props.data.shellToolPartsExpanded,
+      editToolDefaultOpen: props.data.editToolPartsExpanded,
+    })
 
   const blockingPartID = createMemo(() => {
     const blocking = new Set(props.background.blocking().map((task) => task.partID))
@@ -577,7 +583,13 @@ function MessageTimelineView(
             // row: Working hides and returns several times in one step, and each change would move that input 36px.
             const shown = createMemo((was) => was || working() || backgroundHintPresence.present(), false)
 
-            return <Show when={shown()}>{activity(() => true, true)}</Show>
+            // In the New timeline the row above holds a row's gap. A waiting message brings a turn gap for that;
+            // a queued compaction has none, so this row holds its gap, whether or not live status shows.
+            return (
+              <div data-timeline={nextRenderer && "next"} data-timeline-gap={nextRenderer?.gap(row())}>
+                <Show when={shown()}>{activity(() => true, true)}</Show>
+              </div>
+            )
           }}
         </Show>
       )}

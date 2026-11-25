@@ -344,7 +344,9 @@ describe("CdTool", () => {
       // On a sandboxed workspace Location, a sandbox path matching a host worktree path must still prompt.
       const sandboxAssertions: Permission.AssertInput[] = []
       const memory = makeMemoryDriver()
-      const sandboxWorktreePath = AbsolutePath.make("/outside-wt")
+      // A sandboxed Location resolves plain paths with the host's path rules (`D:\outside-wt` on Windows), so create
+      // the directory where that resolution lands for the memory driver to find it.
+      const sandboxWorktreePath = AbsolutePath.make(path.resolve("/outside-wt"))
       yield* memory.overrides!.mkdir!(sandboxWorktreePath)
       const wrkID = Workspace.ID.make("wrk_wt_test")
       const sandboxLayer = buildLayer({

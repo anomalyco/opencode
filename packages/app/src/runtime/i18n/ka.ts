@@ -855,7 +855,6 @@ export const dict = {
   "session.location.description": "ამ სესიის გასაგრძელებლად აირჩიეთ სხვა საქაღალდე.",
   "session.location.choose": "საქაღალდის არჩევა",
   "session.location.worktree": "სამუშაო ხის არჩევა",
-  "session.location.worktreesFailed": "სამუშაო ხეების ჩატვირთვა ვერ მოხერხდა",
   "session.rewind.toast.title": "დაბრუნებულია",
   "session.rewind.toast.undo": "გაუქმება",
   "session.location.moving": "სესია გადაიტანება…",

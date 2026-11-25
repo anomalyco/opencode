@@ -93,6 +93,7 @@ async function read(output: ReadonlyArray<Uint8Array>, options?: { open: boolean
     Environment.Service,
     Environment.Service.of({
       id: Environment.localID,
+      local: true,
       files: Environment.makeFiles(driver),
       spawner: ChildProcessSpawner.make(() =>
         Effect.succeed(

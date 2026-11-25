@@ -945,7 +945,6 @@ export const dict = {
   "session.location.description": "Виберіть інший каталог, щоб продовжити цю сесію.",
   "session.location.choose": "Вибрати каталог",
   "session.location.worktree": "Вибрати робоче дерево",
-  "session.location.worktreesFailed": "Не вдалося завантажити робочі дерева",
   "session.rewind.toast.title": "Скинуто",
   "session.rewind.toast.undo": "Скасувати",
   "session.location.moving": "Переміщення сесії…",

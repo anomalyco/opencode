@@ -7,7 +7,7 @@ import type { InstancePlugins } from "@opencode/core/plugin/instance"
 import type { Session } from "@opencode/schema/session"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import type { LayerNode } from "@opencode/util/effect/layer-node"
-import { Context, Deferred, Duration, Effect, Equal, Layer, LayerMap, RcMap, Scope } from "effect"
+import { Context, Duration, Effect, Layer, LayerMap, RcMap, Scope } from "effect"
 
 export interface Configuration {
   readonly plugins: InstancePlugins.List
@@ -65,29 +65,18 @@ export function layer(options: Options, replacements: () => LayerNode.Replacemen
           Layer.unwrap(
             Effect.gen(function* () {
               const configuration = yield* options.configure(input.key).pipe(Effect.orDie)
-              const self = yield* Deferred.make<Context.Context<Instance.Services>>()
               return Instance.layer(input, {
                 plugins: configuration.plugins,
                 replacements: [
                   ...replacements(),
                   // Instances borrow this selector and the host's Location map instead of retaining
                   // their Layer scopes; retaining the selector would block its shutdown on its own entries.
-                  // Its own plugins run while this entry still awaits their activation, so they get this
-                  // instance's services directly; reacquiring the entry would wait on its own build.
-                  Instance.node.replace(
-                    Layer.succeed(Instance.Service, {
-                      provide: (session) => (effect) =>
-                        Equal.equals(key(session), input)
-                          ? Effect.flatMap(Deferred.await(self), (context) => Effect.provide(effect, context))
-                          : provide(session)(effect),
-                    }),
-                  ),
+                  Instance.node.replace(Layer.succeed(Instance.Service, { provide })),
                   LocationServiceMap.node.replace(Layer.succeed(LocationServiceMap.Service, locations)),
                 ],
               }).pipe(
                 Layer.tap((context) =>
                   Effect.gen(function* () {
-                    yield* Deferred.succeed(self, context)
                     const plugins = yield* Plugin.Service
                     yield* plugins.awaitActivation
                     // Covers setup failures and IDs colliding with host plugins; Core reports both in the inventory.

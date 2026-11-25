@@ -883,7 +883,6 @@ export const dict = {
   "session.location.description": "މި ސެޝަން ކުރިއަށް ގެންދިއުމަށް އެހެން ޑައިރެކްޓަރީއެއް ހޮވާށެވެ.",
   "session.location.choose": "ޑައިރެކްޓަރީ ހޮވާ",
   "session.location.worktree": "ވޯކްޓްރީ ހޮވާ",
-  "session.location.worktreesFailed": "ވޯކްޓްރީތައް ލޯޑް ނުކުރެވުނެވެ",
   "session.rewind.toast.title": "ރިވަރޓް ކުރެވިއްޖެ",
   "session.rewind.toast.undo": "އަންޑޯ",
   "session.location.moving": "ސެޝަން ބަދަލުކުރަމުން…",

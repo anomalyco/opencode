@@ -850,7 +850,6 @@ export const dict = {
   "session.location.description": "Veldu aðra möppu til að halda þessari setu áfram.",
   "session.location.choose": "Velja möppu",
   "session.location.worktree": "Velja vinnutré",
-  "session.location.worktreesFailed": "Ekki tókst að hlaða vinnutrjám",
   "session.rewind.toast.title": "Afturkallað",
   "session.rewind.toast.undo": "Afturkalla",
   "session.location.moving": "Færir setu…",

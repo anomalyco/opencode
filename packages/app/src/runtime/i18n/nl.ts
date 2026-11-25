@@ -866,7 +866,6 @@ export const dict = {
   "session.location.description": "Kies een andere map om deze sessie voort te zetten.",
   "session.location.choose": "Map kiezen",
   "session.location.worktree": "Worktree kiezen",
-  "session.location.worktreesFailed": "Kan worktrees niet laden",
   "session.rewind.toast.title": "Teruggedraaid",
   "session.rewind.toast.undo": "Ongedaan maken",
   "session.location.moving": "Sessie verplaatsen…",
