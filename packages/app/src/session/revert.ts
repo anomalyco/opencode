@@ -248,6 +248,7 @@ export function createSessionRevert(input: {
       await server.api.session.interrupt({ sessionID }, { signal })
       await server.api.experimental.session.wait({ sessionID }, { signal })
       await server.api.session.revert.stage({ sessionID, messageID: operation.message.id }, { signal })
+
       if (operation.commit) await server.api.session.revert.commit({ sessionID }, { signal })
 
       // Like the TUI, pending inputs are left alone: the revert hides them, committing it drops them, and redo

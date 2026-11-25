@@ -365,6 +365,7 @@ for (const [name, draft, expected] of [
     const requests: string[] = []
     page.on("request", (request) => {
       const path = new URL(request.url()).pathname
+
       const step = ["/interrupt", "/wait", "/revert/stage", "/revert/commit"].find((suffix) =>
         path.endsWith(`/${sessionID}${suffix}`),
       )
