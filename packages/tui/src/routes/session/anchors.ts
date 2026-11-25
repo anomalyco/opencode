@@ -14,6 +14,12 @@ export function anchorKey(target: AnchorTarget) {
     : JSON.stringify(["group", target.groupID])
 }
 
+export function targetMessageID(target: AnchorTarget) {
+  if (target.type === "part") return target.ref.messageID
+  const value: unknown = JSON.parse(target.groupID)
+  return Array.isArray(value) && typeof value[0] === "string" ? value[0] : undefined
+}
+
 /** Whole non-assistant messages have one canonical UI body part. Derived
  * footer/usage rows use the preceding entry as their scroll reference. */
 export function entryRef(entry: SessionEntry): PartRef | undefined {

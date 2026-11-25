@@ -5,6 +5,7 @@ import {
   createTimelineAnchors,
   entryRef,
   groupID,
+  targetMessageID,
   type AnchorTarget,
 } from "../../../src/routes/session/anchors"
 import { groupEntries } from "../../../src/routes/session/grouping/tree"
@@ -20,6 +21,13 @@ test("part anchors identify the exact part and whole messages have a body refere
   const saved = entryRef(entry)
   entry.ref.partID = "replacement"
   expect(saved?.partID).toBe("read")
+})
+
+test("an anchor names the message it restores", () => {
+  expect(targetMessageID({ type: "part", ref: { messageID: "user-1", partID: "message" } })).toBe("user-1")
+  expect(targetMessageID({ type: "group", groupID: JSON.stringify(["assistant-1", "read:0", "exploration", 0]) })).toBe(
+    "assistant-1",
+  )
 })
 
 test("group IDs use the first descendant reference, kind and nesting level", () => {

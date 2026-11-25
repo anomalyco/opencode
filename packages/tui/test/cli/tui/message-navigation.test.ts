@@ -90,6 +90,45 @@ test("uses the selected message when the viewport is too tall to scroll", () => 
   ).toEqual({ id: "user-1", y: 0, top: 0 })
 })
 
+test("maps an assistant navigation base to the preceding user message for user-only navigation", () => {
+  const withReplies: SessionMessageInfo[] = [
+    { type: "user", id: "user-1", text: "First", time: { created: 0 } },
+    assistant("assistant-1", "First reply"),
+    { type: "user", id: "user-2", text: "Second", time: { created: 2 } },
+    assistant("assistant-2", "Second reply"),
+    { type: "user", id: "user-3", text: "Third", time: { created: 4 } },
+  ]
+  const positions = [
+    { id: "user-1", y: 0 },
+    { id: "assistant-1", y: 20 },
+    { id: "user-2", y: 40 },
+    { id: "assistant-2", y: 60 },
+    { id: "user-3", y: 80 },
+  ]
+  expect(
+    findMessageBoundary({
+      direction: "prev",
+      children: positions,
+      messages: withReplies,
+      scrollTop: 0,
+      viewportY: 0,
+      currentID: "assistant-2",
+      userOnly: true,
+    }),
+  ).toEqual({ id: "user-1", y: 0, top: 0 })
+  expect(
+    findMessageBoundary({
+      direction: "next",
+      children: positions,
+      messages: withReplies,
+      scrollTop: 0,
+      viewportY: 0,
+      currentID: "assistant-2",
+      userOnly: true,
+    }),
+  ).toEqual({ id: "user-3", y: 80, top: 80 })
+})
+
 test("stops at the first and last selected user message", () => {
   expect(
     findMessageBoundary({

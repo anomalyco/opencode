@@ -134,7 +134,7 @@ import { INLINE_TOOL_ICON_WIDTH, InlineToolRow, ReasoningPart, TextPart, toolDis
 import { defaultVerbosity, type GroupKind, type SessionEntry } from "./grouping/session"
 import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
-import { containsAnchor, createTimelineAnchors, groupID } from "./anchors"
+import { containsAnchor, createTimelineAnchors, groupID, targetMessageID } from "./anchors"
 import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
 export { InlineToolRow } from "./message-parts"
 export { toolDisplay } from "./message-parts"
@@ -583,10 +583,12 @@ export function Session(props: {
     const anchor = sessionTabs.scrollAnchor(sessionID)
     const index = anchor ? rows.findIndex((row) => containsAnchor(row, anchor.target)) : -1
     if (!anchor || index === -1) {
+      rememberMessage(lastMessageID())
       scroll.scrollTo(scroll.scrollHeight)
       setAwayFromBottom(false)
       return
     }
+    rememberMessage(sessionTabs.navigationMessage(sessionID) ?? targetMessageID(anchor.target))
     setHiddenRows(rowsBefore(weights(), index, TRANSCRIPT_BACKFILL_CHUNK))
     const end = rowsAfter(weights(), index, TRANSCRIPT_BACKFILL_CHUNK)
     setVisibleRowsEnd(end === rows.length ? undefined : end)
@@ -596,6 +598,7 @@ export function Session(props: {
         const boundary = anchors.get(anchor.target)
         if (!boundary) {
           sessionTabs.setScrollAnchor(sessionID, undefined)
+          rememberMessage(lastMessageID())
           scroll.stickyScroll = true
           scroll.scrollTo(scroll.scrollHeight)
           setAwayFromBottom(false)
@@ -850,9 +853,14 @@ export function Session(props: {
         footerHints={[{ title: "steer", label: "enter", group: "primary" }]}
       />
     ))
+  const rememberMessage = (messageID: string | undefined) => sessionTabs.setNavigationMessage(sessionID, messageID)
+  const lastMessageID = () =>
+    messages().findLast((message) => message.type === "user" || message.type === "assistant")?.id ??
+    anchors.messagePositions().at(-1)?.id
   const alignMessage = (messageID: string, top: number) => {
     scroll.stickyScroll = false
     setNavigationMessage(messageID)
+    rememberMessage(messageID)
     updateAwayFromBottom()
     setNavigationSlack(
       messageNavigationSlack({
@@ -876,7 +884,7 @@ export function Session(props: {
         messages: messages(),
         scrollTop: scroll.scrollTop,
         viewportY: scroll.viewport.y,
-        currentID: navigationMessage(),
+        currentID: navigationMessage() ?? sessionTabs.navigationMessage(sessionID),
         userOnly,
       })
 
@@ -903,6 +911,7 @@ export function Session(props: {
 
   function toBottom() {
     clearMessageNavigation()
+    rememberMessage(lastMessageID())
     ensureAllRowsPending = undefined
     if (awayTimer) clearTimeout(awayTimer)
     awayTimer = undefined
@@ -919,6 +928,7 @@ export function Session(props: {
 
   function moveTranscript(delta: number) {
     clearMessageNavigation()
+    rememberMessage(undefined)
     if (delta < 0 && revealOlderRows(delta)) {
       dialog.clear()
       return
@@ -1030,6 +1040,7 @@ export function Session(props: {
                 afterLayout(() => {
                   if (firstJump() !== cancel) return
                   scroll.scrollTo(0)
+                  rememberMessage(anchors.messagePositions().at(0)?.id)
                   setFirstJump(undefined)
                   updateAwayFromBottom()
                 })
@@ -1037,6 +1048,7 @@ export function Session(props: {
               (error) => {
                 if (firstJump() !== restore || scroll.isDestroyed) return
                 clearMessageNavigation()
+                rememberMessage(undefined)
                 toast.error(error)
                 updateAwayFromBottom()
               },
