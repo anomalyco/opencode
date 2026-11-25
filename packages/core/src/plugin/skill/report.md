@@ -62,7 +62,7 @@ guessing.
 ## Logs
 
 OpenCode writes logs to `opencode.log` in the log directory named in the
-snapshot. Find the lines around the failure, such as the error and the few lines
+snapshot, or `opencode-<channel>.log` for builds run from source. Find the lines around the failure, such as the error and the few lines
 before it, and include only those, at most about 40 lines. If they don't show the
 cause, ask the user to reproduce once with `OPENCODE_LOG_LEVEL=DEBUG` set and
 take the new lines. Never attach a whole log file.
