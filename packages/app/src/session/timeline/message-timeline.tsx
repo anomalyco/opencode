@@ -314,7 +314,7 @@ function MessageTimelineView(
             category: language.t("command.category.session"),
             title: language.t("command.session.title.generate"),
             description: language.t("command.session.title.generate.description"),
-            disabled: !sessionID() || !!parentID() || title().editing,
+            disabled: !sessionID() || !!parentID() || title().editing || props.title.generating(),
             onSelect: () => props.title.set(""),
           },
           {
@@ -699,7 +699,9 @@ function MessageTimelineView(
                         class="truncate hover:bg-v2-overlay-simple-overlay-hover"
                         onClick={props.title.edit}
                       >
-                        {childTitle()}
+                        <Show when={props.title.generating()} fallback={childTitle()}>
+                          <TextShimmer text={childTitle() ?? ""} active />
+                        </Show>
                       </button>
                     </h1>
                   }
