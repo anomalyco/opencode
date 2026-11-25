@@ -22,6 +22,7 @@
   ],
   "scripts": {
     "test": "bun test",
+    "test:live": "bun test test/live.test.ts",
     "typecheck": "bun check --no-script",
     "typecheck:tsc": "tsc --noEmit"
   },

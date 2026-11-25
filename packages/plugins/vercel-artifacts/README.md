@@ -45,4 +45,4 @@ Deleting an artifact deletes its Vercel project and keeps its Blob stores, so th
 bun test
 ```
 
-The tests run against an in-process fake of Vercel's API. With `VERCEL_TOKEN` (and `VERCEL_TEAM_ID` if needed) set, `test/live.test.ts` also publishes to that team and deletes what it made. Use a dedicated test team on the Pro plan: the cron fixture runs hourly, and private artifacts protect every deployment.
+The tests run against an in-process fake of Vercel's API. `bun run test:live`, with `VERCEL_TOKEN` (and `VERCEL_TEAM_ID` if needed) set, publishes to that team in projects named `opencode-artifacts-test-*` and deletes what it made. Use a dedicated test team.
