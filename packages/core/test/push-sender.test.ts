@@ -16,6 +16,7 @@ import { testEffect } from "./lib/effect"
 interface Call {
   readonly path: string
   readonly box: string
+  readonly silent?: boolean
   readonly redirect?: RequestInit["redirect"]
 }
 
@@ -25,7 +26,8 @@ const relay = async (input: Request | string | URL, init?: RequestInit) => {
   const url = new URL(input instanceof Request ? input.url : input)
   const path = url.pathname
   const text = input instanceof Request ? await input.text() : String(init?.body)
-  calls.push({ path, box: JSON.parse(text).box, redirect: init?.redirect })
+  const body = JSON.parse(text)
+  calls.push({ path, box: body.box, silent: body.silent, redirect: init?.redirect })
   if (path.endsWith("/gone")) return new Response('{"status":"gone"}', { status: 410 })
   if (path.endsWith("/missing")) return new Response("", { status: 404 })
   if (path.endsWith("/busy")) return new Response("", { status: 429 })
@@ -42,6 +44,7 @@ const it = testEffect(
 const sessionID = Session.ID.make("ses_push_sender")
 
 const finished: PushSender.Notification = {
+  id: sessionID,
   type: "session.idle",
   sessionID,
   title: "Fix the login bug",
@@ -51,6 +54,7 @@ const finished: PushSender.Notification = {
 }
 
 const question: PushSender.Notification = {
+  id: "frm_1",
   type: "question",
   sessionID,
   title: "Fix the login bug",
@@ -142,8 +146,10 @@ describe("PushSender", () => {
       expect(calls.filter((call) => call.path.endsWith("/broken"))).toHaveLength(3)
       expect(calls.every((call) => call.redirect === "manual")).toBe(true)
       const delivered = calls.find((call) => call.path.endsWith("/ok"))
+      expect(delivered!.silent).toBeUndefined()
       expect(open(ok, delivered!.box)).toEqual({
         v: 1,
+        id: sessionID,
         type: "session.idle",
         sessionID,
         title: "Fix the login bug",
@@ -180,6 +186,31 @@ describe("PushSender", () => {
     }),
   )
 
+  it.effect("clears a notification silently, once, on the phones that got it", () =>
+    Effect.gen(function* () {
+      const sender = yield* PushSender.Service
+      const ok = yield* phone(ids.ok, "ok")
+      yield* phone(ids.quiet, "quiet", { default: "attention" })
+
+      yield* sender.clear([sessionID])
+      yield* drain
+      expect(calls).toEqual([])
+
+      yield* sender.send(finished)
+      yield* advance(() => calls.length === 1)
+      yield* sender.clear([sessionID, "frm_unknown"])
+      yield* advance(() => calls.length === 2)
+      yield* sender.clear([sessionID])
+      yield* drain
+
+      expect(calls.map((call) => [call.path.split("/").pop(), call.silent])).toEqual([
+        ["ok", undefined],
+        ["ok", true],
+      ])
+      expect(open(ok, calls[1]!.box)).toEqual({ v: 1, id: sessionID, type: "clear", sessionID })
+    }),
+  )
+
   it.effect("shortens a long body so the box fits the relay", () =>
     Effect.sync(() => {
       for (const body of ["é".repeat(5_000), "漢".repeat(1_500), "\n".repeat(3_000)]) {
@@ -191,6 +222,7 @@ describe("PushSender", () => {
       expect(PushSender.message(question)).toBe(
         JSON.stringify({
           v: 1,
+          id: question.id,
           type: "question",
           sessionID,
           title: question.title,

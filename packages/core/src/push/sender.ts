@@ -9,6 +9,8 @@ import { PushCrypto } from "./crypto.js"
 import { PushList } from "./list.js"
 
 export interface Notification {
+  /** What a later `clear` names: the permission request, the form, or the session for a finished turn. */
+  readonly id: string
   readonly type: "session.idle" | "question" | "permission"
   readonly sessionID: string
   readonly title: string
@@ -21,6 +23,8 @@ export interface Notification {
 export interface Interface {
   /** Sends to every phone that wants it, in the background. */
   readonly send: (notification: Notification) => Effect.Effect<void>
+  /** Removes the notifications sent under these ids from the phones that got them, in the background. */
+  readonly clear: (ids: ReadonlyArray<string>) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/PushSender") {}
@@ -46,6 +50,7 @@ export const message = (notification: Notification) => {
   const make = (body: string) =>
     JSON.stringify({
       v: 1,
+      id: notification.id,
       type: notification.type,
       sessionID: notification.sessionID,
       title: notification.title,
@@ -67,14 +72,34 @@ const layer = Layer.effect(
     const http = yield* HttpClient.HttpClient
     const scope = yield* Scope.Scope
 
-    const post = (url: string, box: string) =>
-      http.execute(HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe({ box }))).pipe(
-        Effect.flatMap((response) => response.text.pipe(Effect.ignore, Effect.as(response.status))),
-        Effect.timeout("10 seconds"),
-        Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
-        Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
-        Effect.orElseSucceed(() => undefined),
-      )
+    // Which phones were sent each notification, so a clear goes only to them. Lost on restart, when the phone keeps
+    // the notification until the app is opened.
+    const sent = new Map<string, { sessionID: string; devices: Set<string> }>()
+
+    // The relay delivers a silent box without an alert: it only wakes the app.
+    const post = (url: string, box: string, silent: boolean) =>
+      http
+        .execute(HttpClientRequest.post(url).pipe(HttpClientRequest.bodyJsonUnsafe(silent ? { box, silent } : { box })))
+        .pipe(
+          Effect.flatMap((response) => response.text.pipe(Effect.ignore, Effect.as(response.status))),
+          Effect.timeout("10 seconds"),
+          Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+          Effect.provideService(HttpClient.TracerDisabledWhen, () => true),
+          Effect.orElseSucceed(() => undefined),
+        )
+
+    const push = Effect.fn("PushSender.push")(function* (device: PushList.Stored, text: string, silent: boolean) {
+      const box = PushCrypto.seal(device.secret, device.id, text)
+      for (let attempt = 1; attempt <= attempts; attempt++) {
+        const status = yield* post(device.callbackURL, box, silent)
+        if (status === 404 || status === 410) return yield* list.removeGone(device.id, device.callbackURL)
+        if (status !== undefined && status < 300) return
+        if (status !== undefined && status < 500)
+          return yield* Effect.logWarning("relay rejected a push notification", { deviceID: device.id, status })
+        if (attempt < attempts) yield* Effect.sleep("1 second")
+      }
+      yield* Effect.logWarning("gave up sending a push notification", { deviceID: device.id, attempts })
+    })
 
     const sendTo = Effect.fn("PushSender.sendTo")(function* (
       device: PushList.Stored,
@@ -85,16 +110,10 @@ const layer = Layer.effect(
       const wanted = level(device, sessions, notification.sessionID)
       if (wanted === "none") return
       if (wanted === "attention" && !notification.attention) return
-      const box = PushCrypto.seal(device.secret, device.id, message(notification))
-      for (let attempt = 1; attempt <= attempts; attempt++) {
-        const status = yield* post(device.callbackURL, box)
-        if (status === 404 || status === 410) return yield* list.removeGone(device.id, device.callbackURL)
-        if (status !== undefined && status < 300) return
-        if (status !== undefined && status < 500)
-          return yield* Effect.logWarning("relay rejected a push notification", { deviceID: device.id, status })
-        if (attempt < attempts) yield* Effect.sleep("1 second")
-      }
-      yield* Effect.logWarning("gave up sending a push notification", { deviceID: device.id, attempts })
+      const entry = sent.get(notification.id) ?? { sessionID: notification.sessionID, devices: new Set() }
+      entry.devices.add(device.id)
+      sent.set(notification.id, entry)
+      yield* push(device, message(notification), false)
     })
 
     const deliver = Effect.fn("PushSender.deliver")(function* (notification: Notification) {
@@ -110,8 +129,30 @@ const layer = Layer.effect(
       )
     })
 
+    const clear = Effect.fn("PushSender.clear")(function* (ids: ReadonlyArray<string>) {
+      const cleared = ids.flatMap((id) => {
+        const entry = sent.get(id)
+        sent.delete(id)
+        return entry ? [{ id, ...entry }] : []
+      })
+      if (cleared.length === 0) return
+      const targets = yield* list.targets()
+      yield* Effect.forEach(
+        cleared.flatMap((item) =>
+          targets.devices
+            .filter((device) => item.devices.has(device.id))
+            .map((device) =>
+              push(device, JSON.stringify({ v: 1, id: item.id, type: "clear", sessionID: item.sessionID }), true),
+            ),
+        ),
+        Effect.ignoreCause({ log: "Warn", message: "Failed to clear a push notification" }),
+        { concurrency: "unbounded", discard: true },
+      )
+    })
+
     return Service.of({
       send: (notification) => deliver(notification).pipe(Effect.forkIn(scope), Effect.asVoid),
+      clear: (ids) => clear(ids).pipe(Effect.forkIn(scope), Effect.asVoid),
     })
   }),
 )

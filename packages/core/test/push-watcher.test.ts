@@ -27,10 +27,13 @@ import { testEffect } from "./lib/effect"
 import { waitUntil } from "./lib/eventually"
 
 let boxes: string[] = []
+let silent: unknown[] = []
 
 const relay = async (input: Request | string | URL, init?: RequestInit) => {
   const text = input instanceof Request ? await input.text() : String(init?.body)
-  boxes.push(JSON.parse(text).box)
+  const body = JSON.parse(text)
+  boxes.push(body.box)
+  silent.push(body.silent)
   return new Response('{"status":"accepted"}', { status: 202 })
 }
 
@@ -123,6 +126,7 @@ const step = (sessionID: Session.ID) =>
 
 beforeEach(() => {
   boxes = []
+  silent = []
 })
 
 describe("PushWatcher", () => {
@@ -149,6 +153,7 @@ describe("PushWatcher", () => {
       expect(boxes.map((box) => open(key, box))).toEqual([
         {
           v: 1,
+          id: parentID,
           type: "session.idle",
           sessionID: parentID,
           title: "Fix the login bug",
@@ -157,6 +162,7 @@ describe("PushWatcher", () => {
         },
         {
           v: 1,
+          id: parentID,
           type: "session.idle",
           sessionID: parentID,
           title: "Fix the login bug",
@@ -194,6 +200,7 @@ describe("PushWatcher", () => {
       expect(boxes.map((box) => open(key, box))).toEqual([
         {
           v: 1,
+          id: "frm_1",
           type: "question",
           sessionID: parentID,
           title: "Fix the login bug",
@@ -202,12 +209,84 @@ describe("PushWatcher", () => {
         },
         {
           v: 1,
+          id: "per_1",
           type: "permission",
           sessionID: parentID,
           title: "Fix the login bug",
           body: "Needs permission: bash",
           data: { requestID: "per_1", sessionID: childID, action: "bash" },
         },
+      ])
+    }),
+  )
+  it.live("clears a notification once it is answered, interrupted or followed by a new prompt", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const key = yield* phone()
+      const cleared = () => boxes.filter((_, index) => silent[index] === true).map((box) => open(key, box))
+      const ask = (id: string) =>
+        bus.publish(Permission.Event.Asked, {
+          id: Permission.ID.make(id),
+          sessionID: childID,
+          action: "bash",
+          resources: ["git push"],
+        })
+      const prompt = (type: "user" | "synthetic") =>
+        bus.publish(SessionEvent.InboxEnqueued, {
+          sessionID: parentID,
+          inboxID: SessionMessage.ID.create(),
+          item: { type, payload: { text: "Next" }, delivery: "steer" },
+        })
+
+      // Nothing was sent for these, so nothing is cleared.
+      yield* bus.publish(Permission.Event.Replied, {
+        sessionID: childID,
+        requestID: Permission.ID.make("per_unknown"),
+        reply: "once",
+      })
+      yield* prompt("user")
+
+      yield* ask("per_1")
+      yield* waitUntil(Effect.sync(() => boxes.length === 1))
+      yield* bus.publish(Permission.Event.Replied, {
+        sessionID: childID,
+        requestID: Permission.ID.make("per_1"),
+        reply: "once",
+      })
+      yield* waitUntil(Effect.sync(() => boxes.length === 2))
+
+      yield* bus.publish(Form.Event.Created, {
+        form: {
+          id: Form.ID.make("frm_1"),
+          sessionID: childID,
+          title: "Questions",
+          metadata: { kind: "question" },
+          fields: [{ key: "q0", title: "Database", type: "string" }],
+        },
+      })
+      yield* waitUntil(Effect.sync(() => boxes.length === 3))
+      yield* bus.publish(Form.Event.Cancelled, { id: Form.ID.make("frm_1"), sessionID: childID })
+      yield* waitUntil(Effect.sync(() => boxes.length === 4))
+
+      // An interrupted request gets no reply.
+      yield* ask("per_2")
+      yield* waitUntil(Effect.sync(() => boxes.length === 5))
+      yield* bus.publish(SessionEvent.Execution.Interrupted, { sessionID: childID, reason: "user" })
+      yield* waitUntil(Effect.sync(() => boxes.length === 6))
+
+      yield* step(parentID)
+      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: parentID })
+      yield* waitUntil(Effect.sync(() => boxes.length === 7))
+      yield* prompt("synthetic")
+      yield* prompt("user")
+      yield* waitUntil(Effect.sync(() => boxes.length === 8))
+
+      expect(silent).toEqual([undefined, true, undefined, true, undefined, true, undefined, true])
+      expect(cleared()).toEqual([
+        { v: 1, id: "per_1", type: "clear", sessionID: parentID },
+        { v: 1, id: "frm_1", type: "clear", sessionID: parentID },
+        { v: 1, id: "per_2", type: "clear", sessionID: parentID },
+        { v: 1, id: parentID, type: "clear", sessionID: parentID },
       ])
     }),
   )
