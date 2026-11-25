@@ -450,6 +450,24 @@ export function createTimelineController(input: {
           editable: editable(),
           currentTitle: titleLabel(),
         }),
+      // As in the TUI, `/rename <title>` renames and a bare `/rename` asks the server to generate a new title.
+      set: (title: string) => {
+        const sessionID = input.session.identity.sessionID()
+
+        if (!sessionID || !editable()) return
+        const next = title.trim()
+
+        return Promise.try(() => serverSDK.api.session.update({ sessionID, title: next })).then(
+          () => {
+            // A generated title arrives with the response's session event; sync in case the response beat it.
+            data.session.invalidate(sessionID)
+            return data.session.sync(sessionID)
+          },
+          (cause: unknown) => {
+            showToast({ title: language.t("common.requestFailed"), description: errorMessage(cause) })
+          },
+        )
+      },
     },
     action: {
       export: (id: string) => exporter.export({ server: server.key, sessionID: id }),
