@@ -556,6 +556,7 @@ export function createTimelineVirtualizer(input: Input) {
       })
       dispatchCold(SIZES_FLUSHED)
       pinAnchor()
+      settleReveal()
 
       if (untrack(coldHidden)) pinColdBottom()
       dispatchCold(CHECK_REQUESTED)
@@ -689,12 +690,40 @@ export function createTimelineVirtualizer(input: Input) {
   }
 
   // The row a message reveal scrolls to, and TanStack's scroll to it. TanStack names the row by its index for as long
-  // as that scroll lasts, up to five seconds.
-  let revealed: { key: string; index: number; align: "start" | "center"; scroll: object | null } | undefined
+  // as that scroll lasts, up to five seconds. `unsettled`: rows were still without their content when the reveal was
+  // made, so the place it reached is not final (`settleReveal`).
+  let revealed:
+    | { key: string; index: number; align: "start" | "center"; scroll: object | null; unsettled: boolean }
+    | undefined
 
   function revealRow(index: number, align: "start" | "center") {
     virtualizer.scrollToIndex(index, { align })
-    revealed = { key: rowKeys()[index], index, align, scroll: virtualScroll(virtualizer) }
+    revealed = {
+      key: rowKeys()[index],
+      index,
+      align,
+      scroll: virtualScroll(virtualizer),
+      unsettled: untrack(coldHidden) || !!virtualContent?.querySelector(pendingMarkdown),
+    }
+  }
+
+  // A reveal made before the rows had their content can end short of its place: the scroll range is too short, and
+  // TanStack's scroll is over once it reaches the end of that range. The cold mount's fallback showed a session after
+  // three seconds with a reply still on its way, and the link's prompt stayed 473px below its place when the reply
+  // rendered. Such a reveal is made again when rows measure, until no Markdown is on its way. The reader's input and
+  // the next navigation drop it, as they drop the repeat at the cold release.
+  function settleReveal() {
+    const target = revealed
+    const root = listRoot()
+
+    if (!target?.unsettled || !root || untrack(coldHidden) || input.follow.following()) return
+    const index = rowKeys().indexOf(target.key)
+
+    if (index < 0) return
+    const place = virtualizer.getOffsetForIndex(index, target.align)?.[0]
+
+    if (place !== undefined && Math.abs(place - root.scrollTop) > 1) return revealRow(index, target.align)
+    target.unsettled = !!virtualContent?.querySelector(pendingMarkdown)
   }
 
   // A page of history that arrives above gives the index to another row, and TanStack then scrolls to that one. The

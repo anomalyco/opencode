@@ -1131,6 +1131,54 @@ test.describe("timeline history", () => {
     expect(await frames()).toEqual(Array.from({ length: 12 }, () => 0))
   })
 
+  // The timeline shows after three seconds whatever has rendered. A link's prompt near the session's end then stands
+  // short of its place, because the reply after it has no height yet. The timeline's scroll to the prompt was over
+  // by then, and the prompt stayed 473px below its place when the reply rendered.
+  test("a link lands its prompt once a reply that was slow to render has its height", async ({ page }) => {
+    const messages = validateTimelineMessages([
+      ...historyMessages(20),
+      userMessage(),
+      // Long enough to need the Markdown worker, and taller than the window.
+      assistantMessage([
+        textPart("prt_slow_tail", Array.from({ length: 120 }, (_, index) => `Paragraph ${index}.`).join("\n\n")),
+      ]),
+    ])
+
+    const selector = `[data-timeline-row="UserMessage"][data-message-id="${userID}"]`
+    const content = page.locator("[data-timeline-virtual-content]")
+    await setupTimeline(page, { sessionMessages: messages })
+    await expect(page.getByText("Paragraph 119.", { exact: true })).toBeInViewport()
+
+    // The same session again from a link, with nothing measured, and with the Markdown worker held.
+    const worker = await holdRoute(page, /markdown\.worker(?:-[^/?]+\.js|\.ts)(?:\?.*)?$/)
+
+    try {
+      await page.evaluate((id) => (location.hash = `#message-${id}`), userID)
+      await page.reload()
+      await worker.arrived
+      // With the reply still unrendered, only the timeline's fallback shows it.
+      await expect(content).toHaveCSS("visibility", "visible")
+      await expect(page.getByText("Paragraph 119.", { exact: true })).toHaveCount(0)
+      worker.release()
+      await expect(page.getByText("Paragraph 119.", { exact: true })).toBeAttached()
+      await waitForVisualSettle(page, [selector], 6)
+      expect(await page.evaluate(() => location.hash)).toBe(`#message-${userID}`)
+
+      expect(
+        await page
+          .locator(selector)
+          .evaluate((element) =>
+            Math.round(
+              element.getBoundingClientRect().top -
+                document.querySelector("[data-session-title]")!.getBoundingClientRect().bottom,
+            ),
+          ),
+      ).toBe(0)
+    } finally {
+      worker.release()
+    }
+  })
+
   // The viewport scrolls while its rows are still hidden. A wheel then ended the timeline's scroll to the link's
   // prompt, and the timeline made the reveal again when it showed: the view went 735 to 771px back to the prompt.
   test("a wheel before the timeline shows keeps the view where the reader took it from a link's prompt", async ({
