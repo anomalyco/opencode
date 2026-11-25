@@ -160,7 +160,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     const view = viewport()
     if (!view) return undefined
     const full = { width: Math.min(1200, view.width - 160), height: Math.min(800, view.height - 128) }
-    const across = 96
+    const across = 64
     const down = 52 + 64 + 12 + 64
     const [width, height] = size()
     const scale = Math.min(1, (full.width - across) / width, (full.height - down) / height)
