@@ -27,6 +27,7 @@ import { SessionModelRequest } from "@opencode/core/session/model-request"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Token } from "@opencode/core/util/token"
 import { SessionProjector } from "@opencode/core/session/projector"
+import { SessionRecentText } from "@opencode/core/session/recent-text"
 import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { toLLMMessages } from "@opencode/core/session/runner/to-llm-message"
 import { SessionMessageTable, SessionTable } from "@opencode/core/session/sql"
@@ -43,7 +44,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Money } from "@opencode/schema/money"
 import { Skill } from "@opencode/schema/skill"
 import { Shell } from "@opencode/schema/shell"
-import { DateTime, Deferred, Effect, Fiber, Layer, Schema, Stream } from "effect"
+import { DateTime, Deferred, Effect, Fiber, Layer, Schema, Stream, Tracer } from "effect"
 import { TestClock } from "effect/testing"
 import { asc, eq, inArray, sql } from "drizzle-orm"
 import { testEffect } from "./lib/effect"
@@ -830,6 +831,8 @@ it.effect(
   () =>
     Effect.gen(function* () {
       requests = []
+      const compaction = yield* SessionCompaction.Service
+      yield* compaction.transform((editor) => editor.configure({ keep: 32_000 }))
       const session = yield* insertSession(Session.ID.make("ses_compaction_older_fallback"))
       // About 190k estimated tokens in total, past the 184k left for the summary. The 160k before the retained
       // 30k latest exchange fits the 170k ceiling.
@@ -851,6 +854,75 @@ it.effect(
       expect(requests[0].messages[0].content).toEqual([{ type: "text", text: messages[0].text }])
       expect(requests[0].messages[1].content).toEqual([{ type: "text", text: SessionCompaction.buildPrompt(false) }])
     }),
+)
+
+/** The completed compaction a manual compaction of these stored messages leaves. */
+const compactStored = (id: Session.ID, messages: readonly SessionMessage.Info[]) =>
+  Effect.gen(function* () {
+    const session = yield* insertSession(id)
+    yield* storeMessages(id, messages)
+    expect(yield* compactManually(session, messages)).toEqual({ status: "completed" })
+    const store = yield* SessionStore.Service
+    const stored = (yield* store.context(id))[0]
+    if (stored?.type !== "compaction" || stored.status !== "completed") return yield* Effect.die("compaction missing")
+    return stored
+  })
+
+it.effect("a long run without user messages keeps only the newest messages within keep", () =>
+  Effect.gen(function* () {
+    requests = []
+    // An earlier request, then one request followed by 60 tool steps of about 330 estimated tokens each with a synthetic note after every fifth:
+    // about 20k tokens since the only user message, past the 15k allowance.
+    const steps = Array.from({ length: 60 }, (_, index) => [
+      Schema.decodeUnknownSync(SessionMessage.Assistant)({
+        id: SessionMessage.ID.create(),
+        type: "assistant",
+        agent: Agent.defaultID,
+        model: { id: "summary-model", providerID: "test" },
+        content: [
+          {
+            type: "tool",
+            id: `call_${index}`,
+            name: "read",
+            state: { status: "completed", input: { index }, content: [{ type: "text", text: "x".repeat(1_250) }] },
+            time: { created: 0 },
+          },
+        ],
+        time: { created: 0, completed: 0 },
+      }),
+      ...(index % 5 === 4
+        ? [
+            SessionMessage.Synthetic.make({
+              id: SessionMessage.ID.create(),
+              type: "synthetic",
+              text: `Step ${index} checked`,
+              time: { created: DateTime.makeUnsafe(0) },
+            }),
+          ]
+        : []),
+    ])
+    const messages = [textUser("Earlier question"), textUser("Run the migration"), ...steps.flat()]
+
+    const stored = yield* compactStored(Session.ID.make("ses_compaction_long_run"), messages)
+    const kept = messages.findIndex((message) => message.id === stored.metadata?.keepID)
+    expect(kept).toBeGreaterThan(1)
+    const recent = SessionRecentText.kept(stored)
+    expect(Token.estimate(recent)).toBeLessThanOrEqual(15_000)
+    expect(Token.estimate(recent)).toBeGreaterThan(14_000)
+    expect(recent).not.toContain("Run the migration")
+  }),
+)
+
+it.effect("compaction keeps no tail when the newest message alone exceeds keep", () =>
+  Effect.gen(function* () {
+    requests = []
+    const stored = yield* compactStored(Session.ID.make("ses_compaction_oversized_latest"), [
+      textUser("Earlier question"),
+      textUser(`Latest ${"x".repeat(80_000)}`),
+    ])
+    expect(stored.metadata?.keepID).toBeUndefined()
+    expect(SessionRecentText.kept(stored)).toBe("")
+  }),
 )
 
 it.effect("compaction lowers the output limit when it sends a request it could not shrink", () =>
@@ -1298,6 +1370,41 @@ it.effect("automatic compaction waits for a background summary still being writt
 
     expect(yield* Fiber.join(compacting)).toEqual({ status: "completed" })
     expect(requests).toHaveLength(1)
+  }).pipe(Effect.ensuring(Effect.sync(() => (beforeResponse = Effect.void)))),
+)
+
+it.effect("traces the background summary and the wait for it", () =>
+  Effect.gen(function* () {
+    requests = []
+    const spans: Tracer.NativeSpan[] = []
+    const tracer = Tracer.make({
+      span(options) {
+        const span = new Tracer.NativeSpan(options)
+        spans.push(span)
+        return span
+      },
+    })
+    const release = yield* Deferred.make<void>()
+    beforeResponse = Deferred.await(release)
+    const compaction = yield* SessionCompaction.Service
+    const session = yield* insertSession(Session.ID.make("ses_precompute_traced"))
+    const history = precomputeHistory()
+
+    yield* compaction.precompute(Effect.succeed(loaded(session, history.near))).pipe(Effect.withTracer(tracer))
+    const compacting = yield* compaction
+      .compact({ reason: "auto", context: loaded(session, history.due) })
+      .pipe(Effect.withTracer(tracer), Effect.forkChild({ startImmediately: true }))
+    yield* Deferred.succeed(release, undefined)
+    expect(yield* Fiber.join(compacting)).toEqual({ status: "completed" })
+
+    const background = spans.find((span) => span.name === "SessionCompaction.background")
+    expect(background?.attributes.get("session.id")).toBe(session.id)
+    expect(background?.attributes.get("compaction.keep_id")).toBe(history.anchor.id)
+    expect(background?.status._tag).toBe("Ended")
+    const compact = spans.find((span) => span.name === "SessionCompaction.compact")
+    expect(compact?.attributes.get("compaction.background.pending")).toBe(true)
+    expect(compact?.attributes.get("compaction.background.failed")).toBe(false)
+    expect(typeof compact?.attributes.get("compaction.background.wait_ms")).toBe("number")
   }).pipe(Effect.ensuring(Effect.sync(() => (beforeResponse = Effect.void)))),
 )
 

@@ -125,6 +125,8 @@ function DialogConnectedModels(props: {
       models()
         .filter((model) => model.status !== "deprecated")
         .filter((model) => (props.providerID ? model.providerID === props.providerID : true))
+        // A model's faster and slower speeds are chosen with the speed selector.
+        .filter((model) => !local.model.isSpeed({ providerID: model.providerID, modelID: model.id }))
         .map((model) => {
           const provider = providers().get(model.providerID)
           const value = { providerID: model.providerID, modelID: model.id }
@@ -223,7 +225,7 @@ function DialogConnectedModels(props: {
       flat={true}
       skipFilter={true}
       title={title()}
-      current={local.model.current()}
+      current={local.model.standard()}
     />
   )
 }

@@ -2,6 +2,11 @@
   content-visibility: auto;
 }
 
+/* The viewer takes focus so the keyboard can scroll and search it, and draws no ring. */
+[data-component="file"]:focus-visible {
+  outline: none;
+}
+
 [data-timeline-row] [data-component="file"] {
   content-visibility: visible;
 }

@@ -1,11 +1,9 @@
-import { Flag } from "@opencode/core/flag"
 import { Generate } from "@opencode/core/generate"
 import { VideoGeneration } from "@opencode/core/video-generation"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { AbsolutePath } from "@opencode/core/schema"
 import {
-  ForbiddenError,
   VideoNotFoundError,
   InvalidRequestError,
   ModelNotFoundError,
@@ -57,22 +55,17 @@ export const GenerateHandler = HttpApiBuilder.group(Api, "server.generate", (han
       Effect.provide(services),
       locationErrors,
     )
-    // The flag is read from the same base configuration generation runs on.
-    const videoEnabled = Effect.gen(function* () {
-      if (yield* Flag.enabled("video_generate")) return
-      return yield* new ForbiddenError({ message: "Video generation is disabled; enable experimental.video_generate" })
-    })
     const videoCreate = Effect.fn("server.generate.video.create")(
       function* (request: { readonly payload: VideoRequest }) {
-        yield* videoEnabled
-        return { data: yield* videos.start(request.payload).pipe(Effect.mapError(generateError)) }
+        return {
+          data: yield* videos.start(Generate.videoInput(request.payload)).pipe(Effect.mapError(generateError)),
+        }
       },
       Effect.provide(services),
       locationErrors,
     )
     const videoGet = Effect.fn("server.generate.video.get")(
       function* (request: { readonly params: { readonly id: VideoID } }) {
-        yield* videoEnabled
         const job = yield* videos
           .get(request.params.id)
           .pipe(Effect.mapError((error) => new VideoNotFoundError({ videoID: error.id, message: error.message })))

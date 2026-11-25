@@ -237,7 +237,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
       aria-label={props.language.t("sidebar.project.recentSessions")}
     >
       <div
-        class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base pb-1 pt-6 md:pb-3 lg:pt-12"
+        class="sticky top-0 z-30 shrink-0 bg-v2-background-bg-base pb-1 pt-6 md:pb-3 md:pt-12"
         onWheel={props.onWheel}
       >
         <HomeSessionSearch
@@ -247,7 +247,7 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
           onHoverSession={(sessionID) => setHover("sessionID", sessionID)}
         />
         <Show when={props.groups.length > 0 && props.canCreateSession}>
-          <div class="pointer-events-none absolute right-0 top-[68px] z-20 flex md:top-[84px] lg:top-[108px]">
+          <div class="pointer-events-none absolute right-0 top-[68px] z-20 flex md:top-[108px]">
             <Button
               data-action="home-new-session"
               variant="ghost-muted"
@@ -261,17 +261,18 @@ export function HomeSessionsView(props: HomeSessionsViewProps) {
           </div>
         </Show>
       </div>
-      <div class="pointer-events-none sticky top-[68px] z-40 h-0 -mr-3 md:top-[84px] lg:top-[108px]">
+      <div class="pointer-events-none sticky top-[68px] z-40 h-0 -mr-3 md:top-[108px]">
         <div
           ref={props.onSetThumbTrack}
           data-component="home-session-scroll-track"
-          class="relative ml-auto h-[calc(100cqh-68px)] w-3 md:h-[calc(100cqh-84px)] lg:h-[calc(100cqh-108px)]"
+          class="relative ml-auto h-[calc(100cqh-68px)] w-3 md:h-[calc(100cqh-108px)]"
         />
       </div>
       <div
         data-slot="home-sessions-list"
+        data-focus-scope
         data-reveal={skeleton() || undefined}
-        class="relative -mr-3 min-h-[calc(100cqh-64px)] md:min-h-[calc(100cqh-72px)] lg:min-h-[calc(100cqh-96px)]"
+        class="relative -mr-3 min-h-[calc(100cqh-64px)] md:min-h-[calc(100cqh-96px)]"
         aria-busy={props.listView.status === "loading"}
       >
         <Show when={skeleton()}>
@@ -510,6 +511,7 @@ function HomeSessionSearch(
           </div>
         </Show>
         <label
+          data-slot="home-session-search-field"
           class={`
             relative z-20 flex h-9 w-full items-center gap-2 rounded-[6px] py-1 ps-3 pe-2
             bg-v2-background-bg-layer-02/60 text-v2-icon-icon-muted transition-[background-color,box-shadow]
@@ -532,7 +534,7 @@ function HomeSessionSearch(
             aria-activedescendant={
               props.searchActive && props.searchOpen ? `home-session-search-option-${props.searchActive}` : undefined
             }
-            onFocus={props.onSearchFocus}
+            onFocus={() => props.onSearchFocus()}
             onInput={(event) => props.onSearchInput(event.currentTarget.value)}
             onKeyDown={(event) => {
               if (event.key === "Escape") {
@@ -622,6 +624,7 @@ function HomeSessionSearchResultRow(
       data-component="home-session-search-row"
       data-project-name={!!showProjectName()}
       role="option"
+      tabIndex={-1}
       aria-selected={props.selected}
       class={`
         flex h-10 w-full shrink-0 cursor-default items-center border-0 py-3 pl-[18px] pr-6 text-left text-v2-text-text-muted
@@ -687,7 +690,7 @@ function HomeSessionGroupHeader(props: {
       ref={element}
       class={`
         pointer-events-none sticky top-[68px] flex h-7 min-w-0 items-center justify-between
-        bg-v2-background-bg-base ps-1.5 md:ps-3 md:top-[84px] lg:top-[108px]
+        bg-v2-background-bg-base ps-1.5 md:ps-3 md:top-[108px]
       `}
       classList={{ "home-session-group-header z-[5]": !!props.elevated, "z-10": !props.elevated }}
     >
@@ -804,7 +807,7 @@ function HomeSessionRow(
             flex h-10 min-w-0 w-full flex-1 shrink-0 cursor-default items-center rounded-[6px] border-0
             bg-transparent py-3 ps-1.5 pe-3 md:ps-3 text-start text-v2-text-text-muted [font-weight:530]
             transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
-            hover:bg-v2-overlay-simple-overlay-hover focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none
+            hover:bg-v2-overlay-simple-overlay-hover
           `}
           classList={{ "gap-1.5": props.desktop, "gap-2": !props.desktop, "md:pe-10": SHOW_HOME_SESSION_ARCHIVE }}
           onMouseDown={(event) => {
@@ -908,6 +911,13 @@ function HomeSessionRow(
             // closing the menu restores focus to the row instead.
             onCloseAutoFocus={(event) => event.preventDefault()}
           >
+            <Menu.Item onSelect={() => props.onOpenSession(props.record.session)}>
+              {props.language.t("common.open")}
+            </Menu.Item>
+            <Menu.Item onSelect={() => props.onOpenSession(props.record.session, { background: true })}>
+              {props.language.t("home.sessions.openInBackground")}
+            </Menu.Item>
+            <Menu.Separator />
             <Menu.Item
               onSelect={() => props.onRowEvent({ type: "rename.start", sessionID: sessionID(), title: title() })}
             >

@@ -5,7 +5,7 @@ import { createMemo } from "solid-js"
 export function createMarkdownRenderer(
   sources: () => ReadonlyArray<Readonly<Record<string, MarkdownCodeBlockRenderer>>>,
 ) {
-  // Changing renderNode makes OpenTUI destroy and rebuild every Markdown block.
+  // Changing renderBlock makes OpenTUI destroy and rebuild every Markdown block.
   // Only invalidate it when the effective last-wins language handlers change.
   const renderers = createMemo(
     () => Object.fromEntries(sources().flatMap((source) => Object.entries(source))),

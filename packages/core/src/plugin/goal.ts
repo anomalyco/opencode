@@ -145,12 +145,12 @@ export const Plugin = define({
       if (goal?.status !== "active") return
       if (goal.boot !== boot())
         return yield* settle(sessionID, goal, "paused", "The server restarted while the goal was active")
-      // The Session's own running subagent, image or script wakes it with its notice, and the hook runs again then. A
+      // The Session's own running subagent, image, video or script wakes it with its notice, and the hook runs again then. A
       // grandchild reports to its own parent, so it would never wake this Session.
       if (
         background.some(
           (work) =>
-            (work.kind === "subagent" || work.kind === "image" || work.kind === "codemode") &&
+            (work.kind === "subagent" || work.kind === "image" || work.kind === "video" || work.kind === "codemode") &&
             work.sessionID === sessionID,
         )
       )
@@ -219,16 +219,20 @@ export const Plugin = define({
       ),
     )
 
-    // Until the next continuation restates the objective, a compacted history may not show it. Add it near the tail,
-    // without persisting it, so the cached prefix stays warm and the reminder stops once a continuation lands.
+    // Until the next continuation restates the objective, a compacted history may not show it. Add it right after the
+    // first message, the compaction summary, without persisting it. The last message carries the conversation's cache
+    // point, so a reminder at the tail would move every step and no request would reuse the previous one's cache.
     yield* ctx.session.hook("context", (event) =>
       read(event.sessionID).pipe(
         Effect.map((goal) => {
           if (goal?.status !== "active") return
           const objective = objectiveBlock(goal.objective)
           if (event.messages.some((message) => message.role === "user" && textOf(message).includes(objective))) return
-          const at = event.messages.at(-1)?.role === "user" ? event.messages.length - 1 : event.messages.length
-          event.messages.splice(at, 0, Message.user(render(REMINDER, { objective: escape(goal.objective) })))
+          event.messages.splice(
+            Math.min(1, event.messages.length),
+            0,
+            Message.user(render(REMINDER, { objective: escape(goal.objective) })),
+          )
         }),
         Effect.catchCause((cause) => Effect.logWarning("failed to remind the model of the goal", { cause })),
       ),

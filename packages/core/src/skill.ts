@@ -3,10 +3,10 @@ export * as Skill from "./skill.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import path from "path"
-import { Context, Effect, Layer, Types } from "effect"
+import { Context, Effect, Layer, Schema, Types } from "effect"
 import { Skill } from "@opencode/schema/skill"
 import { Bus } from "./bus.js"
-import { Permission } from "./permission.js"
+import { PermissionPolicy } from "./permission/policy.js"
 import { State } from "./state.js"
 
 export const DirectorySource = Skill.DirectorySource
@@ -30,8 +30,28 @@ export type Name = Skill.Name
 
 export { Event } from "@opencode/schema/skill"
 
-export const available = (skills: ReadonlyArray<Info>, permissions: Permission.Ruleset) =>
-  skills.filter((skill) => Permission.evaluate("skill", skill.id, permissions).effect !== "deny")
+export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Skill.NotFoundError", {
+  skill: Schema.String,
+}) {}
+
+export class FileNotFoundError extends Schema.TaggedError<FileNotFoundError>()("Skill.FileNotFoundError", {
+  skill: Schema.String,
+  file: Schema.String,
+}) {}
+
+export class LoadError extends Schema.TaggedError<LoadError>()("Skill.LoadError", {
+  skill: Schema.String,
+  message: Schema.String,
+}) {}
+
+/** A skill's SKILL.md body or one of its files: inline, or loaded the first time it's needed. */
+export type Content = string | Effect.Effect<string, LoadError>
+export type File = string | Uint8Array | Effect.Effect<string | Uint8Array, LoadError>
+/** Where a skill that didn't come from this machine came from. */
+export type Origin = { readonly type: "mcp"; readonly server: string }
+
+export const available = (skills: ReadonlyArray<Info>, policy: PermissionPolicy.Policy) =>
+  skills.filter((skill) => PermissionPolicy.evaluate(policy, "skill", skill.id).effect !== "deny")
 
 export const uri = (id: string, file?: string) => (file ? `skill://${id}/${file}` : `skill://${id}`)
 
@@ -59,11 +79,11 @@ export const toModelOutput = (skill: Info, files: ReadonlyArray<string>) => {
 export const prepare = Effect.fn("Skill.prepare")(function* (
   fs: FSUtil.Interface,
   skill: Info,
-  virtualFiles?: ReadonlyMap<string, string>,
+  virtualFiles?: ReadonlyArray<string>,
 ) {
   if (isUri(skill.path)) {
     const directory = uri(skill.id)
-    const files = Array.from(virtualFiles?.keys() ?? [])
+    const files = (virtualFiles ?? [])
       .filter((file) => file !== "SKILL.md")
       .toSorted()
       .slice(0, 10)
@@ -95,21 +115,38 @@ export const prepare = Effect.fn("Skill.prepare")(function* (
 
 export type Data = {
   skills: Map<ID, Types.DeepMutable<Info>>
-  files: Map<ID, ReadonlyMap<string, string>>
+  files: Map<ID, ReadonlyMap<string, File>>
+  loaders: Map<ID, Effect.Effect<string, LoadError>>
+  origins: Map<ID, Origin>
 }
 
 export type Editor = {
   list: () => readonly Types.DeepMutable<Info>[]
   get: (id: string) => Types.DeepMutable<Info> | undefined
-  add: (skill: Info, files?: Readonly<Record<string, string>>) => void
+  /** A skill whose content is an effect is listed with `content: ""` until it's loaded. */
+  add: (
+    skill: Omit<Info, "content"> & { readonly content: Content },
+    files?: Readonly<Record<string, File>>,
+    origin?: Origin,
+  ) => void
   update: (id: string, update: (skill: Types.DeepMutable<Info>) => void) => void
   remove: (id: string) => void
 }
 
 export interface Interface extends State.Transformable<Editor> {
   readonly get: (id: ID) => Effect.Effect<Info | undefined>
-  readonly files: (id: ID) => Effect.Effect<ReadonlyMap<string, string> | undefined>
+  /** The skill's SKILL.md body, loaded when the skill doesn't have it inline. */
+  readonly content: (id: ID) => Effect.Effect<string, LoadError>
+  /** Paths of the skill's virtual files besides SKILL.md. */
+  readonly files: (id: ID) => Effect.Effect<ReadonlyArray<string> | undefined>
+  /**
+   * One file of a skill by its path relative to the skill's folder, loaded when it isn't inline. `SKILL.md` is the
+   * body without frontmatter. Any path that isn't one of the skill's files, unsafe ones included, is not found.
+   */
+  readonly read: (id: ID, file: string) => Effect.Effect<Uint8Array, NotFoundError | FileNotFoundError | LoadError>
   readonly list: () => Effect.Effect<Info[]>
+  /** The body as the model is given it: `content`, led by where the skill came from when that isn't this machine. */
+  readonly instructions: (id: ID) => Effect.Effect<string, LoadError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Skill") {}
@@ -121,12 +158,17 @@ const layer = Layer.effect(
 
     const state = State.create<Data, Editor>({
       name: "skill",
-      initial: () => ({ skills: new Map(), files: new Map() }),
+      initial: () => ({ skills: new Map(), files: new Map(), loaders: new Map(), origins: new Map() }),
       editor: (editor) => ({
         list: () => Array.from(editor.skills.values()),
         get: (id) => editor.skills.get(ID.make(id)),
-        add: (skill, files) => {
-          editor.skills.set(skill.id, { ...skill })
+        add: (skill, files, origin) => {
+          const content = skill.content
+          editor.skills.set(skill.id, { ...skill, content: typeof content === "string" ? content : "" })
+          editor.loaders.delete(skill.id)
+          if (typeof content !== "string") editor.loaders.set(skill.id, content)
+          editor.origins.delete(skill.id)
+          if (origin) editor.origins.set(skill.id, origin)
           const entries = files
             ? Object.entries(files)
                 .filter(([file]) => file !== "SKILL.md")
@@ -149,15 +191,28 @@ const layer = Layer.effect(
           const key = ID.make(id)
           editor.skills.delete(key)
           editor.files.delete(key)
+          editor.loaders.delete(key)
+          editor.origins.delete(key)
         },
       }),
       notify: State.changes(
         (data) => [
           Array.from(data.skills.values()),
-          Array.from(data.files, ([id, entries]) => [id, Array.from(entries)]),
+          Array.from(data.files, ([id, entries]) => [
+            id,
+            Array.from(entries, ([file, value]) => [file, Effect.isEffect(value) ? null : value]),
+          ]),
         ],
         () => bus.publish(Skill.Event.Updated, {}).pipe(Effect.asVoid),
       ),
+    })
+
+    const content = Effect.fn("Skill.content")(function* (id: ID) {
+      const current = state.get()
+      const loader = current.loaders.get(id)
+      const inline = current.skills.get(id)?.content ?? ""
+      if (inline || !loader) return inline
+      return yield* loader
     })
 
     return Service.of({
@@ -166,12 +221,28 @@ const layer = Layer.effect(
       get: Effect.fn("Skill.get")(function* (id) {
         return state.get().skills.get(id)
       }),
+      content,
       files: Effect.fn("Skill.files")(function* (id) {
         const current = state.get()
-        return current.skills.has(id) ? current.files.get(id) : undefined
+        if (!current.skills.has(id)) return undefined
+        return Array.from(current.files.get(id)?.keys() ?? [])
+      }),
+      read: Effect.fn("Skill.read")(function* (id, file) {
+        const current = state.get()
+        if (!current.skills.has(id)) return yield* new NotFoundError({ skill: id })
+        const value = file === "SKILL.md" ? yield* content(id) : current.files.get(id)?.get(file)
+        if (value === undefined) return yield* new FileNotFoundError({ skill: id, file })
+        const loaded = typeof value === "string" || value instanceof Uint8Array ? value : yield* value
+        return typeof loaded === "string" ? new TextEncoder().encode(loaded) : loaded
       }),
       list: Effect.fn("Skill.list")(function* () {
         return Array.from(state.get().skills.values())
+      }),
+      instructions: Effect.fn("Skill.instructions")(function* (id) {
+        const body = yield* content(id)
+        const origin = state.get().origins.get(id)
+        if (!origin) return body
+        return `This skill comes from MCP server "${origin.server}", not from this machine.\n\n${body}`
       }),
     })
   }),

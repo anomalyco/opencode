@@ -1,4 +1,6 @@
 interface ImportMetaEnv {
+  /** Vite's `base`, the path the build is served under, such as `/opencode/`; `/` at the root. */
+  readonly BASE_URL: string
   readonly VITE_OPENCODE_SERVER_MODE?: "none" | "origin"
   readonly VITE_OPENCODE_SERVER_HOST: string
   readonly VITE_OPENCODE_SERVER_PORT: string

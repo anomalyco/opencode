@@ -38,6 +38,8 @@ export interface Context {
     /** Stateless generation with a model and a prompt: no session, history or tools. Video jobs are server-only for now. */
     readonly generate: Omit<ExperimentalGenerateApi<unknown>, "video">
     readonly artifact: ExperimentalArtifactDomain
+    /** Create, list and delete automations. Creation fails while automations are off where they would run. */
+    readonly automation: Pick<ExperimentalApi<unknown>["automation"], "create" | "list" | "delete">
   }
   readonly integration: IntegrationDomain
   readonly mcp: MCPDomain

@@ -20,11 +20,16 @@ export interface ButtonProps
     | "ghost-danger"
     | "loading"
   icon?: IconProps["name"]
+  /**
+   * For a button without an outline that sits at an edge of its container: the label lies on that edge and the hover
+   * box hangs outside it by the button's own inset.
+   */
+  flush?: "start" | "end"
 }
 
 // A native button with the attributes Kobalte's Button sets on one, without its per-instance computations.
 export function Button(props: ButtonProps) {
-  const [split, rest] = splitProps(props, ["variant", "size", "icon", "class", "classList", "disabled"])
+  const [split, rest] = splitProps(props, ["variant", "size", "icon", "flush", "class", "classList", "disabled"])
 
   return (
     <button
@@ -32,11 +37,13 @@ export function Button(props: ButtonProps) {
       type="button"
       disabled={split.disabled}
       data-disabled={split.disabled ? "" : undefined}
+      aria-busy={split.variant === "loading" ? "true" : undefined}
       {...rest}
       data-component="button-v2"
       data-size={split.size || "normal"}
       data-variant={split.variant || "neutral"}
       data-icon={split.icon}
+      data-flush={split.flush}
       classList={{
         ...split.classList,
         [split.class ?? ""]: !!split.class,

@@ -438,7 +438,13 @@ describe("WebFetchTool registration", () => {
         metadata: { contentType: "text/plain" },
       })
       expect(assertions).toMatchObject([
-        { sessionID, action: "webfetch", resources: [url], save: ["*"], metadata: { url, format: "text", timeout: 4 } },
+        {
+          sessionID,
+          action: "webfetch",
+          resources: [url],
+          save: ["http://example.com", "http://example.com/*"],
+          metadata: { url, format: "text", timeout: 4 },
+        },
       ])
       expect(requests).toMatchObject([
         {
@@ -465,7 +471,13 @@ describe("WebFetchTool registration", () => {
         content: [{ type: "text", text: "hello" }],
       })
       expect(assertions).toMatchObject([
-        { sessionID, action: "webfetch", resources: [url], save: ["*"], metadata: { url, format: "text" } },
+        {
+          sessionID,
+          action: "webfetch",
+          resources: [url],
+          save: ["http://localhost", "http://localhost/*"],
+          metadata: { url, format: "text" },
+        },
       ])
       expect(requests.map((request) => request.url)).toEqual([url])
     }),
@@ -501,7 +513,13 @@ describe("WebFetchTool registration", () => {
             content: [{ type: "text", text: "redirected" }],
           })
           expect(assertions).toMatchObject([
-            { sessionID, action: "webfetch", resources: [url], save: ["*"], metadata: { url, format: "text" } },
+            {
+              sessionID,
+              action: "webfetch",
+              resources: [url],
+              save: [server.url.origin, `${server.url.origin}/*`],
+              metadata: { url, format: "text" },
+            },
           ])
           const target = new URL("/target", server.url).toString()
           expect(checks).toMatchObject([{ sessionID, action: "webfetch", resources: [target] }])

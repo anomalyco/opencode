@@ -248,7 +248,7 @@ export function createPinnedSessions(input: {
             input.pins.reorder(visible, arrayMove(visible, source.initialIndex, source.index))
           }}
         >
-          <div data-titlebar-tab-list data-orientation="vertical" class="flex w-full min-w-0 flex-col">
+          <div data-titlebar-tab-list data-focus-scope data-orientation="vertical" class="flex w-full min-w-0 flex-col">
             <Key each={items()} by={(item) => item.key}>
               {(item, index) => {
                 const key = item().key

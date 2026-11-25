@@ -406,6 +406,7 @@ export const protocol = Protocol.make({
   }),
   supportsEffortUpdates,
   toolUpdates,
+  namespaces: true,
 })
 
 const endpoint = Endpoint.path<OpenAIResponsesBody>(PATH, { baseURL: DEFAULT_BASE_URL })

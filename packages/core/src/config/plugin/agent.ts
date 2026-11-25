@@ -164,21 +164,13 @@ const decode = Effect.fnUntraced(function* (
   const legacy = unsupported.length > 0 && !keys.some((key) => nativeKeys.includes(key))
   if (!legacy && unsupported.length > 0)
     yield* Effect.logWarning("ignored unsupported agent fields", { path: file.filepath, fields: unsupported })
-  // Join legacy model + variant without sending native request/permissions through migration.
-  // Embedded and structured native selections, and a variant without a model, stay unchanged.
-  const data =
-    typeof markdown.data.model === "string" &&
-    !markdown.data.model.includes("#") &&
-    typeof markdown.data.variant === "string" &&
-    /^[^#]+$/.test(markdown.data.variant)
-      ? { ...markdown.data, model: `${markdown.data.model}#${markdown.data.variant}` }
-      : markdown.data
+  // Native files join a legacy model + variant without sending request/permissions through migration.
   const decoded = legacy
     ? Result.map(
         decodeLegacyAgent({ name, ...markdown.data, prompt: body }, { errors: "all" }),
         ConfigMigrateV1.migrateAgent,
       )
-    : decodeAgent({ ...data, system: body }, { errors: "all" })
+    : decodeAgent({ ...ConfigMarkdown.joinLegacyVariant(markdown.data), system: body }, { errors: "all" })
   if (Result.isFailure(decoded)) {
     yield* Effect.logWarning("agent file skipped", {
       filepath: file.filepath,
@@ -187,7 +179,12 @@ const decode = Effect.fnUntraced(function* (
     })
     return
   }
-  const agent = decoded.success
+  // Native rules may still name the media tools by their old experimental names.
+  const permissions = decoded.success.permissions?.map((rule) => ({
+    ...rule,
+    action: ConfigMigrateV1.renamedTool(rule.action),
+  }))
+  const agent = permissions ? ConfigAgent.Info.make({ ...decoded.success, permissions }) : decoded.success
   const info = Info.make({
     agents: { [name]: file.primary ? ConfigAgent.Info.make({ ...agent, mode: "primary" }) : agent },
   })

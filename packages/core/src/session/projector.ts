@@ -10,6 +10,7 @@ import { DatabaseBatch } from "../database/batch.js"
 import { Bus } from "../bus.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Model } from "@opencode/schema/model"
+import { SessionCwdStore } from "./cwd-store.js"
 import { SessionEvent } from "./event.js"
 import { SessionMessage } from "./message.js"
 import { SessionMessageUpdater } from "./message-updater.js"
@@ -313,11 +314,14 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
     yield* InstructionState.initialize(db, event.data.sessionID, event.durable.seq, event.data.instructions)
 })
 
-/** Reads `experimental.part_rows` from the Config in scope on every call; without one, it is off. */
+/**
+ * Reads `experimental.part_rows` from the Config in scope on every call. Part rows are on unless a config sets it to
+ * false, which keeps the whole-message write path as an escape hatch; without a Config they are on.
+ */
 const partRowsEnabled = Effect.gen(function* () {
   const config = yield* Effect.serviceOption(Config.Service)
-  if (Option.isNone(config)) return false
-  return Config.latest(yield* config.value.entries(), "experimental")?.part_rows === true
+  if (Option.isNone(config)) return true
+  return Config.latest(yield* config.value.entries(), "experimental")?.part_rows !== false
 })
 
 type MessageRow = typeof SessionMessageTable.$inferSelect
@@ -484,7 +488,7 @@ function assistantReads(
 }
 
 /**
- * The write path with `experimental.part_rows` off, unchanged from before part rows were written: every assistant
+ * The write path with `experimental.part_rows: false`, unchanged from before part rows were written: every assistant
  * event rewrites the whole message. A message whose parts already live in session_part (written with the flag on,
  * or by a newer release) is written into those rows, and its row keeps an empty envelope.
  */
@@ -601,7 +605,7 @@ function messageWrites(db: DatabaseService, event: MessageEvent): Writes {
   }
 }
 
-/** The write path with `experimental.part_rows` on: each assistant part is its own session_part row. */
+/** The default write path: each assistant part is its own session_part row. */
 function partRowWrites(db: DatabaseService, event: MessageEvent): Writes {
   /**
    * The only place a legacy inline assistant row moves to session_part, called right before its parts are written.
@@ -671,6 +675,7 @@ function partRowWrites(db: DatabaseService, event: MessageEvent): Writes {
   })
   // Assistant content is written only by the part methods below, which also record its blob refs. Envelope updates
   // keep whatever content the row already holds: inline for a legacy row that was never split, [] once it was.
+  // json_extract rather than `->`, which the system SQLite on macOS 12 (3.37) can't parse.
   const updateMessage = (message: SessionMessage.Info) => {
     const {
       id: _,
@@ -685,7 +690,7 @@ function partRowWrites(db: DatabaseService, event: MessageEvent): Writes {
           : {}),
         data:
           message.type === "assistant"
-            ? sql`json_set(${JSON.stringify(data)}, '$.content', json(coalesce(${SessionMessageTable.data} -> '$.content', '[]')))`
+            ? sql`json_set(${JSON.stringify(data)}, '$.content', json(coalesce(json_extract(${SessionMessageTable.data}, '$.content'), '[]')))`
             : data,
       })
       .where(and(eq(SessionMessageTable.id, message.id), eq(SessionMessageTable.session_id, event.data.sessionID)))
@@ -880,7 +885,7 @@ const layer = Layer.effectDiscard(
             title: event.data.title,
             agent: event.data.agent,
             model: event.data.model,
-            metadata: event.data.metadata,
+            metadata: SessionCwdStore.writeStored(event.data.metadata, undefined),
             permission: event.data.permissions,
             version: event.data.version,
             time_created: event.created,
@@ -982,7 +987,13 @@ const layer = Layer.effectDiscard(
       setSession(db, event.data.sessionID, { title: event.data.title, time_updated: event.created }),
     )
     yield* bus.project(SessionEvent.MetadataUpdated, (event) =>
-      setSession(db, event.data.sessionID, { metadata: event.data.metadata, time_updated: event.created }),
+      Effect.gen(function* () {
+        const existing = yield* SessionCwdStore.read(db, event.data.sessionID)
+        yield* setSession(db, event.data.sessionID, {
+          metadata: SessionCwdStore.writeStored(event.data.metadata, existing),
+          time_updated: event.created,
+        })
+      }),
     )
     yield* bus.project(SessionEvent.Permissions, (event) =>
       setSession(db, event.data.sessionID, { permission: event.data.permissions, time_updated: event.created }),

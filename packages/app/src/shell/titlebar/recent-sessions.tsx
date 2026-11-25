@@ -1047,7 +1047,12 @@ export function RecentSessions(
                   reorderPinned(arrayMove(visible, source.initialIndex, source.index))
                 }}
               >
-                <div data-titlebar-tab-list data-orientation="vertical" class="flex w-full min-w-0 flex-col">
+                <div
+                  data-titlebar-tab-list
+                  data-focus-scope
+                  data-orientation="vertical"
+                  class="flex w-full min-w-0 flex-col"
+                >
                   <Key each={pinned()} by={(item) => item.key}>
                     {(item, index) => row(item, index)}
                   </Key>
@@ -1078,6 +1083,7 @@ export function RecentSessions(
                       collapsible={arrangement().groupBy !== "none"}
                       collapsed={collapsed(group())}
                       mark={hiddenMark(group())}
+                      hoverReveal={settings.appearance.navigationPrototype()}
                       onToggle={() => toggleGroup(group().key)}
                       menu={
                         <RecentViewMenu
@@ -1088,7 +1094,12 @@ export function RecentSessions(
                       }
                     />
                     <Show when={shownRows(group()).length > 0}>
-                      <div data-titlebar-tab-list data-orientation="vertical" class="flex w-full min-w-0 flex-col">
+                      <div
+                        data-titlebar-tab-list
+                        data-focus-scope
+                        data-orientation="vertical"
+                        class="flex w-full min-w-0 flex-col"
+                      >
                         <Key each={shownRows(group())} by={(item) => item.key}>
                           {(item) => row(item)}
                         </Key>
@@ -1098,7 +1109,12 @@ export function RecentSessions(
                 )}
               </Key>
               <Show when={windowed().hasMore && !loadingMore()}>
-                <Button variant="ghost-muted" size="normal" class="w-full justify-start px-2" onClick={showMore}>
+                <Button
+                  variant="ghost-muted"
+                  size="normal"
+                  class="w-full justify-start px-2 focus-visible:-outline-offset-2"
+                  onClick={showMore}
+                >
                   {language.t("sidebar.inbox.showMore")}
                 </Button>
               </Show>
@@ -1107,13 +1123,23 @@ export function RecentSessions(
           <Show when={!input.organize && (recent().length > 0 || windowed().hasMore)}>
             <div role="group" aria-labelledby="sidebar-recent-list" class="flex shrink-0 flex-col gap-2 pb-2.5">
               <SectionHeader id="sidebar-recent-list" label={language.t("sidebar.recent.section.recent")} />
-              <div data-titlebar-tab-list data-orientation="vertical" class="flex w-full min-w-0 flex-col">
+              <div
+                data-titlebar-tab-list
+                data-focus-scope
+                data-orientation="vertical"
+                class="flex w-full min-w-0 flex-col"
+              >
                 <Key each={recent()} by={(item) => item.key}>
                   {(item) => row(item)}
                 </Key>
               </div>
               <Show when={windowed().hasMore && !loadingMore()}>
-                <Button variant="ghost-muted" size="normal" class="w-full justify-start px-2" onClick={showMore}>
+                <Button
+                  variant="ghost-muted"
+                  size="normal"
+                  class="w-full justify-start px-2 focus-visible:-outline-offset-2"
+                  onClick={showMore}
+                >
                   {language.t("sidebar.inbox.showMore")}
                 </Button>
               </Show>
@@ -1150,6 +1176,8 @@ function GroupHeader(props: {
   collapsible: boolean
   collapsed: boolean
   mark: "attention" | "unread" | undefined
+  /** Shows the chevron only on hover or focus (Consolidated). */
+  hoverReveal: boolean
   onToggle: () => void
   menu: JSX.Element
 }) {
@@ -1170,7 +1198,7 @@ function GroupHeader(props: {
           type="button"
           id={props.id}
           aria-expanded={!props.collapsed}
-          class="flex h-6 min-w-0 flex-1 items-center gap-1 rounded-[6px] ps-2 pe-8 text-start text-[13px] leading-4 font-medium text-v2-text-text-muted hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover focus-visible:outline-none"
+          class="group/toggle flex h-6 min-w-0 flex-1 items-center gap-1 rounded-[6px] ps-2 pe-8 text-start text-[13px] leading-4 font-medium text-v2-text-text-muted hover:text-v2-text-text-base focus-visible:-outline-offset-2"
           onClick={props.onToggle}
         >
           <span class="min-w-0 truncate">{props.label}</span>
@@ -1191,8 +1219,12 @@ function GroupHeader(props: {
           </Show>
           <Icon
             name="fill-triangle-down"
-            class="shrink-0 text-v2-icon-icon-muted transition-transform motion-reduce:transition-none"
-            classList={{ "-rotate-90 rtl:rotate-90": props.collapsed }}
+            class="shrink-0 text-v2-icon-icon-muted transition-[transform,opacity] motion-reduce:transition-none"
+            classList={{
+              "-rotate-90 rtl:rotate-90": props.collapsed,
+              "opacity-0 group-hover/header:opacity-100 group-focus-visible/toggle:opacity-100 [@media(hover:none)]:opacity-100":
+                props.hoverReveal,
+            }}
           />
         </button>
       </Show>

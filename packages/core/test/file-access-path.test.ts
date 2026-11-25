@@ -21,10 +21,7 @@ function provide(directory: string, projectDirectory = directory, environment?: 
         ...(environment
           ? [
               Environment.node.replace(
-                Layer.succeed(
-                  Environment.Service,
-                  Environment.Service.of({ files: Environment.makeFiles(environment), spawner: environment.spawner }),
-                ),
+                Layer.succeed(Environment.Service, Environment.make(Environment.localID, environment)),
               ),
             ]
           : []),

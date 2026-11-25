@@ -44,6 +44,7 @@ import type {
   RunCommand,
   RunInput,
   RunPrompt,
+  RunPromptPart,
   RunProvider,
   RunTuiConfig,
   StreamCommit,
@@ -868,8 +869,8 @@ test("run entry content eagerly renders final monochrome markdown", async () => 
   try {
     await app.renderOnce()
     const frame = app.captureCharFrame()
-    expect(frame).toContain("# Caf? ->")
-    expect(frame).toContain("Caf? ->")
+    // The heading (its marker concealed) and the fence's code.
+    expect(frame.match(/^Caf\? ->/gm)).toHaveLength(2)
     expect(frame).not.toMatch(/[^\x00-\x7f]/)
   } finally {
     app.renderer.destroy()
@@ -1467,6 +1468,47 @@ test("undo retains mentioned files when the prompt is sent again", async () => {
       { text: "\t👨‍👩‍👧நி\f\n\ninspect @src/main.ts please!", parts: [{ type: "file", url: "file:///src/main.ts" }] },
     ])
     expect(submitted[0].messageID).toBeUndefined()
+  } finally {
+    app.cleanup()
+  }
+})
+
+test("an undone chip deletion keeps the chip's file", async () => {
+  const submitted: RunPrompt[] = []
+  const file: RunPromptPart = {
+    type: "file",
+    url: "file:///src/main.ts",
+    filename: "main.ts",
+    source: { type: "file", path: "src/main.ts", text: { start: 8, end: 20, value: "@src/main.ts" } },
+  }
+  const app = await renderFooter({
+    queuedPrompts: [
+      { messageID: "m-1", delivery: "queue", prompt: { text: "inspect @src/main.ts please", parts: [file] } },
+    ],
+    onQueuedPromptAction: async () => {
+      app.setQueuedPrompts([])
+    },
+    onSubmit: (prompt) => {
+      submitted.push(prompt)
+      return true
+    },
+  })
+  try {
+    await app.renderOnce()
+    app.mockInput.pressKey("x", { ctrl: true })
+    app.mockInput.pressKey("q")
+    await app.renderOnce()
+    app.mockInput.pressKey("u", { ctrl: true })
+    await Bun.sleep(0)
+    const text = () => (app.renderer.currentFocusedEditor as TextareaRenderable | null)?.plainText
+    await app.waitFor(() => text() === "inspect @src/main.ts please")
+    app.mockInput.pressKey("u", { ctrl: true })
+    await app.waitFor(() => text() === "")
+    app.mockInput.pressKey("z", { super: true })
+    await app.waitFor(() => text() === "inspect @src/main.ts please")
+    app.mockInput.pressEnter()
+    await Bun.sleep(0)
+    expect(submitted).toMatchObject([{ text: "inspect @src/main.ts please", parts: [file] }])
   } finally {
     app.cleanup()
   }

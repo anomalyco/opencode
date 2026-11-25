@@ -2,9 +2,8 @@ export * as ReadToolFileSystem from "./read-filesystem.js"
 
 import path from "path"
 import { pathToFileURL } from "url"
-import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { TextBoundary } from "@opencode/util/text-boundary"
-import { Context, Effect, Layer, Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { Environment } from "../environment/index.js"
 import type { Files } from "../environment/index.js"
 import { Mime } from "../mime.js"
@@ -14,6 +13,7 @@ export const MAX_READ_LINES = 2_000
 export const MAX_READ_BYTES = 50 * 1024
 export const MAX_MEDIA_INGEST_BYTES = 20 * 1024 * 1024
 const FIRST_CHUNK = 256 * 1024
+const MAX_SCAN_CHUNK = 4 * 1024 * 1024
 const TAIL_LINES = 100
 const MAX_LINE_LENGTH = 2_000
 // Enough UTF-8 bytes for the clamped prefix, including a BOM and a partial code point at the end.
@@ -74,29 +74,30 @@ export type PageInput = typeof PageInput.Type
 
 export const TextContent = Schema.Struct({
   type: Schema.Literal("text"),
-  content: Schema.String,
   offset: PositiveInt,
-  lineCount: NonNegativeInt,
   next: Schema.optionalKey(PositiveInt).annotate({
     description: "The line to continue reading from. Absent when the content reaches the end of the file.",
   }),
+  content: Schema.String,
 }).annotate({ identifier: "ReadTool.TextContent" })
 export type TextContent = typeof TextContent.Type
+// The line count stays out of the tool output, which reads like a file length; formatting needs it to place a trailing newline.
+export type TextPage = TextContent & { readonly lineCount: number }
 
 export const DirectoryContent = Schema.Struct({
   type: Schema.Literal("directory"),
-  entries: Schema.Array(Schema.String),
   next: Schema.optionalKey(PositiveInt).annotate({
     description: "The entry to continue reading from. Absent when the listing reaches the last entry.",
   }),
+  entries: Schema.Array(Schema.String),
 }).annotate({ identifier: "ReadTool.DirectoryContent" })
 export type DirectoryContent = typeof DirectoryContent.Type
 
 export const MediaContent = Schema.Struct({
   type: Schema.Literal("media"),
-  uri: Schema.String,
   mime: Schema.String,
   name: Schema.optionalKey(Schema.String),
+  uri: Schema.String,
 }).annotate({ identifier: "ReadTool.MediaContent" })
 export type MediaContent = typeof MediaContent.Type
 
@@ -105,17 +106,6 @@ export type Output = typeof Output.Type
 
 // Media bytes travel beside the reference so the tool can attach them without storing them in its output.
 export type Media = MediaContent & { readonly name: string; readonly bytes: Uint8Array }
-
-export interface Interface {
-  readonly list: (path: AbsolutePath) => ReturnType<Files["list"]>
-  readonly read: (
-    path: AbsolutePath,
-    resource: string,
-    page?: PageInput,
-  ) => Effect.Effect<TextContent | DirectoryContent | Media, ReadError>
-}
-
-export class Service extends Context.Service<Service, Interface>()("@opencode/ReadToolFileSystem") {}
 
 export const read = Effect.fn("ReadTool.read")(function* (
   files: Files,
@@ -290,7 +280,12 @@ const textPage = Effect.fnUntraced(function* (
     if (next === undefined && (entries.length >= limit || size >= MAX_READ_BYTES) && consumed < byte)
       next = requested + entries.length
     if (next !== undefined || byte >= first.info.size) break
-    const more = yield* range(byte, FIRST_CHUNK)
+    // Grow only while skipping lines; keep page reads (including an unfinished selected line) small.
+    const length =
+      entries.length > 0 || (requested > 0 && total >= requested - 1)
+        ? FIRST_CHUNK
+        : Math.max(FIRST_CHUNK, Math.min(chunk.length * 4, MAX_SCAN_CHUNK))
+    const more = yield* range(byte, Math.min(length, first.info.size - byte))
     if (more.bytes.length === 0) break
     chunk = more.bytes
   }
@@ -353,16 +348,3 @@ const list = (items: ReadonlyArray<Environment.DirEntry>, page: PageInput, sep =
 
 const clampLine = (line: string) =>
   line.length <= MAX_LINE_LENGTH ? line : TextBoundary.head(line, MAX_LINE_LENGTH) + MAX_LINE_SUFFIX
-
-const layer = Layer.effect(
-  Service,
-  Effect.gen(function* () {
-    const environment = yield* Environment.Service
-    return Service.of({
-      list: environment.files.list,
-      read: (path, resource, page) => read(environment.files, path, resource, page),
-    })
-  }),
-)
-
-export const node = makeLocationNode({ service: Service, layer, deps: [Environment.node] })

@@ -34,6 +34,7 @@ import { markdownBlockKey, type MarkdownToken } from "./markdown-worker-protocol
 import { shouldResetCodeTokens, type RenderedCodeState } from "./markdown-code-state"
 import {
   getCachedMarkdown,
+  enableMarkdownAppLinks,
   getReadyMarkdown,
   renderCachedMarkdown,
   touchCachedMarkdown,
@@ -291,8 +292,19 @@ function codeOverflow() {
   return overflowObserver
 }
 
+function isCodeWrapped(wrapper: HTMLElement) {
+  if (wrapper.dataset.wrap === "true") return true
+
+  if (wrapper.dataset.wrap === "false") return false
+
+  return !!wrapper.closest('[data-component="markdown"][data-code-wrap]')
+}
+
 function measureCodeOverflow(wrappers: HTMLElement[]) {
-  wrappers.forEach((wrapper) => wrapper.toggleAttribute("data-code-measure", true))
+  // Unwrapped blocks already lay out at their unwrapped width, so reading them directly in the observer
+  // avoids forcing a style recalculation and layout.
+  const wrapped = wrappers.filter(isCodeWrapped)
+  wrapped.forEach((wrapper) => wrapper.toggleAttribute("data-code-measure", true))
 
   const overflow = wrappers.map((wrapper) => {
     const pre = wrapper.querySelector(":scope > pre")
@@ -300,9 +312,10 @@ function measureCodeOverflow(wrappers: HTMLElement[]) {
     return !!pre && pre.scrollWidth > pre.clientWidth
   })
 
+  wrapped.forEach((wrapper) => wrapper.removeAttribute("data-code-measure"))
   wrappers.forEach((wrapper, index) => {
-    wrapper.removeAttribute("data-code-measure")
-    wrapper.toggleAttribute("data-code-overflow", overflow[index])
+    if (wrapper.hasAttribute("data-code-overflow") !== overflow[index])
+      wrapper.toggleAttribute("data-code-overflow", overflow[index])
   })
 }
 
@@ -1226,6 +1239,7 @@ export function Markdown(
             plugins,
             sessionLinks,
             lifetime.signal,
+            markdown?.appLinks,
             localFileExists,
           )
 
@@ -1397,6 +1411,7 @@ function updateBlock(
   plugins: CodePlugins | undefined,
   sessionLinks: ((id: string) => string | undefined) | undefined,
   signal: AbortSignal,
+  appLinks: boolean | undefined,
   localFileExists?: MarkdownLocalFileExists,
 ) {
   const current = container.children[index]
@@ -1435,6 +1450,8 @@ function updateBlock(
 
   if (source === next) disposeCodeHosts(next)
   source.innerHTML = block.html
+
+  if (appLinks) enableMarkdownAppLinks(source)
   const pending = markInlineCode(source, next, block.mode === "live", signal, localFileExists)
   markCodeLinks(source)
   wrapTables(source)
