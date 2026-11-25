@@ -197,6 +197,25 @@ describe("experimental.artifacts service and tools", () => {
         })) as Artifact.Info
         expect(localInfo.provider).toBe(Artifact.LocalProviderID)
 
+        // A read names the files it leaves out, and update says it keeps them.
+        const large = yield* artifacts.create({
+          title: "Large",
+          provider: Artifact.LocalProviderID,
+          files: { "index.html": "<h1>hi</h1>", "data.json": "0".repeat(65 * 1024) },
+        })
+        const read = yield* executeTool(registry, {
+          sessionID: session.id,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-read", name: "opencode_artifact_read", input: { id: large.id } },
+        })
+        expect(read.content?.[0]).toEqual({
+          type: "text",
+          text: `Large (${large.id} · 1 files); omitted: data.json (66560 bytes)`,
+        })
+        expect(rawTools.find((item) => item.id === "opencode_artifact_update")?.description).toContain(
+          "Files a read listed in omitted are kept unless you send that path",
+        )
+
         // Update replaces files at the same ID and URL
         const updatedInfo = (yield* callCodeMode(registry, session.id, "artifact_update", {
           id: createdInfo.id,
