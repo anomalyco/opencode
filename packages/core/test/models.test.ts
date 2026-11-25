@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test"
+import { mkdtempSync, readFileSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { Money } from "@opencode/schema/money"
 import { Effect, Exit, Fiber, Layer, Ref, Scope, Stream, Tracer } from "effect"
 import { HttpClient, HttpClientResponse } from "effect/http"
@@ -12,6 +15,7 @@ import { Model } from "@opencode/core/model"
 import { bodyDigest, ModelsDev } from "@opencode/core/models-dev"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
+import { Global } from "@opencode/util/global"
 import { SessionUsage } from "@opencode/core/session/usage"
 import { location } from "./fixture/location"
 import { it } from "./lib/effect"
@@ -202,13 +206,19 @@ const makeMockKV = (cache: MockCache) =>
     remove: (key) => Effect.sync(() => cache.values.delete(key)).pipe(Effect.asVoid),
   })
 
-const buildLayer = (state: Ref.Ref<MockState>, cache: MockCache, options: ModelsDev.Options = { fetch: false }) =>
+const buildLayer = (
+  state: Ref.Ref<MockState>,
+  cache: MockCache,
+  options: ModelsDev.Options = { fetch: false },
+  cacheDirectory = mkdtempSync(path.join(tmpdir(), "opencode-models-dev-")),
+) =>
   // Layer.fresh is required because the ModelsDev implementation is a module-level Layer constant,
   // and Effect.provide uses a process-global MemoMap by default — without fresh,
   // every test would reuse the cachedInvalidateWithTTL state from the first run.
   Layer.fresh(
-    AppNodeBuilder.build(LayerNode.group([ModelsDev.node, Bus.node]), [
+    AppNodeBuilder.build(LayerNode.group([ModelsDev.node, Bus.node, Global.node]), [
       ModelsDev.node.replace(ModelsDev.configured(options)),
+      Global.node.replace(Global.layerWith({ cache: cacheDirectory })),
       LayerNodePlatform.httpClient.replace(Layer.succeed(HttpClient.HttpClient, makeMockClient(state))),
       KV.node.replace(makeMockKV(cache)),
     ]),
@@ -1009,6 +1019,59 @@ describe("ModelsDev Service", () => {
       expect(anthropic?.environment).toContain("ANTHROPIC_API_KEY")
       const final = yield* Ref.get(state)
       expect(final.calls).toEqual([])
+    }),
+  )
+
+  it.live("get() reuses a normalized catalog from the cache directory", () =>
+    Effect.gen(function* () {
+      const cacheDirectory = mkdtempSync(path.join(tmpdir(), "opencode-models-dev-"))
+      const state = yield* Ref.make(initialState)
+      const cold = yield* ModelsDev.Service.use((s) => s.get()).pipe(
+        Effect.provide(buildLayer(state, makeCache(), { fetch: false }, cacheDirectory)),
+      )
+      expect(cold.length).toBeGreaterThan(0)
+      const file = path.join(cacheDirectory, "models-dev-normalized-default.json")
+      const entry = JSON.parse(readFileSync(file, "utf8"))
+      expect(entry.snapshot).toEqual(JSON.parse(JSON.stringify(cold)))
+      entry.snapshot[0].info.name = "Cached"
+      writeFileSync(file, JSON.stringify(entry))
+      const warm = yield* ModelsDev.Service.use((s) => s.get()).pipe(
+        Effect.provide(buildLayer(state, makeCache(), { fetch: false }, cacheDirectory)),
+      )
+      expect(warm[0]?.info.name).toBe("Cached")
+    }),
+  )
+
+  it.live("get() reads the normalized cache from the digest in KV metadata", () =>
+    Effect.gen(function* () {
+      const cacheDirectory = mkdtempSync(path.join(tmpdir(), "opencode-models-dev-"))
+      const state = yield* Ref.make(initialState)
+      const cache = makeCache()
+      writeCache(cache, fixture)
+      const cold = yield* ModelsDev.Service.use((s) => s.get()).pipe(
+        Effect.provide(buildLayer(state, cache, { fetch: false }, cacheDirectory)),
+      )
+      expect(cold).toEqual(fixtureSnapshot)
+      // A later process only has the metadata row: the body must not be needed for a cache hit.
+      const meta = makeCache()
+      meta.values.set(metaKey, { updatedAt: Date.now(), digest: bodyDigest(JSON.stringify(fixture)) })
+      const warm = yield* ModelsDev.Service.use((s) => s.get()).pipe(
+        Effect.provide(buildLayer(state, meta, { fetch: false }, cacheDirectory)),
+      )
+      expect(warm).toEqual(fixtureSnapshot)
+    }),
+  )
+
+  it.live("get() ignores a corrupt normalized cache entry", () =>
+    Effect.gen(function* () {
+      const cacheDirectory = mkdtempSync(path.join(tmpdir(), "opencode-models-dev-"))
+      writeFileSync(path.join(cacheDirectory, "models-dev-normalized-default.json"), "{")
+      const state = yield* Ref.make(initialState)
+      const result = yield* ModelsDev.Service.use((s) => s.get()).pipe(
+        Effect.provide(buildLayer(state, makeCache(), { fetch: false }, cacheDirectory)),
+      )
+      expect(result.find((snapshot) => snapshot.info.id === "anthropic")?.environment).toContain("ANTHROPIC_API_KEY")
+      expect(JSON.parse(readFileSync(path.join(cacheDirectory, "models-dev-normalized-default.json"), "utf8")).version).toBe(1)
     }),
   )
 
