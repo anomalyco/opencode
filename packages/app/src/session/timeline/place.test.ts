@@ -28,6 +28,29 @@ describe("a place in the rows a session has now", () => {
   ])("is $name", (input) => {
     expect(resolvePlace(place, input.keys.split(""))).toEqual(input.target)
   })
+
+  // The reader was on a letter of row g, further down the view.
+  const read: Place = { ...place, letter: { key: "g", index: 120, top: 300 } }
+
+  test.each([
+    {
+      name: "goes back to its letter while that row is in the list",
+      keys: "xyabcdefghi",
+      target: { type: "row", row: 6, offset: 40, letter: { row: 8, index: 120, top: 300 } },
+    },
+    {
+      name: "is the row alone when the letter's row is gone",
+      keys: "abcdefhi",
+      target: { type: "row", row: 4, offset: 40, letter: undefined },
+    },
+    {
+      name: "is the letter's row when the rows around the top of the view are gone",
+      keys: "xyg",
+      target: { type: "row", row: 2, offset: 0, letter: { row: 2, index: 120, top: 300 } },
+    },
+  ])("with what the reader was on, $name", (input) => {
+    expect(resolvePlace(read, input.keys.split(""))).toEqual(input.target)
+  })
 })
 
 describe("the places kept for sessions", () => {

@@ -756,6 +756,25 @@ test("returns a reader whose passage was removed meanwhile to the end, which the
   await expect(timeline.scroller.getByText("The new end.", { exact: true })).toBeInViewport()
 })
 
+// A row that wraps again at another width is taller, and its words are elsewhere in it. The place names a letter.
+test("returns a reader to the words they left after the window narrowed while they were away", async ({ page }) => {
+  const timeline = await openHistory(page, { words: true })
+  await page.setViewportSize({ width: 1220, height: 844 })
+  await readHistory(page, timeline.scroller, 700)
+  const word = await wordAtReadingLine(timeline.scroller)
+
+  await page.getByRole("button", { name: "Home", exact: true }).click()
+  await expect(timeline.content).toHaveCount(0)
+  await page.setViewportSize({ width: 490, height: 844 })
+  await page.goBack()
+  // The same words, within a line: the reader's letter is back where it was, and the marked word is beside it.
+  await expect
+    .poll(async () => Math.abs((await wordTop(timeline.scroller, word.text)) - word.top))
+    .toBeLessThanOrEqual(word.line)
+  await waitForVisualSettle(page, ["[data-timeline-virtual-content]"])
+  expect(Math.abs((await wordTop(timeline.scroller, word.text)) - word.top)).toBeLessThanOrEqual(word.line)
+})
+
 test("returns a reader who followed to the new end of a session that grew meanwhile", async ({ page }) => {
   const timeline = await openHistory(page, { streaming: true })
   await page.setViewportSize({ width: 1056, height: 844 })
@@ -770,9 +789,13 @@ test("returns a reader who followed to the new end of a session that grew meanwh
 
 // A transcript that loads in pages of 16 messages, on a narrow screen, with another session open in a tab. `older`
 // holds each older page back. `streaming`: its last reply is still under way. `others`: more sessions open in tabs.
-async function openHistory(page: Page, input: { older?: Promise<void>; streaming?: boolean; others?: string[] } = {}) {
+// `words`: no two words of a reply are the same, so a word names one place in the transcript.
+async function openHistory(
+  page: Page,
+  input: { older?: Promise<void>; streaming?: boolean; others?: string[]; words?: boolean } = {},
+) {
   const transcript = validateTimelineMessages([
-    ...historyMessages(40),
+    ...(input.words ? wordyMessages(40) : historyMessages(40)),
     userMessage(),
     assistantMessage([textPart("prt_place_tail", "Checking the route")], { completed: !input.streaming }),
   ])
@@ -826,6 +849,74 @@ async function openHistory(page: Page, input: { older?: Promise<void>; streaming
       )
     },
   }
+}
+
+// The transcript of `historyMessages`, with replies made of words that each occur once.
+function wordyMessages(count: number) {
+  return Array.from({ length: count }, (_, index) => {
+    const value = String(index).padStart(4, "0")
+    const user = `msg_0${value}_history_a_user`
+
+    return [
+      userMessage(undefined, { id: user, created: 1690000000000 + index * 10_000 }),
+      assistantMessage(
+        [
+          textPart(
+            `prt_0${value}_history_text`,
+            Array.from({ length: 90 }, (_, word) => `r${index}w${word}`).join(" "),
+          ),
+        ],
+        { id: `msg_0${value}_history_b_assistant`, parentID: user, created: 1690000001000 + index * 10_000 },
+      ),
+    ]
+  }).flat()
+}
+
+// The word at the reading line, 40% of the way down from the session header to the composer region: its text, where
+// its top is on the screen, and the height of its line.
+function wordAtReadingLine(scroller: Locator) {
+  return scroller.evaluate((element) => {
+    const view = element.getBoundingClientRect()
+    const style = getComputedStyle(element)
+    const top = view.top + (parseFloat(style.scrollPaddingTop) || 0)
+    const y = top + (view.bottom - (parseFloat(style.scrollPaddingBottom) || 0) - top) * 0.4
+    const caret = document.caretPositionFromPoint(view.left + view.width / 2, y)
+
+    if (!caret || !(caret.offsetNode instanceof Text)) throw new Error("No text at the reading line")
+    const text = caret.offsetNode.data
+    const start = text.lastIndexOf(" ", Math.max(0, caret.offset - 1)) + 1
+    const space = text.indexOf(" ", start)
+    const end = space < 0 ? text.length : space
+    const range = document.createRange()
+    range.setStart(caret.offsetNode, start)
+    range.setEnd(caret.offsetNode, end)
+
+    return {
+      text: text.slice(start, end),
+      top: range.getBoundingClientRect().top,
+      line: parseFloat(getComputedStyle(caret.offsetNode.parentElement!).lineHeight),
+    }
+  })
+}
+
+// Where the top of a word that occurs once is on the screen.
+function wordTop(scroller: Locator, word: string) {
+  return scroller.evaluate((element, word) => {
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const at = ` ${node.textContent} `.indexOf(` ${word} `)
+
+      if (at < 0) continue
+      const range = document.createRange()
+      range.setStart(node, at)
+      range.setEnd(node, at + word.length)
+
+      return range.getBoundingClientRect().top
+    }
+
+    return Number.NaN
+  }, word)
 }
 
 // Scrolls up from the end, and returns where each row in view is drawn once the timeline has come to rest.

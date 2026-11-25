@@ -29,7 +29,16 @@ import { Key } from "@solid-primitives/keyed"
 import { createMediaQuery } from "@solid-primitives/media"
 import type { createTimelineProjection } from "./projection"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
-import { keepPlace, PLACE_NEIGHBOURS, placeOf, resolvePlace, takePlace, type Place } from "./place"
+import {
+  keepPlace,
+  letterAt,
+  letterIndex,
+  PLACE_NEIGHBOURS,
+  placeOf,
+  resolvePlace,
+  takePlace,
+  type Place,
+} from "./place"
 import {
   createPlaceReturnState,
   PLACE_LEFT_EVENT,
@@ -1149,13 +1158,30 @@ export function createTimelineVirtualizer(input: Input) {
 
     if (!item) return
     const keys = untrack(rowKeys)
+    // What the reader is on, taken when their scroll came to rest. A text node does not outlive its view, so the
+    // letter is kept by how many letters of its row come before it.
+    const on = reading
+    const row = on && virtualizer.elementsCache.get(on.key)
+
+    const index =
+      on && row && on.node instanceof Text && on.offset !== undefined ? letterIndex(row, on.node, on.offset) : undefined
 
     return {
       key: String(item.key),
       offset: top - item.start,
       after: keys.slice(item.index + 1, item.index + 1 + PLACE_NEIGHBOURS),
       before: keys.slice(Math.max(0, item.index - PLACE_NEIGHBOURS), item.index).toReversed(),
+      letter: on && index !== undefined ? { key: on.key, index, top: on.y - on.lead } : undefined,
     }
+  }
+
+  // A place on the screen, moved into the part of the view the reader sees: below the session header, above the
+  // composer region.
+  function onScreen(root: HTMLDivElement, top: number, height: number) {
+    const port = root.getBoundingClientRect().top
+    const end = port + (virtualizer.scrollRect?.height ?? root.clientHeight) - height
+
+    return Math.max(port + virtualizer.options.scrollPaddingStart, Math.min(end, top))
   }
 
   // Puts a returning reader back where they were, as far as the rows have rendered. True when the passage is gone
@@ -1177,13 +1203,26 @@ export function createTimelineVirtualizer(input: Input) {
 
     const item = virtualizer.measurementsCache[target.row]
     const row = virtualizer.elementsCache.get(keys[target.row]!)
+    const port = root.getBoundingClientRect().top
+    const letter = target.letter
+    const line = letter && virtualizer.elementsCache.get(keys[letter.row]!)
+    const at = letter && line?.isConnected ? letterAt(line, letter.index) : undefined
+    const box = at && readingBox(at.node, at.offset)
+    const lineItem = letter && virtualizer.measurementsCache[letter.row]
 
-    // As drawn: the row begins as far above the top of the view as it did. A row that is not in the page has only
-    // its place in the list, an estimate until the rows before it have their sizes. The view goes there, so that
-    // the row mounts.
-    const wanted = row?.isConnected
-      ? root.scrollTop + row.getBoundingClientRect().top - root.getBoundingClientRect().top + target.offset
-      : item && item.start + target.offset
+    // As drawn. What the reader was on goes back where it was on the screen, or as near as the part of the view
+    // they see now allows: that holds at any width. A reader who was on no text, and one whose text has not
+    // rendered yet, gets the row at the top of the view as far above the top as it was. A row that is not in the
+    // page has only its place in the list, an estimate until the rows before it have their sizes. The view goes
+    // there, so that the row mounts.
+    const wanted =
+      letter && box?.height
+        ? root.scrollTop + box.top - onScreen(root, letter.top, box.height)
+        : letter && lineItem && !line?.isConnected
+          ? lineItem.start - (letter.top - port)
+          : row?.isConnected
+            ? root.scrollTop + row.getBoundingClientRect().top - port + target.offset
+            : item && item.start + target.offset
 
     if (wanted === undefined || Math.abs(root.scrollTop - Math.max(0, wanted)) <= 0.5) return false
     // One of the timeline's own writes. The list is told at once, so that the rows there mount in this frame.
