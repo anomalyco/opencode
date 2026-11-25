@@ -22,6 +22,8 @@ export class Repository extends Schema.Class<Repository>("Git.Repository")({
 // Included from $GIT_DIR/config via include.path (git >= 1.7.10); OpenCode owns
 // this file entirely, so updates are plain rewrites with no config parsing.
 const snapshotConfigFile = "opencode.gitconfig"
+// Present once the store's index is known to hold raw bytes; see `dropConvertedSeed`.
+const rawIndexMarker = "opencode-raw-index"
 const snapshotConfigInclude = `[include]
 	path = ${snapshotConfigFile}
 `
@@ -679,19 +681,23 @@ const layer = Layer.effect(
     })
 
     /**
+     * The store hashes and restores raw bytes (`autocrlf = false`). Under the source's `core.autocrlf`, its index holds
+     * blobs converted to LF while its stat cache calls the CRLF files on disk clean, so a store seeded from it would keep
+     * those blobs as the files' contents and a restore would write LF. Such a store hashes every file itself.
+     */
+    const convertsLineEndings = (source: Repository) =>
+      repositoryOperation("refresh", source, ["config", "--get", "core.autocrlf"]).pipe(
+        Effect.map((result) => ["true", "yes", "on", "1", "input"].includes(result.text.trim().toLowerCase())),
+        Effect.orElseSucceed(() => false),
+      )
+
+    /**
      * Copy the source index into the store. A split index names a shared index file in
      * its own Git directory, so those files are linked in just long enough to rewrite the
      * copy as a complete index.
      */
     const seedIndex = Effect.fnUntraced(function* (store: Repository, source: Repository, target: string) {
-      // The store hashes and restores raw bytes (`autocrlf = false`). Under the source's `core.autocrlf`, its index
-      // holds blobs converted to LF while its stat cache calls the CRLF files on disk clean, so the store would keep
-      // those blobs as the files' contents and a restore would write LF. Such a store hashes every file itself.
-      const autocrlf = yield* repositoryOperation("refresh", source, ["config", "--get", "core.autocrlf"]).pipe(
-        Effect.map((result) => result.text.trim().toLowerCase()),
-        Effect.orElseSucceed(() => ""),
-      )
-      if (["true", "yes", "on", "1", "input"].includes(autocrlf))
+      if (yield* convertsLineEndings(source))
         return yield* new OperationError({
           operation: "refresh",
           directory: store.gitDirectory,
@@ -892,6 +898,7 @@ const layer = Layer.effect(
             preparedStores.add(input.repository.gitDirectory)
             yield* sweepTemporaryIndexes(input.repository)
             yield* ensureSnapshotConfig(input.repository)
+            yield* dropConvertedSeed(input.repository, input.ignores)
           }
           return yield* attemptCapture(input).pipe(
             Effect.catch((error) =>
@@ -953,6 +960,18 @@ const layer = Layer.effect(
           Effect.ignore,
           Effect.ensuring(fs.remove(temporary, { force: true }).pipe(Effect.ignore)),
         )
+    })
+
+    /**
+     * Stores that earlier releases seeded from a source with `core.autocrlf` keep LF blobs for every CRLF file whose stat
+     * data has not changed since. Their index is dropped once, so the next capture hashes the files as they are on disk;
+     * the marker keeps later starts from dropping it again.
+     */
+    const dropConvertedSeed = Effect.fnUntraced(function* (repository: Repository, source: Repository | undefined) {
+      const marker = path.join(repository.gitDirectory, rawIndexMarker)
+      if (!source || (yield* fs.existsSafe(marker))) return
+      if (yield* convertsLineEndings(source)) yield* rebuildIndex(repository)
+      yield* fs.writeFileString(marker, "").pipe(Effect.ignore)
     })
 
     const temporaryIndex = (repository: Repository) =>

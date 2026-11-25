@@ -484,6 +484,46 @@ describe("Snapshot", () => {
       }),
     ),
   )
+
+  testEffect(Layer.empty).live("drops a store index an earlier release seeded from a core.autocrlf repository", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const project = path.join(tmp.path, "project")
+        const file = path.join(project, "notes.txt")
+        const original = "line one\r\nline two\r\n"
+        yield* Effect.promise(async () => {
+          await fs.mkdir(project)
+          await $`git init`.cwd(project).quiet()
+          await $`git config core.autocrlf true`.cwd(project).quiet()
+          await fs.writeFile(file, original)
+          const old = new Date(Date.now() - 3600_000)
+          await fs.utimes(file, old, old)
+          await initGit(project, true)
+        })
+        yield* Snapshot.Service.pipe(
+          Effect.flatMap((snapshot) => snapshot.capture()),
+          Effect.provide(snapshotLayer(tmp.path, project)),
+        )
+        // What an earlier release left behind: the source's index, holding LF blobs, and no marker.
+        const store = yield* snapshotDirectory(tmp.path)
+        yield* Effect.promise(async () => {
+          await fs.copyFile(path.join(project, ".git", "index"), path.join(store, "index"))
+          await fs.rm(path.join(store, "opencode-raw-index"), { force: true })
+        })
+        yield* Effect.gen(function* () {
+          const snapshot = yield* Snapshot.Service
+          const before = yield* snapshot.capture()
+          if (!before) throw new Error("capture failed")
+          yield* Effect.promise(() => fs.writeFile(file, "line one\r\nchanged\r\n"))
+          const after = yield* snapshot.capture()
+          if (!after) throw new Error("capture failed")
+          yield* snapshot.restore({ files: new Map([[RelativePath.make("notes.txt"), before]]) })
+          expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe(original)
+        }).pipe(Effect.provide(snapshotLayer(tmp.path, project)))
+        expect(yield* exists(path.join(store, "opencode-raw-index"))).toBe(true)
+      }),
+    ),
+  )
 })
 
 function snapshotLayer(data: string, directory: string) {
