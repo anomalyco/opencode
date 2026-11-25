@@ -14,7 +14,10 @@ import { Session } from "@opencode/core/session"
 import { Credential } from "@opencode/core/credential"
 import { ConfigIntegration } from "@opencode/core/config/integration"
 import { WebSearch } from "@opencode/core/websearch"
+import { WebSearchExa } from "@opencode/core/plugin/websearch/exa"
+import { WebSearchTinyFish } from "@opencode/core/plugin/websearch/tinyfish"
 import { Effect, Schema } from "effect"
+import { FetchHttpClient } from "effect/http"
 import { waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { organizationPolicy } from "../fixture/policy"
@@ -91,10 +94,15 @@ describe("ConfigPolicyPlugin.Plugin", () => {
     }),
   )
 
-  it.effect("organization tool.use policy overrides authored policy", () =>
+  it.effect("matches tool.use file policies without case where file systems ignore it by default", () =>
     Effect.gen(function* () {
-      yield* addPlugin([organizationPolicy([tool("deny", "shell:*")], "Acme"), document(tool("allow", "shell:*"))])
-      expect(yield* evaluate("shell", ["ls"])).toEqual({ effect: "deny", message: "Blocked by Acme's policy" })
+      yield* addPlugin([organizationPolicy([tool("deny", "read:*.env"), tool("deny", "shell:git push*")], "Acme")])
+      const files = process.platform === "darwin" || process.platform === "win32"
+      expect((yield* evaluate("read", ["secrets.ENV"])).effect).toBe(files ? "deny" : "allow")
+      // Commands keep their case outside Windows.
+      expect((yield* evaluate("shell", ["GIT PUSH origin dev"])).effect).toBe(
+        process.platform === "win32" ? "deny" : "allow",
+      )
     }),
   )
 
@@ -384,6 +392,27 @@ describe("integration policy", () => {
         expect(yield* catalog.get(Provider.ID.make("my-llm"))).toBeUndefined()
       }),
     )
+
+  it.effect("removes built-in and plugin web search providers that websearch.use denies", () =>
+    Effect.gen(function* () {
+      const websearch = yield* WebSearch.Service
+      const host = yield* PluginHost.make(yield* Plugin.Service, "test")
+      // TinyFish needs no API key, so it is offered until a policy removes it.
+      yield* Effect.all([WebSearchExa.Plugin.effect(host), WebSearchTinyFish.Plugin.effect(host)]).pipe(
+        Effect.provide(FetchHttpClient.layer),
+      )
+      yield* host.websearch.transform((editor) =>
+        editor.add({ id: WebSearch.ID.make("acme-search"), name: "Acme Search", execute: () => Effect.succeed([]) }),
+      )
+      yield* addPlugin([
+        document(
+          { action: "websearch.use", resource: "*", effect: "deny" },
+          { action: "websearch.use", resource: "exa", effect: "allow" },
+        ),
+      ])
+      expect((yield* websearch.providers()).map((item): string => item.id)).toEqual(["exa"])
+    }),
+  )
 
   it.effect("converts legacy statements in Console config before enforcement sees them", () =>
     Effect.sync(() => {

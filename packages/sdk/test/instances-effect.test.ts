@@ -100,7 +100,7 @@ it.live(
         overrides: [
           llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
           SessionRunnerModel.node.replace(
-            Layer.succeed(SessionRunnerModel.Service, { resolve: () => Effect.succeed(model) }),
+            Layer.succeed(SessionRunnerModel.Service, { select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })), resolve: () => Effect.succeed(model) }),
           ),
         ],
       }
@@ -133,7 +133,7 @@ it.live(
       expect((yield* second.sessions.get({ sessionID: session.id })).title).toBe("thread-recovery:2")
       expect(
         (yield* llm.requests()).map((request) => ({
-          temperature: request.generation?.temperature,
+          temperature: request.temperature,
           tools: request.tools?.filter((tool) => tool.name.startsWith("thread_")).map((tool) => tool.name),
         })),
       ).toEqual(Array.from({ length: 3 }, () => ({ temperature: 0.25, tools: ["thread_echo"] })))
@@ -193,7 +193,7 @@ it.live(
           overrides: [
             llmClient.replace(Layer.succeed(LLMClient.Service, llm)),
             SessionRunnerModel.node.replace(
-              Layer.succeed(SessionRunnerModel.Service, { resolve: () => Effect.succeed(model) }),
+              Layer.succeed(SessionRunnerModel.Service, { select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })), resolve: () => Effect.succeed(model) }),
             ),
           ],
         },

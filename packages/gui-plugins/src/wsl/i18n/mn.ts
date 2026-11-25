@@ -54,4 +54,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} хугацаа {{timeout}}мс дараа дууссан",
   "error.failedPort": "Портыг авч чадсангүй",
   "menu.remove": "Арилгах",
+  "error.busy": "{{distro}} өөр ажил хийж байна. Дууссаны дараа дахин оролдоно уу.",
 }

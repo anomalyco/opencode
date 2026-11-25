@@ -2,18 +2,18 @@
 # plan-release.sh: decides version, channel and npm dist-tag from the event, ref and dispatch inputs
 # (INPUT_BUMP, INPUT_VERSION) only, and writes them to $GITHUB_OUTPUT. Nothing here reads repository files.
 #
-#   push or dispatch on dev           -> dev      0.0.0-dev-<run>     npm tag dev, desktop
+#   schedule or dispatch on dev       -> dev      0.0.0-dev-<run>     npm tag dev, desktop
 #   dispatch on dev with bump/version -> latest   x.y.z               npm tag latest, releasers only, notes required
 #   push or dispatch on beta          -> beta     0.0.0-beta-<run>    desktop only
 #   pull_request                      -> pr       0.0.0-pr-<run>      everything, dry run
 #
-# Releasers are actors with the admin or maintain role on the repository (the releasers team has maintain).
+# Stable releases are limited to the GitHub logins listed below (case-insensitive).
 . "$(dirname "$0")/lib.sh"
 
 versioned=false
 if [ -n "${INPUT_BUMP:-}" ] || [ -n "${INPUT_VERSION:-}" ]; then versioned=true; fi
 case "$GITHUB_EVENT_NAME:$GITHUB_REF:$versioned" in
-  push:refs/heads/dev:false | workflow_dispatch:refs/heads/dev:false) channel="dev" ;;
+  schedule:refs/heads/dev:false | workflow_dispatch:refs/heads/dev:false) channel="dev" ;;
   workflow_dispatch:refs/heads/dev:true) channel="latest" ;;
   push:refs/heads/beta:false | workflow_dispatch:refs/heads/beta:false) channel="beta" ;;
   pull_request:*:false) channel="pr" ;;
@@ -27,11 +27,9 @@ fi
 if [ "$channel" = latest ]; then
   actor=${GITHUB_TRIGGERING_ACTOR:-${GITHUB_ACTOR:-}}
   [ -n "$actor" ] || die "Stable releases can only be started by releasers; the triggering actor is unknown"
-  role=$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$actor/permission" --jq .role_name) || role=""
-  case "$role" in
-    admin | maintain) ;;
-    *) die "Stable releases can only be started by releasers (admin or maintain on the repo); $actor has ${role:-no readable role}" ;;
-  esac
+  if ! (shopt -s nocasematch; [[ "$actor" = thdxr || "$actor" = Hona || "$actor" = rekram1-node ]]); then
+    die "$actor is not allowed to start stable releases"
+  fi
 fi
 
 if [ "$channel" = latest ] && [ -n "${INPUT_VERSION:-}" ]; then

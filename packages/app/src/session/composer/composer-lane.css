@@ -27,7 +27,7 @@
 
   &:focus-visible {
     outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: 2.5px;
+    outline-offset: 2px;
   }
 
   /* Overlays layer over the capsule's own surface. */
@@ -53,9 +53,16 @@
     }
   }
 
+  /* The timeline's tail reserves this height (tailSize in timeline/virtualizer.tsx); change both together. */
   @media (hover: none) {
     min-height: 44px;
   }
+}
+
+/* A leading icon sits closer to the edge and to its label than text does. */
+[data-composer-pill]:has(> [data-composer-pill-icon]:first-child) {
+  gap: 6px;
+  padding-inline-start: 8px;
 }
 
 /* The popover a pill opens, just above it. */

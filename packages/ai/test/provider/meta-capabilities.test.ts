@@ -24,7 +24,7 @@ it.effect("Meta selects Messages and lowers native search alongside ordinary fun
           ToolDefinition.make({ name: "lookup", description: "Lookup", inputSchema: { type: "object" } }),
         ],
         providerOptions: { effort: "low" },
-        generation: { maxTokens: 1024 },
+        maxTokens: 1024,
       }),
     )
     expect(compiled.body).toMatchObject({
@@ -88,8 +88,8 @@ it.effect("Meta Images preserves request overlays, bearer auth, JSON edit inputs
       },
       http: { body: { output_format: "jpeg", future_option: true }, query: { trace: "1" } },
     })
-    expect(response.image.mediaType).toBe("image/jpeg")
-    expect(response.image.source).toEqual({
+    expect(response.images[0].mediaType).toBe("image/jpeg")
+    expect(response.images[0].source).toEqual({
       type: "url",
       url: "https://images.example/result.jpg",
       mediaType: "image/jpeg",

@@ -1,0 +1,885 @@
+use std::cell::Cell;
+use std::rc::Rc;
+
+use opencode_ui::keymap::{Keybinds, Options};
+use opencode_ui::theme::{Catalog, ThemeMode};
+use opentui::testing::TestApp;
+
+use super::slot::{self, Placed, Placement, Resolution};
+use super::*;
+
+pub(crate) struct TestHost {
+    pub(crate) app: TestApp,
+    keymap: DialogKeymap,
+    /// The registry nested slots mount from.
+    registry: std::cell::RefCell<std::rc::Weak<Registry>>,
+    /// How many times the host was told a plugin failed.
+    failed: Cell<usize>,
+}
+
+impl Host for TestHost {
+    fn app(&self) -> &App {
+        &self.app
+    }
+
+    fn theme(&self) -> Theme {
+        Catalog::default().load("opencode", ThemeMode::Dark).unwrap().theme
+    }
+
+    fn keymap(&self) -> &DialogKeymap {
+        &self.keymap
+    }
+
+    fn slot(&self, parent: &View, path: &str, input: &SlotInput) -> Option<SlotMount> {
+        Some(self.registry.borrow().upgrade()?.mount(self, parent, path, input, |_| {}))
+    }
+
+    fn failed(&self, _: &str) {
+        self.failed.set(self.failed.get() + 1);
+    }
+}
+
+/// `host` as the registry takes it.
+fn dynamic(host: &Rc<TestHost>) -> Rc<dyn Host> {
+    host.clone()
+}
+
+pub(crate) fn host() -> Rc<TestHost> {
+    Rc::new(TestHost {
+        app: TestApp::new(40, 6),
+        keymap: DialogKeymap::new(Keybinds::defaults(), Options::default()),
+        registry: Default::default(),
+        failed: Cell::new(0),
+    })
+}
+
+/// A plugin that claims `placements`, each rendering a text of the plugin ID and its index.
+fn claiming(id: &str, placements: Vec<Placement>) -> Definition {
+    let id = id.to_owned();
+    Definition::new(id.clone(), move |cx: &mut Setup<'_>| {
+        for (index, placement) in placements.iter().enumerate() {
+            let label = format!("{id}{index}");
+            cx.slot(placement.clone(), move |host, _| {
+                Box::new(View::new(host.app()).child(&Text::new(host.app(), label.clone())))
+            });
+        }
+    })
+}
+
+fn placed(build: impl FnOnce(&mut Placed)) -> Placed {
+    let mut placed = Placed::default();
+    build(&mut placed);
+    placed
+}
+
+#[test]
+fn replacing_a_path_suppresses_its_contents_regardless_of_registration_order() {
+    let paths = ["side", "side.child", "sidebar"];
+    let claims = [
+        Placement::replace("side"),
+        Placement::replace("side.child"),
+        Placement::append("side"),
+        Placement::before("side"),
+        Placement::append("sidebar"),
+    ];
+    for first in 0..claims.len() {
+        let mut order = (0..claims.len()).cycle().skip(first).take(claims.len()).collect::<Vec<_>>();
+        order.push(0);
+        let input = order.iter().map(|&i| claims[i].clone()).collect::<Vec<_>>();
+        let resolved = slot::resolve(&paths, &input);
+        let boundary = &resolved.placed["side"];
+        let winner = input.len() - 1;
+        assert_eq!(boundary.replace, Some(winner));
+        assert!(boundary.append.is_empty() && !resolved.placed.contains_key("side.child"));
+        assert_eq!(boundary.before.iter().map(|&i| order[i]).collect::<Vec<_>>(), [3]);
+        assert_eq!(resolved.placed["sidebar"].append.iter().map(|&i| order[i]).collect::<Vec<_>>(), [4]);
+        assert_eq!(resolved.suppressed.len(), 3);
+        for (i, by) in resolved.suppressed {
+            assert!(order[i] < 3 && by == Some(winner));
+        }
+    }
+}
+
+#[test]
+fn resolve_degrades_missing_targets_to_the_nearest_ancestor() {
+    let claims = [
+        Placement::prepend("home.footer.version.left"),
+        Placement::replace("home.footer.gone"),
+        Placement::after("nowhere.at.all"),
+    ];
+    let resolution = slot::resolve(&slot::PATHS, &claims);
+    assert_eq!(
+        resolution,
+        Resolution {
+            placed: [("home.footer".to_owned(), placed(|placed| placed.append = vec![0]))].into(),
+            suppressed: vec![(1, None), (2, None)],
+            degraded: vec![(0, "home.footer".to_owned())],
+        }
+    );
+}
+
+#[test]
+fn selectors_match_as_in_ts() {
+    let cases = [
+        ("*", "opencode.stats", true),
+        ("opencode.stats", "opencode.stats", true),
+        ("opencode.sidebar.*", "opencode.sidebar.todo", true),
+        ("opencode.sidebar.*", "opencode.stats", false),
+        ("opencode.side*", "opencode.sidebar.todo", false),
+        ("opencode.stat", "opencode.stats", false),
+    ];
+    for (selector, id, expected) in cases {
+        assert_eq!(matches(selector, id), expected, "{selector} {id}");
+    }
+}
+
+#[test]
+fn mount_orders_claims_around_the_content() {
+    let host = host();
+    let registry = Registry::define(
+        vec![
+            claiming("a", vec![Placement::append("home.footer"), Placement::before("home.footer")]),
+            claiming(
+                "b",
+                vec![
+                    Placement::prepend("home.footer"),
+                    Placement::after("home.footer"),
+                    Placement::append("home.footer"),
+                ],
+            ),
+        ],
+        [],
+    );
+    registry.activate(&dynamic(&host));
+    let parent = View::new(host.app()).column();
+    let mount = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |parent| {
+        parent.add(&Text::new(host.app(), "content"));
+    });
+    host.app().root().add(&parent);
+    let lines: Vec<String> = host.app.render().text().lines().map(|line| line.trim_end().to_owned()).collect();
+    assert_eq!(lines, ["a1", "b0", "content", "a0", "b2", "b1"]);
+    assert!(!mount.is_empty());
+}
+
+#[test]
+fn a_replacement_drops_the_content_and_inside_claims() {
+    let host = host();
+    let registry = Registry::define(
+        vec![
+            claiming("a", vec![Placement::append("home.footer")]),
+            claiming("b", vec![Placement::replace("home.footer")]),
+        ],
+        [],
+    );
+    registry.activate(&dynamic(&host));
+    let parent = View::new(host.app()).column();
+    registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |parent| {
+        parent.add(&Text::new(host.app(), "content"));
+    });
+    host.app().root().add(&parent);
+    assert_eq!(host.app.render().text().lines().next().unwrap().trim_end(), "b0");
+}
+
+#[test]
+fn an_external_plugin_replaces_a_built_in_of_its_id_in_place() {
+    let host = host();
+    let footer = || vec![Placement::append("home.footer")];
+    let registry =
+        Registry::define(vec![claiming("a", footer()), claiming("b", footer()), claiming("c", footer())], []);
+    registry.activate(&dynamic(&host));
+    let rows = |registry: &Registry| {
+        let parent = View::new(host.app()).column();
+        let _mount = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+        host.app().root().clear();
+        host.app().root().add(&parent);
+        let text = host.app.render().text();
+        text.lines().map(str::trim_end).filter(|line| !line.is_empty()).map(str::to_owned).collect::<Vec<_>>()
+    };
+    assert_eq!(rows(&registry), ["a0", "b0", "c0"]);
+    let external = |label: &str| {
+        let label = label.to_owned();
+        Definition::new("b", move |cx: &mut Setup<'_>| {
+            let label = label.clone();
+            cx.slot(Placement::append("home.footer"), move |host, _| {
+                Box::new(View::new(host.app()).child(&Text::new(host.app(), label.clone())))
+            });
+        })
+        .external("b.so", Rc::new(|| None))
+    };
+    assert!(!registry.id_taken("b", "b.so"));
+    assert_eq!(registry.load(&dynamic(&host), external("ext")), None);
+    assert_eq!(rows(&registry), ["a0", "ext", "c0"]);
+    let entries = registry.entries();
+    assert_eq!((entries[1].source, entries[1].target.as_deref()), (Source::External, Some("b.so")));
+    assert!(registry.id_taken("b", "other.so"));
+    // A rebuild keeps the place too.
+    assert_eq!(registry.load(&dynamic(&host), external("ext2")), None);
+    assert_eq!(rows(&registry), ["a0", "ext2", "c0"]);
+    registry.unload(&dynamic(&host), "b.so");
+    assert_eq!(rows(&registry), ["a0", "b0", "c0"]);
+    assert_eq!((registry.entries()[1].source, registry.entries()[1].status.clone()), (Source::Builtin, Status::Active));
+
+    // A built-in disabled in config comes back inactive, without the failure of the external plugin that replaced it.
+    let registry = Registry::define(vec![claiming("b", footer())], ["-b"]);
+    let failing = Definition::fallible("b", |_| Err("external config".to_owned())).external("b.so", Rc::new(|| None));
+    assert_eq!(registry.load(&dynamic(&host), failing), None);
+    registry.set_active(&dynamic(&host), "b", true);
+    assert_eq!(registry.entries()[0].status, Status::Failed("external config".to_owned()));
+    registry.unload(&dynamic(&host), "b.so");
+    assert_eq!(
+        (registry.entries()[0].source, registry.entries()[0].status.clone()),
+        (Source::Builtin, Status::Inactive)
+    );
+}
+
+#[test]
+fn a_plugin_keeps_its_place_across_a_reload_and_a_toggle() {
+    let host = host();
+    let footer = || vec![Placement::append("home.footer")];
+    let registry = Registry::define(vec![claiming("a", footer())], []);
+    registry.activate(&dynamic(&host));
+    let external = |id: &str, target: &str| claiming(id, footer()).external(target, Rc::new(|| None));
+    registry.load(&dynamic(&host), external("b", "b.so"));
+    registry.load(&dynamic(&host), external("c", "c.so"));
+    let rows = || {
+        let parent = View::new(host.app()).column();
+        let _mount = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+        host.app().root().clear();
+        host.app().root().add(&parent);
+        let text = host.app.render().text();
+        text.lines().map(str::trim_end).filter(|line| !line.is_empty()).map(str::to_owned).collect::<Vec<_>>()
+    };
+    assert_eq!(rows(), ["a0", "b0", "c0"]);
+    registry.load(&dynamic(&host), external("b", "b.so"));
+    assert_eq!(rows(), ["a0", "b0", "c0"], "a rebuild moved its claims");
+    for id in ["b", "a"] {
+        registry.set_active(&dynamic(&host), id, false);
+        registry.set_active(&dynamic(&host), id, true);
+        assert_eq!(rows(), ["a0", "b0", "c0"], "toggling {id} moved its claims");
+    }
+}
+
+#[test]
+fn code_blocks_follow_activation_order() {
+    let host = host();
+    let languages = Rc::new(std::cell::RefCell::new(Vec::new()));
+    let renderer = |id: &'static str| {
+        let languages = languages.clone();
+        Definition::new(id, move |cx: &mut Setup<'_>| {
+            let languages = languages.clone();
+            cx.code_block("math", move |block, _| {
+                languages.borrow_mut().push((id, block.code.trim().to_owned()));
+                None
+            });
+        })
+    };
+    let registry = Registry::define(vec![renderer("first"), renderer("second")], []);
+    registry.activate(&dynamic(&host));
+    // The plugin later in order wins; toggling `first` keeps its place, as TS's registrations keep theirs.
+    registry.set_active(&dynamic(&host), "first", false);
+    registry.set_active(&dynamic(&host), "first", true);
+    let markdown = crate::loader::tests::fence_view(&*host, &registry, "```math\nx^2\n```\n");
+    host.app().root().add(&markdown);
+    host.app.render();
+    assert_eq!(languages.borrow().first(), Some(&("second", "x^2".to_owned())));
+}
+
+/// A plugin whose one claim at `placement` renders what `render` returns.
+fn rendering(id: &str, placement: Placement, render: impl Fn() -> abi::Render + 'static) -> Definition {
+    let render: node::SlotRender = Rc::new(move |_, _, _| render());
+    Definition::new(id, move |cx: &mut Setup<'_>| {
+        let mailbox = crate::mailbox::Mailbox::new(cx.id(), Arc::new(crate::activation::Wake::new(None)));
+        let activation = crate::activation::Activation::new(cx.host(), mailbox);
+        cx.claim(placement.clone(), render.clone(), None, false, &activation);
+    })
+}
+
+/// The rows the app draws, without trailing blanks.
+fn rows(host: &TestHost) -> Vec<String> {
+    host.app.render().text().lines().map(|line| line.trim_end().to_owned()).collect()
+}
+
+#[test]
+fn a_claim_root_shrinks_in_a_row_slot() {
+    use abi::{Layout, Node, Render, Span};
+    let host = host();
+    let shrink = rendering("shrink", Placement::append(slot::PROMPT_FOOTER), || {
+        Render::Show(
+            Node::text([Span::new("abcdefghijklmnop")])
+                .wrap(abi::Wrap::None)
+                .truncate()
+                .layout(Layout::default().shrink(true).min_width(0)),
+        )
+    });
+    let registry = Registry::define(vec![shrink], []);
+    registry.activate(&dynamic(&host));
+    let parent = View::new(host.app()).row().width(20);
+    let _mount = registry.mount(&*host, &parent, slot::PROMPT_FOOTER, &SlotInput::default(), |parent| {
+        parent.add(&Text::new(host.app(), "0123456789").shrink(0.0));
+    });
+    host.app().root().add(&parent);
+    let row = &rows(&host)[0];
+    assert!(row.starts_with("0123456789abc") && row.chars().count() <= 20, "{row:?}");
+}
+
+#[test]
+fn a_replaced_hover_text_drops_its_handlers() {
+    use abi::{Click, Node, Render, Span};
+    let host = host();
+    let count = Rc::new(Cell::new(0));
+    let counter = count.clone();
+    let text = rendering("hover", Placement::append(slot::SIDEBAR_CONTENT), move || {
+        counter.set(counter.get() + 1);
+        Render::Show(
+            Node::text([Span::new(format!("hover {}", counter.get()))])
+                .hover_fg("text.muted")
+                .on_click(Click::command("test.run")),
+        )
+    });
+    let registry = Registry::define(vec![text], []);
+    registry.activate(&dynamic(&host));
+    let parent = View::new(host.app()).column();
+    let mount = registry.mount(&*host, &parent, slot::SIDEBAR_CONTENT, &SlotInput::default(), |_| {});
+    host.app().root().add(&parent);
+    host.app.render();
+    let weak = Rc::weak_count(&host);
+    for _ in 0..10 {
+        mount.sync(&*host, Some(&abi::Changed::everything()));
+    }
+    assert_eq!(rows(&host)[0], "hover 11");
+    assert_eq!(Rc::weak_count(&host), weak);
+}
+
+#[test]
+fn a_claim_on_an_unmounted_child_slot_degrades_to_its_parent() {
+    use abi::{Node, Render, Span};
+    let host = host();
+    let hidden = Rc::new(Cell::new(false));
+    let hide = hidden.clone();
+    let footer = rendering("footer", Placement::append(slot::HOME_FOOTER), move || match hide.get() {
+        true => Render::Hide,
+        false => {
+            Render::Show(Node::row(vec![Node::text([Span::new("footer ")]), Node::slot(slot::HOME_FOOTER_STATUS)]))
+        }
+    });
+    let status = rendering("status", Placement::append(slot::HOME_FOOTER_STATUS), || {
+        Render::Show(Node::text([Span::new("status")]))
+    });
+    let registry = Rc::new(Registry::define(vec![footer, status], []));
+    *host.registry.borrow_mut() = Rc::downgrade(&registry);
+    registry.activate(&dynamic(&host));
+    let mount = |registry: &Registry| {
+        let parent = View::new(host.app()).column();
+        host.app().root().clear();
+        host.app().root().add(&parent);
+        registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |parent| {
+            parent.add(&Text::new(host.app(), "content"));
+        })
+    };
+    let mounted = mount(&registry);
+    assert_eq!(rows(&host)[..2], ["content", "footer status"]);
+
+    hidden.set(true);
+    mounted.sync(&*host, Some(&abi::Changed::everything()));
+    assert_eq!(rows(&host)[..2], ["content", "status"]);
+    hidden.set(false);
+    mounted.sync(&*host, Some(&abi::Changed::everything()));
+    assert_eq!(rows(&host)[..3], ["content", "footer status", ""]);
+    drop(mounted);
+
+    registry.set_active(&dynamic(&host), "footer", false);
+    let _mounted = mount(&registry);
+    assert_eq!(rows(&host)[..2], ["content", "status"]);
+}
+
+#[test]
+fn a_claim_on_a_child_slot_moves_when_a_wake_or_an_invalidation_redraws_its_parent() {
+    use abi::{Node, Render, Span};
+    let host = host();
+    let hidden = Rc::new(Cell::new(false));
+    let hide = hidden.clone();
+    let render: node::SlotRender = Rc::new(move |_, _, _| match hide.get() {
+        true => Render::Hide,
+        false => {
+            Render::Show(Node::row(vec![Node::text([Span::new("footer ")]), Node::slot(slot::HOME_FOOTER_STATUS)]))
+        }
+    });
+    let activation = Rc::new(std::cell::RefCell::new(None));
+    let footer = {
+        let activation = activation.clone();
+        Definition::new("footer", move |cx: &mut Setup<'_>| {
+            let wake = Arc::new(crate::activation::Wake::new(None));
+            let created = crate::activation::Activation::new(cx.host(), crate::mailbox::Mailbox::new("footer", wake));
+            cx.claim(Placement::append(slot::HOME_FOOTER), render.clone(), None, false, &created);
+            *activation.borrow_mut() = Some(created);
+        })
+    };
+    let status = rendering("status", Placement::append(slot::HOME_FOOTER_STATUS), || {
+        Render::Show(Node::text([Span::new("status")]))
+    });
+    let registry = Rc::new(Registry::define(vec![footer, status], []));
+    *host.registry.borrow_mut() = Rc::downgrade(&registry);
+    registry.activate(&dynamic(&host));
+    let parent = View::new(host.app()).column();
+    host.app().root().add(&parent);
+    let _mounted = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |parent| {
+        parent.add(&Text::new(host.app(), "content"));
+    });
+    let activation = activation.borrow().clone().unwrap();
+    let shown = |host: &TestHost| rows(host).into_iter().filter(|row| !row.is_empty()).collect::<Vec<_>>();
+    assert_eq!(shown(&host), ["content", "footer status"]);
+
+    hidden.set(true);
+    activation.redraw();
+    assert_eq!(shown(&host), ["content", "status"]);
+    hidden.set(false);
+    activation.redraw();
+    assert_eq!(shown(&host), ["content", "footer status"]);
+
+    hidden.set(true);
+    activation.invalidate();
+    assert_eq!(shown(&host), ["content", "status"]);
+    hidden.set(false);
+    activation.invalidate();
+    assert_eq!(shown(&host), ["content", "footer status"]);
+}
+
+#[test]
+fn a_replaced_drag_text_drops_its_handlers() {
+    use abi::Span;
+    let host = host();
+    let parent = View::new(host.app()).column();
+    host.app().root().add(&parent);
+    let held = Rc::new(());
+    let start = Rc::strong_count(&held);
+    for index in 0..10 {
+        let lines = vec![vec![Span::new(format!("diagram {index} {}", "-".repeat(60)))]];
+        let widget = node::lines_widget(host.app(), &host.theme(), &lines, None, node::Scroll::Drag);
+        parent.clear();
+        parent.add(&widget);
+        host.app.render();
+        // The text under the drag lives as long as this handler.
+        let held = held.clone();
+        host.app().widget_at(1, 0).unwrap().on_mouse(move |_, _| {
+            let _ = &held;
+        });
+        host.app.drag((10, 0), (2, 0));
+        assert!(rows(&host)[0].starts_with(&format!("{index} -")), "{:?}", rows(&host)[0]);
+    }
+    parent.clear();
+    host.app.render();
+    assert_eq!(Rc::strong_count(&held), start);
+}
+
+#[test]
+fn a_failed_external_plugin_keeps_the_built_in_it_would_replace() {
+    let host = host();
+    let registry = Registry::define(vec![claiming("b", vec![Placement::append("home.footer")])], []);
+    registry.activate(&dynamic(&host));
+    let failing = Definition::fallible("b", |_| Err("ext setup failed".to_owned())).external("b.so", Rc::new(|| None));
+    assert_eq!(
+        registry.load(&dynamic(&host), failing),
+        Some(SetupFailed { error: "ext setup failed".into(), kept: false })
+    );
+    let entries = registry.entries();
+    assert_eq!((entries[0].source, entries[0].status.clone()), (Source::Builtin, Status::Active));
+    assert_eq!(
+        (entries[1].target.as_deref(), entries[1].status.clone()),
+        (Some("b.so"), Status::Failed("ext setup failed (previous version still active)".to_owned()))
+    );
+    let working = claiming("b", vec![Placement::append("home.footer")]).external("b.so", Rc::new(|| None));
+    assert_eq!(registry.load(&dynamic(&host), working), None);
+    let entries = registry.entries();
+    assert_eq!(entries.len(), 1);
+    assert_eq!((entries[0].source, entries[0].status.clone()), (Source::External, Status::Active));
+}
+
+#[test]
+fn a_claim_root_takes_each_layout_as_mounted_fresh() {
+    use abi::{Edges, Layout, Node, Render, Span, Width};
+    let boxed = |layout: Layout| Node::column(vec![Node::text([Span::new("x")])]).bg("#ff0000").layout(layout);
+    let tall = |layout: Layout| Node::column(vec![Node::text([Span::new("x")]); 5]).bg("#ff0000").layout(layout);
+    let renders = [
+        Render::Show(boxed(Layout::default().height(Width::Cells(4)).margin(Edges::new(0, 0, 0, 7)))),
+        Render::Show(boxed(Layout::default())),
+        Render::Hide,
+        Render::Show(boxed(Layout::default().height(Width::Percent(50.0)).margin(Edges::new(1, 0, 0, 0)))),
+        Render::Show(boxed(Layout::default().min_height(Width::Cells(3)).margin(Edges::new(0, 2, 0, 0)))),
+        Render::Show(boxed(Layout::default().max_height(Width::Cells(1)))),
+        Render::Show(tall(Layout::default().max_height(Width::Cells(2)))),
+        Render::Show(tall(Layout::default().max_height(Width::Percent(50.0)))),
+        Render::Show(tall(Layout::default().max_height(Width::Cells(2)).shrink(false))),
+    ];
+    // The cells of a 6-row column slot that shows `shown`, which the claim's render reads.
+    let mounted = |shown: &Rc<std::cell::RefCell<Render>>| {
+        let host = host();
+        let read = shown.clone();
+        let claim = rendering("sized", Placement::prepend(slot::SIDEBAR_CONTENT), move || read.borrow().clone());
+        let registry = Registry::define(vec![claim], []);
+        registry.activate(&dynamic(&host));
+        let parent = View::new(host.app()).column().height(6).width(20);
+        // The slot's own content comes after the claim, where the claim's height moves it.
+        let mount = registry.mount(&*host, &parent, slot::SIDEBAR_CONTENT, &SlotInput::default(), |parent| {
+            parent.add(&Text::new(host.app(), "after").shrink(0.0));
+        });
+        host.app().root().add(&parent);
+        (host, mount)
+    };
+    let live = Rc::new(std::cell::RefCell::new(renders[0].clone()));
+    let (host, mount) = mounted(&live);
+    for render in &renders {
+        *live.borrow_mut() = render.clone();
+        mount.sync(&*host, Some(&abi::Changed::everything()));
+        let (fresh, _mount) = mounted(&Rc::new(std::cell::RefCell::new(render.clone())));
+        assert!(host.app.render().cells == fresh.app.render().cells, "{render:?}");
+    }
+    // The painted rows: 4 from the top; 50% of the 6 rows after a one-row margin; at least 3; at most 1; five rows of
+    // content cut to at most 2, to at most 50%, and to at most 2 although the node does not shrink.
+    for (index, painted) in [
+        (0, vec![0, 1, 2, 3]),
+        (3, vec![1, 2, 3]),
+        (4, vec![0, 1, 2]),
+        (5, vec![0]),
+        (6, vec![0, 1]),
+        (7, vec![0, 1, 2]),
+        (8, vec![0, 1]),
+    ] {
+        *live.borrow_mut() = renders[index].clone();
+        mount.sync(&*host, Some(&abi::Changed::everything()));
+        let capture = host.app.render();
+        let red = |y: u32| (0..20).any(|x| capture.cell(x, y).is_some_and(|cell| cell.bg == Color::rgb(255, 0, 0)));
+        assert_eq!((0..6).filter(|y| red(*y)).collect::<Vec<_>>(), painted, "{index}");
+    }
+}
+
+thread_local! {
+    /// Whether `test.fails`' view panics.
+    static PANICS: Cell<bool> = const { Cell::new(false) };
+}
+
+thread_local! {
+    /// The views of `test.outer`, and what the claim in the slot it shows heard of its mounts.
+    static OUTER_VIEWS: Cell<usize> = const { Cell::new(0) };
+    static MOUNTS: std::cell::RefCell<Vec<bool>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+#[test]
+fn a_rebuilt_nested_slot_unmounts_before_it_mounts() {
+    use abi::v2;
+    fn outer(setup: &mut abi::Setup) -> Result<(), String> {
+        setup.surface(v2::Surface::new("outer", v2::Place::Slot(abi::Placement::append(slot::HOME_FOOTER)), |_| {
+            let views = OUTER_VIEWS.get();
+            OUTER_VIEWS.set(views + 1);
+            let text = v2::Node::text(vec![abi::Span::new("outer")]);
+            let nested = v2::Node::Slot { path: "home.footer.status".into() };
+            // Each view puts the slot on the other side of the text, so it is built again.
+            v2::Node::row(if views.is_multiple_of(2) { vec![text, nested] } else { vec![nested, text] })
+        }));
+        Ok(())
+    }
+    fn inner(setup: &mut abi::Setup) -> Result<(), String> {
+        setup.on_mount(abi::Placement::append("home.footer.status"), |_, _, mounted| {
+            MOUNTS.with(|mounts| mounts.borrow_mut().push(mounted));
+        });
+        Ok(())
+    }
+    OUTER_VIEWS.set(0);
+    MOUNTS.with(|mounts| mounts.borrow_mut().clear());
+    let host = host();
+    let registry = Rc::new(Registry::define(
+        vec![
+            abi::Plugin { id: "test.outer", setup: outer }.into(),
+            abi::Plugin { id: "test.inner", setup: inner }.into(),
+        ],
+        [],
+    ));
+    *host.registry.borrow_mut() = Rc::downgrade(&registry);
+    registry.activate(&dynamic(&host));
+    let parent = View::new(host.app()).column().width(30);
+    let mount = registry.mount(&*host, &parent, slot::HOME_FOOTER, &SlotInput::default(), |_| {});
+    host.app().root().add(&parent);
+    assert_eq!(MOUNTS.with(|mounts| mounts.borrow().clone()), [true]);
+    mount.sync(&*host, Some(&abi::Changed::default()));
+    assert_eq!(OUTER_VIEWS.get(), 2);
+    assert_eq!(MOUNTS.with(|mounts| mounts.borrow().clone()), [true, false, true]);
+}
+
+// The wake and the mailbox as a model with fault operators. A real in-process activation runs; its wake is handled in
+// steps (`Activation::woken`), and the model puts a send, a wake of the plugin's waker, a thread's report or a failing
+// update into every gap between those steps, after zero, one or two of them before the frame. After the host settles
+// it checks: every message accepted arrived once, in order; the last wake of the waker was followed by a run of the
+// plugin's wake handlers; never more than one `Woken` was in flight; and a failure was reported once, with the first
+// cause.
+
+const MODEL: &str = "model.mail";
+/// The message whose `update` panics.
+const FAILING: u32 = u32::MAX;
+
+#[derive(Default)]
+struct MailSeen {
+    arrived: Vec<u32>,
+    /// The clock at each run of the plugin's wake handlers.
+    woken: Vec<u64>,
+    clock: u64,
+    tools: Option<(abi::Sender<u32>, abi::Waker)>,
+}
+
+thread_local! {
+    static MAIL_SEEN: std::cell::RefCell<MailSeen> = std::cell::RefCell::default();
+}
+
+fn seen<T>(f: impl FnOnce(&mut MailSeen) -> T) -> T {
+    MAIL_SEEN.with(|seen| f(&mut seen.borrow_mut()))
+}
+
+fn mail_model(setup: &mut abi::Setup) -> Result<(), String> {
+    let sender = setup.messages(|_, number: u32| {
+        assert!(number != FAILING, "update failed");
+        seen(|seen| seen.arrived.push(number));
+    })?;
+    setup.on_wake(|_| {
+        seen(|seen| {
+            seen.clock += 1;
+            let clock = seen.clock;
+            seen.woken.push(clock);
+        })
+    });
+    let waker = setup.waker().ok_or("no waker")?;
+    seen(|seen| seen.tools = Some((sender, waker)));
+    Ok(())
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum MailOp {
+    Send,
+    Hint,
+    Report,
+    FailingUpdate,
+}
+
+/// What the model did and expects.
+#[derive(Default)]
+struct MailRun {
+    sent: Vec<u32>,
+    hints: Vec<u64>,
+    next: u32,
+    in_flight: Vec<usize>,
+    /// What was applied: an injection whose step never came (no wake ran) was not.
+    applied: Vec<MailOp>,
+    /// The last number accepted before a failing update was: none accepted after it may arrive.
+    failed_after: Option<u32>,
+}
+
+thread_local! {
+    /// The mailbox of the model's running activation.
+    static MODEL_BOX: std::cell::RefCell<Option<std::sync::Arc<crate::mailbox::Mailbox>>> = const { std::cell::RefCell::new(None) };
+}
+
+/// The `Woken`s posted and not handled yet. The model holds the activation's mailbox: a failure retires it.
+fn in_flight() -> usize {
+    let mailbox = MODEL_BOX.with(|held| held.borrow().clone()).unwrap();
+    let wake = mailbox.wake();
+    wake.posted.load(std::sync::atomic::Ordering::SeqCst) - wake.handled.load(std::sync::atomic::Ordering::SeqCst)
+}
+
+fn mail_op(run: &mut MailRun, op: MailOp) {
+    let (sender, waker) = seen(|seen| seen.tools.clone()).unwrap();
+    run.applied.push(op);
+    match op {
+        MailOp::Send => {
+            run.next += 1;
+            if sender.send(run.next).is_ok() {
+                run.sent.push(run.next);
+            }
+        }
+        MailOp::Hint => {
+            let clock = seen(|seen| {
+                seen.clock += 1;
+                seen.clock
+            });
+            run.hints.push(clock);
+            waker.wake();
+        }
+        MailOp::Report => {
+            MODEL_BOX.with(|held| held.borrow().clone()).unwrap().panicked("a thread panicked".to_owned())
+        }
+        MailOp::FailingUpdate => {
+            if sender.send(FAILING).is_ok() {
+                run.failed_after.get_or_insert(run.next);
+            }
+        }
+    }
+    run.in_flight.push(in_flight());
+}
+
+/// Runs `before` on an idle host, then a frame whose wake meets each of `inside` at its step; then lets the host
+/// settle. Returns what went wrong, if anything, with the failure count and status.
+fn mail_scenario(before: &[MailOp], inside: &[(usize, MailOp)]) -> Result<(usize, Status), String> {
+    let host = host();
+    seen(|seen| *seen = MailSeen::default());
+    let registry = Registry::define(vec![abi::Plugin { id: MODEL, setup: mail_model }.into()], []);
+    // The frame budget is not what this model checks: on a clock that does not move, a wake hands over everything.
+    let still = std::time::Instant::now();
+    registry.monitor().set_clock(move || still);
+    registry.activate(&dynamic(&host));
+    MODEL_BOX.with(|held| *held.borrow_mut() = crate::mailbox::current(MODEL));
+    let run = Rc::new(std::cell::RefCell::new(MailRun::default()));
+    for op in before {
+        mail_op(&mut run.borrow_mut(), *op);
+    }
+    let mut pending: Vec<(usize, MailOp)> = inside.to_vec();
+    let hooked = run.clone();
+    crate::activation::BETWEEN.with(|hook| {
+        *hook.borrow_mut() = Some(Box::new(move |step| {
+            let now: Vec<MailOp> = pending.iter().filter(|(at, _)| *at == step).map(|(_, op)| *op).collect();
+            pending.retain(|(at, _)| *at != step);
+            for op in now {
+                mail_op(&mut hooked.borrow_mut(), op);
+            }
+        }));
+    });
+    host.app.advance(std::time::Duration::from_millis(1));
+    // The updates run as a paint starts; those past the frame budget wait for the next frame (Pl).
+    for _ in 0..20 {
+        if in_flight() == 0 && !crate::schedule::busy(&host.app) {
+            break;
+        }
+        host.app.advance(std::time::Duration::from_millis(1));
+        host.app.render();
+    }
+    crate::activation::BETWEEN.with(|hook| hook.borrow_mut().take());
+    let run = run.borrow();
+    let status = registry.entries().into_iter().find(|entry| entry.id == MODEL).unwrap().status;
+    let (arrived, woken) = seen(|seen| (seen.arrived.clone(), seen.woken.clone()));
+    if let Some(flight) = run.in_flight.iter().chain([&in_flight()]).find(|flight| **flight > 1) {
+        return Err(format!("{flight} wakes in flight"));
+    }
+    if in_flight() != 0 {
+        return Err("a wake was still in flight after the host settled".to_owned());
+    }
+    let failing = run.applied.iter().any(|op| matches!(op, MailOp::Report | MailOp::FailingUpdate));
+    if run.hints.is_empty() && !woken.is_empty() {
+        return Err(format!("the wake handlers ran at {woken:?} with no wake of the waker"));
+    }
+    if !failing {
+        if arrived != run.sent {
+            return Err(format!("arrived {arrived:?}, sent {:?}", run.sent));
+        }
+        if let Some(hint) = run.hints.last()
+            && woken.last().is_none_or(|last| last < hint)
+        {
+            return Err(format!("the wake at {hint} was lost: the handlers ran at {woken:?}"));
+        }
+    } else if !matches!(status, Status::Failed(_)) {
+        return Err(format!("a fault left the plugin {status:?}"));
+    }
+    if let Some(last) = run.failed_after
+        && arrived.iter().any(|number| *number > last)
+    {
+        return Err(format!("arrived {arrived:?}, after the update that failed behind {last}"));
+    }
+    if arrived.iter().any(|number| !run.sent.contains(number)) {
+        return Err(format!("arrived {arrived:?}, which was never accepted: {:?}", run.sent));
+    }
+    Ok((host.failed.get(), status))
+}
+
+#[test]
+fn the_wake_and_the_mailbox_lose_nothing_in_any_gap() {
+    use MailOp::*;
+    let befores: [&[MailOp]; 4] = [&[], &[Send], &[Hint], &[Send, Hint]];
+    let mut injections: Vec<Vec<(usize, MailOp)>> = vec![Vec::new()];
+    for first in 0..4 {
+        for a in [Send, Hint] {
+            injections.push(vec![(first, a)]);
+            for second in first..4 {
+                for b in [Send, Hint] {
+                    injections.push(vec![(first, a), (second, b)]);
+                }
+            }
+        }
+    }
+    for before in befores {
+        for inside in &injections {
+            if let Err(error) = mail_scenario(before, inside) {
+                panic!("before {before:?}, inside {inside:?}: {error}");
+            }
+        }
+    }
+    // A fault in any gap fails the plugin once, and nothing arrives that was not accepted.
+    for before in befores {
+        for at in 0..4 {
+            for fault in [Report, FailingUpdate] {
+                let (failed, _) = mail_scenario(before, &[(at, fault), (at, Send)])
+                    .unwrap_or_else(|error| panic!("before {before:?}, {fault:?} at {at}: {error}"));
+                // With nothing before the frame no wake runs, so nothing is injected.
+                let expected = usize::from(!before.is_empty());
+                assert_eq!(failed, expected, "before {before:?}, {fault:?} at {at}: reported {failed} times");
+            }
+        }
+    }
+    // A failing update and a thread's report in one wake: the update is handled first, its failure is the one
+    // reported, once.
+    let (failed, status) = mail_scenario(&[FailingUpdate, Report], &[]).unwrap();
+    assert_eq!(failed, 1);
+    assert!(matches!(&status, Status::Failed(error) if error.contains("update failed")), "{status:?}");
+}
+
+#[test]
+fn an_activation_owns_the_dialogs_of_the_chain_it_goes_on_from() {
+    let generation = Rc::new(Cell::new(0));
+    let seen = generation.clone();
+    let chained = Definition::new("p", move |setup| {
+        seen.set(setup.generation());
+        setup.continues(Some(setup.generation() - 2));
+    });
+    let registry = Registry::define(
+        vec![Definition::new("q", |_| {}), Definition::new("r", |_| {}), Definition::new("s", |_| {}), chained],
+        [],
+    );
+    let host = host();
+    registry.activate(&dynamic(&host));
+    let now = generation.get();
+    assert!(now >= 3, "{now}");
+    let owned: Vec<bool> = (now - 3..=now + 1).map(|at| registry.owns("p", at)).collect();
+    assert_eq!(owned, [false, true, true, true, false]);
+    assert!(!registry.owns("q", now), "another plugin's");
+}
+
+#[test]
+fn a_slash_name_the_prompt_cannot_complete_is_left_out() {
+    let names = |command: abi::Command| {
+        let slash = keyed_command("p", &command, Condition::Always, |_, _| abi::interact::Handled::Consume).slash?;
+        assert_eq!(slash.plugin.as_deref(), Some("p"));
+        Some(std::iter::once(slash.name).chain(slash.aliases).collect::<Vec<_>>())
+    };
+    let aliased = |slash: &str, aliases: &[&str]| {
+        abi::Command::new("p.run").slash(slash).aliases(aliases.iter().map(|alias| (*alias).to_owned()))
+    };
+    let bad = ["", " a", "a b", "a\nb", "/sm", "a/b", "a\u{1b}"];
+    assert_eq!(names(aliased("ok", &bad)), Some(vec!["ok".to_owned()]));
+    assert_eq!(names(aliased("", &["sm", "x y"])), Some(vec!["sm".to_owned()]));
+    assert_eq!(names(aliased("", &[])), None);
+    assert_eq!(names(abi::Command::new("p.run").aliases(["sm".to_owned()])), None);
+}
+
+fn counted(host: &Rc<TestHost>, ran: &Rc<Cell<usize>>, count: usize) {
+    let weak = Rc::downgrade(&dynamic(host));
+    for _ in 0..count {
+        let ran = ran.clone();
+        defer(&weak, move |_| ran.set(ran.get() + 1));
+    }
+}
+
+#[test]
+fn lone_effects_a_second_apart_force_no_paint() {
+    let host = host();
+    host.app.render();
+    let ran = Rc::new(Cell::new(0));
+    for _ in 0..(FRAME_EFFECTS * 2) {
+        counted(&host, &ran, 1);
+        host.app.advance(std::time::Duration::from_secs(1));
+    }
+    assert_eq!(ran.get(), FRAME_EFFECTS * 2);
+    assert!(!host.app.needs_frame(), "lone effects asked for a paint");
+}

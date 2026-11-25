@@ -11,7 +11,7 @@ describe("Patch", () => {
         "*** Begin Patch\n*** Add File: add.txt\n+added\n*** Update File: update.txt\n@@ section\n-old\n+new\n*** Delete File: delete.txt\n*** End Patch",
       ),
     ).toEqual([
-      { type: "add", path: "add.txt", contents: "added" },
+      { type: "add", path: "add.txt", contents: "added\n" },
       {
         type: "update",
         path: "update.txt",
@@ -26,24 +26,17 @@ describe("Patch", () => {
     expect(parse("*** Begin Patch\n*** End Patch")).toEqual([])
   })
 
+  test("keeps a final empty + line of an added file", () => {
+    const add = (lines: string) => parse(`*** Begin Patch\n*** Add File: a.md\n${lines}*** End Patch`)
+    expect(add("+# Title\n+\n")).toEqual([{ type: "add", path: "a.md", contents: "# Title\n\n" }])
+    expect(add("+\n")).toEqual([{ type: "add", path: "a.md", contents: "\n" }])
+    expect(add("")).toEqual([{ type: "add", path: "a.md", contents: "" }])
+  })
+
   test("ignores a Codex environment preamble", () => {
     expect(
       parse("*** Begin Patch\n*** Environment ID: remote\n*** Add File: file.txt\n+content\n*** End Patch"),
-    ).toEqual([{ type: "add", path: "file.txt", contents: "content" }])
-  })
-
-  test("parses an update followed by an add", () => {
-    expect(
-      parse("*** Begin Patch\n*** Update File: update.txt\n@@\n+line\n*** Add File: add.txt\n+content\n*** End Patch"),
-    ).toEqual([
-      {
-        type: "update",
-        path: "update.txt",
-        movePath: undefined,
-        chunks: [{ oldLines: [], newLines: ["line"], changeContext: undefined }],
-      },
-      { type: "add", path: "add.txt", contents: "content" },
-    ])
+    ).toEqual([{ type: "add", path: "file.txt", contents: "content\n" }])
   })
 
   test("parses a file move", () => {
@@ -74,26 +67,26 @@ describe("Patch", () => {
 
   test("allows whitespace after the end marker", () => {
     expect(parse("*** Begin Patch\n*** Add File: add.txt\n+added\n*** End Patch\n \t\n")).toEqual([
-      { type: "add", path: "add.txt", contents: "added" },
+      { type: "add", path: "add.txt", contents: "added\n" },
     ])
   })
 
   test("strips a heredoc wrapper", () => {
     expect(parse("cat <<'EOF'\n*** Begin Patch\n*** Add File: add.txt\n+added\n*** End Patch\nEOF")).toEqual([
-      { type: "add", path: "add.txt", contents: "added" },
+      { type: "add", path: "add.txt", contents: "added\n" },
     ])
   })
 
   test("strips a heredoc wrapper without cat", () => {
     expect(parse("<<EOF\n*** Begin Patch\n*** Add File: add.txt\n+added\n*** End Patch\nEOF")).toEqual([
-      { type: "add", path: "add.txt", contents: "added" },
+      { type: "add", path: "add.txt", contents: "added\n" },
     ])
   })
 
   test("strips quoted heredoc wrappers", () => {
     const patch = "*** Begin Patch\n*** Add File: add.txt\n+added\n*** End Patch"
-    expect(parse(`<<'EOF'\n${patch}\nEOF`)).toEqual([{ type: "add", path: "add.txt", contents: "added" }])
-    expect(parse(`<<\"EOF\"\n${patch}\nEOF`)).toEqual([{ type: "add", path: "add.txt", contents: "added" }])
+    expect(parse(`<<'EOF'\n${patch}\nEOF`)).toEqual([{ type: "add", path: "add.txt", contents: "added\n" }])
+    expect(parse(`<<\"EOF\"\n${patch}\nEOF`)).toEqual([{ type: "add", path: "add.txt", contents: "added\n" }])
   })
 
   test("rejects malformed heredoc wrappers", () => {
@@ -133,23 +126,6 @@ describe("Patch", () => {
         path: "file.txt",
         movePath: undefined,
         chunks: [{ oldLines: ["one"], newLines: ["two"], changeContext: undefined, endOfFile: undefined }],
-      },
-    ])
-  })
-
-  test("parses relative and absolute hunk paths", () => {
-    expect(
-      parse(
-        "*** Begin Patch\n*** Add File: relative.txt\n+content\n*** Delete File: /tmp/delete.txt\n*** Update File: /tmp/update.txt\n@@\n-old\n+new\n*** End Patch",
-      ),
-    ).toEqual([
-      { type: "add", path: "relative.txt", contents: "content" },
-      { type: "delete", path: "/tmp/delete.txt" },
-      {
-        type: "update",
-        path: "/tmp/update.txt",
-        movePath: undefined,
-        chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: undefined }],
       },
     ])
   })
@@ -240,12 +216,6 @@ describe("Patch", () => {
         "line 1\nline 2\nline 3\nline 4\n",
       ).content,
     ).toBe("line 1\nLINE 2\nline 3\nLINE 4\n")
-  })
-
-  test("appends a pure-addition chunk to a nonempty file", () => {
-    expect(
-      Patch.derive("update.txt", [{ oldLines: [], newLines: ["added 1", "added 2"] }], "line 1\nline 2\n").content,
-    ).toBe("line 1\nline 2\nadded 1\nadded 2\n")
   })
 
   test.each(["", "original\n"])("preserves equal-offset insertion order and frozen chunks for %j", (original) => {

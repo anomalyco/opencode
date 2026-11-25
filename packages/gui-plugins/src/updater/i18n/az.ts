@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "Növbəti",
   "releaseNotes.action.hideFuture": "Gələcəkdə göstərmə",
   "releaseNotes.media.alt": "Buraxılış önbaxışı",
+  "action.reload": "Yeniləmək üçün yenidən yüklə",
+  "action.reloading": "Yenidən yüklənir…",
+  "web.ready.title": "Yeniləmə hazırdır",
+  "web.ready.message":
+    "OpenCode-un yeni versiyası hazırdır. Bütün açıq pəncərələrdə istifadə etmək üçün yenidən yükləyin.",
+  "web.reload": "Yenidən yüklə",
+  "web.reset.title": "Serverdən yenidən yüklə",
+  "web.reset.description": "Tətbiqin saxlanmış nüsxəsini təmizlə və serverin cari versiyasını yüklə",
+  "web.reset.action": "Serverdən yenidən yüklə",
 }

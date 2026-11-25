@@ -1,0 +1,1007 @@
+/* The designed print styles for legal documents (legal-print.tsx), which legal.tsx links for print
+   only. The cover and the colophon only print (legal.css hides them on screen). Everything is black
+   on white and drawn with borders, SVG and text, never backgrounds, so it prints the same with
+   "Background graphics" off. */
+
+/* The architect cover's parts, on paper and in the layout editor's preview (/dev/print-editor).
+   Positions and sizes come from the layout (architectCoverCss in lib/legal/architect.ts). */
+[data-architect-cover] {
+  --ink: #000;
+  --mono:
+    "OpenTUI Mono", "OC Arabic", "OC Thai", "OpenTUI Mono Menlo", "OpenTUI Mono Consolas", "OpenTUI Mono Courier",
+    ui-monospace, monospace;
+  --sans: "Inter", "OC Arabic", "OC Thai", ui-sans-serif, system-ui, sans-serif;
+  /* OpenTUI Mono sets about 5% smaller than Inter at one point size (cap height 0.69 vs 0.73 em,
+     x-height 0.52 vs 0.55), so mono labels beside Inter text are scaled by this to look the same size. */
+  --mono-optical: 1.05;
+  position: relative;
+  color: var(--ink);
+  font-family: var(--sans);
+
+  /* Settings › Architect labels: the mono labels in capitals, tracked a little. OpenTUI Mono's
+     capitals are the height its sentence-case labels already start at, so they sit on the rows the same way. */
+  &[data-label-case="upper"] {
+    [data-architect-part="title"] p,
+    [data-architect-part="form"] dt {
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+  }
+
+  /* The cover's title is not a heading (the page's one h1 is the hero title); doubled to outrank
+     site styles. */
+  &[data-architect-cover] [data-slot="cover-title"] {
+    font-family: var(--sans);
+    text-box: none;
+  }
+
+  [data-architect-part] {
+    position: absolute;
+    margin: 0;
+  }
+
+  [data-architect-part="field"] {
+    overflow: visible;
+  }
+
+  /* A field pattern (lib/legal/pattern.ts) is drawn on the whole A4 sheet in millimetres, once for
+     A4 and once for US Letter's shorter field. */
+  [data-architect-part="pattern"] {
+    top: 0;
+    inset-inline-start: 0;
+    width: 210mm;
+    height: 297mm;
+    overflow: hidden;
+
+    &[data-sheet="letter"] {
+      display: none;
+    }
+  }
+
+  @media print and (max-height: 285mm) {
+    [data-architect-part="pattern"][data-sheet="a4"] {
+      display: none;
+    }
+
+    [data-architect-part="pattern"][data-sheet="letter"] {
+      display: block;
+    }
+  }
+
+  /* The title grows upward from the form block under it. */
+  [data-architect-part="title"] {
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+
+    p {
+      margin: 0 0 11px;
+      font-family: var(--mono);
+      font-size: calc(var(--form-size, 8pt) * var(--mono-optical));
+    }
+
+    [data-slot="cover-title"] {
+      margin: 0;
+      font-size: var(--title-size, 34pt);
+      font-weight: 500;
+      line-height: 1;
+      letter-spacing: -0.03em;
+    }
+  }
+
+  /* Each row is one line box of --row; labels share the value's baseline. The rules are an SVG
+     under the rows (rulesSvg), placed so each value sits optically centred between two rules. */
+  [data-architect-part="form"] {
+    font-size: var(--form-size, 8pt);
+
+    > div {
+      display: grid;
+      grid-template-columns: 22mm 1fr;
+      align-items: baseline;
+      margin: 0;
+    }
+
+    dt {
+      font-family: var(--mono);
+      font-size: calc(1em * var(--mono-optical));
+      line-height: 1;
+    }
+
+    dd {
+      margin: 0;
+      padding: 0;
+      line-height: var(--row);
+    }
+
+    [data-slot="rules"] {
+      position: absolute;
+      top: 0;
+      inset-inline-start: 0;
+      width: 100%;
+      height: calc(var(--row) * 7);
+      overflow: visible;
+    }
+  }
+}
+
+@media print {
+  /* ------------------------------------------------------------------------------------------ */
+  /* Shared by every designed style                                                              */
+  /* ------------------------------------------------------------------------------------------ */
+
+  [data-site]:has([data-legal-print]) {
+    --ink: #000;
+    --ink-70: #626262;
+    --ink-20: #d2d2d2;
+    --mono:
+      "OpenTUI Mono", "OC Arabic", "OC Thai", "OpenTUI Mono Menlo", "OpenTUI Mono Consolas", "OpenTUI Mono Courier",
+      ui-monospace, monospace;
+    --sans: "Inter", "OC Arabic", "OC Thai", ui-sans-serif, system-ui, sans-serif;
+    --meta: 38mm;
+    /* One line weight for every rule a style draws (the architect style sets it from its layout). */
+    --rule: 0.5pt;
+    --rule-heavy: 1pt;
+
+    /* Flow layout, so the cover can be its own named page and breaks fall where the rules say. */
+    [data-component="content"] > [data-slot="page"],
+    [data-component="legal-body"] {
+      display: block !important;
+    }
+
+    /* The cover carries the title, dates and actions; the screen's versions of them stay off paper. */
+    [data-slot="legal-header"],
+    [data-component="contents-menu"],
+    [data-component="legal-notice"] {
+      display: none !important;
+    }
+
+    /* The cover: one sheet, the size of the page (A4, or US Letter by the page's height), in whole
+       CSS pixels so the bottom-anchored form block's text lands on whole pixels. */
+    [data-component="legal-print-cover"] {
+      page: legal-cover;
+      position: relative;
+      display: block;
+      width: 100%;
+      height: 1118px;
+      overflow: hidden;
+      break-after: page;
+      color: var(--ink);
+      font-family: var(--sans);
+
+      img {
+        display: block;
+      }
+
+      /* Display type is Inter unless a style says otherwise. */
+      [data-slot="cover-title"] {
+        font-family: var(--sans);
+        text-box: none;
+      }
+    }
+
+    @media (max-height: 285mm) {
+      [data-component="legal-print-cover"] {
+        height: 1052px;
+      }
+    }
+
+    /* Interior text. */
+    [data-component="legal-document"],
+    [data-component="legal-summary"],
+    [data-component="legal-print-colophon"] {
+      font-family: var(--sans);
+      font-size: 9pt;
+      line-height: 1.5;
+      color: var(--ink);
+      font-variant-numeric: tabular-nums;
+    }
+
+    [data-component="legal-document"] {
+      counter-reset: legal-section;
+      padding-inline-start: var(--meta);
+
+      p,
+      li {
+        orphans: 3;
+        widows: 3;
+      }
+
+      ul,
+      ol,
+      table,
+      tr {
+        break-inside: avoid;
+      }
+
+      /* Numbered sections: the number and the title in the meta column hang left of the text. */
+      h2[id]:not([id$="table-of-contents"]) {
+        counter-increment: legal-section;
+      }
+
+      h2 {
+        display: grid;
+        grid-template-columns: var(--meta) minmax(0, 1fr);
+        /* !important: the screen's section rhythm (on-this-page.css) is far too loose on paper. */
+        margin: 9mm 0 3mm calc(-1 * var(--meta)) !important;
+        font-family: var(--sans);
+        font-size: 11pt;
+        font-weight: 600;
+        line-height: 1.25;
+        letter-spacing: 0;
+        text-box: none;
+        break-after: avoid;
+
+        &::before {
+          content: counter(legal-section, decimal-leading-zero);
+          font-family: var(--mono);
+          font-size: 8pt;
+          font-weight: 400;
+          padding-top: 0.2em;
+        }
+
+        &[id$="table-of-contents"]::before {
+          content: "—";
+        }
+      }
+
+      h3,
+      h4 {
+        margin: 5mm 0 1.5mm !important;
+        font-family: var(--sans);
+        font-size: 9pt;
+        font-weight: 600;
+        break-after: avoid;
+      }
+
+      h4 {
+        font-weight: 500;
+        font-style: italic;
+      }
+
+      p {
+        margin: 0 0 2.2mm;
+      }
+
+      li {
+        padding-top: 0.6mm;
+        padding-bottom: 0.6mm;
+      }
+
+      /* The em-dash bullet sits on the item's first line. */
+      ul > li::before {
+        top: 0.6mm;
+      }
+
+      td li::before {
+        top: 0;
+      }
+
+      li ul,
+      li ol {
+        margin: 1mm 0 0 5mm !important;
+      }
+
+      /* Links print as numbered references, listed in the colophon. */
+      a {
+        text-decoration: none;
+        color: var(--ink);
+      }
+
+      a[data-print-href]::after {
+        content: none !important;
+      }
+
+      a[data-ref]::after {
+        content: "[" attr(data-ref) "]";
+        margin-inline-start: 0.15em;
+        font-family: var(--sans);
+        font-size: 0.72em;
+        vertical-align: 0.35em;
+        line-height: 0;
+      }
+
+      table {
+        font-size: 7.5pt;
+        min-width: 0;
+      }
+
+      th,
+      td {
+        border-color: var(--ink) !important;
+        border-width: var(--rule) !important;
+      }
+
+      th {
+        border-top-width: var(--rule-heavy) !important;
+      }
+
+      /* No mono in the printed text: code (cookie names) prints in Inter like the words around it. */
+      code {
+        font-family: var(--sans);
+        font-size: 1em;
+        background: none;
+        padding: 0;
+      }
+    }
+
+    /* The plain-language summary opens the first interior page, framed by hairlines. */
+    [data-component="legal-summary"] {
+      margin: 0 0 8mm var(--meta) !important;
+      padding: 4mm 0 !important;
+      border: 0 !important;
+      border-block: var(--rule) solid var(--ink) !important;
+
+      /* Body text is Inter in sentence case; mono is kept for meta labels only. */
+      h2,
+      summary {
+        font-family: var(--sans);
+        font-size: 9pt;
+        font-weight: 600;
+        text-transform: none;
+        letter-spacing: 0;
+        margin-bottom: 2mm;
+
+        * {
+          font-family: var(--sans);
+          text-transform: none;
+          letter-spacing: 0;
+        }
+      }
+
+      a {
+        color: var(--ink);
+        text-decoration: none;
+      }
+
+      /* Each point ends with the section it restates, set apart as a muted reference. */
+      li > a:last-child {
+        color: var(--ink-70);
+        white-space: nowrap;
+
+        &::before {
+          content: "→\00a0";
+        }
+      }
+    }
+
+    /* The colophon: references, the document's facts and contacts, kept together at the end. */
+    [data-component="legal-print-colophon"] {
+      display: block;
+      margin-block: 12mm 0;
+      margin-inline: var(--meta) 0;
+      break-inside: avoid;
+
+      h2 {
+        margin: 0 0 2mm;
+        font-family: var(--sans);
+        font-size: 9pt;
+        font-weight: 600;
+        text-transform: none;
+        letter-spacing: 0;
+      }
+
+      [data-slot="references"] {
+        margin-bottom: 8mm;
+
+        ol {
+          margin: 0;
+          padding-inline-start: 7mm;
+          font-family: var(--sans);
+          font-size: 7.5pt;
+          line-height: 1.5;
+          overflow-wrap: anywhere;
+        }
+
+        li::marker {
+          content: "[" counter(list-item) "] ";
+        }
+      }
+
+      [data-slot="colophon"] {
+        padding-top: 3mm;
+        border-top: var(--rule) solid var(--ink);
+      }
+
+      dl {
+        display: grid;
+        grid-template-columns: 26mm minmax(0, 1fr);
+        align-items: baseline;
+        gap: 1mm 4mm;
+        margin: 0;
+        font-size: 7.5pt;
+      }
+
+      dl > div {
+        display: contents;
+      }
+
+      /* Meta labels: mono in sentence case, scaled to look the size of the 7.5pt Inter values. */
+      dt {
+        font-family: var(--mono);
+        font-size: calc(7.5pt * 1.05);
+      }
+
+      dd {
+        margin: 0;
+      }
+    }
+
+    /* Shared cover parts. */
+    [data-slot="dots"] {
+      position: absolute;
+      fill: var(--ink);
+    }
+
+    [data-slot="glyph"] {
+      position: absolute;
+    }
+
+    /* ------------------------------------------------------------------------------------------ */
+    /* Exhibit: corner display words, a central justified column, a hairline cross, a dot matrix   */
+    /* ------------------------------------------------------------------------------------------ */
+
+    &:has([data-legal-print="exhibit"]) {
+      [data-component="legal-print-cover"] {
+        [data-slot="rule-v"],
+        [data-slot="rule-h"] {
+          position: absolute;
+        }
+
+        [data-slot="rule-v"] {
+          top: 0;
+          bottom: 0;
+          border-inline-start: 0.5pt solid var(--ink);
+
+          &[data-at="center"] {
+            left: 50%;
+          }
+
+          &[data-at="left"] {
+            inset-inline-start: 14mm;
+          }
+
+          &[data-at="right"] {
+            inset-inline-end: 14mm;
+          }
+        }
+
+        [data-slot="rule-h"] {
+          inset-inline-start: 0;
+          inset-inline-end: 0;
+          border-top: 0.5pt solid var(--ink);
+
+          &[data-at="upper"] {
+            top: 62mm;
+          }
+
+          &[data-at="lower"] {
+            bottom: 34mm;
+          }
+        }
+
+        [data-slot="corner"] {
+          position: absolute;
+          top: 14mm;
+          max-width: 46%;
+          margin: 0;
+          font-size: 54pt;
+          font-weight: 800;
+          line-height: 0.9;
+          letter-spacing: -0.045em;
+
+          &[data-at="left"] {
+            inset-inline-start: 16mm;
+          }
+
+          &[data-at="right"] {
+            inset-inline-end: 16mm;
+            text-align: end;
+          }
+        }
+
+        [data-slot="dots"] {
+          inset-inline-start: 14mm;
+          inset-inline-end: 14mm;
+          top: 62mm;
+          bottom: 34mm;
+          width: calc(100% - 28mm);
+          height: calc(100% - 96mm);
+        }
+
+        [data-slot="column"] {
+          position: absolute;
+          left: 50%;
+          top: 50%;
+          width: 62mm;
+          translate: -50% -50%;
+          padding: 5mm 4mm;
+          background: #fff;
+          border: 0.5pt solid var(--ink);
+          text-align: justify;
+          hyphens: auto;
+        }
+
+        [data-slot="kicker"] {
+          margin: 0 0 3mm;
+          font-family: var(--mono);
+          font-size: 7pt;
+          text-align: center;
+          letter-spacing: 0.04em;
+        }
+
+        [data-slot="text"] {
+          margin: 0 0 2mm;
+          font-size: 7.5pt;
+          line-height: 1.45;
+          font-variant: small-caps;
+          letter-spacing: 0.04em;
+        }
+
+        [data-slot="labels"] {
+          position: absolute;
+          inset-inline-start: 16mm;
+          inset-inline-end: 16mm;
+          bottom: 26mm;
+          display: flex;
+          justify-content: space-between;
+          margin: 0;
+          font-family: var(--mono);
+          font-size: 7.5pt;
+
+          span {
+            padding: 0 1.5mm;
+            background: #fff;
+          }
+        }
+
+        /* The wordmark at 40mm (above its 117px minimum) with more than two strokes of clear space. */
+        [data-slot="brand"] {
+          position: absolute;
+          inset-inline-start: 16mm;
+          bottom: 10mm;
+          display: flex;
+          align-items: flex-end;
+          gap: 8mm;
+          font-size: 7.5pt;
+
+          img {
+            width: 40mm;
+            height: auto;
+          }
+        }
+      }
+
+      [data-component="legal-document"] {
+        text-align: justify;
+        hyphens: auto;
+        border-inline-start: 0;
+        padding-inline-start: var(--meta);
+        background: none;
+
+        > :not(h2) {
+          border-inline-start: 0.5pt solid var(--ink);
+          padding-inline-start: 4mm;
+          margin-inline-start: -4mm;
+        }
+
+        > p,
+        > ul,
+        > ol,
+        > div {
+          margin-bottom: 0;
+          padding-bottom: 2.2mm;
+        }
+
+        h2 {
+          font-size: 13pt;
+          font-weight: 800;
+          letter-spacing: -0.02em;
+        }
+      }
+    }
+
+    /* ------------------------------------------------------------------------------------------ */
+    /* Architect: a square grid, one logo, the title over a form block. Positions, sizes and the   */
+    /* interior's margins and grid come from its layout (lib/legal/architect.ts).                 */
+    /* ------------------------------------------------------------------------------------------ */
+
+    /* Capital labels follow onto the pages: section numbers and the colophon's labels. */
+    &:has([data-legal-print="architect"][data-label-case="upper"]) {
+      [data-component="legal-document"] h2::before,
+      [data-component="legal-print-colophon"] dt {
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+      }
+    }
+
+    &:has([data-legal-print="architect"]) {
+      [data-component="legal-document"] h2 {
+        font-weight: 500;
+        font-size: 12pt;
+
+        &::before {
+          content: "No. " counter(legal-section, decimal-leading-zero);
+        }
+      }
+
+      /* The colophon's labels hang in the meta column, on the logo's left edge like the section
+         numbers; the values line up with the text. */
+      [data-component="legal-print-colophon"] dl {
+        grid-template-columns: var(--meta) minmax(0, 1fr);
+        column-gap: 0;
+        margin-inline-start: calc(-1 * var(--meta));
+      }
+    }
+
+    /* ------------------------------------------------------------------------------------------ */
+    /* Letterhead: calm, two columns, a ruled footer                                                */
+    /* ------------------------------------------------------------------------------------------ */
+
+    &:has([data-legal-print="letterhead"]) {
+      --meta: 46mm;
+
+      [data-component="legal-print-cover"] {
+        [data-slot="head"] {
+          position: absolute;
+          top: 20mm;
+          inset-inline-start: 20mm;
+          inset-inline-end: 20mm;
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-start;
+
+          img {
+            width: 44mm;
+            height: auto;
+          }
+
+          p {
+            margin: 0;
+            font-size: 8.5pt;
+          }
+        }
+
+        [data-slot="grid"] {
+          position: absolute;
+          top: 92mm;
+          inset-inline-start: 20mm;
+          inset-inline-end: 20mm;
+          display: grid;
+          grid-template-columns: 46mm minmax(0, 1fr);
+        }
+
+        [data-slot="meta"] {
+          margin: 0;
+          font-size: 7.5pt;
+
+          > div {
+            margin-bottom: 3.5mm;
+          }
+
+          dt {
+            color: var(--ink-70);
+          }
+
+          dd {
+            margin: 0;
+          }
+        }
+
+        [data-slot="body"] {
+          [data-slot="cover-title"] {
+            margin: -2mm 0 6mm;
+            font-size: 30pt;
+            font-weight: 600;
+            line-height: 1.05;
+            letter-spacing: -0.025em;
+          }
+
+          p {
+            margin: 0 0 8mm;
+            max-width: 110mm;
+            font-size: 10.5pt;
+            line-height: 1.45;
+          }
+
+          ol {
+            margin: 0;
+            padding-inline-start: 6mm;
+            columns: 2;
+            column-gap: 8mm;
+            font-size: 7.5pt;
+            line-height: 1.6;
+          }
+        }
+
+        [data-slot="foot"] {
+          position: absolute;
+          inset-inline-start: 20mm;
+          inset-inline-end: 20mm;
+          bottom: 18mm;
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 6mm;
+          padding-top: 3mm;
+          border-top: 0.5pt solid var(--ink);
+
+          p {
+            margin: 0;
+            font-size: 7.5pt;
+            line-height: 1.45;
+            white-space: pre-line;
+          }
+        }
+      }
+
+      [data-component="legal-document"] h2 {
+        font-size: 11.5pt;
+
+        &::before {
+          color: var(--ink-70);
+        }
+      }
+    }
+
+    /* ------------------------------------------------------------------------------------------ */
+    /* Modular: small caps, the font's modules, numbered contents, a QR to the live page            */
+    /* ------------------------------------------------------------------------------------------ */
+
+    &:has([data-legal-print="modular"]) {
+      --meta: 42mm;
+
+      [data-component="legal-print-cover"] {
+        [data-slot="head"] {
+          position: absolute;
+          top: 14mm;
+          inset-inline-start: 14mm;
+          inset-inline-end: 14mm;
+          display: grid;
+          grid-template-columns: 42mm repeat(3, 1fr);
+          align-items: start;
+
+          img {
+            width: 8mm;
+            height: 10mm;
+          }
+
+          p {
+            margin: 0;
+            font-size: 7.5pt;
+            line-height: 1.4;
+            font-variant: all-small-caps;
+            letter-spacing: 0.06em;
+          }
+        }
+
+        [data-slot="module-word"] {
+          position: absolute;
+          top: 44mm;
+          inset-inline-start: 14mm;
+          width: calc(100% - 28mm);
+          height: auto;
+        }
+
+        [data-slot="cover-title"] {
+          position: absolute;
+          top: 96mm;
+          inset-inline-start: 56mm;
+          inset-inline-end: 14mm;
+          margin: 0;
+          font-family: var(--mono);
+          font-size: 30pt;
+          font-weight: 400;
+          line-height: 1;
+          text-transform: uppercase;
+          letter-spacing: -0.02em;
+        }
+
+        [data-slot="grid"] {
+          position: absolute;
+          top: 124mm;
+          inset-inline-start: 14mm;
+          inset-inline-end: 14mm;
+          display: grid;
+          grid-template-columns: 42mm minmax(0, 1fr);
+        }
+
+        [data-slot="meta"] {
+          margin: 0;
+
+          > div {
+            margin-bottom: 3mm;
+          }
+
+          dt {
+            font-size: 7pt;
+            font-variant: all-small-caps;
+            letter-spacing: 0.08em;
+          }
+
+          dd {
+            margin: 0;
+            font-family: var(--mono);
+            font-size: 7.5pt;
+          }
+        }
+
+        [data-slot="contents"] {
+          margin: 0;
+          padding: 0;
+          list-style: none;
+          columns: 2;
+          column-gap: 6mm;
+          font-size: 7.5pt;
+          line-height: 1.55;
+          font-variant: all-small-caps;
+          letter-spacing: 0.05em;
+
+          li {
+            display: grid;
+            grid-template-columns: 7mm 1fr;
+            break-inside: avoid;
+          }
+
+          span {
+            font-family: var(--mono);
+          }
+        }
+
+        [data-slot="qr"] {
+          position: absolute;
+          inset-inline-start: 14mm;
+          bottom: 14mm;
+          display: flex;
+          align-items: flex-end;
+          gap: 5mm;
+
+          p {
+            margin: 0;
+            font-family: var(--mono);
+            font-size: 7pt;
+            line-height: 1.45;
+          }
+        }
+
+        [data-slot="qr-code"] {
+          width: 24mm;
+          height: 24mm;
+        }
+      }
+
+      [data-component="legal-document"] {
+        text-align: justify;
+        hyphens: auto;
+
+        h2 {
+          font-size: 8.5pt;
+          font-weight: 500;
+          text-transform: uppercase;
+          letter-spacing: 0.06em;
+          text-align: start;
+
+          &::before {
+            content: counter(legal-section) ".";
+          }
+        }
+
+        h3 {
+          font-variant: all-small-caps;
+          letter-spacing: 0.05em;
+          font-size: 9.5pt;
+        }
+      }
+    }
+
+    /* ------------------------------------------------------------------------------------------ */
+    /* Swiss: a strict twelve-column grid, a flush-left title, big numerals                         */
+    /* ------------------------------------------------------------------------------------------ */
+
+    &:has([data-legal-print="swiss"]) {
+      --meta: 46mm;
+
+      [data-component="legal-print-cover"] {
+        --col: calc((100% - 28mm) / 12);
+
+        [data-slot="col"] {
+          position: absolute;
+          top: 0;
+          bottom: 0;
+          inset-inline-start: calc(14mm + var(--i) * var(--col));
+          border-inline-start: 0.25pt solid var(--ink-20);
+        }
+
+        [data-slot="numeral"] {
+          position: absolute;
+          top: 12mm;
+          inset-inline-start: calc(14mm + 8 * var(--col));
+          margin: 0;
+          font-size: 150pt;
+          font-weight: 700;
+          line-height: 0.8;
+          letter-spacing: -0.06em;
+        }
+
+        [data-slot="cover-title"] {
+          position: absolute;
+          top: 120mm;
+          inset-inline-start: 14mm;
+          inset-inline-end: 14mm;
+          margin: 0;
+          font-size: 64pt;
+          font-weight: 700;
+          line-height: 0.92;
+          letter-spacing: -0.045em;
+
+          span {
+            display: block;
+          }
+        }
+
+        [data-slot="facts"] {
+          position: absolute;
+          inset-inline-start: 14mm;
+          inset-inline-end: 14mm;
+          bottom: 40mm;
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          margin: 0;
+          padding-top: 2mm;
+          border-top: 1pt solid var(--ink);
+
+          dt {
+            font-size: 7pt;
+            font-weight: 700;
+          }
+
+          dd {
+            margin: 0;
+            font-family: var(--mono);
+            font-size: 7.5pt;
+          }
+        }
+
+        [data-slot="brand"] {
+          position: absolute;
+          inset-inline-start: 14mm;
+          inset-inline-end: 14mm;
+          bottom: 12mm;
+          display: flex;
+          justify-content: space-between;
+          align-items: flex-end;
+          font-size: 7.5pt;
+          font-weight: 700;
+
+          img {
+            width: 40mm;
+            height: auto;
+          }
+        }
+      }
+
+      [data-component="legal-document"] {
+        h2 {
+          align-items: start;
+          margin-top: 11mm !important;
+          font-size: 13pt;
+          font-weight: 700;
+          letter-spacing: -0.015em;
+          padding-top: 2mm;
+          border-top: 1pt solid var(--ink);
+
+          &::before {
+            font-family: var(--sans);
+            font-size: 26pt;
+            font-weight: 700;
+            line-height: 0.85;
+            letter-spacing: -0.04em;
+            padding: 0;
+          }
+        }
+
+        h3 {
+          font-weight: 700;
+        }
+      }
+    }
+  }
+}

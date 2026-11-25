@@ -312,8 +312,8 @@ const removeEmptyToolInputKeys = (input: unknown): unknown => {
 const lowerToolCall = (part: ToolCallPart, normalizeID: (id: string) => string): BedrockToolUseBlock => ({
   toolUse: {
     toolUseId: normalizeID(part.id),
-    // Models can emit names that Converse rejects when replayed in history.
-    name: part.name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 64) || "_",
+    // Converse rejects replayed names over 64 characters; flattenRequest already fixed invalid characters.
+    name: part.name.slice(0, 64),
     input: removeEmptyToolInputKeys(part.input),
   },
 })
@@ -384,8 +384,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
     if (message.role === "user") {
       const content: BedrockUserBlock[] = []
       for (const part of message.content) {
-        if (!ProviderShared.supportsContent(part, ["text", "media"]))
-          return yield* ProviderShared.unsupportedContent("Bedrock Converse", "user", ["text", "media"])
         if (part.type === "text") {
           content.push(...textWithCache(breakpoints, part.text, part.cache))
           continue
@@ -437,8 +435,6 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
 
     const content: BedrockUserBlock[] = []
     for (const part of message.content) {
-      if (!ProviderShared.supportsContent(part, ["tool-result"]))
-        return yield* ProviderShared.unsupportedContent("Bedrock Converse", "tool", ["tool-result"])
       const result = yield* lowerToolResult(part, documentNames, normalizeID)
       const images: BedrockMedia.ImageBlock[] = hoistImages
         ? result.toolResult.content.filter((item) => "image" in item)
@@ -564,13 +560,12 @@ const applyThinkingBindingDefault = (request: LLMRequest, thinking: Readonly<Rec
 
 const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request: LLMRequest) {
   const toolChoice = request.toolChoice ? yield* lowerToolChoice(request.toolChoice) : undefined
-  const flattened = ProviderShared.flattenToolRequest(request)
-  const generation = request.generation
+  const definitions = ProviderShared.flattenTools(request.tools)
   const options = yield* decodeOptions(request.providerOptions ?? {})
   const maxTokens =
     isNova2(request.model) && (options.effort === "high" || isHighReasoningEffort(request.http?.body))
       ? undefined
-      : generation?.maxTokens
+      : request.maxTokens
   const thinking = applyThinkingBindingDefault(
     request,
     (() => {
@@ -588,7 +583,7 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
     })(),
   )
   const additionalModelRequestFields = {
-    ...(generation?.topK === undefined ? {} : { top_k: generation.topK }),
+    ...(request.topK === undefined ? {} : { top_k: request.topK }),
     ...(thinking === undefined ? {} : { thinking }),
     ...(options.effort === undefined ? {} : effortFields(request.model, options.effort)),
     // Converse takes Anthropic betas in the body, and Bedrock rejects `block_binding` without this one.
@@ -598,30 +593,30 @@ const fromRequest = Effect.fn("BedrockConverse.fromRequest")(function* (request:
   // tools → system → messages order to favour the highest-impact prefixes.
   const breakpoints = BedrockCache.breakpoints(request.model)
   const toolConfig = (() => {
-    if (flattened.tools.length === 0) return undefined
+    if (definitions.length === 0) return undefined
     return {
-      tools: lowerTools(breakpoints, flattened.tools),
+      tools: lowerTools(breakpoints, definitions),
       // Converse has no native "none". Keep definitions stable for prompt
       // caching and omit only the unsupported choice.
       toolChoice,
     }
   })()
   const system = lowerSystem(breakpoints, request.system)
-  const messages = yield* lowerMessages(flattened.request, breakpoints)
+  const messages = yield* lowerMessages(request, breakpoints)
   yield* warnDropped(breakpoints, "Bedrock Converse", BedrockCache.BEDROCK_BREAKPOINT_CAP)
   const inferenceConfig = (() => {
     if (
       maxTokens === undefined &&
-      generation?.temperature === undefined &&
-      generation?.topP === undefined &&
-      (generation?.stop === undefined || generation.stop.length === 0)
+      request.temperature === undefined &&
+      request.topP === undefined &&
+      (request.stop === undefined || request.stop.length === 0)
     )
       return undefined
     return {
       maxTokens,
-      temperature: generation?.temperature,
-      topP: generation?.topP,
-      stopSequences: generation?.stop,
+      temperature: request.temperature,
+      topP: request.topP,
+      stopSequences: request.stop,
     }
   })()
   return {

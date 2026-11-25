@@ -5,10 +5,10 @@ import { OpenResponses } from "../protocols/open-responses.js"
 import { ZAIChat } from "../protocols/zai-chat.js"
 import { ZAIMessages } from "../protocols/zai-messages.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
-import { ProviderID, type ModelID } from "../schema/index.js"
+import { ProviderID, type ModelID, type RequestOptions } from "../schema/index.js"
 import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("zai-coding-plan")
@@ -17,7 +17,7 @@ export type ChatOptionsInput = ZAIChat.OptionsInput
 export type MessagesOptionsInput = ZAIMessages.OptionsInput
 export type ResponsesOptionsInput = { readonly reasoningEffort?: ZAIChat.ReasoningEffort }
 
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     /** Overrides the selected API's complete base URL. */
     readonly baseURL?: string
@@ -61,7 +61,11 @@ export const routes = [chatRoute, messagesRoute, responsesRoute]
 export const configure = (input: Config = {}) => {
   const defaults = bearerRouteDefaults(input, "ZAI_API_KEY")
   const chat = (modelID: string | ModelID) =>
-    chatRoute.with(defaults).model<ChatOptionsInput>({ id: modelID, compatibility: ZAIChat.compatibility })
+    chatRoute.with(defaults).model<ChatOptionsInput>({
+      id: modelID,
+      compatibility: ZAIChat.compatibility,
+      capabilities: ZAIChat.capabilities,
+    })
   const messages = (modelID: string | ModelID) =>
     messagesRoute
       .with(defaults)

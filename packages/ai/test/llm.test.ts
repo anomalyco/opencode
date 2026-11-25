@@ -1,17 +1,18 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
-import { ai, CacheHint, LLMEvent, LLMResponse, ToolEntry, ToolNamespace } from "../src/effect.js"
+import { ai, CacheHint, GENERATION_KEYS, LLMEvent, LLMResponse, ToolEntry, ToolNamespace } from "../src/effect.js"
 import { OpenAI } from "../src/providers.js"
 import * as OpenAIChat from "../src/protocols/openai-chat.js"
 import * as OpenAIResponses from "../src/protocols/openai-responses.js"
 import {
-  GenerationOptions,
   Message,
   LanguageModel,
+  SystemMessage,
   ToolCallPart,
   ToolChoice,
   ToolDefinition,
   ToolResultPart,
+  UserMessage,
 } from "../src/schema/index.js"
 import { fixedResponse } from "./lib/http.js"
 import { sseEvents } from "./lib/sse.js"
@@ -77,10 +78,10 @@ describe("llm constructors", () => {
 
     expect(Object.getPrototypeOf(request)).toBe(Object.prototype)
     expect(request.model).toBeInstanceOf(LanguageModel)
-    expect(request.messages[0]).toBeInstanceOf(Message)
+    expect(request.messages[0]).toBeInstanceOf(UserMessage)
     expect(request.system).toEqual([{ type: "text", text: "You are concise." }])
     expect(request.messages[0]?.content).toEqual([{ type: "text", text: "Say hello." }])
-    expect(request.generation).toBeUndefined()
+    expect(request.maxTokens).toBeUndefined()
     expect(request.tools).toEqual([])
   })
 
@@ -92,13 +93,13 @@ describe("llm constructors", () => {
     })
     const updated = {
       ...base,
-      generation: GenerationOptions.make({ maxTokens: 20 }),
+      maxTokens: 20,
       messages: [...base.messages, Message.assistant("Hi.")],
     }
 
     expect(updated.id).toBe("req_1")
     expect(updated.model).toBe(base.model)
-    expect(updated.generation).toEqual({ maxTokens: 20 })
+    expect(updated.maxTokens).toBe(20)
     expect(updated.messages.map((message) => message.role)).toEqual(["user", "assistant"])
     expect(ai.request(updated)).toEqual(updated)
     expect(ai.request(updated).messages[1]).toBe(updated.messages[1])
@@ -112,30 +113,43 @@ describe("llm constructors", () => {
     expect(prompted.messages.map((message) => message.role)).toEqual(["user", "assistant", "user"])
   })
 
+  test("lists the portable knobs", () => {
+    expect([...GENERATION_KEYS]).toEqual([
+      "maxTokens",
+      "temperature",
+      "topP",
+      "topK",
+      "frequencyPenalty",
+      "presencePenalty",
+      "seed",
+      "stop",
+    ])
+  })
+
   test("keeps request options separate from route defaults", () => {
     const request = ai.request({
       model: LanguageModel.make({
         id: "fake-model",
         provider: "fake",
         route: chatRoute.with({
-          generation: { maxTokens: 100, temperature: 1 },
+          maxTokens: 100,
+          temperature: 1,
           providerOptions: { store: false, metadata: { model: true } },
           http: { body: { metadata: { model: true } }, headers: { "x-shared": "model" }, query: { model: "1" } },
         }),
       }),
       prompt: "Say hello.",
-      generation: { temperature: 0 },
+      temperature: 0,
       providerOptions: { store: true, metadata: { request: true } },
-      http: { body: { metadata: { request: true } }, headers: { "x-shared": "request" }, query: { request: "1" } },
+      headers: { "x-shared": "request" },
+      http: { body: { metadata: { request: true } }, query: { request: "1" } },
     })
 
-    expect(request.generation).toEqual({ temperature: 0 })
+    expect(request.temperature).toBe(0)
+    expect(request.maxTokens).toBeUndefined()
     expect(request.providerOptions).toEqual({ store: true, metadata: { request: true } })
-    expect(request.http).toEqual({
-      body: { metadata: { request: true } },
-      headers: { "x-shared": "request" },
-      query: { request: "1" },
-    })
+    expect(request.headers).toEqual({ "x-shared": "request" })
+    expect(request.http).toEqual({ body: { metadata: { request: true } }, query: { request: "1" } })
   })
 
   test("updates canonical models from the model datatype", () => {
@@ -146,7 +160,7 @@ describe("llm constructors", () => {
     })
     const updated = LanguageModel.update(base, {
       route: responsesRoute,
-      defaults: { generation: { maxTokens: 20 } },
+      options: { maxTokens: 20 },
       compatibility: { sanitizer: "gemini", requireFinishReason: false },
     })
     const updatedInput = LanguageModel.input(updated)
@@ -154,9 +168,9 @@ describe("llm constructors", () => {
     expect(updated).toBeInstanceOf(LanguageModel)
     expect(String(updated.id)).toBe("fake-model")
     expect(updated.route).toBe(responsesRoute)
-    expect(updated.defaults?.generation).toEqual({ maxTokens: 20 })
+    expect(updated.options?.maxTokens).toBe(20)
     expect(updated.compatibility).toEqual({ sanitizer: "gemini", requireFinishReason: false })
-    expect(updatedInput.defaults).toBe(updated.defaults)
+    expect(updatedInput.options).toBe(updated.options)
     expect(updatedInput.compatibility).toBe(updated.compatibility)
     expect(String(updatedInput.provider)).toBe("fake")
     expect(LanguageModel.update(updated, {})).toBe(updated)
@@ -165,8 +179,9 @@ describe("llm constructors", () => {
   test("carries model defaults and compatibility through route model selection", () => {
     const model = chatRoute.model({
       id: "kimi-k2",
-      defaults: {
-        generation: { maxTokens: 1_024, stop: ["END"] },
+      options: {
+        maxTokens: 1_024,
+        stop: ["END"],
         providerOptions: { parallelToolCalls: false },
         http: { body: { extra_body: true } },
       },
@@ -174,11 +189,11 @@ describe("llm constructors", () => {
     })
     const request = ai.request({ model, prompt: "Say hello." })
 
-    expect(request.model.defaults?.generation).toEqual({ maxTokens: 1_024, stop: ["END"] })
-    expect(request.model.defaults?.providerOptions).toEqual({ parallelToolCalls: false })
-    expect(request.model.defaults?.http).toEqual({ body: { extra_body: true } })
+    expect(request.model.options).toMatchObject({ maxTokens: 1_024, stop: ["END"] })
+    expect(request.model.options?.providerOptions).toEqual({ parallelToolCalls: false })
+    expect(request.model.options?.http).toEqual({ body: { extra_body: true } })
     expect(request.model.compatibility).toEqual({ sanitizer: "moonshot" })
-    expect(request.generation).toBeUndefined()
+    expect(request.maxTokens).toBeUndefined()
     expect(request.providerOptions).toBeUndefined()
     expect(request.http).toBeUndefined()
   })
@@ -229,7 +244,7 @@ describe("llm constructors", () => {
       messages: [Message.user("Review this."), update],
     })
 
-    expect(update).toBeInstanceOf(Message)
+    expect(update).toBeInstanceOf(SystemMessage)
     expect(update).toEqual({
       role: "system",
       content: [{ type: "text", text: "Use parameterized SQL.", cache: { type: "ephemeral" } }],

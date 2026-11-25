@@ -1,0 +1,83 @@
+/* "Bring your own subs" on the home page (index.tsx): the title above, the lead, then the logos
+   (the tools section's grid and tiles, index.css), laid out like "Bring your own tools". Settings › Subscriptions style shows one arrangement through the section's data-style. */
+[data-page="home"][data-site] [data-component="block"][data-section="byos"] {
+  :is([data-slot="grid"], [data-slot="split"], [data-slot="tabs"]) {
+    display: none;
+  }
+
+  &[data-style="grid"] [data-slot="grid"],
+  &[data-style="tabs"] [data-slot="tabs"] {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  &[data-style="split"] [data-slot="split"] {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2rem var(--gutter);
+
+    > div {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+    }
+
+    h3 {
+      margin: 0;
+      font-family: var(--font-mono);
+      font-size: var(--fs-meta);
+      font-weight: 400;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-weak);
+    }
+
+    @media (max-width: 60rem) {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+
+  /* "tabs": /brand's badge tabs (mono, the chosen one in ink with a 2px line under it). */
+  [data-slot="tab-list"] {
+    display: flex;
+    gap: 0 1.25rem;
+
+    button {
+      padding: 0.25rem 0;
+      border-bottom: 2px solid transparent;
+      font-family: var(--font-mono);
+      font-size: var(--mono-size);
+      color: var(--text-weak);
+      transition:
+        color 150ms ease,
+        border-color 200ms var(--ease-out);
+
+      &[aria-selected="true"] {
+        border-bottom-color: var(--text-strong);
+        color: var(--text-strong);
+      }
+
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          color: var(--text-strong);
+        }
+      }
+
+      &:active {
+        color: var(--text-strong);
+      }
+
+      &:focus-visible {
+        outline: 2px solid var(--link);
+        outline-offset: 2px;
+      }
+    }
+  }
+
+  [role="tabpanel"]:not([hidden]) {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+}

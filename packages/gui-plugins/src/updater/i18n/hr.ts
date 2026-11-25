@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "Sljedeći",
   "releaseNotes.action.hideFuture": "Nemoj ih ubuduće prikazivati",
   "releaseNotes.media.alt": "Pregled izdanja",
+  "action.reload": "Ponovno učitaj za ažuriranje",
+  "action.reloading": "Ponovno učitavanje…",
+  "web.ready.title": "Ažuriranje je spremno",
+  "web.ready.message":
+    "Nova verzija OpenCodea je spremna. Ponovno učitajte da biste je koristili u svim otvorenim prozorima.",
+  "web.reload": "Ponovno učitaj",
+  "web.reset.title": "Ponovno učitaj s poslužitelja",
+  "web.reset.description": "Izbriši spremljenu kopiju aplikacije i učitaj trenutačnu verziju s poslužitelja",
+  "web.reset.action": "Ponovno učitaj s poslužitelja",
 }

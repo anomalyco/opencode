@@ -39,7 +39,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
               model: alibaba[api]("qwen3.8-max"),
               prompt: "What is 173 multiplied by 219? Reply with only the final integer.",
               providerOptions: api === "messages" ? { effort } : { reasoningEffort: effort },
-              generation: { maxTokens: 4096 },
+              maxTokens: 4096,
             })
             const compiled = yield* compileRequest(request)
             expect(compiled.body.enable_thinking).toBeUndefined()
@@ -77,7 +77,7 @@ for (const api of ["chat", "messages", "responses"] as const) {
             prompt:
               "We have a budget of 38000 dollars for 219 trips costing 173 dollars each. Calculate whether that is affordable. If it is, use get_weather to look up the current weather in Paris. After receiving the result, report the weather in one short sentence.",
             tools: [weather],
-            generation: { maxTokens: 4096 },
+            maxTokens: 4096,
           })
           const first = yield* LLMClient.generate(request)
           expect(first.toolCalls).toMatchObject([{ name: "get_weather", input: { city: "Paris" } }])

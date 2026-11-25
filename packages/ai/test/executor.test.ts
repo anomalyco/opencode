@@ -305,6 +305,77 @@ describe("RequestExecutor", () => {
     )
   })
 
+  it.effect("runs scoped middleware between shared and per-call middleware, outer scopes first", () => {
+    const calls: Array<string> = []
+    const record =
+      (name: string): HttpMiddleware =>
+      (input, next) =>
+        Effect.sync(() => calls.push(name)).pipe(Effect.andThen(next(input)))
+    const base = RequestExecutor.layer.pipe(
+      Layer.provide(
+        handlerLayer((input) => Effect.sync(() => calls.push("handler")).pipe(Effect.as(input.respond("ok")))),
+      ),
+    )
+    return Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      yield* executor
+        .execute(request, record("per-call"))
+        .pipe(RequestExecutor.withMiddleware(record("inner")), RequestExecutor.withMiddleware(record("outer")))
+      expect(calls).toEqual(["shared", "outer", "inner", "per-call", "handler"])
+      calls.length = 0
+      // Outside the scope, nothing scoped runs.
+      yield* executor.execute(request)
+      expect(calls).toEqual(["shared", "handler"])
+    }).pipe(Effect.provide(RequestExecutor.middleware(record("shared"), base)))
+  })
+
+  it.effect("applies scoped middleware to a stream and to requests sent through a per-request fetch", () => {
+    const seen: Array<string> = []
+    const scoped: HttpMiddleware = (input, next) =>
+      Effect.sync(() => seen.push(input.url)).pipe(Effect.andThen(next(input)))
+    const fetch: typeof globalThis.fetch = Object.assign(async () => new Response("from fetch"), {
+      preconnect: globalThis.fetch.preconnect,
+    })
+    return Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const body = yield* RequestExecutor.stream(executor, request).pipe(
+        Stream.decodeText(),
+        Stream.mkString,
+        RequestExecutor.withMiddleware(scoped),
+      )
+      expect(body).toBe("ok")
+      const fetched = yield* executor
+        .execute(sseRequest, RequestExecutor.withFetch(fetch))
+        .pipe(RequestExecutor.withMiddleware(scoped))
+      expect(yield* fetched.text).toBe("from fetch")
+      expect(seen).toEqual([request.url, sseRequest.url])
+    }).pipe(
+      Effect.provide(
+        RequestExecutor.layer.pipe(Layer.provide(handlerLayer((input) => Effect.succeed(input.respond("ok"))))),
+      ),
+    )
+  })
+
+  it.effect("doesn't wrap a request that scoped middleware sends itself", () => {
+    let wrapped = 0
+    return Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const scoped: HttpMiddleware = (input, next) =>
+        Effect.gen(function* () {
+          wrapped++
+          // Such as a token refresh made from inside an auth hook.
+          yield* executor.execute(sseRequest).pipe(Effect.orDie)
+          return yield* next(input)
+        })
+      yield* executor.execute(request).pipe(RequestExecutor.withMiddleware(scoped))
+      expect(wrapped).toBe(1)
+    }).pipe(
+      Effect.provide(
+        RequestExecutor.layer.pipe(Layer.provide(handlerLayer((input) => Effect.succeed(input.respond("ok"))))),
+      ),
+    )
+  })
+
   it.effect("classifies context overflow responses", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service

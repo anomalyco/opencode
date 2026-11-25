@@ -30,7 +30,7 @@ test("a side question carries the pending editor selection", () => {
     selection([range({ line: 24 }, { line: 25 }, "const a = 1\nconst b = 2")]),
   )
 
-  expect(prompt).toContain('<system-reminder>Note: The user selected #24-25 from "src/example.ts".')
+  expect(prompt).toContain('<system-update>Note: The user selected #24-25 from "src/example.ts".')
   expect(prompt).toContain("const a = 1\nconst b = 2")
   expect(prompt.endsWith(`${btwInstructions}\n\nwhich file and lines did I select?`)).toBe(true)
 })
@@ -51,6 +51,6 @@ test("a side question carries every selected range", () => {
 test("an opened file without a range still tells the model about it", () => {
   const prompt = btwPrompt("what file is open?", selection([range({ line: 7 }, { line: 7 }, "")]))
 
-  expect(prompt).toContain('<system-reminder>Note: The user opened the file "src/example.ts".')
+  expect(prompt).toContain('<system-update>Note: The user opened the file "src/example.ts".')
   expect(prompt).not.toContain("The user selected")
 })

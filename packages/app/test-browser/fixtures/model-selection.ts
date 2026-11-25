@@ -60,7 +60,14 @@ mock.module("@/runtime/server/client", () => ({ useServerSDK: () => active.sdk }
 
 mock.module("@/runtime/server/runtime", () => ({ useGlobal: () => ({ models: active.preferences }) }))
 
-mock.module("@/workspaces/location", () => ({ useWorkspaceLocation: () => () => ({ directory: active.directory }) }))
+// Like the real provider, every read builds a new location object, and loading its info builds another.
+mock.module("@/workspaces/location", () => ({
+  useWorkspaceLocation: () => {
+    const owner = active
+
+    return () => ({ directory: owner.directory, loaded: owner.state.locationLoads })
+  },
+}))
 
 mock.module("@/settings/model", () => ({
   useSettings: () => ({ visibility: { customAgents: () => active.state.visible } }),
@@ -106,6 +113,7 @@ function fixture(input: { session?: Commit; agents?: Agent[]; config?: ConfigMod
     visible: true,
     configLoaded: true,
     connection: "connected",
+    locationLoads: 0,
     route: { id: "ses_a" as string | undefined },
     agents: input.agents ?? [agent("build"), agent("plan")],
     config: input.config,
@@ -220,6 +228,13 @@ function fixture(input: { session?: Commit; agents?: Agent[]; config?: ConfigMod
   return result
 }
 
+function stored(directory: string) {
+  const target = Persist.serverWorkspace(ServerScope.local, directory, "model-selection")
+  const raw = localStorage.getItem(`${target.storage}:${target.key}`)
+
+  return raw === null ? undefined : JSON.parse(raw)
+}
+
 function selection(local: ReturnType<typeof useLocal>) {
   return {
     agent: local.agent.current()?.name,
@@ -253,7 +268,7 @@ test("waits for initial configuration and reloads it after reconnecting", () => 
 test("new-session promotion does not mask a command's durable overrides", () => {
   const f = fixture({ session: durable("a", "low") })
   const { local } = f.mount()
-  local.session.promote(f.directory, "ses_a", { agent: "build", model: key("a"), variant: "low" })
+  local.session.promote(f.directory, "ses_a", { agent: "build", model: key("a"), variant: "low", choices: {} })
   f.set("sessions", "ses_a", durable("b", "high", "plan"))
   expect(selection(local)).toEqual({ agent: "plan", model: "b", variant: "high" })
 })
@@ -275,10 +290,121 @@ test("new-session drafts remember each agent's model and hand off inactive choic
   local.agent.set("plan")
   const choices = composer.remembered()
   f.set("sessions", "ses_a", durable("b", undefined, "plan"))
-  local.session.promote(f.directory, "ses_a", { agent: "plan", model: key("b"), choices })
+  local.session.promote(f.directory, "ses_a", { agent: "plan", model: key("b"), variant: undefined, choices })
   f.set("route", "id", "ses_a")
   local.agent.set("build")
   expect(local.model.current()?.id).toBe("c")
+})
+
+test("a draft speed switch uses the target's legacy variant instead of its sibling's", () => {
+  const f = fixture()
+  f.set("route", "id", undefined)
+  f.set("models", (models) => [
+    ...models,
+    { ...models[0], id: "a-fast", modelID: "a-fast", experimental: { speed: { base: "a", id: "fast", faster: true } } },
+    {
+      ...models[0],
+      id: "a-ultrafast",
+      modelID: "a-ultrafast",
+      experimental: { speed: { base: "a", id: "ultrafast", faster: true } },
+    },
+  ])
+  f.setPreferences("variant", "provider/a-fast", "low")
+  f.setPreferences("variant", "provider/a-ultrafast", "high")
+  const { composer } = f.mount(true)
+
+  if (!composer) throw new Error("missing draft composer")
+  expect(composer.current()?.id).toBe("a")
+  expect(composer.variant.current()).toBe("low")
+  composer.speed.set("ultrafast")
+  expect(composer.current()?.id).toBe("a-ultrafast")
+  expect(composer.variant.current()).toBe("high")
+
+  composer.variant.set(undefined)
+  f.setPreferences("variant", "provider/a", "high")
+  composer.speed.set("fast")
+  expect(composer.variant.current()).toBeUndefined()
+})
+
+test.each([
+  { source: "agent", input: { agents: [agent("build", key("a"), "high")] } },
+  { source: "global", input: { config: { providerID: "provider", model: "a", variant: "high" } } },
+])("a draft speed switch falls back to the $source-configured variant", ({ input }) => {
+  const f = fixture(input)
+  f.set("route", "id", undefined)
+  f.set("models", (models) => [
+    ...models,
+    ...["fast", "ultrafast"].map((id) => ({
+      ...models[0],
+      id: `a-${id}`,
+      modelID: `a-${id}`,
+      experimental: { speed: { base: "a", id, faster: true } },
+    })),
+  ])
+  const { composer } = f.mount(true)
+
+  if (!composer) throw new Error("missing draft composer")
+  expect(composer.current()?.id).toBe("a")
+  expect(composer.variant.current()).toBe("high")
+  composer.speed.set("fast")
+  expect(composer.current()?.id).toBe("a-fast")
+  expect(composer.variant.current()).toBe("high")
+
+  f.setPreferences("variant", "provider/a-ultrafast", "low")
+  expect(composer.variant.current()).toBe("high")
+  f.setPreferences("variant", "provider/a-fast", "low")
+  expect(composer.variant.current()).toBe("low")
+})
+
+test("a promoted draft leaves the next draft empty even when its Session is never opened", () => {
+  const f = fixture()
+  f.set("route", "id", undefined)
+  const { local } = f.mount()
+  local.agent.set("plan")
+  local.model.set(key("b"))
+  local.model.variant.set("high")
+  local.session.promote(f.directory, "ses_a", { agent: "plan", model: key("b"), variant: "high", choices: {} })
+  expect(selection(local)).toEqual({ agent: "build", model: "a", variant: undefined })
+  f.set("route", "id", "ses_a")
+  expect(selection(local)).toEqual({ agent: "plan", model: "b", variant: "high" })
+})
+
+test("promoting into a workspace no provider shows writes it there and only there", () => {
+  const draft = fixture()
+  const worktree = fixture()
+  draft.set("route", "id", undefined)
+  const { local } = draft.mount()
+  const choices = { plan: { providerID: "provider", modelID: "c", variant: { type: "named", value: "low" } } } as const
+  local.session.promote(worktree.directory, "ses_wt", { agent: "build", model: key("b"), variant: "high", choices })
+  local.session.promote(worktree.directory, "ses_other", {
+    agent: "build",
+    model: key("a"),
+    variant: undefined,
+    choices,
+  })
+  expect(stored(worktree.directory).session).toEqual({
+    ses_wt: {
+      agent: "build",
+      choice: { providerID: "provider", modelID: "b", variant: { type: "named", value: "high" } },
+      choices,
+    },
+    ses_other: {
+      agent: "build",
+      choice: { providerID: "provider", modelID: "a", variant: { type: "default" } },
+      choices,
+    },
+  })
+  expect(stored(draft.directory)).toBeUndefined()
+
+  worktree.set("route", "id", "ses_wt")
+  const opened = worktree.mount().local
+  expect(selection(opened)).toEqual({ agent: "build", model: "b", variant: "high" })
+  opened.agent.set("plan")
+  expect(selection(opened)).toEqual({ agent: "plan", model: "c", variant: "low" })
+  worktree.set("route", "id", "ses_other")
+  expect(selection(opened)).toEqual({ agent: "build", model: "a", variant: undefined })
+  opened.agent.set("plan")
+  expect(selection(opened)).toEqual({ agent: "plan", model: "c", variant: "low" })
 })
 
 test("session model picks snapshot the variant rather than following another session's preferences", () => {
@@ -470,6 +596,19 @@ test("a commit received while its session is inactive does not discard its local
   f.set("sessions", "ses_a", durable("c", "low"))
   f.set("route", "id", "ses_a")
   expect(selection(local)).toEqual({ agent: "build", model: "a", variant: "high" })
+})
+
+test("a commit keeps waiting for its echo when the same folder's location reloads", () => {
+  const f = fixture()
+  const { local } = f.mount()
+  local.model.set(key("a"))
+  local.model.variant.set("high")
+  local.model.trackSessionCommit("ses_a", { agent: "build", model: key("a"), variant: "high" })
+  f.set("locationLoads", 1)
+  f.set("sessions", "ses_a", durable("a", "high"))
+  f.emit("session.model.selected")
+  f.set("sessions", "ses_a", durable("c", "low"))
+  expect(selection(local)).toEqual({ agent: "build", model: "c", variant: "low" })
 })
 
 test("cancelling a failed commit retains the draft and does not cancel a newer commit", () => {

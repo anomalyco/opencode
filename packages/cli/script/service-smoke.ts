@@ -2,6 +2,7 @@
 
 import { NodeFileSystem } from "@effect/platform-node"
 import { Service } from "@opencode/client/effect/service"
+import { MCP_CLIENT_PATH } from "@opencode/protocol/groups/mcp"
 import { ServerInfo } from "@opencode/protocol/groups/server"
 import { Effect, Schema } from "effect"
 import fs from "node:fs/promises"
@@ -44,6 +45,7 @@ try {
   const token = encodeURIComponent(credential)
   const serverInfo = await waitForReady(info.url, headers)
   if (serverInfo.pid !== info.pid) throw new Error("Server info does not match registration")
+  await verifyClientMcpSocket(info.url, token)
   const tokenInfo = await fetch(new URL(`/api/info?auth_token=${token}`, info.url), {
     signal: AbortSignal.timeout(5_000),
   })
@@ -134,6 +136,25 @@ async function verifyWebUi(url: string) {
   const entry = await fetch(new URL(script, url), { signal: AbortSignal.timeout(5_000) })
   if (entry.status !== 200 || (await entry.text()).length === 0)
     throw new Error(`Compiled service did not serve ${script}`)
+}
+
+// Bun once bundled the WebSocket server away, so every upgrade failed only in the compiled binary.
+async function verifyClientMcpSocket(url: string, token: string) {
+  const endpoint = new URL(`${MCP_CLIENT_PATH}?name=smoke&auth_token=${token}`, url)
+  endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:"
+  const socket = new WebSocket(endpoint)
+  const message = await new Promise<string>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("Compiled service sent no client MCP initialize")), 5_000)
+    socket.onmessage = (event) => {
+      clearTimeout(timeout)
+      resolve(String(event.data))
+    }
+    socket.onerror = () => {
+      clearTimeout(timeout)
+      reject(new Error("Compiled service rejected the client MCP socket"))
+    }
+  }).finally(() => socket.close())
+  if (!message.includes('"initialize"')) throw new Error("Compiled service did not initialize the client MCP socket")
 }
 
 async function waitForReady(url: string, headers: HeadersInit) {

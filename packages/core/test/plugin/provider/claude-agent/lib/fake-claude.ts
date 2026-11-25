@@ -205,7 +205,7 @@ export function make(script: readonly Step[], options?: { readonly probes?: bool
   const runs: Run[] = []
   const errors: string[] = []
   const transcripts = new Map<string, SessionMessage[]>()
-  const forks: Array<{ source: string; boundary: string; sessionID: string }> = []
+  const forks: Array<{ source: string; boundary: string; sessionID: string; configDir?: string }> = []
   const removed: string[] = []
   let next = 0
   let completed = 0
@@ -349,7 +349,7 @@ export function make(script: readonly Step[], options?: { readonly probes?: bool
     transcripts,
     forks,
     removed,
-    async fork(source: string, boundary: string) {
+    async fork(source: string, boundary: string, configDir?: string) {
       const history = transcripts.get(source) ?? []
       const end = history.findIndex((message) => message.uuid === boundary)
       if (end < 0) return
@@ -361,10 +361,13 @@ export function make(script: readonly Step[], options?: { readonly probes?: bool
         return { ...message, session_id: sessionID, uuid }
       })
       transcripts.set(sessionID, copied)
-      forks.push({ source, boundary, sessionID })
+      forks.push({ source, boundary, sessionID, configDir })
       return { sessionID, messages }
     },
-    async remove(sessionID: string) {
+    async remove(sessionID: string, configDir?: string) {
+      // A fork can only be deleted from the config folder it was written to.
+      const fork = forks.find((fork) => fork.sessionID === sessionID)
+      if (fork && fork.configDir !== configDir) errors.push(`removed ${sessionID} from the wrong config folder`)
       transcripts.delete(sessionID)
       removed.push(sessionID)
     },

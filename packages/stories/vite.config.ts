@@ -6,8 +6,7 @@ import { defineConfig, searchForWorkspaceRoot } from "vite"
 import solid from "vite-plugin-solid"
 import { storyIndex } from "./src/index-plugin"
 
-// Serves one story at a time for the component tests, the way Storybook's iframe did, without Storybook. The app's
-// browsing UI for stories is the components lab in the app itself.
+// The standalone components lab and the isolated story frames share the same mock runtime.
 const here = path.dirname(fileURLToPath(import.meta.url))
 const packages = path.resolve(here, "..")
 const app = path.resolve(packages, "app/src")
@@ -58,7 +57,7 @@ export default defineConfig({
       { find: /^@\/runtime\/platform\/platform$/, replacement: path.resolve(mocks, "app/context/platform.ts") },
       { find: /^@\/runtime\/server\/sync$/, replacement: path.resolve(mocks, "app/context/server-sync.ts") },
       { find: /^@\/runtime\/server\/client$/, replacement: path.resolve(mocks, "app/context/server-sdk.ts") },
-      { find: /^@\/runtime\/server\/current$/, replacement: path.resolve(mocks, "app/context/server-current.ts") },
+      { find: /^@\/runtime\/server\/current$/, replacement: path.resolve(mocks, "app/context/server-current.tsx") },
       { find: /^@\/providers\/catalog\/providers$/, replacement: path.resolve(mocks, "app/hooks/use-providers.ts") },
       {
         find: /^@\/providers\/models\/unpaid$/,

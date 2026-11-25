@@ -1,5 +1,4 @@
-// @ts-nocheck
-import * as mod from "./logo"
+import { Logo, Mark, Splash } from "./logo"
 
 const docs = `### Overview
 OpenCode logo assets: mark, splash, and wordmark.
@@ -7,7 +6,7 @@ OpenCode logo assets: mark, splash, and wordmark.
 Use Mark for compact spaces, Logo for headers, Splash for hero sections.
 
 ### API
-- \`Mark\`, \`Splash\`, and \`Logo\` components accept standard SVG props.
+- \`Mark\`, \`Splash\`, and \`Logo\` accept a CSS class for sizing. \`Splash\` also accepts a ref.
 
 ### Variants and states
 - Multiple logo variants for different contexts.
@@ -26,7 +25,7 @@ Use Mark for compact spaces, Logo for headers, Splash for hero sections.
 export default {
   title: "UI/Logo",
   id: "components-logo",
-  component: mod.Logo,
+  component: Logo,
   tags: ["autodocs"],
   parameters: {
     docs: {
@@ -42,16 +41,22 @@ export const Basic = {
     <div style={{ display: "grid", gap: "16px", "align-items": "start" }}>
       <div>
         <div style={{ color: "var(--text-weak)", "font-size": "12px" }}>Mark</div>
-        <mod.Mark />
+        <Mark />
       </div>
       <div>
         <div style={{ color: "var(--text-weak)", "font-size": "12px" }}>Splash</div>
-        <mod.Splash style={{ width: "80px", height: "100px" }} />
+        <Splash class="h-[100px] w-20" />
       </div>
       <div>
         <div style={{ color: "var(--text-weak)", "font-size": "12px" }}>Logo</div>
-        <mod.Logo style={{ width: "200px" }} />
+        <Logo class="w-[200px]" />
       </div>
     </div>
   ),
 }
+
+export const CompactMark = { render: () => <Mark /> }
+
+export const SplashMark = { render: () => <Splash class="h-[100px] w-20" /> }
+
+export const Wordmark = { render: () => <Logo class="w-[200px]" /> }

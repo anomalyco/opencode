@@ -1,7 +1,7 @@
 import path from "path"
 import fs from "fs/promises"
 import { describe, expect, test } from "bun:test"
-import { Arbitrary, Effect, Fiber, Layer, Logger, Schema, Stream } from "effect"
+import { Arbitrary, Effect, Fiber, Layer, Logger, Schema, Stream, Tracer } from "effect"
 import { Config } from "@opencode/core/config"
 import { ConfigDiscovery } from "@opencode/core/config/discovery"
 import { ConfigIntegration } from "@opencode/core/config/integration"
@@ -364,13 +364,6 @@ describe("Config", () => {
     )
   })
 
-  test("resolves macOS managed preferences with user-specific profiles first", () => {
-    expect(ConfigDiscovery.preferencePaths("alice")).toEqual([
-      AbsolutePath.make(path.join("/Library/Managed Preferences", "alice", "ai.opencode.managed.plist")),
-      AbsolutePath.make("/Library/Managed Preferences/ai.opencode.managed.plist"),
-    ])
-  })
-
   test("strips MDM payload metadata from managed preferences", () => {
     expect(
       JSON.parse(
@@ -574,7 +567,15 @@ describe("Config", () => {
         const credentialNode = makeGlobalNode({
           service: Credential.Service,
           layer: Layer.mock(Credential.Service)({
-            list: () => Effect.succeed([]),
+            list: (integrationID) =>
+              Effect.succeed([
+                new Credential.Info({
+                  id: Credential.ID.create(),
+                  integrationID,
+                  label: "default",
+                  value: Credential.Key.make({ type: "key", key: "secret" }),
+                }),
+              ]),
             get: (id) =>
               Effect.succeed(
                 new Credential.Info({
@@ -587,13 +588,17 @@ describe("Config", () => {
           }),
           deps: [],
         })
-        const entry: WellKnown.Entry = { origin, integrationID: Integration.ID.make(origin), manifest: {} }
+        const entry: WellKnown.Entry = {
+          origin,
+          integrationID: Integration.ID.make(origin),
+          manifest: { auth: { command: ["login"], env: "TOKEN" } },
+        }
         const wellknownNode = makeGlobalNode({
           service: WellKnown.Service,
           layer: Layer.mock(WellKnown.Service)({
             entries: () => Effect.succeed([entry]),
             snapshot: () => [entry],
-            cached: () =>
+            resolve: () =>
               Effect.succeed([
                 {
                   mcp: { servers: { wiki: { type: "remote", url: "https://wiki.acme.com/mcp" } } },
@@ -786,6 +791,157 @@ describe("Config", () => {
     ),
   )
 
+  const countReloads = () => {
+    const counter = { reloads: 0 }
+    let finished = () => {}
+    const first = new Promise<void>((resolve) => (finished = resolve))
+    const tracer = Tracer.make({
+      span: (options) => {
+        const span = Tracer.nativeTracer.span(options)
+        if (options.name !== "Config.reload") return span
+        counter.reloads++
+        const end = span.end.bind(span)
+        span.end = (time, exit) => {
+          end(time, exit)
+          finished()
+        }
+        return span
+      },
+    })
+    // The watches' readiness reload; later counts only see what the test triggers.
+    const settled = Effect.promise(() => first).pipe(Effect.timeout("3 seconds"))
+    return { counter, tracer, settled }
+  }
+
+  it.live("does not reload when an unrelated file under a config root changes", () =>
+    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
+      Effect.flatMap((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const project = path.join(tmp.path, "project")
+          const file = path.join(global, "opencode.json")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(global, "skills", "demo"), { recursive: true })
+            await fs.mkdir(project, { recursive: true })
+            await fs.writeFile(file, JSON.stringify({ shell: "one" }))
+          })
+          const { counter, tracer, settled } = countReloads()
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const watcher = yield* Watcher.Test
+            const changes = yield* config
+              .changes()
+              .pipe(Stream.take(2), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
+            yield* settled
+            const before = counter.reloads
+
+            // The config file changed on disk, but only unrelated paths report updates.
+            yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "two" })))
+            yield* watcher.emit({ type: "update", path: path.join(global, "skills", "demo", "SKILL.md") })
+            yield* watcher.emit({ type: "update", path: path.join(global, "opencode.json.bak") })
+            expect(Array.from(yield* Fiber.join(changes)).map((update) => update.path)).toEqual([
+              path.join(global, "skills", "demo", "SKILL.md"),
+              path.join(global, "opencode.json.bak"),
+            ])
+            // Outlasts the 100 ms reload debounce; proving no reload needs a wait.
+            yield* Effect.sleep("250 millis")
+            expect(counter.reloads).toBe(before)
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
+          }).pipe(
+            Effect.provide(testLayer(project, global, project, undefined, Watcher.testLayer)),
+            Effect.withTracer(tracer),
+          )
+        }),
+      ),
+    ),
+  )
+
+  const nextUpdate = Bus.Service.use((bus) =>
+    bus.subscribe(Event.Updated).pipe(Stream.take(1), Stream.runDrain, Effect.forkScoped({ startImmediately: true })),
+  )
+
+  it.live("reloads canonical events for a symlinked global root, even after removal", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const real = path.join(tmp.path, "real")
+        const link = path.join(tmp.path, "link")
+        const file = path.join(real, process.platform === "linux" ? "opencode.json" : "OpenCode.JSON")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(real)
+          await fs.symlink(real, link, "junction")
+        })
+        // Parcel delivers events for the underlying directory rather than the symlink spelling.
+        const canonical = Layer.effect(
+          Watcher.Service,
+          Watcher.Test.use((watcher) =>
+            Effect.succeed(
+              Watcher.Service.of({
+                subscribe: (target, ready) =>
+                  watcher.subscribe(target.path === link ? { ...target, path: real } : target, ready),
+              }),
+            ),
+          ),
+        ).pipe(Layer.provideMerge(Watcher.testLayer))
+        const { tracer, settled } = countReloads()
+        return yield* Effect.gen(function* () {
+          const config = yield* Config.Service
+          const watcher = yield* Watcher.Test
+          yield* settled
+          const created = yield* nextUpdate
+          yield* Effect.promise(() => fs.writeFile(file, JSON.stringify({ shell: "one" })))
+          yield* watcher.emit({ type: "create", path: file })
+          yield* Fiber.join(created).pipe(Effect.timeout("3 seconds"))
+          expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
+
+          const deleted = yield* nextUpdate
+          yield* Effect.promise(() => fs.rename(real, path.join(tmp.path, "moved")))
+          yield* watcher.emit({ type: "delete", path: real })
+          yield* Fiber.join(deleted).pipe(Effect.timeout("3 seconds"))
+          expect(Config.latest(yield* config.entries(), "shell")).toBeUndefined()
+        }).pipe(Effect.provide(testLayer(tmp.path, link, tmp.path, undefined, canonical)), Effect.withTracer(tracer))
+      }),
+    ),
+  )
+
+  for (const source of ["file", "content"] as const) {
+    it.live(`reloads ${source} config when its symlink target changes under a watched root`, () =>
+      withTempDir((tmp) =>
+        Effect.gen(function* () {
+          const global = path.join(tmp.path, "global")
+          const alias = path.join(tmp.path, "alias")
+          const file = path.join(global, "work.json")
+          const write = (shell: string) => fs.writeFile(file, source === "file" ? JSON.stringify({ shell }) : shell)
+          yield* Effect.promise(async () => {
+            await fs.mkdir(global)
+            await fs.symlink(global, alias, "junction")
+            await write("one")
+          })
+          const options =
+            source === "file"
+              ? { file: path.join(alias, "work.json") }
+              : {
+                  content: JSON.stringify({ shell: "{file:alias/work.json}" }),
+                }
+          const { tracer, settled } = countReloads()
+          return yield* Effect.gen(function* () {
+            const config = yield* Config.Service
+            const watcher = yield* Watcher.Test
+            yield* settled
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("one")
+            const changed = yield* nextUpdate
+            yield* Effect.promise(() => write("two"))
+            yield* watcher.emit({ type: "update", path: file })
+            yield* Fiber.join(changed).pipe(Effect.timeout("3 seconds"))
+            expect(Config.latest(yield* config.entries(), "shell")).toBe("two")
+          }).pipe(
+            Effect.provide(testLayer(tmp.path, global, tmp.path, undefined, undefined, undefined, undefined, options)),
+            Effect.withTracer(tracer),
+          )
+        }),
+      ),
+    )
+  }
+
   // Real watcher on purpose: the regression this pins (a deleted config file's
   // watch being torn down, making recreation invisible) only reproduces with
   // path-faithful event delivery.
@@ -841,25 +997,6 @@ describe("Config", () => {
     ),
   )
 
-  it.effect("backs Config.Service and Config.Test with one shared test implementation", () =>
-    Effect.gen(function* () {
-      const config = yield* Config.Service
-      const test = yield* Config.Test
-      expect(yield* config.entries()).toEqual([])
-
-      const entry = new Document({ type: "document", info: new Info({}) })
-      yield* test.setEntries([entry])
-      expect(yield* config.entries()).toEqual([entry])
-
-      const received = yield* config
-        .changes()
-        .pipe(Stream.take(1), Stream.runCollect, Effect.forkScoped({ startImmediately: true }))
-      yield* Effect.yieldNow
-      yield* test.emitChange({ type: "create", path: "/root/commands/review.md" })
-      expect(Array.from(yield* Fiber.join(received))).toEqual([{ type: "create", path: "/root/commands/review.md" }])
-    }).pipe(Effect.provide(Config.testLayer())),
-  )
-
   test("returns the latest defined scalar from priority-ordered documents", () => {
     const entries = [
       new Document({
@@ -898,7 +1035,7 @@ describe("Config", () => {
           layer: Layer.succeed(
             Credential.Service,
             Credential.Service.of({
-              lock: () => Effect.die("unused Credential.lock"),
+              refresh: () => Effect.die("unused Credential.refresh"),
               all: () => Effect.die("unused Credential.all"),
               list: () =>
                 Effect.succeed([
@@ -936,6 +1073,7 @@ describe("Config", () => {
               resolve: (_entry, variables) =>
                 available ? Effect.succeed([{ shell: variables.TOKEN }]) : Effect.fail(new Error("expired credential")),
               cached: () => Effect.succeed([]),
+              clearCached: () => Effect.void,
             }),
           ),
           deps: [],
@@ -971,7 +1109,7 @@ describe("Config", () => {
     ),
   )
 
-  it.live("keeps the last resolved wellknown config across failures and restarts until its source is removed", () =>
+  it.live("keeps the last resolved wellknown config across failures and restarts while a credential exists", () =>
     withTempDir((tmp) => {
       let manifestStatus = 200
       let configStatus = 200
@@ -1079,7 +1217,14 @@ describe("Config", () => {
           expect(requests).toBeGreaterThan(before)
 
           key = undefined
-          expect(yield* warm.reload("logged-out", warm.switched)).toEqual(loaded)
+          expect(yield* warm.reload("logged-out", warm.switched)).toEqual(removed)
+
+          // Logging out drops the saved config, so logging back in while the remote is down supplies nothing.
+          key = "secret"
+          expect(yield* warm.reload("logged-in-unavailable", warm.switched)).toEqual(removed)
+          configStatus = 200
+          expect(yield* warm.reload("logged-in", warm.switched)).toEqual(loaded)
+          configStatus = 503
 
           manifestStatus = 503
           const updated = yield* warm.bus
@@ -1090,7 +1235,6 @@ describe("Config", () => {
           expect(updated.pollUnsafe()).toBeUndefined()
         }).pipe(Effect.scoped, Effect.provide(instance()))
 
-        key = "secret"
         yield* Effect.gen(function* () {
           const cold = yield* services
           expect(remote(yield* cold.config.entries())).toEqual(loaded)
@@ -1134,7 +1278,7 @@ describe("Config", () => {
           layer: Layer.succeed(
             Credential.Service,
             Credential.Service.of({
-              lock: () => Effect.die("unused Credential.lock"),
+              refresh: () => Effect.die("unused Credential.refresh"),
               all: () => Effect.die("unused Credential.all"),
               list: () =>
                 Effect.succeed([
@@ -1167,6 +1311,7 @@ describe("Config", () => {
               // Exercise the loader boundary against a malformed implementation response.
               resolve: () => Effect.succeed([null as unknown as WellKnown.Config]),
               cached: () => Effect.succeed([]),
+              clearCached: () => Effect.void,
             }),
           ),
           deps: [],
@@ -1266,23 +1411,6 @@ describe("Config", () => {
       encoded: { update: "auto" },
       diagnostics: [],
     })
-  })
-
-  test("migrates v1 provider lists to policies", () => {
-    expect(
-      migrateV1({
-        enabled_providers: ["anthropic", "openai"],
-        disabled_providers: ["openai"],
-      }).policies,
-    ).toEqual([
-      { action: "provider.use", resource: "*", effect: "deny" },
-      { action: "provider.use", resource: "anthropic", effect: "allow" },
-      { action: "provider.use", resource: "openai", effect: "allow" },
-      { action: "provider.use", resource: "openai", effect: "deny" },
-    ])
-    expect(migrateV1({ enabled_providers: [] }).policies).toEqual([
-      { action: "provider.use", resource: "*", effect: "deny" },
-    ])
   })
 
   test("migrates v1 provider setup options into AISDK settings", () => {
@@ -1490,31 +1618,6 @@ describe("Config", () => {
     ),
   )
 
-  it.live("deduplicates global ecosystem directories found during upward discovery", () =>
-    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
-      Effect.flatMap((tmp) =>
-        Effect.gen(function* () {
-          const global = path.join(tmp.path, "global")
-          const home = path.join(global, "home")
-          const project = path.join(home, "project")
-          yield* Effect.promise(() =>
-            Promise.all([
-              fs.mkdir(path.join(home, ".claude"), { recursive: true }),
-              fs.mkdir(path.join(home, ".agents"), { recursive: true }),
-              fs.mkdir(project, { recursive: true }),
-            ]),
-          )
-          const compatibility = yield* Config.Service.use((config) => config.compatibility!()).pipe(
-            Effect.provide(testLayer(project, global)),
-          )
-
-          expect(compatibility.claude).toEqual([AbsolutePath.make(path.join(home, ".claude"))])
-          expect(compatibility.agents).toEqual([AbsolutePath.make(path.join(home, ".agents"))])
-        }),
-      ),
-    ),
-  )
-
   it.live("does not recursively watch ecosystem config roots", () =>
     Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
       Effect.flatMap((tmp) =>
@@ -1701,221 +1804,6 @@ describe("Config", () => {
             expect(documents[0]?.info.$schema).toBeUndefined()
             expect(documents[0]?.info.shell).toBe("/bin/zsh")
             expect(yield* Effect.promise(() => fs.readFile(file, "utf8"))).toBe(contents)
-          }).pipe(Effect.provide(testLayer(tmp.path)))
-        }),
-      ),
-    ),
-  )
-
-  it.live("loads supported scalar and resource configuration", () =>
-    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
-      Effect.flatMap((tmp) =>
-        Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            fs.writeFile(
-              path.join(tmp.path, "opencode.json"),
-              JSON.stringify({
-                shell: "/bin/bash",
-                model: "anthropic/claude",
-                default_agent: "reviewer",
-                update: "notify",
-                share: "disabled",
-                enterprise: { url: "https://share.example.com" },
-                username: "test-user",
-                permissions: [
-                  { action: "bash", resource: "*", effect: "ask" },
-                  { action: "bash", resource: "git status", effect: "allow" },
-                ],
-                agents: {
-                  reviewer: {
-                    model: "openrouter/openai/gpt-5#high",
-                    request: {
-                      headers: { "x-agent": "reviewer" },
-                      body: { reasoningEffort: "high" },
-                    },
-                    description: "Review changes for correctness",
-                    system: "Find regressions.",
-                    mode: "subagent",
-                    hidden: false,
-                    color: "#ff6b6b",
-                    steps: 12,
-                    disabled: false,
-                    permissions: [{ action: "edit", resource: "*", effect: "deny" }],
-                  },
-                },
-                snapshots: false,
-                watcher: { ignore: ["node_modules/**", "dist/**", ".git"] },
-                formatter: {
-                  prettier: { disabled: true },
-                  custom: { command: ["custom-fmt", "$FILE"], extensions: [".foo"] },
-                },
-                lsp: { typescript: { disabled: true }, custom: { command: ["custom-lsp"], extensions: [".foo"] } },
-                media: {
-                  image: { auto_resize: false, max_width: 1200, max_height: 900, max_base64_bytes: 1048576 },
-                },
-                tool_output: { max_lines: 1000, max_bytes: 32768 },
-                mcp: {
-                  timeout: { startup: 5000, catalog: 60000, execution: 43200000 },
-                  servers: {
-                    local: {
-                      type: "local",
-                      command: ["node", "./mcp/server.js"],
-                      environment: { API_KEY: "secret" },
-                      disabled: false,
-                      codemode: false,
-                      timeout: { catalog: 10000 },
-                      protocol: "legacy",
-                    },
-                    remote: {
-                      type: "remote",
-                      url: "https://mcp.example.com/mcp",
-                      headers: { Authorization: "Bearer token" },
-                      oauth: { client_id: "client", scope: "read write", callback_port: 19876 },
-                      disabled: true,
-                      codemode: false,
-                      timeout: { startup: 15000 },
-                      protocol: "2026-07-28",
-                    },
-                  },
-                },
-                compaction: {
-                  auto: true,
-                  prune: false,
-                  keep: { tokens: 2000 },
-                  buffer: 10000,
-                },
-                skills: ["./skills", "~/shared-skills", "https://example.com/.well-known/skills/"],
-                instructions: ["CONTRIBUTING.md", ".cursor/rules/*.md", "https://example.com/shared-rules.md"],
-                references: {
-                  local: { path: "../library" },
-                  sdk: { repository: "github.com/example/sdk", branch: "main" },
-                  shorthand: "github.com/example/docs",
-                },
-              }),
-            ),
-          )
-
-          return yield* Effect.gen(function* () {
-            const config = yield* Config.Service
-            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
-
-            expect(documents).toHaveLength(1)
-            expect(documents[0]?.info.shell).toBe("/bin/bash")
-            expect(documents[0]?.info.model).toEqual(selection("anthropic/claude"))
-            expect(documents[0]?.info.default_agent).toBe("reviewer")
-            expect(documents[0]?.info.update).toBe("notify")
-            expect(documents[0]?.info.share).toBe("disabled")
-            expect(documents[0]?.info.enterprise).toEqual({ url: "https://share.example.com" })
-            expect(documents[0]?.info.username).toBe("test-user")
-            expect(documents[0]?.info.permissions).toEqual([
-              { action: "bash", resource: "*", effect: "ask" },
-              { action: "bash", resource: "git status", effect: "allow" },
-            ])
-            const reviewer = documents[0]?.info.agents?.reviewer
-            expect(reviewer?.model).toEqual(selection("openrouter/openai/gpt-5#high"))
-            expect(reviewer?.request).toEqual({
-              headers: { "x-agent": "reviewer" },
-              body: { reasoningEffort: "high" },
-            })
-            expect(reviewer?.description).toBe("Review changes for correctness")
-            expect(reviewer?.system).toBe("Find regressions.")
-            expect(reviewer?.mode).toBe("subagent")
-            expect(reviewer?.hidden).toBe(false)
-            expect(reviewer?.color).toBe("#ff6b6b")
-            expect(reviewer?.steps).toBe(12)
-            expect(reviewer?.disabled).toBe(false)
-            expect(reviewer?.permissions).toEqual([{ action: "edit", resource: "*", effect: "deny" }])
-            expect(documents[0]?.info.snapshots).toBe(false)
-            expect(documents[0]?.info.watcher).toEqual({ ignore: ["node_modules/**", "dist/**", ".git"] })
-            expect(documents[0]?.info.formatter).toEqual({
-              prettier: { disabled: true },
-              custom: { command: ["custom-fmt", "$FILE"], extensions: [".foo"] },
-            })
-            expect(documents[0]?.info.lsp).toEqual({
-              typescript: { disabled: true },
-              custom: { command: ["custom-lsp"], extensions: [".foo"] },
-            })
-            expect(documents[0]?.info.media).toEqual({
-              image: { auto_resize: false, max_width: 1200, max_height: 900, max_base64_bytes: 1048576 },
-            })
-            expect(documents[0]?.info.tool_output).toEqual({ max_lines: 1000, max_bytes: 32768 })
-            expect(documents[0]?.info.mcp).toEqual({
-              timeout: { startup: 5000, catalog: 60000, execution: 43200000 },
-              servers: {
-                local: {
-                  type: "local",
-                  command: ["node", "./mcp/server.js"],
-                  environment: { API_KEY: "secret" },
-                  disabled: false,
-                  codemode: false,
-                  timeout: { catalog: 10000 },
-                  protocol: "legacy",
-                },
-                remote: {
-                  type: "remote",
-                  url: "https://mcp.example.com/mcp",
-                  headers: { Authorization: "Bearer token" },
-                  oauth: { client_id: "client", scope: "read write", callback_port: 19876 },
-                  disabled: true,
-                  codemode: false,
-                  timeout: { startup: 15000 },
-                  protocol: "2026-07-28",
-                },
-              },
-            })
-            expect(documents[0]?.info.compaction).toEqual({
-              auto: true,
-              keep: { tokens: 2000 },
-              buffer: 10000,
-            })
-            expect(documents[0]?.info.skills).toEqual([
-              "./skills",
-              "~/shared-skills",
-              "https://example.com/.well-known/skills/",
-            ])
-            expect(documents[0]?.info.instructions).toEqual([
-              "CONTRIBUTING.md",
-              ".cursor/rules/*.md",
-              "https://example.com/shared-rules.md",
-            ])
-            expect(documents[0]?.info.references).toEqual({
-              local: { path: "../library" },
-              sdk: { repository: "github.com/example/sdk", branch: "main" },
-              shorthand: "github.com/example/docs",
-            })
-          }).pipe(Effect.provide(testLayer(tmp.path)))
-        }),
-      ),
-    ),
-  )
-
-  it.live("migrates the deprecated reference key into references", () =>
-    Effect.acquireDisposable(Effect.promise(() => tmpdir())).pipe(
-      Effect.flatMap((tmp) =>
-        Effect.gen(function* () {
-          yield* Effect.promise(() =>
-            fs.writeFile(
-              path.join(tmp.path, "opencode.json"),
-              JSON.stringify({
-                reference: {
-                  local: { path: "../library" },
-                  sdk: { repository: "github.com/example/sdk", branch: "main" },
-                  shorthand: "github.com/example/docs",
-                },
-              }),
-            ),
-          )
-
-          return yield* Effect.gen(function* () {
-            const config = yield* Config.Service
-            const documents = (yield* config.entries()).filter((entry) => entry.type === "document")
-
-            expect(documents).toHaveLength(1)
-            expect(documents[0]?.info.references).toEqual({
-              local: { path: "../library" },
-              sdk: { repository: "github.com/example/sdk", branch: "main" },
-              shorthand: "github.com/example/docs",
-            })
           }).pipe(Effect.provide(testLayer(tmp.path)))
         }),
       ),

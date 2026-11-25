@@ -1,0 +1,69 @@
+/* The ⌘K search's shell (search.tsx): its live region, the corner hint and the highlight on the
+   result it scrolls to. The dialog's styles load with it (search-palette.css). */
+
+[data-site] {
+  [data-slot="search-status"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  /* In the bottom-right corner. The arcade pages move it left of their own Settings button. */
+  [data-component="search-hint"] {
+    position: fixed;
+    bottom: calc(0.75rem + env(safe-area-inset-bottom, 0px));
+    inset-inline-end: calc(
+      var(--page-offset, 0px) + var(--search-hint-right, calc(0.75rem + env(safe-area-inset-right, 0px)))
+    );
+    z-index: 20;
+    height: 1.75rem;
+    padding-inline: 0.5rem;
+    font-family: var(--font-mono);
+    font-size: var(--fs-micro);
+    color: var(--text-weak);
+    border: 1px solid var(--border);
+    background: var(--bg);
+    opacity: 0.45;
+
+    &:focus-visible {
+      opacity: 1;
+      color: var(--text-strong);
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        opacity: 1;
+        color: var(--text-strong);
+      }
+    }
+
+    &:active,
+    &[aria-expanded="true"] {
+      opacity: 1;
+      color: var(--text-strong);
+    }
+
+    @media (hover: none), (pointer: coarse) {
+      display: none;
+    }
+  }
+
+  [data-search-target] {
+    outline: none;
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    [data-search-target] {
+      animation: search-target 1.6s var(--ease-out);
+    }
+  }
+}
+
+@keyframes search-target {
+  from {
+    background: color-mix(in srgb, var(--link) 12%, transparent);
+  }
+}

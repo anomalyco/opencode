@@ -8,10 +8,16 @@ import {
   type DecisionRequest,
   type DecisionResponse,
 } from "../decision.js"
-import { HttpOptions, ProviderID, type AIError, type ProviderOptions } from "../schema/index.js"
+import {
+  mergeTransport,
+  ProviderID,
+  type AIError,
+  type ProviderOptions,
+  type TransportOptions,
+} from "../schema/index.js"
 import { Auth } from "./auth.js"
 import { Endpoint } from "./endpoint.js"
-import { RequestExecutorService } from "./executor-service.js"
+import { RequestExecutor } from "./executor.js"
 import { MediaProtocol } from "./media-protocol.js"
 import { MediaRoute, type Execute } from "./media.js"
 
@@ -32,26 +38,23 @@ export interface Protocol {
 
 export const protocol = (input: Protocol) => input
 
-export interface Patch {
+/** Headers, timeouts and `http` overlays merge into the route's; every model of the route starts from them. */
+export interface Patch extends TransportOptions {
   readonly id?: string
   readonly provider?: string | ProviderID
   /** ProviderMetadata namespace for responses; defaults to the provider. */
   readonly providerMetadataKey?: string
   readonly endpoint?: Endpoint.EndpointPatch<MediaProtocol.Body, DecisionRequest>
   readonly auth?: Auth.Definition
-  readonly headers?: Record<string, string>
-  readonly http?: HttpOptions.Input
 }
 
-export interface Route {
+export interface Route extends TransportOptions {
   readonly id: string
   readonly provider: ProviderID
   readonly providerMetadataKey: string
   readonly protocol: Protocol
   readonly endpoint: Endpoint.Definition<MediaProtocol.Body, DecisionRequest>
   readonly auth: Auth.Definition
-  readonly headers?: Record<string, string>
-  readonly http?: HttpOptions
   readonly with: (patch: Patch) => Route
   readonly model: <Options extends DecisionOptions = DecisionOptions>(input: {
     readonly id: string
@@ -76,8 +79,7 @@ export const make = (input: MakeInput): Route => {
     protocol: input.protocol,
     endpoint: input.endpoint,
     auth: input.auth ?? Auth.none,
-    headers: input.headers,
-    http: HttpOptions.make(input.http),
+    ...mergeTransport(input),
   }
   return {
     ...route,
@@ -89,8 +91,7 @@ export const make = (input: MakeInput): Route => {
         providerMetadataKey:
           patch.providerMetadataKey ?? (patch.provider === undefined ? route.providerMetadataKey : undefined),
         endpoint: patch.endpoint === undefined ? route.endpoint : Endpoint.merge(route.endpoint, patch.endpoint),
-        headers: patch.headers === undefined ? route.headers : { ...route.headers, ...patch.headers },
-        http: patch.http === undefined ? route.http : HttpOptions.make(patch.http),
+        ...mergeTransport(route, patch),
       }),
     model: <Options extends DecisionOptions>(model: {
       readonly id: string
@@ -101,7 +102,7 @@ export const make = (input: MakeInput): Route => {
       return DecisionModel.make<Options>({
         id: model.id,
         provider,
-        http: route.http,
+        transport: mergeTransport(route),
         providerOptions: model.providerOptions,
         compatibility:
           model.compatibility === undefined ? undefined : DecisionModelCompatibility.make(model.compatibility),
@@ -129,11 +130,11 @@ const transport = (route: Omit<Route, "with" | "model">) => {
     }),
     endpoint: route.endpoint,
     auth: route.auth,
-    headers: route.headers,
   })
   return Effect.fnUntraced(function* (request: DecisionRequest, execute: Execute) {
     if (!route.protocol.inlineMedia) return yield* composed.generate(request, execute)
-    const input = yield* Effect.forEach(request.input, (part) => materialize(part, execute))
+    const timed = RequestExecutor.withTimeout(execute, mergeTransport(request.model.transport, request).timeout)
+    const input = yield* Effect.forEach(request.input, (part) => materialize(part, timed))
     return yield* composed.generate({ ...request, input }, execute)
   })
 }
@@ -141,7 +142,7 @@ const transport = (route: Omit<Route, "with" | "model">) => {
 const materialize = (part: DecisionPart, execute: Execute) =>
   part.type === "media" && part.media.source.type === "url"
     ? part.media.materialize().pipe(
-        Effect.provideService(RequestExecutorService, { execute }),
+        Effect.provideService(RequestExecutor.Service, { execute }),
         Effect.map((media) => ({ ...part, media })),
       )
     : Effect.succeed(part)

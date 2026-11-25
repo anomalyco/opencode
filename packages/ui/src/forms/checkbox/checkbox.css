@@ -83,8 +83,8 @@
   }
 
   &:not([data-readonly]) [data-slot="checkbox-checkbox-input"]:focus-visible + [data-slot="checkbox-checkbox-control"] {
-    border-color: var(--v2-border-border-focus);
-    box-shadow: var(--shadow-xs-border-focus);
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: 2px;
   }
 
   &[data-checked] [data-slot="checkbox-checkbox-control"],

@@ -54,4 +54,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} s'ha esgotat després de {{timeout}}ms",
   "error.failedPort": "No s'ha pogut obtenir el port",
   "menu.remove": "Elimina",
+  "error.busy": "{{distro}} està ocupat amb una altra tasca. Torneu-ho a provar quan acabi.",
 }

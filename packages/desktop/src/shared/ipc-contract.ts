@@ -8,6 +8,25 @@ export type TitlebarTheme = {
   scheme?: "system" | "light" | "dark"
 }
 
+export type TaskbarProgressMode = "none" | "indeterminate" | "paused" | "error"
+
+export type TaskbarProgressSummary = {
+  readonly waiting: number
+  readonly failed: boolean
+  readonly busy: boolean
+}
+
+/** Maps a window's open-tab summary to the Windows taskbar progress bar mode. */
+export function selectTaskbarProgressMode(summary: TaskbarProgressSummary): TaskbarProgressMode {
+  if (summary.waiting > 0) return "paused"
+
+  if (summary.failed) return "error"
+
+  if (summary.busy) return "indeterminate"
+
+  return "none"
+}
+
 export type FatalRendererError = {
   error: string
   url: string

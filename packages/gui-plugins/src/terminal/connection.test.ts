@@ -161,6 +161,60 @@ describe("terminalConnection", () => {
     expect(exited.failures).toEqual([])
   })
 
+  test("reports no failure when the socket errors after the shell exited", () => {
+    const terminal = setup()
+    terminal.connection.message(attached())
+    terminal.connection.message(JSON.stringify({ type: "exited", exitCode: 0, finalOffset: 256 }))
+    terminal.connection.error()
+    terminal.connection.close()
+
+    expect(terminal.failures).toEqual([])
+  })
+
+  test("sends nothing and writes nothing more once disposed", async () => {
+    const terminal = setup()
+    terminal.connection.size({ cols: 120, rows: 40 })
+    terminal.connection.restore({ size: { cols: 80, rows: 24 }, checkpoint: btoa("restored") })
+    terminal.connection.message(attached())
+    terminal.connection.input("ls\r")
+    terminal.connection.output(encode("replayed"))
+    terminal.connection.message(replayComplete)
+    await settle()
+    terminal.connection.dispose()
+    await terminal.drain()
+    terminal.connection.output(encode("late"))
+    await terminal.drain()
+
+    expect(terminal.log).toEqual(["resize 80x24", "write restored"])
+    expect(terminal.sent).toEqual([])
+  })
+
+  test("sends input again after a write threw", async () => {
+    const sent: Uint8Array[] = []
+
+    const connection = terminalConnection({
+      attachmentID: "attachment-1",
+      write: () => {
+        throw new Error("write")
+      },
+      resize: () => {},
+      send: (frame) => sent.push(frame),
+      fail: () => {},
+    })
+
+    connection.size({ cols: 120, rows: 40 })
+    connection.message(attached())
+    connection.message(replayComplete)
+    connection.output(encode("x"))
+    await settle()
+    connection.input("a")
+
+    expect(sent).toEqual([
+      persistentPtyFrame({ cols: 120, rows: 40 }),
+      persistentPtyFrame({ cols: 120, rows: 40 }, encode("a")),
+    ])
+  })
+
   test("reports a server that does not speak input protocol 1 as out of date", () => {
     const terminal = setup()
     terminal.connection.message(attached({ inputProtocol: undefined }))

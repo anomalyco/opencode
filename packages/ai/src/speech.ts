@@ -1,9 +1,16 @@
 import { Effect, Schema, Stream } from "effect"
-import { ProgressEvent, QueuedEvent } from "./generation.js"
+import { ProgressEvent } from "./generation.js"
 import { Media } from "./media.js"
 import { MediaModel, composeRoute, tryRequest } from "./media-model.js"
 import { MediaRoute } from "./route/media.js"
-import { AIError, HttpOptions, MediaUsage, ProviderMetadata, ProviderOptions, type OpenString } from "./schema/index.js"
+import {
+  AIError,
+  MediaUsage,
+  ProviderMetadata,
+  ProviderOptions,
+  type OpenString,
+  type BaseRequest,
+} from "./schema/index.js"
 import { SpeechClient, Service } from "./speech-client.js"
 
 // ---------------------------------------------------------------------------
@@ -44,7 +51,7 @@ export class SpeechModel<Options extends SpeechOptions = SpeechOptions> extends 
     return new SpeechModel<Options>({
       id: input.id,
       provider: route.protocol.provider,
-      http: input.http,
+      transport: input.transport,
       providerOptions: input.providerOptions,
       route: composeRoute(route, input, collectResponse) as SpeechRoute,
     })
@@ -85,28 +92,23 @@ const SpeechRequestSchema = Schema.Struct({
   instructions: Schema.optional(Schema.String),
   timestamps: Schema.optional(Schema.Boolean),
   providerOptions: Schema.optional(ProviderOptions),
-  http: Schema.optional(HttpOptions),
 })
 
 /** A normalized speech request, the plain object `Speech.request(...)` returns. */
 export type SpeechRequest<Model extends SpeechModel = SpeechModel> = Omit<
   typeof SpeechRequestSchema.Type,
   "model" | "providerOptions" | "format"
-> & {
-  readonly model: Model
-  readonly format?: SpeechFormat
-  readonly providerOptions?: SpeechModelOptions<Model>
-}
+> &
+  BaseRequest<Model, SpeechModelOptions<Model>> & { readonly format?: SpeechFormat }
 
 export type SpeechModelOptions<Model> = Model extends SpeechModel<infer Options> ? Options : never
 
 /** Input accepted by `Speech.request` and the calls; a `SpeechRequest` is also a valid input. */
 export type SpeechRequestInput<Model extends SpeechModel = SpeechModel> = Omit<
   SpeechRequest<Model>,
-  "providerOptions" | "http"
+  "providerOptions"
 > & {
   readonly providerOptions?: NoInfer<SpeechModelOptions<Model>>
-  readonly http?: HttpOptions.Input
 }
 
 // ---------------------------------------------------------------------------
@@ -140,7 +142,6 @@ export const SpeechFinishEvent = Schema.Struct({
 }).annotate({ identifier: "Speech.Event.Finish" })
 
 const speechEventTagged = Schema.Union([
-  QueuedEvent,
   ProgressEvent,
   SpeechAudioDeltaEvent,
   SpeechTimestampsEvent,
@@ -148,7 +149,6 @@ const speechEventTagged = Schema.Union([
 ]).pipe(Schema.toTaggedUnion("type"))
 export const SpeechEvent = Object.assign(speechEventTagged, {
   is: {
-    generationQueued: speechEventTagged.guards["generation-queued"],
     generationProgress: speechEventTagged.guards["generation-progress"],
     audioDelta: speechEventTagged.guards["audio-delta"],
     timestamps: speechEventTagged.guards.timestamps,
@@ -179,7 +179,6 @@ const collectResponse = (events: ReadonlyArray<SpeechEvent>): Effect.Effect<Spee
 /** Normalize speech request input into a plain `SpeechRequest`. */
 export const request = <const Model extends SpeechModel>(input: SpeechRequestInput<Model>): SpeechRequest<Model> => ({
   ...input,
-  http: HttpOptions.make(input.http),
 })
 
 const validate = Schema.decodeUnknownSync(SpeechRequestSchema)

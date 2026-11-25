@@ -1,5 +1,7 @@
 import { Popover } from "@kobalte/core/popover"
 import { Badge } from "@opencode/ui/badge"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
+import { createOverlayFocus } from "@opencode/ui/context/overlay-focus"
 import { createEffect, createMemo, For, Match, on, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useLanguage } from "@/runtime/i18n/language"
@@ -13,6 +15,10 @@ export function SessionTodoPill(props: { todos: readonly Todo[]; defaultOpen?: b
   const language = useLanguage()
   const alignment = useComposerLaneAlignment()
   const [state, setState] = createStore({ open: props.defaultOpen ?? false })
+
+  const overlayFocus = createOverlayFocus()
+
+  let trigger: HTMLButtonElement | undefined
 
   const done = createMemo(() => props.todos.filter((todo) => todo.status === "completed").length)
   const current = createMemo(() => currentTodo(props.todos))
@@ -29,11 +35,15 @@ export function SessionTodoPill(props: { todos: readonly Todo[]; defaultOpen?: b
     >
       <Popover
         open={state.open}
-        onOpenChange={(open) => setState("open", open)}
+        onOpenChange={(open) => {
+          overlayFocus.openChanged(open)
+          setState("open", open)
+        }}
         placement={composerLanePlacement(alignment())}
         gutter={8}
       >
         <Popover.Trigger
+          ref={trigger}
           as="button"
           type="button"
           data-slot="session-todo-pill"
@@ -43,7 +53,9 @@ export function SessionTodoPill(props: { todos: readonly Todo[]; defaultOpen?: b
           <Show when={current()}>
             {(todo) => (
               <>
-                <TodoGlyph status={todo().status} />
+                <span data-composer-pill-icon class="flex size-4 shrink-0 items-center justify-center">
+                  <TodoGlyph status={todo().status} />
+                </span>
                 <span dir="auto" class="min-w-0 max-w-[260px] truncate">
                   {todo().content}
                 </span>
@@ -57,7 +69,12 @@ export function SessionTodoPill(props: { todos: readonly Todo[]; defaultOpen?: b
           </Show>
         </Popover.Trigger>
         <Popover.Portal>
-          <Popover.Content data-slot="session-todo-panel" data-composer-pill-panel aria-label={label()}>
+          <Popover.Content
+            data-slot="session-todo-panel"
+            data-composer-pill-panel
+            aria-label={label()}
+            onCloseAutoFocus={(event) => overlayFocus.restore(event, trigger)}
+          >
             <TodoList todos={props.todos} />
           </Popover.Content>
         </Popover.Portal>
@@ -75,17 +92,17 @@ function TodoList(props: { todos: readonly Todo[] }) {
       () => props.todos.findIndex((todo) => todo.status === "in_progress"),
       (index) => {
         if (index < 0 || !list) return
-        list.children[index]?.scrollIntoView({ block: "nearest" })
+        list.querySelectorAll('[data-slot="session-todo-row"]')[index]?.scrollIntoView({ block: "nearest" })
       },
     ),
   )
 
   return (
-    <div
-      ref={list}
+    <MenuScroll
       data-slot="session-todo-list"
-      data-scrollable
-      class="flex max-h-[232px] flex-col overflow-y-auto p-1"
+      class="max-h-[232px]"
+      viewportClass="p-1"
+      viewportRef={(element) => (list = element)}
     >
       <For each={props.todos}>
         {(todo) => (
@@ -107,7 +124,7 @@ function TodoList(props: { todos: readonly Todo[] }) {
           </div>
         )}
       </For>
-    </div>
+    </MenuScroll>
   )
 }
 

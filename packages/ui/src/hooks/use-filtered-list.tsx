@@ -1,7 +1,15 @@
-import fuzzysort from "fuzzysort"
-import { createEffect, createMemo, createResource, on } from "solid-js"
-import { createStore } from "solid-js/store"
-import { createList } from "solid-list"
+import { batch, createComputed, createMemo, createReaction, createSignal, on, onCleanup, untrack } from "solid-js"
+import {
+  createListState,
+  LIST_LOAD_TIMEOUT_MS,
+  selectListFailed,
+  selectListLoading,
+  transitionList,
+  type ListEvent,
+  type ListGroup,
+} from "./list-machine"
+
+export { groupItems } from "./list-machine"
 
 export interface FilteredListProps<T> {
   items: T[] | ((filter: string) => T[] | Promise<T[]>)
@@ -10,134 +18,115 @@ export interface FilteredListProps<T> {
   current?: T
   groupBy?: (x: T) => string
   sortBy?: (a: T, b: T) => number
-  sortGroupsBy?: (a: { category: string; items: T[] }, b: { category: string; items: T[] }) => number
+  sortGroupsBy?: (a: ListGroup<T>, b: ListGroup<T>) => number
   skipFilter?: (item: T) => boolean
   onSelect?: (value: T | undefined, index: number) => void
-}
-
-export function groupItems<T>(
-  items: T[],
-  props: Pick<FilteredListProps<T>, "groupBy" | "sortBy" | "sortGroupsBy">,
-) {
-  // A plain object keeps the group order of `Object.entries`, where numeric-looking categories sort first.
-  const byCategory: Record<string, T[]> = {}
-
-  for (const item of items) {
-    const category = props.groupBy ? props.groupBy(item) : ""
-    byCategory[category] ??= []
-    byCategory[category].push(item)
-  }
-
-  const groups = Object.entries(byCategory).map(([category, group]) => ({
-    category,
-    items: props.sortBy ? group.sort(props.sortBy) : group,
-  }))
-
-  return props.sortGroupsBy ? groups.sort(props.sortGroupsBy) : groups
+  /** Makes the query parent-owned: the list shows this value and reports edits through `onFilter`. */
+  filter?: string
+  onFilter?: (value: string) => void
 }
 
 export function useFilteredList<T>(props: FilteredListProps<T>) {
-  const [store, setStore] = createStore<{ filter: string }>({ filter: "" })
+  const [state, setState] = createSignal(createListState<T>(props.filter))
+  let loadTimer: ReturnType<typeof setTimeout> | undefined
 
-  type Group = { category: string; items: [T, ...T[]] }
+  const dispatch = (event: ListEvent<T>, keyboard?: KeyboardEvent) => {
+    const result = transitionList(untrack(state), event, props)
 
-  const empty: Group[] = []
+    if (result.handled) keyboard?.preventDefault()
 
-  const search = (all: T[], needle: string) => {
-    const skipFilter = props.skipFilter
-    const filterable = skipFilter ? all.filter((item) => !skipFilter(item)) : all
-    const skipped = skipFilter ? all.filter(skipFilter) : []
+    // A synchronous load settles inside the batch, so readers never see its `loading` step.
+    batch(() => {
+      setState(() => result.state)
+      result.effects.forEach((effect) => {
+        if (effect.type === "cancel.load") clearTimeout(loadTimer)
 
-    // oxlint-disable-next-line anti-slop/no-runtime-typeof -- plain string lists have no keys to search by
-    const strings = !props.filterKeys && filterable.every((e) => typeof e === "string")
+        if (effect.type === "load") load(effect.attempt, effect.query)
+      })
+    })
+    result.effects.forEach((effect) => {
+      if (effect.type === "notify.filter") props.onFilter?.(effect.value)
 
-    // SAFETY: when `strings` holds, every element is a string, so the matched targets are the items.
-    const filtered = strings
-      ? (fuzzysort.go(needle, filterable as string[]).map((x) => x.target) as T[])
-      : fuzzysort.go(needle, filterable, { keys: props.filterKeys! }).map((x) => x.obj)
-
-    return skipped.length ? [...filtered, ...skipped] : filtered
+      if (effect.type === "select") props.onSelect?.(effect.item, effect.index)
+    })
   }
 
-  const [grouped, { refetch }] = createResource(
-    () => ({
-      filter: store.filter,
+  // Tracks what the last load read (`props.items`, or the signals `items(query)` reads) and reloads when it changes.
+  const track = createReaction(() => dispatch({ type: "items.reload" }))
+
+  const load = (attempt: number, query: string) => {
+    clearTimeout(loadTimer)
+    track(() => {
       // oxlint-disable-next-line anti-slop/no-runtime-typeof -- `items` is either a list or a loader for one
-      items: typeof props.items === "function" ? props.items(store.filter) : props.items,
-    }),
-    async ({ filter, items }) => {
-      const query = filter ?? ""
-      const needle = query.toLowerCase()
-      const all = (await Promise.resolve(items)) || []
+      const items = typeof props.items === "function" ? props.items(query) : props.items
+      untrack(() => settle(attempt, items))
+    })
+  }
 
-      const matched = needle ? search(all, needle) : all
+  const settle = (attempt: number, items: T[] | Promise<T[]>) => {
+    if (Array.isArray(items)) return dispatch({ type: "load.resolved", attempt, items })
 
-      return groupItems(matched, props)
-    },
-    { initialValue: empty },
+    loadTimer = setTimeout(() => dispatch({ type: "load.timed-out", attempt }), LIST_LOAD_TIMEOUT_MS)
+    void items.then(
+      (items) => dispatch({ type: "load.resolved", attempt, items: items ?? [] }),
+      () => dispatch({ type: "load.failed", attempt }),
+    )
+  }
+
+  createComputed(
+    on(
+      () => props.filter,
+      (value) => dispatch(value === undefined ? { type: "filter.uncontrolled" } : { type: "filter.controlled", value }),
+      { defer: true },
+    ),
   )
 
-  const flat = createMemo(() => (grouped.latest || []).flatMap((x) => x.items))
+  onCleanup(() => dispatch({ type: "disposed" }))
 
-  // Lists open on their first row; `current` only marks the selected item.
-  const list = createList({
-    items: () => flat().map(props.key),
-    initialActive: flat()[0] ? props.key(flat()[0]) : "",
-    loop: true,
-  })
+  dispatch({ type: "items.reload" })
 
-  const reset = () => {
-    const all = flat()
-
-    if (all.length === 0) return
-    list.setActive(props.key(all[0]))
-  }
-
-  const onKeyDown = (event: KeyboardEvent) => {
-    if (event.key === "Enter" && !event.isComposing) {
-      event.preventDefault()
-      const selectedIndex = flat().findIndex((x) => props.key(x) === list.active())
-      const selected = flat()[selectedIndex]
-
-      if (selected) props.onSelect?.(selected, selectedIndex)
-    } else if (event.ctrlKey && !event.metaKey && !event.altKey && !event.shiftKey) {
-      if (event.key === "n" || event.key === "p") {
-        event.preventDefault()
-
-        const navEvent = new KeyboardEvent("keydown", {
-          key: event.key === "n" ? "ArrowDown" : "ArrowUp",
-          bubbles: true,
-        })
-
-        list.onKeyDown(navEvent)
-      }
-    } else {
-      // Skip list navigation for text editing shortcuts (e.g., Option+Arrow, Option+Backspace on macOS)
-      if (event.altKey || event.metaKey) return
-      list.onKeyDown(event)
-    }
-  }
-
-  createEffect(
-    on(grouped, () => {
-      reset()
-    }),
-  )
-
-  const onInput = (value: string) => {
-    setStore("filter", value)
-  }
+  const groups = createMemo(() => state().groups)
+  const loading = createMemo(() => selectListLoading(state()))
+  const failed = createMemo(() => selectListFailed(state()))
 
   return {
-    grouped,
-    filter: () => store.filter,
-    flat,
-    reset,
-    refetch,
-    clear: () => setStore("filter", ""),
-    onKeyDown,
-    onInput,
-    active: list.active,
-    setActive: list.setActive,
+    state,
+    dispatch,
+    grouped: {
+      get latest() {
+        return groups()
+      },
+      get loading() {
+        return loading()
+      },
+      get state(): "ready" | "refreshing" | "errored" {
+        if (loading()) return "refreshing"
+
+        return failed() ? "errored" : "ready"
+      },
+    },
+    filter: createMemo(() => state().filter.query),
+    flat: createMemo(() => state().rows),
+    active: createMemo(() => state().highlight.activeKey),
+    reset: () => dispatch({ type: "active.reset" }),
+    refetch: () => dispatch({ type: "items.reload" }),
+    clear: () => dispatch({ type: "query.change", value: "" }),
+    onInput: (value: string) => dispatch({ type: "query.change", value }),
+    setActive: (key: string | null) => dispatch({ type: "active.set", key }),
+    onKeyDown: (event: KeyboardEvent, options?: { search?: boolean; claimed?: boolean }) =>
+      dispatch(
+        {
+          type: "key.down",
+          key: event.key,
+          ctrl: event.ctrlKey,
+          alt: event.altKey,
+          meta: event.metaKey,
+          shift: event.shiftKey,
+          composing: event.isComposing,
+          search: options?.search === true,
+          claimed: options?.claimed === true,
+        },
+        event,
+      ),
   }
 }

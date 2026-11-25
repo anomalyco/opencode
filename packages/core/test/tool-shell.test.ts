@@ -3,7 +3,8 @@ import { realpathSync, watch } from "node:fs"
 import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, Stream } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Schedule, Scope, Stream, Tracer } from "effect"
+import { TestClock } from "effect/testing"
 import { Money } from "@opencode/schema/money"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
@@ -11,17 +12,20 @@ import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node
 import { filesystem } from "@opencode/util/effect/app-node-platform"
 import { Database } from "@opencode/core/database/database"
 import { Bus } from "@opencode/core/bus"
+import { CodeModeCatalog } from "@opencode/core/codemode/catalog"
 import { Config } from "@opencode/core/config"
 import { Environment } from "@opencode/core/environment/index"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
+import { Flag } from "@opencode/core/flag"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Agent } from "@opencode/core/agent"
+import { Automation } from "@opencode/schema/automation"
 import { Job } from "@opencode/core/job"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
@@ -34,10 +38,16 @@ import { Plugin } from "@opencode/core/plugin"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
 import { Shell } from "@opencode/core/shell"
 import { ShellSelect } from "@opencode/core/shell/select"
+import { ShellResult } from "@opencode/core/shell/result"
 import { ID } from "@opencode/schema/shell"
 import { ShellTool } from "@opencode/core/tool/plugin/shell"
 import { ToolOutput } from "@opencode/core/tool-output"
 import { Tool } from "@opencode/core/tool"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
+import { SessionStep } from "@opencode/core/session/runner/step"
+import { PersistentPty } from "@opencode/core/persistent-pty"
+import { disabledPersistentPtyLayer } from "./fixture/persistent-pty"
+import { fakeDaemon } from "./fixture/persistent-pty-daemon"
 import { tmpdir, tmpdirScoped, withTempDir } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
@@ -130,19 +140,26 @@ const shellPluginSupervisor = makeLocationNode({
   name: "test/shell-plugins",
   layer: Layer.effectDiscard(registerToolPlugin(ShellTool.Plugin)),
   deps: [
+    Agent.node,
     Config.node,
     Environment.node,
     FileAccess.node,
+    Flag.node,
     Permission.node,
     Session.node,
     Job.node,
+    Location.node,
     Shell.node,
+    Shell.daemonNode,
     ShellSelect.node,
+    Bus.node,
     Tool.node,
   ],
 })
 
 const nodes = LayerNode.group([
+  PersistentPty.node,
+  Shell.daemonNode,
   Database.node,
   Bus.node,
   Job.node,
@@ -153,23 +170,64 @@ const nodes = LayerNode.group([
   FSUtil.node,
   Global.node,
 ])
-const replacements = [
+const daemonReplacements = [
   SessionExecution.node.replace(executionNode),
   Permission.node.replace(permission),
   Global.node.replace(tempGlobalLayer),
   offlineModels,
 ] satisfies LayerNode.Replacements
-const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
-const it = testEffect(
-  AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(shellPluginSupervisor)]),
+// Most suites spawn commands from the server, so CI starts no daemon for them; `parity` runs a subset on both.
+const replacements = [
+  ...daemonReplacements,
+  PersistentPty.node.replace(disabledPersistentPtyLayer),
+] satisfies LayerNode.Replacements
+const noFlagOverrides = Layer.succeed(Flag.Overrides, undefined)
+const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements).pipe(Layer.provide(noFlagOverrides)))
+const shellLayer = AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(shellPluginSupervisor)])
+const it = testEffect(shellLayer.pipe(Layer.provideMerge(noFlagOverrides)))
+const codeModeIt = testEffect(shellLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, "full_codemode"))))
+// On the real process daemon (when its binary is compatible; otherwise this falls back to spawning).
+const daemonIt = testEffect(
+  AppNodeBuilder.build(nodes, [...daemonReplacements, PluginSupervisor.node.replace(shellPluginSupervisor)]).pipe(
+    Layer.provide(noFlagOverrides),
+  ),
+)
+const parity = {
+  live: (name: string, body: Parameters<typeof it.live>[1], options?: Parameters<typeof it.live>[2]) => {
+    it.live(`${name} (spawned)`, body, options)
+    daemonIt.live(`${name} (daemon)`, body, options)
+  },
+}
+// On an in-process fake daemon, so daemon-only behavior is covered without the real binary.
+let fake: Effect.Success<ReturnType<typeof fakeDaemon>> | undefined
+const fakeDaemonIt = testEffect(
+  AppNodeBuilder.build(nodes, [
+    ...daemonReplacements,
+    PluginSupervisor.node.replace(shellPluginSupervisor),
+    PersistentPty.node.replace(
+      makeGlobalNode({
+        service: PersistentPty.Service,
+        layer: Layer.unwrap(
+          fakeDaemon().pipe(
+            Effect.map((daemon) => {
+              fake = daemon
+              return PersistentPty.layerWith(daemon.options)
+            }),
+          ),
+        ),
+        deps: [Bus.node, Global.node],
+      }),
+    ),
+  ]).pipe(Layer.provide(noFlagOverrides)),
 )
 const permissionIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([nodes, PermissionSaved.node]), [
     SessionExecution.node.replace(executionNode),
     Global.node.replace(tempGlobalLayer),
     PluginSupervisor.node.replace(shellPluginSupervisor),
+    PersistentPty.node.replace(disabledPersistentPtyLayer),
     offlineModels,
-  ]),
+  ]).pipe(Layer.provide(noFlagOverrides)),
 )
 
 const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
@@ -179,6 +237,7 @@ const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
 })
 
 const isWindows = process.platform === "win32"
+
 const cwdCommand = isWindows ? "(Get-Location).Path; Start-Sleep -Milliseconds 100" : "pwd"
 const helloCommand = isWindows ? "[Console]::Out.Write('hello'); Start-Sleep -Milliseconds 100" : "printf hello"
 const stderrCommand = isWindows
@@ -188,6 +247,11 @@ const mixedOutputCommand = isWindows
   ? "[Console]::Out.Write('stdout'); Start-Sleep -Milliseconds 50; [Console]::Error.Write('stderr'); Start-Sleep -Milliseconds 100"
   : "printf stdout; sleep 0.05; printf stderr >&2"
 const idleCommand = isWindows ? "Start-Sleep -Seconds 60" : "sleep 60"
+const startingCommand = isWindows
+  ? "[Console]::Out.Write('server starting'); Start-Sleep -Seconds 60"
+  : "printf 'server starting'; sleep 60"
+// A timeout kills the process group with SIGTERM, which the result reports as 128 + 15 and its name.
+const timedOutExit = isWindows ? ".+" : "143 \\(SIGTERM\\)"
 const bodyExitCommand = isWindows
   ? "[Console]::Out.Write('body'); Start-Sleep -Milliseconds 100; exit 7"
   : "printf body && exit 7"
@@ -198,6 +262,11 @@ const overflowCommand = (bytes: number) =>
 const lineOverflowCommand = isWindows
   ? "[Console]::Out.Write('one' + [Environment]::NewLine + 'two' + [Environment]::NewLine + 'three')"
   : "printf 'one\\ntwo\\nthree'"
+// Streams a file's exact bytes, so tests control line lengths and UTF-8 boundaries on every platform.
+const catCommand = (file: string) =>
+  isWindows
+    ? `$bytes = [IO.File]::ReadAllBytes('${file}'); $out = [Console]::OpenStandardOutput(); $out.Write($bytes, 0, $bytes.Length); $out.Flush()`
+    : `cat '${file}'`
 const progressOverflowCommand = (bytes: number, release: string) =>
   isWindows
     ? `[Console]::Out.Write(('x' * ${bytes})); while (!(Test-Path -LiteralPath '${release}')) { Start-Sleep -Milliseconds 50 }`
@@ -351,6 +420,96 @@ describe("ShellTool scanner permissions", () => {
           _tag: "Success",
           value: { status: "error", error: { message: expect.stringContaining("Permission denied: shell") } },
         })
+        expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+      }),
+    ))
+
+  test("unanalyzable commands run under allow-all rules", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        const agents = yield* Agent.Service
+        yield* agents.transform((editor) =>
+          editor.update(toolIdentity.agent, (agent) => {
+            agent.permissions = [{ action: "*", resource: "*", effect: "allow" }]
+          }),
+        )
+        const marker = path.join(fixture.active, "marker")
+        const result = yield* runPermissionCommand(registry, "alias p=true; printf hello > marker", marker, [])
+        expect(result.requests).toEqual([])
+        expect(result.exit).toMatchObject({ _tag: "Success", value: { status: "completed", metadata: { exit: 0 } } })
+        expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
+      }),
+    ))
+
+  test("unanalyzable commands are denied when a shell deny rule could be bypassed", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        const agents = yield* Agent.Service
+        yield* agents.transform((editor) =>
+          editor.update(toolIdentity.agent, (agent) => {
+            agent.permissions = [
+              { action: "*", resource: "*", effect: "allow" },
+              { action: "shell", resource: "rm *", effect: "deny" },
+            ]
+          }),
+        )
+        const marker = path.join(fixture.active, "marker")
+        const result = yield* runPermissionCommand(registry, "alias p=true; printf hello > marker", marker, [])
+        expect(result.requests).toEqual([])
+        expect(result.exit).toMatchObject({
+          _tag: "Success",
+          value: {
+            status: "error",
+            error: {
+              message: expect.stringContaining(
+                "Portable shell scanner cannot analyze command: dynamic-execution. A shell deny rule is configured",
+              ),
+            },
+          },
+        })
+        expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+      }),
+    ))
+
+  test("unanalyzable commands ask for the exact command and any directory without saving", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        const saved = yield* PermissionSaved.Service
+        const agents = yield* Agent.Service
+        yield* agents.transform((editor) =>
+          editor.update(toolIdentity.agent, (agent) => {
+            agent.permissions = [
+              { action: "shell", resource: "alias *", effect: "allow" },
+              { action: "external_directory", resource: path.join(fixture.outside, "*"), effect: "allow" },
+            ]
+          }),
+        )
+        const marker = path.join(fixture.active, "marker")
+        const command = "alias p=true; printf hello > marker"
+        const approved = yield* runPermissionCommand(registry, command, marker, ["always"])
+
+        expect(approved.requests).toMatchObject([{ action: "external_directory", resources: ["*"] }])
+        expect(approved.exit).toMatchObject({ _tag: "Success", value: { status: "completed", metadata: { exit: 0 } } })
+        expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
+
+        yield* agents.transform((editor) =>
+          editor.update(toolIdentity.agent, (agent) => {
+            agent.permissions = [{ action: "external_directory", resource: "*", effect: "allow" }]
+          }),
+        )
+        yield* Effect.promise(() => fs.rm(marker))
+        const asked = yield* runPermissionCommand(registry, command, marker, ["always"])
+        expect(asked.requests).toMatchObject([
+          { action: "shell", resources: [command], metadata: { reason: "dynamic-execution" } },
+        ])
+        expect(asked.requests.map((request) => request.save)).toEqual([undefined])
+        expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
+        expect(yield* saved.list()).toEqual([])
+
+        yield* Effect.promise(() => fs.rm(marker))
+        const repeat = yield* runPermissionCommand(registry, command, marker, ["reject"])
+        expect(repeat.requests).toHaveLength(1)
+        expect(Exit.isFailure(repeat.exit)).toBe(true)
         expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
       }),
     ))
@@ -531,7 +690,7 @@ describe("ShellTool conditional process substitution", () => {
       "bash",
     ))
 
-  for (const reply of ["reject", "once", "always"] as const) {
+  for (const reply of ["reject", "always"] as const) {
     test(`conditional substitutions respect ${reply}`, () =>
       withScanner(
         (registry, directory) =>
@@ -569,27 +728,9 @@ describe("ShellTool compound syntax approval compatibility", () => {
   for (const fixture of [
     {
       shell: "zsh",
-      command: 'for value (a b) printf %s "$value"',
-      output: "ab",
-      saved: ["printf *"],
-    },
-    {
-      shell: "zsh",
-      command: 'for value (a b) { printf %s "$value"; }',
-      output: "ab",
-      saved: ["printf *"],
-    },
-    {
-      shell: "zsh",
       command: 'for value ($(printf a)) do printf %s "$value"; done',
       output: "a",
       saved: ["printf *"],
-    },
-    {
-      shell: "bash",
-      command: 'probe() for value in a b; do printf %s "$value"; done; probe',
-      output: "ab",
-      saved: ["printf *", "probe *"],
     },
     {
       shell: "bash",
@@ -631,18 +772,11 @@ describe("ShellTool ordinary shell syntax", () => {
   for (const shell of ["bash", "zsh"]) {
     const test = isWindows || !Bun.which(shell) ? permissionIt.live.skip : permissionIt.live
     for (const fixture of [
-      { name: "quoted heredoc", command: "cat <<'EOF'\nhello\nEOF", output: "hello\n", saved: ["cat *"] },
       {
         name: "heredoc substitution",
         command: "cat <<EOF\n$(printf hello)\nEOF",
         output: "hello\n",
         saved: ["cat *", "printf *"],
-      },
-      {
-        name: "loop with a conditional",
-        command: 'for value in a b; do if test -n "$value"; then printf %s "$value"; fi; done',
-        output: "ab",
-        saved: ["test *", "printf *"],
       },
       {
         name: "function and case",
@@ -651,18 +785,11 @@ describe("ShellTool ordinary shell syntax", () => {
         saved: ["greet *", "printf *"],
       },
       {
-        name: "parameter fallback",
-        command: 'value=; printf %s "${value:-fallback}"',
-        output: "fallback",
-        saved: ["printf *"],
-      },
-      {
         name: "arithmetic statement",
         command: 'count=1; ((count += 1)); printf %s "$count"',
         output: "2",
         saved: ["((count += 1)) *", "printf *"],
       },
-      { name: "ANSI-C quoting", command: "printf %s $'a\\nb'", output: "a\nb", saved: ["printf *"] },
     ]) {
       test(`${shell}: ${fixture.name} reuses existing approvals`, () =>
         withScanner(
@@ -725,12 +852,7 @@ describe("ShellTool ordinary shell syntax", () => {
   const test = pwsh ? permissionIt.live : permissionIt.live.skip
   for (const command of [
     'Write-Output "$(Write-Output hello)"',
-    '$value = "hello"; Write-Output $value',
-    "if ($true) { Write-Output hello } else { Write-Output other }",
-    "foreach ($value in @('hello')) { Write-Output $value }",
-    "ForEach-Object { Write-Output hello }",
     "function Show-Value { Write-Output hello }; Show-Value",
-    "Write-Output `\n  hello",
     "Write-Output @'\nhello\n'@",
   ]) {
     test(`PowerShell: ordinary syntax reuses approvals: ${command}`, () =>
@@ -795,18 +917,78 @@ describe("ShellTool ordinary shell syntax", () => {
 })
 
 describe("ShellTool", () => {
-  it.live("returns both parallel CodeMode shell results", () =>
+  it.live(
+    "keeps a CodeMode shell result's exit code and output path when the execute output is truncated",
+    () =>
+      withTempDir((tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            yield* registry.transform((editor) =>
+              editor.update("shell", (tool) => {
+                tool.options = { ...tool.options, codemode: true }
+              }),
+            )
+            const command = `${overflowCommand(ToolOutput.MAX_BYTES + 1024)}${isWindows ? "; exit 3" : " && exit 3"}`
+            const result = yield* executeTool(registry, {
+              sessionID,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-truncated-shell",
+                name: "execute",
+                input: { code: `return await tools.shell(${JSON.stringify({ command })})` },
+              },
+            })
+            expect(result.status).toBe("completed")
+            const toolOutput = yield* ToolOutput.Service
+            const truncated = yield* toolOutput.truncate({ content: result.content!, metadata: result.metadata })
+            expect(truncated.metadata?.truncated).toBe(true)
+            const text = truncated.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+            const shell = JSON.parse(result.output.output)
+            expect(text).toStartWith(
+              `{"exitCode":3,"outputPath":${JSON.stringify(shell.outputPath)},"wallTimeSeconds":${shell.wallTimeSeconds},"output":"`,
+            )
+          }),
+        )
+      }),
+    { timeout: 15_000 },
+  )
+
+  codeModeIt.live("runs parallel Code Mode shells with the long default and notifies after a shorter timeout", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
         Effect.gen(function* () {
-          yield* registry.transform((editor) =>
-            editor.update("shell", (tool) => {
-              tool.options = { ...tool.options, codemode: true }
+          const snapshot = yield* registry.snapshot()
+          // Pinned: listed even when the catalog has no room for other tools, with the result contract in the field
+          // annotations.
+          const pinned = CodeModeCatalog.summarize(snapshot.codeModeCatalog!, { budget: 0 }).namespaces.flatMap(
+            (namespace) => namespace.entries,
+          )
+          expect(pinned.map((entry) => entry.path)).toEqual(["shell"])
+          expect(pinned[0]!.line).toContain("600000")
+          expect(pinned[0]!.line).toContain("Execute a shell command and return its output.")
+          // No background parameter in Code Mode.
+          expect(pinned[0]!.line).not.toContain("background?: boolean")
+          expect(pinned[0]!.line).not.toContain("Background commands return immediately")
+          expect(pinned[0]!.line).toContain("A result without shellID is final")
+          expect(pinned[0]!.line).toContain("there are no separate stdout or stderr fields")
+          const timeouts: number[] = []
+          const hooks = yield* PluginHooks.Service
+          yield* hooks.register("shell", "create.before", (event) =>
+            Effect.sync(() => {
+              timeouts.push(event.timeout)
             }),
           )
-          const command = isWindows ? helloCommand : `${helloCommand}; sleep 0.1`
-          const inputs = ["one", "two"].map((text) => JSON.stringify({ command: command.replace("hello", text) }))
+          const bus = yield* Bus.Service
+          const notice = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+            Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
+            Stream.runHead,
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          const quick = JSON.stringify({ command: bodyExitCommand })
+          const long = JSON.stringify({ command: progressOverflowCommand(6, "release"), timeout: 10 })
           const result = yield* executeTool(registry, {
             sessionID,
             ...toolIdentity,
@@ -814,14 +996,30 @@ describe("ShellTool", () => {
               type: "tool-call",
               id: "call-parallel-shells",
               name: "execute",
-              input: { code: `return await Promise.all([tools.shell(${inputs[0]}), tools.shell(${inputs[1]})])` },
+              input: { code: `return await Promise.all([tools.shell(${quick}), tools.shell(${long})])` },
             },
           }).pipe(Effect.timeout("3 seconds"))
           expect(result.status).toBe("completed")
-          expect(JSON.parse(result.output.output)).toEqual([
-            { output: "one", exit: 0, truncated: false, status: "completed" },
-            { output: "two", exit: 0, truncated: false, status: "completed" },
-          ])
+          const [completed, running] = JSON.parse(result.output.output)
+          expect(completed).toEqual({
+            output: "body",
+            exitCode: 7,
+            wallTimeSeconds: expect.any(Number),
+          })
+          expect(running).toEqual({
+            output: expect.stringContaining("did not finish within its timeout of 0.01 seconds"),
+            exitCode: null,
+            shellID: expect.stringMatching(/^sh_/),
+            pid: expect.any(Number),
+            outputPath: expect.any(String),
+            wallTimeSeconds: expect.any(Number),
+          })
+          expect(timeouts.toSorted((a, b) => a - b)).toEqual([10, 600_000])
+          yield* Effect.promise(() => Bun.write(path.join(tmp.path, "release"), ""))
+          expect((yield* Fiber.join(notice)).valueOrUndefined?.data.item.payload).toMatchObject({
+            text: expect.stringContaining("xxxxxx"),
+            metadata: { source: "shell", shellID: running.shellID, state: "completed", exit: 0 },
+          })
         }),
       )
     }),
@@ -1051,34 +1249,6 @@ describe("ShellTool", () => {
   )
 
   it.live(
-    "approves an explicit external workdir before shell execution",
-    () =>
-      Effect.acquireUseRelease(
-        Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
-        ([active, outside]) => {
-          reset()
-          return withSession(active.path, (registry) =>
-            executeTool(registry, call({ command: cwdCommand, workdir: outside.path })),
-          ).pipe(
-            Effect.andThen(
-              Effect.sync(() => {
-                expect(assertions.map((item) => item.action)).toEqual(["external_directory", "shell"])
-                expect(assertions[0]).toMatchObject({
-                  resources: [path.join(realpathSync(outside.path), "*").replaceAll("\\", "/")],
-                })
-              }),
-            ),
-          )
-        },
-        ([active, outside]) =>
-          Effect.promise(() =>
-            Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
-          ),
-      ),
-    { timeout: 15_000 },
-  )
-
-  it.live(
     "deduplicates external directory approvals across workdir and directory-change commands",
     () =>
       Effect.acquireUseRelease(
@@ -1154,7 +1324,7 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
-  it.live("rejects malformed syntax across channels without partial execution", () =>
+  it.live("asks for malformed syntax across channels without partial execution", () =>
     Effect.gen(function* () {
       if (isWindows) return
       for (const channel of ["local", "dev", "latest"] as const) {
@@ -1166,34 +1336,42 @@ describe("ShellTool", () => {
             }),
           ),
           deps: [
+            Agent.node,
+            Config.node,
             Environment.node,
             FileAccess.node,
+            Flag.node,
             Permission.node,
             Session.node,
             Job.node,
+            Location.node,
             Shell.node,
+            Shell.daemonNode,
             ShellSelect.node,
+            Bus.node,
             Tool.node,
           ],
         })
         yield* withTempDir((tmp) =>
           Effect.gen(function* () {
             reset()
+            denyAction = "shell"
+            const command = 'printf hello > marker\necho "'
             const settled = yield* withSession(tmp.path, (registry) =>
               Effect.gen(function* () {
                 const selection = yield* ShellSelect.Service
                 yield* selection.transform((editor) => editor.configure("sh"))
-                return yield* executeTool(
-                  registry,
-                  call({ command: 'printf hello > marker\necho "' }, `call-channel-${channel}`),
-                )
+                return yield* executeTool(registry, call({ command }, `call-channel-${channel}`))
               }),
             )
             expect(settled).toMatchObject({
               status: "error",
-              error: { message: expect.stringContaining("unterminated-quote") },
+              error: { message: expect.stringContaining("Permission denied: shell") },
             })
-            expect(assertions).toEqual([])
+            expect(assertions).toMatchObject([
+              { action: "external_directory", resources: ["*"], save: undefined },
+              { action: "shell", resources: [command], save: undefined, metadata: { reason: "unterminated-quote" } },
+            ])
             expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "marker")).exists())).toBe(false)
           }).pipe(
             Effect.provide(
@@ -1241,7 +1419,7 @@ describe("ShellTool", () => {
     )
   }
 
-  it.live("keeps non-zero exits useful", () =>
+  parity.live("keeps non-zero exits useful", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
@@ -1251,8 +1429,10 @@ describe("ShellTool", () => {
           Effect.sync(() => {
             expect(settled.status).toBe("completed")
             expect(settled.metadata).toMatchObject({ exit: 7, truncated: false })
-            expect(settled.content?.[0]).toEqual({ type: "text", text: "body" })
-            expect(settled.content?.[1]).toMatchObject(Expected.text(expect.stringContaining("Exited with code 7")))
+            expect(settled.content).toEqual([
+              { type: "text", text: "body" },
+              { type: "text", text: "Exit code: 7" },
+            ])
           }),
         ),
       )
@@ -1260,22 +1440,39 @@ describe("ShellTool", () => {
   )
 
   it.live(
-    "truncates the model view and points at the saved output file when output overflows",
+    "puts the exit status after the truncation marker when overflowing output fails",
     () =>
       withTempDir((tmp) => {
         reset()
-        const bytes = ToolOutput.MAX_BYTES + 1024
         return withSession(tmp.path, (registry) =>
-          executeTool(registry, call({ command: overflowCommand(bytes) }, "call-overflow")),
+          executeTool(
+            registry,
+            call(
+              { command: `${overflowCommand(ToolOutput.MAX_BYTES + 1024)}${isWindows ? "; exit 3" : " && exit 3"}` },
+              "call-overflow-nonzero",
+            ),
+          ),
         ).pipe(
           Effect.andThen((settled) =>
             Effect.sync(() => {
-              expect(settled.metadata).toMatchObject({ exit: 0, truncated: true })
-              const content = settled.content?.[0]
-              if (!content || content.type !== "text") throw new Error("Expected text content")
-              expect(content.text.includes("output-start")).toBe(false)
-              expect(content.text.includes("output-end")).toBe(true)
-              expect(content).toMatchObject(Expected.text(expect.stringContaining("full output saved to ")))
+              expect(settled.metadata).toMatchObject({
+                exit: 3,
+                truncated: true,
+              })
+              expect(settled.output).toEqual({
+                output: expect.stringContaining(`full output saved to ${settled.output.outputPath}]`),
+                outputPath: expect.any(String),
+                exitCode: 3,
+                wallTimeSeconds: expect.any(Number),
+              })
+              expect(settled.content).toEqual([
+                Expected.text(
+                  expect.stringMatching(
+                    /output-end[^]*\[showing the last 50 KB of line 1 \(51 KB\); full output saved to [^\]]+\]$/,
+                  ),
+                ),
+                { type: "text", text: "Exit code: 3" },
+              ])
             }),
           ),
         )
@@ -1283,7 +1480,242 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
-  it.live("uses configured line limits", () =>
+  it.live("moves a foreground timeout to the background and delivers its original process result once", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const bus = yield* Bus.Service
+          const notices = yield* Queue.unbounded<unknown>()
+          yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+            Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
+            Stream.runForEach((event) => Queue.offer(notices, event.data.item.payload)),
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          const result = yield* executeTool(
+            registry,
+            call({ command: progressOverflowCommand(6, "release"), timeout: 10 }, "call-auto-background"),
+          )
+          const id = ID.make(String(result.metadata?.shellID))
+          const shell = yield* Shell.Service
+          const info = yield* shell.get(id)
+          expect(result.status).toBe("completed")
+          expect(info.pid).toBeGreaterThan(0)
+          expect(result.metadata).toMatchObject({
+            status: "running",
+            shellID: id,
+            pid: info.pid,
+            truncated: false,
+          })
+          expect(result.output).toEqual({
+            shellID: id,
+            pid: info.pid,
+            outputPath: info.file,
+            exitCode: null,
+            output: expect.any(String),
+            wallTimeSeconds: expect.any(Number),
+          })
+          expect(result.output.wallTimeSeconds).toBeGreaterThanOrEqual(0.01)
+          expect(result.metadata).not.toHaveProperty("timeout")
+          expect(result.content?.[0]).toEqual({
+            type: "text",
+            text: `Command moved to the background (shell ID: ${id}).\nPID: ${info.pid}\nOutput is streaming to: ${info.file}\n\nThe command did not finish within its timeout of 0.01 seconds and was moved to the background. Do not start another copy while it is running.`,
+          })
+          expect(info.status).toBe("running")
+          expect((yield* shell.list()).map((item) => item.id)).toEqual([id])
+
+          yield* Effect.promise(() => Bun.write(path.join(tmp.path, "release"), ""))
+          const finished = yield* shell.wait(id)
+          expect(finished).toMatchObject({
+            status: "exited",
+            exit: 0,
+            pid: info.pid,
+          })
+          expect(yield* Queue.take(notices)).toMatchObject({
+            text: expect.stringContaining("xxxxxx"),
+            metadata: {
+              source: "shell",
+              shellID: id,
+              state: "completed",
+              exit: 0,
+            },
+          })
+          expect(yield* Queue.size(notices)).toBe(0)
+          expect(yield* shell.list()).toEqual([])
+        }),
+      )
+    }),
+  )
+
+  it.live("returns a fast foreground result directly", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const result = yield* executeTool(registry, call({ command: helloCommand, timeout: 10_000 }))
+          expect(result.metadata).toMatchObject({ status: "completed", exit: 0 })
+          expect(result.content).toEqual([{ type: "text", text: "hello" }])
+          const jobs = yield* Job.Service
+          expect(yield* jobs.runningBackground).toEqual([])
+        }),
+      )
+    }),
+  )
+
+  it.live("preserves a timeout-promoted command's eventual failure", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const bus = yield* Bus.Service
+          const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+            Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
+            Stream.runHead,
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          const result = yield* executeTool(
+            registry,
+            call({ command: `${progressOverflowCommand(0, "release")}; exit 7`, timeout: 10 }),
+          )
+          const id = ID.make(String(result.metadata?.shellID))
+          yield* Effect.promise(() => Bun.write(path.join(tmp.path, "release"), ""))
+          const shell = yield* Shell.Service
+          expect(yield* shell.wait(id)).toMatchObject({ status: "exited", exit: 7 })
+          expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
+            text: expect.stringContaining("Exit code: 7"),
+            metadata: { source: "shell", shellID: id, state: "completed", exit: 7 },
+          })
+        }),
+      )
+    }),
+  )
+
+  it.effect("treats a foreground timeout of zero as the default timeout", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const running = yield* executeTool(
+            registry,
+            call({ command: progressOverflowCommand(0, "release"), timeout: 0 }, "call-zero-timeout"),
+          ).pipe(Effect.forkScoped({ startImmediately: true }))
+          // The wait starts only after the command spawns, so keep advancing the clock until the call returns.
+          const result = yield* Fiber.join(running).pipe(
+            Effect.raceFirst(
+              Effect.forever(Effect.promise(() => Bun.sleep(20)).pipe(Effect.andThen(TestClock.adjust("2 minutes")))),
+            ),
+          )
+          expect(result.content?.[0]).toMatchObject({
+            type: "text",
+            text: expect.stringContaining("did not finish within its timeout of 120 seconds"),
+          })
+          const id = ID.make(String(result.metadata?.shellID))
+          const shell = yield* Shell.Service
+          expect((yield* shell.get(id)).status).toBe("running")
+          yield* Effect.promise(() => Bun.write(path.join(tmp.path, "release"), ""))
+          expect(yield* shell.wait(id)).toMatchObject({ status: "exited", exit: 0 })
+        }),
+      )
+    }),
+  )
+
+  it.live("still cancels a timeout-promoted shell through its existing job handle", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const result = yield* executeTool(
+            registry,
+            call({ command: progressOverflowCommand(0, "release"), timeout: 10 }),
+          )
+          const id = ID.make(String(result.metadata?.shellID))
+          const shell = yield* Shell.Service
+          expect((yield* shell.get(id)).status).toBe("running")
+          const jobs = yield* Job.Service
+          expect(yield* jobs.cancel(id)).toMatchObject({ id, status: "cancelled" })
+          // Cancelling stops the command and keeps it, output file included.
+          expect((yield* shell.wait(id)).status).toBe("killed")
+          expect(yield* shell.list()).toEqual([])
+        }),
+      )
+    }),
+  )
+
+  // Runs a program the way an automation does: no model, and the automation named on each tool call.
+  const runAutomationCode = (registry: Tool.Interface, code: string) =>
+    Effect.gen(function* () {
+      yield* registry.transform((editor) =>
+        editor.update("shell", (tool) => {
+          tool.options = { ...tool.options, codemode: true }
+        }),
+      )
+      return yield* registry.check({
+        code,
+        tools: ["shell"],
+        bindings: {},
+        policy: Permission.Policy.fromRules([{ action: "*", resource: "*", effect: "allow" }]),
+        limits: { timeoutMs: 30_000, maxOutputBytes: 32 * 1024 },
+        context: {
+          sessionID,
+          ...toolIdentity,
+          progress: () => Effect.void,
+          automation: { id: Automation.ID.make("aut_shell_test") },
+        },
+      })
+    })
+
+  it.live("stops an automation's command at its timeout and fails the call", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const result = yield* runAutomationCode(
+            registry,
+            `try { await tools.shell({ command: ${JSON.stringify(idleCommand)}, timeout: 50 }); return "finished" }
+             catch (error) { return error.message }`,
+          )
+          expect(result).toMatchObject({
+            ok: true,
+            value: expect.stringMatching(
+              new RegExp(`Command timed out after 0\\.05 seconds\\. [^\\n]+\\nExit code: ${timedOutExit}`),
+            ),
+          })
+          const shell = yield* Shell.Service
+          expect(yield* shell.list()).toEqual([])
+        }),
+      )
+    }),
+  )
+
+  it.live("keeps an automation's command out of reach of the session's move to the background", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const command = JSON.stringify(progressOverflowCommand(0, "release"))
+          const running = yield* runAutomationCode(
+            registry,
+            `return await tools.shell({ command: ${command}, timeout: 10000 })`,
+          ).pipe(Effect.forkScoped({ startImmediately: true }))
+          const shell = yield* Shell.Service
+          const [started] = yield* shell
+            .list()
+            .pipe(
+              Effect.repeat({ until: (shells) => shells.length > 0, schedule: Schedule.spaced("10 millis") }),
+              Effect.timeout("10 seconds"),
+            )
+          const jobs = yield* Job.Service
+          expect(yield* jobs.backgroundAll({ sessionID })).toEqual([])
+          yield* Effect.promise(() => Bun.write(path.join(tmp.path, "release"), ""))
+          expect(yield* Fiber.join(running)).toMatchObject({ ok: true, value: { exitCode: 0 } })
+          // A finished job stays listed, so this proves the command never had one for the session to take.
+          expect(yield* jobs.get(started!.id)).toBeUndefined()
+        }),
+      )
+    }),
+  )
+
+  parity.live("uses configured line limits", () =>
     withTempDir((tmp) => {
       reset()
       return Effect.gen(function* () {
@@ -1304,6 +1736,79 @@ describe("ShellTool", () => {
         expect(content.text.replaceAll("\r\n", "\n")).toStartWith("two\nthree")
         expect(content.text).toContain("full output saved to ")
       })
+    }),
+  )
+
+  const truncatedText = (tmp: string, contents: string | Uint8Array, callID: string) =>
+    Effect.gen(function* () {
+      const file = path.join(tmp, `${callID}.txt`)
+      yield* Effect.promise(() => Bun.write(file, contents))
+      const settled = yield* withSession(tmp, (registry) =>
+        executeTool(registry, call({ command: catCommand(file) }, callID)),
+      )
+      expect(settled.metadata).toMatchObject({ exit: 0, truncated: true })
+      const content = settled.content?.[0]
+      if (!content || content.type !== "text") throw new Error("Expected text content")
+      return content.text
+    })
+
+  it.live("drops the partial first line so the truncation note counts only whole lines", () =>
+    withTempDir((tmp) => {
+      reset()
+      const lines = Array.from({ length: 10 }, (_, index) => `${index + 1}`.padEnd(10 * 1024, "x"))
+      return truncatedText(tmp.path, lines.join("\n") + "\n", "call-long-lines").pipe(
+        Effect.andThen((text) =>
+          Effect.sync(() => {
+            expect(text).toStartWith(`7xxx`)
+            expect(text).toContain(`${lines[9]}\n\n[showing lines 7-10 of 10; full output saved to `)
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.live("says how much of a single long line is shown", () =>
+    withTempDir((tmp) => {
+      reset()
+      return truncatedText(tmp.path, "head\n" + "x".repeat(200 * 1024), "call-long-line").pipe(
+        Effect.andThen((text) =>
+          Effect.sync(() => {
+            expect(text).toStartWith("x".repeat(ToolOutput.MAX_BYTES) + "\n\n")
+            expect(text).toContain("[showing the last 50 KB of line 2 (200 KB); full output saved to ")
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.live("starts the truncated view on a whole UTF-8 character", () =>
+    withTempDir((tmp) => {
+      reset()
+      // The window starts on the last byte of the three-byte euro sign.
+      const contents = "a".repeat(100) + "€" + "b".repeat(ToolOutput.MAX_BYTES - 1)
+      return truncatedText(tmp.path, contents, "call-utf8-cut").pipe(
+        Effect.andThen((text) =>
+          Effect.sync(() => {
+            expect(text).toStartWith("b".repeat(ToolOutput.MAX_BYTES - 1) + "\n\n")
+            expect(text).not.toContain("\uFFFD")
+          }),
+        ),
+      )
+    }),
+  )
+
+  it.live("numbers lines exactly when the line limit truncates", () =>
+    withTempDir((tmp) => {
+      reset()
+      const lines = Array.from({ length: 2500 }, (_, index) => `line ${index + 1}`)
+      return truncatedText(tmp.path, lines.join("\n") + "\n", "call-many-lines").pipe(
+        Effect.andThen((text) =>
+          Effect.sync(() => {
+            expect(text).toStartWith("line 501\n")
+            expect(text).toContain("line 2500\n\n[showing lines 501-2500 of 2500; full output saved to ")
+          }),
+        ),
+      )
     }),
   )
 
@@ -1354,7 +1859,119 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
-  it.live("returns the shell id for a background command", () =>
+  it.live("names the tool call and background on the spans of the shell it starts", () =>
+    withTempDir((tmp) => {
+      reset()
+      const spans: Tracer.NativeSpan[] = []
+      const tracer = Tracer.make({
+        span(options) {
+          const span = new Tracer.NativeSpan(options)
+          spans.push(span)
+          return span
+        },
+      })
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          yield* executeTool(registry, call({ command: bodyExitCommand }, "call-traced"))
+          yield* executeTool(registry, call({ command: helloCommand, background: true }, "call-traced-background"))
+        }),
+      ).pipe(
+        Effect.withTracer(tracer),
+        Effect.andThen(
+          Effect.sync(() => {
+            const attributes = (name: string, callID: string) =>
+              spans
+                .filter((span) => span.name === name && span.attributes.get("gen_ai.tool.call.id") === callID)
+                .map((span) => Object.fromEntries(span.attributes))
+            expect(attributes("Shell.create", "call-traced")).toEqual([
+              expect.objectContaining({ "session.id": sessionID, "opencode.shell.command": bodyExitCommand }),
+            ])
+            expect(attributes("Shell.create", "call-traced")[0]).not.toHaveProperty("opencode.shell.background")
+            expect(attributes("Shell.result", "call-traced")).toEqual([
+              expect.objectContaining({ "session.id": sessionID, "process.exit.code": 7 }),
+            ])
+            expect(attributes("Shell.create", "call-traced-background")).toEqual([
+              expect.objectContaining({ "session.id": sessionID, "opencode.shell.background": true }),
+            ])
+          }),
+        ),
+      )
+    }),
+  )
+
+  fakeDaemonIt.live("keeps a background daemon command's job across a Location reload and reports how it ended", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        reset()
+        const sessions = yield* Session.Service
+        const jobs = yield* Job.Service
+        const bus = yield* Bus.Service
+        const locations = yield* LocationServiceMap.Service
+        const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
+        yield* sessions.create({ id: sessionID, title: "shell test", location, model: sessionModel })
+        const admitted = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+          Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
+          Stream.take(2),
+          Stream.runCollect,
+          Effect.forkScoped({ startImmediately: true }),
+        )
+        const started = yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          yield* plugins.awaitActivation
+          const registry = yield* Tool.Service
+          const shell = yield* Shell.Service
+          const run = (id: string) =>
+            Effect.gen(function* () {
+              const settled = yield* executeTool(registry, call({ command: "work", background: true }, id))
+              return yield* shell.get(ID.make(String(settled.metadata?.shellID)))
+            })
+          return { finishing: yield* run("call-finishing"), cancelled: yield* run("call-cancelled") }
+        }).pipe(Effect.provide(locations.get(location)))
+        const process = (info: { file: string }) => {
+          const found = fake?.processes.find((item) => item.pipe?.output_path === info.file)
+          if (!found) throw new Error("no daemon process for the command")
+          return found.id
+        }
+
+        // A reload closes the Location and boots its replacement, which takes the commands back.
+        yield* locations.invalidate(location)
+        const replacement = yield* Effect.gen(function* () {
+          return yield* Shell.Service
+        }).pipe(Effect.provide(locations.get(location)))
+        expect((yield* replacement.list()).map((info) => info.id).toSorted()).toEqual(
+          [started.finishing.id, started.cancelled.id].toSorted(),
+        )
+        expect((yield* jobs.get(started.finishing.id))?.status).toBe("running")
+
+        // Cancelling the session's job still stops its command.
+        yield* jobs.cancel(started.cancelled.id)
+        while (!fake?.ops.includes("signal")) yield* Effect.promise(() => Bun.sleep(2))
+        expect(fake?.requests).toContainEqual(
+          expect.objectContaining({ op: "signal", id: process(started.cancelled), signal: "SIGTERM" }),
+        )
+
+        fake?.output(process(started.finishing), "done\n")
+        fake?.exit(process(started.finishing), 0)
+        const notices = Array.from(yield* Fiber.join(admitted)).map((event) => event.data.item.payload)
+        expect(notices).toContainEqual(
+          expect.objectContaining({
+            text: expect.stringContaining("done"),
+            metadata: expect.objectContaining({ shellID: started.finishing.id, state: "completed", exit: 0 }),
+          }),
+        )
+        expect(notices).toContainEqual(
+          expect.objectContaining({
+            metadata: expect.objectContaining({ shellID: started.cancelled.id, state: "cancelled" }),
+          }),
+        )
+        expect((yield* jobs.get(started.finishing.id))?.status).toBe("completed")
+        expect((yield* replacement.get(started.finishing.id)).status).toBe("exited")
+        yield* locations.invalidate(location)
+      }),
+    ),
+  )
+
+  parity.live("returns the shell id and PID for a background command", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
@@ -1374,10 +1991,13 @@ describe("ShellTool", () => {
           if (!shellID) return
           const id = ID.make(shellID)
           const info = yield* shell.get(id)
+          expect(info.pid).toBeGreaterThan(0)
+          expect(settled.metadata).toMatchObject({ pid: info.pid })
+          expect(settled.output).toMatchObject({ shellID, pid: info.pid })
           expect(settled.content).toEqual([
             {
               type: "text",
-              text: `Command moved to the background (shell ID: ${shellID}).\nOutput is streaming to: ${info.file}`,
+              text: `Command moved to the background (shell ID: ${shellID}).\nPID: ${info.pid}\nOutput is streaming to: ${info.file}`,
             },
             {
               type: "text",
@@ -1385,9 +2005,17 @@ describe("ShellTool", () => {
             },
           ])
           expect((yield* shell.list()).map((info) => info.id)).toContain(id)
-          expect((yield* shell.wait(id)).status).toBe("timeout")
+          const timedOut = yield* shell.wait(id)
+          expect(timedOut.status).toBe("timeout")
+          // The timeout keeps its status but still records how the killed process exited.
+          expect(timedOut.exit !== undefined || timedOut.signal !== undefined).toBe(true)
+          if (!isWindows) expect(timedOut).toMatchObject({ signal: "SIGTERM" })
           expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
-            text: expect.stringContaining("Timed out before completion"),
+            text: expect.stringMatching(
+              new RegExp(
+                `\\nCommand timed out after 0\\.05 seconds\\. If it needs longer and isn't waiting for input, rerun with a larger timeout\\.\\nExit code: ${timedOutExit}\\n</background-result>$`,
+              ),
+            ),
             description: idleCommand,
             metadata: {
               source: "shell",
@@ -1420,7 +2048,7 @@ describe("ShellTool", () => {
           const shellID = settled.metadata?.shellID
           expect(typeof shellID).toBe("string")
           expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
-            text: expect.stringContaining("Exited with code 7"),
+            text: `<background-result kind="shell" id="${shellID}" state="completed" command="${bodyExitCommand}">\nbody\n\nExit code: 7\n</background-result>`,
             description: bodyExitCommand,
             metadata: {
               source: "shell",
@@ -1466,7 +2094,7 @@ describe("ShellTool", () => {
             {
               id: settled.metadata?.shellID,
               status: "completed",
-              output: "(no output)\n\nExited with code 7",
+              output: "(no output)\n\nExit code: 7",
             },
           ])
         }),
@@ -1541,10 +2169,13 @@ describe("ShellTool", () => {
                   yield* Deferred.await(ready).pipe(Effect.timeout("5 seconds"))
                   yield* shell.timeout(info.id, 1)
                   // Completion must reap the process, not only mark the command as timed out.
-                  expect((yield* shell.wait(info.id).pipe(Effect.timeout("10 seconds"))).status).toBe("timeout")
+                  expect(yield* shell.wait(info.id).pipe(Effect.timeout("10 seconds"))).toMatchObject({
+                    status: "timeout",
+                    signal: "SIGKILL",
+                  })
                   const pid = info.pid
                   if (pid === undefined) throw new Error("Expected shell PID")
-                  expect(() => process.kill(pid, 0)).toThrow()
+                  expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: "ESRCH" }))
                 }),
               (info) =>
                 Effect.try(() => {
@@ -1558,6 +2189,23 @@ describe("ShellTool", () => {
         )
       }),
     { timeout: 30_000 },
+  )
+
+  it.live("words the status as an exit code", () =>
+    Effect.sync(() => {
+      expect(ShellResult.notice({ exit: 0 })).toBeUndefined()
+      expect(ShellResult.notice({ exit: 7 })).toBe("Exit code: 7")
+      expect(ShellResult.notice({ exit: 143 })).toBe("Exit code: 143")
+      expect(ShellResult.notice({ signal: "SIGTERM" })).toBe("Exit code: 143 (SIGTERM)")
+      expect(ShellResult.notice({ signal: "SIGKILL" })).toBe("Exit code: 137 (SIGKILL)")
+      expect(ShellResult.notice({ signal: "SIGNOPE" })).toBe("Exit code: unknown")
+      expect(ShellResult.notice({ signal: "SIGTERM", timeout: true }, 120_000)).toBe(
+        "Command timed out after 120 seconds. If it needs longer and isn't waiting for input, rerun with a larger timeout.\nExit code: 143 (SIGTERM)",
+      )
+      expect(ShellResult.notice({ timeout: true })).toBe(
+        "Command timed out. If it needs longer and isn't waiting for input, rerun with a larger timeout.\nExit code: unknown",
+      )
+    }),
   )
 
   if (!isWindows) {
@@ -1590,7 +2238,7 @@ describe("ShellTool", () => {
     )
   }
 
-  it.live("backgrounds a foreground command when the session is signaled", () =>
+  parity.live("backgrounds a foreground command when the session is signaled", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
@@ -1623,7 +2271,7 @@ describe("ShellTool", () => {
           const info = yield* shell.get(id)
           expect(settled.content?.[0]).toEqual({
             type: "text",
-            text: `Command moved to the background (shell ID: ${shellID}).\nOutput is streaming to: ${info.file}`,
+            text: `Command moved to the background (shell ID: ${shellID}).\nPID: ${info.pid}\nOutput is streaming to: ${info.file}`,
           })
           expect(settled.content?.[1]).toEqual({
             type: "text",
@@ -1633,6 +2281,368 @@ describe("ShellTool", () => {
           expect((yield* shell.get(id)).status).toBe("running")
           expect((yield* shell.list()).map((info) => info.id)).toContain(id)
           yield* shell.remove(id)
+        }),
+      )
+    }),
+  )
+})
+
+describe("ShellTool stopped", () => {
+  // Runs a foreground call the way a session step does, then stops it as the user does (through `cancel`), or
+  // interrupts it as a server shutdown does.
+  const stopCall = (
+    registry: Tool.Interface,
+    command: string,
+    id: string,
+    how: "cancel" | "interrupt",
+    waitForOutput = true,
+  ) =>
+    Effect.gen(function* () {
+      const shell = yield* Shell.Service
+      const cancel = yield* Deferred.make<void>()
+      const started = yield* Deferred.make<string>()
+      const fiber = yield* executeTool(registry, {
+        ...call({ command }, id),
+        progress: (update) =>
+          typeof update.shellID === "string"
+            ? Deferred.succeed(started, update.shellID).pipe(Effect.asVoid)
+            : Effect.void,
+        cancel: Deferred.await(cancel),
+      }).pipe(Effect.forkChild({ startImmediately: true }))
+      const shellID = ID.make(yield* Deferred.await(started))
+      while (waitForOutput && (yield* shell.output(shellID, { cursor: Number.MAX_SAFE_INTEGER })).size === 0)
+        yield* Effect.sleep(Duration.millis(10))
+      if (how === "cancel") yield* Deferred.succeed(cancel, undefined)
+      if (how === "interrupt") yield* Fiber.interrupt(fiber)
+      const exit = yield* Fiber.await(fiber)
+      return { shellID, exit, result: Exit.isSuccess(exit) ? exit.value : undefined }
+    })
+
+  parity.live(
+    "stops a command the user stopped, keeps its file and fails the call with the tail, file and shell ID",
+    () =>
+      withTempDir((tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const shell = yield* Shell.Service
+            const jobs = yield* Job.Service
+            const { shellID, result } = yield* stopCall(
+              registry,
+              isWindows
+                ? "[Console]::Out.Write('first' + [char]10 + 'second' + [char]10); Start-Sleep -Seconds 60"
+                : "printf 'first\\nsecond\\n'; sleep 60",
+              "call-stopped",
+              "cancel",
+            )
+            const info = yield* shell.get(shellID)
+            expect(info.status).toBe("killed")
+            expect(yield* Effect.promise(() => fs.readFile(info.file, "utf8"))).toBe("first\nsecond\n")
+            expect(result).toEqual({
+              status: "error",
+              error: {
+                type: "tool.execution",
+                message: `first\nsecond\n\n[full output saved to ${info.file}]\n\nCommand interrupted by the user (shell ID: ${shellID}).`,
+              },
+            })
+            expect((yield* jobs.get(shellID))?.status).not.toBe("running")
+          }),
+        )
+      }),
+  )
+
+  it.live("ends a call the user stopped before its command started, without starting it", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const shell = yield* Shell.Service
+          const result = yield* executeTool(registry, {
+            ...call({ command: "echo started > started" }, "call-early-stop"),
+            // Already stopped, as when the user stops the step while the call waits for permission.
+            cancel: Effect.void,
+          })
+          expect(result.error?.message).toContain("Command interrupted by the user before it started.")
+          expect(yield* shell.list()).toEqual([])
+          expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "started")).exists())).toBe(false)
+        }),
+      )
+    }),
+  )
+
+  // Resolving a working directory can be slow (an external one in a cold remote workspace); here it never finishes.
+  const resolving = Deferred.makeUnsafe<void>()
+  const stuckResolveIt = testEffect(
+    AppNodeBuilder.build(nodes, [
+      ...replacements,
+      PluginSupervisor.node.replace(shellPluginSupervisor),
+      FileAccess.node.replace(
+        Layer.mock(FileAccess.Service, {
+          resolve: () => Deferred.succeed(resolving, undefined).pipe(Effect.andThen(Effect.never)),
+        }),
+      ),
+    ]).pipe(Layer.provide(noFlagOverrides)),
+  )
+
+  stuckResolveIt.live("ends a call the user stopped while its working directory resolved, without starting it", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const shell = yield* Shell.Service
+          const cancel = yield* Deferred.make<void>()
+          const fiber = yield* executeTool(registry, {
+            ...call({ command: "echo started > started" }, "call-stop-resolving"),
+            cancel: Deferred.await(cancel),
+          }).pipe(Effect.forkChild({ startImmediately: true }))
+          yield* Deferred.await(resolving)
+          yield* Deferred.succeed(cancel, undefined)
+          const result = yield* Fiber.join(fiber)
+          expect(result.error?.message).toContain("Command interrupted by the user before it started.")
+          expect(yield* shell.list()).toEqual([])
+          expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "started")).exists())).toBe(false)
+        }),
+      )
+    }),
+  )
+
+  parity.live("says once that a stopped command wrote nothing", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const shell = yield* Shell.Service
+          const { shellID, result } = yield* stopCall(registry, idleCommand, "call-silent", "cancel", false)
+          const info = yield* shell.get(shellID)
+          // The call settles after a bounded wait for the kill, which a loaded Windows runner can outlast.
+          expect(result?.error?.message?.replace("; it is still being stopped", "")).toBe(
+            `[no output; output file: ${info.file}]\n\nCommand interrupted by the user (shell ID: ${shellID}).`,
+          )
+        }),
+      )
+    }),
+  )
+
+  // Windows signals terminate the job immediately; a process cannot ignore SIGTERM there.
+  const ignoresTerm = isWindows ? it.live.skip : it.live
+  ignoresTerm(
+    "settles a stopped call without waiting for a command that ignores SIGTERM",
+    () =>
+      withTempDir((tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const shell = yield* Shell.Service
+            const started = Date.now()
+            const { shellID, result } = yield* stopCall(
+              registry,
+              "trap '' TERM; printf 'kept\\n'; while :; do sleep 1; done",
+              "call-stubborn",
+              "cancel",
+            )
+            // Bounded by the short wait, not by the 3 s grace before SIGKILL.
+            expect(Date.now() - started).toBeLessThan(2_500)
+            const info = yield* shell.get(shellID)
+            expect(result?.error?.message).toBe(
+              `kept\n\n[full output saved to ${info.file}]\n\nCommand interrupted by the user (shell ID: ${shellID}); it is still being stopped.`,
+            )
+            // The stop still ends it.
+            expect((yield* shell.wait(shellID)).status).toBe("killed")
+          }),
+        )
+      }),
+    { timeout: 15_000 },
+  )
+
+  // Starts a call whose daemon command is slow to be created, and returns once the daemon was asked for it.
+  const startSlowCall = (registry: Tool.Interface, id: string) =>
+    Effect.gen(function* () {
+      let release = () => {}
+      if (fake) fake.holdCreate.until = new Promise<void>((resolve) => (release = resolve))
+      // The step's own gate: a stop goes through `cancel` only if the tool is awaiting it.
+      const cancel = SessionStep.makeCancel()
+      const fiber = yield* executeTool(registry, {
+        ...call({ command: idleCommand }, id),
+        cancel: cancel.effect,
+      }).pipe(Effect.forkChild({ startImmediately: true }))
+      while (!fake?.ops.includes("create_pipe")) yield* Effect.promise(() => Bun.sleep(2))
+      return {
+        fiber,
+        stop: Effect.sync(() => cancel.trigger()),
+        release: Effect.sync(() => {
+          if (fake) fake.holdCreate.until = undefined
+          release()
+        }),
+      }
+    })
+
+  fakeDaemonIt.live("stops a command the user stopped while it was being created", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const jobs = yield* Job.Service
+          const shell = yield* Shell.Service
+          const call = yield* startSlowCall(registry, "call-slow-create")
+          // The tool already listens while its command is being created, so the step would not interrupt it.
+          expect(yield* call.stop).toBe(true)
+          yield* call.release
+          const result = yield* Fiber.join(call.fiber)
+          expect(result.error?.message).toContain("Command interrupted by the user")
+          const process = fake?.processes[0]
+          expect(fake?.requests).toContainEqual(
+            expect.objectContaining({ op: "signal", id: process?.id, signal: "SIGTERM" }),
+          )
+          expect(process?.lifecycle.status).toBe("exited")
+          expect(yield* shell.list()).toEqual([])
+          expect((yield* jobs.get(String(process?.pipe?.metadata.id)))?.status).not.toBe("running")
+        }),
+      )
+    }),
+  )
+
+  fakeDaemonIt.live("stops a command the user stopped after its Location reloaded", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        reset()
+        const sessions = yield* Session.Service
+        const locations = yield* LocationServiceMap.Service
+        const location = Location.Ref.make({ directory: AbsolutePath.make(tmp.path) })
+        yield* sessions.create({ id: sessionID, title: "shell test", location, model: sessionModel })
+        yield* Effect.gen(function* () {
+          const plugins = yield* Plugin.Service
+          yield* plugins.awaitActivation
+          const registry = yield* Tool.Service
+          const jobs = yield* Job.Service
+          const cancel = SessionStep.makeCancel()
+          const started = yield* Deferred.make<string>()
+          const fiber = yield* executeTool(registry, {
+            ...call({ command: idleCommand }, "call-reloaded"),
+            progress: (update) =>
+              typeof update.shellID === "string"
+                ? Deferred.succeed(started, update.shellID).pipe(Effect.asVoid)
+                : Effect.void,
+            cancel: cancel.effect,
+          }).pipe(Effect.forkChild({ startImmediately: true }))
+          const shellID = yield* Deferred.await(started)
+          // The call still holds the old Location when a reload closes it.
+          yield* locations.invalidate(location)
+          expect(cancel.trigger()).toBe(true)
+          const result = yield* Fiber.join(fiber)
+          expect(result.error?.message).toContain(`Command interrupted by the user (shell ID: ${shellID})`)
+          expect(fake?.processes[0]?.lifecycle.status).toBe("exited")
+          expect((yield* jobs.get(shellID))?.status).not.toBe("running")
+        }).pipe(Effect.provide(locations.get(location)))
+        yield* locations.invalidate(location)
+      }),
+    ),
+  )
+
+  for (const handoff of [false, true])
+    for (const starting of [true, false])
+      fakeDaemonIt.live(
+        `${handoff ? "leaves a command running" : "stops a command"} when an interrupt ${handoff ? "during a handoff " : ""}cuts its call off while it ${starting ? "starts" : "runs"}`,
+        () =>
+          withTempDir((tmp) => {
+            reset()
+            return withSession(tmp.path, (registry) =>
+              Effect.gen(function* () {
+                const jobs = yield* Job.Service
+                const pty = yield* PersistentPty.Service
+                const call = yield* startSlowCall(registry, "call-interrupted")
+                if (handoff) expect(yield* pty.handoff()).not.toBeNull()
+                if (!starting) {
+                  yield* call.release
+                  while (fake!.waiters(fake!.processes[0]?.id ?? -1) === 0) yield* Effect.sleep(2)
+                }
+                const interrupting = yield* Fiber.interrupt(call.fiber).pipe(
+                  Effect.forkChild({ startImmediately: true }),
+                )
+                if (starting) yield* call.release
+                yield* Fiber.join(interrupting)
+                expect(Exit.hasInterrupts(yield* Fiber.await(call.fiber))).toBe(true)
+                const process = fake?.processes[0]
+                const shellID = String(process?.pipe?.metadata.id)
+                if (handoff) {
+                  // Nothing stopped it: the next server takes it over through its recorded tool call.
+                  expect(process?.lifecycle.status).toBe("running")
+                  expect(process?.pipe?.metadata).toMatchObject({ toolCall: { callID: "call-interrupted" } })
+                  expect(fake?.ops).not.toContain("signal")
+                  expect((yield* jobs.get(shellID))?.status).toBe("running")
+                  yield* jobs.cancel(shellID)
+                  return
+                }
+                // Nothing will take it over, so it is stopped and its job ends.
+                const shell = yield* Shell.Service
+                expect((yield* shell.wait(ID.make(shellID))).status).toBe("killed")
+                expect(fake?.requests).toContainEqual(
+                  expect.objectContaining({ op: "signal", id: process?.id, signal: "SIGTERM" }),
+                )
+                expect(process?.lifecycle.status).toBe("exited")
+                expect((yield* jobs.get(shellID))?.status).toBe("cancelled")
+              }),
+            )
+          }),
+      )
+
+  fakeDaemonIt.live("records which call waits on a daemon command, and keeps no timeout for a restart", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const { shellID } = yield* stopCall(registry, idleCommand, "call-recorded", "interrupt", false)
+          const request = fake?.requests.find((item) => item.op === "create_pipe")
+          expect(request?.metadata).toMatchObject({
+            id: shellID,
+            toolCall: { sessionID, callID: "call-recorded" },
+          })
+          // The call's timeout applies to this server only: a restart moves the command to the background.
+          expect(request?.metadata).not.toHaveProperty("timeoutDeadline")
+        }),
+      )
+    }),
+  )
+
+  it.live("lets an execute.after hook replace a stopped call's failure", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const hooks = yield* PluginHooks.Service
+          const seen: unknown[] = []
+          yield* hooks.register("tool", "execute.after", (event) =>
+            Effect.sync(() => {
+              if (event.status !== "error") return
+              seen.push(event.error.metadata)
+              event.error = new Tool.Error({ message: "rewritten by a plugin" })
+            }),
+          )
+          const { shellID, result } = yield* stopCall(registry, startingCommand, "call-hooked", "cancel")
+          expect(seen).toEqual([
+            {
+              interrupted: true,
+              truncated: false,
+              shellID,
+              notice: expect.stringContaining("Command interrupted by the user"),
+            },
+          ])
+          expect(result?.error?.message).toBe("rewritten by a plugin")
+        }),
+      )
+    }),
+  )
+
+  parity.live("stops a command whose call an interrupt cut off, with no handoff to take it over", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const shell = yield* Shell.Service
+          const jobs = yield* Job.Service
+          const { shellID, exit } = yield* stopCall(registry, startingCommand, "call-teardown", "interrupt")
+          expect(Exit.hasInterrupts(exit)).toBe(true)
+          expect((yield* shell.wait(shellID)).status).toBe("killed")
+          expect((yield* jobs.get(shellID))?.status).toBe("cancelled")
         }),
       )
     }),

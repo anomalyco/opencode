@@ -38,4 +38,5 @@ export default {
   "form.namePlaceholder": "Localhost",
   "form.add": "Pievienot serveri",
   "menu.delete": "Dzēst",
+  "error.unavailable": "SSH nav pieejams",
 }

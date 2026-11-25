@@ -8,12 +8,14 @@ import { ACPReplay } from "../../src/acp/replay"
 import { ACPTranslate } from "../../src/acp/translate"
 import {
   assistantMessage,
+  backgroundShell,
   childCreated,
   delivered,
   durableEvent,
   ephemeralEvent,
   failed,
   reasoningDelta,
+  shellNotice,
   stepEnded,
   succeeded,
   textDelta,
@@ -575,6 +577,59 @@ const rows: Row[] = [
     },
   },
   {
+    name: "keeps a background shell pending after its turn ends",
+    events: live(...backgroundShell(root, "sh_bg"), succeeded(root)),
+    expected: { terminal: "succeeded", pending: true },
+  },
+  {
+    name: "keeps a background shell pending until its queued notice is delivered",
+    events: live(...backgroundShell(root, "sh_bg"), shellNotice(root, "msg_notice", "sh_bg"), succeeded(root)),
+    expected: { pending: true },
+  },
+  {
+    name: "settles a background shell once its notice is delivered",
+    events: live(
+      ...backgroundShell(root, "sh_bg"),
+      shellNotice(root, "msg_notice", "sh_bg"),
+      delivered(root, "msg_notice"),
+    ),
+    expected: { pending: false },
+  },
+  {
+    name: "settles a background shell whose notice is cancelled",
+    events: live(
+      ...backgroundShell(root, "sh_bg"),
+      shellNotice(root, "msg_notice", "sh_bg"),
+      durableEvent("session.inbox.cancelled", { sessionID: root, inboxID: "msg_notice" }),
+    ),
+    expected: { pending: false },
+  },
+  {
+    name: "settles a shell that exits before its call's result arrives",
+    events: live(
+      shellNotice(root, "msg_notice", "sh_fast"),
+      ...backgroundShell(root, "sh_fast"),
+      delivered(root, "msg_notice"),
+    ),
+    expected: { pending: false },
+  },
+  {
+    name: "leaves a user's shell command, whose notice waits for the next prompt, out of pending work",
+    events: live(shellNotice(root, "msg_user_shell", "sh_user", { job: false }), succeeded(root)),
+    expected: { pending: false },
+  },
+  {
+    name: "keeps a finished child's background shell pending",
+    events: live(
+      childCreated("ses_child", root, "Explore"),
+      durableEvent("session.execution.started", { sessionID: "ses_child" }),
+      ...backgroundShell("ses_child", "sh_child"),
+      succeeded("ses_child"),
+      succeeded(root),
+    ),
+    expected: { terminal: "succeeded", pending: true },
+  },
+  {
     name: "replays reasoning with the same message IDs as live reasoning ordinals",
     messages: [
       assistantMessage("msg_a", {
@@ -624,6 +679,7 @@ function translate(row: Row) {
     failure: ACPTranslate.failure(result.state)?._tag,
     context: result.state.usage?.last,
     abandoned: updates(ACPTranslate.abandon(result.state, context).outputs),
+    pending: ACPTranslate.pending(result.state),
   }
 }
 

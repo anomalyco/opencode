@@ -1,5 +1,5 @@
 import type { ModelInfo } from "@opencode/client"
-import { createMemo, createSignal, onMount, Show } from "solid-js"
+import { createMemo, createSignal, Show } from "solid-js"
 import { useLocal } from "../context/local"
 import { DialogSelect } from "../ui/dialog-select"
 import { useDialog } from "../ui/dialog"
@@ -12,11 +12,9 @@ import { modelPreferenceKey } from "../model-preference"
 import { useLocation } from "../context/location"
 import { useNewDesigns } from "../config"
 import { DialogFreeModels } from "./dialog-model-free"
-import { FavoriteMarker, ModelDetail, isFreeModel, prioritizeFavorites, sortModelOptions } from "./model-options"
-import { DialogUsage, useUsageLimits } from "./usage"
-import { formatDollars, usageLevel } from "../util/usage-limits"
+import { FavoriteMarker, isFreeModel, prioritizeFavorites, sortModelOptions } from "./model-options"
 
-export function DialogModel(props: { providerID?: string }) {
+export function DialogModel(props: { integrationID?: string }) {
   const local = useLocal()
   const dialog = useDialog()
   const newDesigns = useNewDesigns()
@@ -39,14 +37,16 @@ export function DialogModel(props: { providerID?: string }) {
 
   function connect() {
     dialog.replace(() => (
-      <DialogIntegration onConnected={(providerID) => dialog.replace(() => <DialogModel providerID={providerID} />)} />
+      <DialogIntegration
+        onConnected={(integrationID) => dialog.replace(() => <DialogModel integrationID={integrationID} />)}
+      />
     ))
   }
 
   return (
     <Show
-      when={newDesigns() && !connected() && !props.providerID}
-      fallback={<DialogConnectedModels providerID={props.providerID} onSelect={select} onConnect={connect} />}
+      when={newDesigns() && !connected() && !props.integrationID}
+      fallback={<DialogConnectedModels integrationID={props.integrationID} onSelect={select} onConnect={connect} />}
     >
       <DialogFreeModels onSelect={select} onConnect={connect} />
     </Show>
@@ -54,7 +54,8 @@ export function DialogModel(props: { providerID?: string }) {
 }
 
 function DialogConnectedModels(props: {
-  providerID?: string
+  // Lists only the models of this integration's providers, such as OpenCode's workspace and OpenCode Go.
+  integrationID?: string
   onSelect: (providerID: string, modelID: string) => void
   onConnect: () => void
 }) {
@@ -62,19 +63,6 @@ function DialogConnectedModels(props: {
   const newDesigns = useNewDesigns()
   const data = useData()
   const location = useLocation()
-  const dialog = useDialog()
-  const limits = useUsageLimits()
-  // Spend moves with every request, so the picker shows fresh limits.
-  onMount(() => limits.load(true))
-  const usage = (model: ModelInfo) => {
-    const value = limits.usage(model)
-    if (value) {
-      const level = usageLevel(value, model)
-      return { text: `${formatDollars(value.left)} left`, danger: level === "out" || level === "reached" }
-    }
-    if (limits.unlimited(model)) return { text: "No limit" }
-    return undefined
-  }
   const [query, setQuery] = createSignal("")
   // Under new designs, favoriting does not reorder the list until the dialog is reopened.
   const favoritesAtOpen = [...local.model.favorite()]
@@ -89,7 +77,7 @@ function DialogConnectedModels(props: {
   }
   // OpenCode's own free models get their own group at the end of the list instead of joining "OpenCode".
   const freeGroup = (model: ModelInfo) =>
-    newDesigns() && !props.providerID && model.providerID === "opencode" && isFreeModel(model)
+    newDesigns() && !props.integrationID && model.providerID === "opencode" && isFreeModel(model)
 
   const connected = useConnected()
   const providers = createMemo(
@@ -97,11 +85,61 @@ function DialogConnectedModels(props: {
   )
   const models = createMemo(() => data.location.model.list(location.ref) ?? [])
 
-  const showExtra = createMemo(() => connected() && !props.providerID)
+  const showExtra = createMemo(() => connected() && !props.integrationID)
+
+  // Built apart from the query so that typing reuses the same options and the list keeps its rows instead of
+  // rebuilding one per model on every key.
+  const modelOptions = createMemo(() =>
+    sortModelOptions(
+      models()
+        .filter((model) => model.status !== "deprecated")
+        .filter(
+          (model) =>
+            !props.integrationID ||
+            model.providerID === props.integrationID ||
+            providers().get(model.providerID)?.integrationID === props.integrationID,
+        )
+        // A model's faster and slower speeds are chosen with the speed selector.
+        .filter((model) => !local.model.isSpeed({ providerID: model.providerID, modelID: model.id }))
+        .map((model) => {
+          const provider = providers().get(model.providerID)
+          const value = { providerID: model.providerID, modelID: model.id }
+          const favorite = isFavorite(value)
+          return {
+            value,
+            providerID: model.providerID,
+            providerName: provider?.name ?? model.providerID,
+            title: model.name,
+            releaseDate: model.time.released,
+            description: newDesigns() ? undefined : favorite ? "(Favorite)" : undefined,
+            category: connected() ? (freeGroup(model) ? "Free" : (provider?.name ?? model.providerID)) : undefined,
+            footer: trailing(model, favorite),
+            // Search results name the provider inline. The trailing slot keeps the favorite marker instead of
+            // falling back to the provider name.
+            searchDescription: newDesigns() ? (provider?.name ?? model.providerID) : undefined,
+            searchFooter: newDesigns() ? (trailing(model, favorite) ?? "") : undefined,
+            free: isFreeModel(model),
+            onSelect() {
+              props.onSelect(model.providerID, model.id)
+            },
+          }
+        }),
+      connected(),
+    ),
+  )
 
   const options = createMemo(() => {
     const needle = query().trim()
-    const showSections = showExtra() && needle.length === 0
+    if (needle)
+      return prioritizeFavorites(
+        sortModelOptions(
+          fuzzysort.go(needle, modelOptions(), { keys: ["title", "category"] }).map((item) => item.obj),
+          false,
+        ),
+        favoritePriority,
+      )
+
+    const showSections = showExtra()
     const favorites = connected() ? (newDesigns() ? favoritesAtOpen : local.model.favorite()) : []
     const recents = local.model.recent()
 
@@ -120,7 +158,6 @@ function DialogConnectedModels(props: {
             description: provider?.name ?? model.providerID,
             category,
             footer: trailing(model, isFavorite(item)),
-            detail: newDesigns() ? () => <ModelDetail model={model} usage={usage(model)} /> : undefined,
             onSelect: () => {
               props.onSelect(model.providerID, model.id)
             },
@@ -137,77 +174,33 @@ function DialogConnectedModels(props: {
       "Recent",
     )
 
-    const modelOptions = sortModelOptions(
-      models()
-        .filter((model) => model.status !== "deprecated")
-        .filter((model) => (props.providerID ? model.providerID === props.providerID : true))
-        .map((model) => {
-          const provider = providers().get(model.providerID)
-          const value = { providerID: model.providerID, modelID: model.id }
-          // Users with nothing connected can only favorite models in the free picker (new designs); this picker keeps them unavailable.
-          const favorite = connected() && isFavorite(value)
-          return {
-            value,
-            providerID: model.providerID,
-            providerName: provider?.name ?? model.providerID,
-            title: model.name,
-            releaseDate: model.time.released,
-            description: newDesigns() ? undefined : favorite ? "(Favorite)" : undefined,
-            category: connected() ? (freeGroup(model) ? "Free" : (provider?.name ?? model.providerID)) : undefined,
-            footer: trailing(model, favorite),
-            free: isFreeModel(model),
-            detail: newDesigns() ? () => <ModelDetail model={model} usage={usage(model)} /> : undefined,
-            onSelect() {
-              props.onSelect(model.providerID, model.id)
-            },
-          }
-        })
-        .filter((option) => {
-          if (!showSections) return true
-          if (
-            favorites.some(
-              (item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID,
-            )
-          )
-            return false
-          if (
-            recents.some((item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID)
-          )
-            return false
-          return true
-        }),
-      connected(),
-    )
-
-    if (needle) {
-      const results = prioritizeFavorites(
-        sortModelOptions(
-          fuzzysort.go(needle, modelOptions, { keys: ["title", "category"] }).map((item) => item.obj),
-          false,
-        ),
-        favoritePriority,
+    const listed = modelOptions().filter((option) => {
+      if (!showSections) return true
+      if (
+        favorites.some((item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID)
       )
-      // Search results name the provider inline. Without a category, the trailing slot keeps the favorite marker
-      // instead of falling back to the provider name.
-      if (!newDesigns()) return results
-      return results.map((option) => ({ ...option, description: option.providerName, category: undefined }))
-    }
+        return false
+      if (recents.some((item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID))
+        return false
+      return true
+    })
+
+    if (!connected()) return prioritizeFavorites(listed, favoritePriority)
 
     return [
       ...favoriteOptions,
       ...recentOptions,
-      ...modelOptions.filter((option) => option.category !== "Free"),
-      ...modelOptions.filter((option) => option.category === "Free"),
+      ...listed.filter((option) => option.category !== "Free"),
+      ...listed.filter((option) => option.category === "Free"),
     ]
   })
 
-  const provider = createMemo(() => (props.providerID ? providers().get(props.providerID) : undefined))
-
-  const title = createMemo(() => {
-    const value = provider()
-    if (!value) return "Select model"
-    return value.name
-  })
+  const title = createMemo(
+    () =>
+      (props.integrationID &&
+        data.location.integration.list(location.ref)?.find((item) => item.id === props.integrationID)?.name) ||
+      "Select model",
+  )
 
   return (
     <DialogSelect<ReturnType<typeof options>[number]["value"]>
@@ -228,16 +221,8 @@ function DialogConnectedModels(props: {
           onTrigger: props.onConnect,
         },
         {
-          command: "model.dialog.usage",
-          title: newDesigns() ? "usage" : "Usage",
-          selection: "none",
-          hidden: !limits.info(),
-          onTrigger: () => dialog.replace(() => <DialogUsage />),
-        },
-        {
           command: "model.dialog.favorite",
           title: newDesigns() ? (option) => (isFavorite(option?.value) ? "unfavorite" : "favorite") : "Favorite",
-          hidden: !connected(),
           onTrigger: (option) => {
             local.model.toggleFavorite(option.value as { providerID: string; modelID: string })
           },
@@ -247,7 +232,7 @@ function DialogConnectedModels(props: {
       flat={true}
       skipFilter={true}
       title={title()}
-      current={local.model.current()}
+      current={local.model.standard()}
     />
   )
 }

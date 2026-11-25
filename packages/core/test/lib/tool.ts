@@ -1,21 +1,38 @@
 import { Agent } from "@opencode/core/agent"
 import { CodeModeCatalog } from "@opencode/core/codemode/catalog"
-import type { Permission } from "@opencode/core/permission"
+import { Config } from "@opencode/core/config"
+import { Image } from "@opencode/core/image"
+import { Permission } from "@opencode/core/permission"
+import { PermissionPolicy } from "@opencode/core/permission/policy"
 import { SessionMessage } from "@opencode/core/session/message"
 import { toSessionError } from "@opencode/core/session/to-session-error"
 import type { SessionError } from "@opencode/schema/session-error"
 import { Tool } from "@opencode/core/tool"
 import type { Context } from "@opencode/plugin/effect/plugin"
-import { Effect, type Scope } from "effect"
+import type { LayerNode } from "@opencode/util/effect/layer-node"
+import { Effect, type Layer, type Scope } from "effect"
 import { host } from "../plugin/host"
+import { imagePassthrough } from "./image"
+import { permissionLayer } from "./permission"
 
 export const toolIdentity = {
   agent: Agent.ID.make("build"),
   messageID: SessionMessage.ID.make("msg_tool_test"),
 }
 
+/** Replacements for tests that build `Tool.node` without a Location. */
+export const toolNodeReplacements = (
+  permission: Layer.Layer<Permission.Service> = permissionLayer(),
+): LayerNode.Replacements => [
+  Config.node.replace(Config.testLayer()),
+  Image.node.replace(imagePassthrough),
+  Permission.node.replace(permission),
+]
+
 export const toolDefinitions = (registry: Tool.Interface, permissions?: Permission.Ruleset) =>
-  registry.snapshot(permissions).pipe(Effect.map((toolSet) => toolSet.definitions))
+  registry
+    .snapshot(permissions ? PermissionPolicy.fromRules(permissions) : undefined)
+    .pipe(Effect.map((toolSet) => toolSet.definitions))
 
 export const codeModeListings = (catalog: CodeModeCatalog.Inventory) =>
   CodeModeCatalog.summarize(catalog, { budget: Infinity }).namespaces.flatMap((namespace) => namespace.entries)
@@ -74,8 +91,9 @@ export interface ToolExecution {
 export const executeTool = (
   registry: Tool.Interface,
   input: Parameters<Tool.Snapshot["execute"]>[0],
+  options?: Tool.SnapshotOptions,
 ): Effect.Effect<ToolExecution> =>
-  registry.snapshot().pipe(
+  registry.snapshot(undefined, options).pipe(
     Effect.flatMap((tools) => tools.execute(input)),
     Effect.map((result) => ({ status: "completed" as const, ...result }) satisfies ToolExecution),
     Effect.catchTag("Tool.Error", (error) =>

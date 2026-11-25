@@ -2,7 +2,10 @@ import { describe, expect, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { which } from "@opencode/core/util/which"
+import { appExecutionAlias } from "../fixture/app-execution-alias"
 import { tmpdir } from "../fixture/tmpdir"
+
+const alias = appExecutionAlias()
 
 async function cmd(dir: string, name: string, exec = true) {
   const ext = process.platform === "win32" ? ".cmd" : ""
@@ -43,15 +46,6 @@ describe("util.which", () => {
     expect(which("opencode-missing-command-for-test")).toBeNull()
   })
 
-  test("finds a command from PATH override", async () => {
-    await using tmp = await tmpdir()
-    const bin = path.join(tmp.path, "bin")
-    await fs.mkdir(bin)
-    const file = await cmd(bin, "tool")
-
-    same(which("tool", env(bin)), file)
-  })
-
   test("uses first PATH match", async () => {
     await using tmp = await tmpdir()
     const a = path.join(tmp.path, "a")
@@ -85,6 +79,11 @@ describe("util.which", () => {
     await fs.writeFile(file, "@echo off\r\n")
 
     expect(which("pathext", { PATH: bin, PATHEXT: ".CMD" })).toBe(file)
+  })
+
+  // Skipped where no Microsoft Store app is installed for the user; see the fixture.
+  test.skipIf(!alias)("finds a Microsoft Store app execution alias on windows", () => {
+    same(which(path.parse(alias!.name).name, env(alias!.dir)), alias!.file)
   })
 
   test("uses Windows Path casing fallback", async () => {

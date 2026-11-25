@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
 import { createRoot } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, unwrap } from "solid-js/store"
 import { createComposerAttachments } from "@/composer/attachments/attachments"
+import { uploads } from "@/composer/attachments/uploads"
+import { createMemoryComposerState } from "@/composer/state"
 import type { ComposerPrompt } from "@/composer/types"
 
 function target() {
@@ -59,5 +61,72 @@ describe("Composer attachment ownership", () => {
         }, rejectTest)
       })
     })
+  })
+
+  test("upload progress keeps each row's identity and writes only its own row", async () => {
+    const scope = {}
+    const reports: ((loaded: number) => void)[] = []
+
+    const work = (report: (loaded: number) => void) => {
+      reports.push(report)
+
+      return new Promise<string>(() => {})
+    }
+
+    const first = uploads.track({ id: "one", scope, filename: "one.bin", mime: "", size: 100 }, work)
+    const second = uploads.track({ id: "two", scope, filename: "two.bin", mime: "", size: 100 }, work)
+    const rows = [...uploads.items()]
+
+    reports[1]?.(40)
+    expect(uploads.items()[0]).toBe(rows[0]!)
+    expect(uploads.items()[1]).toBe(rows[1]!)
+    expect(uploads.items().map((item) => item.loaded)).toEqual([0, 40])
+
+    uploads.cancelScope(scope)
+    expect(await Promise.all([first, second])).toEqual([undefined, undefined])
+  })
+
+  test("keeps an upload pending for its draft across a remount, and stops it when the draft closes", async () => {
+    const draft = createRoot((dispose) => ({ state: createMemoryComposerState(), dispose }))
+    const prompt = target()
+    let signal: AbortSignal | undefined
+
+    const mount = () =>
+      createRoot((dispose) => ({
+        dispose,
+        attachments: createComposerAttachments({
+          capture: () => ({ ...prompt.capture, scope: unwrap(draft.state.store[0]()) }),
+          editor: () => document.createElement("div"),
+          focusEditor() {},
+          addPart: () => false,
+          setDraggingType() {},
+          directory: () => "C:/repo",
+          destination: () => ({
+            input: { image: false, pdf: false },
+            local: false,
+            upload: (_file, _report, abort) => {
+              signal = abort
+
+              return new Promise<string>(() => {})
+            },
+          }),
+          isDialogActive: () => false,
+          duplicate() {},
+          onError() {},
+          onUploadError() {},
+        }),
+      }))
+
+    const first = mount()
+    await first.attachments.addAttachments([new File([new Uint8Array([0, 1, 2])], "data.bin")])
+    first.dispose()
+
+    const second = mount()
+    expect(second.attachments.pending().map((upload) => upload.filename)).toEqual(["data.bin"])
+
+    draft.dispose()
+    expect(second.attachments.pending()).toEqual([])
+    expect(signal?.aborted).toBe(true)
+    second.dispose()
   })
 })

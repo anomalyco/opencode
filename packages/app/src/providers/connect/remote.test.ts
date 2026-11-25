@@ -5,11 +5,9 @@ const contributed = {
   type: "plugin",
   key: "ssh:production",
   plugin: "ssh",
-  state: "ready",
-  connecting: false,
-  authenticationRequired: false,
+  status: { type: "ready", http: { url: "http://127.0.0.1:4096" } },
+  authenticate: () => false,
   managed: true,
-  http: { url: "http://127.0.0.1:4096" },
 } as const
 
 test("SSH disclosure uses the remote identity even with a loopback proxy", () => {
