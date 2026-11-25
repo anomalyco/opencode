@@ -94,12 +94,12 @@ function attention(ctx: ServerCtx, sessionId: string, root: boolean, autoApprove
   return !!requests.permission || !!requests.form
 }
 
-// A root runs while any session in its family is busy.
+// A root runs while any session in its family is busy. The keyed family index keeps this per root, not per session.
 function running(data: ServerData, sessionId: string, root: boolean) {
   if (root)
-    return data.session
-      .list()
-      .some((session) => data.session.root(session.id) === sessionId && sessionBusy(data, session.id))
+    return (
+      data.session.root(sessionId) === sessionId && data.session.family(sessionId).some((id) => sessionBusy(data, id))
+    )
 
   return sessionBusy(data, sessionId)
 }
