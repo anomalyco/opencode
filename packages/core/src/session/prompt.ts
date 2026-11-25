@@ -67,9 +67,7 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
         const skill = yield* skillService.get(attachment.id)
         if (!skill) return yield* new SkillNotFoundError({ skill: attachment.id })
         prepared.set(skill.id, skill.name)
-        const content = yield* skillService
-          .content(skill.id)
-          .pipe(Effect.mapError((error) => new AttachmentError({ uri: Skill.uri(skill.id), message: error.message })))
+        const content = yield* skillService.content(skill.id)
         const files = yield* skillService.files(skill.id)
         return {
           id: skill.id,

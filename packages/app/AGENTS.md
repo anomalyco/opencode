@@ -120,6 +120,13 @@ This section is the single source for scroll containers across `app`, `ui`, `ses
 
 This section is the single source for what may move or restyle the session timeline. It applies to every component and stylesheet that renders in or around the timeline, across `app`, `ui`, `session-ui` and `gui-plugins`. Each rule comes from a regression that shipped.
 
+### Transcript size
+
+- A session keeps every history page the reader loads, so a pass over the whole transcript costs more with each page. A history page that lands shifts every index of the message list, and each memo that reads the list runs again and reads every message through the store.
+- Read a message's parts through a memo for that message (`mapArray` over the messages with a `createMemo` inside, as `messageParts` in `packages/session-ui/src/timeline/projection.ts` and `createSessionBackground` do), and fold over the memos. A page that lands, or a tool that updates, then reads that page or that message.
+- Do not read the transcript for something that cannot show: the todo pill reads it only while a turn runs and todos are on.
+- Still whole-transcript: `Timeline.constructSessionMessageRows` and its indexes. It was 24 of 68 ms of script when a page landed with 30 pages loaded.
+
 ### Scroll position
 
 - The timeline moves when the reader scrolls it or asks to go somewhere (a jump, a search hit, a link). Nothing else scrolls it: not focus, not an update, not a row that mounts.
@@ -135,6 +142,21 @@ This section is the single source for what may move or restyle the session timel
 - `scrollToFn` in `src/session/timeline/virtualizer.tsx` holds the corrections made while a batch of sizes is applied and writes the last one once. Keep scroll writes for size changes on that path, and call `flushHeldScroll` before code inside the batch reads the native offset.
 - Keeper: "corrects the scroll position once for each batch of rows an older page measures" in `e2e/regression/timeline-history.spec.ts`.
 
+### Scroll events
+
+- A scroll event must read before it writes. A style write followed by a read of `scrollTop`, `scrollHeight` or a rect, in the same event, makes the browser recalculate style (and lay out, when the write changed a size) inside the event.
+- `ScrollView` (`packages/ui/src/components/scroll-view.tsx`) therefore reads the thumb's geometry first (`readThumb`), forwards the event to the timeline, and writes the thumb in the next animation frame (`applyThumb`). Keep that order when you add work to a scroll handler.
+- Keeper: "handles a scroll event without a forced style or layout pass" in `e2e/regression/timeline-geometry.spec.ts`, for both timelines. It counts the passes in a Chrome trace; the old order forced one in every scroll event.
+
+### Transcript reads
+
+- The reader keeps their place only while the rows in view stay in the transcript. `session.message.sync` (`packages/client/src/solid/data.ts`) reads the newest page again on every reconnect of the event stream, and when a turn ends with a tool still running. It once replaced the transcript with that page: a reader further back than the page jumped 3,400 to 8,100 px, and the older pages were gone.
+- A new read of the newest page keeps the loaded messages before it and their cursor. When the page does not reach the loaded messages, it reads older pages until they meet; after a long absence it gives up and keeps the newest messages only.
+- Never join a page to messages it does not adjoin. A transcript that skips messages is worse than a lost place, and nothing shows the reader that messages are missing. `loadMore` drops an older page when a newer read replaced the transcript the page continued.
+- A message counts as loaded history only where the server put it. The row of a waiting input sits where the input was admitted until its delivery moves it, so it cannot tell where a page meets the history.
+- Keepers: "reading the newest page again keeps the loaded history" and the cases after it in `packages/client/test/solid-data.test.ts`, and "a reconnect of the event stream keeps a reader in older history where they were" in `e2e/regression/timeline-history.spec.ts`.
+- To check by hand: scroll several screens back in a long session, then run `window.dispatchEvent(new Event("online"))` in DevTools. The app drops the event stream and reads the transcript again. The rows in view must not move.
+
 ### `:has()` selectors
 
 - Chromium rechecks an element's `:has()` when focus moves, an attribute changes, or an element is added or removed near it. In and around the timeline, that happens many times a second during a scroll.
@@ -144,6 +166,13 @@ This section is the single source for what may move or restyle the session timel
 - On a small component (a row, a tab, a card, a menu), the selector may continue after `:has()`. A recheck costs the size of that component.
 - Never select on `style` inside `:has()`. Every inline style write then rechecks the `:has()` of the element's ancestors, and the virtualizer writes inline styles while the reader scrolls. Set a `data-` attribute when the element is built, and select on that.
 - To check: record a Chrome trace of the `devtools.timeline` category while you scroll through history that has not been visited, click in the timeline and press a scroll key. Read `elementCount` on each `UpdateLayoutTree` event; DevTools shows it as Recalculate Style, Elements Affected. A pass that affects about as many elements as the timeline contains is this regression.
+
+### Work on every transcript change
+
+- The transcript changes with each message, tool update and history page. A memo that reads it and returns a new array or object (`visibleUserMessages()`, the revert view, the list of running tasks) notifies its readers every time, whether or not their result changes.
+- Code outside the timeline that needs one fact about the transcript reads it through a memo of that fact, such as a boolean or an id. The session command list (`src/session/commands/use-session-commands.tsx`) does this. When it read the transcript directly, every history page rebuilt all commands, registered every keybind again and rebuilt the review toggle in the session header, whose fit forces a layout.
+- A control that shows a keybind reads `command.keybind()` or `command.keybindParts()`, which change only when a keybind does. Do not read `command.options` for a label.
+- Keeper: "the header keeps its controls while the transcript changes" in `e2e/regression/session-header.spec.ts`.
 
 ## Localization
 

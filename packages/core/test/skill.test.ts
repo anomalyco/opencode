@@ -227,7 +227,7 @@ describe("Skill", () => {
       expect(yield* skill.files(id)).toEqual(["references/a.md", "references/b.md"])
       expect(loaded).toEqual([])
       expect(yield* skill.content(id)).toBe("# remote")
-      expect(yield* skill.file(id, "references/a.md")).toBe("A")
+      expect(new TextDecoder().decode(yield* skill.read(id, "references/a.md"))).toBe("A")
       expect(loaded).toEqual(["SKILL.md", "references/a.md"])
     }),
   )
@@ -265,7 +265,10 @@ describe("Skill", () => {
 
         const files = yield* skill.files(Skill.ID.make("review"))
         expect(files).toEqual(["references/a.md", "references/b.md"])
-        expect(yield* skill.file(Skill.ID.make("review"), "references/a.md")).toBe("A")
+        expect(new TextDecoder().decode(yield* skill.read(Skill.ID.make("review"), "references/a.md"))).toBe("A")
+        expect((yield* skill.read(Skill.ID.make("review"), "../secret").pipe(Effect.flip))._tag).toBe(
+          "Skill.FileNotFoundError",
+        )
         const fs = yield* FSUtil.Service
         const prepared = yield* Skill.prepare(
           { ...fs, scan: () => Effect.die(new Error("unexpected disk scan")) },
