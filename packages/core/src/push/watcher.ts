@@ -90,11 +90,23 @@ const layer = Layer.effectDiscard(
       Effect.forkScoped({ startImmediately: true }),
     )
 
-    // An answer on any client makes the notification stale, and so does a new prompt for a finished turn.
+    // An answer on any client makes the notification stale, and so does a new prompt for a finished turn. A deleted
+    // session has nothing left to open.
     yield* bus
-      .subscribe([Permission.Event.Replied, Form.Event.Replied, Form.Event.Cancelled, SessionEvent.InboxEnqueued])
+      .subscribe([
+        Permission.Event.Replied,
+        Form.Event.Replied,
+        Form.Event.Cancelled,
+        SessionEvent.InboxEnqueued,
+        SessionEvent.Deleted,
+      ])
       .pipe(
         Stream.runForEach((event) => {
+          if (event.type === "session.deleted") {
+            stepped.delete(event.data.sessionID)
+            asking.delete(event.data.sessionID)
+            return sender.clearSession(event.data.sessionID)
+          }
           if (event.type === "permission.replied") {
             asking.get(event.data.sessionID)?.delete(event.data.requestID)
             return sender.clear([event.data.requestID])

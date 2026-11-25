@@ -25,6 +25,8 @@ export interface Interface {
   readonly send: (notification: Notification) => Effect.Effect<void>
   /** Removes the notifications sent under these ids from the phones that got them, in the background. */
   readonly clear: (ids: ReadonlyArray<string>) => Effect.Effect<void>
+  /** Removes every notification sent for this top-level session, for when the session is deleted. */
+  readonly clearSession: (sessionID: string) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/PushSender") {}
@@ -153,6 +155,11 @@ const layer = Layer.effect(
     return Service.of({
       send: (notification) => deliver(notification).pipe(Effect.forkIn(scope), Effect.asVoid),
       clear: (ids) => clear(ids).pipe(Effect.forkIn(scope), Effect.asVoid),
+      clearSession: (sessionID) =>
+        clear(Array.from(sent).flatMap(([id, entry]) => (entry.sessionID === sessionID ? [id] : []))).pipe(
+          Effect.forkIn(scope),
+          Effect.asVoid,
+        ),
     })
   }),
 )

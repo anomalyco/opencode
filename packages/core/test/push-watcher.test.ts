@@ -272,8 +272,22 @@ describe("PushWatcher", () => {
       yield* prompt("user")
       yield* waitUntil(Effect.sync(() => boxes.length === 8))
 
-      expect(silent).toEqual([undefined, true, undefined, true, undefined, true, undefined, true])
-      expect(cleared()).toEqual([
+      // Deleting the session removes whatever is still showing for it.
+      yield* ask("per_3")
+      yield* step(parentID)
+      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: parentID })
+      yield* waitUntil(Effect.sync(() => boxes.length === 10))
+      yield* bus.publish(SessionEvent.Deleted, { sessionID: parentID })
+      yield* waitUntil(Effect.sync(() => boxes.length === 12))
+      expect(
+        cleared()
+          .slice(4)
+          .map((item) => item.id)
+          .sort(),
+      ).toEqual([parentID, "per_3"].sort())
+
+      expect(silent.slice(0, 8)).toEqual([undefined, true, undefined, true, undefined, true, undefined, true])
+      expect(cleared().slice(0, 4)).toEqual([
         { v: 1, id: "per_1", type: "clear", sessionID: parentID },
         { v: 1, id: "frm_1", type: "clear", sessionID: parentID },
         { v: 1, id: "per_2", type: "clear", sessionID: parentID },
