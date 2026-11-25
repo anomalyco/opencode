@@ -1176,6 +1176,7 @@ export function Session(props: {
       })(),
       id: "session.toggle.thinking",
       group: "Session",
+      slash: { name: "thinking" },
       palette: undefined,
       run: () => {
         void configState
