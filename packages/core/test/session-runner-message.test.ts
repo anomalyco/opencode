@@ -237,7 +237,7 @@ Earlier work
       background: [{ kind: "shell", sessionID: "ses_parent", shellID: "sh_dev", command: "bun dev" }],
     }
     const notes =
-      "<subagents> lists this session's direct subagent sessions, with their status when this checkpoint was written. <background-work> lists this session's background jobs that were running when this checkpoint was written; each sends a <background-result> when it finishes."
+      "<subagents> lists this session's direct subagent sessions, with their status when this checkpoint was written; a subagent whose own background work is still going counts as running. <background-work> lists this session's background jobs that were running when this checkpoint was written; each sends a <background-result> when it finishes. Where the summary and these lists disagree, the lists are newer."
     const block = [
       "<subagents>",
       "- ses_child (explore, running): Search",

@@ -298,7 +298,10 @@ function toLLMMessage(message: SessionMessage.Info, model: Model.Ref, providerMe
         { block: SessionCompactionBackground.format(message), note: SessionCompactionBackground.NOTE },
       ].filter((list) => list.block)
       // Tags hold only their lists; what they mean is said once, outside them.
-      const notes = lists.map((list) => ` ${list.note}`).join("")
+      // A background summary can be older than the checkpoint; the lists are read when it is saved.
+      const notes = lists.length
+        ? `${lists.map((list) => ` ${list.note}`).join("")} Where the summary and these lists disagree, the lists are newer.`
+        : ""
       const listed = lists.map((list) => list.block).join("\n\n")
       // History selection only keeps native windows the target model can replay.
       if (message.native?.messages !== undefined) {

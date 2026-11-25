@@ -2,6 +2,7 @@ export * as SessionCompactionSubagents from "./compaction-subagents.js"
 
 import { DateTime, Effect, Option, Schema } from "effect"
 import type { Job } from "../job.js"
+import { SessionBackground } from "./background.js"
 import type { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
 import type { SessionStore } from "./store.js"
@@ -29,28 +30,25 @@ const decodeEntries = Schema.decodeUnknownOption(Entries)
  * {@link MAX_IDLE} most recently updated idle ones, {@link MAX} in all.
  */
 export const collect = Effect.fnUntraced(function* (
-  store: Pick<SessionStore.Interface, "list">,
+  store: Pick<SessionStore.Interface, "list" | "get">,
   jobs: Pick<Job.Interface, "runningBackground">,
   sessionID: SessionSchema.ID,
 ): Effect.fn.Return<readonly Entry[]> {
   const children = yield* store.list({ parentID: sessionID, archived: false, order: "desc" })
   if (children.length === 0) return []
-  const runningJobs = new Map(
-    (yield* jobs.runningBackground).flatMap((recovery) =>
-      recovery.kind === "subagent" && recovery.parentSessionID === sessionID
-        ? [[recovery.childSessionID, recovery] as const]
-        : [],
+  // A child that went idle with its own shell or subagent still running has not finished its work.
+  const working = new Set(
+    yield* Effect.forEach(yield* SessionBackground.outstanding(jobs, store, sessionID), (item) =>
+      directChild(store, item.kind === "subagent" ? item.childSessionID : item.sessionID, sessionID),
     ),
   )
   const entries = children.map((child): Entry => {
-    const job = runningJobs.get(child.id)
-    const agent = child.agent ?? job?.agent
-    const title = formatTitle(child.title ?? job?.description)
+    const title = formatTitle(child.title)
     return {
       id: child.id,
-      ...(agent ? { agent } : {}),
+      ...(child.agent ? { agent: child.agent } : {}),
       ...(title ? { title } : {}),
-      status: job !== undefined || isBusy(child) ? "running" : "idle",
+      status: working.has(child.id) || isBusy(child) ? "running" : "idle",
     }
   })
   const running = entries.filter((entry) => entry.status === "running")
@@ -60,7 +58,7 @@ export const collect = Effect.fnUntraced(function* (
 
 /** Explains the `<subagents>` block. The tag holds only the list, so this goes beside it. */
 export const NOTE =
-  "<subagents> lists this session's direct subagent sessions, with their status when this checkpoint was written."
+  "<subagents> lists this session's direct subagent sessions, with their status when this checkpoint was written; a subagent whose own background work is still going counts as running."
 
 /** Renders the `<subagents>` checkpoint block, or an empty string when none exist. */
 export const format = (message: SessionMessage.CompactionCompleted) => {
@@ -68,6 +66,24 @@ export const format = (message: SessionMessage.CompactionCompleted) => {
   if (entries.length === 0) return ""
   return ["<subagents>", ...entries.map(formatEntry), "</subagents>"].join("\n")
 }
+
+/** The direct child of `root` that `from` is or descends from, or undefined when `from` is `root` itself. */
+const directChild = Effect.fnUntraced(function* (
+  store: Pick<SessionStore.Interface, "get">,
+  from: SessionSchema.ID,
+  root: SessionSchema.ID,
+) {
+  const seen = new Set<SessionSchema.ID>()
+  let current = from
+  while (current !== root && !seen.has(current)) {
+    seen.add(current)
+    const parentID = (yield* store.get(current))?.parentID
+    if (parentID === root) return current
+    if (parentID === undefined) return undefined
+    current = parentID
+  }
+  return undefined
+})
 
 const isBusy = (session: SessionSchema.Info) =>
   session.time.busy !== undefined &&

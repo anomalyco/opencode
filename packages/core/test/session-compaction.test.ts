@@ -1772,20 +1772,23 @@ flagged.effect("compaction lists at most MAX subagents, even when more are runni
   }),
 )
 
-flagged.effect("compaction lists the session's own running background jobs, not its subagents' jobs", () =>
-  Effect.gen(function* () {
-    const parent = yield* insertSession(Session.ID.make("ses_background"))
-    yield* child(parent.id, "ses_background_child", 100)
-    yield* runningShell(parent.id, "sh_background_parent")
-    yield* runningShell(Session.ID.make("ses_background_child"), "sh_background_child")
-    const messages = [textUser("Question")]
-    yield* storeMessages(parent.id, messages)
-    expect(yield* compactManually(parent, messages)).toEqual({ status: "completed" })
-    const [checkpoint] = yield* SessionStore.Service.use((store) => store.context(parent.id))
-    expect(checkpoint?.metadata?.background).toEqual([
-      { kind: "shell", sessionID: parent.id, shellID: "sh_background_parent", command: "run sh_background_parent" },
-    ])
-  }),
+flagged.effect(
+  "compaction lists the session's own running background jobs, and counts a subagent with its own as running",
+  () =>
+    Effect.gen(function* () {
+      const parent = yield* insertSession(Session.ID.make("ses_background"))
+      yield* child(parent.id, "ses_background_child", 100)
+      yield* runningShell(parent.id, "sh_background_parent")
+      yield* runningShell(Session.ID.make("ses_background_child"), "sh_background_child")
+      const messages = [textUser("Question")]
+      yield* storeMessages(parent.id, messages)
+      expect(yield* compactManually(parent, messages)).toEqual({ status: "completed" })
+      const [checkpoint] = yield* SessionStore.Service.use((store) => store.context(parent.id))
+      expect(checkpoint?.metadata?.background).toEqual([
+        { kind: "shell", sessionID: parent.id, shellID: "sh_background_parent", command: "run sh_background_parent" },
+      ])
+      expect(checkpoint?.metadata?.subagents).toMatchObject([{ id: "ses_background_child", status: "running" }])
+    }),
 )
 
 flagged.effect("a swapped-in background summary lists subagents started after it was written", () =>
