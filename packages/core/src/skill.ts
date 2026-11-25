@@ -47,6 +47,8 @@ export class LoadError extends Schema.TaggedError<LoadError>()("Skill.LoadError"
 /** A skill's SKILL.md body or one of its files: inline, or loaded the first time it's needed. */
 export type Content = string | Effect.Effect<string, LoadError>
 export type File = string | Uint8Array | Effect.Effect<string | Uint8Array, LoadError>
+/** Where a skill that didn't come from this machine came from. */
+export type Origin = { readonly type: "mcp"; readonly server: string }
 
 export const available = (skills: ReadonlyArray<Info>, policy: PermissionPolicy.Policy) =>
   skills.filter((skill) => PermissionPolicy.evaluate(policy, "skill", skill.id).effect !== "deny")
@@ -115,13 +117,18 @@ export type Data = {
   skills: Map<ID, Types.DeepMutable<Info>>
   files: Map<ID, ReadonlyMap<string, File>>
   loaders: Map<ID, Effect.Effect<string, LoadError>>
+  origins: Map<ID, Origin>
 }
 
 export type Editor = {
   list: () => readonly Types.DeepMutable<Info>[]
   get: (id: string) => Types.DeepMutable<Info> | undefined
   /** A skill whose content is an effect is listed with `content: ""` until it's loaded. */
-  add: (skill: Omit<Info, "content"> & { readonly content: Content }, files?: Readonly<Record<string, File>>) => void
+  add: (
+    skill: Omit<Info, "content"> & { readonly content: Content },
+    files?: Readonly<Record<string, File>>,
+    origin?: Origin,
+  ) => void
   update: (id: string, update: (skill: Types.DeepMutable<Info>) => void) => void
   remove: (id: string) => void
 }
@@ -138,6 +145,8 @@ export interface Interface extends State.Transformable<Editor> {
    */
   readonly read: (id: ID, file: string) => Effect.Effect<Uint8Array, NotFoundError | FileNotFoundError | LoadError>
   readonly list: () => Effect.Effect<Info[]>
+  /** The body as the model is given it: `content`, led by where the skill came from when that isn't this machine. */
+  readonly instructions: (id: ID) => Effect.Effect<string, LoadError>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Skill") {}
@@ -149,15 +158,17 @@ const layer = Layer.effect(
 
     const state = State.create<Data, Editor>({
       name: "skill",
-      initial: () => ({ skills: new Map(), files: new Map(), loaders: new Map() }),
+      initial: () => ({ skills: new Map(), files: new Map(), loaders: new Map(), origins: new Map() }),
       editor: (editor) => ({
         list: () => Array.from(editor.skills.values()),
         get: (id) => editor.skills.get(ID.make(id)),
-        add: (skill, files) => {
+        add: (skill, files, origin) => {
           const content = skill.content
           editor.skills.set(skill.id, { ...skill, content: typeof content === "string" ? content : "" })
           editor.loaders.delete(skill.id)
           if (typeof content !== "string") editor.loaders.set(skill.id, content)
+          editor.origins.delete(skill.id)
+          if (origin) editor.origins.set(skill.id, origin)
           const entries = files
             ? Object.entries(files)
                 .filter(([file]) => file !== "SKILL.md")
@@ -181,6 +192,7 @@ const layer = Layer.effect(
           editor.skills.delete(key)
           editor.files.delete(key)
           editor.loaders.delete(key)
+          editor.origins.delete(key)
         },
       }),
       notify: State.changes(
@@ -225,6 +237,12 @@ const layer = Layer.effect(
       }),
       list: Effect.fn("Skill.list")(function* () {
         return Array.from(state.get().skills.values())
+      }),
+      instructions: Effect.fn("Skill.instructions")(function* (id) {
+        const body = yield* content(id)
+        const origin = state.get().origins.get(id)
+        if (!origin) return body
+        return `This skill comes from MCP server "${origin.server}", not from this machine.\n\n${body}`
       }),
     })
   }),

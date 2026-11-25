@@ -197,6 +197,9 @@ describe("MCP skills", () => {
       yield* connect("team", server.url, ["team:deploy"])
       const skills = yield* Skill.Service
       expect(yield* skills.content(id)).toBe("# Deploy\n\nRun scripts/run.sh.\n")
+      expect(yield* skills.instructions(id)).toBe(
+        'This skill comes from MCP server "team", not from this machine.\n\n# Deploy\n\nRun scripts/run.sh.\n',
+      )
       expect(new TextDecoder().decode(yield* skills.read(id, "scripts/run.sh"))).toBe("echo run")
       // Once loaded, the content is listed and nothing is read again.
       yield* eventually(skills.get(id), (skill) => skill?.content === "# Deploy\n\nRun scripts/run.sh.\n")
