@@ -124,7 +124,8 @@ opencode mcp list
 ```
 
 Remote servers use OAuth by default. If `mcp list` reports that a server needs
-authentication, tell the user to run `/mcps`, select the server, and sign in.
+authentication, tell the user to run `/mcp` in the desktop or web app, or `/mcps` in the TUI,
+select the server, and sign in.
 Do not run `opencode mcp auth` through the shell tool: it starts an interactive
 flow whose authorization link can be hidden in background process output.
 Use the user-facing MCP interface instead.
