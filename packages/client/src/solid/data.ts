@@ -2511,8 +2511,10 @@ export function createData(config: CreateDataInput) {
 
 export type Data = ReturnType<typeof createData>
 
+// 404 is a declared status, so the client parses its body as a tagged error and fails on the old server's empty,
+// non-JSON body before it can report the status. Undeclared statuses such as 500 or 502 fail as UnexpectedStatus.
 function missingEndpoint(error: unknown) {
   if (!(error instanceof ClientError)) return false
   if (error.reason === "UnexpectedStatus") return (error.cause as { status?: number } | undefined)?.status === 404
-  return error.reason === "UnsupportedContentType" || error.reason === "MalformedResponse"
+  return error.reason === "UnsupportedContentType"
 }

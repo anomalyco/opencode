@@ -120,6 +120,26 @@ test("a missing location still fails the flag sync", async () => {
   }
 })
 
+test("server errors and malformed flag responses still fail the flag sync", async () => {
+  for (const response of [
+    () => new Response("<html>Bad Gateway</html>", { status: 502, headers: { "content-type": "text/html" } }),
+    () => new Response("{", { status: 200, headers: { "content-type": "application/json" } }),
+  ]) {
+    const app = setup(response)
+    try {
+      expect(
+        await app.data.location.flags.sync({ directory: "/project" }).then(
+          () => undefined,
+          (error: unknown) => error,
+        ),
+      ).toBeDefined()
+      expect(app.data.location.flags.list({ directory: "/project" })).toBeUndefined()
+    } finally {
+      app.dispose()
+    }
+  }
+})
+
 test("keeps each location's flags apart", async () => {
   const app = setup((directory) =>
     Response.json({ location: { directory }, data: { full_codemode: directory === "/on" } }),
