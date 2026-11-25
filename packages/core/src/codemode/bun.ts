@@ -404,12 +404,13 @@ const glob = (host: Host, given: string, cwd: string, dot: boolean) =>
         () => Effect.succeed([]),
       ),
     )
+    const matches = Glob.matcher(pattern, { dot })
     return entries
       .map((entry) => ({
         path: path.isAbsolute(pattern) ? path.join(base, entry.path) : path.join(path.relative(cwd, base), entry.path),
         type: entry.type,
       }))
-      .filter((entry) => Glob.match(pattern, entry.path, { dot }))
+      .filter((entry) => matches(entry.path))
   })
 
 type Entry = { readonly path: string; readonly type: Environment.FileType }
@@ -520,11 +521,12 @@ export const extension = Extension.make({
       write: Extension.async(writeTo),
       Glob: Extension.constructible((pattern: string) => {
         if (typeof pattern !== "string") throw new TypeError("Bun.Glob expects a pattern string.")
+        const matches = Glob.matcher(pattern)
         return {
           scan: (options?: string | ScanOptions) => scan(pattern, options),
           scanSync: (options?: string | ScanOptions) => scan(pattern, options),
           // As in Bun, `match` takes a dot file that a scan without `dot` leaves out.
-          match: (name: string) => Glob.match(pattern, name),
+          match: (name: string) => matches(name),
         }
       }),
     },
