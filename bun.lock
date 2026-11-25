@@ -623,6 +623,23 @@
         "@opencode/plugin": "^2.0.27 || ^0.0.0-dev",
       },
     },
+    "packages/plugins/s3-artifacts": {
+      "name": "@opencode/plugin-s3-artifacts",
+      "version": "2.4.1",
+      "dependencies": {
+        "marked": "18.0.11",
+      },
+      "devDependencies": {
+        "@opencode/core": "workspace:*",
+        "@tsconfig/bun": "1.0.9",
+        "@types/bun": "1.4.3",
+        "@typescript/native": "npm:typescript@7.1.0-beta",
+        "effect": "catalog:",
+      },
+      "peerDependencies": {
+        "@opencode/plugin": "^2.0.27 || ^0.0.0-dev",
+      },
+    },
     "packages/protocol": {
       "name": "@opencode/protocol",
       "version": "2.4.1",
@@ -1888,6 +1905,8 @@
     "@opencode/plugin-browser": ["@opencode/plugin-browser@workspace:packages/plugin-browser"],
 
     "@opencode/plugin-figma": ["@opencode/plugin-figma@workspace:packages/plugins/figma"],
+
+    "@opencode/plugin-s3-artifacts": ["@opencode/plugin-s3-artifacts@workspace:packages/plugins/s3-artifacts"],
 
     "@opencode/protocol": ["@opencode/protocol@workspace:packages/protocol"],
 
