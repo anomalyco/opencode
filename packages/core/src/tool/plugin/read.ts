@@ -94,26 +94,21 @@ export const Plugin = {
                   ...Permission.invocation(context),
                 })
                 const virtualFs = Environment.makeFiles(Environment.makeMemoryDriver())
-                const encoder = new TextEncoder()
                 // Only the requested file is loaded. The rest stay empty, which is enough for directory listings.
-                const load = (file: string) => {
-                  if (file !== parsed.target.slice(1)) return Effect.succeed("")
-                  if (file === "SKILL.md") return skills.content(id)
-                  return skills.file(id, file).pipe(Effect.map((value) => value ?? ""))
-                }
                 yield* Effect.forEach(
                   files,
                   (file) =>
-                    load(file).pipe(
+                    (file === parsed.target.slice(1) ? skills.read(id, file) : Effect.succeed(new Uint8Array())).pipe(
                       Effect.mapError(
-                        (error) => new ToolFailure({ message: `Unable to read ${input.path}: ${error.message}` }),
+                        (error) =>
+                          new ToolFailure({
+                            message:
+                              error._tag === "Skill.LoadError"
+                                ? `Unable to read ${input.path}: ${error.message}`
+                                : `File not found: ${input.path}`,
+                          }),
                       ),
-                      Effect.flatMap((value) =>
-                        virtualFs.write(
-                          AbsolutePath.make(`/${file}`),
-                          typeof value === "string" ? encoder.encode(value) : value,
-                        ),
-                      ),
+                      Effect.flatMap((bytes) => virtualFs.write(AbsolutePath.make(`/${file}`), bytes)),
                     ),
                   { discard: true },
                 )

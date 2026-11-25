@@ -135,6 +135,7 @@ impl Client {
     endpoint!(" `DELETE /api/experimental/fs/watch` (`unwatch`)", experimental_file_unwatch, experimental_file_unwatch_call, empty, (), input: ExperimentalFileUnwatchInput);
     endpoint!(" `GET /api/command` (`list`)", command_list, command_list_call, json, CommandListOutput, input: CommandListInput);
     endpoint!(" `GET /api/skill` (`list`)", skill_list, skill_list_call, json, SkillListOutput, input: SkillListInput);
+    endpoint!(" `GET /api/experimental/skill/:skillID/file/*` (`file`)", experimental_skill_file, experimental_skill_file_call, binary, bytes::Bytes, input: ExperimentalSkillFileInput);
     endpoint!(" `POST /api/rpc/:rpcID/:method` (`call`)", rpc_call, rpc_call_call, json, RpcCallOutput, input: RpcCallInput);
     endpoint!(" `GET /api/event` (`subscribe`)", event_subscribe, event_subscribe_call, sse, SseResponse<EventSubscribeOutput>, input: EventSubscribeInput);
     endpoint!(" `GET /api/pty` (`list`)", pty_list, pty_list_call, json, PtyListOutput, input: PtyListInput);
@@ -191,6 +192,21 @@ impl Client {
     );
     endpoint!(" `POST /api/experimental/machine` (`machine.add`)", experimental_machine_add, experimental_machine_add_call, data, ExperimentalMachineAddOutput, input: ExperimentalMachineAddInput);
     endpoint!(" `DELETE /api/experimental/machine/:name` (`machine.remove`)", experimental_machine_remove, experimental_machine_remove_call, empty, (), input: ExperimentalMachineRemoveInput);
+    endpoint!(
+        " `GET /api/experimental/push` (`push.get`)",
+        experimental_push_get,
+        experimental_push_get_call,
+        data,
+        ExperimentalPushGetOutput
+    );
+    endpoint!(" `PUT /api/experimental/push/device/:deviceID` (`push.device.register`)", experimental_push_device_register, experimental_push_device_register_call, data, ExperimentalPushDeviceRegisterOutput, input: ExperimentalPushDeviceRegisterInput);
+    endpoint!(" `DELETE /api/experimental/push/device/:deviceID` (`push.device.remove`)", experimental_push_device_remove, experimental_push_device_remove_call, empty, (), input: ExperimentalPushDeviceRemoveInput);
+    endpoint!(" `PATCH /api/experimental/push/device/:deviceID` (`push.device.update`)", experimental_push_device_update, experimental_push_device_update_call, data, ExperimentalPushDeviceUpdateOutput, input: ExperimentalPushDeviceUpdateInput);
+    endpoint!(" `PUT /api/experimental/push/device/:deviceID/session/:sessionID` (`push.device.session.set`)", experimental_push_device_session_set, experimental_push_device_session_set_call, data, ExperimentalPushDeviceSessionSetOutput, input: ExperimentalPushDeviceSessionSetInput);
+    endpoint!(" `DELETE /api/experimental/push/device/:deviceID/session/:sessionID` (`push.device.session.remove`)", experimental_push_device_session_remove, experimental_push_device_session_remove_call, empty, (), input: ExperimentalPushDeviceSessionRemoveInput);
+    endpoint!(" `PUT /api/experimental/push/session/:sessionID` (`push.session.set`)", experimental_push_session_set, experimental_push_session_set_call, data, ExperimentalPushSessionSetOutput, input: ExperimentalPushSessionSetInput);
+    endpoint!(" `DELETE /api/experimental/push/session/:sessionID` (`push.session.remove`)", experimental_push_session_remove, experimental_push_session_remove_call, empty, (), input: ExperimentalPushSessionRemoveInput);
+    endpoint!(" `PUT /api/experimental/push/settings` (`push.settings.set`)", experimental_push_settings_set, experimental_push_settings_set_call, data, ExperimentalPushSettingsSetOutput, input: ExperimentalPushSettingsSetInput);
     endpoint!(" `GET /api/shell` (`list`)", shell_list, shell_list_call, json, ShellListOutput, input: ShellListInput);
     endpoint!(" `POST /api/shell` (`create`)", shell_create, shell_create_call, json, ShellCreateOutput, input: ShellCreateInput);
     endpoint!(" `GET /api/shell/:id` (`get`)", shell_get, shell_get_call, json, ShellGetOutput, input: ShellGetInput);

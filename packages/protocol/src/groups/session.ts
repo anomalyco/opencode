@@ -26,6 +26,7 @@ import {
   ServiceUnavailableError,
   SessionBusyError,
   SessionNotFoundError,
+  SkillLoadError,
   SkillNotFoundError,
   UnknownError,
 } from "../errors.js"
@@ -398,7 +399,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           }),
         }),
         success: Schema.Struct({ data: SessionInbox.User }),
-        error: [ConflictError, InvalidRequestError, SessionNotFoundError],
+        error: [ConflictError, InvalidRequestError, SessionNotFoundError, SkillLoadError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(
@@ -442,7 +443,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           resume: Schema.Boolean.pipe(Schema.optional),
         }),
         success: HttpApiSchema.NoContent,
-        error: [SessionNotFoundError, SkillNotFoundError],
+        error: [SessionNotFoundError, SkillNotFoundError, SkillLoadError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(

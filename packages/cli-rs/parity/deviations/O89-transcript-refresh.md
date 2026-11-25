@@ -1,10 +1,13 @@
 # O89: a transcript refresh merges what streamed during it by `durable.seq`
 
-**TypeScript.** `message.sync` replaces the transcript with the latest page and keeps only local input rows that
-are in the outbox or admitted (`packages/client/src/solid/data.ts:1831-1855`). When the read started before a step,
-the `session.step.started` row and its text are gone once the older page lands, and later deltas for that message
+**TypeScript.** `message.sync` publishes the latest page and keeps local input rows that are in the outbox or
+admitted (`packages/client/src/solid/data.ts`, `message.sync`). When the page starts inside the loaded transcript,
+the loaded messages before it stay, with their cursor, and those that were still running are read again. When the
+page does not reach the loaded transcript, up to three older pages (20, 40 and 140 messages) are read to reach it;
+past that, the pages replace the transcript. A row after the start of the page that the page lacks is dropped: when the read started before a
+step, the `session.step.started` row and its text are gone once the page lands, and later deltas for that message
 are dropped because the row is not loaded. The reply reappears only after another invalidation. Events create rows for
-any session, also one the store found missing (`message.update` does `draft[sessionID] ??= []`, `data.ts:495`).
+any session, also one the store found missing (`message.update` does `draft[sessionID] ??= []`).
 
 **Rust.** Each head read records what overtakes it (`messages::HeadRead`):
 the rows events create, each with its event's `durable.seq`, and the durable edits (step, text, reasoning and tool
@@ -32,6 +35,9 @@ first read are kept (O3-model-row-during-first-read, O4-edit-during-first-read).
 ended publishes nothing and reads again; deletion and eviction drop it. The `session.model.selected` refetch updates
 its row only while the transcript holds it, so it cannot put back a row the merge dropped as older; TS appends it.
 Events for a session the store found missing create no transcript (model O9, transcript half).
+
+**Older pages.** A Rust head read drops the loaded messages that are older than the page, and an older page brings
+them back. TypeScript keeps them, as described above.
 
 **Known gap (O10).** When the stream lags behind the read, the page already holds rows whose events arrive after it
 published. A row created before them, delivered later still, has nothing to compare with and is appended after newer

@@ -511,8 +511,9 @@ export interface ComposerNote {
 
 /**
  * Text the user quoted from something the plugin shows, such as terminal output, with an optional comment. It
- * renders like a quote from the session timeline, under the source's icon and label. The model reads "The user quoted
- * the following from <subject>:" and the text, each line prefixed with `> `, then the comment when there is one.
+ * renders like a quote from the session timeline, under the source's icon and label. The model reads "From <subject>:"
+ * and the text as a blockquote, each line prefixed with `> `, then the comment below it when there is one, all before
+ * the user's message.
  */
 export interface ComposerQuote {
   /** The part kind. */
@@ -529,7 +530,7 @@ export interface ComposerQuote {
     readonly label: string
     /** Chip icon; one of the plugin's own icons draws while the plugin is active. */
     readonly icon: IconName
-    /** Where the text came from, for the model, e.g. `the terminal`. Not localized. */
+    /** Where the text came from, for the model's `From <subject>:` line, e.g. `the terminal`. Not localized. */
     readonly subject: string
   }
 }
