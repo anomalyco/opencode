@@ -10,6 +10,10 @@ import { Session } from "../session.js"
 import { PushList } from "./list.js"
 import { PushSender } from "./sender.js"
 
+// A client with the session already open reports the view the moment the turn ends, whether or not anyone is
+// looking. Only a later view counts as the user having seen it.
+const viewedAfter = 10_000
+
 const bodies = {
   succeeded: "Finished",
   failed: "Failed",
@@ -90,14 +94,15 @@ const layer = Layer.effectDiscard(
       Effect.forkScoped({ startImmediately: true }),
     )
 
-    // An answer on any client makes the notification stale, and so does a new prompt for a finished turn. A deleted
-    // session has nothing left to open.
+    // An answer on any client makes the notification stale, and so does a new prompt or a view for a finished turn.
+    // A deleted session has nothing left to open.
     yield* bus
       .subscribe([
         Permission.Event.Replied,
         Form.Event.Replied,
         Form.Event.Cancelled,
         SessionEvent.InboxEnqueued,
+        SessionEvent.Viewed,
         SessionEvent.Deleted,
       ])
       .pipe(
@@ -110,6 +115,10 @@ const layer = Layer.effectDiscard(
           if (event.type === "permission.replied") {
             asking.get(event.data.sessionID)?.delete(event.data.requestID)
             return sender.clear([event.data.requestID])
+          }
+          if (event.type === "session.viewed") {
+            if (event.created - event.data.idle < viewedAfter) return Effect.void
+            return sender.clear([event.data.sessionID])
           }
           if (event.type !== "session.inbox.enqueued") return sender.clear([event.data.id])
           if (event.data.item.type !== "user") return Effect.void
