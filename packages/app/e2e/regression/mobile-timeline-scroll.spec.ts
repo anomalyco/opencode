@@ -10,6 +10,7 @@ import {
   shell,
   textPart,
   userMessage,
+  waitForVisualSettle,
 } from "../utils/timeline"
 import { capturePromptMotion, markPrompt, promptMotionIssues, readPromptPositions } from "../utils/prompt-motion"
 
@@ -792,7 +793,9 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       }
     }
 
-    test("keeps the visible row anchored through reflow and touch cancellation", async ({ page }, testInfo) => {
+    test("keeps the words on the reading line anchored through reflow and touch cancellation", async ({
+      page,
+    }, testInfo) => {
       await setupTimeline(page, {
         messages: [
           userMessage(),
@@ -812,7 +815,7 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       await page.evaluate(() => document.fonts.ready)
       await expect(timeline.locator('[data-component="markdown"]:not([data-markdown-ready])')).toHaveCount(0)
       const bounds = (await scroller.boundingBox())!
-      const before = await tail.evaluate((element) => element.getBoundingClientRect().top)
+      const start = await tail.evaluate((element) => element.getBoundingClientRect().top)
       const devtools = await page.context().newCDPSession(page)
       await devtools.send("Input.dispatchTouchEvent", {
         type: "touchStart",
@@ -824,35 +827,38 @@ for (const device of ["Pixel 7", "iPhone 13"]) {
       })
       await expect
         .poll(() => tail.evaluate((element) => element.getBoundingClientRect().top))
-        .toBeGreaterThan(before + 50)
+        .toBeGreaterThan(start + 50)
       await expect(page.locator(`${thumbSelector}[data-visible="false"]`)).toHaveCount(1)
 
-      const chosen = await scroller.evaluate((root) => {
+      // The letter on the reading line, 40% of the way down from the session header to the composer region: a DOM
+      // Range around it, which stays on that letter however the text wraps.
+      const letter = await scroller.evaluateHandle((root) => {
         const view = root.getBoundingClientRect()
-        const rows = [...root.querySelectorAll<HTMLElement>("[data-timeline-key]")]
-        const above = rows.filter((row) => row.getBoundingClientRect().bottom <= view.top).slice(-2)
-        const first = rows.find((row) => row.getBoundingClientRect().bottom > view.top)!
+        const style = getComputedStyle(root)
+        const top = view.top + (parseFloat(style.scrollPaddingTop) || 0)
+        const line = top + (view.bottom - (parseFloat(style.scrollPaddingBottom) || 0) - top) * 0.4
+        const caret = document.caretPositionFromPoint(view.left + view.width / 2, line)!
+        const range = document.createRange()
+        range.setStart(caret.offsetNode, caret.offset)
+        range.setEnd(caret.offsetNode, caret.offset + 1)
 
-        return {
-          above: above.map((row) => ({ key: row.dataset.timelineKey, height: row.getBoundingClientRect().height })),
-          key: first.dataset.timelineKey,
-          top: first.getBoundingClientRect().top,
-        }
+        return range
       })
 
-      expect(chosen.above).toHaveLength(2)
+      const place = () => letter.evaluate((range) => range.getBoundingClientRect().top)
+      const before = await place()
+      const height = await scroller.evaluate((root) => root.scrollHeight)
       await page.setViewportSize({ width: 390, height: 844 })
-
-      for (const row of chosen.above)
-        await expect
-          .poll(async () => (await scroller.locator(`[data-timeline-key="${row.key}"]`).boundingBox())?.height)
-          .toBeGreaterThan(row.height)
-      const anchor = scroller.locator(`[data-timeline-key="${chosen.key}"]`)
+      // Every row wraps again at the new width.
+      await expect.poll(() => scroller.evaluate((root) => root.scrollHeight)).toBeGreaterThan(height)
+      await waitForVisualSettle(page, ["[data-timeline-virtual-content]"])
       await testInfo.attach("reflow-held.png", { body: await page.screenshot(), contentType: "image/png" })
-      expect((await anchor.boundingBox())?.y).toBeCloseTo(chosen.top, 0)
+      // The letter stays within a line of where it was: the rows above it moved the view, not it.
+      expect(Math.abs((await place()) - before)).toBeLessThanOrEqual(24)
       await devtools.send("Input.dispatchTouchEvent", { type: "touchCancel", touchPoints: [] })
       await testInfo.attach("reflow-cancelled.png", { body: await page.screenshot(), contentType: "image/png" })
-      expect((await anchor.boundingBox())?.y).toBeCloseTo(chosen.top, 0)
+      expect(Math.abs((await place()) - before)).toBeLessThanOrEqual(24)
+      await letter.dispose()
     })
   })
 }

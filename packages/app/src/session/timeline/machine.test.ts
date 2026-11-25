@@ -6,6 +6,7 @@ import {
   defersAdjustments,
   isFollowing,
   isGliding,
+  isRoaming,
   isTouchHeld,
   needsEndProbe,
   ROUTE_REVEAL_HISTORY_LIMIT,
@@ -295,7 +296,8 @@ test("only the reader's own input lets a revealed tool go", () => {
     { type: "detach" },
     { type: "pointer.up" },
     { type: "touch.drag", overflow: true },
-    scroll(1000, 400),
+    // The reveal's own scroll, and the pins that hold the tool while the rows above it measure.
+    scroll(1000, 400, 1000, 1000, 0),
     { type: "scroll.settled", atReachableEnd: true },
   ]
 
@@ -304,10 +306,54 @@ test("only the reader's own input lets a revealed tool go", () => {
     { type: "pointer.down" },
     { type: "touch.start", nested: false },
     { type: "release" },
+    // A scroll key the browser handled, an autoscroll or momentum: no input the timeline sees, only the movement.
+    scroll(940, 1000),
+    scroll(1000, 940),
   ]
 
   kept.forEach((event) => expect(transitionFollow(anchored, event)).toBe(anchored))
   released.forEach((event) => expect(transitionFollow(anchored, event).type).toBe("detached"))
+})
+
+// The pin ran again at the next measurement, so a reader who had scrolled on without a wheel or a key the timeline
+// handles was pulled back to the tool.
+test("a revealed tool lets go of a slow scroll once it adds up to more than a zoomed range rounds", () => {
+  const nudged = replay([{ type: "anchor", anchor }, scroll(398, 400), scroll(396, 398)])
+
+  expect(nudged.type).toBe("anchored")
+  expect(transitionFollow(nudged, scroll(396, 396, 1000, 1000, 0))).toBe(nudged)
+  expect(transitionFollow(nudged, scroll(395, 396)).type).toBe("detached")
+
+  // The movement adds up with its sign: a view that goes back and forth by less than that stays held.
+  const wobbled = replay([
+    { type: "anchor", anchor },
+    scroll(397, 400),
+    scroll(400, 397),
+    scroll(397, 400),
+    scroll(400, 397),
+  ])
+
+  expect(wobbled.type).toBe("anchored")
+})
+
+test.each<{ name: string; events: FollowEvent[]; roaming: boolean }>([
+  { name: "follows the end", events: [], roaming: false },
+  { name: "was sent somewhere by navigation", events: [{ type: "detach" }], roaming: false },
+  { name: "holds a revealed tool", events: [{ type: "anchor", anchor }], roaming: false },
+  { name: "left the end by wheel", events: [{ type: "scroll.intent", upward: true, overflow: true }], roaming: true },
+  { name: "left the end with no input the timeline sees", events: [scroll(480, 500)], roaming: true },
+  {
+    name: "scrolled on from where navigation sent it",
+    events: [{ type: "detach" }, { type: "scroll.intent", upward: true, overflow: true }],
+    roaming: true,
+  },
+  {
+    name: "scrolled on from a revealed tool",
+    events: [{ type: "anchor", anchor }, scroll(300, 400)],
+    roaming: true,
+  },
+])("the reader's own scroll decides where a view that $name rests: $roaming", (input) => {
+  expect(isRoaming(replay(input.events))).toBe(input.roaming)
 })
 
 test("probes a zoomed end only once the finger lifts", () => {
@@ -400,7 +446,7 @@ test.each<{ name: string; state: FollowState }>([
 test.each<{ name: string; state: FollowState; event: FollowEvent }>([
   { name: "following", state: createFollowState(), event: scroll(1000, 990) },
   { name: "detached", state: replay([{ type: "detach" }]), event: scroll(200, 300) },
-  { name: "anchored", state: replay([{ type: "anchor", anchor }]), event: scroll(200, 300) },
+  { name: "anchored", state: replay([{ type: "anchor", anchor }]), event: scroll(200, 300, 1000, 1000, 0) },
   { name: "settled following", state: createFollowState(), event: { type: "scroll.settled", atReachableEnd: false } },
 ])("a steady $name scroll returns the same state", (input) => {
   expect(transitionFollow(input.state, input.event)).toBe(input.state)

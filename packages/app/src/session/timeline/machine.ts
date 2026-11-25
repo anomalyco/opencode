@@ -49,8 +49,11 @@ export type FollowState =
       readonly endPending: boolean
       readonly by?: DetachedBy
     }
-  /** Holds a revealed tool call in place. */
-  | { readonly type: "anchored"; readonly anchor: FollowAnchor }
+  /**
+   * Holds a revealed tool call in place. `away`: how far the reader has scrolled since the reveal with no input the
+   * timeline sees, while that is still too little to tell from the rounding of a zoomed scroll range.
+   */
+  | { readonly type: "anchored"; readonly anchor: FollowAnchor; readonly away?: number }
 
 export type FollowEvent =
   /** A programmatic scroll to the end, such as a route change or a growing composer at the end. */
@@ -189,6 +192,14 @@ export function isFollowing(state: FollowState) {
   return state.type === "following" || state.type === "returning"
 }
 
+/**
+ * The view rests where the reader scrolled it. A view that follows the end, holds a revealed tool call, or is where
+ * navigation sent it keeps that place while its rows measure; this one keeps what the reader has in view.
+ */
+export function isRoaming(state: FollowState) {
+  return state.type === "detached" && state.by !== "navigation"
+}
+
 /** A glide to the end is under way. Until it arrives, the view is not pinned to the end. */
 export function isGliding(state: FollowState) {
   return state.type === "following" && !!state.gliding
@@ -258,7 +269,7 @@ export function needsEndProbe(state: FollowState) {
 }
 
 // Only the reader's own input lets an anchored tool go.
-function releaseAnchor(state: FollowState, event: FollowEvent): FollowState {
+function releaseAnchor(state: Extract<FollowState, { type: "anchored" }>, event: FollowEvent): FollowState {
   if (event.type === "release") return DETACHED
 
   if (event.type === "scroll.intent") return detached(undefined, false, event.upward ? undefined : "toward-end")
@@ -267,7 +278,13 @@ function releaseAnchor(state: FollowState, event: FollowEvent): FollowState {
 
   if (event.type === "touch.start") return detached(event.nested ? "nested-touch" : "touch", false)
 
-  return state
+  // A scroll key the browser handles, an autoscroll or momentum shows only as movement the timeline did not make.
+  // Holding the tool against it would pull the reader back at the next measurement. The movement adds up with its
+  // sign, so a view that goes back and forth by a pixel stays held.
+  if (event.type !== "scroll" || !event.reader) return state
+  const away = (state.away ?? 0) + event.reader
+
+  return Math.abs(away) > ZOOM_SLACK ? DETACHED : { type: "anchored", anchor: state.anchor, away }
 }
 
 // Following resumes by arriving at the end, either by scrolling there or by content shrinking under a viewport that

@@ -17,6 +17,7 @@ import {
   userID,
   userMessage,
   validateTimelineMessages,
+  waitForVisualSettle,
 } from "../utils/timeline"
 import { expectSessionTitle } from "../utils/waits"
 import { openSession } from "../utils/workspace"
@@ -237,6 +238,150 @@ test.describe("timeline history", () => {
     // The older page has landed above the visible rows.
     await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
     await expect.poll(positions).toEqual(before)
+  })
+
+  // The space above a reply row depends on the reply row before it. Here that row is on the older page, so the first
+  // loaded row changes height when the page lands.
+  test("keeps visible rows fixed while an older page that ends inside a turn prepends", async ({ page }) => {
+    const older = Promise.withResolvers<void>()
+    const requests: { before?: string; phase: "start" | "end" }[] = []
+    const prompt = "msg_0500_split_user"
+
+    const messages = [
+      ...historyMessages(4),
+      userMessage([{ id: "prt_split_prompt", type: "text", text: "Answer in two steps." }], { id: prompt }),
+      assistantMessage([textPart("prt_split_first", "The first step of the answer.")], {
+        id: "msg_0501_split_assistant",
+        parentID: prompt,
+      }),
+      assistantMessage(
+        Array.from({ length: 12 }, (_, index) =>
+          textPart(`prt_split_second_${index}`, `Second step ${index}. ${"More context. ".repeat(40)}`),
+        ),
+        { id: "msg_0502_split_assistant", parentID: prompt },
+      ),
+    ]
+
+    await setupTimeline(page, {
+      sessionMessages: validateTimelineMessages(messages),
+      // The newest page holds the second reply of the turn only.
+      pageMessages: (_, __, before) =>
+        before ? { items: messages.slice(0, -1) } : { items: messages.slice(-1), cursor: messages.at(-1)!.id },
+      beforeMessagesResponse: ({ before }) => (before ? older.promise : Promise.resolve()),
+      onMessages: (request) => requests.push(request),
+    })
+
+    const scroller = timelineScroller(page)
+    await expect(scroller.getByText(/^Second step 11\. /)).toBeInViewport()
+    await scroller.hover()
+    await page.mouse.wheel(0, -100_000)
+    await expect.poll(() => requests.some((request) => request.before && request.phase === "start")).toBe(true)
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeLessThanOrEqual(1)
+
+    const positions = () =>
+      scroller.evaluate((element) => {
+        const top = element.getBoundingClientRect().top
+
+        return [0, 1, 2].map((index) => {
+          const row = [...element.querySelectorAll<HTMLElement>("[data-timeline-part-id]")].find((part) =>
+            part.textContent?.startsWith(`Second step ${index}. `),
+          )
+
+          return row && Math.round((row.getBoundingClientRect().top - top) * devicePixelRatio) / devicePixelRatio
+        })
+      })
+
+    const before = await positions()
+    const height = await scroller.evaluate((element) => element.scrollHeight)
+    expect(before.every((position) => position !== undefined)).toBe(true)
+
+    older.resolve()
+    await expect(scroller.getByText("The first step of the answer.", { exact: true })).toBeAttached()
+    await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
+    await expect.poll(positions).toEqual(before)
+  })
+
+  // The first loaded row is taller than the view, so what the reader is on is in the row that changes height.
+  test("keeps a tall reply a reader is in fixed while an older page that ends inside its turn prepends", async ({
+    page,
+  }) => {
+    const older = Promise.withResolvers<void>()
+    const requests: { before?: string; phase: "start" | "end" }[] = []
+    const prompt = "msg_0500_tall_user"
+
+    const messages = [
+      ...historyMessages(4),
+      userMessage([{ id: "prt_tall_prompt", type: "text", text: "Answer in two steps." }], { id: prompt }),
+      assistantMessage([textPart("prt_tall_first", "The first step of the answer.")], {
+        id: "msg_0501_tall_assistant",
+        parentID: prompt,
+      }),
+      assistantMessage(
+        [
+          textPart(
+            "prt_tall_second",
+            Array.from({ length: 30 }, (_, index) => `Tall step ${index}. ${"More context. ".repeat(40)}`).join("\n\n"),
+          ),
+          ...Array.from({ length: 4 }, (_, index) =>
+            textPart(`prt_tall_after_${index}`, `After step ${index}. ${"More context. ".repeat(40)}`),
+          ),
+        ],
+        { id: "msg_0502_tall_assistant", parentID: prompt },
+      ),
+    ]
+
+    await setupTimeline(page, {
+      sessionMessages: validateTimelineMessages(messages),
+      // The newest page holds the second reply of the turn only.
+      pageMessages: (_, __, before) =>
+        before ? { items: messages.slice(0, -1) } : { items: messages.slice(-1), cursor: messages.at(-1)!.id },
+      beforeMessagesResponse: ({ before }) => (before ? older.promise : Promise.resolve()),
+      onMessages: (request) => requests.push(request),
+    })
+
+    const scroller = timelineScroller(page)
+    await expect(scroller.getByText(/^After step 3\. /)).toBeInViewport()
+    await scroller.hover()
+    await page.mouse.wheel(0, -100_000)
+    await expect.poll(() => requests.some((request) => request.before && request.phase === "start")).toBe(true)
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeLessThanOrEqual(1)
+    // The reader takes the pointer away, and the scroll comes to rest: the thumb fades.
+    await page.mouse.move(2, 2)
+    await expect(page.locator('[data-slot="session-timeline-visible"] .scroll-view__thumb')).toHaveAttribute(
+      "data-visible",
+      "false",
+    )
+
+    // Where the first words of the paragraphs in view are on the screen.
+    const positions = () =>
+      scroller.evaluate((element) => {
+        const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT)
+        const tops = new Map<number, number>()
+
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const found = node instanceof Text ? /^Tall step (\d+)\. /.exec(node.data) : null
+
+          if (!found) continue
+          const range = document.createRange()
+          range.setStart(node, 0)
+          range.setEnd(node, found[0].length)
+          tops.set(Number(found[1]), Math.round(range.getBoundingClientRect().top))
+        }
+
+        return [0, 1, 2, 3].map((index) => tops.get(index))
+      })
+
+    await expect(scroller.getByText(/^Tall step 0\. /)).toBeInViewport()
+    await expect(scroller.getByText(/^Tall step 3\. /)).toBeInViewport()
+    const before = await positions()
+    const height = await scroller.evaluate((element) => element.scrollHeight)
+    expect(before.every((position) => position !== undefined)).toBe(true)
+
+    older.resolve()
+    await expect(scroller.getByText("The first step of the answer.", { exact: true })).toBeAttached()
+    await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
+    await waitForVisualSettle(page, ["[data-timeline-virtual-content]"])
+    expect(await positions()).toEqual(before)
   })
 
   // Each native scroll write forces a layout of the rows resized before it.

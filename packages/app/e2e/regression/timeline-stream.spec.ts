@@ -1000,6 +1000,72 @@ test("grows a streaming row without a ResizeObserver loop error", async ({ page 
   expect(await page.evaluate(() => document.documentElement.dataset.resizeObserverLoops)).toBeUndefined()
 })
 
+test("stays at its end in every frame while new rows of a reply stream in", async ({ page }) => {
+  // A new row has 60px in the list until it is measured. A row that still waited for its text kept that room, and the
+  // measurement that was dropped did not bring the view back to its end: for one frame the view was 60px from it.
+  await page.addInitScript(() => {
+    const sample = () => {
+      const content = document.querySelector<HTMLElement>("[data-timeline-virtual-content]")
+      const scroller = content?.closest<HTMLElement>(".scroll-view__viewport")
+
+      // From the moment the reader sees the timeline: a cold open keeps it hidden until it is at its end.
+      if (content && scroller && content.checkVisibility({ visibilityProperty: true })) {
+        const away = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop
+        const furthest = Number(document.documentElement.dataset.furthestFromEnd ?? 0)
+        document.documentElement.dataset.furthestFromEnd = String(Math.max(furthest, away))
+      }
+
+      // After the frame has rendered: what the reader sees, not what a task left for the frame to finish.
+      requestAnimationFrame(() => setTimeout(sample, 0))
+    }
+
+    requestAnimationFrame(() => setTimeout(sample, 0))
+  })
+
+  const timeline = await setupTimeline(page, {
+    messages: [
+      userMessage(),
+      assistantMessage([textPart("prt_rows_earlier", notes("Earlier", 80))], { completed: false }),
+    ],
+    // A text row of this timeline is still waiting for its text when it is first measured.
+    settings: { newTimeline: true },
+  })
+
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  const fromEnd = () => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)
+
+  // The reply goes on: six more text parts arrive, each a new row at the end. Each has enough text that its row
+  // still waits for the Markdown of it when the row is first measured.
+  for (const ordinal of [1, 2, 3, 4, 5, 6]) {
+    await timeline.send([
+      {
+        id: `evt_rows_text_started_${ordinal}`,
+        type: "session.text.started",
+        created: 1700000002000 + ordinal * 10,
+        location: { directory },
+        durable: { aggregateID: sessionID, seq: ordinal - 1, version: 1 },
+        data: { sessionID, assistantMessageID: assistantID, ordinal },
+      },
+      {
+        id: `evt_rows_text_delta_${ordinal}`,
+        type: "session.text.delta",
+        created: 1700000002001 + ordinal * 10,
+        location: { directory },
+        data: { sessionID, assistantMessageID: assistantID, ordinal, delta: notes(`Streamed ${ordinal}`, 300) },
+      },
+    ])
+    const row = page.locator(`[data-timeline-part-id="${assistantID}:text:${ordinal}"]`)
+    await expect(row).toContainText(`Streamed ${ordinal} note 300.`)
+    await expect(row).toBeInViewport()
+    await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+  }
+
+  expect(await page.evaluate(() => Number(document.documentElement.dataset.furthestFromEnd ?? -1))).toBeLessThanOrEqual(
+    1,
+  )
+  expect(await page.evaluate(() => document.documentElement.dataset.furthestFromEnd)).toBeDefined()
+})
+
 for (const input of ["Ctrl+Home", "PageUp on a control in a row", "the scrollbar"] as const) {
   test(`keeps a reader who left the end with ${input} in place while the reply streams`, async ({ page }) => {
     // Only the wheel, the scroll keys the timeline handles and a held pointer told it that the reader left the end.
