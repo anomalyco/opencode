@@ -53,4 +53,20 @@ describe("staleValue", () => {
     setSystemTime(Date.now() + 61_000)
     expect(await read()).toEqual({ value: "live", standIn: false })
   })
+  test("feeds back off a failing source like pages do", async () => {
+    let loads = 0
+    const read = staleValue<string>({
+      key: "test/feed-backoff",
+      freshFor: 60_000,
+      wait: 20,
+      load: async () => {
+        loads++
+        return undefined
+      },
+      fallback: () => "snapshot",
+    })
+    expect(await read()).toEqual({ value: "snapshot", standIn: true })
+    for (let i = 0; i < 5; i++) expect(await read(50)).toEqual({ value: "snapshot", standIn: true })
+    expect(loads).toBe(1)
+  })
 })

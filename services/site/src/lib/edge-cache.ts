@@ -78,9 +78,9 @@ export function staleValue<T>(options: {
       if (due) background(refresh())
       return { value: state.value, standIn: false }
     }
-    // Only the read that starts a refresh waits for it; reads while it runs take the stand-in at
-    // once, unless they asked to wait longer than pages do (feeds), which load the source themselves.
-    if (!due && wait <= options.wait) return standIn()
+    // Only the read that starts a refresh waits for it; reads while it runs, or inside the retry window
+    // after a failed one, take the stand-in at once (feeds included), so a failing source is backed off.
+    if (!due) return standIn()
     const pending = refresh()
     background(pending)
     const value = await Promise.race([pending, new Promise<undefined>((resolve) => setTimeout(resolve, wait))])
