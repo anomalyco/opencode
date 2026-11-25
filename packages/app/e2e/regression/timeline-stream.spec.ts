@@ -917,7 +917,7 @@ test.describe("Working", () => {
 
       const trigger = page
         .locator('[data-component="collapsed-tool-group"]')
-        .getByRole("button", { name: "Used 2 Shell", exact: true, includeHidden: true })
+        .getByRole("button", { name: "Used 2 Shell", exact: true })
 
       await expect(trigger).toHaveAttribute("aria-expanded", "false")
       await expect(working).toBeVisible()

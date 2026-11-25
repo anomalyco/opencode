@@ -18,6 +18,28 @@ export interface BootOptions {
   readonly overrides?: LayerNode.Replacements
 }
 
+/** Internal entry for runtime profiles (such as `ServerWorkerd.create`) that also need the built service context. */
+export const makeWithContext = Effect.fn("ServerFetch.makeWithContext")(function* (
+  options: ServerOptions = {},
+  boot: BootOptions = {},
+) {
+  // Handlers capture the build context; without the caller's span, each request is its own trace.
+  const context = yield* Layer.build(
+    createRoutes(options, () => [], boot.overrides ?? []).pipe(Layer.provide(HttpServer.layerServices)),
+  ).pipe(withoutParentSpan)
+  // Forked so the returned handler is never delayed; resumed drains are already
+  // logged and durably recorded by the execution layer.
+  yield* Effect.forkDetach(Context.get(context, SessionRestart.Service).resumeSuspendedSessions)
+  const handler = Context.get(context, HttpRouter.HttpRouter)
+    .asHttpEffect()
+    .pipe(
+      RequestSite.middleware(options),
+      HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
+      HttpEffect.toWebHandlerWith(context),
+    )
+  return { handler, context }
+})
+
 /**
  * Builds a web-standard fetch handler — `(request: Request) => Promise<Response>` — serving the
  * same HttpApi routes as the Node server process without binding a port, owning a listener, or
@@ -41,18 +63,5 @@ export interface BootOptions {
  * next boot, and the sweep is a no-op when nothing is suspended.
  */
 export const make = Effect.fn("ServerFetch.make")(function* (options: ServerOptions = {}, boot: BootOptions = {}) {
-  // Handlers capture the build context; without the caller's span, each request is its own trace.
-  const context = yield* Layer.build(
-    createRoutes(options, () => [], boot.overrides ?? []).pipe(Layer.provide(HttpServer.layerServices)),
-  ).pipe(withoutParentSpan)
-  // Forked so the returned handler is never delayed; resumed drains are already
-  // logged and durably recorded by the execution layer.
-  yield* Effect.forkDetach(Context.get(context, SessionRestart.Service).resumeSuspendedSessions)
-  return Context.get(context, HttpRouter.HttpRouter)
-    .asHttpEffect()
-    .pipe(
-      RequestSite.middleware(options),
-      HttpMiddleware.cors({ allowedOrigins: (origin) => isAllowedCorsOrigin(origin, options), maxAge: 86_400 }),
-      HttpEffect.toWebHandlerWith(context),
-    )
+  return (yield* makeWithContext(options, boot)).handler
 })

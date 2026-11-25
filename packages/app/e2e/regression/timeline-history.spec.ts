@@ -295,6 +295,86 @@ test.describe("timeline history", () => {
     expect(Math.max(...writes)).toBe(1)
   })
 
+  test("a reconnect of the event stream keeps a reader in older history where they were", async ({ page }) => {
+    const messages: SessionMessageInfo[] = historyMessages(30)
+
+    const timeline = await setupTimeline(page, {
+      sessionMessages: messages,
+      pageMessages: (_, limit, before) => {
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        const start = Math.max(0, end - limit)
+
+        return { items: messages.slice(start, end), cursor: start ? messages[start]!.id : undefined }
+      },
+    })
+
+    const scroller = timelineScroller(page)
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+
+    // Load the older page, then rest at its start: further back than the newest page reaches.
+    const top = () =>
+      scroller.evaluate((element) => {
+        element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1 }))
+        element.scrollTop = 0
+      })
+
+    await top()
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(200)
+    await top()
+    await expect(scroller.getByText(/^Historical response 0\./)).toBeInViewport()
+    await expect(scroller.getByText(/^Historical response 1\./)).toBeInViewport()
+
+    const keys = await scroller.evaluate((element) => {
+      const view = element.getBoundingClientRect()
+
+      return [...element.querySelectorAll<HTMLElement>("[data-timeline-part-id]")]
+        .filter((row) => {
+          const rect = row.getBoundingClientRect()
+
+          return rect.bottom > view.top && rect.top < view.bottom
+        })
+        .flatMap((row) => (row.dataset.timelinePartId ? [row.dataset.timelinePartId] : []))
+        .slice(0, 3)
+    })
+
+    expect(keys).toHaveLength(3)
+
+    const positions = () =>
+      scroller.evaluate((element, keys) => {
+        const top = element.getBoundingClientRect().top
+
+        return keys.map((key) => {
+          const row = element.querySelector<HTMLElement>(`[data-timeline-part-id="${key}"]`)
+
+          if (!row) return undefined
+
+          return Math.round((row.getBoundingClientRect().top - top) * devicePixelRatio) / devicePixelRatio
+        })
+      }, keys)
+
+    const before = await positions()
+    const height = await scroller.evaluate((element) => element.scrollHeight)
+    const connection = await timeline.transport.waitForConnection()
+
+    // The client gets no event for this turn, so it hears of it only when the reconnect reads the newest page again.
+    messages.push(
+      userMessage([textPart("prt_missed_prompt", "Ship it")], {
+        id: "msg_09000_missed_a_user",
+        created: 1700000000000,
+      }),
+      assistantMessage([textPart("prt_missed_reply", "Shipped.")], {
+        id: "msg_09000_missed_b_assistant",
+        parentID: "msg_09000_missed_a_user",
+        created: 1700000001000,
+      }),
+    )
+    await timeline.transport.disconnect()
+    await timeline.transport.waitForConnection({ after: connection.id })
+    // The newest page was read again: the missed turn makes the transcript taller.
+    await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
+    await expect.poll(positions).toEqual(before)
+  })
+
   test("mounts every part once and in order while paging to the start", async ({ page }) => {
     test.setTimeout(240_000)
     const errors = trackPageErrors(page)

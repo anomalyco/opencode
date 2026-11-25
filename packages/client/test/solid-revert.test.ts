@@ -159,7 +159,12 @@ test("a committed revert whose boundary may be in an older page keeps what is lo
 
     expect(setup.ids()).toEqual(notes(1, 9).map((message) => message.id))
     expect(setup.data.session.get(sessionID)?.revert).toBeUndefined()
-    expect(setup.server.requests).toEqual(["message?limit=20&order=desc", "message?limit=20&order=desc"])
+    // The read looks behind its page for the messages that were loaded. The server has none: the revert removed them.
+    expect(setup.server.requests).toEqual([
+      "message?limit=20&order=desc",
+      "message?limit=20&order=desc",
+      "message?limit=20&cursor=msg_001",
+    ])
   } finally {
     setup.dispose()
   }
@@ -187,14 +192,15 @@ test("a read that started before the revert was committed leaves the pointer to 
     early.resolve()
     await stale
 
-    // The early answer holds the boundary and the messages after it. The pointer still hides them.
-    expect(setup.ids()).toEqual(notes(26, 45).map((message) => message.id))
+    // The early answer holds the boundary and the messages after it, and joins the loaded pages. The pointer still
+    // hides the boundary and what follows it.
+    expect(setup.ids()).toEqual(notes(21, 45).map((message) => message.id))
     expect(setup.data.session.get(sessionID)?.revert?.messageID).toBe(id(43))
 
     late.resolve()
     // Joins the read that the revert started.
     await setup.data.session.message.sync(sessionID)
-    expect(setup.ids()).toEqual(notes(23, 42).map((message) => message.id))
+    expect(setup.ids()).toEqual(notes(21, 42).map((message) => message.id))
     expect(setup.data.session.get(sessionID)?.revert).toBeUndefined()
     expect(setup.server.requests).toEqual(Array.from({ length: 3 }, () => "message?limit=20&order=desc"))
   } finally {

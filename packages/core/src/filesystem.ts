@@ -119,7 +119,7 @@ const baseLayer = Layer.effect(
     // configured directory as canonical; host placements keep symlink
     // canonicalization. This skip is boot-only: resolve/read/list below still
     // access the host filesystem per operation (tracked in #44568).
-    const root = environment.hostsServer
+    const root = environment.local
       ? yield* fs.realPath(location.directory).pipe(
           // Linux realpath succeeds on an unreadable directory, so probe readability explicitly.
           Effect.tap((real) => fs.access(real, { readable: true })),
