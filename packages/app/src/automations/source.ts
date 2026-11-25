@@ -4,6 +4,7 @@ import { useQueries } from "@tanstack/solid-query"
 import { createEffect, createMemo } from "solid-js"
 import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal } from "@/runtime/server/runtime"
+import { useSettings } from "@/settings/model"
 import { useLayout } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
 
@@ -14,9 +15,11 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
     const servers = useServers()
     const layout = useLayout()
     const tabs = useTabs()
+    const settings = useSettings()
 
+    // With the setting off, nothing is synced or polled, so every entry point stays hidden.
     const connections = createMemo(() =>
-      servers.visible.flatMap((conn) => {
+      (settings.general.automations() ? servers.visible : []).flatMap((conn) => {
         const server = ServerConnection.key(conn)
         const ctx = global.serverCtx(server)
 

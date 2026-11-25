@@ -75,7 +75,7 @@ test("inspects event and timer automations and manages the selected row", async 
     automations,
     seed: {
       theme: { id: "oc-2", scheme: "dark" },
-      settings: { appearance: { tabLayout: "vertical", sidebarOpen: true } },
+      settings: { general: { automations: true }, appearance: { tabLayout: "vertical", sidebarOpen: true } },
     },
   })
   await page.goto(sessionHref("ses_release"))
@@ -122,6 +122,14 @@ test("inspects event and timer automations and manages the selected row", async 
   await expect(page.locator('[data-component="composer-editor"]')).toHaveText(/\/automation/)
 })
 
+test("hides every automation entry point while the experimental setting is off", async ({ page }) => {
+  await mockWorkspace(page, { name: "Off", commands: [{ name: "automation" }] })
+  await page.goto("/automations")
+  await expect(page.getByText("Automations aren’t available in your open projects.")).toBeVisible()
+  await expect(page.getByRole("button", { name: "Automations", exact: true })).toHaveCount(0)
+  await expect(page.getByRole("button", { name: "New automation" })).toHaveCount(0)
+})
+
 test("discovers an enabled empty project and withdraws the entry when the server removes its command", async ({
   page,
 }) => {
@@ -130,6 +138,7 @@ test("discovers an enabled empty project and withdraws the entry when the server
   const { push, directory } = await mockWorkspace(page, {
     name: "Empty",
     commands: () => (enabled ? [{ name: "automation" }] : []),
+    seed: { settings: { general: { automations: true } } },
   })
 
   await page.goto("/automations")
@@ -171,6 +180,7 @@ test("manages a watch outside open locations and opens the recipient instead of 
       { id: "ses_child", title: "Research notes", parentID: "ses_parent" },
     ],
     seed: {
+      settings: { general: { automations: true } },
       storage: {
         "opencode.window.browser.dat:tabs": [
           {
@@ -240,6 +250,7 @@ test("keeps identically keyed automations on separate servers and starts the dra
     ),
   )
   await seed(page, {
+    settings: { general: { automations: true } },
     servers: [REMOTE_SERVER],
     usedProjects: { local: ["proj_shared"], [REMOTE_SERVER]: ["proj_shared"] },
   })
