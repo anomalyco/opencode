@@ -10,6 +10,7 @@ import { FileAccess } from "../file-access.js"
 
 // Descriptor traversal is deliberately bounded independently of the result limit.
 const MAX_INSPECTED_ENTRIES = 20_000
+export const BATCH_SIZE = 32
 
 export const matches = (pattern: string, relative: string) =>
   Glob.match(pattern, relative) || (!pattern.includes("/") && Glob.match(pattern, path.posix.basename(relative)))
@@ -23,11 +24,25 @@ export const files = <A, E, R>(input: {
   readonly hidden: boolean
   readonly directoryOnly?: boolean
   readonly file?: (relative: string) => boolean
-  readonly onFile: (file: FileHandle, relative: string, remaining: number) => Effect.Effect<readonly A[], E, R>
+  readonly onFile?: (file: FileHandle, relative: string, remaining: number) => Effect.Effect<readonly A[], E, R>
+  readonly onBatch?: (
+    batch: readonly { readonly file: FileHandle; readonly relative: string }[],
+    remaining: number,
+  ) => Effect.Effect<readonly A[], E, R>
 }) =>
   Effect.gen(function* () {
     const found: A[] = []
+    const pending: { file: FileHandle; relative: string }[] = []
     let inspected = 0
+
+    const flush = Effect.gen(function* () {
+      if (!input.onBatch || pending.length === 0) return
+      yield* input.workspace.verify()
+      const matches = yield* input.onBatch(pending, input.limit - found.length)
+      found.push(...matches)
+      yield* Effect.promise(() => Promise.allSettled(pending.map((entry) => entry.file.close())))
+      pending.length = 0
+    })
 
     const visit = (relative: string): Effect.Effect<void, unknown, R> =>
       Effect.gen(function* () {
@@ -44,6 +59,7 @@ export const files = <A, E, R>(input: {
           workspace.absolute !== expected
         )
           return yield* new ToolFailure({ message: "Workspace assignment changed during search" })
+        let retained = false
         yield* Effect.acquireUseRelease(
           Effect.gen(function* () {
             yield* workspace.verify()
@@ -60,8 +76,14 @@ export const files = <A, E, R>(input: {
                 if (!relative && input.directoryOnly)
                   return yield* new ToolFailure({ message: `Search path is not a directory: ${input.requested}` })
                 if (relative && input.file && !input.file(relative)) return
-                const matches = yield* input.onFile(opened.file, relative, input.limit - found.length)
-                found.push(...matches)
+                if (input.onBatch) {
+                  retained = true
+                  pending.push({ file: opened.file, relative })
+                  if (pending.length === BATCH_SIZE) yield* flush
+                  return
+                }
+                if (!input.onFile) return yield* new ToolFailure({ message: "Scoped search has no file consumer" })
+                found.push(...(yield* input.onFile(opened.file, relative, input.limit - found.length)))
                 return
               }
               for (const child of yield* Effect.tryPromise(() => opened.directory.readEntries())) {
@@ -77,10 +99,21 @@ export const files = <A, E, R>(input: {
                 yield* visit(next)
               }
             }),
-          (opened) => Effect.promise(() => (opened.type === "file" ? opened.file : opened.directory).close()),
+          (opened) =>
+            retained
+              ? Effect.void
+              : Effect.promise(() => (opened.type === "file" ? opened.file : opened.directory).close()),
         )
       })
 
-    yield* visit("")
-    return found
+    return yield* Effect.acquireUseRelease(
+      Effect.void,
+      () =>
+        Effect.gen(function* () {
+          yield* visit("")
+          yield* flush
+          return found
+        }),
+      () => Effect.promise(() => Promise.allSettled(pending.map((entry) => entry.file.close()))),
+    )
   })

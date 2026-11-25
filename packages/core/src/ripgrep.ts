@@ -86,6 +86,8 @@ export interface GrepInput {
   readonly file?: string
   /** Stable result name for a guarded descriptor path passed as `file`. */
   readonly displayFile?: string
+  /** Guarded descriptor paths held open until this grep process exits. */
+  readonly files?: readonly { readonly path: string; readonly display: string }[]
   readonly include?: string
   readonly literal?: boolean
   readonly caseSensitive?: boolean
@@ -267,14 +269,14 @@ const layer = Layer.effect(
             "--json",
             "--hidden",
             "--no-messages",
-            ...(input.displayFile ? ["--no-ignore"] : []),
+            ...(input.displayFile || input.files ? ["--no-ignore"] : []),
             ...(input.literal ? ["--fixed-strings"] : []),
             ...(input.caseSensitive === false ? ["--ignore-case"] : []),
             ...(input.include ? [`--glob=${input.include}`] : []),
             "--glob=!**/.git/**",
             "--",
             input.pattern,
-            input.file ?? ".",
+            ...(input.files ? input.files.map((file) => file.path) : [input.file ?? "."]),
           ],
           parse: (line) =>
             decodeJsonRecord(line).pipe(
@@ -283,19 +285,22 @@ const layer = Layer.effect(
                 if (!json || typeof json !== "object" || !("type" in json) || json.type !== "match")
                   return Effect.undefined
                 return Schema.decodeUnknownEffect(RawMatch)(json).pipe(
-                  Effect.map((match) => {
+                  Effect.flatMap((match) => {
                     const lines = rawText(match.data.lines)
-                    return {
+                    const observed = rawText(match.data.path)
+                    const display = input.files?.find((file) => file.path === observed)?.display
+                    if (input.files && !display) return Effect.fail(failure("Unknown guarded ripgrep result path"))
+                    return Effect.succeed({
                       ...match.data,
                       lines: {
                         text: lines.length > MAX_LINE_CHARS ? TextBoundary.head(lines, MAX_LINE_CHARS) + "..." : lines,
                       },
-                      path: { text: input.displayFile ?? normalizePath(rawText(match.data.path)) },
+                      path: { text: display ?? input.displayFile ?? normalizePath(observed) },
                       submatches: match.data.submatches.slice(0, MAX_SUBMATCHES).map((submatch) => ({
                         ...submatch,
                         match: { text: rawText(submatch.match) },
                       })),
-                    }
+                    })
                   }),
                   Effect.mapError((cause) => failure("Invalid ripgrep match output", cause)),
                 )

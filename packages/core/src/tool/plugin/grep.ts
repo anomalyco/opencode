@@ -124,13 +124,15 @@ export const Plugin = {
                       limit,
                       hidden: true,
                       file: include ? (relative) => ScopedSearch.matches(include, relative) : undefined,
-                      onFile: (file, relative, remaining) =>
+                      onBatch: (batch, remaining) =>
                         ripgrep.grep({
                           environment: target.environment,
                           cwd,
                           pattern: input.pattern,
-                          file: `/proc/${process.pid}/fd/${file.fd}`,
-                          displayFile: path.resolve(root, relative),
+                          files: batch.map(({ file, relative }) => ({
+                            path: `/proc/${process.pid}/fd/${file.fd}`,
+                            display: path.resolve(root, relative),
+                          })),
                           include: input.include,
                           literal: input.literal,
                           caseSensitive: input.caseSensitive,

@@ -1,7 +1,8 @@
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
+import type { FileHandle } from "node:fs/promises"
 import path from "path"
-import { Effect, Layer } from "effect"
+import { Deferred, Effect, Fiber, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Config } from "@opencode/core/config"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
@@ -14,6 +15,7 @@ import { FileAccess } from "@opencode/core/file-access"
 import { Permission } from "@opencode/core/permission"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Ripgrep } from "@opencode/core/ripgrep"
+import { ScopedSearch } from "@opencode/core/tool/scoped-search"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { GlobTool } from "@opencode/core/tool/plugin/glob"
@@ -53,7 +55,7 @@ const withTools = <A, E, R>(
     return yield* body(registry)
   }).pipe(
     Effect.provide(
-      AppNodeBuilder.build(LayerNode.group([Tool.node, searchToolsNode, PluginHooks.node]), [
+      AppNodeBuilder.build(LayerNode.group([Tool.node, searchToolsNode, PluginHooks.node, FileAccess.node]), [
         Config.node.replace(Config.testLayer()),
         ...(scoped ? [Flag.node.replace(Flag.testLayer([], { overrides: "workspace_read_scope" }))] : []),
         Location.node.replace(
@@ -508,6 +510,107 @@ describe("search tools", () => {
         assertions,
         true,
         "/protected/*",
+      )
+    }),
+  )
+
+  scopedGrep("batches guarded descriptors and closes them after each search", () =>
+    Effect.gen(function* () {
+      const active = yield* tmpdirScoped()
+      const physical = yield* tmpdirScoped()
+      const names = Array.from({ length: ScopedSearch.BATCH_SIZE + 1 }, (_, index) => `file-${index}.txt`)
+      yield* Effect.promise(() =>
+        Promise.all(names.map((name) => fs.writeFile(path.join(physical.path, name), "needle\n"))),
+      )
+      yield* withTools(
+        active.path,
+        (registry) =>
+          Effect.gen(function* () {
+            const hooks = yield* PluginHooks.Service
+            const access = yield* FileAccess.Service
+            const logical = path.join(active.path, "member")
+            const context = { sessionID, ...toolIdentity, id: Tool.CallID.make("call-batch") }
+            yield* hooks.register("permission", "experimental.workspace.readScope", (event) =>
+              Effect.sync(() => void event.scopes.push({ members: [{ physical: physical.path, logical }] })),
+            )
+            const target = yield* access.authorizeRead(physical.path, context, { workspaceScope: true })
+            if (!target.workspace) throw new Error("Expected guarded workspace")
+            const sizes: number[] = []
+            const handles: FileHandle[] = []
+            const found = yield* ScopedSearch.files({
+              workspace: target.workspace,
+              requested: physical.path,
+              context,
+              access,
+              limit: names.length,
+              hidden: true,
+              onBatch: (batch) =>
+                Effect.gen(function* () {
+                  sizes.push(batch.length)
+                  handles.push(...batch.map((entry) => entry.file))
+                  yield* Effect.forEach(batch, (entry) => Effect.promise(() => entry.file.stat()), { discard: true })
+                  return batch.map((entry) => entry.relative)
+                }),
+            })
+            expect(sizes).toEqual([ScopedSearch.BATCH_SIZE, 1])
+            expect([...found].sort()).toEqual([...names].sort())
+            expect(
+              (yield* Effect.promise(() => Promise.allSettled(handles.map((file) => file.stat())))).every(
+                (item) => item.status === "rejected",
+              ),
+            ).toBe(true)
+            const result = yield* executeTool(registry, call("grep", { path: physical.path, pattern: "needle" }))
+            expect(result).toMatchObject({ status: "completed", metadata: { matches: names.length, truncated: false } })
+            if (result.status === "completed")
+              expect(result.output.map((match: { entry: { path: string } }) => match.entry.path).sort()).toEqual(
+                names.map((name) => path.relative(active.path, path.join(physical.path, name))).sort(),
+              )
+            const failedHandles: FileHandle[] = []
+            const failed = yield* ScopedSearch.files({
+              workspace: target.workspace,
+              requested: physical.path,
+              context,
+              access,
+              limit: names.length,
+              hidden: true,
+              onBatch: (batch) => {
+                failedHandles.push(...batch.map((entry) => entry.file))
+                return Effect.fail(new Error("batch failed"))
+              },
+            }).pipe(Effect.flip)
+            expect(failed).toMatchObject({ message: "batch failed" })
+            expect(failedHandles).toHaveLength(ScopedSearch.BATCH_SIZE)
+            expect(
+              (yield* Effect.promise(() => Promise.allSettled(failedHandles.map((file) => file.stat())))).every(
+                (item) => item.status === "rejected",
+              ),
+            ).toBe(true)
+            const started = yield* Deferred.make<void>()
+            const cancelledHandles: FileHandle[] = []
+            const pending = yield* ScopedSearch.files({
+              workspace: target.workspace,
+              requested: physical.path,
+              context,
+              access,
+              limit: names.length,
+              hidden: true,
+              onBatch: (batch) =>
+                Effect.sync(() => cancelledHandles.push(...batch.map((entry) => entry.file))).pipe(
+                  Effect.andThen(Deferred.succeed(started, undefined)),
+                  Effect.andThen(Effect.never),
+                ),
+            }).pipe(Effect.forkChild)
+            yield* Deferred.await(started)
+            yield* Fiber.interrupt(pending)
+            expect(cancelledHandles).toHaveLength(ScopedSearch.BATCH_SIZE)
+            expect(
+              (yield* Effect.promise(() => Promise.allSettled(cancelledHandles.map((file) => file.stat())))).every(
+                (item) => item.status === "rejected",
+              ),
+            ).toBe(true)
+          }),
+        undefined,
+        true,
       )
     }),
   )
