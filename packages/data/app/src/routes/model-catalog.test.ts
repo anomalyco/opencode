@@ -1,8 +1,5 @@
-import { describe, expect, mock, test } from "bun:test"
-
-mock.module("@solidjs/router", () => ({ query: (load: () => unknown) => load }))
-
-const { buildModelCatalog, findModelCatalogEntry, isKnownCatalogLab, modelPagePath } = await import("./model-catalog")
+import { describe, expect, test } from "bun:test"
+import { buildModelCatalog, findModelCatalogEntry, isKnownCatalogLab, modelPagePath } from "./model-catalog"
 
 describe("model catalog pricing", () => {
   test("prefers OpenCode Go pricing over a zero-cost coding plan with the same model id", () => {
