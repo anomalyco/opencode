@@ -777,6 +777,68 @@
   }
 }
 
+[data-component="tool-result-images"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+[data-slot="tool-result-image"] {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 88px;
+  aspect-ratio: 3 / 2;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--v2-background-bg-layer-02);
+  color: var(--icon-weak);
+  cursor: zoom-in;
+
+  /* inset box-shadows do not paint over <img> content, so the hairline is an overlay */
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
+    pointer-events: none;
+    transition: box-shadow 0.15s ease;
+  }
+
+  &:hover::after {
+    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-strong);
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+
+  &[data-retry] {
+    cursor: pointer;
+  }
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  [data-slot="icon-svg"] {
+    width: 20px;
+    height: 20px;
+  }
+
+  @media (forced-colors: active) {
+    border: 1px solid CanvasText;
+  }
+}
+
 [data-slot="linked-text-link"] {
   color: inherit;
   text-decoration: underline;

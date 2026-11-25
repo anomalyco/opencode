@@ -31,6 +31,20 @@ export function currentToolOutput(tool: SessionMessageAssistantTool) {
   return text || undefined
 }
 
+/**
+ * The images a call's result carries, which the model sees but its text output leaves out: the files a script read, a
+ * screenshot, a generated image. A read of an image previews it from its path in its own row instead.
+ */
+export function currentToolImages(tool: SessionMessageAssistantTool) {
+  if (!("content" in tool.state) || !tool.state.content) return []
+
+  if (tool.name === "read" && readImagePath(currentToolInput(tool))) return []
+
+  return tool.state.content.filter(
+    (item): item is Extract<typeof item, { type: "file" }> => item.type === "file" && item.mime.startsWith("image/"),
+  )
+}
+
 export function currentToolError(tool: SessionMessageAssistantTool) {
   if (tool.state.status !== "error") return undefined
 

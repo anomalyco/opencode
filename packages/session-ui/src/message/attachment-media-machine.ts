@@ -83,11 +83,20 @@ export function resolveAttachmentMediaTarget(
 
   if (!uri) return UNREADABLE_ATTACHMENT_MEDIA_TARGET
 
-  const peeked = options.peekMedia?.(uri, file.mime)
+  return resolveMediaUriTarget(uri, file.mime, options)
+}
+
+/** An image named only by a URI, such as a tool result's file: a URL to show, or a `media:` reference to read. */
+export function resolveMediaUriTarget(
+  uri: string,
+  mime: string,
+  options: { readonly peekMedia?: (uri: string, mime: string) => string | undefined; readonly hasReader: boolean },
+): AttachmentMediaTarget {
+  const peeked = options.peekMedia?.(uri, mime)
 
   if (peeked !== undefined) return { kind: "direct", src: peeked }
 
-  if (options.hasReader) return { kind: "remote", key: `${file.mime}:${uri}`, uri, mime: file.mime }
+  if (options.hasReader) return { kind: "remote", key: `${mime}:${uri}`, uri, mime }
 
   // Without a reader a `media:` reference names no loadable URL; anything else is one.
   if (uri.startsWith("media:")) return UNREADABLE_ATTACHMENT_MEDIA_TARGET
