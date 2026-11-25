@@ -101,18 +101,21 @@ browsers that use the same server. `localStorage` stays the synchronous source f
 `server-preferences.ts` only copies values in and out of it, and anything that fails (the flag off,
 an older server, a refused password, no answer within 1.5 s) leaves the page on `localStorage` alone.
 
-- **What syncs** (`syncsPreference`): every key of `opencode.global.dat` except `server`, whose list
-  holds passwords and this browser's connections, plus `settings.v3` and the theme id and color
-  scheme from the default namespace. Window and workspace storage, drafts, theme CSS caches and
-  legacy keys stay in the browser.
+- **What syncs** (`syncsPreference`): a fixed list of keys and nothing else. From
+  `opencode.global.dat`, only `language`; from the default namespace, `settings.v3`,
+  `opencode-theme-id` and `opencode-color-scheme`. Every other key stays in this browser, and so
+  does any key added later until it is listed: the server list (passwords and this browser's
+  connections), data kept for each server (`Persist.serverGlobal`), plugin stores, `layout` and
+  other pane, tab and session state, model picks, tips and dismissals, caches, and window,
+  workspace and draft storage. The same list filters what the server sends back.
 - **Before the first render** `entry.tsx` loads both namespaces, with the saved server's password
   before the one in the URL (as `resolveServerList` merges them). Values the server holds replace
   the local ones, keys only this browser holds are uploaded, and nothing is deleted.
 - **After a sign-in** that the server first refused, the load runs again. When the server's values
   differ from what the page shows, they are stored and the page reloads once to read them.
-- **While mirroring**, every write through the storage view (and every theme write) is sent through
-  a `NamespaceStorage` per namespace: batched for 100 ms, retried with backoff, and flushed with
-  `keepalive` when the page hides. The last writer wins; nothing is pushed to other open pages.
+- **While mirroring**, every write of a listed key, through the storage view or the theme, is sent
+  through a `NamespaceStorage` per namespace: batched for 100 ms, retried with backoff, and flushed
+  with `keepalive` when the page hides. The last writer wins; nothing is pushed to other open pages.
 
 Known limits: a key deleted in one browser is uploaded again by another browser that still holds
 it; a local change that never reached the server is replaced by the server's value on the next

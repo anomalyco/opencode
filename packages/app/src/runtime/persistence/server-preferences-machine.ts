@@ -6,14 +6,18 @@ export const DEFAULT_PREFERENCES = "default.dat"
 
 export const PREFERENCE_NAMESPACES = [GLOBAL_PREFERENCES, DEFAULT_PREFERENCES] as const
 
+const GLOBAL_KEYS = new Set(["language"])
+
 const DEFAULT_KEYS = new Set(["settings.v3", "opencode-theme-id", "opencode-color-scheme"])
 
 /**
- * Whether a stored key follows the user to the server. The server list holds credentials and this browser's
- * connections, so it never leaves the browser; window, workspace and draft storage stay too.
+ * Whether a stored key follows the user to the server: only the preferences listed above, which hold no server's
+ * data. Every other key stays in the browser, including keys added later: the server list (credentials and this
+ * browser's connections), data kept for each server, plugin stores, layout, tab and session state, caches, and
+ * window, workspace and draft storage.
  */
 export function syncsPreference(name: string, key: string) {
-  if (name === GLOBAL_PREFERENCES) return key !== "server"
+  if (name === GLOBAL_PREFERENCES) return GLOBAL_KEYS.has(key)
 
   return name === DEFAULT_PREFERENCES && DEFAULT_KEYS.has(key)
 }
@@ -106,7 +110,7 @@ export function transitionServerPreferences(
   }
 
   // The server wins for every key it holds, and keys only this browser holds are uploaded; nothing is deleted. Stored
-  // keys pass `syncsPreference` here too, so no server can write this browser's server list.
+  // keys pass `syncsPreference` here too, so no server can write this browser's server list or any other unlisted key.
   const store = entries(event.stored).filter(
     (entry) => syncsPreference(entry.name, entry.key) && event.local[entry.name]?.[entry.key] !== entry.value,
   )

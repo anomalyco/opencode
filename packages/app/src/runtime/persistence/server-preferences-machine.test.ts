@@ -1,4 +1,8 @@
 import { describe, expect, test } from "bun:test"
+import { storeName } from "@/runtime/plugin/stores"
+import { ServerKey } from "@/runtime/server/persistence"
+import { ServerScope } from "@/runtime/server/scope"
+import { Persist } from "./storage"
 import {
   DEFAULT_PREFERENCES,
   GLOBAL_PREFERENCES,
@@ -39,22 +43,37 @@ const signedOut = settle([
 ])
 
 describe("syncsPreference", () => {
-  test.each([
-    [GLOBAL_PREFERENCES, "language", true],
-    [GLOBAL_PREFERENCES, "layout", true],
-    [GLOBAL_PREFERENCES, "plugin.terminal.font", true],
-    [DEFAULT_PREFERENCES, "settings.v3", true],
-    [DEFAULT_PREFERENCES, "opencode-theme-id", true],
-    [DEFAULT_PREFERENCES, "opencode-color-scheme", true],
+  // On the web the server that serves the app is the local one, so its server-scoped keys carry no scope.
+  const served = ServerKey.make(server.url)
+  const local = ServerScope.fromServerKey(served, served)
+  const remote = ServerScope.fromServerKey(ServerKey.make("https://remote.example"), served)
+
+  test.each<[{ readonly storage?: string; readonly key: string }, boolean]>([
+    [Persist.global("language"), true],
+    [{ key: "settings.v3" }, true],
+    [{ key: "opencode-theme-id" }, true],
+    [{ key: "opencode-color-scheme" }, true],
     // The server list holds passwords and this browser's connections.
-    [GLOBAL_PREFERENCES, "server", false],
-    [DEFAULT_PREFERENCES, "server.v3", false],
-    [DEFAULT_PREFERENCES, "layout.v6", false],
-    [DEFAULT_PREFERENCES, "opencode-theme-css-dark", false],
-    ["opencode.window.browser.dat", "tabs", false],
-    ["opencode.workspace.C--Projects.1a2b.dat", "workspace:layout", false],
-  ])("%s %s syncs: %p", (name, key, synced) => {
-    expect(syncsPreference(name, key)).toBe(synced)
+    [Persist.global("server"), false],
+    [{ key: "server.v3" }, false],
+    // Layout holds the tabs, scroll positions and closed tabs of sessions on every server.
+    [Persist.global("layout"), false],
+    [{ key: "layout.v6" }, false],
+    [Persist.global("model"), false],
+    [Persist.global("tips.queue"), false],
+    [Persist.global("free-limit"), false],
+    [Persist.global("navigation.list-snapshot"), false],
+    // Data kept for each server, the serving one or another, and plugin stores.
+    [Persist.serverGlobal(local, "settings-v2.models.providers"), false],
+    [Persist.serverGlobal(remote, "notification"), false],
+    [Persist.global(storeName("review", "diff")), false],
+    [Persist.serverGlobal(remote, storeName("review", "diff")), false],
+    [{ key: "opencode-theme-css-dark" }, false],
+    [{ storage: "opencode.window.browser.dat", key: "tabs" }, false],
+    [Persist.workspace("/home/user/app", "layout"), false],
+  ])("%j syncs: %p", (target, synced) => {
+    // A write without a storage goes to the default namespace, as `recordPreference` records it.
+    expect(syncsPreference(target.storage ?? DEFAULT_PREFERENCES, target.key)).toBe(synced)
   })
 })
 
@@ -65,12 +84,13 @@ describe("transitionServerPreferences", () => {
       {
         type: "hydrate.succeeded",
         stored: {
-          [GLOBAL_PREFERENCES]: { language: '{"locale":"de"}', server: '{"list":[]}', layout: "{}" },
-          [DEFAULT_PREFERENCES]: { "settings.v3": '{"general":{}}' },
+          // Keys off the list, such as the server list, never come from the server.
+          [GLOBAL_PREFERENCES]: { language: '{"locale":"de"}', server: '{"list":[]}', layout: '{"sidebar":{}}' },
+          [DEFAULT_PREFERENCES]: { "settings.v3": '{"general":{}}', "opencode-color-scheme": "dark" },
         },
         local: {
-          [GLOBAL_PREFERENCES]: { language: '{"locale":"en"}', layout: "{}", model: "{}" },
-          [DEFAULT_PREFERENCES]: { "opencode-theme-id": "nord" },
+          [GLOBAL_PREFERENCES]: { language: '{"locale":"en"}' },
+          [DEFAULT_PREFERENCES]: { "opencode-theme-id": "nord", "opencode-color-scheme": "dark" },
         },
       },
     ])
@@ -85,13 +105,7 @@ describe("transitionServerPreferences", () => {
             { name: DEFAULT_PREFERENCES, key: "settings.v3", value: '{"general":{}}' },
           ],
         },
-        {
-          type: "send",
-          changes: [
-            { name: GLOBAL_PREFERENCES, key: "model", value: "{}" },
-            { name: DEFAULT_PREFERENCES, key: "opencode-theme-id", value: "nord" },
-          ],
-        },
+        { type: "send", changes: [{ name: DEFAULT_PREFERENCES, key: "opencode-theme-id", value: "nord" }] },
       ],
     ])
     expect(steps.at(-1)?.state).toEqual({ status: "mirroring", server })
@@ -104,7 +118,7 @@ describe("transitionServerPreferences", () => {
         {
           type: "hydrate.succeeded",
           stored: { [GLOBAL_PREFERENCES]: { language: '{"locale":"de"}' }, [DEFAULT_PREFERENCES]: {} },
-          local: { [GLOBAL_PREFERENCES]: { model: "{}" }, [DEFAULT_PREFERENCES]: {} },
+          local: { [GLOBAL_PREFERENCES]: {}, [DEFAULT_PREFERENCES]: { "opencode-theme-id": "nord" } },
         },
       ],
       signedOut,
@@ -127,20 +141,23 @@ describe("transitionServerPreferences", () => {
         {
           type: "hydrate.succeeded",
           stored: { [GLOBAL_PREFERENCES]: { language: '{"locale":"de"}' }, [DEFAULT_PREFERENCES]: {} },
-          local: { [GLOBAL_PREFERENCES]: { language: '{"locale":"de"}', model: "{}" }, [DEFAULT_PREFERENCES]: {} },
+          local: {
+            [GLOBAL_PREFERENCES]: { language: '{"locale":"de"}' },
+            [DEFAULT_PREFERENCES]: { "opencode-theme-id": "nord" },
+          },
         },
       ],
       signedOut,
     )
 
     expect(steps.at(-1)?.effects).toEqual([
-      { type: "send", changes: [{ name: GLOBAL_PREFERENCES, key: "model", value: "{}" }] },
+      { type: "send", changes: [{ name: DEFAULT_PREFERENCES, key: "opencode-theme-id", value: "nord" }] },
     ])
     expect(steps.at(-1)?.state).toEqual({ status: "mirroring", server: { url: server.url, password: "new" } })
   })
 
   test("only a mirroring page sends its writes", () => {
-    const change = { name: GLOBAL_PREFERENCES, key: "layout", value: null }
+    const change = { name: GLOBAL_PREFERENCES, key: "language", value: null }
 
     const states: ServerPreferencesState[] = [
       INITIAL_SERVER_PREFERENCES_STATE,
