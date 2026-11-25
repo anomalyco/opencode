@@ -199,7 +199,12 @@ export default function DebugBar(props: {
 
     if (index === -1) return
 
-    const options = { index, legacy: SessionTurn.legacy(messages) }
+    const session = current.data.session.get(current.id)
+    const options = {
+      index,
+      legacy: SessionTurn.legacy(messages),
+      forkCreatedAt: session?.fork ? session.time.created : undefined,
+    }
     // The TUI hides a zero duration, which means the step has not completed.
     const elapsed = SessionTurn.duration(messages, messages[index], options)
 
