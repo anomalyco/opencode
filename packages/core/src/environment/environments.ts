@@ -20,6 +20,8 @@ export interface Interface {
    * Fails immediately with NotFound when a machine or workspace does not exist, without waking lazy sandboxes.
    */
   readonly lookup: (id: Environment.ID) => Effect.Effect<Environment.Interface, Machines.NotFound | Workspace.NotFound>
+  /** Whether an environment prefix is known (local, any workspace ID, or a registered paired machine). */
+  readonly has: (id: Environment.ID) => Effect.Effect<boolean>
   /** Whether an environment is currently reachable in memory without waking a cold/lazy sandbox. */
   readonly ready: (id: Environment.ID) => Effect.Effect<boolean>
 }
@@ -55,6 +57,10 @@ const layer = Layer.effect(
           return yield* sandbox(id)
         }
         return yield* machines.get(id)
+      }),
+      has: Effect.fn("Environments.has")(function* (id: Environment.ID) {
+        if (id === Environment.localID || Workspace.isID(id)) return true
+        return (yield* machines.list()).some((info) => info.id === id)
       }),
       ready: Effect.fn("Environments.ready")(function* (id: Environment.ID) {
         if (id === Environment.localID) return true

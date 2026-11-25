@@ -854,7 +854,6 @@ export const dict = {
   "session.location.description": "Ընտրեք այլ գրացուցակ՝ այս նիստը շարունակելու համար։",
   "session.location.choose": "Ընտրել գրացուցակ",
   "session.location.worktree": "Ընտրել աշխատանքային ծառ",
-  "session.location.worktreesFailed": "Չհաջողվեց բեռնել աշխատանքային ծառերը",
   "session.rewind.toast.title": "Հետ է վերադարձվել",
   "session.rewind.toast.undo": "Հետարկել",
   "session.location.moving": "Նիստը տեղափոխվում է…",

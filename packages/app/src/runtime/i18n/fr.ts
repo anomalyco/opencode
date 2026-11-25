@@ -894,7 +894,6 @@ export const dict = {
   "session.location.description": "Choisissez un autre répertoire pour poursuivre cette session.",
   "session.location.choose": "Choisir un répertoire",
   "session.location.worktree": "Choisir un arbre de travail",
-  "session.location.worktreesFailed": "Échec du chargement des arbres de travail",
   "session.rewind.toast.title": "Restauré",
   "session.rewind.toast.undo": "Annuler",
   "session.location.moving": "Déplacement de la session…",

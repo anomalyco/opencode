@@ -63,22 +63,15 @@ export type ModelCatalog = {
 }
 
 const catalogTtlMs = 5 * 60 * 1000
-let cachedCatalog: { expiresAt: number; value: Promise<ModelCatalog> } | undefined
+let cachedCatalog: { expiresAt: number; value: ModelCatalog } | undefined
 
 // The catalog is about 11 MB of JSON to fetch and parse and rarely changes, so share it across requests.
-export function loadModelCatalog() {
-  const now = Date.now()
-  if (cachedCatalog && cachedCatalog.expiresAt > now) return cachedCatalog.value
-  const value = fetchModelCatalog()
-  const entry = { expiresAt: now + catalogTtlMs, value }
-  cachedCatalog = entry
+// Only the resolved catalog is shared: a Worker request cannot await I/O started by another request that has ended.
+export async function loadModelCatalog() {
+  if (cachedCatalog && cachedCatalog.expiresAt > Date.now()) return cachedCatalog.value
+  const value = await fetchModelCatalog()
   // An empty catalog means a source failed, so retry on the next request instead of serving it for the TTL.
-  const evict = () => {
-    if (cachedCatalog === entry) cachedCatalog = undefined
-  }
-  value.then((catalog) => {
-    if (catalog.models.length === 0) evict()
-  }, evict)
+  if (value.models.length > 0) cachedCatalog = { expiresAt: Date.now() + catalogTtlMs, value }
   return value
 }
 

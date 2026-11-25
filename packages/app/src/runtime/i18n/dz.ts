@@ -871,7 +871,6 @@ export const dict = {
   "session.location.description": "ལཱ་ཡུན་འདི་འཕྲོ་མཐུད་ནིའི་དོན་ལུ་ སྣོད་ཐོ་གཞན་ཅིག་གདམ་ཁ་རྐྱབས།",
   "session.location.choose": "སྣོད་ཐོ་གདམ་ཁ་རྐྱབས།",
   "session.location.worktree": "ལཱ་གི་ཤིང་གདམ་ཁ་རྐྱབས།",
-  "session.location.worktreesFailed": "ལཱ་གི་ཤིང་ཚུ་མངོན་གསལ་འབད་མ་ཚུགས།",
   "session.rewind.toast.title": "ཕྱིར་ལོག་འབད་ཡོདཔ།",
   "session.rewind.toast.undo": "འབད་བཤོལ།",
   "session.location.moving": "ལཱ་ཡུན་སྤོ་བཤུད་འབད་དོ…",

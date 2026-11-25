@@ -850,7 +850,6 @@ export const dict = {
   "session.location.description": "Bu sessiýany dowam etmek üçin başga katalog saýlaň.",
   "session.location.choose": "Katalog saýlaň",
   "session.location.worktree": "Worktree saýlaň",
-  "session.location.worktreesFailed": "Worktree-leri ýükläp bolmady",
   "session.rewind.toast.title": "Yzyna gaýtaryldy",
   "session.rewind.toast.undo": "Yza gaýtar",
   "session.location.moving": "Sessiýa göçürilýär…",

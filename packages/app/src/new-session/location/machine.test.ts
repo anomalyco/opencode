@@ -109,6 +109,15 @@ describe("location dialog steps", () => {
     }
   })
 
+  test("a dialog that only lists one project's worktrees closes on Escape and never steps back to the projects", () => {
+    const only = createLocationDialogState(opencode, true)
+
+    expect(transitionLocationDialog(only, key("Escape")).effects).toEqual([{ type: "close" }])
+
+    for (const event of [key("Backspace"), key("ArrowLeft"), back])
+      expect(transitionLocationDialog(only, event).state).toBe(only)
+  })
+
   test("a typed worktree search keeps Backspace for the input", () => {
     const state = transitionLocationDialog(createLocationDialogState(opencode), query("feat")).state
     expect(transitionLocationDialog(state, key("Backspace"))).toEqual({

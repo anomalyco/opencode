@@ -858,7 +858,6 @@ export const dict = {
   "session.location.description": "Энэ сессийг үргэлжлүүлэхийн тулд өөр хавтас сонгоно уу.",
   "session.location.choose": "Хавтас сонгох",
   "session.location.worktree": "Worktree сонгох",
-  "session.location.worktreesFailed": "Worktree-үүдийг ачаалж чадсангүй",
   "session.rewind.toast.title": "Буцаалаа",
   "session.rewind.toast.undo": "Буцаах",
   "session.location.moving": "Сессийг шилжүүлж байна…",

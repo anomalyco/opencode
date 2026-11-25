@@ -875,7 +875,6 @@ export const dict = {
   "session.location.description": "Επιλέξτε άλλον κατάλογο για να συνεχίσετε αυτήν τη συνεδρία.",
   "session.location.choose": "Επιλογή καταλόγου",
   "session.location.worktree": "Επιλογή δέντρου εργασίας",
-  "session.location.worktreesFailed": "Αποτυχία φόρτωσης δέντρων εργασίας",
   "session.rewind.toast.title": "Έγινε επαναφορά",
   "session.rewind.toast.undo": "Αναίρεση",
   "session.location.moving": "Μετακίνηση συνεδρίας…",

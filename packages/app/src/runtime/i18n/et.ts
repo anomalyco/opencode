@@ -847,7 +847,6 @@ export const dict = {
   "session.location.description": "Seansi jätkamiseks vali teine kataloog.",
   "session.location.choose": "Vali kataloog",
   "session.location.worktree": "Vali tööpuu",
-  "session.location.worktreesFailed": "Tööpuude laadimine ebaõnnestus",
   "session.rewind.toast.title": "Taastatud",
   "session.rewind.toast.undo": "Võta tagasi",
   "session.location.moving": "Seansi teisaldamine…",

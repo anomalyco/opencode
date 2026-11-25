@@ -851,7 +851,6 @@ export const dict = {
   "session.location.description": "Vel eina aðra mappu fyri at halda fram við hesi setuni.",
   "session.location.choose": "Vel mappu",
   "session.location.worktree": "Vel arbeiðstræ",
-  "session.location.worktreesFailed": "Tað eydnaðist ikki at heinta arbeiðstrø",
   "session.rewind.toast.title": "Afturført",
   "session.rewind.toast.undo": "Angra",
   "session.location.moving": "Flytur setu…",

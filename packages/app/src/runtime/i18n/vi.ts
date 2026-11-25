@@ -858,7 +858,6 @@ export const dict = {
   "session.location.description": "Chọn thư mục khác để tiếp tục phiên này.",
   "session.location.choose": "Chọn thư mục",
   "session.location.worktree": "Chọn worktree",
-  "session.location.worktreesFailed": "Không tải được worktree",
   "session.rewind.toast.title": "Đã hoàn nguyên",
   "session.rewind.toast.undo": "Hoàn tác",
   "session.location.moving": "Đang di chuyển phiên…",

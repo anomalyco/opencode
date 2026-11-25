@@ -859,7 +859,6 @@ export const dict = {
   "session.location.description": "Изберете друг директориум за да ја продолжите сесијата.",
   "session.location.choose": "Избери директориум",
   "session.location.worktree": "Избери работно дрво",
-  "session.location.worktreesFailed": "Работните дрвја не можеа да се вчитаат",
   "session.rewind.toast.title": "Вратено",
   "session.rewind.toast.undo": "Поништи",
   "session.location.moving": "Се преместува сесијата…",

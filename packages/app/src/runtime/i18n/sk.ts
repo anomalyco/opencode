@@ -879,7 +879,6 @@ export const dict = {
   "session.location.description": "Ak chcete v relácii pokračovať, vyberte iný adresár.",
   "session.location.choose": "Vybrať adresár",
   "session.location.worktree": "Vybrať pracovný strom",
-  "session.location.worktreesFailed": "Nepodarilo sa načítať pracovné stromy",
   "session.rewind.toast.title": "Vrátené",
   "session.rewind.toast.undo": "Späť",
   "session.location.moving": "Presúva sa relácia…",

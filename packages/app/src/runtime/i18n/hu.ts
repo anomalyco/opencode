@@ -861,7 +861,6 @@ export const dict = {
   "session.location.description": "Válasszon egy másik könyvtárat a munkamenet folytatásához.",
   "session.location.choose": "Könyvtár kiválasztása",
   "session.location.worktree": "Munkafa kiválasztása",
-  "session.location.worktreesFailed": "Nem sikerült betölteni a munkafákat",
   "session.rewind.toast.title": "Visszaállítva",
   "session.rewind.toast.undo": "Visszavonás",
   "session.location.moving": "Munkamenet áthelyezése…",

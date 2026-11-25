@@ -888,7 +888,6 @@ export const dict = {
   "session.location.description": "選擇其他目錄以繼續此工作階段。",
   "session.location.choose": "選擇目錄",
   "session.location.worktree": "選擇工作樹",
-  "session.location.worktreesFailed": "載入工作樹失敗",
   "session.rewind.toast.title": "已還原",
   "session.rewind.toast.undo": "復原",
   "session.location.moving": "正在移動工作階段…",
