@@ -13,14 +13,16 @@ import { testEffect } from "../../../core/test/lib/effect"
 import { PluginTestLayer } from "../../../core/test/plugin/fixture"
 import VercelArtifacts from "../index"
 
-// Publishes to a real Vercel team and deletes what it made. Use a dedicated test team on the Pro plan: the cron fixture
-// runs hourly, which Hobby refuses, and private artifacts protect every deployment.
+// Publishes to a real Vercel test team, in projects named opencode-artifacts-test-*, and deletes what it made.
 const token = process.env.VERCEL_TOKEN
 const team = process.env.VERCEL_TEAM_ID
 if (!token)
   console.log(
     "Skipping the live Vercel run: set VERCEL_TOKEN (and VERCEL_TEAM_ID when the token reaches several teams) to run it.",
   )
+// Hobby teams refuse crons that run more than once a day, so the cron fixture runs daily here.
+const cron = ArtifactConformance.fixtures.cron.files
+if (token) cron["artifact.json"] = cron["artifact.json"].replace("0 * * * *", "0 0 * * *")
 
 const it = testEffect(PluginTestLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, "artifacts"))))
 const provider = Artifact.ProviderID.make("vercel")
@@ -28,7 +30,10 @@ const timeout = 30 * 60_000
 
 const start = Effect.fnUntraced(function* () {
   const host = yield* PluginHost.make(yield* Plugin.Service, "test")
-  yield* PluginPromise.fromPromise(VercelArtifacts).effect({ ...host, options: { token, teamId: team } })
+  yield* PluginPromise.fromPromise(VercelArtifacts).effect({
+    ...host,
+    options: { token, teamId: team, projectPrefix: "opencode-artifacts-test" },
+  })
 })
 
 /** What an anonymous reader gets. Vercel Authentication answers with a redirect or 401, never the page. */

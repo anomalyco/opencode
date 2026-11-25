@@ -362,9 +362,9 @@ describe("Vercel artifacts", () => {
         expect(firstIndex(vercel, "POST", /\/env$/)).toBeLessThan(firstIndex(vercel, "POST", /^\/v13\/deployments$/))
         const project = [...vercel.state.projects.values()][0]
         const deployment = vercel.state.deployments.get(project?.production ?? "")
-        expect(JSON.parse(decoder.decode(deployment?.files["config.json"])).crons).toEqual([
-          { path: "/tasks/hourly", schedule: "0 * * * *" },
-        ])
+        expect(JSON.parse(decoder.decode(deployment?.files["config.json"])).crons).toEqual(
+          JSON.parse(ArtifactConformance.fixtures.cron.files["artifact.json"]).crons,
+        )
         expect((yield* read(vercel, info, "tasks/hourly")).status).toBe(401)
         const secret = project?.env.CRON_SECRET
         expect(secret).toBeString()
@@ -416,6 +416,19 @@ describe("Vercel artifacts", () => {
         vercel.state.teams = ["team_a"]
         yield* artifacts.create({ title: "One", provider, files })
         expect(sent(vercel, "POST", /^\/v11\/projects$/)[0]?.teamId).toBe("team_a")
+      }),
+    ),
+  )
+
+  it.live("names projects with the projectPrefix option", () =>
+    withVercel((vercel) =>
+      Effect.gen(function* () {
+        yield* start(vercel, { token: "test-token", teamId: "team_1", projectPrefix: "opencode-artifacts-test" })
+        const artifacts = yield* Artifact.Service
+        yield* artifacts.create({ title: "One", provider, files: { "index.html": "<p>hi</p>" } })
+        expect(sent(vercel, "POST", /^\/v11\/projects$/)[0]?.body.name).toMatch(
+          /^opencode-artifacts-test-one-[0-9a-f]{8}$/,
+        )
       }),
     ),
   )

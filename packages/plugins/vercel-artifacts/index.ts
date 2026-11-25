@@ -36,6 +36,7 @@ export default Plugin.define({
     if (!token) return
     const configuredTeam: string | undefined = ctx.options.teamId ?? process.env.VERCEL_TEAM_ID
     const call = client(token, ctx.options.apiUrl ?? "https://api.vercel.com")
+    const projectPrefix: string | undefined = ctx.options.projectPrefix
 
     // The team every call goes to, resolved once. A token that reaches several teams must name one.
     let scope: Promise<{ team?: string; owner: string }> | undefined
@@ -218,7 +219,7 @@ export default Plugin.define({
         defaultAudience: "public",
         prompt,
         destination: async (target, context) =>
-          `vercel:${(await resolveScope(context.signal)).owner}/${projectName(target)}`,
+          `vercel:${(await resolveScope(context.signal)).owner}/${projectName(target, projectPrefix)}`,
         create: (input, context) => publish(input, context.signal),
         update: (_id, input, context) => publish(input, context.signal),
         delete: async (_id, receipt, context) => {
@@ -239,8 +240,8 @@ export default Plugin.define({
 /** Extensions Vercel already serves with the right Content-Type. Others get the type OpenCode detected. */
 const known = /\.(html?|css|m?js|json|map|txt|xml|svg|png|jpe?g|gif|webp|avif|ico|woff2?|wasm|pdf|mp4|webm)$/i
 
-/** Readable and stable: the title when it was created, and a hash of the artifact ID. */
-function projectName(target: ArtifactTarget) {
+/** Readable and stable: the prefix, the title when it was created, and a hash of the artifact ID. */
+function projectName(target: ArtifactTarget, prefix: string | undefined) {
   const saved = (target.receipt as Receipt | undefined)?.project
   if (saved) return saved
   const slug = target.title
@@ -248,7 +249,7 @@ function projectName(target: ArtifactTarget) {
     .replace(/[^a-z0-9]+/g, "-")
     .slice(0, 40)
     .replace(/^-+|-+$/g, "")
-  return `${slug || "artifact"}-${createHash("sha256").update(target.id).digest("hex").slice(0, 8)}`
+  return `${prefix ? `${prefix}-` : ""}${slug || "artifact"}-${createHash("sha256").update(target.id).digest("hex").slice(0, 8)}`
 }
 
 /**
