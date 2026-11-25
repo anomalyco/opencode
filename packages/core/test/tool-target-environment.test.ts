@@ -19,7 +19,6 @@ import { Image } from "@opencode/core/image"
 import { InstructionDiscovery } from "@opencode/core/instruction-discovery"
 import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
-import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionInstructions } from "@opencode/core/session/instructions"
 import { Skill } from "@opencode/core/skill"
@@ -28,11 +27,9 @@ import { EditTool } from "@opencode/core/tool/plugin/edit"
 import { PatchTool } from "@opencode/core/tool/plugin/patch"
 import { ReadTool } from "@opencode/core/tool/plugin/read"
 import { WriteTool } from "@opencode/core/tool/plugin/write"
-import { hostEnvironmentLayer } from "./fixture/environment"
-import { location } from "./fixture/location"
+import { elsewhere } from "./fixture/target-environment"
 import { withTempDir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
-import { permissionLayer } from "./lib/permission"
 import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
 
 const fileToolsNode = makeLocationNode({
@@ -55,6 +52,7 @@ const fileToolsNode = makeLocationNode({
     FileWrite.node,
     Formatter.node,
     Image.node,
+    Environment.node,
     Permission.node,
     SessionInstructions.node,
     InstructionDiscovery.node,
@@ -68,34 +66,6 @@ const fileToolsNode = makeLocationNode({
 
 const sessionID = Session.ID.make("ses_target_environment_test")
 const it = testEffect(Layer.succeed(Flag.Overrides, undefined))
-
-// A session on the host at `directory` whose resolved targets all live in another, in-memory environment.
-const elsewhere = (directory: string) => {
-  const driver = Environment.makeMemoryDriver()
-  const environment: Environment.Interface = { files: Environment.makeFiles(driver), spawner: driver.spawner }
-  const assertions: Permission.AssertInput[] = []
-  const replacements = [
-    Environment.node.replace(hostEnvironmentLayer),
-    Permission.node.replace(permissionLayer({ assert: (input) => Effect.sync(() => void assertions.push(input)) })),
-    Location.node.replace(
-      Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
-    ),
-  ]
-  // Resolves and authorizes exactly as the session does, then places each target in the other environment.
-  const access = Layer.effect(
-    FileAccess.Service,
-    Effect.gen(function* () {
-      const session = yield* FileAccess.Service
-      return FileAccess.Service.of({
-        ...session,
-        resolve: (input) => session.resolve(input).pipe(Effect.map((target) => ({ ...target, environment }))),
-        authorizeRead: (input, context, options) =>
-          session.authorizeRead(input, context, options).pipe(Effect.map((target) => ({ ...target, environment }))),
-      })
-    }),
-  ).pipe(Layer.provide(LayerNode.compile(FileAccess.node, { replacements })))
-  return { environment, assertions, replacements: [...replacements, FileAccess.node.replace(access)] }
-}
 
 describe("file tools", () => {
   it.live("read and write the resolved target's environment, not the session's", () =>
@@ -192,7 +162,7 @@ describe("Code Mode Bun", () => {
             metadata: { files: [{ status: "modified", patch: expect.stringContaining("-one\n+two") }] },
           },
           { action: "edit" },
-          { action: "glob" },
+          { action: "read", resources: ["notes.txt"] },
         ])
         expect(yield* Environment.exists(other.environment.files, file)).toBe(false)
         expect(yield* Effect.promise(() => fs.readdir(tmp.path))).toEqual(["notes.txt"])

@@ -14,8 +14,6 @@ import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
 import { toolFailure } from "../runtime.js"
 import { FileMutation } from "../../file-mutation.js"
-import { Location } from "../../location.js"
-import { FileAccess } from "../../file-access.js"
 import { FileWrite } from "../../file-write.js"
 import { Permission } from "../../permission.js"
 import { fileDiff } from "./file-diff.js"
@@ -262,7 +260,6 @@ export const Plugin = {
   effect: Effect.fn("EditTool.Plugin")(function* (ctx: Context) {
     const fileMutation = yield* FileMutation.Service
     const fileWrite = yield* FileWrite.Service
-    const location = yield* Location.Service
     const permission = yield* Permission.Service
     const config = yield* Config.Service
     const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
@@ -301,9 +298,12 @@ export const Plugin = {
 
               const target = yield* fileWrite.target(input.path, context)
 
-              const original = yield* FileMutation.readText(target.environment.files, target.absolute).pipe(
+              const original = yield* FileMutation.readEditableText(target.environment.files, target.absolute).pipe(
                 Effect.catchTag("Environment.NotFound", () =>
                   Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
+                ),
+                Effect.catchTag("FileMutation.InvalidUtf8Error", (error) =>
+                  Effect.fail(new ToolFailure({ message: `Unable to edit ${input.path}: ${error.message}` })),
                 ),
                 Effect.catchTag("Environment.WrongKind", (error) =>
                   error.actual === "directory"
@@ -362,10 +362,7 @@ export const Plugin = {
                 output: `Edited ${result.resource} (${replacements} replacement${replacements === 1 ? "" : "s"})`,
                 metadata: { files: [fileDiff(result.resource, source, formatted)] },
               }
-            }).pipe(
-              fileMutation.withLock([FileAccess.resolvePath(location.directory, input.path)]),
-              Effect.mapError(toolFailure(`Unable to edit ${input.path}`)),
-            )
+            }).pipe(fileMutation.withLock([input.path]), Effect.mapError(toolFailure(`Unable to edit ${input.path}`)))
           },
         }),
       )

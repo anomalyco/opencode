@@ -22,8 +22,9 @@
     overflow-wrap: anywhere;
     user-select: text;
 
+    /* A scroll area takes focus so the keyboard can scroll it, and draws no ring. */
     &:focus-visible {
-      outline: 1px solid var(--v2-border-border-focus);
+      outline: none;
     }
   }
 

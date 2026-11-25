@@ -1,0 +1,262 @@
+[data-page="stats"] [data-section="new-models"] {
+  position: relative;
+  box-sizing: border-box;
+  box-shadow:
+    inset 0 -1px var(--stats-line),
+    inset 1px 0 var(--stats-line),
+    inset -1px 0 var(--stats-line);
+  padding: 80px 40px;
+  color: var(--stats-text);
+}
+
+[data-page="stats"] [data-component="new-models-split"] {
+  display: grid;
+  gap: 4px;
+}
+
+[data-page="stats"] [data-slot="split-heading"],
+[data-page="stats"] [data-slot="split-row"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 420px) minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+}
+
+[data-page="stats"] [data-slot="split-heading"] {
+  padding: 0 16px 8px;
+  color: var(--stats-faint);
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+[data-page="stats"] [data-slot="split-heading"] span:first-child {
+  text-align: right;
+}
+
+[data-page="stats"] [data-slot="split-row"] {
+  min-height: 64px;
+  padding: 0 16px;
+  border: 1px solid var(--stats-line);
+  background: var(--stats-layer);
+  color: var(--stats-text);
+  text-decoration: none;
+}
+
+[data-page="stats"] [data-slot="split-row"][data-active="true"] {
+  border-color: var(--stats-line-strong);
+  background: var(--stats-layer-2);
+}
+
+[data-page="stats"] :is([data-slot="split-users"], [data-slot="split-tokens"]) {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="split-users"] {
+  justify-content: flex-end;
+}
+
+[data-page="stats"] :is([data-slot="split-users"], [data-slot="split-tokens"]) i {
+  display: block;
+  flex: 0 1 auto;
+  min-width: 2px;
+  height: 14px;
+  background: var(--stats-text);
+}
+
+[data-page="stats"] [data-slot="split-users"] i {
+  background: var(--stats-bar-idle);
+}
+
+[data-page="stats"] [data-slot="split-row"][data-active="true"] [data-slot="split-tokens"] i {
+  background: var(--stats-accent);
+}
+
+[data-page="stats"] [data-slot="split-row"][data-active="true"] [data-slot="split-users"] i {
+  background: color-mix(in srgb, var(--stats-accent) 45%, transparent);
+}
+
+[data-page="stats"] :is([data-slot="split-users"], [data-slot="split-tokens"]) b {
+  flex: none;
+  min-width: 48px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+[data-page="stats"] [data-slot="split-users"] b {
+  text-align: right;
+}
+
+[data-page="stats"] [data-slot="split-model"] {
+  display: grid;
+  grid-template-columns: 20px 20px minmax(0, 1fr) 96px;
+  align-items: center;
+  gap: 10px;
+  padding: 0 16px;
+  border-right: 1px solid var(--stats-line);
+  border-left: 1px solid var(--stats-line);
+  height: 100%;
+}
+
+[data-page="stats"] [data-slot="split-rank"] {
+  color: var(--stats-faint);
+  font-size: 11px;
+}
+
+[data-page="stats"] [data-slot="split-icon"] {
+  width: 18px;
+  height: 18px;
+  color: var(--stats-muted);
+}
+
+[data-page="stats"] [data-slot="split-name"] {
+  display: grid;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="split-name"] strong {
+  overflow: hidden;
+  font-size: 13px;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="split-name"] em {
+  color: var(--stats-muted);
+  font-size: 10px;
+  font-style: normal;
+}
+
+[data-page="stats"] [data-slot="split-spark"] {
+  width: 96px;
+  height: 28px;
+  overflow: visible;
+}
+
+[data-page="stats"] [data-slot="split-spark"] polygon {
+  opacity: 0.18;
+}
+
+[data-page="stats"] [data-slot="split-spark"] polyline {
+  fill: none;
+  stroke-width: 1.5;
+}
+
+[data-page="stats"] [data-slot="split-row"][data-featured="true"] {
+  min-height: 128px;
+  margin-bottom: 8px;
+}
+
+[data-page="stats"] [data-slot="split-row"][data-featured="true"] [data-slot="split-model"] {
+  position: relative;
+  grid-template-columns: 20px 32px minmax(0, 1fr) 132px;
+  gap: 14px;
+  overflow: hidden;
+}
+
+[data-page="stats"]
+  [data-slot="split-row"][data-featured="true"]
+  [data-slot="split-model"]
+  > :not([data-slot="split-watermark"]) {
+  position: relative;
+  z-index: 1;
+}
+
+[data-page="stats"] [data-slot="split-watermark"] {
+  position: absolute;
+  top: 50%;
+  right: -24px;
+  width: 180px;
+  height: 180px;
+  transform: translateY(-50%);
+  color: var(--stats-line);
+  opacity: 0.58;
+  pointer-events: none;
+  transition:
+    color 140ms ease,
+    opacity 140ms ease;
+}
+
+[data-page="stats"] [data-slot="split-row"][data-active="true"] [data-slot="split-watermark"] {
+  color: var(--stats-line-strong);
+  opacity: 0.5;
+}
+
+[data-page="stats"] [data-slot="split-row"][data-featured="true"] [data-slot="split-icon"] {
+  width: 30px;
+  height: 30px;
+}
+
+[data-page="stats"] [data-slot="split-row"][data-featured="true"] [data-slot="split-name"] {
+  gap: 4px;
+}
+
+[data-page="stats"] [data-slot="split-row"][data-featured="true"] [data-slot="split-name"] strong {
+  font-size: 20px;
+}
+
+[data-page="stats"] [data-slot="split-row"][data-featured="true"] [data-slot="split-name"] em {
+  font-size: 12px;
+}
+
+[data-page="stats"] [data-slot="split-row"][data-featured="true"] [data-slot="split-spark"] {
+  width: 132px;
+  height: 52px;
+}
+
+[data-page="stats"]
+  [data-slot="split-row"][data-featured="true"]
+  :is([data-slot="split-users"], [data-slot="split-tokens"])
+  i {
+  height: 24px;
+}
+
+[data-page="stats"]
+  [data-slot="split-row"][data-featured="true"]
+  :is([data-slot="split-users"], [data-slot="split-tokens"])
+  b {
+  min-width: 64px;
+  font-size: 22px;
+}
+
+@media (max-width: 74rem) {
+  [data-page="stats"] [data-section="new-models"] {
+    padding: 64px 32px;
+  }
+}
+
+@media (max-width: 47.999rem) {
+  [data-page="stats"] [data-section="new-models"] {
+    padding: 48px 20px;
+  }
+
+  [data-page="stats"] [data-slot="split-heading"] {
+    display: none;
+  }
+
+  [data-page="stats"] [data-slot="split-row"] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    grid-template-areas:
+      "model model"
+      "users tokens";
+    padding: 12px;
+    gap: 10px;
+  }
+
+  [data-page="stats"] [data-slot="split-model"] {
+    grid-area: model;
+    padding: 0;
+    border: 0;
+  }
+
+  [data-page="stats"] [data-slot="split-users"] {
+    grid-area: users;
+  }
+
+  [data-page="stats"] [data-slot="split-tokens"] {
+    grid-area: tokens;
+  }
+}

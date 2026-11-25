@@ -1,4 +1,4 @@
-import type { Browser } from "@opencode/plugin-browser/rpc"
+import { Browser } from "@opencode/plugin-browser/rpc"
 import type { Protocol } from "devtools-protocol"
 
 // One CDP request ID's hops. Chromium reuses a request ID across a redirect chain, and the network
@@ -26,6 +26,7 @@ export type HopPhase =
 export type HopWire = "both" | "request" | "response" | "none"
 
 export type Hop = {
+  readonly extension: boolean
   readonly id: string
   readonly nativeID: string
   readonly sessionID: string | undefined
@@ -98,6 +99,7 @@ export function transitionChain(chain: Chain | undefined, event: ChainEvent): Ch
           : supersede(current.hops, event.event.timestamp)
 
       return append({ ...current, hops }, {
+        extension: (!!redirect && !!latest?.extension) || Browser.extensionOrigin(event.event.documentURL) || extensionSource(event.event.initiator.url, event.event.initiator.stack) || Browser.extensionOrigin(event.event.request.url),
         id: event.id,
         nativeID: event.event.requestId,
         sessionID: event.sessionID,
@@ -116,6 +118,7 @@ export function transitionChain(chain: Chain | undefined, event: ChainEvent): Ch
 
     case "ws.created":
       return append({ ...current, hops: supersede(current.hops, undefined) }, {
+        extension: extensionSource(event.event.initiator?.url, event.event.initiator?.stack) || Browser.extensionOrigin(event.event.url),
         id: event.id,
         nativeID: event.event.requestId,
         sessionID: event.sessionID,
@@ -259,24 +262,26 @@ export function evictHop(chain: Chain, id: string): Chain | undefined {
 
 /** The hop as the browser tools report it. */
 export function networkRequest(hop: Hop): Browser.NetworkRequest {
-  const base = {
+  const base: Omit<Browser.NetworkRequest, "state"> = {
     id: hop.id,
     url: hop.url,
     method: hop.method,
     resourceType: hop.resourceType,
     timestampMs: hop.timestampMs,
-    statusCode: hop.statusCode,
   }
+
+  // A network failure need not have an HTTP response. An absent field is JSON; an own undefined value is not.
+  const request = hop.statusCode === undefined ? base : { ...base, statusCode: hop.statusCode }
 
   switch (hop.phase.status) {
     case "connecting":
     case "pending":
-      return { ...base, state: "pending" }
+      return { ...request, state: "pending" }
     case "redirected":
     case "completed":
-      return { ...base, state: "completed", durationMs: hop.phase.durationMs }
+      return { ...request, state: "completed", durationMs: hop.phase.durationMs }
     case "failed":
-      return { ...base, state: "failed", durationMs: hop.phase.durationMs, failure: hop.phase.failure }
+      return { ...request, state: "failed", durationMs: hop.phase.durationMs, failure: hop.phase.failure }
   }
 }
 
@@ -335,15 +340,27 @@ function responseExtra(chain: Chain | undefined, current: Chain, wire: WireRespo
   return { ...current, hops: replaceAt(current.hops, index, responseWire(current.hops[index], wire)) }
 }
 
+/** Direct script URL or any synchronous/asynchronous caller attributed to an extension by Chromium. */
+export function extensionSource(url?: string, stack?: Protocol.Runtime.StackTrace) {
+  if (url && Browser.extensionOrigin(url)) return true
+
+  for (let trace = stack; trace; trace = trace.parent) {
+    if (trace.callFrames.some((frame) => Browser.extensionOrigin(frame.url))) return true
+  }
+
+  return false
+}
+
 function append(
   chain: Chain,
-  input: Pick<Hop, "id" | "nativeID" | "sessionID" | "url" | "method" | "resourceType" | "timestampMs" | "request"> & {
+  input: Pick<Hop, "extension" | "id" | "nativeID" | "sessionID" | "url" | "method" | "resourceType" | "timestampMs" | "request"> & {
     started: number | undefined
   },
 ): Chain {
   const headers = trimHeaders(input.request.headers)
 
   const created: Hop = {
+    extension: input.extension,
     id: input.id,
     nativeID: input.nativeID,
     sessionID: input.sessionID,

@@ -127,6 +127,26 @@ const logEvents = (session: Session.Interface, sessionID: Session.ID, follow?: b
     .log({ sessionID, follow })
     .pipe(Stream.filter((item): item is SessionEvent.DurableEvent => !Bus.isSynced(item)))
 
+/** Records one completed step, the way the runner does, so the Session's history shows which agent ran. */
+const completeStep = Effect.fn(function* (sessionID: Session.ID, agent: Agent.ID) {
+  const bus = yield* Bus.Service
+  const assistantMessageID = SessionMessage.ID.create()
+  yield* bus.publish(SessionEvent.Step.Started, {
+    sessionID,
+    assistantMessageID,
+    agent,
+    model: Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }),
+    started: 0,
+  })
+  yield* bus.publish(SessionEvent.Step.Ended, {
+    sessionID,
+    assistantMessageID,
+    finish: "stop",
+    cost: Money.USD.zero,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+  })
+})
+
 const assertCreateInputTypes = (session: Session.Interface) => {
   // @ts-expect-error location or parentID is required.
   session.create({})
@@ -1439,6 +1459,40 @@ describe("Session.create", () => {
       expect(yield* session.messages({ sessionID: created.id, order: "asc" })).toMatchObject([
         { type: "agent-switched", agent: "plan", previous: "build" },
       ])
+    }),
+  )
+
+  for (const input of [
+    { name: "its stored agent", agent: Agent.ID.make("plan"), ran: Agent.ID.make("plan") },
+    { name: "the default agent it ran as without a stored one", agent: undefined, ran: Agent.ID.make("build") },
+  ])
+    it.effect(`does not record re-selecting ${input.name}`, () =>
+      Effect.gen(function* () {
+        const session = yield* Session.Service
+        const created = yield* session.create({ location, agent: input.agent })
+        yield* completeStep(created.id, input.ran)
+
+        yield* session.switchAgent({ sessionID: created.id, agent: input.ran })
+
+        expect((yield* session.get(created.id)).agent).toBe(input.agent)
+        expect(
+          (yield* session.messages({ sessionID: created.id, order: "asc" })).map((message) => message.type),
+        ).toEqual(["assistant"])
+      }),
+    )
+
+  it.effect("records selecting another agent for a Session without a stored one", () =>
+    Effect.gen(function* () {
+      const session = yield* Session.Service
+      const created = yield* session.create({ location })
+      yield* completeStep(created.id, Agent.ID.make("build"))
+
+      yield* session.switchAgent({ sessionID: created.id, agent: Agent.ID.make("plan") })
+
+      expect((yield* session.messages({ sessionID: created.id, order: "asc" })).at(-1)).toMatchObject({
+        type: "agent-switched",
+        agent: "plan",
+      })
     }),
   )
 

@@ -1,5 +1,6 @@
 import { useLocation } from "@solidjs/router"
 import { createEffect } from "solid-js"
+import { stripBasePath, withBasePath } from "./base-path"
 
 const LAST_ROUTE_KEY = "opencode.pwa.last-route"
 
@@ -11,7 +12,7 @@ export function isStandalone() {
 }
 
 export function restorePwaRoute() {
-  if (location.pathname !== "/" || location.search || location.hash) return
+  if (stripBasePath(location.pathname) !== "/" || location.search || location.hash) return
 
   try {
     const value = localStorage.getItem(LAST_ROUTE_KEY)
@@ -27,7 +28,7 @@ export function restorePwaRoute() {
       !/^\/server\/[^/]+\/session\/[^/]+$/.test(url.pathname)
     )
       return
-    history.replaceState(history.state, "", url.pathname + url.search + url.hash)
+    history.replaceState(history.state, "", withBasePath(url.pathname) + url.search + url.hash)
   } catch {
     // Storage may be unavailable; keep the launch URL in that case.
   }

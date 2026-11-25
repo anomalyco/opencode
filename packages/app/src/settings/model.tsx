@@ -137,6 +137,8 @@ const generalSchema = Persistence.struct({
   newTimeline: Persistence.optional(Schema.Boolean),
   // Browser-style session tab grouping across vertical and horizontal tabs.
   tabGroups: Persistence.optional(Schema.Boolean),
+  // One side panel open state for every session tab, instead of one per tab.
+  sharedSidePanel: Persistence.optional(Schema.Boolean),
   // "projects" is retired; `resolveSidebarOrganize` moves it to its replacement.
   sidebarOrganize: Schema.Literals(["projects", "list", "customize", "recent", "consolidated"]),
   mobileTitlebarPosition: Schema.Literals(["top", "bottom"]),
@@ -462,6 +464,10 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setTabGroups(value: boolean) {
           setStore("general", "tabGroups", value)
         },
+        sharedSidePanel: withFallback(() => store.general?.sharedSidePanel, false),
+        setSharedSidePanel(value: boolean) {
+          setStore("general", "sharedSidePanel", value)
+        },
         newQuestionUI: withFallback(() => store.general?.newQuestionUI, defaultSettings.general.newQuestionUI),
         setNewQuestionUI(value: boolean) {
           setStore("general", "newQuestionUI", value)
@@ -537,6 +543,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         },
       },
       keybinds: {
+        all: () => store.keybinds ?? {},
         get: (action: string) => store.keybinds?.[action],
         set(action: string, keybind: string) {
           setStore("keybinds", action, keybind)

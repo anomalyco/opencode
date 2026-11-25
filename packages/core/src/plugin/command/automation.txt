@@ -2,17 +2,6 @@ Manage this project's automations.
 
 Request: $ARGUMENTS
 
-Use the automation tools in the `opencode` namespace. They see every automation in this session's project.
+Use the `automation` tools: `tools.automation.create` to add one, and `list`, `pause`, `resume` or `delete` to manage them (find ids with `list`). Their descriptions explain triggers and actions. If the request is empty, list the automations with their name, trigger, status and next run.
 
-- To create one, call `automation_create` with a short `name`, a `trigger` and an `action`.
-  - `trigger`: `{ type: "at", at: "in 20 minutes" }` or `{ type: "at", at: "2026-10-27T09:00" }` (runs once), `{ type: "every", every: "1 hour" }` or `{ type: "cron", cron: "0 9 * * 1-5" }`, each with an optional `tz`.
-  - For a connected MCP server advertising push delivery, use `{ type: "event", server, event, args? }` instead of a timer. With `mcp_events` enabled, list event types with `list_mcp_events`. `args` must match `inputSchema`. A code action receives `input.event = { id, timestamp, data }`; `data` is checked against `payloadSchema`. A plain prompt includes the event as untrusted data.
-  - A watch starts when its stream opens. After interruption it requests replay from the saved cursor. The server controls retention: a gap, missing replay cursor on reconnect, invalid payload or rejected handoff pauses the automation. Inspect `lastOutput`. When replay is unavailable, reconcile the source before creating a new watch from now. Delivery is not exactly once; earlier tool side effects are not rolled back.
-  - `action`: `{ type: "prompt", prompt }` sends `prompt` to this session; add `to: { subagent: "<agent>" }` to start a new child of this session with that agent each run (it finishes without reporting back), or `to: { session: "ses_..." }` for another session. Write `prompt` as the instruction the session will receive, with enough context to act on it without this conversation.
-  - Or `{ type: "code", code, args? }` runs a JavaScript string with no model, calling `tools.<path>(...)` statically (no `fetch`; 30s / 20 calls / 32 KB caps). It receives `input = { state, now, runs, args }`, where `state` starts as `null` and `now` is epoch milliseconds. For local working hours, set `tz` on a cron trigger. Return nothing or any combination of `state` (JSON for next time), `done: true` (stop), and at most one `send` per run. Omit `send` to stay quiet. `{ send: { prompt } }` steers this session; `{ send: { prompt, to: { subagent: "<agent>" } } }` starts a permitted child that won't report back. No session IDs in code results. `lastOutput` shows the delivery target and any logs.
-    Example: `await tools.opencode.automation_create({ name: "Third check", trigger: { type: "every", every: "1 minute" }, action: { type: "code", code: 'if (runs < 2) return; return { done: true, send: { prompt: "Three checks elapsed. Review the build." } }' } })`.
-  - To stop a repeating automation at a time, add `expires`: an instant, a wall-clock time, or `"in 8 hours"`.
-- To pause, resume or delete one, find its id with `automation_list`, then call `automation_pause`, `automation_resume` or `automation_delete`.
-- If the request is empty, call `automation_list` and show the automations: name, trigger, status and next scheduled time (timers only).
-
-Reply in one line: what changed and which time or event triggers it.
+Reply in one line: what changed and when it runs.

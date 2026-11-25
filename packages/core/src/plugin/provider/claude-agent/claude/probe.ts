@@ -112,6 +112,13 @@ export function isLoggedIn(account: AccountInfo) {
   return account.tokenSource !== "none" || account.apiKeySource !== undefined
 }
 
+export function loginMessage(configDir: string | undefined) {
+  if (!configDir) return "Claude Code is not logged in. Run `claude auth login` in a terminal."
+  if (process.platform === "win32")
+    return `Claude Code is not logged in. Run \`$env:CLAUDE_CONFIG_DIR = "${configDir}"; claude auth login\` in PowerShell.`
+  return `Claude Code is not logged in. Run \`CLAUDE_CONFIG_DIR="${configDir}" claude auth login\` in a terminal.`
+}
+
 async function* waitFor(done: Promise<void>): AsyncGenerator<never> {
   await done
 }

@@ -1,3 +1,5 @@
+import type { CliRenderer } from "@opentui/core"
+import { useRenderer } from "@opentui/solid"
 import { createEffect, createSignal, onCleanup, type Accessor } from "solid-js"
 
 type AnimatableValue = number | readonly number[]
@@ -29,8 +31,9 @@ type ValueState = {
 
 type AnimationTask = (now: number) => boolean
 
-const tasks = new Set<AnimationTask>()
-let timer: ReturnType<typeof setInterval> | undefined
+// One 60 fps subscription on each renderer's shared animation clock while any of its tasks runs. Tasks belong to no
+// node, so a hidden view's tween runs to its end; it stops early only when its owner is disposed.
+const clocks = new Map<CliRenderer, { tasks: Set<AnimationTask>; stop: () => void }>()
 
 const smoothstep = (progress: number) => progress * progress * (3 - 2 * progress)
 
@@ -58,11 +61,12 @@ export function createAnimatable<T extends AnimatableTarget>(
     enabled?: Accessor<boolean>
   },
 ) {
+  const renderer = useRenderer()
   const enabled = options.enabled ?? (() => true)
   const state = new Map<string, ValueState>()
   const [value, setValue] = createSignal(clone(initial), { equals: false })
   let target = clone(initial)
-  let started = performance.now()
+  let started = renderer.clock.now()
   let previous = started
 
   rebuild(initial)
@@ -89,25 +93,25 @@ export function createAnimatable<T extends AnimatableTarget>(
     target = clone(next)
     if (!enabled() || !sameShape(next)) return jump(next)
 
-    started = performance.now()
+    started = renderer.clock.now()
     previous = started
     for (const [key, current] of state) {
       current.from = [...current.value]
       current.target = values(next[key]!)
     }
     if (settled()) return jump(next)
-    schedule(step)
+    schedule(renderer, step)
   }
 
   function jump(next: T) {
     target = clone(next)
-    unschedule(step)
+    unschedule(renderer, step)
     rebuild(next)
     setValue(() => clone(next))
   }
 
   function stop() {
-    unschedule(step)
+    unschedule(renderer, step)
   }
 
   function rebuild(next: T) {
@@ -122,7 +126,7 @@ export function createAnimatable<T extends AnimatableTarget>(
         from: [...value],
       })
     }
-    started = performance.now()
+    started = renderer.clock.now()
     previous = started
   }
 
@@ -213,23 +217,19 @@ function clone<T extends AnimatableTarget>(target: T) {
   ) as T
 }
 
-function schedule(task: AnimationTask) {
-  tasks.add(task)
-  if (timer) return
-  timer = setInterval(tick, 16)
+function schedule(renderer: CliRenderer, task: AnimationTask) {
+  const clock = clocks.get(renderer)
+  if (clock) return void clock.tasks.add(task)
+  const tasks = new Set([task])
+  const stop = renderer.onAnimationTick(60, (_deltaTime, _ticks, now) => {
+    for (const task of tasks) if (!task(now)) unschedule(renderer, task)
+  })
+  clocks.set(renderer, { tasks, stop })
 }
 
-function unschedule(task: AnimationTask) {
-  tasks.delete(task)
-  if (tasks.size > 0 || !timer) return
-  clearInterval(timer)
-  timer = undefined
-}
-
-function tick() {
-  const now = performance.now()
-  for (const task of tasks) if (!task(now)) tasks.delete(task)
-  if (tasks.size > 0 || !timer) return
-  clearInterval(timer)
-  timer = undefined
+function unschedule(renderer: CliRenderer, task: AnimationTask) {
+  const clock = clocks.get(renderer)
+  if (!clock?.tasks.delete(task) || clock.tasks.size > 0) return
+  clock.stop()
+  clocks.delete(renderer)
 }
