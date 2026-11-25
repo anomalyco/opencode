@@ -2,6 +2,90 @@
 
 Release notes for OpenCode V2, newest first.
 
+## v2.4.2 — 2026-11-25
+
+### Highlights
+
+- **GPT-6.2 System Prompt**: GPT-6.2 Sol and Astra, and the `gpt-latest` aliases, use a system prompt written for GPT-6.2. ([#66297](https://github.com/anomalyco/opencode/pull/66297))
+- **OpenCode Go Onboarding Fix**: After you connect OpenCode, the model picker lists OpenCode Go first. ([#66363](https://github.com/anomalyco/opencode/pull/66363))
+- **Esc Takes Back Your Last Message**: If the composer is empty, stopping a response with Esc before the model has written anything or called a tool removes your message and puts it back in the composer, images included, so you can edit it and send again. ([#65505](https://github.com/anomalyco/opencode/pull/65505))
+
+### Upgrade notes
+
+- **"Always allow" for a web fetch allows that site only.** It used to allow every URL. Approvals saved by earlier versions stay as they were. ([#66000](https://github.com/anomalyco/opencode/pull/66000))
+- **Automations keep running after a failed run.** A failed run is recorded and the next one runs on schedule. Automations still pause when the session that created them or their directory is gone, or when their setup is no longer valid. A shell command in an automation's code that runs past its timeout is now stopped and fails the call instead of moving to the background. ([#66422](https://github.com/anomalyco/opencode/pull/66422), [#65626](https://github.com/anomalyco/opencode/pull/65626))
+- **Sending to an archived session unarchives it.** This applies to messages, commands, skills and shell commands, including ones sent through the API. ([#66348](https://github.com/anomalyco/opencode/pull/66348))
+- **Plan mode's rules are in the system prompt.** Sessions already in Plan mode get the rules once more after upgrading. ([#63669](https://github.com/anomalyco/opencode/pull/63669))
+
+### Core
+
+#### Improvements
+
+- Added a system prompt for GPT-6.2. ([#66297](https://github.com/anomalyco/opencode/pull/66297))
+- Moving a session also moves its subagents. ([#66215](https://github.com/anomalyco/opencode/pull/66215))
+- The `report` skill checks the docs, searches for duplicate issues and includes the relevant log lines. ([#66290](https://github.com/anomalyco/opencode/pull/66290))
+- Cost estimates for service tiers that list their own prices use those prices, including their long-context rates. ([#65861](https://github.com/anomalyco/opencode/pull/65861), [#65984](https://github.com/anomalyco/opencode/pull/65984))
+
+#### Bug fixes
+
+- Fixed sign-in to MCP servers whose configured URL has a query string, such as the AWS MCP Server. ([#66036](https://github.com/anomalyco/opencode/pull/66036))
+- Fixed Plan mode re-adding its reminder after every compaction, which could keep a session running in a loop. ([#63669](https://github.com/anomalyco/opencode/pull/63669))
+- Fixed tools staying visible to the model when a blanket deny was followed by narrower denies. ([#65899](https://github.com/anomalyco/opencode/pull/65899))
+- Fixed PDFs with bytes before the `%PDF-` header not being read as PDFs. ([#65967](https://github.com/anomalyco/opencode/pull/65967))
+- Fixed branches whose names end in `/HEAD` missing from the branch list. ([#65904](https://github.com/anomalyco/opencode/pull/65904))
+- Fixed files added by a patch losing a trailing blank line. ([#66378](https://github.com/anomalyco/opencode/pull/66378))
+- Fixed moving a session to a `~\` path on Windows. ([#66269](https://github.com/anomalyco/opencode/pull/66269))
+- Fixed OpenAI custom tool calls failing as malformed on providers that end them only with the completed response. ([#65849](https://github.com/anomalyco/opencode/pull/65849))
+
+### TUI
+
+#### Improvements
+
+- The model picker stays responsive with large catalogs, such as OpenRouter's. ([#66370](https://github.com/anomalyco/opencode/pull/66370))
+- The goal dialog scrolls when the goal is long. ([#65906](https://github.com/anomalyco/opencode/pull/65906))
+- Updated OpenTUI to 0.9.9. ([#65919](https://github.com/anomalyco/opencode/pull/65919))
+
+#### Bug fixes
+
+- Fixed `/models` showing only free models when the TUI opened a session in another directory. ([#66424](https://github.com/anomalyco/opencode/pull/66424))
+- Fixed type-to-filter in Message Actions. ([#65903](https://github.com/anomalyco/opencode/pull/65903))
+- Fixed removing `theme` from config not switching back to the default theme. ([#65925](https://github.com/anomalyco/opencode/pull/65925))
+- Fixed quick successive settings changes overwriting each other. ([#65761](https://github.com/anomalyco/opencode/pull/65761))
+- Fixed the session list losing the selected row after a deletion. ([#65855](https://github.com/anomalyco/opencode/pull/65855))
+
+### Desktop
+
+#### Improvements
+
+- On macOS and Windows, desktop updates download only the parts of the app that changed instead of the full installer again. ([#66042](https://github.com/anomalyco/opencode/pull/66042))
+- Enter in the question dock moves to the next question and submits on the last one. Set **Submit question answers with** to Cmd/Ctrl+Enter in **Settings → Preferences** to keep the previous behavior. ([#66169](https://github.com/anomalyco/opencode/pull/66169))
+- To move the file tree to the right in the Files and Review panels, right-click its header and choose **Sidebar position → Right**. ([#66012](https://github.com/anomalyco/opencode/pull/66012))
+- `/rename` with no title generates a new title, and `/rename <title>` sets one. ([#66396](https://github.com/anomalyco/opencode/pull/66396))
+- Search sessions also finds archived sessions and shows them dimmed. ([#66356](https://github.com/anomalyco/opencode/pull/66356))
+- In the Inbox sidebar, you can pin sessions, open archived sessions in a collapsible section and choose where working sessions appear. Archived sessions waiting on you show under Needs attention. ([#65961](https://github.com/anomalyco/opencode/pull/65961), [#66327](https://github.com/anomalyco/opencode/pull/66327))
+- Cmd+Shift+S (Ctrl+Shift+S on Windows and Linux) unarchives the open session when it's archived. ([#66327](https://github.com/anomalyco/opencode/pull/66327))
+- Custom answers to questions can span several lines. ([#66169](https://github.com/anomalyco/opencode/pull/66169))
+- Subagent sessions show their parent session's side panel tabs. ([#65957](https://github.com/anomalyco/opencode/pull/65957))
+- Sessions in open tabs keep browser access after a restart or when an automation wakes them. ([#65969](https://github.com/anomalyco/opencode/pull/65969))
+
+#### Bug fixes
+
+- Fixed older messages you had loaded disappearing after a reconnect. ([#66035](https://github.com/anomalyco/opencode/pull/66035))
+- Fixed the timeline jumping while older history loads or a focused row scrolls out of view, and made scrolling in long sessions smoother. ([#66014](https://github.com/anomalyco/opencode/pull/66014), [#65921](https://github.com/anomalyco/opencode/pull/65921), [#66034](https://github.com/anomalyco/opencode/pull/66034), [#65631](https://github.com/anomalyco/opencode/pull/65631))
+- Fixed the background indicator flashing "1 shell" for each shell command a script runs. ([#66402](https://github.com/anomalyco/opencode/pull/66402))
+- Fixed screen readers skipping a reply while it's being written. ([#66120](https://github.com/anomalyco/opencode/pull/66120))
+- Fixed the app menu missing from the side tabs header on Linux. ([#65912](https://github.com/anomalyco/opencode/pull/65912))
+- Fixed the model list jumping when you unfavorite a model with the mouse. ([#65649](https://github.com/anomalyco/opencode/pull/65649))
+
+### SDK
+
+- `@opencode/sdk/workerd`: forward your Durable Object's `alarm()` to `opencode.alarm()` so idle remote workspaces suspend. ([#66183](https://github.com/anomalyco/opencode/pull/66183), [#66240](https://github.com/anomalyco/opencode/pull/66240))
+
+### Extensions
+
+- Promise plugin API calls honor `signal`. Aborting rejects the call. ([#65980](https://github.com/anomalyco/opencode/pull/65980))
+- Plugins can give an agent `instructions` that apply while that agent is selected, without busting the prompt cache. Switching agents or changing the instructions mid-session sends an update instead of rewriting the system prompt. ([#63669](https://github.com/anomalyco/opencode/pull/63669))
+
 ## v2.4.1 — 2026-11-23
 
 ### Highlights
