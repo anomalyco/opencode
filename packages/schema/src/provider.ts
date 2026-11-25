@@ -134,3 +134,28 @@ export const Info = Schema.Struct({
       empty: (id: ID): Info => ({ id, name: id, activation: "auto", package: "" }),
     })),
   )
+
+// Only bundled adapters, so creating a custom provider can't make the server load arbitrary code.
+export const CustomPackage = Schema.Literals([
+  "@opencode/ai/providers/openai-compatible",
+  "@opencode/ai/providers/anthropic-compatible",
+]).annotate({ identifier: "Provider.CustomPackage" })
+export type CustomPackage = typeof CustomPackage.Type
+
+export interface CustomModel extends Schema.Schema.Type<typeof CustomModel> {}
+export const CustomModel = Schema.Struct({
+  id: Schema.String.check(Schema.isMinLength(1)),
+  name: Schema.String.pipe(optional),
+}).annotate({ identifier: "Provider.CustomModel" })
+
+/** A provider added from a client: written to the global config, with its API key stored as a credential. */
+export interface Custom extends Schema.Schema.Type<typeof Custom> {}
+export const Custom = Schema.Struct({
+  id: ID.check(Schema.isPattern(/^[a-z0-9][a-z0-9-_]*$/u)),
+  name: Schema.String.check(Schema.isMinLength(1)),
+  package: CustomPackage,
+  baseURL: Schema.String.check(Schema.isPattern(/^https?:\/\/[^\s]+$/u)),
+  apiKey: Schema.String.pipe(optional),
+  headers: Schema.Record(Schema.String, Schema.String).pipe(optional),
+  models: Schema.Array(CustomModel).check(Schema.isMinLength(1)),
+}).annotate({ identifier: "Provider.Custom" })

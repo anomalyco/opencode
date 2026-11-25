@@ -132,6 +132,8 @@ import type {
   ProviderListOutput,
   ProviderGetInput,
   ProviderGetOutput,
+  ExperimentalProviderCustomCreateInput,
+  ExperimentalProviderCustomCreateOutput,
   IntegrationListInput,
   IntegrationListOutput,
   IntegrationGetInput,
@@ -1064,6 +1066,27 @@ const EndpointProviderGet = (raw: RawClient["server.provider"]) => (input: Provi
 const adaptGroupProvider = (raw: RawClient["server.provider"]) => ({
   list: EndpointProviderList(raw),
   get: EndpointProviderGet(raw),
+})
+
+const EndpointExperimentalProviderCustomCreate =
+  (raw: RawClient["server.provider"]) => (input: ExperimentalProviderCustomCreateInput) =>
+    preserveEffect<ExperimentalProviderCustomCreateOutput>()(
+      raw["provider.custom.create"]({
+        query: { location: input["location"] },
+        payload: {
+          id: input["id"],
+          name: input["name"],
+          package: input["package"],
+          baseURL: input["baseURL"],
+          apiKey: input["apiKey"],
+          headers: input["headers"],
+          models: input["models"],
+        },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const adaptGroupExperimentalProvider = (raw: RawClient["server.provider"]) => ({
+  custom: { create: EndpointExperimentalProviderCustomCreate(raw) },
 })
 
 const EndpointIntegrationList = (raw: RawClient["server.integration"]) => (input?: IntegrationListInput) =>
@@ -2172,6 +2195,7 @@ const adaptClient = (raw: RawClient) => {
       session: adaptGroupExperimentalSession(raw["server.session"]),
       generate: adaptGroupExperimentalGenerate(raw["server.generate"]),
       voice: adaptGroupExperimentalVoice(raw["server.voice"]),
+      provider: adaptGroupExperimentalProvider(raw["server.provider"]),
       integration: adaptGroupExperimentalIntegration(raw["server.integration"]),
       mcp: adaptGroupExperimentalMcp(raw["server.mcp"]),
       file: adaptGroupExperimentalFile(raw["server.fs"]),

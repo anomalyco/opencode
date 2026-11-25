@@ -1613,6 +1613,25 @@ export interface ProviderApi<E = never> {
   readonly get: ProviderGetOperation<E>
 }
 
+export type ExperimentalProviderCustomCreateInput = {
+  readonly location?: { readonly directory?: string | undefined } | undefined
+  readonly id: string
+  readonly name: string
+  readonly package: Provider.CustomPackage
+  readonly baseURL: string
+  readonly apiKey?: string | undefined
+  readonly headers?: { readonly [x: string]: string } | undefined
+  readonly models: ReadonlyArray<Provider.CustomModel>
+}
+export type ExperimentalProviderCustomCreateOutput = void
+export type ExperimentalProviderCustomCreateOperation<E = never> = (
+  input: ExperimentalProviderCustomCreateInput,
+) => Effect.Effect<ExperimentalProviderCustomCreateOutput, E>
+
+export interface ExperimentalProviderApi<E = never> {
+  readonly custom: { readonly create: ExperimentalProviderCustomCreateOperation<E> }
+}
+
 export type IntegrationListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type IntegrationListOutput = {
   readonly location: Location.PublicRef
@@ -3229,6 +3248,7 @@ export interface AppApi<E = never> {
     readonly session: ExperimentalSessionApi<E>
     readonly generate: ExperimentalGenerateApi<E>
     readonly voice: ExperimentalVoiceApi<E>
+    readonly provider: ExperimentalProviderApi<E>
     readonly integration: ExperimentalIntegrationApi<E>
     readonly mcp: ExperimentalMcpApi<E>
     readonly file: ExperimentalFileApi<E>

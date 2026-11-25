@@ -6,6 +6,7 @@ import { isDeepStrictEqual } from "node:util"
 import { applyEdits, modify, type ParseError, parse } from "jsonc-parser"
 import { Context, Effect, FiberMap, Layer, Option, PubSub, Ref, Schema, Semaphore, Stream } from "effect"
 import { Directory, Document, Info, type Patch, type Entry, Event } from "@opencode/schema/config"
+import { ConfigProvider } from "@opencode/schema/config/provider"
 import { App } from "./app.js"
 import { Credential } from "./credential.js"
 import { FlagResolve } from "./flag/resolve.js"
@@ -48,6 +49,14 @@ export interface Interface {
   readonly changes: () => Stream.Stream<Watcher.Update>
   /** Updates supported global config fields while preserving unrelated JSONC content. */
   readonly update?: (patch: Patch) => Effect.Effect<void, FSUtil.Error>
+  /**
+   * Writes one provider into the highest-precedence global config document while preserving unrelated JSONC content.
+   * Config has reloaded and published `config.updated` when it returns.
+   */
+  readonly provider?: (
+    providerID: string,
+    provider: typeof ConfigProvider.Info.Encoded,
+  ) => Effect.Effect<void, FSUtil.Error>
   /**
    * Replaces, or clears with `undefined`, the document an integration connection contributes. It loads right after
    * managed policies: its settings layer below remote, user, and project config, while its policies outrank theirs.
@@ -506,8 +515,8 @@ export const layer = (options?: Options) =>
       )
       yield* reloadLock.withPermit(reconcile(sources))
 
-      const update = Effect.fn("Config.update")(
-        function* (patch: Patch) {
+      const write = Effect.fn("Config.write")(
+        function* (key: readonly (string | number)[], value: unknown) {
           const directory = initial.global ?? AbsolutePath.make(globalService.config)
           const candidates = ConfigDiscovery.names.map((name) => path.join(directory, name))
           const filepath =
@@ -517,17 +526,30 @@ export const layer = (options?: Options) =>
             try: () =>
               applyEdits(
                 text,
-                modify(text, ["shell"], patch.shell ?? undefined, {
+                modify(text, [...key], value, {
                   formattingOptions: { tabSize: 2, insertSpaces: true },
                 }),
               ),
             catch: (cause) => new FSUtil.FileSystemError({ method: "config.update", cause }),
           })
           yield* fs.writeWithDirs(filepath, updated.endsWith("\n") ? updated : `${updated}\n`)
-          yield* requestReload
         },
         (effect) => updateLock.withPermit(effect),
       )
+
+      const update = Effect.fn("Config.update")(function* (patch: Patch) {
+        yield* write(["shell"], patch.shell ?? undefined)
+        yield* requestReload
+      })
+
+      const provider = Effect.fn("Config.provider")(function* (
+        providerID: string,
+        info: typeof ConfigProvider.Info.Encoded,
+      ) {
+        yield* write(["providers", providerID], info)
+        // Reload now rather than after the watcher's debounce, so the caller's next read sees the provider.
+        yield* reload().pipe(Effect.provide(context))
+      })
 
       return Service.of({
         entries: Effect.fnUntraced(function* () {
@@ -540,6 +562,7 @@ export const layer = (options?: Options) =>
           }),
         changes: () => Stream.fromPubSub(updates),
         update,
+        provider,
         integration: Effect.fn("Config.integration")(function* (integrationID, document) {
           if (isDeepStrictEqual(integrations.get(integrationID), document)) return
           integrations.delete(integrationID)
