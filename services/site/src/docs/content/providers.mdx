@@ -577,7 +577,30 @@ LM Studio and vLLM also have built-in local discovery. Their default endpoints a
 
 LM Studio discovers language models from `/api/v1/models`. vLLM checks `/health` before reading `/v1/models`; its
 discovery cannot infer tool support, so discovered vLLM models start with tools disabled. For another OpenAI-compatible
-runtime, use the [custom provider](#custom) recipe and list its models explicitly.
+runtime, use the [custom provider](#custom) recipe and list its models explicitly. For example,
+[Rapid-MLX](https://rapidmlx.com) serves models on Apple Silicon Macs at `http://127.0.0.1:8000/v1` with no API key:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "rapid-mlx/qwen3.5-9b-4bit",
+  "providers": {
+    "rapid-mlx": {
+      "name": "Rapid-MLX",
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "http://127.0.0.1:8000/v1" },
+      "models": {
+        "qwen3.5-9b-4bit": {
+          "capabilities": { "tools": true, "input": ["text"], "output": ["text"] },
+          "limit": { "context": 65536, "output": 4096 },
+        },
+      },
+    },
+  },
+}
+```
+
+Use the alias you started with `rapid-mlx serve` as the model key, and set `limit.context` to what you serve it with.
 
 ## Gateways
 
