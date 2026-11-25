@@ -5,7 +5,7 @@ import { batch, createEffect, createMemo, createRoot, createSignal, onCleanup, u
 import { Predicate, Schema, SchemaGetter } from "effect"
 import { useModels } from "@/providers/models/models"
 import { useSettings } from "@/settings/model"
-import { syncWhileBooting, useProviders } from "@/providers/catalog/providers"
+import { useProviders } from "@/providers/catalog/providers"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { Persistence } from "@/runtime/persistence/schema"
 import { usePlatform, type Platform } from "@/runtime/platform/platform"
@@ -26,6 +26,7 @@ import {
   type Selection,
   type SelectionEdit,
 } from "./selection-machine"
+import { cycleModelSpeed } from "./speed"
 import {
   cycleModelVariant,
   durableVariantSelection,
@@ -331,7 +332,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       const directory = sdk().directory
 
       if (!directory) return
-      void syncWhileBooting(() => data.location.agent.sync({ directory })).catch(() => undefined)
+      void data.location.agent.sync({ directory }).catch(() => undefined)
     })
 
     const agentsVisible = createMemo(() => settings.visibility.customAgents() || hasCustomAgent(list()))
@@ -557,14 +558,56 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       ),
     )
 
+    const currentKey = () => {
+      const item = current()
+
+      return item && { providerID: item.provider.id, modelID: item.id }
+    }
+
     const model = {
       ready: Object.assign(() => models.ready() && configuredModel.ready(), { promise: models.ready.promise }),
       key,
       preview,
       current,
+      /** The current model at its standard speed: the entry that stands for it in a list of models. */
+      standard() {
+        const item = currentKey()
+
+        return item && models.find(models.standard(item))
+      },
       recent,
       favorite: { list: favorite, toggle: models.favorite.toggle },
-      list: models.list,
+      list: models.listed,
+      speed: {
+        /** The current model's other speeds, slowest first. */
+        list() {
+          const item = currentKey()
+
+          return item ? models.speed.list(item) : []
+        },
+        /** The speed in use; none is the model's standard speed. */
+        current() {
+          const item = currentKey()
+
+          return item && models.speed.of(item)
+        },
+        set(value: string | undefined) {
+          batch(() => {
+            const item = currentKey()
+            const target = item && models.speed.model(item, value)
+
+            if (!target) return
+            models.speed.remember(target, value)
+            model.set(target)
+          })
+        },
+        cycle() {
+          const items = model.speed.list()
+
+          if (items.length === 0) return
+          model.speed.set(cycleModelSpeed(model.speed.current(), items))
+        },
+      },
       trackSessionCommit(sessionID: string, selection: { agent: string; model: ModelKey; variant?: string }) {
         const target = workspace()
 
@@ -588,7 +631,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
       },
       cycle(direction: 1 | -1) {
         const items = recent()
-        const item = current()
+        const item = model.standard()
 
         if (!item) return
 
@@ -604,11 +647,19 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
         if (!entry) return
         model.set({ providerID: entry.provider.id, modelID: entry.id })
       },
-      set(item: ModelKey | undefined, options?: { recent?: boolean }) {
+      set(picked: ModelKey | undefined, options?: { recent?: boolean }) {
         batch(() => {
-          if (item && !validModel(item)) return
-          const previous = current()
-          const same = item && previous?.provider.id === item.providerID && previous.id === item.modelID
+          if (picked && !validModel(picked)) return
+          // A model runs at the speed last used with it.
+          const item = picked && models.speed.remembered(picked)
+          const previous = currentKey()
+
+          // Another speed of the same model keeps its variant.
+          const same =
+            item &&
+            previous &&
+            models.standard(previous).modelID === models.standard(item).modelID &&
+            previous.providerID === item.providerID
 
           if (!item) {
             edit({ type: "model", agent: agent.current()?.name, choice: undefined })
@@ -730,5 +781,7 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
   },
 })
 
-export type ModelSelection = Omit<ReturnType<typeof useLocal>["model"], "trackSessionCommit" | "preview"> &
-  Partial<Pick<ReturnType<typeof useLocal>["model"], "trackSessionCommit" | "preview">>
+type OptionalSelection = "trackSessionCommit" | "preview" | "standard" | "speed"
+
+export type ModelSelection = Omit<ReturnType<typeof useLocal>["model"], OptionalSelection> &
+  Partial<Pick<ReturnType<typeof useLocal>["model"], OptionalSelection>>

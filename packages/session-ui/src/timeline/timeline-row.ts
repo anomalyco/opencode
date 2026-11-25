@@ -18,7 +18,8 @@ export type PartGroup =
     }
   | {
       key: string
-      type: "file" | "read"
+      /** A subagent row holds one call or report; events count background shells; thought holds thoughts one after another. */
+      type: "file" | "read" | "events" | "subagent" | "thought"
       refs: PartRef[]
     }
 
@@ -52,9 +53,11 @@ export namespace TimelineRow {
     spacing?: "tool" | "content"
   }> {}
 
+  /** The thought the model is writing, after the finished thoughts (`before`) it follows with nothing between. */
   export class Thinking extends Data.TaggedClass("Thinking")<{
     userMessageID: string
     ref: PartRef
+    before?: readonly PartRef[]
   }> {}
 
   /**
@@ -97,6 +100,11 @@ export namespace TimelineRow {
     files: readonly string[]
   }> {}
 
+  /** How long a turn the user stopped worked, in the New timeline where the setting hides all the agent's activity. */
+  export class Worked extends Data.TaggedClass("Worked")<{
+    userMessageID: string
+  }> {}
+
   /** Where the host shows the active turn's live status when undelivered input waits below it. */
   export class Activity extends Data.TaggedClass("Activity")<{
     userMessageID: string
@@ -114,6 +122,7 @@ export namespace TimelineRow {
     | Retry
     | CompactionQueued
     | TurnDiff
+    | Worked
     | Activity
 
   export const key: (row: TimelineRow) => string = Match.typeTags<TimelineRow>()({
@@ -131,6 +140,7 @@ export namespace TimelineRow {
     Retry: (row) => `retry:${row.userMessageID}`,
     CompactionQueued: (row) => `compaction-queued:${row.inboxID}`,
     TurnDiff: (row) => `turn-diff:${row.messageID}`,
+    Worked: (row) => `worked:${row.userMessageID}`,
     // One live status exists at a time; it keeps its identity when the active turn changes.
     Activity: () => "activity",
   })
@@ -149,7 +159,11 @@ export namespace TimelineRow {
       other.previousAssistantPart === row.previousAssistantPart &&
       other.spacing === row.spacing &&
       sameGroup(other.group, row.group),
-    Thinking: (row) => (other: TimelineRow) => Predicate.isTagged(other, "Thinking") && sameRef(other.ref, row.ref),
+    Thinking: (row) => (other: TimelineRow) =>
+      Predicate.isTagged(other, "Thinking") &&
+      sameRef(other.ref, row.ref) &&
+      (other.before?.length ?? 0) === (row.before?.length ?? 0) &&
+      (row.before ?? []).every((ref, index) => sameRef(ref, other.before![index]!)),
     Error: (row) => (other: TimelineRow) =>
       Predicate.isTagged(other, "Error") &&
       other.text === row.text &&
@@ -168,6 +182,7 @@ export namespace TimelineRow {
       other.from === row.from &&
       other.files.length === row.files.length &&
       other.files.every((file, index) => file === row.files[index]),
+    Worked: () => (other: TimelineRow) => Predicate.isTagged(other, "Worked"),
     Activity: () => (other: TimelineRow) => Predicate.isTagged(other, "Activity"),
   })
 
@@ -208,7 +223,7 @@ export type TimelineRowMap = {
     previousAssistantPart: boolean
     spacing?: "tool" | "content"
   }
-  Thinking: { userMessageID: string; ref: PartRef }
+  Thinking: { userMessageID: string; ref: PartRef; before?: readonly PartRef[] }
   Retry: { userMessageID: string; attempt: number; message: string; next: number }
   Error: {
     userMessageID: string
@@ -218,5 +233,6 @@ export type TimelineRowMap = {
   }
   CompactionQueued: { userMessageID: string; inboxID: string }
   TurnDiff: { userMessageID: string; messageID: string; from: string; files: readonly string[] }
+  Worked: { userMessageID: string }
   Activity: { userMessageID: string }
 }

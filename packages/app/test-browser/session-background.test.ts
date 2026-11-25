@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionInfo, SessionMessageAssistantTool, ShellInfo } from "@opencode/client/promise"
-import { createRoot } from "solid-js"
+import type { JobInfo, SessionInfo, SessionMessageAssistantTool, ShellInfo } from "@opencode/client/promise"
+import { createRoot, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSessionBackground } from "@/session/requests/background"
 
 const tool = (
   id: string,
   name: string,
-  metadata: Record<string, string>,
+  metadata: Record<string, string | boolean>,
   input: Record<string, string> = {},
   status: "completed" | "running" = "completed",
   time: SessionMessageAssistantTool["time"] = { created: 0 },
@@ -62,6 +62,44 @@ const notification = (id: string, metadata: Record<string, string>) => ({
 })
 
 describe("createSessionBackground", () => {
+  // A history page shifts every message's index; the messages already loaded did not change.
+  test("reads only the messages of a history page that lands", () => {
+    createRoot((dispose) => {
+      const reads: Record<string, number> = {}
+
+      const message = (id: string) => {
+        const content = [tool(`${id}-part`, "subagent", { sessionID: id }, { description: `${id} call` })]
+
+        return {
+          ...assistant(id, content, 1),
+          get content() {
+            reads[id] = (reads[id] ?? 0) + 1
+
+            return content
+          },
+        }
+      }
+
+      const [messages, setMessages] = createSignal([message("later"), message("latest")])
+
+      const background = createSessionBackground({
+        sessionID: () => "root",
+        messages,
+        sessions: () => [session("older", "root", 1), session("later", "root", 2), session("latest", "root", 3)],
+        status: () => "running",
+        shells: () => [],
+      })
+
+      expect(background.tasks().map((task) => task.label)).toEqual(["older", "later call", "latest call"])
+      const before = { ...reads }
+      setMessages((loaded) => [message("older"), ...loaded])
+      expect(background.tasks().map((task) => task.label)).toEqual(["older call", "later call", "latest call"])
+      expect(reads).toEqual({ ...before, older: reads.older })
+      expect(reads.older).toBeGreaterThan(0)
+      dispose()
+    })
+  })
+
   test("counts a subagent from its session status, whatever its call or completion notices say", () => {
     createRoot((dispose) => {
       const [store, setStore] = createStore<{ status: Record<string, "idle" | "running"> }>({
@@ -83,7 +121,7 @@ describe("createSessionBackground", () => {
           // History alone no longer counts a shell either.
           assistant("shell-launch", [tool("shell-part", "shell", { status: "running", shellID: "gone" })]),
         ],
-        sessions: () => [session("stuck"), session("noticed")],
+        sessions: () => [session("stuck", "root", 1), session("noticed", "root", 2)],
         status: (id) => store.status[id] ?? "idle",
         shells: () => [],
       })
@@ -93,7 +131,6 @@ describe("createSessionBackground", () => {
       expect(background.tasks().map((task) => task.id)).toEqual(["stuck", "noticed"])
       setStore("status", { stuck: "idle", noticed: "idle" })
       expect(background.tasks()).toEqual([])
-      expect(background.subagents()).toEqual([])
       dispose()
     })
   })
@@ -103,21 +140,63 @@ describe("createSessionBackground", () => {
       const background = createSessionBackground({
         sessionID: () => "root",
         messages: () => [],
-        sessions: () => [
-          session("child"),
-          session("grandchild", "child"),
-          session("other-child", "other"),
-        ],
+        sessions: () => [session("child"), session("grandchild", "child"), session("other-child", "other")],
         status: () => "running",
         shells: () => [],
       })
 
-      expect(background.subagents().map((task) => task.id)).toEqual(["child", "grandchild"])
+      expect(background.tasks().map((task) => task.id)).toEqual(["child", "grandchild"])
       dispose()
     })
   })
 
-  test("shows a blocking call until its child session is known, then follows the child's status", () => {
+  test("keeps work in the order it was created, however the lists it reads are ordered", () => {
+    createRoot((dispose) => {
+      const [store, setStore] = createStore<{ sessions: SessionInfo[]; shells: ShellInfo[]; jobs: JobInfo[] }>({
+        sessions: [session("first", "root", 10), session("second", "root", 20), session("third", "second", 30)],
+        shells: [
+          { ...shell("serve", "serve"), time: { started: 40 } },
+          { ...shell("watch", "watch"), time: { started: 50 } },
+        ],
+        jobs: [
+          { kind: "codemode", id: "cm_build", sessionID: "root", status: "running", time: { started: 60 } },
+          { kind: "codemode", id: "cm_deploy", sessionID: "root", status: "running", time: { started: 70 } },
+        ],
+      })
+
+      const background = createSessionBackground({
+        sessionID: () => "root",
+        messages: () => [
+          assistant(
+            "launch",
+            [
+              tool("build-part", "execute", { jobID: "cm_build" }, { code: "await build()" }),
+              tool("deploy-part", "execute", { jobID: "cm_deploy" }, { code: "await deploy()" }),
+            ],
+            1,
+          ),
+        ],
+        sessions: () => store.sessions,
+        status: () => "running",
+        shells: () => store.shells,
+        jobs: () => store.jobs,
+      })
+
+      const order = () => [...background.tasks(), ...background.scripts()].map((item) => item.id)
+      const created = ["first", "second", "third", "serve", "watch", "cm_build", "cm_deploy"]
+      expect(order()).toEqual(created)
+
+      // The session list is most recently updated first, so a child moves to its front each time its info is read
+      // again. Shells and jobs come back in the server's order after a reconnect.
+      setStore("sessions", (list) => [list[2], list[0], list[1]])
+      setStore("shells", (list) => list.toReversed())
+      setStore("jobs", (list) => list.toReversed())
+      expect(order()).toEqual(created)
+      dispose()
+    })
+  })
+
+  test("ignores a legacy blocking subagent call and counts its running child", () => {
     createRoot((dispose) => {
       const [store, setStore] = createStore<{
         messages: ReturnType<typeof assistant>[]
@@ -126,10 +205,14 @@ describe("createSessionBackground", () => {
       }>({
         messages: [
           assistant("current", [
-            tool("call", "subagent", {}, { description: "Inspect", agent: "explore" }, "running", {
-              created: 5,
-              ran: 6,
-            }),
+            tool(
+              "call",
+              "subagent",
+              { status: "running", sessionID: "child" },
+              { description: "Inspect", agent: "explore" },
+              "running",
+              { created: 5, ran: 6 },
+            ),
           ]),
         ],
         sessions: [],
@@ -144,27 +227,24 @@ describe("createSessionBackground", () => {
         shells: () => [],
       })
 
-      const pending = {
-        id: "call",
+      // Subagents always run in the background, so a leftover running call blocks nothing.
+      expect(background.blocking()).toEqual([])
+      expect(background.tasks()).toEqual([])
+
+      setStore("sessions", [session("child")])
+      expect(background.tasks()).toEqual([])
+      setStore("status", "child", "running")
+
+      const task = {
+        id: "child",
         type: "subagent",
-        sessionID: undefined,
-        partID: "call",
+        sessionID: "child",
         label: "Inspect",
         agent: "explore",
         started: 6,
       }
-      expect(background.subagents()).toEqual([pending])
-      setStore("messages", 0, "content", 0, "state", "metadata", { sessionID: "child" })
-      expect(background.subagents()).toEqual([{ ...pending, id: "child", sessionID: "child" }])
-      setStore("sessions", [session("child")])
-      expect(background.subagents()).toEqual([])
-      setStore("status", "child", "running")
-      expect(background.subagents()).toEqual([{ ...pending, id: "child", sessionID: "child" }])
-      // Blocking work is not background work.
-      expect(background.tasks()).toEqual([])
-      setStore("messages", 0, "time", "completed", 7)
-      expect(background.blocking()).toEqual([])
-      expect(background.tasks()).toEqual([{ ...pending, id: "child", sessionID: "child", partID: undefined }])
+
+      expect(background.tasks()).toEqual([task])
       dispose()
     })
   })
@@ -208,15 +288,14 @@ describe("createSessionBackground", () => {
       setStore("shells", 0, "command", "updated command")
       const live = background.tasks()
       expect(live).toEqual([
+        { id: "child", type: "subagent", sessionID: "child", label: "renamed", started: 0 },
         {
           id: "live-child",
           type: "subagent",
           sessionID: "live-child",
-          partID: undefined,
           label: "live-child",
           started: 40,
         },
-        { id: "child", type: "subagent", sessionID: "child", partID: undefined, label: "renamed", started: 0 },
         { id: "shell", type: "shell", label: "updated command", started: 0 },
       ])
       expect(background.blocking()).toBe(blocking)
@@ -254,6 +333,44 @@ describe("createSessionBackground", () => {
         { type: "shell", partID: "shell-part", id: undefined, label: "build", agent: undefined, started: 31 },
       ])
       expect(background.tasks()).toEqual([{ id: "serve", type: "shell", label: "serve", started: 50 }])
+      dispose()
+    })
+  })
+
+  test("counts a script only once its execute call has moved it to the background", () => {
+    createRoot((dispose) => {
+      const [store, setStore] = createStore<{ messages: ReturnType<typeof assistant>[] }>({
+        // Every script runs as a job, so a foreground script has a running job while its call blocks the turn.
+        messages: [
+          assistant("current", [
+            tool("script-part", "execute", { background: true }, { code: "await build()" }, "running", {
+              created: 10,
+              ran: 11,
+            }),
+          ]),
+        ],
+      })
+
+      const background = createSessionBackground({
+        sessionID: () => "root",
+        messages: () => store.messages,
+        sessions: () => [],
+        status: () => "idle",
+        shells: () => [],
+        jobs: () => [
+          { kind: "codemode", id: "cm_script", sessionID: "root", status: "running", time: { started: 11 } },
+          { kind: "codemode", id: "cm_other", sessionID: "other", status: "running", time: { started: 11 } },
+        ],
+      })
+
+      expect(background.scripts()).toEqual([])
+
+      setStore("messages", [
+        assistant("current", [tool("script-part", "execute", { jobID: "cm_script" }, { code: "await build()" })]),
+      ])
+      expect(background.scripts()).toEqual([
+        { id: "cm_script", type: "script", label: "await build()", started: 11 },
+      ])
       dispose()
     })
   })

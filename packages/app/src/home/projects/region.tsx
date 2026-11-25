@@ -1,15 +1,23 @@
 import type { HomeProjectsController } from "./controller"
 import { HomeProjectsView } from "./view"
 import type { HomeScrollController } from "../scroll"
+import { useSettings } from "@/settings/model"
 
 export function HomeProjects(props: {
   projects: HomeProjectsController
-  scroll: HomeScrollController
+  scroll?: HomeScrollController
   dropdown?: boolean
+  scope?: boolean
+  /** Runs after a project or server is picked, or a project is added (which selects it). */
+  onPick?: () => void
 }) {
+  const settings = useSettings()
+
   return (
     <HomeProjectsView
       dropdown={props.dropdown}
+      scope={props.scope}
+      serverScope={settings.appearance.navigationPrototype()}
       language={props.projects.copy.language}
       servers={props.projects.server.list()}
       projects={props.projects.project.list()}
@@ -20,9 +28,15 @@ export function HomeProjects(props: {
       collapsed={props.projects.server.collapsed}
       canRevealProject={props.projects.project.canReveal}
       hasUnread={props.projects.project.hasUnread}
-      onWheel={props.scroll.viewport.containWheel}
-      onChooseProject={props.projects.project.choose}
-      onFocusServer={props.projects.server.focus}
+      onWheel={(event) => props.scroll?.viewport.containWheel(event)}
+      onChooseProject={(server) => {
+        props.projects.project.choose(server)
+        props.onPick?.()
+      }}
+      onFocusServer={(server) => {
+        props.projects.server.focus(server)
+        props.onPick?.()
+      }}
       onAuthenticateServer={props.projects.server.authenticate}
       onToggleCollapsed={props.projects.server.toggleCollapsed}
       onEditServer={props.projects.server.edit}
@@ -30,7 +44,10 @@ export function HomeProjects(props: {
       onRemoveServer={props.projects.server.remove}
       canHideServer={props.projects.server.canHide}
       onHideServer={props.projects.server.hide}
-      onSelectProject={props.projects.project.select}
+      onSelectProject={(server, directory) => {
+        props.projects.project.select(server, directory)
+        props.onPick?.()
+      }}
       onOpenProjectNewSession={props.projects.project.openNewSession}
       canImportSession={props.projects.project.canImportSession}
       importingSession={props.projects.project.importingSession()}

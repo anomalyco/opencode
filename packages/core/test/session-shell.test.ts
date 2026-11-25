@@ -1,11 +1,12 @@
 import { describe, expect, setDefaultTimeout } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Schedule, Stream } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Schedule, Stream, Tracer } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { Plugin } from "@opencode/core/plugin"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
@@ -69,11 +70,28 @@ const setup = Effect.gen(function* () {
   const session = yield* Session.Service
   const created = yield* session.create({ location: Location.Ref.make({ directory: AbsolutePath.make(tmp.path) }) })
   const locations = yield* LocationServiceMap.Service
-  const shell = yield* Shell.Service.pipe(Effect.provide(locations.get(created.location)))
+  // Session.shell waits for plugin activation before spawning. Settle the cold activation here, under the test
+  // timeout, so the 5-second waits below cover only the shell itself.
+  const shell = yield* Plugin.awaitActivation.pipe(
+    Effect.andThen(Shell.Service),
+    Effect.provide(locations.get(created.location)),
+  )
   const control = yield* ExecutionControl
   const execution = yield* SessionExecution.Service
   return { tmp, session, created, shell, control, execution }
 })
+
+const recordSpans = () => {
+  const spans: Tracer.NativeSpan[] = []
+  const tracer = Tracer.make({
+    span(options) {
+      const span = new Tracer.NativeSpan(options)
+      spans.push(span)
+      return span
+    },
+  })
+  return { spans, tracer }
+}
 
 const log = (session: Session.Interface, sessionID: Session.ID, follow = false) =>
   session.log({ sessionID, follow }).pipe(Stream.filter((event) => !Bus.isSynced(event)))
@@ -272,7 +290,7 @@ describe("Session.shell", () => {
         expect(completion.payload.text).toContain("user output")
         expect(completion.payload.text).toContain("user error")
         if (exit === 0) expect(completion.payload.text).not.toContain("Exit code")
-        if (exit !== 0) expect(completion.payload.text).toContain(`\n\nExit code: ${exit}\n</shell>`)
+        if (exit !== 0) expect(completion.payload.text).toContain(`\n\nExit code: ${exit}\n</background-result>`)
         expect(fixture.control.wakes).toEqual([])
       }),
     )
@@ -326,6 +344,37 @@ describe("Session.shell", () => {
       }),
     )
   }
+
+  it.live("names the session, a truncated command and the exit on shell spans outside any turn", () =>
+    Effect.gen(function* () {
+      const { spans, tracer } = recordSpans()
+      const fixture = yield* setup
+      // The emoji's two UTF-16 units sit at indexes 199 and 200, across the 200-unit cut.
+      const command = `exit 3 # ${"x".repeat(190)}😀${"x".repeat(100)}`
+      const truncated = `exit 3 # ${"x".repeat(190)}\uFFFD…`
+      yield* fixture.session.shell({ sessionID: fixture.created.id, command }).pipe(Effect.withTracer(tracer))
+
+      const create = spans.find((span) => span.name === "Shell.create")
+      const result = spans.find((span) => span.name === "Shell.result")
+      const shellID = create?.attributes.get("opencode.shell.id")
+      expect(shellID).toBeString()
+      expect(truncated.isWellFormed()).toBe(true)
+      expect(Object.fromEntries(create?.attributes ?? [])).toEqual({
+        "opencode.shell.id": shellID,
+        "opencode.shell.command": truncated,
+        "session.id": fixture.created.id,
+        "opencode.shell.background": true,
+      })
+      expect(Object.fromEntries(result?.attributes ?? [])).toEqual({
+        "opencode.shell.id": shellID,
+        "opencode.shell.command": truncated,
+        "session.id": fixture.created.id,
+        "opencode.shell.background": true,
+        "opencode.shell.status": "exited",
+        "process.exit.code": 3,
+      })
+    }),
+  )
 
   it.live("admits a spawn failure without waking the model before failing the caller", () =>
     Effect.gen(function* () {

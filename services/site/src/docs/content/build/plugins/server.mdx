@@ -802,6 +802,9 @@ await ctx.session.command({ sessionID, name: "review", text: "--staged" })
 const synthetic = await ctx.session.synthetic({ sessionID, text: "Deployment completed" })
 ```
 
+`generate` returns the `text` along with the call's `tokens` and `cost`, in the same shape an assistant message
+reports them.
+
 Rename, interrupt, or wait for a session.
 
 ```ts
@@ -1009,6 +1012,25 @@ execute: async ({ url }, context) => {
   return { content: await response.text() }
 }
 ```
+
+#### Freeform tool input
+
+A direct tool with exactly one required string field can let the model write that string without a JSON wrapper. Set `freeform` to `{ type: "text" }`, `{ type: "regex", pattern }`, or `{ type: "lark", grammar }`.
+
+```ts
+editor.add({
+  name: "ticket",
+  description: "Look up a ticket by ID",
+  options: { codemode: false },
+  input: Schema.Struct({ id: Schema.String }),
+  freeform: { type: "regex", pattern: "OPS-[0-9]+" },
+  execute: async ({ id }) => ({ content: await lookup(id) }),
+})
+```
+
+If the selected model's API lists `regex` in models.dev, the model can write `OPS-42` directly. Otherwise Core omits **only** `freeform`: the model still has the `ticket` tool and calls it with `{"id":"OPS-42"}`. Missing or empty format lists mean no freeform support. The executor receives `{ id }` either way.
+
+Inside Code Mode (`codemode: true`), a freeform tool takes its string directly, as in `await tools.ticket("OPS-42")`. `await tools.ticket({ id: "OPS-42" })` also works.
 
 Call `reload()` after changing source data captured by the callback. Reload replays the active transforms without
 changing their order; it does not rerun plugin setup.
@@ -1359,6 +1381,14 @@ so later hooks see changes made by earlier hooks.
 
 Session hooks intercept prompt admission, model calls, native HTTP, and retries.
 
+#### Forks
+
+The `fork` hook runs after OpenCode copies the history and before the fork call returns. `sessionID` identifies the new session.
+
+```ts
+await ctx.session.hook("fork", ({ sessionID }) => console.log(sessionID))
+```
+
 #### Prompt admission
 
 Intercept incoming user prompts before attachment and skill resolution and durable inbox admission:
@@ -1430,6 +1460,9 @@ await ctx.session.hook("compaction", async (event) => {
 Changes affect only the outgoing model call, not persisted history or configuration. A hook that should apply to
 every request must register for each kind.
 
+Messages in the `context`, `compaction`, and `generate` hooks carry their stored message's `metadata`, read-only
+(for example, what a `prompt` hook set). It is not sent to the model.
+
 The `system` part that holds OpenCode's instructions also lists each source in `metadata.experimental.instructions` as
 `{ key, text }`, such as `core/date` or `core/environment`, so a hook can tell the sources apart. The list is a copy:
 editing the part's `text` does not update it. This is experimental and may change.
@@ -1463,6 +1496,25 @@ Generation options depend on the selected protocol and model:
 
 - `maxTokens` is the semantic output-token limit.
 - Gemini supports `topK`; OpenAI Responses does not expose it.
+
+#### Model resolve
+
+Experimental. Runs whenever a Session resolves the model for a request, before anything is built for it. `model` starts
+as the selected model; change it to serve this request with another model from the same provider, including one hidden
+from the model picker. The Session keeps its selected model; the request and the assistant message use the new one.
+`kind` says which request is resolving, so a router can skip titles or route again after compaction. A model from
+another provider fails as unavailable.
+
+```ts
+await ctx.session.hook(
+  "experimental.model.resolve",
+  (event) => {
+    if (event.model.id === "auto" && event.kind !== "title")
+      event.model = { providerID: event.model.providerID, id: pick(event.sessionID) }
+  },
+  { providerID: "acme" },
+)
+```
 
 #### Model request
 
@@ -1591,6 +1643,7 @@ interface SessionHooks {
   compaction: SessionContextHook & { result?: SessionCompactionResult }
   generate: SessionContextHook
   title: SessionRequestHook & { result?: string }
+  "experimental.model.resolve": SessionModelResolveHook
   "model.request": SessionModelRequestHook
   "http.request": SessionHttpRequestHook
   "http.response": SessionHttpResponseHook
@@ -1598,6 +1651,13 @@ interface SessionHooks {
   "experimental.ws.send": SessionWebSocketSendHook
   "experimental.ws.receive": SessionWebSocketReceiveHook
   retry: SessionRetryHook
+}
+
+interface SessionModelResolveHook {
+  readonly sessionID: string
+  readonly agent: string
+  readonly kind: "primary" | "compaction" | "title" | "generate"
+  model: { providerID: string; id: string; variant?: string }
 }
 
 interface SessionWebSocketHandshakeHook {

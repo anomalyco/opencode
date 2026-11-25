@@ -5,7 +5,8 @@
  * Behind it means the first element under the mark that says what it is: `data-surface` on it or an
  * ancestor (for media and canvases), else its own background colour (an SVG shape's fill) when
  * mostly opaque. Nothing
- * decisive (the page itself) leaves the attribute off, so the page theme decides.
+ * decisive (the page itself) leaves the attribute off, so the page theme decides. It checks again
+ * when something could have changed behind a mark, and never while nothing does.
  */
 export function watchSurfaces(marks: () => HTMLElement[]) {
   const check = () =>
@@ -23,10 +24,10 @@ export function watchSurfaces(marks: () => HTMLElement[]) {
       const dark = votes.filter((vote) => vote === "dark").length
       const light = votes.filter((vote) => vote === "light").length
       const surface = dark === light ? votes[0] : dark > light ? "dark" : "light"
-      if (surface) mark.dataset.onSurface = surface
+      if (surface && mark.dataset.onSurface !== surface) mark.dataset.onSurface = surface
       if (!surface) delete mark.dataset.onSurface
     })
-  const frame = { id: 0 }
+  const frame = { id: 0, timer: 0, again: false }
   const schedule = () => {
     if (frame.id) return
     frame.id = requestAnimationFrame(() => {
@@ -34,16 +35,42 @@ export function watchSurfaces(marks: () => HTMLElement[]) {
       check()
     })
   }
+  // The page changes under a still mark too: the theme, a page swapped in, the film starting, a
+  // plate animating. Animations change it every frame, so at most one check per 400ms, and one
+  // after the last change.
+  const changed = () => {
+    if (frame.timer) {
+      frame.again = true
+      return
+    }
+    schedule()
+    frame.timer = window.setTimeout(() => {
+      frame.timer = 0
+      if (!frame.again) return
+      frame.again = false
+      changed()
+    }, 400)
+  }
+  const mutations = new MutationObserver(
+    (records) => records.some((record) => record.attributeName !== "data-on-surface") && changed(),
+  )
+  const scheme = window.matchMedia("(prefers-color-scheme: dark)")
   check()
   window.addEventListener("scroll", schedule, { passive: true })
   window.addEventListener("resize", schedule)
-  // Pinned stages and the film change under a still mark too.
-  const timer = setInterval(schedule, 400)
+  scheme.addEventListener("change", schedule)
+  document.addEventListener("transitionend", changed, true)
+  document.addEventListener("animationend", changed, true)
+  mutations.observe(document.documentElement, { subtree: true, childList: true, attributes: true })
   return () => {
     cancelAnimationFrame(frame.id)
-    clearInterval(timer)
+    clearTimeout(frame.timer)
+    mutations.disconnect()
     window.removeEventListener("scroll", schedule)
     window.removeEventListener("resize", schedule)
+    scheme.removeEventListener("change", schedule)
+    document.removeEventListener("transitionend", changed, true)
+    document.removeEventListener("animationend", changed, true)
   }
 }
 

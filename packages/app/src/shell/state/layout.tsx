@@ -16,6 +16,7 @@ import { SessionStateKey } from "@/runtime/server/scope"
 import { createSessionKeyReader, ensureSessionKey, pruneSessionKeys } from "./helpers"
 import { requireServerKey } from "@/shell/routes/session"
 import {
+  appendSessionTab,
   closeSessionTab,
   moveSessionTab,
   openSessionTab,
@@ -133,6 +134,8 @@ const closedTabSchema = Schema.Struct({
   file: Schema.optional(Schema.String),
   detail: Schema.optional(Schema.String),
   data: Schema.optional(Schema.String),
+  pane: Schema.optional(Schema.Literals(["side", "split", "bottom"])),
+  index: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
   closed: Schema.Finite,
 })
 
@@ -250,7 +253,11 @@ export function initialLayout(server?: ServerConnection.Key): typeof layoutSchem
 export const { use: useLayout, provider: LayoutProvider } = createSimpleContext({
   name: "Layout",
   gate: false,
-  init: () => {
+  /**
+   * `open`: whether a layout key's session is open in a shell tab, from whoever mounts the provider under the shell
+   * tabs. Undefined until those are known: the layout then forgets no session's state, as any may be an open one.
+   */
+  init: (props: { open: Accessor<((key: string) => boolean) | undefined> }) => {
     const servers = useServers()
     const platform = usePlatform()
 
@@ -424,6 +431,10 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     function prune(keep?: string) {
       if (!canPruneSessions(untrack(scopedState))) return
+      const open = untrack(props.open)
+
+      // Which sessions are open is not known: any stored session may be one, so none is forgotten.
+      if (!open) return
 
       const drop = pruneSessionKeys({
         keep,
@@ -431,6 +442,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         used,
         view: Object.keys(store.sessionView),
         tabs: Object.keys(store.sessionTabs),
+        open,
       })
 
       if (drop.length === 0) return
@@ -486,8 +498,9 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
 
     const ensureKey = (key: string) => ensureSessionKey(key, touch, (sessionKey) => scroll.seed(sessionKey))
 
+    // The first prune waits for the shell tabs as well as the stored layout: it runs once the open sessions are known.
     createEffect(() => {
-      if (ready() && scopedReady()) untrack(() => dispatchScoped({ type: "hydrated" }))
+      if (ready() && scopedReady() && props.open()) untrack(() => dispatchScoped({ type: "hydrated" }))
     })
     onCleanup(() => dispatchScoped({ type: "disposed" }))
 
@@ -627,12 +640,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         preview(session: string, tab: string, launchers?: ReadonlySet<string>) {
           applyTabs(session, previewSessionTab(tabState(session), tab, launchers))
         },
-        /** Adds a tab at the end of the strip without selecting it or touching the preview. */
-        append(session: string, tab: string) {
+        /** Adds a tab without selecting it or touching the preview: after `after` when given and stored, else at the end. */
+        append(session: string, tab: string, after?: string) {
           const current = store.sessionTabs[session] ?? { all: [] }
+          const next = appendSessionTab(current, tab, after)
 
-          if (current.all.includes(tab)) return
-          writeTabs(session, { ...current, all: [...current.all, tab] })
+          if (next !== current) writeTabs(session, next)
         },
         focus(session: string, tab: string) {
           writeTabs(session, { ...(store.sessionTabs[session] ?? { all: [] }), active: tab })
@@ -767,9 +780,12 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             if (!current?.all.includes(tab)) return
             writeTabs(session, moveSessionTab(current, tab, pane, before))
           },
-          /** Opens the next new tab a pane's "+" menu creates in `pane`; with `plugin`, only that plugin's tab. */
-          target(pane: SessionPane, plugin?: string) {
-            dispatchIntent({ type: "pane.targeted", session: key(), pane, plugin })
+          /**
+           * Opens the next new tab a pane's "+" menu creates in `pane`; with `plugin`, only that plugin's tab, and with
+           * `index`, at that position in the strip.
+           */
+          target(pane: SessionPane, plugin?: string, index?: number) {
+            dispatchIntent({ type: "pane.targeted", session: key(), pane, plugin, index })
           },
         }
       },

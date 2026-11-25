@@ -18,7 +18,7 @@ mod unix;
 pub(crate) use unix::{Cancellation, Connection, Listener, Readiness, Wake};
 
 #[cfg(windows)]
-mod retained;
+pub(crate) mod retained;
 
 #[cfg(windows)]
 pub(crate) mod windows;

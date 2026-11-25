@@ -16,6 +16,7 @@ await Effect.runPromise(
       check: () => Effect.die("Manual upgrades must not check for TUI updates"),
       apply: () => Effect.die("Manual upgrades must not apply TUI updates"),
       removal: () => undefined,
+      managed: () => Effect.succeed(undefined),
       method: () =>
         Effect.sync(() => {
           record("method")

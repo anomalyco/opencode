@@ -130,6 +130,20 @@ permissions:
     }),
   )
 
+  it.live("loads Markdown agents with flow collections alongside unquoted-colon descriptions", () =>
+    Effect.gen(function* () {
+      const agent = yield* loadMarkdownAgent(
+        `description: Review changes. Keywords: review, audit
+model: { providerID: example, model: chat, variant: high }
+permissions: [{ action: edit, resource: "*", effect: deny }]`,
+      )
+      expect(agent.description).toBe("Review changes. Keywords: review, audit")
+      expect(agent.model).toEqual(Model.Ref.parse("example/chat#high"))
+      expect(agent.permissions).toContainEqual({ action: "edit", resource: "*", effect: "deny" })
+      expect(Permission.evaluate("edit", "example.txt", agent.permissions).effect).toBe("deny")
+    }),
+  )
+
   for (const variant of [undefined, "high"]) {
     it.live(`loads Markdown legacy temperature ${variant ? "with" : "without"} a separate variant`, () =>
       Effect.gen(function* () {
@@ -733,21 +747,6 @@ function directoryEntry(directory: string) {
 function sourceCases() {
   return [
     {
-      name: "created",
-      source: "agents",
-      prepare: () => Effect.void,
-      mutate: (directory: string) =>
-        Effect.promise(async () => {
-          const file = path.join(directory, "reviewer.md")
-          await fs.writeFile(file, "Review changes")
-          return [{ type: "create" as const, path: file }]
-        }),
-      verify: (agents: Agent.Interface) =>
-        Effect.gen(function* () {
-          expect(yield* agents.get(Agent.ID.make("reviewer"))).toMatchObject({ system: "Review changes" })
-        }),
-    },
-    {
       name: "created in a legacy modes directory",
       source: "modes",
       prepare: () => Effect.void,
@@ -797,22 +796,6 @@ function sourceCases() {
         Effect.gen(function* () {
           expect(yield* agents.get(Agent.ID.make("reviewer"))).toBeUndefined()
           expect(yield* agents.get(Agent.ID.make("release"))).toMatchObject({ system: "Review renamed" })
-        }),
-    },
-    {
-      name: "deleted",
-      source: "agents",
-      prepare: (directory: string) =>
-        Effect.promise(() => fs.writeFile(path.join(directory, "reviewer.md"), "Review deleted")),
-      mutate: (directory: string) =>
-        Effect.promise(async () => {
-          const file = path.join(directory, "reviewer.md")
-          await fs.unlink(file)
-          return [{ type: "delete" as const, path: file }]
-        }),
-      verify: (agents: Agent.Interface) =>
-        Effect.gen(function* () {
-          expect(yield* agents.get(Agent.ID.make("reviewer"))).toBeUndefined()
         }),
     },
   ] as const

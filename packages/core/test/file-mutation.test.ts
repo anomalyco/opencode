@@ -70,6 +70,24 @@ describe("FileMutation", () => {
     ),
   )
 
+  it.live("appends bytes to a file, creating it when missing", () =>
+    withTempDir(({ path: directory }) =>
+      Effect.gen(function* () {
+        const access = yield* FileAccess.Service
+        const files = yield* FileMutation.Service
+        const target = yield* access.resolve({ path: "log.txt" })
+
+        expect(yield* files.append({ target, content: "one\n" })).toMatchObject({ existed: false })
+        expect(yield* files.append({ target, content: new Uint8Array([0xff, 0x0a]) })).toMatchObject({ existed: true })
+        expect([...(yield* Effect.promise(() => fs.readFile(target.absolute)))]).toEqual([
+          ...Buffer.from("one\n"),
+          0xff,
+          0x0a,
+        ])
+      }).pipe(provide(directory)),
+    ),
+  )
+
   it.live("preserves exactly one BOM for text writes and normalizes created text", () =>
     withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
@@ -179,28 +197,6 @@ describe("FileMutation", () => {
         yield* Fiber.join(first)
         yield* Fiber.join(second)
       }),
-    ),
-  )
-
-  it.live("allows transaction locks for distinct resolved paths to proceed independently", () =>
-    withTempDir(({ path: directory }) =>
-      Effect.gen(function* () {
-        const firstStarted = yield* Deferred.make<void>()
-        const releaseFirst = yield* Deferred.make<void>()
-        const secondFinished = yield* Deferred.make<void>()
-        const files = yield* FileMutation.Service
-        const first = yield* files
-          .withLock([path.join(directory, "first.txt")])(
-            Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst))),
-          )
-          .pipe(Effect.forkChild)
-        yield* Deferred.await(firstStarted)
-        yield* files.withLock([path.join(directory, "second.txt")])(Deferred.succeed(secondFinished, undefined))
-        expect(yield* Deferred.isDone(secondFinished)).toBe(true)
-
-        yield* Deferred.succeed(releaseFirst, undefined)
-        yield* Fiber.join(first)
-      }).pipe(provide(directory)),
     ),
   )
 

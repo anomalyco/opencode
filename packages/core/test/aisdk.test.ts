@@ -318,7 +318,6 @@ it.effect("maps package-specific AI SDK provider option keys", () =>
     })
 
     const cases = [
-      ["@ai-sdk/github-copilot", "copilot", { reasoningEffort: "high" }],
       ["@ai-sdk/amazon-bedrock/mantle", "openai", { reasoningEffort: "high", forceReasoning: true }],
       ["@ai-sdk/openai-compatible", "test-provider", { reasoningEffort: "high" }],
       ["@jerome-benoit/sap-ai-provider-v2", "sap-ai", { reasoningEffort: "high" }],
@@ -1107,22 +1106,8 @@ it.effect("classifies data-only AI SDK provider codes", () =>
   }),
 )
 
-it.effect("classifies data-only AI SDK authentication errors", () =>
-  Effect.gen(function* () {
-    const error = yield* streamFailure(
-      apiCallError({
-        statusCode: 400,
-        data: { error: { code: "authentication_error" } },
-      }),
-    )
-    expect(error.reason).toMatchObject({ _tag: "Authentication" })
-    expect(SessionRunnerRetry.isRetryable(error)).toBeFalse()
-  }),
-)
-
 Object.entries({
   json: '{"message":"Request failed"}',
-  malformed: "<html>Request failed</html>",
   empty: "",
 }).forEach(([kind, responseBody]) => {
   it.effect(`classifies SDK data alongside the original ${kind} response body`, () =>

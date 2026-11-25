@@ -3,6 +3,7 @@ import {
   createShellRunState,
   INITIAL_SUBAGENT_RUN_STATE,
   shellRunProps,
+  stoppedShell,
   subagentRunProps,
   transitionShellRun,
   transitionSubagentRun,
@@ -136,37 +137,34 @@ describe("transitionSubagentRun", () => {
     return transitionSubagentRun(state, { type: "sync", props: subagentRunProps(tool, childBusy) })
   }
 
-  test("a subagent handed to the background runs until its child session goes idle", () => {
+  test("a subagent runs until its child session goes idle", () => {
     const delegating = step(INITIAL_SUBAGENT_RUN_STATE, { status: "streaming", metadata: {} })
 
     expect(delegating).toBe(INITIAL_SUBAGENT_RUN_STATE)
     expect(viewSubagentRun(delegating)).toMatchObject({ delegating: true, running: true })
 
-    const foreground = step(delegating, { status: "running", metadata: {} }, true)
+    const running = step(delegating, { status: "running", metadata: {} }, true)
 
-    expect(viewSubagentRun(foreground)).toEqual({
+    expect(viewSubagentRun(running)).toEqual({
       delegating: false,
       running: true,
       basicStatus: "running",
-      background: false,
     })
 
-    // The call completes with `status: "running"` once the subagent moved to the background.
+    // The call completes with `status: "running"` while the child keeps working in the background.
     const handoff = { status: "completed", metadata: { ...child, status: "running" } }
-    const background = step(foreground, handoff, true)
+    const background = step(running, handoff, true)
 
     expect(viewSubagentRun(background)).toEqual({
       delegating: false,
       running: true,
       basicStatus: "running",
-      background: true,
     })
     expect(step(background, handoff, true)).toBe(background)
     expect(viewSubagentRun(step(background, handoff))).toEqual({
       delegating: false,
       running: false,
       basicStatus: "completed",
-      background: true,
     })
   })
 
@@ -175,5 +173,27 @@ describe("transitionSubagentRun", () => {
 
     expect(viewSubagentRun(failed)).toMatchObject({ running: false, basicStatus: "error" })
     expect(viewSubagentRun(step(failed, { status: "error", metadata: {} }, true)).running).toBe(true)
+  })
+})
+
+describe("stoppedShell", () => {
+  const notice = "[full output saved to /tmp/sh_1.out]\n\nCommand interrupted by the user (shell ID: sh_1)."
+
+  const stopped = {
+    tool: "shell",
+    status: "error",
+    metadata: { interrupted: true, shellID: "sh_1", notice },
+    error: `step 1\nstep 2\n\n${notice}`,
+  }
+
+  test("splits a stopped call's error into its output and the notice, each once", () => {
+    expect(stoppedShell(stopped)).toEqual({ output: "step 1\nstep 2", notice })
+  })
+
+  test("leaves every other failure, and a stopped call whose error a plugin rewrote, as an error", () => {
+    expect(stoppedShell({ ...stopped, metadata: { notice } })).toBeUndefined()
+    expect(stoppedShell({ ...stopped, tool: "read" })).toBeUndefined()
+    expect(stoppedShell({ ...stopped, status: "completed" })).toBeUndefined()
+    expect(stoppedShell({ ...stopped, error: "rewritten by a plugin" })).toBeUndefined()
   })
 })

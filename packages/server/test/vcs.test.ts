@@ -6,6 +6,7 @@ import { Effect, Layer, Schedule } from "effect"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
 import { it } from "../../core/test/lib/effect"
 import { startServer } from "./fixture/server"
+import { serveRoutes } from "./fixture/routes"
 import { ServerFetch } from "../src/fetch"
 
 it.live(
@@ -14,33 +15,37 @@ it.live(
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-vcs-init-")))
       yield* Effect.promise(() => Bun.write(path.join(tmp.path, "hello.txt"), "hello\n"))
-      const server = yield* startServer(path.join(tmp.path, "config"))
-      const url = new URL("/api/vcs/init", server.base)
+      const server = yield* serveRoutes({
+        database: { path: ":memory:" },
+        config: { directory: path.join(tmp.path, "config") },
+        fs: { filewatcher: false },
+        models: { fetch: false },
+      })
+      yield* server.pluginsLoaded(tmp.path)
+      const url = new URL("/api/vcs/init", "http://opencode.local")
       url.searchParams.set("location[directory]", tmp.path)
       const before = yield* Effect.promise(() =>
-        fetch(new URL(`/api/location${url.search}`, server.base), { headers: server.headers }),
+        server.fetch(new URL(`/api/location${url.search}`, "http://opencode.local")),
       )
       expect(before.status).toBe(200)
       const original = yield* Effect.promise(() => before.json())
-      const initialized = yield* Effect.promise(() => fetch(url, { method: "POST", headers: server.headers }))
+      const initialized = yield* Effect.promise(() => server.fetch(url, { method: "POST" }))
       expect(initialized.status).toBe(204)
       expect(yield* Effect.promise(() => $`git -C ${tmp.path} rev-parse --is-inside-work-tree`.text())).toBe("true\n")
       url.pathname = "/api/location"
-      const location = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
+      const location = yield* Effect.promise(() => server.fetch(url))
       expect(location.status).toBe(200)
       const refreshed = yield* Effect.promise(() => location.json())
       expect(refreshed).toMatchObject({ project: { directory: tmp.path } })
       expect(refreshed.project.id).not.toBe(original.project.id)
-      const projects = yield* Effect.promise(() =>
-        fetch(new URL("/api/project", server.base), { headers: server.headers }),
-      )
+      const projects = yield* Effect.promise(() => server.fetch(new URL("/api/project", "http://opencode.local")))
       expect(yield* Effect.promise(() => projects.json())).toContainEqual(
         expect.objectContaining({ id: refreshed.project.id, vcs: "git" }),
       )
       url.pathname = "/api/vcs"
       const vcs = yield* Effect.tryPromise({
         try: async () => {
-          const response = await fetch(url, { headers: server.headers })
+          const response = await server.fetch(url)
           const body: unknown = await response.json()
           if (!isRecord(body) || !isRecord(body.data) || body.data.provider !== "git")
             throw new Error("Git provider not ready")
@@ -51,14 +56,14 @@ it.live(
       expect(vcs).toMatchObject({ data: { provider: "git" } })
       url.pathname = "/api/vcs/diff"
       url.searchParams.set("mode", "working")
-      const diff = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
+      const diff = yield* Effect.promise(() => server.fetch(url))
       expect(diff.status).toBe(200)
       expect(yield* Effect.promise(() => diff.json())).toMatchObject({
         data: expect.arrayContaining([expect.objectContaining({ file: "hello.txt" })]),
       })
       url.searchParams.delete("mode")
       url.pathname = "/api/vcs/init"
-      const repeated = yield* Effect.promise(() => fetch(url, { method: "POST", headers: server.headers }))
+      const repeated = yield* Effect.promise(() => server.fetch(url, { method: "POST" }))
       expect(repeated.status).toBe(409)
     }),
   15_000,
@@ -85,11 +90,17 @@ it.live(
   () =>
     Effect.gen(function* () {
       const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-vcs-provider-")))
-      const server = yield* startServer(path.join(tmp.path, "config"))
-      const url = new URL("/api/vcs/init", server.base)
+      const server = yield* serveRoutes({
+        database: { path: ":memory:" },
+        config: { directory: path.join(tmp.path, "config") },
+        fs: { filewatcher: false },
+        models: { fetch: false },
+      })
+      yield* server.pluginsLoaded(tmp.path)
+      const url = new URL("/api/vcs/init", "http://opencode.local")
       url.searchParams.set("location[directory]", tmp.path)
       url.searchParams.set("provider", "unknown")
-      const unsupported = yield* Effect.promise(() => fetch(url, { method: "POST", headers: server.headers }))
+      const unsupported = yield* Effect.promise(() => server.fetch(url, { method: "POST" }))
       expect(unsupported.status).toBe(400)
       expect(yield* Effect.promise(() => unsupported.json())).toMatchObject({
         _tag: "InvalidRequestError",
@@ -98,7 +109,7 @@ it.live(
       expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".git", "HEAD")).exists())).toBe(false)
       expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".hg", "requires")).exists())).toBe(false)
       url.searchParams.set("provider", "git")
-      const initialized = yield* Effect.promise(() => fetch(url, { method: "POST", headers: server.headers }))
+      const initialized = yield* Effect.promise(() => server.fetch(url, { method: "POST" }))
       expect(initialized.status).toBe(204)
       expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".git", "HEAD")).exists())).toBe(true)
     }),
@@ -108,49 +119,48 @@ it.live(
 it.live("returns 501 when a registered VCS provider has no initializer", () =>
   Effect.gen(function* () {
     const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-vcs-no-init-")))
-    const handler = yield* ServerFetch.make(
+    const server = yield* serveRoutes(
       {
         database: { path: ":memory:" },
         config: { directory: tmp.path },
         fs: { filewatcher: false },
         models: { fetch: false },
       },
-      {
-        overrides: [
-          SdkPlugins.node.replace(
-            Layer.succeed(
-              SdkPlugins.Service,
-              SdkPlugins.Service.of({
-                register: () => Effect.void,
-                all: () => [
-                  {
-                    id: "read-only-vcs",
-                    revision: "test",
-                    effect: (ctx) =>
-                      ctx.vcs
-                        .transform((editor) => {
-                          editor.add({
-                            id: "read-only",
-                            name: "Read-only VCS",
-                            info: () => Effect.succeed({ branch: {} }),
-                            branches: () => Effect.succeed([]),
-                            status: () => Effect.succeed([]),
-                            diff: () => Effect.succeed([]),
-                          })
+      [
+        SdkPlugins.node.replace(
+          Layer.succeed(
+            SdkPlugins.Service,
+            SdkPlugins.Service.of({
+              register: () => Effect.void,
+              all: () => [
+                {
+                  id: "read-only-vcs",
+                  revision: "test",
+                  effect: (ctx) =>
+                    ctx.vcs
+                      .transform((editor) => {
+                        editor.add({
+                          id: "read-only",
+                          name: "Read-only VCS",
+                          info: () => Effect.succeed({ branch: {} }),
+                          branches: () => Effect.succeed([]),
+                          status: () => Effect.succeed([]),
+                          diff: () => Effect.succeed([]),
                         })
-                        .pipe(Effect.asVoid),
-                  },
-                ],
-              }),
-            ),
+                      })
+                      .pipe(Effect.asVoid),
+                },
+              ],
+            }),
           ),
-        ],
-      },
+        ),
+      ],
     )
+    yield* server.pluginsLoaded(tmp.path)
     const url = new URL("http://opencode.local/api/vcs/init")
     url.searchParams.set("location[directory]", tmp.path)
     url.searchParams.set("provider", "read-only")
-    const response = yield* Effect.promise(() => handler(new Request(url, { method: "POST" })))
+    const response = yield* Effect.promise(() => server.handler(new Request(url, { method: "POST" })))
     expect(response.status).toBe(501)
     expect(yield* Effect.promise(() => response.json())).toMatchObject({
       _tag: "VcsInitNotSupportedError",
@@ -170,17 +180,23 @@ describeHg("Mercurial initialization", () => {
       Effect.gen(function* () {
         const tmp = yield* Effect.acquireDisposable(Effect.promise(() => tmpdir("opencode-vcs-hg-init-")))
         yield* Effect.promise(() => Bun.write(path.join(tmp.path, "hello.txt"), "hello\n"))
-        const server = yield* startServer(path.join(tmp.path, "config"))
-        const url = new URL("/api/vcs/init", server.base)
+        const server = yield* serveRoutes({
+          database: { path: ":memory:" },
+          config: { directory: path.join(tmp.path, "config") },
+          fs: { filewatcher: false },
+          models: { fetch: false },
+        })
+        yield* server.pluginsLoaded(tmp.path)
+        const url = new URL("/api/vcs/init", "http://opencode.local")
         url.searchParams.set("location[directory]", tmp.path)
         url.searchParams.set("provider", "hg")
-        const initialized = yield* Effect.promise(() => fetch(url, { method: "POST", headers: server.headers }))
+        const initialized = yield* Effect.promise(() => server.fetch(url, { method: "POST" }))
         expect(initialized.status).toBe(204)
         expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, ".hg", "requires")).exists())).toBe(true)
         url.pathname = "/api/vcs"
         const info = yield* Effect.tryPromise({
           try: async () => {
-            const response = await fetch(url, { headers: server.headers })
+            const response = await server.fetch(url)
             const body: unknown = await response.json()
             if (!isRecord(body) || !isRecord(body.data) || body.data.provider !== "hg")
               throw new Error("Mercurial provider not ready")
@@ -191,7 +207,7 @@ describeHg("Mercurial initialization", () => {
         expect(info).toMatchObject({ data: { provider: "hg" } })
         url.pathname = "/api/vcs/diff"
         url.searchParams.set("mode", "working")
-        const diff = yield* Effect.promise(() => fetch(url, { headers: server.headers }))
+        const diff = yield* Effect.promise(() => server.fetch(url))
         expect(diff.status).toBe(200)
         expect(yield* Effect.promise(() => diff.json())).toMatchObject({
           data: expect.arrayContaining([expect.objectContaining({ file: "hello.txt" })]),
@@ -199,7 +215,7 @@ describeHg("Mercurial initialization", () => {
         url.pathname = "/api/vcs/init"
         url.searchParams.delete("mode")
         url.searchParams.set("provider", "git")
-        const repeated = yield* Effect.promise(() => fetch(url, { method: "POST", headers: server.headers }))
+        const repeated = yield* Effect.promise(() => server.fetch(url, { method: "POST" }))
         expect(repeated.status).toBe(409)
       }),
     15_000,

@@ -84,7 +84,7 @@ export function SettingsProjectRow(props: {
                 readOnly={rename.saving()}
                 aria-busy={rename.saving() || undefined}
                 class="w-full text-[13px] font-[530] leading-5 tracking-[-0.04px] text-v2-text-text-base outline-none"
-                style={{ "--inline-input-shadow": "none", "border-radius": "0", "text-align": "start" }}
+                style={{ "border-radius": "0", "text-align": "start" }}
                 onInput={(event) => rename.input(event.currentTarget.value)}
                 onKeyDown={rename.keyDown}
                 onBlur={rename.blur}
@@ -97,7 +97,7 @@ export function SettingsProjectRow(props: {
             type="button"
             aria-label={displayName(props.project)}
             title={props.project.worktree}
-            class="flex h-full min-w-0 flex-1 items-center gap-2 rounded-[4px] bg-transparent text-start focus-visible:outline-none focus-visible:[box-shadow:inset_0_0_0_1px_var(--v2-border-border-focus)]"
+            class="flex h-full min-w-0 flex-1 items-center gap-2 rounded-[4px] bg-transparent text-start focus-visible:outline-none"
             onClick={() => props.onOpen(props.project)}
           >
             <ProjectIcon project={props.project} class="shrink-0" />

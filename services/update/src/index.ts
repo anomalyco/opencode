@@ -36,19 +36,24 @@ const select =
   "SELECT channel, name, distribution, version, metadata, active, minimum, time_created, time_updated FROM artifact"
 const audience = "https://update.opencode.ai"
 const githubKeys = createRemoteJWKSet(new URL("https://token.actions.githubusercontent.com/.well-known/jwks"))
+const hosts = ["opencode.ai", "dev.opencode.ai"]
+const prefix = "/update"
+// Cloudflare Access sits in front of the admin routes; the Worker also verifies the identity it asserts.
+const accessTeam = "https://anomalyco.cloudflareaccess.com"
+const accessAudience = "d369a93ad5ce8cf96eebe30620488dd2537427c92fed439c310288832a282987"
+const accessKeys = createRemoteJWKSet(new URL(`${accessTeam}/cdn-cgi/access/certs`))
 // Clients poll every lookup path, and querying D1 on each request overloaded it.
 // Cache the caller-independent reads per isolate; caller-specific selection still runs per request.
 const readTtl = 60_000
-const reads = new Map<string, { expires: number; value: Promise<unknown> }>()
+const reads = new Map<string, { expires: number; value: unknown }>()
 
 export default {
   async fetch(request: Request, env: Env, ctx: Pick<ExecutionContext, "waitUntil">): Promise<Response> {
     const url = new URL(request.url)
-    // The legacy hostname only exposes /admin, covered by its existing Access policy.
-    const prefix =
-      url.hostname !== "update.opencode.ai" && (url.pathname === "/update" || url.pathname.startsWith("/update/"))
-        ? "/update"
-        : ""
+    const host = url.hostname.replace(/\.$/, "").toLowerCase()
+    if (!hosts.includes(host) || !(url.pathname === prefix || url.pathname.startsWith(`${prefix}/`))) {
+      return new Response("Not found", { status: 404 })
+    }
     const pathname = url.pathname.slice(prefix.length) || "/"
     ctx.waitUntil(
       env.EVENTS.send([
@@ -65,16 +70,23 @@ export default {
             cf_colo: request.cf?.colo,
           },
         },
-      ]).catch(() => console.error("Failed to send update request event to the data lake")),
+      ]).catch((error) => console.error("Failed to send update request event to the data lake", error)),
     )
 
     if (pathname === "/") return json({ service: "opencode-update" })
-    if (pathname === "/admin" && request.method === "GET") return admin(request, env, prefix)
-    if (pathname === "/admin/activate" && request.method === "POST") return markArtifact(request, env, "active", prefix)
-    if (pathname === "/admin/minimum" && request.method === "POST") return markArtifact(request, env, "minimum", prefix)
-    if (pathname === "/admin/rollout" && request.method === "POST") return configureRollout(request, env, prefix)
+    if (pathname === "/admin" || pathname.startsWith("/admin/")) {
+      const email = await verifyAccess(request)
+      if (!email) return json({ error: "Forbidden" }, 403)
+      if (request.method !== "GET") console.log("Admin mutation", { email, method: request.method, path: pathname })
+    }
+    if (pathname === "/admin" && request.method === "GET") return admin(request, env)
+    if (pathname === "/admin/activate" && request.method === "POST") return markArtifact(request, env, "active")
+    if (pathname === "/admin/minimum" && request.method === "POST") return markArtifact(request, env, "minimum")
+    if (pathname === "/admin/rollout" && request.method === "POST") return configureRollout(request, env)
     if (pathname === "/api/publish" && request.method === "POST") return publishArtifact(request, env)
-    if (request.method !== "GET") return new Response("Method not allowed", { status: 405 })
+    // Download managers probe with HEAD before downloading; the runtime drops the body from HEAD responses.
+    const head = request.method === "HEAD" && pathname.startsWith("/api/")
+    if (request.method !== "GET" && !head) return new Response("Method not allowed", { status: 405 })
 
     const [root, ...path] = pathname.split("/").filter(Boolean)
     if (root !== "api" || path.length < 1 || path.length > 4 || !path.every(validIdentifier)) {
@@ -163,7 +175,10 @@ async function artifactDistribution(
   if (manifest) {
     const metadata = decodeMetadata(artifact.metadata)
     if (name === "desktop" && /^latest(?:-mac|-linux(?:-arm64)?)?\.yml$/.test(manifest)) {
-      const value = isRecord(metadata) && isRecord(metadata.manifests) ? metadata.manifests[manifest.replace(/^latest/, "desktop")] : undefined
+      const value =
+        isRecord(metadata) && isRecord(metadata.manifests)
+          ? metadata.manifests[manifest.replace(/^latest/, "desktop")]
+          : undefined
       if (!isRecord(value)) return json({ error: "Manifest not found" }, 404)
       return new Response(stringify({ ...value, version: artifact.version }), {
         headers: { "Content-Type": "application/yaml; charset=utf-8", "Cache-Control": "no-store" },
@@ -265,7 +280,7 @@ function rolloutCandidates(db: D1Database, active: ArtifactRow, floor: number) {
   )
 }
 
-async function configureRollout(request: Request, env: Env, prefix: string) {
+async function configureRollout(request: Request, env: Env) {
   const invalid = validMutation(request)
   if (invalid) return invalid
   const form = await request.formData()
@@ -300,7 +315,7 @@ function releaseVersion(input: string) {
   )
 }
 
-async function admin(request: Request, env: Env, prefix: string) {
+async function admin(request: Request, env: Env) {
   const url = new URL(request.url)
   const rollouts = await env.DB.prepare(
     `SELECT channels.channel, COALESCE(channel_rollout.duration_hours, 0) AS duration_hours
@@ -453,7 +468,7 @@ async function publishArtifact(request: Request, env: Env) {
   return json({ published: true })
 }
 
-async function markArtifact(request: Request, env: Env, flag: "active" | "minimum", prefix: string) {
+export async function markArtifact(request: Request, env: Env, flag: "active" | "minimum") {
   const invalid = validMutation(request)
   if (invalid) return invalid
   const form = await request.formData()
@@ -614,16 +629,20 @@ export function resolveChannel(channel: string) {
   return channel === "next" ? "beta" : channel
 }
 
-function cachedRead<T>(key: string, load: () => Promise<T>) {
-  const now = Date.now()
+async function cachedRead<T>(key: string, load: () => Promise<T>) {
   const hit = reads.get(key)
   if (hit) {
     reads.delete(key)
-    if (hit.expires > now) {
+    if (hit.expires > Date.now()) {
       reads.set(key, hit)
-      return hit.value as Promise<T>
+      return hit.value as T
     }
   }
+  // Workers ties a D1 result stream to the request that started the query, so sharing an in-flight
+  // promise fails other requests with "Cannot perform I/O on behalf of a different request".
+  // Only settled results are shared. Failed reads throw before they are cached, so the next request retries D1.
+  const value = await load()
+  const now = Date.now()
   // Lookup paths are caller-controlled identifiers, so bound the number of retained entries.
   if (reads.size >= 1_000) {
     reads.forEach((entry, k) => {
@@ -634,13 +653,25 @@ function cachedRead<T>(key: string, load: () => Promise<T>) {
       if (oldest !== undefined) reads.delete(oldest)
     }
   }
-  // Concurrent callers share one in-flight read. Failed reads are dropped so the next request retries D1.
-  const value = load()
   reads.set(key, { expires: now + readTtl, value })
-  value.catch(() => {
-    if (reads.get(key)?.value === value) reads.delete(key)
-  })
   return value
+}
+
+async function verifyAccess(request: Request) {
+  const token =
+    request.headers.get("Cf-Access-Jwt-Assertion") ??
+    request.headers
+      .get("Cookie")
+      ?.split(";")
+      .map((part) => part.trim())
+      .find((part) => part.startsWith("CF_Authorization="))
+      ?.slice("CF_Authorization=".length)
+  if (!token) return
+  const result = await jwtVerify(token, accessKeys, { issuer: accessTeam, audience: accessAudience }).catch(
+    () => undefined,
+  )
+  if (typeof result?.payload.email !== "string") return
+  return result.payload.email
 }
 
 function validMutation(request: Request) {

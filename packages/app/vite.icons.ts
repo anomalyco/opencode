@@ -6,7 +6,7 @@ export function icons(channel: string): Plugin {
   const selected = channel === "beta" || channel === "prod" ? channel : "dev"
   const prefix = `icons/${selected}`
 
-  const files = [
+  const iconFiles = [
     ...Object.entries({
       "favicon.ico": "icon.ico",
       "apple-touch-icon.png": "ios/AppIcon-60x60@3x.png",
@@ -17,24 +17,36 @@ export function icons(channel: string): Plugin {
       source: readFileSync(new URL(`../desktop/icons/${selected}/${source}`, import.meta.url)),
       type: name.endsWith(".ico") ? "image/x-icon" : "image/png",
     })),
-    {
-      fileName: "site.webmanifest",
-      source: JSON.stringify({
-        ...manifest,
-        icons: manifest.icons.map((icon) => ({ ...icon, src: `/${prefix}${icon.src}` })),
-      }),
-      type: "application/manifest+json",
-    },
   ]
+
+  // Vite's resolved `base`, such as `/opencode/` for `vite build --base=/opencode/`.
+  let base = "/"
+
+  const webManifest = () => ({
+    fileName: "site.webmanifest",
+    source: JSON.stringify({
+      ...manifest,
+      id: base,
+      start_url: base,
+      scope: base,
+      icons: manifest.icons.map((icon) => ({ ...icon, src: `${base}${prefix}${icon.src}` })),
+    }),
+    type: "application/manifest+json",
+  })
+
+  const files = () => [...iconFiles, webManifest()]
 
   return {
     name: "opencode-app:icons",
+    configResolved(config) {
+      base = config.base
+    },
     generateBundle() {
-      files.forEach((file) => this.emitFile({ type: "asset", fileName: file.fileName, source: file.source }))
+      files().forEach((file) => this.emitFile({ type: "asset", fileName: file.fileName, source: file.source }))
     },
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
-        const file = files.find((file) => `/${file.fileName}` === request.url?.split("?")[0])
+        const file = files().find((file) => `${base}${file.fileName}` === request.url?.split("?")[0])
 
         if (!file) return next()
         response.setHeader("Content-Type", file.type)
@@ -45,8 +57,8 @@ export function icons(channel: string): Plugin {
       order: "pre",
       handler(html) {
         return html
-          .replace("%OPENCODE_FAVICON%", `/${prefix}/favicon.ico`)
-          .replace("%OPENCODE_APPLE_TOUCH_ICON%", `/${prefix}/apple-touch-icon.png`)
+          .replace("%OPENCODE_FAVICON%", `${base}${prefix}/favicon.ico`)
+          .replace("%OPENCODE_APPLE_TOUCH_ICON%", `${base}${prefix}/apple-touch-icon.png`)
       },
     },
   }

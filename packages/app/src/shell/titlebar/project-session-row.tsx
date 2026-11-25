@@ -1,4 +1,4 @@
-import { createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
+import { createMemo, createSignal, onCleanup, Show, untrack, type JSX } from "solid-js"
 import { useQueryClient } from "@tanstack/solid-query"
 import type { SessionInfo } from "@opencode/client/promise"
 import { ActivityRing } from "@opencode/ui/activity-ring"
@@ -16,6 +16,9 @@ import { errorMessage } from "@/shell/layout/helpers"
 import { showToast } from "@/shell/notifications/toast"
 import { sessionTreeIDs } from "@/session/requests/session-request-tree"
 import { sessionLabel } from "@/session/title"
+import { createSessionExporter } from "@/session/commands/export-session"
+import { createSessionRenamer } from "@/session/commands/rename-session"
+import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { notifySessionTabsRemoved } from "./session-events"
 import {
   createSessionRenameDialogState,
@@ -24,6 +27,9 @@ import {
   type SessionRenameDialogEffect,
   type SessionRenameDialogEvent,
 } from "./session-rename-dialog-machine"
+import type { Project } from "@/runtime/server/types"
+import { ProjectIcon } from "@/shell/layout/project-icon"
+import { MutedIcon } from "./tab-nav"
 import "./tab-nav.css"
 
 export function ProjectSessionRow(props: {
@@ -31,6 +37,16 @@ export function ProjectSessionRow(props: {
   session: SessionInfo
   openTab: boolean
   active: boolean
+  /** A faint trailing label, such as the server a session belongs to. */
+  label?: string
+  /** Extra nesting steps of 14px, for subagent sessions and nested groups. */
+  depth?: number
+  /** Shows the project avatar in the leading slot, where no project header names it. */
+  project?: Project
+  /** Marks a session whose notifications are muted, in place of its unread dot. */
+  muted?: boolean
+  /** Menu items shown above the row's own. */
+  menuItems?: () => JSX.Element
   onOpen: () => void
 }) {
   const language = useLanguage()
@@ -45,24 +61,18 @@ export function ProjectSessionRow(props: {
 
   const ctx = () => global.serverCtx(props.server)
 
+  const exporter = createSessionExporter()
+
+  const rename = createSessionRenamer()
+
+  const exportTarget = () => ({ server: props.server, sessionID: props.session.id })
+
   const status = useSessionTabAvatarState(
     () => props.server,
     () => props.session.id,
     () => true,
     () => props.session,
   )
-
-  // Refreshes the title even when the dialog already stopped waiting, so a late save still shows.
-  const rename = async (title: string) => {
-    const current = ctx()
-
-    if (!current) throw new Error(language.t("common.requestFailed"))
-    await current.sdk.api.session.update({ sessionID: props.session.id, title })
-    current.data.session.remember({ ...(current.data.session.get(props.session.id) ?? props.session), title })
-    current.data.session.invalidate(props.session.id)
-    void current.data.session.sync(props.session.id).catch(() => undefined)
-    void queryClient.invalidateQueries({ queryKey: ["home-sessions", connection()], exact: true })
-  }
 
   function DeleteDialog() {
     const confirm = () => {
@@ -124,12 +134,20 @@ export function ProjectSessionRow(props: {
         type="button"
         data-titlebar-tab-action
         data-state={props.active ? "pressed" : undefined}
-        class="relative flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] ps-8 pe-2 text-start text-[13px] leading-[var(--line-height-compact)] font-medium focus-visible:outline-none"
+        class="relative flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] ps-8 pe-2 text-start text-[13px] leading-[var(--line-height-compact)] font-medium"
         classList={{ "text-v2-text-text-base": props.active, "text-v2-text-text-faint": !props.active }}
         aria-current={props.active ? "page" : undefined}
         title={sessionLabel(props.session)}
+        style={props.depth ? { "padding-inline-start": `calc(2rem + ${props.depth * 14}px)` } : undefined}
         onClick={props.onOpen}
       >
+        <Show when={props.project && !props.openTab ? props.project : undefined}>
+          {(project) => (
+            <span class="absolute start-2 top-1/2 flex size-4 -translate-y-1/2 items-center justify-center">
+              <ProjectIcon project={project()} />
+            </span>
+          )}
+        </Show>
         <Show when={props.openTab}>
           <span
             role="img"
@@ -143,12 +161,24 @@ export function ProjectSessionRow(props: {
         <span class="min-w-0 flex-1 truncate" dir="auto">
           {sessionLabel(props.session)}
         </span>
+        <Show when={props.label}>
+          {(label) => (
+            <span class="max-w-[40%] shrink-0 truncate text-[11px] leading-[var(--line-height-compact)] text-v2-text-text-faint [font-weight:400]">
+              {label()}
+            </span>
+          )}
+        </Show>
         <span class="flex size-4 shrink-0 items-center justify-center">
           <Show
             when={status.loading()}
             fallback={
-              <Show when={status.unread() && !props.active}>
-                <span class="size-1.5 rounded-full bg-v2-text-text-base" />
+              <Show
+                when={!props.muted}
+                fallback={<MutedIcon class="text-v2-icon-icon-faint" />}
+              >
+                <Show when={status.unread() && !props.active}>
+                  <span class="size-1.5 rounded-full bg-v2-text-text-base" />
+                </Show>
               </Show>
             }
           >
@@ -162,14 +192,36 @@ export function ProjectSessionRow(props: {
             if (dialog.active) event.preventDefault()
           }}
         >
+          <Show when={props.menuItems}>
+            {(items) => (
+              <>
+                {items()()}
+                <Menu.Separator />
+              </>
+            )}
+          </Show>
           <Menu.Item
             disabled={!ctx()}
-            onSelect={() => dialog.show(() => <RenameDialog title={sessionLabel(props.session)} onRename={rename} />)}
+            onSelect={() =>
+              dialog.show(() => (
+                <RenameDialog
+                  title={sessionLabel(props.session)}
+                  onRename={(title) => rename(props.server, props.session, title)}
+                />
+              ))
+            }
           >
             {language.t("common.rename")}
           </Menu.Item>
+          <Menu.Item
+            disabled={!ctx() || exporter.exporting(exportTarget())}
+            onSelect={() => exporter.export(exportTarget())}
+          >
+            {language.t("common.export")}…
+          </Menu.Item>
+          <SessionReadMenuItem server={props.server} session={props.session} />
           <Menu.Separator />
-          <Menu.Item data-variant="critical" disabled={!ctx()} onSelect={() => dialog.show(() => <DeleteDialog />)}>
+          <Menu.Item disabled={!ctx()} onSelect={() => dialog.show(() => <DeleteDialog />)}>
             {language.t("common.delete")}…
           </Menu.Item>
         </Menu.Context.Content>
@@ -178,7 +230,7 @@ export function ProjectSessionRow(props: {
   )
 }
 
-function RenameDialog(props: { title: string; onRename: (title: string) => Promise<void> }) {
+export function RenameDialog(props: { title: string; onRename: (title: string) => Promise<void> }) {
   const language = useLanguage()
 
   const dialog = useDialog()

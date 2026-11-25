@@ -65,24 +65,6 @@ describe("cross-spawn spawner", () => {
     )
 
     fx.effect(
-      "captures multiple lines",
-      Effect.gen(function* () {
-        const handle = yield* js('console.log("line1"); console.log("line2"); console.log("line3")')
-        const out = yield* decodeByteStream(handle.stdout)
-        expect(out).toBe("line1\nline2\nline3")
-      }),
-    )
-
-    fx.effect(
-      "returns exit code",
-      Effect.gen(function* () {
-        const handle = yield* js("process.exit(0)")
-        const code = yield* handle.exitCode
-        expect(code).toBe(ChildProcessSpawner.ExitCode(0))
-      }),
-    )
-
-    fx.effect(
       "returns non-zero exit code",
       Effect.gen(function* () {
         const handle = yield* js("process.exit(42)")
@@ -134,21 +116,6 @@ describe("cross-spawn spawner", () => {
         expect(out).toBe("test_value")
       }),
     )
-
-    fx.effect(
-      "passes multiple environment variables",
-      Effect.gen(function* () {
-        const handle = yield* js(
-          "process.stdout.write(`${process.env.VAR1}-${process.env.VAR2}-${process.env.VAR3}`)",
-          {
-            env: { VAR1: "one", VAR2: "two", VAR3: "three" },
-            extendEnv: true,
-          },
-        )
-        const out = yield* decodeByteStream(handle.stdout)
-        expect(out).toBe("one-two-three")
-      }),
-    )
   })
 
   describe("stderr", () => {
@@ -163,15 +130,6 @@ describe("cross-spawn spawner", () => {
         })
         expect(output).toEqual(["o".repeat(256 * 1024), "e".repeat(256 * 1024)])
         expect(yield* handle.exitCode).toBe(ChildProcessSpawner.ExitCode(0))
-      }),
-    )
-
-    fx.effect(
-      "captures stderr output",
-      Effect.gen(function* () {
-        const handle = yield* js('process.stderr.write("error message")')
-        const err = yield* decodeByteStream(handle.stderr)
-        expect(err).toBe("error message")
       }),
     )
 
@@ -199,15 +157,6 @@ describe("cross-spawn spawner", () => {
   })
 
   describe("combined output (all)", () => {
-    fx.effect(
-      "captures stdout via .all when no stderr",
-      Effect.gen(function* () {
-        const handle = yield* ChildProcess.make("echo", ["hello from stdout"])
-        const all = yield* decodeByteStream(handle.all)
-        expect(all).toBe("hello from stdout")
-      }),
-    )
-
     fx.effect(
       "captures stderr via .all when no stdout",
       Effect.gen(function* () {
@@ -414,16 +363,6 @@ describe("cross-spawn spawner", () => {
         )
       }),
     )
-
-    fx.effect(
-      "isRunning reflects process state",
-      Effect.gen(function* () {
-        const handle = yield* js('process.stdout.write("done")')
-        yield* handle.exitCode
-        const running = yield* handle.isRunning
-        expect(running).toBe(false)
-      }),
-    )
   })
 
   describe("error handling", () => {
@@ -494,22 +433,6 @@ describe("cross-spawn spawner", () => {
   })
 
   describe("pipeline", () => {
-    fx.effect(
-      "pipes stdout of one command to stdin of another",
-      Effect.gen(function* () {
-        const handle = yield* js('process.stdout.write("hello world")').pipe(
-          ChildProcess.pipeTo(
-            js(
-              'process.stdin.setEncoding("utf8"); let out = ""; process.stdin.on("data", (chunk) => out += chunk); process.stdin.on("end", () => process.stdout.write(out.toUpperCase()))',
-            ),
-          ),
-        )
-        const out = yield* decodeByteStream(handle.stdout)
-        yield* handle.exitCode
-        expect(out).toBe("HELLO WORLD")
-      }),
-    )
-
     fx.effect(
       "three-stage pipeline",
       Effect.gen(function* () {

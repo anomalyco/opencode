@@ -1,0 +1,126 @@
+---
+title: "Enterprise"
+description: "Control which models, providers, and integrations people in your organization can use in OpenCode."
+---
+
+Use [policies](/policies) to control what OpenCode can use on your organization's machines. Put them in managed
+configuration so users and projects can't change them.
+
+## Deploy
+
+Put the policies in the system configuration file:
+
+| Platform | File                                                  |
+| -------- | ----------------------------------------------------- |
+| macOS    | `/Library/Application Support/opencode/opencode.json` |
+| Linux    | `/etc/opencode/opencode.json`                         |
+| Windows  | `%ProgramData%\opencode\opencode.json`                |
+
+On macOS, you can also deploy them with MDM as managed preferences for the `ai.opencode.managed` domain. See
+[config locations](/config#locations).
+
+```jsonc title="/etc/opencode/opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+Policies in these files outrank user and project configuration, so a user or repository can't allow something you deny.
+See [precedence](/policies#precedence).
+
+## Block free models
+
+Deny the signed-out free tier. Everything else still works, and people can connect their own providers and accounts.
+
+```jsonc
+{
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+The free tier is the `opencode` integration with no account. Signed-in Console accounts are `opencode#<account>`, so
+this statement doesn't affect them.
+
+A Console workspace can also offer free models. To block them:
+
+- In your own workspace, turn off **Free models** on the Console's Models tab. See
+  [OpenCode models](/console/providers#opencode-models).
+- To hide free models in every account, set `OPENCODE_DISABLE_FREE_MODELS=1` on the OpenCode service. See
+  [free models](/models#free-models).
+
+## Require your Console workspace
+
+Allow only your organization's Console workspace. Nothing else can be connected or used.
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.connect", "resource": "*", "effect": "deny" },
+    { "action": "integration.connect", "resource": "opencode", "effect": "allow" },
+    { "action": "integration.use", "resource": "*", "effect": "deny" },
+    { "action": "integration.use", "resource": "opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1", "effect": "allow" },
+  ],
+}
+```
+
+- `/connect` lists only the OpenCode Console, so people can sign in.
+- Only your workspace works. The free tier, personal Console accounts, other organizations, API keys from environment
+  variables, and providers from `opencode.json` are blocked.
+- Your workspace's models, MCP servers, and web search work. Change them in the Console without redeploying the policy.
+
+Replace `org_01M3CAP8H43Z49CER6NT0Y3ZF1` with your workspace's organization ID. To block free models in the workspace
+too, turn off **Free models** in the Console.
+
+## Allow only approved providers
+
+Deny every provider, then allow the ones you approve. This example allows only an internal OpenAI-compatible gateway.
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+A denied provider is removed even when someone has credentials for it. See [providers](/policies#providers).
+
+## Restrict MCP servers and tools
+
+Allow only approved MCP servers, and block tools you don't want agents to run.
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "read:*/.ssh/*", "effect": "deny" },
+  ],
+}
+```
+
+See [MCP servers, skills, and plugins](/policies#mcp-servers-skills-and-plugins) and [tools](/policies#tools).
+
+## Check it works
+
+- Run `/connect` and `/models` as a user and confirm only what you allowed appears.
+- Check the server log for warnings. A statement that fails validation is dropped and the rest still apply.
+- A blocked tool call fails with `Blocked by configuration policy`.
+
+## Versions
+
+| Action                                                                    | Requires |
+| ------------------------------------------------------------------------- | -------- |
+| `integration.connect`, `integration.use`, `mcp.use`, `skill.use`, `plugin.use` | 2.2.3    |
+| `websearch.use`                                                           | 2.2.6    |
+
+Older clients ignore these statements.

@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} ժամանակը սպառվել է {{timeout}}ms",
   "error.failedPort": "Չհաջողվեց ստանալ միացքը",
   "menu.remove": "Հեռացնել",
+  "error.busy": "{{distro}}-ն զբաղված է այլ առաջադրանքով։ Կրկին փորձեք, երբ այն ավարտվի։",
 }

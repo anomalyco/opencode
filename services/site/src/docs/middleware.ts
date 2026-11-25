@@ -2,18 +2,19 @@ import { createMiddleware } from "@solidjs/start/middleware"
 import { assets } from "#resource"
 import { config } from "~/config"
 import { securityHeaders, setSecurityHeaders } from "~/lib/security-headers"
-import { base } from "./config"
+import type { DocsSet } from "./config"
 import { docsSlugs } from "virtual:docs-pages"
 import { renderLlmsTxt } from "./lib/llms"
 import { docsHref, docsMarkdownHref } from "./lib/navigation"
 import { renderSitemap } from "./lib/sitemap"
-import { docsRoute } from "./route"
+import { docsHostRedirect, docsRoute } from "./route"
 
-// Everything under /docs. Docs pages and their Markdown twins are static assets prerendered at build
-// (script/build.ts). Docs URLs come here first (cloudflare.config.ts runWorkerFirst), so one URL can
-// answer with the page or, to `Accept: text/markdown`, its Markdown. The development server has no
-// assets and renders instead. The docs' own files (config.ts `files`) are plain assets. A /docs URL
-// without a page here goes to the V1 docs (route.ts).
+// Everything under /docs and /v1/docs (config.ts `docsSets`). Docs pages and their Markdown twins are
+// static assets prerendered at build (script/build.ts). Docs URLs come here first (cloudflare.config.ts
+// runWorkerFirst), so one URL can answer with the page or, to `Accept: text/markdown`, its Markdown.
+// The development server has no assets and renders instead. The docs' own files (config.ts `files`)
+// are plain assets. A /docs URL without a page here goes to the V1 docs (route.ts), and the V1 docs'
+// old host, docs.opencode.ai, to the same path here.
 
 const pageHeaders = {
   "Cache-Control": "public, max-age=300, stale-while-revalidate=3600",
@@ -24,14 +25,17 @@ const markdownType = "text/markdown; charset=utf-8"
 export const docsMiddleware = createMiddleware({
   async onRequest(event) {
     const url = new URL(event.request.url)
+    const host = docsHostRedirect(url)
+    if (host) return new Response(null, { status: 301, headers: { Location: host } })
     const route = docsRoute(url, event.request.headers.get("accept") ?? "", docsSlugs)
     if (!route) return
     setSecurityHeaders(event.response.headers)
-    if (route.type === "redirect") return new Response(null, { status: route.status, headers: { Location: route.location } })
+    if (route.type === "redirect")
+      return new Response(null, { status: route.status, headers: { Location: route.location } })
     if (route.type === "missing") return notFound()
     if (route.type === "file") {
-      // Static assets in the Worker, so only the development server reaches these two.
-      if (route.path === "/llms.txt")
+      // Static assets in the Worker, so only the development server reaches these two, for the latest docs.
+      if (route.path === "/llms.txt" && route.set.id === "latest")
         return new Response(renderLlmsTxt(new URL(config.baseUrl)), {
           headers: { "Content-Type": "text/plain; charset=utf-8" },
         })
@@ -43,39 +47,33 @@ export const docsMiddleware = createMiddleware({
       return notFound()
     }
 
-    const response = await asset(
-      route.markdown ? docsMarkdownHref(route.slug) : docsHref(route.slug),
-      url,
-      event.request,
-    )
+    const response = await asset(route.set, route.slug, route.markdown, url, event.request)
     if (!response.ok && response.status !== 304) return notFound()
     // Without a twin there is nothing to negotiate, so the API reference is served as the plain file.
     if (!route.twin) return response
     const headers = new Headers(response.headers)
     Object.entries(pageHeaders).forEach(([name, value]) => headers.set(name, value))
     if (route.markdown) headers.set("Content-Type", markdownType)
+    // The pages say so too (DocsLayout.tsx); their Markdown twins can only say it here.
+    if (route.set.noindex) headers.set("X-Robots-Tag", "noindex")
     return new Response(event.request.method === "HEAD" ? null : response.body, { status: response.status, headers })
   },
 })
 
 /** A prerendered docs file from the Worker's assets, or rendered on request by the development server. */
-async function asset(href: string, url: URL, request: Request) {
+async function asset(set: DocsSet, slug: string, markdown: boolean, url: URL, request: Request) {
+  const href = markdown ? docsMarkdownHref(slug, set) : docsHref(slug, set)
   const binding = assets()
   // Assets drop the trailing slash (cloudflare.config.ts htmlHandling) and find the page's index.html.
   if (binding) return binding.fetch(new Request(new URL(href.replace(/(.)\/$/, "$1"), url), request))
   if (!import.meta.env.DEV) return notFound()
   const { renderDocsMarkdown, renderDocsPage } = await import("./render")
-  const slug =
-    href
-      .slice(base.length - 1)
-      .replace(/\.md$/, "")
-      .replace(/^\/|\/$/g, "") || "index"
-  const body = href.endsWith(".md")
-    ? await renderDocsMarkdown(slug)
-    : await renderDocsPage(slug, { stylesheet: "/src/docs/styles/docs.css", script: "/src/docs/client.ts" })
+  const body = markdown
+    ? await renderDocsMarkdown(set, slug)
+    : await renderDocsPage(set, slug, { stylesheet: "/src/docs/styles/docs.css", script: "/src/docs/client.ts" })
   if (body === undefined) return notFound()
   return new Response(body, {
-    headers: { "Content-Type": href.endsWith(".md") ? markdownType : "text/html; charset=utf-8" },
+    headers: { "Content-Type": markdown ? markdownType : "text/html; charset=utf-8" },
   })
 }
 

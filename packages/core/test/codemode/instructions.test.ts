@@ -66,7 +66,7 @@ describe("CodeModeInstructions", () => {
       )
 
       expect(yield* readUpdate(CodeModeInstructions.make(), initialized)).toMatchObject({
-        text: "Code Mode tools are no longer available. Do not use any previously listed Code Mode tools.",
+        text: "The `execute` tool is no longer available. Permitted tools are now available as direct tool calls.",
       })
     }),
   )

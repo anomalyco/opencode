@@ -10,6 +10,7 @@ import { brandContent, brandMarkdown } from "~/lib/brand-content"
 import { brandAssets } from "~/lib/media"
 import type { ChangelogRelease } from "~/lib/changelog"
 import { changelogTimeline } from "~/lib/changelog-notes"
+import { latestDocs } from "~/docs/config"
 import { docsHref, docsSections } from "~/docs/lib/navigation"
 import { v1DocsUrl } from "~/lib/docs"
 import { docsIntro, docsToc } from "~/lib/docs-content"
@@ -226,7 +227,7 @@ export function buildSearchIndex(
       title: entry.label,
       context: "Docs › Intro",
       body: docsBody(entry.id),
-      href: `${docsHref("index")}#${entry.id}`,
+      href: `${docsHref("index", latestDocs)}#${entry.id}`,
       target: { id: entry.id },
     })),
     ...docsSections.flatMap((section) =>
@@ -236,9 +237,9 @@ export function buildSearchIndex(
           group: "Docs" as const,
           // A section's first page is its intro: "CLI docs" rather than a second "Intro".
           title: item.slug === section.landingSlug && section.key !== "docs" ? `${section.title} docs` : item.title,
-          context: docsHref(item.slug),
+          context: docsHref(item.slug, latestDocs),
           body: item.slug === "index" ? docsIntro.lead : undefined,
-          href: docsHref(item.slug),
+          href: docsHref(item.slug, latestDocs),
         })),
       ),
     ),

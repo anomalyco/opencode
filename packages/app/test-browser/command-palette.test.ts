@@ -2,7 +2,11 @@ import { describe, expect, test } from "bun:test"
 import type { Project } from "@/runtime/server/types"
 import type { SessionInfo } from "@opencode/client/promise"
 import { createRoot } from "solid-js"
-import { createCommandPaletteCommandEntry, createServerSessionEntries } from "@/shell/commands/palette"
+import {
+  createCommandPaletteCommandEntry,
+  createServerSessionEntries,
+  type CommandPaletteEntry,
+} from "@/shell/commands/palette"
 import { matchesCommandPaletteEntry } from "@/shell/commands/dialog"
 import { ServerConnection } from "@/runtime/server/registry"
 import { getProjectAvatarSource } from "@opencode/ui/project-avatar"
@@ -90,6 +94,40 @@ describe("command palette sessions", () => {
       description: project.name,
       project: { id: project.id, icon: project.icon },
     })
+  })
+
+  test("with includeArchived, typed searches list archived sessions marked archived and recent rows skip them", async () => {
+    const archived = {
+      ...session,
+      id: "archived-session",
+      title: "Palette archived",
+      time: { ...session.time, archived: 3 },
+    }
+
+    const [typed, recent] = await new Promise<[CommandPaletteEntry[], CommandPaletteEntry[]]>((resolve, reject) => {
+      createRoot((dispose) => {
+        const sessions = createServerSessionEntries({
+          server: ServerConnection.Key.make("selected-server"),
+          includeArchived: true,
+          projects: () => [project],
+          load: async () => ({ data: [session, archived] }),
+          get: async () => session,
+          untitled: () => "Untitled",
+          category: () => "Sessions",
+          recentCategory: () => "Recent sessions",
+        })
+
+        sessions("palette")
+          .then((entries) => resolve([entries, sessions.items("")]), reject)
+          .finally(dispose)
+      })
+    })
+
+    expect(typed.map((entry) => [entry.sessionID, entry.archived])).toEqual([
+      [session.id, undefined],
+      [archived.id, 3],
+    ])
+    expect(recent.map((entry) => entry.sessionID)).toEqual([session.id])
   })
 
   test("loads an exact session when the query looks like an ID", async () => {

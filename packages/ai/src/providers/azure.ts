@@ -5,6 +5,7 @@ import { Endpoint } from "../route/endpoint.js"
 import type { ProviderPackage } from "../provider-package.js"
 import { MediaRoute } from "../route/media.js"
 import {
+  mergeTransport,
   ProviderConfigurationError,
   ProviderID,
   type ModelID,
@@ -13,6 +14,7 @@ import {
 } from "../schema/index.js"
 import { AnthropicMessages } from "../protocols/anthropic-messages.js"
 import { OpenAIImages } from "../protocols/openai-images.js"
+import { OpenAIEmbeddings } from "../protocols/openai-embeddings.js"
 import * as OpenAIChat from "../protocols/openai-chat.js"
 import * as OpenAIResponses from "../protocols/openai-responses.js"
 import { withOpenAIOptions, type OpenAIProviderOptionsInput } from "./openai-options.js"
@@ -157,15 +159,20 @@ export const configure = (input: Config) => {
 
   const image = (modelID: string | ModelID, providerOptions?: ProviderOptions) => {
     const target = endpoint(input, modelID)
-    const media = MediaRoute.deployment({ ...input, baseURL: target.baseURL }, auth(input))
-    return OpenAIImages.model({
-      ...media,
-      id: modelID,
-      provider: id,
-      providerOptions,
-      http: { ...media.http, query: { ...media.http?.query, ...target.query } },
-    })
+    const transport = mergeTransport(input, { http: { query: target.query } })
+    const media = MediaRoute.deployment({ ...transport, baseURL: target.baseURL }, auth(input))
+    return OpenAIImages.model({ ...media, id: modelID, provider: id, providerOptions })
   }
+
+  const embedding = (modelID: string | ModelID, providerOptions?: ProviderOptions) =>
+    OpenAIEmbeddings.route
+      .with({
+        provider: id,
+        endpoint: endpoint(input, modelID),
+        auth: auth(input),
+        ...mergeTransport(input),
+      })
+      .model({ id: modelID, providerOptions })
 
   return {
     id,
@@ -174,6 +181,7 @@ export const configure = (input: Config) => {
     chat,
     messages,
     image,
+    embedding,
     configure,
   }
 }
@@ -222,6 +230,10 @@ export const messagesModel: ProviderPackage.Model<MessagesSettings, AnthropicMes
 export const imageModel = (modelID: string, settings: Settings) => {
   const input = config(settings)
   return configure(input).image(modelID, input.providerOptions)
+}
+export const embeddingModel = (modelID: string, settings: Settings) => {
+  const input = config(settings)
+  return configure(input).embedding(modelID, input.providerOptions)
 }
 export const model = responsesModel
 export const responses = responsesModel

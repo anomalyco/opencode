@@ -193,6 +193,16 @@ describe("toSessionError", () => {
       })
   })
 
+  test("types the ChatGPT workspace usage limit", () => {
+    const body = JSON.stringify({
+      error: { code: "subscription_sharing_workplace_individual_usage_limit_exceeded", message: "Limit" },
+    })
+    expect(toSessionError(llm(new RateLimitError({ message: "Too many requests", body })))).toMatchObject({
+      type: "provider.chatgpt-workspace-limit",
+      message: expect.stringContaining("workspace admin"),
+    })
+  })
+
   test("preserves the permission rejection type without exposing internal fields", () => {
     const blocked = new Permission.BlockedError({ rules: [], permission: "external_directory", resources: [] })
     expect(toSessionError(blocked)).toEqual({
@@ -262,6 +272,7 @@ describe("toSessionError", () => {
     const cases = [
       ["subscription_sharing_user_not_eligible", "token sharing isn't available for this account"],
       ["subscription_sharing_usage_limit_exceeded", "ChatGPT usage limit reached"],
+      ["subscription_sharing_workplace_individual_usage_limit_exceeded", "workspace admin"],
       ["subscription_sharing_usage_unavailable", "Try again later"],
       ["subscription_sharing_unsupported_capability", "Remove the unsupported feature"],
       ["subscription_sharing_route_not_supported", "Check the configured endpoint"],

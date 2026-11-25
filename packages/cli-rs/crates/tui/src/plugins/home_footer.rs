@@ -1,0 +1,72 @@
+//! Built-in home footer.
+
+use opencode_plugin::abi::v2::{Node, Place, Surface};
+use opencode_plugin::abi::{self, Click, Layout, Placement, Span, Width};
+use opencode_plugin::slot;
+
+use super::{hidden, kept};
+
+pub fn plugin() -> abi::Plugin {
+    abi::Plugin { id: "opencode.home.footer", setup }
+}
+
+const ROOT: &str = "footer";
+
+fn setup(setup: &mut abi::Setup) -> Result<(), String> {
+    setup.surface(Surface::new("footer", Place::Slot(Placement::append(slot::HOME_FOOTER)), |cx| {
+        let changed = &cx.input.changed;
+        if !(changed.all || changed.size || changed.local || !changed.locations.is_empty()) {
+            return kept(ROOT);
+        }
+        let read = cx.read;
+        let info = read.info();
+        if !(changed.all || changed.size || changed.local || changed.location(&info.location)) {
+            return kept(ROOT);
+        }
+        let (width, height) = info.size;
+        if height < 14 || width < 44 {
+            return hidden(ROOT);
+        }
+        let list = read.mcp_servers(None).unwrap_or_default();
+        let count = |tag: &str| list.iter().filter(|item| item.status.tag() == tag).count();
+        let mut row = Vec::new();
+        if !list.is_empty() {
+            let (connected, failed) = (count("connected"), count("failed"));
+            let spans = if failed > 0 {
+                vec![Span::new("⊙ ").fg("text.feedback.error.base"), Span::new(format!("{failed} MCP failed"))]
+            } else {
+                let dot = if connected > 0 { "text.feedback.success.base" } else { "text.muted" };
+                vec![Span::new("⊙ ").fg(dot), Span::new(format!("{connected} MCP"))]
+            };
+            let mut mcp = vec![Node::text(spans)];
+            if width >= 64 {
+                mcp.push(Node::text([Span::new("/mcps")]).fg("text.muted"));
+            }
+            let fixed = Layout::default().shrink(false);
+            row.push(Node::row(mcp).gap(1).layout(fixed).on_click(Click::command("mcp.list")));
+        }
+        if info.failed_plugins > 0 {
+            let failed = info.failed_plugins;
+            let plural = if failed == 1 { "" } else { "s" };
+            let spans = vec![
+                Span::new("⊙ ").fg("text.feedback.error.base"),
+                Span::new(format!("{failed} plugin{plural} failed")),
+            ];
+            let mut plugins = vec![Node::text(spans)];
+            if width >= 80 {
+                plugins.push(Node::text([Span::new("/plugins")]).fg("text.muted"));
+            }
+            let fixed = Layout::default().shrink(false);
+            row.push(Node::row(plugins).gap(1).layout(fixed).on_click(Click::command("plugins.list")));
+        }
+        row.push(Node::slot(slot::HOME_FOOTER_STATUS));
+        row.push(Node::column(Vec::new()).layout(Layout::default().grow()));
+        if width >= 64 {
+            let version = Node::text([Span::new(info.version)]).fg("text.muted");
+            row.push(Node::column(vec![version]).layout(Layout::default().shrink(false)));
+        }
+        let full = Layout::default().width(Width::Percent(100.0)).shrink(false);
+        Node::row(row).gap(2).padding(2, if height < 16 { 0 } else { 1 }).layout(full).with_id(ROOT)
+    }));
+    Ok(())
+}

@@ -37,9 +37,5 @@
     padding-block: 0 0.25rem;
     padding-inline: 1.5rem 0;
     border: 0;
-
-    &::before {
-      top: 0;
-    }
   }
 }

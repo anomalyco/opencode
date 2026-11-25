@@ -1,6 +1,7 @@
 /* The products carousel's previous and next (products-arrows.tsx): under the cards at the content's
    end edge, the chevron lined up with it, in the space before the next section, so they take no room
-   and move nothing when they appear. Fine pointers only; touch screens swipe. */
+   and move nothing when they appear. Fine pointers only, once the cards overflow (carousel-nav.ts);
+   touch screens swipe. */
 [data-site] [data-component="products"] {
   position: relative;
 
@@ -12,7 +13,7 @@
   }
 
   @media (pointer: fine) {
-    > [data-slot="carousel-nav"] {
+    > [data-slot="carousel-nav"]:not([hidden]) {
       display: flex;
     }
   }

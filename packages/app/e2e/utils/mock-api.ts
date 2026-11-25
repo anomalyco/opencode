@@ -196,6 +196,11 @@ const Group = HttpApiGroup.make("mock")
   )
   .add(HttpApiEndpoint.get("command", "/api/command", { success: Json }))
   .add(HttpApiEndpoint.get("skill", "/api/skill", { success: Json }))
+  .add(
+    HttpApiEndpoint.get("skillFile", "/api/experimental/skill/:skillID/file/*", {
+      success: Schema.Uint8Array.pipe(HttpApiSchema.asUint8Array()),
+    }),
+  )
   .add(HttpApiEndpoint.get("plugin", "/api/plugin", { success: Json }))
   .add(HttpApiEndpoint.get("mcp", "/api/mcp", { success: Json }))
   .add(
@@ -235,6 +240,7 @@ const Group = HttpApiGroup.make("mock")
   )
   .add(HttpApiEndpoint.get("websearchProviders", "/api/websearch/provider", { success: Json }))
   .add(HttpApiEndpoint.get("usageLimits", "/api/experimental/usage/limits", { success: Json }))
+  .add(HttpApiEndpoint.get("jobList", "/api/experimental/job", { success: Json }))
   .add(
     HttpApiEndpoint.get("worktreeList", "/api/worktree", {
       query: Schema.Struct({ projectID: Schema.String }),
@@ -388,12 +394,7 @@ const Group = HttpApiGroup.make("mock")
   .add(
     HttpApiEndpoint.post("sessionView", "/api/session/:sessionID/view", {
       params: SessionParams,
-      success: NoContent,
-    }),
-  )
-  .add(
-    HttpApiEndpoint.post("sessionView", "/api/session/:sessionID/view", {
-      params: SessionParams,
+      payload: Schema.Struct({ idle: Schema.Number }),
       success: NoContent,
     }),
   )

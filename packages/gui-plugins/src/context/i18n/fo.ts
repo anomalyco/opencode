@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Nýtsla",
   "usage.cost": "Kostnaður",
   "usage.view": "Vís samanhangsnýtslu",
-  "systemPrompt.title": "Skipanarboð",
   "rawMessages.title": "Rá boð",
   "export.session": "Útflutningsløta",
   "stats.session": "Seta",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "Goymd seta til {{filename}}",
   "export.failed.title": "Tað eydnaðist ikki at útflyta setu",
   "export.failed.description": "Ein feilur hendi, meðan setan varð útflutt.",
+  "usage.toggle": "Skift setusamanhang",
 }

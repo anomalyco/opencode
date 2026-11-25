@@ -54,4 +54,5 @@ export default {
   "error.commandTimeout": "⁨{{command}}⁩ ⁨{{args}}⁩ ޓައިމް އައުޓް ކޮށްފައިވަނީ ⁨{{timeout}}⁩ms އަށް ފަހުގައެވެ",
   "error.failedPort": "ބަނދަރު ހޯދުމަށް ނާކާމިޔާބުވިއެވެ",
   "menu.remove": "ރިމޫވް",
+  "error.busy": "⁨{{distro}}⁩ އެހެން މަސައްކަތެއްގައި ބުރަވެފައިވެއެވެ. އެ ނިމުމުން އަލުން ޖައްސަވާ.",
 }

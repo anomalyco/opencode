@@ -6,6 +6,12 @@
   background-color: var(--v2-background-bg-layer-01);
 }
 
+/* Plain text and code sit on the code view's diff background, not the artifact surface. */
+[data-slot="artifact-view"][data-source-only] {
+  --opencode-diffs-bg: var(--color-background-stronger);
+  background-color: var(--color-background-stronger);
+}
+
 [data-slot="artifact-toolbar"] {
   display: flex;
   flex-shrink: 0;
@@ -14,6 +20,10 @@
   height: 44px;
   padding-inline: 20px 12px;
   background-color: var(--v2-background-bg-layer-01);
+}
+
+[data-slot="artifact-view"][data-source-only] [data-slot="artifact-toolbar"] {
+  background-color: var(--color-background-stronger);
 }
 
 [data-slot="artifact-filename"] {
@@ -314,4 +324,13 @@ img[data-slot="artifact-media"] {
   [data-slot="artifact-diagram"] {
     padding: 20px 12px;
   }
+}
+
+/* The same marks as the code view's find. */
+::highlight(file-preview-find) {
+  background-color: rgb(from var(--surface-warning-base) r g b / 0.35);
+}
+
+::highlight(file-preview-find-current) {
+  background-color: rgb(from var(--surface-warning-strong) r g b / 0.55);
 }

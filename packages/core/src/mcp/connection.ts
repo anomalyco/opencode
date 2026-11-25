@@ -1,6 +1,6 @@
 export * as McpConnection from "./connection.js"
 
-import type { OAuthClientProvider } from "@modelcontextprotocol/client"
+import type { AuthProvider } from "@modelcontextprotocol/client"
 import type { Mcp } from "@opencode/schema/mcp"
 import { Cause, Effect, Exit, Scope } from "effect"
 import { FetchHttpClient } from "effect/http"
@@ -10,8 +10,8 @@ import type { McpClient } from "./client.js"
 
 export type Failure = Extract<Mcp.Status, { readonly status: "failed" | "needs_auth" }>
 
-/** A catalog the server can change: its tools, prompts or resources. */
-export type Kind = "tools" | "prompts" | "resources"
+/** A catalog the server can change: its tools, prompts, resources or skills. */
+export type Kind = "tools" | "prompts" | "resources" | "skills"
 
 // Unshared connections to one remote endpoint, from any number of Locations, take turns at their
 // handshake so the endpoint does not receive a startup burst.
@@ -51,8 +51,10 @@ export interface Input {
    */
   readonly shared?: boolean
   readonly clientInfo?: { readonly name: string; readonly version: string }
+  /** Lists the server's MCP Skills when it offers them. */
+  readonly skills?: boolean
   /** Read on every attempt, so a credential change applies to the next one. */
-  readonly authProvider: Effect.Effect<OAuthClientProvider | undefined>
+  readonly authProvider: Effect.Effect<AuthProvider | undefined>
   readonly elicitation: McpClient.ElicitationHandler
   /** A stdio server is spawned on this execution plane. */
   readonly environment: Environment.Interface
@@ -80,6 +82,8 @@ export interface Connection {
   /** The server's tool list as listed. Each refresh replaces the array. */
   readonly tools: ReadonlyArray<McpClient.Tool> | undefined
   readonly prompts: ReadonlyArray<McpClient.Prompt> | undefined
+  /** The server's skill entries as listed, when it offers MCP Skills. Each refresh replaces the array. */
+  readonly skills: ReadonlyArray<McpClient.Skill> | undefined
   /** Connects and lists tools; a failure is reported through `failed`. */
   readonly start: Effect.Effect<void>
   readonly stop: Effect.Effect<void>
@@ -100,6 +104,7 @@ export function make(input: Input): Connection {
     client?: McpClient.Connection
     tools?: ReadonlyArray<McpClient.Tool>
     prompts?: ReadonlyArray<McpClient.Prompt>
+    skills?: ReadonlyArray<McpClient.Skill>
   } = {}
 
   // Runs a connection callback under the lock, dropping it if the connection is no longer the live
@@ -125,6 +130,16 @@ export function make(input: Input): Connection {
       }),
       Effect.andThen(input.events.changed("prompts")),
     )
+
+  const refreshSkills = (client: McpClient.Connection) =>
+    client.skills
+      ? client.skills.list().pipe(
+          Effect.map((skills) => {
+            state.skills = skills
+          }),
+          Effect.andThen(input.events.changed("skills")),
+        )
+      : Effect.void
 
   // Re-establishes a connection whose HTTP session the server dropped, unless another path already
   // replaced it while this one waited for the lock.
@@ -156,7 +171,8 @@ export function make(input: Input): Connection {
     client.onSessionExpired(() => input.fork(recover(client)))
     client.onToolsChanged(() => live(refreshTools(client).pipe(Effect.andThen(input.events.changed("tools")))))
     client.onPromptsChanged(() => live(refreshPrompts(client)))
-    client.onResourcesChanged(() => live(input.events.changed("resources")))
+    // MCP Skills announces a changed skill list as a resource list change.
+    client.onResourcesChanged(() => live(input.events.changed("resources").pipe(Effect.andThen(refreshSkills(client)))))
   }
 
   const start: Effect.Effect<void> = Effect.suspend(() =>
@@ -184,6 +200,8 @@ export function make(input: Input): Connection {
         elicitation: input.elicitation,
         clientInfo: input.clientInfo,
         roots: !input.shared,
+        events: true,
+        skills: input.skills,
       }).pipe(
         Effect.flatMap(
           (client): Effect.Effect<{ client: McpClient.Connection; tools?: ReadonlyArray<McpClient.Tool> }, Error> =>
@@ -206,9 +224,11 @@ export function make(input: Input): Connection {
         state.client = result.value.client
         state.tools = result.value.tools
         state.prompts = []
+        state.skills = []
         watch(result.value.client)
         yield* input.events.connected
         whenLive(result.value.client)(refreshPrompts(result.value.client))
+        whenLive(result.value.client)(refreshSkills(result.value.client))
         return
       }
       yield* Scope.close(scope, Exit.void)
@@ -233,10 +253,12 @@ export function make(input: Input): Connection {
     state.client = undefined
     state.tools = undefined
     state.prompts = undefined
+    state.skills = undefined
     yield* Scope.close(scope, Exit.void)
     yield* input.events.changed("tools")
     yield* input.events.changed("resources")
     yield* input.events.changed("prompts")
+    yield* input.events.changed("skills")
   })
 
   return {
@@ -248,6 +270,9 @@ export function make(input: Input): Connection {
     },
     get prompts() {
       return state.prompts
+    },
+    get skills() {
+      return state.skills
     },
     start,
     stop,

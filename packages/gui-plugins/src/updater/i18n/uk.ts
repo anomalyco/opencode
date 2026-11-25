@@ -29,4 +29,12 @@ export default {
   "releaseNotes.action.next": "Далі",
   "releaseNotes.action.hideFuture": "Не показувати це в майбутньому",
   "releaseNotes.media.alt": "Попередній перегляд релізу",
+  "action.reload": "Перезавантажити для оновлення",
+  "action.reloading": "Перезавантаження…",
+  "web.ready.title": "Оновлення готове",
+  "web.ready.message": "Нова версія OpenCode готова. Перезавантажте, щоб використовувати її в усіх відкритих вікнах.",
+  "web.reload": "Перезавантажити",
+  "web.reset.title": "Перезавантажити із сервера",
+  "web.reset.description": "Очистити збережену копію застосунку та завантажити поточну версію із сервера",
+  "web.reset.action": "Перезавантажити із сервера",
 }

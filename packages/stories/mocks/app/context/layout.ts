@@ -2,6 +2,7 @@ import { useLocation } from "../../solid-router"
 import { createSignal, type ParentProps } from "solid-js"
 import type { ServerConnection } from "@/runtime/server/registry"
 import type { Project } from "@/runtime/server/types"
+import { requireServerKey } from "@/shell/routes/session"
 
 export type LocalProject = Partial<Project> & { worktree: string; expanded?: boolean }
 
@@ -28,6 +29,10 @@ export function currentRoute(pathname: string, search: string): LayoutRoute {
     const draftID = new URLSearchParams(search).get("draftId")
 
     return draftID ? { type: "draft", draftID } : { type: "home" }
+  }
+
+  if (parts[0] === "server" && parts[2] === "session" && parts[3]) {
+    return { type: "session", server: requireServerKey(parts[1]), sessionId: parts[3] }
   }
 
   return { type: "home" }

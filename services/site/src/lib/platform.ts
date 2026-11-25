@@ -1,12 +1,10 @@
 import { getRequestEvent, isServer } from "solid-js/web"
+import { browserPlatform, platformFromUserAgent, platforms, type Platform } from "./user-agent"
 
-/**
- * The visitor's platform, for OS-dependent copy (download buttons, install commands, ⌘ or Ctrl).
- * Everything that changes by OS reads it from here, so the device preview's override reaches it.
- */
+export { platformFromUserAgent, platforms, type Platform } from "./user-agent"
 
-export const platforms = ["ios", "android", "macos", "windows", "linux"] as const
-export type Platform = (typeof platforms)[number]
+// The visitor's platform, for OS-dependent copy (download buttons, install commands, ⌘ or Ctrl).
+// Everything that changes by OS reads it from here, so the device preview's override reaches it.
 
 /**
  * The device preview (component/site/device-preview.tsx) loads its frames with `?_device=<platform>`
@@ -23,17 +21,6 @@ export const devicePreviewFrame = "data-device-preview-frame"
 /** True on the page shown inside the device preview, which must not open a preview of its own. */
 export const inDevicePreview = () => !isServer && !!window.frameElement?.hasAttribute(devicePreviewFrame)
 
-/** The platform from a user agent alone, so the server and the first client render agree. */
-export function platformFromUserAgent(userAgent: string): Platform | undefined {
-  const agent = userAgent.toLowerCase()
-  // iPhone and iPad user agents mention "Mac OS X", Android ones "Linux".
-  if (/iphone|ipad|ipod/.test(agent)) return "ios"
-  if (agent.includes("android")) return "android"
-  if (agent.includes("mac")) return "macos"
-  if (agent.includes("win")) return "windows"
-  if (agent.includes("linux")) return "linux"
-}
-
 /**
  * The platform for the first render, on the server and in hydration: the device preview's choice,
  * else the user agent.
@@ -48,11 +35,7 @@ export function requestPlatform(): Platform | undefined {
 /** The platform once mounted, when the browser can say more than its user agent. */
 export function detectPlatform(): Platform | undefined {
   if (isServer) return requestPlatform()
-  const override = platformOverride()
-  if (override) return override
-  // iPadOS Safari reports a Mac platform and user agent, but has a touch screen.
-  if (navigator.platform.toLowerCase().includes("mac") && navigator.maxTouchPoints > 1) return "ios"
-  return platformFromUserAgent(navigator.userAgent)
+  return platformOverride() ?? browserPlatform()
 }
 
 /** Phones and tablets: they get the mobile app's button, and every desktop build as a file. */

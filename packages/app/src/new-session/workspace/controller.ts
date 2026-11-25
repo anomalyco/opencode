@@ -24,6 +24,10 @@ export function resolveNewSessionWorktree(input: { enabled: boolean; selected?: 
   return input.fallback ?? "main"
 }
 
+function checkoutDirectory(worktree: string, root: string) {
+  return worktree === "main" || worktree === "create" ? root : worktree
+}
+
 export function resolveNewSessionBranch(input: {
   worktree: string
   root: string
@@ -31,9 +35,8 @@ export function resolveNewSessionBranch(input: {
   worktreeBranch: (worktree: string) => string | undefined
 }) {
   if (input.worktree === "create" && input.createBranch) return input.createBranch
-  const directory = input.worktree === "main" || input.worktree === "create" ? input.root : input.worktree
 
-  return input.worktreeBranch(directory)
+  return input.worktreeBranch(checkoutDirectory(input.worktree, input.root))
 }
 
 export function resolveNewSessionGit(input: { projectVcs?: string; branch?: string }) {
@@ -208,6 +211,13 @@ export function createNewSessionWorkspaceController(input: {
     }),
   )
 
+  // A missing checkout is loading; a loaded checkout may have a detached HEAD.
+  const checkout = createMemo(() => {
+    const info = data.location.vcs.info({ directory: checkoutDirectory(value(), projectRoot()) })
+
+    return info ? { branch: info.branch.current } : undefined
+  })
+
   const remember = (worktree = value()) => {
     const project = currentProject()
 
@@ -218,7 +228,7 @@ export function createNewSessionWorkspaceController(input: {
   }
 
   const select = (worktree: string) => {
-    input.setSelectedBranch(undefined)
+    if (worktree !== "create" || value() !== "create") input.setSelectedBranch(undefined)
     input.setSelectedWorktree(worktree)
     remember(worktree)
   }
@@ -269,6 +279,7 @@ export function createNewSessionWorkspaceController(input: {
     bar: {
       visible,
       branch,
+      checkout,
     },
     branches: (search: string, signal?: AbortSignal) =>
       serverSDK.api.vcs.branch

@@ -5,7 +5,6 @@ export default {
   "usage.usage": "استعمال",
   "usage.cost": "لاگت",
   "usage.view": "سیاق و سباق کا استعمال دیکھیں",
-  "systemPrompt.title": "سسٹم پرامپٹ",
   "rawMessages.title": "خام پیغامات",
   "export.session": "سیشن برآمد کریں",
   "stats.session": "سیشن",
@@ -28,4 +27,5 @@ export default {
   "export.success.description": "سیشن کو ⁨{{filename}}⁩ میں محفوظ کر دیا گیا",
   "export.failed.title": "سیشن برآمد کرنے میں ناکام",
   "export.failed.description": "سیشن برآمد کرتے وقت ایک خرابی پیش آ گئی",
+  "usage.toggle": "سیشن کا سیاق و سباق دکھائیں یا چھپائیں",
 }

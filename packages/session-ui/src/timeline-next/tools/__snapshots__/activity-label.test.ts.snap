@@ -1,0 +1,39 @@
+// Bun Snapshot v1, https://bun.sh/docs/test/snapshots
+
+exports[`group labels the New timeline names a group by what it did 1`] = `
+{
+  "background outcomes only": "Finished 2 shells",
+  "edits": "Edited 3 files · 1 read",
+  "empty": "Updates",
+  "failed calls": "Edited a.ts · 1 command, 1 read",
+  "mixed tools": "Ran 1 command · Questions, Browser, custom_tool, 1 read",
+  "one edit": "Edited a.ts",
+  "reads and searches": "Explored 2 files, 2 searches, 1 web search, 1 page",
+  "shells with background outcomes": "Ran 1 command · finished 1 shell, started 1 shell, stopped 1 shell",
+  "skills": "Explored 2 skills",
+  "still running": "Ran 1 command · 1 read",
+  "thoughts": "Used 1 Thought",
+  "thoughts and tools": "Explored 1 file",
+  "v1 tool names": "Edited z.ts · 1 command",
+}
+`;
+
+exports[`group labels background shells count once, as how they ended 1`] = `
+{
+  "failed": 0,
+  "verbs": [
+    {
+      "count": 1,
+      "verb": "finished",
+    },
+    {
+      "count": 1,
+      "verb": "started",
+    },
+    {
+      "count": 1,
+      "verb": "stopped",
+    },
+  ],
+}
+`;
