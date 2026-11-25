@@ -877,6 +877,33 @@ test.skipIf(process.platform === "win32")(
   },
 )
 
+test.each(["source", "rendered"] as const)(
+  "completed replay is committed without waiting for idle (markdown=%s)",
+  async (markdown) => {
+    const out = await setup({ markdown })
+    try {
+      // Replay while the session is busy cannot rely on footer.idle() completing
+      // streaming entries. A completed historical part must flush itself.
+      for (const commit of [
+        assistant("COMPLETED_ANSWER", "progress"),
+        reasoning("Thinking: COMPLETED_REASONING", "progress"),
+      ]) {
+        await out.scrollback.append(commit)
+        await out.scrollback.append({ ...commit, text: "", phase: "final" })
+        const commits = claim(out.renderer)
+        try {
+          expect(render(commits)).toContain(commit.kind === "assistant" ? "COMPLETED_ANSWER" : "COMPLETED_REASONING")
+        } finally {
+          destroy(commits)
+        }
+      }
+    } finally {
+      out.scrollback.destroy()
+      destroy(claim(out.renderer))
+    }
+  },
+)
+
 test("coalesces same-line tool progress into one snapshot", async () => {
   const out = await setup()
 

@@ -769,7 +769,7 @@ describe("V2 mini transport", () => {
       ui.commits
         .filter((commit) => commit.kind === "user" || commit.kind === "assistant" || commit.kind === "tool")
         .map((commit) => commit.text),
-    ).toEqual(["what happened", "Done."])
+    ).toEqual(["what happened", "Done.", ""])
     await transport.close()
   })
 
@@ -1074,7 +1074,7 @@ describe("V2 mini transport", () => {
     settled.resolve()
     await turn
 
-    expect(ui.commits.map((item) => item.text)).toEqual(["hello", "ans", "wer"])
+    expect(ui.commits.map((item) => item.text)).toEqual(["hello", "ans", "wer", ""])
     await transport.close()
   })
 
@@ -2151,8 +2151,10 @@ describe("V2 mini transport", () => {
 
     expect(ui.commits.filter((commit) => commit.messageID === "msg_assistant").map((commit) => commit.text)).toEqual([
       "partial",
+      "",
       " suffix",
       "partial",
+      "",
       " suffix",
       "entirely local",
     ])
@@ -2213,7 +2215,9 @@ describe("V2 mini transport", () => {
 
     expect(ui.commits.filter((commit) => commit.messageID === "msg_assistant").map((commit) => commit.text)).toEqual([
       "partial",
+      "",
       "partial",
+      "",
       " suffix",
     ])
     expect(live.map((commit) => commit.text)).toEqual(["partial suffix"])
@@ -2268,6 +2272,262 @@ describe("V2 mini transport", () => {
     expect(ui.commits.slice(-2).map((commit) => commit.text)).toEqual(["hello", "Thinking: thought"])
     await transport.close()
   })
+
+  test.each(["text", "reasoning"] as const)(
+    "resize completes historical %s while keeping the current message streaming",
+    async (type) => {
+      const events = feed()
+      events.push(connected())
+      const client = sdk({
+        streams: [events],
+        active: () => ({ ses_1: { type: "running" } }),
+        messages: {
+          ses_1: [
+            {
+              id: "msg_current",
+              type: "assistant",
+              agent: "build",
+              model: { providerID: "test", id: "model" },
+              content: [{ type, text: "still streaming" }],
+              time: { created: 4 },
+            },
+            {
+              id: "msg_completed",
+              type: "assistant",
+              agent: "build",
+              model: { providerID: "test", id: "model" },
+              content: [{ type, text: "completed history" }],
+              time: { created: 2, completed: 3 },
+            },
+          ],
+        },
+      })
+      const ui = footer()
+      const transport = await createSessionTransport({
+        sdk: client,
+        sessionID: "ses_1",
+        thinking: true,
+        replay: true,
+        replayLimit: 10,
+        footer: ui.api,
+      })
+      try {
+        const phases = () => ui.commits.map((commit) => ({ messageID: commit.messageID, phase: commit.phase }))
+        expect(phases()).toEqual([
+          { messageID: "msg_completed", phase: "progress" },
+          { messageID: "msg_completed", phase: "final" },
+          { messageID: "msg_current", phase: "progress" },
+        ])
+        await transport.replayOnResize({
+          localRows: () => [],
+          reset: async () => {
+            ui.commits.length = 0
+          },
+        })
+        expect(phases()).toEqual([
+          { messageID: "msg_completed", phase: "progress" },
+          { messageID: "msg_completed", phase: "final" },
+          { messageID: "msg_current", phase: "progress" },
+        ])
+      } finally {
+        await transport.close()
+      }
+    },
+  )
+
+  test.each(["assistant", "reasoning"] as const)(
+    "restores completed local %s outside the replay projection with its completion marker",
+    async (kind) => {
+      const events = feed()
+      events.push(connected())
+      const client = sdk({
+        streams: [events],
+        active: () => ({ ses_1: { type: "running" } }),
+        messages: { ses_1: [] },
+      })
+      const ui = footer()
+      const transport = await createSessionTransport({
+        sdk: client,
+        sessionID: "ses_1",
+        thinking: true,
+        replay: true,
+        replayLimit: 10,
+        footer: ui.api,
+      })
+      try {
+        await transport.replayOnResize({
+          localRows: () => [
+            {
+              commit: {
+                kind,
+                source: kind,
+                messageID: "msg_completed",
+                partID: kind === "reasoning" ? "reasoning:0" : "text:0",
+                text: kind === "reasoning" ? "Thinking: completed" : "completed",
+                phase: "final",
+              },
+            },
+          ],
+          reset: async () => {
+            ui.commits.length = 0
+          },
+        })
+        expect(ui.commits.map((commit) => ({ text: commit.text, phase: commit.phase }))).toEqual([
+          { text: kind === "reasoning" ? "Thinking: completed" : "completed", phase: "progress" },
+          { text: "", phase: "final" },
+        ])
+      } finally {
+        await transport.close()
+      }
+    },
+  )
+
+  test.each([10, 100, 200])(
+    "resize does not append evicted history after the newest replay messages (limit=%s)",
+    async (limit) => {
+      const events = feed()
+      events.push(connected())
+      const messages = Array.from(
+        { length: 240 },
+        (_, index) =>
+          ({
+            id: `msg_${String(index).padStart(4, "0")}`,
+            type: "assistant",
+            agent: "build",
+            model: { providerID: "test", id: "model" },
+            content: [{ type: "text", text: `ANSWER_${index}` }],
+            time: { created: index * 2, completed: index * 2 + 1 },
+          }) satisfies SessionMessages[number],
+      )
+      const client = sdk({ streams: [events], messages: { ses_1: messages } })
+      spyOn(client.message, "list").mockImplementation((request) =>
+        ok({ data: messages.slice(-request.limit!).toReversed(), cursor: {} }),
+      )
+      const ui = footer()
+      const transport = await createSessionTransport({
+        sdk: client,
+        sessionID: "ses_1",
+        thinking: false,
+        replay: true,
+        replayLimit: limit,
+        footer: ui.api,
+      })
+      const localRows = messages.slice(-100).map((message) => ({
+        commit: {
+          kind: "assistant",
+          source: "assistant",
+          phase: "final",
+          messageID: message.id,
+          partID: "text:0",
+          text: message.content[0].text,
+        } as const,
+      }))
+      try {
+        for (let resize = 0; resize < 3; resize++) {
+          if (resize > 0) {
+            const index = messages.length
+            messages.push({
+              ...messages.at(-1)!,
+              id: `msg_${String(index).padStart(4, "0")}`,
+              content: [{ type: "text", text: `ANSWER_${index}` }],
+              time: { created: index * 2, completed: index * 2 + 1 },
+            })
+            localRows.push({
+              commit: { ...localRows.at(-1)!.commit, messageID: messages.at(-1)!.id, text: `ANSWER_${index}` },
+            })
+            localRows.shift()
+          }
+          await transport.replayOnResize({
+            localRows: () => localRows,
+            reset: async () => {
+              ui.commits.length = 0
+            },
+          })
+          const visible = ui.commits.filter((commit) => commit.text).map((commit) => commit.text)
+          expect(visible.at(-1)).toBe(`ANSWER_${239 + resize}`)
+          expect(visible).toEqual(messages.slice(-limit).map((message) => message.content[0].text))
+        }
+      } finally {
+        await transport.close()
+      }
+    },
+  )
+
+  test.each(["text", "reasoning"] as const)(
+    "full replay keeps local streaming %s after dropping the evicted prefix",
+    async (type) => {
+      const events = feed()
+      events.push(connected())
+      const messages = Array.from(
+        { length: 12 },
+        (_, index) =>
+          ({
+            id: `msg_${index}`,
+            type: "assistant",
+            agent: "build",
+            model: { providerID: "test", id: "model" },
+            content: [{ type: "text", text: `ANSWER_${index}` }],
+            time: { created: index * 2, completed: index * 2 + 1 },
+          }) satisfies SessionMessages[number],
+      )
+      const client = sdk({
+        streams: [events],
+        messages: { ses_1: messages },
+        active: () => ({ ses_1: { type: "running" } }),
+      })
+      spyOn(client.message, "list").mockImplementation((request) =>
+        ok({ data: messages.slice(-request.limit!).toReversed(), cursor: {} }),
+      )
+      const ui = footer()
+      const transport = await createSessionTransport({
+        sdk: client,
+        sessionID: "ses_1",
+        thinking: true,
+        replay: true,
+        replayLimit: 10,
+        footer: ui.api,
+      })
+      const localRows = [
+        ...messages.map((message) => ({
+          commit: {
+            kind: "assistant",
+            source: "assistant",
+            phase: "final",
+            messageID: message.id,
+            partID: "text:0",
+            text: message.content[0].text,
+          } as const,
+        })),
+        {
+          commit: {
+            kind: type === "text" ? "assistant" : "reasoning",
+            source: type === "text" ? "assistant" : "reasoning",
+            phase: "progress",
+            messageID: "msg_current",
+            partID: `${type}:0`,
+            text: type === "text" ? "STREAMING" : "Thinking: STREAMING",
+          } as const,
+        },
+      ]
+      try {
+        for (let resize = 0; resize < 3; resize++) {
+          await transport.replayOnResize({
+            localRows: () => localRows,
+            reset: async () => {
+              ui.commits.length = 0
+            },
+          })
+          expect(ui.commits.filter((commit) => commit.text).map((commit) => commit.text)).toEqual([
+            ...Array.from({ length: 10 }, (_, index) => `ANSWER_${index + 2}`),
+            type === "text" ? "STREAMING" : "Thinking: STREAMING",
+          ])
+          expect(ui.commits.at(-1)?.phase).toBe("progress")
+        }
+      } finally {
+        await transport.close()
+      }
+    },
+  )
 
   test("serializes and coalesces overlapping resize replays", async () => {
     const events = feed()
@@ -2549,9 +2809,13 @@ describe("V2 mini transport", () => {
 
     expect(ui.commits.map((item) => item.text)).toEqual([
       "Thinking: first thought",
+      "",
       "first answer",
+      "",
       "Thinking: second thought",
+      "",
       "second answer",
+      "",
     ])
     await transport.close()
   })

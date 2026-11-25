@@ -843,6 +843,9 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
     if (message.type !== "assistant") return
     state.messageIDs.add(message.id)
+    // Completed history must flush its trailing row/block even when replaying
+    // during another active turn. Only the current message remains streaming.
+    const completed = message.time.completed !== undefined
     const hasTools = message.content.some((item) => item.type === "tool")
     if (hasTools) rememberToolMessage(message.id)
     let textOrdinal = 0
@@ -852,33 +855,33 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
         const fragment = fragmentRef(message.id, "text", textOrdinal++)
         const visible = render && (showTools() || !hasTools)
         const update = state.fragments.project(fragment, item.text, visible)
-        if (visible && item.text.length > update.previous.length)
-          write([
-            {
-              kind: "assistant",
-              source: "assistant",
-              text: item.text.slice(update.previous.length),
-              phase: "progress",
-              messageID: message.id,
-              partID: fragment.partID,
-            },
-          ])
+        if (visible && item.text.length > update.previous.length) {
+          const commit = {
+            kind: "assistant",
+            source: "assistant",
+            text: item.text.slice(update.previous.length),
+            phase: "progress",
+            messageID: message.id,
+            partID: fragment.partID,
+          } as const
+          write(completed ? [commit, { ...commit, text: "", phase: "final" }] : [commit])
+        }
         continue
       }
       if (item.type === "reasoning") {
         const fragment = fragmentRef(message.id, "reasoning", reasoningOrdinal++)
         const update = state.fragments.project(fragment, item.text, render)
-        if (render && input.thinking && item.text.length > update.previous.length)
-          write([
-            {
-              kind: "reasoning",
-              source: "reasoning",
-              text: update.previous.length === 0 ? `Thinking: ${item.text}` : item.text.slice(update.previous.length),
-              phase: "progress",
-              messageID: message.id,
-              partID: fragment.partID,
-            },
-          ])
+        if (render && input.thinking && item.text.length > update.previous.length) {
+          const commit = {
+            kind: "reasoning",
+            source: "reasoning",
+            text: update.previous.length === 0 ? `Thinking: ${item.text}` : item.text.slice(update.previous.length),
+            phase: "progress",
+            messageID: message.id,
+            partID: fragment.partID,
+          } as const
+          write(completed ? [commit, { ...commit, text: "", phase: "final" }] : [commit])
+        }
         continue
       }
       renderTool(message.id, item, render)
@@ -1020,6 +1023,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     })
     if (!state.rootActive && !next.reconnect) await input.footer.idle()
     if (!current(attempt)) return
+    return projected
   }
 
   const apply = (attempt: Attempt, event: RunV2Event) => {
@@ -1667,6 +1671,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     const replayBuffer = { attempt, events: buffered }
     let failure: unknown
     let reset = false
+    let localStart = 0
     state.buffered = replayBuffer
     try {
       await input.footer.idle()
@@ -1688,7 +1693,14 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       state.activeCompaction = undefined
       state.shellEnded.clear()
       state.errors.clear()
-      await hydrate(attempt, { render: true })
+      const projected = await hydrate(attempt, { render: true })
+      // A full replay window evicts older history. Do not append its cached
+      // prefix after the newest messages, but keep local output past the boundary.
+      if (projected?.length === (input.replayLimit ?? 200))
+        localStart = Math.max(
+          0,
+          localRows.findIndex((row) => !!row.commit.messageID && state.messageIDs.has(row.commit.messageID)),
+        )
     } catch (error) {
       failure = error
     } finally {
@@ -1697,7 +1709,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     if (!current(attempt)) return false
     try {
       if (reset) {
-        for (const row of localRows) {
+        for (const row of localRows.slice(localStart)) {
           if (row.commit.image && row.commit.messageID && row.commit.partID) {
             const key = streamPartKey(row.commit.messageID, row.commit.partID)
             if (state.imageIDs.has(key)) continue
@@ -1719,7 +1731,12 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
             if (restored.type === "covered") continue
             if (restored.type === "append") {
               if (restored.suffix)
-                input.footer.append(restored.suffix === text ? row.commit : { ...row.commit, text: restored.suffix })
+                input.footer.append({
+                  ...row.commit,
+                  text: restored.suffix === text ? row.commit.text : restored.suffix,
+                  phase: "progress",
+                })
+              if (row.commit.phase === "final") input.footer.append({ ...row.commit, text: "" })
               continue
             }
           }
