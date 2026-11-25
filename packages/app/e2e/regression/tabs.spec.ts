@@ -2573,6 +2573,58 @@ test("an archived session that asks a question joins Needs attention and goes ba
   )
 })
 
+test("in the inbox, ⌘1-9 and option arrows move through sessions in the order the list shows", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "InboxShortcuts",
+    sessions: [
+      {
+        id: "ses_keys_first",
+        title: "First read session",
+        time: { created: T0, updated: T0 + 3, idle: T0 + 3, viewed: T0 + 3 },
+      },
+      { id: "ses_keys_unread", title: "Unread session", time: { created: T0, updated: T0 + 2, idle: T0 + 2 } },
+      {
+        id: "ses_keys_second",
+        title: "Second read session",
+        time: { created: T0, updated: T0 + 1, idle: T0 + 1, viewed: T0 + 1 },
+      },
+      {
+        id: "ses_keys_archived",
+        title: "Archived session",
+        time: { created: T0, updated: T0 + 4, idle: T0 + 4, viewed: T0 + 4, archived: T0 + 10 },
+      },
+    ],
+    seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
+  })
+  await page.goto("/")
+
+  const rows = page.locator('[data-slot="sidebar-inbox"] [data-slot="sidebar-inbox-item"]')
+
+  await expect(rows).toHaveText([/First read session/, /Unread session/, /Second read session/])
+
+  await page.keyboard.press("ControlOrMeta+1")
+  await expectPath(page, sessionHref("ses_keys_first"))
+
+  await page.keyboard.press("Alt+ArrowDown")
+  await expectPath(page, sessionHref("ses_keys_unread"))
+
+  await page.keyboard.press("Alt+ArrowDown")
+  await expectPath(page, sessionHref("ses_keys_second"))
+
+  // Past the last row it wraps to the first, skipping the collapsed Archived section.
+  await page.keyboard.press("Alt+ArrowDown")
+  await expectPath(page, sessionHref("ses_keys_first"))
+
+  await page.keyboard.press("Shift+Alt+ArrowDown")
+  await expectPath(page, sessionHref("ses_keys_unread"))
+
+  await page.keyboard.press("ControlOrMeta+3")
+  await expectPath(page, sessionHref("ses_keys_second"))
+
+  await page.keyboard.press("Alt+ArrowUp")
+  await expectPath(page, sessionHref("ses_keys_unread"))
+})
+
 test("the inbox list's own menu moves Working between the bottom shelf and above Archived", async ({ page }) => {
   await mockWorkspace(page, {
     name: "WorkingPlacement",

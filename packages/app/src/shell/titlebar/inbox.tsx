@@ -7,6 +7,7 @@ import {
   createUniqueId,
   For,
   on,
+  onCleanup,
   Show,
   useContext,
   type Accessor,
@@ -41,6 +42,7 @@ import { tabKey, useTabs, type DraftTab } from "@/shell/tabs/tabs"
 import { createDraftComposerState } from "@/composer/state"
 import { pinnedRefs, pinKey } from "@/shell/tabs/pins"
 import { usePins } from "./pinned-area"
+import { createSessionRowNavigation } from "./tab-strip"
 import { isAttachment } from "@/composer/prompt-parts"
 
 const RECENT_LIMIT = 10
@@ -170,6 +172,42 @@ export function SidebarInbox() {
     }
   })
 
+  // The vertical tab strip's shortcuts, over the session rows in the order they show: ⌘1-9, ⌥↑/⌥↓ and ⇧⌥↑/⇧⌥↓.
+  const rowRefs = new Map<string, HTMLElement>()
+
+  const navigationKeys = () => {
+    const visible = sections()
+
+    const working = state.workingExpanded ? visible.working : []
+
+    return [
+      ...visible.current,
+      ...visible.needs,
+      ...visible.recent,
+      ...(shelf() ? [] : working),
+      ...(state.archivedExpanded ? visible.archived : []),
+      ...(shelf() ? working : []),
+    ].map((entry) => entry.key)
+  }
+
+  createSessionRowNavigation({
+    keys: navigationKeys,
+    current: () => inbox.entries().find((entry) => inbox.selected(entry))?.key,
+    unread: (key) => {
+      const status = inbox.byKey().get(key)?.status
+
+      return status === "done" || status === "failed"
+    },
+    navigate: (key, reveal) => {
+      const entry = inbox.byKey().get(key)
+
+      if (!entry) return
+      inbox.open(entry)
+
+      if (reveal) rowRefs.get(key)?.scrollIntoView({ behavior: "instant", block: "nearest" })
+    },
+  })
+
   // The inbox lists sessions, not tabs, so drafts get their own group: the open one and every other still holding
   // something, newest first. Without it a draft left for a session can't be reached again.
   const draftComposer = (tab: DraftTab) => tabs.state(tab, "prompt", () => createDraftComposerState(tab.draftID))
@@ -239,6 +277,10 @@ export function SidebarInbox() {
         <Show when={inbox.byKey().get(key)}>
           {(entry) => (
             <InboxSessionCard
+              ref={(element) => {
+                rowRefs.set(key, element)
+                onCleanup(() => rowRefs.get(key) === element && rowRefs.delete(key))
+              }}
               project={entry().ctx.projects.forSession(entry().session)}
               directory={entry().session.location.directory}
               title={entry().session.title}
@@ -787,6 +829,7 @@ export function InboxDraftCard(props: {
 }
 
 export function InboxSessionCard(props: {
+  ref?: (element: HTMLButtonElement) => void
   project?: LocalProject
   directory: string
   title?: string
@@ -835,6 +878,7 @@ export function InboxSessionCard(props: {
   return (
     <Menu.Context modal={false}>
       <Menu.Context.Trigger
+        ref={props.ref}
         as="button"
         type="button"
         id={id}
