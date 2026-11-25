@@ -39,6 +39,52 @@ const it = testEffect(
 const command = "echo automation-output; exit 7"
 const trigger = { type: "every", every: "1 hour" } as const
 
+it.live("keeps a relative at trigger JSON-encodable in the permission metadata", () =>
+  Effect.gen(function* () {
+    const directory = AbsolutePath.make((yield* tmpdirScoped()).path)
+    yield* Effect.promise(() =>
+      Bun.write(path.join(directory, "opencode.json"), JSON.stringify({ permission: { shell: "ask" } })),
+    )
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ location: { directory } })
+    const instances = yield* Instance.Service
+    const automations = yield* Automation.Service
+    const invocation = Permission.invocation({
+      sessionID: session.id,
+      agent: Agent.defaultID,
+      messageID: SessionMessage.ID.make("msg_automation_shell_tz"),
+      id: Tool.CallID.make("automation_create_tz"),
+    })
+    const create = yield* automations
+      .create(
+        {
+          name: "relative at",
+          sessionID: session.id,
+          trigger: { type: "at", at: "in 5 minutes" },
+          action: { type: "shell", command: "echo tz" },
+        },
+        invocation,
+      )
+      .pipe(Effect.forkChild)
+
+    yield* Effect.gen(function* () {
+      const permission = yield* Permission.Service
+      const asks = yield* permission
+        .forSession(session.id)
+        .pipe(
+          Effect.repeat({ until: (asks) => asks.length > 0, schedule: Schedule.spaced("10 millis") }),
+          Effect.timeout("10 seconds"),
+        )
+      const metadata = asks[0]?.metadata as Record<string, unknown>
+      expect(metadata.trigger).not.toHaveProperty("tz")
+      expect(JSON.parse(JSON.stringify(metadata))).toStrictEqual(metadata)
+      for (const ask of asks) yield* permission.reply({ requestID: ask.id, reply: "once" })
+    }).pipe(instances.provide(session))
+
+    yield* Fiber.join(create)
+  }),
+)
+
 it.live("approves the fixed command once and records a failed exit without waking a session", () =>
   Effect.gen(function* () {
     const directory = AbsolutePath.make((yield* tmpdirScoped()).path)
