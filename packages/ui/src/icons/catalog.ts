@@ -308,7 +308,7 @@ const icons = {
   },
   "settings-gear": {
     viewBox: "0 0 16 16",
-    body: `<path d="M1.5 11V5L8 1.5L14.5 5V11L8 14.5L1.5 11Z" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M10.5 8C10.5 9.38071 9.38071 10.5 8 10.5C6.61929 10.5 5.5 9.38071 5.5 8C5.5 6.61929 6.61929 5.5 8 5.5C9.38071 5.5 10.5 6.61929 10.5 8Z" stroke="currentColor"/>`,
+    body: `<path d="M1.5 11V5L8 1L14.5 5V11L8 15L1.5 11Z" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M10.5 8C10.5 9.38071 9.38071 10.5 8 10.5C6.61929 10.5 5.5 9.38071 5.5 8C5.5 6.61929 6.61929 5.5 8 5.5C9.38071 5.5 10.5 6.61929 10.5 8Z" stroke="currentColor"/>`,
   },
   "cloud-upload": {
     viewBox: "0 0 20 20",

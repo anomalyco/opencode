@@ -20,7 +20,7 @@ Always answer for OpenCode V2 unless the user explicitly asks about V1,
 legacy OpenCode, or migrating from V1.
 
 Use only <https://opencode.ai/docs/> documentation as the source of truth for V2.
-Do not use <https://opencode.ai/docs/>, which documents V1, and do not use
+Do not use <https://opencode.ai/v1/docs/>, which documents V1, and do not use
 general web search to resolve a V2 documentation question when the V2 docs or
 linked pages cover it. The schema served from
 <https://opencode.ai/config.json> accepts both V2 fields and deprecated V1
@@ -142,8 +142,7 @@ secret into configuration.
 
 For any request to migrate OpenCode configuration, agents, commands, skills,
 plugins, integrations, or other behavior from V1 to V2, read the full
-[migration guide](https://opencode.ai/docs/migrate-v1) before acting. In
-the repository, its source is `services/site/src/docs/content/migrate-v1.mdx`.
+[migration guide](https://opencode.ai/docs/migrate-v1) before acting.
 
 V1 config files and `.opencode/` definitions are intended to remain compatible.
 The only intentional breaking changes are the server API and plugin API. Native

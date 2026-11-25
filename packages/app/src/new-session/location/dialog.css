@@ -29,9 +29,8 @@
   color: inherit;
   cursor: default;
 
-  &:is(:hover, :focus-visible) {
+  &:hover {
     background: var(--v2-overlay-simple-overlay-hover);
-    outline: none;
   }
 }
 
