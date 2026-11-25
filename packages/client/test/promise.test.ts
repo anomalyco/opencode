@@ -70,6 +70,7 @@ test("exposes every standard HTTP API group", () => {
     "push",
     "migration",
     "usage",
+    "flag",
     "config",
   ])
   expect(Object.keys(client.experimental.job)).toEqual(["list", "cancel"])
