@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import { fullGC } from "bun:jsc"
 import { AIError, HttpContext, InvalidRequestError, TransportError } from "@opencode/ai/effect"
 import type {
   ChannelObservation,
@@ -8,7 +9,7 @@ import type {
 } from "@opencode/ai/route"
 import { SessionModelTransport } from "@opencode/core/session/model-transport"
 import { Session } from "@opencode/schema/session"
-import { Cause, Deferred, Effect, Fiber, Metric, Queue, Stream } from "effect"
+import { Cause, Deferred, Effect, Fiber, Metric, Queue, Scope, Stream } from "effect"
 import { TestClock } from "effect/testing"
 import { Headers } from "effect/http"
 
@@ -48,7 +49,7 @@ const run = <A, E>(connector: WebSocketConnector, effect: Effect.Effect<A, E, Se
 
 const runWithTestClock = <A, E>(
   connector: WebSocketConnector,
-  effect: Effect.Effect<A, E, SessionModelTransport.Service>,
+  effect: Effect.Effect<A, E, SessionModelTransport.Service | Scope.Scope>,
 ) =>
   Effect.runPromise(
     effect.pipe(
@@ -1044,6 +1045,133 @@ describe("SessionModelTransport", () => {
           failure: { reason: { _tag: "Transport", code: "message", delivery: "accepted" } },
         })
         yield* Deferred.await(closed)
+      }),
+    )
+  })
+
+  test("closes a completed idle connection after the idle TTL", async () => {
+    const fixture = automatic()
+
+    await runWithTestClock(
+      fixture.connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        yield* collect(transport.bind(session), exchange("first"))
+        expect(fixture.connections[0]?.closed).toBe(0)
+
+        yield* TestClock.adjust("5 minutes")
+        yield* Effect.yieldNow
+
+        expect(fixture.connections[0]?.closed).toBe(1)
+      }),
+    )
+  })
+
+  test("starts the idle TTL after the most recent exchange", async () => {
+    const fixture = automatic()
+
+    await runWithTestClock(
+      fixture.connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session)
+        yield* collectComplete(executor, exchange("first"))
+        yield* TestClock.adjust("299 seconds")
+        yield* collectComplete(executor, exchange("second"))
+        yield* TestClock.adjust("1 second")
+        expect(fixture.connections[0]?.closed).toBe(0)
+        yield* TestClock.adjust("299 seconds")
+        expect(fixture.connections[0]?.closed).toBe(1)
+      }),
+    )
+  })
+
+  test("does not release an idle watcher's unacquired lock on cancellation", async () => {
+    const sent: string[] = []
+    const connector: WebSocketConnector = {
+      open: () =>
+        Effect.gen(function* () {
+          const messages = yield* Queue.unbounded<string | Uint8Array, AIError>()
+          return {
+            sendText: (message) => Effect.sync(() => void sent.push(message)),
+            messages: Stream.fromQueue(messages),
+            close: Queue.shutdown(messages).pipe(Effect.asVoid),
+          }
+        }),
+    }
+    await runWithTestClock(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const executor = transport.bind(session)
+        const first = yield* collect(executor, exchange("first")).pipe(Effect.forkChild({ startImmediately: true }))
+        expect(sent).toEqual(["first"])
+        yield* TestClock.adjust("5 minutes")
+        yield* Fiber.interrupt(first)
+        const second = yield* collect(executor, exchange("second")).pipe(Effect.forkChild({ startImmediately: true }))
+        const third = yield* collect(executor, exchange("third")).pipe(Effect.forkChild({ startImmediately: true }))
+        yield* Effect.yieldNow
+        expect(sent).toEqual(["first", "second"])
+        yield* Fiber.interrupt(third)
+        yield* Fiber.interrupt(second)
+      }),
+    )
+  })
+
+  test("keeps an active connection past the idle TTL", async () => {
+    const messages = queue<string | Uint8Array, AIError>()
+    const closed = { count: 0 }
+    const connector: WebSocketConnector = {
+      open: () =>
+        Effect.succeed({
+          sendText: () => Effect.void,
+          messages: Stream.fromQueue(messages),
+          close: Effect.sync(() => {
+            closed.count++
+          }).pipe(Effect.andThen(Queue.shutdown(messages)), Effect.asVoid),
+        }),
+    }
+
+    await runWithTestClock(
+      connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const execution = yield* transport.bind(session).execute(exchange("first"))
+        const fiber = yield* execution.frames.pipe(Stream.runCollect, Effect.forkChild)
+
+        yield* TestClock.adjust("5 minutes")
+        expect(closed.count).toBe(0)
+
+        Queue.offerUnsafe(messages, "completed")
+        yield* Fiber.join(fiber)
+        yield* TestClock.adjust("5 minutes")
+        expect(closed.count).toBe(1)
+      }),
+    )
+  })
+
+  test("releases the completed request while its socket remains reusable", async () => {
+    const fixture = automatic()
+
+    await run(
+      fixture.connector,
+      Effect.gen(function* () {
+        const transport = yield* SessionModelTransport.Service
+        const payload = { body: "x".repeat(1024) }
+        const reference = new WeakRef(payload)
+        const item: WebSocketChannelExchange = {
+          ...exchange("first"),
+          fallback: () => {
+            void payload
+            return Stream.make("fallback")
+          },
+        }
+
+        yield* collect(transport.bind(session), item)
+        fullGC()
+
+        expect(fixture.connections[0]?.closed).toBe(0)
+        expect(reference.deref()).toBeUndefined()
       }),
     )
   })

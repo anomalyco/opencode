@@ -23,6 +23,7 @@ const ROTATE_AFTER_MS = 55 * 60 * 1000
 const CONNECT_TIMEOUT = "15 seconds"
 // Reasoning models can stream nothing for several minutes while still working.
 const IDLE_TIMEOUT = "30 minutes"
+const IDLE_SOCKET_TTL = "5 minutes"
 /** Consecutive exchanges lost to the socket before the Session stays on HTTP. */
 const MAX_STREAM_FAILURES = 5
 const events = Metric.counter("opencode_session_websocket_events_total", {
@@ -46,6 +47,7 @@ interface Channel {
   checkpoint?: ChannelCheckpoint
   pending?: { readonly token: object; readonly checkpoint: ChannelCheckpoint }
   reader?: Fiber.Fiber<unknown, unknown>
+  idle?: Fiber.Fiber<unknown, never>
 }
 
 interface State {
@@ -138,11 +140,19 @@ export const makeLayer = (connector: WebSocketConnector) =>
         return created
       }
 
+      const stopWatchers = Effect.fnUntraced(function* (channel: Channel) {
+        const current = Fiber.getCurrent()
+        if (channel.reader && channel.reader !== current) yield* Fiber.interrupt(channel.reader)
+        if (channel.idle && channel.idle !== current) yield* Fiber.interrupt(channel.idle)
+        channel.reader = undefined
+        channel.idle = undefined
+      })
+
       const closeChannel = Effect.fn("SessionModelTransport.closeChannel")(function* (owner: State, channel: Channel) {
         if (owner.channel === channel) owner.channel = undefined
         if (channel.closing) return
         channel.closing = true
-        if (channel.reader) yield* Fiber.interrupt(channel.reader)
+        yield* stopWatchers(channel)
         yield* channel.connection.close
         if (channel.active)
           Queue.failCauseUnsafe(
@@ -170,6 +180,7 @@ export const makeLayer = (connector: WebSocketConnector) =>
         if (owner.channel === channel) owner.channel = undefined
         if (channel.closing) return
         channel.closing = true
+        yield* stopWatchers(channel)
         yield* Effect.logDebug("session websocket poisoned", {
           sessionTransport: "websocket",
           code: error.reason._tag === "Transport" ? error.reason.code : error.reason._tag,
@@ -194,6 +205,61 @@ export const makeLayer = (connector: WebSocketConnector) =>
           failures: owner.streamFailures,
         })
         yield* metric("fallback", { reason: "stream_failures" })
+      })
+
+      const watchMessages = Effect.fnUntraced(function* (owner: State, channel: Channel, url: string) {
+        return yield* channel.connection.messages.pipe(
+          Stream.runForEach((message) =>
+            Effect.gen(function* () {
+              const active = channel.active
+              if (!active)
+                return yield* transportError("WebSocket data arrived without an active exchange", {
+                  url,
+                  operation: "read",
+                  code: "idle-data",
+                  phase: "receive",
+                })
+              active.delivery = "provider-observed"
+              if (typeof message !== "string")
+                return yield* transportError("Unsupported binary WebSocket frame", {
+                  url,
+                  operation: "read",
+                  code: "message",
+                  phase: "receive",
+                })
+              Queue.offerUnsafe(active.queue, message)
+            }),
+          ),
+          Effect.catch((error) =>
+            channel.closing
+              ? Effect.void
+              : poison(
+                  owner,
+                  channel,
+                  annotate(error, {
+                    phase: error.reason._tag === "Transport" && error.reason.phase === "close" ? "close" : "receive",
+                    delivery:
+                      channel.active?.delivery === "provider-observed" || channel.active?.delivery === "terminal"
+                        ? "accepted"
+                        : error.reason._tag === "Transport" && error.reason.code === "1009"
+                          ? "rejected"
+                          : "ambiguous",
+                  }),
+                ),
+          ),
+          Effect.forkIn(scope, { startImmediately: true }),
+        )
+      })
+
+      const watchIdle = Effect.fnUntraced(function* (owner: State, channel: Channel) {
+        yield* Effect.sleep(IDLE_SOCKET_TTL)
+        yield* owner.lock.withPermit(
+          Effect.gen(function* () {
+            if (channel.closing || channel.active || owner.channel !== channel) return
+            yield* closeChannel(owner, channel)
+            yield* metric("idle_close")
+          }),
+        )
       })
 
       const open = Effect.fn("SessionModelTransport.open")(function* (
@@ -235,48 +301,8 @@ export const makeLayer = (connector: WebSocketConnector) =>
               closing: false,
             }
             owner.channel = channel
-            channel.reader = yield* connection.messages.pipe(
-              Stream.runForEach((message) =>
-                Effect.gen(function* () {
-                  const active = channel.active
-                  if (!active)
-                    return yield* transportError("WebSocket data arrived without an active exchange", {
-                      url: exchange.connect.url,
-                      operation: "read",
-                      code: "idle-data",
-                      phase: "receive",
-                    })
-                  active.delivery = "provider-observed"
-                  if (typeof message !== "string")
-                    return yield* transportError("Unsupported binary WebSocket frame", {
-                      url: exchange.connect.url,
-                      operation: "read",
-                      code: "message",
-                      phase: "receive",
-                    })
-                  Queue.offerUnsafe(active.queue, message)
-                }),
-              ),
-              Effect.catch((error) =>
-                channel.closing
-                  ? Effect.void
-                  : poison(
-                      owner,
-                      channel,
-                      annotate(error, {
-                        phase:
-                          error.reason._tag === "Transport" && error.reason.phase === "close" ? "close" : "receive",
-                        delivery:
-                          channel.active?.delivery === "provider-observed" || channel.active?.delivery === "terminal"
-                            ? "accepted"
-                            : error.reason._tag === "Transport" && error.reason.code === "1009"
-                              ? "rejected"
-                              : "ambiguous",
-                      }),
-                    ),
-              ),
-              Effect.forkIn(scope, { startImmediately: true }),
-            )
+            const url = exchange.connect.url
+            channel.reader = yield* watchMessages(owner, channel, url)
             yield* Effect.logDebug("session websocket connected", {
               sessionTransport: "websocket",
               phase: "connect",
@@ -362,6 +388,10 @@ export const makeLayer = (connector: WebSocketConnector) =>
             )
         if (!channel) return fallback(exchange)
 
+        if (channel.idle) {
+          yield* Fiber.interrupt(channel.idle)
+          channel.idle = undefined
+        }
         if (channel.pending) {
           channel.pending = undefined
           channel.checkpoint = undefined
@@ -454,6 +484,8 @@ export const makeLayer = (connector: WebSocketConnector) =>
                 // never answered and the socket dies with 1006. api.openai.com keeps it open, so reconnecting
                 // costs one handshake there. Drop the socket after every error so retries never race that.
                 if (terminal.type !== "completed" && terminal.type !== "incomplete") yield* closeChannel(owner, channel)
+                if (!channel.closing)
+                  channel.idle = yield* watchIdle(owner, channel).pipe(Effect.forkIn(scope, { startImmediately: true }))
                 return
               }
               yield* metric("cancellation")
