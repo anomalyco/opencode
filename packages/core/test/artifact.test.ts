@@ -263,6 +263,11 @@ describe("experimental.artifacts service and tools", () => {
         expect(Object.keys(snapshot.files)).toEqual(["index.html", "a.txt", "b.txt", "c.txt"])
         expect(snapshot.omitted).toEqual({ "big.txt": 65 * 1024, "d.txt": 64 * 1024 })
 
+        // An update keeps the files that read left out, since they can't be sent back, and drops the rest it omits.
+        yield* artifacts.update(page.id, { files: { "index.html": "<h1>v2</h1>", "d.txt": "d" } })
+        expect(Object.keys(remote.get(page.id) ?? {}).toSorted()).toEqual(["big.txt", "d.txt", "index.html"])
+        expect((yield* artifacts.get(page.id)).files).toEqual({ "index.html": "<h1>v2</h1>", "d.txt": "d" })
+
         // A host others edit is read live, and the snapshot follows it.
         const shared = yield* artifacts.create({
           title: "Shared",
@@ -403,6 +408,8 @@ describe("experimental.artifacts service and tools", () => {
           "assets/app.js": "console.log(1)",
         })
         expect(yield* consoleStorage.get(`artifact-slug:${shared}`)).toBe("console-page-abc123")
+        // Only local artifacts had files on disk, so another host's can't be read until it's loaded.
+        expect(yield* artifacts.get(shared).pipe(Effect.flip)).toBeInstanceOf(Artifact.ProviderNotFoundError)
         expect(yield* kv.get(`artifact:item:${local}`)).toBeUndefined()
       }).pipe(Effect.provide(buildLayer(true, dir)))
     }),

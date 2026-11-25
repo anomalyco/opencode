@@ -13512,11 +13512,14 @@
             }
           },
           "404": {
-            "description": "ArtifactNotFoundError | LocationNotFoundError",
+            "description": "ProviderNotFoundError | ArtifactNotFoundError | LocationNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ProviderNotFoundErrorEncoded"
+                    },
                     {
                       "$ref": "#/components/schemas/ArtifactNotFoundErrorEncoded"
                     },

@@ -170,7 +170,7 @@ export interface Interface extends State.Transformable<Editor> {
     readonly provider?: ProviderID
   }) => Effect.Effect<readonly Info[], DisabledError | Session.NotFoundError>
   readonly create: (input: CreateInput) => Effect.Effect<Info, Error>
-  readonly get: (id: ID) => Effect.Effect<Content, DisabledError | NotFoundError | ProviderError>
+  readonly get: (id: ID) => Effect.Effect<Content, DisabledError | NotFoundError | ProviderNotFoundError | ProviderError>
   readonly info: (id: ID) => Effect.Effect<Info, DisabledError | NotFoundError>
   readonly update: (id: ID, input: UpdateInput) => Effect.Effect<Info, Error>
   readonly remove: (
@@ -224,6 +224,13 @@ const layer = Layer.effect(
     // The last published files of every artifact, whatever its provider.
     const saveSnapshot = (id: ID, files: Readonly<Record<string, Uint8Array>>) =>
       replaceDirectoryFiles(itemDir(id), files).pipe(Effect.orDie)
+    const snapshotExists = (id: ID) =>
+      Effect.promise(() =>
+        fs.stat(itemDir(id)).then(
+          () => true,
+          () => false,
+        ),
+      )
 
     // This server serves the snapshot, so publishing locally has nothing more to do.
     const localProvider: ProviderImplementation = {
@@ -376,6 +383,9 @@ const layer = Layer.effect(
         yield* requireEnabled()
         const existing = yield* requireRecord(id)
         const read = state.get().providers.get(existing.provider)?.read
+        // An artifact migrated from KV has no snapshot unless its provider was local.
+        if (!read && !(yield* snapshotExists(id)))
+          return yield* new ProviderNotFoundError({ providerID: existing.provider })
         const files = read
           ? yield* read(id).pipe(
               Effect.mapError((cause) => new ProviderError({ providerID: existing.provider, cause })),
@@ -394,7 +404,14 @@ const layer = Layer.effect(
         const existing = yield* requireRecord(id)
         const title = input.title === undefined ? existing.title : input.title.trim()
         if (!title) return yield* new InvalidError({ reason: "Artifact title must not be empty", field: "title" })
-        const files = yield* normalizeFiles(encodeStringFiles(input.files))
+        const supplied = yield* normalizeFiles(encodeStringFiles(input.files))
+        // Files a read leaves out (binary, or past its limits) can't be sent back, so they stay unless replaced.
+        const previous = yield* readDirectoryFiles(itemDir(id))
+        const omitted = inlineFiles(previous, existing.entry).omitted
+        const files = {
+          ...Object.fromEntries(Object.entries(previous).filter(([filePath]) => filePath in omitted)),
+          ...supplied,
+        }
         const entry = yield* resolveEntry(files, input.entry ?? (files[existing.entry] ? existing.entry : undefined))
         const provider = yield* resolveProvider(existing.provider)
         const now = yield* Clock.currentTimeMillis
