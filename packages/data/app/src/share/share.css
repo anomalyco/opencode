@@ -477,7 +477,7 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
     /* Code reads left to right in every language. */
     direction: ltr;
     text-align: left;
-    cursor: copy;
+    cursor: pointer;
     background: var(--stats-bg);
     border: 1px solid var(--stats-line-strong);
     border-radius: 0;
