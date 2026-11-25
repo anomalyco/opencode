@@ -221,6 +221,11 @@ export interface Interface extends State.Transformable<Editor> {
     readonly entry: McpClient.Skill
     readonly ref?: string
   }) => Effect.Effect<McpClient.SkillFile, NotFoundError | Error>
+  /** Experimental: one skill of a server by its `SKILL.md` URI, listed or not (`skills/get`). No file is read. */
+  readonly getSkill: (input: {
+    readonly server: ServerName | string
+    readonly uri: string
+  }) => Effect.Effect<McpClient.Skill, NotFoundError | Error>
   /** Experimental: MCP Events of a connected server that offers them. */
   readonly events: (server: ServerName | string) => Effect.Effect<McpClient.Events | undefined, NotFoundError>
   /**
@@ -1181,6 +1186,16 @@ export const layer = (options?: Options) =>
         skills: Effect.fn("MCP.skills")(function* () {
           return Array.from(entries).flatMap(([server, entry]) =>
             (entry.connection.skills ?? []).map((skill): Skill => ({ server, entry: skill })),
+          )
+        }),
+        getSkill: Effect.fn("MCP.getSkill")(function* (input) {
+          const name = ServerName.make(input.server)
+          const target = yield* connected(name)
+          if (!target.client) return yield* Effect.fail(new Error(unavailable(name, target.entry.status)))
+          return yield* target.entry.connection.recovering(target.client, (connection) =>
+            connection.skills
+              ? connection.skills.get(input.uri)
+              : Effect.fail(new Error(`MCP server "${name}" does not offer skills`)),
           )
         }),
         readSkill: Effect.fn("MCP.readSkill")(function* (input) {
