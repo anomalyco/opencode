@@ -162,7 +162,8 @@ function parseAdd(
     content.push(lines[index]!.slice(1))
     index++
   }
-  return { content: content.join("\n"), next: index }
+  // Every `+` line is one line of the file, so a final empty `+` line is a blank last line, not the closing newline.
+  return { content: content.map((line) => `${line}\n`).join(""), next: index }
 }
 
 function parseUpdate(
