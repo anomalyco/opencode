@@ -512,3 +512,21 @@ describe("hang watchdog", () => {
     ])
   })
 })
+
+// Find asks for the text that Markdown sources show. Each request stands alone, as a parse does: it has no key, so
+// none waits behind another or replaces it.
+test("a text request is posted at once, settled by its answer, and rejected with its worker", () => {
+  const text = (...sources: string[]): MarkdownWorkerEvent => ({ type: "text.requested", sources })
+  const asked = replay([text("**a**"), project("p"), text("b")])
+  expect(posted(asked.effects)).toEqual([1, 2, 3])
+
+  const answered = replay([reply({ type: "text", id: 1, texts: ["a"] })], asked.state)
+  expect(answered.effects).toEqual([{ type: "resolve-text", id: 1, texts: ["a"] }])
+  expect([...ready(answered.state).requests.keys()]).toEqual([2, 3])
+
+  const refused = replay([reply({ type: "error", id: 3, message: "no" })], answered.state)
+  expect(rejected(refused.effects, "error")).toEqual([3])
+
+  const crashed = replay([text("c"), { type: "worker.crashed", attempt: 1, message: "boom" }], refused.state)
+  expect(rejected(crashed.effects, "error")).toEqual([2, 4])
+})

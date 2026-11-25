@@ -84,6 +84,7 @@ export type MarkdownWorkerEvent =
       readonly complete: boolean
     }
   | { readonly type: "highlight.disposed"; readonly key: string }
+  | { readonly type: "text.requested"; readonly sources: readonly string[] }
   | { readonly type: "worker.message"; readonly attempt: number; readonly response: MarkdownWorkerResponse }
   | { readonly type: "worker.spawn-failed"; readonly attempt: number; readonly message: string }
   | { readonly type: "worker.crashed"; readonly attempt: number; readonly message: string }
@@ -96,9 +97,14 @@ export type MarkdownWorkerEffect =
   | { readonly type: "post"; readonly attempt: number; readonly message: MarkdownWorkerRequest }
   | { readonly type: "arm-watchdog"; readonly attempt: number; readonly delay: number }
   | { readonly type: "schedule-retry"; readonly attempt: number; readonly delay: number }
-  | { readonly type: "resolve-parse"; readonly id: number; readonly html: Extract<MarkdownWorkerResponse, { type: "parse" }>["html"] }
+  | {
+      readonly type: "resolve-parse"
+      readonly id: number
+      readonly html: Extract<MarkdownWorkerResponse, { type: "parse" }>["html"]
+    }
   | { readonly type: "resolve-project"; readonly id: number; readonly projection: Projection }
   | { readonly type: "resolve-highlight"; readonly id: number; readonly value: MarkdownWorkerState }
+  | { readonly type: "resolve-text"; readonly id: number; readonly texts: readonly string[] }
   | { readonly type: "reject"; readonly ids: readonly number[]; readonly reason: WorkerRejectReason }
 
 export type MarkdownWorkerTransition = {
@@ -124,7 +130,10 @@ const TIMED_OUT: WorkerFailure = Object.freeze({ kind: "error", message: "Markdo
 
 const OUT_OF_SYNC: WorkerFailure = Object.freeze({ kind: "error", message: "Markdown projection out of sync" })
 
-type Requested = Extract<MarkdownWorkerEvent, { type: "parse.requested" | "project.requested" | "highlight.requested" }>
+type Requested = Extract<
+  MarkdownWorkerEvent,
+  { type: "parse.requested" | "project.requested" | "highlight.requested" | "text.requested" }
+>
 
 type KeyedRequest = Extract<WorkerRequest, { key: string }>
 
@@ -134,7 +143,12 @@ export function transitionMarkdownWorker(
   state: MarkdownWorkerMachineState,
   event: MarkdownWorkerEvent,
 ): MarkdownWorkerTransition {
-  if (event.type === "parse.requested" || event.type === "project.requested" || event.type === "highlight.requested")
+  if (
+    event.type === "parse.requested" ||
+    event.type === "project.requested" ||
+    event.type === "highlight.requested" ||
+    event.type === "text.requested"
+  )
     return request(state, event)
 
   if (event.type === "retry.ready") {
@@ -225,6 +239,8 @@ function request(state: MarkdownWorkerMachineState, event: Requested): MarkdownW
 function requestMessage(event: Requested, id: number): WorkerRequest {
   if (event.type === "parse.requested") return { type: "parse", id, text: event.text }
 
+  if (event.type === "text.requested") return { type: "text", id, sources: event.sources }
+
   if (event.type === "project.requested")
     return { type: "project", id, key: event.key, text: event.text, live: event.live }
 
@@ -245,16 +261,18 @@ function admit(
   spawn: readonly MarkdownWorkerEffect[],
 ): MarkdownWorkerTransition {
   const requests = new Map(state.requests).set(message.id, message)
-  const lane = message.type === "parse" ? undefined : state[laneField(message)].get(message.key)
+  // A parse and a text request have no key: each one is posted and answered on its own.
+  const keyed = message.type === "parse" || message.type === "text" ? undefined : message
+  const lane = keyed && state[laneField(keyed)].get(keyed.key)
 
-  if (lane && message.type !== "parse") {
+  if (lane && keyed) {
     if (lane.queued !== undefined) requests.delete(lane.queued)
 
     return {
       state: withLane(
         { ...state, issued: message.id, requests },
-        laneField(message),
-        new Map(state[laneField(message)]).set(message.key, { active: lane.active, queued: message.id }),
+        laneField(keyed),
+        new Map(state[laneField(keyed)]).set(keyed.key, { active: lane.active, queued: message.id }),
       ),
       effects:
         lane.queued === undefined ? EMPTY_WORKER_EFFECTS : [{ type: "reject", ids: [lane.queued], reason: SUPERSEDED }],
@@ -271,10 +289,10 @@ function admit(
 
   const next = { ...state, issued: message.id, watched: arm ? message.id : state.watched, requests }
 
-  if (message.type === "parse") return { state: next, effects }
-  const field = laneField(message)
+  if (!keyed) return { state: next, effects }
+  const field = laneField(keyed)
 
-  return { state: withLane(next, field, new Map(state[field]).set(message.key, { active: message.id })), effects }
+  return { state: withLane(next, field, new Map(state[field]).set(keyed.key, { active: message.id })), effects }
 }
 
 function dispose(state: MarkdownWorkerReady, field: LaneField, key: string): MarkdownWorkerTransition {
@@ -314,6 +332,12 @@ function message(state: MarkdownWorkerReady, response: MarkdownWorkerResponse): 
     return {
       state: { ...state, failures: 0, requests: without(state.requests, entry.id) },
       effects: [{ type: "resolve-parse", id: entry.id, html: response.html }],
+    }
+
+  if (response.type === "text" && entry.type === "text")
+    return {
+      state: { ...state, failures: 0, requests: without(state.requests, entry.id) },
+      effects: [{ type: "resolve-text", id: entry.id, texts: response.texts }],
     }
 
   if (response.type === "project" && entry.type === "project") return projected(state, entry, response)
@@ -410,7 +434,7 @@ function refused(
     reason: { kind: "error", message: response.message },
   }
 
-  if (entry.type === "parse")
+  if (entry.type === "parse" || entry.type === "text")
     return { state: { ...state, failures: 0, requests: without(state.requests, entry.id) }, effects: [reject] }
   const next = advance(state, entry)
   const stream = entry.type === "highlight" ? state.highlightStreams.get(entry.key) : undefined
