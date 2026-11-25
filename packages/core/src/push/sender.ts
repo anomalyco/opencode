@@ -27,6 +27,8 @@ export interface Interface {
   readonly clear: (ids: ReadonlyArray<string>) => Effect.Effect<void>
   /** Removes every notification sent for this top-level session, for when the session is deleted. */
   readonly clearSession: (sessionID: string) => Effect.Effect<void>
+  /** Removes a finished turn's notification because a client opened the session, unless the turn only just ended. */
+  readonly viewed: (sessionID: string) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/PushSender") {}
@@ -35,6 +37,9 @@ const maxMessageBytes = 2600
 const attempts = 3
 // How long a sent notification can still be cleared. Older ones are forgotten so the record doesn't grow forever.
 const clearableFor = 7 * 24 * 60 * 60 * 1000
+// A client with the session already open reports the view the moment the turn ends, whether or not anyone is
+// looking. Only a later view counts as the user having seen it.
+const viewedAfter = 5_000
 
 /** Drops characters from the end of `text` until its JSON is at least `bytes` shorter, then adds "…". */
 const shorten = (text: string, bytes: number) => {
@@ -167,6 +172,14 @@ const layer = Layer.effect(
           Effect.forkIn(scope),
           Effect.asVoid,
         ),
+      // A finished turn's notification is sent under the session's id; permissions and questions are not, so a view
+      // leaves them alone.
+      viewed: Effect.fn("PushSender.viewed")(function* (sessionID) {
+        const entry = sent.get(sessionID)
+        if (!entry) return
+        if ((yield* Clock.currentTimeMillis) - entry.at < viewedAfter) return
+        yield* clear([sessionID]).pipe(Effect.forkIn(scope))
+      }),
     })
   }),
 )

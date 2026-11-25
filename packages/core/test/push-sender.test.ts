@@ -229,6 +229,32 @@ describe("PushSender", () => {
     }),
   )
 
+  it.effect("clears a finished turn on a view, but not a view as the turn ends or a pending question", () =>
+    Effect.gen(function* () {
+      const sender = yield* PushSender.Service
+      const device = yield* phone(ids.ok, "ok")
+
+      yield* sender.send(finished)
+      yield* sender.send(question)
+      yield* advance(() => calls.length === 2)
+      // The session was open when the turn ended, so nobody has necessarily seen it.
+      yield* TestClock.adjust("1 second")
+      yield* sender.viewed(sessionID)
+      yield* drain
+      expect(calls.length).toBe(2)
+
+      yield* TestClock.adjust("5 seconds")
+      yield* sender.viewed(sessionID)
+      yield* advance(() => calls.length === 3)
+      yield* sender.viewed(sessionID)
+      yield* drain
+
+      expect(calls.length).toBe(3)
+      expect(calls[2].silent).toBe(true)
+      expect(open(device, calls[2].box)).toEqual({ v: 1, id: finished.id, type: "clear", sessionID })
+    }),
+  )
+
   it.effect("shortens a long body so the box fits the relay", () =>
     Effect.sync(() => {
       for (const body of ["é".repeat(5_000), "漢".repeat(1_500), "\n".repeat(3_000)]) {
