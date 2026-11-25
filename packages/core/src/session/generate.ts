@@ -3,6 +3,7 @@ export * as SessionGenerate from "./generate.js"
 import type { FileSystem } from "../filesystem.js"
 import { LLMClient, Message, SystemPart, type AIError } from "@opencode/ai/effect"
 import { Effect, type JsonSchema } from "effect"
+import { Agent } from "../agent.js"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
 import { Instance } from "../instance/service.js"
@@ -62,19 +63,32 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
   return yield* Effect.gen(function* () {
     yield* Plugin.awaitActivation
     const context = yield* SessionContext.Service
-    const selection = yield* context.select(input.session.id)
-    const model = yield* context.resolveModel(
-      input.model === undefined ? selection.session : { ...selection.session, model: input.model },
-      { kind: "generate", agent: selection.agent.id },
-    )
-    const tools =
-      input.output === undefined ? (input.history === false ? undefined : selection.tools) : outputTools(input.output)
-    const request = yield* input.history === false
-      ? Effect.succeed({
-          system: input.system === undefined ? [] : [SystemPart.make(input.system)],
-          messages: [Message.user(input.prompt)],
+    // Without history, skip context.select() (MCP flush, tool snapshot, and instruction loading) so parallel llm() calls
+    // don't pay full session-preflight overhead only to discard the result.
+    const prepared = yield* input.history === false
+      ? Effect.gen(function* () {
+          const agent = input.session.agent ?? Agent.defaultID
+          const model = yield* context.resolveModel(
+            input.model === undefined ? input.session : { ...input.session, model: input.model },
+            { kind: "generate", agent },
+          )
+          const req = yield* context.request.generate({
+            session: input.session,
+            agent,
+            model,
+            tools: input.output === undefined ? undefined : outputTools(input.output),
+            system: input.system === undefined ? [] : [SystemPart.make(input.system)],
+            messages: [Message.user(input.prompt)],
+            ...(input.output === undefined ? {} : { toolChoice: OUTPUT_TOOL }),
+          })
+          return { session: input.session, model, prepared: req }
         })
       : Effect.gen(function* () {
+          const selection = yield* context.select(input.session.id)
+          const model = yield* context.resolveModel(
+            input.model === undefined ? selection.session : { ...selection.session, model: input.model },
+            { kind: "generate", agent: selection.agent.id },
+          )
           const history = yield* SessionHistory.preview(
             database.db,
             selection.session.id,
@@ -88,32 +102,29 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
             initial: history.initial,
             messages: history.messages,
           })
-          return {
+          const req = yield* context.request.generate({
+            session: selection.session,
+            agent: selection.agent.id,
+            model,
+            tools: input.output === undefined ? selection.tools : outputTools(input.output),
             system: [...transcript.system, ...(input.system === undefined ? [] : [SystemPart.make(input.system)])],
             messages: [
               ...transcript.messages,
               ...(history.instructionUpdate ? [Message.system(history.instructionUpdate)] : []),
               Message.user(input.prompt),
             ],
-          }
+            ...(input.output === undefined ? {} : { toolChoice: OUTPUT_TOOL }),
+          })
+          return { session: selection.session, model, prepared: req }
         })
-    const prepared = yield* context.request.generate({
-      session: selection.session,
-      agent: selection.agent.id,
-      model,
-      tools,
-      system: request.system,
-      messages: request.messages,
-      ...(input.output === undefined ? {} : { toolChoice: OUTPUT_TOOL }),
-    })
     yield* Effect.logInfo("sending session generation request", {
-      sessionID: selection.session.id,
-      providerID: model.ref.providerID,
-      modelID: model.ref.id,
+      sessionID: prepared.session.id,
+      providerID: prepared.model.ref.providerID,
+      modelID: prepared.model.ref.id,
     })
-    const response = yield* llm.generate(prepared.request, prepared.options).pipe(ModelRetry.retry)
-    const usage = SessionUsage.record(response.usage, model.cost)
-    yield* bus.publish(SessionEvent.UsageRecorded, { sessionID: selection.session.id, source: "generate", ...usage })
+    const response = yield* llm.generate(prepared.prepared.request, prepared.prepared.options).pipe(ModelRetry.retry)
+    const usage = SessionUsage.record(response.usage, prepared.model.cost)
+    yield* bus.publish(SessionEvent.UsageRecorded, { sessionID: prepared.session.id, source: "generate", ...usage })
     const call = input.output === undefined ? undefined : response.toolCalls.find((item) => item.name === OUTPUT_TOOL)
     return { text: response.text, ...(call === undefined ? {} : { output: call.input }), ...usage }
   }).pipe(instances.provide(input.session))

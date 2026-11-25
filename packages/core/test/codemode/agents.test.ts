@@ -148,8 +148,9 @@ describe("agent() and llm() arguments", () => {
     expect(await failure(`await agent("x")`)).toContain("not available in this session")
     expect(await failure(`await agent("")`)).toContain("non-empty prompt")
     expect(await failure(`await agent("x", { shema: {} })`)).toContain(
-      "valid options: agent, model, label, schema, retries",
+      "valid options: agent, model, effort, label, schema, retries",
     )
     expect(await failure(`await llm("x", { schema: "string" })`)).toContain("schema must be an object")
+    expect(await failure(`await llm("x", { effort: "turbo" })`)).toContain("valid options:")
   })
 })

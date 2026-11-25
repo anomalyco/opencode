@@ -22,6 +22,7 @@ Options (anything else is an error):
 - `schema`: return a value checked against this schema instead of text. See Schemas.
 - `agent`: the subagent type, default `"general"`. Use `"explore"` for read-only research.
 - `model`: `"providerID/modelID"`. Omit it to use the agent's or the session's model.
+- `effort`: `"none" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max"`. Use `"low"` for fast mechanical workers; omit to inherit.
 - `label`: a short title for the child session and the progress row.
 - `retries`: 0 to 3 extra attempts after a failure that is not a usage or rate limit. Default 0.
 
@@ -37,7 +38,7 @@ const label = await llm(`Is this a bug report or a feature request?\n\n${issue.b
 })
 ```
 
-Options: `schema`, `system`, `model`, `label`, `retries`. It sees only `system` and `prompt`, so include the text it should work on. Use it to classify, extract, summarize, deduplicate or judge text the script already has. If the step needs to read files or run commands, use agent().
+Options: `schema`, `system`, `model`, `effort`, `label`, `retries`. Defaults to low reasoning effort when the model supports it; pass `effort: "high"` for harder steps. It sees only `system` and `prompt`, so include the text it should work on. Use it to classify, extract, summarize, deduplicate or judge text the script already has. If the step needs to read files or run commands, use agent().
 
 ## Schemas
 
@@ -70,7 +71,7 @@ Calls run concurrently when you start them before awaiting:
 const results = await Promise.all(files.map((file) => agent(`Review ${file}`, { schema: Findings })))
 ```
 
-- At most 8 agents run at once; the rest wait their turn, so it is fine to start 50. A script may start 100 agents and 500 llm() calls in total.
+- At most 16 agents and 32 `llm()` calls run at once; the rest wait their turn. A script may start 100 agents and 500 `llm()` calls in total.
 - `Promise.all` rejects on the first failure. Use `Promise.allSettled` when some may fail and the rest are still useful.
 - After any call hits a usage or rate limit, no more calls start: they would fail the same way.
 

@@ -53,10 +53,14 @@ export interface Output {
   readonly codec: Schema.Codec<unknown>
 }
 
+export const EFFORTS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const
+export type Effort = (typeof EFFORTS)[number]
+
 export interface AgentInput {
   readonly prompt: string
   readonly agent?: string
   readonly model?: string
+  readonly effort?: Effort
   readonly label?: string
   readonly output?: Output
 }
@@ -64,6 +68,7 @@ export interface AgentInput {
 export interface LlmInput {
   readonly prompt: string
   readonly model?: string
+  readonly effort?: Effort
   readonly system?: string
   readonly output?: Output
 }
@@ -111,9 +116,9 @@ export const unavailable = Service.of({ register: () => Effect.void, current: Ef
 
 /** Per-run limits. A script that needs more should be split into several runs. */
 export const LIMITS = {
-  agentConcurrency: 8,
+  agentConcurrency: 16,
   agentTotal: 100,
-  llmConcurrency: 16,
+  llmConcurrency: 32,
   llmTotal: 500,
 }
 
@@ -123,13 +128,13 @@ const OPTIONAL = "~optional"
 const guide = `## agent(), llm() and z in Code Mode
 
 Scripts you run with \`execute\` also have these globals:
-- \`await agent(prompt, { schema?, agent?, model?, label?, retries? })\` starts a subagent with its own tools and session, waits for it, and returns its final text. With \`schema\`, it returns a value checked against the schema instead.
-- \`await llm(prompt, { schema?, system?, model?, retries? })\` makes one model call with no tools and no conversation history: classify, extract, summarize or judge text the script already has. With \`schema\`, it returns a checked value.
-- \`z\` builds schemas the way zod does: \`z.object({ file: z.string(), line: z.integer().optional(), severity: z.enum(["low", "high"]) })\`. Plain JSON Schema works too.
+- \`await agent(prompt, { schema?, agent?, model?, effort?, label?, retries? })\` starts a subagent (default \`"general"\`, use \`"explore"\` for read-only work) in its own child session, waits for it, and returns its final text — or a checked value when \`schema\` is given.
+- \`await llm(prompt, { schema?, system?, model?, effort?, label?, retries? })\` makes one fast model call with no tools and no history (defaults to low reasoning effort). Use it whenever the script already has the text to classify, extract, summarize or verify.
+- \`z\` builds JSON Schema like zod: \`z.object({ file: z.string(), line: z.integer().optional(), severity: z.enum(["low", "high"]) })\`. Plain JSON Schema works too.
 
-Run calls together with \`Promise.all\` or \`Promise.allSettled\`. A script runs at most ${LIMITS.agentConcurrency} agents at once (more wait their turn) and ${LIMITS.agentTotal} in total. A failed call rejects with what went wrong; after a usage or rate limit, no more calls start.
+For speed, put scouting, per-item pipelining (\`Promise.all(items.map(async (item) => { const a = await ...; const b = a.flagged ? await ... : null; return ... }))\`), and writing final files (\`Bun.write\`) in ONE \`execute\` call instead of bouncing intermediate results back to the main session between turns. Read small shared files once in the script and include them in prompts instead of having every worker re-read them. Pass \`effort: "low"\` to \`agent()\` for mechanical stages; omit or pass \`"high"\` for harder reasoning. Up to ${LIMITS.agentConcurrency} agents and ${LIMITS.llmConcurrency} \`llm()\` calls run at once (caps: ${LIMITS.agentTotal} agents, ${LIMITS.llmTotal} \`llm()\`); after any usage/rate limit, no more calls start.
 
-Each agent() is a full subagent run and can cost a lot. Start agents only when the user asks for parallel agents, multi-agent work or a workflow; otherwise describe what a script could do and ask. Before writing a script with agent(), load the \`codemode-agents\` skill.`
+Each \`agent()\` is a full subagent run. Start agents only when the user asks for parallel agents, multi-agent work or a workflow; otherwise describe what a script would do and ask. Load the \`codemode-agents\` skill only if you need advanced multi-stage patterns.`
 
 const instructionsKey = Instructions.Key.make("core/codemode-agents")
 const instructionsCodec = Schema.toCodecJson(Schema.String)
@@ -166,6 +171,7 @@ export const extension = Extension.make({
             prompt: input.prompt,
             ...(input.options?.agent === undefined ? {} : { agent: input.options.agent }),
             ...(input.options?.model === undefined ? {} : { model: input.options.model }),
+            ...(input.options?.effort === undefined ? {} : { effort: input.options.effort }),
             ...(input.options?.label === undefined ? {} : { label: input.options.label }),
             ...(output === undefined ? {} : { output }),
           },
@@ -185,6 +191,7 @@ export const extension = Extension.make({
           {
             prompt: input.prompt,
             ...(input.options?.model === undefined ? {} : { model: input.options.model }),
+            ...(input.options?.effort === undefined ? {} : { effort: input.options.effort }),
             ...(input.options?.system === undefined ? {} : { system: input.options.system }),
             ...(output === undefined ? {} : { output }),
           },
@@ -222,6 +229,7 @@ export const display = (name: string, args: ReadonlyArray<unknown>) => {
     ...(typeof options.label === "string" ? { label: options.label } : {}),
     ...(name === "agent" && typeof options.agent === "string" ? { agent: options.agent } : {}),
     ...(typeof options.model === "string" ? { model: options.model } : {}),
+    ...(typeof options.effort === "string" ? { effort: options.effort } : {}),
     ...(options.schema !== undefined ? { schema: true } : {}),
   }
 }
@@ -338,10 +346,12 @@ const limited = (run: RunState, kind: "agent" | "llm", retries: number, call: Ef
   })
 
 const Retries = Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 3 }))
+const EffortSchema = Schema.Literals(EFFORTS)
 
 const AgentOptions = Schema.Struct({
   agent: Schema.optional(Schema.String),
   model: Schema.optional(Schema.String),
+  effort: Schema.optional(EffortSchema),
   label: Schema.optional(Schema.String),
   schema: Schema.optional(Schema.Unknown),
   retries: Schema.optional(Retries),
@@ -349,6 +359,7 @@ const AgentOptions = Schema.Struct({
 
 const LlmOptions = Schema.Struct({
   model: Schema.optional(Schema.String),
+  effort: Schema.optional(EffortSchema),
   system: Schema.optional(Schema.String),
   label: Schema.optional(Schema.String),
   schema: Schema.optional(Schema.Unknown),

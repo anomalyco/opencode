@@ -150,8 +150,9 @@ export const Plugin = {
         save: [info.id],
         ...Permission.invocation(execution),
       })
-      const model =
+      const baseModel =
         input.model === undefined ? (info.model ?? parent.model) : yield* resolveModelRef(models, input.model)
+      const model = yield* applyEffort(models, baseModel, input.effort, false)
       const output = input.output
       const id = SessionSchema.ID.create()
       // Stored durably on the child so schema validation and restart handling never depend on process memory.
@@ -192,7 +193,15 @@ export const Plugin = {
       input: CodeModeAgents.LlmInput,
       execution: Parameters<CodeModeAgents.Implementation["llm"]>[1],
     ): Effect.fn.Return<unknown, unknown> {
-      const model = input.model === undefined ? undefined : yield* resolveModelRef(models, input.model)
+      const parent = yield* sessions.get(execution.sessionID)
+      const baseModel = input.model === undefined ? parent.model : yield* resolveModelRef(models, input.model)
+      // llm() defaults to lower reasoning effort unless the caller asked for a specific effort or #variant.
+      const model = yield* applyEffort(
+        models,
+        baseModel,
+        input.effort,
+        input.effort === undefined && baseModel?.variant === undefined,
+      )
       const request = {
         sessionID: execution.sessionID,
         history: false,
@@ -243,6 +252,32 @@ export const Plugin = {
     })
   }),
 }
+
+// Maps a requested effort level onto the model's supported variants (exact match, else nearest lower variant).
+// For `defaultLow`, prefers `low` (then `minimal`/`none`) so fast `llm()` calls don't burn heavy reasoning tokens.
+const applyEffort = Effect.fn("CodeModeAgents.applyEffort")(function* (
+  models: Model.Interface,
+  ref: Model.Ref | undefined,
+  effort: CodeModeAgents.Effort | undefined,
+  defaultLow: boolean,
+) {
+  if (ref === undefined) return undefined
+  if (effort === undefined && !defaultLow) return ref
+  const info = yield* models.get(ref.providerID, ref.id)
+  if (info === undefined || info.variants.length === 0) return ref
+  const available = new Set<string>(info.variants.map((item) => item.id))
+  const pick =
+    effort !== undefined
+      ? (CodeModeAgents.EFFORTS.slice(0, CodeModeAgents.EFFORTS.indexOf(effort) + 1)
+          .toReversed()
+          .find((candidate) => available.has(candidate)) ??
+        CodeModeAgents.EFFORTS.slice(CodeModeAgents.EFFORTS.indexOf(effort) + 1).find((candidate) =>
+          available.has(candidate),
+        ))
+      : (["low", "minimal", "none"] as const).find((candidate) => available.has(candidate))
+  if (pick === undefined) return ref
+  return Model.Ref.make({ providerID: ref.providerID, id: ref.id, variant: Model.VariantID.make(pick) })
+})
 
 const fail = (message: string) => Effect.fail(new CodeModeAgents.CallError({ message, limit: false }))
 
