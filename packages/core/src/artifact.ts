@@ -1,8 +1,10 @@
 export * as Artifact from "./artifact.js"
 
+import { isUtf8 } from "node:buffer"
 import { randomUUID } from "node:crypto"
 import fs from "node:fs/promises"
 import path from "node:path"
+import { and, desc, eq } from "drizzle-orm"
 import { lookup } from "mime-types"
 import {
   Capability,
@@ -18,10 +20,11 @@ import {
 import type { SessionID } from "@opencode/schema/session-id"
 import { Global } from "@opencode/util/global"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Clock, Context, Effect, Layer, Option, Schema } from "effect"
+import { Clock, Context, Effect, Layer, Schema } from "effect"
+import { ArtifactTable } from "./artifact/sql.js"
 import { Bus } from "./bus.js"
+import { Database } from "./database/database.js"
 import { Flag } from "./flag.js"
-import { KV } from "./kv.js"
 import { Location } from "./location.js"
 import { Mime } from "./mime.js"
 import { Session } from "./session.js"
@@ -30,7 +33,6 @@ import { State } from "./state.js"
 export { Capability, Content, CreateInput, Event, ID, Info, Provider, ProviderID, UpdateInput }
 
 export const LocalProviderID = ProviderID.make("local")
-const ItemPrefix = "artifact:item:"
 
 export interface ProviderCreateInput {
   readonly id: ID
@@ -57,7 +59,8 @@ export interface ProviderImplementation {
   readonly capabilities: readonly Capability[]
   readonly prompt: string
   readonly create: (input: ProviderCreateInput) => Effect.Effect<ProviderResult, unknown>
-  readonly read: (id: ID) => Effect.Effect<Readonly<Record<string, Uint8Array>>, unknown>
+  /** Reads the live files of a host others edit too. Without it, reads use the snapshot saved at the last publish. */
+  readonly read?: (id: ID) => Effect.Effect<Readonly<Record<string, Uint8Array>>, unknown>
   readonly update: (id: ID, input: ProviderUpdateInput) => Effect.Effect<ProviderResult, unknown>
   readonly delete: (id: ID) => Effect.Effect<void, unknown>
 }
@@ -167,10 +170,12 @@ export interface Interface extends State.Transformable<Editor> {
     readonly provider?: ProviderID
   }) => Effect.Effect<readonly Info[], DisabledError | Session.NotFoundError>
   readonly create: (input: CreateInput) => Effect.Effect<Info, Error>
-  readonly get: (id: ID) => Effect.Effect<Content, DisabledError | NotFoundError | ProviderNotFoundError | ProviderError>
+  readonly get: (id: ID) => Effect.Effect<Content, DisabledError | NotFoundError | ProviderError>
   readonly info: (id: ID) => Effect.Effect<Info, DisabledError | NotFoundError>
   readonly update: (id: ID, input: UpdateInput) => Effect.Effect<Info, Error>
-  readonly remove: (id: ID) => Effect.Effect<void, DisabledError | NotFoundError | ProviderError>
+  readonly remove: (
+    id: ID,
+  ) => Effect.Effect<void, DisabledError | NotFoundError | ProviderNotFoundError | ProviderError>
   readonly readLocalFile: (
     id: ID,
     subpath?: string,
@@ -179,26 +184,20 @@ export interface Interface extends State.Transformable<Editor> {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Artifact") {}
 
-const StoredRecord = Schema.Struct({
-  info: Info,
-  directory: Schema.String,
-  projectID: Schema.String,
-})
-type StoredRecord = typeof StoredRecord.Type
-
-const decodeStoredRecord = Schema.decodeUnknownOption(StoredRecord)
-const encodeStoredRecord = Schema.encodeSync(StoredRecord)
 const encoder = new TextEncoder()
+const decoder = new TextDecoder()
 
 /** Resolves the stored directory of an artifact for HTTP routes without an explicit location query. */
-export const locate = (kv: KV.Interface, id: ID) =>
-  kv.get(ItemPrefix + id).pipe(
-    Effect.map((stored) => {
-      if (stored === undefined) return undefined
-      const decoded = decodeStoredRecord(stored)
-      return Option.isSome(decoded) ? decoded.value.directory : undefined
-    }),
-  )
+export const locate = (database: Database.Interface, id: ID) =>
+  database.db
+    .select({ directory: ArtifactTable.directory })
+    .from(ArtifactTable)
+    .where(eq(ArtifactTable.id, id))
+    .get()
+    .pipe(
+      Effect.orDie,
+      Effect.map((row) => row?.directory),
+    )
 
 const layer = Layer.effect(
   Service,
@@ -206,30 +205,36 @@ const layer = Layer.effect(
     const bus = yield* Bus.Service
     const flags = yield* Flag.Service
     const global = yield* Global.Service
-    const kv = yield* KV.Service
+    const db = (yield* Database.Service).db
     const location = yield* Location.Service
     const sessions = yield* Session.Service
 
     const rootDir = path.join(global.data, "artifacts")
     const itemDir = (id: ID) => path.join(rootDir, id)
     const requireRecord = (id: ID) =>
-      loadProjectRecord(kv, id, location.project.id).pipe(
-        Effect.flatMap((existing) =>
-          existing ? Effect.succeed(existing) : Effect.fail(new NotFoundError({ artifactID: id })),
-        ),
-      )
+      db
+        .select()
+        .from(ArtifactTable)
+        .where(and(eq(ArtifactTable.id, id), eq(ArtifactTable.project_id, location.project.id)))
+        .get()
+        .pipe(
+          Effect.orDie,
+          Effect.flatMap((row) => (row ? Effect.succeed(row) : Effect.fail(new NotFoundError({ artifactID: id })))),
+        )
+    // The last published files of every artifact, whatever its provider.
+    const saveSnapshot = (id: ID, files: Readonly<Record<string, Uint8Array>>) =>
+      replaceDirectoryFiles(itemDir(id), files).pipe(Effect.orDie)
 
+    // This server serves the snapshot, so publishing locally has nothing more to do.
     const localProvider: ProviderImplementation = {
       id: LocalProviderID,
       name: "Local",
       capabilities: ["static"],
       prompt:
         "Artifacts are served as HTML by this OpenCode server. Only people who can reach this server can open them.",
-      create: (input) =>
-        replaceDirectoryFiles(itemDir(input.id), input.files).pipe(Effect.as({ url: viewURL(input.id) })),
-      read: (id) => readDirectoryFiles(itemDir(id)),
-      update: (id, input) => replaceDirectoryFiles(itemDir(id), input.files).pipe(Effect.as({ url: viewURL(id) })),
-      delete: (id) => Effect.promise(() => fs.rm(itemDir(id), { recursive: true, force: true })),
+      create: (input) => Effect.succeed({ url: viewURL(input.id) }),
+      update: (id) => Effect.succeed({ url: viewURL(id) }),
+      delete: () => Effect.void,
     }
 
     const snapshotProviders = (data: Data) =>
@@ -319,14 +324,20 @@ const layer = Layer.effect(
       list: Effect.fn("Artifact.list")(function* (filter) {
         yield* requireEnabled()
         if (filter?.sessionID !== undefined) yield* checkSession(filter.sessionID)
-        const items = yield* scanProjectInfos(kv, location.project.id)
-        return items
-          .filter(
-            (item) =>
-              (filter?.sessionID === undefined || item.sessionID === filter.sessionID) &&
-              (filter?.provider === undefined || item.provider === filter.provider),
+        const rows = yield* db
+          .select()
+          .from(ArtifactTable)
+          .where(
+            and(
+              eq(ArtifactTable.project_id, location.project.id),
+              filter?.sessionID === undefined ? undefined : eq(ArtifactTable.session_id, filter.sessionID),
+              filter?.provider === undefined ? undefined : eq(ArtifactTable.provider, filter.provider),
+            ),
           )
-          .toSorted((a, b) => b.time.updated - a.time.updated || b.id.localeCompare(a.id))
+          .orderBy(desc(ArtifactTable.time_updated), desc(ArtifactTable.id))
+          .all()
+          .pipe(Effect.orDie)
+        return rows.map(toInfo)
       }),
       create: Effect.fn("Artifact.create")(function* (input) {
         yield* requireEnabled()
@@ -341,99 +352,88 @@ const layer = Layer.effect(
         const created = yield* provider
           .create({ id, title, entry, files, sessionID: input.sessionID })
           .pipe(Effect.mapError((cause) => new ProviderError({ providerID: provider.id, cause })))
-        const info = Info.make({
+        yield* saveSnapshot(id, files)
+        const row = {
           id,
+          project_id: location.project.id,
+          session_id: input.sessionID ?? null,
+          directory: location.directory,
           provider: provider.id,
-          ...(input.sessionID === undefined ? {} : { sessionID: input.sessionID }),
           title,
           entry,
           url: created.url ?? viewURL(id),
-          time: { created: now, updated: now },
-        })
-        yield* kv.set(
-          ItemPrefix + id,
-          encodeStoredRecord({
-            info,
-            directory: location.directory,
-            projectID: location.project.id,
-          }),
-        )
-        return info
+          time_created: now,
+          time_updated: now,
+        }
+        yield* db.insert(ArtifactTable).values(row).run().pipe(Effect.orDie)
+        return toInfo(row)
       }),
       info: Effect.fn("Artifact.info")(function* (id) {
         yield* requireEnabled()
-        const existing = yield* requireRecord(id)
-        return existing.info
+        return toInfo(yield* requireRecord(id))
       }),
       get: Effect.fn("Artifact.get")(function* (id) {
         yield* requireEnabled()
         const existing = yield* requireRecord(id)
-        const provider = yield* resolveProvider(existing.info.provider)
-        const raw = yield* provider
-          .read(id)
-          .pipe(Effect.mapError((cause) => new ProviderError({ providerID: provider.id, cause })))
+        const read = state.get().providers.get(existing.provider)?.read
+        const files = read
+          ? yield* read(id).pipe(
+              Effect.mapError((cause) => new ProviderError({ providerID: existing.provider, cause })),
+              Effect.tap((live) => saveSnapshot(id, live)),
+            )
+          : yield* readDirectoryFiles(itemDir(id))
         return Content.make({
-          info: existing.info,
-          files: decodeReadFiles(raw),
+          info: toInfo(existing),
+          ...inlineFiles(files, existing.entry),
+          source: read ? "live" : "snapshot",
         })
       }),
       update: Effect.fn("Artifact.update")(function* (id, input) {
         yield* requireEnabled()
         yield* checkSession(input.sessionID)
         const existing = yield* requireRecord(id)
-        const title = input.title === undefined ? existing.info.title : input.title.trim()
+        const title = input.title === undefined ? existing.title : input.title.trim()
         if (!title) return yield* new InvalidError({ reason: "Artifact title must not be empty", field: "title" })
         const files = yield* normalizeFiles(encodeStringFiles(input.files))
-        const entry = yield* resolveEntry(
-          files,
-          input.entry ?? (files[existing.info.entry] ? existing.info.entry : undefined),
-        )
-        const provider = yield* resolveProvider(existing.info.provider)
+        const entry = yield* resolveEntry(files, input.entry ?? (files[existing.entry] ? existing.entry : undefined))
+        const provider = yield* resolveProvider(existing.provider)
         const now = yield* Clock.currentTimeMillis
-        const sessionID = input.sessionID ?? existing.info.sessionID
+        const sessionID = input.sessionID ?? existing.session_id ?? undefined
         const updated = yield* provider
           .update(id, { title, entry, files, sessionID })
           .pipe(Effect.mapError((cause) => new ProviderError({ providerID: provider.id, cause })))
-        const info = Info.make({
-          id,
-          provider: existing.info.provider,
-          ...(sessionID === undefined ? {} : { sessionID }),
+        yield* saveSnapshot(id, files)
+        const changes = {
+          session_id: sessionID ?? null,
           title,
           entry,
-          url: updated.url ?? existing.info.url,
-          time: { created: existing.info.time.created, updated: now },
-        })
-        yield* kv.set(
-          ItemPrefix + id,
-          encodeStoredRecord({
-            info,
-            directory: existing.directory,
-            projectID: existing.projectID,
-          }),
-        )
-        return info
+          url: updated.url ?? existing.url,
+          time_updated: now,
+        }
+        yield* db.update(ArtifactTable).set(changes).where(eq(ArtifactTable.id, id)).run().pipe(Effect.orDie)
+        return toInfo({ ...existing, ...changes })
       }),
+      // Keeps the record unless its host deleted the artifact, so it is never lost while the host still serves it.
       remove: Effect.fn("Artifact.remove")(function* (id) {
         yield* requireEnabled()
         const existing = yield* requireRecord(id)
-        const provider = state.get().providers.get(existing.info.provider)
-        if (provider) {
-          yield* provider
-            .delete(id)
-            .pipe(Effect.mapError((cause) => new ProviderError({ providerID: provider.id, cause })))
-        }
-        yield* kv.remove(ItemPrefix + id)
+        const provider = yield* resolveProvider(existing.provider)
+        yield* provider
+          .delete(id)
+          .pipe(Effect.mapError((cause) => new ProviderError({ providerID: provider.id, cause })))
+        yield* Effect.promise(() => fs.rm(itemDir(id), { recursive: true, force: true }))
+        yield* db.delete(ArtifactTable).where(eq(ArtifactTable.id, id)).run().pipe(Effect.orDie)
       }),
       readLocalFile: Effect.fn("Artifact.readLocalFile")(function* (id, subpath) {
         yield* requireEnabled()
         const existing = yield* requireRecord(id)
-        if (existing.info.provider !== LocalProviderID) {
+        if (existing.provider !== LocalProviderID) {
           return yield* new InvalidError({
-            reason: `Artifact ${id} is hosted by provider "${existing.info.provider}", not the local server`,
+            reason: `Artifact ${id} is hosted by provider "${existing.provider}", not the local server`,
             field: "artifactID",
           })
         }
-        const requested = subpath?.trim() ? yield* normalizePath(subpath) : existing.info.entry
+        const requested = subpath?.trim() ? yield* normalizePath(subpath) : existing.entry
         const target = path.join(itemDir(id), ...requested.split("/"))
         const exists = yield* Effect.promise(() =>
           fs
@@ -452,16 +452,40 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Bus.node, Flag.node, Global.node, KV.node, Location.node, Session.node],
+  deps: [Bus.node, Database.node, Flag.node, Global.node, Location.node, Session.node],
 })
 
 function encodeStringFiles(files: Readonly<Record<string, string>>) {
   return Object.fromEntries(Object.entries(files).map(([filePath, content]) => [filePath, encoder.encode(content)]))
 }
 
-function decodeReadFiles(files: Readonly<Record<string, Uint8Array>>) {
-  const decoder = new TextDecoder()
-  return Object.fromEntries(Object.entries(files).map(([filePath, bytes]) => [filePath, decoder.decode(bytes)]))
+function toInfo(row: typeof ArtifactTable.$inferSelect) {
+  return Info.make({
+    id: row.id,
+    provider: row.provider,
+    ...(row.session_id === null ? {} : { sessionID: row.session_id }),
+    title: row.title,
+    entry: row.entry,
+    url: row.url,
+    time: { created: row.time_created, updated: row.time_updated },
+  })
+}
+
+/** Inlines UTF-8 text up to 64 KiB a file and 256 KiB in all, entry first, and lists the size of the rest. */
+function inlineFiles(files: Readonly<Record<string, Uint8Array>>, entry: string) {
+  const content = { files: {} as Record<string, string>, omitted: {} as Record<string, number> }
+  let total = 0
+  for (const [filePath, bytes] of Object.entries(files).toSorted(
+    ([a], [b]) => Number(b === entry) - Number(a === entry) || a.localeCompare(b),
+  )) {
+    if (bytes.length > 64 * 1024 || total + bytes.length > 256 * 1024 || !isUtf8(bytes)) {
+      content.omitted[filePath] = bytes.length
+      continue
+    }
+    content.files[filePath] = decoder.decode(bytes)
+    total += bytes.length
+  }
+  return content
 }
 
 function detectFileMime(filePath: string, bytes: Uint8Array) {
@@ -532,34 +556,6 @@ function resolveEntry(files: Readonly<Record<string, Uint8Array>>, requested?: s
 
 function viewURL(id: ID) {
   return `/api/experimental/artifacts/${encodeURIComponent(id)}/view/`
-}
-
-function loadProjectRecord(kv: KV.Interface, id: ID, projectID: string) {
-  return kv.get(ItemPrefix + id).pipe(
-    Effect.map((stored) => {
-      if (stored === undefined) return undefined
-      const decoded = Option.getOrUndefined(decodeStoredRecord(stored))
-      return decoded?.projectID === projectID ? decoded : undefined
-    }),
-  )
-}
-
-function scanProjectInfos(kv: KV.Interface, projectID: string) {
-  return Effect.gen(function* () {
-    const results: Info[] = []
-    let after: string | undefined
-    while (true) {
-      const page = yield* kv.scan({ prefix: ItemPrefix, after, limit: 500 })
-      results.push(
-        ...page.entries.flatMap((entry) => {
-          const decoded = decodeStoredRecord(entry.value)
-          return Option.isSome(decoded) && decoded.value.projectID === projectID ? [decoded.value.info] : []
-        }),
-      )
-      if (!page.next) return results
-      after = page.next
-    }
-  })
 }
 
 function replaceDirectoryFiles(baseDir: string, files: Readonly<Record<string, Uint8Array>>) {

@@ -1,5 +1,5 @@
 import { Artifact } from "@opencode/core/artifact"
-import { KV } from "@opencode/core/kv"
+import { Database } from "@opencode/core/database/database"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { AbsolutePath } from "@opencode/core/schema"
@@ -22,7 +22,7 @@ import { missingSession } from "./session-error"
 export const makeArtifact = Effect.gen(function* () {
   const locations = yield* LocationServiceMap.Service
   const sessions = yield* Session.Service
-  const kv = yield* KV.Service
+  const database = yield* Database.Service
 
   const explicitDirectory = (
     request: HttpServerRequest.HttpServerRequest,
@@ -58,7 +58,7 @@ export const makeArtifact = Effect.gen(function* () {
         return session.location
       }
       if (options.artifactID !== undefined) {
-        const directory = yield* Artifact.locate(kv, options.artifactID)
+        const directory = yield* Artifact.locate(database, options.artifactID)
         if (directory !== undefined) {
           return Location.Ref.make({ directory: AbsolutePath.make(directory) })
         }

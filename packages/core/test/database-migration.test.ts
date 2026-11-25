@@ -27,6 +27,7 @@ import scheduleChecksMigration from "@opencode/core/database/migration/202610291
 import automationMigration from "@opencode/core/database/migration/20261116043204_automation"
 import automationEventPosition from "@opencode/core/database/migration/20261116181958_automation_event_position"
 import automationActiveIndex from "@opencode/core/database/migration/20261116213417_automation_active_index"
+import artifactMigration from "@opencode/core/database/migration/20261125001949_artifact"
 import { Global } from "@opencode/util/global"
 
 const run = <A, E>(
@@ -516,6 +517,75 @@ describe("DatabaseMigration", () => {
           },
         ])
         expect(yield* db.all(sql`SELECT name FROM sqlite_master WHERE name LIKE 'schedule%'`)).toEqual([])
+      }),
+    )
+  })
+
+  test("moves artifact KV records to the artifact table and leaves every other key", async () => {
+    await run(
+      Effect.gen(function* () {
+        const db = yield* makeDb
+        yield* db.run(
+          sql`CREATE TABLE kv (key text PRIMARY KEY, value text NOT NULL, time_created integer NOT NULL, time_updated integer NOT NULL)`,
+        )
+        const record = (id: string, provider: string, sessionID?: string) =>
+          JSON.stringify({
+            info: {
+              id,
+              provider,
+              ...(sessionID ? { sessionID } : {}),
+              title: `${provider} page`,
+              entry: "index.html",
+              url: `https://${provider}.example.test/${id}/`,
+              time: { created: 100, updated: 200 },
+            },
+            directory: "/repo",
+            projectID: "prj_1",
+          })
+        const keys = {
+          "artifact:item:art_console": record("art_console", "console", "ses_1"),
+          "artifact:item:art_local": record("art_local", "local"),
+          "artifact:item:art_plugin": record("art_plugin", "cloudflare"),
+          // `LIKE 'artifact:item:%'` would take these: `_` matches any character, and `;` sorts right after `:`.
+          "artifact:itemXart_lookalike": "{}",
+          "artifact:item;": "{}",
+          "plugin:0063:artifact-slug:art_console": JSON.stringify("console-page-onsole"),
+        }
+        yield* Effect.forEach(Object.entries(keys), ([key, value]) =>
+          db.run(sql`INSERT INTO kv VALUES (${key}, ${value}, 1, 1)`),
+        )
+
+        yield* DatabaseMigration.applyOnly(db, [artifactMigration])
+
+        expect(
+          yield* db.all(
+            sql`SELECT id, project_id, session_id, directory, provider, title, entry, url, time_created, time_updated FROM artifact ORDER BY id`,
+          ),
+        ).toEqual(
+          (
+            [
+              ["art_console", "console", "ses_1"],
+              ["art_local", "local", null],
+              ["art_plugin", "cloudflare", null],
+            ] as const
+          ).map(([id, provider, sessionID]) => ({
+            id,
+            project_id: "prj_1",
+            session_id: sessionID,
+            directory: "/repo",
+            provider,
+            title: `${provider} page`,
+            entry: "index.html",
+            url: `https://${provider}.example.test/${id}/`,
+            time_created: 100,
+            time_updated: 200,
+          })),
+        )
+        expect(yield* db.all(sql`SELECT key FROM kv ORDER BY key`)).toEqual([
+          { key: "artifact:item;" },
+          { key: "artifact:itemXart_lookalike" },
+          { key: "plugin:0063:artifact-slug:art_console" },
+        ])
       }),
     )
   })
