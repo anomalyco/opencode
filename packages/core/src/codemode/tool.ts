@@ -167,7 +167,8 @@ export const create = (
       Effect.gen(function* () {
         const callIndex = yield* Ref.make(0)
         const files = yield* Ref.make<Array<CollectedFiles>>([])
-        const calls = yield* Ref.make<Array<ExecuteCall>>([])
+        // Changed only under the lock; each publish and the result take a copy.
+        const calls: Array<ExecuteCall> = []
         const lock = Semaphore.makeUnsafe(1)
         // Each update replaces the last, so send at most one per 100 ms; a trailing one carries the latest rows.
         // A success drops a pending one when the scope closes, since the result carries the final rows.
@@ -179,14 +180,14 @@ export const create = (
           yield* Ref.set(publishedAt, yield* Clock.currentTimeMillis)
           const changed = diffs.files()
           yield* context.progress({
-            toolCalls: yield* Ref.get(calls),
+            toolCalls: calls.slice(),
             ...(changed.length > 0 ? { files: changed } : {}),
           })
         })
-        const record = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) =>
+        const record = (update: (items: Array<ExecuteCall>) => void) =>
           lock.withPermit(
             Effect.gen(function* () {
-              yield* Ref.update(calls, update)
+              update(calls)
               if (yield* Ref.get(trailing)) return
               const wait = (yield* Ref.get(publishedAt)) + 100 - (yield* Clock.currentTimeMillis)
               if (wait <= 0) return yield* publish
@@ -196,7 +197,7 @@ export const create = (
           )
         // The files the program changes, shown under the call as it runs and when it ends in the foreground. A failed
         // or stopped one keeps them too, since they really changed.
-        const diffs = CodeModeDiffs.make(record((items) => items))
+        const diffs = CodeModeDiffs.make(record(() => {}))
         const result = yield* runtime(inventory)
           .execute(code, undefined, {
             extensions: runExtensions(services !== undefined),
@@ -240,7 +241,7 @@ export const create = (
             Effect.provide(yield* executionServices(context, permission, services, api)),
             Effect.provideService(CodeModeDiffs.Service, diffs),
           )
-        const toolCalls = yield* Ref.get(calls)
+        const toolCalls = calls.slice()
         const collected = (yield* Ref.get(files))
           .toSorted((left, right) => left.index - right.index)
           .flatMap((item) => item.files)
@@ -276,20 +277,18 @@ export const create = (
 }
 
 // Rows appear in start order; the same call object arrives at both hooks, so a call finds its row again.
-function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) => Effect.Effect<unknown>) {
+function progressHooks(record: (update: (items: Array<ExecuteCall>) => void) => Effect.Effect<unknown>) {
   const rows = new WeakMap<object, number>()
   const start = (call: object, entry: ExecuteCall) =>
     record((items) => {
       rows.set(call, items.length)
-      return [...items, entry]
+      items.push(entry)
     })
   const settle = (call: object, result: CodeMode.CallResult) => {
     const index = rows.get(call)
     if (index === undefined) return Effect.void
     return record((items) => {
-      const next = [...items]
-      next[index] = { ...items[index], status: result.status === "success" ? "completed" : "error" }
-      return next
+      items[index] = { ...items[index], status: result.status === "success" ? "completed" : "error" }
     })
   }
   return {
