@@ -59,9 +59,45 @@ for (const { name, id } of [
   })
 }
 
+const pickWithKeyboard = async (page: Page, side: "Left" | "Right") => {
+  await expect(page.getByRole("menu")).toBeFocused()
+  await page.keyboard.press("ArrowDown")
+  await expect(page.getByRole("menuitem", { name: "Sidebar position" })).toBeFocused()
+  await page.keyboard.press("ArrowRight")
+  await expect(page.getByRole("menuitemradio", { name: "Left" })).toBeFocused()
+  await expect(page.getByRole("menuitemradio", { name: "Left" })).toHaveAttribute("aria-checked", "true")
+
+  if (side === "Right") await page.keyboard.press("ArrowDown")
+  await expect(page.getByRole("menuitemradio", { name: side })).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(page.getByRole("menuitemradio")).toHaveCount(0)
+}
+
+story("Shift+F10 on the toggle opens the position menu and returns focus", async ({ mount, page }) => {
+  const component = await mount("plugins-review--changes-and-comments")
+  const panel = component.locator('[data-component="session-review-v2"]')
+  const toggle = panel.getByRole("button", { name: "Toggle file tree" })
+
+  await toggle.focus()
+  await page.keyboard.press("Shift+F10")
+  await expect(page.getByRole("menu")).toBeFocused()
+  await page.keyboard.press("Escape")
+  await expect(toggle).toBeFocused()
+
+  await page.keyboard.press("Shift+F10")
+  await pickWithKeyboard(page, "Right")
+  await expect(panel).toHaveAttribute("data-sidebar-side", "end")
+  await expect(toggle).toBeFocused()
+})
+
 story("the file tree filter keeps the system context menu", async ({ mount, page }) => {
   const component = await mount("plugins-review--changes-and-comments")
+  const filter = component.getByRole("searchbox", { name: "Filter files" })
 
-  await component.getByRole("searchbox", { name: "Filter files" }).click({ button: "right" })
+  await filter.click({ button: "right" })
+  await expect(page.getByRole("menuitem", { name: "Sidebar position" })).toHaveCount(0)
+
+  await filter.focus()
+  await page.keyboard.press("Shift+F10")
   await expect(page.getByRole("menuitem", { name: "Sidebar position" })).toHaveCount(0)
 })

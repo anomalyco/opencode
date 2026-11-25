@@ -512,6 +512,45 @@ describe("Session.move", () => {
     ),
   )
 
+  for (const removed of [false, true]) {
+    it.effect(`moves children from the ${removed ? "removed" : "same"} source with their parent`, () =>
+      tmpdirScoped().pipe(
+        Effect.flatMap((tmp) =>
+          Effect.gen(function* () {
+            const session = yield* Session.Service
+            const bus = yield* Bus.Service
+            const source = AbsolutePath.make(path.join(tmp.path, "source"))
+            const other = AbsolutePath.make(path.join(tmp.path, "other"))
+            const destination = AbsolutePath.make(tmp.path)
+            yield* Effect.promise(() => Promise.all([mkdir(source), mkdir(other)]))
+            const parent = yield* session.create({ location: Location.Ref.make({ directory: source }) })
+            const child = yield* session.create({ parentID: parent.id })
+            const grandchild = yield* session.create({ parentID: child.id })
+            const elsewhere = yield* session.create({ parentID: parent.id })
+            yield* bus.publish(SessionEvent.Moved, {
+              sessionID: elsewhere.id,
+              location: Location.Ref.make({ directory: other }),
+              projectID: Project.ID.global,
+            })
+            if (removed) yield* Effect.promise(() => rm(source, { recursive: true }))
+
+            yield* session.move({ sessionID: parent.id, directory: destination })
+
+            for (const id of [parent.id, child.id, grandchild.id]) {
+              if (removed) expect((yield* session.get(id)).location.directory).toBe(destination)
+              else
+                expect(yield* session.inbox(id)).toMatchObject([
+                  { type: "move", payload: { location: { directory: destination } } },
+                ])
+            }
+            expect((yield* session.get(elsewhere.id)).location.directory).toBe(other)
+            expect(yield* session.inbox(elsewhere.id)).toEqual([])
+          }),
+        ),
+      ),
+    )
+  }
+
   itWithActiveExecution.live("defers an active move when the source directory no longer exists", () =>
     tmpdirScoped().pipe(
       Effect.flatMap((tmp) =>

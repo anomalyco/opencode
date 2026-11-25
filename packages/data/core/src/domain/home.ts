@@ -38,7 +38,15 @@ export type RetentionEntry = {
   rank: number | null
 }
 export type CountryEntry = { country: string; continent: string; tokens: number; share: number; rank: number }
-export type NewModelDay = { date: string; tokens: number; users: number; sessions: number }
+export type NewModelDay = {
+  date: string
+  tokens: number
+  users: number
+  sessions: number
+  // Of all tokens that day, and among individual models.
+  share: number
+  rank: number
+}
 // A model used in the recent window, with the day it first had usage. The site decides which ones are new.
 export type NewModelCandidate = {
   model: string
@@ -163,7 +171,7 @@ export class StatsDataError extends Error {
   override name = "StatsDataError"
 
   constructor(readonly cause: unknown) {
-    super("Failed to load stats data")
+    super(`Failed to load stats data: ${cause instanceof Error ? cause.message : String(cause)}`)
   }
 }
 
@@ -225,7 +233,7 @@ type ModelAggregate = {
 }
 
 type RawRow = Record<string, unknown>
-type CachedQuery = { expiresAt: number; value: Promise<RawRow[]> }
+type CachedQuery = { expiresAt: number; value: RawRow[] }
 
 const queryCache = new Map<string, CachedQuery>()
 
@@ -406,22 +414,17 @@ async function listRetentionWeekly(): Promise<RetentionMetricRow[]> {
   }
 }
 
+// Only resolved rows are cached: a Worker request cannot await I/O started by another request that has ended.
 async function queryRows(query: string, params: string[] = []) {
   const key = JSON.stringify([query, params])
-  const now = Date.now()
   const cached = queryCache.get(key)
-  if (cached && cached.expiresAt > now) return cached.value
+  if (cached && cached.expiresAt > Date.now()) return cached.value
   if (cached) queryCache.delete(key)
 
-  const value = new Client({ url: databaseUrl() }).execute(query, params).then((result) => result.rows as RawRow[])
-  const entry = { expiresAt: now + QUERY_CACHE_TTL_MS, value }
-  queryCache.set(key, entry)
+  const value = (await new Client({ url: databaseUrl() }).execute(query, params)).rows as RawRow[]
+  queryCache.set(key, { expiresAt: Date.now() + QUERY_CACHE_TTL_MS, value })
   if (queryCache.size > QUERY_CACHE_MAX_ENTRIES) queryCache.delete(queryCache.keys().next().value!)
-
-  return value.catch((cause) => {
-    if (queryCache.get(key) === entry) queryCache.delete(key)
-    throw cause
-  })
+  return value
 }
 
 function databaseUrl() {
@@ -576,7 +579,14 @@ function buildNewModelCandidates(rows: StatMetricRow[], latest: number): NewMode
   }, new Map())
   const start = latest - (NEW_MODEL_WINDOW_DAYS - 1) * DAY_MS
   const days = Array.from({ length: NEW_MODEL_WINDOW_DAYS }, (_, index) => start + index * DAY_MS)
-  return aggregateByModelName(productRows.filter((row) => row.periodStart >= start))
+  const recentRows = productRows.filter((row) => row.periodStart >= start)
+  const tokensByDay = new Map(
+    days.map((day) => [
+      day,
+      aggregateByModelName(recentRows.filter((row) => row.periodStart === day)).map((item) => item.totalTokens),
+    ]),
+  )
+  return aggregateByModelName(recentRows)
     .map((item) => {
       const modelRows = productRows.filter((row) => row.model === item.model && row.periodStart >= start)
       const first = firstSeen.get(item.model) ?? start
@@ -587,11 +597,15 @@ function buildNewModelCandidates(rows: StatMetricRow[], latest: number): NewMode
             item.model,
             modelRows.filter((row) => row.periodStart === day),
           )
+          const dayTokens = tokensByDay.get(day) ?? []
+          const dayTotal = dayTokens.reduce((sum, tokens) => sum + tokens, 0)
           return {
             date: periodKey(day),
             tokens: aggregate.totalTokens,
             users: aggregate.uniqueUsers,
             sessions: aggregate.sessions,
+            share: dayTotal > 0 ? aggregate.totalTokens / dayTotal : 0,
+            rank: dayTokens.filter((tokens) => tokens > aggregate.totalTokens).length + 1,
           }
         })
       return {

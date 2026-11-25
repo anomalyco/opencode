@@ -1,5 +1,5 @@
 /** @jsxImportSource @opentui/solid */
-import { InputRenderable, type RGBA } from "@opentui/core"
+import { InputRenderable, ScrollBoxRenderable, type Renderable, type RGBA } from "@opentui/core"
 import { testRender } from "@opentui/solid"
 import { expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
@@ -649,6 +649,49 @@ test("shows no-match and still closes after a flat filter goes empty", async () 
 
     select.app.mockInput.pressEscape()
     await select.app.waitForFrame((frame) => !frame.includes("Mutable options") && !frame.includes("No results found"))
+  } finally {
+    select.app.renderer.destroy()
+  }
+})
+
+test("keeps rows mounted while the filter changes", async () => {
+  await using tmp = await tmpdir()
+  const select = await mountSelect(
+    tmp.path,
+    [
+      { title: "alpha one", value: "alpha-one", category: "A" },
+      { title: "alpha two", value: "alpha-two", category: "A" },
+      { title: "beta one", value: "beta-one", category: "B" },
+    ],
+    undefined,
+    undefined,
+    { flat: true },
+  )
+
+  try {
+    const find = (node: Renderable): ScrollBoxRenderable | undefined =>
+      node instanceof ScrollBoxRenderable ? node : node.getChildren().map(find).find(Boolean)
+    const children = () => find(select.app.renderer.root)?.getChildren() ?? []
+    await select.app.waitForFrame((frame) => frame.includes("beta one"))
+    // The category headers come first in each group: A, alpha one, alpha two, B, beta one.
+    const rows = [children()[1], children()[2], children()[4]]
+
+    // Lists such as the model picker hold thousands of rows, so mounting them again on every key lags typing.
+    await select.app.mockInput.typeText("alpha")
+    await select.app.waitForFrame((frame) => frame.includes("alpha two") && !frame.includes("beta one"))
+    expect(children()).toHaveLength(2)
+    expect(children().every((row) => rows.includes(row))).toBe(true)
+
+    await select.app.mockInput.typeText(" t")
+    await select.app.waitForFrame((frame) => !frame.includes("alpha one"))
+    expect(children()).toHaveLength(1)
+    expect(children()[0] === rows[1]).toBe(true)
+
+    for (let i = 0; i < "alpha t".length; i++) select.app.mockInput.pressBackspace()
+    await select.app.waitForFrame((frame) => frame.includes("beta one"))
+    // The row that stayed listed is kept when the list goes back to its groups.
+    expect(children()).toHaveLength(5)
+    expect(children()[2] === rows[1]).toBe(true)
   } finally {
     select.app.renderer.destroy()
   }

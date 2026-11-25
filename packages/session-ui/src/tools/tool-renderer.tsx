@@ -40,6 +40,7 @@ import { useMarkdown } from "../context/markdown"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { checksum } from "@opencode/util/encode"
 import { formatExecuteOutput } from "@opencode/util/execute-output"
+import { Badge } from "@opencode/ui/badge"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
@@ -2090,9 +2091,7 @@ ToolRegistry.register({
     const viewable = () => props.status !== "streaming" && !!code()
 
     const openDetails = () =>
-      dialog.show(() => (
-        <ExecuteDetails code={code()} output={output()} error={error()} calls={count()} status={props.status} />
-      ))
+      dialog.show(() => <ExecuteDetails code={code()} output={output()} error={error()} status={props.status} />)
 
     return (
       <BasicTool
@@ -2155,39 +2154,42 @@ const executeCallsShown = 10
 
 const executeCallsRevealed = 50
 
-function ExecuteDetails(props: { code: string; output: string; error?: string; calls: number; status?: string }) {
+function ExecuteDetails(props: { code: string; output: string; error?: string; status?: string }) {
   const i18n = useI18n()
   const fileComponent = useFileComponent()
   const lineCount = (text: string) => text.split("\n").length
-  const lines = (text: string) => i18n.plural("ui.tool.execute.lines", lineCount(text))
 
   // Code Mode returns structured results as compact JSON; show those indented, and highlight a bare JSON result.
   const output = createMemo(() => formatExecuteOutput(props.output))
 
-  // Code and output share one number gutter, sized to the longer block, so their content starts on the same column.
+  // Code and output/error share one number gutter, sized to the longer block, so their content starts on the same column.
   const numberDigits = () =>
-    String(Math.max(lineCount(props.code), props.output && !props.error ? lineCount(output().text) : 0)).length
+    String(
+      Math.max(
+        lineCount(props.code),
+        props.error ? lineCount(props.error) : props.output ? lineCount(output().text) : 0,
+      ),
+    ).length
+
+  const statusLabel = () =>
+    props.error
+      ? i18n.t("ui.toolErrorCard.failed")
+      : props.status === "running"
+        ? i18n.t("ui.tool.execute.running")
+        : i18n.t("ui.tool.execute.completed")
 
   return (
     <Dialog size="large" fit>
       <DialogHeader>
         <div data-slot="execute-details-title">
           <DialogTitle>{i18n.t("ui.tool.execute")}</DialogTitle>
-          <span data-slot="execute-details-status" data-status={props.error ? "error" : props.status}>
-            {props.error
-              ? i18n.t("ui.toolErrorCard.failed")
-              : props.status === "running"
-                ? i18n.t("ui.tool.execute.running")
-                : i18n.t("ui.tool.execute.completed")}
-          </span>
-          <span data-slot="execute-details-meta">{i18n.plural("ui.tool.execute.calls", props.calls)}</span>
+          <Badge variant={props.error ? "danger" : "neutral"}>{statusLabel()}</Badge>
         </div>
       </DialogHeader>
       <DialogBody class="min-h-0">
         <div data-component="execute-details" style={{ "--execute-details-number-width": `${numberDigits()}ch` }}>
           <ExecuteDetailsSection
             label={i18n.t("ui.tool.execute.code")}
-            meta={lines(props.code)}
             copy={props.code}
             copyLabel={i18n.t("ui.tool.execute.copyCode")}
           >
@@ -2196,6 +2198,7 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
               mode="text"
               file={{ name: "execute.js", contents: props.code, cacheKey: checksum(props.code) }}
               overflow="wrap"
+              lineHoverHighlight="disabled"
             />
           </ExecuteDetailsSection>
           <Show
@@ -2204,7 +2207,6 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
               <Show when={props.output}>
                 <ExecuteDetailsSection
                   label={i18n.t("ui.tool.execute.output")}
-                  meta={lines(output().text)}
                   copy={output().text}
                   copyLabel={i18n.t("ui.tool.execute.copyOutput")}
                 >
@@ -2217,6 +2219,7 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
                       cacheKey: checksum(output().text),
                     }}
                     overflow="wrap"
+                    lineHoverHighlight="disabled"
                   />
                 </ExecuteDetailsSection>
               </Show>
@@ -2228,7 +2231,15 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
                 copy={error()}
                 copyLabel={i18n.t("ui.toolErrorCard.copyError")}
               >
-                <pre data-slot="execute-details-error">{error()}</pre>
+                <div data-tone="danger">
+                  <Dynamic
+                    component={fileComponent}
+                    mode="text"
+                    file={{ name: "error.txt", contents: error(), cacheKey: checksum(error()) }}
+                    overflow="wrap"
+                    lineHoverHighlight="disabled"
+                  />
+                </div>
               </ExecuteDetailsSection>
             )}
           </Show>
@@ -2240,7 +2251,6 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
 
 function ExecuteDetailsSection(props: {
   label: string
-  meta?: string
   copy: string
   copyLabel: string
   children: JSX.Element
@@ -2252,7 +2262,6 @@ function ExecuteDetailsSection(props: {
     <section data-slot="execute-details-section">
       <header data-slot="execute-details-section-header">
         <span data-slot="execute-details-section-label">{props.label}</span>
-        <Show when={props.meta}>{(meta) => <span data-slot="execute-details-section-meta">{meta()}</span>}</Show>
         <Tooltip
           value={copy.copied() ? i18n.t("ui.message.copied") : props.copyLabel}
           placement="top"
