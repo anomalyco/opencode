@@ -1,5 +1,6 @@
 export * as OpenCodeWorkerd from "./workerd"
 
+import { Effect } from "effect"
 import { WorkerdProfile } from "./internal/workerd"
 import type { LogOptions } from "./logging"
 import { PromiseSdk } from "./promise"
@@ -12,6 +13,11 @@ export interface CreateOptions extends WorkerdProfile.Options {
   readonly instances?: PromiseSdk.CreateOptions["instances"]
 }
 
+export type Interface = PromiseSdk.Interface & {
+  /** Suspends any workspaces past their idle threshold; call from the Durable Object's `alarm()` method. */
+  readonly alarm: () => Promise<void>
+}
+
 /**
  * Boots the embedded opencode SDK on the workerd runtime profile: the full
  * application graph inside a Cloudflare Durable Object, with the database on
@@ -22,13 +28,23 @@ export interface CreateOptions extends WorkerdProfile.Options {
  * Object can be evicted mid-turn with no teardown; the write-ahead execution
  * claim marks the turn and the boot-time sweep replays it.
  *
- * Returns the same typed `OpenCode.Interface` as `OpenCode.create` — typed
- * session operations plus the live `events.subscribe()` stream — served over
- * an in-process fetch transport, so no request leaves the isolate.
+ * Forward the Durable Object's `alarm()` lifecycle method to `opencode.alarm()`
+ * so idle remote workspaces suspend while the Durable Object hibernates at
+ * zero idle cost.
+ *
+ * Returns the same typed `OpenCode.Interface` as `OpenCode.create` plus
+ * `alarm()` — typed session operations plus the live `events.subscribe()`
+ * stream — served over an in-process fetch transport, so no request leaves the
+ * isolate.
  */
-export const create = ({ log, plugins, instances, ...options }: CreateOptions) => {
+export const create = async ({ log, plugins, instances, ...options }: CreateOptions): Promise<Interface> => {
   const profile = WorkerdProfile.make(options)
-  return PromiseSdk.create({ ...profile.options, log, plugins, instances }, { overrides: profile.replacements })
+  const { sdk, host } = await PromiseSdk.createWithHost(
+    { ...profile.options, log, plugins, instances },
+    { overrides: profile.replacements },
+  )
+  return {
+    ...sdk,
+    alarm: () => host.runtime.runPromise(Effect.asVoid(host.workspace.suspendIdle())),
+  }
 }
-
-export type Interface = PromiseSdk.Interface

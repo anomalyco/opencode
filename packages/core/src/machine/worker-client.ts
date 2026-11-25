@@ -1,7 +1,8 @@
 export * as WorkerClient from "./worker-client.js"
 
-import { Cause, Deferred, Effect, Queue, Result, Sink, Stream } from "effect"
-import type { Environment } from "../environment/index.js"
+import { Cause, Deferred, Effect, Exit, Queue, Result, Sink, Stream } from "effect"
+import { Environment } from "../environment/index.js"
+import type { Workspace } from "../workspace.js"
 import { Frames } from "./frames.js"
 import { Machine } from "./index.js"
 import { Link } from "./link.js"
@@ -9,6 +10,12 @@ import type { ToWorker } from "./wire.js"
 
 const HELLO_DEADLINE = "10 seconds"
 const HEADER_BYTES = 4
+const MAX_FRAME = 65_535
+/** Cap unread inbound WebSocket bytes well below Cloudflare workerd's 128 MB isolate limit. */
+const MAX_WEBSOCKET_WAITING = 8 * 1024 * 1024
+const NORMAL_CLOSE = 1000
+/** Custom WHATWG-valid close code (3000–4999) so standard WebSocket implementations (Node, Bun, workerd) accept it. */
+const POLICY_CLOSE = 4008
 
 /** Encodes a single UTF-8 JSON payload with a 4-byte big-endian uint32 length prefix for `opencode-worker stdio`. */
 export const encodeStdioFrame = (payload: Uint8Array): Result.Result<Uint8Array, Link.Refused> => {
@@ -95,16 +102,116 @@ export const fromConnection = Effect.fn("WorkerClient.fromConnection")(function*
 })
 
 /**
+ * Structural subset of standard WebSocket (DOM, Bun, Node, and Cloudflare Workers `workerd`, including
+ * already-open `fetch`-upgraded sockets after `accept()`).
+ */
+export interface WebSocketLike {
+  readonly readyState: number
+  binaryType?: string
+  send(data: Uint8Array<ArrayBuffer>): void
+  close(code?: number, reason?: string): void
+  addEventListener(type: "open" | "close" | "error", listener: () => void): void
+  addEventListener(type: "message", listener: (event: { readonly data: unknown }) => void): void
+  removeEventListener?(type: "open" | "close" | "error", listener: () => void): void
+  removeEventListener?(type: "message", listener: (event: { readonly data: unknown }) => void): void
+}
+
+const toBytes = (data: unknown): Uint8Array | undefined => {
+  if (data instanceof ArrayBuffer) return new Uint8Array(data)
+  if (ArrayBuffer.isView(data)) return new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+  return undefined
+}
+
+/**
+ * Adapts a standard or Cloudflare Workers WebSocket into a scoped binary `Link.Carrier` for `WorkerClient.dial`.
+ *
+ * Accepts sockets that are still `CONNECTING` (waits interruptibly for `open`) or already `OPEN` (such as a
+ * Cloudflare `fetch` WebSocket after `accept()` — call `fromWebSocket` immediately after `accept()` with no `await`
+ * in between so the worker's first handshake message is not missed). Rejects text or oversized frames and closes the
+ * socket when the owning scope exits.
+ */
+export const fromWebSocket = Effect.fn("WorkerClient.fromWebSocket")(function* (socket: WebSocketLike) {
+  const inbound = yield* Queue.unbounded<Uint8Array, Cause.Done>()
+  const opened = yield* Deferred.make<void, Link.Closed>()
+  let queuedBytes = 0
+
+  const end = (code?: number) => {
+    Queue.endUnsafe(inbound)
+    Deferred.doneUnsafe(opened, Exit.fail(new Link.Closed()))
+    if (socket.readyState < 2) socket.close(code)
+  }
+
+  const onOpen = () => {
+    Deferred.doneUnsafe(opened, Exit.void)
+  }
+
+  const onMessage = (event: { readonly data: unknown }) => {
+    const bytes = toBytes(event.data)
+    if (!bytes || bytes.byteLength > MAX_FRAME || queuedBytes + bytes.byteLength > MAX_WEBSOCKET_WAITING) {
+      end(POLICY_CLOSE)
+      return
+    }
+    queuedBytes += bytes.byteLength
+    Queue.offerUnsafe(inbound, bytes)
+  }
+
+  const onClose = () => {
+    end()
+  }
+
+  const detachAndEnd = (code?: number) => {
+    socket.removeEventListener?.("open", onOpen)
+    socket.removeEventListener?.("message", onMessage)
+    socket.removeEventListener?.("error", onClose)
+    socket.removeEventListener?.("close", onClose)
+    end(code)
+  }
+
+  yield* Effect.acquireRelease(
+    Effect.sync(() => {
+      if ("binaryType" in socket) socket.binaryType = "arraybuffer"
+      socket.addEventListener("open", onOpen)
+      socket.addEventListener("message", onMessage)
+      socket.addEventListener("error", onClose)
+      socket.addEventListener("close", onClose)
+      if (socket.readyState === 1) Deferred.doneUnsafe(opened, Exit.void)
+      else if (socket.readyState >= 2) detachAndEnd()
+    }),
+    () => Effect.sync(() => detachAndEnd(NORMAL_CLOSE)),
+  )
+
+  yield* Deferred.await(opened).pipe(Effect.onError(() => Effect.sync(() => detachAndEnd(NORMAL_CLOSE))))
+
+  return {
+    describe: () => ({ kind: "websocket" }),
+    send: (message) =>
+      Effect.sync(() => {
+        if (socket.readyState !== 1) return
+        socket.send(new Uint8Array(message))
+      }),
+    receive: Queue.take(inbound).pipe(
+      Effect.tap((bytes) =>
+        Effect.sync(() => {
+          queuedBytes -= bytes.byteLength
+        }),
+      ),
+      Effect.mapError(() => new Link.Closed()),
+    ),
+  } satisfies Link.Carrier
+})
+
+/**
  * Pull mode: attaches to a listening `opencode-worker serve` (or a relay-bridged worker) over any binary
  * `Link.Carrier`, authenticates via Noise XX against `peerKey`, and returns a scoped `Environment.Driver`.
  */
 export const dial = Effect.fn("WorkerClient.dial")(function* (
-  id: Environment.ID,
+  id: Environment.ID | Workspace.ID,
   carrier: Link.Carrier,
   options: { readonly peerKey: Uint8Array; readonly fixed?: Link.Fixed; readonly machine?: Machine.Interface },
 ) {
-  const served = yield* Link.serveDirect(carrier, { machine: id, peerKey: options.peerKey }, options.fixed)
-  return yield* fromConnection(id, served.connection, options.machine)
+  const environmentID = Environment.ID.make(id)
+  const served = yield* Link.serveDirect(carrier, { machine: environmentID, peerKey: options.peerKey }, options.fixed)
+  return yield* fromConnection(environmentID, served.connection, options.machine)
 })
 
 export interface StdioPipe {
@@ -117,13 +224,16 @@ export interface StdioPipe {
  * duplex byte stream (such as `ssh host opencode-worker stdio` or container `exec`) and returns a scoped `Environment.Driver`.
  */
 export const stdio = Effect.fn("WorkerClient.stdio")(function* (
-  id: Environment.ID,
+  id: Environment.ID | Workspace.ID,
   io: StdioPipe,
   existing?: Machine.Interface,
 ) {
+  const environmentID = Environment.ID.make(id)
   const pull = yield* Stream.toPull(decodeStdioFrames(io.stdout))
   const first = yield* pull.pipe(
-    Effect.flatMap((batch) => Effect.map(Link.decodeHello(id, batch[0]), (hello) => ({ hello, rest: batch.slice(1) }))),
+    Effect.flatMap((batch) =>
+      Effect.map(Link.decodeHello(environmentID, batch[0]), (hello) => ({ hello, rest: batch.slice(1) })),
+    ),
     Effect.timeout(HELLO_DEADLINE),
     Effect.catchCause(() => Effect.fail(new Link.Refused())),
   )
@@ -157,7 +267,7 @@ export const stdio = Effect.fn("WorkerClient.stdio")(function* (
   )
 
   return yield* fromConnection(
-    id,
+    environmentID,
     {
       hello: first.hello,
       send: (message) => {

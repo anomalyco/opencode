@@ -3,6 +3,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Database } from "@opencode/core/database/database"
 import { sqliteLayer } from "@opencode/core/database/sqlite.workerd"
 import { Failed, makeFiles, makeMemoryDriver, NotFound } from "@opencode/core/environment/index"
+import { Identity } from "@opencode/core/machine/identity"
 import { Workspace } from "@opencode/core/workspace"
 import { WorkspaceDriver } from "@opencode/core/workspace/driver"
 import { WorkspaceTable } from "@opencode/core/workspace/sql"
@@ -641,6 +642,7 @@ const makeAlarmHarness = (
       }),
       [
         Database.node.replace(sharedDb),
+        Identity.node.replace(Identity.kvNode),
         WorkspaceDriver.node.replace(WorkspaceDriver.registryNode({ fake: alarmDriver })),
       ],
     )
@@ -819,5 +821,42 @@ bareIt.effect(
           expect(harness.counts()).toEqual({ openCount: 2, closeCount: 1 })
         }),
       )
+    }),
+)
+
+bareIt.effect(
+  "provides persistent host Identity.Service to both WorkspaceDriver.create and WorkspaceDriver.connect",
+  () =>
+    Effect.gen(function* () {
+      const keys: Uint8Array[] = []
+      const seedErrors: Identity.InvalidKey[] = []
+      const harness = makeAlarmHarness({
+        connect: () =>
+          Effect.gen(function* () {
+            const identity = yield* Identity.Service
+            keys.push(yield* identity.publicKey().pipe(Effect.orDie))
+            seedErrors.push(yield* identity.seed().pipe(Effect.flip, Effect.orDie))
+            return memory
+          }),
+      })
+
+      const workspaceID = yield* harness.run((workspace) =>
+        Effect.gen(function* () {
+          const id = yield* workspace.attach({ provider: "fake", binding: { host: "vm" } })
+          yield* makeFiles(yield* workspace.connect(id)).mkdir("/identity-check")
+          return id
+        }),
+      )
+
+      // A fresh Workspace.Service over the same KV database sees the exact same 32-byte Ed25519 identity key.
+      yield* harness.run((workspace) =>
+        Effect.flatMap(workspace.connect(workspaceID), (driver) => makeFiles(driver).mkdir("/identity-check-2")),
+      )
+
+      expect(keys).toHaveLength(2)
+      expect(keys[0]?.length).toBe(32)
+      expect(keys[1]).toEqual(keys[0])
+      expect(seedErrors).toHaveLength(2)
+      expect(seedErrors[0]).toBeInstanceOf(Identity.InvalidKey)
     }),
 )

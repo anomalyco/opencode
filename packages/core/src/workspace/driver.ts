@@ -5,6 +5,7 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import type { Scope } from "effect"
 import type { EnvironmentDriver } from "../environment/driver.js"
+import type { Identity } from "../machine/identity.js"
 
 /**
  * Smallest provider-owned JSON value required to reconnect to the same
@@ -36,12 +37,12 @@ export interface Interface {
    */
   readonly create: (input: {
     readonly workspaceID: Workspace.ID
-  }) => Effect.Effect<{ readonly binding: Binding }, Error>
+  }) => Effect.Effect<{ readonly binding: Binding }, Error, Identity.Service>
   readonly connect: (input: {
     readonly workspaceID: Workspace.ID
     readonly binding: Binding
     readonly saveBinding: (binding: Binding) => Effect.Effect<void>
-  }) => Effect.Effect<EnvironmentDriver.Driver, Error, Scope.Scope>
+  }) => Effect.Effect<EnvironmentDriver.Driver, Error, Scope.Scope | Identity.Service>
   readonly suspendForIdle: (input: {
     readonly workspaceID: Workspace.ID
     readonly binding: Binding
