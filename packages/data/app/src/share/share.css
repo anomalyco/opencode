@@ -394,6 +394,13 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
       width: 36px;
       height: 36px;
     }
+
+    /* But for the wide card, the arrows at its corners: the row as wide as the card, its buttons on the card's edges. */
+    &[data-spread] {
+      justify-content: space-between;
+      width: var(--card-width);
+      max-width: none;
+    }
   }
 
   /* The section's name, a fixed width so the arrows stay put as it changes. */
@@ -585,6 +592,11 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
     [data-variant="primary"] {
       justify-content: center;
       min-width: 96px;
+      margin-inline-start: 4px;
+    }
+
+    /* Shuffle as far from Customize as Customize is from Save. */
+    [data-variant="customize"] {
       margin-inline-start: 4px;
     }
 

@@ -1167,7 +1167,11 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
               </div>
               {/* Under the card, the section's name between arrows that step to the previous and next section; a saved or
                   copied notice takes the name's place for a moment. */}
-              <div data-slot="editor-toolbar">
+              <div
+                data-slot="editor-toolbar"
+                data-spread={options().size === "16:9" ? undefined : ""}
+                style={{ "--card-width": `${cardBox().width}px` } as JSX.CSSProperties}
+              >
                 <button
                   type="button"
                   data-slot="icon-button"
