@@ -122,15 +122,12 @@ export const LIMITS = {
   llmTotal: 500,
 }
 
-const OPTIONAL = "~optional"
-
 // prettier-ignore
-const guide = `## agent(), llm() and z in Code Mode
+const guide = `## agent() and llm() in Code Mode
 
 Scripts you run with \`execute\` also have these globals:
-- \`await agent(prompt, { schema?, agent?, model?, effort?, label?, retries? })\` starts a subagent (default \`"general"\`, use \`"explore"\` for read-only work) in its own child session, waits for it, and returns its final text — or a checked value when \`schema\` is given.
+- \`await agent(prompt, { schema?, agent?, model?, effort?, label?, retries? })\` starts a subagent (default \`"general"\`, use \`"explore"\` for read-only work) in its own child session, waits for it, and returns its final text — or a value checked against \`schema\` (a JSON Schema object).
 - \`await llm(prompt, { schema?, system?, model?, effort?, label?, retries? })\` makes one fast model call with no tools and no history (defaults to low reasoning effort). Use it whenever the script already has the text to classify, extract, summarize or verify.
-- \`z\` builds JSON Schema like zod: \`z.object({ file: z.string(), line: z.integer().optional(), severity: z.enum(["low", "high"]) })\`. Plain JSON Schema works too.
 
 For speed, put scouting, per-item pipelining (\`Promise.all(items.map(async (item) => { const a = await ...; const b = a.flagged ? await ... : null; return ... }))\`), and writing final files (\`Bun.write\`) in ONE \`execute\` call instead of bouncing intermediate results back to the main session between turns. Read small shared files once in the script and include them in prompts instead of having every worker re-read them. Pass \`effort: "low"\` to \`agent()\` for mechanical stages; omit or pass \`"high"\` for harder reasoning. Up to ${LIMITS.agentConcurrency} agents and ${LIMITS.llmConcurrency} \`llm()\` calls run at once (caps: ${LIMITS.agentTotal} agents, ${LIMITS.llmTotal} \`llm()\`); after any usage/rate limit, no more calls start.
 
@@ -139,7 +136,7 @@ Each \`agent()\` is a full subagent run. Start agents only when the user asks fo
 const instructionsKey = Instructions.Key.make("core/codemode-agents")
 const instructionsCodec = Schema.toCodecJson(Schema.String)
 
-/** The short guide to agent(), llm() and z, sent while the session's Code Mode has them. */
+/** The short guide to agent() and llm(), sent while the session's Code Mode has them. */
 export const instructions = (enabled: boolean): Instructions.List =>
   Instructions.make({
     key: instructionsKey,
@@ -148,14 +145,11 @@ export const instructions = (enabled: boolean): Instructions.List =>
     render: {
       initial: (text) => text,
       changed: (previous, current) => (previous === current ? undefined : current),
-      removed: () => "agent(), llm() and z are no longer available in Code Mode scripts.",
+      removed: () => "agent() and llm() are no longer available in Code Mode scripts.",
     },
   })
 
-/**
- * The script's `agent`, `llm` and `z` globals. `z` builds JSON Schema the way zod does, as plain objects whose methods
- * (`optional`, `nullable`, `describe`, ...) are host functions; agent() and llm() drop those methods again.
- */
+/** The script's `agent` and `llm` globals. Both accept a plain JSON Schema in `options.schema`. */
 export const extension = Extension.make({
   name: "agents",
   globals: {
@@ -200,23 +194,6 @@ export const extension = Extension.make({
         return yield* limited(run, "llm", input.options?.retries ?? 0, call)
       }),
     ),
-    z: {
-      string: (options?: unknown) => build({ type: "string", ...keywords(options) }),
-      number: (options?: unknown) => build({ type: "number", ...keywords(options) }),
-      integer: (options?: unknown) => build({ type: "integer", ...keywords(options) }),
-      boolean: () => build({ type: "boolean" }),
-      null: () => build({ type: "null" }),
-      unknown: () => build({}),
-      any: () => build({}),
-      literal: (value: unknown) => build({ const: value }),
-      enum: (values: unknown) => build({ enum: Array.isArray(values) ? values : [] }),
-      array: (items: unknown, options?: unknown) => build({ type: "array", items: clean(items), ...keywords(options) }),
-      object: (shape: unknown) => object(shape),
-      union: (members: unknown) => build({ anyOf: Array.isArray(members) ? members.map(clean) : [] }),
-      optional: (inner: unknown) => build({ ...(isRecord(inner) ? strip(inner) : {}), [OPTIONAL]: true }),
-      nullable: (inner: unknown) => build({ anyOf: [clean(inner), { type: "null" }] }),
-      record: (values: unknown) => build({ type: "object", additionalProperties: clean(values) }),
-    },
   },
 })
 
@@ -235,8 +212,8 @@ export const display = (name: string, args: ReadonlyArray<unknown>) => {
 }
 
 /**
- * Normalizes a schema from a script: drops `z` methods and markers, wraps a non-object root as `{ value }`, and checks
- * that it is JSON Schema we can validate against. Fails with a message for the script otherwise.
+ * Normalizes a JSON Schema from a script: wraps a non-object root as `{ value }` and checks that it is a JSON Schema
+ * this runtime can validate against. Fails with a message for the script otherwise.
  */
 export function compile(json: JsonSchema.JsonSchema, wrapped: boolean): Result.Result<Output, string> {
   // Patterns guide the model but are not enforced: a regex written by one model and run on another's output could
@@ -252,10 +229,9 @@ export function compile(json: JsonSchema.JsonSchema, wrapped: boolean): Result.R
 }
 
 export function output(schema: unknown): Result.Result<Output, string> {
-  const cleaned = clean(schema)
-  if (!isRecord(cleaned)) return Result.fail("schema must be an object: a z schema or a JSON Schema.")
+  if (!isRecord(schema)) return Result.fail("schema must be a JSON Schema object.")
   // A script's JSON Schema is a boundary value: the codec below is what checks that it is usable.
-  const json = cleaned as JsonSchema.JsonSchema
+  const json = schema as JsonSchema.JsonSchema
   const wrapped = json.type !== "object"
   const root: JsonSchema.JsonSchema = wrapped
     ? { type: "object", properties: { value: json }, required: ["value"], additionalProperties: false }
@@ -388,90 +364,4 @@ const parseOutput = (name: string, schema: unknown) => {
   const result = output(schema)
   if (Result.isSuccess(result)) return Effect.succeed(result.success)
   return Effect.fail(new TypeError(`${name}(): ${result.failure}`))
-}
-
-// zod's common refinements, mapped onto the JSON Schema keyword for the node's type.
-const build = (json: Record<string, unknown>): Record<string, unknown> => {
-  const bounds = (kind: "min" | "max", value: unknown) => {
-    const n = Number(value)
-    if (json.type === "string") return build({ ...json, [kind === "min" ? "minLength" : "maxLength"]: n })
-    if (json.type === "array") return build({ ...json, [kind === "min" ? "minItems" : "maxItems"]: n })
-    return build({ ...json, [kind === "min" ? "minimum" : "maximum"]: n })
-  }
-  const format = (name: string) => () => build({ ...json, format: name })
-  return {
-    ...json,
-    optional: () => build({ ...json, [OPTIONAL]: true }),
-    nullable: () => build({ anyOf: [strip(json), { type: "null" }], ...marker(json) }),
-    nullish: () => build({ anyOf: [strip(json), { type: "null" }], [OPTIONAL]: true }),
-    describe: (description: unknown) => build({ ...json, description: String(description) }),
-    default: (value: unknown) => build({ ...json, default: value }),
-    min: (value: unknown) => bounds("min", value),
-    max: (value: unknown) => bounds("max", value),
-    length: (value: unknown) =>
-      json.type === "array"
-        ? build({ ...json, minItems: Number(value), maxItems: Number(value) })
-        : build({ ...json, minLength: Number(value), maxLength: Number(value) }),
-    nonempty: () => bounds("min", 1),
-    int: () => build({ ...json, type: "integer" }),
-    positive: () => build({ ...json, exclusiveMinimum: 0 }),
-    nonnegative: () => build({ ...json, minimum: 0 }),
-    regex: (pattern: unknown) =>
-      build({
-        ...json,
-        pattern: isRecord(pattern) && typeof pattern.source === "string" ? pattern.source : String(pattern),
-      }),
-    email: format("email"),
-    url: format("uri"),
-    uuid: format("uuid"),
-    datetime: format("date-time"),
-  }
-}
-
-const object = (shape: unknown) => {
-  const entries = isRecord(shape) ? Object.entries(shape) : []
-  return build({
-    type: "object",
-    properties: Object.fromEntries(entries.map(([key, value]) => [key, clean(value)])),
-    required: entries.filter(([, value]) => !(isRecord(value) && value[OPTIONAL] === true)).map(([key]) => key),
-    additionalProperties: false,
-  })
-}
-
-const strip = (json: Record<string, unknown>) =>
-  Object.fromEntries(Object.entries(json).filter(([key, value]) => key !== OPTIONAL && typeof value !== "function"))
-
-const marker = (json: Record<string, unknown>) => (json[OPTIONAL] === true ? { [OPTIONAL]: true } : {})
-
-const KEYWORDS = new Set([
-  "description",
-  "minimum",
-  "maximum",
-  "minLength",
-  "maxLength",
-  "minItems",
-  "maxItems",
-  "pattern",
-  "format",
-])
-
-// Only the keywords that narrow a value; anything else in options is ignored.
-const keywords = (options: unknown) =>
-  isRecord(options)
-    ? Object.fromEntries(
-        Object.entries(options).filter(
-          ([key, value]) => KEYWORDS.has(key) && (typeof value === "string" || typeof value === "number"),
-        ),
-      )
-    : {}
-
-/** Drops `z` methods and markers at any depth, leaving plain JSON Schema. */
-function clean(value: unknown): unknown {
-  if (Array.isArray(value)) return value.map(clean)
-  if (!isRecord(value)) return value
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([key, item]) => key !== OPTIONAL && typeof item !== "function")
-      .map(([key, item]) => [key, clean(item)]),
-  )
 }

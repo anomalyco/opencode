@@ -196,7 +196,7 @@ describe("agent()", () => {
     Effect.gen(function* () {
       const h = yield* harness()
       const result = yield* h.run(
-        `return await agent("Find bugs in src", { agent: "reviewer", label: "bug hunt", schema: z.object({ bugs: z.array(z.string()) }) })`,
+        `return await agent("Find bugs in src", { agent: "reviewer", label: "bug hunt", schema: { type: "object", properties: { bugs: { type: "array", items: { type: "string" } } }, required: ["bugs"], additionalProperties: false } })`,
         {
           reviewer: [
             TestLLM.toolCall("call-bad", "structured_output", { bugs: "off by one" }),
@@ -234,7 +234,7 @@ describe("agent()", () => {
     Effect.gen(function* () {
       const h = yield* harness()
       const result = yield* h.run(
-        `return await agent("Check auth", { agent: "readonly", schema: z.object({ ok: z.boolean() }) })`,
+        `return await agent("Check auth", { agent: "readonly", schema: { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"], additionalProperties: false } })`,
         {
           readonly: [
             TestLLM.toolCall("call-ok", "structured_output", { ok: true }),
@@ -287,7 +287,7 @@ describe("llm()", () => {
     Effect.gen(function* () {
       const h = yield* harness()
       const result = yield* h.run(
-        `return await llm("Classify: the app crashes on save", { schema: z.object({ kind: z.enum(["bug", "feature"]) }) })`,
+        `return await llm("Classify: the app crashes on save", { schema: { type: "object", properties: { kind: { enum: ["bug", "feature"] } }, required: ["kind"], additionalProperties: false } })`,
         {
           build: [
             TestLLM.toolCall("call-1", "respond", { kind: "crash" }),

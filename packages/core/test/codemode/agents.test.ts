@@ -29,79 +29,13 @@ const execute = (code: string) =>
     ),
   )
 
-// A schema built by a script with `z`, as agent() and llm() receive it.
-const built = async (code: string) => {
-  const result = await execute(`return ${code}`)
-  if (!result.ok) throw new Error(result.error.message)
-  return result.value
-}
-
 const output = (schema: unknown) => {
   const result = CodeModeAgents.output(schema)
   if (Result.isFailure(result)) throw new Error(result.failure)
   return result.success
 }
 
-describe("z", () => {
-  test("builds JSON Schema with required keys from what is not optional", async () => {
-    const schema = await built(
-      `z.object({ title: z.string().describe("Short title"), line: z.integer({ minimum: 1 }).optional(), severity: z.enum(["low", "high"]), tags: z.array(z.string(), { maxItems: 3 }), owner: z.string().nullable() })`,
-    )
-    expect(output(schema).json).toEqual({
-      type: "object",
-      properties: {
-        title: { type: "string", description: "Short title" },
-        line: { type: "integer", minimum: 1 },
-        severity: { enum: ["low", "high"] },
-        tags: { type: "array", items: { type: "string" }, maxItems: 3 },
-        owner: { anyOf: [{ type: "string" }, { type: "null" }] },
-      },
-      required: ["title", "severity", "tags", "owner"],
-      additionalProperties: false,
-    })
-  })
-
-  test("common zod refinements map to JSON Schema keywords", async () => {
-    const schema = await built(
-      `z.object({ name: z.string().min(1).max(40), id: z.string().uuid(), site: z.string().url().optional(), code: z.string().regex(/^[A-Z]{3}$/), count: z.number().int().nonnegative(), score: z.number().positive().max(1), tags: z.array(z.string()).nonempty(), pair: z.array(z.number()).length(2), note: z.string().nullish() })`,
-    )
-    const json = output(schema).json
-    expect(json.properties).toEqual({
-      name: { type: "string", minLength: 1, maxLength: 40 },
-      id: { type: "string", format: "uuid" },
-      site: { type: "string", format: "uri" },
-      code: { type: "string", pattern: "^[A-Z]{3}$" },
-      count: { type: "integer", minimum: 0 },
-      score: { type: "number", exclusiveMinimum: 0, maximum: 1 },
-      tags: { type: "array", items: { type: "string" }, minItems: 1 },
-      pair: { type: "array", items: { type: "number" }, minItems: 2, maxItems: 2 },
-      note: { anyOf: [{ type: "string" }, { type: "null" }] },
-    })
-    expect(json.required).toEqual(["name", "id", "code", "count", "score", "tags", "pair"])
-    expect(
-      Result.isFailure(
-        CodeModeAgents.check(output(schema), {
-          name: "",
-          id: "x",
-          code: "abc",
-          count: -1,
-          score: 2,
-          tags: [],
-          pair: [1],
-        }),
-      ),
-    ).toBe(true)
-  })
-
-  test("a non-object root is wrapped for the model and unwrapped for the script", async () => {
-    const schema = output(await built(`z.array(z.object({ file: z.string() }))`))
-    expect(schema.wrapped).toBe(true)
-    expect(schema.json.required).toEqual(["value"])
-    expect(CodeModeAgents.check(schema, { value: [{ file: "a.ts" }] })).toEqual(Result.succeed([{ file: "a.ts" }]))
-  })
-})
-
-describe("check", () => {
+describe("output and check", () => {
   const findings = output({
     type: "object",
     properties: {
@@ -131,6 +65,29 @@ describe("check", () => {
     expect(result.failure).toContain("findings[1]")
   })
 
+  test("wraps a non-object root for the model and unwraps it for the script", () => {
+    const schema = output({
+      type: "array",
+      items: { type: "object", properties: { file: { type: "string" } }, required: ["file"] },
+    })
+    expect(schema.wrapped).toBe(true)
+    expect(schema.json.required).toEqual(["value"])
+    expect(CodeModeAgents.check(schema, { value: [{ file: "a.ts" }] })).toEqual(Result.succeed([{ file: "a.ts" }]))
+  })
+
+  test("keeps pattern in JSON Schema for the model without failing compilation", () => {
+    const schema = output({
+      type: "object",
+      properties: {
+        code: { type: "string", pattern: "^[A-Z]{3}$" },
+        count: { type: "integer", minimum: 0 },
+      },
+      required: ["code", "count"],
+    })
+    expect(CodeModeAgents.check(schema, { code: "ABC", count: 1 })).toEqual(Result.succeed({ code: "ABC", count: 1 }))
+    expect(Result.isFailure(CodeModeAgents.check(schema, { code: "ABC", count: -1 }))).toBe(true)
+  })
+
   test("rejects what is not a usable schema before any model call", () => {
     expect(Result.isFailure(CodeModeAgents.output("findings"))).toBe(true)
     expect(Result.isFailure(CodeModeAgents.output([{ type: "string" }]))).toBe(true)
@@ -150,7 +107,7 @@ describe("agent() and llm() arguments", () => {
     expect(await failure(`await agent("x", { shema: {} })`)).toContain(
       "valid options: agent, model, effort, label, schema, retries",
     )
-    expect(await failure(`await llm("x", { schema: "string" })`)).toContain("schema must be an object")
+    expect(await failure(`await llm("x", { schema: "string" })`)).toContain("schema must be a JSON Schema object")
     expect(await failure(`await llm("x", { effort: "turbo" })`)).toContain("valid options:")
   })
 })

@@ -1,12 +1,11 @@
 # Code Mode agents
 
-Inside `execute`, three globals let one script run many model calls:
+Inside `execute`, two globals let one script run many model calls:
 
 | Global                    | What it does                                                                     | Cost                |
 | ------------------------- | -------------------------------------------------------------------------------- | ------------------- |
 | `agent(prompt, options?)` | Starts a subagent in its own child session, with tools, and waits for its result | A full subagent run |
 | `llm(prompt, options?)`   | One model call: no tools, no conversation history                                | One request         |
-| `z`                       | Builds schemas the way zod does                                                  | Free                |
 
 Start agents only when the user asked for parallel agents, multi-agent work or a workflow. For anything else, describe what a script would do and roughly how many agents it would start, and ask. `llm()` is cheap enough to use whenever a script needs a model.
 
@@ -34,7 +33,15 @@ Each child is a normal session the user can open. agent() rejects when the child
 
 ```js
 const label = await llm(`Is this a bug report or a feature request?\n\n${issue.body}`, {
-  schema: z.object({ kind: z.enum(["bug", "feature"]), confidence: z.number() }),
+  schema: {
+    type: "object",
+    properties: {
+      kind: { enum: ["bug", "feature"] },
+      confidence: { type: "number" },
+    },
+    required: ["kind", "confidence"],
+    additionalProperties: false,
+  },
 })
 ```
 
@@ -45,21 +52,32 @@ Options: `schema`, `system`, `model`, `effort`, `label`, `retries`. Defaults to 
 With `schema`, the model must return a value that matches; agent() and llm() check it and give the model the exact problems to fix until it does, so the script gets a value it can use without parsing.
 
 ```js
-const Finding = z.object({
-  file: z.string(),
-  line: z.integer({ minimum: 1 }).optional(),
-  severity: z.enum(["low", "medium", "high"]),
-  summary: z.string().describe("One sentence"),
-})
-const Findings = z.object({ findings: z.array(Finding) })
+const Findings = {
+  type: "object",
+  properties: {
+    findings: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          file: { type: "string" },
+          line: { type: "integer", minimum: 1 },
+          severity: { enum: ["low", "medium", "high"] },
+          summary: { type: "string", description: "One sentence" },
+        },
+        required: ["file", "severity", "summary"],
+        additionalProperties: false,
+      },
+    },
+  },
+  required: ["findings"],
+  additionalProperties: false,
+}
 ```
 
-- Types: `z.string()`, `z.number()`, `z.integer()`, `z.boolean()`, `z.null()`, `z.unknown()`, `z.literal(v)`, `z.enum([...])`, `z.array(item)`, `z.object({...})`, `z.union([...])`, `z.record(value)`.
-- Methods: `.optional()`, `.nullable()`, `.nullish()`, `.describe(text)`, `.default(value)`, `.min(n)`, `.max(n)`, `.length(n)`, `.nonempty()`, `.int()`, `.positive()`, `.nonnegative()`, `.email()`, `.url()`, `.uuid()`, `.datetime()`, `.regex(re)`. Nothing else from zod exists: no `.refine()`, `.transform()` or `.parse()`.
-- `.regex()` and JSON Schema `pattern` are shown to the model but not enforced; check those values in the script if they matter.
-- Object keys are required unless `.optional()`; extra keys are not allowed.
-- A root that is not an object works: `schema: z.array(Finding)` returns an array.
-- Plain JSON Schema works anywhere a `z` schema does.
+- Pass standard JSON Schema (Draft 2020-12).
+- `pattern` is shown to the model as guidance but is not enforced during validation; check regexes in the script if they matter.
+- A root that is not an object works: `{ type: "array", items: { type: "string" } }` returns an array directly.
 
 Describe fields whose meaning is not obvious from the name: the model reads the descriptions.
 
@@ -108,7 +126,7 @@ Wait for every result first only when the next step needs all of them, such as d
 
 ## Rules of thumb
 
-- Scout first in the main conversation (list files, check the diff) to learn the work list, then fan out over it.
+- Put scouting, per-item pipelining, and writing final files (`Bun.write`) in one `execute` call instead of bouncing intermediate results back to the main session between turns.
 - Keep each agent's task small and specific, with a clear result. One agent per file or per finding beats one agent for everything.
 - Agents that edit files at the same time can overwrite each other. Give them separate files, or have them return changes and apply them yourself.
 - Return the summary the user needs from the script, not every raw result: the script's return value is what you read next.

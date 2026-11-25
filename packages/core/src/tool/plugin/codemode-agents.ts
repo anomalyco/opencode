@@ -30,7 +30,7 @@ const DEFAULT_AGENT = "general"
 const LLM_ATTEMPTS = 3
 
 export const SkillDescription =
-  "Read before writing a Code Mode script that calls agent() or llm(): the full API, schemas with z, limits, and patterns for fanning work out, verifying it and combining the results."
+  "Read before writing a Code Mode script that calls agent() or llm(): the full API, schemas, limits, and patterns for fanning work out, verifying it and combining the results."
 
 export const Plugin = {
   id: "opencode.tool.codemode-agents",
