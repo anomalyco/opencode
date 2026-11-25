@@ -246,6 +246,13 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
     return result
   })
 
+  // Keep matching option rows mounted when filtering removes their category headings.
+  const scrollRows = createMemo(() =>
+    grouped().flatMap<DialogSelectOption<T> | { category: string; first: boolean }>(([category, options], index) =>
+      category ? [{ category, first: index === 0 }, ...options] : options,
+    ),
+  )
+
   const flat = createMemo(() => {
     return pipe(
       grouped(),
@@ -774,63 +781,57 @@ export function DialogSelect<T>(props: DialogSelectProps<T>) {
             }}
             maxHeight={height()}
           >
-            <For each={grouped()}>
-              {([category, options], index) => (
-                <>
-                  <Show when={category}>
-                    <DialogSelectCategory title={category} first={index() === 0} />
-                  </Show>
-                  <For each={options}>
-                    {(option) => {
-                      const active = createMemo(() => !props.locked && isDeepEqual(option.value, selected()?.value))
-                      const current = createMemo(() => isDeepEqual(option.value, props.current))
-                      return (
-                        <box
-                          flexDirection="column"
-                          position="relative"
-                          onMouseMove={() => {
-                            if (props.locked) return
-                            const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
-                            if (index === -1 || index === store.selected) return
-                            moveTo(index)
-                          }}
-                          onMouseUp={() => {
-                            if (props.locked) return
-                            option.onSelect?.(dialog)
-                            props.onSelect?.(option)
-                          }}
-                          onMouseDown={() => {
-                            if (props.locked) return
-                            const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
-                            if (index === -1) return
-                            moveTo(index)
-                          }}
-                        >
-                          <DialogSelectRow
-                            title={option.title}
-                            titleView={option.titleView}
-                            footer={
-                              flatten() ? (option.searchFooter ?? option.category ?? option.footer) : option.footer
-                            }
-                            footerColor={option.footerColor}
-                            footerOverhang={option.footerOverhang}
-                            titleWidth={option.titleWidth}
-                            truncateTitle={option.truncateTitle}
-                            description={option.description !== category ? option.description : undefined}
-                            active={active()}
-                            current={current()}
-                            activeBackground={option.bg}
-                            activeColor={option.fg}
-                            gutter={option.gutter}
-                            margin={option.margin}
-                          />
-                          <DialogSelectDetails details={option.details} width={detailsWidth()} />
-                        </box>
-                      )
+            <For each={scrollRows()}>
+              {(option) => {
+                if (!("value" in option)) return <DialogSelectCategory title={option.category} first={option.first} />
+                const active = createMemo(() => !props.locked && isDeepEqual(option.value, selected()?.value))
+                const current = createMemo(() => isDeepEqual(option.value, props.current))
+                return (
+                  <box
+                    flexDirection="column"
+                    position="relative"
+                    onMouseMove={() => {
+                      if (props.locked) return
+                      const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
+                      if (index === -1 || index === store.selected) return
+                      moveTo(index)
                     }}
-                  </For>
-                </>
-              )}
+                    onMouseUp={() => {
+                      if (props.locked) return
+                      option.onSelect?.(dialog)
+                      props.onSelect?.(option)
+                    }}
+                    onMouseDown={() => {
+                      if (props.locked) return
+                      const index = flat().findIndex((x) => isDeepEqual(x.value, option.value))
+                      if (index === -1) return
+                      moveTo(index)
+                    }}
+                  >
+                    <DialogSelectRow
+                      title={option.title}
+                      titleView={option.titleView}
+                      footer={flatten() ? (option.searchFooter ?? option.category ?? option.footer) : option.footer}
+                      footerColor={option.footerColor}
+                      footerOverhang={option.footerOverhang}
+                      titleWidth={option.titleWidth}
+                      truncateTitle={option.truncateTitle}
+                      description={
+                        option.description !== (flatten() ? "" : (option.category ?? ""))
+                          ? option.description
+                          : undefined
+                      }
+                      active={active()}
+                      current={current()}
+                      activeBackground={option.bg}
+                      activeColor={option.fg}
+                      gutter={option.gutter}
+                      margin={option.margin}
+                    />
+                    <DialogSelectDetails details={option.details} width={detailsWidth()} />
+                  </box>
+                )
+              }}
             </For>
           </scrollbox>
           {/* Reserved whenever any option has a detail, so the dialog does not resize as the selection moves. */}
