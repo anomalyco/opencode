@@ -14,7 +14,7 @@ export function entryLook(commit: StreamCommit, theme: RunEntryTheme): { fg: Col
   if (commit.kind === "user") {
     return {
       fg: theme.user.body,
-      //attrs: TextAttributes.BOLD,
+      attrs: TextAttributes.BOLD,
     }
   }
 
