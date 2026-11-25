@@ -1,14 +1,14 @@
 export * as FileSystem from "./filesystem.js"
 
+import path from "node:path"
+import { Entry, FileSystem, FindInput, Write } from "@opencode/schema/filesystem"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import path from "path"
-import { Context, Effect, Layer, type Option, type PlatformError, Schema, type Stream } from "effect"
 import { FSUtil } from "@opencode/util/fs-util"
+import { Context, Effect, Layer, Option, PlatformError, Schema, Stream } from "effect"
 import { Environment } from "./environment/index.js"
+import { FileSystemSearch } from "./filesystem/search.js"
 import { Location } from "./location.js"
 import { AbsolutePath, PositiveInt, RelativePath } from "./schema.js"
-import { FileSystemSearch } from "./filesystem/search.js"
-import { Entry, FileSystem, FindInput, Write } from "@opencode/schema/filesystem"
 export { Entry, Match, Submatch } from "@opencode/schema/filesystem"
 
 export interface ReadInput {
@@ -66,6 +66,7 @@ export { FindInput, Write }
 
 export const DEFAULT_SEARCH_LIMIT = 100
 export const DEFAULT_SEARCH_TIMEOUT_MS = 30_000
+const REMOTE_CHUNK_BYTES = 4 * 1024 * 1024
 
 export class GlobInput extends Schema.Class<GlobInput>("FileSystem.GlobInput")({
   pattern: Schema.String,
@@ -106,6 +107,32 @@ export interface Interface {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/FileSystem") {}
 
+const mapMissing = <A>(
+  effect: Effect.Effect<A, Environment.NotFound | Environment.WrongKind | Environment.Failed>,
+  target: RelativePath,
+): Effect.Effect<A, NotFoundError> =>
+  effect.pipe(
+    Effect.catchTags({
+      "Environment.NotFound": () => Effect.fail(new NotFoundError({ path: target })),
+      "Environment.WrongKind": () => Effect.fail(new NotFoundError({ path: target })),
+      "Environment.Failed": Effect.die,
+    }),
+  )
+
+const toStreamError = (target: string, cause: Environment.NotFound | Environment.WrongKind | Environment.Failed) =>
+  PlatformError.systemError({
+    _tag:
+      cause._tag === "Environment.NotFound"
+        ? "NotFound"
+        : cause._tag === "Environment.WrongKind"
+          ? "BadResource"
+          : "Unknown",
+    module: "FileSystem",
+    method: "stream",
+    pathOrDescriptor: target,
+    cause,
+  })
+
 const baseLayer = Layer.effect(
   Service,
   Effect.gen(function* () {
@@ -113,12 +140,14 @@ const baseLayer = Layer.effect(
     const fs = yield* FSUtil.Service
     const location = yield* Location.Service
     const search = yield* FileSystemSearch.Service
+    const envPath = environment.path ?? path
+
     // Directories outside the server host do not live on the host filesystem,
     // so a host realpath probe at boot would consult the wrong filesystem and
-    // block construction when no matching local directory exists. Treat the
-    // configured directory as canonical; host placements keep symlink
-    // canonicalization. This skip is boot-only: resolve/read/list below still
-    // access the host filesystem per operation (tracked in #44568).
+    // block construction when no matching local directory exists. Host
+    // placements keep boot realpath canonicalization and symlink containment;
+    // remote reads enforce lexical containment while isolation lives at the
+    // remote sandbox or worker boundary.
     const root = environment.local
       ? yield* fs.realPath(location.directory).pipe(
           // Linux realpath succeeds on an unreadable directory, so probe readability explicitly.
@@ -132,10 +161,16 @@ const baseLayer = Layer.effect(
           }),
         )
       : location.directory
-    const resolve = Effect.fnUntraced(function* (input: RelativePath) {
-      if (input.includes("\u0000")) return yield* Effect.fail(new NotFoundError({ path: input }))
-      const absolute = path.resolve(location.directory, input)
-      if (!FSUtil.contains(location.directory, absolute)) return yield* Effect.fail(new NotFoundError({ path: input }))
+
+    const confine = Effect.fnUntraced(function* (input: RelativePath) {
+      if (input.includes("\u0000")) return yield* new NotFoundError({ path: input })
+      const absolute = envPath.resolve(location.directory, input)
+      if (!FSUtil.contains(location.directory, absolute, envPath)) return yield* new NotFoundError({ path: input })
+      return absolute
+    })
+
+    const readLocal = Effect.fnUntraced(function* (input: RelativePath) {
+      const absolute = yield* confine(input)
       const real = yield* fs.realPath(absolute).pipe(
         Effect.catchReason(
           "PlatformError",
@@ -144,67 +179,84 @@ const baseLayer = Layer.effect(
           (_, error) => Effect.die(error),
         ),
       )
-      if (!FSUtil.contains(root, real)) return yield* Effect.fail(new NotFoundError({ path: input }))
-      return { absolute, real, directory: location.directory }
+      if (!FSUtil.contains(root, real, envPath)) return yield* new NotFoundError({ path: input })
+      const info = yield* fs.stat(real).pipe(
+        Effect.catchReason(
+          "PlatformError",
+          "NotFound",
+          () => Effect.fail(new NotFoundError({ path: input })),
+          (_, error) => Effect.die(error),
+        ),
+      )
+      if (info.type !== "File") return yield* new NotFoundError({ path: input })
+      return {
+        mime: FSUtil.mimeType(real),
+        size: Number(info.size),
+        mtime: info.mtime,
+        stream: (options) => fs.stream(real, options),
+      } satisfies File
     })
+
+    const readRemote = Effect.fnUntraced(function* (input: RelativePath) {
+      const absolute = yield* confine(input)
+      // Zero-byte ranged read checks existence, file kind, size, and mtime without transferring file bytes
+      // until the caller actually consumes stream().
+      const probe = yield* mapMissing(environment.files.read(absolute, { offset: 0, length: 0 }), input)
+      return {
+        mime: FSUtil.mimeType(absolute),
+        size: probe.info.size,
+        mtime: probe.info.mtimeMs > 0 ? Option.some(new Date(probe.info.mtimeMs)) : Option.none(),
+        // Paginate in fixed chunks so large files (>64 MiB exec cap) stream cleanly without buffering whole files in RAM.
+        stream: (options) => {
+          const start = Math.max(0, options?.offset ?? 0)
+          const end = options?.bytesToRead === undefined ? Infinity : start + Math.max(0, options.bytesToRead)
+          if (end <= start) return Stream.empty
+          return Stream.paginate(start, (offset) => {
+            const length = Math.min(REMOTE_CHUNK_BYTES, end - offset)
+            return environment.files.read(absolute, { offset, length }).pipe(
+              Effect.map((result) => {
+                const next = offset + result.bytes.length
+                const done = result.bytes.length < length || next >= end
+                return [
+                  result.bytes.length > 0 ? [result.bytes] : [],
+                  done ? Option.none() : Option.some(next),
+                ] as const
+              }),
+              Effect.mapError((cause) => toStreamError(absolute, cause)),
+            )
+          })
+        },
+      } satisfies File
+    })
+
+    const readFile = environment.local ? readLocal : readRemote
+
     return Service.of({
       find: search.find,
-      read: Effect.fn("FileSystem.read")(function* (input) {
-        const target = yield* resolve(input.path)
-        const info = yield* fs.stat(target.real).pipe(
-          Effect.catchReason(
-            "PlatformError",
-            "NotFound",
-            () => Effect.fail(new NotFoundError({ path: input.path })),
-            (_, error) => Effect.die(error),
-          ),
-        )
-        if (info.type !== "File") return yield* Effect.fail(new NotFoundError({ path: input.path }))
-        return {
-          mime: FSUtil.mimeType(target.real),
-          size: Number(info.size),
-          mtime: info.mtime,
-          stream: (options) => fs.stream(target.real, options),
-        }
-      }),
+      read: Effect.fn("FileSystem.read")((input) => readFile(input.path)),
       list: Effect.fn("FileSystem.list")(function* (input = {}) {
         // Navigation can leave the cwd without activating another Location.
-        const directory = path.resolve(location.directory, input.path ?? ".")
-        const missing = new NotFoundError({ path: RelativePath.make(input.path ?? ".") })
-        const info = yield* fs.stat(directory).pipe(
-          Effect.catchReason(
-            "PlatformError",
-            "NotFound",
-            () => Effect.fail(missing),
-            (_, error) => Effect.die(error),
-          ),
-        )
-        if (info.type !== "Directory") return yield* missing
-        return yield* fs.readDirectoryEntries(directory).pipe(
-          Effect.orDie,
-          Effect.map((items) =>
-            items
-              .flatMap((item) => {
-                if (item.type !== "File" && item.type !== "Directory") return []
-                const type = item.type === "Directory" ? "directory" : "file"
-                const absolute = path.join(directory, item.name)
-                const relative = path.relative(location.directory, absolute) || "."
-                return [
-                  Entry.make({
-                    path: RelativePath.make(relative + (type === "directory" ? path.sep : "")),
-                    type,
-                  }),
-                ]
-              })
-              .sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1)),
-          ),
-        )
+        const directory = envPath.resolve(location.directory, input.path ?? ".")
+        const items = yield* mapMissing(environment.files.list(directory), RelativePath.make(input.path ?? "."))
+        return items
+          .flatMap((item) => {
+            if (item.type !== "file" && item.type !== "directory") return []
+            const absolute = envPath.join(directory, item.name)
+            const relative = envPath.relative(location.directory, absolute) || "."
+            return [
+              Entry.make({
+                path: RelativePath.make(relative + (item.type === "directory" ? envPath.sep : "")),
+                type: item.type,
+              }),
+            ]
+          })
+          .sort((a, b) => (a.type === b.type ? a.path.localeCompare(b.path) : a.type === "directory" ? -1 : 1))
       }),
-      // Unlike read, write reaches outside the location so clients can stage files in the
-      // server tmp directory, which the model is already told to prefer and permitted to access.
+      // Unlike read, write is not confined to the location so clients can stage files in the
+      // environment's temp directory (e.g. /tmp) for tools to reference.
       write: Effect.fn("FileSystem.write")(function* (input) {
-        const target = path.resolve(location.directory, input.path)
-        yield* fs.writeWithDirs(target, input.data).pipe(Effect.orDie)
+        const target = envPath.resolve(location.directory, input.path)
+        yield* environment.files.write(target, input.data).pipe(Effect.orDie)
         return Write.make({ path: AbsolutePath.make(target) })
       }),
     })

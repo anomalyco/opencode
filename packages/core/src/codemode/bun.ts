@@ -290,7 +290,8 @@ const unwritable = () =>
 
 // A value from a program is a plain copy, so its functions are among its own entries.
 const method = (value: unknown, key: string) => {
-  if (typeof value !== "object" || value === null) return undefined
+  if (typeof value !== "object" || value === null || ArrayBuffer.isView(value) || value instanceof ArrayBuffer)
+    return undefined
   const found: unknown = Object.entries(value).find(([name]) => name === key)?.[1]
   return typeof found === "function" ? found : undefined
 }

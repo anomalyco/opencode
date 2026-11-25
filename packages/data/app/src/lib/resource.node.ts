@@ -30,10 +30,10 @@ async function loadAssets(): Promise<OgAssets> {
   const { decompress } = await import("wawoff2")
   const font = async (weight: "regular" | "bold", group: "latin" | "rest") => {
     const bytes = await decompress(
-      await readFile(new URL(`../asset/fonts/opentui-mono-${weight}-${group}.woff2`, import.meta.url)),
+      await readFile(new URL(`../asset/fonts/openmono-${weight}-${group}.woff2`, import.meta.url)),
     )
     return {
-      name: "OpenTUI Mono",
+      name: "OpenMono",
       data: bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength) as ArrayBuffer,
       weight: weight === "bold" ? (700 as const) : (400 as const),
     }

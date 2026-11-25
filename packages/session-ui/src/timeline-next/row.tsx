@@ -57,7 +57,7 @@ import { scriptFileFact, type FileFact } from "../timeline/facts"
 import { diffOpens, placeContent } from "../timeline/place"
 import { goal as goalMessage, movedInPlace, thoughtOpens, toolRule } from "./rules"
 import { Separator } from "./separator"
-import { timelineGaps } from "./spacing"
+import { timelineGaps, type TimelineGap } from "./spacing"
 import { AssistantContent } from "./tools/assistant-content"
 import { ContextGroup, type ActivityGroupPart } from "./tools/context-group"
 import { FileGroup } from "./tools/file-group"
@@ -752,10 +752,10 @@ export function createNextTimelineRowRenderer(input: {
 
   const gaps = createMemo(() => timelineGaps(input.projection.rows(), input.projection.messageByID()))
 
-  // Each row's space above comes from its block, and none of its own. A message joining the user's message above
-  // already sits its run's 4 px below it.
-  const gap = (row: FramedTimelineRow) => {
-    if (Predicate.isTagged(row, "UserMessage") && runs().get(row.userMessageID)?.above) return undefined
+  // Each row's only space is the gap below it, which sets the row below apart. A message joining the user's message
+  // above sits its run's 4 px below it instead, which its turn gap springs to.
+  const gap = (row: TimelineRow.TimelineRow) => {
+    if (Predicate.isTagged(row, "TurnGap") && runs().get(row.userMessageID)?.above) return undefined
 
     return gaps().get(TimelineRow.key(row))
   }
@@ -1138,8 +1138,10 @@ export function createNextTimelineRowRenderer(input: {
     )
   }
 
-  // A run's messages sit as close as the iOS app's (4 px); the gap springs as a message joins or leaves.
-  function TurnGap(props: { messageID: string }) {
+  // Holds the gap above its turn's first row, so the gap arrives and leaves with the turn and no row beside it
+  // changes. A run's messages sit as close as the iOS app's (4 px) instead; that gap springs as a message joins or
+  // leaves.
+  function TurnGap(props: { messageID: string; gap?: TimelineGap }) {
     let element: HTMLDivElement | undefined
     const joined = run(props.messageID)
     springStyle(
@@ -1155,7 +1157,9 @@ export function createNextTimelineRowRenderer(input: {
     return (
       <div
         ref={element}
+        data-timeline="next"
         data-timeline-row="TurnGap"
+        data-timeline-gap={props.gap}
         aria-hidden="true"
         style={{ height: untrack(joined)?.above ? "4px" : "0px" }}
       />
@@ -1163,7 +1167,7 @@ export function createNextTimelineRowRenderer(input: {
   }
 
   const render = (row: Accessor<TimelineRow.TimelineRow>, onSizeChange?: () => void) => {
-    if (Predicate.isTagged(row(), "TurnGap")) return <TurnGap messageID={row().userMessageID} />
+    if (Predicate.isTagged(row(), "TurnGap")) return <TurnGap messageID={row().userMessageID} gap={gap(row())} />
 
     // The host owns live status and renders this slot itself.
     if (Predicate.isTagged(row(), "Activity")) return null
@@ -1567,7 +1571,7 @@ export function createNextTimelineRowRenderer(input: {
     )
   }
 
-  return { Row }
+  return { Row, gap }
 }
 
 function capitalizeAgent(agent: string) {
