@@ -20,8 +20,11 @@ const modeVerb = {
  */
 export function activityFacts(parts: readonly ActivityGroupPart[]) {
   const facts = factsOf(
-    parts.flatMap((part): FactPart[] => {
-      if (part.type === "tool" || part.type === "reasoning") return [part]
+    parts.flatMap((part, index): FactPart[] => {
+      // Thoughts one after another count as one, as they show.
+      if (part.type === "reasoning") return parts[index - 1]?.type === "reasoning" ? [] : [part]
+
+      if (part.type === "tool") return [part]
 
       if (part.type !== "event") return []
       const { kind, verb, failed } = part.event

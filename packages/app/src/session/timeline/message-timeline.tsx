@@ -263,6 +263,10 @@ function MessageTimelineView(
         )
       }
 
+      // Finished thoughts one after another start closed like one thought, and open as their first does.
+      if (Predicate.isTagged(row, "AssistantPart") && row.group.type === "thought")
+        return !disclosure[row.group.refs[0]!.partID]
+
       if (!Predicate.isTagged(row, "AssistantPart") || row.group.type !== "part") return false
       const message = messageByID().get(row.group.ref.messageID)
 
