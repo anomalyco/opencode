@@ -60,25 +60,25 @@ fn sort_rows<R: std::borrow::Borrow<Row>>(rows: &mut [R], grouped: bool) {
     });
 }
 
-pub fn show(local: &Rc<Local>, provider: Option<String>) {
-    if !local.connected() && provider.is_none() {
+pub fn show(local: &Rc<Local>, integration: Option<String>) {
+    if !local.connected() && integration.is_none() {
         crate::dialogs::free_models::show(local);
         return;
     }
-    open(local, provider, String::new());
+    open(local, integration, String::new());
 }
 
-fn open(local: &Rc<Local>, provider: Option<String>, filter: String) {
+fn open(local: &Rc<Local>, integration: Option<String>, filter: String) {
     local.dialogs.replace(
         bind!(local, |local, cx| {
-            build(cx, &local, provider.clone(), &filter)
+            build(cx, &local, integration.clone(), &filter)
         }, else View::new(&cx.app)),
         None,
         DialogOptions::default(),
     );
 }
 
-fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Option<String>, filter: &str) -> View {
+fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, integration: Option<String>, filter: &str) -> View {
     // Favoriting does not reorder the list until the dialog is reopened, which a build in a new theme is not.
     let favorites = Rc::new(local.favorite());
     let saved = favorites.clone();
@@ -86,18 +86,19 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Op
     let marker = cx.theme.text.formfield.selected;
     let catalog: Rc<RefCell<Option<Catalog>>> = Rc::default();
     let options: select::Options<Model> = {
-        let (provider, catalog) = (provider.clone(), catalog.clone());
+        let (integration, catalog) = (integration.clone(), catalog.clone());
         Rc::new(bind!(local, |local, query: &str| {
             let mut catalog = catalog.borrow_mut();
             let catalog =
-                catalog.get_or_insert_with(|| Catalog::new(&local, provider.as_deref(), &favorites_at_open, marker));
+                catalog.get_or_insert_with(|| Catalog::new(&local, integration.as_deref(), &favorites_at_open, marker));
             catalog.options(query)
         }))
     };
-    let title = provider
+    let title = integration
         .as_deref()
-        .and_then(|id| local.provider(id))
-        .map_or("Select model".to_owned(), |provider| provider.name);
+        .and_then(|id| local.integration(id))
+        .filter(|item| !item.name.is_empty())
+        .map_or("Select model".to_owned(), |item| item.name);
     let connected = local.connected();
     let mut props = SelectProps::dynamic(title, options.clone());
     props.flat = true;
@@ -138,10 +139,10 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Op
         }
         if local.connected() != connected {
             reopened.set(true);
-            let provider = provider.clone();
+            let integration = integration.clone();
             let again = local.clone();
             let filter = handle.filter();
-            local.app.defer(move |_| open(&again, provider, filter));
+            local.app.defer(move |_| open(&again, integration, filter));
             return;
         }
         catalog.take();
@@ -151,9 +152,9 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, provider: Op
 }
 
 impl Catalog {
-    fn new(local: &Local, provider: Option<&str>, favorites_at_open: &[Model], marker: Color) -> Self {
+    fn new(local: &Local, integration: Option<&str>, favorites_at_open: &[Model], marker: Color) -> Self {
         local.models(|models| {
-            local.providers(|providers| Self::of(local, models, providers, provider, favorites_at_open, marker))
+            local.providers(|providers| Self::of(local, models, providers, integration, favorites_at_open, marker))
         })
     }
 
@@ -161,19 +162,18 @@ impl Catalog {
         local: &Local,
         models: &[ModelInfo],
         providers: &[ProviderInfo],
-        provider: Option<&str>,
+        integration: Option<&str>,
         favorites_at_open: &[Model],
         marker: Color,
     ) -> Self {
         let connected = local.connected();
-        let sections = connected && provider.is_none();
+        let sections = connected && integration.is_none();
         let favorites: Vec<Model> = if connected { favorites_at_open.to_vec() } else { Vec::new() };
         let favorite_now = local.favorite();
         let favorite_priority: Vec<String> = favorites_at_open.iter().map(Model::key).collect();
         let recents = local.recent();
-        let provider_name = |id: &str| {
-            providers.iter().find(|item| item.id.0 == id).map_or(id.to_owned(), |provider| provider.name.clone())
-        };
+        let provider_of = |id: &str| providers.iter().find(|item| item.id.0 == id);
+        let provider_name = |id: &str| provider_of(id).map_or(id.to_owned(), |provider| provider.name.clone());
         let section = |items: &[Model], category: &str| -> Vec<SelectOption<Model>> {
             if !sections {
                 return Vec::new();
@@ -195,11 +195,19 @@ impl Catalog {
         let recent_options = section(&recent_items, "Recent");
 
         // OpenCode's own free models get their own group at the end of the list instead of joining "OpenCode".
-        let free_group = |model: &ModelInfo| provider.is_none() && model.provider_id.0 == "opencode" && is_free(model);
+        let free_group =
+            |model: &ModelInfo| integration.is_none() && model.provider_id.0 == "opencode" && is_free(model);
         let mut rows: Vec<Row> = models
             .iter()
             .filter(|model| !matches!(model.status, ModelInfoStatus::Deprecated))
-            .filter(|model| provider.is_none_or(|id| model.provider_id.0 == id))
+            .filter(|model| {
+                integration.is_none_or(|id| {
+                    model.provider_id.0 == id
+                        || provider_of(&model.provider_id.0)
+                            .and_then(|provider| provider.integration_id.as_ref())
+                            .is_some_and(|item| item.0 == id)
+                })
+            })
             // A model's faster and slower speeds are chosen with the speed selector.
             .filter(|model| !is_speed_in(models, model))
             .map(|model| {

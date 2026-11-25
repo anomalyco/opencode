@@ -703,6 +703,71 @@ fn go_upsell_is_offered_once_a_day_and_remembers_dont_show() {
 }
 
 #[test]
+fn lists_every_provider_of_the_integration_just_connected() {
+    let dir = "/tmp/opencode/app";
+    let fake = support::Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/location") => (200, support::location(dir)),
+        ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
+        ("GET", "/api/integration") => (
+            200,
+            support::list(
+                dir,
+                json!([{
+                    "id": "opencode",
+                    "name": "OpenCode",
+                    "methods": [{ "type": "oauth", "id": "oauth", "label": "OpenCode account" }],
+                    "connections": [{ "type": "credential", "id": "cred_1", "label": "Personal", "method": "oauth" }],
+                }]),
+            ),
+        ),
+        ("GET", "/api/provider") => (
+            200,
+            support::list(
+                dir,
+                json!([
+                    {
+                        "id": "opencode", "name": "Personal / OpenCode", "integrationID": "opencode",
+                        "activation": "enabled", "package": "opencode",
+                    },
+                    {
+                        "id": "opencode-go", "name": "OpenCode Go", "integrationID": "opencode",
+                        "activation": "enabled", "package": "opencode",
+                    },
+                    { "id": "ollama", "name": "Ollama", "activation": "enabled", "package": "openai-compatible" },
+                ]),
+            ),
+        ),
+        ("GET", "/api/model") => (
+            200,
+            support::list(
+                dir,
+                json!([
+                    support::model("opencode", "zen", "Zen Model"),
+                    support::model("opencode-go", "go", "Go Model"),
+                    support::model("ollama", "local", "Local Model"),
+                ]),
+            ),
+        ),
+        _ => support::base(seen, dir),
+    });
+    let home = opencode_util::temp::tempdir().unwrap();
+    let deps = Deps {
+        directory: dir.into(),
+        roots: support::roots(support::home_paths(home.path()), "test"),
+        route: Route::Home,
+        ..support::deps(Arc::new(fake))
+    };
+    let h = support::mount(100, 34, deps);
+    let local = h.tui.local.clone();
+    assert!(h.app.wait_until(WAIT, || local.ready() && local.catalog_ready() && local.connected()));
+    model::show(&local, Some("opencode".into()));
+    let screen = h.wait_for("Search models");
+    assert!(screen.contains("Zen Model"), "{screen}");
+    assert!(screen.contains("Go Model"), "{screen}");
+    assert!(!screen.contains("Local Model"), "{screen}");
+}
+
+#[test]
 fn a_closed_go_upsell_is_freed() {
     let h = mount();
     let offer = Offer { reset: None, can_continue: Rc::new(|| true), on_subscribe: Rc::new(|| {}) };
