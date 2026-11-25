@@ -781,7 +781,7 @@ describe("OpencodePlugin event watches", () => {
     ),
   )
 
-  it.effect("wakes once for status changes seconds apart, once 20 seconds pass without another or a minute at most", () =>
+  it.effect("wakes once for status changes seconds apart, once 15 seconds pass without another or 30 at most", () =>
     withConsole({}, (console) =>
       Effect.gen(function* () {
         const { host, wakes } = yield* start(console)
@@ -789,32 +789,29 @@ describe("OpencodePlugin event watches", () => {
         yield* waitUntil(Effect.sync(() => console.state.opens === 1))
         const status = (id: string, kind: string, status: string) => watchEvent(session.id, id, { kind, status })
         yield* hold(console, host, status("evt_checks", "check", "all 1 passed"))
-        yield* TestClock.adjust("15 seconds")
+        yield* TestClock.adjust("10 seconds")
         yield* hold(console, host, status("evt_merged", "state", "merged"))
-        yield* TestClock.adjust("15 seconds")
-        yield* hold(console, host, status("evt_run", "workflow_run", "success"))
-        yield* TestClock.adjust("19 seconds")
+        yield* TestClock.adjust("14 seconds")
         expect(wakes).toEqual([])
         yield* TestClock.adjust("1 second")
         yield* waitUntil(Effect.sync(() => wakes.length === 1))
-        expect(wakes[0]?.metadata?.events).toEqual(["evt_checks", "evt_merged", "evt_run"])
-        expect(wakes[0]?.text).toStartWith("3 updates arrived")
+        expect(wakes[0]?.metadata?.events).toEqual(["evt_checks", "evt_merged"])
+        expect(wakes[0]?.text).toStartWith("2 updates arrived")
         expect(wakes[0]?.text).not.toContain("Looks good")
 
-        for (const index of [1, 2, 3, 4]) {
+        // Each arrives before the last has been quiet for 15 seconds, so the cap sends them 30 seconds after the first.
+        for (const index of [1, 2, 3]) {
           yield* hold(console, host, status(`evt_slow_${index}`, "workflow_run", "success"))
-          yield* TestClock.adjust("15 seconds")
+          yield* TestClock.adjust("10 seconds")
         }
-        yield* waitUntil(Effect.sync(() => wakes.length === 2))
-        expect(wakes[1]?.metadata?.events).toEqual(["evt_slow_1", "evt_slow_2", "evt_slow_3", "evt_slow_4"])
+        yield* waitUntil(Effect.sync(() => console.state.acks.flat().includes("evt_slow_3")))
+        expect(wakes[1]?.metadata?.events).toEqual(["evt_slow_1", "evt_slow_2", "evt_slow_3"])
         expect(console.state.acks.flat().filter((id) => !id.startsWith("evt_marker"))).toEqual([
           "evt_checks",
           "evt_merged",
-          "evt_run",
           "evt_slow_1",
           "evt_slow_2",
           "evt_slow_3",
-          "evt_slow_4",
         ])
       }),
     ),

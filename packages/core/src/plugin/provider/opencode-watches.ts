@@ -31,8 +31,8 @@ const POLL_RETRY_WEBSOCKET = Duration.minutes(10)
  * How long a session's status changes wait for another before they wake it, and the longest the first one waits. A
  * merge's checks, its merge and the runs it starts arrive seconds apart, often while the agent checks them itself.
  */
-export const SETTLE = Duration.seconds(20)
-export const MAX_SETTLE = Duration.minutes(1)
+export const SETTLE = Duration.seconds(15)
+export const MAX_SETTLE = Duration.seconds(30)
 /** Wakes in 10 minutes, and since the user's last prompt, before updates wait for a person, so agents can't loop. */
 export const WINDOW_LIMIT = 5
 export const PROMPT_LIMIT = 20
