@@ -28,24 +28,11 @@ const verbs: Record<string, string> = {
   external_directory: "Access",
 }
 
-const maxBody = 150
-
-/** What a permission request asks for, on one line short enough to read on a phone. */
 const permissionBody = (request: Permission.Request) => {
-  const shown: string[] = []
-  for (const resource of request.resources) {
-    if (resource === "*") continue
-    if (request.action === "external_directory" && resource.endsWith("/*")) shown.push(resource.slice(0, -2) || "/")
-    else if (request.action === "webfetch") shown.push(URL.parse(resource)?.host ?? resource)
-    else shown.push(resource)
-  }
-  let body = `Use ${request.action}`
-  if (shown.length > 0)
-    body = `${verbs[request.action] ?? body}: ${shown.join(request.action === "shell" ? "; " : ", ")}`
-  else if (request.action === "external_directory") body = "Access: any folder"
-  const chars = Array.from(body.replace(/\s+/g, " "))
-  if (chars.length <= maxBody) return chars.join("")
-  return chars.slice(0, maxBody - 1).join("") + "…"
+  const shown = request.resources.filter((resource) => resource !== "*")
+  if (shown.length === 0)
+    return request.action === "external_directory" ? "Access: any folder" : `Use ${request.action}`
+  return `${verbs[request.action] ?? `Use ${request.action}`}: ${shown.join(", ")}`
 }
 
 const layer = Layer.effectDiscard(
