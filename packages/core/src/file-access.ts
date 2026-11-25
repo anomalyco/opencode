@@ -373,7 +373,13 @@ const layer = Layer.effect(
           return member
         })
         const member = yield* assignedMember()
-        if (member) {
+        const type = member
+          ? yield* environment.files.stat(target.absolute).pipe(
+              Effect.map((info) => info.type),
+              Effect.catchTag("Environment.NotFound", () => Effect.undefined),
+            )
+          : undefined
+        if (member && type === "file") {
           const relative = path.relative(member.physical, target.absolute)
           const resource = slash(path.relative(location.directory, path.join(member.logical, relative)))
           yield* permission.assert({

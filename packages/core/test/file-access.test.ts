@@ -88,6 +88,12 @@ describe("FileAccess.authorizeRead", () => {
       )
       expect(requests.map((request) => request.action)).toEqual(["read", "external_directory", "read"])
 
+      const nested = path.join(physical.path, "nested")
+      yield* Effect.promise(() => fs.mkdir(nested))
+      const directory = yield* access.authorizeRead(nested, invocation, { workspaceScope: true })
+      expect(directory.workspaceFile).toBeUndefined()
+      expect(requests.at(-2)?.action).toBe("external_directory")
+
       yield* hooks.register("permission", "experimental.workspace.readScope", (event) =>
         Effect.sync(() => {
           event.scopes.push(null)
