@@ -169,12 +169,9 @@ export function createReactiveTimelineProjection(input: {
   // Row structure depends on the empty/non-empty boundary, not each text delta.
   // Keep the original content objects so row renderers still read live text.
   const textParts = mapArray(
-    () =>
-      input
-        .sessionMessages()
-        .flatMap((message) =>
-          message.type === "assistant" ? message.content.filter((content) => content.type !== "tool") : [],
-        ),
+    messageParts(input.sessionMessages, (message) =>
+      message.type === "assistant" ? message.content.filter((content) => content.type !== "tool") : [],
+    ),
     (content) => {
       // A memo here went stale on every streamed delta, which marked the projection below pending; Solid then
       // re-checked each of its thousands of sources to find nothing changed. A signal set from a computation
@@ -1206,17 +1203,27 @@ function isNotice(message: SessionMessageInfo): message is Notice {
 }
 
 /**
+ * The picked parts of every message, in order. A message is read again only when it changes, so a history page that
+ * lands reads its own messages and not the loaded transcript.
+ */
+function messageParts<Part>(
+  messages: Accessor<SessionMessageInfo[]>,
+  pick: (message: SessionMessageInfo) => Part[],
+): Accessor<Part[]> {
+  const each = mapArray(messages, (message) => createMemo(() => pick(message)))
+
+  return createMemo(() => each().flatMap((parts) => parts()))
+}
+
+/**
  * Reads what placing each call needs through a signal per call. Streamed input and progress reports change a call many
  * times a second without moving it, and a signal notifies the rows only when what they read of it changes.
  */
 export function placeFacts(messages: Accessor<SessionMessageInfo[]>): PlaceFactOf {
   const parts = mapArray(
-    () =>
-      messages().flatMap((message) =>
-        message.type === "assistant"
-          ? message.content.filter((content): content is Tool => content.type === "tool")
-          : [],
-      ),
+    messageParts(messages, (message) =>
+      message.type === "assistant" ? message.content.filter((content): content is Tool => content.type === "tool") : [],
+    ),
     (tool) => {
       const [fact, setFact] = createSignal(
         untrack(() => placeFactOf(tool)),

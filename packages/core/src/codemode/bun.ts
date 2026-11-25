@@ -262,8 +262,14 @@ const text = (bytes: Uint8Array) =>
 export const body = <A>(value: A) => {
   const from = handleOf(value)
   if (!from) return Effect.succeed(value)
-  return Effect.map(read(from), (bytes) => new Blob([new Uint8Array(bytes)], { type: from.type }))
+  return Effect.map(read(from), (bytes) => new Blob([owned(bytes)], { type: from.type }))
 }
+
+// A Blob part can't be backed by a SharedArrayBuffer, which a workspace provider's driver may return. Other bytes go in as they are: Blob copies them itself.
+const owned = (bytes: Uint8Array) =>
+  bytes.buffer instanceof ArrayBuffer
+    ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    : new Uint8Array(bytes)
 
 const handleOf = (value: unknown) => {
   const bytes = method(value, "bytes")
@@ -290,7 +296,8 @@ const unwritable = () =>
 
 // A value from a program is a plain copy, so its functions are among its own entries.
 const method = (value: unknown, key: string) => {
-  if (typeof value !== "object" || value === null) return undefined
+  if (typeof value !== "object" || value === null || ArrayBuffer.isView(value) || value instanceof ArrayBuffer)
+    return undefined
   const found: unknown = Object.entries(value).find(([name]) => name === key)?.[1]
   return typeof found === "function" ? found : undefined
 }

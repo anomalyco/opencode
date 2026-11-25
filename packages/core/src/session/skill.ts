@@ -12,5 +12,5 @@ export const get = Effect.fn("SessionSkill.get")(function* (input: { session: Se
   const skills = yield* Plugin.awaitActivation.pipe(Effect.andThen(Skill.Service), instances.provide(input.session))
   const skill = yield* skills.get(input.skill)
   if (!skill) return yield* new SkillNotFoundError({ skill: input.skill })
-  return { ...skill, content: yield* skills.content(skill.id).pipe(Effect.orDie) }
+  return { ...skill, content: yield* skills.instructions(skill.id) }
 })
