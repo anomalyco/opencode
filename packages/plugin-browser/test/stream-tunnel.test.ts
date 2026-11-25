@@ -534,6 +534,133 @@ describe("StreamMux flow control, fairness, half-close, and RESET cancellation",
     }
   }, 15_000)
 
+  test("normal detach cancels pending credit-starved writes and FIN without reporting success or uncaught errors", async () => {
+    const serverReceived: Buffer[] = []
+    const peerSockets: Socket[] = []
+    const target = createNetServer((socket) => {
+      peerSockets.push(socket)
+      // Pause the server target socket so server recvWindow stays exhausted (credit-starved client stream)
+      socket.pause()
+      socket.on("data", (chunk: Buffer) => serverReceived.push(chunk))
+    })
+    await once(target.listen(0, "127.0.0.1"), "listening")
+    const addr = target.address()
+    if (!addr || typeof addr === "string") throw new Error("No TCP address")
+
+    const pair = createSocketPair({ simulateBuffered: true })
+    // Withhold server WINDOW_UPDATE credits so the client's 4 KiB send window stays deterministically exhausted.
+    const creditStarvedServer: BrowserTunnelHost.BinarySocket = {
+      ...pair.server,
+      get readyState() {
+        return pair.server.readyState
+      },
+      get bufferedAmount() {
+        return pair.server.bufferedAmount
+      },
+      send(data, onWritten) {
+        if (data.byteLength >= 10 && data[1] === StreamWire.FrameType.WINDOW_UPDATE) {
+          onWritten?.()
+          return
+        }
+        pair.server.send(data, onWritten)
+      },
+    }
+    const serverMux = StreamMux.createServerMux(creditStarvedServer, {
+      policy: EgressPolicy.makePolicy(),
+      streamWindowBytes: 4096,
+      creditBatchBytes: 4096,
+      heartbeatIntervalMs: 0,
+    })
+    const clientMux = StreamMux.createClientMux(pair.client, {
+      streamWindowBytes: 4096,
+      creditBatchBytes: 4096,
+      frameChunkBytes: 4096,
+      streamOutboundHighWaterBytes: 4096,
+      heartbeatIntervalMs: 0,
+    })
+
+    const uncaught: Error[] = []
+    const onUncaught = (error: Error) => {
+      uncaught.push(error)
+    }
+    process.on("uncaughtException", onUncaught)
+
+    try {
+      // Stream 1: credit-starved pending write + queued second write (NO error listener attached)
+      const writeStream = await clientMux.openStream({ host: "127.0.0.1", port: addr.port })
+      let cb1Settled = false
+      let cb2Settled = false
+      const cb1 = Promise.withResolvers<Error | null | undefined>()
+      const cb2 = Promise.withResolvers<Error | null | undefined>()
+      // 16 KiB exceeds the 4 KiB initial sendWindow + 4 KiB high-water mark so writeResume stays held
+      writeStream.write(Buffer.alloc(16 * 1024, 0xaa), (err) => {
+        cb1Settled = true
+        cb1.resolve(err)
+      })
+      writeStream.write(Buffer.alloc(8 * 1024, 0xbb), (err) => {
+        cb2Settled = true
+        cb2.resolve(err)
+      })
+
+      // Stream 2: credit-starved pending FIN via end(cb) (NO error listener attached)
+      const finStream = await clientMux.openStream({ host: "127.0.0.1", port: addr.port })
+      let finFinished = false
+      let endSettled = false
+      finStream.on("finish", () => {
+        finFinished = true
+      })
+      const endCb = Promise.withResolvers<Error | null | undefined>()
+      // First exhaust the 4 KiB window, leave 4 KiB queued (below high-water mark so _write returns and _final runs),
+      // then call end() so finalCallback is held waiting for credit to send FIN.
+      finStream.write(Buffer.alloc(6 * 1024, 0xcc))
+      finStream.end((err?: Error | null) => {
+        endSettled = true
+        endCb.resolve(err)
+      })
+
+      // Stream 3: clean idle stream with no pending write/FIN
+      const idleStream = await clientMux.openStream({ host: "127.0.0.1", port: addr.port })
+      const idleClosed = Promise.withResolvers<void>()
+      let idleErrored = false
+      idleStream.on("error", () => {
+        idleErrored = true
+      })
+      idleStream.once("close", () => idleClosed.resolve())
+
+      // Let initial 4 KiB window fill so remaining outgoing bytes/FIN are strictly credit-starved
+      await new Promise<void>((resolve) => setTimeout(resolve, 25))
+      expect(cb1Settled).toBe(false)
+      expect(cb2Settled).toBe(false)
+      expect(endSettled).toBe(false)
+      const bytesBeforeDetach = serverReceived.reduce((sum, b) => sum + b.byteLength, 0)
+
+      // Trigger normal detach while streams 1 & 2 have discarded buffered writes/FIN
+      clientMux.close(1000, "desktop detached")
+
+      const [err1, err2, errEnd] = await Promise.all([cb1.promise, cb2.promise, endCb.promise])
+      await idleClosed.promise
+      await new Promise<void>((resolve) => setTimeout(resolve, 25))
+
+      // Discarded pending writes and FIN MUST settle with cancellation errors, never null/success
+      expect(err1).toBeInstanceOf(Error)
+      expect(err1?.message).toContain("desktop detached")
+      expect(err2).toBeInstanceOf(Error)
+      expect(errEnd).toBeInstanceOf(Error)
+      expect(finFinished).toBe(false)
+      // Clean idle socket closes normally with no error event
+      expect(idleErrored).toBe(false)
+      // No discarded bytes flushed/retried after detach, and zero uncaught 'error' events
+      expect(serverReceived.reduce((sum, b) => sum + b.byteLength, 0)).toBe(bytesBeforeDetach)
+      expect(uncaught).toEqual([])
+    } finally {
+      process.off("uncaughtException", onUncaught)
+      clientMux.close()
+      serverMux.close()
+      peerSockets.forEach((s) => s.destroy())
+      await new Promise<void>((resolve) => target.close(() => resolve()))
+    }
+  }, 15_000)
+
   test("rejects text WebSocket frames as a protocol error and closes cleanly", async () => {
     const pair = createSocketPair()
     const serverMux = StreamMux.createServerMux(pair.server, {

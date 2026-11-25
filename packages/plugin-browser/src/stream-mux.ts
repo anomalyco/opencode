@@ -805,16 +805,17 @@ export function createClientMux(socket: BrowserTunnelHost.BinarySocket, options:
     const duplex = stream.duplex
     stream.duplex = undefined
 
+    const streamError = input.error ?? new Error("Browser tunnel stream closed.")
     if (input.normalClose) {
-      // On clean desktop detach, destroy live/idle streams without synthesizing an asynchronous
-      // 'error' event whose listeners (e.g. http.Agent pool or pipe) may be removed before nextTick.
+      // Destroy first so Node/Bun never emit an uncaught async 'error' event on idle or unpiped sockets,
+      // then settle any outstanding write/FIN callbacks with the cancellation error so discarded bytes
+      // are never reported as delivered.
       if (duplex && !duplex.destroyed) duplex.destroy()
-      if (writeResume) writeResume()
-      if (finalCallback) finalCallback()
+      if (writeResume) writeResume(streamError)
+      if (finalCallback) finalCallback(streamError)
       return
     }
 
-    const streamError = input.error ?? new Error("Browser tunnel stream closed.")
     if (duplex && !duplex.destroyed) {
       // Settle pending write/final callbacks with the genuine error before destroying, or destroy with error.
       if (writeResume) writeResume(streamError)
