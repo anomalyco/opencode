@@ -1,5 +1,16 @@
 import { Badge } from "@opencode/ui/badge"
-import { children, createMemo, createSignal, For, getOwner, runWithOwner, Show, untrack, type JSX } from "solid-js"
+import {
+  children,
+  createMemo,
+  createSignal,
+  createUniqueId,
+  For,
+  getOwner,
+  runWithOwner,
+  Show,
+  untrack,
+  type JSX,
+} from "solid-js"
 import { createStore } from "solid-js/store"
 import { createLatest, usePlugin, type IconName } from "@opencode/plugin/gui"
 import { choiceLabel, choiceValue, Glyph, profileChoices, type Choice } from "./choices"
@@ -10,6 +21,8 @@ import { createProfileJobs, type JobMessage } from "./jobs"
 import type { ExtensionCompatibility, InstallResult, ProfileExtension, ProfileSource } from "./profile/ipc"
 import { displayHost } from "./host-display"
 import { BrowserSites } from "./site-permissions"
+import { Button } from "@opencode/ui/button"
+import { Spinner } from "@opencode/ui/spinner"
 import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { MenuScroll } from "@opencode/ui/menu-scroll"
 import { showToast } from "@opencode/ui/toast"
@@ -447,8 +460,8 @@ type PendingReview = { readonly job: InstallJob; readonly result: Extract<Instal
 
 /**
  * The Add an extension dialog: a store link, or the extensions another Chromium browser has. Loading one from a folder
- * of its source files is for people who build extensions, so it waits in a closed "For developers" disclosure at the
- * end. When an install needs confirmation, the dialog switches cleanly into a minimal confirmation step.
+ * of its source files is for people who build extensions, so it is a quiet action at the start of the footer. When an
+ * install needs confirmation, the dialog switches cleanly into a minimal confirmation step.
  */
 function AddExtension(props: { sources: readonly ProfileSource[]; close: () => void }) {
   const ctx = usePlugin<typeof definition>()
@@ -482,6 +495,48 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
 
     return job?.type === "install-browser" && job.id === id
   }
+
+  const unsupportedHeading = createUniqueId()
+
+  // Extensions that work, fully or in part, come first; those that won't work here follow under their own heading.
+  const listed = createMemo(() => {
+    const all = available.latest ?? []
+
+    return {
+      ready: all.filter((item) => item.compatibility.level !== "unsupported"),
+      unsupported: all.filter((item) => item.compatibility.level === "unsupported"),
+    }
+  })
+
+  const BrowserRow = (row: { item: ReturnType<typeof listed>["ready"][number]; choice: Choice }) => (
+    <ChoiceRow
+      image={row.item.icon}
+      name={row.item.name}
+      note={<CompatibilityNote compatibility={row.item.compatibility} stacked />}
+    >
+      <ui.Button
+        size="small"
+        class={ACTION_COLUMN}
+        variant={row.item.installed ? "ghost-muted" : "neutral"}
+        disabled={blocked() || row.item.installed}
+        busy={installing(row.item.id)}
+        onClick={() =>
+          jobs.start({
+            type: "install-browser",
+            source: row.choice.source.id,
+            profile: row.choice.profile.id,
+            id: row.item.id,
+          })
+        }
+      >
+        {row.item.installed
+          ? ctx.t("settings.extensions.added")
+          : row.item.compatibility.level === "unsupported"
+            ? ctx.t("settings.extensions.anyway")
+            : ctx.t("settings.extensions.add")}
+      </ui.Button>
+    </ChoiceRow>
+  )
 
   // The install that stopped for the user to confirm: its extension will not work here, or asks for access the user
   // has not seen yet.
@@ -531,7 +586,7 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
   }
 
   return (
-    <Dialog fit size="normal">
+    <Dialog fit size="normal" containerClass="!bg-v2-background-bg-base">
       <DialogHeader>
         <Show
           when={review()}
@@ -562,7 +617,7 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
             when={review()}
             fallback={
               /* Top and bottom padding keep borders and focus rings of the URL input and buttons inside the clip. */
-              <div class="flex h-full min-h-0 flex-col gap-4 py-1">
+              <div class="flex h-full min-h-0 flex-col gap-6 py-1">
                 <div class="flex shrink-0 items-center gap-2">
                   <ui.TextInput
                     label={ctx.t("settings.extensions.store.label")}
@@ -584,126 +639,92 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
                     {ctx.t("settings.extensions.add")}
                   </ui.Button>
                 </div>
-                {/* The scroller spans the dialog's inset so its thumb sits beside the rows and focus rings stay unclipped. */}
-                <MenuScroll class="-mx-4 -my-1 max-h-[50vh] min-h-0 flex-1" viewportClass="min-h-0 flex-1 px-4 py-1">
-                  <div class="flex flex-col gap-3">
-                    <Show when={jobs.describe(jobs.last())}>
-                      {(message) => (
-                        <div
-                          role={message().error ? "alert" : "status"}
-                          class="text-[13px] leading-[var(--line-height-base)]"
-                        >
-                          <Show
-                            when={message().compatibility}
-                            fallback={
-                              <p
-                                classList={{
-                                  "text-v2-state-fg-danger": message().error,
-                                  "text-v2-text-text-muted": !message().error,
-                                }}
-                              >
-                                {message().text}
-                              </p>
-                            }
+                <Show when={jobs.describe(jobs.last())}>
+                  {(message) => (
+                    <div
+                      role={message().error ? "alert" : "status"}
+                      class="-mt-3 shrink-0 text-[13px] leading-[var(--line-height-base)]"
+                    >
+                      <Show
+                        when={message().compatibility}
+                        fallback={
+                          <p
+                            classList={{
+                              "text-v2-state-fg-danger": message().error,
+                              "text-v2-text-text-muted": !message().error,
+                            }}
                           >
-                            {(compatibility) => (
-                              <ui.Tooltip value={<CompatibilityDetails compatibility={compatibility()} />}>
-                                <p tabIndex={0} class="w-fit text-v2-text-text-muted">
-                                  {message().text}
-                                </p>
-                              </ui.Tooltip>
-                            )}
-                          </Show>
-                        </div>
-                      )}
-                    </Show>
-                    <Show when={selected()}>
-                      {(choice) => (
-                        <div class="flex flex-col gap-1">
-                          <div class="flex h-7 items-center justify-between gap-2">
-                            <span class="text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
-                              {ctx.t("settings.extensions.browser.title")}
-                            </span>
-                            <Show when={choices().length > 1}>
-                              {/* Pulls the inline select's 4px end padding out without shrinking its trigger width. */}
-                              <div class="-me-1 shrink-0">
-                                <ui.Select
-                                  label={ctx.t("settings.extensions.browser.select")}
-                                  options={choices().map((item) => ({
-                                    value: choiceValue(item),
-                                    label: choiceLabel(item),
-                                  }))}
-                                  value={choiceValue(choice())}
-                                  onChange={(profile) => setForm("profile", profile)}
-                                />
+                            {message().text}
+                          </p>
+                        }
+                      >
+                        {(compatibility) => (
+                          <ui.Tooltip value={<CompatibilityDetails compatibility={compatibility()} />}>
+                            <p tabIndex={0} class="w-fit text-v2-text-text-muted">
+                              {message().text}
+                            </p>
+                          </ui.Tooltip>
+                        )}
+                      </Show>
+                    </div>
+                  )}
+                </Show>
+                <Show when={selected()}>
+                  {(choice) => (
+                    // A bordered list with the profile picker as its header, so the picker reads as the list's source
+                    // and the scrolled rows end at the frame instead of being cut off mid-row.
+                    <div
+                      role="group"
+                      aria-label={ctx.t("settings.extensions.browser.list", { browser: choiceLabel(choice()) })}
+                      class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[8px] bg-v2-background-bg-layer-01 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-muted)]"
+                    >
+                      <div class="flex h-9 shrink-0 items-center gap-1 border-b-[0.5px] border-v2-border-border-muted px-3 text-[13px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-muted">
+                        <span>{ctx.t("settings.extensions.browser.from")}</span>
+                        <Show when={choices().length > 1} fallback={<span>{choiceLabel(choice())}</span>}>
+                          <div class="min-w-0">
+                            <ui.Select
+                              label={ctx.t("settings.extensions.browser.select")}
+                              options={choices().map((item) => ({
+                                value: choiceValue(item),
+                                label: choiceLabel(item),
+                              }))}
+                              value={choiceValue(choice())}
+                              placement="bottom-start"
+                              onChange={(profile) => setForm("profile", profile)}
+                            />
+                          </div>
+                        </Show>
+                      </div>
+                      <MenuScroll class="max-h-[50vh] min-h-0 flex-1" viewportClass="min-h-0 flex-1 px-3 py-1">
+                        <Show
+                          when={(available.latest ?? []).length > 0}
+                          fallback={
+                            <Show when={available.latest}>
+                              <div class="py-3">
+                                <Muted>{ctx.t("settings.extensions.browser.empty")}</Muted>
                               </div>
                             </Show>
-                          </div>
-                          <For
-                            each={available.latest ?? []}
-                            fallback={
-                              <Show when={available.latest}>
-                                <Muted>{ctx.t("settings.extensions.browser.empty")}</Muted>
-                              </Show>
-                            }
-                          >
-                            {(item) => (
-                              <ChoiceRow
-                                image={item.icon}
-                                name={item.name}
-                                note={<CompatibilityNote compatibility={item.compatibility} stacked />}
+                          }
+                        >
+                          <For each={listed().ready}>{(item) => <BrowserRow item={item} choice={choice()} />}</For>
+                          <Show when={listed().unsupported.length > 0}>
+                            <div role="group" aria-labelledby={unsupportedHeading}>
+                              <p
+                                id={unsupportedHeading}
+                                class="pb-1 pt-3 text-[12px] font-[440] leading-[var(--line-height-compact)] text-v2-text-text-faint"
                               >
-                                <ui.Button
-                                  size="small"
-                                  class={ACTION_COLUMN}
-                                  variant={item.installed ? "ghost-muted" : "neutral"}
-                                  disabled={blocked() || item.installed}
-                                  busy={installing(item.id)}
-                                  onClick={() =>
-                                    jobs.start({
-                                      type: "install-browser",
-                                      source: choice().source.id,
-                                      profile: choice().profile.id,
-                                      id: item.id,
-                                    })
-                                  }
-                                >
-                                  {item.installed
-                                    ? ctx.t("settings.extensions.added")
-                                    : item.compatibility.level === "unsupported"
-                                      ? ctx.t("settings.extensions.anyway")
-                                      : ctx.t("settings.extensions.add")}
-                                </ui.Button>
-                              </ChoiceRow>
-                            )}
-                          </For>
-                        </div>
-                      )}
-                    </Show>
-                  </div>
-                </MenuScroll>
-                <details class="group shrink-0 border-t-[0.5px] border-v2-border-border-muted pt-3 text-v2-text-text-muted">
-                  <summary class={DISCLOSURE}>
-                    {ctx.t("settings.developers")}
-                    <span class="flex transition-transform group-open:rotate-180">
-                      <ui.Icon name="outline-chevron-down" />
-                    </span>
-                  </summary>
-                  <div class="mt-2 flex items-center gap-3">
-                    <p class="min-w-0 flex-1 text-[13px] leading-[var(--line-height-base)]">
-                      {ctx.t("settings.extensions.folder.description")}
-                    </p>
-                    <ui.Button
-                      size="small"
-                      variant="neutral"
-                      disabled={blocked() || !desktop}
-                      busy={jobs.running()?.type === "install-folder"}
-                      onClick={() => void pickFolder()}
-                    >
-                      {ctx.t("settings.extensions.folder.action")}
-                    </ui.Button>
-                  </div>
-                </details>
+                                {ctx.t("settings.extensions.browser.unsupported")}
+                              </p>
+                              <For each={listed().unsupported}>
+                                {(item) => <BrowserRow item={item} choice={choice()} />}
+                              </For>
+                            </div>
+                          </Show>
+                        </Show>
+                      </MenuScroll>
+                    </div>
+                  )}
+                </Show>
               </div>
             }
           >
@@ -715,9 +736,32 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
         <Show
           when={review()}
           fallback={
-            <ui.Button variant="contrast" onClick={props.close}>
-              {ctx.t("settings.extensions.done")}
-            </ui.Button>
+            <>
+              {/* Quiet, at the start of the footer, its label on the dialog's edge, as Choose sites is in SiteChooser. While
+                  the folder loads it waits as the sign-in steps' WaitingButton does. */}
+              <Show
+                when={jobs.running()?.type === "install-folder"}
+                fallback={
+                  <Button
+                    variant="ghost-muted"
+                    flush="start"
+                    class="me-auto"
+                    disabled={blocked() || !desktop}
+                    onClick={() => void pickFolder()}
+                  >
+                    {ctx.t("settings.extensions.folder.action")}
+                  </Button>
+                }
+              >
+                <Button variant="loading" class="me-auto !ps-1.5" aria-live="polite">
+                  <Spinner width={16} class="text-v2-icon-icon-muted" />
+                  {ctx.t("settings.extensions.folder.action")}
+                </Button>
+              </Show>
+              <ui.Button variant="submit" onClick={props.close}>
+                {ctx.t("settings.extensions.done")}
+              </ui.Button>
+            </>
           }
         >
           {(pending) => (
@@ -726,7 +770,7 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
                 {ctx.t("common.cancel")}
               </ui.Button>
               <ui.Button
-                variant="contrast"
+                variant="submit"
                 disabled={blocked()}
                 busy={runningApproval() !== undefined}
                 onClick={() => approve(pending())}
@@ -742,10 +786,6 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
     </Dialog>
   )
 }
-
-/** A disclosure's summary: the app's own chevron in place of the browser's marker. */
-const DISCLOSURE =
-  "flex w-fit cursor-pointer list-none items-center gap-1 text-[13px] leading-[var(--line-height-base)] [&::-webkit-details-marker]:hidden"
 
 /**
  * Row buttons share one width whatever they say, so the right-hand action column stays flush.
