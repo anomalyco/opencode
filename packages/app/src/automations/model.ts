@@ -83,7 +83,9 @@ export function createAutomationsController() {
           recipient,
           serverLabel,
           row.trigger.type === "event" && row.trigger.server,
-          row.action.type === "prompt" ? row.action.prompt : row.action.code,
+          row.action.type === "prompt" && row.action.prompt,
+          row.action.type === "code" && row.action.code,
+          row.action.type === "shell" && row.action.command,
         ]
           .join(" ")
           .toLowerCase()

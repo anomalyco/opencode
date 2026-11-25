@@ -43,6 +43,17 @@ test("inspects event and timer automations and manages the selected row", async 
     },
     {
       ...base,
+      id: "aut_smoke",
+      name: "Nightly smoke test",
+      trigger: { type: "cron", cron: "0 2 * * *" },
+      action: { type: "shell", command: "bun run test:smoke --reporter=dot" },
+      nextDueAt: now + 2 * 86_400_000,
+      lastRunAt: now,
+      lastOutcome: "fired",
+      lastOutput: "Exit code: 0\n42 pass, 0 fail",
+    },
+    {
+      ...base,
       id: "aut_docs",
       name: "Documentation review",
       status: "paused",
@@ -93,15 +104,18 @@ test("inspects event and timer automations and manages the selected row", async 
   await expect(detail.getByText("Deployment status: succeeded", { exact: true })).toBeVisible()
   await page.screenshot({ path: test.info().outputPath("automation-inspector.png"), animations: "disabled" })
   await detail.getByRole("button", { name: "Pause", exact: true }).click()
-  await expect(nav).toContainText("1")
-  await detail.getByRole("button", { name: "Resume", exact: true }).click()
   await expect(nav).toContainText("2")
+  await detail.getByRole("button", { name: "Resume", exact: true }).click()
+  await expect(nav).toContainText("3")
   await detail.getByRole("button", { name: "Delete automation" }).click()
   await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click()
   await expect(page.getByRole("button", { name: /Release health watch/ })).toHaveCount(0)
   await expect(detail.getByText("Next run")).toBeVisible()
   await expect(detail.getByRole("button", { name: "Release planning" })).toBeVisible()
   await expect(detail.getByRole("button", { name: "Release notes" })).toBeVisible()
+  await page.getByRole("button", { name: /Nightly smoke test/ }).click()
+  await expect(detail.getByText("bun run test:smoke --reporter=dot", { exact: true })).toBeVisible()
+  await expect(detail.getByText("No one. The command runs on its own", { exact: false })).toBeVisible()
   await page.getByRole("button", { name: /Documentation review/ }).click()
   await expect(detail.getByText("New quiet child · reviewer")).toBeVisible()
   await page.getByRole("button", { name: "New automation" }).click()

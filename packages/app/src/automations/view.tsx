@@ -119,6 +119,12 @@ export function AutomationInspector(props: {
     return a.type === "code" ? a : undefined
   })
 
+  const shell = createMemo(() => {
+    const a = action()
+
+    return a.type === "shell" ? a : undefined
+  })
+
   const date = (at: number) =>
     new Date(at).toLocaleString(language.intl(), { dateStyle: "medium", timeStyle: "short", timeZone: row().tz })
 
@@ -197,7 +203,7 @@ export function AutomationInspector(props: {
           {(id) => <Fact label={t("automations.creator")}>{link(id(), props.entry.creator ?? id())}</Fact>}
         </Show>
         <Fact label={t("automations.recipient")}>
-          <Show when={prompt()} fallback={t("automations.conditional")}>
+          <Show when={prompt()} fallback={t(shell() ? "automations.noRecipient" : "automations.conditional")}>
             {(action) => (
               <Show when={action().to.session} fallback={t("automations.child", { agent: action().to.subagent ?? "" })}>
                 {(id) => link(id(), props.entry.recipient ?? id())}
@@ -226,6 +232,13 @@ export function AutomationInspector(props: {
               </Block>
             </Show>
           </>
+        )}
+      </Show>
+      <Show when={shell()}>
+        {(a) => (
+          <Block label={t("automations.section.shell")} code>
+            {a().command}
+          </Block>
         )}
       </Show>
       <Show when={row().lastOutput}>
