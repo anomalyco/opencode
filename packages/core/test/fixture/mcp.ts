@@ -26,6 +26,7 @@ export const emptyMcp = Mcp.Service.of({
   readResource: () => Effect.undefined,
   skills: () => Effect.succeed([]),
   readSkill: () => Effect.die("unused mcp.readSkill"),
+  getSkill: () => Effect.die("unused mcp.getSkill"),
   events: () => Effect.undefined,
   follow: () => Stream.die("unused Mcp.follow"),
   subscribe: () => Effect.die("unused Mcp.subscribe"),

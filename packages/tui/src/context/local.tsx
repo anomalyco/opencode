@@ -45,8 +45,16 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const models = () => data.location.model.list(location.ref)
     const providers = () => data.location.provider.list(location.ref)
 
+    // Indexed because the model picker looks up every model, and catalogs such as OpenRouter's hold thousands.
+    const modelIndex = createMemo(
+      () =>
+        new Map(
+          (models() ?? []).map((item) => [modelPreferenceKey({ providerID: item.providerID, modelID: item.id }), item]),
+        ),
+    )
+
     function findModel(model: ModelPreferenceModel) {
-      return models()?.find((item) => item.providerID === model.providerID && item.id === model.modelID)
+      return modelIndex().get(modelPreferenceKey(model))
     }
 
     function isModelValid(model: ModelPreferenceModel) {

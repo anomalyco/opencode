@@ -22,12 +22,15 @@ story(
       await expect(search).toBeFocused()
     }
 
-    // Tab reaches the rows, and typing there still goes to the search field.
-    await page.keyboard.press("Tab")
-    await expect(search).not.toBeFocused()
-    await expect(page.locator(":focus")).toHaveAttribute("role", "option")
+    // The search field names the active row, so Tab and Shift+Tab never land on a row.
+    for (const key of ["Tab", "Shift+Tab"]) {
+      await search.focus()
+      await page.keyboard.press(key)
+      await expect(page.locator('[role="option"]:focus')).toHaveCount(0)
+    }
+
+    await search.focus()
     await page.keyboard.type("rev")
-    await expect(search).toBeFocused()
     await expect(search).toHaveValue("rev")
 
     await page.keyboard.press("Escape")

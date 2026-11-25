@@ -22,6 +22,7 @@ import { Database } from "./database/database.js"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { EnvironmentDriver } from "./environment/driver.js"
 import { KV } from "./kv.js"
+import { Identity } from "./machine/identity.js"
 import { WorkspaceDriver } from "./workspace/driver.js"
 import { WorkspaceTable } from "./workspace/sql.js"
 
@@ -131,7 +132,7 @@ export const configured = (options: Options = {}) =>
   makeGlobalNode({
     service: Service,
     layer: layer(options),
-    deps: [Database.node, KV.node, WorkspaceDriver.node],
+    deps: [Database.node, KV.node, Identity.node, WorkspaceDriver.node],
   })
 
 const layer = (options: Options) =>
@@ -140,6 +141,16 @@ const layer = (options: Options) =>
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
       const kv = yield* KV.Service
+      const hostIdentity = yield* Identity.Service
+      // Workspace drivers may read the home public key and sign Link handshakes, never export the raw private seed.
+      const identity = Identity.Service.of({
+        publicKey: hostIdentity.publicKey,
+        sign: hostIdentity.sign,
+        seed: () =>
+          Effect.fail(
+            new Identity.InvalidKey({ file: "workspace", reason: "seed is not exposed to workspace drivers" }),
+          ),
+      })
       const registry = yield* WorkspaceDriver.RegistryService
       const lifetime = yield* Scope.Scope
       const connections = new Map<ID, Connection>()
@@ -243,7 +254,9 @@ const layer = (options: Options) =>
                   const row = yield* load(workspaceID)
                   if (row.binding) return info(row, row.binding)
                   const driver = yield* registry.get(row.provider)
-                  const result = yield* driver.create({ workspaceID })
+                  const result = yield* driver
+                    .create({ workspaceID })
+                    .pipe(Effect.provideService(Identity.Service, identity))
                   yield* saveBinding(workspaceID, result.binding)
                   return info(row, result.binding)
                 }),
@@ -277,6 +290,7 @@ const layer = (options: Options) =>
         const environment = yield* driver
           .connect({ workspaceID, binding: row.binding, saveBinding: (binding) => saveBinding(workspaceID, binding) })
           .pipe(
+            Effect.provideService(Identity.Service, identity),
             Effect.provideService(Scope.Scope, scope),
             Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
           )

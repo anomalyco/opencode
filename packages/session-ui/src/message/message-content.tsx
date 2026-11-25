@@ -1287,6 +1287,8 @@ export function AssistantTextContent(props: {
 export function AssistantReasoningContent(props: {
   id: string
   content: SessionMessageAssistantReasoning
+  /** Finished thoughts that follow this one with nothing between, shown and timed with it. */
+  more?: { id: string; content: SessionMessageAssistantReasoning }[]
   streaming: boolean
   defaultOpen?: boolean
   open?: boolean
@@ -1296,11 +1298,17 @@ export function AssistantReasoningContent(props: {
   const i18n = useI18n()
   const heading = createMemo(() => (props.streaming ? reasoningHeading(props.content.text) : ""))
 
-  const duration = createMemo(() => {
-    const time = props.content.time
+  const parts = createMemo(() => [{ id: props.id, content: props.content }, ...(props.more ?? [])])
 
-    if (time?.completed === undefined) return undefined
-    const total = Math.max(0, Math.round((time.completed - time.created) / 1000))
+  const duration = createMemo(() => {
+    const times = parts().flatMap((part) => {
+      const time = part.content.time
+
+      return time?.completed === undefined ? [] : [Math.max(0, time.completed - time.created)]
+    })
+
+    if (times.length < parts().length) return undefined
+    const total = Math.round(times.reduce((sum, time) => sum + time, 0) / 1000)
     const numfmt = new Intl.NumberFormat(i18n.locale())
 
     if (total < 60) return i18n.t("ui.message.duration.seconds", { count: numfmt.format(total) })
@@ -1312,14 +1320,24 @@ export function AssistantReasoningContent(props: {
   })
 
   return (
-    <div data-component="reasoning-part" data-timeline-part-id={props.id}>
+    <div
+      data-component="reasoning-part"
+      data-timeline-part-id={props.more?.length ? undefined : props.id}
+      data-timeline-part-ids={
+        props.more?.length
+          ? parts()
+              .map((part) => part.id)
+              .join(",")
+          : undefined
+      }
+    >
       <BasicTool
         icon="mcp"
         status={props.streaming ? "running" : "completed"}
         compact
         hasContent
         allowOpenWhilePending
-        hideDetails={!props.content.text.trim()}
+        hideDetails={parts().every((part) => !part.content.text.trim())}
         open={props.open}
         defaultOpen={props.defaultOpen}
         onOpenChange={(value) => {
@@ -1351,7 +1369,22 @@ export function AssistantReasoningContent(props: {
           </div>
         )}
       >
-        <PacedMarkdown text={props.content.text} cacheKey={props.id} streaming={props.streaming} />
+        <Show
+          when={props.more?.length}
+          fallback={<PacedMarkdown text={props.content.text} cacheKey={props.id} streaming={props.streaming} />}
+        >
+          <div data-slot="reasoning-part-run">
+            <Index each={parts()}>
+              {(part) => (
+                <Show when={part().content.text.trim()}>
+                  <div data-timeline-part-id={part().id}>
+                    <PacedMarkdown text={part().content.text} cacheKey={part().id} streaming={false} />
+                  </div>
+                </Show>
+              )}
+            </Index>
+          </div>
+        </Show>
       </BasicTool>
     </div>
   )

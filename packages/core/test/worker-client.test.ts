@@ -370,3 +370,160 @@ describe("WorkerClient.stdio", () => {
     }),
   )
 })
+
+const makeMockWebSocketPair = (initialReadyState = 1) => {
+  type Listener = (event: { readonly data: unknown }) => void
+  const makeSide = () => {
+    let lastCloseCode: number | undefined
+    let onSend: (buffer: ArrayBuffer) => void = () => {}
+    let onClose: (code?: number) => void = () => {}
+    const listeners: Record<"open" | "message" | "error" | "close", Set<Listener>> = {
+      open: new Set(),
+      message: new Set(),
+      error: new Set(),
+      close: new Set(),
+    }
+    const side = {
+      readyState: initialReadyState,
+      binaryType: "blob",
+      get lastCloseCode() {
+        return lastCloseCode
+      },
+      link(peer: { readyState: number; deliverRaw(data: unknown): void; close(code?: number): void }) {
+        onSend = (buffer) => {
+          if (peer.readyState === 1) peer.deliverRaw(buffer)
+        }
+        onClose = (code) => {
+          if (peer.readyState < 2) peer.close(code)
+        }
+      },
+      open() {
+        if (side.readyState !== 0) return
+        side.readyState = 1
+        Array.from(listeners.open, (fn) => fn({ data: undefined }))
+      },
+      deliverRaw(data: unknown) {
+        Array.from(listeners.message, (fn) => fn({ data }))
+      },
+      send(data: Uint8Array<ArrayBuffer>) {
+        if (side.readyState === 1) onSend(data.slice().buffer)
+      },
+      close(code?: number) {
+        // Mirror the WHATWG WebSocket API (Node 22+ throws InvalidAccessError for codes outside 1000 and 3000–4999).
+        if (code !== undefined && code !== 1000 && (code < 3000 || code > 4999)) {
+          throw new RangeError(`Invalid WebSocket close code: ${code}`)
+        }
+        lastCloseCode = code
+        if (side.readyState >= 2) return
+        side.readyState = 3
+        Array.from(listeners.close, (fn) => fn({ data: undefined }))
+        onClose(code)
+      },
+      addEventListener(type: "open" | "close" | "error" | "message", fn: Listener) {
+        listeners[type].add(fn)
+      },
+      removeEventListener(type: "open" | "close" | "error" | "message", fn: Listener) {
+        listeners[type].delete(fn)
+      },
+      listenerCount() {
+        return Object.values(listeners).reduce((sum, set) => sum + set.size, 0)
+      },
+    }
+    return side
+  }
+  const a = makeSide()
+  const b = makeSide()
+  a.link(b)
+  b.link(a)
+  return { a, b }
+}
+
+describe("WorkerClient.fromWebSocket", () => {
+  const id = Workspace.ID.make("wrk_01TestUpperCase_Ws")
+
+  it.effect("completes a full Noise XX WorkerClient.dial over an already-open WebSocket and closes on scope exit", () =>
+    Effect.gen(function* () {
+      // Standard global WebSocket structurally satisfies WebSocketLike without casts.
+      const _check = (ws: WebSocket): WorkerClient.WebSocketLike => ws
+      void _check
+
+      const homeKey = newKey()
+      const workerKey = newKey()
+      const pair = makeMockWebSocketPair(1)
+      const driverScope = yield* Scope.fork(yield* Effect.scope)
+
+      const homeCarrier = yield* WorkerClient.fromWebSocket(pair.a).pipe(Scope.provide(driverScope))
+      const workerCarrier = yield* WorkerClient.fromWebSocket(pair.b)
+      expect(pair.a.binaryType).toBe("arraybuffer")
+
+      const worker = yield* makeWorker({
+        connect: (connection) =>
+          Effect.scoped(
+            Effect.gen(function* () {
+              const linked = yield* Link.connect(workerCarrier, { home: homeKey.publicKey, identity: workerKey })
+              expect(linked.machine).toBe("wrk-01testuppercase-ws")
+              linked.send(connection.hello)
+              yield* Effect.raceFirst(
+                Stream.runForEach(linked.messages, (message) => Effect.sync(() => connection.send(message))),
+                Stream.runForEach(connection.messages, (message) => Effect.sync(() => linked.send(message))),
+              )
+            }),
+          ),
+      })
+      yield* worker.restore
+
+      const driver = yield* WorkerClient.dial(id, homeCarrier, { peerKey: workerKey.publicKey }).pipe(
+        Effect.provide(identityLayer(homeKey)),
+        Scope.provide(driverScope),
+      )
+      const env = Environment.workspace(id, driver)
+      yield* env.files.write("/ws.txt", text("over websocket"))
+      expect(utf8.decode((yield* env.files.read("/ws.txt")).bytes)).toBe("over websocket")
+
+      yield* Scope.close(driverScope, Exit.void)
+      expect(pair.a.readyState).toBe(3)
+      expect(pair.a.listenerCount()).toBe(0)
+    }),
+  )
+
+  it.effect("waits for CONNECTING sockets, fails on pre-closed sockets, and rejects text or oversized frames", () =>
+    Effect.gen(function* () {
+      const closed = makeMockWebSocketPair(3)
+      expect(yield* WorkerClient.fromWebSocket(closed.a).pipe(Effect.flip)).toEqual(new Link.Closed())
+      expect(closed.a.listenerCount()).toBe(0)
+
+      const connecting = makeMockWebSocketPair(0)
+      const fiber = yield* Effect.forkChild(WorkerClient.fromWebSocket(connecting.a), { startImmediately: true })
+      connecting.a.open()
+      const carrier = yield* Fiber.join(fiber)
+
+      connecting.a.deliverRaw("not-binary")
+      expect(yield* carrier.receive.pipe(Effect.flip)).toEqual(new Link.Closed())
+      expect(connecting.a.lastCloseCode).toBe(4008)
+      expect(connecting.a.listenerCount()).toBe(0)
+
+      // Oversized frames (>65535B) close with WHATWG-valid policy code 4008 and immediately detach listeners.
+      const over = makeMockWebSocketPair(1)
+      const overCarrier = yield* WorkerClient.fromWebSocket(over.a)
+      over.a.deliverRaw(new Uint8Array(65_536))
+      expect(yield* overCarrier.receive.pipe(Effect.flip)).toEqual(new Link.Closed())
+      expect(over.a.lastCloseCode).toBe(4008)
+      expect(over.a.listenerCount()).toBe(0)
+
+      // Closing while still CONNECTING fails with Link.Closed and immediately detaches listeners.
+      const dying = makeMockWebSocketPair(0)
+      const dyingFiber = yield* Effect.forkChild(WorkerClient.fromWebSocket(dying.a), { startImmediately: true })
+      dying.a.close(1000)
+      expect(yield* Fiber.join(dyingFiber).pipe(Effect.flip)).toEqual(new Link.Closed())
+      expect(dying.a.listenerCount()).toBe(0)
+
+      // Interrupting while CONNECTING immediately closes the socket and detaches listeners even if the outer scope stays open.
+      const stalled = makeMockWebSocketPair(0)
+      const stalledFiber = yield* Effect.forkChild(WorkerClient.fromWebSocket(stalled.a), { startImmediately: true })
+      yield* Fiber.interrupt(stalledFiber)
+      expect(stalled.a.readyState).toBe(3)
+      expect(stalled.a.lastCloseCode).toBe(1000)
+      expect(stalled.a.listenerCount()).toBe(0)
+    }),
+  )
+})

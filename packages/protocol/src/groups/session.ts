@@ -407,7 +407,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
             identifier: "session.prompt",
             summary: "Send message",
             description:
-              "Send a user message and start the agent unless resume is false. Returns once the message is queued, not when the agent finishes: wait with experimental.session.wait or the session.execution.* events, then read the reply with session.message.list.",
+              "Send a user message and start the agent unless resume is false. Returns once the message is queued, not when the agent finishes: wait with POST /api/experimental/session/:sessionID/wait or the session.execution.* events, then read the reply with GET /api/session/:sessionID/message. An archived session is unarchived.",
           }),
         ),
     )
@@ -431,7 +431,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
             identifier: "session.command",
             summary: "Run command",
             description:
-              "Run a named command in the session. Most commands send a prompt, so like session.prompt this returns before the agent finishes.",
+              "Run a named command in the session. Most commands send a prompt, so like session.prompt this returns before the agent finishes. An archived session is unarchived.",
           }),
         ),
     )
@@ -450,7 +450,8 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
           OpenApi.annotations({
             identifier: "experimental.session.skill",
             summary: "Activate skill",
-            description: "Activate a skill for a session by appending a skill message and resuming execution.",
+            description:
+              "Activate a skill for a session by appending a skill message and resuming execution. An archived session is unarchived.",
           }),
         ),
     )
@@ -504,7 +505,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
             identifier: "session.shell",
             summary: "Run shell command",
             description:
-              "Execute one shell command in the session's working directory. Emits a shell.started event before execution and a shell.ended event with the merged output after.",
+              "Execute one shell command in the session's working directory. Emits a shell.started event before execution and a shell.ended event with the merged output after. An archived session is unarchived.",
           }),
         ),
     )

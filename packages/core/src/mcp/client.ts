@@ -333,6 +333,8 @@ export interface Skills {
    * `SKILL.md`, frontmatter against the entry.
    */
   readonly read: (skill: Skill, ref?: string) => Effect.Effect<SkillFile, Error>
+  /** One skill by its `SKILL.md` URI, listed or not (`skills/get`). No file is read. */
+  readonly get: (uri: string) => Effect.Effect<Skill, Error>
 }
 
 /** An MCP server reached over a transport someone else already opened, such as a client socket. */
@@ -836,6 +838,10 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
               ),
             read: (skill, ref) =>
               request("read MCP skill file", (signal) => skills.read(skill, ref, { signal, timeout: execution })),
+            get: (uri) =>
+              request("get MCP skill", (signal) => skills.get(uri, { signal, timeout: execution })).pipe(
+                Effect.map((result) => result.skill),
+              ),
           }
         : undefined,
       // Tool lists skip the SDK response cache: it re-stringifies every list, and on the first tools/call
