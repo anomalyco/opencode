@@ -65,7 +65,7 @@ export default function BrowserSettings(props: { target?: string }) {
 
   const chooseSites = (choice: Choice) =>
     runWithOwner(owner, () =>
-      ctx.dialogs.open((dialog) => <SiteChooser choices={choices()} initial={choice} jobs={jobs} close={() => dialog.close()} />),
+      ctx.dialogs.open((dialog) => <SiteChooser choices={[choice]} initial={choice} jobs={jobs} close={() => dialog.close()} />),
     )
 
   const addExtension = () =>

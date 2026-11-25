@@ -1,7 +1,10 @@
 import { Button } from "@opencode/ui/button"
 import { Checkbox } from "@opencode/ui/checkbox"
+import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Icon } from "@opencode/ui/icon"
+import { Loader } from "@opencode/ui/loader"
 import { MenuScroll } from "@opencode/ui/menu-scroll"
+import { RadioGroup, RadioItem } from "@opencode/ui/radio"
 import { Select } from "@opencode/ui/select"
 import { TextInput } from "@opencode/ui/text-input"
 import { createVirtualizer, defaultRangeExtractor } from "@tanstack/solid-virtual"
@@ -16,6 +19,9 @@ import type { SiteList } from "./profile/ipc"
 import { siteListMove, siteTypeAhead } from "./site-keys"
 import { exactSite, matchSites } from "./site-search"
 
+/** A group's heading: what comes over, and from which sites. */
+const HEADING = "text-[12px] font-[440] leading-5 text-v2-text-text-muted"
+
 /** One row of the site list, in CSS pixels. */
 const ROW_HEIGHT = 32
 
@@ -23,16 +29,17 @@ const ROW_HEIGHT = 32
 const TYPE_AHEAD_MS = 700
 
 /**
- * The import dialog, "Import from <browser>": what comes over, as two ticked boxes, "Sign-ins" and "Browsing history",
- * and "Import". A quiet "Choose sites" reveals, in place under the boxes, the sites the browser profile has cookies
- * for, one row per registrable domain, every one ticked until the person changes that; the button then names how many
- * sites it brings. Main reads the list from the cookies' hosts alone. Lists stay only while the dialog is open, so
- * switching back to a profile does not read it again; neither the lists nor any choice is stored: an import is a
- * one-off, and each starts from everything.
+ * The import dialog, "Import from <browser>", in two groups: what comes over, as two ticked boxes, "Sign-ins" and
+ * "Browsing history", and from which sites, "All sites" or "Only sites I choose". The second shows, under it, the sites
+ * the browser profile has cookies for, one row per registrable domain, none ticked until the person ticks them; the
+ * button then names how many sites it brings. A profile picker shows only where the dialog has several profiles to
+ * offer, as the pane's offer and a passkey notice do; a Settings row has picked its profile already. Main reads the
+ * list from the cookies' hosts alone. Lists stay only while the dialog is open, so switching back to a profile does not
+ * read it again; neither the lists nor any choice is stored: an import is a one-off, and each starts from every site.
  *
  * The import runs as a job of `jobs`, the surface that opened the dialog, which reports how it ended in its own place
  * (a Settings row, the pane's offer). A clean import closes the dialog; a partial or failed one keeps it open and says
- * why. `reveal` opens it with the list shown. `site` opens it with the list shown and searched for a page's
+ * why. `reveal` opens it on "Only sites I choose", with the list shown. `site` opens it with the list shown and searched for a page's
  * registrable domain, as a passkey request's, on the first browser profile that lists exactly that site; with
  * `choose`, that site alone is chosen there, and without it nothing is. A site that only contains it, such as
  * `github.com` for `hub.com`, is shown but never chosen. Opened so, the dialog is about one site's sign-in: it
@@ -53,8 +60,8 @@ export function SiteChooser(props: {
   const lists = new Map<string, SiteList>()
   const elements: ChooserElements = {}
 
-  // The list's viewport mounts when "Choose sites" reveals the list or its loading ends, either of which can come after
-  // the sites did. The virtualizer follows it as a signal, or it would never see the list scroll.
+  // The list's viewport mounts when "Only sites I choose" shows the list or its loading ends, either of which can come
+  // after the sites did. The virtualizer follows it as a signal, or it would never see the list scroll.
   const [viewport, setViewport] = createSignal<HTMLDivElement>()
 
   // A new element belongs to no window until it is in the page, and the virtualizer needs its window to watch it.
@@ -71,12 +78,10 @@ export function SiteChooser(props: {
     query: props.site?.name ?? "",
     chosen: { profile: choiceValue(props.initial), sites: new Set() },
     active: 0,
-    focused: false,
     attempt: 0,
     typed: { text: "", at: 0 },
     seeking: !!props.site,
-    revealed: !!props.site || !!props.reveal,
-    custom: !!props.site,
+    scope: props.site || props.reveal ? "some" : "all",
     signins: true,
     history: true,
   })
@@ -88,13 +93,13 @@ export function SiteChooser(props: {
   const choice = createMemo(() => props.choices.find((item) => choiceValue(item) === state.profile) ?? props.initial)
 
   const sites = () => {
-    if (!state.custom) return everySite()
+    if (state.scope === "all") return everySite()
 
     return state.chosen.profile === state.profile ? state.chosen.sites : new Set<string>()
   }
 
-  // The import brings every site: nothing was changed, or everything is ticked again.
-  const everything = () => !state.custom || (all().length > 0 && sites().size === all().length)
+  // The import brings every site: "All sites" is picked, or every site is ticked.
+  const everything = () => state.scope === "all" || (all().length > 0 && sites().size === all().length)
 
   const listed = createLatest(
     () => `${state.profile}\n${state.attempt}`,
@@ -132,7 +137,8 @@ export function SiteChooser(props: {
   const missing = () => {
     const site = props.site?.name
 
-    if (!site || state.query.trim().toLowerCase() !== site || result()?.type !== "listed" || exactSite(all(), site)) return
+    if (!site || state.query.trim().toLowerCase() !== site || result()?.type !== "listed" || exactSite(all(), site))
+      return
 
     return ctx.t("sites.missing", { site, browser: browser() })
   }
@@ -142,7 +148,8 @@ export function SiteChooser(props: {
 
     if (listed.error !== undefined && !listed.loading) return { text: ctx.t("sites.failed"), error: true, retry: true }
 
-    if (!current || state.seeking) return { text: ctx.t("sites.loading", { browser: browser() }), error: false, loading: true }
+    if (!current || state.seeking)
+      return { text: ctx.t("sites.loading", { browser: browser() }), error: false, loading: true }
 
     if (current.type === "failed" && current.reason === "locked")
       return { text: ctx.t("signins.failed.locked.named", { browser: browser() }), error: true, retry: true }
@@ -198,7 +205,7 @@ export function SiteChooser(props: {
   }
 
   const switchProfile = (profile: string) => {
-    setState({ profile, seeking: false, custom: false })
+    setState({ profile, seeking: false })
     toTop()
   }
 
@@ -209,7 +216,11 @@ export function SiteChooser(props: {
 
     // The site the page belongs to is chosen already where the person asked, so importing it is one click.
     if (site && list.type === "listed" && exactSite(list.sites, site.name))
-      return setState({ seeking: false, custom: true, chosen: { profile: choiceValue(current), sites: new Set(site.choose ? [site.name] : []) } })
+      return setState({
+        seeking: false,
+        scope: "some",
+        chosen: { profile: choiceValue(current), sites: new Set(site.choose ? [site.name] : []) },
+      })
     const index = props.choices.findIndex((item) => choiceValue(item) === choiceValue(current))
     const next = props.choices[index + 1]
 
@@ -219,7 +230,7 @@ export function SiteChooser(props: {
   const choose = (change: (next: Set<string>) => void) => {
     const next = new Set(sites())
     change(next)
-    setState({ custom: true, chosen: { profile: state.profile, sites: next } })
+    setState("chosen", { profile: state.profile, sites: next })
   }
 
   const toggle = (site: string) => choose((next) => (next.has(site) ? next.delete(site) : next.add(site)))
@@ -230,7 +241,7 @@ export function SiteChooser(props: {
   // Importing everything needs no list: it works while the list is still being read, as the one-click import does.
   const canImport = () =>
     (!!props.site || state.signins || state.history) &&
-    (state.custom ? sites().size > 0 : result()?.type !== "listed" || all().length > 0) &&
+    (state.scope === "some" ? sites().size > 0 : result()?.type !== "listed" || all().length > 0) &&
     props.jobs.available() &&
     !busy() &&
     props.jobs.unsaved() === undefined
@@ -277,7 +288,9 @@ export function SiteChooser(props: {
       const indexes = defaultRangeExtractor(range)
       const active = state.active
 
-      return indexes.includes(active) || active >= shown().length ? indexes : [...indexes, active].toSorted((a, b) => a - b)
+      return indexes.includes(active) || active >= shown().length
+        ? indexes
+        : [...indexes, active].toSorted((a, b) => a - b)
     },
   })
 
@@ -318,270 +331,366 @@ export function SiteChooser(props: {
     if (event.key.length !== 1 || event.altKey || event.ctrlKey || event.metaKey) return
     const typed = event.timeStamp - state.typed.at < TYPE_AHEAD_MS ? state.typed.text + event.key : event.key
     setState("typed", { text: typed, at: event.timeStamp })
-    const found = siteTypeAhead(shown().map((item) => item.site), state.active, typed)
+
+    const found = siteTypeAhead(
+      shown().map((item) => item.site),
+      state.active,
+      typed,
+    )
 
     if (found !== undefined) moveTo(found)
   }
 
-  const profileOptions = createMemo(() => props.choices.map((item) => ({ value: choiceValue(item), label: choiceLabel(item) })))
+  // The import this dialog started is running, which the button shows as it does a busy one.
+  const importing = () => !!job() && props.jobs.running() === job()
+
+  const allChosen = () => shown().length > 0 && shownChosen() === shown().length
+  const someChosen = () => shownChosen() > 0 && !allChosen()
+
+  const profileOptions = createMemo(() =>
+    props.choices.map((item) => ({ value: choiceValue(item), label: choiceLabel(item) })),
+  )
 
   return (
-    <ui.Dialog
-      title={ctx.t("signins.import", { browser: choiceLabel(choice()) })}
-      size={state.revealed ? "large" : "fit"}
-      footer={
-        <>
-          {/* Quiet, at the start of the footer: most people import everything and never open it. */}
-          <Button type="button" variant="ghost-muted" flush="start" class="me-auto" aria-expanded={state.revealed} onClick={() => setState("revealed", (shown) => !shown)}>
-            {ctx.t("settings.import.choose")}
-            <Icon name={state.revealed ? "outline-chevron-down" : "outline-chevron-right"} size="small" class="rtl:-scale-x-100" />
-          </Button>
-          <ui.Button variant="neutral" onClick={props.close}>
-            {ctx.t("common.cancel")}
-          </ui.Button>
-          <ui.Button variant="contrast" disabled={!canImport()} busy={!!job() && props.jobs.running() === job()} onClick={start}>
-            {everything() ? ctx.t("signins.action") : ctx.plural("import.some", sites().size, { number: number(sites().size) })}
-          </ui.Button>
-        </>
-      }
-    >
-      <div data-component="browser-site-chooser" class="flex h-full min-h-0 flex-col">
-        {/* What comes over: both, until the person unticks one. The rows are the first thing in the body with or without
-            the list, so they stay where they are when "Choose sites" opens it. Each box sits 6px inside its 28px row,
-            which keeps its focus ring inside the body's clip. Enter on a box imports, as it does on the list. */}
-        <Show when={!props.site}>
-        <div
-          class="flex shrink-0 flex-col"
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" || event.isComposing) return
-            event.preventDefault()
-            start()
-          }}
-        >
-          <div class="flex h-7 items-center">
-            <Checkbox
-              appearance="compact"
-              surface={state.revealed ? "base" : "layer-1"}
-              checked={state.signins}
-              disabled={busy()}
-              onChange={(signins) => setState("signins", signins)}
-            >
-              {ctx.t("import.signins")}
-            </Checkbox>
-          </div>
-          <div class="flex h-7 items-center">
-            <Checkbox
-              appearance="compact"
-              surface={state.revealed ? "base" : "layer-1"}
-              checked={state.history}
-              disabled={busy()}
-              onChange={(history) => setState("history", history)}
-            >
-              {ctx.t("import.history")}
-            </Checkbox>
-          </div>
-        </div>
-        </Show>
-        <Show when={state.revealed}>
-        {/* The dialog's body scrolls, so it clips at its edges. The search field and the profile select draw their edge
-            and their focus ring just outside their box, and the list's frame its edge just inside the body's end: the
-            padding keeps them inside the clip. Under the boxes the search field starts 8px lower. */}
-        <div class="flex min-h-0 flex-1 flex-col gap-3 pb-1" classList={{ "pt-2": !props.site, "pt-1": !!props.site }}>
-        <div class="flex items-center gap-2">
-          <TextInput
-            appearance="large"
-            role="searchbox"
-            aria-label={ctx.t("sites.search")}
-            placeholder={ctx.t("sites.search")}
-            autofocus
-            autocomplete="off"
-            spellcheck={false}
-            leadingIcon={<Icon name="magnifying-glass" size="small" />}
-            showClearButton={!!state.query}
-            onClearClick={() => search("")}
-            value={state.query}
-            onInput={(event) => search(event.currentTarget.value)}
-            // With text in it, Escape clears the search; once empty, it closes the dialog. During an input method's
-            // composition it is the composition's.
-            data-owns-escape={state.query || composing() ? "" : undefined}
-            onCompositionStart={() => setComposing(true)}
-            onCompositionEnd={() => setComposing(false)}
-            onKeyDown={(event) => {
-              // Keys that end or move inside an input method's composition belong to it; Escape does not reach the
-              // dialog either.
-              if (event.isComposing || event.keyCode === 229) {
-                if (event.key === "Escape") event.preventDefault()
-
-                return
-              }
-
-              if (event.key === "Escape" && state.query) {
-                event.preventDefault()
-                search("")
-              }
-
-              // The active row comes into view, which a scroll with the mouse may have left.
-              if (event.key === "ArrowDown" && ready() && shown().length > 0) {
-                event.preventDefault()
-                elements.listbox?.focus({ preventScroll: true })
-                moveTo(Math.min(state.active, shown().length - 1))
-              }
-            }}
-            class="min-w-40 flex-1"
-          />
-          <Show when={props.choices.length > 1}>
-            {/* The profile gives way before the search on a narrow window. */}
-            <div class="min-w-28 shrink-[3] basis-52">
-              <Select
-                appearance="large"
-                aria-label={ctx.t("sites.profile")}
-                options={profileOptions()}
-                current={profileOptions().find((option) => option.value === state.profile)}
-                value={(option) => option.value}
-                label={(option) => option.label}
-                disabled={busy()}
-                placement="bottom-end"
-                gutter={6}
-                class="!w-full"
-                onSelect={(option) => option && switchProfile(option.value)}
-              />
-            </div>
-          </Show>
-        </div>
-        <div class="flex h-7 items-center gap-1" classList={{ invisible: !ready() }} aria-hidden={!ready()}>
-          {/* The count alone is announced, so Select all and Select none say what they did. */}
-          <span
-            aria-live="polite"
-            class="min-w-0 flex-1 truncate text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-text-text-muted"
-          >
-            <Show
-              when={shown().length > 0 && missing()}
-              fallback={
-                <bdi dir="auto">
-                  {state.query
-                    ? ctx.t("sites.selected.shown", { shown: number(shown().length), selected: number(sites().size) })
-                    : ctx.t("sites.selected", { selected: number(sites().size), total: number(all().length) })}
-                </bdi>
-              }
-            >
-              {(text) => <bdi dir="auto">{text()}</bdi>}
+    // A fixed top edge, so choosing sites only grows it downward.
+    <Dialog size="tall" fit>
+      <DialogHeader>
+        <DialogTitleGroup
+          // With a profile picker, the picker names the browser, so the title does not repeat it.
+          title={
+            props.choices.length > 1
+              ? ctx.t("settings.import.title")
+              : ctx.t("signins.import", { browser: choiceLabel(choice()) })
+          }
+        />
+      </DialogHeader>
+      <DialogBody class="min-h-0">
+        {/* The body scrolls, so it clips: 4px above the first control keep its focus ring inside. */}
+        <div data-scrollable class="flex min-h-0 flex-1 flex-col overflow-y-auto px-4 pt-1">
+          <div data-component="browser-site-chooser" class="flex h-full min-h-0 flex-col gap-4">
+            {/* Where it comes from, only where the person has not picked a profile already, as a Settings row does. */}
+            <Show when={props.choices.length > 1}>
+              <div class="flex shrink-0 items-center gap-3">
+                <span class="w-14 shrink-0 text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-text-text-muted">
+                  {ctx.t("import.from")}
+                </span>
+                <div class="min-w-0 flex-1">
+                  <Select
+                    appearance="base"
+                    aria-label={ctx.t("sites.profile")}
+                    options={profileOptions()}
+                    current={profileOptions().find((option) => option.value === state.profile)}
+                    value={(option) => option.value}
+                    label={(option) => option.label}
+                    disabled={busy()}
+                    placement="bottom-start"
+                    gutter={6}
+                    class="!w-full"
+                    onSelect={(option) => option && switchProfile(option.value)}
+                  />
+                </div>
+              </div>
             </Show>
-          </span>
-          <Button size="small" variant="ghost" disabled={shownChosen() === shown().length} onClick={selectShown}>
-            {state.query ? ctx.t("sites.all.shown", { count: number(shown().length) }) : ctx.t("sites.all")}
-          </Button>
-          {/* The last label lies on the dialog's right edge, as the list and the field do. */}
-          <Button size="small" variant="ghost" flush="end" disabled={shownChosen() === 0} onClick={clearShown}>
-            {state.query ? ctx.t("sites.none.shown", { count: number(shown().length) }) : ctx.t("sites.none")}
-          </Button>
-        </div>
-        <div class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-[8px] bg-v2-background-bg-layer-01 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-muted)]">
-          <Show
-            when={status()}
-            fallback={
-              <MenuScroll class="min-h-0 flex-1" viewportClass="min-h-0 flex-1 px-1" viewportRef={followViewport}>
-                <div
-                  ref={(element) => (elements.listbox = element)}
-                  id={`${id}-list`}
-                  role="listbox"
-                  aria-multiselectable="true"
-                  aria-label={ctx.t("sites.list")}
-                  aria-activedescendant={activeSite() ? optionID(activeSite() ?? "") : undefined}
-                  tabIndex={0}
-                  class="relative w-full outline-none"
-                  style={{ height: `${virtualizer.getTotalSize()}px` }}
-                  onKeyDown={onListKey}
-                  onFocus={() => setState("focused", true)}
-                  onBlur={() => setState("focused", false)}
+            {/* What comes over: both, until the person unticks one. Enter on a box imports, as it does on the list. */}
+            <Show when={!props.site}>
+              <section
+                class="flex shrink-0 flex-col gap-1"
+                aria-labelledby={`${id}-what`}
+                onKeyDown={(event) => {
+                  if (event.key !== "Enter" || event.isComposing) return
+                  event.preventDefault()
+                  start()
+                }}
+              >
+                <h3 id={`${id}-what`} class={HEADING}>
+                  {ctx.t("import.what")}
+                </h3>
+                <div class="flex h-7 items-center">
+                  <Checkbox
+                    appearance="compact"
+                    surface="base"
+                    checked={state.signins}
+                    disabled={busy()}
+                    onChange={(signins) => setState("signins", signins)}
+                  >
+                    {ctx.t("import.signins")}
+                  </Checkbox>
+                </div>
+                <div class="flex h-7 items-center">
+                  <Checkbox
+                    appearance="compact"
+                    surface="base"
+                    checked={state.history}
+                    disabled={busy()}
+                    onChange={(history) => setState("history", history)}
+                  >
+                    {ctx.t("import.history")}
+                  </Checkbox>
+                </div>
+              </section>
+            </Show>
+            {/* Which sites, for both: every one, or the ones ticked in the list under the choice. Opened for one site, only
+            the list shows, with that site searched for. */}
+            <section
+              class="flex min-h-0 flex-1 flex-col gap-1"
+              aria-labelledby={props.site ? undefined : `${id}-sites`}
+            >
+              <Show when={!props.site}>
+                <h3 id={`${id}-sites`} class={HEADING}>
+                  {ctx.t("import.sites")}
+                </h3>
+                <RadioGroup
+                  value={state.scope}
+                  disabled={busy()}
+                  onChange={(scope) => setState("scope", scope === "some" ? "some" : "all")}
+                  class="shrink-0 py-1 [&_[data-slot=radio-v2-items]]:gap-2"
                 >
-                  <For each={keys()}>
-                    {(site) => (
-                      <Show when={placed().get(site)}>
-                        {(row) => {
-                          const active = () => activeSite() === site
+                  <RadioItem
+                    value="all"
+                    label={
+                      <>
+                        {ctx.t("sites.every")}
+                        <Show when={ready()}>
+                          <span class="ms-1.5 text-v2-text-text-muted">{number(all().length)}</span>
+                        </Show>
+                      </>
+                    }
+                  />
+                  <RadioItem value="some" label={ctx.t("sites.only")} />
+                </RadioGroup>
+              </Show>
+              <Show when={state.scope === "some"}>
+                {/* The search, then the box that ticks every shown site with the count, and the sites, in one frame. Under
+                the choice it indents to the choice's label. */}
+                <div class="flex min-h-0 flex-1 flex-col gap-2 pb-0.5" classList={{ "ps-6": !props.site }}>
+                  <TextInput
+                    appearance="large"
+                    role="searchbox"
+                    aria-label={ctx.t("sites.search")}
+                    placeholder={ctx.t("sites.search")}
+                    autofocus
+                    autocomplete="off"
+                    spellcheck={false}
+                    leadingIcon={<Icon name="magnifying-glass" />}
+                    showClearButton={!!state.query}
+                    onClearClick={() => search("")}
+                    value={state.query}
+                    onInput={(event) => search(event.currentTarget.value)}
+                    // With text in it, Escape clears the search; once empty, it closes the dialog. During an input method's
+                    // composition it is the composition's.
+                    data-owns-escape={state.query || composing() ? "" : undefined}
+                    onCompositionStart={() => setComposing(true)}
+                    onCompositionEnd={() => setComposing(false)}
+                    onKeyDown={(event) => {
+                      // Keys that end or move inside an input method's composition belong to it; Escape does not reach the
+                      // dialog either.
+                      if (event.isComposing || event.keyCode === 229) {
+                        if (event.key === "Escape") event.preventDefault()
 
-                          return (
-                            <div
-                              id={optionID(site)}
-                              role="option"
-                              aria-selected={sites().has(site)}
-                              aria-setsize={shown().length}
-                              aria-posinset={row().index + 1}
-                              data-site={site}
-                              data-active={active() ? "" : undefined}
-                              class="absolute inset-x-0 top-0 flex cursor-default items-center gap-2 rounded-[6px] px-2 hover:bg-[var(--v2-overlay-simple-overlay-hover)]"
+                        return
+                      }
+
+                      if (event.key === "Escape" && state.query) {
+                        event.preventDefault()
+                        search("")
+                      }
+
+                      // The active row comes into view, which a scroll with the mouse may have left.
+                      if (event.key === "ArrowDown" && ready() && shown().length > 0) {
+                        event.preventDefault()
+                        elements.listbox?.focus({ preventScroll: true })
+                        moveTo(Math.min(state.active, shown().length - 1))
+                      }
+                    }}
+                    class="mt-1 w-full shrink-0"
+                  />
+                  <div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[8px] bg-v2-background-bg-layer-01 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-muted)]">
+                    <div
+                      class="flex h-9 shrink-0 items-center border-b-[0.5px] border-v2-border-border-muted px-3"
+                      classList={{ invisible: !ready() }}
+                      aria-hidden={!ready()}
+                    >
+                      {/* Named by what it does, so the live count beside it is not its name. */}
+                      <Checkbox
+                        appearance="compact"
+                        surface="layer-1"
+                        hideLabel
+                        checked={allChosen()}
+                        indeterminate={someChosen()}
+                        disabled={busy() || shown().length === 0}
+                        onChange={() => (allChosen() ? clearShown() : selectShown())}
+                      >
+                        {state.query ? ctx.t("sites.all.shown", { count: number(shown().length) }) : ctx.t("sites.all")}
+                      </Checkbox>
+                      {/* The count alone is announced, so ticking a site or every one says what it did. */}
+                      <span
+                        aria-live="polite"
+                        class="min-w-0 flex-1 truncate select-none ps-2 text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-text-text-muted"
+                      >
+                        <Show
+                          when={shown().length > 0 && missing()}
+                          fallback={
+                            <bdi dir="auto">
+                              {state.query
+                                ? ctx.t("sites.selected.shown", {
+                                    shown: number(shown().length),
+                                    selected: number(sites().size),
+                                  })
+                                : ctx.t("sites.selected", {
+                                    selected: number(sites().size),
+                                    total: number(all().length),
+                                  })}
+                            </bdi>
+                          }
+                        >
+                          {(text) => <bdi dir="auto">{text()}</bdi>}
+                        </Show>
+                      </span>
+                    </div>
+                    <Show
+                      when={status()}
+                      fallback={
+                        <MenuScroll
+                          class="min-h-0 flex-1"
+                          viewportClass="min-h-0 flex-1 px-1"
+                          viewportRef={followViewport}
+                        >
+                          <div
+                            ref={(element) => (elements.listbox = element)}
+                            id={`${id}-list`}
+                            role="listbox"
+                            aria-multiselectable="true"
+                            aria-label={ctx.t("sites.list")}
+                            aria-activedescendant={activeSite() ? optionID(activeSite() ?? "") : undefined}
+                            tabIndex={0}
+                            class="group/list relative w-full outline-none"
+                            style={{ height: `${virtualizer.getTotalSize()}px` }}
+                            onKeyDown={onListKey}
+                          >
+                            <For each={keys()}>
+                              {(site) => (
+                                <Show when={placed().get(site)}>
+                                  {(row) => {
+                                    const active = () => activeSite() === site
+
+                                    return (
+                                      <div
+                                        id={optionID(site)}
+                                        role="option"
+                                        aria-selected={sites().has(site)}
+                                        aria-setsize={shown().length}
+                                        aria-posinset={row().index + 1}
+                                        data-site={site}
+                                        data-active={active() ? "" : undefined}
+                                        // The active row shows the ring only while the list has keyboard focus, not after a click.
+                                        class="absolute inset-x-0 top-0 flex cursor-default select-none items-center gap-2 rounded-[6px] px-2 outline-[var(--v2-border-border-focus)] hover:bg-[var(--v2-overlay-simple-overlay-hover)] group-focus-visible/list:data-[active]:bg-[var(--v2-overlay-simple-overlay-hover)] group-focus-visible/list:data-[active]:outline-2 group-focus-visible/list:data-[active]:-outline-offset-2"
+                                        style={{
+                                          height: `${ROW_HEIGHT}px`,
+                                          transform: `translateY(${row().start}px)`,
+                                        }}
+                                        onClick={() => {
+                                          setState("active", row().index)
+                                          toggle(site)
+                                        }}
+                                      >
+                                        <Checkbox
+                                          appearance="compact"
+                                          surface="layer-1"
+                                          presentation
+                                          checked={sites().has(site)}
+                                        />
+                                        {/* A long name loses its start, so the registrable domain at its end stays in view. */}
+                                        <span
+                                          class="min-w-0 flex-1 truncate text-[13px] leading-[var(--line-height-base)] text-v2-text-text-base [direction:rtl] ltr:text-left rtl:text-right"
+                                          title={site}
+                                        >
+                                          <bdi dir="ltr">{site}</bdi>
+                                        </span>
+                                      </div>
+                                    )
+                                  }}
+                                </Show>
+                              )}
+                            </For>
+                          </div>
+                        </MenuScroll>
+                      }
+                    >
+                      {(current) => (
+                        <div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+                          <div class="flex items-center gap-2">
+                            <Show when={current().loading}>
+                              <ui.Loader size="small" />
+                            </Show>
+                            <p
+                              role={current().error ? "alert" : "status"}
+                              class="text-[13px] font-[440] leading-[var(--line-height-base)]"
                               classList={{
-                                "bg-[var(--v2-overlay-simple-overlay-hover)]": active() && state.focused,
-                                "shadow-[inset_0_0_0_1px_var(--v2-border-border-focus)]": active() && state.focused,
-                              }}
-                              style={{ height: `${ROW_HEIGHT}px`, transform: `translateY(${row().start}px)` }}
-                              onClick={() => {
-                                setState("active", row().index)
-                                toggle(site)
+                                "text-v2-state-fg-danger": current().error,
+                                "text-v2-text-text-muted": !current().error,
                               }}
                             >
-                              <Checkbox appearance="compact" surface="layer-1" presentation checked={sites().has(site)} />
-                              {/* A long name loses its start, so the registrable domain at its end stays in view. */}
-                              <span
-                                class="min-w-0 flex-1 truncate text-[13px] leading-[var(--line-height-base)] text-v2-text-text-base [direction:rtl] ltr:text-left rtl:text-right"
-                                title={site}
-                              >
-                                <bdi dir="ltr">{site}</bdi>
-                              </span>
-                            </div>
-                          )
-                        }}
-                      </Show>
-                    )}
-                  </For>
+                              {current().text}
+                            </p>
+                          </div>
+                          <Show when={current().retry}>
+                            <ui.Button
+                              size="small"
+                              variant="neutral"
+                              onClick={() => setState("attempt", (attempt) => attempt + 1)}
+                            >
+                              {ctx.t("common.retry")}
+                            </ui.Button>
+                          </Show>
+                        </div>
+                      )}
+                    </Show>
+                  </div>
                 </div>
-              </MenuScroll>
-            }
-          >
-            {(current) => (
-              <div class="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-                <div class="flex items-center gap-2">
-                  <Show when={current().loading}>
-                    <ui.Loader size="small" />
-                  </Show>
-                  <p
-                    role={current().error ? "alert" : "status"}
-                    class="text-[13px] font-[440] leading-[var(--line-height-base)]"
-                    classList={{ "text-v2-state-fg-danger": current().error, "text-v2-text-text-muted": !current().error }}
-                  >
-                    {current().text}
-                  </p>
-                </div>
-                <Show when={current().retry}>
-                  <ui.Button size="small" variant="neutral" onClick={() => setState("attempt", (attempt) => attempt + 1)}>
-                    {ctx.t("common.retry")}
-                  </ui.Button>
-                </Show>
-              </div>
-            )}
+              </Show>
+            </section>
+            <Show when={message()}>
+              {(current) => (
+                <p
+                  role={current().error ? "alert" : "status"}
+                  class="shrink-0 py-1 text-[13px] leading-[var(--line-height-base)]"
+                  classList={{
+                    "text-v2-state-fg-danger": current().error,
+                    "text-v2-text-text-muted": !current().error,
+                  }}
+                >
+                  {current().text}
+                </p>
+              )}
+            </Show>
+          </div>
+        </div>
+      </DialogBody>
+      <DialogFooter>
+        <ui.Button variant="neutral" onClick={props.close}>
+          {ctx.t("common.cancel")}
+        </ui.Button>
+        <Button
+          variant="submit"
+          disabled={!canImport() || importing()}
+          aria-busy={importing() || undefined}
+          onClick={start}
+        >
+          <Show when={importing()}>
+            <Loader width={14} height={14} />
           </Show>
-        </div>
-        </div>
-        </Show>
-        <Show when={message()}>
-          {(current) => (
-            <p
-              role={current().error ? "alert" : "status"}
-              class="shrink-0 py-1 text-[13px] leading-[var(--line-height-base)]"
-              classList={{ "text-v2-state-fg-danger": current().error, "text-v2-text-text-muted": !current().error }}
-            >
-              {current().text}
-            </p>
-          )}
-        </Show>
-      </div>
-    </ui.Dialog>
+          {everything() || sites().size === 0
+            ? ctx.t("signins.action")
+            : ctx.plural("import.some", sites().size, { number: number(sites().size) })}
+        </Button>
+      </DialogFooter>
+    </Dialog>
   )
 }
 
 /**
  * The dialog's state: the profile shown and the search; the chosen sites of one profile, so switching profiles starts
- * from none; the active row and whether the list has the keyboard; how often the list was read again; what the
+ * from none; the active row; how often the list was read again; what the
  * type-ahead has so far; whether it still looks for the profile that has the searched site; and what comes over.
  */
 type ChooserState = {
@@ -589,14 +698,11 @@ type ChooserState = {
   query: string
   chosen: { profile: string; sites: ReadonlySet<string> }
   active: number
-  focused: boolean
   attempt: number
   typed: { text: string; at: number }
   seeking: boolean
-  /** The site list shows; the dialog opens without it. */
-  revealed: boolean
-  /** The person changed which sites come over, or the dialog opened for one site; before that, every site does. */
-  custom: boolean
+  /** Every site comes over, or only the ticked ones, which start with none. */
+  scope: "all" | "some"
   /** The sign-ins come over; ticked until the person unticks it. */
   signins: boolean
   /** The browsing history comes over; ticked until the person unticks it. */
@@ -648,7 +754,16 @@ export function SiteChooserDialog(props: {
         </ctx.ui.Dialog>
       }
     >
-      {(first) => <SiteChooser choices={choices()} initial={first()} jobs={jobs} site={props.site} reveal={props.reveal} close={props.close} />}
+      {(first) => (
+        <SiteChooser
+          choices={choices()}
+          initial={first()}
+          jobs={jobs}
+          site={props.site}
+          reveal={props.reveal}
+          close={props.close}
+        />
+      )}
     </Show>
   )
 }
