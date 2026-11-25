@@ -39,7 +39,7 @@ export const Plugin = define({
           description: OpencodeDescription,
           path: AbsolutePath.make("skill://opencode/SKILL.md"),
           // With opencode:// fetch, its API section points there instead of the `opencode api` command.
-          content: api ? OpencodeContent.replace(/## \[API\][^]*?(?=## \[Client\])/, apiContent) : OpencodeContent,
+          content: api ? OpencodeContent.replace(/## \[API\][^]*?(?=## \[Client\])/, `${apiContent}\n`) : OpencodeContent,
         }),
         api ? apiFiles : undefined,
       )
