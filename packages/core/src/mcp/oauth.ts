@@ -45,6 +45,9 @@ class IssuerChanged extends Data.TaggedError("McpOAuth.IssuerChanged")<{ readonl
 // Like other MCP clients: refreshing this close to expiry leaves short-lived tokens alone until they are due.
 const REFRESH_AHEAD = Duration.seconds(30)
 
+// How long an error redirect waits for the browser's code before it ends the login.
+const DENIAL_GRACE = Duration.seconds(10)
+
 const rejections = new Set<string>([
   OAuthErrorCode.InvalidGrant,
   OAuthErrorCode.InvalidClient,
@@ -448,6 +451,7 @@ export const authorize = (input: {
       { code: string; iss: string | undefined; host?: string; response?: ServerResponse },
       Error
     >()
+    const denied = yield* Deferred.make<never, Error>()
     const redirect = oauth?.redirect_uri ? new URL(oauth.redirect_uri) : undefined
     const redirectPath = redirect?.pathname ?? "/callback"
     const state = Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")
@@ -460,27 +464,37 @@ export const authorize = (input: {
         response.writeHead(404).end("Not found")
         return
       }
-      const fail = (reason: string, failure: string) => {
+      const reject = (reason: string, failure: string) => {
         runFork(Effect.logWarning("mcp oauth callback rejected", { ...fields, reason: failure }))
-        Effect.runSync(Deferred.fail(code, new Error(reason)))
         response
           .writeHead(400, { "Content-Type": "text/html" })
           .end(OauthCallbackPage.error(reason, { provider: input.name }))
       }
       const error = url.searchParams.get("error_description") ?? url.searchParams.get("error")
-      if (error) return fail(error, "authorization_error")
       const returned = url.searchParams.get("state")
       const value = url.searchParams.get("code")
       // Browsers can reach the callback without any OAuth parameters (preflights, prefetches, reloads). Only a
       // redirect from the authorization server may end the login, so keep waiting for it.
-      if (returned === null && !value) {
+      if (returned === null && !value && !error) {
         response
           .writeHead(400, { "Content-Type": "text/html" })
           .end(OauthCallbackPage.error("Missing authorization code", { provider: input.name }))
         return
       }
-      if (returned !== state) return fail("OAuth state mismatch", "state_mismatch")
-      if (!value) return fail("Missing authorization code", "missing_code")
+      // Programs that replay the browser's requests without its cookies (macOS link previews) make an authorization
+      // server that uses single-use verifiers redirect here with an error while the browser still brings the code,
+      // so an error ends the login only if no code follows within DENIAL_GRACE. Some servers leave state out of
+      // error redirects, so those count for this sign-in.
+      if (error && (returned === null || returned === state)) {
+        Effect.runSync(Deferred.fail(denied, new Error(error)))
+        return reject(error, "authorization_error")
+      }
+      // Any local program can request the callback, so one for another sign-in must not end this one.
+      if (returned !== state) return reject("OAuth state mismatch", "state_mismatch")
+      if (!value) {
+        Effect.runSync(Deferred.fail(code, new Error("Missing authorization code")))
+        return reject("Missing authorization code", "missing_code")
+      }
       // The page waits for the token exchange so the browser never reports success for a rejected code.
       if (
         !Effect.runSync(
@@ -601,6 +615,11 @@ export const authorize = (input: {
 
     const completed = yield* Deferred.make<Credential.OAuth, Error>()
     yield* Deferred.await(code).pipe(
+      Effect.raceFirst(
+        Deferred.await(denied).pipe(
+          Effect.catch((error) => Effect.sleep(DENIAL_GRACE).pipe(Effect.andThen(Effect.fail(error)))),
+        ),
+      ),
       Effect.flatMap((value) => {
         if (value.host === `localhost:${port}`) reached = "localhost"
         const respond = (error?: string) =>
