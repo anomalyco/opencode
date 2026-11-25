@@ -72,6 +72,9 @@ const pendingMarkdown = '[data-component="markdown"]:not([data-markdown-ready])'
 
 const upwardKeys = new Set(["up", "page-up", "home"])
 
+// How long after a press the growth of its row still counts as what the press opened.
+const pressHold = 1000
+
 const settledEvent = { type: "scroll.settled", atReachableEnd: false } as const
 
 const settledAtEndEvent = { type: "scroll.settled", atReachableEnd: true } as const
@@ -87,6 +90,12 @@ const touchMomentumEvent = { type: "touch.end", scrolling: true } as const
 const pointerDownEvent = { type: "pointer.down" } as const
 
 const pointerUpEvent = { type: "pointer.up" } as const
+
+/**
+ * The row that holds the control the reader pressed, with its height at the press. `grew`: whether the row was taller
+ * by the next frame, which is when the control's own handlers have run.
+ */
+type Press = { key: string; height: number; at: number; grew?: boolean }
 
 /** A row on screen: its key, the row it draws and where TanStack places it. */
 type MountedRow = { key: string; row: TimelineRow.TimelineRow; item: VirtualItem }
@@ -295,6 +304,8 @@ export function createTimelineVirtualizer(input: Input) {
   // event. `lost`: the view left the document, which drops its offset, so the next read starts over. Measurements
   // only: whether the reader left the end is the follow machine's to decide.
   const seen = { top: 0, max: 0, reader: 0, lost: false }
+
+  let pressed: Press | undefined
 
   // Reused for every scroll: the transition only reads it, so a scroll allocates nothing.
   const scrollEvent = {
@@ -514,6 +525,28 @@ export function createTimelineVirtualizer(input: Input) {
       }
 
       const root = listRoot()
+      const press = pressed
+
+      if (press && sizes.some(([, value]) => value.key === press.key)) {
+        pressed = undefined
+
+        // The reader pressed a control, and its row grows for what the press opened. A view that follows its end would
+        // scroll there and take the control away from under the pointer, so the view lets the end go first, as it
+        // does for the reader's scroll up: Jump to latest shows, and a scroll back to the end follows again. A row
+        // that closes at the end leaves the view there, and it goes on following.
+        if (
+          press.grew !== false &&
+          performance.now() - press.at < pressHold &&
+          sizes.some(([, value]) => value.key === press.key && value.size > press.height) &&
+          input.follow.following()
+        ) {
+          intentEvent.upward = true
+          // Also where nothing overflows yet: what opens is about to.
+          intentEvent.overflow = true
+          input.follow.dispatch(intentEvent)
+          stopScroll()
+        }
+      }
 
       // Rows that left the list shorten the scroll range. Read the clamp before these sizes grow the range again.
       if (root && input.follow.following()) readScroll(root)
@@ -1109,7 +1142,13 @@ export function createTimelineVirtualizer(input: Input) {
 
     if (!scrollView) return
     scrollView.addEventListener("pointerdown", handleListPointerDown, { capture: true })
-    onCleanup(() => scrollView.removeEventListener("pointerdown", handleListPointerDown, { capture: true }))
+    scrollView.addEventListener("click", handleListPress, { capture: true })
+    scrollView.addEventListener("keydown", handleListPress, { capture: true })
+    onCleanup(() => {
+      scrollView.removeEventListener("pointerdown", handleListPointerDown, { capture: true })
+      scrollView.removeEventListener("click", handleListPress, { capture: true })
+      scrollView.removeEventListener("keydown", handleListPress, { capture: true })
+    })
   }
 
   // Upward input is the one intent geometry cannot recover: nudging up while still a pixel from
@@ -1264,6 +1303,27 @@ export function createTimelineVirtualizer(input: Input) {
     if (!active() || event.button === 2) return
     input.onUserScroll(event.target)
     input.follow.dispatch(pointerDownEvent)
+  }
+
+  // A click on a control in a row, or the key that presses it. Heard before the control's own handlers, so the row's
+  // height here is the one before what the press opens or closes.
+  const handleListPress = (event: Event) => {
+    pressed = undefined
+
+    if (!active() || (event instanceof KeyboardEvent && event.key !== "Enter" && event.key !== " ")) return
+    const target = event.target instanceof Element ? event.target : null
+    const row = target?.closest<HTMLElement>("[data-timeline-key]")
+    const content = row?.firstElementChild
+    const control = target?.closest("button, summary, a, [role], [aria-expanded], [tabindex]")
+
+    if (!row?.dataset.timelineKey || !(content instanceof HTMLElement) || !control || !row.contains(control)) return
+    const press: Press = { key: row.dataset.timelineKey, height: content.offsetHeight, at: performance.now() }
+    pressed = press
+    // A row that is no taller by the next frame was not opened by the press: what grows it later is a reply that
+    // streams in it.
+    requestAnimationFrame(() => {
+      press.grew = content.isConnected && content.offsetHeight > press.height
+    })
   }
 
   // A release only ends a pointer gesture, so every view may report it, including one that went inactive mid-press.
