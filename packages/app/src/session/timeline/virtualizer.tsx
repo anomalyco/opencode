@@ -555,6 +555,12 @@ export function createTimelineVirtualizer(input: Input) {
           input.follow.dispatch(intentEvent)
           stopScroll()
           setRendering("leftByPress", true)
+
+          // TanStack keeps the offset that it wrote, not the one that the element reached: in a transcript that fits
+          // the view its scroll to the end went nowhere. A view that follows corrects that with its next scroll. This
+          // one stays, and rows near its top would count as above it: what the next press opened there scrolled the
+          // view by its whole height.
+          if (root && virtualizer.scrollOffset !== root.scrollTop) reportOffset?.(root.scrollTop, false)
         }
       }
 
