@@ -248,6 +248,7 @@ export function createSessionRevert(input: {
       await server.api.session.interrupt({ sessionID }, { signal })
       await server.api.experimental.session.wait({ sessionID }, { signal })
       await server.api.session.revert.stage({ sessionID, messageID: operation.message.id }, { signal })
+      if (operation.commit) await server.api.session.revert.commit({ sessionID }, { signal })
 
       // Like the TUI, pending inputs are left alone: the revert hides them, committing it drops them, and redo
       // delivers them.
@@ -277,23 +278,27 @@ export function createSessionRevert(input: {
     return { type: "undo-rewind.succeeded", attempt, ...snapshot(sessionID) }
   }
 
-  const to = (messageID: string, sessionID = input.session.identity.params.id) =>
+  const to = (messageID: string, sessionID = input.session.identity.params.id, commit = false) =>
     request(sessionID, (id) => ({
       type: "rewind.to",
       messageID,
       revertMessageID: data.session.get(id)?.revert?.messageID,
+      commit,
       ...snapshot(id),
     }))
 
   return {
-    to,
-    /** After Stop interrupted the Session: rewinds to its latest prompt if the model had not answered it yet. */
+    to: (messageID: string, sessionID?: string) => to(messageID, sessionID),
+    /**
+     * After Stop interrupted the Session: takes its latest prompt back if the model had not answered it yet. Nothing
+     * of an answer is lost, so the rewind commits instead of offering an Undo.
+     */
     takeBack: async (sessionID: string) => {
       // Interrupt acknowledges before the execution settles, so the start of an answer may still be on its way.
       await server.api.experimental.session.wait({ sessionID })
       const message = selectUnansweredPrompt(data.session.message.list(sessionID))
 
-      if (message) await to(message.id, sessionID)
+      if (message) await to(message.id, sessionID, true)
     },
     undo: () =>
       request(input.session.identity.params.id, (id) => ({

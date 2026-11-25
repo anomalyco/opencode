@@ -342,7 +342,7 @@ test("a blank Enter leaves the running session alone while Stop still interrupts
 })
 
 for (const [name, draft, expected] of [
-  ["takes the prompt back", "", ["/interrupt", "/wait", "/interrupt", "/wait", "/revert/stage"]],
+  ["takes the prompt back", "", ["/interrupt", "/wait", "/interrupt", "/wait", "/revert/stage", "/revert/commit"]],
   ["with a draft only stops", "Something else", ["/interrupt"]],
 ] as const) {
   test(`stopping before the model answers ${name}, as in the TUI`, async ({ page }) => {
@@ -365,7 +365,9 @@ for (const [name, draft, expected] of [
     const requests: string[] = []
     page.on("request", (request) => {
       const path = new URL(request.url()).pathname
-      const step = ["/interrupt", "/wait", "/revert/stage"].find((suffix) => path.endsWith(`/${sessionID}${suffix}`))
+      const step = ["/interrupt", "/wait", "/revert/stage", "/revert/commit"].find((suffix) =>
+        path.endsWith(`/${sessionID}${suffix}`),
+      )
 
       if (step) requests.push(step)
     })

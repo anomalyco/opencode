@@ -23,7 +23,13 @@ export type RevertEcho = string | undefined
 export type SessionRevertOperation =
   /** An undelivered prompt has no history to rewind, so it is withdrawn from the inbox instead. */
   | { readonly type: "withdraw"; readonly message: SessionMessageUser }
-  | { readonly type: "rewind"; readonly message: SessionMessageUser; readonly prior: string | undefined }
+  | {
+      readonly type: "rewind"
+      readonly message: SessionMessageUser
+      readonly prior: string | undefined
+      /** Drop the rewound messages for good: no Rewound toast and nothing to redo. */
+      readonly commit?: boolean
+    }
   | { readonly type: "redo" }
   /** The Rewound toast's Undo: restage the earlier boundary and put the draft from before the rewind back. */
   | { readonly type: "undo-rewind"; readonly prior: string | undefined; readonly draft: RevertDraftSnapshot }
@@ -66,6 +72,7 @@ export type SessionRevertEvent =
       readonly type: "rewind.to"
       readonly messageID: string
       readonly revertMessageID: string | undefined
+      readonly commit?: boolean
     } & RevertMessages)
   | ({ readonly type: "undo.requested"; readonly revertMessageID: string | undefined } & RevertMessages)
   | { readonly type: "redo.requested"; readonly revertMessageID: string | undefined }
@@ -114,7 +121,7 @@ export function transitionSessionRevert(state: SessionRevertState, event: Sessio
 
     return start(
       state,
-      rewindOrWithdraw(message, event.inboxIDs, effectiveRevertMessageID(state, event.revertMessageID)),
+      rewindOrWithdraw(message, event.inboxIDs, effectiveRevertMessageID(state, event.revertMessageID), event.commit),
     )
   }
 
@@ -155,6 +162,12 @@ export function transitionSessionRevert(state: SessionRevertState, event: Sessio
     if (state.status !== "running" || state.attempt !== event.attempt || state.operation.type !== "rewind")
       return unchanged(state)
     const message = state.operation.message
+
+    if (state.operation.commit)
+      return changed(idle(state.attempt, state.echoes), [
+        { type: "draft.restoreMessage", message },
+        { type: "cursor.select", messageID: selectCursorAfterRevert(event, message.id) },
+      ])
 
     return changed(
       {
@@ -285,10 +298,11 @@ function rewindOrWithdraw(
   message: SessionMessageUser,
   inboxIDs: ReadonlySet<string>,
   prior: string | undefined,
+  commit?: boolean,
 ): SessionRevertOperation {
   if (inboxIDs.has(message.id)) return { type: "withdraw", message }
 
-  return { type: "rewind", message, prior }
+  return commit ? { type: "rewind", message, prior, commit } : { type: "rewind", message, prior }
 }
 
 // Claims the Session synchronously, so a second request before the first await is refused.

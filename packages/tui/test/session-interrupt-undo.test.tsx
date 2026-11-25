@@ -35,6 +35,7 @@ const shell = {
 const INTERRUPT = `POST /api/session/${session.id}/interrupt`
 const WAIT = `POST /api/experimental/session/${session.id}/wait`
 const REVERT = `POST /api/session/${session.id}/revert/stage`
+const COMMIT = `POST /api/session/${session.id}/revert/commit`
 
 /** Opens a running session whose last prompt got `content` back so far, and interrupts it. `calls` logs what that sent. */
 async function interrupt(input: { content: unknown[]; later?: unknown[]; inbox?: unknown[]; draft?: string }) {
@@ -45,6 +46,7 @@ async function interrupt(input: { content: unknown[]; later?: unknown[]; inbox?:
     [INTERRUPT]: () => json({ interrupted: true }),
     [WAIT]: () => new Response(null, { status: 204 }),
     [REVERT]: () => json({ data: session }),
+    [COMMIT]: () => new Response(null, { status: 204 }),
   }
   const app = await createAppFixture({
     width: 100,
@@ -94,7 +96,8 @@ test("interrupting before the model answers with text or a tool call takes the p
   await using app = await interrupt({ content: [{ type: "reasoning", text: "Thinking it over" }] })
 
   await app.waitForFrame((frame) => shown(frame) === 2)
-  expect(app.calls).toEqual([INTERRUPT, WAIT, REVERT])
+  await app.waitForFrame(() => app.calls.length === 4)
+  expect(app.calls).toEqual([INTERRUPT, WAIT, REVERT, COMMIT])
 }, 20000)
 
 test.each([
@@ -102,12 +105,16 @@ test.each([
   ["a shell command run after an unanswered prompt", { content: [], later: [shell] }, [INTERRUPT, WAIT]],
   ["with a draft in the composer", { content: [], draft: "something else" }, [INTERRUPT]],
   ["with a prompt still pending", { content: [], inbox: [queued] }, [INTERRUPT]],
-])("interrupting %s only interrupts", async (_name, input, expected) => {
-  await using app = await interrupt(input)
+])(
+  "interrupting %s only interrupts",
+  async (_name, input, expected) => {
+    await using app = await interrupt(input)
 
-  await app.waitForFrame(() => app.calls.length === expected.length)
-  // Gives a rewind that shouldn't follow time to show.
-  await Bun.sleep(50)
-  expect(app.calls).toEqual(expected)
-  expect(shown(await app.waitForFrame(() => true))).toBe(1)
-}, 20000)
+    await app.waitForFrame(() => app.calls.length === expected.length)
+    // Gives a rewind that shouldn't follow time to show.
+    await Bun.sleep(50)
+    expect(app.calls).toEqual(expected)
+    expect(shown(await app.waitForFrame(() => true))).toBe(1)
+  },
+  20000,
+)

@@ -415,6 +415,9 @@ export function Prompt(props: PromptProps) {
     if (answered) return
     const restored = await restorePrompt(message)
     await client.api.session.revert.stage({ sessionID, messageID: message.id })
+    // Nothing of an answer is lost and the prompt is back in the composer, so drop it for good instead of leaving a
+    // "reverted" notice to redo from.
+    await client.api.session.revert.commit({ sessionID })
     appendToSessionPrompt(sessionID, restored, renderer.widthMethod)
   }
 
