@@ -95,7 +95,9 @@ export async function runNonInteractivePrompt(input: Input) {
   }
 
   const replyPermission = async (request: PermissionRequest) => {
-    if (!input.auto)
+    // A required request needs a person's decision, so even --auto can't approve it.
+    const approve = input.auto && !request.required
+    if (!approve)
       UI.println(
         UI.Style.TEXT_WARNING_BOLD + "!",
         UI.Style.TEXT_NORMAL +
@@ -105,8 +107,8 @@ export async function runNonInteractivePrompt(input: Input) {
       .reply({
         sessionID: request.sessionID,
         requestID: request.id,
-        decision: input.auto ? "once" : "reject",
-        ...(input.auto ? {} : { message: PERMISSION_REJECTED_FEEDBACK }),
+        decision: approve ? "once" : "reject",
+        ...(approve ? {} : { message: PERMISSION_REJECTED_FEEDBACK }),
       })
       .catch(() => {})
   }

@@ -8,8 +8,8 @@ authored under `policies` and can also be delivered by a connected
 [OpenCode Console](/console) workspace.
 
 Policies are separate from [permissions](/permissions). Permissions are per-agent tool
-rules that can `allow`, `deny`, or `ask`. Policies are binary, never prompt, and only
-ever tighten what permissions and providers would otherwise allow.
+rules that can `allow`, `deny`, or `ask`. Policies are binary and only ever tighten
+what permissions and providers would otherwise allow.
 
 ## Configure
 
@@ -40,11 +40,11 @@ merges into `policies`:
 
 Each statement has three fields:
 
-| Field      | Values                                                                                                                      | Meaning                                              |
-| ---------- | --------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
-| `action`   | `provider.use`, `tool.use`, `integration.connect`, `integration.use`, `mcp.use`, `skill.use`, `plugin.use`, `websearch.use` | The operation being controlled                       |
-| `resource` | string or wildcard pattern                                                                                                  | What the statement applies to; depends on the action |
-| `effect`   | `allow`, `deny`                                                                                                             | The decision when this statement matches             |
+| Field      | Values                                                                                                                                                      | Meaning                                              |
+| ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| `action`   | `provider.use`, `tool.use`, `tool.auto`, `permission.save`, `integration.connect`, `integration.use`, `mcp.use`, `skill.use`, `plugin.use`, `websearch.use` | The operation being controlled                       |
+| `resource` | string or wildcard pattern                                                                                                                                  | What the statement applies to; depends on the action |
+| `effect`   | `allow`, `deny`                                                                                                                                             | The decision when this statement matches             |
 
 Statements that fail validation are dropped with a warning in the server log and
 the rest of the list still applies. Check the log after editing a `deny`.
@@ -150,6 +150,49 @@ broader `deny`, after which the agent's own rules decide.
 ```
 
 `git status` falls back to the agent's `shell` rule; every other command is blocked.
+
+## Approvals
+
+`tool.auto` and `permission.save` take the same `<action>:<value>` resources as
+`tool.use`. A `tool.use` deny is checked first and still blocks the call.
+
+`tool.auto` with `deny` makes every matching call wait for a fresh approval, even
+when agent rules or a saved approval allow it. The prompt offers no "Allow always",
+and nothing approves the call on its own. `opencode run --auto` and scheduled
+automations reject it, and auto-accept in the TUI, desktop, and web app leaves it on
+screen for you to answer. A shell command OpenCode can't analyze needs approval
+whenever any `tool.auto` deny on `shell:` or `external_directory:` exists.
+
+`permission.save` with `deny` removes "Allow always" from matching prompts and
+ignores approvals saved with it earlier. Calls the agent's rules allow still run
+without a prompt.
+
+```jsonc
+{
+  "policies": [
+    { "action": "tool.auto", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "permission.save", "resource": "*", "effect": "deny" },
+  ],
+}
+```
+
+Direct `git push` commands need a fresh approval, and no prompt offers "Allow
+always". As with `tool.use`, a later `allow` only lifts an earlier, broader `deny`.
+
+Commands are matched as typed, so `shell:git push *` doesn't cover `bash -c "git push"`
+or `eval "git push"`. To require a fresh approval for every shell command, use
+`shell:*`.
+
+An approving reply to a required call must carry `confirmed: true` on the permission
+reply endpoint. The flag is the client's own claim that a person chose, and the server
+can't verify it. The server rejects an approval without it with a `400`, so older
+clients that approve automatically can't approve these calls.
+
+The guarantee covers calls the agent makes. A shell command you type yourself in the
+TUI (`!cmd`) and the choices an ACP host makes on your behalf are your own decisions.
+
+On managed installs, pair these statements with a `plugin.use` allowlist. A plugin
+runs inside OpenCode and can answer permission requests itself.
 
 ## Integrations
 

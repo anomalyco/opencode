@@ -270,7 +270,7 @@ Returns: `{ data: Permission.Request }`
 - `Form.When`: `{ key: string; op: "eq" | "neq"; value: string | number | boolean }`
 - `Location.PublicRef`: `{ directory: string }`
 - `Model.Ref`: `{ id: string; providerID: string; variant?: string }`
-- `Permission.Request`: `{ id: string; sessionID: string; action: string; resources: string[]; save?: string[]; metadata?: Record<string, unknown>; source?: Permission.Source; message?: string }`
+- `Permission.Request`: `{ id: string; sessionID: string; action: string; resources: string[]; save?: string[]; metadata?: Record<string, unknown>; source?: Permission.Source; message?: string; required?: boolean }`
 - `Permission.Rule`: `{ action: string; resource: string; effect: "allow" | "deny" | "ask" }`
 - `Permission.Ruleset`: `Permission.Rule[]`
 - `Permission.Source`: `{ type: "tool"; messageID: string; id: string }`

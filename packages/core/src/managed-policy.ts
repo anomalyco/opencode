@@ -3,6 +3,7 @@ export * as ManagedPolicy from "./managed-policy.js"
 import { Document, type Entry } from "@opencode/schema/config"
 import { ConfigIntegration } from "./config/integration.js"
 import { Wildcard } from "./util/wildcard.js"
+import { ignoresCase } from "./permission/policy.js"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import type { Credential } from "./credential.js"
 
@@ -30,8 +31,41 @@ export function match<Policy extends ConfigPolicy.Info>(
   policies: readonly Policy[],
   action: ConfigPolicy.Action,
   resource: string,
+  options?: { readonly ignoreCase?: boolean },
 ) {
-  return policies.findLast((policy) => policy.action === action && Wildcard.match(resource, policy.resource))
+  return policies.findLast(
+    (policy) => policy.action === action && Wildcard.match(resource, policy.resource, options?.ignoreCase),
+  )
+}
+
+/**
+ * The statement denying `action` for a permission request, matched as `<permission>:<resource>`. A shell command the
+ * scanner couldn't analyze (`metadata.reason`) may run anything anywhere, so any `tool.auto` deny on `shell:` or
+ * `external_directory:` covers it.
+ */
+export function denying<Policy extends ConfigPolicy.Info>(
+  policies: readonly Policy[],
+  action: ConfigPolicy.Action,
+  request: {
+    readonly action: string
+    readonly resources: readonly string[]
+    readonly metadata?: Record<string, unknown>
+  },
+) {
+  const ignoreCase = ignoresCase(request.action)
+  return (
+    request.resources
+      .map((resource) => match(policies, action, `${request.action}:${resource}`, { ignoreCase }))
+      .find((policy) => policy?.effect === "deny") ??
+    (action === "tool.auto" && request.action === "shell" && typeof request.metadata?.reason === "string"
+      ? policies.find(
+          (policy) =>
+            policy.action === action &&
+            policy.effect === "deny" &&
+            /^(shell|external_directory):/.test(policy.resource),
+        )
+      : undefined)
+  )
 }
 
 export function decision(policies: readonly ConfigPolicy.Info[], action: ConfigPolicy.Action, resource: string) {

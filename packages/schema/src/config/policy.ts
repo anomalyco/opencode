@@ -8,6 +8,9 @@ export type Effect = typeof Effect.Type
 /**
  * - `provider.use`: resource is a provider ID.
  * - `tool.use`: resource is `<tool>:<input>`, such as `shell:git *`.
+ * - `tool.auto`: resource as for `tool.use`; `deny` makes each matching call need a fresh approval that is never
+ *   saved or given automatically.
+ * - `permission.save`: resource as for `tool.use`; `deny` turns off "Allow always" and ignores approvals saved with it.
  * - `integration.connect`: resource is an integration ID; controls which integrations can be listed and connected.
  * - `integration.use`: resource is `<integration>#<account>`, or the bare integration ID when the providers, models,
  *   web search, MCP servers, or config an integration supplies come from no account (env keys, local config, the
@@ -18,6 +21,8 @@ export type Effect = typeof Effect.Type
 export const Action = Schema.Literals([
   "provider.use",
   "tool.use",
+  "tool.auto",
+  "permission.save",
   "integration.connect",
   "integration.use",
   "mcp.use",

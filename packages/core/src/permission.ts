@@ -48,6 +48,8 @@ export interface ReplyInput {
   readonly requestID: ID
   readonly reply: Reply
   readonly message?: string
+  /** The client's assertion that a person chose this reply; approving a required request needs it. */
+  readonly confirmed?: boolean
 }
 
 export interface AskResult {
@@ -90,6 +92,14 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Permissi
   requestID: ID,
 }) {}
 
+export class UnconfirmedError extends Schema.TaggedError<UnconfirmedError>()("Permission.UnconfirmedError", {
+  requestID: ID,
+}) {
+  override get message() {
+    return `Permission request ${this.requestID} needs a confirmed decision`
+  }
+}
+
 export type Error = BlockedError | CorrectedError
 
 export { ignoresCase, pathActions } from "./permission/policy.js"
@@ -128,7 +138,7 @@ export interface Interface {
   readonly assertNotDenied: (input: AssertInput) => Effect.Effect<void, BlockedError | SessionErrors.NotFoundError>
   /** True only when the rules already allow the request; never asks the user. */
   readonly allows: (input: AssertInput) => Effect.Effect<boolean, SessionErrors.NotFoundError>
-  readonly reply: (input: ReplyInput) => Effect.Effect<void, NotFoundError>
+  readonly reply: (input: ReplyInput) => Effect.Effect<void, NotFoundError | UnconfirmedError>
   readonly get: (id: ID) => Effect.Effect<Request | undefined>
   readonly forSession: (sessionID: SessionSchema.ID) => Effect.Effect<ReadonlyArray<Request>>
   readonly list: () => Effect.Effect<ReadonlyArray<Request>>
@@ -207,8 +217,8 @@ const layer = Layer.effect(
 
     const evaluateInput = Effect.fnUntraced(function* (input: AssertInput) {
       const base = yield* configured(input.sessionID, input.agent)
-      if (PermissionPolicy.evaluateAll(base, input.action, input.resources) === "deny")
-        return { effect: "deny" as const, policy: base }
+      const baseEffect = PermissionPolicy.evaluateAll(base, input.action, input.resources)
+      if (baseEffect === "deny") return { effect: "deny" as const, policy: base }
       const effective = PermissionPolicy.fallback(base, yield* savedPolicy())
       const effect = PermissionPolicy.evaluateAll(effective, input.action, input.resources)
       const event = yield* hooks.trigger("permission", "evaluate", {
@@ -218,16 +228,25 @@ const layer = Layer.effect(
         resources: input.resources,
         metadata: input.metadata,
         source: row(input.source),
+        baseEffect,
         effect,
+        save: input.save,
       })
       const unattended = yield* Unattended
       if (event.effect !== "ask" || unattended === undefined)
-        return { effect: event.effect, message: event.message, policy: effective }
+        return {
+          effect: event.effect,
+          message: event.message,
+          policy: effective,
+          save: event.save,
+          required: event.required,
+        }
       // When an evaluate hook downgraded `allow` to `ask`, unattended rules must explicitly allow the request
       // rather than inheriting the pre-hook `allow` from `effective`.
       const settled =
         effect === "ask" ? PermissionPolicy.override(effective, unattended) : PermissionPolicy.fromRules(unattended)
       if (
+        !event.required &&
         (effect === "ask" || input.resources.length > 0) &&
         PermissionPolicy.evaluateAll(settled, input.action, input.resources) === "allow"
       )
@@ -239,20 +258,21 @@ const layer = Layer.effect(
       }
     })
 
-    function request(input: AssertInput, message?: string): Request {
+    function request(input: AssertInput, result: Pick<Request, "message" | "save" | "required">): Request {
       return {
         id: input.id ?? ID.create(),
         sessionID: input.sessionID,
         action: input.action,
         resources: input.resources,
-        save: input.save,
+        save: result.save,
+        required: result.required,
         // Tools copy optional inputs straight into metadata; undefined values are not JSON and would
         // fail the HttpApi response encoder when clients list pending requests.
         metadata:
           input.metadata &&
           Object.fromEntries(Object.entries(input.metadata).filter(([, value]) => value !== undefined)),
         source: row(input.source),
-        message,
+        message: result.message,
       }
     }
 
@@ -278,7 +298,7 @@ const layer = Layer.effect(
     const ask = Effect.fn("Permission.ask")(function* (input: AssertInput) {
       if (closed) return { id: input.id ?? ID.create(), effect: "deny" as const }
       const result = yield* evaluateInput(input)
-      const value = request(input, result.message)
+      const value = request(input, result)
       if (result.effect === "ask") yield* create(value, input.agent)
       return { id: value.id, effect: result.effect }
     })
@@ -298,7 +318,7 @@ const layer = Layer.effect(
               })
             }
             if (result.effect === "allow") return
-            const item = yield* create(request(input, result.message), input.agent)
+            const item = yield* create(request(input, result), input.agent)
             return yield* restore(Deferred.await(item.deferred)).pipe(
               // Deliberate defect tunnel: leaves wrap execution in blanket `mapError`, which
               // must not convert a user's decline into model-facing tool output. The decline
@@ -319,7 +339,8 @@ const layer = Layer.effect(
 
     const assertNotDenied = Effect.fn("Permission.assertNotDenied")(function* (input: AssertInput) {
       const result = yield* evaluateInput(input)
-      if (result.effect !== "deny") return
+      // A required request needs a person's decision, which this never asks for.
+      if (result.effect !== "deny" && !result.required) return
       return yield* new BlockedError({
         rules: PermissionPolicy.relevant(result.policy, input.action),
         permission: input.action,
@@ -338,6 +359,8 @@ const layer = Layer.effect(
         Effect.gen(function* () {
           const existing = pending.get(input.requestID)
           if (!existing) return yield* new NotFoundError({ requestID: input.requestID })
+          if (existing.request.required && input.reply !== "reject" && !input.confirmed)
+            return yield* new UnconfirmedError({ requestID: input.requestID })
           yield* bus.publish(Permission.Event.Replied, {
             sessionID: existing.request.sessionID,
             requestID: existing.request.id,
@@ -380,6 +403,7 @@ const layer = Layer.effect(
           if (input.reply !== "always" || !existing.request.save?.length) return
 
           for (const [id, item] of pending) {
+            if (item.request.required) continue
             const result = yield* evaluateInput({ ...item.request, agent: item.agent }).pipe(
               Effect.catchTag("Session.NotFoundError", () => Effect.undefined),
             )

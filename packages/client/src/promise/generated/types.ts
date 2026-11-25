@@ -863,6 +863,7 @@ export type PermissionRequest = {
   metadata?: { [x: string]: JsonValue }
   source?: PermissionSource
   message?: string
+  required?: boolean
 }
 
 export type PermissionSavedInfo = {
@@ -1911,6 +1912,7 @@ export type PermissionAsked = {
     metadata?: { [x: string]: any }
     source?: PermissionSource
     message?: string
+    required?: boolean
   }
 }
 
@@ -2529,6 +2531,8 @@ export type ConfigEntry =
           action:
             | "provider.use"
             | "tool.use"
+            | "tool.auto"
+            | "permission.save"
             | "integration.connect"
             | "integration.use"
             | "mcp.use"
@@ -2721,6 +2725,8 @@ export type ConfigEntry =
             action:
               | "provider.use"
               | "tool.use"
+              | "tool.auto"
+              | "permission.save"
               | "integration.connect"
               | "integration.use"
               | "mcp.use"
@@ -4511,6 +4517,7 @@ export type PermissionReplyInput = {
   readonly requestID: string
   readonly decision: "once" | "always" | "reject"
   readonly message?: string | undefined
+  readonly confirmed?: boolean | undefined
 }
 
 export type PermissionReplyOutput = void

@@ -149,7 +149,8 @@ export const Plugin = {
 
               yield* permission.assert({
                 action: name,
-                resources: [url],
+                // The URL as written and as requested, so rules for either apply.
+                resources: [...new Set([url, new URL(url).href])],
                 save: Permission.site(url),
                 metadata: input,
                 ...Permission.invocation(context),

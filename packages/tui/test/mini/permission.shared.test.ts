@@ -35,6 +35,7 @@ describe("run permission shared", () => {
       sessionID: "session-1",
       requestID: "perm-1",
       decision: "once",
+      confirmed: true,
     })
   })
 
@@ -48,6 +49,7 @@ describe("run permission shared", () => {
       sessionID: "session-1",
       requestID: "perm-1",
       decision: "always",
+      confirmed: true,
     })
 
     expect(permissionRun(next.state, "perm-1", "cancel").state).toMatchObject({
@@ -65,6 +67,7 @@ describe("run permission shared", () => {
       sessionID: "session-1",
       requestID: "perm-1",
       decision: "reject",
+      confirmed: true,
       message: "use rg",
     })
 

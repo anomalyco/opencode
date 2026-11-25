@@ -257,7 +257,7 @@ test("shows a pending permission dock", async ({ page }) => {
           permission: "shell",
           patterns: ["git status", "git diff"],
           metadata: {},
-          always: [],
+          always: ["git *"],
         },
       ],
     },
@@ -277,9 +277,11 @@ test("shows a pending permission dock", async ({ page }) => {
   await permission.getByRole("button", { name: "Allow once" }).click()
   const response = await reply
   expect(new URL(response.url()).pathname).toBe(`/api/session/${sessionID}/permission/permission-request/reply`)
-  expect(response.request().postDataJSON()).toEqual({ decision: "once" })
+  expect(response.request().postDataJSON()).toEqual({ decision: "once", confirmed: true })
   expect(response.status()).toBe(204)
-  expect(replies).toEqual([{ sessionID, permissionID: "permission-request", body: { decision: "once" } }])
+  expect(replies).toEqual([
+    { sessionID, permissionID: "permission-request", body: { decision: "once", confirmed: true } },
+  ])
   await expect(permission).toHaveCount(0)
   await expect(page.locator('[data-component="composer"]')).toBeVisible()
 })
@@ -294,7 +296,7 @@ test("sends one permission reply and closes the dock when it lands, before permi
           permission: "shell",
           patterns: ["git status"],
           metadata: {},
-          always: [],
+          always: ["git status *"],
         },
       ],
     },
@@ -324,7 +326,46 @@ test("sends one permission reply and closes the dock when it lands, before permi
   await expect(permission).toHaveCount(0)
   await expect(page.locator('[data-component="composer"]')).toBeVisible()
   await expect(page.getByText("Request failed", { exact: true })).toHaveCount(0)
-  expect(replies).toEqual([{ decision: "once" }])
+  expect(replies).toEqual([{ decision: "once", confirmed: true }])
+})
+
+test("asks for a required permission under auto-accept, without Allow always, and confirms the reply", async ({
+  page,
+}) => {
+  const replies: { sessionID: string; permissionID: string; body: unknown }[] = []
+  await mockWorkspace(page, {
+    name: "RequestDocks",
+    directory,
+    sessions: [{ id: sessionID, title }],
+    sessionPermissions: {
+      [sessionID]: [
+        {
+          id: "permission-required",
+          sessionID,
+          action: "shell",
+          resources: ["git push"],
+          metadata: {},
+          required: true,
+        },
+      ],
+    },
+    onPermissionReply: (reply) => replies.push(reply),
+    seed: { settings: { permissions: { autoApprove: true } } },
+  })
+
+  await page.goto(sessionHref(sessionID))
+  await expectSessionTitle(page, title)
+
+  const permission = page.locator('[data-component="dock-prompt"][data-kind="permission"]')
+  const actions = permission.locator('[data-slot="permission-footer-actions"] button')
+  await expect(permission.getByText("git push")).toBeVisible()
+  await expect(actions).toHaveText(["Deny", "Allow once"])
+  expect(replies).toEqual([])
+
+  await permission.getByRole("button", { name: "Allow once" }).click()
+  await expect
+    .poll(() => replies)
+    .toEqual([{ sessionID, permissionID: "permission-required", body: { decision: "once", confirmed: true } }])
 })
 
 test("shows an auto-accepted permission in the dock once its replies stop answering", async ({ page }) => {
@@ -637,7 +678,9 @@ test("recovers a running child session's permission on load and across reconnect
 
   await permission.getByRole("button", { name: "Allow once" }).click()
   expect((await reply).status()).toBe(204)
-  expect(replies).toEqual([{ sessionID: childID, permissionID: "perm_child_reconnect", body: { decision: "once" } }])
+  expect(replies).toEqual([
+    { sessionID: childID, permissionID: "perm_child_reconnect", body: { decision: "once", confirmed: true } },
+  ])
   await expect(permission).toHaveCount(0)
   await expect(composer).toBeVisible()
   expect(permissionGets.filter((path) => path.includes("ses_request_idle_perm_"))).toEqual([])

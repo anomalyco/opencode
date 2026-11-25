@@ -132,8 +132,8 @@ describe("acp turn events over the wire", () => {
         },
       ])
       expect(acp.server.replies).toEqual([
-        { sessionID: "ses_grandchild", requestID: "perm_child", decision: "once" },
-        { sessionID: "ses_background", requestID: "perm_background", decision: "once" },
+        { sessionID: "ses_grandchild", requestID: "perm_child", decision: "once", confirmed: true },
+        { sessionID: "ses_background", requestID: "perm_background", decision: "once", confirmed: true },
       ])
     },
   )
@@ -186,7 +186,9 @@ describe("acp turn events over the wire", () => {
     )
     await acp.waitForUpdate(({ update }) => JSON.stringify(update).includes("followup reaction"))
 
-    expect(acp.server.replies).toEqual([{ sessionID: "ses_second", requestID: "perm_second", decision: "once" }])
+    expect(acp.server.replies).toEqual([
+      { sessionID: "ses_second", requestID: "perm_second", decision: "once", confirmed: true },
+    ])
     expect(turnUpdates(acp.updates).map(({ update }) => update)).toMatchObject([
       { messageId: "msg_reaction_1", content: { text: "first reaction" } },
       { messageId: "msg_chat", content: { text: "chat reply" } },

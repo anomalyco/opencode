@@ -31,6 +31,8 @@ const RequestFields = {
   metadata: Schema.Record(Schema.String, Schema.Unknown).pipe(optional),
   source: Source.pipe(optional),
   message: Schema.String.pipe(optional),
+  /** Policy requires a fresh decision: nothing approves it automatically, and an approving reply must be confirmed. */
+  required: Schema.Boolean.pipe(optional),
 }
 
 export const Request = Schema.Struct({

@@ -467,7 +467,12 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
       reply: (input) =>
         sessionPermission(input).pipe(
           Effect.andThen(() =>
-            permission.reply({ requestID: input.requestID, reply: input.decision, message: input.message }),
+            permission.reply({
+              requestID: input.requestID,
+              reply: input.decision,
+              message: input.message,
+              confirmed: input.confirmed,
+            }),
           ),
         ),
       // Plain rejections stay defects, as for built-in tools, so they end the step.

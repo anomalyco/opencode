@@ -3,6 +3,7 @@ import { Agent } from "@opencode/core/agent"
 import { Automation } from "@opencode/core/automation"
 import { AutomationTable } from "@opencode/core/automation/sql"
 import { Bus } from "@opencode/core/bus"
+import { Config } from "@opencode/core/config"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Instance } from "@opencode/core/instance/service"
@@ -168,6 +169,127 @@ it.live("uses the saved location after the creating session moves and pauses if 
       lastOutput: `Directory no longer exists: ${directory}`,
     })
     expect(directories).toEqual([directory])
+  }),
+)
+
+// Runs only recheck managed policy, so of the config written after creation only its policies take effect.
+const runAfterConfigChange = Effect.fn(function* (config: object, command = "echo automation-output") {
+  const directory = AbsolutePath.make((yield* tmpdirScoped()).path)
+  const file = path.join(directory, "opencode.json")
+  yield* Effect.promise(() =>
+    Bun.write(file, JSON.stringify({ automations: true, permission: { shell: "allow", external_directory: "allow" } })),
+  )
+  const sessions = yield* Session.Service
+  const session = yield* sessions.create({ location: { directory } })
+  const automations = yield* Automation.Service
+  const created = yield* automations.create(
+    { name: "rechecked", sessionID: session.id, trigger, action: { type: "shell", command } },
+    Permission.invocation({
+      sessionID: session.id,
+      agent: Agent.defaultID,
+      messageID: SessionMessage.ID.make("msg_rechecked"),
+      id: Tool.CallID.make("automation_create"),
+    }),
+  )
+  const instances = yield* Instance.Service
+  yield* Effect.gen(function* () {
+    const current = yield* Config.Service
+    yield* Effect.promise(() => Bun.write(file, JSON.stringify({ automations: true, ...config })))
+    yield* current.entries().pipe(
+      Effect.repeat({
+        until: (entries) =>
+          JSON.stringify(entries.map((entry) => entry.type === "document" && entry.info)).includes("deny"),
+        schedule: Schedule.spaced("10 millis"),
+      }),
+      Effect.timeout("10 seconds"),
+    )
+  }).pipe(instances.provide(session))
+
+  const database = yield* Database.Service
+  yield* database.db
+    .update(AutomationTable)
+    .set({ next_due_at: yield* Clock.currentTimeMillis })
+    .where(eq(AutomationTable.id, created.id))
+    .run()
+  yield* automations.tick
+  return yield* automations
+    .get(created.id)
+    .pipe(
+      Effect.repeat({ until: (row) => row.lastOutput !== undefined, schedule: Schedule.spaced("10 millis") }),
+      Effect.timeout("10 seconds"),
+    )
+})
+
+for (const action of ["tool.use", "tool.auto"] as const)
+  it.live(`stops a scheduled command that a ${action} policy added after creation denies`, () =>
+    Effect.gen(function* () {
+      const ran = yield* runAfterConfigChange({
+        permission: { shell: "allow" },
+        policies: [{ action, resource: "shell:echo *", effect: "deny" }],
+      })
+      expect(ran).toMatchObject({ lastOutcome: "failed", lastOutput: "Blocked by configuration policy" })
+    }),
+  )
+
+it.live("stops a scheduled command the scanner can't analyze once any shell tool.auto policy denies", () =>
+  Effect.gen(function* () {
+    const ran = yield* runAfterConfigChange(
+      { policies: [{ action: "tool.auto", resource: "shell:git push *", effect: "deny" }] },
+      // Prompt expansion runs the substitution; the scanner can't see into it.
+      "x='$(git push)'; echo ${x@P}",
+    )
+    expect(ran).toMatchObject({ lastOutcome: "failed", lastOutput: "Blocked by configuration policy" })
+  }),
+)
+
+it.live("asks for a fresh approval when creating a schedule for a command the scanner can't analyze", () =>
+  Effect.gen(function* () {
+    const directory = AbsolutePath.make((yield* tmpdirScoped()).path)
+    yield* Effect.promise(() =>
+      Bun.write(
+        path.join(directory, "opencode.json"),
+        JSON.stringify({
+          automations: true,
+          permission: { shell: "allow", external_directory: "allow" },
+          policies: [{ action: "tool.auto", resource: "shell:git push *", effect: "deny" }],
+        }),
+      ),
+    )
+    const sessions = yield* Session.Service
+    const session = yield* sessions.create({ location: { directory } })
+    const automations = yield* Automation.Service
+    const command = "x='$(git push)'; echo ${x@P}"
+    yield* automations
+      .create(
+        { name: "opaque", sessionID: session.id, trigger, action: { type: "shell", command } },
+        Permission.invocation({
+          sessionID: session.id,
+          agent: Agent.defaultID,
+          messageID: SessionMessage.ID.make("msg_opaque"),
+          id: Tool.CallID.make("automation_create"),
+        }),
+      )
+      .pipe(Effect.forkChild)
+    const instances = yield* Instance.Service
+    const asks = yield* Effect.gen(function* () {
+      const permission = yield* Permission.Service
+      return yield* permission
+        .forSession(session.id)
+        .pipe(
+          Effect.repeat({ until: (asks) => asks.length > 0, schedule: Schedule.spaced("10 millis") }),
+          Effect.timeout("10 seconds"),
+        )
+    }).pipe(instances.provide(session))
+    expect(asks).toMatchObject([
+      { action: "shell", resources: [command], required: true, metadata: { reason: expect.any(String), command } },
+    ])
+  }),
+)
+
+it.live("keeps running a scheduled command after an agent deny is added", () =>
+  Effect.gen(function* () {
+    const ran = yield* runAfterConfigChange({ permission: { shell: "deny" } })
+    expect(ran).toMatchObject({ lastOutcome: "fired", lastOutput: expect.stringContaining("automation-output") })
   }),
 )
 

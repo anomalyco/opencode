@@ -44,11 +44,13 @@ describe("acp permissions over the wire", () => {
           permissionAsked(sessionID, "perm_once", {
             action: "shell",
             metadata: { command: "printf hello" },
+            save: ["printf *"],
             source: { type: "tool", messageID: "msg_allow", id: "call_once" },
           }),
           permissionAsked(sessionID, "perm_always", {
             action: "read",
             metadata: { path: "/workspace/file.ts" },
+            save: ["*"],
             source: { type: "tool", messageID: "msg_allow", id: "call_always" },
           }),
           permissionAsked(sessionID, "perm_selected_reject"),
@@ -93,6 +95,23 @@ describe("acp permissions over the wire", () => {
       ["perm_selected_reject", "reject"],
       ["perm_cancelled", "reject"],
       ["perm_failed", "reject"],
+    ])
+  })
+
+  test("offers no Always allow when nothing would be saved, and confirms the selection", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) =>
+        turn(sessionID, id, permissionAsked(sessionID, "perm_required", { required: true })),
+      permission: allowOnce,
+    })
+
+    expect(await acp.prompt(acp.sessionId, "hello")).toMatchObject({ stopReason: "end_turn" })
+    expect(acp.permissions[0]?.options).toEqual([
+      { optionId: "once", kind: "allow_once", name: "Allow once" },
+      { optionId: "reject", kind: "reject_once", name: "Reject" },
+    ])
+    expect(acp.server.replies.map((reply) => [reply.requestID, reply.decision, reply.confirmed])).toEqual([
+      ["perm_required", "once", true],
     ])
   })
 

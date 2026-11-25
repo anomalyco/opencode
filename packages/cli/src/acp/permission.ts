@@ -67,17 +67,20 @@ export const ask = Effect.fnUntraced(function* (input: Input) {
       ...(previews.length > 0 ? { content: previews } : {}),
       ...(input.child ? { _meta: ACPChild.meta(input.child) } : {}),
     },
-    options,
+    // No "Always allow" when there is nothing to save.
+    options: input.event.data.save?.length ? options : options.filter((option) => option.kind !== "allow_always"),
   })
   const selected = result.outcome.outcome === "selected" ? result.outcome.optionId : undefined
   return selected === "once" || selected === "always" ? selected : "reject"
 })
 
 export function respond(input: Input, decision: Permission.Reply) {
-  return input.client.permission.reply({ sessionID: input.sessionID, requestID: input.event.data.id, decision }).pipe(
-    Effect.catchTag("PermissionNotFoundError", () => Effect.void),
-    Effect.catch(ACPClient.classify),
-  )
+  return input.client.permission
+    .reply({ sessionID: input.sessionID, requestID: input.event.data.id, decision, confirmed: true })
+    .pipe(
+      Effect.catchTag("PermissionNotFoundError", () => Effect.void),
+      Effect.catch(ACPClient.classify),
+    )
 }
 
 export const withCompletedDiffs = Effect.fnUntraced(function* (
