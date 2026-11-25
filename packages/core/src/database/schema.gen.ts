@@ -216,6 +216,21 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`service_instance\` (
+          \`key\` text PRIMARY KEY,
+          \`value\` text NOT NULL
+        );
+      `)
+      yield* tx.run(`
+        CREATE TABLE \`session_inbox_fence\` (
+          \`id\` text NOT NULL,
+          \`session_id\` text NOT NULL,
+          \`time_created\` integer NOT NULL,
+          CONSTRAINT \`session_inbox_fence_pk\` PRIMARY KEY(\`session_id\`, \`id\`),
+          CONSTRAINT \`fk_session_inbox_fence_session_id_session_v2_id_fk\` FOREIGN KEY (\`session_id\`) REFERENCES \`session_v2\`(\`id\`) ON DELETE CASCADE
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`session_inbox\` (
           \`id\` text PRIMARY KEY,
           \`session_id\` text NOT NULL,

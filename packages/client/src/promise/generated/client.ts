@@ -778,6 +778,7 @@ export function make(options: ClientOptions) {
           {
             method: "POST",
             path: `/api/session/${encodeURIComponent(input.sessionID)}/prompt`,
+            query: { expectedInstance: input["expectedInstance"] },
             body: {
               id: input["id"],
               text: input["text"],
@@ -932,8 +933,9 @@ export function make(options: ClientOptions) {
             {
               method: "DELETE",
               path: `/api/session/${encodeURIComponent(input.sessionID)}/inbox/${encodeURIComponent(input.inboxID)}`,
+              query: { fence: input["fence"], expectedInstance: input["expectedInstance"] },
               successStatus: 204,
-              declaredStatuses: [400, 401, 404],
+              declaredStatuses: [400, 401, 404, 409],
               empty: true,
             },
             requestOptions,
@@ -992,8 +994,9 @@ export function make(options: ClientOptions) {
             {
               method: "GET",
               path: `/api/session/${encodeURIComponent(input.sessionID)}/message/${encodeURIComponent(input.messageID)}`,
+              query: { expectedInstance: input["expectedInstance"] },
               successStatus: 200,
-              declaredStatuses: [400, 401, 404],
+              declaredStatuses: [400, 401, 404, 409],
               empty: false,
             },
             requestOptions,

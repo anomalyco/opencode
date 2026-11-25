@@ -1,3 +1,4 @@
+import { ServiceInstance } from "@opencode/core/service-instance"
 import { Instance } from "@opencode/core/instance/service"
 import { Session } from "@opencode/core/session"
 import { SessionStats } from "@opencode/core/session/stats"
@@ -53,6 +54,13 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
         sessionID: error.sessionID,
         message: `Session is busy: ${error.sessionID}`,
       })
+    // The service enforces the identity the caller expects: a different database rejects the request before any effect.
+    const requireInstance = (expected: string | undefined) =>
+      ServiceInstance.require(expected).pipe(
+        Effect.catchTag("ServiceInstance.MismatchError", (e) =>
+          Effect.fail(new ConflictError({ message: `service instance mismatch: expected ${e.expected}, this is ${e.actual}`, resource: "service-instance" })),
+        ),
+      )
     const pendingMutation = (effect: ReturnType<typeof session.cancelInbox>, conflict: string) =>
       effect.pipe(
         Effect.catchTag("Session.NotFoundError", missingSession),
@@ -289,6 +297,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.prompt",
         Effect.fn(function* (ctx) {
+          yield* requireInstance(ctx.query.expectedInstance)
           return {
             data: yield* session
               .prompt({
@@ -541,7 +550,8 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.inbox.cancel",
         Effect.fn(function* (ctx) {
-          yield* session.cancelInbox({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID }).pipe(
+          yield* requireInstance(ctx.query.expectedInstance)
+          yield* session.cancelInbox({ sessionID: ctx.params.sessionID, inboxID: ctx.params.inboxID, fence: ctx.query.fence === true }).pipe(
             Effect.catchTag("Session.NotFoundError", missingSession),
             Effect.catchTag("Session.InboxConflictError", () => Effect.void),
           )
@@ -623,6 +633,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.message",
         Effect.fn(function* (ctx) {
+          yield* requireInstance(ctx.query.expectedInstance)
           yield* session.get(ctx.params.sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
           if (wantsMediaRefs(ctx.request)) {
             const message = yield* session.messageWithRefs(ctx.params)

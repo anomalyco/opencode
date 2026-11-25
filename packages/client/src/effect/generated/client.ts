@@ -559,6 +559,7 @@ const EndpointSessionPrompt = (raw: RawClient["server.session"]) => (input: Sess
   preserveEffect<SessionPromptOutput>()(
     raw["session.prompt"]({
       params: { sessionID: input["sessionID"] },
+      query: { expectedInstance: input["expectedInstance"] },
       payload: {
         id: input["id"],
         text: input["text"],
@@ -677,9 +678,10 @@ const EndpointSessionInboxList = (raw: RawClient["server.session"]) => (input: S
 
 const EndpointSessionInboxCancel = (raw: RawClient["server.session"]) => (input: SessionInboxCancelInput) =>
   preserveEffect<SessionInboxCancelOutput>()(
-    raw["session.inbox.cancel"]({ params: { sessionID: input["sessionID"], inboxID: input["inboxID"] } }).pipe(
-      Effect.mapError(mapClientError),
-    ),
+    raw["session.inbox.cancel"]({
+      params: { sessionID: input["sessionID"], inboxID: input["inboxID"] },
+      query: { fence: input["fence"], expectedInstance: input["expectedInstance"] },
+    }).pipe(Effect.mapError(mapClientError)),
   )
 
 const EndpointSessionInboxUpdate = (raw: RawClient["server.session"]) => (input: SessionInboxUpdateInput) =>
@@ -712,7 +714,10 @@ const EndpointSessionBackground = (raw: RawClient["server.session"]) => (input: 
 
 const EndpointSessionMessageGet = (raw: RawClient["server.session"]) => (input: SessionMessageGetInput) =>
   preserveEffect<SessionMessageGetOutput>()(
-    raw["session.message"]({ params: { sessionID: input["sessionID"], messageID: input["messageID"] } }).pipe(
+    raw["session.message"]({
+      params: { sessionID: input["sessionID"], messageID: input["messageID"] },
+      query: { expectedInstance: input["expectedInstance"] },
+    }).pipe(
       Effect.mapError(mapClientError),
       Effect.map((value) => value.data),
     ),

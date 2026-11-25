@@ -27,7 +27,7 @@ import { SessionBlob } from "./blob.js"
 import { SessionMessage } from "./message.js"
 import { SessionSchema } from "./schema.js"
 import { SessionStored } from "./stored.js"
-import { SessionInboxTable, SessionMessageTable } from "./sql.js"
+import { SessionInboxFenceTable, SessionInboxTable, SessionMessageTable } from "./sql.js"
 import { SessionHistory } from "./history.js"
 
 type DatabaseService = Database.Interface["db"]
@@ -115,6 +115,16 @@ const fromRow = (row: typeof SessionInboxTable.$inferSelect): Info => {
   throw new LifecycleConflict({ id: base.id })
 }
 
+const isFenced = Effect.fn("SessionInbox.isFenced")(function* (db: DatabaseService, sessionID: SessionSchema.ID, id: SessionMessage.ID) {
+  const row = yield* db
+    .select({ id: SessionInboxFenceTable.id })
+    .from(SessionInboxFenceTable)
+    .where(and(eq(SessionInboxFenceTable.id, id), eq(SessionInboxFenceTable.session_id, sessionID)))
+    .get()
+    .pipe(Effect.orDie)
+  return row !== undefined
+})
+
 export const find = Effect.fn("SessionInbox.find")(function* (db: DatabaseService, id: SessionMessage.ID) {
   const row = yield* db.select().from(SessionInboxTable).where(eq(SessionInboxTable.id, id)).get().pipe(Effect.orDie)
   if (row === undefined) return undefined
@@ -182,7 +192,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
   }) {
     const existing =
       (yield* find(db, request.id)) ?? (yield* promotedFromMessage(db, request.sessionID, request.id, request.delivery))
-    if (existing === undefined) return undefined
+    if (existing === undefined) return (yield* isFenced(db, request.sessionID, request.id)) ? yield* new LifecycleConflict({ id: request.id }) : undefined
     if (existing.type === "compaction" || !matches(existing, request))
       return yield* new LifecycleConflict({ id: request.id })
     return existing
@@ -259,6 +269,15 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     ),
   )
 
+  /** Record the fence first, then cancel if still pending. Fence-first means nothing can slip in between the two. */
+  const fence = Effect.fn("SessionInbox.fence")(function* (input: PendingRef) {
+    yield* db
+      .insert(SessionInboxFenceTable)
+      .values({ id: input.id, session_id: input.sessionID })
+      .onConflictDoNothing()
+      .pipe(Effect.orDie)
+  })
+
   const steer = Effect.fn("SessionInbox.steer")((input: PendingRef) =>
     publishMutation(
       input,
@@ -287,6 +306,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     admit,
     admitCompaction,
     cancel,
+    fence,
     steer,
     queue,
   }
@@ -313,6 +333,9 @@ export const projectAdmitted = Effect.fn("SessionInbox.projectAdmitted")(functio
     .get()
     .pipe(Effect.orDie)
   if (message !== undefined) return yield* Effect.die(new LifecycleConflict({ id: request.id }))
+  // Atomic with the row insert (same event transaction): a fenced ID is never admitted, even by a submission that
+  // passed reconcile before the fence was written.
+  if (yield* isFenced(db, request.sessionID, request.id)) return yield* Effect.die(new LifecycleConflict({ id: request.id }))
   const payload =
     request.item.type === "user"
       ? encodeStoredUser(yield* SessionBlob.externalizePayload(db, request.item.payload))
