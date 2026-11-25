@@ -129,7 +129,7 @@ describe("OllamaPlugin", () => {
     ),
   )
 
-  it.live("gives title and generate requests the model's output limit, fitted to its context window", () =>
+  it.live("caps titles at 4,096 tokens and generate requests at the model's output limit", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => Bun.serve({ port: 0, fetch: () => Response.json({ models: [] }) })),
       (server) =>
@@ -142,7 +142,7 @@ describe("OllamaPlugin", () => {
               model.limit.output = 8_192
             })
             editor.models.update(ollama, Model.ID.make("small"), (model) => {
-              model.limit.context = 4_096
+              model.limit.context = 2_048
             })
           })
           yield* addPlugin(server.url.origin)
@@ -162,13 +162,14 @@ describe("OllamaPlugin", () => {
               .trigger("session", "generate", { ...request(providerID, id), agent: Agent.ID.make("build"), tools: {} })
               .pipe(Effect.map((event) => event.options.maxTokens))
 
-          expect(yield* title(ollama, "capped")).toBe(8_192)
+          expect(yield* title(ollama, "capped")).toBe(4_096)
           expect(yield* generate(ollama, "capped")).toBe(8_192)
           // Never more than the model's context window holds.
-          expect(yield* title(ollama, "small")).toBe(4_096)
-          expect(yield* generate(ollama, "small")).toBe(4_096)
+          expect(yield* title(ollama, "small")).toBe(2_048)
+          expect(yield* generate(ollama, "small")).toBe(2_048)
           // A model the catalog doesn't list gets the same default as an agent step.
-          expect(yield* title(ollama, "unlisted")).toBe(32_000)
+          expect(yield* title(ollama, "unlisted")).toBe(4_096)
+          expect(yield* generate(ollama, "unlisted")).toBe(32_000)
           expect(yield* title(ollama, "capped", 64)).toBe(64)
           expect(yield* title(Provider.ID.openai, "gpt-5.5")).toBeUndefined()
         }),

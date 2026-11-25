@@ -28,6 +28,10 @@ export type LocalModel = {
 // only delays when the models appear.
 const requestTimeout = "15 seconds"
 
+// A title is one line, but a thinking model reasons before writing it, often for over a thousand tokens. 4,096
+// leaves room for that and still stops a title that loops long before the tens of thousands of tokens in #54401.
+const TITLE_OUTPUT_MAX = 4_096
+
 export type LocalDiscoveryClient = ReturnType<typeof createClient>
 
 export function createLocalProviderPlugin<Discovered>(input: {
@@ -102,20 +106,27 @@ export function createLocalProviderPlugin<Discovered>(input: {
 
         // Agent steps send the model's default output limit, but titles and generate requests leave it to the provider,
         // so on a server without a limit of its own a model stuck in a loop never finishes. Give them the model's limit,
-        // never more than its context window; later hooks can still change or remove it. The prompt isn't subtracted:
-        // only servers that count the limit down opt in, not ones that reject a prompt plus limit past the window.
-        const defaultOutputLimit = (event: SessionRequest) =>
+        // never more than its context window, and titles no more than TITLE_OUTPUT_MAX; later hooks can still change
+        // or remove it. The prompt isn't subtracted: only servers that count the limit down opt in, not ones that
+        // reject a prompt plus limit past the window.
+        const defaultOutputLimit = (ceiling: number) => (event: SessionRequest) =>
           Effect.gen(function* () {
             if (event.options.maxTokens !== undefined) return
             const models = yield* ctx.model.list().pipe(Effect.orElseSucceed(() => undefined))
             const model =
               models?.data.find((item) => item.providerID === event.model.providerID && item.id === event.model.id) ??
               Model.Info.default(event.model.providerID, event.model.id)
-            event.options.maxTokens = SessionModelRequest.outputLimit(model.limit, { measured: 0, estimated: 0 })
+            event.options.maxTokens = Math.min(
+              ceiling,
+              SessionModelRequest.outputLimit(model.limit, { measured: 0, estimated: 0 }),
+            )
           })
-        if (input.unboundedOutput)
-          for (const name of ["title", "generate"] as const)
-            yield* ctx.session.hook(name, defaultOutputLimit, { providerID: input.providerID })
+        if (input.unboundedOutput) {
+          yield* ctx.session.hook("title", defaultOutputLimit(TITLE_OUTPUT_MAX), { providerID: input.providerID })
+          yield* ctx.session.hook("generate", defaultOutputLimit(Number.POSITIVE_INFINITY), {
+            providerID: input.providerID,
+          })
+        }
 
         const discover = Effect.fn("LocalProviderPlugin.discover")(function* () {
           const current = source.current
