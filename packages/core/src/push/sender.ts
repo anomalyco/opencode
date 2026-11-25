@@ -40,22 +40,49 @@ const decodeSent = Schema.decodeUnknownOption(Sent)
 const sentKey = (id: string) => `push:sent:${id}`
 const sentPrefix = "push:sent:"
 
-/** Drops characters from the end of `text` until its JSON is at least `bytes` shorter, then adds "…". */
-const shorten = (text: string, bytes: number) => {
+/** Drops characters from one end of `text` until its JSON is at least `bytes` shorter, and marks the cut with "…". */
+const shorten = (text: string, bytes: number, from: "start" | "end" = "end") => {
   const chars = Array.from(text)
+  if (from === "start") chars.reverse()
   let dropped = 0
   while (chars.length > 0 && dropped < bytes + 3) {
     dropped += Buffer.byteLength(JSON.stringify(chars.pop()), "utf8") - 2
   }
+  if (from === "start") return "…" + chars.reverse().join("")
   return chars.join("") + "…"
 }
 
+type Data = Notification["data"]
+
+const shortenText = (data: Data, key: string, from: "start" | "end", over: (data: Data) => number) => {
+  const value = data[key]
+  if (typeof value !== "string" || over(data) <= 0) return data
+  return { ...data, [key]: shorten(value, over(data), from) }
+}
+
+const shortenList = (data: Data, key: string, over: (data: Data) => number) => {
+  const items = data[key]
+  if (!Array.isArray(items) || over(data) <= 0) return data
+  const cut = (kept: ReadonlyArray<string>) => ({ ...data, [key]: kept, truncated: "true" })
+  const kept: string[] = []
+  for (const item of items) {
+    const next = cut([...kept, item])
+    if (over(next) > 0) {
+      const short = cut([...kept, shorten(item, over(next))])
+      return over(short) > 0 ? cut(kept) : short
+    }
+    kept.push(item)
+  }
+  return cut(kept)
+}
+
 /**
- * The JSON the phone decrypts, shortened so the box stays within the relay's limit. Only a question's body and a
- * permission's `data.resources` can be long. Cut resources keep their order and come with `truncated: "true"`.
+ * The JSON the phone decrypts, shortened so the box stays within the relay's limit. A finished turn's text is cut from
+ * its start so its end survives, then its error. A permission's resources or a question's choices keep their order and
+ * come with `truncated: "true"`. The body is cut last; ids never are.
  */
 export const message = (notification: Notification) => {
-  const make = (body: string, data = notification.data) =>
+  const make = (data: Data, body = notification.body) =>
     JSON.stringify({
       v: 1,
       id: notification.id,
@@ -65,23 +92,12 @@ export const message = (notification: Notification) => {
       body,
       data,
     })
-  const over = (text: string) => Buffer.byteLength(text, "utf8") - maxMessageBytes
-  const whole = make(notification.body)
-  if (over(whole) <= 0) return whole
-  const resources = notification.data.resources
-  if (!Array.isArray(resources)) return make(shorten(notification.body, over(whole)))
-  const cut = (kept: ReadonlyArray<string>) =>
-    make(notification.body, { ...notification.data, resources: kept, truncated: "true" })
-  const kept: string[] = []
-  for (const resource of resources) {
-    const next = cut([...kept, resource])
-    if (over(next) > 0) {
-      const short = cut([...kept, shorten(resource, over(next))])
-      return over(short) > 0 ? cut(kept) : short
-    }
-    kept.push(resource)
-  }
-  return cut(kept)
+  const over = (data: Data) => Buffer.byteLength(make(data), "utf8") - maxMessageBytes
+  const text = shortenText(notification.data, "text", "start", over)
+  const error = shortenText(text, "error", "end", over)
+  const data = shortenList(shortenList(error, "resources", over), "choices", over)
+  if (over(data) <= 0) return make(data)
+  return make(data, shorten(notification.body, over(data)))
 }
 
 export const level = (device: PushList.Stored, sessions: Record<string, Push.Bell>, sessionID: string) =>

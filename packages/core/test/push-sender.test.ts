@@ -235,6 +235,26 @@ describe("PushSender", () => {
       })
       expect(Buffer.byteLength(many, "utf8")).toBeLessThanOrEqual(2600)
       expect(JSON.parse(many).data.resources).not.toContain("…")
+      const choices = PushSender.message({ ...question, data: { formID: "frm_1", choices: ["A", "x".repeat(5_000)] } })
+      expect(Buffer.byteLength(choices, "utf8")).toBeLessThanOrEqual(2600)
+      expect(JSON.parse(choices).data).toEqual({
+        formID: "frm_1",
+        choices: ["A", expect.stringMatching(/^x+…$/)],
+        truncated: "true",
+      })
+      const answer = PushSender.message({
+        ...finished,
+        data: { outcome: "succeeded", text: "x".repeat(5_000) + " Done." },
+      })
+      expect(Buffer.byteLength(answer, "utf8")).toBeGreaterThan(2580)
+      expect(JSON.parse(answer).data.text).toMatch(/^…x+ Done\.$/)
+      const failed = PushSender.message({
+        ...finished,
+        body: "Failed",
+        data: { outcome: "failed", error: "x".repeat(5_000) },
+      })
+      expect(Buffer.byteLength(failed, "utf8")).toBeLessThanOrEqual(2600)
+      expect(JSON.parse(failed)).toMatchObject({ body: "Failed", data: { error: expect.stringMatching(/^x+…$/) } })
       expect(PushSender.message(question)).toBe(
         JSON.stringify({
           v: 1,

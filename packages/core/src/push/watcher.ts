@@ -36,17 +36,28 @@ const layer = Layer.effectDiscard(
       return session
     })
 
-    const finished = Effect.fn("PushWatcher.finished")(function* (sessionID: Session.ID, outcome: keyof typeof bodies) {
+    const finished = Effect.fn("PushWatcher.finished")(function* (
+      sessionID: Session.ID,
+      outcome: keyof typeof bodies,
+      ran: boolean,
+      error?: string,
+    ) {
       if (!(yield* list.hasDevices())) return
       const session = yield* sessions.get(sessionID)
       if (session.parentID) return
+      // The newest assistant message is the turn's last step, so only read it when this turn ran one.
+      const [last] = ran ? yield* sessions.messages({ sessionID, type: "assistant", order: "desc", limit: 1 }) : []
+      const text = (last?.type === "assistant" ? last.content : [])
+        .flatMap((part) => (part.type === "text" ? [part.text] : []))
+        .join("\n")
+        .trim()
       yield* sender.send({
         id: sessionID,
         type: "session.idle",
         sessionID,
         title: session.title || "OpenCode",
         body: bodies[outcome],
-        data: { outcome },
+        data: { outcome, ...(text && { text }), ...(error && { error }) },
         attention: false,
       })
     })
@@ -58,6 +69,7 @@ const layer = Layer.effectDiscard(
       if (!(yield* list.hasDevices())) return
       const session = yield* topLevel(sessionID.value)
       const field = form.fields[0]
+      const choice = field.type === "string" || field.type === "multiselect" ? field : undefined
       yield* sender.send({
         id: form.id,
         type: "question",
@@ -65,7 +77,15 @@ const layer = Layer.effectDiscard(
         title: session.title || "OpenCode",
         body: field.description || field.title || form.title,
         // The top-level session is the one to open and the one bells apply to; the form belongs to this one.
-        data: { formID: form.id, sessionID: sessionID.value },
+        data: {
+          formID: form.id,
+          sessionID: sessionID.value,
+          field: field.key,
+          kind: field.type,
+          ...(choice?.options && { choices: choice.options.map((option) => option.label) }),
+          ...(choice?.custom && { custom: "true" }),
+          ...(form.fields.length > 1 && { more: String(form.fields.length - 1) }),
+        },
         attention: true,
       })
     })
@@ -155,10 +175,11 @@ const layer = Layer.effectDiscard(
           if (event.type === "session.execution.interrupted") return sender.clear(unanswered)
           if (event.type === "session.execution.succeeded" && !ran) return sender.clear(unanswered)
           const outcome = event.type === "session.execution.succeeded" ? "succeeded" : "failed"
+          const error = event.type === "session.execution.failed" ? event.data.error.message : undefined
           return sender
             .clear(unanswered)
             .pipe(
-              Effect.andThen(finished(sessionID, outcome)),
+              Effect.andThen(finished(sessionID, outcome, ran, error)),
               Effect.ignoreCause({ log: "Warn", message: "Failed to notify phones" }),
             )
         }),

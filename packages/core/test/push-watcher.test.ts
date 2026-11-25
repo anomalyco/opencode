@@ -65,6 +65,20 @@ const it = testEffect(
       Session.node.replace(
         Layer.mock(Session.Service, {
           get: (id) => Effect.succeed(sessions.get(id)!),
+          messages: () =>
+            Effect.succeed([
+              SessionMessage.Assistant.make({
+                id: SessionMessage.ID.create(),
+                type: "assistant",
+                agent: Agent.ID.make("build"),
+                model: Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }),
+                content: [
+                  { type: "reasoning", text: "Check the session code", time: { created: DateTime.makeUnsafe(0) } },
+                  { type: "text", text: "Fixed the login bug." },
+                ],
+                time: { created: DateTime.makeUnsafe(0) },
+              }),
+            ]),
           revert: {
             stage: () => Effect.die(new Error("unused")),
             clear: () => Effect.die(new Error("unused")),
@@ -149,7 +163,7 @@ describe("PushWatcher", () => {
           sessionID: parentID,
           title: "Fix the login bug",
           body: "Finished",
-          data: { outcome: "succeeded" },
+          data: { outcome: "succeeded", text: "Fixed the login bug." },
         },
         {
           v: 1,
@@ -158,7 +172,7 @@ describe("PushWatcher", () => {
           sessionID: parentID,
           title: "Fix the login bug",
           body: "Failed",
-          data: { outcome: "failed" },
+          data: { outcome: "failed", error: "x" },
         },
       ])
     }),
@@ -173,7 +187,20 @@ describe("PushWatcher", () => {
         sessionID,
         title: "Questions",
         metadata: { kind },
-        fields: [{ key: "q0", title: "Database", description: "Which database?", type: "string" }],
+        fields: [
+          {
+            key: "q0",
+            title: "Database",
+            description: "Which database?",
+            type: "string",
+            options: [
+              { value: "Postgres", label: "Postgres", description: "The production database" },
+              { value: "SQLite", label: "SQLite" },
+            ],
+            custom: true,
+          },
+          { key: "q1", title: "Seed", type: "boolean" },
+        ],
       })
 
       yield* bus.publish(Form.Event.Created, { form: form("frm_other", childID, "elicitation") })
@@ -196,7 +223,15 @@ describe("PushWatcher", () => {
           sessionID: parentID,
           title: "Fix the login bug",
           body: "Which database?",
-          data: { formID: "frm_1", sessionID: grandchildID },
+          data: {
+            formID: "frm_1",
+            sessionID: grandchildID,
+            field: "q0",
+            kind: "string",
+            choices: ["Postgres", "SQLite"],
+            custom: "true",
+            more: "1",
+          },
         },
         {
           v: 1,
