@@ -11,8 +11,7 @@ export const makePush = Effect.gen(function* () {
   const options = yield* PushOptions.Service
 
   const requireEnabled = Effect.gen(function* () {
-    const current = yield* options.get()
-    if (current.enabled) return current
+    if (yield* options.enabled()) return
     return yield* new ForbiddenError({ message: "Push notifications are disabled; enable experimental.push" })
   })
 
@@ -22,12 +21,12 @@ export const makePush = Effect.gen(function* () {
 
   return {
     get: Effect.fn("PushHandler.get")(function* () {
-      const current = yield* requireEnabled
-      return { data: { ...(yield* list.info()), relays: current.relays } }
+      yield* requireEnabled
+      return { data: yield* list.info() }
     }),
     register: Effect.fn("PushHandler.register")(function* (id: Push.DeviceID, payload: Push.Register) {
-      const current = yield* requireEnabled
-      return { data: yield* list.register(id, payload, current.relays).pipe(Effect.mapError(invalid)) }
+      yield* requireEnabled
+      return { data: yield* list.register(id, payload).pipe(Effect.mapError(invalid)) }
     }),
     remove: Effect.fn("PushHandler.remove")(function* (id: Push.DeviceID) {
       yield* requireEnabled

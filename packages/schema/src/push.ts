@@ -77,9 +77,6 @@ export const Info = Schema.Struct({
   settings: Settings,
   devices: Schema.Array(Device),
   sessions: Schema.Record(Schema.String, Bell),
-  relays: Schema.Array(Schema.String).annotate({
-    description: "Relay origins a phone's callback URL may be on",
-  }),
 }).annotate({ identifier: "Push.Info" })
 
 const Updated = ephemeral({ type: "push.updated", schema: {} })

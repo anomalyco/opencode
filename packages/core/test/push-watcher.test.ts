@@ -64,7 +64,7 @@ const it = testEffect(
         Layer.succeed(
           PushOptions.Service,
           PushOptions.Service.of({
-            get: () => Effect.succeed({ enabled: true, relays: [PushOptions.defaultRelay] }),
+            enabled: () => Effect.succeed(true),
           }),
         ),
       ),
@@ -88,17 +88,13 @@ const phone = Effect.fn(function* () {
   const list = yield* PushList.Service
   const keys = createECDH("prime256v1")
   keys.generateKeys()
-  const registered = yield* list.register(
-    Push.DeviceID.make(id),
-    {
-      callbackURL: `${PushOptions.defaultRelay}/v2/notify/ok`,
-      expiresAt: Date.now() + 86_400_000,
-      publicKey: keys.getPublicKey("base64"),
-      platform: "android",
-      name: "Pixel",
-    },
-    [PushOptions.defaultRelay],
-  )
+  const registered = yield* list.register(Push.DeviceID.make(id), {
+    callbackURL: `${PushList.relay}/v2/notify/ok`,
+    expiresAt: Date.now() + 86_400_000,
+    publicKey: keys.getPublicKey("base64"),
+    platform: "android",
+    name: "Pixel",
+  })
   const shared = keys.computeSecret(Buffer.from(registered.publicKey, "base64"))
   return Buffer.from(hkdfSync("sha256", shared, Buffer.from(id, "utf8"), PushCrypto.context, 32))
 })

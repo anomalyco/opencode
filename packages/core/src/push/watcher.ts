@@ -28,8 +28,7 @@ const layer = Layer.effectDiscard(
     // Reading the flag starts the configuration's Location, so a server with no phones never does.
     const wanted = Effect.gen(function* () {
       if (!(yield* list.hasDevices())) return false
-      const current = yield* options.get()
-      return current.enabled
+      return yield* options.enabled()
     })
 
     const topLevel = Effect.fn("PushWatcher.topLevel")(function* (sessionID: Session.ID) {

@@ -8,7 +8,7 @@ import { ServerProcess } from "../src/process"
 
 const authorization = `Basic ${btoa("opencode:secret")}`
 const id = "12345678-1234-1234-1234-123456789abc"
-const devRelay = "https://notify.dev.opencode.ai"
+const relay = "https://opencode-notify-relay.anomalyco.workers.dev"
 
 const start = Effect.fnUntraced(function* (push: boolean) {
   const directory = (yield* tmpdirScoped("opencode-push-routes-")).path
@@ -20,7 +20,7 @@ const start = Effect.fnUntraced(function* (push: boolean) {
     config: {
       directory,
       project: false,
-      content: JSON.stringify({ experimental: { push, push_relays: [devRelay] } }),
+      content: JSON.stringify({ experimental: { push } }),
     },
     fs: { filewatcher: false },
     hostname: "127.0.0.1",
@@ -38,7 +38,7 @@ const start = Effect.fnUntraced(function* (push: boolean) {
     })
 })
 
-const register = (publicKey: string, callbackURL = `${devRelay}/v2/notify/sealed`) =>
+const register = (publicKey: string, callbackURL = `${relay}/v2/notify/sealed`) =>
   JSON.stringify({ callbackURL, expiresAt: Date.now() + 86_400_000, publicKey, platform: "android", name: "Pixel" })
 
 const phoneKey = () => {
@@ -61,11 +61,6 @@ it.live("refuses every push route when the flag is off", () =>
 it.live("registers, lists and removes a phone", () =>
   Effect.gen(function* () {
     const request = yield* start(true)
-    expect((yield* request("/api/experimental/push")).body.data.relays).toEqual([
-      "https://opencode-notify-relay.anomalyco.workers.dev",
-      devRelay,
-    ])
-
     const registered = yield* request(`/api/experimental/push/device/${id}`, {
       method: "PUT",
       body: register(phoneKey()),

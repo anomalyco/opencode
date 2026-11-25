@@ -2717,7 +2717,6 @@ export type ConfigEntry =
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
           location_idle_timeout?: string | false
-          push_relays?: Array<string>
           policies?: Array<{
             action:
               | "provider.use"
@@ -2819,12 +2818,7 @@ export type ExperimentalJobUpdated = {
 
 export type FormFields1 = [FormField1, ...Array<FormField1>]
 
-export type PushInfo = {
-  settings: PushSettings
-  devices: Array<PushDevice>
-  sessions: { [x: string]: PushBell }
-  relays: Array<string>
-}
+export type PushInfo = { settings: PushSettings; devices: Array<PushDevice>; sessions: { [x: string]: PushBell } }
 
 export type AgentInfo = {
   id: AgentID

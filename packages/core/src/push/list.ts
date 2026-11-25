@@ -43,11 +43,7 @@ export class NotFoundError extends Schema.TaggedError<NotFoundError>()("PushList
 }
 
 export interface Interface {
-  readonly register: (
-    id: Push.DeviceID,
-    input: Push.Register,
-    relays: readonly string[],
-  ) => Effect.Effect<Push.Registered, InvalidError>
+  readonly register: (id: Push.DeviceID, input: Push.Register) => Effect.Effect<Push.Registered, InvalidError>
   readonly remove: (id: Push.DeviceID) => Effect.Effect<void>
   /** Removes the phone after its relay answered gone, unless it has registered a new callback URL since. */
   readonly removeGone: (id: Push.DeviceID, callbackURL: string) => Effect.Effect<void>
@@ -62,7 +58,7 @@ export interface Interface {
   readonly setSessionBell: (sessionID: Session.ID, bell: Push.Bell) => Effect.Effect<Push.Bell, InvalidError>
   readonly removeSessionBell: (sessionID: Session.ID) => Effect.Effect<void>
   readonly setSettings: (settings: Push.Settings) => Effect.Effect<Push.Settings, InvalidError>
-  readonly info: () => Effect.Effect<Omit<Push.Info, "relays">>
+  readonly info: () => Effect.Effect<Push.Info>
   readonly targets: () => Effect.Effect<Targets>
 }
 
@@ -84,14 +80,17 @@ const decodeStored = Schema.decodeUnknownOption(Stored)
 const decodeSettings = Schema.decodeUnknownOption(Push.Settings)
 const decodeBell = Schema.decodeUnknownOption(Push.Bell)
 
+/** The notification relay, the only origin a phone's callback URL may be on. */
+export const relay = "https://opencode-notify-relay.anomalyco.workers.dev"
+
 const notifyPath = /^\/v2\/notify\/[^/]+$/
 
-const validURL = (callbackURL: string, relays: readonly string[]) => {
+const validURL = (callbackURL: string) => {
   const url = URL.parse(callbackURL)
   if (!url || url.href !== callbackURL) return false
   if (url.protocol !== "https:") return false
   if (url.username || url.password || url.search || url.hash) return false
-  if (!relays.includes(url.origin)) return false
+  if (url.origin !== relay) return false
   return notifyPath.test(url.pathname)
 }
 
@@ -180,16 +179,10 @@ const layer = Layer.effect(
       return bells
     })
 
-    const register = Effect.fn("PushList.register")(function* (
-      id: Push.DeviceID,
-      input: Push.Register,
-      relays: readonly string[],
-    ) {
+    const register = Effect.fn("PushList.register")(function* (id: Push.DeviceID, input: Push.Register) {
       const now = yield* Clock.currentTimeMillis
-      if (!validURL(input.callbackURL, relays))
-        return yield* new InvalidError({
-          reason: "callbackURL must be a /v2/notify/ URL on a relay this server allows",
-        })
+      if (!validURL(input.callbackURL))
+        return yield* new InvalidError({ reason: "callbackURL must be a /v2/notify/ URL on the notification relay" })
       if (input.expiresAt <= now) return yield* new InvalidError({ reason: "expiresAt must be in the future" })
 
       const existing = Option.filter(yield* readDevice(id), (stored) => stored.expiresAt > now)
@@ -365,7 +358,7 @@ const layer = Layer.effect(
     })
 
     return Service.of({
-      register: (id, input, relays) => lock.withPermit(register(id, input, relays)),
+      register: (id, input) => lock.withPermit(register(id, input)),
       remove: (id) => lock.withPermit(remove(id)),
       removeGone: (id, callbackURL) => lock.withPermit(removeGone(id, callbackURL)),
       hasDevices,

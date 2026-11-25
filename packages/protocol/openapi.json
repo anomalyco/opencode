@@ -18762,12 +18762,6 @@
                   }
                 ]
               },
-              "push_relays": {
-                "type": "array",
-                "items": {
-                  "type": "string"
-                }
-              },
               "policies": {
                 "type": "array",
                 "items": {
@@ -24756,16 +24750,9 @@
             "additionalProperties": {
               "$ref": "#/components/schemas/Push.Bell"
             }
-          },
-          "relays": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            },
-            "description": "Relay origins a phone's callback URL may be on"
           }
         },
-        "required": ["settings", "devices", "sessions", "relays"],
+        "required": ["settings", "devices", "sessions"],
         "additionalProperties": false
       },
       "Push.Level": {

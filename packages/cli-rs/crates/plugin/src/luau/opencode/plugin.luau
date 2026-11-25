@@ -2016,7 +2016,6 @@ export type ConfigInfoEncoded = {
         })?,
         subagent_depth: number?,
         location_idle_timeout: (string | false)?,
-        push_relays: { string }?,
         policies: { {
             action: ("provider.use" | "tool.use" | "integration.connect" | "integration.use" | "mcp.use" | "skill.use" | "plugin.use" | "websearch.use"),
             resource: string,
@@ -3517,7 +3516,6 @@ export type PushInfo = {
     settings: PushSettings,
     devices: { PushDevice },
     sessions: { [string]: PushBell },
-    relays: { string },
 }
 
 export type PushLevel = ("all" | "attention" | "none")

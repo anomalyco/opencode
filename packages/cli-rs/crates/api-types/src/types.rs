@@ -11377,7 +11377,6 @@ pub struct PushInfo {
     pub settings: PushSettings,
     pub devices: Vec<PushDevice>,
     pub sessions: IndexMap<String, PushBell>,
-    pub relays: Vec<String>,
 }
 
 /// Output of `Client::experimental_push_get`.
@@ -12865,8 +12864,6 @@ pub struct ConfigEntryDocumentInfoExperimental {
     pub subagent_depth: Option<i64>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location_idle_timeout: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub push_relays: Option<Vec<String>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policies: Option<Vec<ConfigEntryDocumentInfoPoliciesItem>>,
 }

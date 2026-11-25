@@ -7,7 +7,6 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { httpClient } from "@opencode/util/effect/app-node-platform"
 import { PushCrypto } from "./crypto.js"
 import { PushList } from "./list.js"
-import { PushOptions } from "./options.js"
 
 export interface Notification {
   readonly type: "session.idle" | "question" | "permission"
@@ -65,7 +64,6 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const list = yield* PushList.Service
-    const options = yield* PushOptions.Service
     const http = yield* HttpClient.HttpClient
     const scope = yield* Scope.Scope
 
@@ -82,10 +80,8 @@ const layer = Layer.effect(
       device: PushList.Stored,
       sessions: Record<string, Push.Bell>,
       notification: Notification,
-      relays: readonly string[],
     ) {
       if (device.paused) return
-      if (!relays.includes(new URL(device.callbackURL).origin)) return
       const wanted = level(device, sessions, notification.sessionID)
       if (wanted === "none") return
       if (wanted === "attention" && !notification.attention) return
@@ -104,11 +100,10 @@ const layer = Layer.effect(
     const deliver = Effect.fn("PushSender.deliver")(function* (notification: Notification) {
       const targets = yield* list.targets()
       if (targets.settings.paused) return
-      const current = yield* options.get()
       yield* Effect.forEach(
         targets.devices,
         (device) =>
-          sendTo(device, targets.sessions, notification, current.relays).pipe(
+          sendTo(device, targets.sessions, notification).pipe(
             Effect.ignoreCause({ log: "Warn", message: "Failed to send a push notification" }),
           ),
         { concurrency: "unbounded", discard: true },
@@ -121,4 +116,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [PushList.node, PushOptions.node, httpClient] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [PushList.node, httpClient] })

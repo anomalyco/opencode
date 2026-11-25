@@ -5,7 +5,6 @@ import { TestClock } from "effect/testing"
 import { Bus } from "@opencode/core/bus"
 import { KV } from "@opencode/core/kv"
 import { PushList } from "@opencode/core/push/list"
-import { PushOptions } from "@opencode/core/push/options"
 import { Push } from "@opencode/schema/push"
 import { Session } from "@opencode/schema/session"
 import { SessionEvent } from "@opencode/schema/session-event"
@@ -17,8 +16,7 @@ const it = testEffect(LayerNode.compile(LayerNode.group([PushList.node, KV.node,
 
 const id = Push.DeviceID.make("12345678-1234-1234-1234-123456789abc")
 const sessionID = Session.ID.make("ses_push_bells")
-const relays = [PushOptions.defaultRelay]
-const callbackURL = `${PushOptions.defaultRelay}/v2/notify/sealed-ref`
+const callbackURL = `${PushList.relay}/v2/notify/sealed-ref`
 
 const phoneKey = () => {
   const phone = createECDH("prime256v1")
@@ -38,7 +36,7 @@ describe("PushList", () => {
   it.effect("registers a phone and lists it without its URL or keys", () =>
     Effect.gen(function* () {
       const list = yield* PushList.Service
-      const registered = yield* list.register(id, input(phoneKey()), relays)
+      const registered = yield* list.register(id, input(phoneKey()))
       expect(Buffer.from(registered.publicKey, "base64")).toHaveLength(65)
 
       expect(yield* list.info()).toEqual({
@@ -64,13 +62,14 @@ describe("PushList", () => {
     Effect.gen(function* () {
       const list = yield* PushList.Service
       const key = phoneKey()
-      const first = yield* list.register(id, input(key), relays)
+      const first = yield* list.register(id, input(key))
       yield* TestClock.adjust(1_000)
-      const renewed = yield* list.register(
-        id,
-        { ...input(key), name: "Pixel 9", expiresAt: 20_000, settings: { default: "attention" } },
-        relays,
-      )
+      const renewed = yield* list.register(id, {
+        ...input(key),
+        name: "Pixel 9",
+        expiresAt: 20_000,
+        settings: { default: "attention" },
+      })
       expect(renewed.publicKey).toBe(first.publicKey)
 
       const [device] = (yield* list.info()).devices
@@ -79,29 +78,29 @@ describe("PushList", () => {
       expect(device.settings).toEqual({ default: "attention" })
       expect(device.time).toEqual({ created: 0, updated: 1_000 })
 
-      const replaced = yield* list.register(id, input(phoneKey()), relays)
+      const replaced = yield* list.register(id, input(phoneKey()))
       expect(replaced.publicKey).not.toBe(first.publicKey)
     }),
   )
 
-  it.effect("rejects callback URLs outside the allowed relays and bad phone keys", () =>
+  it.effect("rejects callback URLs off the relay and bad phone keys", () =>
     Effect.gen(function* () {
       const list = yield* PushList.Service
       const key = phoneKey()
       const urls = [
         "http://opencode-notify-relay.anomalyco.workers.dev/v2/notify/x",
         "https://relay.example.com/v2/notify/x",
-        `${PushOptions.defaultRelay}/v1/notify/x`,
-        `${PushOptions.defaultRelay}/v2/notify/x?debug=1`,
+        `${PushList.relay}/v1/notify/x`,
+        `${PushList.relay}/v2/notify/x?debug=1`,
         "https://user:pass@opencode-notify-relay.anomalyco.workers.dev/v2/notify/x",
       ]
       for (const url of urls) {
-        const exit = yield* list.register(id, { ...input(key), callbackURL: url }, relays).pipe(Effect.exit)
+        const exit = yield* list.register(id, { ...input(key), callbackURL: url }).pipe(Effect.exit)
         expect(Exit.isFailure(exit)).toBe(true)
       }
-      const badKey = yield* list.register(id, input(Buffer.alloc(65, 4).toString("base64")), relays).pipe(Effect.exit)
+      const badKey = yield* list.register(id, input(Buffer.alloc(65, 4).toString("base64"))).pipe(Effect.exit)
       expect(Exit.isFailure(badKey)).toBe(true)
-      const past = yield* list.register(id, { ...input(key), expiresAt: 0 }, relays).pipe(Effect.exit)
+      const past = yield* list.register(id, { ...input(key), expiresAt: 0 }).pipe(Effect.exit)
       expect(Exit.isFailure(past)).toBe(true)
       expect((yield* list.info()).devices).toEqual([])
     }),
@@ -111,12 +110,12 @@ describe("PushList", () => {
     Effect.gen(function* () {
       const list = yield* PushList.Service
       const kv = yield* KV.Service
-      yield* list.register(id, input(phoneKey()), relays)
+      yield* list.register(id, input(phoneKey()))
       yield* TestClock.adjust(10_000)
       expect((yield* list.info()).devices).toEqual([])
       expect(yield* kv.get(`push:device:${id}`)).toBeUndefined()
 
-      yield* list.register(id, { ...input(phoneKey()), expiresAt: 50_000 }, relays)
+      yield* list.register(id, { ...input(phoneKey()), expiresAt: 50_000 })
       yield* list.remove(id)
       yield* list.remove(id)
       expect((yield* list.info()).devices).toEqual([])
@@ -126,8 +125,8 @@ describe("PushList", () => {
   it.effect("removes a gone phone only while it still has the URL that was gone", () =>
     Effect.gen(function* () {
       const list = yield* PushList.Service
-      yield* list.register(id, input(phoneKey()), relays)
-      yield* list.register(id, { ...input(phoneKey()), callbackURL: `${callbackURL}-renewed` }, relays)
+      yield* list.register(id, input(phoneKey()))
+      yield* list.register(id, { ...input(phoneKey()), callbackURL: `${callbackURL}-renewed` })
       yield* list.removeGone(id, callbackURL)
       expect((yield* list.info()).devices).toHaveLength(1)
 
@@ -140,10 +139,10 @@ describe("PushList", () => {
     Effect.gen(function* () {
       const list = yield* PushList.Service
       const key = phoneKey()
-      const first = yield* list.register(id, input(key), relays)
+      const first = yield* list.register(id, input(key))
       yield* list.update(id, { paused: true })
       yield* TestClock.adjust(10_000)
-      const again = yield* list.register(id, { ...input(key), expiresAt: 50_000 }, relays)
+      const again = yield* list.register(id, { ...input(key), expiresAt: 50_000 })
       expect(again.publicKey).not.toBe(first.publicKey)
       expect((yield* list.info()).devices[0].paused).toBe(false)
     }),
@@ -152,7 +151,7 @@ describe("PushList", () => {
   it.effect("keeps a phone's pause, level and bells when it registers again", () =>
     Effect.gen(function* () {
       const list = yield* PushList.Service
-      yield* list.register(id, input(phoneKey()), relays)
+      yield* list.register(id, input(phoneKey()))
       expect((yield* list.update(id, { paused: true })).paused).toBe(true)
       const updated = yield* list.update(id, { settings: { default: "attention" } })
       expect(updated.paused).toBe(true)
@@ -161,7 +160,7 @@ describe("PushList", () => {
         level: "none",
         until: 5_000,
       })
-      yield* list.register(id, input(phoneKey()), relays)
+      yield* list.register(id, input(phoneKey()))
 
       const [device] = (yield* list.info()).devices
       expect(device.paused).toBe(true)
@@ -171,7 +170,7 @@ describe("PushList", () => {
       yield* TestClock.adjust(5_000)
       expect((yield* list.info()).devices[0].sessions).toEqual({})
 
-      yield* list.register(id, { ...input(phoneKey()), settings: { default: "none" } }, relays)
+      yield* list.register(id, { ...input(phoneKey()), settings: { default: "none" } })
       expect((yield* list.info()).devices[0].settings).toEqual({ default: "none" })
     }),
   )
@@ -215,7 +214,7 @@ describe("PushList", () => {
         Stream.runForEach(() => Effect.sync(() => updates++)),
         Effect.forkScoped({ startImmediately: true }),
       )
-      yield* list.register(id, input(phoneKey()), relays)
+      yield* list.register(id, input(phoneKey()))
       yield* list.setDeviceBell(id, sessionID, { level: "attention" })
       yield* list.setSessionBell(sessionID, { level: "none" })
       expect((yield* list.info()).sessions).toEqual({ [sessionID]: { level: "none" } })
