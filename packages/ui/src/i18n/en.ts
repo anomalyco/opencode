@@ -316,9 +316,6 @@ const source = {
   "ui.tool.skill": "Skill",
 
   "ui.basicTool.called": "Called `{{tool}}`",
-  "ui.script.returned": "Script returned",
-  "ui.script.failed": "Script failed",
-  "ui.script.background": "Script running in the background",
   "ui.toolErrorCard.failed": "Failed",
   "ui.toolErrorCard.copyError": "Copy error",
 

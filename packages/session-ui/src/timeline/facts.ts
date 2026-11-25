@@ -9,7 +9,6 @@ import {
   readImagePath,
 } from "../message/current-tool-state"
 import { isInterruptedError } from "./turn-phase-machine"
-import { scriptBackgroundTool, scriptFileTool, scriptResultTool } from "./unwrap-execute"
 
 /**
  * What the agent did, read only from message parts. Every count or summary a timeline shows comes from `summarize`,
@@ -116,7 +115,6 @@ const modes = new Map<string, FactMode>(
     patch: "edit",
     shell: "run",
     execute: "run",
-    [scriptFileTool]: "edit",
   } satisfies Record<string, FactMode>),
 )
 
@@ -256,8 +254,6 @@ export function launchOf(tool: Tool) {
 }
 
 function toolFacts(tool: Tool, id: string): Fact[] {
-  // How a script drawn as its calls ended is not something it did, so it counts for nothing.
-  if (tool.name === scriptResultTool || tool.name === scriptBackgroundTool) return []
   const read = reads(tool)
   const fact = placeFact(tool, id, read)
   const raw = read.input().path
@@ -484,17 +480,6 @@ const scriptFilePart = /^(.*?):file:(\d+):/
 
 /** The change a script made that a part id names, read from that one entry of the script's part in the message. */
 export function scriptFileFact(content: readonly Content[], messageID: string, partID: string) {
-  const own = content.find((item) => item.type === "tool" && item.id === partID && item.name === scriptFileTool)
-
-  // A script drawn as its calls (`unwrapExecute`) carries a change no call row draws as a part of its own.
-  if (own?.type === "tool") {
-    const file = Option.getOrElse(decodeFiles(currentToolMetadata(own).files), () => []).flatMap((item) =>
-      Option.toArray(decodeFile(item)),
-    )[0]
-
-    return file ? { ...fileFact(file, messageID, own.state.status, "script"), id: `${messageID}:${partID}` } : undefined
-  }
-
   const match = scriptFilePart.exec(partID)
 
   if (!match) return undefined

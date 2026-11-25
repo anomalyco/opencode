@@ -2,7 +2,6 @@ import type { SessionMessageAssistant, SessionMessageInfo } from "@opencode/clie
 import { untrack } from "solid-js"
 import { timelineNoticeRequired, type TimelineDetail, type TimelinePlacement } from "./detail"
 import { placeFactOf, scriptChangePaths, scriptFilePartID, type Fact, type PlaceFact } from "./facts"
-import { scriptBackgroundTool, scriptFileTool, scriptResultTool } from "./unwrap-execute"
 
 /**
  * Where each fact shows, under the Timeline detail setting: its category, whether it stands alone, joins a group or
@@ -42,13 +41,7 @@ export function categoryOf(fact: Fact | Placeable): keyof TimelineDetail | undef
 
   if (fact.kind !== "call") return
 
-  if (
-    fact.name === "shell" ||
-    fact.name === "execute" ||
-    fact.name === scriptResultTool ||
-    fact.name === scriptBackgroundTool
-  )
-    return "shell"
+  if (fact.name === "shell" || fact.name === "execute") return "shell"
 
   if (fact.mode === "edit") return "edit"
 
@@ -177,7 +170,7 @@ function placeFact(fact: Placeable, detail: TimelineDetail, timeline: TimelineKi
             ? "read"
             : failed
               ? "part"
-              : ["patch", "edit", "write", scriptFileTool].includes(fact.tool)
+              : ["patch", "edit", "write"].includes(fact.tool)
                 ? "file"
                 : "part"
 

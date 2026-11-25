@@ -32,8 +32,7 @@ import { NextSessionTimeline } from "./session-timeline"
  * with what came after the call. Play steps through them once a second, as the live updates arrived.
  *
  * The controls live in the address: `?id=codemode-captured-states--captured&scenario=running&step=3&metadata=open`.
- * Left and right arrows step too. `execute=unwrapped` (or `both`) draws each script as the calls it made, the
- * `unwrapExecute` prototype, with `boundary=divider|rail` to try marking where a script's rows run.
+ * Left and right arrows step too.
  */
 export default {
   title: "Code Mode/Captured states",
@@ -59,18 +58,6 @@ const presetLabels = {
 const segments = { width: "auto" }
 
 const segment = { flex: "none" }
-
-const executes = [
-  { id: "wrapped", label: "Wrapped" },
-  { id: "unwrapped", label: "Unwrapped" },
-  { id: "both", label: "Side by side" },
-] as const
-
-const boundaries = [
-  { id: "none", label: "None" },
-  { id: "divider", label: "Divider" },
-  { id: "rail", label: "Rail" },
-] as const
 
 type Step = { label: string; file?: string; state: CodeModeState }
 
@@ -100,8 +87,6 @@ export const Captured = {
       step: query.has("step") ? Number(query.get("step")) : Number.MAX_SAFE_INTEGER,
       timeline: timelines.find((item) => item.id === query.get("timeline"))?.id ?? timelines[2].id,
       preset: timelinePresets.find((item) => item.id === query.get("preset"))?.id ?? timelinePresets[1].id,
-      execute: executes.find((item) => item.id === query.get("execute"))?.id ?? executes[0].id,
-      boundary: boundaries.find((item) => item.id === query.get("boundary"))?.id ?? boundaries[0].id,
       playing: false,
       metadata: query.get("metadata") === "open",
     })
@@ -129,8 +114,6 @@ export const Captured = {
       address.set("step", String(index()))
       address.set("timeline", state.timeline)
       address.set("preset", state.preset)
-      address.set("execute", state.execute)
-      address.set("boundary", state.boundary)
 
       if (state.metadata) address.set("metadata", "open")
       else address.delete("metadata")
@@ -171,43 +154,27 @@ export const Captured = {
     onMount(() => window.addEventListener("keydown", keys))
     onCleanup(() => window.removeEventListener("keydown", keys))
 
-    // Each timeline the toolbar asks for, wrapped and unwrapped as it asks. A pane reads `unwrapExecute` once, so a
-    // change of it mounts a new pane.
-    const panes = createMemo(() =>
-      (state.timeline === "both" ? [false, true] : [state.timeline === "new"]).flatMap((next) =>
-        (state.execute === "both" ? [false, true] : [state.execute === "unwrapped"]).map(
-          (unwrap) => `${next ? "new" : "old"}:${unwrap ? "unwrapped" : "wrapped"}`,
-        ),
-      ),
-    )
-
     // As MessageTimeline lays out a session: rows the width of the session column, then the status lane below them.
-    const pane = (key: string) => {
-      const next = key.startsWith("new")
-      const unwrap = key.endsWith(":unwrapped")
-
-      return (
-        <div class="w-full py-6 md:mx-auto md:max-w-session" data-script-boundary={unwrap ? state.boundary : undefined}>
-          <CurrentSessionProviders document={view.document} directory={session().directory}>
-            <Show
-              when={next}
-              fallback={
-                <SessionTimeline
-                  document={view.document}
-                  timelineDetail={detail()}
-                  turnDiffs={false}
-                  unwrapExecute={unwrap}
-                  {...sessionTimelineSettings(detail())}
-                />
-              }
-            >
-              <NextSessionTimeline document={view.document} timelineDetail={detail()} unwrapExecute={unwrap} />
-            </Show>
-          </CurrentSessionProviders>
-          <SessionStatusLane document={view.document} timelineDetail={detail()} next={next} unwrapExecute={unwrap} />
-        </div>
-      )
-    }
+    const pane = (next: boolean) => (
+      <div class="w-full py-6 md:mx-auto md:max-w-session">
+        <CurrentSessionProviders document={view.document} directory={session().directory}>
+          <Show
+            when={next}
+            fallback={
+              <SessionTimeline
+                document={view.document}
+                timelineDetail={detail()}
+                turnDiffs={false}
+                {...sessionTimelineSettings(detail())}
+              />
+            }
+          >
+            <NextSessionTimeline document={view.document} timelineDetail={detail()} />
+          </Show>
+        </CurrentSessionProviders>
+        <SessionStatusLane document={view.document} timelineDetail={detail()} next={next} />
+      </div>
+    )
 
     return (
       <div class="flex h-screen min-h-0 bg-v2-background-bg-base text-v2-text-text-base">
@@ -277,50 +244,6 @@ export const Captured = {
               </SegmentedControl>
             </Labeled>
           </div>
-          <div class="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-v2-border-border-base px-4 py-2 text-13-regular">
-            <Labeled label="Execute">
-              <SegmentedControl
-                aria-label="Execute"
-                style={segments}
-                value={state.execute}
-                onChange={(value) => {
-                  const item = executes.find((execute) => execute.id === value)
-
-                  if (item) setState("execute", item.id)
-                }}
-              >
-                <For each={executes}>
-                  {(item) => (
-                    <SegmentedControlItem value={item.id} style={segment}>
-                      {item.label}
-                    </SegmentedControlItem>
-                  )}
-                </For>
-              </SegmentedControl>
-            </Labeled>
-            <Show when={state.execute !== "wrapped"}>
-              <Labeled label="Script boundary">
-                <SegmentedControl
-                  aria-label="Script boundary"
-                  style={segments}
-                  value={state.boundary}
-                  onChange={(value) => {
-                    const item = boundaries.find((boundary) => boundary.id === value)
-
-                    if (item) setState("boundary", item.id)
-                  }}
-                >
-                  <For each={boundaries}>
-                    {(item) => (
-                      <SegmentedControlItem value={item.id} style={segment}>
-                        {item.label}
-                      </SegmentedControlItem>
-                    )}
-                  </For>
-                </SegmentedControl>
-              </Labeled>
-            </Show>
-          </div>
           <div class="flex flex-col gap-2 border-b border-v2-border-border-base px-4 py-2">
             <div class="flex items-center gap-2">
               <Button
@@ -380,26 +303,29 @@ export const Captured = {
               onOpenChange={(open) => setState("metadata", open)}
             />
           </div>
-          <style>{boundaryStyles}</style>
-          <div
-            class="grid min-h-0 flex-1 divide-x divide-v2-border-border-base"
-            style={{ "grid-template-columns": `repeat(${panes().length}, minmax(0, 1fr))` }}
+          <Show
+            when={state.timeline === "both"}
+            fallback={
+              <div class="min-h-0 flex-1 overflow-y-auto" data-scrollable>
+                {pane(state.timeline === "new")}
+              </div>
+            }
           >
-            <For each={panes()}>
-              {(key) => (
-                <div class="flex min-h-0 flex-col">
-                  <Show when={panes().length > 1}>
+            <div class="grid min-h-0 flex-1 grid-cols-2 divide-x divide-v2-border-border-base">
+              <For each={[false, true]}>
+                {(next) => (
+                  <div class="flex min-h-0 flex-col">
                     <div class="border-b border-v2-border-border-base px-4 py-1.5 text-12-medium text-v2-text-text-muted">
-                      {paneLabel(key)}
+                      {next ? "New timeline" : "Old timeline"}
                     </div>
-                  </Show>
-                  <div class="min-h-0 flex-1 overflow-y-auto" data-scrollable>
-                    {pane(key)}
+                    <div class="min-h-0 flex-1 overflow-y-auto" data-scrollable>
+                      {pane(next)}
+                    </div>
                   </div>
-                </div>
-              )}
-            </For>
-          </div>
+                )}
+              </For>
+            </div>
+          </Show>
         </div>
       </div>
     )
@@ -502,28 +428,6 @@ function Metadata(props: {
   )
 }
 
-function paneLabel(key: string) {
-  return `${key.startsWith("new") ? "New" : "Old"} timeline · ${key.endsWith(":unwrapped") ? "unwrapped" : "wrapped"}`
-}
-
-// Where a script's rows begin and what they span, in an unwrapped pane, to try ways of marking a script's run.
-const scriptRows = (suffix = "") =>
-  [":call:", ":result", ":file:", ":background"]
-    .map((id) => `[data-script-boundary="rail"] [data-timeline-part-id*="${id}"]${suffix}`)
-    .join(", ")
-
-const boundaryStyles = `
-${scriptRows()} { position: relative; }
-${scriptRows("::before")} {
-  content: ""; position: absolute; left: -12px; top: 0; bottom: 0; width: 2px; border-radius: 1px;
-  background: var(--v2-border-border-base);
-}
-[data-script-boundary="divider"] [data-timeline-part-id$=":call:0"]::before {
-  content: "Script"; display: block; margin-bottom: 6px; font-size: 12px; line-height: 16px;
-  color: var(--v2-text-text-faint);
-}
-`
-
 const padding = "px-4 md:px-6"
 
 const statusLabels = {
@@ -551,18 +455,12 @@ function sessionTimelineSettings(detail: TimelineDetail) {
  * it and the offer to move a blocking call to the background. A story session has no permissions, questions, queued
  * input or background tasks, so those cases are left out.
  */
-function SessionStatusLane(props: {
-  document: SessionDocument
-  timelineDetail: TimelineDetail
-  next: boolean
-  unwrapExecute?: boolean
-}) {
+function SessionStatusLane(props: { document: SessionDocument; timelineDetail: TimelineDetail; next: boolean }) {
   const input = {
     sessionMessages: () => props.document.messages,
     status: () => props.document.status,
     timelineDetail: () => props.timelineDetail,
     turnDiffs: () => false,
-    unwrapExecute: props.unwrapExecute,
   }
 
   const settings = () => sessionTimelineSettings(props.timelineDetail)

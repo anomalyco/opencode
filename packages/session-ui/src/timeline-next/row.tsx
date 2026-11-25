@@ -54,7 +54,6 @@ import { noticeEvent, toolEvent } from "./events"
 import { trackNestedRails } from "./nested-rail"
 import { contentEntries, createNextTimelineProjection, resolveContent, workedDuration } from "./projection"
 import { scriptFileFact, type FileFact } from "../timeline/facts"
-import { scriptFileTool } from "../timeline/unwrap-execute"
 import { diffOpens, placeContent } from "../timeline/place"
 import { goal as goalMessage, movedInPlace, thoughtOpens, toolRule } from "./rules"
 import { Separator } from "./separator"
@@ -574,8 +573,7 @@ export function createNextTimelineRowRenderer(input: {
             (ref) => {
               const content = contents.get(ref.messageID)?.get(ref.partID)
 
-              // A script's change drawn as its own part (`unwrapExecute`) runs with the script's changes.
-              if (content?.type === "tool" && content.name !== scriptFileTool) return [content]
+              if (content?.type === "tool") return [content]
               const message = input.projection.messageByID().get(ref.messageID)
 
               const file =
