@@ -256,6 +256,20 @@ describe("PatchTool", () => {
     ),
   )
 
+  it.live("writes a final empty + line of an added file", () =>
+    withTempTool((directory, registry) =>
+      Effect.gen(function* () {
+        const settled = yield* executeTool(
+          registry,
+          call("*** Begin Patch\n*** Add File: notes.md\n+# Title\n+\n*** Add File: blank.txt\n+\n*** End Patch"),
+        )
+        expect(settled.status).toBe("completed")
+        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "notes.md"), "utf8"))).toBe("# Title\n\n")
+        expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "blank.txt"), "utf8"))).toBe("\n")
+      }),
+    ),
+  )
+
   it.live("counts deleted lines with and without a trailing newline", () =>
     withTempTool((directory, registry) =>
       Effect.gen(function* () {
