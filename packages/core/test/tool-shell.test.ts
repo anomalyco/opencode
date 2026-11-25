@@ -1015,6 +1015,9 @@ describe("ShellTool", () => {
             wallTimeSeconds: expect.any(Number),
           })
           expect(timeouts.toSorted((a, b) => a - b)).toEqual([10, 600_000])
+          // A script's shell names the execute call, the one clients have in the transcript.
+          const shell = yield* Shell.Service
+          expect((yield* shell.get(running.shellID)).metadata.callID).toBe("call-parallel-shells")
           yield* Effect.promise(() => Bun.write(path.join(tmp.path, "release"), ""))
           expect((yield* Fiber.join(notice)).valueOrUndefined?.data.item.payload).toMatchObject({
             text: expect.stringContaining("xxxxxx"),
