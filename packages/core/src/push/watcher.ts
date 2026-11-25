@@ -47,10 +47,13 @@ const layer = Layer.effectDiscard(
       if (session.parentID) return
       // The newest assistant message is the turn's last step, so only read it when this turn ran one.
       const [last] = ran ? yield* sessions.messages({ sessionID, type: "assistant", order: "desc", limit: 1 }) : []
-      const text = (last?.type === "assistant" ? last.content : [])
-        .flatMap((part) => (part.type === "text" ? [part.text] : []))
-        .join("\n")
-        .trim()
+      const chars = Array.from(
+        (last?.type === "assistant" ? last.content : [])
+          .flatMap((part) => (part.type === "text" ? [part.text] : []))
+          .join("\n")
+          .trim(),
+      )
+      const text = chars.length > 500 ? "…" + chars.slice(-500).join("") : chars.join("")
       yield* sender.send({
         id: sessionID,
         type: "session.idle",
@@ -82,8 +85,7 @@ const layer = Layer.effectDiscard(
           sessionID: sessionID.value,
           field: field.key,
           kind: field.type,
-          ...(choice?.options && { choices: choice.options.map((option) => option.label) }),
-          ...(choice?.custom && { custom: "true" }),
+          ...(choice?.options?.length && { choices: choice.options.map((option) => option.label) }),
           ...(form.fields.length > 1 && { more: String(form.fields.length - 1) }),
         },
         attention: true,

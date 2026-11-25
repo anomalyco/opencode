@@ -242,19 +242,27 @@ describe("PushSender", () => {
         choices: ["A", expect.stringMatching(/^x+…$/)],
         truncated: "true",
       })
-      const answer = PushSender.message({
-        ...finished,
-        data: { outcome: "succeeded", text: "x".repeat(5_000) + " Done." },
-      })
-      expect(Buffer.byteLength(answer, "utf8")).toBeGreaterThan(2580)
-      expect(JSON.parse(answer).data.text).toMatch(/^…x+ Done\.$/)
+      for (const body of ["b".repeat(2_393), "b".repeat(3_000)]) {
+        for (const list of [["A", "abcd", "Z".repeat(100)], []]) {
+          const cut = PushSender.message({ ...question, body, data: { formID: "frm_1", choices: list } })
+          expect(Buffer.byteLength(cut, "utf8")).toBeLessThanOrEqual(2600)
+          expect(JSON.parse(cut).data.choices).not.toContain("…")
+          if (list.length === 0) expect(JSON.parse(cut).data).toEqual({ formID: "frm_1", choices: [] })
+        }
+      }
+      const answer = PushSender.message({ ...finished, data: { outcome: "succeeded", text: "\u0000".repeat(500) } })
+      expect(Buffer.byteLength(answer, "utf8")).toBeLessThanOrEqual(2600)
+      expect(JSON.parse(answer).data).toEqual({ outcome: "succeeded" })
       const failed = PushSender.message({
         ...finished,
         body: "Failed",
-        data: { outcome: "failed", error: "x".repeat(5_000) },
+        data: { outcome: "failed", text: "Done.", error: "E".repeat(5_000) },
       })
       expect(Buffer.byteLength(failed, "utf8")).toBeLessThanOrEqual(2600)
-      expect(JSON.parse(failed)).toMatchObject({ body: "Failed", data: { error: expect.stringMatching(/^x+…$/) } })
+      expect(JSON.parse(failed)).toMatchObject({
+        body: "Failed",
+        data: { text: "Done.", error: expect.stringMatching(/^E+…$/) },
+      })
       expect(PushSender.message(question)).toBe(
         JSON.stringify({
           v: 1,

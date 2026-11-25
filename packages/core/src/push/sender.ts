@@ -40,36 +40,43 @@ const decodeSent = Schema.decodeUnknownOption(Sent)
 const sentKey = (id: string) => `push:sent:${id}`
 const sentPrefix = "push:sent:"
 
-/** Drops characters from one end of `text` until its JSON is at least `bytes` shorter, and marks the cut with "…". */
-const shorten = (text: string, bytes: number, from: "start" | "end" = "end") => {
+/**
+ * Drops characters from the end of `text` until its JSON is at least `bytes` shorter, then adds "…". Undefined when
+ * nothing is left.
+ */
+const shorten = (text: string, bytes: number) => {
   const chars = Array.from(text)
-  if (from === "start") chars.reverse()
   let dropped = 0
   while (chars.length > 0 && dropped < bytes + 3) {
     dropped += Buffer.byteLength(JSON.stringify(chars.pop()), "utf8") - 2
   }
-  if (from === "start") return "…" + chars.reverse().join("")
+  if (chars.length === 0) return undefined
   return chars.join("") + "…"
 }
 
 type Data = Notification["data"]
 
-const shortenText = (data: Data, key: string, from: "start" | "end", over: (data: Data) => number) => {
+const without = (data: Data, key: string): Data => Object.fromEntries(Object.entries(data).filter(([k]) => k !== key))
+
+const shortenText = (data: Data, key: string, over: (data: Data) => number) => {
   const value = data[key]
   if (typeof value !== "string" || over(data) <= 0) return data
-  return { ...data, [key]: shorten(value, over(data), from) }
+  const short = shorten(value, over(data))
+  if (short === undefined) return without(data, key)
+  return { ...data, [key]: short }
 }
 
 const shortenList = (data: Data, key: string, over: (data: Data) => number) => {
   const items = data[key]
-  if (!Array.isArray(items) || over(data) <= 0) return data
+  if (!Array.isArray(items) || items.length === 0 || over(data) <= 0) return data
   const cut = (kept: ReadonlyArray<string>) => ({ ...data, [key]: kept, truncated: "true" })
   const kept: string[] = []
   for (const item of items) {
     const next = cut([...kept, item])
     if (over(next) > 0) {
-      const short = cut([...kept, shorten(item, over(next))])
-      return over(short) > 0 ? cut(kept) : short
+      const short = shorten(item, over(next))
+      if (short === undefined || over(cut([...kept, short])) > 0) return cut(kept)
+      return cut([...kept, short])
     }
     kept.push(item)
   }
@@ -77,9 +84,9 @@ const shortenList = (data: Data, key: string, over: (data: Data) => number) => {
 }
 
 /**
- * The JSON the phone decrypts, shortened so the box stays within the relay's limit. A finished turn's text is cut from
- * its start so its end survives, then its error. A permission's resources or a question's choices keep their order and
- * come with `truncated: "true"`. The body is cut last; ids never are.
+ * The JSON the phone decrypts, shortened so the box stays within the relay's limit. A finished turn's error is cut
+ * first, then its text is dropped. A permission's resources or a question's choices keep their order and come with
+ * `truncated: "true"`. The body is cut last; ids never are.
  */
 export const message = (notification: Notification) => {
   const make = (data: Data, body = notification.body) =>
@@ -93,11 +100,11 @@ export const message = (notification: Notification) => {
       data,
     })
   const over = (data: Data) => Buffer.byteLength(make(data), "utf8") - maxMessageBytes
-  const text = shortenText(notification.data, "text", "start", over)
-  const error = shortenText(text, "error", "end", over)
-  const data = shortenList(shortenList(error, "resources", over), "choices", over)
+  const error = shortenText(notification.data, "error", over)
+  const text = over(error) > 0 ? without(error, "text") : error
+  const data = shortenList(shortenList(text, "resources", over), "choices", over)
   if (over(data) <= 0) return make(data)
-  return make(data, shorten(notification.body, over(data)))
+  return make(data, shorten(notification.body, over(data)) ?? "…")
 }
 
 export const level = (device: PushList.Stored, sessions: Record<string, Push.Bell>, sessionID: string) =>

@@ -229,7 +229,6 @@ describe("PushWatcher", () => {
             field: "q0",
             kind: "string",
             choices: ["Postgres", "SQLite"],
-            custom: "true",
             more: "1",
           },
         },
