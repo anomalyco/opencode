@@ -18,7 +18,7 @@
 }
 
 .markdown-session-link:focus-visible {
-  outline: 2px solid currentColor;
+  outline: 2px solid var(--v2-border-border-focus);
   outline-offset: 2px;
 }
 
@@ -54,6 +54,15 @@
   /* Reset & Base Typography */
   min-width: 0;
   max-width: 100%;
+  /* Bare prose keeps its collapsed margins and rasterization. Markup that could pick up layout from the app's
+     styles is paint-contained, including fixed descendants, without creating a scrollport for sticky headers. */
+  &:has([data-markdown-contain]) { contain: paint; }
+  /* Each base is an existing atomic line box. Clip its positioned ink without making the whole formula atomic
+     (which would change wrapping), changing its baseline, or introducing a scroll container. */
+  .katex .katex-base, .katex .katex-tag {
+    overflow: clip;
+    overflow-clip-margin: 0.125em;
+  }
   overflow-wrap: break-word;
   color: var(--v2-text-text-base);
   font-family: var(--font-family-sans);
@@ -196,6 +205,11 @@
 
   a[data-local-link] {
     cursor: pointer;
+  }
+
+  a[data-app-link][role="link"][tabindex="0"] {
+    cursor: pointer;
+    text-decoration: underline;
   }
 
   &[data-local-links] :not(pre) > code[data-inline-code-kind="path"]:not(a > code) {
@@ -375,8 +389,13 @@
     --markdown-code-background: var(--color-background-stronger);
   }
 
-  /* A completed block's highlighter paints its own background inline, which the shell colours don't override. */
-  [data-component="markdown-code"][data-code-kind="shell"]:has(> pre:not([style*="background"])) {
+  /* A completed block's highlighter paints its own background inline, which the shell colours don't override. Matched
+     from the toolbar after the code rather than with :has(): a style attribute in a :has() argument makes Chromium
+     recheck every :has() above each element whose inline style changes, and the session timeline sets its rows'
+     positions inline, so each change restyled the whole timeline. */
+  [data-component="markdown-code"][data-code-kind="shell"]
+    > pre:not([style*="background"])
+    ~ [data-slot="markdown-code-toolbar"] {
     --markdown-code-background: var(--markdown-shell-code-background);
   }
 
@@ -527,6 +546,7 @@
 
   table {
     width: 100%;
+    max-width: 100%;
     border-collapse: separate;
     border-spacing: 0;
     color: var(--v2-text-text-base);
@@ -587,6 +607,16 @@
     border-radius: 4px;
     margin: 1.5rem 0;
     display: block;
+  }
+
+  /* Media keeps inside its message, whatever size the author gave it. */
+  video,
+  audio {
+    max-width: 100%;
+  }
+
+  video {
+    height: auto;
   }
 }
 

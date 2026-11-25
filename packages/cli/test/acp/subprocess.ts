@@ -36,7 +36,7 @@ type Waiter = {
 type AcpProcess = {
   readonly pid: number
   readonly exited: Promise<number>
-  readonly request: <T>(method: string, params?: unknown) => Promise<JsonRpcResponse<T>>
+  readonly request: <T>(method: string, params?: unknown, timeoutMs?: number) => Promise<JsonRpcResponse<T>>
   readonly waitForMessage: (predicate: Waiter["predicate"], description: string) => Promise<JsonRpcMessage>
   readonly close: () => Promise<number>
   readonly stderr: () => string
@@ -87,6 +87,8 @@ export async function createAcpFixture(
           OPENCODE_CONFIG_CONTENT: undefined,
           OPENCODE_DISABLE_AUTOUPDATE: "true",
           OPENCODE_MODELS_PATH: models,
+          // The scripted model calls read and shell directly, which full_codemode moves inside execute.
+          OPENCODE_FLAGS: "-full_codemode",
         }),
       })
       processes.add(acp)
@@ -120,12 +122,19 @@ async function removeRoot(root: string, deadline = Date.now() + 15_000): Promise
 }
 
 export function initialize(acp: AcpProcess) {
+  // A cold agent starts its own server and loads its plugins before it can answer; on the merge lane's loaded box
+  // that has taken over 20 s (both sides failed their first request in suites-20261118-210025). The suites' own
+  // budget is 60 s, so the first request waits most of it rather than failing while the agent is still starting.
   return acp
-    .request<InitializeResponse>("initialize", {
-      protocolVersion: 1,
-      clientCapabilities: { _meta: { "terminal-auth": true } },
-      clientInfo: { name: "opencode-local-acp", version: "0.1.0" },
-    })
+    .request<InitializeResponse>(
+      "initialize",
+      {
+        protocolVersion: 1,
+        clientCapabilities: { _meta: { "terminal-auth": true } },
+        clientInfo: { name: "opencode-local-acp", version: "0.1.0" },
+      },
+      50_000,
+    )
     .then(expectOk)
 }
 
@@ -198,7 +207,9 @@ function verifierConfig(llmUrl: string) {
 }
 
 function spawnAcp(input: { readonly env: Record<string, string | undefined> }): AcpProcess {
-  const child = Bun.spawn([process.execPath, "run", "src/index.ts", "acp"], {
+  // OPENCODE_ACP_TEST_BIN runs the suites against another ACP binary, such as the Rust client.
+  const override = process.env.OPENCODE_ACP_TEST_BIN
+  const child = Bun.spawn(override ? [override, "acp"] : [process.execPath, "run", "src/index.ts", "acp"], {
     cwd: path.join(import.meta.dir, "../.."),
     env: input.env,
     stdin: "pipe",
@@ -291,12 +302,16 @@ function spawnAcp(input: { readonly env: Record<string, string | undefined> }): 
     await child.stdin.flush()
   }
 
-  const request = <T>(method: string, params?: unknown) => {
+  const request = <T>(method: string, params?: unknown, timeoutMs = 20_000) => {
     const id = nextID++
     const message: JsonRpcRequest =
       params === undefined ? { jsonrpc: "2.0", id, method } : { jsonrpc: "2.0", id, method, params }
     return write(message).then(async () => {
-      const response = await take((message) => isResponse(message) && message.id === id, 20_000, `${method} response`)
+      const response = await take(
+        (message) => isResponse(message) && message.id === id,
+        timeoutMs,
+        `${method} response`,
+      )
       if (!isResponse<T>(response)) throw new Error(`Invalid ACP response: ${JSON.stringify(response)}`)
       return response
     })

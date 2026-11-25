@@ -23,7 +23,6 @@ export const dict = {
   "session.location.description": "Choose another directory to continue this session.",
   "session.location.choose": "Choose directory",
   "session.location.worktree": "Choose worktree",
-  "session.location.worktreesFailed": "Failed to load worktrees",
   "session.rewind.toast.title": "Reverted",
   "session.rewind.toast.undo": "Undo",
   "session.location.moving": "Moving session…",
@@ -102,6 +101,9 @@ export const dict = {
   "command.agent.cycle.reverse.description": "Switch to the previous agent",
   "command.model.variant.cycle": "Cycle model variant",
   "command.model.variant.cycle.description": "Switch to the next model variant",
+  "command.model.speed.cycle": "Cycle model speed",
+  "command.model.speed.cycle.description": "Switch to the next model speed",
+  "composer.speed.standard": "standard",
   "command.prompt.mode.shell": "Shell",
   "command.prompt.mode.normal": "Prompt",
   "command.prompt.mode.toggle": "Toggle shell mode",
@@ -121,6 +123,7 @@ export const dict = {
   "command.session.export.description": "Export the full session transcript as JSON",
   "command.session.import": "Import session",
   "command.session.copyID": "Copy Session ID",
+  "command.session.archive": "Archive session",
   "command.session.rename": "Rename session",
   "command.session.delete": "Delete session",
 
@@ -188,7 +191,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Connect",
   "provider.connect.breadcrumb.label": "Connect steps",
   "provider.connect.methods.description": "Choose how to connect {{provider}}.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Try again",
   "provider.connect.console.serviceKeyDescription": "Connect using a service-account API key from OpenCode Console.",
@@ -219,6 +222,13 @@ export const dict = {
   "provider.connect.chatgptUsageLimit.description": "Check your usage and limits in ChatGPT settings.",
   "provider.connect.chatgptUsageLimit.manage": "Manage usage",
   "provider.connect.chatgptUsageLimit.close": "Close",
+  "provider.connect.chatgptUsageLimit.workspaceDescription":
+    "You've reached your workspace's limit for using your ChatGPT plan in other apps. Copy a message below to ask your workspace admin for increased usage limits.",
+  "provider.connect.chatgptUsageLimit.copyRequest": "Copy request for admin",
+  "provider.connect.chatgptUsageLimit.requestCopied": "Request copied. Send it to your workspace admin.",
+  "provider.connect.chatgptUsageLimit.requestCopyFailed": "Couldn't copy. Send this to your workspace admin:",
+  "provider.connect.chatgptUsageLimit.request":
+    "I've reached the limit for using my ChatGPT plan in OpenCode. Could you increase our workspace's usage limits so I can continue?\n\nGo to admin.openai.com → Workspace → Usage limits. Thank you!",
   "provider.connect.console.refreshFailed":
     "Your account is connected, but we couldn't load your models. Try again to refresh them.",
   "provider.connect.console.connected": "OpenCode connected",
@@ -588,6 +598,8 @@ export const dict = {
   "notification.session.responseReady.title": "Response ready",
   "notification.session.error.title": "Session error",
   "notification.session.error.fallbackDescription": "An error occurred",
+  "notification.taskbar.badge.one": "{{count}} session needs you",
+  "notification.taskbar.badge.other": "{{count}} sessions need you",
 
   "home.title": "Home",
   "home.projects": "Projects",
@@ -604,6 +616,7 @@ export const dict = {
   "home.sessions.search.placeholder.scoped": "Search sessions in {{scope}}",
   "home.sessions.search.sessions": "Sessions",
   "home.sessions.search.noResults": "No sessions found for {{query}}",
+  "home.sessions.openInBackground": "Open in background",
   "home.sessions.empty": "Nothing here yet",
   "home.sessions.empty.description": "Create a session to get started",
   "home.sessions.load.failed": "Couldn't load sessions",
@@ -616,7 +629,8 @@ export const dict = {
   "tips.browse.description": "Let OpenCode work in your browser with your tabs, logins, and extensions.",
   "tips.browse.install": "Install",
   "tips.hex.title": "Use your voice",
-  "tips.hex.description": "Hex lets you hold a key and speak your prompts. It runs on your computer and works in any app.",
+  "tips.hex.description":
+    "Hex lets you hold a key and speak your prompts. It runs on your computer and works in any app.",
   "tips.hex.install": "Install Hex",
   "home.workspaceTip": "Start next session in a new workspace to keep changes isolated",
 
@@ -683,6 +697,7 @@ export const dict = {
   "session.timeline.status.working": "Working",
   "session.running.stop.subagent": "Interrupt subagent",
   "session.running.stop.shell": "Kill shell command",
+  "session.running.stop.script": "Cancel script",
 
   "session.files.selectToOpen": "Select a file to open",
 
@@ -692,6 +707,8 @@ export const dict = {
   "session.activity.subagents.other": "{{count}} subagents",
   "session.activity.shells.one": "{{count}} shell",
   "session.activity.shells.other": "{{count}} shells",
+  "session.activity.scripts.one": "{{count}} script",
+  "session.activity.scripts.other": "{{count}} scripts",
   "session.activity.shell.back": "Back to background work",
   "session.activity.shell.stop": "Stop",
   "session.activity.shell.stopping": "Stopping…",
@@ -814,7 +831,6 @@ export const dict = {
   "sidebar.help": "Help",
   "sidebar.inbox.empty": "Sessions you work on will appear here",
   "sidebar.inbox.section.needsAttention": "Needs attention",
-  "sidebar.inbox.section.unread": "Unread",
   "sidebar.inbox.showMore": "Show more",
   "sidebar.inbox.showLess": "Show less",
   "sidebar.inbox.announce.approval": "{{title}} needs approval.",
@@ -823,9 +839,13 @@ export const dict = {
   "sidebar.inbox.announce.done": "{{title}} is done.",
   "sidebar.inbox.announce.failed": "{{title}} failed.",
   "sidebar.inbox.section.working": "Working",
+  "sidebar.inbox.working.placement": "Working sessions",
+  "sidebar.inbox.working.shelf": "Pinned to the bottom",
+  "sidebar.inbox.working.inline": "Above archived",
   "sidebar.inbox.section.recent": "Recent",
   "sidebar.inbox.section.archived": "Archived",
-  "sidebar.inbox.archived.title": "Archived sessions",
+  "sidebar.inbox.section.drafts": "Drafts",
+  "sidebar.inbox.discardDraft": "Discard draft",
   "sidebar.inbox.unarchive": "Unarchive",
   "sidebar.inbox.status.approval": "Approval",
   "sidebar.inbox.status.input": "Question",
@@ -886,8 +906,7 @@ export const dict = {
   "settings.experimental.row.newQuestionUI.title": "New question UI",
   "settings.experimental.row.newQuestionUI.description": "Preview the keyboard-first question dock",
   "settings.experimental.row.tabGroups.title": "Tab groups",
-  "settings.experimental.row.tabGroups.description":
-    "Group session tabs in side tabs with inline session search",
+  "settings.experimental.row.tabGroups.description": "Group session tabs in side tabs with inline session search",
   "settings.experimental.row.sidebarOrganize.title": "Organize vertical sidebar",
   "settings.experimental.row.sidebarOrganize.description":
     "Choose how to organize sessions in side tabs. On desktop, Customize replaces Home with Settings in the sidebar.",
@@ -896,7 +915,8 @@ export const dict = {
   "settings.experimental.sidebarOrganize.customize": "Customize",
   "settings.experimental.sidebarOrganize.consolidated": "Consolidated",
   "settings.general.row.navigation.title": "Navigation",
-  "settings.general.row.navigation.description": "Keep the sessions you're working on as tabs, or see every session in one list.",
+  "settings.general.row.navigation.description":
+    "Keep the sessions you're working on as tabs, or see every session in one list.",
   "settings.general.row.navigation.tabs": "Tabs",
   "settings.general.row.navigation.list": "List",
   "settings.general.row.tabPosition.title": "Tab position",
@@ -1209,6 +1229,8 @@ export const dict = {
   "settings.general.row.showCustomAgents.title": "Show agent",
   "settings.general.row.showCustomAgents.description":
     "Switch between agents in the composer. When hidden, defaults to Build agent.",
+  "settings.general.row.sharedSidePanel.title": "Keep side panel open across sessions",
+  "settings.general.row.sharedSidePanel.description": "Opening or closing it in one session applies to all",
   "settings.general.row.followUpBehavior.title": "Follow-up behavior",
   "settings.general.row.followUpBehavior.description":
     "Choose whether to queue follow-ups or steer the current turn. Use {{keybind}} to switch.",
@@ -1297,6 +1319,7 @@ export const dict = {
   "settings.shortcuts.unassigned": "Unassigned",
   "settings.shortcuts.pressKeys": "Press keys",
   "settings.shortcuts.unbind": "Unbind",
+  "settings.shortcuts.addKey": "Add a key",
   "settings.shortcuts.search.placeholder": "Search shortcuts",
 
   "settings.shortcuts.group.general": "General",

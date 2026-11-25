@@ -1,7 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { resolve } from "node:path"
-import { pathToFileURL } from "node:url"
-import { resolveExternalURL, resolveLocalFilePath } from "./external-url"
+import { resolveExternalURL } from "./external-url"
 
 describe("external URLs", () => {
   test("opens only web and mail URLs externally", () => {
@@ -13,10 +11,4 @@ describe("external URLs", () => {
       expect(resolveExternalURL(url)).toBeUndefined()
   })
 
-  test("resolves only local file URLs", () => {
-    const path = resolve("example.html")
-    expect(resolveLocalFilePath(pathToFileURL(path).href)).toBe(path)
-    expect(resolveLocalFilePath("file://example.com/share/index.html")).toBeUndefined()
-    expect(resolveLocalFilePath("https://example.com/index.html")).toBeUndefined()
-  })
 })

@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Käyttö",
   "usage.cost": "Kustannukset",
   "usage.view": "Näytä kontekstin käyttö",
-  "systemPrompt.title": "Järjestelmäkehote",
   "rawMessages.title": "Raakaviestit",
   "export.session": "Vie istunto",
   "stats.session": "Istunto",

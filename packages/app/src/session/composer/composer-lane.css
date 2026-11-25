@@ -27,7 +27,7 @@
 
   &:focus-visible {
     outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: 2.5px;
+    outline-offset: 2px;
   }
 
   /* Overlays layer over the capsule's own surface. */

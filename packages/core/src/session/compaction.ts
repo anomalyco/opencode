@@ -18,7 +18,7 @@ import type { StreamOptions } from "@opencode/ai/route"
 import type { SessionCompactionResult } from "@opencode/plugin/effect/session"
 import type { SessionError } from "@opencode/schema/session-error"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
-import { Clock, Context, DateTime, Effect, Exit, Fiber, Layer, Result, Scope, Stream } from "effect"
+import { Cause, Clock, Context, DateTime, Effect, Exit, Fiber, Layer, Result, Scope, Stream } from "effect"
 import { Agent } from "../agent.js"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
@@ -375,6 +375,11 @@ export const layer = Layer.effect(
         if (index >= 0 && !failed && tailTokens(context, index) <= existing.tailLimit) return
         // Summarizing up to the same response again would repeat the same request.
         if (index >= 0 && (existing.keepID === anchor.id || failures >= PRECOMPUTE_MAX_FAILURES)) return
+        yield* Effect.logInfo("background compaction replaced", {
+          sessionID,
+          keepID: existing.keepID,
+          reason: index < 0 ? "history changed" : failed ? "failed" : "fell behind",
+        })
         yield* Fiber.interrupt(existing.fiber)
         precomputed.delete(sessionID)
       }
@@ -390,7 +395,17 @@ export const layer = Layer.effect(
       const fiber = yield* summarize({ reason: "auto", context: model.context }, model.cap, settings.keep, {
         messages: context.messages.slice(0, anchorIndex),
         usage: (recorded) => usage.push(recorded),
-      }).pipe(Effect.forkIn(scope))
+      }).pipe(
+        Effect.tapCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.void
+            : Effect.logWarning("background compaction failed", { sessionID, keepID: anchor.id, cause }),
+        ),
+        Effect.withSpan("SessionCompaction.background", {
+          attributes: { "session.id": sessionID, "compaction.keep_id": anchor.id },
+        }),
+        Effect.forkIn(scope),
+      )
       precomputed.set(sessionID, {
         firstID: context.messages[0]?.id,
         keepID: anchor.id,
@@ -416,11 +431,23 @@ export const layer = Layer.effect(
       const context = trigger.context
       const index = heldIndex(held, context)
       if (native || index < 0 || tailTokens(context, index) > tailLimit(budget)) {
+        yield* Effect.logInfo("background compaction discarded", {
+          sessionID: context.session.id,
+          keepID: held.keepID,
+          reason: native ? "native compaction" : index < 0 ? "history changed" : "tail too long",
+        })
         yield* Fiber.interrupt(held.fiber)
         return undefined
       }
 
+      const pending = held.fiber.pollUnsafe() === undefined
+      const waitStarted = yield* Clock.currentTimeMillis
       const exit = yield* Fiber.await(held.fiber).pipe(Effect.onInterrupt(() => Fiber.interrupt(held.fiber)))
+      yield* Effect.annotateCurrentSpan({
+        "compaction.background.pending": pending,
+        "compaction.background.wait_ms": (yield* Clock.currentTimeMillis) - waitStarted,
+        "compaction.background.failed": Exit.isFailure(exit),
+      })
       if (Exit.isFailure(exit)) return undefined
       // Background calls were billed as they finished; the compaction's message still shows what it cost.
       held.usage.forEach((usage) => addSpent(context.session.id, usage))
@@ -674,8 +701,9 @@ export const layer = Layer.effect(
           const step = SHRINK_STEPS[rejections]
           if (step === undefined) return yield* Effect.fail<Failure>({ error })
           rejected ??= size ? total(size) : estimateRequest(request)
-          // The characters can still say the rejected request fits, so it only goes out again as text.
-          if (size) asText = true
+          // The characters can still say a rejected request fits, so the conversation or the history before the tail
+          // only goes out again as text.
+          if (size || request === shrink.history) asText = true
           target = Math.floor(rejected * step)
           fit = target
           rejections++
@@ -1024,15 +1052,11 @@ const recentStart = (
   keep: number,
   previous: SessionMessage.CompactionCompleted | undefined,
 ) => {
-  // Drop the oldest entries until the rest fit the allowance, but always keep the newest one.
-  const dropped = Math.min(
-    oldestToDrop(entries, (entry) => Token.estimate(entry.text), keep),
-    entries.length - 1,
-  )
-
-  // Start at a user message so an assistant's tool calls and results stay together.
-  const userBoundary = entries.findLastIndex((entry, index) => index <= dropped && entry.message.type === "user")
-  if (userBoundary > 0) return userBoundary
+  // The tail is sent as text and each message carries its own tool calls and results, so it can start at any
+  // message. One token more per message covers the separator between them and rounding, so the joined text stays
+  // within `keep`. A newest message larger than `keep` on its own is summarized with the rest.
+  const start = oldestToDrop(entries, (entry) => Token.estimate(entry.text) + 1, keep)
+  if (start > 0) return start
 
   // Everything fits. Keep only the latest exchange rather than duplicating the whole conversation beside the summary.
   const latestUser = entries.findLastIndex((entry) => entry.message.type === "user")

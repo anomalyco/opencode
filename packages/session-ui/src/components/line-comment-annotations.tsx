@@ -52,8 +52,8 @@ export type SavedLineComment = {
 type LineCommentDriverProps<T extends SavedLineComment> = {
   machine?: LineCommentMachine
   onSyncSelected?: (range: SelectedLineRange | null) => void
-  onSubmit: (input: { comment: string; selection: SelectedLineRange }) => void
-  onUpdate?: (input: { id: string; comment: string; selection: SelectedLineRange }) => void
+  onSubmit: (input: { comment: string; selection: SelectedLineRange; send: boolean }) => void
+  onUpdate?: (input: { id: string; comment: string; selection: SelectedLineRange; send: boolean }) => void
   onDelete?: (comment: T) => void
 }
 
@@ -239,10 +239,11 @@ export function createLineCommentDriver<T extends SavedLineComment>(props: LineC
       if (effect.type === "sync-selected")
         props.onSyncSelected?.(effect.range ? cloneSelectedLineRange(effect.range) : null)
 
-      if (effect.type === "submit-draft") props.onSubmit({ comment: effect.comment, selection: effect.selection })
+      if (effect.type === "submit-draft")
+        props.onSubmit({ comment: effect.comment, selection: effect.selection, send: effect.send })
 
       if (effect.type === "submit-edit")
-        props.onUpdate?.({ id: effect.id, comment: effect.comment, selection: effect.selection })
+        props.onUpdate?.({ id: effect.id, comment: effect.comment, selection: effect.selection, send: effect.send })
 
       if (effect.type === "delete-comment" && comment) props.onDelete?.(comment)
     }

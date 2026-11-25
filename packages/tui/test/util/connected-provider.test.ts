@@ -1,16 +1,59 @@
 import { describe, expect, test } from "bun:test"
 import { hasConnectedProvider } from "../../src/util/connected-provider"
 
-describe("hasConnectedProvider", () => {
-  test("is false without integration credentials", () => {
-    expect(hasConnectedProvider([])).toBe(false)
-    expect(hasConnectedProvider([{ connections: [] }])).toBe(false)
-  })
+const opencode = { providerID: "opencode", status: "active" } as const
+const ollama = { providerID: "ollama", status: "active" } as const
+const providers = [{ id: "opencode" }, { id: "ollama" }]
 
-  test("is true after any provider integration is connected", () => {
-    expect(
-      hasConnectedProvider([{ connections: [{ type: "credential", method: "key", id: "cred_1", label: "Work" }] }]),
-    ).toBe(true)
-    expect(hasConnectedProvider([{ connections: [{ type: "env", name: "OPENAI_API_KEY" }] }])).toBe(true)
+describe("hasConnectedProvider", () => {
+  test.each<[string, Parameters<typeof hasConnectedProvider>[0], boolean]>([
+    ["nothing listed", { integrations: [], providers: [], models: [] }, false],
+    ["only OpenCode's keyless models", { integrations: [{ connections: [] }], providers, models: [opencode] }, false],
+    [
+      "a stored credential",
+      {
+        integrations: [
+          {
+            connections: [
+              {
+                type: "credential",
+                method: "key",
+                id: "cred_1",
+                label: "Work",
+              },
+            ],
+          },
+        ],
+        providers: [],
+        models: [],
+      },
+      true,
+    ],
+    [
+      "a detected environment variable",
+      {
+        integrations: [{ connections: [{ type: "env", name: "OPENAI_API_KEY" }] }],
+        providers: [],
+        models: [],
+      },
+      true,
+    ],
+    ["a provider declared only in config", { integrations: [], providers, models: [opencode, ollama] }, true],
+    [
+      "only deprecated models",
+      {
+        integrations: [],
+        providers,
+        models: [{ ...ollama, status: "deprecated" }],
+      },
+      false,
+    ],
+    [
+      "models of a provider that is not listed",
+      { integrations: [], providers: [{ id: "opencode" }], models: [ollama] },
+      false,
+    ],
+  ])("%s", (_, input, expected) => {
+    expect(hasConnectedProvider(input)).toBe(expected)
   })
 })

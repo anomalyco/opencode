@@ -107,6 +107,15 @@ opencode plugin remove opencode-acme-plugin@1.2.0
 pass a configured package target to check or update only that package. Local plugins and exact package revisions are
 skipped.
 
+A package updates itself when it names what to follow: `name@latest`, a version range such as `name@^1.2.0`,
+`name@~1.2.0`, `name@1.x` or `name@>=1.2.0 <2`, a Git branch such as `github:acme/plugin#main`, or a Git `semver:` range.
+OpenCode checks it on startup and every 24 hours, installs a newer version, and reloads it. A range only moves to versions
+inside it. If the new version fails to load, the previous one keeps running and stays installed.
+
+A bare name (`name`) or repository (`github:acme/plugin`) stays on the version it installed. So do other npm tags such as
+`name@next` and Git tags. `plugin check` still reports their updates and `plugin update` installs them. Exact versions and
+commit hashes are pinned.
+
 Package installation accepts npm names with versions, tags, or ranges, plus npm-compatible Git package specifications.
 Git repositories can use hosted shortcuts, HTTPS, or SSH, including private repositories available through your existing
 Git credentials.
@@ -124,8 +133,8 @@ local paths directly; tarball and npm alias targets are not accepted by `plugin 
 ## Reload
 
 Changes under watched config directories reload automatically. Server startup loads cached package plugins immediately,
-installs missing packages in the background, and checks unpinned npm and Git plugins for updates without changing the
-installed package. Exact npm versions and full Git commit hashes stay pinned. Changes to unwatched local dependencies
+installs missing packages in the background, and checks unpinned npm and Git plugins for updates. Exact npm versions and
+full Git commit hashes stay pinned. Changes to unwatched local dependencies
 may still require restarting OpenCode.
 
 ```sh
