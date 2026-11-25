@@ -374,6 +374,8 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
   const measure = () => {
     if (!root) return
 
+    if (customInput) fitCustomAnswer(customInput)
+
     const scroller = document.querySelector('[data-slot="session-timeline-scroll"] > .scroll-view__viewport')
     const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
 
@@ -509,7 +511,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
 
     const dock = root?.closest('[data-component="session-composer-dock"]')
     const scroller = document.querySelector('[data-slot="session-timeline-scroll"] > .scroll-view__viewport')
-    createResizeObserver([dock, scroller], requestMeasure)
+    createResizeObserver([dock, scroller, customInput], requestMeasure)
 
     focus(pickFocus())
   })
@@ -575,6 +577,7 @@ export const SessionQuestionDockExperimental: Component<{ request: FormInfo; onS
 
     if (customInput) fitCustomAnswer(customInput)
   })
+
   const shortcuts = createMemo(() => questionSubmitShortcuts(submitKey(), IS_MAC, language.t("common.key.ctrl")))
   const backShortcut = () => (IS_MAC ? "⌘[" : `${language.t("common.key.alt")}+←`)
 

@@ -188,6 +188,8 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
   const measure = () => {
     if (!root) return
 
+    if (customInput) fitCustomAnswer(customInput)
+
     const scroller = document.querySelector('[data-slot="session-timeline-scroll"] > .scroll-view__viewport')
     const head = scroller instanceof HTMLElement ? scroller.firstElementChild : undefined
 
@@ -272,7 +274,7 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
 
     const dock = root?.closest('[data-component="session-composer-dock"]')
     const scroller = document.querySelector('[data-slot="session-timeline-scroll"] > .scroll-view__viewport')
-    createResizeObserver([dock, scroller], update)
+    createResizeObserver([dock, scroller, customInput], update)
 
     onCleanup(() => {
       if (raf !== undefined) cancelAnimationFrame(raf)
