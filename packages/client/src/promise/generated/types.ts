@@ -2705,6 +2705,7 @@ export type ConfigEntry =
           recommended_api?: boolean
           model_speeds?: boolean
           full_codemode?: boolean
+          execute_description?: boolean
           machines?: boolean
           home_memory?: boolean
           project_overlay?: boolean

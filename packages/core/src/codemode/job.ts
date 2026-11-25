@@ -1,7 +1,7 @@
 export * as CodeModeJob from "./job.js"
 
 import { Identifier } from "@opencode/schema/identifier"
-import { Cause, Context, Deferred, Duration, Effect, Exit, Option, type Scope, Semaphore } from "effect"
+import { Cause, Context, Deferred, Duration, Effect, Exit, Option, Predicate, Ref, type Scope, Semaphore } from "effect"
 import { extension } from "mime-types"
 import { Flag } from "../flag.js"
 import { Job } from "../job.js"
@@ -21,6 +21,15 @@ export function notice(job: Pick<Job.Info, "id" | "status" | "output" | "error">
 }
 
 const BLOCK_TIMEOUT = "2 minutes"
+
+// The row ends when the script moves to the background, so a call still in flight then shows as done; the job's own
+// notice reports how the script ended.
+const settled = (calls: unknown) =>
+  Array.isArray(calls)
+    ? calls.map((call) =>
+        Predicate.hasProperty(call, "status") && call.status === "running" ? { ...call, status: "completed" } : call,
+      )
+    : []
 
 type Execute = (context: Tool.Context) => Effect.Effect<Tool.NormalizedResult, Tool.Error>
 /** The execute call's own `timeout` and `background` inputs, which only exist with `full_codemode`. */
@@ -54,6 +63,8 @@ export const make = Effect.fnUntraced(function* (
     const result = yield* Deferred.make<Tool.NormalizedResult, Tool.Error>()
     const detached = yield* Deferred.make<void>()
     const progress = Semaphore.makeUnsafe(1)
+    // The calls the script made before it moved to the background, which its row keeps showing.
+    const toolCalls = yield* Ref.make<unknown>([])
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
         yield* context.progress({ background: true })
@@ -69,7 +80,13 @@ export const make = Effect.fnUntraced(function* (
                 progress.withPermit(
                   Deferred.isDone(detached).pipe(
                     // The background flag tells clients this script can move to the background.
-                    Effect.flatMap((done) => (done ? Effect.void : context.progress({ ...update, background: true }))),
+                    Effect.flatMap((done) =>
+                      done
+                        ? Effect.void
+                        : Ref.set(toolCalls, update.toolCalls ?? []).pipe(
+                            Effect.andThen(context.progress({ ...update, background: true })),
+                          ),
+                    ),
                   ),
                 ),
             }).pipe(Effect.provideService(Job.BlockingParent, id), Effect.interruptible, Effect.exit)
@@ -136,7 +153,7 @@ export const make = Effect.fnUntraced(function* (
         return {
           content: [{ type: "text" as const, text }],
           output: { output: text, toolCalls: [], files: [] },
-          metadata: { jobID: id },
+          metadata: { jobID: id, toolCalls: settled(yield* Ref.get(toolCalls)) },
         }
       }),
     )

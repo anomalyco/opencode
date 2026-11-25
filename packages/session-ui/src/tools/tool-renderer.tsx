@@ -2048,23 +2048,10 @@ ToolRegistry.register({
     const count = createMemo(() => executeToolCallCount(props.metadata))
     const subtitle = createMemo(() => executeToolSubtitle(props.metadata))
     const code = createMemo(() => (toolInput(props.input).code ?? "").trimEnd())
-
     // A runtime failure shows its output on the failing row; a successful script shows its result below the calls.
-    const error = createMemo(() => {
-      if (props.status !== "error" && props.metadata.error !== true) return undefined
-      const fallback = i18n.t("ui.toolErrorCard.failed")
-      const text = stripAnsi((props.status === "error" ? props.error : undefined) || props.output || fallback)
-
-      return text.replace(/^Error:\s*/, "").trim() || fallback
-    })
-
-    const output = createMemo(() =>
-      error()
-        ? ""
-        : stripAnsi(props.output ?? "")
-            .replace(/\r\n?/g, "\n")
-            .trim(),
-    )
+    const result = createMemo(() => executeResult(props, i18n))
+    const error = () => result().error
+    const output = () => result().output
 
     // A runtime failure belongs to the call that raised it; scripts can also fail outside any call.
     const owner = createMemo(() => executeToolErrorIndex(props.metadata))
@@ -2150,11 +2137,26 @@ ToolRegistry.register({
   },
 })
 
+/** What a script ended with: its error where it failed, or else its output. */
+export function executeResult(props: ToolProps & { error?: string }, i18n: UiI18n) {
+  if (props.status !== "error" && props.metadata.error !== true)
+    return {
+      error: undefined,
+      output: stripAnsi(props.output ?? "")
+        .replace(/\r\n?/g, "\n")
+        .trim(),
+    }
+  const fallback = i18n.t("ui.toolErrorCard.failed")
+  const text = stripAnsi((props.status === "error" ? props.error : undefined) || props.output || fallback)
+
+  return { error: text.replace(/^Error:\s*/, "").trim() || fallback, output: "" }
+}
+
 const executeCallsShown = 10
 
 const executeCallsRevealed = 50
 
-function ExecuteDetails(props: { code: string; output: string; error?: string; status?: string }) {
+export function ExecuteDetails(props: { code: string; output: string; error?: string; status?: string }) {
   const i18n = useI18n()
   const fileComponent = useFileComponent()
   const lineCount = (text: string) => text.split("\n").length

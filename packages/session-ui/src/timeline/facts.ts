@@ -246,6 +246,52 @@ export function scriptChangePaths(tool: Tool) {
   return scriptChanges(tool, reads(tool)).map((file) => file.file)
 }
 
+const decodeScriptCall = Schema.decodeUnknownOption(
+  Schema.Struct({
+    tool: Schema.String,
+    status: Schema.Literals(["running", "completed", "error"]),
+    input: Schema.optional(Schema.Record(Schema.String, Schema.Unknown)),
+  }),
+)
+
+// A script calls `fetch` where an agent calls webfetch.
+const scriptToolNames = new Map([["fetch", "webfetch"]])
+
+/**
+ * The calls a script made, each as a call of its own with `key` naming what it called with, so a reader can count a
+ * call repeated in a loop once. A script moved to the background keeps the calls it made before it moved.
+ */
+export function scriptCalls(tool: Tool, id = tool.id) {
+  const calls = currentToolMetadata(tool).toolCalls
+
+  if (!Array.isArray(calls)) return []
+
+  return calls.flatMap((value, index) =>
+    Option.toArray(decodeScriptCall(value)).map((call) => {
+      const name = toolName(scriptToolNames.get(call.tool) ?? call.tool)
+      const path = call.input?.path
+      const fact: CallFact = {
+        kind: "call",
+        id: `${id}:call:${index}`,
+        name,
+        tool: name,
+        mode: modes.get(name) ?? "tool",
+        status: call.status,
+        failed: call.status === "error",
+        stopped: false,
+        called: true,
+        groupedRead: name === "read",
+        background: false,
+        changes: 0,
+      }
+
+      if (Predicate.isString(path) && path) fact.path = path
+
+      return { key: `${call.tool}\0${JSON.stringify(call.input ?? {})}`, fact }
+    }),
+  )
+}
+
 /** How a call that launches background work ended, or undefined for any other call or while it is still written. */
 export function launchOf(tool: Tool) {
   const read = reads(tool)

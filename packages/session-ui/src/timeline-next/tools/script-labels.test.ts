@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test"
+import type { JsonValue } from "@opencode/client/promise"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { storyTool } from "../../storybook/current-session-scenarios"
 import { factsOf, type FileFact } from "../../timeline/facts"
@@ -87,6 +88,97 @@ describe("script labels", () => {
     expect(changed({})).toHaveLength(1)
     expect(changed({ background: true })).toEqual([])
     expect(changed({ jobID: "job_1" })).toEqual([])
+  })
+
+  test("the New timeline names scripts by the calls they made", () => {
+    const calls = (id: string, toolCalls: JsonValue[], status: "running" | "completed" = "completed") =>
+      storyTool(id, "execute", status, { code: "x" }, { metadata: { toolCalls } })
+
+    expect(
+      next([
+        calls("exec_a", [
+          { tool: "read", status: "completed", input: { path: "/repo/a.ts" } },
+          { tool: "grep", status: "completed", input: { pattern: "foo" } },
+        ]),
+        calls("exec_b", [
+          { tool: "read", status: "completed", input: { path: "/repo/b.ts" } },
+          { tool: "shell", status: "completed", input: { command: "bun test" } },
+        ]),
+      ]),
+    ).toBe("Ran 1 command · 2 reads, 1 search")
+
+    // A script still running counts the calls made so far.
+    expect(
+      next([calls("exec_c", [{ tool: "read", status: "running", input: { path: "/repo/a.ts" } }], "running")]),
+    ).toBe("Explored 1 file")
+  })
+
+  test("a loop's repeated calls count once", () => {
+    const poll = { tool: "shell", status: "completed", input: { command: "gh pr checks" } }
+    const push = { tool: "shell", status: "completed", input: { command: "git push" } }
+    const loop = storyTool(
+      "exec_loop",
+      "execute",
+      "completed",
+      { code: "x" },
+      { metadata: { toolCalls: [poll, poll, push, poll] } },
+    )
+
+    expect(next([loop])).toBe("Ran 2 commands")
+  })
+
+  test("a script's edits count through the files it changed, not its edit calls", () => {
+    const edits = storyTool(
+      "exec_edit",
+      "execute",
+      "completed",
+      { code: "x" },
+      {
+        metadata: {
+          toolCalls: [
+            { tool: "edit", status: "completed", input: { path: "/repo/a.ts" } },
+            { tool: "read", status: "completed", input: { path: "/repo/b.ts" } },
+          ],
+        },
+      },
+    )
+
+    expect(next([edits])).toBe("Explored 1 file")
+
+    // One that only edited still counts, where its files are placed elsewhere.
+    const editOnly = storyTool(
+      "exec_edit_only",
+      "execute",
+      "completed",
+      { code: "x" },
+      { metadata: { toolCalls: [{ tool: "edit", status: "completed", input: { path: "/repo/a.ts" } }] } },
+    )
+
+    expect(next([editOnly])).toBe("Ran 1 command")
+  })
+
+  test("calls to other tools name them by their own name", () => {
+    const mcp = storyTool(
+      "exec_mcp",
+      "execute",
+      "completed",
+      { code: "x" },
+      { metadata: { toolCalls: [{ tool: "anomaly_slack.slack_read_thread", status: "completed", input: {} }] } },
+    )
+
+    expect(next([mcp])).toBe("Used slack_read_thread")
+  })
+
+  test("a script moved to the background counts the calls it made before it moved", () => {
+    const moved = storyTool(
+      "exec_bg",
+      "execute",
+      "completed",
+      { code: "x" },
+      { metadata: { jobID: "cm_1", toolCalls: [{ tool: "read", status: "running", input: { path: "/repo/a.ts" } }] } },
+    )
+
+    expect(next([moved])).toBe("Explored 1 file")
   })
 
   test("the New timeline counts a script's files only where they are placed", () => {

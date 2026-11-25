@@ -101,6 +101,21 @@ export function executeToolCallArgs(call: ExecuteToolCall) {
     .map(([key, value]) => `${key}=${String(value).replace(/\s+/g, " ")}`)
 }
 
+/** How many times a script called each tool, in the order it first called them. */
+export function executeToolCounts(metadata: ToolProps["metadata"]) {
+  const counts = new Map<string, number>()
+
+  executeToolCallList(metadata).forEach((value) =>
+    Option.toArray(decodeExecuteCall(value)).forEach((call) => {
+      // A script calls a namespaced tool by its path; its own name reads better.
+      const tool = call.tool.split(".").at(-1) ?? call.tool
+      counts.set(tool, (counts.get(tool) ?? 0) + 1)
+    }),
+  )
+
+  return Array.from(counts, ([tool, count]) => ({ tool, count }))
+}
+
 // Collapsed rows name the failed call, or else the latest one.
 export function executeToolSubtitle(metadata: ToolProps["metadata"]) {
   const calls = executeToolCallList(metadata)

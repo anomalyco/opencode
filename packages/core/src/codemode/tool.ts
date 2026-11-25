@@ -115,11 +115,16 @@ const executionServices = (
 
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions. With `full_codemode`,
 // the runtime also has Bun's file APIs.
-const description = (full: boolean) =>
+const description = (full: boolean, described: boolean) =>
   [
     full
       ? "Run JavaScript in a confined Code Mode runtime to work with files and data, script tool calls and HTTP requests, and compose their results."
       : "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
+    ...(described
+      ? [
+          "Set `description` to what the script does in 3-6 words, such as `Find unused exports`. The user sees it in place of the code.",
+        ]
+      : []),
     "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
     "Each call is a fresh program; nothing carries over from earlier calls.",
     full
@@ -148,6 +153,20 @@ export const FullInput = Schema.Struct({
   }),
 })
 
+// First, so it streams in before the code it describes.
+const described = <Fields extends Schema.Struct.Fields>(input: Schema.Struct<Fields>) =>
+  Schema.Struct({
+    description: Schema.optionalKey(Schema.String).annotate({
+      description: "What the script does in 3-6 words, in sentence case without a period, such as `Find unused exports`.",
+    }),
+    ...input.fields,
+  })
+
+export type Options = {
+  /** Asks the model to describe each script, with the `execute_description` flag. */
+  readonly description?: boolean
+}
+
 export const create = (
   inventory: Inventory,
   executeTool: (name: string, tool: Info, input: unknown, context: ToolContext) => Effect.Effect<Result, Error>,
@@ -156,11 +175,13 @@ export const create = (
   services?: Context.Context<Services>,
   /** What `opencode://` fetch sends requests through. Without it, `opencode://` fails as unavailable. */
   api?: Context.Context<Api>,
+  options?: Options,
 ) => {
+  const input = services ? FullInput : CodeMode.Input
   return {
     name: "execute",
-    description: description(services !== undefined),
-    input: services ? FullInput : CodeMode.Input,
+    description: description(services !== undefined, options?.description === true),
+    input: options?.description ? described(input) : input,
     freeform: { type: "text", field: "code" },
     output: ExecuteOutput,
     execute: ({ code }, context) =>

@@ -1,6 +1,12 @@
 import { describe, expect, test } from "bun:test"
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
-import { currentToolError, currentToolInput, currentToolMetadata, currentToolOutput } from "./current-tool-state"
+import {
+  currentToolError,
+  currentToolInput,
+  currentToolMetadata,
+  currentToolOutput,
+  executeToolCounts,
+} from "./current-tool-state"
 
 const time = { created: 1 }
 
@@ -84,5 +90,33 @@ describe("current tool state", () => {
 
     expect(currentToolError(tool)).toBe("Command failed")
     expect(currentToolOutput(tool)).toBeUndefined()
+  })
+})
+
+describe("execute tool counts", () => {
+  test("counts each tool a script called, in the order it first called them", () => {
+    expect(
+      executeToolCounts({
+        toolCalls: [
+          { tool: "shell", status: "completed", input: { command: "ls" } },
+          { tool: "write", status: "completed", input: { path: "a.ts" } },
+          { tool: "shell", status: "completed", input: { command: "ls" } },
+          { tool: "write", status: "running", input: { path: "b.ts" } },
+          { tool: "write", status: "error" },
+        ],
+      }),
+    ).toEqual([
+      { tool: "shell", count: 2 },
+      { tool: "write", count: 3 },
+    ])
+  })
+
+  test("names a namespaced tool by its own name, and skips what does not decode", () => {
+    expect(
+      executeToolCounts({
+        toolCalls: [{ tool: "anomaly_slack.slack_read_thread", status: "completed" }, { status: "completed" }, "x"],
+      }),
+    ).toEqual([{ tool: "slack_read_thread", count: 1 }])
+    expect(executeToolCounts({})).toEqual([])
   })
 })

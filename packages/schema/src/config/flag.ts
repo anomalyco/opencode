@@ -17,6 +17,8 @@ export const registry = {
   model_speeds:
     "Offer a model's faster and slower service tiers (fast, flex…) as speeds of that model: one entry in the model picker with a speed selector, instead of a separate entry per tier such as gpt-5.5-fast.",
   full_codemode: "Enable the full Code Mode work in progress.",
+  execute_description:
+    "Ask the model for a short description of each Code Mode script, which the New timeline shows in place of the code.",
   machines: "Let a tool path name a machine, as in gpu:/work/train.py, and act on that machine's files and processes.",
   home_memory:
     "Give sessions in the home folder a persistent memory/, docs/ and scripts/ workspace the agent can use freely, tidied by a daily maintenance session that reads the day's home-folder conversations.",
