@@ -208,6 +208,34 @@ for (const direction of ["ltr", "rtl"] as const) {
   })
 }
 
+test("a wheel over the desktop session header's drag area scrolls the timeline as far as one over the rows", async ({
+  page,
+}) => {
+  // The area lies over the timeline, outside its view. The timeline heard no wheel over it and the browser scrolled
+  // nothing for one, so the reader's wheel did nothing with the pointer on the header's empty strip.
+  await page.setViewportSize({ width: 1440, height: 900 })
+  await mockStressTimeline(page)
+  await page.goto(
+    `/e2e/utils/windows-menu.html?${new URLSearchParams({ server: fixture.serverKey, path: sessionHref(fixture.targetID, "sidecar") })}`,
+  )
+  const area = page.locator('[data-slot="session-header-drag"]')
+  const scroller = page.locator('[data-slot="session-timeline-scroll"] .scroll-view__viewport')
+
+  const fromEnd = () =>
+    scroller.evaluate((element) => Math.round(element.scrollHeight - element.clientHeight - element.scrollTop))
+
+  await expect(page.locator("[data-session-title]").getByRole("heading")).toHaveText(fixture.expected.targetTitle)
+  await expect(area).toBeVisible()
+  // Before the rows have their real sizes the timeline has nowhere to scroll, and the wheel would do nothing.
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(100)
+  await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+  await area.hover()
+  await page.mouse.wheel(0, -120)
+  await expect.poll(fromEnd).toBe(120)
+  await page.mouse.wheel(0, 120)
+  await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+})
+
 test("the web session header leaves window dragging to the browser", async ({ page }) => {
   await mockStressTimeline(page)
   await seed(page, { tabs: [fixture.targetID] })

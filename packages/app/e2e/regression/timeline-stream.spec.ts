@@ -1136,6 +1136,145 @@ for (const input of [
   })
 }
 
+for (const over of [
+  "the Jump to latest button",
+  "the empty strip of the session header",
+  "the scrollbar's thumb",
+] as const) {
+  test(`a wheel over ${over} scrolls the timeline as far as one over the rows`, async ({ page }) => {
+    // The session header, the jump button and the scrollbar's thumb lie over the timeline, outside its scroll element.
+    // Once a row held a scroller of its own, such as a shell's output, the browser scrolled nothing for a wheel over
+    // them. The timeline still took an upward one for the reader leaving the end: the view stayed where it was, and the
+    // reply that streamed next went out of view below it.
+    const timeline = await setupTimeline(page, {
+      settings: { shellToolPartsExpanded: true },
+      messages: [
+        userMessage(),
+        assistantMessage(
+          [
+            textPart("prt_over_earlier", notes("Earlier", 40)),
+            ...Array.from({ length: 12 }, (_, index) =>
+              shell(
+                `prt_over_shell_${index}`,
+                "completed",
+                Array.from({ length: 60 }, (_, line) => `Output ${index} line ${line + 1}.`).join("\n"),
+              ),
+            ),
+            textPart("prt_over_tail", "Streaming."),
+          ],
+          { completed: false },
+        ),
+      ],
+    })
+
+    const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+    const editor = page.locator('[data-component="composer-editor"]')
+    const jump = page.getByRole("button", { name: "Jump to latest", exact: true })
+
+    const target = {
+      "the Jump to latest button": jump,
+      "the empty strip of the session header": page.locator('[data-slot="session-header-gap"]'),
+      "the scrollbar's thumb": page.locator(
+        '[data-slot="session-timeline-visible"] .scroll-view__thumb[data-orientation="vertical"]',
+      ),
+    }[over]
+
+    // The margin beside the rows: a wheel over a shell's output scrolls the output.
+    const rows = { position: { x: 20, y: 300 } }
+
+    const fromEnd = () =>
+      scroller.evaluate((element) => Math.round(element.scrollHeight - element.clientHeight - element.scrollTop))
+
+    await expect(page.getByText("Streaming.", { exact: true })).toBeInViewport()
+    // Before the rows have their real sizes the timeline has nowhere to scroll, and the wheel would do nothing.
+    await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(100)
+    await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+    await editor.focus()
+
+    // The button shows only away from the end. Over the others, a wheel up leaves the end by its distance.
+    if (over !== "the Jump to latest button") {
+      await target.hover()
+      await page.mouse.wheel(0, -120)
+      await expect.poll(fromEnd).toBe(120)
+      const height = await scroller.evaluate((element) => element.scrollHeight)
+      await timeline.send(partDelta("prt_over_tail", `\n\n${notes("Streamed", 4)}`))
+      // The streamed lines are measured, which is when a timeline that follows scrolls to its end.
+      await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
+      expect(await fromEnd()).toBeGreaterThan(120)
+    }
+
+    const left = await fromEnd()
+    await scroller.hover(rows)
+    await page.mouse.wheel(0, -2400)
+    await expect.poll(fromEnd).toBe(left + 2400)
+    await expect(jump).toBeVisible()
+
+    // A row below the top third of the view stays mounted through the wheels.
+    const key = await scroller.evaluate((element) => {
+      const view = element.getBoundingClientRect()
+
+      return [...element.querySelectorAll<HTMLElement>("[data-timeline-key]")].find(
+        (row) => row.getBoundingClientRect().y > view.y + view.height / 3,
+      )?.dataset.timelineKey
+    })
+
+    const row = scroller.locator(`[data-timeline-key="${key}"]`)
+    const top = () => row.evaluate((element) => element.getBoundingClientRect().y)
+    const place = await top()
+    await page.mouse.wheel(0, -120)
+    await expect.poll(top).toBe(place + 120)
+    await page.mouse.wheel(0, 120)
+    await expect.poll(top).toBe(place)
+
+    await target.hover()
+    await page.mouse.wheel(0, -120)
+    await expect.poll(top).toBe(place + 120)
+    await page.mouse.wheel(0, 120)
+    await expect.poll(top).toBe(place)
+    // Once: a wheel over the rows starts from the same place.
+    await scroller.hover(rows)
+    await page.mouse.wheel(0, -120)
+    await expect.poll(top).toBe(place + 120)
+    // The wheel pressed nothing and took no focus.
+    await expect(jump).toBeVisible()
+    await expect(editor).toBeFocused()
+
+    // Toward the end, the wheel lands 40px short of it, and the timeline follows the reply again.
+    const away = await fromEnd()
+    await target.hover()
+    await page.mouse.wheel(0, away - 40)
+    await expect.poll(fromEnd).toBeLessThanOrEqual(40)
+    await timeline.send(partDelta("prt_over_tail", `\n\n${notes("Later", 12)}`))
+    await expect(page.getByText("Later note 12.", { exact: true })).toBeInViewport()
+    await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+  })
+}
+
+test("the browser scrolls for a wheel over the rows without waiting for the page", async ({ page }) => {
+  // The timeline takes a wheel over what lies over it from the browser, which needs a listener that is not passive. On
+  // an element that covers the rows, even one that takes no pointer input, such a listener makes the browser wait for
+  // the page before it scrolls for every wheel over the rows.
+  await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([textPart("prt_wait_tail", notes("Line", 80))])],
+  })
+
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+  await expect(page.getByText("Line note 80.", { exact: true })).toBeInViewport()
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(100)
+
+  // The browser sends a wheel that it does not wait for as one that cannot be cancelled.
+  const cancelable = scroller.evaluate(
+    (element) =>
+      new Promise<boolean>((resolve) =>
+        element.addEventListener("wheel", (event) => resolve(event.cancelable), { once: true, passive: true }),
+      ),
+  )
+
+  await scroller.hover()
+  await page.mouse.wheel(0, -120)
+  expect(await cancelable).toBe(false)
+})
+
 for (const input of ["a streamed line", "the reader's wheel"] as const) {
   test(`the glide to the latest message ${input === "a streamed line" ? "outlasts" : "yields to"} ${input}`, async ({
     page,
@@ -1291,6 +1430,163 @@ test("goes on following the reply after a long prompt folds from its toggle", as
   await timeline.send(partDelta("prt_fold_tail", `\n\n${notes("Streamed", 40)}`))
   await expect(page.getByText("Streamed note 40.", { exact: true })).toBeInViewport()
   await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+})
+
+for (const next of [false, true]) {
+  for (const wheel of ["inside", "that runs past the top of", "at the top of"] as const) {
+    const leaves = wheel === "at the top of"
+
+    test(`${leaves ? "leaves the end with" : "goes on following the reply after"} a wheel up ${wheel} a shell's output${next ? " in the New timeline" : ""}`, async ({
+      page,
+    }) => {
+      // A wheel over a shell's output scrolls the output while it has room, and the timeline does not move. The
+      // timeline took every upward wheel for the reader leaving the end, so the reply that streamed next stayed out of
+      // view. At the top of the output the browser scrolls the timeline, and then the reader has left the end. It does
+      // not when the wheel gesture began lower in the output: the rest of that gesture scrolls nothing.
+      const timeline = await setupTimeline(page, {
+        settings: { shellToolPartsExpanded: true, newTimeline: next },
+        messages: [
+          userMessage(),
+          assistantMessage(
+            [
+              textPart("prt_inner_earlier", notes("Earlier", 40)),
+              shell(
+                "prt_inner_shell",
+                "completed",
+                Array.from({ length: 80 }, (_, index) => `Output line ${index + 1}.`).join("\n"),
+              ),
+              textPart("prt_inner_tail", "Streaming."),
+            ],
+            { completed: false },
+          ),
+        ],
+      })
+
+      const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+      const output = page.locator('[data-slot="bash-scroll"]')
+      const earlier = page.locator(`[data-timeline-part-id="${renderedPartID("prt_inner_earlier")}"]`)
+
+      const fromEnd = () =>
+        scroller.evaluate((element) => Math.round(element.scrollHeight - element.clientHeight - element.scrollTop))
+
+      const inner = () => output.evaluate((element) => element.scrollTop)
+      const top = () => earlier.evaluate((element) => element.getBoundingClientRect().y)
+
+      await expect(page.getByText("Streaming.", { exact: true })).toBeInViewport()
+      // Before the rows have their real sizes the timeline has nowhere to scroll, and the wheel would do nothing.
+      await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(100)
+      await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+      // The timeline follows: a streamed line comes into view.
+      await timeline.send(partDelta("prt_inner_tail", "\n\nFollowed."))
+      await expect(page.getByText("Followed.", { exact: true })).toBeInViewport()
+      await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+      await expect
+        .poll(() => output.evaluate((element) => element.scrollHeight - element.clientHeight))
+        .toBeGreaterThan(400)
+      const box = (await output.boundingBox())!
+      const point = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+      await page.mouse.move(point.x, point.y)
+
+      // Down into the output, or already at its end.
+      await page.mouse.wheel(0, 200)
+      await expect.poll(inner).toBeGreaterThanOrEqual(200)
+
+      if (wheel === "inside") {
+        const before = await inner()
+        await page.mouse.wheel(0, -100)
+        await expect.poll(inner).toBe(before - 100)
+      }
+
+      if (wheel === "that runs past the top of") {
+        // The browser's own wheel gesture. Each wheel event that a test sends begins a gesture of its own.
+        const devtools = await page.context().newCDPSession(page)
+        await devtools.send("Input.synthesizeScrollGesture", {
+          x: point.x,
+          y: point.y,
+          yDistance: 800,
+          speed: 2400,
+          gestureSourceType: "mouse",
+        })
+        await expect.poll(inner).toBe(0)
+      }
+
+      if (leaves) {
+        // One wheel event takes the output to its top, however far that is.
+        await page.mouse.wheel(0, -4000)
+        await expect.poll(inner).toBe(0)
+      }
+
+      // Only the output has moved so far.
+      expect(await fromEnd()).toBeLessThanOrEqual(1)
+
+      if (leaves) {
+        await page.mouse.wheel(0, -120)
+        await expect.poll(fromEnd).toBe(120)
+      }
+
+      const place = await top()
+      const height = await scroller.evaluate((element) => element.scrollHeight)
+      await timeline.send(partDelta("prt_inner_tail", `\n\n${notes("Streamed", 12)}`))
+      // The streamed lines are measured, which is when a timeline that follows scrolls to its end.
+      await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
+
+      if (leaves) {
+        expect(await top()).toBe(place)
+
+        return
+      }
+
+      await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+      await expect(page.getByText("Streamed note 12.", { exact: true })).toBeInViewport()
+    })
+  }
+}
+
+test("goes on following the reply after a wheel with the control key, which zooms", async ({ page }) => {
+  // In the desktop app a wheel with the control key zooms, and a pinch on a trackpad arrives as one. Nothing scrolls,
+  // yet the timeline took it for the reader leaving the end.
+  const timeline = await setupTimeline(page, {
+    messages: [userMessage(), assistantMessage([textPart("prt_zoom_tail", notes("Line", 80))], { completed: false })],
+  })
+
+  const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+
+  const fromEnd = () =>
+    scroller.evaluate((element) => Math.round(element.scrollHeight - element.clientHeight - element.scrollTop))
+
+  await expect(page.getByText("Line note 80.", { exact: true })).toBeInViewport()
+  // Before the rows have their real sizes the timeline has nowhere to scroll.
+  await expect.poll(() => scroller.evaluate((element) => element.scrollTop)).toBeGreaterThan(100)
+  await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+
+  // The desktop app takes this wheel for its zoom. The page takes it here in the same way, so nothing scrolls.
+  const taken = page.evaluate(
+    () =>
+      new Promise<boolean>((resolve) =>
+        window.addEventListener(
+          "wheel",
+          (event) => {
+            if (!event.ctrlKey) return
+            event.preventDefault()
+            resolve(event.defaultPrevented)
+          },
+          { capture: true, passive: false },
+        ),
+      ),
+  )
+
+  await scroller.hover()
+  await page.keyboard.down("Control")
+  await page.mouse.wheel(0, -120)
+  await page.keyboard.up("Control")
+  expect(await taken).toBe(true)
+  expect(await fromEnd()).toBeLessThanOrEqual(1)
+  const height = await scroller.evaluate((element) => element.scrollHeight)
+  await timeline.send(partDelta("prt_zoom_tail", `\n\n${notes("Streamed", 12)}`))
+  // The streamed lines are measured, which is when a timeline that follows scrolls to its end.
+  await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
+  await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+  await expect(page.getByText("Streamed note 12.", { exact: true })).toBeInViewport()
 })
 
 test.describe("background work", () => {
@@ -1738,6 +2034,99 @@ test.describe("background work", () => {
       await timeline.send(partUpdated({ id: "prt_late", messageID: late.id, type: "text", text: notes("Late", 30) }))
       await expect(page.getByText("Late note 30.", { exact: true })).toBeAttached()
       await aligned()
+    })
+  }
+
+  for (const wheel of ["inside", "at the top of"] as const) {
+    test(`${wheel === "inside" ? "goes on holding" : "lets go of"} the call revealed by a shell notice after a wheel ${wheel} its output`, async ({
+      page,
+    }) => {
+      // The reader reads the output of the call that a notice revealed. A wheel that the output takes does not move the
+      // timeline, so the call stays held: it was let go, and no longer rose under its group's header when more
+      // arrived below it. A wheel at the top of the output scrolls the timeline, and lets the call go.
+      const timeline = await setupTimeline(page, {
+        settings: { timelineDetail: detailed },
+        sessionMessages: [
+          userMessage(),
+          assistantMessage([
+            textPart("prt_earlier", notes("Earlier", 40)),
+            ...searches(0, 42),
+            // The last part: a call at the very end cannot rise under the header until more arrives below it.
+            toolPart(
+              "prt_far_call",
+              "shell",
+              "completed",
+              { command: "bun serve.ts" },
+              {
+                output: Array.from({ length: 80 }, (_, index) => `Output line ${index + 1}.`).join("\n"),
+                metadata: { shellID: "shell_notice", status: "running" },
+              },
+            ),
+          ]),
+          {
+            id: "msg_1002_shell_finished",
+            type: "synthetic",
+            text: '<shell id="shell_notice" state="completed" command="bun serve.ts">\nlistening\n</shell>',
+            description: "bun serve.ts",
+            metadata: { source: "shell", shellID: "shell_notice", state: "completed" },
+            time: { created: 1700000003000 },
+          },
+        ],
+      })
+
+      const group = page
+        .locator('[data-component="collapsed-tool-group"]')
+        .locator(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
+
+      const call = page.locator('[data-timeline-part-id="prt_far_call"]')
+      const output = call.locator('[data-slot="bash-scroll"]')
+      const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+
+      // How far the call is below its group's stuck header.
+      const gap = async () => {
+        const [header, row] = await Promise.all([group.boundingBox(), call.boundingBox()])
+
+        return header && row ? Math.round(row.y - (header.y + header.height)) : undefined
+      }
+
+      const inner = () => output.evaluate((element) => element.scrollTop)
+
+      await page.getByRole("button", { name: /^Shell finished/ }).click()
+      await expect(group).toHaveAttribute("aria-expanded", "true")
+      await expect(output).toBeInViewport()
+      await expect
+        .poll(() => output.evaluate((element) => element.scrollHeight - element.clientHeight))
+        .toBeGreaterThan(400)
+      await output.evaluate((element) => (element.scrollTop = 0))
+      const box = (await output.boundingBox())!
+      await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+      const revealed = await gap()
+      expect(revealed).toBeGreaterThan(0)
+
+      if (wheel === "inside") {
+        await page.mouse.wheel(0, 100)
+        await expect.poll(inner).toBe(100)
+        expect(await gap()).toBe(revealed)
+      }
+
+      if (wheel === "at the top of") {
+        await page.mouse.wheel(0, -100)
+        await expect.poll(gap).toBe(revealed! + 100)
+        expect(await inner()).toBe(0)
+      }
+
+      // The agent keeps writing below the call.
+      const height = await scroller.evaluate((element) => element.scrollHeight)
+      const late = assistantMessage([], { id: "msg_1003_late", completed: false, created: 1700000004000 })
+      await timeline.send(stepStarted(late))
+      await timeline.send(partUpdated({ id: "prt_late", messageID: late.id, type: "text", text: notes("Late", 30) }))
+      await expect(page.getByText("Late note 30.", { exact: true })).toBeAttached()
+      await expect.poll(() => scroller.evaluate((element) => element.scrollHeight)).toBeGreaterThan(height)
+
+      // Still held, the call rises to its place under the header. Let go, it stays where the reader's wheel left it.
+      if (wheel === "inside") await expect.poll(gap).toBe(0)
+
+      if (wheel === "at the top of") expect(await gap()).toBe(revealed! + 100)
     })
   }
 

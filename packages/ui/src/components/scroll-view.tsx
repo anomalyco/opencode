@@ -403,6 +403,20 @@ export function ScrollView(props: ScrollViewProps) {
 
   const onThumbPointerEnd = (e: PointerEvent) => dispatch({ type: "drag.ended", pointerId: e.pointerId })
 
+  // The thumb lies over the viewport, not inside it. For a wheel over it the browser goes by the layers it composites,
+  // not by the element under the pointer: it scrolled the viewport while the content was text, and nothing once the
+  // content held a scroller of its own. So the thumb takes the wheel from the browser and scrolls the viewport as far
+  // itself, as a native scrollbar does. The browser does not wait for the page once it scrolls for a wheel gesture, and
+  // a wheel with the control key zooms.
+  const thumbWheel = {
+    passive: false,
+    handleEvent: (e: WheelEvent) => {
+      if (!e.cancelable || e.ctrlKey) return
+      e.preventDefault()
+      viewportRef.scrollBy({ left: e.deltaX, top: e.deltaY, behavior: "instant" })
+    },
+  }
+
   const renderVerticalThumb = () => (
     <div
       ref={(el) => {
@@ -413,6 +427,7 @@ export function ScrollView(props: ScrollViewProps) {
       onPointerUp={onThumbPointerEnd}
       onPointerCancel={onThumbPointerEnd}
       onLostPointerCapture={onThumbPointerEnd}
+      on:wheel={thumbWheel}
       class="scroll-view__thumb"
       data-orientation="vertical"
       data-visible={thumbVisible()}
@@ -435,6 +450,7 @@ export function ScrollView(props: ScrollViewProps) {
       onPointerUp={onThumbPointerEnd}
       onPointerCancel={onThumbPointerEnd}
       onLostPointerCapture={onThumbPointerEnd}
+      on:wheel={thumbWheel}
       class="scroll-view__thumb"
       data-orientation="horizontal"
       data-visible={thumbVisible()}

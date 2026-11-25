@@ -12,6 +12,7 @@ import {
   session,
   sessionID,
   setupTimeline,
+  shell,
   status,
   textPart,
   userID,
@@ -756,6 +757,90 @@ test.describe("timeline history", () => {
     await expect.poll(hash).toBe("")
     await expect(latest).toBeInViewport()
   })
+
+  for (const box of [
+    { name: "that holds all of its lines", lines: 8 },
+    { name: "at its top", lines: 80 },
+  ]) {
+    test(`message navigation steps from the prompt in view after a wheel over a shell's output ${box.name} scrolls the timeline`, async ({
+      page,
+    }) => {
+      // A wheel that a scroller in a row takes leaves the chosen prompt as the place navigation steps from. A wheel
+      // over one that cannot take it scrolls the timeline, and was skipped all the same: the next step then started
+      // from the prompt the reader had scrolled away from.
+      const chosen = 8
+
+      const messages = validateTimelineMessages(
+        Array.from({ length: 12 }, (_, index) => {
+          const value = String(index).padStart(4, "0")
+          const id = `msg_0${value}_seek_a_user`
+
+          return [
+            userMessage(undefined, { id, created: 1690000000000 + index * 10_000 }),
+            assistantMessage(
+              index === chosen
+                ? [
+                    shell(
+                      "prt_seek_shell",
+                      "completed",
+                      Array.from({ length: box.lines }, (_, line) => `Output line ${line + 1}.`).join("\n"),
+                    ),
+                    // Enough below the shell that the chosen prompt reaches the top of the view.
+                    { id: `prt_0${value}_seek_text`, type: "text", text: "Following explanation.\n\n".repeat(40) },
+                  ]
+                : [{ id: `prt_0${value}_seek_text`, type: "text", text: `Short answer ${index}.` }],
+              { id: `msg_0${value}_seek_b_assistant`, parentID: id, created: 1690000001000 + index * 10_000 },
+            ),
+          ]
+        }).flat(),
+      )
+
+      const prompt = (index: number) => messages.filter((message) => message.type === "user")[index]!.id
+
+      const row = (index: number) =>
+        page.locator(`[data-timeline-row="UserMessage"][data-message-id="${prompt(index)}"]`)
+
+      const hash = () => page.evaluate(() => location.hash)
+
+      await setupTimeline(page, { sessionMessages: messages, settings: { shellToolPartsExpanded: true } })
+      const scroller = timelineScroller(page)
+      const output = page.locator('[data-slot="bash-scroll"]')
+      await expect(page.getByText("Short answer 11.", { exact: true })).toBeInViewport()
+      await page.evaluate((id) => (location.hash = `#message-${id}`), prompt(chosen))
+      await expect(row(chosen)).toBeInViewport()
+      await expect(output).toBeInViewport()
+      // The scroll to the prompt has come to rest once the offset holds from one read to the next.
+      const seen = { top: Number.NaN }
+
+      await expect
+        .poll(
+          async () => {
+            const top = await scroller.evaluate((element) => element.scrollTop)
+            const still = top === seen.top
+            seen.top = top
+
+            return still
+          },
+          { intervals: [200] },
+        )
+        .toBe(true)
+      expect(await output.evaluate((element) => element.scrollTop)).toBe(0)
+      // Up by three quarters of the height of the output, with the pointer near its bottom: the turn before the chosen
+      // one comes to the top of the view, and the pointer is still well inside the output when the timeline has moved.
+      // Both by some 50px: a row above that is measured late moves them by a line.
+      const bounds = (await output.boundingBox())!
+      const point = { x: bounds.x + bounds.width / 2, y: bounds.y + bounds.height - 10 }
+      await page.mouse.move(point.x, point.y)
+      await page.mouse.wheel(0, -Math.round(bounds.height * 0.75))
+      await expect(row(chosen - 1)).toBeInViewport()
+      expect(
+        await output.evaluate((element, point) => element.contains(document.elementFromPoint(point.x, point.y)), point),
+      ).toBe(true)
+      // From the prompt that the wheel brought into view, and not from the chosen one.
+      await page.keyboard.press("Control+Alt+BracketLeft")
+      await expect.poll(hash).toBe(`#message-${prompt(chosen - 2)}`)
+    })
+  }
 
   test("a hash for a prompt the revert hides, or one that does not exist, clears without paging history", async ({
     page,

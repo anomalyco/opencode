@@ -191,7 +191,11 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
               <div data-slot="tool-error-card-copy">{copyButton()}</div>
             </Show>
             <Show when={state.clipped && split.subtitle}>
-              {(text) => <p data-slot="tool-error-card-subtitle">{text()}</p>}
+              {(text) => (
+                <p data-slot="tool-error-card-subtitle" data-scrollable>
+                  {text()}
+                </p>
+              )}
             </Show>
             <CardDescription>{cleaned()}</CardDescription>
           </div>
