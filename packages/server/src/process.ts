@@ -2,6 +2,7 @@ export * as ServerProcess from "./process"
 
 import { NodeHttpServer } from "@effect/platform-node"
 import { Bus } from "@opencode/core/bus"
+import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { Automation } from "@opencode/core/automation"
 import { SessionSearchBuild } from "@opencode/core/session/search-build"
@@ -128,6 +129,9 @@ export const start = Effect.fn("ServerProcess.start")(function* <E, R>(
         Effect.provideService(Scope.Scope, applicationScope),
       )
     }
+    // Steer items are mid-turn intents: once the session stops running they can never be consumed again,
+    // so they accumulate until purged. Queued prompts and controls are never touched.
+    yield* Effect.forkIn(Context.get(context, SessionInbox.Service).gcStaleSteers(7 * 24 * 60 * 60 * 1000), applicationScope)
     // Automations run from any server process (`service`, `opencode serve`, or `--standalone`); the table holds all their state.
     yield* Effect.forkIn(Context.get(context, Automation.Service).run, applicationScope)
     // Likewise the one-time session search build, once a location has sqlite_fts on.

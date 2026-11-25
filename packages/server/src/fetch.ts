@@ -2,6 +2,7 @@ export * as ServerFetch from "./fetch"
 
 import { Context, Effect, Layer } from "effect"
 import { HttpEffect, HttpMiddleware, HttpRouter, HttpServer } from "effect/http"
+import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import type { LayerNode } from "@opencode/util/effect/layer-node"
 import { isAllowedCorsOrigin } from "./cors"
@@ -48,6 +49,7 @@ export const make = Effect.fn("ServerFetch.make")(function* (options: ServerOpti
   // Forked so the returned handler is never delayed; resumed drains are already
   // logged and durably recorded by the execution layer.
   yield* Effect.forkDetach(Context.get(context, SessionRestart.Service).resumeSuspendedSessions)
+  yield* Effect.forkDetach(Context.get(context, SessionInbox.Service).gcStaleSteers(7 * 24 * 60 * 60 * 1000))
   return Context.get(context, HttpRouter.HttpRouter)
     .asHttpEffect()
     .pipe(

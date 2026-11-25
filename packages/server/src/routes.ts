@@ -36,6 +36,7 @@ import { Identity } from "@opencode/core/machine/identity"
 import { Machines } from "@opencode/core/machine/machines"
 import { SessionSearchBuild } from "@opencode/core/session/search-build"
 import { ModelsDev } from "@opencode/core/models-dev"
+import { SessionInbox } from "@opencode/core/session/inbox"
 import { SessionRestart } from "@opencode/core/session/execution/restart"
 import { Automation } from "@opencode/core/automation"
 import { PluginUpdate } from "@opencode/core/plugin/update"
@@ -83,6 +84,7 @@ const applicationServiceNodes = [
   Worktree.node,
   Session.node,
   Instance.node,
+  SessionInbox.node,
   SessionTransfer.node,
   InstructionEntry.node,
   SdkPlugins.node,

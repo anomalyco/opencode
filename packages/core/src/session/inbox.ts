@@ -1,6 +1,6 @@
 export * as SessionInbox from "./inbox.js"
 
-import { and, asc, eq, or } from "drizzle-orm"
+import { and, asc, eq, lt, or } from "drizzle-orm"
 import { Context, DateTime, Effect, Layer, Schema } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import {
@@ -281,6 +281,27 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     ),
   )
 
+  /** Boot-time GC. A steer is a mid-turn intent, so one older than the TTL can never be consumed again.
+   * Only synthetic notices are purged: a steered user prompt is user input and stays visible until the
+   * session runs again. Queued prompts and control rows are never touched. */
+  const gcStaleSteers = Effect.fn("SessionInbox.gcStaleSteers")(function* (maxAgeMs: number) {
+    const cutoff = Date.now() - maxAgeMs
+    const deleted = yield* db
+      .delete(SessionInboxTable)
+      .where(
+        and(
+          eq(SessionInboxTable.delivery, "steer"),
+          eq(SessionInboxTable.type, "synthetic"),
+          lt(SessionInboxTable.time_created, cutoff),
+        ),
+      )
+      .returning({ id: SessionInboxTable.id, session_id: SessionInboxTable.session_id })
+      .all()
+      .pipe(Effect.orDie)
+    yield* Effect.forEach(deleted, (row) => SessionBlob.releaseMessage(db, row.session_id, row.id))
+    return deleted.map((row) => row.id)
+  })
+
   return {
     list: (sessionID: SessionSchema.ID) => list(db, sessionID),
     reconcile,
@@ -289,6 +310,7 @@ export const make = Effect.fn("SessionInbox.make")(function* () {
     cancel,
     steer,
     queue,
+    gcStaleSteers,
   }
 })
 
