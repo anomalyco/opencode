@@ -192,7 +192,7 @@ export const dict = {
   "go.faq.a5.grokRetention": "O ZDR desativa recursos importantes da API que dependem de dados armazenados, incluindo a Responses API com estado, Files and Collections e a Batch API.",
   "go.faq.a5.gptRetention": "Logs de monitoramento de abuso são gerados para todo uso de recursos da API e retidos por até 30 dias.",
   "go.faq.a5.learnMore": "Saiba mais",
-  "go.faq.a5.deepseekRetention": "O acordo de ZDR é renovado mensalmente. O acordo atual é válido até 30 de novembro de 2026.",
+  "go.faq.a5.deepseekRetention": "O acordo de ZDR é renovado mensalmente. O acordo atual é válido até 31 de dezembro de 2026.",
   "go.faq.q6": "Posso recarregar crédito?",
   "go.faq.a6": "Se você precisar de mais uso, pode recarregar crédito em sua conta.",
   "go.faq.q7": "Posso cancelar?",
