@@ -1,7 +1,8 @@
 import { Push } from "@opencode/schema/push"
 import { Session } from "@opencode/schema/session"
+import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiSchema, OpenApi } from "effect/http-api"
-import { InvalidRequestError, PushNotFoundError } from "../errors.js"
+import { ForbiddenError, InvalidRequestError, PushNotFoundError } from "../errors.js"
 
 const EXPERIMENTAL = "Behind the push flag. Experimental: may change without compatibility guarantees."
 
@@ -16,50 +17,56 @@ const annotations = (identifier: string, summary: string, description: string) =
 /** Lives in the `server.experimental` group (see `groups/experimental.ts`). */
 export const PushEndpoints = [
   HttpApiEndpoint.get("push.get", "/api/experimental/push", {
-    success: Push.Info,
-    error: [PushNotFoundError],
+    success: Schema.Struct({ data: Push.Info }),
+    error: [ForbiddenError],
   }).annotateMerge(
     annotations(
       "get",
       "Get push settings",
-      "List the registered phones with their choices, bells and pauses, the server-wide pause and the shared session bells. Never returns callback URLs or keys.",
+      "List the registered phones with their choices, bells and pauses, the server-wide pause, the shared session bells and the relays a phone may register with. Never returns callback URLs or keys.",
     ),
   ),
   HttpApiEndpoint.put("push.device.register", "/api/experimental/push/device/:id", {
     params: { id: Push.DeviceID },
     payload: Push.Register,
-    success: Push.Registered,
-    error: [InvalidRequestError, PushNotFoundError],
+    success: Schema.Struct({ data: Push.Registered }),
+    error: [ForbiddenError, InvalidRequestError],
   }).annotateMerge(
     annotations(
       "device.register",
       "Register a phone",
-      "Register or renew a phone's relay callback URL and public key, and answer with the server's public key for it. Keeps the phone's pause and session bells.",
+      "Register or renew a phone's relay callback URL and public key, and answer with the server's public key for it. Keeps the phone's pause, session bells and, unless given, its level.",
     ),
   ),
   HttpApiEndpoint.delete("push.device.remove", "/api/experimental/push/device/:id", {
     params: { id: Push.DeviceID },
     success: HttpApiSchema.NoContent,
-    error: [PushNotFoundError],
+    error: [ForbiddenError],
   }).annotateMerge(annotations("device.remove", "Remove a phone", "Stop sending notifications to a phone.")),
   HttpApiEndpoint.patch("push.device.update", "/api/experimental/push/device/:id", {
     params: { id: Push.DeviceID },
     payload: Push.DevicePatch,
-    success: Push.DevicePatch,
-    error: [PushNotFoundError],
-  }).annotateMerge(annotations("device.update", "Pause a phone", "Pause or resume notifications to one phone.")),
+    success: Schema.Struct({ data: Push.Device }),
+    error: [ForbiddenError, PushNotFoundError],
+  }).annotateMerge(
+    annotations(
+      "device.update",
+      "Update a phone",
+      "Pause or resume notifications to one phone, or change the level it gets by default.",
+    ),
+  ),
   HttpApiEndpoint.put("push.device.session.set", "/api/experimental/push/device/:id/session/:sessionID", {
     params: { id: Push.DeviceID, sessionID: Session.ID },
     payload: Push.Bell,
-    success: Push.Bell,
-    error: [InvalidRequestError, PushNotFoundError],
+    success: Schema.Struct({ data: Push.Bell }),
+    error: [ForbiddenError, InvalidRequestError, PushNotFoundError],
   }).annotateMerge(
     annotations("device.session.set", "Set a phone's session bell", "Choose what one phone gets for one session."),
   ),
   HttpApiEndpoint.delete("push.device.session.remove", "/api/experimental/push/device/:id/session/:sessionID", {
     params: { id: Push.DeviceID, sessionID: Session.ID },
     success: HttpApiSchema.NoContent,
-    error: [PushNotFoundError],
+    error: [ForbiddenError, PushNotFoundError],
   }).annotateMerge(
     annotations(
       "device.session.remove",
@@ -70,24 +77,20 @@ export const PushEndpoints = [
   HttpApiEndpoint.put("push.session.set", "/api/experimental/push/session/:sessionID", {
     params: { sessionID: Session.ID },
     payload: Push.Bell,
-    success: Push.Bell,
-    error: [InvalidRequestError, PushNotFoundError],
+    success: Schema.Struct({ data: Push.Bell }),
+    error: [ForbiddenError, InvalidRequestError],
   }).annotateMerge(annotations("session.set", "Set a session bell", "Choose what every phone gets for one session.")),
   HttpApiEndpoint.delete("push.session.remove", "/api/experimental/push/session/:sessionID", {
     params: { sessionID: Session.ID },
     success: HttpApiSchema.NoContent,
-    error: [PushNotFoundError],
+    error: [ForbiddenError],
   }).annotateMerge(
     annotations("session.remove", "Clear a session bell", "Let every phone follow its default for one session again."),
   ),
-  HttpApiEndpoint.get("push.settings.get", "/api/experimental/push/settings", {
-    success: Push.Settings,
-    error: [PushNotFoundError],
-  }).annotateMerge(annotations("settings.get", "Get the push pause", "Read whether all notifications are paused.")),
   HttpApiEndpoint.put("push.settings.set", "/api/experimental/push/settings", {
     payload: Push.Settings,
-    success: Push.Settings,
-    error: [InvalidRequestError, PushNotFoundError],
+    success: Schema.Struct({ data: Push.Settings }),
+    error: [ForbiddenError, InvalidRequestError],
   }).annotateMerge(
     annotations("settings.set", "Pause all notifications", "Pause or resume notifications to every phone."),
   ),

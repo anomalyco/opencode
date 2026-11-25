@@ -40,6 +40,7 @@ import type { Pty } from "@opencode/schema/pty"
 import type { Automation } from "@opencode/schema/automation"
 import type { Artifact } from "@opencode/schema/artifact"
 import type { Job } from "@opencode/schema/job"
+import type { Push } from "@opencode/schema/push"
 import type { Reference } from "@opencode/schema/reference"
 import type { Worktree } from "@opencode/schema/worktree"
 import type { Vcs } from "@opencode/schema/vcs"
@@ -53,18 +54,7 @@ export type ServerInfoOutput = {
   readonly hostname?: string | undefined
   readonly urls: ReadonlyArray<string>
   readonly paths: { readonly tmp: string }
-  readonly capabilities?:
-    | {
-        readonly persistentPty?: boolean | undefined
-        readonly push?:
-          | {
-              readonly version: 1
-              readonly relays: ReadonlyArray<string>
-              readonly levels: ReadonlyArray<"all" | "attention" | "none">
-            }
-          | undefined
-      }
-    | undefined
+  readonly capabilities?: { readonly persistentPty?: boolean | undefined } | undefined
 }
 export type ServerInfoOperation<E = never> = () => Effect.Effect<ServerInfoOutput, E>
 
@@ -2610,67 +2600,51 @@ export type ExperimentalMachineRemoveOperation<E = never> = (
   input: ExperimentalMachineRemoveInput,
 ) => Effect.Effect<ExperimentalMachineRemoveOutput, E>
 
-export type ExperimentalPushGetOutput = {
-  readonly settings: { readonly paused: boolean; readonly until?: number | undefined }
-  readonly devices: ReadonlyArray<{
-    readonly id: string
-    readonly name: string
-    readonly platform: "android" | "ios"
-    readonly expiresAt: number
-    readonly settings: { readonly default: "all" | "attention" | "none" }
-    readonly paused: boolean
-    readonly sessions: {
-      readonly [x: string]: { readonly level: "all" | "attention" | "none"; readonly until?: number | undefined }
-    }
-    readonly time: { readonly created: number; readonly updated: number }
-  }>
-  readonly sessions: {
-    readonly [x: string]: { readonly level: "all" | "attention" | "none"; readonly until?: number | undefined }
-  }
-}
+export type ExperimentalPushGetOutput = Push.Info
 export type ExperimentalPushGetOperation<E = never> = () => Effect.Effect<ExperimentalPushGetOutput, E>
 
 export type ExperimentalPushDeviceRegisterInput = {
-  readonly id: string
+  readonly id: Push.DeviceID
   readonly callbackURL: string
   readonly expiresAt: number
   readonly publicKey: string
-  readonly platform: "android" | "ios"
+  readonly platform: Push.Platform
   readonly name: string
-  readonly settings?: { readonly default: "all" | "attention" | "none" } | undefined
+  readonly settings?: Push.DeviceSettings | undefined
 }
-export type ExperimentalPushDeviceRegisterOutput = { readonly publicKey: string }
+export type ExperimentalPushDeviceRegisterOutput = Push.Registered
 export type ExperimentalPushDeviceRegisterOperation<E = never> = (
   input: ExperimentalPushDeviceRegisterInput,
 ) => Effect.Effect<ExperimentalPushDeviceRegisterOutput, E>
 
-export type ExperimentalPushDeviceRemoveInput = { readonly id: string }
+export type ExperimentalPushDeviceRemoveInput = { readonly id: Push.DeviceID }
 export type ExperimentalPushDeviceRemoveOutput = void
 export type ExperimentalPushDeviceRemoveOperation<E = never> = (
   input: ExperimentalPushDeviceRemoveInput,
 ) => Effect.Effect<ExperimentalPushDeviceRemoveOutput, E>
 
-export type ExperimentalPushDeviceUpdateInput = { readonly id: string; readonly paused: boolean }
-export type ExperimentalPushDeviceUpdateOutput = { readonly paused: boolean }
+export type ExperimentalPushDeviceUpdateInput = {
+  readonly id: Push.DeviceID
+  readonly paused?: boolean | undefined
+  readonly settings?: Push.DeviceSettings | undefined
+}
+export type ExperimentalPushDeviceUpdateOutput = Push.Device
 export type ExperimentalPushDeviceUpdateOperation<E = never> = (
   input: ExperimentalPushDeviceUpdateInput,
 ) => Effect.Effect<ExperimentalPushDeviceUpdateOutput, E>
 
 export type ExperimentalPushDeviceSessionSetInput = {
-  readonly id: string
+  readonly id: Push.DeviceID
   readonly sessionID: Session.ID
-  readonly level: "all" | "attention" | "none"
+  readonly level: Push.Level
   readonly until?: number | undefined
 }
-export type ExperimentalPushDeviceSessionSetOutput = {
-  readonly level: "all" | "attention" | "none"
-  readonly until?: number | undefined
-}
+export type ExperimentalPushDeviceSessionSetOutput = Push.Bell
 export type ExperimentalPushDeviceSessionSetOperation<E = never> = (
   input: ExperimentalPushDeviceSessionSetInput,
 ) => Effect.Effect<ExperimentalPushDeviceSessionSetOutput, E>
 
-export type ExperimentalPushDeviceSessionRemoveInput = { readonly id: string; readonly sessionID: Session.ID }
+export type ExperimentalPushDeviceSessionRemoveInput = { readonly id: Push.DeviceID; readonly sessionID: Session.ID }
 export type ExperimentalPushDeviceSessionRemoveOutput = void
 export type ExperimentalPushDeviceSessionRemoveOperation<E = never> = (
   input: ExperimentalPushDeviceSessionRemoveInput,
@@ -2678,13 +2652,10 @@ export type ExperimentalPushDeviceSessionRemoveOperation<E = never> = (
 
 export type ExperimentalPushSessionSetInput = {
   readonly sessionID: Session.ID
-  readonly level: "all" | "attention" | "none"
+  readonly level: Push.Level
   readonly until?: number | undefined
 }
-export type ExperimentalPushSessionSetOutput = {
-  readonly level: "all" | "attention" | "none"
-  readonly until?: number | undefined
-}
+export type ExperimentalPushSessionSetOutput = Push.Bell
 export type ExperimentalPushSessionSetOperation<E = never> = (
   input: ExperimentalPushSessionSetInput,
 ) => Effect.Effect<ExperimentalPushSessionSetOutput, E>
@@ -2695,11 +2666,8 @@ export type ExperimentalPushSessionRemoveOperation<E = never> = (
   input: ExperimentalPushSessionRemoveInput,
 ) => Effect.Effect<ExperimentalPushSessionRemoveOutput, E>
 
-export type ExperimentalPushSettingsGetOutput = { readonly paused: boolean; readonly until?: number | undefined }
-export type ExperimentalPushSettingsGetOperation<E = never> = () => Effect.Effect<ExperimentalPushSettingsGetOutput, E>
-
 export type ExperimentalPushSettingsSetInput = { readonly paused: boolean; readonly until?: number | undefined }
-export type ExperimentalPushSettingsSetOutput = { readonly paused: boolean; readonly until?: number | undefined }
+export type ExperimentalPushSettingsSetOutput = Push.Settings
 export type ExperimentalPushSettingsSetOperation<E = never> = (
   input: ExperimentalPushSettingsSetInput,
 ) => Effect.Effect<ExperimentalPushSettingsSetOutput, E>
@@ -2754,10 +2722,7 @@ export interface ExperimentalApi<E = never> {
       readonly set: ExperimentalPushSessionSetOperation<E>
       readonly remove: ExperimentalPushSessionRemoveOperation<E>
     }
-    readonly settings: {
-      readonly get: ExperimentalPushSettingsGetOperation<E>
-      readonly set: ExperimentalPushSettingsSetOperation<E>
-    }
+    readonly settings: { readonly set: ExperimentalPushSettingsSetOperation<E> }
   }
 }
 

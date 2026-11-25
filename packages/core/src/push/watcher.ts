@@ -64,7 +64,8 @@ const layer = Layer.effectDiscard(
         sessionID: session.id,
         title: session.title || "OpenCode",
         body: field.description || field.title || form.title,
-        data: { formID: form.id },
+        // The top-level session is the one to open and the one bells apply to; the form belongs to this one.
+        data: { formID: form.id, sessionID: sessionID.value },
         attention: true,
       })
     })
@@ -77,7 +78,8 @@ const layer = Layer.effectDiscard(
         sessionID: session.id,
         title: session.title || "OpenCode",
         body: `Needs permission: ${request.action}`,
-        data: { requestID: request.id, action: request.action },
+        // A reply has to name the session that asked, which may be a subagent's.
+        data: { requestID: request.id, sessionID: request.sessionID, action: request.action },
         attention: true,
       })
     })

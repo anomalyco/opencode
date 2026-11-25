@@ -202,7 +202,7 @@ describe("PushWatcher", () => {
           sessionID: parentID,
           title: "Fix the login bug",
           body: "Which database?",
-          data: { formID: "frm_1" },
+          data: { formID: "frm_1", sessionID: grandchildID },
         },
         {
           v: 1,
@@ -210,7 +210,7 @@ describe("PushWatcher", () => {
           sessionID: parentID,
           title: "Fix the login bug",
           body: "Needs permission: bash",
-          data: { requestID: "per_1", action: "bash" },
+          data: { requestID: "per_1", sessionID: childID, action: "bash" },
         },
       ])
     }),

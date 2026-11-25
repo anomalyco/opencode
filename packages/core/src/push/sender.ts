@@ -39,23 +39,23 @@ const shorten = (text: string, bytes: number) => {
   return chars.join("") + "…"
 }
 
-/** The JSON the phone decrypts, with the body and then the title shortened so the box stays within the relay's limit. */
+/**
+ * The JSON the phone decrypts, with the body shortened so the box stays within the relay's limit. Only the body can be
+ * long: a question's text is free-form, while titles are short and `data` holds ids and names.
+ */
 export const message = (notification: Notification) => {
-  const make = (title: string, body: string) =>
+  const make = (body: string) =>
     JSON.stringify({
       v: 1,
       type: notification.type,
       sessionID: notification.sessionID,
-      title,
+      title: notification.title,
       body,
       data: notification.data,
     })
-  const over = (title: string, body: string) => Buffer.byteLength(make(title, body), "utf8") - maxMessageBytes
-  let title = notification.title
-  let body = notification.body
-  if (over(title, body) > 0) body = shorten(body, over(title, body))
-  if (over(title, body) > 0) title = shorten(title, over(title, body))
-  return make(title, body)
+  const over = Buffer.byteLength(make(notification.body), "utf8") - maxMessageBytes
+  if (over <= 0) return make(notification.body)
+  return make(shorten(notification.body, over))
 }
 
 export const level = (device: PushList.Stored, sessions: Record<string, Push.Bell>, sessionID: string) =>
@@ -93,9 +93,12 @@ const layer = Layer.effect(
       for (let attempt = 1; attempt <= attempts; attempt++) {
         const status = yield* post(device.callbackURL, box)
         if (status === 404 || status === 410) return yield* list.removeGone(device.id, device.callbackURL)
-        if (status !== undefined && status < 500) return
+        if (status !== undefined && status < 300) return
+        if (status !== undefined && status < 500)
+          return yield* Effect.logWarning("relay rejected a push notification", { deviceID: device.id, status })
         if (attempt < attempts) yield* Effect.sleep("1 second")
       }
+      yield* Effect.logWarning("gave up sending a push notification", { deviceID: device.id, attempts })
     })
 
     const deliver = Effect.fn("PushSender.deliver")(function* (notification: Notification) {

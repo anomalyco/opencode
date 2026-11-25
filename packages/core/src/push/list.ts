@@ -52,7 +52,7 @@ export interface Interface {
   /** Removes the phone after its relay answered gone, unless it has registered a new callback URL since. */
   readonly removeGone: (id: Push.DeviceID, callbackURL: string) => Effect.Effect<void>
   readonly hasDevices: () => Effect.Effect<boolean>
-  readonly pause: (id: Push.DeviceID, paused: boolean) => Effect.Effect<Push.DevicePatch, NotFoundError>
+  readonly update: (id: Push.DeviceID, patch: Push.DevicePatch) => Effect.Effect<Push.Device, NotFoundError>
   readonly setDeviceBell: (
     id: Push.DeviceID,
     sessionID: Session.ID,
@@ -61,9 +61,8 @@ export interface Interface {
   readonly removeDeviceBell: (id: Push.DeviceID, sessionID: Session.ID) => Effect.Effect<void, NotFoundError>
   readonly setSessionBell: (sessionID: Session.ID, bell: Push.Bell) => Effect.Effect<Push.Bell, InvalidError>
   readonly removeSessionBell: (sessionID: Session.ID) => Effect.Effect<void>
-  readonly settings: () => Effect.Effect<Push.Settings>
   readonly setSettings: (settings: Push.Settings) => Effect.Effect<Push.Settings, InvalidError>
-  readonly info: () => Effect.Effect<Push.Info>
+  readonly info: () => Effect.Effect<Omit<Push.Info, "relays">>
   readonly targets: () => Effect.Effect<Targets>
 }
 
@@ -194,7 +193,8 @@ const layer = Layer.effect(
       if (input.expiresAt <= now) return yield* new InvalidError({ reason: "expiresAt must be in the future" })
 
       const existing = Option.filter(yield* readDevice(id), (stored) => stored.expiresAt > now)
-      const settings = input.settings ?? { default: "all" }
+      const settings =
+        input.settings ?? Option.getOrUndefined(existing)?.settings ?? ({ default: "all" } satisfies Push.DeviceSettings)
       if (Option.isSome(existing) && existing.value.phoneKey === input.publicKey) {
         yield* kv.set(deviceKey(id), {
           ...existing.value,
@@ -209,7 +209,7 @@ const layer = Layer.effect(
         return { publicKey: existing.value.serverKey }
       }
 
-      const agreement = yield* PushCrypto.agree(PushCrypto.newServerKey(), input.publicKey, id)
+      const agreement = PushCrypto.agree(PushCrypto.newServerKey(), input.publicKey, id)
       if (Option.isNone(agreement))
         return yield* new InvalidError({ reason: "publicKey must be a base64 uncompressed P-256 public key" })
       const stored: Stored = {
@@ -264,12 +264,17 @@ const layer = Layer.effect(
       return bell
     })
 
-    const pause = Effect.fn("PushList.pause")(function* (id: Push.DeviceID, paused: boolean) {
+    const update = Effect.fn("PushList.update")(function* (id: Push.DeviceID, patch: Push.DevicePatch) {
       const stored = yield* requireDevice(id)
-      const now = yield* Clock.currentTimeMillis
-      yield* kv.set(deviceKey(id), { ...stored, paused, updatedAt: now })
+      const updated: Stored = {
+        ...stored,
+        paused: patch.paused ?? stored.paused,
+        settings: patch.settings ?? stored.settings,
+        updatedAt: yield* Clock.currentTimeMillis,
+      }
+      yield* kv.set(deviceKey(id), updated)
       yield* changed
-      return { paused }
+      return toDevice(updated)
     })
 
     const setDeviceBell = Effect.fn("PushList.setDeviceBell")(function* (
@@ -308,10 +313,6 @@ const layer = Layer.effect(
       if ((yield* kv.get(sessionKey(sessionID))) === undefined) return
       yield* kv.remove(sessionKey(sessionID))
       yield* changed
-    })
-
-    const settings = Effect.fn("PushList.settings")(function* () {
-      return yield* readSettings(yield* Clock.currentTimeMillis)
     })
 
     const setSettings = Effect.fn("PushList.setSettings")(function* (input: Push.Settings) {
@@ -368,12 +369,11 @@ const layer = Layer.effect(
       remove: (id) => lock.withPermit(remove(id)),
       removeGone: (id, callbackURL) => lock.withPermit(removeGone(id, callbackURL)),
       hasDevices,
-      pause: (id, paused) => lock.withPermit(pause(id, paused)),
+      update: (id, patch) => lock.withPermit(update(id, patch)),
       setDeviceBell: (id, sessionID, bell) => lock.withPermit(setDeviceBell(id, sessionID, bell)),
       removeDeviceBell: (id, sessionID) => lock.withPermit(removeDeviceBell(id, sessionID)),
       setSessionBell: (sessionID, bell) => lock.withPermit(setSessionBell(sessionID, bell)),
       removeSessionBell: (sessionID) => lock.withPermit(removeSessionBell(sessionID)),
-      settings: () => lock.withPermit(settings()),
       setSettings: (input) => lock.withPermit(setSettings(input)),
       info: () => lock.withPermit(info()),
       targets: () => lock.withPermit(targets()),

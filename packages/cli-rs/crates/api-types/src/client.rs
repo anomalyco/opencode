@@ -1786,14 +1786,14 @@ pub fn experimental_machine_remove(input: &ExperimentalMachineRemoveInput) -> Ca
 
 /// `GET /api/experimental/push` (`push.get`)
 pub fn experimental_push_get() -> Call<ExperimentalPushGetOutput> {
-    Call::new("GET", "/api/experimental/push".to_owned(), Reply::Json, 200, &[400, 401, 404])
+    Call::new("GET", "/api/experimental/push".to_owned(), Reply::Data, 200, &[400, 401, 403])
 }
 
 /// `PUT /api/experimental/push/device/:id` (`push.device.register`)
 pub fn experimental_push_device_register(
     input: &ExperimentalPushDeviceRegisterInput,
 ) -> Call<ExperimentalPushDeviceRegisterOutput> {
-    let mut call = Call::new("PUT", String::new(), Reply::Json, 200, &[400, 401, 404]);
+    let mut call = Call::new("PUT", String::new(), Reply::Data, 200, &[400, 401, 403]);
     call.path = format!("/api/experimental/push/device/{}", call.param(&input.id));
     call.object();
     call.field("callbackURL", &input.callback_url);
@@ -1809,7 +1809,7 @@ pub fn experimental_push_device_register(
 
 /// `DELETE /api/experimental/push/device/:id` (`push.device.remove`)
 pub fn experimental_push_device_remove(input: &ExperimentalPushDeviceRemoveInput) -> Call<()> {
-    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401, 404]);
+    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401, 403]);
     call.path = format!("/api/experimental/push/device/{}", call.param(&input.id));
     call
 }
@@ -1818,10 +1818,15 @@ pub fn experimental_push_device_remove(input: &ExperimentalPushDeviceRemoveInput
 pub fn experimental_push_device_update(
     input: &ExperimentalPushDeviceUpdateInput,
 ) -> Call<ExperimentalPushDeviceUpdateOutput> {
-    let mut call = Call::new("PATCH", String::new(), Reply::Json, 200, &[400, 401, 404]);
+    let mut call = Call::new("PATCH", String::new(), Reply::Data, 200, &[400, 401, 403, 404]);
     call.path = format!("/api/experimental/push/device/{}", call.param(&input.id));
     call.object();
-    call.field("paused", &input.paused);
+    if let Some(value) = &input.paused {
+        call.field("paused", value);
+    }
+    if let Some(value) = &input.settings {
+        call.field("settings", value);
+    }
     call
 }
 
@@ -1829,7 +1834,7 @@ pub fn experimental_push_device_update(
 pub fn experimental_push_device_session_set(
     input: &ExperimentalPushDeviceSessionSetInput,
 ) -> Call<ExperimentalPushDeviceSessionSetOutput> {
-    let mut call = Call::new("PUT", String::new(), Reply::Json, 200, &[400, 401, 404]);
+    let mut call = Call::new("PUT", String::new(), Reply::Data, 200, &[400, 401, 403, 404]);
     call.path =
         format!("/api/experimental/push/device/{}/session/{}", call.param(&input.id), call.param(&input.session_id));
     call.object();
@@ -1842,7 +1847,7 @@ pub fn experimental_push_device_session_set(
 
 /// `DELETE /api/experimental/push/device/:id/session/:sessionID` (`push.device.session.remove`)
 pub fn experimental_push_device_session_remove(input: &ExperimentalPushDeviceSessionRemoveInput) -> Call<()> {
-    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401, 404]);
+    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401, 403, 404]);
     call.path =
         format!("/api/experimental/push/device/{}/session/{}", call.param(&input.id), call.param(&input.session_id));
     call
@@ -1852,7 +1857,7 @@ pub fn experimental_push_device_session_remove(input: &ExperimentalPushDeviceSes
 pub fn experimental_push_session_set(
     input: &ExperimentalPushSessionSetInput,
 ) -> Call<ExperimentalPushSessionSetOutput> {
-    let mut call = Call::new("PUT", String::new(), Reply::Json, 200, &[400, 401, 404]);
+    let mut call = Call::new("PUT", String::new(), Reply::Data, 200, &[400, 401, 403]);
     call.path = format!("/api/experimental/push/session/{}", call.param(&input.session_id));
     call.object();
     call.field("level", &input.level);
@@ -1864,21 +1869,16 @@ pub fn experimental_push_session_set(
 
 /// `DELETE /api/experimental/push/session/:sessionID` (`push.session.remove`)
 pub fn experimental_push_session_remove(input: &ExperimentalPushSessionRemoveInput) -> Call<()> {
-    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401, 404]);
+    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401, 403]);
     call.path = format!("/api/experimental/push/session/{}", call.param(&input.session_id));
     call
-}
-
-/// `GET /api/experimental/push/settings` (`push.settings.get`)
-pub fn experimental_push_settings_get() -> Call<ExperimentalPushSettingsGetOutput> {
-    Call::new("GET", "/api/experimental/push/settings".to_owned(), Reply::Json, 200, &[400, 401, 404])
 }
 
 /// `PUT /api/experimental/push/settings` (`push.settings.set`)
 pub fn experimental_push_settings_set(
     input: &ExperimentalPushSettingsSetInput,
 ) -> Call<ExperimentalPushSettingsSetOutput> {
-    let mut call = Call::new("PUT", "/api/experimental/push/settings".to_owned(), Reply::Json, 200, &[400, 401, 404]);
+    let mut call = Call::new("PUT", "/api/experimental/push/settings".to_owned(), Reply::Data, 200, &[400, 401, 403]);
     call.object();
     call.field("paused", &input.paused);
     if let Some(value) = &input.until {
@@ -3105,6 +3105,7 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
             Ok(experimental_push_device_update(&ExperimentalPushDeviceUpdateInput {
                 id: field(input, "id")?,
                 paused: field(input, "paused")?,
+                settings: field(input, "settings")?,
             })
             .cast())
         })()),
@@ -3138,7 +3139,6 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
             })
             .cast())
         })()),
-        "experimental.push.settings.get" => Some((|| Ok(experimental_push_settings_get().cast()))()),
         "experimental.push.settings.set" => Some((|| {
             Ok(experimental_push_settings_set(&ExperimentalPushSettingsSetInput {
                 paused: field(input, "paused")?,

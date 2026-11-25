@@ -1,6 +1,13 @@
 export type JsonValue = null | boolean | number | string | Array<JsonValue> | { [key: string]: JsonValue }
 
-export type PushLevel = "all" | "attention" | "none"
+export type ServerInfo = {
+  version: string
+  pid: number
+  hostname?: string | undefined
+  urls: Array<string>
+  paths: { tmp: string }
+  capabilities?: { persistentPty?: boolean | undefined } | undefined
+}
 
 export type PairingCode = { code: string; expires_in: number }
 
@@ -367,9 +374,9 @@ export type PushDeviceID = string
 
 export type PushPlatform = "android" | "ios"
 
-export type PushRegistered = { publicKey: string }
+export type PushLevel = "all" | "attention" | "none"
 
-export type PushDevicePatch = { paused: boolean }
+export type PushRegistered = { publicKey: string }
 
 export type ReferenceGitSource = { type: "git"; repository: string; branch?: string }
 
@@ -403,12 +410,6 @@ export type ConfigModelReasoning =
   | { supported: true; toggle?: boolean; effort?: Array<string>; budget?: { min?: number; max?: number } }
 
 export type ConfigShellOption = { path: string; name: string; acceptable: boolean }
-
-export type PushCapability = { version: 1; relays: Array<string>; levels: Array<PushLevel> }
-
-export type PushDeviceSettings = { default: PushLevel }
-
-export type PushBell = { level: PushLevel; until?: number }
 
 export type LocationPublicRef = { directory: AbsolutePath }
 
@@ -1053,6 +1054,10 @@ export type MachineInvite = {
   reach: Array<MachineReach | { type: "iroh" }>
 }
 
+export type PushDeviceSettings = { default: PushLevel }
+
+export type PushBell = { level: PushLevel; until?: number }
+
 export type VcsInfo = { provider?: string; branch: VcsBranch }
 
 export type WebSearchProvider = { id: WebSearchID; name: string }
@@ -1066,26 +1071,6 @@ export type ConfigModelCapabilities = {
   output?: Array<string>
   temperature?: boolean
   reasoning?: ConfigModelReasoning
-}
-
-export type ServerInfo = {
-  version: string
-  pid: number
-  hostname?: string | undefined
-  urls: Array<string>
-  paths: { tmp: string }
-  capabilities?: { persistentPty?: boolean | undefined; push?: PushCapability | undefined } | undefined
-}
-
-export type PushDevice = {
-  id: PushDeviceID
-  name: string
-  platform: PushPlatform
-  expiresAt: number
-  settings: PushDeviceSettings
-  paused: boolean
-  sessions: { [x: string]: PushBell }
-  time: { created: number; updated: number }
 }
 
 export type SessionMessageLocationSwitched = {
@@ -2382,7 +2367,16 @@ export type AutomationTrigger =
 
 export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
 
-export type PushInfo = { settings: PushSettings; devices: Array<PushDevice>; sessions: { [x: string]: PushBell } }
+export type PushDevice = {
+  id: PushDeviceID
+  name: string
+  platform: PushPlatform
+  expiresAt: number
+  settings: PushDeviceSettings
+  paused: boolean
+  sessions: { [x: string]: PushBell }
+  time: { created: number; updated: number }
+}
 
 export type SessionInboxMove = {
   id: SessionMessageID
@@ -2649,7 +2643,6 @@ export type ConfigEntry =
             | { path: string; description?: string; hidden?: boolean }
         }
         websearch?: false | { provider: "random" | WebSearchID }
-        push?: { relays?: Array<string> }
         plugins?: Array<string | { package: string; options?: { [x: string]: JsonValue } }>
         worktree?: ConfigWorktree
         warming?: boolean | { prompt?: string; interval?: "auto" | (string & {}); duration?: string }
@@ -2724,6 +2717,7 @@ export type ConfigEntry =
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
           location_idle_timeout?: string | false
+          push_relays?: Array<string>
           policies?: Array<{
             action:
               | "provider.use"
@@ -2824,6 +2818,13 @@ export type ExperimentalJobUpdated = {
 }
 
 export type FormFields1 = [FormField1, ...Array<FormField1>]
+
+export type PushInfo = {
+  settings: PushSettings
+  devices: Array<PushDevice>
+  sessions: { [x: string]: PushBell }
+  relays: Array<string>
+}
 
 export type AgentInfo = {
   id: AgentID
@@ -3457,7 +3458,11 @@ export type MachineNotFoundError = {
 export const isMachineNotFoundError = (value: unknown): value is MachineNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "MachineNotFoundError"
 
-export type PushNotFoundError = { readonly _tag: "PushNotFoundError"; readonly message: string }
+export type PushNotFoundError = {
+  readonly _tag: "PushNotFoundError"
+  readonly deviceID: string
+  readonly message: string
+}
 export const isPushNotFoundError = (value: unknown): value is PushNotFoundError =>
   typeof value === "object" && value !== null && "_tag" in value && value["_tag"] === "PushNotFoundError"
 
@@ -4939,7 +4944,7 @@ export type ExperimentalMachineRemoveInput = { readonly name: string }
 
 export type ExperimentalMachineRemoveOutput = void
 
-export type ExperimentalPushGetOutput = PushInfo
+export type ExperimentalPushGetOutput = { data: PushInfo }["data"]
 
 export type ExperimentalPushDeviceRegisterInput = {
   readonly id: string
@@ -4951,15 +4956,19 @@ export type ExperimentalPushDeviceRegisterInput = {
   readonly settings?: { readonly default: "all" | "attention" | "none" } | undefined
 }
 
-export type ExperimentalPushDeviceRegisterOutput = PushRegistered
+export type ExperimentalPushDeviceRegisterOutput = { data: PushRegistered }["data"]
 
 export type ExperimentalPushDeviceRemoveInput = { readonly id: string }
 
 export type ExperimentalPushDeviceRemoveOutput = void
 
-export type ExperimentalPushDeviceUpdateInput = { readonly id: string; readonly paused: boolean }
+export type ExperimentalPushDeviceUpdateInput = {
+  readonly id: string
+  readonly paused?: boolean | undefined
+  readonly settings?: { readonly default: "all" | "attention" | "none" } | undefined
+}
 
-export type ExperimentalPushDeviceUpdateOutput = PushDevicePatch
+export type ExperimentalPushDeviceUpdateOutput = { data: PushDevice }["data"]
 
 export type ExperimentalPushDeviceSessionSetInput = {
   readonly id: string
@@ -4968,7 +4977,7 @@ export type ExperimentalPushDeviceSessionSetInput = {
   readonly until?: number | undefined
 }
 
-export type ExperimentalPushDeviceSessionSetOutput = PushBell
+export type ExperimentalPushDeviceSessionSetOutput = { data: PushBell }["data"]
 
 export type ExperimentalPushDeviceSessionRemoveInput = { readonly id: string; readonly sessionID: string }
 
@@ -4980,17 +4989,15 @@ export type ExperimentalPushSessionSetInput = {
   readonly until?: number | undefined
 }
 
-export type ExperimentalPushSessionSetOutput = PushBell
+export type ExperimentalPushSessionSetOutput = { data: PushBell }["data"]
 
 export type ExperimentalPushSessionRemoveInput = { readonly sessionID: string }
 
 export type ExperimentalPushSessionRemoveOutput = void
 
-export type ExperimentalPushSettingsGetOutput = PushSettings
-
 export type ExperimentalPushSettingsSetInput = { readonly paused: boolean; readonly until?: number | undefined }
 
-export type ExperimentalPushSettingsSetOutput = PushSettings
+export type ExperimentalPushSettingsSetOutput = { data: PushSettings }["data"]
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 

@@ -3,8 +3,6 @@ import { Duration, Effect } from "effect"
 import { HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiBuilder } from "effect/http-api"
 import { PersistentPty } from "@opencode/core/persistent-pty"
-import { PushOptions } from "@opencode/core/push/options"
-import { Push } from "@opencode/schema/push"
 import { UnauthorizedError } from "@opencode/protocol/errors"
 import { Api } from "../api"
 import { ServerAuth } from "../auth"
@@ -15,23 +13,18 @@ export const ServerHandler = HttpApiBuilder.group(Api, "server.server", (handler
   Effect.gen(function* () {
     const pairing = yield* ServerPairing.Service
     const auth = yield* ServerAuth.Config
-    const pushOptions = yield* PushOptions.Service
 
     return handlers
       .handle("server.info", () =>
         Effect.gen(function* () {
           const info = yield* ServerInfo.Service
-          const push = yield* pushOptions.get()
           return {
             version: info.app.version ?? "unknown",
             pid: process.pid ?? 0,
             hostname: hostname() || undefined,
             urls: info.urls(),
             paths: info.paths,
-            capabilities: {
-              persistentPty: PersistentPty.available,
-              ...(push.enabled ? { push: { version: 1 as const, relays: push.relays, levels: Push.levels } } : {}),
-            },
+            capabilities: { persistentPty: PersistentPty.available },
           }
         }),
       )

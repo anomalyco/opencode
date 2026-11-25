@@ -57,7 +57,6 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
       .handle("push.device.session.remove", (ctx) => push.removeDeviceBell(ctx.params.id, ctx.params.sessionID))
       .handle("push.session.set", (ctx) => push.setSessionBell(ctx.params.sessionID, ctx.payload))
       .handle("push.session.remove", (ctx) => push.removeSessionBell(ctx.params.sessionID))
-      .handle("push.settings.get", () => push.settings())
       .handle("push.settings.set", (ctx) => push.setSettings(ctx.payload))
       .handle("artifacts.providers", (ctx) => artifact.providers(ctx.query, ctx.request))
       .handle("artifacts.list", (ctx) => artifact.list(ctx.query, ctx.request))

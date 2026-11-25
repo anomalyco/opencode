@@ -1,6 +1,7 @@
 export * as PushOptions from "./options.js"
 
 import { Context, Effect, Layer } from "effect"
+import type { Document } from "@opencode/schema/config"
 import { AbsolutePath } from "@opencode/schema/schema"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Global } from "@opencode/util/global"
@@ -33,7 +34,10 @@ const layer = Layer.effect(
         const enabled = yield* Flag.enabled("push")
         const config = yield* Config.Service
         const entries = yield* config.entries()
-        const extra = Config.latest(entries, "push")?.relays ?? []
+        const configured = entries.findLast(
+          (entry): entry is Document => entry.type === "document" && entry.info.experimental?.push_relays !== undefined,
+        )
+        const extra = configured?.info.experimental?.push_relays ?? []
         const relays = [defaultRelay]
         for (const relay of extra) {
           const url = URL.parse(relay)

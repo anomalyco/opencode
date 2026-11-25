@@ -18,7 +18,6 @@ import { ConfigPolicy } from "./config/policy.js"
 import { ConfigProvider } from "./config/provider.js"
 import { ConfigReference } from "./config/reference.js"
 import { ConfigWebSearch } from "./config/websearch.js"
-import { ConfigPush } from "./config/push.js"
 import { ConfigToolOutput } from "./config/tool-output.js"
 import { ConfigWatcher } from "./config/watcher.js"
 import { ConfigWarming } from "./config/warming.js"
@@ -107,9 +106,6 @@ export class Info extends Schema.Class<Info>("Config.Info")({
   }),
   websearch: ConfigWebSearch.Selection.pipe(optional).annotate({
     description: "Web search provider selection",
-  }),
-  push: ConfigPush.Info.pipe(optional).annotate({
-    description: "Phone push notification settings",
   }),
   plugins: ConfigPlugin.Plugins.pipe(optional).annotate({
     description: "Ordered plugin enablement directives and external package declarations",

@@ -1660,6 +1660,10 @@ export type AgentInfo = {
     model: ModelRef?,
     request: ProviderRequest,
     system: string?,
+    instructions: (string | {
+        selected: string,
+        unselected: string,
+    })?,
     description: string?,
     mode: ("subagent" | "primary" | "all"),
     hidden: boolean,
@@ -1974,9 +1978,6 @@ export type ConfigInfoEncoded = {
     instructions: { string }?,
     references: { [string]: (string | ConfigReferenceGitEncoded | ConfigReferenceLocalEncoded) }?,
     websearch: (false | ConfigWebSearchInfoEncoded)?,
-    push: {
-        relays: { string }?,
-    }?,
     plugins: { (string | ConfigPluginEntryEncoded) }?,
     worktree: ConfigWorktree?,
     warming: (boolean | ConfigWarmingEncoded)?,
@@ -2015,6 +2016,7 @@ export type ConfigInfoEncoded = {
         })?,
         subagent_depth: number?,
         location_idle_timeout: (string | false)?,
+        push_relays: { string }?,
         policies: { {
             action: ("provider.use" | "tool.use" | "integration.connect" | "integration.use" | "mcp.use" | "skill.use" | "plugin.use" | "websearch.use"),
             resource: string,
@@ -3490,12 +3492,6 @@ export type PushBell = {
     ["until"]: number?,
 }
 
-export type PushCapability = {
-    version: number,
-    relays: { string },
-    levels: { PushLevel },
-}
-
 export type PushDevice = {
     id: PushDeviceID,
     name: string,
@@ -3513,10 +3509,6 @@ export type PushDevice = {
 --- A lowercase canonical UUID chosen by the phone
 export type PushDeviceID = string
 
-export type PushDevicePatch = {
-    paused: boolean,
-}
-
 export type PushDeviceSettings = {
     default: PushLevel,
 }
@@ -3525,6 +3517,7 @@ export type PushInfo = {
     settings: PushSettings,
     devices: { PushDevice },
     sessions: { [string]: PushBell },
+    relays: { string },
 }
 
 export type PushLevel = ("all" | "attention" | "none")
@@ -3581,7 +3574,6 @@ export type ServerInfo = {
     },
     capabilities: {
         persistentPty: boolean?,
-        push: PushCapability?,
     }?,
 }
 
@@ -5368,8 +5360,9 @@ export type Client = {
                 },
                 update: (input: {
                     id: string,
-                    paused: boolean,
-                }) -> (PushDevicePatch?, string?),
+                    paused: boolean?,
+                    settings: PushDeviceSettings?,
+                }) -> (PushDevice?, string?),
             },
             get: (input: {}?) -> (PushInfo?, string?),
             session: {
@@ -5383,7 +5376,6 @@ export type Client = {
                 }) -> (PushBell?, string?),
             },
             settings: {
-                get: (input: {}?) -> (PushSettings?, string?),
                 set: (input: {
                     paused: boolean,
                     ["until"]: number?,

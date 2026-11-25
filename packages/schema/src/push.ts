@@ -2,19 +2,18 @@ export * as Push from "./push.js"
 
 import { Schema } from "effect"
 import { ephemeral, inventory } from "./event.js"
-import { optional } from "./schema.js"
+import { NonNegativeInt, optional } from "./schema.js"
 
 export const DeviceID = Schema.String.check(
   Schema.isPattern(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/),
 ).annotate({ identifier: "Push.DeviceID", description: "A lowercase canonical UUID chosen by the phone" })
 export type DeviceID = typeof DeviceID.Type
 
-export const Time = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)).annotate({
+export const Time = NonNegativeInt.annotate({
   description: "Milliseconds since the Unix epoch",
 })
 
-export const levels = ["all", "attention", "none"] as const
-export const Level = Schema.Literals(levels).annotate({ identifier: "Push.Level" })
+export const Level = Schema.Literals(["all", "attention", "none"]).annotate({ identifier: "Push.Level" })
 export type Level = typeof Level.Type
 
 export interface Bell extends Schema.Schema.Type<typeof Bell> {}
@@ -54,7 +53,8 @@ export const Registered = Schema.Struct({
 
 export interface DevicePatch extends Schema.Schema.Type<typeof DevicePatch> {}
 export const DevicePatch = Schema.Struct({
-  paused: Schema.Boolean,
+  paused: Schema.Boolean.pipe(optional),
+  settings: DeviceSettings.pipe(optional),
 }).annotate({ identifier: "Push.DevicePatch" })
 
 export interface Device extends Schema.Schema.Type<typeof Device> {}
@@ -77,14 +77,10 @@ export const Info = Schema.Struct({
   settings: Settings,
   devices: Schema.Array(Device),
   sessions: Schema.Record(Schema.String, Bell),
+  relays: Schema.Array(Schema.String).annotate({
+    description: "Relay origins a phone's callback URL may be on",
+  }),
 }).annotate({ identifier: "Push.Info" })
-
-export interface Capability extends Schema.Schema.Type<typeof Capability> {}
-export const Capability = Schema.Struct({
-  version: Schema.Literal(1),
-  relays: Schema.Array(Schema.String),
-  levels: Schema.Array(Level),
-}).annotate({ identifier: "Push.Capability" })
 
 const Updated = ephemeral({ type: "push.updated", schema: {} })
 export const Event = { Updated, Definitions: inventory(Updated) }

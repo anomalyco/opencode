@@ -20,7 +20,7 @@ const start = Effect.fnUntraced(function* (push: boolean) {
     config: {
       directory,
       project: false,
-      content: JSON.stringify({ experimental: { push }, push: { relays: [devRelay] } }),
+      content: JSON.stringify({ experimental: { push, push_relays: [devRelay] } }),
     },
     fs: { filewatcher: false },
     hostname: "127.0.0.1",
@@ -47,40 +47,36 @@ const phoneKey = () => {
   return phone.getPublicKey("base64")
 }
 
-it.live("hides every push route and the capability when the flag is off", () =>
+it.live("refuses every push route when the flag is off", () =>
   Effect.gen(function* () {
     const request = yield* start(false)
-    const info = yield* request("/api/info")
-    expect(info.body.capabilities.push).toBeUndefined()
-    expect((yield* request("/api/experimental/push")).status).toBe(404)
+    expect((yield* request("/api/experimental/push")).status).toBe(403)
     expect(
       (yield* request(`/api/experimental/push/device/${id}`, { method: "PUT", body: register(phoneKey()) })).status,
-    ).toBe(404)
-    expect((yield* request(`/api/experimental/push/device/${id}`, { method: "DELETE" })).status).toBe(404)
+    ).toBe(403)
+    expect((yield* request(`/api/experimental/push/device/${id}`, { method: "DELETE" })).status).toBe(403)
   }),
 )
 
 it.live("registers, lists and removes a phone", () =>
   Effect.gen(function* () {
     const request = yield* start(true)
-    const info = yield* request("/api/info")
-    expect(info.body.capabilities.push).toEqual({
-      version: 1,
-      relays: ["https://opencode-notify-relay.anomalyco.workers.dev", devRelay],
-      levels: ["all", "attention", "none"],
-    })
+    expect((yield* request("/api/experimental/push")).body.data.relays).toEqual([
+      "https://opencode-notify-relay.anomalyco.workers.dev",
+      devRelay,
+    ])
 
     const registered = yield* request(`/api/experimental/push/device/${id}`, {
       method: "PUT",
       body: register(phoneKey()),
     })
     expect(registered.status).toBe(200)
-    expect(Buffer.from(registered.body.publicKey, "base64")).toHaveLength(65)
+    expect(Buffer.from(registered.body.data.publicKey, "base64")).toHaveLength(65)
 
     const listed = yield* request("/api/experimental/push")
-    expect(listed.body.devices.map((device: { id: string }) => device.id)).toEqual([id])
-    expect(JSON.stringify(listed.body)).not.toContain("notify")
-    expect(JSON.stringify(listed.body)).not.toContain(registered.body.publicKey)
+    expect(listed.body.data.devices.map((device: { id: string }) => device.id)).toEqual([id])
+    expect(JSON.stringify(listed.body)).not.toContain("/v2/notify")
+    expect(JSON.stringify(listed.body)).not.toContain(registered.body.data.publicKey)
 
     const badURL = yield* request(`/api/experimental/push/device/${id}`, {
       method: "PUT",
@@ -95,46 +91,55 @@ it.live("registers, lists and removes a phone", () =>
 
     expect((yield* request(`/api/experimental/push/device/${id}`, { method: "DELETE" })).status).toBe(204)
     expect((yield* request(`/api/experimental/push/device/${id}`, { method: "DELETE" })).status).toBe(204)
-    expect((yield* request("/api/experimental/push")).body.devices).toEqual([])
+    expect((yield* request("/api/experimental/push")).body.data.devices).toEqual([])
   }),
 )
 
-it.live("pauses phones and sets session bells", () =>
+it.live("updates phones and sets session bells", () =>
   Effect.gen(function* () {
     const request = yield* start(true)
     const device = `/api/experimental/push/device/${id}`
     const until = Date.now() + 3_600_000
 
-    expect((yield* request(device, { method: "PATCH", body: JSON.stringify({ paused: true }) })).status).toBe(404)
+    const unknown = yield* request(device, { method: "PATCH", body: JSON.stringify({ paused: true }) })
+    expect(unknown.status).toBe(404)
+    expect(unknown.body.deviceID).toBe(id)
     expect(
       (yield* request(`${device}/session/ses_push`, { method: "PUT", body: JSON.stringify({ level: "none" }) })).status,
     ).toBe(404)
 
     yield* request(device, { method: "PUT", body: register(phoneKey()) })
     const paused = yield* request(device, { method: "PATCH", body: JSON.stringify({ paused: true }) })
-    expect(paused.body).toEqual({ paused: true })
+    expect(paused.body.data.paused).toBe(true)
+    expect(paused.body.data.settings).toEqual({ default: "all" })
+    const quieter = yield* request(device, {
+      method: "PATCH",
+      body: JSON.stringify({ settings: { default: "attention" } }),
+    })
+    expect(quieter.body.data.paused).toBe(true)
+    expect(quieter.body.data.settings).toEqual({ default: "attention" })
     const bell = yield* request(`${device}/session/ses_push`, {
       method: "PUT",
       body: JSON.stringify({ level: "attention", until }),
     })
-    expect(bell.body).toEqual({ level: "attention", until })
+    expect(bell.body.data).toEqual({ level: "attention", until })
     const shared = yield* request("/api/experimental/push/session/ses_push", {
       method: "PUT",
       body: JSON.stringify({ level: "none" }),
     })
-    expect(shared.body).toEqual({ level: "none" })
+    expect(shared.body.data).toEqual({ level: "none" })
     const all = yield* request("/api/experimental/push/settings", {
       method: "PUT",
       body: JSON.stringify({ paused: true, until }),
     })
-    expect(all.body).toEqual({ paused: true, until })
-    expect((yield* request("/api/experimental/push/settings")).body).toEqual({ paused: true, until })
+    expect(all.body.data).toEqual({ paused: true, until })
 
-    const listed = yield* request("/api/experimental/push")
-    expect(listed.body.settings).toEqual({ paused: true, until })
-    expect(listed.body.sessions).toEqual({ ses_push: { level: "none" } })
-    expect(listed.body.devices[0].paused).toBe(true)
-    expect(listed.body.devices[0].sessions).toEqual({ ses_push: { level: "attention", until } })
+    const listed = (yield* request("/api/experimental/push")).body.data
+    expect(listed.settings).toEqual({ paused: true, until })
+    expect(listed.sessions).toEqual({ ses_push: { level: "none" } })
+    expect(listed.devices[0].paused).toBe(true)
+    expect(listed.devices[0].settings).toEqual({ default: "attention" })
+    expect(listed.devices[0].sessions).toEqual({ ses_push: { level: "attention", until } })
 
     const badLevel = yield* request("/api/experimental/push/session/ses_push", {
       method: "PUT",
@@ -149,8 +154,8 @@ it.live("pauses phones and sets session bells", () =>
 
     expect((yield* request(`${device}/session/ses_push`, { method: "DELETE" })).status).toBe(204)
     expect((yield* request("/api/experimental/push/session/ses_push", { method: "DELETE" })).status).toBe(204)
-    const cleared = yield* request("/api/experimental/push")
-    expect(cleared.body.sessions).toEqual({})
-    expect(cleared.body.devices[0].sessions).toEqual({})
+    const cleared = (yield* request("/api/experimental/push")).body.data
+    expect(cleared.sessions).toEqual({})
+    expect(cleared.devices[0].sessions).toEqual({})
   }),
 )

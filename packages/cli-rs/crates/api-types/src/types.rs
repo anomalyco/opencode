@@ -10,28 +10,10 @@ pub struct ServerInfoPaths {
     pub tmp: String,
 }
 
-literal_enum! {
-/// `Push.Level`
-PushLevel {
-    All => "all",
-    Attention => "attention",
-    None => "none",
-}
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct PushCapability {
-    pub version: i64,
-    pub relays: Vec<String>,
-    pub levels: Vec<PushLevel>,
-}
-
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ServerInfoCapabilities {
     #[serde(rename = "persistentPty", default, skip_serializing_if = "Option::is_none")]
     pub persistent_pty: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub push: Option<PushCapability>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
@@ -302,6 +284,39 @@ pub struct ProviderRequest {
     pub body: IndexMap<String, serde_json::Value>,
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct AgentInfoInstructionsObject {
+    pub selected: String,
+    pub unselected: String,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(untagged)]
+pub enum AgentInfoInstructions {
+    String(String),
+    Object(AgentInfoInstructionsObject),
+    /// A shape this client does not know, kept as it arrived.
+    Unknown(serde_json::Value),
+}
+
+impl<'de> Deserialize<'de> for AgentInfoInstructions {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        crate::de::union(deserializer, Self::from_raw)
+    }
+}
+
+impl AgentInfoInstructions {
+    fn from_raw(raw: &crate::de::Raw) -> Result<Self, serde_json::Error> {
+        if let Ok(member) = raw.decode() {
+            return Ok(Self::String(member));
+        }
+        if let Ok(member) = raw.decode() {
+            return Ok(Self::Object(member));
+        }
+        raw.unknown().map(Self::Unknown)
+    }
+}
+
 literal_enum! {
 AgentInfoMode {
     Subagent => "subagent",
@@ -340,6 +355,8 @@ pub struct AgentInfo {
     pub request: ProviderRequest,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub system: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instructions: Option<AgentInfoInstructions>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
     pub mode: AgentInfoMode,
@@ -11315,6 +11332,15 @@ PushPlatform {
 }
 }
 
+literal_enum! {
+/// `Push.Level`
+PushLevel {
+    All => "all",
+    Attention => "attention",
+    None => "none",
+}
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct PushDeviceSettings {
     pub default: PushLevel,
@@ -11351,6 +11377,7 @@ pub struct PushInfo {
     pub settings: PushSettings,
     pub devices: Vec<PushDevice>,
     pub sessions: IndexMap<String, PushBell>,
+    pub relays: Vec<String>,
 }
 
 /// Output of `Client::experimental_push_get`.
@@ -11387,16 +11414,12 @@ pub struct ExperimentalPushDeviceRemoveInput {
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ExperimentalPushDeviceUpdateInput {
     pub id: PushDeviceID,
-    pub paused: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct PushDevicePatch {
-    pub paused: bool,
+    pub paused: Option<bool>,
+    pub settings: Option<PushDeviceSettings>,
 }
 
 /// Output of `Client::experimental_push_device_update`.
-pub type ExperimentalPushDeviceUpdateOutput = PushDevicePatch;
+pub type ExperimentalPushDeviceUpdateOutput = PushDevice;
 
 /// Input of `Client::experimental_push_device_session_set`.
 #[derive(Debug, Clone, PartialEq)]
@@ -11433,9 +11456,6 @@ pub type ExperimentalPushSessionSetOutput = PushBell;
 pub struct ExperimentalPushSessionRemoveInput {
     pub session_id: SessionID,
 }
-
-/// Output of `Client::experimental_push_settings_get`.
-pub type ExperimentalPushSettingsGetOutput = PushSettings;
 
 /// Input of `Client::experimental_push_settings_set`.
 #[derive(Debug, Clone, PartialEq, Default)]
@@ -12459,12 +12479,6 @@ impl ConfigEntryDocumentInfoWebsearch {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
-pub struct ConfigEntryDocumentInfoPush {
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub relays: Option<Vec<String>>,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct ConfigEntryDocumentInfoPluginsItemObject {
     pub package: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -12852,6 +12866,8 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub location_idle_timeout: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub push_relays: Option<Vec<String>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policies: Option<Vec<ConfigEntryDocumentInfoPoliciesItem>>,
 }
 
@@ -12909,8 +12925,6 @@ pub struct ConfigEntryDocumentInfo {
     pub references: Option<IndexMap<String, ConfigEntryDocumentInfoReferencesValue>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub websearch: Option<ConfigEntryDocumentInfoWebsearch>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub push: Option<ConfigEntryDocumentInfoPush>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plugins: Option<Vec<ConfigEntryDocumentInfoPluginsItem>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -13552,6 +13566,8 @@ impl crate::TaggedError for MachineNotFoundError {
 pub struct PushNotFoundError {
     #[serde(rename = "_tag")]
     pub tag: String,
+    #[serde(rename = "deviceID")]
+    pub device_id: String,
     pub message: String,
 }
 

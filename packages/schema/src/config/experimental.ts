@@ -66,6 +66,10 @@ export class Info extends Schema.Class<Info>("ConfigExperimental.Info")({
       description:
         'How long a location can go without session activity before its services are unloaded. Running sessions and background jobs keep a location loaded. Set to false to never unload (default: "60 minutes")',
     }),
+  push_relays: Schema.Array(Schema.String).pipe(optional).annotate({
+    description:
+      "Extra notification relay origins phones may register with, added to the production relay, such as https://notify.dev.opencode.ai",
+  }),
   policies: ConfigPolicy.Info.pipe(Schema.Array, optional).annotate({
     description: "Deprecated: use top-level policies. Ordered policies controlling access to configured resources",
   }),

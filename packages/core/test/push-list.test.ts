@@ -141,7 +141,7 @@ describe("PushList", () => {
       const list = yield* PushList.Service
       const key = phoneKey()
       const first = yield* list.register(id, input(key), relays)
-      yield* list.pause(id, true)
+      yield* list.update(id, { paused: true })
       yield* TestClock.adjust(10_000)
       const again = yield* list.register(id, { ...input(key), expiresAt: 50_000 }, relays)
       expect(again.publicKey).not.toBe(first.publicKey)
@@ -149,11 +149,14 @@ describe("PushList", () => {
     }),
   )
 
-  it.effect("keeps a phone's pause and bells when it registers again", () =>
+  it.effect("keeps a phone's pause, level and bells when it registers again", () =>
     Effect.gen(function* () {
       const list = yield* PushList.Service
       yield* list.register(id, input(phoneKey()), relays)
-      expect(yield* list.pause(id, true)).toEqual({ paused: true })
+      expect((yield* list.update(id, { paused: true })).paused).toBe(true)
+      const updated = yield* list.update(id, { settings: { default: "attention" } })
+      expect(updated.paused).toBe(true)
+      expect(updated.settings).toEqual({ default: "attention" })
       expect(yield* list.setDeviceBell(id, sessionID, { level: "none", until: 5_000 })).toEqual({
         level: "none",
         until: 5_000,
@@ -162,17 +165,21 @@ describe("PushList", () => {
 
       const [device] = (yield* list.info()).devices
       expect(device.paused).toBe(true)
+      expect(device.settings).toEqual({ default: "attention" })
       expect(device.sessions).toEqual({ [sessionID]: { level: "none", until: 5_000 } })
 
       yield* TestClock.adjust(5_000)
       expect((yield* list.info()).devices[0].sessions).toEqual({})
+
+      yield* list.register(id, { ...input(phoneKey()), settings: { default: "none" } }, relays)
+      expect((yield* list.info()).devices[0].settings).toEqual({ default: "none" })
     }),
   )
 
   it.effect("answers not found for an unknown phone and rejects a past until", () =>
     Effect.gen(function* () {
       const list = yield* PushList.Service
-      const pause = yield* list.pause(id, true).pipe(Effect.flip)
+      const pause = yield* list.update(id, { paused: true }).pipe(Effect.flip)
       expect(pause._tag).toBe("PushList.NotFoundError")
       const bell = yield* list.setDeviceBell(id, sessionID, { level: "all" }).pipe(Effect.flip)
       expect(bell._tag).toBe("PushList.NotFoundError")
@@ -190,11 +197,11 @@ describe("PushList", () => {
   it.effect("pauses everything until a time", () =>
     Effect.gen(function* () {
       const list = yield* PushList.Service
-      expect(yield* list.settings()).toEqual({ paused: false })
+      expect((yield* list.info()).settings).toEqual({ paused: false })
       expect(yield* list.setSettings({ paused: true, until: 2_000 })).toEqual({ paused: true, until: 2_000 })
       expect((yield* list.info()).settings).toEqual({ paused: true, until: 2_000 })
       yield* TestClock.adjust(2_000)
-      expect(yield* list.settings()).toEqual({ paused: false })
+      expect((yield* list.info()).settings).toEqual({ paused: false })
       expect(yield* list.setSettings({ paused: false, until: 9_000 })).toEqual({ paused: false })
     }),
   )
