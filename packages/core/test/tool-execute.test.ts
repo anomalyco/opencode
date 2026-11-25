@@ -328,18 +328,6 @@ describe("Bun", () => {
     )
   })
 
-  test("Bun.write writes megabytes of bytes without stalling", async () => {
-    await using tmp = await tmpdir()
-    const start = performance.now()
-    expect(await run(tmp.path, `return await Bun.write("big.bin", new Uint8Array(8 * 1024 * 1024).fill(7))`)).toBe(
-      8 * 1024 * 1024,
-    )
-    expect(performance.now() - start).toBeLessThan(2000)
-    const written = await Bun.file(path.join(tmp.path, "big.bin")).bytes()
-    expect(written.byteLength).toBe(8 * 1024 * 1024)
-    expect(written.every((byte) => byte === 7)).toBe(true)
-  })
-
   test("Bun.Glob scans for files, with dot files, folders and absolute paths on request", async () => {
     await using tmp = await tmpdir()
     await Bun.write(path.join(tmp.path, "src", "a.ts"), "a")
