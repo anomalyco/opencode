@@ -183,7 +183,7 @@ describe("PushWatcher", () => {
       yield* bus.publish(Permission.Event.Asked, {
         id: Permission.ID.make("per_1"),
         sessionID: childID,
-        action: "bash",
+        action: "shell",
         resources: ["git push"],
       })
       yield* waitUntil(Effect.sync(() => boxes.length === 2))
@@ -204,10 +204,42 @@ describe("PushWatcher", () => {
           type: "permission",
           sessionID: parentID,
           title: "Fix the login bug",
-          body: "Needs permission: bash",
-          data: { requestID: "per_1", sessionID: childID, action: "bash" },
+          body: "Run: git push",
+          data: { requestID: "per_1", sessionID: childID, action: "shell" },
         },
       ])
+    }),
+  )
+
+  it.live("says what a permission asks for", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const key = yield* phone()
+      const long = "echo " + "🙂".repeat(200)
+      const cases: [string, string[], string][] = [
+        ["shell", ["git add .", "git commit -m 'Fix\n\nlogin'"], "Run: git add .; git commit -m 'Fix login'"],
+        ["edit", ["/repo/a.ts", "/repo/b.ts"], "Edit: /repo/a.ts, /repo/b.ts"],
+        ["read", ["/repo/.env"], "Read: /repo/.env"],
+        ["webfetch", ["https://example.com/docs?page=2"], "Fetch: example.com"],
+        ["websearch", ["effect schema unions"], "Search: effect schema unions"],
+        ["external_directory", ["/other/project/*"], "Access: /other/project"],
+        ["external_directory", ["*"], "Access: any folder"],
+        ["skill", ["release-notes"], "Use skill: release-notes"],
+        ["doom_loop", ["*"], "Use doom_loop"],
+        ["shell", [long], "Run: " + Array.from(long).slice(0, 144).join("") + "…"],
+      ]
+
+      for (const [index, [action, resources]] of cases.entries()) {
+        yield* bus.publish(Permission.Event.Asked, {
+          id: Permission.ID.make(`per_${index}`),
+          sessionID: parentID,
+          action,
+          resources,
+        })
+        yield* waitUntil(Effect.sync(() => boxes.length === index + 1))
+      }
+
+      expect(boxes.map((box) => open(key, box).body)).toEqual(cases.map((item) => item[2]))
     }),
   )
   it.live("clears a notification once it is answered, interrupted or followed by a new prompt", () =>

@@ -19,6 +19,35 @@ const bodies = {
   failed: "Failed",
 }
 
+const verbs: Record<string, string> = {
+  shell: "Run",
+  edit: "Edit",
+  read: "Read",
+  webfetch: "Fetch",
+  websearch: "Search",
+  external_directory: "Access",
+}
+
+const maxBody = 150
+
+/** What a permission request asks for, on one line short enough to read on a phone. */
+const permissionBody = (request: Permission.Request) => {
+  const shown: string[] = []
+  for (const resource of request.resources) {
+    if (resource === "*") continue
+    if (request.action === "external_directory" && resource.endsWith("/*")) shown.push(resource.slice(0, -2) || "/")
+    else if (request.action === "webfetch") shown.push(URL.parse(resource)?.host ?? resource)
+    else shown.push(resource)
+  }
+  let body = `Use ${request.action}`
+  if (shown.length > 0)
+    body = `${verbs[request.action] ?? body}: ${shown.join(request.action === "shell" ? "; " : ", ")}`
+  else if (request.action === "external_directory") body = "Access: any folder"
+  const chars = Array.from(body.replace(/\s+/g, " "))
+  if (chars.length <= maxBody) return chars.join("")
+  return chars.slice(0, maxBody - 1).join("") + "…"
+}
+
 const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
@@ -79,7 +108,7 @@ const layer = Layer.effectDiscard(
         type: "permission",
         sessionID: session.id,
         title: session.title || "OpenCode",
-        body: `Needs permission: ${request.action}`,
+        body: permissionBody(request),
         // A reply has to name the session that asked, which may be a subagent's.
         data: { requestID: request.id, sessionID: request.sessionID, action: request.action },
         attention: true,
