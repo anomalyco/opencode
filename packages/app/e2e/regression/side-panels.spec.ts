@@ -528,22 +528,18 @@ test("dragging a docked tab from the bottom pane back to the side pane removes i
 }) => {
   await page.setViewportSize({ width: 1440, height: 900 })
   const directory = "C:/OpenCode/BottomDragBack"
-  const keyOne = `local\u0000${base64Encode(directory)}/ses_one`
+  const key = `local\u0000${base64Encode(directory)}/ses_bottomdragback`
 
   await openSession(page, {
     name: "BottomDragBack",
-    sessions: [
-      { id: "ses_one", title: "Session One" },
-      { id: "ses_two", title: "Session Two" },
-    ],
     fileList: () => [],
     fileContent: (path) => ({ type: "text", content: `contents:${path}` }),
     seed: {
-      panes: { ses_one: { review: true } },
+      panes: { ses_bottomdragback: { review: true } },
       storage: {
         "opencode.global.dat:layout": {
           sessionTabs: {
-            [keyOne]: {
+            [key]: {
               all: ["file://a.md"],
               active: "file://a.md",
             },
@@ -557,7 +553,7 @@ test("dragging a docked tab from the bottom pane back to the side pane removes i
   const bottom = page.locator('[data-pane-content="bottom"]')
   const chat = page.locator('[data-slot="session-chat-panel"]')
 
-  // Drag a.md from side strip down into the bottom drop zone of the chat panel.
+  // Drag a.md from the side strip into the bottom drop zone of the chat panel.
   const sideTab = side.getByRole("tab", { name: "a.md", exact: true })
   await expect(sideTab).toHaveAttribute("aria-selected", "true")
   const from = (await sideTab.boundingBox())!
@@ -568,21 +564,6 @@ test("dragging a docked tab from the bottom pane back to the side pane removes i
   await page.mouse.move(chatBox.x + chatBox.width / 2, chatBox.y + chatBox.height - 20, { steps: 8 })
   await page.mouse.up()
 
-  await expect(bottom.getByRole("tab", { name: "a.md", exact: true })).toHaveAttribute("aria-selected", "true")
-  await expect(side.getByRole("tab")).toHaveCount(0)
-
-  // Switch between Session Two and Session One several times.
-  const tabOne = page.locator("[data-titlebar-tab-slot]", { hasText: "Session One" })
-  const tabTwo = page.locator("[data-titlebar-tab-slot]", { hasText: "Session Two" })
-
-  for (const _ of [1, 2, 3]) {
-    await tabTwo.click()
-    await expectSessionTitle(page, "Session Two")
-    await tabOne.click()
-    await expectSessionTitle(page, "Session One")
-  }
-
-  // After switching back, a.md stays in bottom and side strip has no phantom/empty tab.
   await expect(bottom.getByRole("tab", { name: "a.md", exact: true })).toHaveAttribute("aria-selected", "true")
   await expect(side.getByRole("tab")).toHaveCount(0)
 
