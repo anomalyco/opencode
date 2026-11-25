@@ -133,8 +133,6 @@ story(
     await terminal.click()
     await input.fill("Diagnostics")
     await expect(custom).toBeChecked()
-    await input.press("Enter")
-    await expect(custom).toBeFocused()
     await expect(input).toHaveValue("Diagnostics")
     await question.getByRole("button", { name: "Back", exact: true }).click()
     await expect(wide).toBeChecked()
@@ -334,8 +332,6 @@ story(
     await expect(toggle).not.toBeChecked()
     await expect(question.getByRole("radio", { name: /Focused/ })).toBeFocused()
     await input.fill("Split view")
-    await input.press("Enter")
-    await expect(question.getByRole("radio", { name: "Type your own answer…", exact: true })).toBeFocused()
 
     await toggle.press(" ")
     await expect(question).toHaveAttribute("data-variant", "experimental")
@@ -1120,7 +1116,8 @@ story.describe("with the new question UI experiment enabled", () => {
 
           const sample = () => ({
             animations: document.getAnimations().length,
-            heights: [...root.querySelectorAll<HTMLElement>("*")].filter((el) => el.style.height).length,
+            // The custom answer's field keeps an inline height that fits its lines; the switch doesn't set it.
+            heights: [...root.querySelectorAll<HTMLElement>("*:not(textarea)")].filter((el) => el.style.height).length,
             ghosts: root.querySelectorAll("[data-ghost]").length,
           })
 
@@ -1374,11 +1371,12 @@ story.describe("with the new question UI experiment enabled", () => {
   story("shows question navigation shortcuts in buttons and tooltips", async ({ mount, page }) => {
     const component = await mount("app-current-session-surface--question-request")
     const mac = await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))
-    const shortcut = mac ? "⌘⏎" : "Ctrl+⏎"
+    // Enter submits by default, and Cmd/Ctrl+Enter still does.
+    const shortcut = "⏎"
     const next = component.getByRole("button", { name: "Next", exact: true })
     await expect(next.locator('[data-slot="question-submit-shortcut"]')).toBeVisible()
     await expect(next.locator('[data-slot="question-submit-shortcut"]')).toHaveText(shortcut)
-    await expect(next).toHaveAttribute("aria-keyshortcuts", "Meta+Enter Control+Enter")
+    await expect(next).toHaveAttribute("aria-keyshortcuts", "Enter Meta+Enter Control+Enter")
     await next.hover()
     await expect(page.getByRole("tooltip")).toContainText("Next")
     await expect(page.getByRole("tooltip")).toContainText(shortcut)
@@ -1386,7 +1384,7 @@ story.describe("with the new question UI experiment enabled", () => {
     const submit = component.getByRole("button", { name: "Submit", exact: true })
     await expect(submit.locator('[data-slot="question-submit-shortcut"]')).toBeVisible()
     await expect(submit.locator('[data-slot="question-submit-shortcut"]')).toHaveText(shortcut)
-    await expect(submit).toHaveAttribute("aria-keyshortcuts", "Meta+Enter Control+Enter")
+    await expect(submit).toHaveAttribute("aria-keyshortcuts", "Enter Meta+Enter Control+Enter")
     // Pressing the button closes its tooltip until the pointer comes back to it.
     await page.mouse.move(0, 0)
     await submit.hover()
