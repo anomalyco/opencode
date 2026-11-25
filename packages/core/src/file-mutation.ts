@@ -10,6 +10,7 @@ import { Environment } from "./environment/index.js"
 import type { Files } from "./environment/index.js"
 import { FileAccess } from "./file-access.js"
 import { AbsolutePath } from "./schema.js"
+import { readWorkspaceBytes, replaceWorkspaceFile } from "./environment/guarded-mutation.js"
 
 export type Target = Pick<FileAccess.Target, "absolute" | "resource" | "environment">
 
@@ -75,6 +76,69 @@ export const readEditableText = Effect.fn("FileMutation.readEditableText")(funct
 export const readOptionalText = Effect.fn("FileMutation.readOptionalText")(function* (files: Files, target: string) {
   const result = yield* files.read(target).pipe(Effect.catchTag("Environment.NotFound", () => Effect.undefined))
   return result ? Bom.decodeBytes(result.bytes) : undefined
+})
+
+export const readScopedOptionalText = Effect.fn("FileMutation.readScopedOptionalText")(function* (
+  target: FileAccess.Target,
+) {
+  if (!target.workspace) throw new Error("Expected a scoped target")
+  yield* target.workspace.verify()
+  const bytes = yield* Effect.tryPromise({
+    try: () => readWorkspaceBytes(target.workspace!.root, target.workspace!.relative),
+    catch: (cause) => new Environment.Failed({ path: target.absolute, cause }),
+  }).pipe(
+    Effect.catchIf(
+      (error) => (error.cause as NodeJS.ErrnoException)?.code === "ENOENT",
+      () => Effect.undefined,
+    ),
+  )
+  return bytes ? Bom.decodeBytes(bytes) : undefined
+})
+
+export const readScopedEditableText = Effect.fn("FileMutation.readScopedEditableText")(function* (
+  target: FileAccess.Target,
+) {
+  if (!target.workspace) throw new Error("Expected a scoped target")
+  yield* target.workspace.verify()
+  const bytes = yield* Effect.tryPromise({
+    try: () => readWorkspaceBytes(target.workspace!.root, target.workspace!.relative),
+    catch: (cause) => new Environment.Failed({ path: target.absolute, cause }),
+  }).pipe(
+    Effect.catchIf(
+      (error) => (error.cause as NodeJS.ErrnoException)?.code === "ENOENT",
+      () => Effect.fail(new Environment.NotFound({ path: target.absolute })),
+    ),
+  )
+  if (!isUtf8(bytes)) return yield* new InvalidUtf8Error({ path: target.absolute })
+  return Bom.decodeBytes(bytes)
+})
+
+export const writeScopedTextPreservingBom = Effect.fn("FileMutation.writeScopedTextPreservingBom")(function* (
+  target: FileAccess.Target,
+  content: string,
+) {
+  if (!target.workspace) throw new Error("Expected a scoped target")
+  yield* target.workspace.verify()
+  const current = yield* readScopedOptionalText(target)
+  const next = Bom.split(content)
+  const bom = Boolean(current?.bom) || next.bom
+  const result = yield* Effect.tryPromise({
+    try: () =>
+      replaceWorkspaceFile(
+        target.workspace!.root,
+        target.workspace!.relative,
+        new TextEncoder().encode(Bom.join(next.text, bom)),
+        () => Effect.runPromise(target.workspace!.verify()),
+      ),
+    catch: (cause) => new Environment.Failed({ path: target.absolute, cause }),
+  })
+  return {
+    operation: "write" as const,
+    target: target.workspace.absolute,
+    resource: target.resource,
+    existed: result.existed,
+    bom,
+  }
 })
 
 export const syncTextBom = Effect.fn("FileMutation.syncTextBom")(function* (

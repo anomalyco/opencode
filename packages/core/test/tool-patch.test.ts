@@ -11,6 +11,7 @@ import { Formatter } from "@opencode/core/formatter"
 import { FileMutation } from "@opencode/core/file-mutation"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Permission } from "@opencode/core/permission"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
@@ -92,6 +93,7 @@ const withTool = <A, E, R>(
   directory: string,
   body: (registry: Tool.Interface) => Effect.Effect<A, E, R>,
   projectDirectory = directory,
+  scoped = false,
 ) => {
   const activeLocation = Layer.succeed(
     Location.Service,
@@ -103,32 +105,38 @@ const withTool = <A, E, R>(
     return yield* body(yield* Tool.Service)
   }).pipe(
     Effect.provide(
-      AppNodeBuilder.build(LayerNode.group([Tool.node, FileAccess.node, FileMutation.node, patchToolNode]), [
-        Environment.node.replace(
-          transformEnvironmentFiles((files) => ({
-            read: (target, range) =>
-              Effect.sync(() => {
-                if (!editApproved) readsBeforeEditApproval++
-              }).pipe(Effect.andThen(files.read(target, range))),
-            remove: (target) => {
-              if (failRemoveTarget && path.basename(target) === failRemoveTarget)
-                return Effect.die("forced remove failure")
-              if (failRemoveErrorTarget && path.basename(target) === failRemoveErrorTarget)
-                return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced remove failure") }))
-              return files.remove(target)
-            },
-            write: (target, content) => {
-              if (failWriteTarget && path.basename(target) === failWriteTarget)
-                return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced write failure") }))
-              return files.write(target, content)
-            },
-          })),
-        ),
-        Location.node.replace(activeLocation),
-        Formatter.node.replace(formatter),
-        Permission.node.replace(permission),
-        Config.node.replace(Config.testLayer()),
-      ]),
+      AppNodeBuilder.build(
+        LayerNode.group([Tool.node, FileAccess.node, FileMutation.node, PluginHooks.node, patchToolNode]),
+        [
+          Environment.node.replace(
+            transformEnvironmentFiles((files) => ({
+              read: (target, range) =>
+                Effect.sync(() => {
+                  if (!editApproved) readsBeforeEditApproval++
+                }).pipe(Effect.andThen(files.read(target, range))),
+              remove: (target) => {
+                if (failRemoveTarget && path.basename(target) === failRemoveTarget)
+                  return Effect.die("forced remove failure")
+                if (failRemoveErrorTarget && path.basename(target) === failRemoveErrorTarget)
+                  return Effect.fail(
+                    new Environment.Failed({ path: target, cause: new Error("forced remove failure") }),
+                  )
+                return files.remove(target)
+              },
+              write: (target, content) => {
+                if (failWriteTarget && path.basename(target) === failWriteTarget)
+                  return Effect.fail(new Environment.Failed({ path: target, cause: new Error("forced write failure") }))
+                return files.write(target, content)
+              },
+            })),
+          ),
+          Location.node.replace(activeLocation),
+          Formatter.node.replace(formatter),
+          Permission.node.replace(permission),
+          Config.node.replace(Config.testLayer()),
+          ...(scoped ? [Flag.node.replace(Flag.testLayer([], { overrides: "workspace_read_scope" }))] : []),
+        ],
+      ),
     ),
   )
 }
@@ -154,6 +162,49 @@ const withTempTool = <A, E, R>(body: (directory: string, registry: Tool.Interfac
   })
 
 describe("PatchTool", () => {
+  const scopedPatch = process.platform === "linux" ? it.live : it.live.skip
+
+  scopedPatch("rejects a managed member before any raw patch mutation", () =>
+    withTempDir((logical) =>
+      withTempDir((physical) => {
+        reset()
+        return withTool(
+          logical.path,
+          (registry) =>
+            Effect.gen(function* () {
+              const hooks = yield* PluginHooks.Service
+              yield* hooks.register("permission", "experimental.workspace.readScope", (event) =>
+                Effect.sync(() => {
+                  if (event.sessionID === sessionID && event.action === "write")
+                    event.scopes.push({
+                      members: [
+                        {
+                          logical: path.join(logical.path, "member"),
+                          physical: physical.path,
+                          protectedPaths: [".git"],
+                        },
+                      ],
+                    })
+                }),
+              )
+              expect(
+                yield* executeTool(
+                  registry,
+                  call("*** Begin Patch\n*** Add File: member/new.txt\n+blocked\n*** End Patch"),
+                ),
+              ).toMatchObject({
+                status: "error",
+              })
+              expect(yield* exists(path.join(physical.path, "new.txt"))).toBe(false)
+              expect(assertions).toEqual([])
+            }),
+          logical.path,
+          true,
+        )
+      }),
+    ),
+  )
+
   it.live("registers and sequentially applies add, update, and delete hunks", () =>
     withTempDir((tmp) => {
       reset()
@@ -450,7 +501,10 @@ describe("PatchTool", () => {
         expect(yield* Effect.promise(() => fs.readFile(latin1))).toEqual(bytes)
         // Deleting does not rewrite the bytes, so it stays allowed.
         expect(
-          yield* executeTool(registry, call("*** Begin Patch\n*** Delete File: Old.java\n*** End Patch", "call-delete")),
+          yield* executeTool(
+            registry,
+            call("*** Begin Patch\n*** Delete File: Old.java\n*** End Patch", "call-delete"),
+          ),
         ).toMatchObject({ status: "completed" })
         expect(yield* exists(doomed)).toBe(false)
       }),
@@ -464,7 +518,9 @@ describe("PatchTool", () => {
         expect(
           yield* executeTool(
             registry,
-            call("*** Begin Patch\n*** Update File: same.txt\n*** Move to: Same.txt\n@@\n-before\n+after\n*** End Patch"),
+            call(
+              "*** Begin Patch\n*** Update File: same.txt\n*** Move to: Same.txt\n@@\n-before\n+after\n*** End Patch",
+            ),
           ),
         ).toMatchObject({ status: "completed" })
         expect(yield* Effect.promise(() => fs.readdir(directory))).toEqual(["Same.txt"])
@@ -483,7 +539,9 @@ describe("PatchTool", () => {
         expect(
           yield* executeTool(
             registry,
-            call("*** Begin Patch\n*** Update File: Foo/a.txt\n*** Move to: foo/a.txt\n@@\n-before\n+after\n*** End Patch"),
+            call(
+              "*** Begin Patch\n*** Update File: Foo/a.txt\n*** Move to: foo/a.txt\n@@\n-before\n+after\n*** End Patch",
+            ),
           ),
         ).toMatchObject({ status: "completed" })
         expect(yield* Effect.promise(() => fs.readFile(path.join(directory, "foo", "a.txt"), "utf8"))).toBe("after\n")

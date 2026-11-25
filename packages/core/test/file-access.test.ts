@@ -297,3 +297,33 @@ describe("FileAccess.authorizeRead", () => {
     }).pipe(provide(requests))
   })
 })
+
+describe("FileAccess.scope write", () => {
+  const scopedWrite = process.platform === "linux" ? it.live : it.live.skip
+
+  scopedWrite("returns physical identity and denies protected descendants", () =>
+    Effect.gen(function* () {
+      const access = yield* FileAccess.Service
+      const hooks = yield* PluginHooks.Service
+      const location = yield* Location.Service
+      const physical = yield* tmpdirScoped()
+      const logical = path.join(location.directory, "member")
+      yield* hooks.register("permission", "experimental.workspace.readScope", (event) =>
+        Effect.sync(() => {
+          if (event.action === "write")
+            event.scopes.push({ members: [{ physical: physical.path, logical, protectedPaths: [".git"] }] })
+        }),
+      )
+      const allowed = yield* access.scope(
+        yield* access.resolve({ path: path.join(logical, "file.txt") }),
+        invocation,
+        "write",
+      )
+      expect(allowed.workspace?.absolute).toBe(AbsolutePath.make(path.join(physical.path, "file.txt")))
+      const denied = yield* access
+        .scope(yield* access.resolve({ path: path.join(logical, ".git", "config") }), invocation, "write")
+        .pipe(Effect.flip)
+      expect(denied).toMatchObject({ _tag: "Environment.Failed", cause: "Protected workspace path" })
+    }).pipe(provide([], undefined, "workspace_read_scope")),
+  )
+})

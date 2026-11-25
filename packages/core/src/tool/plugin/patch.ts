@@ -106,6 +106,13 @@ export const Plugin = {
               const updates = new Map<string, { target: FileAccess.Target; content: string | null }>()
               const resolveTarget = Effect.fnUntraced(function* (value: string) {
                 const target = yield* access.resolve({ path: value, kind: "file" })
+                // Patch has sequential multi-file, move, and delete semantics. Keep its raw pathname IO unavailable
+                // for a managed physical member until those operations have guarded implementations.
+                if ((yield* access.scope(target, context, "write")).workspace)
+                  return yield* new Environment.Failed({
+                    path: target.absolute,
+                    cause: "Scoped patch mutation is unsupported",
+                  })
                 if (!target.externalDirectory) return target
                 yield* access.authorizeExternal([target], context, {
                   filepath: target.absolute,

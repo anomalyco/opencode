@@ -61,6 +61,13 @@ const layer = Layer.effect(
 
     const target = Effect.fn("FileWrite.target")(function* (file: string, context: FileAccess.Invocation) {
       const target = yield* access.resolve({ path: file, kind: "file" })
+      const scoped = yield* access.scope(target, context, "write")
+      if (scoped.workspace) {
+        const physical = yield* access.resolve({ path: scoped.workspace.absolute, kind: "file" })
+        const external = FileAccess.externalDirectoryRequest([target, physical])
+        if (external) yield* permission.assertNotDenied({ ...external, ...Permission.invocation(context) })
+        return scoped
+      }
       yield* access.authorizeExternal([target], context)
       return target
     })
@@ -72,14 +79,15 @@ const layer = Layer.effect(
     ) {
       yield* permission.assert({
         action: "edit",
-        resources: [target.resource],
-        save: [FileAccess.always(target)],
+        resources: target.workspace?.resources ?? [target.resource],
+        ...(target.workspace ? {} : { save: [FileAccess.always(target)] }),
         metadata: preview ? { files: [preview] } : undefined,
         ...Permission.invocation(context),
       })
     })
 
     const commit = Effect.fn("FileWrite.commit")(function* (target: FileAccess.Target, content: string) {
+      if (target.workspace) return yield* FileMutation.writeScopedTextPreservingBom(target, content)
       const written = yield* fileMutation.writeTextPreservingBom({ target, content })
       if (!(yield* formatter.file(target))) return written
       return {
@@ -90,13 +98,30 @@ const layer = Layer.effect(
 
     const write = Effect.fn("FileWrite.write")(function* (input: WriteInput, context: FileAccess.Invocation) {
       const resolved = yield* target(input.path, context)
-      const current = yield* FileMutation.readOptionalText(resolved.environment.files, resolved.absolute)
-      yield* authorize(
-        resolved,
-        context,
-        fileDiff(resolved.resource, current?.text ?? "", Bom.split(input.content).text, current ? "modified" : "added"),
+      return yield* fileMutation.withLock([resolved.workspace?.absolute ?? resolved.absolute])(
+        Effect.gen(function* () {
+          if (resolved.workspace)
+            yield* permission.assertNotDenied({
+              action: "read",
+              resources: resolved.workspace.resources,
+              ...Permission.invocation(context),
+            })
+          const current = resolved.workspace
+            ? yield* FileMutation.readScopedOptionalText(resolved)
+            : yield* FileMutation.readOptionalText(resolved.environment.files, resolved.absolute)
+          yield* authorize(
+            resolved,
+            context,
+            fileDiff(
+              resolved.resource,
+              current?.text ?? "",
+              Bom.split(input.content).text,
+              current ? "modified" : "added",
+            ),
+          )
+          return yield* commit(resolved, input.content)
+        }),
       )
-      return yield* commit(resolved, input.content)
     })
 
     return Service.of({ target, authorize, commit, write })

@@ -12,6 +12,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Environment } from "@opencode/core/environment/index"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Permission } from "@opencode/core/permission"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
@@ -47,6 +48,7 @@ const makeWriteFixture = () => {
   }
 
   const permission = permissionLayer({
+    assertNotDenied: () => Effect.void,
     assert: (input) =>
       Effect.sync(() => fixture.assertions.push(input)).pipe(
         Effect.andThen(
@@ -74,6 +76,7 @@ const withTool = <A, E, R>(
   directory: string,
   fixture: ReturnType<typeof makeWriteFixture>,
   body: (registry: Tool.Interface) => Effect.Effect<A, E, R>,
+  scoped = false,
 ) => {
   const activeLocation = Layer.succeed(
     Location.Service,
@@ -84,22 +87,26 @@ const withTool = <A, E, R>(
     return yield* body(registry)
   }).pipe(
     Effect.provide(
-      AppNodeBuilder.build(LayerNode.group([Tool.node, FileAccess.node, FileMutation.node, writeToolNode]), [
-        Environment.node.replace(
-          transformEnvironmentFiles((files) => ({
-            read: (target, options) =>
-              Effect.sync(() => fixture.reads.push({ target, length: options?.length })).pipe(
-                Effect.andThen(files.read(target, options)),
-              ),
-            write: (target, content) =>
-              Effect.sync(() => fixture.writes.push(target)).pipe(Effect.andThen(files.write(target, content))),
-          })),
-        ),
-        Location.node.replace(activeLocation),
-        Formatter.node.replace(fixture.formatter),
-        Permission.node.replace(fixture.permission),
-        Config.node.replace(Config.testLayer()),
-      ]),
+      AppNodeBuilder.build(
+        LayerNode.group([Tool.node, FileAccess.node, FileMutation.node, PluginHooks.node, writeToolNode]),
+        [
+          Environment.node.replace(
+            transformEnvironmentFiles((files) => ({
+              read: (target, options) =>
+                Effect.sync(() => fixture.reads.push({ target, length: options?.length })).pipe(
+                  Effect.andThen(files.read(target, options)),
+                ),
+              write: (target, content) =>
+                Effect.sync(() => fixture.writes.push(target)).pipe(Effect.andThen(files.write(target, content))),
+            })),
+          ),
+          Location.node.replace(activeLocation),
+          Formatter.node.replace(fixture.formatter),
+          Permission.node.replace(fixture.permission),
+          Config.node.replace(Config.testLayer()),
+          ...(scoped ? [Flag.node.replace(Flag.testLayer([], { overrides: "workspace_read_scope" }))] : []),
+        ],
+      ),
     ),
   )
 }
@@ -113,6 +120,81 @@ const call = (input: typeof WriteTool.Input.Type, id = "call-write") => ({
 const it = testEffect(Layer.succeed(Flag.Overrides, undefined))
 
 describe("WriteTool", () => {
+  const scopedWrite = process.platform === "linux" ? it.live : it.live.skip
+
+  scopedWrite("writes through the physical member and skips pathname formatting", () =>
+    withTempDir((logical) =>
+      withTempDir((physical) => {
+        const fixture = makeWriteFixture()
+        let formatterCalls = 0
+        fixture.formatFile = () =>
+          Effect.sync(() => {
+            formatterCalls++
+            return true
+          })
+        return withTool(
+          logical.path,
+          fixture,
+          (registry) =>
+            Effect.gen(function* () {
+              const hooks = yield* PluginHooks.Service
+              yield* hooks.register("permission", "experimental.workspace.readScope", (event) =>
+                Effect.sync(() => {
+                  if (event.sessionID === sessionID && event.action === "write")
+                    event.scopes.push({
+                      members: [
+                        {
+                          logical: path.join(logical.path, "member"),
+                          physical: physical.path,
+                          protectedPaths: [".git"],
+                        },
+                      ],
+                    })
+                }),
+              )
+              expect(yield* executeTool(registry, call({ path: "member/new.txt", content: "scoped" }))).toMatchObject({
+                status: "completed",
+                output: "Created file successfully: member/new.txt",
+              })
+              expect(yield* Effect.promise(() => fs.readFile(path.join(physical.path, "new.txt"), "utf8"))).toBe(
+                "scoped",
+              )
+              expect(fixture.assertions).toMatchObject([
+                { action: "edit", resources: ["member/new.txt", path.join(physical.path, "new.txt")] },
+              ])
+              expect(fixture.writes).toEqual([])
+              expect(formatterCalls).toBe(0)
+              expect(
+                yield* executeTool(
+                  registry,
+                  call({ path: path.join(physical.path, "new.txt"), content: "alias" }, "call-alias"),
+                ),
+              ).toMatchObject({
+                status: "completed",
+              })
+              expect(yield* Effect.promise(() => fs.readFile(path.join(physical.path, "new.txt"), "utf8"))).toBe(
+                "alias",
+              )
+              expect(
+                yield* executeTool(registry, call({ path: "member/.git/config", content: "blocked" }, "call-git")),
+              ).toMatchObject({
+                status: "error",
+              })
+              expect(
+                yield* Effect.promise(() =>
+                  fs.stat(path.join(physical.path, ".git")).then(
+                    () => true,
+                    () => false,
+                  ),
+                ),
+              ).toBe(false)
+            }),
+          true,
+        )
+      }),
+    ),
+  )
+
   it.live("registers and creates a relative file through FileMutation once", () =>
     withTempDir((tmp) => {
       const fixture = makeWriteFixture()

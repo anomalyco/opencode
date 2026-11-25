@@ -55,6 +55,14 @@ const call = <A, E>(syscall: string, name: string, body: (host: Host) => Effect.
     })
   }).pipe(Effect.mapError((error) => nodeError(error, syscall, name)))
 
+const unscoped = Effect.fnUntraced(function* (host: Host, target: FileAccess.Target, action: "read" | "write") {
+  if (!(yield* host.access.scope(target, host.context, action)).workspace) return target
+  return yield* new Environment.Failed({
+    path: target.absolute,
+    cause: "Scoped Code Mode Bun file operation is unsupported",
+  })
+})
+
 // `Bun.file` asks read permission, and external-directory approval outside the project, once: the file's own reads
 // don't ask again, and its writes ask only edit. Bun reads `size` and `lastModified` when a program asks for them. A
 // program's copy of the file can't ask later, so they are read here. A missing file has Bun's values for one.
@@ -63,7 +71,8 @@ const open = (input: string | URL, options?: { readonly type?: string }) => {
   const name = toPath(input)
   return call("stat", name, (host) =>
     Effect.gen(function* () {
-      const target = yield* host.access.authorizeRead(name, host.context)
+      const target = yield* host.access.authorizeRead(name, host.context, { workspaceScope: true })
+      yield* unscoped(host, target, "read")
       const info = yield* followed(target.environment.files, target.absolute).pipe(
         Effect.catchTag("Environment.NotFound", () => Effect.undefined),
       )
@@ -132,34 +141,40 @@ const file = (handle: Handle, type: string, size: number, lastModified: number) 
 }
 
 const read = (handle: Handle) =>
-  call("open", handle.name, () =>
-    Effect.map(
-      handle.target.environment.files.read(handle.target.absolute, handle.range),
-      // A plain Uint8Array over the same memory: a driver may give a Buffer, which Bun's `bytes()` never does.
-      (result) => new Uint8Array(result.bytes.buffer, result.bytes.byteOffset, result.bytes.byteLength),
-    ),
+  call("open", handle.name, (host) =>
+    Effect.gen(function* () {
+      yield* unscoped(host, handle.target, "read")
+      const result = yield* handle.target.environment.files.read(handle.target.absolute, handle.range)
+      return new Uint8Array(result.bytes.buffer, result.bytes.byteOffset, result.bytes.byteLength)
+    }),
   )
 
 // As in Bun, only a file exists: a directory doesn't.
 const exists = (handle: Handle) =>
-  call("access", handle.name, () =>
-    Environment.typeFollowing(handle.target.environment.files, handle.target.absolute).pipe(
-      Effect.map((type) => type === "file"),
-      Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
-    ),
+  call("access", handle.name, (host) =>
+    Effect.gen(function* () {
+      yield* unscoped(host, handle.target, "read")
+      return yield* Environment.typeFollowing(handle.target.environment.files, handle.target.absolute).pipe(
+        Effect.map((type) => type === "file"),
+        Effect.catchTag("Environment.NotFound", () => Effect.succeed(false)),
+      )
+    }),
   )
 
 // The part of Node's Stats that the file's environment can tell.
 const stat = (handle: Handle) =>
-  call("stat", handle.name, () =>
-    Effect.map(followed(handle.target.environment.files, handle.target.absolute), (info) => ({
-      size: info.size,
-      mtimeMs: info.mtimeMs,
-      mtime: new Date(info.mtimeMs),
-      isFile: () => info.type === "file",
-      isDirectory: () => info.type === "directory",
-      isSymbolicLink: () => info.type === "symlink",
-    })),
+  call("stat", handle.name, (host) =>
+    Effect.gen(function* () {
+      yield* unscoped(host, handle.target, "read")
+      return yield* Effect.map(followed(handle.target.environment.files, handle.target.absolute), (info) => ({
+        size: info.size,
+        mtimeMs: info.mtimeMs,
+        mtime: new Date(info.mtimeMs),
+        isFile: () => info.type === "file",
+        isDirectory: () => info.type === "directory",
+        isSymbolicLink: () => info.type === "symlink",
+      }))
+    }),
   )
 
 // What a path leads to, through a symlink: reading zero bytes resolves one. A directory behind a link keeps the
@@ -179,6 +194,7 @@ const followed = (files: Environment.Files, absolute: string) =>
 const remove = (handle: Handle) =>
   call("unlink", handle.name, (host) =>
     Effect.gen(function* () {
+      yield* unscoped(host, handle.target, "write")
       const info = yield* handle.target.environment.files.stat(handle.target.absolute)
       if (info.type === "directory")
         return yield* new Environment.WrongKind({ path: handle.target.absolute, actual: info.type })
@@ -218,6 +234,7 @@ const put = (
   call("open", typeof to === "string" ? to : to.name, (host) =>
     Effect.gen(function* () {
       const target = typeof to === "string" ? yield* host.fileWrite.target(to, host.context) : to.target
+      yield* unscoped(host, target, "write")
       return yield* Effect.gen(function* () {
         const type = yield* typeOf(target.environment.files, target.absolute)
         if (type === "directory") return yield* new Environment.WrongKind({ path: target.absolute, actual: type })

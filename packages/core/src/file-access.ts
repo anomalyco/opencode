@@ -107,7 +107,7 @@ export interface Interface {
   readonly scope: (
     target: Target,
     context: Invocation,
-    action: "read" | "shell-cwd",
+    action: "read" | "write" | "shell-cwd",
   ) => Effect.Effect<Target, Environment.Failed>
   /** Approve external directories in one batch, preserving first-seen resource order. */
   readonly authorizeExternal: (
@@ -331,7 +331,7 @@ const layer = Layer.effect(
     const scope = Effect.fn("FileAccess.scope")(function* (
       target: Target,
       context: Invocation,
-      action: "read" | "shell-cwd",
+      action: "read" | "write" | "shell-cwd",
     ) {
       if (
         process.platform !== "linux" ||
@@ -360,7 +360,21 @@ const layer = Layer.effect(
               path.resolve(member.physical) !== member.physical ||
               path.resolve(member.logical) !== member.logical ||
               member.logical === location.directory ||
-              !FSUtil.contains(location.directory, member.logical),
+              !FSUtil.contains(location.directory, member.logical) ||
+              member.protectedPaths?.some(
+                (protectedPath) =>
+                  !protectedPath ||
+                  protectedPath
+                    .split("/")
+                    .some(
+                      (segment) =>
+                        !segment ||
+                        segment === "." ||
+                        segment === ".." ||
+                        segment.includes("\\") ||
+                        segment.includes("\0"),
+                    ),
+              ),
           )
         )
           return yield* new Environment.Failed({ path: target.absolute, cause: "Unverified workspace assignment" })
@@ -379,11 +393,22 @@ const layer = Layer.effect(
       if (!member) return target
       const selectedRoot = FSUtil.contains(member.physical, target.absolute) ? member.physical : member.logical
       const relative = path.relative(selectedRoot, target.absolute)
+      if (
+        action === "write" &&
+        member.protectedPaths?.some(
+          (protectedPath) => relative === protectedPath || relative.startsWith(`${protectedPath}/`),
+        )
+      )
+        return yield* new Environment.Failed({ path: target.absolute, cause: "Protected workspace path" })
       const absolute = AbsolutePath.make(path.join(member.physical, relative))
       const resource = slash(path.relative(location.directory, path.join(member.logical, relative)))
       const verify = Effect.fnUntraced(function* () {
         const current = yield* assignment()
-        if (current?.physical !== member.physical || current.logical !== member.logical)
+        if (
+          current?.physical !== member.physical ||
+          current.logical !== member.logical ||
+          JSON.stringify(current.protectedPaths ?? []) !== JSON.stringify(member.protectedPaths ?? [])
+        )
           return yield* new Environment.Failed({
             path: target.absolute,
             cause: "Workspace assignment or policy changed",

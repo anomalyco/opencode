@@ -5,14 +5,19 @@ import { Schema } from "effect"
 
 /** A trusted adapter's verified correspondence between workspace paths and their resolved paths. */
 export interface WorkspaceReadScope {
-  readonly members: ReadonlyArray<{ readonly logical: string; readonly physical: string }>
+  readonly members: ReadonlyArray<{
+    readonly logical: string
+    readonly physical: string
+    /** Member-relative files or directory subtrees that may never be mutated. */
+    readonly protectedPaths?: ReadonlyArray<string>
+  }>
 }
 
 /** An empty `scopes` array means unmanaged; `null` records a failed managed binding. */
 export interface WorkspaceReadScopeHook {
   readonly sessionID: Session.ID
   readonly directory: string
-  readonly action: "read" | "shell-cwd"
+  readonly action: "read" | "write" | "shell-cwd"
   readonly source: Permission.Request["source"]
   readonly scopes: Array<WorkspaceReadScope | null>
 }
