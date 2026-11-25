@@ -1,5 +1,7 @@
 //! Model selection, favorites, and usage alerts.
 
+use std::collections::{HashMap, HashSet};
+
 use opencode_api::generated::{ModelInfo, ModelInfoStatus, ProviderInfo};
 use opencode_api::js::locale_compare;
 use opencode_local::model_pref::Model;
@@ -7,7 +9,7 @@ use opencode_ui::fuzzy;
 use opencode_ui::keymap::Slash;
 use opencode_ui::select::{ActionRun, SelectAction};
 
-use crate::local::{Local, is, is_speed_in};
+use crate::local::{Local, ModelIndex};
 use crate::prelude::*;
 
 pub fn is_free(model: &ModelInfo) -> bool {
@@ -17,7 +19,6 @@ pub fn is_free(model: &ModelInfo) -> bool {
 /// An option of the model list before it becomes a select row.
 struct Row {
     value: Model,
-    provider_id: String,
     provider_name: String,
     title: String,
     category: Option<String>,
@@ -27,6 +28,16 @@ struct Row {
     pinned: bool,
     /// A favorite when the dialog opened: first among search results (`prioritizeFavorites`).
     priority: bool,
+}
+
+impl Row {
+    fn provider_id(&self) -> &str {
+        &self.value.provider_id
+    }
+
+    fn provider_name(&self) -> &str {
+        &self.provider_name
+    }
 }
 
 /// The model list of one catalog: built when the dialog opens and again when the catalog, the favorites or the
@@ -49,13 +60,14 @@ fn sort_rows<R: std::borrow::Borrow<Row>>(rows: &mut [R], grouped: bool) {
     rows.sort_by(|a, b| {
         let (a, b) = (a.borrow(), b.borrow());
         let provider = if grouped {
-            (b.provider_id == "opencode-go")
-                .cmp(&(a.provider_id == "opencode-go"))
-                .then((b.provider_id == "opencode").cmp(&(a.provider_id == "opencode")))
+            (b.provider_id() == "opencode-go")
+                .cmp(&(a.provider_id() == "opencode-go"))
+                .then((b.provider_id() == "opencode").cmp(&(a.provider_id() == "opencode")))
         } else {
             std::cmp::Ordering::Equal
         };
-        let name = if grouped { locale_compare(&a.provider_name, &b.provider_name) } else { std::cmp::Ordering::Equal };
+        let name =
+            if grouped { locale_compare(a.provider_name(), b.provider_name()) } else { std::cmp::Ordering::Equal };
         provider.then(name).then(b.free.cmp(&a.free))
     });
 }
@@ -110,7 +122,7 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, integration:
     let connect = Rc::new(bind!(local, |local| connect(&local)));
     let provider_title = if connected { "connect integration" } else { "view all integrations" };
     let favorite_title = bind!(local, |local, option: Option<&SelectOption<Model>>| {
-        let favorite = option.is_some_and(|option| local.favorite().contains(&option.value));
+        let favorite = option.is_some_and(|option| local.is_favorite(&option.value));
         String::from(if favorite { "unfavorite" } else { "favorite" })
     }, else String::from("favorite"));
     props.actions = vec![
@@ -153,14 +165,14 @@ fn build(cx: &Rc<opencode_ui::dialog::DialogCx>, local: &Rc<Local>, integration:
 
 impl Catalog {
     fn new(local: &Local, integration: Option<&str>, favorites_at_open: &[Model], marker: Color) -> Self {
-        local.models(|models| {
-            local.providers(|providers| Self::of(local, models, providers, integration, favorites_at_open, marker))
-        })
+        let index = local.model_index();
+        local
+            .providers(|providers| Self::of(local, index.as_deref(), providers, integration, favorites_at_open, marker))
     }
 
     fn of(
         local: &Local,
-        models: &[ModelInfo],
+        index: Option<&ModelIndex>,
         providers: &[ProviderInfo],
         integration: Option<&str>,
         favorites_at_open: &[Model],
@@ -170,34 +182,46 @@ impl Catalog {
         let sections = connected && integration.is_none();
         let favorites: Vec<Model> = if connected { favorites_at_open.to_vec() } else { Vec::new() };
         let favorite_now = local.favorite();
-        let favorite_priority: Vec<String> = favorites_at_open.iter().map(Model::key).collect();
         let recents = local.recent();
-        let provider_of = |id: &str| providers.iter().find(|item| item.id.0 == id);
-        let provider_name = |id: &str| provider_of(id).map_or(id.to_owned(), |provider| provider.name.clone());
+        fn key(item: &Model) -> (&str, &str) {
+            (item.provider_id.as_str(), item.model_id.as_str())
+        }
+        let favorites_set: HashSet<(&str, &str)> = favorites.iter().map(key).collect();
+        let favorite_now_set: HashSet<(&str, &str)> = favorite_now.iter().map(key).collect();
+        let priority_set: HashSet<(&str, &str)> = favorites_at_open.iter().map(key).collect();
+        let recents_set: HashSet<(&str, &str)> = recents.iter().map(key).collect();
+        let providers_by_id: HashMap<&str, &ProviderInfo> =
+            providers.iter().map(|provider| (provider.id.0.as_str(), provider)).collect();
+        let provider_of = |id: &str| providers_by_id.get(id).copied();
+        let provider_name = |id: &str| provider_of(id).map_or_else(|| id.to_owned(), |provider| provider.name.clone());
         let section = |items: &[Model], category: &str| -> Vec<SelectOption<Model>> {
             if !sections {
                 return Vec::new();
             }
+            let Some(index) = index else { return Vec::new() };
             items
                 .iter()
                 .filter_map(|item| {
-                    let model = models.iter().find(|model| is(model, item))?;
+                    let model = index.get(&item.provider_id, &item.model_id)?;
                     let mut option = SelectOption::new(model.name.clone(), Model::new(&model.provider_id.0, &model.id))
                         .description(provider_name(&model.provider_id.0))
                         .category(category);
-                    marked(&mut option, favorite_now.contains(item), marker);
+                    marked(&mut option, favorite_now_set.contains(&key(item)), marker);
                     Some(option)
                 })
                 .collect()
         };
         let favorite_options = section(&favorites, "Favorites");
-        let recent_items: Vec<Model> = recents.iter().filter(|item| !favorites.contains(item)).cloned().collect();
+        let recent_items: Vec<Model> =
+            recents.iter().filter(|item| !favorites_set.contains(&key(item))).cloned().collect();
         let recent_options = section(&recent_items, "Recent");
 
         // OpenCode's own free models get their own group at the end of the list instead of joining "OpenCode".
         let free_group =
             |model: &ModelInfo| integration.is_none() && model.provider_id.0 == "opencode" && is_free(model);
-        let mut rows: Vec<Row> = models
+        let mut rows: Vec<Row> = index
+            .map(ModelIndex::models)
+            .unwrap_or_default()
             .iter()
             .filter(|model| !matches!(model.status, ModelInfoStatus::Deprecated))
             .filter(|model| {
@@ -209,20 +233,19 @@ impl Catalog {
                 })
             })
             // A model's faster and slower speeds are chosen with the speed selector.
-            .filter(|model| !is_speed_in(models, model))
+            .filter(|model| index.is_none_or(|index| !index.is_speed(model)))
             .map(|model| {
-                let value = Model::new(&model.provider_id.0, &model.id);
+                let model_key = (model.provider_id.0.as_str(), model.id.as_str());
                 let name = provider_name(&model.provider_id.0);
                 Row {
-                    provider_id: model.provider_id.0.clone(),
+                    value: Model::new(&model.provider_id.0, &model.id),
                     provider_name: name.clone(),
                     title: model.name.clone(),
                     category: connected.then(|| if free_group(model) { "Free".to_owned() } else { name }),
-                    favorite: favorite_now.contains(&value),
+                    favorite: favorite_now_set.contains(&model_key),
                     free: is_free(model),
-                    pinned: favorites.contains(&value) || recents.contains(&value),
-                    priority: favorite_priority.contains(&value.key()),
-                    value,
+                    pinned: favorites_set.contains(&model_key) || recents_set.contains(&model_key),
+                    priority: priority_set.contains(&model_key),
                 }
             })
             .collect();
@@ -250,9 +273,14 @@ impl Catalog {
                 })
                 .collect();
         }
+        let whitespace = !query.is_empty();
         let option = |row: &Row| {
             let mut option = SelectOption::new(row.title.clone(), row.value.clone());
             option.category = row.category.clone();
+            if whitespace {
+                option.search_description = Some(row.provider_name.clone());
+                option.search_footer = Some(if row.favorite { "*".to_owned() } else { String::new() });
+            }
             marked(&mut option, row.favorite, self.marker);
             option
         };

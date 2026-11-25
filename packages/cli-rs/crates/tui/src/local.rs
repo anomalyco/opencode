@@ -102,6 +102,8 @@ pub struct Local {
     pub(crate) startup_agent: RefCell<Option<String>>,
     /// First model to try when falling back.
     pub(crate) startup_model: RefCell<Option<Model>>,
+    /// Indexed models for the current catalog `Arc`, rebuilt only when the catalog changes.
+    model_index: RefCell<Option<Rc<ModelIndex>>>,
     watch: RefCell<Option<Watch>>,
     pub(crate) layers: RefCell<Vec<Disposer>>,
     pub(crate) go_memory: RefCell<crate::dialogs::go_upsell::Seen>,
@@ -165,6 +167,7 @@ impl Local {
             warned: RefCell::default(),
             startup_agent: RefCell::default(),
             startup_model: RefCell::default(),
+            model_index: RefCell::default(),
             watch: RefCell::new(None),
             layers: RefCell::new(Vec::new()),
             go_memory: RefCell::default(),
@@ -392,8 +395,18 @@ impl Local {
         self.catalog(|data| f(data.and_then(|data| data.model.as_deref()).unwrap_or_default()))
     }
 
+    /// Indexed lookup into the current catalog's models, cached per catalog `Arc`.
+    pub(crate) fn model_index(&self) -> Option<Rc<ModelIndex>> {
+        let models = self.catalog(|data| data?.model.clone())?;
+        let mut slot = self.model_index.borrow_mut();
+        if slot.as_ref().is_none_or(|cached| !Arc::ptr_eq(&cached.models, &models)) {
+            *slot = Some(Rc::new(ModelIndex::new(models)));
+        }
+        slot.clone()
+    }
+
     pub fn model_info(&self, model: &Model) -> Option<ModelInfo> {
-        self.models(|models| models.iter().find(|item| is(item, model)).cloned())
+        self.model_index()?.get(&model.provider_id, &model.model_id).cloned()
     }
 
     /// Runs `f` on the providers (empty until loaded).
@@ -471,16 +484,26 @@ impl Local {
         self.unique(favorite)
     }
 
+    /// Whether `model` is currently favorited (matching any speed of the same standard model).
+    pub fn is_favorite(&self, model: &Model) -> bool {
+        let index = self.model_index();
+        let standard = |item: &Model| index.as_ref().map_or_else(|| item.clone(), |index| index.standard(item));
+        let target = standard(model);
+        self.state.borrow().preference.favorite.iter().any(|item| standard(item) == target)
+    }
+
     fn unique(&self, list: Vec<Model>) -> Vec<Model> {
         let mut seen = HashSet::new();
-        self.models(|models| {
-            list.iter().map(|item| standard_of(models, item)).filter(|item| seen.insert(item.key())).collect()
-        })
+        let index = self.model_index();
+        list.iter()
+            .map(|item| index.as_ref().map_or_else(|| item.clone(), |index| index.standard(item)))
+            .filter(|item| seen.insert(item.key()))
+            .collect()
     }
 
     /// `standardModel`: the model whose entry stands for `model` in a list of models.
     pub fn standard_model(&self, model: &Model) -> Model {
-        self.models(|models| standard_of(models, model))
+        self.model_index().map_or_else(|| model.clone(), |index| index.standard(model))
     }
 
     /// The current model at its standard speed.
@@ -503,7 +526,7 @@ impl Local {
     }
 
     fn is_valid(&self, model: &Model) -> bool {
-        self.models(|models| models.iter().any(|item| is(item, model)))
+        self.model_index().is_some_and(|index| index.contains(&model.provider_id, &model.model_id))
     }
 
     pub fn agents(&self) -> Vec<AgentInfo> {
@@ -1019,6 +1042,48 @@ impl Local {
         }
         let order: Vec<(&str, bool)> = speeds.iter().map(|speed| (speed.id.as_str(), speed.faster)).collect();
         self.set_speed(model_pref::cycle_speed(self.speed().as_deref(), &order).as_deref());
+    }
+}
+
+/// Indexed model lookup keyed by the catalog `Arc` it came from, because the model picker looks up every model and
+/// catalogs such as OpenRouter's hold thousands.
+pub(crate) struct ModelIndex {
+    models: Arc<[ModelInfo]>,
+    by_provider: HashMap<String, HashMap<String, usize>>,
+}
+
+impl ModelIndex {
+    fn new(models: Arc<[ModelInfo]>) -> Self {
+        let mut by_provider: HashMap<String, HashMap<String, usize>> = HashMap::new();
+        for (index, model) in models.iter().enumerate() {
+            by_provider.entry(model.provider_id.0.clone()).or_default().entry(model.id.clone()).or_insert(index);
+        }
+        Self { models, by_provider }
+    }
+
+    pub(crate) fn models(&self) -> &[ModelInfo] {
+        &self.models
+    }
+
+    pub(crate) fn get(&self, provider_id: &str, model_id: &str) -> Option<&ModelInfo> {
+        let index = *self.by_provider.get(provider_id)?.get(model_id)?;
+        self.models.get(index)
+    }
+
+    pub(crate) fn contains(&self, provider_id: &str, model_id: &str) -> bool {
+        self.by_provider.get(provider_id).is_some_and(|models| models.contains_key(model_id))
+    }
+
+    pub(crate) fn is_speed(&self, info: &ModelInfo) -> bool {
+        speed_info(info).is_some_and(|speed| self.contains(&info.provider_id.0, &speed.base))
+    }
+
+    pub(crate) fn standard(&self, model: &Model) -> Model {
+        let base = self.get(&model.provider_id, &model.model_id).and_then(speed_info).map(|speed| speed.base);
+        match base {
+            Some(base) if self.contains(&model.provider_id, &base) => Model::new(&model.provider_id, base),
+            _ => model.clone(),
+        }
     }
 }
 

@@ -63,6 +63,8 @@ pub struct SelectOption<T> {
     pub value: T,
     pub description: Option<String>,
     pub search_text: Option<String>,
+    /// Replaces the description while the list is flattened by a search (`searchDescription`).
+    pub search_description: Option<String>,
     /// The footer while the list is flattened by a search.
     pub search_footer: Option<String>,
     /// Muted lines under the row, cut in the middle to fit.
@@ -98,6 +100,7 @@ impl<T> SelectOption<T> {
             value,
             description: None,
             search_text: None,
+            search_description: None,
             search_footer: None,
             details: Vec::new(),
             footer: None,
@@ -370,7 +373,9 @@ struct Row<T> {
     description: Option<String>,
     footer: Option<String>,
     active: bool,
-    /// The option's line, built again when `active` changes.
+    /// Set when the row kept its outer view across a look change (such as flat ↔ grouped), so `line` needs rebuilding.
+    line_stale: bool,
+    /// The option's line, built again when `active` or the row's look changes.
     line: View,
     /// The line and the detail lines, with the mouse handler.
     view: View,
@@ -384,18 +389,21 @@ type FooterKey = (bool, Vec<(Group, String, Option<String>, bool, bool)>);
 type Look<'a, T> = (&'a SelectOption<T>, Option<&'a str>, Option<&'a str>);
 
 impl<T: PartialEq> Row<T> {
+    // Whether this row's outer view (its details and mouse handler) can be kept for `option`.
+    fn same_shell(&self, option: &SelectOption<T>) -> bool {
+        self.option.value == option.value && self.option.details == option.details
+    }
+
     // Whether this row draws `look` as a new row would. Gutters are compared by identity.
     fn draws(&self, (option, description, footer): Look<'_, T>) -> bool {
         let row = &self.option;
-        self.description.as_deref() == description
+        self.same_shell(option)
+            && self.description.as_deref() == description
             && self.footer.as_deref() == footer
-            && row.value == option.value
             && row.title == option.title
             && row.title_spans == option.title_spans
             && row.title_width == option.title_width
             && row.truncate == option.truncate
-            && row.category == option.category
-            && row.details == option.details
             && row.fg == option.fg
             && row.bg == option.bg
             && row.footer_color == option.footer_color
@@ -700,11 +708,17 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         let mut state = self.0.state.borrow_mut();
         let filter = state.filter.clone();
         let filtered: Vec<SelectOption<T>> = match &props.search {
-            Some(search) => search(&filter).into_iter().filter(|x| !x.disabled).collect(),
+            Some(search) => {
+                let mut found = search(&filter);
+                found.retain(|x| !x.disabled);
+                found
+            }
             None => {
                 let needle = filter.to_lowercase();
                 if props.skip_filter || !props.render_filter || needle.is_empty() {
-                    options.into_iter().filter(|x| !x.disabled).collect()
+                    let mut kept = options;
+                    kept.retain(|x| !x.disabled);
+                    kept
                 } else {
                     let options: Vec<&SelectOption<T>> = options.iter().filter(|x| !x.disabled).collect();
                     fuzzy::go_cached(
@@ -738,7 +752,11 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
             }
             groups
         };
-        state.flat = grouped.iter().flat_map(|(_, members)| members.clone()).collect();
+        let mut flat = Vec::with_capacity(filtered.len());
+        for (_, members) in &grouped {
+            flat.extend_from_slice(members);
+        }
+        state.flat = flat;
         state.grouped = grouped;
         state.filtered = filtered;
         self.0.rows_stale.set(true);
@@ -1175,17 +1193,20 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         if synced {
             self.sync_rows(&state);
         }
-        // A move restyles the row it leaves and the row it reaches; matching the rows may have moved any.
+        // A move restyles the row it leaves and the row it reaches; matching the rows may have moved or updated any.
         let active = (!self.props().locked && state.selected < state.flat.len()).then_some(state.selected);
         let previous = self.0.active.replace(active);
         for (position, row) in self.0.rows.borrow_mut().iter_mut().enumerate() {
             let want = Some(position) == active;
-            if row.active != want && (synced || Some(position) == previous || Some(position) == active) {
+            if row.line_stale
+                || (row.active != want && (synced || Some(position) == previous || Some(position) == active))
+            {
                 let line = self.option_line(&row.option, row.description.as_deref(), row.footer.as_deref(), want);
                 row.line.detach();
                 row.view.insert(0, &line);
                 row.line = line;
                 row.active = want;
+                row.line_stale = false;
             }
         }
         let selected = state.flat.get(state.selected).copied();
@@ -1227,8 +1248,9 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         self.render_footer();
     }
 
-    // Matches the rows to `filtered`: a row whose option draws the same stays, and only the other options get new
-    // rows. The list's children are put in order again only when the rows or categories changed.
+    // Matches the rows to `filtered`: a row whose option draws the same stays untouched; one whose outer view matches
+    // (same value and details, as when a filter flips a list between grouped and flat) stays mounted and only rebuilds
+    // its line. The list's children are put in order again only when the rows or categories changed.
     fn sync_rows(&self, state: &State<T>) {
         let cx = &self.0.cx;
         let flattened = self.props().search.is_some() || (self.props().flat && !state.filter.is_empty());
@@ -1238,12 +1260,22 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
             .flat_map(|(category, members)| {
                 members.iter().map(move |&index| {
                     let option = &state.filtered[index];
+                    let description = if flattened {
+                        option
+                            .search_description
+                            .as_deref()
+                            .filter(|description| !description.is_empty())
+                            .or_else(|| option.description.as_deref().filter(|description| !description.is_empty()))
+                    } else {
+                        option.description.as_deref().filter(|description| *description != category)
+                    };
                     let footer = if flattened {
                         option.search_footer.as_deref().or(option.category.as_deref()).or(option.footer.as_deref())
                     } else {
                         option.footer.as_deref()
-                    };
-                    (option, option.description.as_deref().filter(|description| description != category), footer)
+                    }
+                    .filter(|footer| !footer.is_empty());
+                    (option, description, footer)
                 })
             })
             .collect();
@@ -1258,18 +1290,37 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
         let old = std::mem::take(&mut *self.0.rows.borrow_mut());
         let mut in_place = old.len() == wanted.len();
         let mut slots: Vec<Option<Row<T>>> = std::iter::repeat_with(|| None).take(wanted.len()).collect();
-        for (old_position, row) in old.into_iter().enumerate() {
+        for (old_position, mut row) in old.into_iter().enumerate() {
             let mut position = first.get(row.option.title.as_str()).copied().unwrap_or(usize::MAX);
-            while position != usize::MAX && (slots[position].is_some() || !row.draws(wanted[position])) {
+            let mut fallback = usize::MAX;
+            while position != usize::MAX {
+                if slots[position].is_none() {
+                    if row.draws(wanted[position]) {
+                        break;
+                    }
+                    if fallback == usize::MAX && row.same_shell(wanted[position].0) {
+                        fallback = position;
+                    }
+                }
                 position = next[position];
             }
+            if position != usize::MAX {
+                in_place &= position == old_position;
+                slots[position] = Some(row);
+                continue;
+            }
             // A row left out stays in the list until the children are put in order below.
-            if position == usize::MAX {
+            if fallback == usize::MAX {
                 in_place = false;
                 continue;
             }
-            in_place &= position == old_position;
-            slots[position] = Some(row);
+            let (option, description, footer) = wanted[fallback];
+            row.option = option.clone();
+            row.description = description.map(str::to_owned);
+            row.footer = footer.map(str::to_owned);
+            row.line_stale = true;
+            in_place &= fallback == old_position;
+            slots[fallback] = Some(row);
         }
         let rows: Vec<Row<T>> =
             slots.into_iter().zip(&wanted).map(|(slot, &look)| slot.unwrap_or_else(|| self.new_row(look))).collect();
@@ -1329,6 +1380,7 @@ impl<T: Clone + PartialEq + 'static> Select<T> {
             description: description.map(str::to_owned),
             footer: footer.map(str::to_owned),
             active: false,
+            line_stale: false,
             line,
             view,
         }
@@ -1533,7 +1585,7 @@ fn option_row<T>(
             let color = if active { theme.text.action.primary.focused } else { theme.text.muted };
             Some((text, color, 2))
         }
-        None => footer.map(|footer| {
+        None => footer.filter(|footer| !footer.is_empty()).map(|footer| {
             let color = match (option.footer_fg, option.footer_color) {
                 (Some(color), _) => color,
                 (None, Some(color)) if !active => color,
