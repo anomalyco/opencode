@@ -337,50 +337,6 @@ describe("createSessionBackground", () => {
     })
   })
 
-  // A script lists a call a moment after the shell starts, so its shells are matched by the call they name.
-  test("keeps a running script's shells out of background tasks unless their call has ended", () => {
-    createRoot((dispose) => {
-      const [jobs, setJobs] = createSignal<JobInfo[]>([])
-
-      const own = {
-        ...shell("test", "test"),
-        metadata: { sessionID: "root", callID: "script-part" },
-        time: { started: 20 },
-      }
-
-      const background = createSessionBackground({
-        sessionID: () => "root",
-        messages: () => [
-          assistant("current", [
-            tool("script-part", "execute", {}, { code: "await test()" }, "running", { created: 10, ran: 11 }),
-          ]),
-        ],
-        sessions: () => [],
-        status: () => "idle",
-        // The user's own command, started while the script runs, names no call.
-        shells: () => [own, { ...shell("serve", "serve"), time: { started: 30 } }],
-        jobs,
-      })
-
-      expect(background.tasks()).toEqual([{ id: "serve", type: "shell", label: "serve", started: 30 }])
-
-      // The call timed out and left the command running.
-      setJobs([
-        {
-          kind: "shell",
-          id: "test",
-          sessionID: "root",
-          status: "running",
-          time: { started: 20 },
-          shellID: "test",
-          command: "test",
-        },
-      ])
-      expect(background.tasks().map((task) => task.id)).toEqual(["test", "serve"])
-      dispose()
-    })
-  })
-
   test("counts a script only once its execute call has moved it to the background", () => {
     createRoot((dispose) => {
       const [store, setStore] = createStore<{ messages: ReturnType<typeof assistant>[] }>({
@@ -395,19 +351,33 @@ describe("createSessionBackground", () => {
         ],
       })
 
+      const owned = (id: string) => ({ ...shell(id, id), metadata: { sessionID: "root", callID: "script-part" } })
+
       const background = createSessionBackground({
         sessionID: () => "root",
         messages: () => store.messages,
         sessions: () => [],
         status: () => "idle",
-        shells: () => [],
+        // The script's shells name its call. A shell that names none is the user's own.
+        shells: () => [owned("test"), owned("left"), { ...shell("serve", "serve"), time: { started: 1 } }],
         jobs: () => [
           { kind: "codemode", id: "cm_script", sessionID: "root", status: "running", time: { started: 11 } },
           { kind: "codemode", id: "cm_other", sessionID: "other", status: "running", time: { started: 11 } },
+          // A shell call that timed out left its command running, which gives the shell a job.
+          {
+            kind: "shell",
+            id: "left",
+            sessionID: "root",
+            status: "running",
+            time: { started: 0 },
+            shellID: "left",
+            command: "left",
+          },
         ],
       })
 
       expect(background.scripts()).toEqual([])
+      expect(background.tasks().map((task) => task.id)).toEqual(["left", "serve"])
 
       setStore("messages", [
         assistant("current", [tool("script-part", "execute", { jobID: "cm_script" }, { code: "await build()" })]),
