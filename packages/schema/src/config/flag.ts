@@ -27,7 +27,7 @@ export const registry = {
   sqlite_fts:
     "Build an SQLite full-text index of session titles and message text in the background, and enable the opencode.session.search and opencode.session.read tools. The index covers every session in the database and starts while any loaded location enables it; SQLite keeps it current from then on, also after this is turned off.",
   workspace_read_scope:
-    "Restrict the experimental regular-file read slice to a trusted adapter's verified workspace scope. Off by default in every build; opt in with OPENCODE_FLAGS=workspace_read_scope or experimental.workspace_read_scope: true.",
+    "Use a trusted adapter's verified workspace scope for guarded regular-file reads and directory listings. Off by default in every build; opt in with OPENCODE_FLAGS=workspace_read_scope or experimental.workspace_read_scope: true.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 
