@@ -14,14 +14,26 @@ import PROMPT_META from "./system-prompt/meta.txt"
 import PROMPT_TRINITY from "./system-prompt/trinity.txt"
 import PROMPT_ANTHROPIC from "./system-prompt/anthropic.txt"
 
-const LEGACY_GPT = /gpt-(?:35|[1-5](?:[.-]\d+)?|6(?:[.-][01])?|oss)(?![.\d]|-\d{1,2}\b)/
+const GPT_6_2 = [
+  "gpt-6.2",
+  "gpt-6-2",
+  "gpt-62",
+  "gpt-latest",
+  "gpt-sol-latest",
+  "gpt-astra-latest",
+  "gpt-terra-latest",
+  "gpt-luna-latest",
+  "gpt-chat-latest",
+  "gpt-mini-latest",
+  "gpt-pro-latest",
+]
 
 export const OpenAIPlugin = make("opencode.prompt.openai", (model) => {
   const id = model.id.toLowerCase()
   if (!id.includes("gpt")) return undefined
-  if (LEGACY_GPT.test(id)) return id.includes("astra") ? PROMPT_ASTRA : PROMPT_GPT
   // Derived from Codex's prompts, where GPT-6.2 Sol and Astra share the same core instructions.
-  return PROMPT_GPT_6_2
+  if (GPT_6_2.some((prefix) => id.includes(prefix))) return PROMPT_GPT_6_2
+  return id.includes("astra") ? PROMPT_ASTRA : PROMPT_GPT
 })
 
 export const AnthropicPlugin = make(
