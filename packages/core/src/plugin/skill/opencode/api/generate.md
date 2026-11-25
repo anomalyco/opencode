@@ -10,16 +10,6 @@ Body:
 
 Returns: `GenerateTextResponse`
 
-## POST /api/experimental/generate (experimental)
-
-Deprecated alias of POST /api/experimental/generate/text.
-
-Body:
-- `prompt: string`
-- `model?: Model.Ref`
-
-Returns: `GenerateTextResponse`
-
 ## POST /api/experimental/generate/image (experimental)
 
 Generate or edit images with an image model using the server's base configuration and return them as base64. Stateless: nothing is stored.

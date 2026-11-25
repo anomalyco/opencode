@@ -1444,8 +1444,11 @@ function mockHandlers(
             Effect.andThen(noContent),
           )
         },
-        // Like the server for an idle session: nothing was running to interrupt.
-        sessionInterrupt: () => Effect.succeed({ interrupted: false }),
+        // Like the server: an idle session has nothing running to interrupt.
+        sessionInterrupt: (ctx) =>
+          Effect.succeed({
+            interrupted: resolve(config.sessionStatus ?? {})[ctx.params.sessionID]?.type === "running",
+          }),
         // The mock runs no agent loop, so every session is already idle.
         sessionWait: () => noContent,
         sessionRevertStage: (ctx) => {

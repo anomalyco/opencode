@@ -86,6 +86,58 @@ test("opens the free models list without a connection or a configured provider",
   expect(setup.captureCharFrame()).toContain("Free models")
 })
 
+test("lists every provider of the integration just connected", async () => {
+  await using setup = await renderLocal({
+    config: { experimental: { "new-designs": true } },
+    models: [
+      { ...model("zen"), providerID: "opencode", name: "Zen Model" },
+      { ...model("go"), providerID: "opencode-go", name: "Go Model" },
+      { ...model("local"), providerID: "ollama", name: "Local Model" },
+    ],
+    fetch: (url) => {
+      if (url.pathname === "/api/integration")
+        return json({
+          location: { directory },
+          data: [
+            {
+              id: "opencode",
+              name: "OpenCode",
+              methods: [{ type: "oauth", label: "OpenCode account" }],
+              connections: [{ type: "credential", id: "cred_1", label: "Personal", active: true }],
+            },
+          ],
+        })
+      if (url.pathname === "/api/provider")
+        return json({
+          location: { directory },
+          data: [
+            {
+              id: "opencode",
+              name: "Personal / OpenCode",
+              integrationID: "opencode",
+              activation: "enabled",
+              package: "opencode",
+            },
+            {
+              id: "opencode-go",
+              name: "OpenCode Go",
+              integrationID: "opencode",
+              activation: "enabled",
+              package: "opencode",
+            },
+            { id: "ollama", name: "Ollama", activation: "enabled", package: "openai-compatible" },
+          ],
+        })
+    },
+  })
+  setup.dialog.replace(() => <DialogModel integrationID="opencode" />)
+  await setup.renderOnce()
+  const frame = setup.captureCharFrame()
+  expect(frame).toContain("Zen Model")
+  expect(frame).toContain("Go Model")
+  expect(frame).not.toContain("Local Model")
+})
+
 const freeCost = {
   input: 0,
   output: 0,

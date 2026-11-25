@@ -124,6 +124,7 @@ export const dict = {
   "command.session.import": "Import session",
   "command.session.copyID": "Copy Session ID",
   "command.session.archive": "Archive session",
+  "command.session.unarchive": "Unarchive session",
   "command.session.rename": "Rename session",
   "command.session.delete": "Delete session",
 
@@ -920,6 +921,10 @@ export const dict = {
   "settings.general.row.navigation.tabs": "Tabs",
   "settings.general.row.navigation.list": "List",
   "settings.general.row.tabPosition.title": "Tab position",
+  "settings.general.row.tabGrouping.title": "Group tabs",
+  "settings.general.row.tabGrouping.none": "None",
+  "settings.general.row.tabGrouping.project": "By project",
+  "settings.general.row.tabGrouping.server": "By server",
   "sidebar.sessions": "Sessions",
   "sidebar.organize.openTab": "Open tab",
   "sidebar.organize.showMore": "Show more",

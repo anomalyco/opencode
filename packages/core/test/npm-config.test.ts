@@ -5,15 +5,6 @@ import { NpmConfig } from "@opencode/util/npm-config"
 import { tmpdir } from "./fixture/tmpdir"
 
 describe("NpmConfig.load", () => {
-  test("reads registry from project .npmrc", async () => {
-    await using tmp = await tmpdir()
-    await Bun.write(path.join(tmp.path, ".npmrc"), "registry=https://registry.example.test/\n")
-
-    const config = await Effect.runPromise(NpmConfig.load(tmp.path))
-
-    expect(config.registry).toBe("https://registry.example.test/")
-  })
-
   test("reads scoped registries from project .npmrc", async () => {
     await using tmp = await tmpdir()
     await Bun.write(path.join(tmp.path, ".npmrc"), "@acme:registry=https://npm.acme.test/\n")

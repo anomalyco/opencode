@@ -9,254 +9,274 @@
   color: var(--stats-text);
 }
 
-[data-page="stats"] [data-component="new-models-split"] {
+[data-page="stats"] [data-slot="breakout-card"] {
+  --breakout-bg: var(--stats-layer);
+  --breakout-bar: color-mix(in srgb, var(--stats-faint) 75%, var(--breakout-bg));
+  --breakout-peak: var(--stats-muted);
   display: grid;
-  gap: 4px;
-}
-
-[data-page="stats"] [data-slot="split-heading"],
-[data-page="stats"] [data-slot="split-row"] {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(340px, 420px) minmax(0, 1fr);
-  align-items: center;
-  gap: 16px;
-}
-
-[data-page="stats"] [data-slot="split-heading"] {
-  padding: 0 16px 8px;
-  color: var(--stats-faint);
-  font-size: 10px;
-  text-transform: uppercase;
-}
-
-[data-page="stats"] [data-slot="split-heading"] span:first-child {
-  text-align: right;
-}
-
-[data-page="stats"] [data-slot="split-row"] {
-  min-height: 64px;
-  padding: 0 16px;
-  border: 1px solid var(--stats-line);
-  background: var(--stats-layer);
+  grid-template-columns: 360px minmax(0, 1fr);
+  border: 1px solid var(--stats-line-strong);
+  background: var(--breakout-bg);
   color: var(--stats-text);
   text-decoration: none;
+  transition: background-color 140ms ease;
 }
 
-[data-page="stats"] [data-slot="split-row"][data-active="true"] {
-  border-color: var(--stats-line-strong);
-  background: var(--stats-layer-2);
+[data-page="stats"] [data-slot="breakout-card"]:focus-visible {
+  --breakout-bar: color-mix(in srgb, var(--breakout-color) 45%, var(--breakout-bg));
+  --breakout-peak: var(--breakout-color);
 }
 
-[data-page="stats"] :is([data-slot="split-users"], [data-slot="split-tokens"]) {
+@media (hover: hover) {
+  [data-page="stats"] [data-slot="breakout-card"]:hover {
+    --breakout-bg: var(--stats-layer-2);
+    --breakout-bar: color-mix(in srgb, var(--breakout-color) 45%, var(--breakout-bg));
+    --breakout-peak: var(--breakout-color);
+  }
+}
+
+[data-page="stats"] [data-slot="breakout-card"]:focus-visible,
+[data-page="stats"] [data-slot="breakout-also"] a:focus-visible {
+  outline: 2px solid var(--stats-accent);
+  outline-offset: 2px;
+}
+
+[data-page="stats"] [data-slot="breakout-summary"] {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  padding: 32px 16px 16px 32px;
+}
+
+/* Tall enough for the free line, so the number stays put with or without it. */
+[data-page="stats"] [data-slot="breakout-model"] {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 62px;
+}
+
+[data-page="stats"] [data-slot="breakout-model"] svg {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin-top: 6px;
+}
+
+[data-page="stats"] [data-slot="breakout-model"] > span {
+  display: grid;
   min-width: 0;
 }
 
-[data-page="stats"] [data-slot="split-users"] {
-  justify-content: flex-end;
-}
-
-[data-page="stats"] :is([data-slot="split-users"], [data-slot="split-tokens"]) i {
-  display: block;
-  flex: 0 1 auto;
-  min-width: 2px;
-  height: 14px;
-  background: var(--stats-text);
-}
-
-[data-page="stats"] [data-slot="split-users"] i {
-  background: var(--stats-bar-idle);
-}
-
-[data-page="stats"] [data-slot="split-row"][data-active="true"] [data-slot="split-tokens"] i {
-  background: var(--stats-accent);
-}
-
-[data-page="stats"] [data-slot="split-row"][data-active="true"] [data-slot="split-users"] i {
-  background: color-mix(in srgb, var(--stats-accent) 45%, transparent);
-}
-
-[data-page="stats"] :is([data-slot="split-users"], [data-slot="split-tokens"]) b {
-  flex: none;
-  min-width: 48px;
-  font-size: 13px;
+[data-page="stats"] [data-slot="breakout-model"] strong {
+  font-size: 20px;
   font-weight: 500;
+  line-height: 26px;
 }
 
-[data-page="stats"] [data-slot="split-users"] b {
-  text-align: right;
+[data-page="stats"] [data-slot="breakout-model"] em {
+  color: var(--stats-muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 18px;
 }
 
-[data-page="stats"] [data-slot="split-model"] {
+[data-page="stats"] [data-slot="breakout-share"] {
+  margin-top: 24px;
+  margin-left: -0.07em;
+  font-size: 92px;
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+[data-page="stats"] [data-slot="breakout-caption"] {
+  margin-top: 6px;
+  color: var(--stats-muted);
+  font-size: 14px;
+  text-wrap: pretty;
+}
+
+[data-page="stats"] [data-slot="breakout-stats"] {
   display: grid;
-  grid-template-columns: 20px 20px minmax(0, 1fr) 96px;
-  align-items: center;
-  gap: 10px;
-  padding: 0 16px;
-  border-right: 1px solid var(--stats-line);
-  border-left: 1px solid var(--stats-line);
-  height: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: auto;
+  padding-top: 28px;
 }
 
-[data-page="stats"] [data-slot="split-rank"] {
+[data-page="stats"] [data-slot="breakout-stats"] > span {
+  display: grid;
+}
+
+[data-page="stats"] [data-slot="breakout-stats"] b {
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+[data-page="stats"] [data-slot="breakout-stats"] small {
   color: var(--stats-faint);
   font-size: 11px;
+  line-height: 17px;
 }
 
-[data-page="stats"] [data-slot="split-icon"] {
-  width: 18px;
-  height: 18px;
-  color: var(--stats-muted);
-}
-
-[data-page="stats"] [data-slot="split-name"] {
+[data-page="stats"] [data-slot="breakout-chart"] {
   display: grid;
+  gap: 12px;
+  min-width: 0;
+  min-height: 380px;
+  padding: 32px 32px 16px 16px;
+}
+
+/* Snaps each day to whole dot columns, so no dot is cut at its edge. Very narrow days keep their width. */
+[data-page="stats"] [data-slot="breakout-day"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) 24px;
+  justify-self: center;
+  width: max(calc(round(down, 100% - 2px, 6px) + 2px), min(100%, 8px));
   min-width: 0;
 }
 
-[data-page="stats"] [data-slot="split-name"] strong {
-  overflow: hidden;
-  font-size: 13px;
+[data-page="stats"] [data-slot="breakout-plot"] {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  padding-top: 24px;
+}
+
+[data-page="stats"] [data-slot="breakout-plot"]::before {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(round(down, 100% - 2px, 6px) + 2px);
+  height: calc(round(down, 100% - 2px, 6px) + 2px);
+  margin-inline: auto;
+  content: "";
+  background: var(--stats-dot);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='2' height='2'/%3E%3C/svg%3E");
+  mask-size: 6px 6px;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='2' height='2'/%3E%3C/svg%3E");
+  -webkit-mask-size: 6px 6px;
+}
+
+[data-page="stats"] [data-slot="breakout-plot"] i {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 2px;
+  background: var(--breakout-bar);
+  transition: background-color 140ms ease;
+}
+
+[data-page="stats"] [data-peak="true"] [data-slot="breakout-plot"] i {
+  background: var(--breakout-peak);
+}
+
+[data-page="stats"] [data-slot="breakout-plot"] b {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 2px;
+  background: var(--breakout-bg);
+  font-size: 11px;
   font-weight: 500;
-  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: background-color 140ms ease;
+}
+
+[data-page="stats"] [data-slot="breakout-day"] small {
+  padding-top: 7px;
+  color: var(--stats-faint);
+  font-size: 11px;
+  line-height: 17px;
   white-space: nowrap;
 }
 
-[data-page="stats"] [data-slot="split-name"] em {
+[data-page="stats"] [data-slot="breakout-day"] small[data-end="true"] {
+  justify-self: end;
+}
+
+[data-page="stats"] [data-slot="breakout-also"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin: 18px 0 0;
   color: var(--stats-muted);
-  font-size: 10px;
-  font-style: normal;
+  font-size: 13px;
 }
 
-[data-page="stats"] [data-slot="split-spark"] {
-  width: 96px;
-  height: 28px;
-  overflow: visible;
+[data-page="stats"] [data-slot="breakout-also"] span {
+  color: var(--stats-faint);
 }
 
-[data-page="stats"] [data-slot="split-spark"] polygon {
-  opacity: 0.18;
+[data-page="stats"] [data-slot="breakout-also"] a {
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--stats-line-strong);
+  text-underline-offset: 3px;
 }
 
-[data-page="stats"] [data-slot="split-spark"] polyline {
-  fill: none;
-  stroke-width: 1.5;
-}
-
-[data-page="stats"] [data-slot="split-row"][data-featured="true"] {
-  min-height: 128px;
-  margin-bottom: 8px;
-}
-
-[data-page="stats"] [data-slot="split-row"][data-featured="true"] [data-slot="split-model"] {
-  position: relative;
-  grid-template-columns: 20px 32px minmax(0, 1fr) 132px;
-  gap: 14px;
-  overflow: hidden;
-}
-
-[data-page="stats"]
-  [data-slot="split-row"][data-featured="true"]
-  [data-slot="split-model"]
-  > :not([data-slot="split-watermark"]) {
-  position: relative;
-  z-index: 1;
-}
-
-[data-page="stats"] [data-slot="split-watermark"] {
-  position: absolute;
-  top: 50%;
-  right: -24px;
-  width: 180px;
-  height: 180px;
-  transform: translateY(-50%);
-  color: var(--stats-line);
-  opacity: 0.58;
-  pointer-events: none;
-  transition:
-    color 140ms ease,
-    opacity 140ms ease;
-}
-
-[data-page="stats"] [data-slot="split-row"][data-active="true"] [data-slot="split-watermark"] {
-  color: var(--stats-line-strong);
-  opacity: 0.5;
-}
-
-[data-page="stats"] [data-slot="split-row"][data-featured="true"] [data-slot="split-icon"] {
-  width: 30px;
-  height: 30px;
-}
-
-[data-page="stats"] [data-slot="split-row"][data-featured="true"] [data-slot="split-name"] {
-  gap: 4px;
-}
-
-[data-page="stats"] [data-slot="split-row"][data-featured="true"] [data-slot="split-name"] strong {
-  font-size: 20px;
-}
-
-[data-page="stats"] [data-slot="split-row"][data-featured="true"] [data-slot="split-name"] em {
-  font-size: 12px;
-}
-
-[data-page="stats"] [data-slot="split-row"][data-featured="true"] [data-slot="split-spark"] {
-  width: 132px;
-  height: 52px;
-}
-
-[data-page="stats"]
-  [data-slot="split-row"][data-featured="true"]
-  :is([data-slot="split-users"], [data-slot="split-tokens"])
-  i {
-  height: 24px;
-}
-
-[data-page="stats"]
-  [data-slot="split-row"][data-featured="true"]
-  :is([data-slot="split-users"], [data-slot="split-tokens"])
-  b {
-  min-width: 64px;
-  font-size: 22px;
+[data-page="stats"] [data-slot="breakout-also"] a:hover {
+  color: var(--stats-text);
+  text-decoration-color: currentColor;
 }
 
 @media (max-width: 74rem) {
   [data-page="stats"] [data-section="new-models"] {
     padding: 64px 32px;
   }
+
+  [data-page="stats"] [data-slot="breakout-card"] {
+    grid-template-columns: 320px minmax(0, 1fr);
+  }
+
+  [data-page="stats"] [data-slot="breakout-summary"] {
+    padding: 24px 12px 12px 24px;
+  }
+
+  [data-page="stats"] [data-slot="breakout-chart"] {
+    gap: 6px;
+    padding: 24px 24px 12px 12px;
+  }
 }
 
 @media (max-width: 47.999rem) {
   [data-page="stats"] [data-section="new-models"] {
-    padding: 48px 20px;
+    padding: 48px 24px;
   }
 
-  [data-page="stats"] [data-slot="split-heading"] {
-    display: none;
+  [data-page="stats"] [data-slot="breakout-card"] {
+    grid-template-columns: minmax(0, 1fr);
   }
 
-  [data-page="stats"] [data-slot="split-row"] {
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    grid-template-areas:
-      "model model"
-      "users tokens";
-    padding: 12px;
-    gap: 10px;
+  [data-page="stats"] [data-slot="breakout-summary"] {
+    padding: 22px 22px 0;
   }
 
-  [data-page="stats"] [data-slot="split-model"] {
-    grid-area: model;
-    padding: 0;
-    border: 0;
+  [data-page="stats"] [data-slot="breakout-share"] {
+    font-size: 72px;
   }
 
-  [data-page="stats"] [data-slot="split-users"] {
-    grid-area: users;
+  [data-page="stats"] [data-slot="breakout-chart"] {
+    gap: 4px;
+    min-height: 240px;
+    padding: 22px 22px 10px;
   }
 
-  [data-page="stats"] [data-slot="split-tokens"] {
-    grid-area: tokens;
+  [data-page="stats"] [data-slot="breakout-plot"] b,
+  [data-page="stats"] [data-slot="breakout-day"] small {
+    font-size: 10px;
+  }
+
+  [data-page="stats"] [data-slot="breakout-also"] {
+    gap: 6px 12px;
+    font-size: 12px;
+  }
+
+  [data-page="stats"] [data-slot="breakout-also"] span {
+    flex-basis: 100%;
   }
 }

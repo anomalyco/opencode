@@ -5,6 +5,7 @@ import path from "node:path"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Environment } from "@opencode/core/environment/index"
+import { Frames } from "@opencode/core/machine/frames"
 import { Identity } from "@opencode/core/machine/identity"
 import { Join } from "@opencode/core/machine/join"
 import { Link } from "@opencode/core/machine/link"
@@ -491,4 +492,36 @@ it.effect("stays interrupted when its caller interrupts it, on either side", () 
       }
     }),
   ),
+)
+
+it.effect("refuses an invalid welcome label in Link.dial, matching Rust opencode-worker", () =>
+  Effect.gen(function* () {
+    const homeKey = Identity.fromSeed(new Uint8Array(randomBytes(32)))
+    const workerKey = newWorker()
+    for (const invalidWelcome of ["wrk_Upper", "local", "a"]) {
+      const toHome = yield* Queue.unbounded<Uint8Array, Cause.Done>()
+      const toWorker = yield* Queue.unbounded<Uint8Array, Cause.Done>()
+      const dialing = yield* Effect.forkChild(
+        Link.dial(
+          {
+            send: (message) => Queue.offer(toHome, message).pipe(Effect.asVoid),
+            receive: Queue.take(toWorker).pipe(Effect.mapError(() => new Link.Closed())),
+          },
+          { home: homeKey.publicKey, identity: workerKey },
+        ),
+        { startImmediately: true },
+      )
+      const local = Noise.generateKeyPair()
+      const noise = ok(Noise.handshake({ initiator: false, prologue: text("opencode-link-v1"), static: local }))
+      ok(noise.read(yield* Queue.take(toHome)))
+      const sig = homeKey.sign(
+        new Uint8Array([...text("opencode-link-v1/home:"), ...local.publicKey, ...(noise.hash ?? [])]),
+      )
+      yield* Queue.offer(toWorker, ok(noise.write(new Uint8Array([...homeKey.publicKey, ...sig]))))
+      ok(noise.read(yield* Queue.take(toHome)))
+      const ciphers = Frames.rekeying(ok(noise.split()), 2 ** 20)
+      yield* Queue.offer(toWorker, ok(ciphers.send.encrypt(text(invalidWelcome))))
+      expect(yield* Fiber.join(dialing).pipe(Effect.flip)).toEqual(new Link.Refused())
+    }
+  }),
 )
