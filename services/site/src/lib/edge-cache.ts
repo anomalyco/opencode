@@ -13,6 +13,9 @@ export function background(work: Promise<unknown>) {
   getRequestEvent()?.nativeEvent.waitUntil(done)
 }
 
+// A refresh still running after this long is taken as lost: the request that started it ended.
+const lostAfter = 30_000
+
 /**
  * A value from a slow outside source (GitHub, the status page) that page renders never wait on for
  * long. It comes from this isolate's memory, else Cloudflare's cache at this location (shared by the
@@ -33,23 +36,31 @@ export function staleValue<T>(options: {
   /** False when the page reads fine without the value (the status bars), so its HTML may still be kept. */
   marksStandIn?: boolean
 }) {
+  // Only settled values are shared between requests. A promise belongs to the request that made it,
+  // and never settles once that request has ended, so each request reads the edge cache and loads
+  // the source itself; `loadingSince` only tells other reads a refresh is running, and is taken as
+  // lost after `lostAfter` (its request ended), so a cancelled refresh can't stop the next ones.
   const state: {
     value?: T
     time: number
     tried: number
-    pending?: Promise<T | undefined>
-    stored?: Promise<void>
+    loadingSince?: number
+    stored?: boolean
   } = {
     time: 0,
     tried: 0,
   }
 
+  const loading = () => state.loadingSince !== undefined && Date.now() - state.loadingSince < lostAfter
+
   const refresh = () => {
-    state.pending ??= options
+    const started = Date.now()
+    state.loadingSince = started
+    return options
       .load()
       .catch(() => undefined)
       .then(async (value) => {
-        state.pending = undefined
+        if (state.loadingSince === started) state.loadingSince = undefined
         state.tried = Date.now()
         if (value === undefined) {
           if (state.value !== undefined) state.time = Date.now()
@@ -60,25 +71,26 @@ export function staleValue<T>(options: {
         await writeStored(options.key, { time: state.time, value })
         return value
       })
-    return state.pending
   }
 
   return async function read(wait = options.wait): Promise<{ value: T | undefined; standIn: boolean }> {
-    state.stored ??= readStored<T>(options.key).then((stored) => {
-      if (!stored || state.value !== undefined) return
-      state.value = stored.value
-      state.time = stored.time
-    })
-    await state.stored
+    if (!state.stored && state.value === undefined) {
+      const stored = await readStored<T>(options.key)
+      state.stored = true
+      if (stored && state.value === undefined) {
+        state.value = stored.value
+        state.time = stored.time
+      }
+    }
     const due =
       Date.now() - state.time >= options.freshFor && Date.now() - state.tried >= Math.min(options.freshFor, 60_000)
     if (state.value !== undefined) {
-      if (due) background(refresh())
+      if (due && !loading()) background(refresh())
       return { value: state.value, standIn: false }
     }
     // Only the read that starts a refresh waits for it; reads while it runs take the stand-in at
-    // once, unless they asked to wait longer than pages do (feeds).
-    if (state.pending ? wait <= options.wait : !due) return standIn()
+    // once, unless they asked to wait longer than pages do (feeds), which load the source themselves.
+    if (loading() ? wait <= options.wait : !due) return standIn()
     const pending = refresh()
     background(pending)
     const value = await Promise.race([pending, new Promise<undefined>((resolve) => setTimeout(resolve, wait))])
