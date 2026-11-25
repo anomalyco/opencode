@@ -1,6 +1,6 @@
 export * as PushSender from "./sender.js"
 
-import { Context, Effect, Layer, Scope } from "effect"
+import { Clock, Context, Effect, Layer, Scope } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
 import type { Push } from "@opencode/schema/push"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -33,6 +33,8 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pu
 
 const maxMessageBytes = 2600
 const attempts = 3
+// How long a sent notification can still be cleared. Older ones are forgotten so the record doesn't grow forever.
+const clearableFor = 7 * 24 * 60 * 60 * 1000
 
 /** Drops characters from the end of `text` until its JSON is at least `bytes` shorter, then adds "…". */
 const shorten = (text: string, bytes: number) => {
@@ -76,7 +78,7 @@ const layer = Layer.effect(
 
     // Which phones were sent each notification, so a clear goes only to them. Lost on restart, when the phone keeps
     // the notification until the app is opened.
-    const sent = new Map<string, { sessionID: string; devices: Set<string> }>()
+    const sent = new Map<string, { sessionID: string; devices: Set<string>; at: number }>()
 
     // The relay delivers a silent box without an alert: it only wakes the app.
     const post = (url: string, box: string, silent: boolean) =>
@@ -107,24 +109,29 @@ const layer = Layer.effect(
       device: PushList.Stored,
       sessions: Record<string, Push.Bell>,
       notification: Notification,
+      now: number,
     ) {
       if (device.paused) return
       const wanted = level(device, sessions, notification.sessionID)
       if (wanted === "none") return
       if (wanted === "attention" && !notification.attention) return
-      const entry = sent.get(notification.id) ?? { sessionID: notification.sessionID, devices: new Set() }
-      entry.devices.add(device.id)
-      sent.set(notification.id, entry)
+      const devices = sent.get(notification.id)?.devices ?? new Set()
+      devices.add(device.id)
+      sent.set(notification.id, { sessionID: notification.sessionID, devices, at: now })
       yield* push(device, message(notification), false)
     })
 
     const deliver = Effect.fn("PushSender.deliver")(function* (notification: Notification) {
       const targets = yield* list.targets()
       if (targets.settings.paused) return
+      const now = yield* Clock.currentTimeMillis
+      for (const [id, entry] of sent) {
+        if (now - entry.at > clearableFor) sent.delete(id)
+      }
       yield* Effect.forEach(
         targets.devices,
         (device) =>
-          sendTo(device, targets.sessions, notification).pipe(
+          sendTo(device, targets.sessions, notification, now).pipe(
             Effect.ignoreCause({ log: "Warn", message: "Failed to send a push notification" }),
           ),
         { concurrency: "unbounded", discard: true },
