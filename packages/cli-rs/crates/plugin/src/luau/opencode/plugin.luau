@@ -1999,6 +1999,7 @@ export type ConfigInfoEncoded = {
         project_overlay: boolean?,
         opencode_api: boolean?,
         mcp_skills: boolean?,
+        compaction_jobs: boolean?,
         sqlite_fts: boolean?,
         video_generate: (boolean | {
             model: (string | {
