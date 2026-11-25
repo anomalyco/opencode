@@ -23,5 +23,8 @@
       "id": "REPLACE_WITH_KV_NAMESPACE_ID"
     }
   ],
+  "vars": {
+    "MANIFEST_READS": "d1"
+  },
   "observability": { "enabled": true }
 }

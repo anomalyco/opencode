@@ -7,9 +7,11 @@ import {
   indexKey,
   manifestKey,
   parseMetadata,
-  toManifestEntry,
+  selectArtifactColumns,
+  toManifest,
   type ArtifactRow,
   type ChannelIndex,
+  type ChannelIndexEntry,
   type DistributionManifest,
   type ManifestEntry,
 } from "./manifest"
@@ -18,6 +20,9 @@ interface Env {
   DB: D1Database
   MANIFESTS: KVNamespace
   EVENTS: Pipeline
+  // Transitional switch for a two-deploy rollout: "d1" (default) dual-writes KV while reading D1;
+  // "kv" serves lookups exclusively from KV. Removed in a follow-up PR once KV reads are verified.
+  MANIFEST_READS?: "d1" | "kv"
 }
 
 type Artifact = {
@@ -43,16 +48,15 @@ type PublishInput = {
 
 const identifier = /^[a-zA-Z0-9._-]{1,64}$/
 const version = /^[a-zA-Z0-9.+_-]{1,128}$/
-const select =
-  "SELECT channel, name, distribution, version, metadata, active, minimum, time_created, time_updated FROM artifact"
 const audience = "https://update.opencode.ai"
 const githubKeys = createRemoteJWKSet(new URL("https://token.actions.githubusercontent.com/.well-known/jwks"))
 const hosts = ["opencode.ai", "dev.opencode.ai"]
 const prefix = "/update"
 // KV reads are billed per read and this worker handles ~65M requests/day.
-// Cache parsed KV reads per isolate for 60s so each isolate reads each hot key about once a minute;
+// Cache parsed reads per isolate for 60s so each isolate reads each hot key about once a minute;
 // caller-specific selection still runs per request.
 const readTtl = 60_000
+const kvCacheTtl = 30
 const reads = new Map<string, { expires: number; value: unknown }>()
 
 export default {
@@ -92,37 +96,86 @@ export default {
       return new Response("Not found", { status: 404 })
     }
 
-    return lookup(request, env.MANIFESTS, url, path).catch((error) => {
+    return lookup(request, env, url, path).catch((error) => {
       console.error("Update lookup failed", error)
       return json({ error: "Update service temporarily unavailable" }, 503, { "Retry-After": "60" })
     })
   },
 } satisfies ExportedHandler<Env>
 
-async function lookup(request: Request, kv: KVNamespace, url: URL, path: string[]) {
+async function lookup(request: Request, env: Env, url: URL, path: string[]) {
   const resolved = resolveChannel(path[0])
   const agent = request.headers.get("User-Agent")?.match(/^opencode\/(?:([^/]+)\/([^/]+)\/cli|(.*))$/)
   const current = url.searchParams.get("current") ?? agent?.[2] ?? agent?.[3]
   const source = agent?.[1] ?? current?.match(/^v?0\.0\.0-(.+)-\d+(?:\.\d+)?(?:\+.*)?$/)?.[1]
   const caller = source === undefined || resolveChannel(source) === resolved ? current : undefined
-  if (path.length === 4) return artifactDistribution(kv, resolved, path[1], path[2], caller, path[3])
-  if (path.length === 1) return channel(kv, resolved, caller)
-  if (path.length === 2) return artifactName(kv, resolved, path[1], caller)
-  return artifactDistribution(kv, resolved, path[1], path[2], caller)
+  if (env.MANIFEST_READS !== "kv") return lookupD1(env.DB, resolved, path, caller)
+  if (path.length === 1) return channel(env.MANIFESTS, resolved, caller)
+  if (path.length === 2) return artifactName(env.MANIFESTS, resolved, path[1], caller)
+  return artifactDistribution(env.MANIFESTS, resolved, path[1], path[2], caller, path[3])
+}
+
+// Transitional D1 read path kept only for Deploy 1 (dual-write + backfill) before flipping MANIFEST_READS to "kv".
+async function lookupD1(db: D1Database, resolved: string, path: string[], current: string | undefined) {
+  if (path.length === 1) {
+    const artifacts = selectD1Artifacts(await readD1Candidates(db, "channel = ?", [resolved]), current)
+    if (!artifacts.length) return json({ error: "Channel not found" }, 404)
+    return updateResponse({ channel: resolved, artifacts })
+  }
+  if (path.length === 2) {
+    const artifacts = selectD1Artifacts(
+      await readD1Candidates(db, "channel = ? AND name = ?", [resolved, path[1]]),
+      current,
+    )
+    if (!artifacts.length) return json({ error: "Artifact not found" }, 404)
+    return updateResponse({ channel: resolved, name: path[1], artifacts })
+  }
+  const artifact = selectD1Artifacts(
+    await readD1Candidates(db, "channel = ? AND name = ? AND distribution = ?", [resolved, path[1], path[2]]),
+    current,
+  )[0]
+  if (!artifact) return json({ error: "Artifact not found" }, 404)
+  return respondArtifact(artifact, path[3])
+}
+
+function readD1Candidates(db: D1Database, filter: string, values: string[]) {
+  return cachedRead(`d1:${values.join("/")}`, () =>
+    db
+      .prepare(
+        `${selectArtifactColumns} INDEXED BY artifact_active WHERE ${filter} AND active = 1
+         UNION ALL
+         ${selectArtifactColumns} INDEXED BY artifact_minimum WHERE ${filter} AND minimum = 1 AND active = 0
+         ORDER BY name, distribution`,
+      )
+      .bind(...values, ...values)
+      .all<ArtifactRow>()
+      .then((result) => result.results),
+  )
+}
+
+function selectD1Artifacts(rows: ArtifactRow[], current: string | undefined) {
+  const groups = new Map<string, { channel: string; name: string; distribution: string; rows: ArtifactRow[] }>()
+  for (const row of rows) {
+    const key = `${row.name}/${row.distribution}`
+    const group = groups.get(key) ?? {
+      channel: row.channel,
+      name: row.name,
+      distribution: row.distribution,
+      rows: [],
+    }
+    group.rows.push(row)
+    groups.set(key, group)
+  }
+  return [...groups.values()].flatMap((group) => {
+    const manifest = toManifest(group.rows)
+    return manifest ? [selectArtifact(group.channel, group.name, group.distribution, manifest, current)] : []
+  })
 }
 
 async function channel(kv: KVNamespace, channel: string, current: string | undefined) {
   const index = await readIndex(kv, channel)
   if (!index?.entries.length) return json({ error: "Channel not found" }, 404)
-  const manifests = await Promise.all(
-    index.entries.map(async (entry) => ({
-      entry,
-      manifest: await readManifest(kv, channel, entry.name, entry.distribution),
-    })),
-  )
-  const artifacts = manifests.flatMap((item) =>
-    item.manifest ? [selectArtifact(channel, item.entry.name, item.entry.distribution, item.manifest, current)] : [],
-  )
+  const artifacts = await loadArtifacts(kv, channel, index.entries, current)
   if (!artifacts.length) return json({ error: "Channel not found" }, 404)
   return updateResponse({ channel, artifacts })
 }
@@ -131,17 +184,26 @@ async function artifactName(kv: KVNamespace, channel: string, name: string, curr
   const index = await readIndex(kv, channel)
   const entries = index?.entries.filter((entry) => entry.name === name) ?? []
   if (!entries.length) return json({ error: "Artifact not found" }, 404)
+  const artifacts = await loadArtifacts(kv, channel, entries, current)
+  if (!artifacts.length) return json({ error: "Artifact not found" }, 404)
+  return updateResponse({ channel, name, artifacts })
+}
+
+async function loadArtifacts(
+  kv: KVNamespace,
+  channel: string,
+  entries: ChannelIndexEntry[],
+  current: string | undefined,
+) {
   const manifests = await Promise.all(
     entries.map(async (entry) => ({
       entry,
       manifest: await readManifest(kv, channel, entry.name, entry.distribution),
     })),
   )
-  const artifacts = manifests.flatMap((item) =>
+  return manifests.flatMap((item) =>
     item.manifest ? [selectArtifact(channel, item.entry.name, item.entry.distribution, item.manifest, current)] : [],
   )
-  if (!artifacts.length) return json({ error: "Artifact not found" }, 404)
-  return updateResponse({ channel, name, artifacts })
 }
 
 async function artifactDistribution(
@@ -154,34 +216,37 @@ async function artifactDistribution(
 ) {
   const manifest = await readManifest(kv, channel, name, distribution)
   if (!manifest) return json({ error: "Artifact not found" }, 404)
-  const artifact = selectArtifact(channel, name, distribution, manifest, current)
-  if (file) {
-    if (name === "desktop" && /^latest(?:-mac|-linux(?:-arm64)?)?\.yml$/.test(file)) {
-      const value =
-        isRecord(artifact.metadata) && isRecord(artifact.metadata.manifests)
-          ? artifact.metadata.manifests[file.replace(/^latest/, "desktop")]
-          : undefined
-      if (!isRecord(value)) return json({ error: "Manifest not found" }, 404)
-      return new Response(stringify({ ...value, version: artifact.version }), {
-        headers: { "Content-Type": "application/yaml; charset=utf-8", "Cache-Control": "no-store" },
-      })
-    }
-    const entry =
-      isRecord(artifact.metadata) && isRecord(artifact.metadata.files) ? artifact.metadata.files[file] : undefined
-    if (!isRecord(entry) || typeof entry.url !== "string") return json({ error: "File not found" }, 404)
-    return new Response(null, { status: 302, headers: { Location: entry.url, "Cache-Control": "no-store" } })
+  return respondArtifact(selectArtifact(channel, name, distribution, manifest, current), file)
+}
+
+function respondArtifact(artifact: Artifact, file?: string) {
+  if (!file) return updateResponse(artifact)
+  if (artifact.name === "desktop" && /^latest(?:-mac|-linux(?:-arm64)?)?\.yml$/.test(file)) {
+    const value =
+      isRecord(artifact.metadata) && isRecord(artifact.metadata.manifests)
+        ? artifact.metadata.manifests[file.replace(/^latest/, "desktop")]
+        : undefined
+    if (!isRecord(value)) return json({ error: "Manifest not found" }, 404)
+    return new Response(stringify({ ...value, version: artifact.version }), {
+      headers: { "Content-Type": "application/yaml; charset=utf-8", "Cache-Control": "no-store" },
+    })
   }
-  return updateResponse(artifact)
+  const entry =
+    isRecord(artifact.metadata) && isRecord(artifact.metadata.files) ? artifact.metadata.files[file] : undefined
+  if (!isRecord(entry) || typeof entry.url !== "string") return json({ error: "File not found" }, 404)
+  return new Response(null, { status: 302, headers: { Location: entry.url, "Cache-Control": "no-store" } })
 }
 
 function readIndex(kv: KVNamespace, channel: string) {
   const key = indexKey(channel)
-  return cachedRead<ChannelIndex | null>(key, () => kv.get<ChannelIndex>(key, "json"))
+  return cachedRead<ChannelIndex | null>(key, () => kv.get<ChannelIndex>(key, { type: "json", cacheTtl: kvCacheTtl }))
 }
 
 function readManifest(kv: KVNamespace, channel: string, name: string, distribution: string) {
   const key = manifestKey(channel, name, distribution)
-  return cachedRead<DistributionManifest | null>(key, () => kv.get<DistributionManifest>(key, "json"))
+  return cachedRead<DistributionManifest | null>(key, () =>
+    kv.get<DistributionManifest>(key, { type: "json", cacheTtl: kvCacheTtl }),
+  )
 }
 
 function selectArtifact(
@@ -219,7 +284,7 @@ function toArtifact(
     active,
     minimum,
     time_created: entry.time_created,
-    time_updated: entry.time_updated ?? entry.time_created,
+    time_updated: entry.time_updated,
   }
 }
 
@@ -266,106 +331,111 @@ export async function applyPublish(env: Env, input: unknown, claims: GitHubClaim
     },
   }
 
-  try {
-    await writeArtifact(env.DB, record)
-    await syncManifest(env.DB, env.MANIFESTS, record.channel, record.name, record.distribution)
-  } catch (error) {
-    console.error("Failed to publish artifact", error)
-    return json({ error: "Failed to publish artifact" }, 500)
-  }
-
-  return json({ published: true })
+  return publishToStores(env, record)
+    .then(() => json({ published: true }))
+    .catch((error) => {
+      console.error("Failed to publish artifact", error)
+      return json({ error: "Failed to publish artifact" }, 500)
+    })
 }
 
-function writeArtifact(db: D1Database, artifact: PublishInput) {
+async function publishToStores(env: Env, artifact: PublishInput) {
   const time = Date.now()
+  const minimum = artifact.minimum === undefined ? null : artifact.minimum ? 1 : 0
   const statements = [
-    db
-      .prepare("UPDATE artifact SET active = 0 WHERE channel = ? AND name = ? AND distribution = ? AND active = 1")
-      .bind(artifact.channel, artifact.name, artifact.distribution),
-    ...(artifact.minimum === undefined
-      ? [
-          db
-            .prepare(
-              `INSERT INTO artifact (channel, name, distribution, version, metadata, active, time_created, time_updated)
-               VALUES (?, ?, ?, ?, ?, 1, ?, ?)
-               ON CONFLICT (channel, name, distribution, version) DO UPDATE SET
-                 metadata = excluded.metadata, active = 1, time_updated = excluded.time_updated`,
-            )
-            .bind(
-              artifact.channel,
-              artifact.name,
-              artifact.distribution,
-              artifact.version,
-              JSON.stringify(artifact.metadata),
-              time,
-              time,
-            ),
-        ]
+    env.DB.prepare(
+      "UPDATE artifact SET active = 0 WHERE channel = ? AND name = ? AND distribution = ? AND active = 1",
+    ).bind(artifact.channel, artifact.name, artifact.distribution),
+    ...(minimum === null
+      ? []
       : [
-          db
-            .prepare(
-              "UPDATE artifact SET minimum = 0 WHERE channel = ? AND name = ? AND distribution = ? AND minimum = 1",
-            )
-            .bind(artifact.channel, artifact.name, artifact.distribution),
-          db
-            .prepare(
-              `INSERT INTO artifact (channel, name, distribution, version, metadata, active, minimum, time_created, time_updated)
-               VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
-               ON CONFLICT (channel, name, distribution, version) DO UPDATE SET
-                 metadata = excluded.metadata, active = 1, minimum = excluded.minimum, time_updated = excluded.time_updated`,
-            )
-            .bind(
-              artifact.channel,
-              artifact.name,
-              artifact.distribution,
-              artifact.version,
-              JSON.stringify(artifact.metadata),
-              artifact.minimum ? 1 : 0,
-              time,
-              time,
-            ),
+          env.DB.prepare(
+            "UPDATE artifact SET minimum = 0 WHERE channel = ? AND name = ? AND distribution = ? AND minimum = 1",
+          ).bind(artifact.channel, artifact.name, artifact.distribution),
         ]),
+    env.DB.prepare(
+      `INSERT INTO artifact (channel, name, distribution, version, metadata, active, minimum, time_created, time_updated)
+       VALUES (?, ?, ?, ?, ?, 1, COALESCE(?, 0), ?, ?)
+       ON CONFLICT (channel, name, distribution, version) DO UPDATE SET
+         metadata = excluded.metadata,
+         active = 1,
+         minimum = COALESCE(?, artifact.minimum),
+         time_updated = excluded.time_updated`,
+    ).bind(
+      artifact.channel,
+      artifact.name,
+      artifact.distribution,
+      artifact.version,
+      JSON.stringify(artifact.metadata),
+      minimum,
+      time,
+      time,
+      minimum,
+    ),
+    // Read the manifest and channel entries inside the same D1 batch transaction as the writes.
+    env.DB.prepare(
+      `${selectArtifactColumns} INDEXED BY artifact_active WHERE channel = ? AND name = ? AND distribution = ? AND active = 1
+       UNION ALL
+       ${selectArtifactColumns} INDEXED BY artifact_minimum WHERE channel = ? AND name = ? AND distribution = ? AND minimum = 1 AND active = 0`,
+    ).bind(
+      artifact.channel,
+      artifact.name,
+      artifact.distribution,
+      artifact.channel,
+      artifact.name,
+      artifact.distribution,
+    ),
+    env.DB.prepare(
+      `SELECT name, distribution FROM artifact INDEXED BY artifact_active
+       WHERE channel = ? AND active = 1 ORDER BY name, distribution`,
+    ).bind(artifact.channel),
   ]
-  return db.batch(statements)
+
+  const results = await env.DB.batch(statements)
+  const manifestRows = results[results.length - 2].results as ArtifactRow[]
+  const channelRows = results[results.length - 1].results as ChannelIndexEntry[]
+  await syncManifest(env.MANIFESTS, artifact.channel, artifact.name, artifact.distribution, manifestRows, channelRows)
 }
 
-async function syncManifest(db: D1Database, kv: KVNamespace, channel: string, name: string, distribution: string) {
-  const [rows, indexRows] = await Promise.all([
-    db
-      .prepare(
-        `${select} INDEXED BY artifact_active WHERE channel = ? AND name = ? AND distribution = ? AND active = 1
-         UNION ALL
-         ${select} INDEXED BY artifact_minimum WHERE channel = ? AND name = ? AND distribution = ? AND minimum = 1 AND active = 0`,
-      )
-      .bind(channel, name, distribution, channel, name, distribution)
-      .all<ArtifactRow>(),
-    db
-      .prepare(
-        `SELECT name, distribution FROM artifact INDEXED BY artifact_active
-         WHERE channel = ? AND active = 1 ORDER BY name, distribution`,
-      )
-      .bind(channel)
-      .all<{ name: string; distribution: string }>(),
-  ])
-
-  const activeRow = rows.results.find((row) => row.active === 1)
-  if (!activeRow) throw new Error(`Missing active artifact after publish: ${channel}/${name}/${distribution}`)
-  const minimumRow = rows.results.find((row) => row.minimum === 1)
-  const manifest: DistributionManifest = minimumRow
-    ? { active: toManifestEntry(activeRow), minimum: toManifestEntry(minimumRow) }
-    : { active: toManifestEntry(activeRow) }
-  const index: ChannelIndex = {
-    entries: indexRows.results.map((row) => ({ name: row.name, distribution: row.distribution })).sort(compareEntries),
-  }
+async function syncManifest(
+  kv: KVNamespace,
+  channel: string,
+  name: string,
+  distribution: string,
+  manifestRows: ArtifactRow[],
+  channelRows: ChannelIndexEntry[],
+) {
+  const manifest = toManifest(manifestRows)
+  if (!manifest) throw new Error(`Missing active artifact after publish: ${channel}/${name}/${distribution}`)
 
   const mKey = manifestKey(channel, name, distribution)
   const iKey = indexKey(channel)
-  // Write the manifest before the channel index so an index never points to an unwritten manifest.
+  // Write the manifest before updating the channel index so an index never points to an unwritten manifest.
   await kv.put(mKey, JSON.stringify(manifest))
-  await kv.put(iKey, JSON.stringify(index))
+
+  // Only write index:<channel> when an entry from this transaction is missing from KV.
+  // This avoids KV's 1 write/sec/key limit on back-to-back publishes and prevents an earlier
+  // concurrent publish from clobbering a later publish's index entry.
+  const existingRaw = await kv.get(iKey, { cacheTtl: kvCacheTtl })
+  const parsed = existingRaw ? parseMetadata(existingRaw) : undefined
+  const existingEntries =
+    isRecord(parsed) && Array.isArray(parsed.entries) ? (parsed.entries as ChannelIndexEntry[]) : []
+  const present = new Set(existingEntries.map((entry) => `${entry.name}/${entry.distribution}`))
+  if (channelRows.some((entry) => !present.has(`${entry.name}/${entry.distribution}`))) {
+    const merged = new Map<string, ChannelIndexEntry>()
+    for (const entry of existingEntries) merged.set(`${entry.name}/${entry.distribution}`, entry)
+    for (const entry of channelRows) {
+      merged.set(`${entry.name}/${entry.distribution}`, { name: entry.name, distribution: entry.distribution })
+    }
+    const nextRaw = JSON.stringify({ entries: [...merged.values()].sort(compareEntries) } satisfies ChannelIndex)
+    if (nextRaw !== existingRaw) await kv.put(iKey, nextRaw)
+  }
+
   reads.delete(mKey)
   reads.delete(iKey)
+  reads.delete(`d1:${channel}`)
+  reads.delete(`d1:${channel}/${name}`)
+  reads.delete(`d1:${channel}/${name}/${distribution}`)
 }
 
 function parseArtifact(input: Record<string, unknown>): PublishInput | Response {
@@ -453,7 +523,7 @@ async function cachedRead<T>(key: string, load: () => Promise<T>) {
   }
   // Workers ties I/O streams to the request that started the call, so sharing an in-flight
   // promise fails other requests with "Cannot perform I/O on behalf of a different request".
-  // Only settled results are shared. Failed reads throw before they are cached, so the next request retries KV.
+  // Only settled results are shared. Failed reads throw before they are cached, so the next request retries.
   const value = await load()
   const now = Date.now()
   // Lookup paths are caller-controlled identifiers, so bound the number of retained entries.

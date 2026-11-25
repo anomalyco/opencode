@@ -111,7 +111,8 @@ r2_credentials() {
 publish_update() {
   local body status token attempt
   body=$(jq -n --arg channel "$OPENCODE_CHANNEL" --arg version "$OPENCODE_VERSION" --arg name "$1" --arg distribution "$2" \
-    --argjson metadata "$3" '{channel: $channel, name: $name, distribution: $distribution, version: $version, metadata: $metadata}')
+    --argjson metadata "$3" --arg minimum "${OPENCODE_MINIMUM:-}" \
+    '{channel: $channel, name: $name, distribution: $distribution, version: $version, metadata: $metadata} + (if $minimum == "set" then {minimum: true} elif $minimum == "clear" then {minimum: false} else {} end)')
   echo "$body" | jq .
   if dry_run; then return; fi
   token=$(curl -fsS -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \

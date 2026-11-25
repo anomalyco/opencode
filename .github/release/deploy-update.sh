@@ -5,7 +5,7 @@
 #
 # The build job has no secrets, so the bundle is untrusted by design: its code
 # can change freely. The rest of the Worker does not come from the artifact at
-# all: the name, routes, custom domain, D1 database, and Pipelines stream are
+# all: the name, routes, custom domain, D1 database, KV namespace, vars, and Pipelines stream are
 # the complete pinned wrangler.json in targets/update/production/, which is what
 # wrangler reads. Only production deploys this Worker.
 . "$(dirname "$0")/lib.sh"

@@ -15,17 +15,24 @@ as `GET`.
 
 ## Architecture
 
-- **Reads (`GET` / `HEAD /update/api/*`):** Read only from the `MANIFESTS` KV namespace behind
-  a 60-second per-isolate settled-value cache (bounded to 1,000 entries, no in-flight promise
-  sharing). The read path never touches D1.
+- **Reads (`GET` / `HEAD /update/api/*`):** Controlled by the transitional `MANIFEST_READS` var
+  (`"d1"` during dual-write rollout, `"kv"` once backfilled and verified). In `"kv"` mode, reads
+  use only the `MANIFESTS` KV namespace (`cacheTtl: 30`) behind a 60-second per-isolate
+  settled-value cache (bounded to 1,000 entries, no in-flight promise sharing) and never touch D1.
   - Per-distribution manifest key: `manifest:<channel>/<name>/<distribution>` containing
     `{ active, minimum? }` where each entry stores `{ version, metadata, time_created, time_updated }`.
   - Per-channel index key: `index:<channel>` containing `{ entries: [{ name, distribution }] }`
     sorted by `(name, distribution)` for `/api/<channel>` and `/api/<channel>/<name>` listings.
-- **Writes (`POST /update/api/publish`):** Authenticated via GitHub Actions OIDC. Writes the
-  release row to D1 (`DB`) for release history and authoritative active/minimum state, then writes
-  the updated distribution manifest and channel index to KV. If a KV write fails, publish returns
-  500 so the release workflow retries cleanly.
+- **Writes (`POST /update/api/publish`):** Authenticated via GitHub Actions OIDC. Atomically
+  updates D1 (`DB`) and reads the authoritative active/minimum and channel-index snapshot in one
+  `DB.batch` transaction, then writes `manifest:<channel>/<name>/<distribution>` to KV and only
+  updates `index:<channel>` when a new `(name, distribution)` is missing from KV (avoiding KV's
+  1 write/sec/key limit on back-to-back publishes and preventing concurrent publishes from clobbering
+  each other).
+  - **Healing after a KV write failure:** If KV fails after D1 commits, `POST /update/api/publish`
+    returns HTTP 500 so `.github/release/lib.sh` retries up to 3×. If all retries fail (leaving D1
+    ahead of KV for that distribution), re-run the failed publish job or run
+    `bun run kv:backfill -- --remote` to resync KV from D1.
 
 ## Desktop update feeds
 
@@ -45,11 +52,17 @@ and `current`/User-Agent handling also apply to these feeds. Other fourth-segmen
 ## Minimum releases
 
 Each `latest` name/distribution can mark one release as `minimum`, independently of its
-`active` artifact. Pass `"minimum": true` in the `POST /update/api/publish` payload to set the
-published artifact as the minimum (requires `channel: "latest"` and a comparable semver version),
-omit `minimum` on subsequent publishes to preserve the existing minimum, or pass `"minimum": false`
-to clear it. Preview build numbers reset, so `dev` and `beta` cannot set a minimum and lookups
-ignore any existing non-`latest` minimum.
+`active` artifact:
+
+- **On a new `latest` release:** choose `minimum: set` or `minimum: clear` in the
+  `.github/workflows/release.yml` workflow dispatch inputs (omitted preserves the existing minimum).
+  `POST /update/api/publish` accepts `"minimum": true` (requires `channel: "latest"` and a
+  comparable semver version) or `"minimum": false`.
+- **Retroactively on an existing release / single distribution:** update the `minimum` flag in D1
+  with `wrangler d1 execute DB --remote` and run `bun run kv:backfill -- --remote` to sync KV.
+
+Preview build numbers reset, so `dev` and `beta` cannot set a minimum and lookups ignore any
+existing non-`latest` minimum.
 
 Clients send their running version as `?current=<version>` and use the CLI's default
 `User-Agent: opencode/<channel>/<version>/cli`. When `current` is absent, the service
@@ -118,21 +131,32 @@ and environment `release`. Pushes to `dev` may publish only to `dev`; only a
 `workflow_dispatch` on `dev` (a versioned release) may publish to `latest`, and `beta`
 publishes only to `beta`.
 
-## Backfill and deploy
+## Two-deploy rollout, backfill, and deploy
 
-Before deploying the KV-backed Worker to production for the first time, create the `MANIFESTS`
-KV namespace, set its `id` in both `services/update/wrangler.jsonc` and
-`.github/release/targets/update/production/wrangler.json`, and backfill current active and
-minimum rows from D1 into KV:
+Because the CLI auto-updater installs any version that differs from `current`, flipping reads to a
+stale KV namespace would downgrade clients. Roll out in two deploys:
 
-```sh
-npx wrangler kv namespace create MANIFESTS
-bun run kv:backfill -- --remote --dry-run
-bun run kv:backfill -- --remote
-```
+1. **Create the KV namespace** and replace `REPLACE_WITH_KV_NAMESPACE_ID` in both
+   `services/update/wrangler.jsonc` and `.github/release/targets/update/production/wrangler.json`
+   (keeping `"MANIFEST_READS": "d1"`):
+   ```sh
+   npx wrangler kv namespace create MANIFESTS
+   ```
+2. **Deploy 1 (dual-write):** merge/deploy with `"MANIFEST_READS": "d1"`. Every new publish now
+   writes both D1 and KV while reads stay on D1.
+3. **Backfill and verify KV == D1:**
+   ```sh
+   bun run kv:backfill -- --remote --dry-run
+   bun run kv:backfill -- --remote
+   bun run kv:backfill -- --remote --verify
+   ```
+4. **Deploy 2 (flip reads to KV):** change `"MANIFEST_READS"` to `"kv"` in both wrangler configs
+   and deploy.
+5. **Cleanup:** once KV reads are verified in production, delete `MANIFEST_READS` and the
+   transitional D1 read path in a follow-up PR, and remove the unused `update-admin-production`
+   Cloudflare Access application on `opencode.ai/update/admin*`.
 
-The backfill script is idempotent and can also target a namespace ID directly with
-`--namespace-id <id>` or local wrangler state with `--local`.
+The backfill script is idempotent and also accepts `--namespace-id <id>` or `--local`.
 
 Apply migrations and deploy from this directory:
 

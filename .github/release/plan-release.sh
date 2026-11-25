@@ -20,6 +20,14 @@ case "$GITHUB_EVENT_NAME:$GITHUB_REF:$versioned" in
   *) die "$GITHUB_EVENT_NAME on $GITHUB_REF cannot publish (versioned: $versioned)" ;;
 esac
 
+minimum=${INPUT_MINIMUM:-}
+if [ -n "$minimum" ] && [ "$minimum" != set ] && [ "$minimum" != clear ]; then
+  die "Invalid minimum option: $minimum (expected set or clear)"
+fi
+if [ "$minimum" = set ] && [ "$channel" != latest ]; then
+  die "minimum=set is only supported on latest releases"
+fi
+
 if [ "$channel" = latest ] && [ -z "${INPUT_RELEASE_NOTES//[[:space:]]/}" ]; then
   die "Stable releases need release notes; generate them with ./script/release.ts --print"
 fi
@@ -76,4 +84,5 @@ if [ "$channel" = pr ]; then dry_run=true; fi
   echo "desktop=$desktop"
   echo "node=$node"
   echo "release=$release"
+  echo "minimum=$minimum"
 } | tee -a "$GITHUB_OUTPUT"

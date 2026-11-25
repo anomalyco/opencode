@@ -34,6 +34,11 @@ on:
         description: "Reviewed V2 release notes for CHANGELOG.md and the GitHub release (required with bump or version)"
         required: false
         type: string
+      minimum:
+        description: "Set or clear this release as the minimum version on latest (optional)"
+        required: false
+        type: choice
+        options: [set, clear]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}-${{ (inputs.bump || inputs.version) && 'release' || 'build' }}
@@ -63,6 +68,7 @@ jobs:
       desktop: ${{ steps.plan.outputs.desktop }}
       node: ${{ steps.plan.outputs.node }}
       release: ${{ steps.plan.outputs.release }}
+      minimum: ${{ steps.plan.outputs.minimum }}
     steps:
       - &checkout-release
         name: Check out release scripts
@@ -80,6 +86,7 @@ jobs:
           INPUT_BUMP: ${{ inputs.bump }}
           INPUT_VERSION: ${{ inputs.version }}
           INPUT_RELEASE_NOTES: ${{ inputs.release_notes }}
+          INPUT_MINIMUM: ${{ inputs.minimum }}
 
   # ---- Gate: the full check suite, before anything is published ------------------------------------------------
 
@@ -112,6 +119,7 @@ jobs:
       OPENCODE_CHANNEL: ${{ needs.plan.outputs.channel }}
       OPENCODE_NPM_TAG: ${{ needs.plan.outputs.npm_tag }}
       OPENCODE_DRY_RUN: ${{ needs.plan.outputs.dry_run }}
+      OPENCODE_MINIMUM: ${{ needs.plan.outputs.minimum }}
     outputs:
       sha: ${{ steps.tag.outputs.sha || github.sha }}
     steps:

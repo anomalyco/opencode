@@ -37,6 +37,10 @@
       "id": "REPLACE_WITH_KV_NAMESPACE_ID",
     },
   ],
+  "vars": {
+    // Two-deploy rollout: start on "d1" (dual-write D1+KV, read D1), backfill & verify, then flip to "kv".
+    "MANIFEST_READS": "d1",
+  },
   "observability": {
     "enabled": true,
   },
