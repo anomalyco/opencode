@@ -46,6 +46,7 @@ import { Worktree } from "@opencode/schema/worktree"
 import { SessionID } from "@opencode/schema/session-id"
 import { SessionMessage } from "@opencode/schema/session-message"
 import {
+  ClientError,
   isFormAlreadySettledError,
   isFormNotFoundError,
   isMessageNotFoundError,
@@ -124,6 +125,8 @@ type LocationData = {
   // once the command exits or is deleted, so this only ever holds in-flight shells.
   shell?: Record<string, ShellWithLocation>
   skill?: SkillInfo[]
+  // Resolved feature flags the server reports for clients; a flag not listed is off.
+  flags?: Record<string, boolean>
 }
 
 type Store = {
@@ -855,6 +858,13 @@ export function createData(config: CreateDataInput) {
         )
         refresh(() => result.location.vcs.sync())
         refresh(() => result.project.sync())
+        Object.entries(store.location).forEach(([key, data]) => {
+          if (data.flags === undefined) return
+          const ref = JSON.parse(key) as [string, string | null]
+          const location = { directory: ref[0], workspaceID: ref[1] ?? undefined }
+          flags.invalidate(location)
+          refresh(() => flags.sync(location))
+        })
         Object.keys(store.jobTree).forEach((sessionID) => {
           result.job.invalidate(sessionID)
           refresh(() => result.job.sync(sessionID))
@@ -1263,8 +1273,7 @@ export function createData(config: CreateDataInput) {
             error: event.data.error,
             input: typeof tool.state.input === "string" ? {} : tool.state.input,
             metadata: event.data.metadata,
-            content:
-              omitFiles() && event.data.content ? omitFileData(event.data.content) : event.data.content,
+            content: omitFiles() && event.data.content ? omitFileData(event.data.content) : event.data.content,
           }
           tool.executed = event.data.executed || tool.executed === true
           if (event.data.native) tool.native = { ...tool.native, ...event.data.native }
@@ -1564,6 +1573,7 @@ export function createData(config: CreateDataInput) {
       }
       case "config.updated":
         refreshLocation("config", result.location.config, location)
+        refreshLocation("flags", flags, location)
         if (hasLocation("websearch", location)) refresh(() => result.location.websearch.refresh(location))
         break
       case "websearch.updated":
@@ -1580,6 +1590,9 @@ export function createData(config: CreateDataInput) {
       }
       case "mcp.resources.changed":
         refreshLocation("mcpResource", result.location.mcp.resource, location)
+        break
+      case "location.shutdown":
+        refreshLocation("flags", flags, location)
         break
     }
   }
@@ -1635,6 +1648,18 @@ export function createData(config: CreateDataInput) {
 
   const vcs = locationResource("vcs", (location) => api().vcs.get({ location }))
   const usageLimits = locationResource("usageLimits", (location) => api().experimental.usage.limits({ location }))
+  // A server older than the flag endpoint answers it with a 404 and no JSON body: every flag is off there.
+  const flags = locationResource(
+    "flags",
+    (location) =>
+      api()
+        .experimental.flag.get({ location })
+        .catch((error) => {
+          if (!missingEndpoint(error)) throw error
+          return { location: { directory: location.directory }, data: {} }
+        }),
+    { alias: true },
+  )
   const shells = locationResource("shell", async (location) => {
     const response = await api().shell.list({ location })
     const ref = { directory: response.location.directory }
@@ -2394,9 +2419,12 @@ export function createData(config: CreateDataInput) {
         })
       },
       async sync(ref?: LocationRef) {
-        await result.location.syncInfo(ref)
+        // With a known location, flags load alongside its info rather than after it.
+        const early = ref ? flags.sync(ref) : undefined
+        await Promise.all([result.location.syncInfo(ref), early])
         const location = ref ?? defaultLocation()
         await Promise.all([
+          early ?? flags.sync(location),
           result.location.vcs.sync(location),
           result.location.agent.sync(location),
           result.location.command.sync(location),
@@ -2425,10 +2453,15 @@ export function createData(config: CreateDataInput) {
         result.location.provider.invalidate(location)
         result.location.reference.invalidate(location)
         result.location.skill.invalidate(location)
+        flags.invalidate(location)
         result.shell.invalidate(location)
         result.session.form.invalidate("global", location)
       },
       vcs: { info: vcs.list, sync: vcs.sync, invalidate: vcs.invalidate },
+      flag(key: string, ref?: LocationRef) {
+        return flags.list(ref)?.[key] === true
+      },
+      flags: { list: flags.list, sync: flags.sync, invalidate: flags.invalidate },
       usage: { limits: usageLimits.list, sync: usageLimits.sync, invalidate: usageLimits.invalidate },
       agent: locationResource("agent", (location) => api().agent.list({ location })),
       command: locationResource("command", (location) => api().command.list({ location })),
@@ -2477,3 +2510,9 @@ export function createData(config: CreateDataInput) {
 }
 
 export type Data = ReturnType<typeof createData>
+
+function missingEndpoint(error: unknown) {
+  if (!(error instanceof ClientError)) return false
+  if (error.reason === "UnexpectedStatus") return (error.cause as { status?: number } | undefined)?.status === 404
+  return error.reason === "UnsupportedContentType" || error.reason === "MalformedResponse"
+}

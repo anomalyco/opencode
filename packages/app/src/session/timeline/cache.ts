@@ -120,6 +120,7 @@ export function createTimelineCache(
                 get agents() {
                   return agents()
                 },
+                flag: data.flag,
                 navigateToSession: data.navigateToSession,
                 sessionHref: data.sessionHref,
                 readMedia: data.readMedia,
