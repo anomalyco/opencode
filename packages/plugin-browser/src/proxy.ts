@@ -14,30 +14,52 @@ import { Schema } from "effect"
 import { BrowserProxyMachine } from "./proxy-machine.js"
 import { Browser } from "./rpc.js"
 
+/** Legacy chunked RPC transport. */
 export type Transport = {
   open(target: Browser.TunnelTarget, signal: AbortSignal): Promise<string>
   read(id: string, signal: AbortSignal): Promise<Browser.TunnelRead>
   write(id: string, data: Uint8Array, end: boolean, signal: AbortSignal): Promise<void>
   close(id: string): Promise<void>
 }
+
+/** Streaming duplex transport backed by the prewarmed binary WebSocket multiplexer. */
+export type StreamTransport = {
+  openStream(target: Browser.TunnelTarget, signal: AbortSignal): Promise<Duplex>
+  /** Optional hook invoked when the underlying tunnel disconnects so idle pooled sockets are evicted immediately. */
+  onReset?(listener: () => void): () => void
+}
+
+export type ProxyTransport = Transport | StreamTransport
 export type Proxy = Awaited<ReturnType<typeof make>>
 
+const MAX_POOLED_ORIGINS = 64
+const MAX_SOCKETS_PER_ORIGIN = 8
+const MAX_FREE_SOCKETS_PER_ORIGIN = 6
+const IDLE_POOL_SOCKET_TIMEOUT_MS = 30_000
+
+function isStreamTransport(transport: ProxyTransport): transport is StreamTransport {
+  return "openStream" in transport
+}
+
 // Desktop-only leaf. This listener is never loaded by the server plugin.
-export async function make(transport: Transport) {
+export async function make(transport: ProxyTransport) {
   const username = randomBytes(16).toString("hex")
   const password = randomBytes(32).toString("hex")
   const expected = Buffer.from(`Basic ${Buffer.from(`${username}:${password}`).toString("base64")}`)
   const clients = new Set<Duplex>()
   const tunnels = new Set<Duplex>()
   const pending = new Set<AbortController>()
+  const originPools = new Map<string, Agent>()
   const closed = Promise.withResolvers<void>()
   let state = BrowserProxyMachine.initial
+
   const authorized = (value: string | undefined) => {
     if (!value) return false
     const actual = Buffer.from(value)
     return actual.length === expected.length && timingSafeEqual(actual, expected)
   }
-  const connect = async (target: Browser.TunnelTarget, signal: AbortSignal) => {
+
+  const connect = async (destination: Browser.TunnelTarget, signal: AbortSignal) => {
     if (!BrowserProxyMachine.admits(state)) throw new Error("Browser proxy is closed")
     const abort = new AbortController()
     const cancel = () => abort.abort()
@@ -45,8 +67,9 @@ export async function make(transport: Transport) {
     if (signal.aborted) cancel()
     pending.add(abort)
     try {
-      const id = await transport.open(target, abort.signal)
-      const socket = new TunnelSocket(transport, id)
+      const socket = isStreamTransport(transport)
+        ? await transport.openStream(destination, abort.signal)
+        : new TunnelSocket(transport, await transport.open(destination, abort.signal))
       if (!BrowserProxyMachine.admits(state) || abort.signal.aborted) {
         socket.destroy()
         throw new Error("Browser proxy connection was cancelled")
@@ -59,11 +82,78 @@ export async function make(transport: Transport) {
       signal.removeEventListener("abort", cancel)
     }
   }
+
+  const clearPools = () => {
+    for (const agent of originPools.values()) agent.destroy()
+    originPools.clear()
+  }
+
+  const offReset = isStreamTransport(transport) ? transport.onReset?.(clearPools) : undefined
+
+  /**
+   * Returns a per-origin HTTP/1.1 keep-alive Agent scoped strictly to this attachment's proxy.
+   * Each origin key is canonicalized `host:port`; sockets are never shared across origins or attachments.
+   */
+  const agentForOrigin = (destination: Browser.TunnelTarget) => {
+    const key = `${destination.host.toLowerCase()}:${destination.port}`
+    const existing = originPools.get(key)
+    if (existing) {
+      // Refresh LRU order.
+      originPools.delete(key)
+      originPools.set(key, existing)
+      return existing
+    }
+    if (originPools.size >= MAX_POOLED_ORIGINS) {
+      const oldest = originPools.keys().next().value
+      if (oldest !== undefined) {
+        originPools.get(oldest)?.destroy()
+        originPools.delete(oldest)
+      }
+    }
+    const agent = new Agent({
+      keepAlive: true,
+      keepAliveMsecs: 15_000,
+      maxSockets: MAX_SOCKETS_PER_ORIGIN,
+      maxFreeSockets: MAX_FREE_SOCKETS_PER_ORIGIN,
+      timeout: IDLE_POOL_SOCKET_TIMEOUT_MS,
+      scheduling: "lifo",
+    })
+    // Intercept async socket creation so each pooled socket dials through the attachment's tunnel.
+    const createConnection = (
+      _options: unknown,
+      callback?: (error: Error | null, socket?: Duplex) => void,
+    ) => {
+      const abort = new AbortController()
+      if (!callback) throw new Error("Browser proxy pool requires async createConnection callback")
+      void connect(destination, abort.signal).then(
+        (socket) => {
+          // Half-open sockets whose upstream server closes them while idle must leave the pool immediately.
+          socket.once("end", () => {
+            if (!socket.destroyed) socket.destroy()
+          })
+          callback(null, socket)
+        },
+        (error: unknown) => callback(asError(error)),
+      )
+      return undefined as unknown as Duplex
+    }
+    // SAFETY: Node's http.Agent invokes `createConnection(options, callback)` when a callback is accepted.
+    // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion
+    agent.createConnection = createConnection as unknown as typeof agent.createConnection
+    originPools.set(key, agent)
+    return agent
+  }
+
   const server = createServer({ maxHeaderSize: 64 * 1024 }, (incoming, response) => {
-    void forward(incoming, response, connect, authorized).catch(() => {
+    void forward(incoming, response, agentForOrigin, authorized).catch((error: unknown) => {
       if (!response.headersSent) {
-        response.writeHead(502)
-        response.end()
+        const body = error instanceof Error ? error.message.slice(0, 256) : "Bad Gateway"
+        response.writeHead(502, {
+          connection: "close",
+          "content-type": "text/plain; charset=utf-8",
+          "content-length": String(Buffer.byteLength(body)),
+        })
+        response.end(body)
         return
       }
       response.destroy()
@@ -71,6 +161,7 @@ export async function make(transport: Transport) {
   })
   server.requestTimeout = 30_000
   server.headersTimeout = 10_000
+  server.keepAliveTimeout = 30_000
   server.on("connection", (socket) => {
     // A backlog connection can surface while the server drains after `close()`.
     if (!BrowserProxyMachine.admits(state)) {
@@ -78,6 +169,7 @@ export async function make(transport: Transport) {
       return
     }
     clients.add(socket)
+    socket.setNoDelay(true)
     socket.on("error", () => socket.destroy())
     socket.once("close", () => clients.delete(socket))
   })
@@ -156,10 +248,13 @@ export async function make(transport: Transport) {
     host: "127.0.0.1",
     port: address.port,
     credentials: { username, password },
+    resetPools: clearPools,
     close() {
       const next = BrowserProxyMachine.transition(state, { type: "close" })
       state = next.state
       next.effects.forEach(() => {
+        offReset?.()
+        clearPools()
         pending.forEach((abort) => abort.abort())
         tunnels.forEach((socket) => socket.destroy())
         clients.forEach((socket) => socket.destroy())
@@ -173,52 +268,75 @@ export async function make(transport: Transport) {
 async function forward(
   incoming: IncomingMessage,
   response: ServerResponse,
-  connect: (target: Browser.TunnelTarget, signal: AbortSignal) => Promise<Duplex>,
+  agentForOrigin: (target: Browser.TunnelTarget) => Agent,
   authorized: (value: string | undefined) => boolean,
 ) {
   if (!authorized(incoming.headers["proxy-authorization"])) {
-    response.writeHead(407, { "Proxy-Authenticate": 'Basic realm="OpenCode Browser Proxy"' })
+    response.writeHead(407, {
+      "Proxy-Authenticate": 'Basic realm="OpenCode Browser Proxy"',
+      "Content-Length": "0",
+      Connection: "close",
+    })
     response.end()
     return
   }
   const url = parseURL(incoming.url)
   if (!url || url.protocol !== "http:") {
-    response.writeHead(400)
+    response.writeHead(400, { "Content-Length": "0", Connection: "close" })
     response.end()
     return
   }
+  const destination = target(url)
+  const agent = agentForOrigin(destination)
   const abort = new AbortController()
-  const cancel = () => abort.abort()
+  let finished = false
+  const cancel = () => {
+    if (!finished) abort.abort()
+  }
   incoming.once("aborted", cancel)
   response.once("close", cancel)
-  const agent = new Agent({ keepAlive: false, maxSockets: 1 })
-  // An abort before the request adopts the tunnel leaves it out of `agent.destroy()`.
-  let opened: Duplex | undefined
+  const headers = forwardedHeaders(incoming.headers)
+  headers.host = url.host
+  // Keep upstream HTTP/1.1 connections warm per origin/attachment; Node's Agent honours upstream `Connection: close`.
+  headers.connection = "keep-alive"
+  const clientWantsClose =
+    incoming.httpVersion === "1.0" ||
+    /\bclose\b/i.test(incoming.headers.connection ?? "") ||
+    /\bclose\b/i.test(String(incoming.headers["proxy-connection"] ?? ""))
+
   try {
-    const tunnel = await connect(target(url), abort.signal)
-    opened = tunnel
-    agent.createConnection = () => tunnel
-    const headers = forwardedHeaders(incoming.headers)
-    headers.host = url.host
-    headers.connection = "close"
     await new Promise<void>((resolve, reject) => {
       const upstream = request(
         {
           agent,
           hostname: url.hostname,
-          port: url.port || 80,
+          port: destination.port,
           path: `${url.pathname}${url.search}`,
           method: incoming.method,
           headers,
           signal: abort.signal,
         },
         (result) => {
-          response.writeHead(result.statusCode ?? 502, result.statusMessage, {
-            ...forwardedHeaders(result.headers),
-            connection: "close",
+          const status = result.statusCode ?? 502
+          const bodyless = status === 204 || status === 304 || incoming.method === "HEAD"
+          const explicitLength =
+            result.headers["content-length"] !== undefined || result.headers["transfer-encoding"] !== undefined
+          const responseHeaders = forwardedHeaders(result.headers)
+          // Keep the local Chromium <-> proxy connection alive whenever framing is explicit and client allows it.
+          if (clientWantsClose || (!bodyless && !explicitLength)) {
+            responseHeaders.connection = "close"
+          } else {
+            responseHeaders.connection = "keep-alive"
+          }
+          response.writeHead(status, result.statusMessage, responseHeaders)
+          result.once("error", (error) => {
+            upstream.destroy()
+            reject(error)
           })
-          result.once("error", reject)
-          response.once("finish", resolve)
+          response.once("finish", () => {
+            finished = true
+            resolve()
+          })
           result.pipe(response)
         },
       )
@@ -228,8 +346,6 @@ async function forward(
   } finally {
     incoming.off("aborted", cancel)
     response.off("close", cancel)
-    agent.destroy()
-    opened?.destroy()
   }
 }
 
@@ -268,6 +384,7 @@ class TunnelSocket extends Duplex {
   readonly connecting = false
   private readonly abort = new AbortController()
   private reads: BrowserProxyMachine.ReadState = "idle"
+  private idleTimer?: ReturnType<typeof setTimeout>
 
   constructor(
     private readonly transport: Transport,
@@ -318,6 +435,10 @@ class TunnelSocket extends Duplex {
     )
   }
   override _destroy(error: Error | null, callback: (error?: Error | null) => void) {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer)
+      this.idleTimer = undefined
+    }
     this.advance("destroyed")
     this.abort.abort()
     void this.transport
@@ -331,8 +452,21 @@ class TunnelSocket extends Duplex {
   setNoDelay() {
     return this
   }
-  setTimeout(_timeout: number, callback?: () => void) {
+  setTimeout(timeout: number, callback?: () => void) {
+    if (this.idleTimer) {
+      clearTimeout(this.idleTimer)
+      this.idleTimer = undefined
+    }
+    if (timeout === 0) {
+      if (callback) this.off("timeout", callback)
+      return this
+    }
     if (callback) this.once("timeout", callback)
+    this.idleTimer = setTimeout(() => {
+      this.idleTimer = undefined
+      this.emit("timeout")
+    }, timeout)
+    this.idleTimer.unref?.()
     return this
   }
   ref() {

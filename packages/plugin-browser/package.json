@@ -21,7 +21,9 @@
     "./rpc": "./src/rpc.ts",
     "./workspace": "./src/workspace.ts",
     "./preview-path": "./src/preview-path.ts",
-    "./proxy": "./src/proxy.ts"
+    "./proxy": "./src/proxy.ts",
+    "./stream": "./src/stream.ts",
+    "./tunnel-host": "./src/tunnel-host.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.build.json",

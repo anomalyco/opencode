@@ -251,6 +251,7 @@ import type {
   ExperimentalMediaGetOutput,
   ExperimentalBlobGetInput,
   ExperimentalBlobGetOutput,
+  ExperimentalBrowserTunnelOutput,
   ExperimentalAutomationCreateInput,
   ExperimentalAutomationCreateOutput,
   ExperimentalAutomationListInput,
@@ -1580,6 +1581,19 @@ export function make(options: ClientOptions) {
               declaredStatuses: [400, 401, 404],
               empty: false,
               binary: true,
+            },
+            requestOptions,
+          ),
+      },
+      browser: {
+        tunnel: (requestOptions?: RequestOptions) =>
+          request<ExperimentalBrowserTunnelOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/browser/tunnel`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403],
+              empty: false,
             },
             requestOptions,
           ),

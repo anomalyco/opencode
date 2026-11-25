@@ -1,5 +1,6 @@
 import { ArtifactEndpoints } from "./artifact.js"
 import { BlobGetEndpoint } from "./blob.js"
+import { BrowserTunnelEndpoint } from "./browser-tunnel.js"
 import { AutomationEndpoints } from "./automation.js"
 import { JobEndpoints } from "./job.js"
 import { MachineEndpoints } from "./machine.js"
@@ -10,6 +11,7 @@ import { PersistentPtyGroup } from "./persistent-pty.js"
 export const ExperimentalGroup = PersistentPtyGroup.add(
   MediaGetEndpoint,
   BlobGetEndpoint,
+  BrowserTunnelEndpoint,
   ...AutomationEndpoints,
   ...ArtifactEndpoints,
   ...JobEndpoints,

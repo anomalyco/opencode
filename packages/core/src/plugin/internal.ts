@@ -110,6 +110,8 @@ import { WellKnown } from "../wellknown.js"
 import { WriteTool } from "../tool/plugin/write.js"
 import { AgentPlugin } from "./agent.js"
 import BrowserPlugin from "@opencode/plugin-browser"
+import { BrowserTunnelHost } from "@opencode/plugin-browser/tunnel-host"
+import { BrowserTunnelGateway } from "../browser-tunnel.js"
 import { CommandPlugin } from "./command.js"
 import { IdentityPlugin } from "./identity.js"
 import { ForkNoticePlugin } from "./fork-notice.js"
@@ -139,6 +141,7 @@ const services = [
   FetchHttpClient.Fetch,
   Artifact.Service,
   AppProcess.Service,
+  BrowserTunnelGateway.Service,
   BlobStore.Service,
   Provider.Service,
   Model.Service,
@@ -203,6 +206,7 @@ export const requirements = LayerNode.group([
   App.node,
   Artifact.node,
   AppProcess.node,
+  BrowserTunnelGateway.node,
   BlobStore.node,
   Provider.node,
   Model.node,
@@ -343,12 +347,20 @@ export const guarded: ReadonlySet<string> = new Set([OpencodePlugin.id, ConfigPo
 export const list = Effect.fn("PluginInternal.list")(function* () {
   // Capture only services; activation supplies the child Scope and batching context.
   const context = Context.pick(...services)(yield* Effect.context<Requirements>())
+  const gateway = Context.get(context, BrowserTunnelGateway.Service)
+  const flags = Context.get(context, Flag.Service)
+  const browserContext = Context.add(
+    context,
+    BrowserTunnelHost.Reference,
+    gateway.hostForLocation(flags.enabled("browser_stream_tunnel")),
+  )
   const resolve = (plugins: readonly InternalPlugin[]) =>
     plugins.map(
       (plugin) =>
         ({
           id: plugin.id,
-          effect: (host) => plugin.effect(host).pipe(Effect.provide(context)),
+          effect: (host) =>
+            plugin.effect(host).pipe(Effect.provide(plugin.id === BrowserPlugin.id ? browserContext : context)),
           revision: "internal",
           source: { type: "builtin" },
         }) satisfies Generation,

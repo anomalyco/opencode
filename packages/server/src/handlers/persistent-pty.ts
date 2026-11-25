@@ -19,6 +19,7 @@ import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
 import { makeArtifact } from "./artifact"
 import { makeBlobGet } from "./blob"
+import { makeBrowserTunnel } from "./browser-tunnel"
 import { makeAutomation } from "./automation"
 import { makeJob } from "./job"
 import { makeMachine, makeMachineLink } from "./machine"
@@ -37,10 +38,12 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const automation = yield* makeAutomation
     const machine = yield* makeMachine
     const machineLink = yield* makeMachineLink
+    const browserTunnel = yield* makeBrowserTunnel
 
     return handlers
       .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
       .handleRaw("blob.get", (ctx) => blobGet(ctx.params.id, ctx.request))
+      .handleRaw("browser.tunnel", (ctx) => browserTunnel(ctx.request))
       .handle("job.list", (ctx) => job.list(ctx.query))
       .handle("job.cancel", (ctx) => job.cancel(ctx.params.id))
       .handleRaw("machine.link", (ctx) => machineLink(ctx.request))

@@ -12585,6 +12585,59 @@
         "summary": "Read a blob"
       }
     },
+    "/api/experimental/browser/tunnel": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.browser.tunnel",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Upgrade to a binary WebSocket carrying multiplexed TCP streams for one live desktop browser attachment. Requires a short-lived, single-use attachment-bound ticket in the x-opencode-browser-ticket header minted through authenticated browser RPC. Never accepts a session ID or browser cookie alone. Experimental: may change without compatibility guarantees.",
+        "summary": "Open a browser attachment binary stream tunnel",
+        "x-websocket": true
+      }
+    },
     "/api/experimental/automation": {
       "post": {
         "tags": ["experimental"],
@@ -18016,6 +18069,9 @@
                 "type": "boolean"
               },
               "sqlite_fts": {
+                "type": "boolean"
+              },
+              "browser_stream_tunnel": {
                 "type": "boolean"
               },
               "video_generate": {
