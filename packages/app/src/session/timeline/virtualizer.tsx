@@ -144,8 +144,11 @@ type Input = {
   /** Pages the timeline for keys pressed outside it, such as PageUp in the composer. */
   setPage?: (fn: (direction: 1 | -1) => void) => void
   reveal?: TimelineRouteReveal
-  /** A link or a jump still has its place to put under the view. The cold mount stays hidden until it has. */
-  landing?: () => boolean
+  /**
+   * A link or a jump still has its place to put under the view: `soon`, in a few frames, or once history has paged
+   * to it. The cold mount stays hidden until it has.
+   */
+  landing?: () => "soon" | "paging" | undefined
 }
 
 /** A tool call the route asks this timeline to open on; `consume` marks its history entry attempted. */
@@ -767,7 +770,7 @@ export function createTimelineVirtualizer(input: Input) {
   // under the view, or once the cursor has given up on it.
   createEffect(
     on(
-      () => input.landing?.() ?? false,
+      () => !!input.landing?.(),
       (landing) => {
         if (!landing) dispatchCold(CHECK_REQUESTED)
       },
@@ -1103,7 +1106,10 @@ export function createTimelineVirtualizer(input: Input) {
 
     if (effect.type === "timer.start") {
       clearTimeout(revealTimer)
-      revealTimer = setTimeout(() => dispatchCold({ type: "timeout", attempt: effect.attempt }), COLD_REVEAL_TIMEOUT)
+      revealTimer = setTimeout(
+        () => dispatchCold({ type: "timeout", attempt: effect.attempt, landing: input.landing?.() === "soon" }),
+        COLD_REVEAL_TIMEOUT,
+      )
 
       return
     }

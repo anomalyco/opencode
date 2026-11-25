@@ -1085,50 +1085,109 @@ test.describe("timeline history", () => {
   // A session that opens on a link waits for two things: its rows, and the link's prompt under the view. With a short
   // newest reply the rows were ready first, and the timeline showed the session's end for about 60 ms before it went
   // to the prompt.
-  test("a link that opens the session shows its prompt in place from the first frame", async ({ page }) => {
+  for (const newTimeline of [false, true]) {
+    test(`a link that opens the session shows its prompt in place from the first frame (${newTimeline ? "New" : "current"} timeline)`, async ({
+      page,
+    }) => {
+      const messages = validateTimelineMessages([
+        ...historyMessages(20),
+        userMessage(),
+        assistantMessage([textPart("prt_first_frame_tail", "Latest answer")]),
+      ])
+
+      const prompt = messages.filter((message) => message.type === "user")[5]!.id
+      const selector = `[data-timeline-row="UserMessage"][data-message-id="${prompt}"]`
+
+      // Where the prompt is against the header's lower edge, in each frame from the first one that shows a row: one
+      // that a click in the upper part of the timeline would reach.
+      await page.addInitScript((selector) => {
+        if (!sessionStorage.getItem("first-frames")) return
+        const frames: (number | null)[] = []
+        Object.assign(window, { firstFrames: frames })
+
+        const sample = () => {
+          const content = document.querySelector("[data-timeline-virtual-content]")
+          const view = content?.closest(".scroll-view__viewport")
+          const box = view?.getBoundingClientRect()
+
+          const shown =
+            box &&
+            document.elementFromPoint(box.x + box.width / 2, box.y + box.height * 0.35)?.closest("[data-timeline-key]")
+
+          if (content && view && shown && view.contains(shown) && getComputedStyle(content).visibility === "visible") {
+            const row = document.querySelector(selector)
+            const title = document.querySelector("[data-session-title]")
+            frames.push(
+              row && title ? Math.round(row.getBoundingClientRect().top - title.getBoundingClientRect().bottom) : null,
+            )
+          }
+
+          if (frames.length < 12) requestAnimationFrame(sample)
+        }
+
+        requestAnimationFrame(sample)
+      }, selector)
+      await setupTimeline(page, { sessionMessages: messages, settings: { newTimeline } })
+      await expect(page.getByText("Latest answer", { exact: true })).toBeInViewport()
+
+      // The same session again from a link, with nothing measured.
+      await page.evaluate((id) => {
+        sessionStorage.setItem("first-frames", "1")
+        location.hash = `#message-${id}`
+      }, prompt)
+      await page.reload()
+      const frames = () => page.evaluate(() => (window as unknown as { firstFrames?: (number | null)[] }).firstFrames)
+      await expect.poll(async () => (await frames())?.length).toBe(12)
+      expect(await frames()).toEqual(Array.from({ length: 12 }, () => 0))
+      expect(await page.evaluate(() => location.hash)).toBe(`#message-${prompt}`)
+    })
+  }
+
+  // At phone width a link that opened a session lost its fragment in 1 of 6 opens of the new timeline: the session
+  // showed its end, and a history.replaceState had cleared the link.
+  test("a link that opens the session at phone width keeps its fragment and shows its prompt (New timeline)", async ({
+    page,
+  }) => {
     const messages = validateTimelineMessages([
       ...historyMessages(20),
       userMessage(),
-      assistantMessage([textPart("prt_first_frame_tail", "Latest answer")]),
+      // Taller than the window, so the prompt is not within sight of the end once the reply has its size.
+      assistantMessage([
+        textPart("prt_phone_tail", Array.from({ length: 120 }, (_, index) => `Paragraph ${index}.`).join("\n\n")),
+      ]),
     ])
 
-    const prompt = messages.filter((message) => message.type === "user")[5]!.id
-    const selector = `[data-timeline-row="UserMessage"][data-message-id="${prompt}"]`
+    const selector = `[data-timeline-row="UserMessage"][data-message-id="${userID}"]`
 
-    // Where the prompt is against the header's lower edge, in each frame from the first one that shows the timeline.
-    await page.addInitScript((selector) => {
-      if (!sessionStorage.getItem("first-frames")) return
-      const frames: (number | null)[] = []
-      Object.assign(window, { firstFrames: frames })
-
-      const sample = () => {
-        const content = document.querySelector("[data-timeline-virtual-content]")
-
-        if (content && getComputedStyle(content).visibility === "visible") {
-          const row = document.querySelector(selector)
-          const title = document.querySelector("[data-session-title]")
-          frames.push(
-            row && title ? Math.round(row.getBoundingClientRect().top - title.getBoundingClientRect().bottom) : null,
-          )
-        }
-
-        if (frames.length < 12) requestAnimationFrame(sample)
-      }
-
-      requestAnimationFrame(sample)
-    }, selector)
-    await setupTimeline(page, { sessionMessages: messages })
-    await expect(page.getByText("Latest answer", { exact: true })).toBeInViewport()
+    await setupTimeline(page, {
+      sessionMessages: messages,
+      viewport: { width: 590, height: 850 },
+      deviceScaleFactor: 1.5,
+      settings: { newTimeline: true },
+    })
+    await expect(page.getByText("Paragraph 119.", { exact: true })).toBeInViewport()
 
     // The same session again from a link, with nothing measured.
-    await page.evaluate((id) => {
-      sessionStorage.setItem("first-frames", "1")
-      location.hash = `#message-${id}`
-    }, prompt)
+    await page.evaluate((id) => (location.hash = `#message-${id}`), userID)
     await page.reload()
-    const frames = () => page.evaluate(() => (window as unknown as { firstFrames?: (number | null)[] }).firstFrames)
-    await expect.poll(async () => (await frames())?.length).toBe(12)
-    expect(await frames()).toEqual(Array.from({ length: 12 }, () => 0))
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    await expect(page.locator(selector)).toBeInViewport()
+    await waitForVisualSettle(page, [selector], 6)
+    expect(await page.evaluate(() => location.hash)).toBe(`#message-${userID}`)
+
+    // The prompt is at the top of the part the timeline shows.
+    expect(
+      await page.locator(selector).evaluate((element) => {
+        const view = element.closest(".scroll-view__viewport")!
+
+        // The viewport declares no scroll padding where no header lies over it.
+        return Math.round(
+          element.getBoundingClientRect().top -
+            view.getBoundingClientRect().top -
+            (parseFloat(getComputedStyle(view).scrollPaddingTop) || 0),
+        )
+      }),
+    ).toBe(0)
   })
 
   // The timeline shows after three seconds whatever has rendered. A link's prompt near the session's end then stands

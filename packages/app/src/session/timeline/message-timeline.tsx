@@ -102,7 +102,7 @@ type MessageTimelineProps = {
   setScrollTo?: (fn: (top: number, behavior: ScrollBehavior) => void) => void
   setPage?: (fn: (direction: 1 | -1) => void) => void
   reveal?: TimelineRouteReveal
-  landing?: () => boolean
+  landing?: () => "soon" | "paging" | undefined
   search?: JSX.Element
 }
 

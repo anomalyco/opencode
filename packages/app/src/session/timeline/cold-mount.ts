@@ -1,6 +1,8 @@
 // A pinned timeline without cached measurements mounts hidden: first only the cheap tail, then the full range, and it
 // reveals once a pass finds every row measured, Markdown ready and the view at its end. The fallback timer bounds that
-// wait, so a block that never reports ready or a gate that never clears cannot leave the timeline invisible.
+// wait, so a block that never reports ready or a gate that never clears cannot leave the timeline invisible. A link
+// that is a few frames from putting its place under the view gets one more wait of the same length: on a machine
+// slow enough to need it, the fallback showed the session's end and the view then jumped to the link's prompt.
 export const COLD_REVEAL_TIMEOUT = 3_000
 
 type Hidden = {
@@ -11,6 +13,8 @@ type Hidden = {
   readonly checking: boolean
   /** A batched row-size commit is running; its per-row scroll writes wait for one pin after it. */
   readonly flushing: boolean
+  /** The fallback timer ran out once while a link was about to land, and runs once more. */
+  readonly extended: boolean
 }
 
 export type ColdMountState =
@@ -33,7 +37,8 @@ export type ColdMountEvent =
   | { readonly type: "check.sampled"; readonly attempt: number; readonly sample: ColdMountSample }
   | { readonly type: "sizes.flushing" }
   | { readonly type: "sizes.flushed" }
-  | { readonly type: "timeout"; readonly attempt: number }
+  /** The fallback timer ran out. `landing`: a link is a few frames from putting its place under the view. */
+  | { readonly type: "timeout"; readonly attempt: number; readonly landing: boolean }
   | { readonly type: "disposed" }
 
 export type ColdMountEffect =
@@ -72,7 +77,7 @@ export const DISPOSED: ColdMountEvent = { type: "disposed" }
 export function createColdMountState(cold: boolean): ColdMountState {
   if (!cold) return revealed
 
-  return { type: "measuring-tail", attempt: 0, active: false, checking: false, flushing: false }
+  return { type: "measuring-tail", attempt: 0, active: false, checking: false, flushing: false, extended: false }
 }
 
 export function transitionColdMount(state: ColdMountState, event: ColdMountEvent): ColdMountTransition {
@@ -94,7 +99,7 @@ export function transitionColdMount(state: ColdMountState, event: ColdMountEvent
     const attempt = state.attempt + 1
 
     return {
-      state: { ...state, attempt, active: true, checking: true },
+      state: { ...state, attempt, active: true, checking: true, extended: false },
       effects: [
         { type: "timer.start", attempt },
         { type: "check.schedule", attempt },
@@ -128,6 +133,9 @@ export function transitionColdMount(state: ColdMountState, event: ColdMountEvent
 
   if (event.type === "timeout") {
     if (!current(state, event.attempt)) return quiet(state)
+
+    if (event.landing && !state.extended)
+      return { state: { ...state, extended: true }, effects: [{ type: "timer.start", attempt: state.attempt }] }
 
     return { state: revealed, effects: [{ type: "release" }, { type: "pin" }] }
   }
