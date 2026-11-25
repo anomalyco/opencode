@@ -496,6 +496,71 @@ test("⌘⇧S archives the open session and moves to the next tab", async ({ pag
   await expect(page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)).toBeVisible()
 })
 
+test("⌘⇧S toggles archive on the open session, and Unarchive session has its own command", async ({ page }) => {
+  const archived = { ...a, time: { created: Date.now(), archived: Date.now() } }
+  const workspace = await mockWorkspace(page, {
+    name: "UnarchiveShortcut",
+    sessions: [archived, b],
+    seed: { tabs: [a.id, b.id] },
+  })
+  await page.goto(sessionHref(a.id))
+  await expectSessionTitle(page, a.title)
+
+  const update = () =>
+    page.waitForRequest(
+      (request) => request.method() === "PATCH" && new URL(request.url()).pathname === `/api/session/${a.id}`,
+    )
+
+  // The mock doesn't announce updates, so send the server's event once the request lands.
+  const unarchived = () =>
+    workspace.push([
+      {
+        id: "evt_unarchived",
+        type: "session.unarchived",
+        created: Date.now(),
+        location: { directory: workspace.directory },
+        durable: { aggregateID: a.id, seq: 1, version: 1 },
+        data: { sessionID: a.id },
+      } satisfies Extract<OpenCodeEvent, { type: "session.unarchived" }>,
+    ])
+
+  const prompt = page.getByRole("textbox", { name: "Prompt", exact: true })
+
+  // ⌘⇧S on an archived session unarchives it and keeps it open.
+  const shortcut = update()
+  await prompt.click()
+  await page.keyboard.press("ControlOrMeta+Shift+s")
+  expect((await shortcut).postDataJSON()).toMatchObject({ archived: false })
+  await expectPath(page, sessionHref(a.id))
+  unarchived()
+
+  // Unarchived now, so the same shortcut archives it, and Unarchive session is no longer offered.
+  await prompt.click()
+  await page.keyboard.press("ControlOrMeta+Shift+p")
+  const dialog = page.getByRole("dialog")
+  await dialog.getByRole("combobox").fill("archive session")
+  await expect(dialog.getByRole("option", { name: /^Archive session/ })).toBeVisible()
+  await expect(dialog.getByRole("option", { name: /^Unarchive session/ })).toHaveCount(0)
+  await page.keyboard.press("Escape")
+
+  const archive = update()
+  await prompt.click()
+  await page.keyboard.press("ControlOrMeta+Shift+s")
+  expect((await archive).postDataJSON()).toMatchObject({ archived: true })
+  await expectPath(page, sessionHref(b.id))
+
+  // From the palette on an archived session.
+  await page.goto(sessionHref(a.id))
+  await expectSessionTitle(page, a.title)
+  await prompt.click()
+  await page.keyboard.press("ControlOrMeta+Shift+p")
+  await dialog.getByRole("combobox").fill("unarchive session")
+  const command = update()
+  await dialog.getByRole("option", { name: /^Unarchive session/ }).click()
+  expect((await command).postDataJSON()).toMatchObject({ archived: false })
+  await expectPath(page, sessionHref(a.id))
+})
+
 test("option arrows move to the previous or next tab, and with shift to the next unread one", async ({ page }) => {
   await mockWorkspace(page, {
     name: "Tabs",
