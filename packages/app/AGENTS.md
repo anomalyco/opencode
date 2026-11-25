@@ -142,6 +142,12 @@ This section is the single source for what may move or restyle the session timel
 - `scrollToFn` in `src/session/timeline/virtualizer.tsx` holds the corrections made while a batch of sizes is applied and writes the last one once. Keep scroll writes for size changes on that path, and call `flushHeldScroll` before code inside the batch reads the native offset.
 - Keeper: "corrects the scroll position once for each batch of rows an older page measures" in `e2e/regression/timeline-history.spec.ts`.
 
+### Scroll events
+
+- A scroll event must read before it writes. A style write followed by a read of `scrollTop`, `scrollHeight` or a rect, in the same event, makes the browser recalculate style (and lay out, when the write changed a size) inside the event.
+- `ScrollView` (`packages/ui/src/components/scroll-view.tsx`) therefore reads the thumb's geometry first (`readThumb`), forwards the event to the timeline, and writes the thumb in the next animation frame (`applyThumb`). Keep that order when you add work to a scroll handler.
+- Keeper: "handles a scroll event without a forced style or layout pass" in `e2e/regression/timeline-geometry.spec.ts`, for both timelines. It counts the passes in a Chrome trace; the old order forced one in every scroll event.
+
 ### Transcript reads
 
 - The reader keeps their place only while the rows in view stay in the transcript. `session.message.sync` (`packages/client/src/solid/data.ts`) reads the newest page again on every reconnect of the event stream, and when a turn ends with a tool still running. It once replaced the transcript with that page: a reader further back than the page jumped 3,400 to 8,100 px, and the older pages were gone.
