@@ -33,7 +33,7 @@ export type BlockingTask = {
   label?: string
   agent?: undefined
   started: number
-} & ({ type: "shell" } | { type: "execute"; commands: string[]; ended: string[]; background: boolean })
+} & ({ type: "shell" } | { type: "execute"; commands: string[]; background: boolean })
 
 const decodeString = Schema.decodeUnknownOption(Schema.String)
 
@@ -102,8 +102,7 @@ export function createSessionBackground(input: {
                 label: firstLine(text(part.state.input.code)),
                 agent: undefined,
                 started: part.time.ran ?? part.time.created,
-                commands: executeShellCommands(part.state.metadata.toolCalls, true),
-                ended: executeShellCommands(part.state.metadata.toolCalls, false),
+                commands: executeShellCommands(part.state.metadata.toolCalls),
                 // Only a script running as a job can move to the background.
                 background: part.state.metadata.background === true,
               },
@@ -194,6 +193,11 @@ export function createSessionBackground(input: {
     if (!id) return []
     const current = history()
 
+    // A shell whose call ended while it runs has a running job.
+    const moved = new Set(
+      (input.jobs?.() ?? []).flatMap((job) => (job.kind === "shell" && job.status === "running" ? [job.shellID] : [])),
+    )
+
     const shells = oldestFirst(input.shells(), (shell) => shell.time.started).flatMap((shell) => {
       if (shell.status !== "running" || shell.metadata.sessionID !== id) return []
 
@@ -201,10 +205,9 @@ export function createSessionBackground(input: {
         current.blocking.some((item) =>
           item.type === "shell"
             ? item.id === shell.id || (!!item.label && shell.command === item.label)
-            : // A script lists a call a moment after its shell starts. Until then the shell is the script's, unless
-              // a call for it has already ended, which leaves a shell still running in the background.
-              shell.time.started >= item.started &&
-              (item.commands.includes(shell.command) || !item.ended.includes(shell.command)),
+            : // A script's shell names its execute call. A server that doesn't is matched by the calls the script lists.
+              (shell.metadata.callID === item.partID && !moved.has(shell.id)) ||
+              (shell.time.started >= item.started && item.commands.includes(shell.command)),
         )
       )
         return []
@@ -290,14 +293,14 @@ function firstLine(code: string | undefined) {
     .find((line) => line.length > 0)
 }
 
-// The commands of the shell calls a running script is still running, or of those it has ended.
-function executeShellCommands(calls: JsonValue | undefined, running: boolean) {
+// The commands of the shells a running script has started and not finished.
+function executeShellCommands(calls: JsonValue | undefined) {
   if (!Array.isArray(calls)) return []
 
   return calls.flatMap((call) =>
     Option.match(decodeCall(call), {
       onNone: () => [],
-      onSome: (item) => (item.tool === "shell" && (item.status === "running") === running ? [item.input.command] : []),
+      onSome: (item) => (item.tool === "shell" && item.status === "running" ? [item.input.command] : []),
     }),
   )
 }

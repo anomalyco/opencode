@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { JobInfo, JsonValue, SessionInfo, SessionMessageAssistantTool, ShellInfo } from "@opencode/client/promise"
+import type { JobInfo, SessionInfo, SessionMessageAssistantTool, ShellInfo } from "@opencode/client/promise"
 import { createRoot, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSessionBackground } from "@/session/requests/background"
@@ -7,7 +7,7 @@ import { createSessionBackground } from "@/session/requests/background"
 const tool = (
   id: string,
   name: string,
-  metadata: Record<string, JsonValue>,
+  metadata: Record<string, string | boolean>,
   input: Record<string, string> = {},
   status: "completed" | "running" = "completed",
   time: SessionMessageAssistantTool["time"] = { created: 0 },
@@ -337,32 +337,45 @@ describe("createSessionBackground", () => {
     })
   })
 
-  test("keeps a running script's shell out of background tasks before the script lists its call", () => {
+  // A script lists a call a moment after the shell starts, so its shells are matched by the call they name.
+  test("keeps a running script's shells out of background tasks unless their call has ended", () => {
     createRoot((dispose) => {
-      const call = (command: string, status: string) => ({ tool: "shell", status, input: { command } })
-
-      const script = (toolCalls: JsonValue[]) =>
-        assistant("current", [
-          tool("script-part", "execute", { toolCalls }, { code: "await build()" }, "running", { created: 10, ran: 11 }),
-        ])
-
-      const [messages, setMessages] = createSignal([script([call("build", "completed")])])
+      const [jobs, setJobs] = createSignal<JobInfo[]>([])
+      const own = {
+        ...shell("test", "test"),
+        metadata: { sessionID: "root", callID: "script-part" },
+        time: { started: 20 },
+      }
 
       const background = createSessionBackground({
         sessionID: () => "root",
-        messages,
+        messages: () => [
+          assistant("current", [
+            tool("script-part", "execute", {}, { code: "await test()" }, "running", { created: 10, ran: 11 }),
+          ]),
+        ],
         sessions: () => [],
         status: () => "idle",
-        shells: () => [{ ...shell("test", "test"), time: { started: 20 } }],
+        // The user's own command, started while the script runs, names no call.
+        shells: () => [own, { ...shell("serve", "serve"), time: { started: 30 } }],
+        jobs,
       })
 
-      // The shell is live before the script's next progress update lists its call.
-      expect(background.tasks()).toEqual([])
-      setMessages([script([call("build", "completed"), call("test", "running")])])
-      expect(background.tasks()).toEqual([])
-      // Its call timed out and left it running in the background.
-      setMessages([script([call("build", "completed"), call("test", "completed")])])
-      expect(background.tasks()).toEqual([{ id: "test", type: "shell", label: "test", started: 20 }])
+      expect(background.tasks()).toEqual([{ id: "serve", type: "shell", label: "serve", started: 30 }])
+
+      // The call timed out and left the command running.
+      setJobs([
+        {
+          kind: "shell",
+          id: "test",
+          sessionID: "root",
+          status: "running",
+          time: { started: 20 },
+          shellID: "test",
+          command: "test",
+        },
+      ])
+      expect(background.tasks().map((task) => task.id)).toEqual(["test", "serve"])
       dispose()
     })
   })

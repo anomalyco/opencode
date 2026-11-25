@@ -44,6 +44,8 @@ export interface Context {
   readonly cancel?: Effect.Effect<void>
   /** True when the tool is invoked from inside Code Mode (`execute`). */
   readonly codemode?: boolean
+  /** The `execute` call a Code Mode call runs under. */
+  readonly parent?: CallID
   /**
    * Set when an automation's code makes the call. No model waits on it, and nobody hears about work it leaves
    * running, so a tool must finish its work within the call.

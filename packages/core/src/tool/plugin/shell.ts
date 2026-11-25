@@ -483,7 +483,8 @@ export const Plugin = {
                       environment: target.environment,
                       timeout,
                       shell: yield* compatibleShell,
-                      metadata: { sessionID: context.sessionID },
+                      // The call in the transcript that started the command, so clients can tell whose it is.
+                      metadata: { sessionID: context.sessionID, callID: context.parent ?? context.id },
                       waited: timeoutBackgrounds,
                       toolCall: {
                         sessionID: context.sessionID,
