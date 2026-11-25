@@ -228,6 +228,13 @@ describe("PushSender", () => {
         resources: ["git push", expect.stringMatching(/^x+…$/)],
         truncated: "true",
       })
+      const many = PushSender.message({
+        ...question,
+        type: "permission",
+        data: { ...data, resources: Array.from({ length: 3000 }, (_, i) => "cmd" + i) },
+      })
+      expect(Buffer.byteLength(many, "utf8")).toBeLessThanOrEqual(2600)
+      expect(JSON.parse(many).data.resources).not.toContain("…")
       expect(PushSender.message(question)).toBe(
         JSON.stringify({
           v: 1,

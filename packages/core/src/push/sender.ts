@@ -75,7 +75,10 @@ export const message = (notification: Notification) => {
   const kept: string[] = []
   for (const resource of resources) {
     const next = cut([...kept, resource])
-    if (over(next) > 0) return cut([...kept, shorten(resource, over(next))])
+    if (over(next) > 0) {
+      const short = cut([...kept, shorten(resource, over(next))])
+      return over(short) > 0 ? cut(kept) : short
+    }
     kept.push(resource)
   }
   return cut(kept)
