@@ -472,6 +472,16 @@
     }
   }
 
+  /* A script's static title starts the same gap above its calls, which always show. */
+  [data-component="collapsible"].tool-collapsible:has(
+      > [data-slot="collapsible-content"] > [data-component="execute-tool-calls"]
+    )
+    > [data-slot="collapsible-trigger"][data-locked] {
+    margin-bottom: 0;
+    padding-bottom: var(--timeline-gap-s);
+    height: calc(var(--line-height-compact) + 6px + var(--timeline-gap-s));
+  }
+
   /* Answers are spaced by the row gaps and trimmed to their text, as the agent's text is. */
   [data-component="question-answers"] {
     gap: var(--timeline-gap-s);

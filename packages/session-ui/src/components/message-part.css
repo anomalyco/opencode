@@ -1125,11 +1125,10 @@
     }
   }
 
-  /* Lines up with the calls' names, past their markers. */
+  /* Lines up with the calls' names, which line up with the title. */
   [data-slot="execute-tool-call-more"] {
     all: unset;
     width: fit-content;
-    margin-inline-start: 20px;
     cursor: pointer;
     color: var(--v2-text-text-faint);
     user-select: none;
@@ -1192,14 +1191,12 @@
 
   [data-slot="execute-tool-output"] {
     margin-top: 4px;
-    padding-inline-start: 20px;
   }
 
   [data-slot="execute-tool-error"] {
     margin-top: 4px;
     max-height: 240px;
     overflow-y: auto;
-    padding-inline-start: 20px;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }

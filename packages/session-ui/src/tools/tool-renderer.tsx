@@ -67,7 +67,6 @@ import {
   executeToolCallCount,
   executeToolCalls,
   executeToolErrorIndex,
-  executeToolSubtitle,
   readImagePath,
   type ExecuteToolCall,
 } from "../message/current-tool-state"
@@ -2052,7 +2051,6 @@ ToolRegistry.register({
     const dialog = useDialog()
     const pending = () => props.status === "streaming" || props.status === "running"
     const count = createMemo(() => executeToolCallCount(props.metadata))
-    const subtitle = createMemo(() => executeToolSubtitle(props.metadata))
     const code = createMemo(() => (toolInput(props.input).code ?? "").trimEnd())
 
     // A runtime failure shows its output on the failing row; a successful script shows its result below the calls.
@@ -2089,7 +2087,6 @@ ToolRegistry.register({
       if (hidden() === 0) list?.querySelector<HTMLElement>('[data-slot="execute-tool-call"][tabindex]')?.focus()
     }
 
-    const sawPending = pending()
     // A shimmer is six elements; a group opens dozens of finished scripts, so only one that ran while shown gets it.
     const shimmered = createMemo((was: boolean) => was || pending(), false)
 
@@ -2099,6 +2096,7 @@ ToolRegistry.register({
     const openDetails = () =>
       dialog.show(() => <ExecuteDetails code={code()} output={output()} error={error()} status={props.status} />)
 
+    // The title is static and the calls always show under it: the block never collapses, whatever the timeline asks.
     return (
       <BasicTool
         {...props}
@@ -2106,8 +2104,12 @@ ToolRegistry.register({
         rail={false}
         hasContent={count() > 0 || !!error() || !!output()}
         compact
-        allowOpenWhilePending
-        trigger={(open) => (
+        locked
+        open
+        forceOpen
+        defer={false}
+        onOpenChange={undefined}
+        trigger={
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
@@ -2115,12 +2117,9 @@ ToolRegistry.register({
                   <TextShimmer text={i18n.t("ui.tool.execute")} active={pending()} />
                 </Show>
               </span>
-              <Show when={!open() && subtitle()}>
-                {(text) => <ShellSubmessage text={text()} animate={sawPending} />}
-              </Show>
             </div>
           </div>
-        )}
+        }
         action={
           viewable() ? (
             <Tooltip value={i18n.t("ui.tool.execute.viewCode")} placement="top">
@@ -2255,12 +2254,7 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; s
   )
 }
 
-function ExecuteDetailsSection(props: {
-  label: string
-  copy: string
-  copyLabel: string
-  children: JSX.Element
-}) {
+function ExecuteDetailsSection(props: { label: string; copy: string; copyLabel: string; children: JSX.Element }) {
   const i18n = useI18n()
   const copy = createCopyFeedback()
 
@@ -2323,9 +2317,6 @@ function ExecuteOutputRow(props: { output: string }) {
           toggle(event)
         }}
       >
-        <span data-slot="execute-tool-call-marker">
-          <span data-slot="execute-tool-call-arrow">›</span>
-        </span>
         <span data-slot="execute-tool-call-name">{i18n.t("ui.tool.execute.output")}</span>
         <span data-slot="execute-tool-call-args">
           {i18n.plural("ui.tool.execute.lines", text().split("\n").length)}
@@ -2372,11 +2363,6 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
           toggle(event)
         }}
       >
-        <Show when={failed()} fallback={<span data-slot="execute-tool-call-marker">›</span>}>
-          <span data-slot="execute-tool-call-marker">
-            <Icon name="outline-hexagonal-warning" size="small" />
-          </span>
-        </Show>
         <Show when={props.call}>
           {(call) => (
             <span data-slot="execute-tool-call-name">
@@ -2385,6 +2371,12 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
               </Show>
             </span>
           )}
+        </Show>
+        {/* After the name, so every call's name lines up with the title; a failure without a call leads with it. */}
+        <Show when={failed()}>
+          <span data-slot="execute-tool-call-marker">
+            <Icon name="outline-hexagonal-warning" size="small" />
+          </span>
         </Show>
         <Show when={!open() && summary()}>
           {(text) => (
