@@ -1324,9 +1324,7 @@ export function createNextTimelineRowRenderer(input: {
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <div data-slot="session-turn-assistant-content" aria-hidden={phase(current().userMessageID).live}>
-              {content}
-            </div>
+            <div data-slot="session-turn-assistant-content">{content}</div>
           </div>
         </Frame>
       )

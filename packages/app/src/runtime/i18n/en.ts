@@ -23,7 +23,6 @@ export const dict = {
   "session.location.description": "Choose another directory to continue this session.",
   "session.location.choose": "Choose directory",
   "session.location.worktree": "Choose worktree",
-  "session.location.worktreesFailed": "Failed to load worktrees",
   "session.rewind.toast.title": "Reverted",
   "session.rewind.toast.undo": "Undo",
   "session.location.moving": "Moving session…",

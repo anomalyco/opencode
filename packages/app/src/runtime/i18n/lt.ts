@@ -880,7 +880,6 @@ export const dict = {
   "session.location.description": "Pasirinkite kitą katalogą, kad galėtumėte tęsti šį seansą.",
   "session.location.choose": "Pasirinkti katalogą",
   "session.location.worktree": "Pasirinkti darbo medį",
-  "session.location.worktreesFailed": "Nepavyko įkelti darbo medžių",
   "session.rewind.toast.title": "Grąžinta",
   "session.rewind.toast.undo": "Anuliuoti",
   "session.location.moving": "Perkeliamas seansas…",

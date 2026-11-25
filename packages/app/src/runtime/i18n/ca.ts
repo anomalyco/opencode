@@ -879,7 +879,6 @@ export const dict = {
   "session.location.description": "Trieu un altre directori per continuar aquesta sessió.",
   "session.location.choose": "Tria un directori",
   "session.location.worktree": "Tria un arbre de treball",
-  "session.location.worktreesFailed": "No s'han pogut carregar els arbres de treball",
   "session.rewind.toast.title": "S'ha revertit",
   "session.rewind.toast.undo": "Desfés",
   "session.location.moving": "S'està movent la sessió…",

@@ -855,7 +855,6 @@ export const dict = {
   "session.location.description": "මෙම සැසිය දිගටම කරගෙන යාමට වෙනත් නාමාවලියක් තෝරන්න.",
   "session.location.choose": "නාමාවලිය තෝරන්න",
   "session.location.worktree": "වර්ක්ට්‍රී තෝරන්න",
-  "session.location.worktreesFailed": "වර්ක්ට්‍රී පූරණය කිරීමට අසමත් විය",
   "session.rewind.toast.title": "ප්‍රතිවර්තනය කර ඇත",
   "session.rewind.toast.undo": "අහෝසි කරන්න",
   "session.location.moving": "සැසිය ගෙන යමින්…",

@@ -854,7 +854,6 @@ export const dict = {
   "session.location.description": "برای ادامه این جلسه، پوشه دیگری انتخاب کنید.",
   "session.location.choose": "انتخاب پوشه",
   "session.location.worktree": "انتخاب درخت‌کار",
-  "session.location.worktreesFailed": "بارگیری درخت‌های کار ناموفق بود",
   "session.rewind.toast.title": "برگردانده شد",
   "session.rewind.toast.undo": "واگرد",
   "session.location.moving": "در حال انتقال جلسه…",

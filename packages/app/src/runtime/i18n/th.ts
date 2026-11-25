@@ -903,7 +903,6 @@ export const dict = {
   "session.location.description": "เลือกไดเรกทอรีอื่นเพื่อทำเซสชันนี้ต่อ",
   "session.location.choose": "เลือกไดเรกทอรี",
   "session.location.worktree": "เลือก worktree",
-  "session.location.worktreesFailed": "โหลด worktree ไม่สำเร็จ",
   "session.rewind.toast.title": "ย้อนกลับแล้ว",
   "session.rewind.toast.undo": "เลิกทำ",
   "session.location.moving": "กำลังย้ายเซสชัน…",

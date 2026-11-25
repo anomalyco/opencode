@@ -1,6 +1,7 @@
 export * as Link from "./link.js"
 
 import { Effect, Schema } from "effect"
+import type { Environment } from "../environment/index.js"
 import { Frames } from "./frames.js"
 import { Identity } from "./identity.js"
 import type { Machine } from "./index.js"
@@ -93,6 +94,24 @@ export interface DialOptions extends Fixed {
   readonly secret?: Uint8Array
 }
 
+type Authenticate = (peer: {
+  readonly key: Uint8Array
+  readonly hasSecret: boolean
+  readonly secret: Uint8Array
+}) => Effect.Effect<Environment.ID, Refused>
+
+// A key the home already knows is a reconnect whatever else the message carries; an unknown key needs a valid secret.
+const authenticateMachine =
+  (machines: Machines.Interface): Authenticate =>
+  (peer) =>
+    machines.identify(peer.key).pipe(
+      Effect.catch(() => {
+        if (peer.hasSecret)
+          return machines.join({ secret: peer.secret, key: peer.key }).pipe(Effect.mapError(() => new Refused()))
+        return Effect.fail(new Refused())
+      }),
+    )
+
 /**
  * The home's side, called with the carrier of a connection it received.
  *
@@ -106,11 +125,40 @@ export interface DialOptions extends Fixed {
  */
 export const accept = Effect.fn("Link.accept")(
   function* (carrier: Carrier, fixed: Fixed = {}) {
-    return yield* handshake(carrier, fixed)
+    const machines = yield* Machines.Service
+    return yield* handshake(carrier, authenticateMachine(machines), fixed)
   },
   Effect.timeout(DEADLINE),
   Effect.catchCause(() => Effect.fail(new Refused())),
 )
+
+export const decodeHello = Effect.fnUntraced(function* (machine: Environment.ID, bytes: Uint8Array) {
+  const message = yield* helloMessage.decode(bytes)
+  const version = yield* Schema.decodeUnknownEffect(helloProtocol)(message)
+  if (version.protocol !== PROTOCOL) {
+    yield* Effect.logWarning(
+      `Machine ${machine} uses protocol ${version.protocol}; this home requires protocol ${PROTOCOL}. The worker and the home must be the same version.`,
+    )
+    return yield* new Refused()
+  }
+  return yield* Schema.decodeUnknownEffect(Hello)(message)
+})
+
+const serveWith = Effect.fnUntraced(function* (carrier: Carrier, authenticate: Authenticate, fixed: Fixed) {
+  const link = yield* Effect.gen(function* () {
+    const accepted = yield* handshake(carrier, authenticate, fixed)
+    const hello = yield* decodeHello(accepted.machine, yield* Frames.read(carrier, accepted.receive))
+    return { ...accepted, hello }
+  }).pipe(
+    Effect.timeout(DEADLINE),
+    Effect.catchCause(() => Effect.fail(new Refused())),
+  )
+  const frames = yield* Frames.open(carrier, link, workerCodec)
+  return {
+    machine: link.machine,
+    connection: { hello: link.hello, send: frames.send, messages: frames.messages, describe: carrier.describe },
+  }
+})
 
 /**
  * The home's side of a connection to a worker, called with the carrier it received.
@@ -121,38 +169,31 @@ export const accept = Effect.fn("Link.accept")(
  * that scope and the carrier once it returns. Anything else before that is `Refused`, as with `accept`.
  */
 export const serve = Effect.fn("Link.serve")(function* (carrier: Carrier, fixed: Fixed = {}) {
-  const link = yield* Effect.gen(function* () {
-    const accepted = yield* handshake(carrier, fixed)
-    const message = yield* Effect.flatMap(Frames.read(carrier, accepted.receive), helloMessage.decode)
-    const version = yield* Schema.decodeUnknownEffect(helloProtocol)(message)
-    if (version.protocol !== PROTOCOL) {
-      yield* Effect.logWarning(
-        `Machine ${accepted.machine} uses protocol ${version.protocol}; this home requires protocol ${PROTOCOL}. The worker and the home must be the same version.`,
-      )
-      return yield* new Refused()
-    }
-    return { ...accepted, hello: yield* Schema.decodeUnknownEffect(Hello)(message) }
-  }).pipe(
-    Effect.timeout(DEADLINE),
-    Effect.catchCause(() => Effect.fail(new Refused())),
-  )
-  const frames = yield* Frames.open(carrier, link, {
-    // A second hello is as bad as any other message that is not valid here.
-    decode: (bytes) =>
-      Effect.flatMap(fromWorker.decode(bytes), (message) =>
-        message.type === "hello" ? Effect.fail(new Refused()) : Effect.succeed(message),
-      ),
-    encode: toWorker.encode,
-  })
-  return {
-    machine: link.machine,
-    connection: { hello: link.hello, send: frames.send, messages: frames.messages, describe: carrier.describe },
-  }
+  const machines = yield* Machines.Service
+  return yield* serveWith(carrier, authenticateMachine(machines), fixed)
 })
 
-const handshake = Effect.fnUntraced(function* (carrier: Carrier, fixed: Fixed) {
+/**
+ * Serves a direct (pull-mode or relay-bridged) link to a worker whose Ed25519 public key `peerKey` is already
+ * pinned by the caller (e.g. a cloud VM or sandbox binding), without consulting `Machines.Service`.
+ */
+export const serveDirect = Effect.fn("Link.serveDirect")(function* (
+  carrier: Carrier,
+  options: { readonly machine: Environment.ID; readonly peerKey: Uint8Array },
+  fixed: Fixed = {},
+) {
+  const expected = new Uint8Array(options.peerKey)
+  if (expected.length !== KEY) return yield* new Refused()
+  return yield* serveWith(
+    carrier,
+    (peer) =>
+      !peer.hasSecret && same(peer.key, expected) ? Effect.succeed(options.machine) : Effect.fail(new Refused()),
+    fixed,
+  )
+})
+
+const handshake = Effect.fnUntraced(function* (carrier: Carrier, authenticate: Authenticate, fixed: Fixed) {
   const identity = yield* Identity.Service
-  const machines = yield* Machines.Service
   const local = fixed.static ?? Noise.generateKeyPair()
   const noise = yield* Effect.fromResult(
     Noise.handshake({ initiator: false, prologue: PROLOGUE, static: local, ephemeral: fixed.ephemeral }),
@@ -168,15 +209,7 @@ const handshake = Effect.fnUntraced(function* (carrier: Carrier, fixed: Fixed) {
   const flag = payload[KEY + SIGNATURE]
   const secret = payload.slice(KEY + SIGNATURE + 1)
   if (flag > 1 || (flag === 0 && !same(secret, NO_SECRET))) return yield* new Refused()
-  // A key the home already knows is a reconnect whatever else the message carries; an unknown key needs a valid secret.
-  const machine = yield* machines.identify(key).pipe(
-    Effect.catch(() =>
-      Effect.gen(function* () {
-        if (flag === 0) return yield* new Refused()
-        return yield* machines.join({ secret, key })
-      }),
-    ),
-  )
+  const machine = yield* authenticate({ key, hasSecret: flag === 1, secret })
   const ciphers = Frames.rekeying(yield* Effect.fromResult(noise.split()), fixed.rekeyInterval ?? REKEY_INTERVAL)
   yield* carrier.send(yield* Effect.fromResult(ciphers.send.encrypt(text(machine))))
   return { machine, send: ciphers.send, receive: ciphers.receive }
@@ -255,6 +288,15 @@ const helloMessage = json(Schema.fromJsonString(Schema.Unknown))
 const helloProtocol = Schema.Struct({ type: Schema.Literal("hello"), protocol: Schema.Number })
 const fromWorker = json(Schema.fromJsonString(FromWorker))
 const toWorker = json(Schema.fromJsonString(ToWorker))
+
+export const workerCodec: Frames.Codec<Exclude<FromWorker, Hello>, ToWorker> = {
+  // A second hello is as bad as any other message that is not valid here.
+  decode: (bytes) =>
+    Effect.flatMap(fromWorker.decode(bytes), (message) =>
+      message.type === "hello" ? Effect.fail(new Refused()) : Effect.succeed(message),
+    ),
+  encode: toWorker.encode,
+}
 
 const concat = (...parts: ReadonlyArray<Uint8Array>) => new Uint8Array(Buffer.concat(parts))
 

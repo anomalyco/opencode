@@ -2087,6 +2087,13 @@
     }
   }
 
+  /* Inter centers capitals on the line, so lowercase reads about 1px low against the bar. A one-line quote's bar runs
+     1px past the line, which puts the text half a pixel above its middle, between the two. Wrapped quotes already sit
+     evenly between the bar's ends. */
+  [data-slot="user-message-quote"][data-single-line] {
+    padding-bottom: 1px;
+  }
+
   /* A source's icon leads the quote like a file's. It sits inline, so wrapped lines return to the bar. */
   [data-slot="user-message-quote-icon"] {
     display: inline-flex;

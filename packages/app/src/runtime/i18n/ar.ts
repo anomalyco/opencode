@@ -909,7 +909,6 @@ export const dict = {
   "session.location.description": "اختر دليلًا آخر لمتابعة هذه الجلسة.",
   "session.location.choose": "اختيار دليل",
   "session.location.worktree": "اختيار شجرة عمل",
-  "session.location.worktreesFailed": "فشل تحميل أشجار العمل",
   "session.rewind.toast.title": "تم التراجع",
   "session.rewind.toast.undo": "تراجع",
   "session.location.moving": "جارٍ نقل الجلسة…",
