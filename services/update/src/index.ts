@@ -45,7 +45,7 @@ const accessKeys = createRemoteJWKSet(new URL(`${accessTeam}/cdn-cgi/access/cert
 // Clients poll every lookup path, and querying D1 on each request overloaded it.
 // Cache the caller-independent reads per isolate; caller-specific selection still runs per request.
 const readTtl = 60_000
-const reads = new Map<string, { expires: number; value: Promise<unknown> }>()
+const reads = new Map<string, { expires: number; value: unknown }>()
 
 export default {
   async fetch(request: Request, env: Env, ctx: Pick<ExecutionContext, "waitUntil">): Promise<Response> {
@@ -173,7 +173,10 @@ async function artifactDistribution(
   if (manifest) {
     const metadata = decodeMetadata(artifact.metadata)
     if (name === "desktop" && /^latest(?:-mac|-linux(?:-arm64)?)?\.yml$/.test(manifest)) {
-      const value = isRecord(metadata) && isRecord(metadata.manifests) ? metadata.manifests[manifest.replace(/^latest/, "desktop")] : undefined
+      const value =
+        isRecord(metadata) && isRecord(metadata.manifests)
+          ? metadata.manifests[manifest.replace(/^latest/, "desktop")]
+          : undefined
       if (!isRecord(value)) return json({ error: "Manifest not found" }, 404)
       return new Response(stringify({ ...value, version: artifact.version }), {
         headers: { "Content-Type": "application/yaml; charset=utf-8", "Cache-Control": "no-store" },
@@ -624,16 +627,20 @@ export function resolveChannel(channel: string) {
   return channel === "next" ? "beta" : channel
 }
 
-function cachedRead<T>(key: string, load: () => Promise<T>) {
-  const now = Date.now()
+async function cachedRead<T>(key: string, load: () => Promise<T>) {
   const hit = reads.get(key)
   if (hit) {
     reads.delete(key)
-    if (hit.expires > now) {
+    if (hit.expires > Date.now()) {
       reads.set(key, hit)
-      return hit.value as Promise<T>
+      return hit.value as T
     }
   }
+  // Workers ties a D1 result stream to the request that started the query, so sharing an in-flight
+  // promise fails other requests with "Cannot perform I/O on behalf of a different request".
+  // Only settled results are shared. Failed reads throw before they are cached, so the next request retries D1.
+  const value = await load()
+  const now = Date.now()
   // Lookup paths are caller-controlled identifiers, so bound the number of retained entries.
   if (reads.size >= 1_000) {
     reads.forEach((entry, k) => {
@@ -644,12 +651,7 @@ function cachedRead<T>(key: string, load: () => Promise<T>) {
       if (oldest !== undefined) reads.delete(oldest)
     }
   }
-  // Concurrent callers share one in-flight read. Failed reads are dropped so the next request retries D1.
-  const value = load()
   reads.set(key, { expires: now + readTtl, value })
-  value.catch(() => {
-    if (reads.get(key)?.value === value) reads.delete(key)
-  })
   return value
 }
 
