@@ -67,16 +67,18 @@ export const make = (id: ID, driver: Driver, options?: Options): Interface => ({
   spawner: driver.spawner,
 })
 
-/** The computer the server runs on. */
+/**
+ * The computer the server runs on. Runtimes without local execution (such as workerd) have neither local
+ * process spawning nor a local host filesystem, so they fall back to the unavailable spawner without node:fs.
+ */
 export const local = (spawner: ChildProcessSpawner.ChildProcessSpawner["Service"]) =>
-  make(
-    localID,
-    makeLocalDriver(spawner),
-    // Runtimes without local process execution (such as workerd) cannot host local commands or search.
-    spawner === EnvironmentUnavailable.spawner
-      ? {}
-      : { local: true, home: Effect.sync(() => Global.Path.home), rg: Effect.succeed("rg") },
-  )
+  spawner === EnvironmentUnavailable.spawner
+    ? make(localID, { spawner }, { path: posix })
+    : make(localID, makeLocalDriver(spawner), {
+        local: true,
+        home: Effect.sync(() => Global.Path.home),
+        rg: Effect.succeed("rg"),
+      })
 
 /** A workspace sandbox environment; runs ripgrep through its own spawner and uses POSIX path rules. */
 export const workspace = (id: Workspace.ID, driver: Driver) =>
