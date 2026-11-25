@@ -225,7 +225,12 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
       )
       if (target === undefined) return Effect.void
       // Off the tool call's path: the result never waits on Console, and a failure only skips the watch.
-      return create(member, event.sessionID, { target }).pipe(
+      return (
+        typeof target === "object" && target._tag === "ArtifactComments"
+          ? rootSession(ctx, event.sessionID)
+          : Effect.succeed(event.sessionID)
+      ).pipe(
+        Effect.flatMap((sessionID) => create(member, sessionID, { target })),
         Effect.scoped,
         // A refusal, such as a GitHub sign-in the member hasn't made, is told once per reason: the ID repeats with it.
         Effect.catchIf(
@@ -638,11 +643,37 @@ function expectOk(response: HttpClientResponse.HttpClientResponse) {
 }
 
 /**
- * What a finished shell command started that's worth watching: the pull request `gh pr create` printed, or the branch
- * `git push` updated on GitHub, whose Actions runs settle the watch. Anything less clear-cut is skipped.
+ * The session a person talks to: a subagent's root. Readers' comments on an artifact are for that person, so the
+ * watch a share makes wakes it, not a subagent that has finished.
+ */
+export const rootSession = (ctx: Context, sessionID: Session.ID): Effect.Effect<Session.ID, unknown> =>
+  ctx.session
+    .get({ sessionID })
+    .pipe(
+      Effect.flatMap((session) =>
+        session.parentID === undefined ? Effect.succeed(sessionID) : rootSession(ctx, session.parentID),
+      ),
+    )
+
+/**
+ * What a finished shell command started that's worth watching: the pull request `gh pr create` printed, the branch
+ * `git push` updated on GitHub, whose Actions runs settle the watch, or the comments on the artifact
+ * `opencode-console artifact share` shared. Anything less clear-cut is skipped.
  */
 export function shellTarget(command: string, shell: typeof ShellOutput.Type) {
   if (shell.exitCode !== 0) return undefined
+  if (/(?:^|[\s;&|(/])(?:opencode-console|@opencode\/console(?:@\S+)?)\s+artifact\s+share\b/.test(command)) {
+    // The share's first line (`Shared <slug>: <url>`, or `Updated <slug> …`), or its `--json` output.
+    const slugs = new Set(
+      Array.from(
+        shell.output.matchAll(
+          /^(?:Shared|Updated) ([a-z0-9]+(?:-[a-z0-9]+)*)[: ]|"slug":"([a-z0-9]+(?:-[a-z0-9]+)*)"/gm,
+        ),
+        (match) => match[1] ?? match[2],
+      ),
+    )
+    return slugs.size === 1 ? { _tag: "ArtifactComments" as const, artifact: [...slugs][0] } : undefined
+  }
   if (/(?:^|[\s;&|(])gh\s+pr\s+create\b/.test(command)) {
     const urls = new Set(
       Array.from(shell.output.matchAll(/https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/pull\/\d+/g), (match) => match[0]),

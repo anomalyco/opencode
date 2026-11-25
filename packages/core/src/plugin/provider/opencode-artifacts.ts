@@ -2,10 +2,12 @@ export * as OpencodeArtifacts from "./opencode-artifacts.js"
 
 import { createHash } from "node:crypto"
 import type { Context } from "@opencode/plugin/effect/plugin"
+import { Session } from "@opencode/schema/session"
 import { Effect, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { ConsoleAccess } from "../../console-access.js"
 import { IntegrationConnection } from "../../integration/connection.js"
+import { OpencodeWatches } from "./opencode-watches.js"
 
 /** The `GET /api/v2/config` response header Console sends while the caller may share artifacts. */
 export const header = "x-opencode-artifacts"
@@ -25,7 +27,8 @@ const Problem = Schema.Struct({ message: Schema.optional(Schema.String), owner: 
 
 /**
  * The `console` artifact provider for one Location, the default while `sync` is given the Console connection that may
- * share. While event watches run (`wakes`), publishing makes the session watch the artifact's comments.
+ * share. While event watches run (`wakes`), publishing makes the session watch the artifact's comments: a subagent's
+ * root session, the one a person talks to.
  */
 export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.HttpClient) {
   let current: { readonly connection: Connection; readonly wakes: boolean } | undefined
@@ -57,6 +60,8 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
         files: files.map((file) => ({ path: file.path, sha256: file.sha256, bytes: file.bytes.length })),
         ...(replace ? { replace } : {}),
       }).pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(Prepared)))
+      const sessionID =
+        wakes && input.sessionID ? yield* OpencodeWatches.rootSession(ctx, Session.ID.make(input.sessionID)) : undefined
       const missing = new Set(prepared.missing)
       // Files with the same bytes upload once.
       yield* Effect.forEach(
@@ -68,7 +73,7 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
         title: input.title.slice(0, 200).trim(),
         files: files.map((file) => ({ path: file.path, sha256: file.sha256 })),
         ...(replace ? { replace } : {}),
-        ...(wakes && input.sessionID ? { sessionID: input.sessionID } : {}),
+        ...(sessionID ? { sessionID } : {}),
       }).pipe(Effect.flatMap(HttpClientResponse.schemaBodyJson(Published)))
     }, Effect.scoped)
     const slugOf = (id: string) =>

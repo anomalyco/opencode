@@ -1017,6 +1017,36 @@ describe("OpencodePlugin event watches", () => {
     ),
   )
 
+  it.effect("watches the comments on an artifact a subagent's shell shared from its root session", () =>
+    withConsole({}, (console) =>
+      Effect.gen(function* () {
+        const hooks = yield* PluginHooks.Service
+        const { host } = yield* start(console)
+        const root = yield* host.session.create({})
+        const subagent = yield* host.session.create({ parentID: root.id })
+        yield* hooks.trigger("tool", "execute.after", {
+          tool: "shell",
+          codemode: true,
+          sessionID: subagent.id,
+          agent: Agent.ID.make("build"),
+          messageID: SessionMessage.ID.create(),
+          id: Tool.CallID.make("call_shell"),
+          input: { command: "npx -y @opencode/console@latest artifact share ./shots --name mcp-tab 2>&1 | tail -5" },
+          status: "completed",
+          result: { output: { exitCode: 0, output: "Shared mcp-tab: https://share.opncd.ai/x\n", wallTimeSeconds: 1 } },
+        })
+        const created = () =>
+          console.state.requests.filter((request) => request.method === "POST" && request.path === "/api/event-watches")
+        yield* waitUntil(Effect.sync(() => created().length === 1))
+
+        expect(created()[0]?.body).toEqual({
+          sessionID: root.id,
+          target: { _tag: "ArtifactComments", artifact: "mcp-tab" },
+        })
+      }),
+    ),
+  )
+
   it.effect("tells the session once why Console refused a shell command's watch, and skips other failures", () =>
     withConsole({}, (console) =>
       Effect.gen(function* () {
@@ -1098,6 +1128,19 @@ describe("OpencodeWatches.shellTarget", () => {
       ).toBeUndefined()
       expect(OpencodeWatches.shellTarget("git push", { exitCode: 0, output: "Everything up-to-date\n" })).toBeUndefined()
       expect(OpencodeWatches.shellTarget("echo git status", { exitCode: 0, output: push })).toBeUndefined()
+    }),
+  )
+
+  it.effect("reads the slug an artifact share printed, and skips a failed or unclear one", () =>
+    Effect.sync(() => {
+      const share = "opencode-console artifact share ./plan"
+      const shared = "Shared plan: https://share.opncd.ai/a\n"
+      const target = { _tag: "ArtifactComments" as const, artifact: "plan" }
+      expect(OpencodeWatches.shellTarget(share, { exitCode: 0, output: shared })).toEqual(target)
+      expect(OpencodeWatches.shellTarget(share, { exitCode: 0, output: '{"slug":"plan","url":"x"}' })).toEqual(target)
+      expect(OpencodeWatches.shellTarget(share, { exitCode: 1, output: shared })).toBeUndefined()
+      expect(OpencodeWatches.shellTarget(share, { exitCode: 0, output: "Not signed in\n" })).toBeUndefined()
+      expect(OpencodeWatches.shellTarget("echo artifact share", { exitCode: 0, output: shared })).toBeUndefined()
     }),
   )
 })
