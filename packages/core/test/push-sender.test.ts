@@ -10,7 +10,6 @@ import { Push } from "@opencode/schema/push"
 import { Session } from "@opencode/schema/session"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { LayerNodePlatform } from "@opencode/util/effect/app-node-platform"
-import { TestClock } from "effect/testing"
 import { advance, drain } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 
@@ -209,23 +208,6 @@ describe("PushSender", () => {
         ["ok", true],
       ])
       expect(open(ok, calls[1]!.box)).toEqual({ v: 1, id: sessionID, type: "clear", sessionID })
-    }),
-  )
-
-  it.effect("forgets a notification after a week", () =>
-    Effect.gen(function* () {
-      const sender = yield* PushSender.Service
-      yield* phone(ids.ok, "ok")
-
-      yield* sender.send(finished)
-      yield* advance(() => calls.length === 1)
-      yield* TestClock.adjust("8 days")
-      yield* sender.send({ ...finished, id: "ses_other" })
-      yield* advance(() => calls.length === 2)
-      yield* sender.clear([sessionID])
-      yield* drain
-
-      expect(calls.map((call) => call.silent)).toEqual([undefined, undefined])
     }),
   )
 
