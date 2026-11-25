@@ -40,8 +40,9 @@ export function currentToolImages(tool: SessionMessageAssistantTool) {
 
   if (tool.name === "read" && readImagePath(currentToolInput(tool))) return []
 
-  return tool.state.content.filter(
-    (item): item is Extract<typeof item, { type: "file" }> => item.type === "file" && item.mime.startsWith("image/"),
+  // Each keeps its call and position, so a host that dropped its bytes can read it again.
+  return tool.state.content.flatMap((item, index) =>
+    item.type === "file" && item.mime.startsWith("image/") ? [{ ...item, callID: tool.id, index }] : [],
   )
 }
 

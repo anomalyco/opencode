@@ -116,7 +116,8 @@ describe("current tool state", () => {
       time,
     } satisfies SessionMessageAssistantTool
 
-    expect(currentToolImages(tool)).toEqual([screenshot])
+    // The position counts the text, so the host finds the file in the call's content as the server has it.
+    expect(currentToolImages(tool)).toEqual([{ ...screenshot, callID: "tool_execute", index: 1 }])
     expect(currentToolOutput(tool)).toBe("done")
   })
 
@@ -136,7 +137,7 @@ describe("current tool state", () => {
       time,
     } satisfies SessionMessageAssistantTool
 
-    expect(currentToolImages(tool)).toEqual([screenshot])
+    expect(currentToolImages(tool)).toEqual([{ ...screenshot, callID: "tool_execute_failed", index: 0 }])
   })
 
   test("leaves an image read to the read row's own preview", () => {

@@ -104,6 +104,30 @@ export function resolveMediaUriTarget(
   return { kind: "direct", src: uri }
 }
 
+/**
+ * An image in a call's result. A host that keeps tool results without their bytes leaves an empty `data:<mime>;base64,`
+ * URI in its place; that one is read again from its call, and is unreadable without a host to read it.
+ */
+export function resolveToolImageTarget(
+  image: { readonly uri: string; readonly mime: string; readonly callID: string; readonly index: number },
+  options: {
+    readonly peekMedia?: (uri: string, mime: string) => string | undefined
+    readonly hasReader: boolean
+    readonly peekToolFile?: () => string | undefined
+    readonly hasToolFileReader: boolean
+  },
+): AttachmentMediaTarget {
+  if (image.uri !== `data:${image.mime};base64,`) return resolveMediaUriTarget(image.uri, image.mime, options)
+
+  const peeked = options.peekToolFile?.()
+
+  if (peeked !== undefined) return { kind: "direct", src: peeked }
+
+  if (!options.hasToolFileReader) return UNREADABLE_ATTACHMENT_MEDIA_TARGET
+
+  return { kind: "remote", key: `tool:${image.callID}:${image.index}`, uri: image.uri, mime: image.mime }
+}
+
 export function transitionAttachmentMedia(
   state: AttachmentMediaState,
   event: AttachmentMediaEvent,

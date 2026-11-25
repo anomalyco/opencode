@@ -6,7 +6,7 @@ import { getFilename } from "@opencode/util/path"
 import { createMemo, Index, Match, onMount, Show, Switch } from "solid-js"
 import { useData } from "../context"
 import { createAttachmentMedia } from "../message/attachment-media"
-import { resolveMediaUriTarget } from "../message/attachment-media-machine"
+import { resolveToolImageTarget } from "../message/attachment-media-machine"
 import type { currentToolImages } from "../message/current-tool-state"
 
 export type ToolImage = ReturnType<typeof currentToolImages>[number]
@@ -39,13 +39,27 @@ function Tile(props: { image: ToolImage }) {
   const dialog = useDialog()
   const i18n = useI18n()
 
+  const file = (sessionID: string) => ({
+    sessionID,
+    callID: props.image.callID,
+    index: props.image.index,
+    mime: props.image.mime,
+  })
+
   const media = createAttachmentMedia(
     createMemo(() =>
-      resolveMediaUriTarget(props.image.uri, props.image.mime, {
+      resolveToolImageTarget(props.image, {
         peekMedia: data.peekMedia,
         hasReader: !!data.readMedia,
+        peekToolFile: () => (data.sessionID ? data.toolFile?.peek(file(data.sessionID)) : undefined),
+        hasToolFileReader: !!data.toolFile && !!data.sessionID,
       }),
     ),
+    (uri, mime, signal) => {
+      if (uri !== `data:${mime};base64,`) return data.readMedia?.(uri, mime, signal)
+
+      return data.sessionID ? data.toolFile?.read(file(data.sessionID), signal) : undefined
+    },
   )
 
   const name = () => getFilename(props.image.name ?? "") || i18n.t("ui.message.attachment.alt")

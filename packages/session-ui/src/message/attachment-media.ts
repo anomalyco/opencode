@@ -9,8 +9,11 @@ import {
   type AttachmentMediaTarget,
 } from "./attachment-media-machine"
 
-/** Runs the host reads one image slot needs, for as long as the slot is mounted. */
-export function createAttachmentMedia(target: Accessor<AttachmentMediaTarget>) {
+/** Runs the host reads one image slot needs, for as long as the slot is mounted. `read` defaults to the host's media read. */
+export function createAttachmentMedia(
+  target: Accessor<AttachmentMediaTarget>,
+  read?: (uri: string, mime: string, signal: AbortSignal) => Promise<string | undefined> | undefined,
+) {
   const data = useData()
   const [state, setState] = createSignal(INITIAL_ATTACHMENT_MEDIA_STATE)
   let controller: AbortController | undefined
@@ -30,7 +33,7 @@ export function createAttachmentMedia(target: Accessor<AttachmentMediaTarget>) {
       }
 
       const current = new AbortController()
-      const readMedia = data.readMedia
+      const readMedia = read ?? data.readMedia
       controller = current
       timer = setTimeout(() => dispatch({ type: "read.timed-out", attempt: effect.attempt }), effect.timeoutMs)
       // A read that resolves, rejects or throws settles its attempt.
