@@ -59,9 +59,75 @@ for (const { name, id } of [
   })
 }
 
+const pickWithKeyboard = async (
+  page: Page,
+  direction: "ltr" | "rtl",
+  side: "Left" | "Right",
+  checked: "Left" | "Right",
+) => {
+  const trigger = page.getByRole("menuitem", { name: "Sidebar position" })
+
+  await expect(page.getByRole("menu")).toBeFocused()
+  await page.keyboard.press("ArrowDown")
+  await expect(trigger).toBeFocused()
+  await page.keyboard.press(direction === "rtl" ? "ArrowLeft" : "ArrowRight")
+
+  const option = page.getByRole("menuitemradio", { name: side })
+
+  await expect(page.getByRole("menuitemradio", { name: "Left" })).toBeFocused()
+  await expect(page.getByRole("menuitemradio", { name: checked })).toHaveAttribute("aria-checked", "true")
+
+  if (side === "Right") await page.keyboard.press("ArrowDown")
+  await expect(option).toBeFocused()
+  await page.keyboard.press("Enter")
+  await expect(page.getByRole("menuitemradio")).toHaveCount(0)
+}
+
+for (const direction of ["ltr", "rtl"] as const) {
+  story(`Shift+F10 on the toggle moves the file tree from the keyboard (${direction})`, async ({ mount, page }) => {
+    const component = await mount("plugins-review--changes-and-comments", { globals: { direction } })
+    const panel = component.locator('[data-component="session-review-v2"]')
+    const sidebar = panel.locator('[data-slot="session-review-v2-sidebar"]')
+    const toggle = panel.getByRole("button", { name: "Toggle file tree" })
+    const startSide = direction === "rtl" ? "Right" : "Left"
+    const endSide = direction === "rtl" ? "Left" : "Right"
+
+    await expect(sidebar).toBeVisible()
+    await page.keyboard.press("Shift")
+    await toggle.focus()
+    await page.keyboard.press("Shift+F10")
+    await expect(page.getByRole("menu")).toBeFocused()
+    await expect(page.getByRole("menuitem", { name: "Sidebar position" })).toBeVisible()
+    await page.keyboard.press("Escape")
+    await expect(page.getByRole("menuitem", { name: "Sidebar position" })).toHaveCount(0)
+    await expect(toggle).toBeFocused()
+    await expect(toggle).toHaveCSS("outline-style", "solid")
+
+    await page.keyboard.press("Shift+F10")
+    await pickWithKeyboard(page, direction, endSide, startSide)
+    await expect(panel).toHaveAttribute("data-sidebar-side", "end")
+    await expect(toggle).toBeFocused()
+    await expect(toggle).toHaveCSS("outline-style", "solid")
+
+    // Enter still toggles the sidebar, and Shift+F10 works while collapsed.
+    await page.keyboard.press("Enter")
+    await expect(sidebar).toBeHidden()
+    await page.keyboard.press("Shift+F10")
+    await pickWithKeyboard(page, direction, startSide, endSide)
+    await expect(panel).toHaveAttribute("data-sidebar-side", "start")
+    await expect(toggle).toBeFocused()
+    await expect(toggle).toHaveCSS("outline-style", "solid")
+  })
+}
+
 story("the file tree filter keeps the system context menu", async ({ mount, page }) => {
   const component = await mount("plugins-review--changes-and-comments")
+  const filter = component.getByRole("searchbox", { name: "Filter files" })
 
-  await component.getByRole("searchbox", { name: "Filter files" }).click({ button: "right" })
+  await filter.click({ button: "right" })
+  await expect(page.getByRole("menuitem", { name: "Sidebar position" })).toHaveCount(0)
+
+  await filter.focus()
+  await page.keyboard.press("Shift+F10")
   await expect(page.getByRole("menuitem", { name: "Sidebar position" })).toHaveCount(0)
 })

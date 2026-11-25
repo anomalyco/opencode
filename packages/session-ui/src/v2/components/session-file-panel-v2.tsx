@@ -32,7 +32,7 @@ export function SessionFilePanelV2(props: {
       data-sidebar-side={side()}
     >
       <div data-slot="session-review-v2-sidebar-toggle">
-        <SessionFilePanelV2SideMenu side={side()} onChange={props.onSidebarSideChange}>
+        <SessionFilePanelV2SideMenu side={side()} onChange={props.onSidebarSideChange} keyboard>
           {props.sidebarToggle}
         </SessionFilePanelV2SideMenu>
       </div>
@@ -66,6 +66,7 @@ function SessionFilePanelV2SideMenu(
   props: ParentProps<{
     side: SessionFilePanelV2SidebarSide
     onChange?: (side: SessionFilePanelV2SidebarSide) => void
+    keyboard?: boolean
   }>,
 ) {
   const i18n = useI18n()
@@ -91,6 +92,29 @@ function SessionFilePanelV2SideMenu(
                   event.stopPropagation()
                 }
               },
+            }}
+            onKeyDown={(event) => {
+              if (!props.keyboard) return
+
+              if (event.defaultPrevented || event.repeat || event.ctrlKey || event.metaKey || event.altKey) return
+
+              if (event.key !== "ContextMenu" && (event.key !== "F10" || !event.shiftKey)) return
+
+              const target = event.target
+
+              if (!(target instanceof HTMLElement)) return
+              event.preventDefault()
+
+              const bounds = target.getBoundingClientRect()
+
+              target.dispatchEvent(
+                new MouseEvent("contextmenu", {
+                  bubbles: true,
+                  cancelable: true,
+                  clientX: rtl() ? bounds.right : bounds.left,
+                  clientY: bounds.bottom,
+                }),
+              )
             }}
           >
             {props.children}
