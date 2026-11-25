@@ -498,11 +498,13 @@ test("⌘⇧S archives the open session and moves to the next tab", async ({ pag
 
 test("⌘⇧S toggles archive on the open session, and Unarchive session has its own command", async ({ page }) => {
   const archived = { ...a, time: { created: Date.now(), archived: Date.now() } }
+
   const workspace = await mockWorkspace(page, {
     name: "UnarchiveShortcut",
     sessions: [archived, b],
     seed: { tabs: [a.id, b.id] },
   })
+
   await page.goto(sessionHref(a.id))
   await expectSessionTitle(page, a.title)
 
@@ -2495,6 +2497,7 @@ test("an archived session that asks a question joins Needs attention and goes ba
   page,
 }) => {
   await page.clock.install({ time: T0 + 10 * 60_000 })
+
   const workspace = await mockWorkspace(page, {
     name: "ArchivedQuestion",
     sessions: [
@@ -2512,6 +2515,7 @@ test("an archived session that asks a question joins Needs attention and goes ba
       storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
     },
   })
+
   await page.goto("/")
 
   const inbox = page.locator('[data-slot="sidebar-inbox"]')
