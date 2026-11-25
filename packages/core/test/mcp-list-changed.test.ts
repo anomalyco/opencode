@@ -18,6 +18,7 @@ const catalogServer = Effect.fnUntraced(function* () {
     listens: [] as Array<{ id: string | number; params: unknown; at: number }>,
     cancelled: [] as unknown[],
     refuse: false,
+    refuseFirst: false,
     hangUp: false,
   }
   const capabilities = { tools: { listChanged: true } }
@@ -46,8 +47,9 @@ const catalogServer = Effect.fnUntraced(function* () {
       void reply(message.id, { tools: state.tools, ttlMs: 0, cacheScope: "private" })
     if (message.method === "subscriptions/listen") {
       state.listens.push({ id: message.id, params, at: Date.now() })
-      // A refusal is a ProtocolError, which the follow loop must not retry.
-      if (state.refuse) {
+      // A refusal is a ProtocolError, which the follow loop must not retry. Refusing only the first leaves the SDK's
+      // connect-time open failed and the stream to us.
+      if (state.refuse || (state.refuseFirst && state.listens.length === 1)) {
         void server.send({ jsonrpc: "2.0", id: message.id, error: { code: -32600, message: "refused" } })
         return
       }
@@ -152,6 +154,33 @@ describe("MCP list changes", () => {
       const observed = gaps(server.state.listens).slice(1)
       expect(observed.every((gap) => gap >= 800)).toBe(true)
       expect(observed[1]).toBeGreaterThan(observed[0])
+    }),
+  )
+
+  it.live("opens a stream when the connect-time listen was refused", () =>
+    Effect.gen(function* () {
+      const server = yield* catalogServer()
+      // The SDK's own open at connect is refused, so `autoOpenedSubscription` never exists and nothing else would
+      // ever open a stream for this connection.
+      server.state.refuseFirst = true
+      const connection = yield* McpClient.connect({
+        server: "catalog",
+        config: { type: "attached", transport: server.transport, protocol: "2026-07-28" },
+        directory: import.meta.dir,
+      })
+      const changes = { tools: 0 }
+      connection.onToolsChanged(() => {
+        changes.tools += 1
+      })
+      yield* connection.tools()
+
+      yield* until(() => server.state.listens.length >= 2)
+      const stream = server.state.listens[server.state.listens.length - 1]
+
+      yield* server.add("added")
+      yield* server.change(stream.id)
+      yield* until(() => changes.tools >= 1)
+      expect((yield* connection.tools()).map((tool) => tool.name)).toEqual(["added"])
     }),
   )
 

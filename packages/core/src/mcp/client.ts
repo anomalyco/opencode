@@ -1021,12 +1021,22 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     // after it ends reopen with the filter the server honored, refreshing each time because a change announced while
     // the stream was down is not replayed (#66072).
     const autoOpened = client.autoOpenedSubscription
-    if (autoOpened) {
+    const capabilities = client.getServerCapabilities()
+    const wanted = {
+      ...(capabilities?.tools?.listChanged === true ? { toolsListChanged: true } : {}),
+      ...(capabilities?.prompts?.listChanged === true ? { promptsListChanged: true } : {}),
+      ...(capabilities?.resources?.listChanged === true ? { resourcesListChanged: true } : {}),
+    }
+    // The SDK's stream exists only when it opened: a refused open at connect leaves `autoOpenedSubscription` undefined
+    // and reports it to `onerror` alone. Fall back to the filter the SDK would have used, so that connection still gets
+    // a stream instead of none for its whole life.
+    const filter = autoOpened?.honoredFilter ?? wanted
+    if (autoOpened || Object.keys(wanted).length > 0) {
       // Reopens only. The first stream is the SDK's, and nothing can have been missed while it was open, so a refresh
       // there would only relist what the connection just listed.
       const attempt = Effect.acquireRelease(
         Effect.tryPromise({
-          try: (signal) => client.listen(autoOpened.honoredFilter, { timeout: catalog.timeout, signal }),
+          try: (signal) => client.listen(filter, { timeout: catalog.timeout, signal }),
           catch: (error) => error,
         }),
         (subscription) => Effect.sync(() => void subscription.close().catch(() => {})),
@@ -1054,18 +1064,19 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
         // as `listen` returned. This way the release runs when the attempt ends, and not on the connection's scope.
         Effect.scoped,
       )
-      yield* Effect.promise(() => autoOpened.closed).pipe(
-        Effect.flatMap((reason) =>
-          reason === "local"
-            ? Effect.void
-            : attempt.pipe(
-                Effect.retry(
-                  reopen.pipe(
-                    Schedule.setInputType<unknown>(),
-                    Schedule.while(({ input }) => !(input instanceof ProtocolError)),
-                  ),
-                ),
-              ),
+      // With the SDK's stream, wait for it to end before the first reopen. Without one, start now: the open at
+      // connect was refused, and nothing else would ever open a stream for this connection.
+      const follow = autoOpened
+        ? Effect.promise(() => autoOpened.closed).pipe(
+            Effect.flatMap((reason) => (reason === "local" ? Effect.void : attempt)),
+          )
+        : attempt
+      yield* follow.pipe(
+        Effect.retry(
+          reopen.pipe(
+            Schedule.setInputType<unknown>(),
+            Schedule.while(({ input }) => !(input instanceof ProtocolError)),
+          ),
         ),
         Effect.tapError((error) =>
           Effect.logWarning("MCP list change listener stopped", { server, error: describe(error) }),
