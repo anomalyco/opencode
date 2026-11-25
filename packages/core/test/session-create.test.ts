@@ -52,6 +52,7 @@ const it = testEffect(
       Bus.node,
       SessionProjector.node,
       SessionStore.node,
+      SessionInbox.node,
       Session.node,
       SessionTransfer.node,
       InstructionEntry.node,
@@ -72,6 +73,7 @@ const durableIt = testEffect(
       Bus.node,
       SessionProjector.node,
       SessionStore.node,
+      SessionInbox.node,
       Session.node,
       SessionTransfer.node,
       InstructionEntry.node,
@@ -89,7 +91,7 @@ const durableIt = testEffect(
 )
 const liveIt = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, Project.node, SessionProjector.node, SessionStore.node, Session.node]),
+    LayerNode.group([Database.node, Bus.node, Project.node, SessionProjector.node, SessionStore.node, SessionInbox.node, Session.node]),
     [
       Bus.node.replace(Bus.configured({ persist: true })),
       SessionExecution.node.replace(SessionExecution.noopLayer),
@@ -99,7 +101,7 @@ const liveIt = testEffect(
 )
 const projectIt = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, Project.node, SessionProjector.node, SessionStore.node, Session.node]),
+    LayerNode.group([Database.node, Bus.node, Project.node, SessionProjector.node, SessionStore.node, SessionInbox.node, Session.node]),
     [
       Bus.node.replace(Bus.configured({ persist: true })),
       // Project adoption needs plain-prompt admission, not live plugin/provider startup.
