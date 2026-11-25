@@ -2715,6 +2715,7 @@ export type ConfigEntry =
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           subagent_depth?: number
+          stream_delta_interval_ms?: number
           location_idle_timeout?: string | false
           policies?: Array<{
             action:

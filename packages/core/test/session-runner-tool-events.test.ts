@@ -36,6 +36,7 @@ const capture = (
     readonly interruptProgress?: boolean
     readonly beforeTextDelta?: Effect.Effect<void>
     readonly pendingSnapshot?: Effect.Effect<Snapshot.ID | undefined>
+    readonly deltaBatchInterval?: number
   },
 ) => {
   const published: Array<{ readonly type: string; readonly data: unknown }> = []
@@ -69,6 +70,7 @@ const capture = (
       pendingSnapshot: options?.pendingSnapshot,
       started: 0,
       assistantMessageID: SessionMessage.ID.create(),
+      deltaBatchInterval: options?.deltaBatchInterval,
     }),
   }
 }
@@ -359,6 +361,21 @@ for (const kind of ["text", "reasoning"] as const) {
     }),
   )
 }
+
+it.effect("publishes streamed deltas on the configured batch interval", () =>
+  Effect.gen(function* () {
+    const { published, publisher } = capture("anthropic", { deltaBatchInterval: 25 })
+    yield* publisher.publish(LLMEvent.textStart({ id: "text" }))
+    yield* publisher.publish(LLMEvent.textDelta({ id: "text", text: "one" }))
+    yield* TestClock.adjust("24 millis")
+    expect(published.filter((event) => event.type === "session.text.delta")).toHaveLength(0)
+    yield* TestClock.adjust("1 millis")
+    expect(published.filter((event) => event.type === "session.text.delta").map((event) => event.data)).toMatchObject([
+      { delta: "one" },
+    ])
+    yield* publisher.flush()
+  }),
+)
 
 it.effect("batches text deltas and flushes pending text before the terminal event", () =>
   Effect.gen(function* () {

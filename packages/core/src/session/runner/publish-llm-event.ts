@@ -27,6 +27,8 @@ type Input = {
   readonly pendingSnapshot?: Effect.Effect<Snapshot.ID | undefined>
   readonly started: number
   readonly assistantMessageID: SessionMessage.ID
+  /** The batch interval for streamed deltas, in milliseconds, when `experimental.stream_delta_interval_ms` is set. */
+  readonly deltaBatchInterval?: number
 }
 
 const asRecord = (value: unknown): Record<string, unknown> => (isRecord(value) ? value : { value })
@@ -104,7 +106,7 @@ const hostedContent = (result: ToolResultValue): NonEmptyContent => {
  * and consumers fold by id/ordinal rather than global position.
  */
 export const createLLMEventPublisher = (bus: Pick<Bus.Interface, "publish">, input: Input) => {
-  const deltaBatchInterval = 100
+  const deltaBatchInterval = input.deltaBatchInterval ?? 100
   type ToolState = {
     readonly name: string
     called: boolean
