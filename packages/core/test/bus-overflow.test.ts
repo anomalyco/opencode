@@ -106,7 +106,6 @@ describe("Bus subscriber bounds", () => {
     }),
   )
 
-
   it.effect("times out backpressure instead of blocking an uninterruptible publisher", () =>
     Effect.gen(function* () {
       const bus = yield* Bus.Service
@@ -261,11 +260,4 @@ describe("Bus subscriber bounds", () => {
       yield* Fiber.interrupt(consumer)
     }),
   )
-
-
-
-
-
-
-
 })
