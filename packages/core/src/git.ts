@@ -72,6 +72,7 @@ export class OperationError extends Schema.TaggedError<OperationError>()("Git.Op
     "refresh",
     "write_tree",
     "list_files",
+    "inspect",
     "diff",
     "restore",
     "pack",
@@ -173,17 +174,28 @@ export interface Interface {
   readonly tree: {
     readonly capture: (input: CaptureInput) => Effect.Effect<TreeID, OperationError>
     readonly write: (repository: Repository) => Effect.Effect<TreeID, OperationError>
+    /**
+     * The subset of `trees` that `repository` cannot read, including through its alternates and the
+     * extra object directories in `alternates`.
+     */
+    readonly missing: (input: {
+      repository: Repository
+      trees: readonly TreeID[]
+      alternates?: readonly AbsolutePath[]
+    }) => Effect.Effect<ReadonlySet<TreeID>, OperationError>
     readonly files: (input: {
       repository: Repository
       from: TreeID
       to: TreeID
     }) => Effect.Effect<readonly RelativePath[], OperationError>
+    /** `alternates` lists extra object directories to read trees from for this diff only. */
     readonly diff: (input: {
       repository: Repository
       from: TreeID
       to: TreeID
       context?: number
       paths?: readonly RelativePath[]
+      alternates?: readonly AbsolutePath[]
     }) => Effect.Effect<readonly FileDiff.Info[], OperationError>
     readonly restore: (input: {
       repository: Repository
@@ -982,12 +994,33 @@ const layer = Layer.effect(
       ).map((file) => RelativePath.make(file))
     })
 
+    const treeMissing = Effect.fn("Git.tree.missing")(function* (input: {
+      repository: Repository
+      trees: readonly TreeID[]
+      alternates?: readonly AbsolutePath[]
+    }) {
+      if (input.trees.length === 0) return new Set<TreeID>()
+      const result = yield* repositoryOperation("inspect", input.repository, ["cat-file", "--batch-check"], {
+        stdin: input.trees.map((tree) => `${tree}^{tree}`).join("\n") + "\n",
+        env: alternatesEnv(input.alternates),
+      })
+      // Each input line answers with "<input> missing" when the object (or its tree) is absent.
+      const absent = new Set(
+        result.text
+          .split("\n")
+          .filter((line) => line.endsWith(" missing"))
+          .map((line) => line.slice(0, -" missing".length)),
+      )
+      return new Set(input.trees.filter((tree) => absent.has(`${tree}^{tree}`)))
+    })
+
     const treeDiff = Effect.fn("Git.tree.diff")(function* (input: {
       repository: Repository
       from: TreeID
       to: TreeID
       context?: number
       paths?: readonly RelativePath[]
+      alternates?: readonly AbsolutePath[]
     }) {
       if (input.paths?.length === 0) return []
       const groups = input.paths ? pathGroups(input.paths) : [undefined]
@@ -1002,21 +1035,30 @@ const layer = Layer.effect(
     })
 
     const diffGroup = Effect.fnUntraced(function* (
-      input: { repository: Repository; from: TreeID; to: TreeID; context?: number; paths?: readonly RelativePath[] },
+      input: {
+        repository: Repository
+        from: TreeID
+        to: TreeID
+        context?: number
+        paths?: readonly RelativePath[]
+        alternates?: readonly AbsolutePath[]
+      },
       patchBudget: number,
     ) {
       const args = ["--no-renames", input.from, input.to, "--", ...(input.paths ?? [])]
+      const env = alternatesEnv(input.alternates)
       // Patch headers have no -z form: unquoted paths keep chunksByFile matching non-ASCII names.
       const [names, numbers, patch] = yield* Effect.all(
         [
-          repositoryOperation("diff", input.repository, [
-            "--literal-pathspecs",
+          repositoryOperation(
             "diff",
-            "--name-status",
-            "-z",
-            ...args,
-          ]),
-          repositoryOperation("diff", input.repository, ["--literal-pathspecs", "diff", "--numstat", "-z", ...args]),
+            input.repository,
+            ["--literal-pathspecs", "diff", "--name-status", "-z", ...args],
+            { env },
+          ),
+          repositoryOperation("diff", input.repository, ["--literal-pathspecs", "diff", "--numstat", "-z", ...args], {
+            env,
+          }),
           patchBudget > 0
             ? repositoryOperation(
                 "diff",
@@ -1030,7 +1072,7 @@ const layer = Layer.effect(
                   `--unified=${input.context ?? 3}`,
                   ...args,
                 ],
-                { maxOutputBytes: patchBudget },
+                { maxOutputBytes: patchBudget, env },
               )
             : Effect.succeed({ text: "", stderr: "", truncated: true }),
         ],
@@ -1462,6 +1504,7 @@ const layer = Layer.effect(
       tree: {
         capture: captureTree,
         write: (repository) => writeTree(repository),
+        missing: treeMissing,
         files: treeFiles,
         diff: treeDiff,
         restore,
@@ -1526,6 +1569,19 @@ function execute(cwd: string, proc: AppProcess.Interface, args: string[]) {
           }) satisfies Result,
       ),
     )
+}
+
+/**
+ * Extra object directories for one command, without touching the repository's own alternates file. Git reads a
+ * double-quoted entry as a C-style string, so a path containing the list separator stays one entry.
+ */
+function alternatesEnv(alternates?: readonly AbsolutePath[]) {
+  if (!alternates?.length) return undefined
+  return {
+    GIT_ALTERNATE_OBJECT_DIRECTORIES: alternates
+      .map((directory) => `"${directory.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"`)
+      .join(path.delimiter),
+  }
 }
 
 /** Split NUL-terminated git output into its records. */
