@@ -684,6 +684,19 @@ const layer = Layer.effect(
      * copy as a complete index.
      */
     const seedIndex = Effect.fnUntraced(function* (store: Repository, source: Repository, target: string) {
+      // The store hashes and restores raw bytes (`autocrlf = false`). Under the source's `core.autocrlf`, its index
+      // holds blobs converted to LF while its stat cache calls the CRLF files on disk clean, so the store would keep
+      // those blobs as the files' contents and a restore would write LF. Such a store hashes every file itself.
+      const autocrlf = yield* repositoryOperation("refresh", source, ["config", "--get", "core.autocrlf"]).pipe(
+        Effect.map((result) => result.text.trim().toLowerCase()),
+        Effect.orElseSucceed(() => ""),
+      )
+      if (["true", "yes", "on", "1", "input"].includes(autocrlf))
+        return yield* new OperationError({
+          operation: "refresh",
+          directory: store.gitDirectory,
+          message: "The source index converts line endings",
+        })
       yield* copyIndex(path.join(source.gitDirectory, "index"), target)
       const shared = (yield* fs.readDirectory(source.gitDirectory)).filter((entry) => entry.startsWith("sharedindex."))
       if (shared.length === 0) return
