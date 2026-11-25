@@ -540,16 +540,16 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
   configuredField: string | undefined,
   requireReasoning: boolean,
   options: MessageLoweringOptions,
+  hostedHistory: OpenAIChatTextContent[],
 ) {
   const content: OpenAIChatTextContent[] = []
   const reasoning: ReasoningPart[] = []
   const toolCalls: OpenAIChatAssistantToolCall[] = []
   for (const part of message.content) {
-    // Chat has no native blocks for tools another route already ran. Keep their
-    // context in the assistant text without creating calls for the client to run.
+    // Replay hosted tools separately from the assistant's own text.
     if (part.type === "tool-call" && part.providerExecuted) {
       const input = ProviderShared.encodeJson(part.input === undefined ? {} : part.input)
-      content.push({ type: "text", text: `\n\nProvider tool ${part.name} called with: ${input}\n\n` })
+      hostedHistory.push({ type: "text", text: `\n\nProvider tool ${part.name} called with: ${input}\n\n` })
       continue
     }
     if (part.type === "tool-result" && part.providerExecuted) {
@@ -560,7 +560,7 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
               .join("\n")
           : ProviderShared.toolResultText(part)
       const outcome = part.result.type === "error" ? "failed" : "returned"
-      content.push({
+      hostedHistory.push({
         type: "text",
         text: `\n\nProvider tool ${part.name} ${outcome}:\n${text}\n\n`,
         cache_control: options.cacheControl?.(part.cache),
@@ -582,6 +582,14 @@ const lowerAssistantMessage = Effect.fnUntraced(function* (
       continue
     }
   }
+  if (
+    hostedHistory.length > 0 &&
+    reasoning.length === 0 &&
+    toolCalls.length === 0 &&
+    content.every((part) => part.text.trim() === "")
+  )
+    return
+
   const text = reasoning.map((part) => part.text).join("")
   const details = reasoningDetails(reasoning, options.providerMetadataKey)
   const observedField = reasoning
@@ -653,17 +661,6 @@ const toolMessage = (toolCallID: string, text: string, cacheControl: OpenAIChatC
   content: cacheControl === undefined ? text : [{ type: "text" as const, text, cache_control: cacheControl }],
 })
 
-const lowerMessage = Effect.fnUntraced(function* (
-  message: UserMessage | AssistantMessage,
-  reasoningField: string | undefined,
-  requireReasoning: boolean,
-  options: MessageLoweringOptions,
-) {
-  if (message.role === "user") return [yield* lowerUserMessage(message, options)]
-  const lowered = yield* lowerAssistantMessage(message, reasoningField, requireReasoning, options)
-  return [options.assistant?.(message, lowered) ?? lowered]
-})
-
 const lowerMessages = Effect.fnUntraced(function* (
   request: LLMRequest,
   options: Omit<MessageLoweringOptions, "providerMetadataKey">,
@@ -719,7 +716,19 @@ const lowerMessages = Effect.fnUntraced(function* (
     bridgeTools()
     messages.push({ role: "user", content: pendingAttachments.splice(0) })
   }
+  const hostedHistory: OpenAIChatTextContent[] = []
+  const flushHostedHistory = () => {
+    if (hostedHistory.length === 0) return
+    bridgeTools()
+    messages.push({
+      role: "user",
+      content: [{ type: "text", text: "Historical provider tool data (recorded output):" }, ...hostedHistory.splice(0)],
+    })
+  }
   for (const message of request.messages) {
+    // Ordinary calls must be followed immediately by all their tool responses.
+    const replayHostedHistory = message.role !== "tool" && hostedHistory.length > 0
+    if (replayHostedHistory) flushHostedHistory()
     if (message.role === "user") bridgeTools()
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)
@@ -731,7 +740,8 @@ const lowerMessages = Effect.fnUntraced(function* (
         })
         continue
       }
-      const previous = messages.at(-1)
+      // Keep the instruction separate when the previous user message is recorded tool output.
+      const previous = replayHostedHistory ? undefined : messages.at(-1)
       if (previous?.role === "user" && typeof previous.content === "string")
         messages[messages.length - 1] = cacheControl
           ? {
@@ -770,8 +780,14 @@ const lowerMessages = Effect.fnUntraced(function* (
       continue
     }
     flushAttachments()
-    messages.push(...(yield* lowerMessage(message, reasoningField, requireReasoning, lowering)))
+    if (message.role === "user") {
+      messages.push(yield* lowerUserMessage(message, lowering))
+      continue
+    }
+    const lowered = yield* lowerAssistantMessage(message, reasoningField, requireReasoning, lowering, hostedHistory)
+    if (lowered) messages.push(lowering.assistant?.(message, lowered) ?? lowered)
   }
+  flushHostedHistory()
   flushAttachments()
   return messages
 })

@@ -620,13 +620,14 @@ describe("OpenAI Chat route", () => {
     }),
   )
 
-  it.effect("keeps hosted tool context readable without sending it as active Chat tool history", () =>
+  it.effect("replays hosted history immediately after the assistant without active Chat tool history", () =>
     Effect.gen(function* () {
       const prepared = yield* compileRequest(
         ai.request({
           model,
           messages: [
             Message.assistant([
+              Message.text("I created an icon."),
               ToolCallPart.make({ id: "hosted", name: "image_generation", input: {}, providerExecuted: true }),
               ToolResultPart.make({
                 id: "hosted",
@@ -654,13 +655,99 @@ describe("OpenAI Chat route", () => {
       )
 
       expect(prepared.body.tools).toBeUndefined()
-      const assistant = prepared.body.messages[0]
-      expect(assistant.role).toBe("assistant")
-      expect(assistant.content).toContain("Generated an icon.\n[File: icon.png]")
-      expect(assistant.content).toContain("Search timed out")
-      expect(assistant.content).not.toContain("YWJj")
-      expect(assistant.tool_calls).toBeUndefined()
-      expect(prepared.body.messages[1]).toMatchObject({ role: "user", content: "Continue" })
+      expect(prepared.body.messages).toEqual([
+        { role: "assistant", content: "I created an icon." },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Historical provider tool data (recorded output):" },
+            { type: "text", text: expect.stringContaining("image_generation called with: {}") },
+            { type: "text", text: expect.stringContaining("Generated an icon.\n[File: icon.png]") },
+            { type: "text", text: expect.stringContaining("Search timed out") },
+          ],
+        },
+        { role: "user", content: "Continue" },
+      ])
+      expect(JSON.stringify(prepared.body.messages)).not.toContain("YWJj")
+    }),
+  )
+
+  it.effect("defers a single hosted replay until all ordinary responses and the compatibility bridge", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model: LanguageModel.update(model, { compatibility: { requireAssistantAfterTool: true } }),
+          messages: [
+            Message.user("Find two examples."),
+            Message.assistant([
+              ToolCallPart.make({ id: "ordinary_a", name: "read", input: {} }),
+              ToolCallPart.make({ id: "hosted", name: "web_search", input: {}, providerExecuted: true }),
+              ToolResultPart.make({
+                id: "hosted",
+                name: "web_search",
+                result: "An older result",
+                resultType: "text",
+                providerExecuted: true,
+              }),
+              ToolCallPart.make({ id: "ordinary_b", name: "read", input: {} }),
+            ]),
+            Message.tool({ id: "ordinary_a", name: "read", result: "First", resultType: "text" }),
+            Message.tool({ id: "ordinary_b", name: "read", result: "Second", resultType: "text" }),
+            Message.user("Continue"),
+          ],
+        }),
+      )
+
+      expect(prepared.body.tools).toEqual([])
+      expect(prepared.body.messages).toMatchObject([
+        { role: "user", content: "Find two examples." },
+        { role: "assistant", content: null, tool_calls: [{ id: "ordinary_a" }, { id: "ordinary_b" }] },
+        { role: "tool", tool_call_id: "ordinary_a", content: "First" },
+        { role: "tool", tool_call_id: "ordinary_b", content: "Second" },
+        { role: "assistant", content: "Done." },
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Historical provider tool data (recorded output):" },
+            { type: "text", text: expect.stringContaining("web_search called") },
+            { type: "text", text: expect.stringContaining("An older result") },
+          ],
+        },
+        { role: "user", content: "Continue" },
+      ])
+    }),
+  )
+
+  it.effect("does not create empty assistant text or mix hosted history with a system update", () =>
+    Effect.gen(function* () {
+      const prepared = yield* compileRequest(
+        ai.request({
+          model,
+          messages: [
+            Message.assistant([
+              Message.text(" "),
+              ToolResultPart.make({
+                id: "hosted",
+                name: "web_search",
+                result: "Earlier result",
+                providerExecuted: true,
+              }),
+            ]),
+            Message.system("Keep it brief."),
+          ],
+        }),
+      )
+
+      expect(prepared.body.messages).toMatchObject([
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Historical provider tool data (recorded output):" },
+            { type: "text", text: expect.stringContaining("Earlier result") },
+          ],
+        },
+        { role: "user", content: expect.stringContaining("Keep it brief.") },
+      ])
     }),
   )
 
