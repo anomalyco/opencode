@@ -122,6 +122,18 @@ test("Permission.site saves a web URL's site as written, and only the URL itself
     expect(Permission.site(url)).toEqual([])
 })
 
+test("grants artifact_publish only through an allow that names it", () => {
+  const all = { action: "*", resource: "*", effect: "allow" } as const
+  const named = { action: "artifact_publish", resource: "console:*", effect: "allow" } as const
+  const publish = (...rules: Permission.Rule[]) =>
+    Permission.evaluate("artifact_publish", "console:org_1:private", rules).effect
+  expect(publish(all)).toBe("ask")
+  expect(publish(all, named)).toBe("allow")
+  expect(publish(named, { action: "*", resource: "*", effect: "deny" })).toBe("deny")
+  expect(publish(named, { action: "artifact_*", resource: "*", effect: "ask" })).toBe("ask")
+  expect(Permission.evaluate("read", "src/index.ts", [all]).effect).toBe("allow")
+})
+
 describe("Permission.isActionDenied", () => {
   const rule = (action: string, resource: string, effect: Permission.Rule["effect"]): Permission.Rule => ({
     action,
@@ -610,6 +622,22 @@ describe("Permission", () => {
         id: Permission.ID.create("per_test"),
         effect: "deny",
       })
+    }),
+  )
+
+  it.effect("lets an Allow always grant artifact_publish where a blanket allow doesn't", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "*", resource: "*", effect: "allow" }])
+      const service = yield* Permission.Service
+      const publish = assertion({ action: "artifact_publish", resources: ["console:org_1:private"] })
+      expect(yield* service.allows(publish)).toBe(false)
+      const saved = yield* PermissionSaved.Service
+      yield* saved.add({
+        projectID: Project.ID.global,
+        action: "artifact_publish",
+        resources: ["console:org_1:private"],
+      })
+      expect(yield* service.allows(publish)).toBe(true)
     }),
   )
 

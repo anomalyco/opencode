@@ -1,8 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { TestClock } from "effect/testing"
+import { eq } from "drizzle-orm"
 import { Artifact } from "@opencode/core/artifact"
+import { ArtifactTable } from "@opencode/core/artifact/sql"
 import { Credential } from "@opencode/core/credential"
+import { Database } from "@opencode/core/database/database"
 import { Flag } from "@opencode/core/flag"
 import { Integration } from "@opencode/core/integration"
 import { Plugin } from "@opencode/core/plugin"
@@ -10,6 +13,7 @@ import { PluginHost } from "@opencode/core/plugin/host"
 import { OpencodePlugin } from "@opencode/core/plugin/provider/opencode"
 import { OpencodeArtifacts } from "@opencode/core/plugin/provider/opencode-artifacts"
 import { OpencodeWatches } from "@opencode/core/plugin/provider/opencode-watches"
+import { ArtifactConformance } from "../lib/artifact-conformance"
 import { eventually } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -94,7 +98,11 @@ const start = Effect.fnUntraced(function* (console: ReturnType<typeof fakeConsol
   const credentials = yield* Credential.Service
   yield* credentials.create({
     integrationID: Integration.ID.make("opencode"),
-    value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: console.server.url.origin } }),
+    value: Credential.Key.make({
+      type: "key",
+      key: "secret",
+      metadata: { server: console.server.url.origin, orgID: "org_1" },
+    }),
   })
   const host = yield* PluginHost.make(yield* Plugin.Service, "test")
   yield* OpencodePlugin.effect(host)
@@ -129,6 +137,8 @@ describe("OpencodePlugin artifacts", () => {
             id: Artifact.ProviderID.make("console"),
             name: "OpenCode Console",
             capabilities: ["static"],
+            audiences: ["private"],
+            defaultAudience: "private",
             default: true,
           }),
         )
@@ -155,7 +165,13 @@ describe("OpencodePlugin artifacts", () => {
           expect(created).toMatchObject({
             provider: "console",
             url: `https://opencode.ai/console/org_1/artifacts/${slug}`,
+            visibility: "private",
           })
+          const database = yield* Database.Service
+          expect(
+            (yield* database.db.select().from(ArtifactTable).where(eq(ArtifactTable.id, created.id)).get())
+              ?.destination,
+          ).toBe("console:org_1")
           expect(console.state.uploads).toHaveLength(2)
           expect(console.state.prepared[0]).not.toHaveProperty("replace")
           expect(console.state.published[0]).toMatchObject({
@@ -230,6 +246,35 @@ describe("OpencodePlugin artifacts", () => {
         expect((yield* artifacts.prompts()).defaultProvider.prompt).not.toContain("wake")
         yield* artifacts.create({ title: "Demo", files, sessionID: session.id })
         expect(console.state.published[0]?.body).not.toHaveProperty("sessionID")
+      }),
+    ),
+  )
+
+  it.effect("meets the Console provider's pinned conformance matrix", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        yield* start(console)
+        yield* ArtifactConformance.run(
+          {
+            provider: Artifact.ProviderID.make("console"),
+            fetch: (info, filePath) =>
+              Effect.sync(() => {
+                const slug = info.url.split("/").at(-1) ?? ""
+                if (console.state.deleted.includes(slug)) return undefined
+                const published = console.state.published.findLast((item) => item.slug === slug)?.body as
+                  | { files: { path: string; sha256: string }[] }
+                  | undefined
+                const file = published?.files.find((item) => item.path === filePath)
+                return file && console.state.blobs.get(file.sha256)
+              }),
+            calls: () =>
+              console.state.prepared.length +
+              console.state.uploads.length +
+              console.state.published.length +
+              console.state.deleted.length,
+          },
+          ArtifactConformance.expected.console,
+        )
       }),
     ),
   )

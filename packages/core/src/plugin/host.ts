@@ -301,17 +301,7 @@ export const make = Effect.fn("PluginHost.make")(function* (plugin: Pick<Interfa
         transform: (callback) =>
           artifacts.transform((editor) => {
             callback({
-              add: (definition) =>
-                editor.add({
-                  id: Artifact.ProviderID.make(definition.id),
-                  name: definition.name,
-                  capabilities: definition.capabilities,
-                  prompt: definition.prompt,
-                  create: definition.create,
-                  read: definition.read,
-                  update: definition.update,
-                  delete: definition.delete,
-                }),
+              add: (definition) => editor.add({ ...definition, id: Artifact.ProviderID.make(definition.id) }),
               remove: (id) => editor.remove(Artifact.ProviderID.make(id)),
               default: {
                 get: () => editor.default.get(),

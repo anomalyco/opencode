@@ -351,7 +351,17 @@ export type AutomationStatus = "active" | "paused" | "done"
 
 export type AutomationOutcome = "fired" | "late" | "skipped" | "disabled" | "failed" | "expired"
 
-export type ArtifactCapability = "static" | "server-code" | "sqlite" | "durable-objects"
+export type ArtifactCapability =
+  | "static"
+  | "spa"
+  | "server-code"
+  | "sqlite"
+  | "kv"
+  | "blob"
+  | "cron"
+  | "durable-objects"
+
+export type ArtifactVisibility = "local" | "private" | "public"
 
 export type ArtifactID = string
 
@@ -1025,7 +1035,14 @@ export type FormAnswer1 = { [x: string]: FormValue1 }
 
 export type AutomationTriggerEvery = { type: "every"; every: AutomationDuration; tz?: string }
 
-export type ArtifactProvider = { id: string; name: string; capabilities: Array<ArtifactCapability>; default: boolean }
+export type ArtifactProvider = {
+  id: string
+  name: string
+  capabilities: Array<ArtifactCapability>
+  audiences: Array<ArtifactVisibility>
+  defaultAudience: ArtifactVisibility
+  default: boolean
+}
 
 export type ArtifactInfo = {
   id: ArtifactID
@@ -1034,6 +1051,7 @@ export type ArtifactInfo = {
   title: string
   entry: string
   url: string
+  visibility?: ArtifactVisibility
   time: ArtifactTime
 }
 
@@ -4831,6 +4849,7 @@ export type ExperimentalArtifactsCreateInput = {
   readonly files: { readonly [x: string]: string }
   readonly entry?: string | undefined
   readonly provider?: string | undefined
+  readonly visibility?: ("local" | "private" | "public") | undefined
   readonly sessionID?: string | undefined
 }
 

@@ -28,6 +28,7 @@ import automationMigration from "@opencode/core/database/migration/2026111604320
 import automationEventPosition from "@opencode/core/database/migration/20261116181958_automation_event_position"
 import automationActiveIndex from "@opencode/core/database/migration/20261116213417_automation_active_index"
 import artifactMigration from "@opencode/core/database/migration/20261125001949_artifact"
+import artifactProviderMigration from "@opencode/core/database/migration/20261125002931_artifact-provider"
 import { Global } from "@opencode/util/global"
 
 const run = <A, E>(
@@ -586,6 +587,26 @@ describe("DatabaseMigration", () => {
           { key: "artifact:itemXart_lookalike" },
           { key: "plugin:0063:artifact-slug:art_console" },
         ])
+
+        // Console's and local artifacts get the audience they had; another plugin's stays unknown.
+        yield* DatabaseMigration.applyOnly(db, [artifactProviderMigration])
+        expect(
+          yield* db.all(sql`SELECT id, visibility, destination, manifest, receipt FROM artifact ORDER BY id`),
+        ).toEqual(
+          (
+            [
+              ["art_console", "private", null],
+              ["art_local", "local", "local"],
+              ["art_plugin", null, null],
+            ] as const
+          ).map(([id, visibility, destination]) => ({
+            id,
+            visibility,
+            destination,
+            manifest: '{"spa":false,"bindings":[],"crons":[]}',
+            receipt: null,
+          })),
+        )
       }),
     )
   })

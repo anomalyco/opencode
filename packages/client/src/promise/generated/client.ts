@@ -1697,6 +1697,7 @@ export function make(options: ClientOptions) {
                 files: input["files"],
                 entry: input["entry"],
                 provider: input["provider"],
+                visibility: input["visibility"],
                 sessionID: input["sessionID"],
               },
               successStatus: 200,

@@ -1710,6 +1710,7 @@ const EndpointExperimentalArtifactsCreate =
           files: input["files"],
           entry: input["entry"],
           provider: input["provider"],
+          visibility: input["visibility"],
           sessionID: input["sessionID"],
         },
       }).pipe(Effect.mapError(mapClientError)),

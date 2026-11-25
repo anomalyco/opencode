@@ -1,6 +1,7 @@
 export * as OpencodeArtifacts from "./opencode-artifacts.js"
 
 import { createHash } from "node:crypto"
+import type { ArtifactPublishInput } from "@opencode/plugin/effect/artifact"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Effect, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
@@ -37,20 +38,17 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
     const connection = current.connection
     const wakes = current.wakes
     // Uploads only the files Console doesn't store yet, then publishes them as the artifact `slug`.
-    const publish = Effect.fnUntraced(function* (
-      slug: string,
-      input: {
-        readonly title: string
-        readonly files: Readonly<Record<string, Uint8Array>>
-        readonly sessionID?: string
-      },
-      replace: boolean,
-    ) {
+    const publish = Effect.fnUntraced(function* (slug: string, input: ArtifactPublishInput, replace: boolean) {
+      // Console opens an artifact at its root index.html or index.md, so refuse any other entry before uploading.
+      if (input.entry !== "index.html" && input.entry !== "index.md")
+        return yield* Effect.fail(
+          new Error(`OpenCode Console opens artifacts at index.html or index.md, not ${input.entry}`),
+        )
       const send = yield* sender(ctx, http, connection, slug)
-      const files = Object.entries(input.files).map(([path, bytes]) => ({
+      const files = Object.entries(input.assets).map(([path, file]) => ({
         path,
-        bytes,
-        sha256: createHash("sha256").update(bytes).digest("hex"),
+        bytes: file.bytes,
+        sha256: createHash("sha256").update(file.bytes).digest("hex"),
       }))
       const prepared = yield* send("POST", "/api/artifacts/prepare", {
         slug,
@@ -86,9 +84,21 @@ export const make = Effect.fnUntraced(function* (ctx: Context, http: HttpClient.
       id: providerID,
       name: "OpenCode Console",
       capabilities: ["static"],
+      audiences: ["private"],
+      defaultAudience: "private",
       prompt:
-        "Artifacts are private pages the workspace's members open and comment on inside OpenCode Console. Each needs an index.html." +
+        "Artifacts are private pages the workspace's members open and comment on inside OpenCode Console. Each needs an index.html or index.md at its root." +
         (wakes ? " Comments wake this session." : ""),
+      // The workspace the sign-in chose; an API key carries none, so the sign-in itself stands for it.
+      destination: () =>
+        ctx.integration.connection
+          .resolve(connection)
+          .pipe(
+            Effect.map(
+              (credential) =>
+                `console:${typeof credential?.metadata?.orgID === "string" ? credential.metadata.orgID : IntegrationConnection.key(connection)}`,
+            ),
+          ),
       create: (input) =>
         Effect.gen(function* () {
           // A suffix from the ID, so two artifacts with one title never publish over each other.

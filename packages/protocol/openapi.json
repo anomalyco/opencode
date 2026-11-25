@@ -16788,7 +16788,7 @@
       },
       "Artifact.Capability": {
         "type": "string",
-        "enum": ["static", "server-code", "sqlite", "durable-objects"]
+        "enum": ["static", "spa", "server-code", "sqlite", "kv", "blob", "cron", "durable-objects"]
       },
       "Artifact.Content": {
         "type": "object",
@@ -16834,6 +16834,9 @@
           "provider": {
             "type": "string"
           },
+          "visibility": {
+            "$ref": "#/components/schemas/Artifact.Visibility"
+          },
           "sessionID": {
             "$ref": "#/components/schemas/Session.ID"
           }
@@ -16866,6 +16869,9 @@
           "url": {
             "type": "string"
           },
+          "visibility": {
+            "$ref": "#/components/schemas/Artifact.Visibility"
+          },
           "time": {
             "$ref": "#/components/schemas/Artifact.Time"
           }
@@ -16888,11 +16894,20 @@
               "$ref": "#/components/schemas/Artifact.Capability"
             }
           },
+          "audiences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Artifact.Visibility"
+            }
+          },
+          "defaultAudience": {
+            "$ref": "#/components/schemas/Artifact.Visibility"
+          },
           "default": {
             "type": "boolean"
           }
         },
-        "required": ["id", "name", "capabilities", "default"],
+        "required": ["id", "name", "capabilities", "audiences", "defaultAudience", "default"],
         "additionalProperties": false
       },
       "Artifact.ProviderIDEncoded": {
@@ -16932,6 +16947,10 @@
         },
         "required": ["files"],
         "additionalProperties": false
+      },
+      "Artifact.Visibility": {
+        "type": "string",
+        "enum": ["local", "private", "public"]
       },
       "ArtifactNotFoundErrorEncoded": {
         "type": "object",
