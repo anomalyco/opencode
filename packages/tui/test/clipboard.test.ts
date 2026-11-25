@@ -136,8 +136,10 @@ test("rejects only when no clipboard route accepted the write", async () => {
     }),
   )
 
-  expect(await fallback.write("hello")).toBeUndefined()
-  expect(await clipboard.write("hello").then(undefined, (error) => error)).toBe(failure)
+  await withWSL({}, async () => {
+    expect(await fallback.write("hello")).toBeUndefined()
+    expect(await clipboard.write("hello").then(undefined, (error) => error)).toBe(failure)
+  })
   expect(writes).toEqual([["hello", { destination: "all-available", selection: "clipboard" }]])
 })
 
@@ -146,3 +148,131 @@ test("rejects reads when no clipboard route is supported", async () => {
 
   await expect(clipboard.read()).rejects.toThrow("Clipboard read is not supported on this system")
 })
+
+const WSL_VARIABLES = ["WSL_DISTRO_NAME", "WSL_INTEROP"] as const
+
+// The WSL fallback writes to the real Windows clipboard, so tests pin the variables that decide
+// whether it runs and inject the writer instead of spawning powershell.exe.
+async function withWSL(variables: Partial<Record<(typeof WSL_VARIABLES)[number], string>>, run: () => Promise<void>) {
+  const previous = WSL_VARIABLES.map((name) => [name, process.env[name]] as const)
+  for (const name of WSL_VARIABLES) {
+    const value = variables[name]
+    if (value === undefined) delete process.env[name]
+    else process.env[name] = value
+  }
+  try {
+    await run()
+  } finally {
+    for (const [name, value] of previous) {
+      if (value === undefined) delete process.env[name]
+      else process.env[name] = value
+    }
+  }
+}
+
+const windowsWriteFailed: ClipboardWriteResult = {
+  host: { status: "failed", error: new Error("native clipboard failed") },
+  terminal: { status: "attempted", capability: "unknown" },
+}
+
+test("writes through Windows interop when the host clipboard does not write on WSL", () =>
+  withWSL({ WSL_DISTRO_NAME: "Ubuntu" }, async () => {
+    const writes: string[] = []
+    const clipboard = createClipboardAdapter(coreClipboard({ write: windowsWriteFailed }), {
+      windowsClipboard: async (text) => {
+        writes.push(text)
+      },
+    })
+    const text = "line 1\r\n\t世界 😀 $dollar `tick` \\back"
+
+    expect(await clipboard.write(text)).toBeUndefined()
+    expect(writes).toEqual([text])
+  }))
+
+test("reports a failed WSL interop when the terminal cannot copy", () =>
+  withWSL({ WSL_DISTRO_NAME: "Ubuntu" }, async () => {
+    const clipboard = createClipboardAdapter(
+      coreClipboard({
+        write: {
+          host: { status: "failed", error: new Error("native clipboard failed") },
+          terminal: { status: "local-failure", capability: "supported" },
+        },
+      }),
+      {
+        windowsClipboard: async () => {
+          throw new Error("Clipboard copy under WSL needs powershell.exe interop, which is not available")
+        },
+      },
+    )
+
+    await expect(clipboard.write("hello")).rejects.toThrow("needs powershell.exe interop")
+  }))
+
+test("keeps an unknown terminal result when WSL interop fails", () =>
+  withWSL({ WSL_DISTRO_NAME: "Ubuntu" }, async () => {
+    const clipboard = createClipboardAdapter(coreClipboard({ write: windowsWriteFailed }), {
+      windowsClipboard: async () => {
+        throw new Error("interop failed")
+      },
+    })
+
+    expect(await clipboard.write("hello")).toBeUndefined()
+  }))
+
+test("keeps a terminal that reports OSC 52 support when WSL interop fails", () =>
+  withWSL({ WSL_DISTRO_NAME: "Ubuntu" }, async () => {
+    const clipboard = createClipboardAdapter(
+      coreClipboard({
+        write: {
+          host: { status: "failed", error: new Error("native clipboard failed") },
+          terminal: { status: "attempted", capability: "supported" },
+        },
+      }),
+      {
+        windowsClipboard: async () => {
+          throw new Error("interop failed")
+        },
+      },
+    )
+
+    expect(await clipboard.write("hello")).toBeUndefined()
+  }))
+
+test("mirrors the copy through WSL interop even when the host reports written", () =>
+  withWSL({ WSL_DISTRO_NAME: "Ubuntu" }, async () => {
+    let calls = 0
+    const clipboard = createClipboardAdapter(
+      coreClipboard({
+        write: { host: { status: "written" }, terminal: { status: "not-attempted", capability: "unknown" } },
+      }),
+      {
+        windowsClipboard: async () => {
+          calls++
+        },
+      },
+    )
+
+    expect(await clipboard.write("hello")).toBeUndefined()
+    expect(calls).toBe(1)
+  }))
+
+test("does not use WSL interop outside WSL", () =>
+  withWSL({}, async () => {
+    let calls = 0
+    const clipboard = createClipboardAdapter(
+      coreClipboard({
+        write: {
+          host: { status: "failed", error: new Error("native clipboard failed") },
+          terminal: { status: "local-failure", capability: "supported" },
+        },
+      }),
+      {
+        windowsClipboard: async () => {
+          calls++
+        },
+      },
+    )
+
+    await expect(clipboard.write("hello")).rejects.toThrow("native clipboard failed")
+    expect(calls).toBe(0)
+  }))
