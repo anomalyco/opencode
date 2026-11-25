@@ -48,14 +48,19 @@ const layer = Layer.effectDiscard(
       const session = yield* sessions.get(sessionID)
       if (session.parentID) return
       // The newest assistant message is the turn's last step, so only read it when this turn ran one.
-      const [last] = ran ? yield* sessions.messages({ sessionID, type: "assistant", order: "desc", limit: 1 }) : []
-      const chars = Array.from(
+      const [last] = ran
+        ? yield* sessions
+            .messages({ sessionID, type: "assistant", order: "desc", limit: 1 })
+            .pipe(Effect.orElseSucceed(() => []))
+        : []
+      const text = Array.from(
         (last?.type === "assistant" ? last.content : [])
           .flatMap((part) => (part.type === "text" ? [part.text] : []))
           .join("\n")
           .trim(),
       )
-      const text = chars.length > 500 ? "…" + chars.slice(-500).join("") : chars.join("")
+        .slice(-500)
+        .join("")
       yield* sender.send({
         id: sessionID,
         type: "session.idle",
@@ -63,7 +68,11 @@ const layer = Layer.effectDiscard(
         time,
         title: session.title || "OpenCode",
         body: bodies[outcome],
-        data: { outcome, ...(text && { text }), ...(error && { error: { type: error.type, message: error.message } }) },
+        data: {
+          outcome,
+          ...(text && { text }),
+          ...(error && { error: { type: error.type, ...(error.message && { message: error.message }) } }),
+        },
         attention: false,
       })
     })
@@ -75,7 +84,8 @@ const layer = Layer.effectDiscard(
       if (!(yield* list.hasDevices())) return
       const session = yield* topLevel(sessionID.value)
       const field = form.fields[0]
-      const options = field.type === "string" || field.type === "multiselect" ? (field.options ?? []) : []
+      const choices = field.type === "string" || field.type === "multiselect" ? field : undefined
+      const options = choices?.options ?? []
       yield* sender.send({
         id: form.id,
         type: "question",
@@ -86,11 +96,14 @@ const layer = Layer.effectDiscard(
         // The top-level session is the one to open and the one bells apply to; the form belongs to this one.
         data: {
           formID: form.id,
-          sessionID: sessionID.value,
+          replySessionID: sessionID.value,
           count: form.fields.length,
           question: {
             key: field.key,
             type: field.type,
+            ...(field.title && { title: field.title }),
+            ...(field.description && { text: field.description }),
+            ...(choices?.custom && { custom: true }),
             ...(options.length > 0 && {
               options: options.map((option) =>
                 option.value === option.label ? { label: option.label } : { label: option.label, value: option.value },
@@ -116,7 +129,7 @@ const layer = Layer.effectDiscard(
         // A reply has to name the session that asked, which may be a subagent's.
         data: {
           requestID: request.id,
-          sessionID: request.sessionID,
+          replySessionID: request.sessionID,
           action: request.action,
           resources: request.resources,
           ...(request.save?.length && { save: request.save }),
@@ -150,23 +163,23 @@ const layer = Layer.effectDiscard(
       ])
       .pipe(
         Stream.runForEach((event) => {
-          if (event.type === "session.archived") return sender.clearSession(event.data.sessionID)
+          if (event.type === "session.archived") return sender.clearSession(event.data.sessionID, event.created)
           if (event.type === "session.deleted") {
             stepped.delete(event.data.sessionID)
             asking.delete(event.data.sessionID)
-            return sender.clearSession(event.data.sessionID)
+            return sender.clearSession(event.data.sessionID, event.created)
           }
           if (event.type === "permission.replied") {
             asking.get(event.data.sessionID)?.delete(event.data.requestID)
-            return sender.clear([event.data.requestID])
+            return sender.clear([event.data.requestID], event.created)
           }
           if (event.type === "session.viewed") {
             if (event.created - event.data.idle < viewedAfter) return Effect.void
-            return sender.clear([event.data.sessionID])
+            return sender.clear([event.data.sessionID], event.created)
           }
-          if (event.type !== "session.inbox.enqueued") return sender.clear([event.data.id])
+          if (event.type !== "session.inbox.enqueued") return sender.clear([event.data.id], event.created)
           if (event.data.item.type !== "user") return Effect.void
-          return sender.clear([event.data.sessionID])
+          return sender.clear([event.data.sessionID], event.created)
         }),
         Effect.forkScoped({ startImmediately: true }),
       )
@@ -189,12 +202,12 @@ const layer = Layer.effectDiscard(
           const ran = stepped.delete(sessionID)
           const unanswered = Array.from(asking.get(sessionID) ?? [])
           asking.delete(sessionID)
-          if (event.type === "session.execution.interrupted") return sender.clear(unanswered)
-          if (event.type === "session.execution.succeeded" && !ran) return sender.clear(unanswered)
+          if (event.type === "session.execution.interrupted") return sender.clear(unanswered, event.created)
+          if (event.type === "session.execution.succeeded" && !ran) return sender.clear(unanswered, event.created)
           const outcome = event.type === "session.execution.succeeded" ? "succeeded" : "failed"
           const error = event.type === "session.execution.failed" ? event.data.error : undefined
           return sender
-            .clear(unanswered)
+            .clear(unanswered, event.created)
             .pipe(
               Effect.andThen(finished(sessionID, outcome, ran, event.created, error)),
               Effect.ignoreCause({ log: "Warn", message: "Failed to notify phones" }),

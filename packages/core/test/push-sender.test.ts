@@ -195,15 +195,15 @@ describe("PushSender", () => {
       const ok = yield* phone(ids.ok, "ok")
       yield* phone(ids.quiet, "quiet", { default: "attention" })
 
-      yield* sender.clear([sessionID])
+      yield* sender.clear([sessionID], 2_000)
       yield* drain
       expect(calls).toEqual([])
 
       yield* sender.send(finished)
       yield* advance(() => calls.length === 1)
-      yield* sender.clear([sessionID, "frm_unknown"])
+      yield* sender.clear([sessionID, "frm_unknown"], 2_000)
       yield* advance(() => calls.length === 2)
-      yield* sender.clear([sessionID])
+      yield* sender.clear([sessionID], 2_000)
       yield* drain
 
       expect(calls.map((call) => [call.path.split("/").pop(), call.silent])).toEqual([
@@ -215,12 +215,12 @@ describe("PushSender", () => {
         id: sessionID,
         type: "clear",
         sessionID,
-        time: expect.any(Number),
+        time: 2_000,
       })
     }),
   )
 
-  it.effect("shortens a long body or resource list so the box fits the relay", () =>
+  it.effect("cuts bulk before small facts so the box fits the relay", () =>
     Effect.sync(() => {
       for (const body of ["é".repeat(5_000), "漢".repeat(1_500), "\n".repeat(3_000)]) {
         const text = PushSender.message({ ...question, body })
@@ -230,7 +230,7 @@ describe("PushSender", () => {
       }
       const data = {
         requestID: "per_1",
-        sessionID,
+        replySessionID: sessionID,
         action: "shell",
         resources: ["git push", "x".repeat(5_000), "ls"],
         save: ["git push *"],
@@ -240,7 +240,6 @@ describe("PushSender", () => {
       expect(Buffer.byteLength(text, "utf8")).toBeGreaterThan(2580)
       expect(JSON.parse(text).data).toEqual({
         ...data,
-        save: undefined,
         resources: ["git push", expect.stringMatching(/^x+…$/)],
         truncated: true,
       })
@@ -251,29 +250,44 @@ describe("PushSender", () => {
       })
       expect(Buffer.byteLength(many, "utf8")).toBeLessThanOrEqual(2600)
       expect(JSON.parse(many).data.resources).not.toContain("…")
+      const save = { ...data, resources: ["ls"], save: ["s".repeat(5_000)] }
+      expect(JSON.parse(PushSender.message({ ...question, type: "permission", data: save })).data).toEqual({
+        ...data,
+        resources: ["ls"],
+        save: undefined,
+        truncated: true,
+      })
+      const options = [{ label: "A" }, { label: "abcd" }, { label: "Z".repeat(100) }]
       for (const body of ["b".repeat(2_393), "b".repeat(3_000)]) {
-        for (const labels of [["A", "abcd", "Z".repeat(100)], []]) {
-          const options = labels.map((label) => ({ label }))
-          const data = { formID: "frm_1", question: { key: "q0", type: "string", options } }
-          const cut = JSON.parse(PushSender.message({ ...question, body, data }))
-          expect(Buffer.byteLength(JSON.stringify(cut), "utf8")).toBeLessThanOrEqual(2600)
-          expect(cut.data.question).toEqual(
-            labels.length === 0 ? data.question : { ...data.question, options: expect.any(Array), truncated: true },
-          )
-        }
+        const data = { formID: "frm_1", question: { key: "q0", type: "string", text: body, options } }
+        const cut = PushSender.message({ ...question, body, data })
+        expect(Buffer.byteLength(cut, "utf8")).toBeLessThanOrEqual(2600)
+        expect(JSON.parse(cut)).toMatchObject({
+          body: "",
+          data: { question: { options, text: expect.stringMatching(/^b+…$/) }, truncated: true },
+        })
       }
+      const labels = Array.from({ length: 1000 }, (_, i) => ({ label: "option " + i }))
+      const dropped = JSON.parse(
+        PushSender.message({
+          ...question,
+          data: { formID: "frm_1", question: { key: "q0", type: "string", options: labels } },
+        }),
+      )
+      expect(dropped.data.question.options).toEqual(labels.slice(0, dropped.data.question.options.length))
+      expect(dropped.data.truncated).toBe(true)
       const answer = PushSender.message({ ...finished, data: { outcome: "succeeded", text: "\u0000".repeat(500) } })
       expect(Buffer.byteLength(answer, "utf8")).toBeLessThanOrEqual(2600)
-      expect(JSON.parse(answer).data).toEqual({ outcome: "succeeded" })
+      expect(JSON.parse(answer).data).toEqual({ outcome: "succeeded", truncated: true })
       const failed = PushSender.message({
         ...finished,
         body: "Failed",
-        data: { outcome: "failed", text: "Done.", error: { type: "unknown", message: "E".repeat(5_000) } },
+        data: { outcome: "failed", text: "\u0000".repeat(500), error: { type: "rate_limit", message: "Slow down" } },
       })
-      expect(Buffer.byteLength(failed, "utf8")).toBeLessThanOrEqual(2600)
-      expect(JSON.parse(failed)).toMatchObject({
-        body: "Failed",
-        data: { text: "Done.", error: { type: "unknown", message: expect.stringMatching(/^E+…$/) } },
+      expect(JSON.parse(failed).data).toEqual({
+        outcome: "failed",
+        error: { type: "rate_limit", message: "Slow down" },
+        truncated: true,
       })
       expect(PushSender.message(question)).toBe(
         JSON.stringify({

@@ -1,6 +1,6 @@
 export * as PushSender from "./sender.js"
 
-import { Clock, Context, Effect, Layer, Option, Schema, Scope } from "effect"
+import { Context, Effect, Layer, Option, Schema, Scope } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
 import type { Push } from "@opencode/schema/push"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -9,9 +9,9 @@ import { KV } from "../kv.js"
 import { PushCrypto } from "./crypto.js"
 import { PushList } from "./list.js"
 
-export interface Option {
+/** A reply sends `value`, or `label` when there is no value. */
+export interface Choice {
   readonly label: string
-  /** Only when it differs from the label. */
   readonly value?: string
 }
 
@@ -19,14 +19,18 @@ export interface Option {
 export interface Question {
   readonly key: string
   readonly type: string
-  readonly options?: ReadonlyArray<Option>
-  readonly truncated?: true
+  readonly title?: string
+  readonly text?: string
+  /** True when a typed answer is accepted besides the options. */
+  readonly custom?: true
+  readonly options?: ReadonlyArray<Choice>
 }
 
 export interface Data {
   readonly requestID?: string
   readonly formID?: string
-  readonly sessionID?: string
+  /** The session that asked, which replies name; it may be a subagent's. */
+  readonly replySessionID?: string
   readonly action?: string
   readonly resources?: ReadonlyArray<string>
   readonly save?: ReadonlyArray<string>
@@ -35,6 +39,7 @@ export interface Data {
   readonly outcome?: "succeeded" | "failed"
   readonly text?: string
   readonly error?: { readonly type: string; readonly message?: string }
+  /** Something in `data` was cut or left out; the full version can be read by id. */
   readonly truncated?: true
 }
 
@@ -56,9 +61,9 @@ export interface Interface {
   /** Sends to every phone that wants it, in the background. */
   readonly send: (notification: Notification) => Effect.Effect<void>
   /** Removes the notifications sent under these ids from the phones that got them, in the background. */
-  readonly clear: (ids: ReadonlyArray<string>) => Effect.Effect<void>
+  readonly clear: (ids: ReadonlyArray<string>, time: number) => Effect.Effect<void>
   /** Removes every notification sent for this top-level session, for when the session is deleted. */
-  readonly clearSession: (sessionID: string) => Effect.Effect<void>
+  readonly clearSession: (sessionID: string, time: number) => Effect.Effect<void>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/PushSender") {}
@@ -109,7 +114,8 @@ const cutList = <T>(
 
 const shortenError = (data: Data, over: Over): Data => {
   if (data.error?.message === undefined || over(data) <= 0) return data
-  return { ...data, error: { ...data.error, message: shorten(data.error.message, over(data)) } }
+  const marked = { ...data, truncated: true as const }
+  return { ...marked, error: { ...data.error, message: shorten(data.error.message, over(marked)) } }
 }
 
 const shortenResources = (data: Data, over: Over) => {
@@ -117,24 +123,33 @@ const shortenResources = (data: Data, over: Over) => {
   return cutList(data.resources, (kept) => ({ ...data, resources: kept, truncated: true }), over, shorten)
 }
 
-// An option is never shortened: without a value, its label is what a reply sends.
+const shortenQuestion = (data: Data, over: Over): Data => {
+  const question = data.question
+  if (question?.text === undefined || over(data) <= 0) return data
+  const marked = { ...data, truncated: true as const }
+  return { ...marked, question: { ...question, text: shorten(question.text, over(marked)) } }
+}
+
+// A choice is never shortened, since a reply sends it as it is.
 const shortenOptions = (data: Data, over: Over) => {
   const question = data.question
   if (!question?.options?.length || over(data) <= 0) return data
-  const cut = (kept: ReadonlyArray<Option>): Data => ({
+  const cut = (kept: ReadonlyArray<Choice>): Data => ({
     ...data,
-    question: { ...question, options: kept, truncated: true },
+    question: { ...question, options: kept },
+    truncated: true,
   })
   return cutList(question.options, cut, over, () => undefined)
 }
 
 /**
- * The JSON the phone decrypts, shortened so the box stays within the relay's limit. A failed turn's error message is
- * cut first, then the turn's text and a permission's `save` are dropped. A permission's resources or a question's
- * options keep their order and come with `truncated: true`. The body is cut last; ids never are.
+ * The JSON the phone decrypts, shortened so the box stays within the relay's limit. Bulk goes before small facts: a
+ * turn's text is dropped, then a failed turn's error message is cut, then a permission's resources (its `save` is
+ * dropped only when that isn't enough), then the body, a question's text and its options. Anything cut or left out of
+ * `data` sets `truncated: true`. Ids are never cut.
  */
 export const message = (notification: Notification) => {
-  const make = (data: Data, body = notification.body) =>
+  const make = (data: Data, body: string) =>
     JSON.stringify({
       v: 1,
       id: notification.id,
@@ -145,13 +160,20 @@ export const message = (notification: Notification) => {
       body,
       data,
     })
-  const over = (data: Data) => Buffer.byteLength(make(data), "utf8") - maxMessageBytes
-  const error = shortenError(notification.data, over)
-  const text = over(error) > 0 ? { ...error, text: undefined } : error
-  const save = over(text) > 0 ? { ...text, save: undefined } : text
-  const data = shortenOptions(shortenResources(save, over), over)
-  if (over(data) <= 0) return make(data)
-  return make(data, shorten(notification.body, over(data)) ?? "…")
+  const overWith = (body: string) => (data: Data) => Buffer.byteLength(make(data, body), "utf8") - maxMessageBytes
+  const over = overWith(notification.body)
+  const start = notification.data
+  const text =
+    start.text === undefined || over(start) <= 0 ? start : { ...start, text: undefined, truncated: true as const }
+  const error = shortenError(text, over)
+  const resources = shortenResources(error, over)
+  const save =
+    resources.save === undefined || over(resources) <= 0
+      ? resources
+      : shortenResources({ ...error, save: undefined, truncated: true }, over)
+  const body = over(save) <= 0 ? notification.body : (shorten(notification.body, over(save)) ?? "")
+  const data = shortenOptions(shortenQuestion(save, overWith(body)), overWith(body))
+  return make(data, body)
 }
 
 export const level = (device: PushList.Stored, sessions: Record<string, Push.Bell>, sessionID: string) =>
@@ -221,7 +243,7 @@ const layer = Layer.effect(
       )
     })
 
-    const clear = Effect.fn("PushSender.clear")(function* (ids: ReadonlyArray<string>) {
+    const clear = Effect.fn("PushSender.clear")(function* (ids: ReadonlyArray<string>, time: number) {
       const cleared: (typeof Sent.Type & { id: string })[] = []
       for (const id of ids) {
         const sent = yield* getSent(id)
@@ -230,7 +252,6 @@ const layer = Layer.effect(
       }
       if (cleared.length === 0) return
       const targets = yield* list.targets()
-      const time = yield* Clock.currentTimeMillis
       yield* Effect.forEach(
         cleared.flatMap((item) =>
           targets.devices
@@ -244,7 +265,7 @@ const layer = Layer.effect(
       )
     })
 
-    const clearSession = Effect.fn("PushSender.clearSession")(function* (sessionID: string) {
+    const clearSession = Effect.fn("PushSender.clearSession")(function* (sessionID: string, time: number) {
       const ids: string[] = []
       let after: string | undefined
       while (true) {
@@ -256,13 +277,13 @@ const layer = Layer.effect(
         if (!page.next) break
         after = page.next
       }
-      yield* clear(ids)
+      yield* clear(ids, time)
     })
 
     return Service.of({
       send: (notification) => deliver(notification).pipe(Effect.forkIn(scope), Effect.asVoid),
-      clear: (ids) => clear(ids).pipe(Effect.forkIn(scope), Effect.asVoid),
-      clearSession: (sessionID) => clearSession(sessionID).pipe(Effect.forkIn(scope), Effect.asVoid),
+      clear: (ids, time) => clear(ids, time).pipe(Effect.forkIn(scope), Effect.asVoid),
+      clearSession: (sessionID, time) => clearSession(sessionID, time).pipe(Effect.forkIn(scope), Effect.asVoid),
     })
   }),
 )
