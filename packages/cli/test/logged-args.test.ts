@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import fs from "node:fs/promises"
 import path from "node:path"
 import { tmpdir } from "../../core/test/fixture/tmpdir"
+import { isRedacted } from "@opencode/util/redact"
 import { loggedArgs } from "../src/logged-args"
 import { isolatedEnv } from "./fixture/environment"
 
@@ -53,9 +54,11 @@ describe("loggedArgs", () => {
     ])
   })
 
-  test("passes clean arguments through unchanged", () => {
+  test("passes clean arguments through unchanged and marks output as pre-redacted", () => {
     const clean = ["--standalone", "run", "--model", "anthropic/claude-sonnet-4-5", "explain src/index.ts"]
-    expect(loggedArgs(clean)).toEqual(clean)
+    const result = loggedArgs(clean)
+    expect(result).toEqual(clean)
+    expect(isRedacted(result)).toBe(true)
   })
 })
 

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { REDACTED, redactSecrets, redactValue } from "./redact.js"
+import { isRedacted, markRedacted, REDACTED, redactSecrets } from "./redact.js"
 
 const syntheticGithubOauth = "gho_FAKEFAKE0000111122223333444455556666"
 const syntheticGithubPat = "github_pat_11AAAAAAA0123456789_ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
@@ -30,10 +30,13 @@ describe("redactSecrets", () => {
       [`OPENAI_API_KEY=${syntheticOpenAi}`, `OPENAI_API_KEY=${REDACTED}`],
       [`GOOGLE_API_KEY=${syntheticGoogle}`, `GOOGLE_API_KEY=${REDACTED}`],
       [`AWS_ACCESS_KEY_ID=${syntheticAws}`, `AWS_ACCESS_KEY_ID=${REDACTED}`],
+      [`AWS_SESSION_KEY_ID=ASIAIOSFODNN7EXAMPLE`, `AWS_SESSION_KEY_ID=${REDACTED}`],
       [`SLACK_TOKEN=${syntheticSlack}`, `SLACK_TOKEN=${REDACTED}`],
       [`GITLAB_TOKEN=${syntheticGitLab}`, `GITLAB_TOKEN=${REDACTED}`],
       [`PYPI_TOKEN=${syntheticPyPi}`, `PYPI_TOKEN=${REDACTED}`],
       [`Authorization: Bearer ${syntheticBearer}`, `Authorization: Bearer ${REDACTED}`],
+      [`Authorization: bearer ${syntheticBearer}`, `Authorization: bearer ${REDACTED}`],
+      [`Authorization: BEARER ${syntheticBearer}`, `Authorization: BEARER ${REDACTED}`],
     ]
     for (const [input, expected] of cases) {
       expect(redactSecrets(input)).toBe(expected)
@@ -77,22 +80,13 @@ describe("redactSecrets", () => {
   })
 })
 
-describe("redactValue", () => {
-  test("recursively redacts nested objects and arrays", () => {
-    const input = {
-      command: `export GH_TOKEN=${syntheticGithubOauth}`,
-      urls: ["https://user:pass123@example.com/repo", "https://example.com/clean"],
-      count: 2,
-    }
-    expect(redactValue(input)).toEqual({
-      command: `export GH_TOKEN=${REDACTED}`,
-      urls: [`https://${REDACTED}@example.com/repo`, "https://example.com/clean"],
-      count: 2,
-    })
-  })
-
-  test("preserves object identity when nothing needs redaction", () => {
-    const clean = { command: "git status", flags: ["--short"], exit: 0 }
-    expect(redactValue(clean)).toBe(clean)
+describe("markRedacted", () => {
+  test("marks objects and arrays in place without affecting unmarked values", () => {
+    const args = ["run", REDACTED]
+    expect(markRedacted(args)).toBe(args)
+    expect(isRedacted(args)).toBe(true)
+    expect(isRedacted(["run", REDACTED])).toBe(false)
+    expect(isRedacted("run")).toBe(false)
+    expect(isRedacted(null)).toBe(false)
   })
 })
