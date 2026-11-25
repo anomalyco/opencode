@@ -41,7 +41,8 @@ export const Input = Schema.Struct({
   sessionID: Schema.optionalKey(
     Schema.String.check(Schema.isPattern(/^ses_[0-9A-Za-z]{26}$/u)).pipe(Schema.brand("SessionID")),
   ).annotate({
-    description: "Send a follow-up to an existing subagent, running or finished. Copy the full sessionID from the previous tool result. Omit to start a new one.",
+    description:
+      "Send a follow-up to an existing subagent, running or finished. Copy the full sessionID from the previous tool result. Omit to start a new one.",
   }),
 })
 
