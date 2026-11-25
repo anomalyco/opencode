@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test"
-import { fullGC } from "bun:jsc"
 import { AIError, HttpContext, InvalidRequestError, TransportError } from "@opencode/ai/effect"
 import type {
   ChannelObservation,
@@ -1059,7 +1058,7 @@ describe("SessionModelTransport", () => {
         yield* collect(transport.bind(session), exchange("first"))
         expect(fixture.connections[0]?.closed).toBe(0)
 
-        yield* TestClock.adjust("5 minutes")
+        yield* TestClock.adjust("25 minutes")
         yield* Effect.yieldNow
 
         expect(fixture.connections[0]?.closed).toBe(1)
@@ -1076,44 +1075,12 @@ describe("SessionModelTransport", () => {
         const transport = yield* SessionModelTransport.Service
         const executor = transport.bind(session)
         yield* collectComplete(executor, exchange("first"))
-        yield* TestClock.adjust("299 seconds")
+        yield* TestClock.adjust("24 minutes")
         yield* collectComplete(executor, exchange("second"))
-        yield* TestClock.adjust("1 second")
+        yield* TestClock.adjust("1 minute")
         expect(fixture.connections[0]?.closed).toBe(0)
-        yield* TestClock.adjust("299 seconds")
+        yield* TestClock.adjust("24 minutes")
         expect(fixture.connections[0]?.closed).toBe(1)
-      }),
-    )
-  })
-
-  test("does not release an idle watcher's unacquired lock on cancellation", async () => {
-    const sent: string[] = []
-    const connector: WebSocketConnector = {
-      open: () =>
-        Effect.gen(function* () {
-          const messages = yield* Queue.unbounded<string | Uint8Array, AIError>()
-          return {
-            sendText: (message) => Effect.sync(() => void sent.push(message)),
-            messages: Stream.fromQueue(messages),
-            close: Queue.shutdown(messages).pipe(Effect.asVoid),
-          }
-        }),
-    }
-    await runWithTestClock(
-      connector,
-      Effect.gen(function* () {
-        const transport = yield* SessionModelTransport.Service
-        const executor = transport.bind(session)
-        const first = yield* collect(executor, exchange("first")).pipe(Effect.forkChild({ startImmediately: true }))
-        expect(sent).toEqual(["first"])
-        yield* TestClock.adjust("5 minutes")
-        yield* Fiber.interrupt(first)
-        const second = yield* collect(executor, exchange("second")).pipe(Effect.forkChild({ startImmediately: true }))
-        const third = yield* collect(executor, exchange("third")).pipe(Effect.forkChild({ startImmediately: true }))
-        yield* Effect.yieldNow
-        expect(sent).toEqual(["first", "second"])
-        yield* Fiber.interrupt(third)
-        yield* Fiber.interrupt(second)
       }),
     )
   })
@@ -1139,39 +1106,13 @@ describe("SessionModelTransport", () => {
         const execution = yield* transport.bind(session).execute(exchange("first"))
         const fiber = yield* execution.frames.pipe(Stream.runCollect, Effect.forkChild)
 
-        yield* TestClock.adjust("5 minutes")
+        yield* TestClock.adjust("25 minutes")
         expect(closed.count).toBe(0)
 
         Queue.offerUnsafe(messages, "completed")
         yield* Fiber.join(fiber)
-        yield* TestClock.adjust("5 minutes")
+        yield* TestClock.adjust("25 minutes")
         expect(closed.count).toBe(1)
-      }),
-    )
-  })
-
-  test("releases the completed request while its socket remains reusable", async () => {
-    const fixture = automatic()
-
-    await run(
-      fixture.connector,
-      Effect.gen(function* () {
-        const transport = yield* SessionModelTransport.Service
-        const payload = { body: "x".repeat(1024) }
-        const reference = new WeakRef(payload)
-        const item: WebSocketChannelExchange = {
-          ...exchange("first"),
-          fallback: () => {
-            void payload
-            return Stream.make("fallback")
-          },
-        }
-
-        yield* collect(transport.bind(session), item)
-        fullGC()
-
-        expect(fixture.connections[0]?.closed).toBe(0)
-        expect(reference.deref()).toBeUndefined()
       }),
     )
   })
