@@ -119,7 +119,7 @@ currently use these actions and resources:
 | `question`           | `*`                                                                         |
 | `webfetch`           | Requested URL                                                               |
 | `websearch`          | Search query                                                                |
-| `experimental_image_generate` | Selected image model as `providerID/modelID`, plus `#variant` when set |
+| `generate_image` | Selected image model as `providerID/modelID`, plus `#variant` when set |
 | `external_directory` | Canonical external directory boundary, normally ending in `/*`              |
 | `<server>_<tool>`    | `*` for an MCP tool; unsupported characters in both names become `_`        |
 | `opencode_list_mcp_resources` | MCP server name                                                    |
@@ -288,7 +288,8 @@ shell: git status * → allow
 
 Saved approvals are durable, project-scoped `allow` rules. They never override
 a configured `deny`. Tools choose the proposed saved pattern: some propose `*`,
-shell proposes command prefixes, and skills and subagents propose their IDs.
+shell proposes command prefixes, web fetches propose the URL's site (such as
+`https://opencode.ai/*`), and skills and subagents propose their IDs.
 Review broad approvals and remove those no longer needed.
 
 Clients may attach feedback when rejecting. Non-interactive clients must decide

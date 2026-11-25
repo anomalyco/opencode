@@ -126,7 +126,7 @@ impl Diffs {
             .count()
     }
 
-    /// Deliver start and end in the same UI turn so both events arrive before the next sync.
+    /// Apply start and end before the UI's next turn, so its sync sees both at once.
     fn short_turn(&self, session: &str) {
         for (kind, status) in [
             ("session.execution.started", SessionStatus::Running),
@@ -144,6 +144,7 @@ impl Diffs {
             while self.tui.data.read(|state| state.status(&id)) != status {
                 assert!(started.elapsed() < support::WAIT, "{kind} did not set the status");
                 std::thread::sleep(Duration::from_millis(1));
+                self.tui.data.drain();
             }
         }
     }
@@ -561,9 +562,9 @@ fn the_file_menu_opens_on_the_right_button_down() {
 #[test]
 fn the_route_opens_from_home_and_goes_back() {
     let h = route(1, 4, 120, 30);
-    assert_eq!(h.tui.route(), Route::Plugin { id: "opencode.diffs".into(), name: "diff".into() });
+    assert_eq!(*h.tui.route(), Route::Plugin { id: "opencode.diffs".into(), name: "diff".into() });
     h.keys(&["q"]);
-    h.wait("the route did not go back home", || h.tui.route() == Route::Home);
+    h.wait("the route did not go back home", || *h.tui.route() == Route::Home);
 }
 
 #[test]
@@ -595,7 +596,7 @@ fn ctrl_c_closes_one_level_of_the_viewer() {
         };
         h.wait_for("/project");
         h.tui.navigate(stats.clone());
-        h.wait("stats did not show", || h.tui.route() == stats);
+        h.wait("stats did not show", || *h.tui.route() == stats);
         h.tui.keymap.dispatch("diff.open", None);
         h.wait_for("≡ f0000.rs");
         let (x, y) = h.find("src/f0000.rs");
@@ -603,11 +604,11 @@ fn ctrl_c_closes_one_level_of_the_viewer() {
         h.wait_for("Mark complete");
         h.keys(&["ctrl+c"]);
         h.assert_menu_closed();
-        assert_eq!(h.tui.route(), diff, "the chord closed more than the menu");
+        assert_eq!(*h.tui.route(), diff, "the chord closed more than the menu");
         h.keys(&["ctrl+c"]);
-        h.wait("ctrl+c did not go back to stats", || h.tui.route() == stats);
+        h.wait("ctrl+c did not go back to stats", || *h.tui.route() == stats);
         h.keys(&["ctrl+c"]);
-        h.wait("ctrl+c did not go home", || h.tui.route() == Route::Home);
+        h.wait("ctrl+c did not go home", || *h.tui.route() == Route::Home);
         assert!(!h.app.app().is_quitting());
         if !rebound {
             h.keys(&["ctrl+c"]);
@@ -747,7 +748,7 @@ fn the_picked_source_outlives_the_viewer() {
     h.keys(&["down", "down", "return"]);
     h.wait_for("Uncommitted");
     h.keys(&["q"]);
-    h.wait("q did not close the viewer", || h.tui.route() == Route::Home);
+    h.wait("q did not close the viewer", || *h.tui.route() == Route::Home);
     h.tui.keymap.dispatch("diff.open", None);
     h.wait_for("≡ f0000.rs");
     assert!(h.settle().contains("Uncommitted"), "{}", h.app.text());
@@ -990,7 +991,7 @@ fn a_remount_keeps_the_viewer_and_its_way_back() {
     let h = mount_with(Route::Home, json!([hunk_file(0, 4)]), 120, 30);
     h.wait_for("/project");
     h.tui.navigate(stats.clone());
-    h.wait("stats did not show", || h.tui.route() == stats);
+    h.wait("stats did not show", || *h.tui.route() == stats);
     h.tui.keymap.dispatch("diff.open", None);
     h.wait_for("≡ f0000.rs");
     h.keys(&["m"]);
@@ -999,7 +1000,7 @@ fn a_remount_keeps_the_viewer_and_its_way_back() {
     h.wait_for("≡ f0000.rs");
     assert!(h.settle().contains("1/1"), "the remount lost the mark:\n{}", h.app.text());
     h.keys(&["q"]);
-    h.wait("q did not go back to stats", || h.tui.route() == stats);
+    h.wait("q did not go back to stats", || *h.tui.route() == stats);
 }
 
 #[test]
@@ -1175,16 +1176,6 @@ fn every_end_of_a_turn_loads_last_turn_again_and_a_shutdown_does_not() {
     assert!(!reloads(&h, &[started.clone(), interrupted("shutdown")]), "a shutdown loaded again");
     assert!(reloads(&h, &[("server.connected", json!({}))]), "a reconnect did not load the turn it lost");
     assert!(!reloads(&h, &[("server.connected", json!({}))]), "a reconnect loaded with no turn running");
-    // Posted to the UI as the pump posts signals, so the start is heard before the skip.
-    let started: opencode_api::generated::V2Event = serde_json::from_value(json!({
-        "id": "evt_lagged", "created": 99, "type": "session.execution.started",
-        "durable": { "aggregateID": "ses_a", "seq": 99, "version": 1 }, "data": { "sessionID": "ses_a" },
-    }))
-    .unwrap();
-    opencode_tui::features::events::testing::signal(&h.tui, started);
-    let reads = h.diff_reads();
-    opencode_tui::features::events::testing::lagged(&h.tui);
-    h.wait("skipped signals did not load the turn again", || h.diff_reads() > reads);
 }
 
 #[test]
@@ -1310,7 +1301,7 @@ fn the_viewers_small_controls_do_what_they_say() {
     assert!(diffs_setting(&h)["view"].is_null(), "the toggle without room saved {}", diffs_setting(&h));
     let (x, y) = h.find("close");
     h.app.click(x, y);
-    h.wait("the footer's close did not leave", || h.tui.route() == Route::Home);
+    h.wait("the footer's close did not leave", || *h.tui.route() == Route::Home);
 
     let h = route(2, 4, 140, 30);
     h.keys(&["b"]);

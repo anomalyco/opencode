@@ -40,6 +40,7 @@ import { useMarkdown } from "../context/markdown"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { checksum } from "@opencode/util/encode"
 import { formatExecuteOutput } from "@opencode/util/execute-output"
+import { Badge } from "@opencode/ui/badge"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
@@ -62,7 +63,9 @@ import {
   currentToolMetadata,
   currentToolOutput,
   executeToolCallArgs,
+  executeToolCallCount,
   executeToolCalls,
+  executeToolErrorIndex,
   executeToolSubtitle,
   readImagePath,
   type ExecuteToolCall,
@@ -70,6 +73,7 @@ import {
 import { AssistantReasoningContent } from "../message/message-content"
 import { createCopyFeedback } from "../components/copy"
 import { stripAnsi } from "./ansi"
+import { relativizeProjectPath } from "./project-path"
 import { createShellFollower } from "./shell-output"
 import {
   createShellRunState,
@@ -227,25 +231,6 @@ function DiagnosticsDisplay(props: { diagnostics: readonly Diagnostic[] }): JSX.
       </div>
     </Show>
   )
-}
-
-function relativizeProjectPath(path: string, directory?: string) {
-  if (!path) return ""
-
-  if (!directory) return path
-
-  if (directory === "/") return path
-
-  if (directory === "\\") return path
-
-  if (path === directory) return ""
-
-  const separator = directory.includes("\\") ? "\\" : "/"
-  const prefix = directory.endsWith(separator) ? directory : directory + separator
-
-  if (!path.startsWith(prefix)) return path
-
-  return path.slice(prefix.length)
 }
 
 export function displayDirectory(path: string | undefined) {
@@ -1386,63 +1371,6 @@ export function FileAccordionGroup(props: { children: JSX.Element }) {
   )
 }
 
-// A file's diff shows this much until its toggle opens the rest.
-const FILE_DIFF_FOLD = 420
-
-/** Folds a tall file diff as a long user message folds: laid out whole, clipped, and opened by its toggle. */
-export function FileDiffFold(props: { children: JSX.Element }) {
-  const i18n = useI18n()
-  const id = createUniqueId()
-  const [state, setState] = createStore({ tall: false, expanded: false })
-
-  let fold: HTMLDivElement | undefined
-  let toggle: HTMLButtonElement | undefined
-
-  // The limit always applies and the toggle lies over the fold, so measuring moves nothing. A height changed during
-  // this delivery would reach the timeline's row observer a frame late, as a ResizeObserver loop error.
-  createResizeObserver(
-    () => fold,
-    () => setState("tall", fold!.scrollHeight >= FILE_DIFF_FOLD),
-  )
-
-  // Closing shrinks the diff above the toggle, which would leave the reader far past its end, so the toggle stays
-  // where it was pressed. Opening moves nothing above it.
-  const flip = () => {
-    const before = toggle!.getBoundingClientRect().top
-    setState("expanded", !state.expanded)
-    const moved = before - toggle!.getBoundingClientRect().top
-
-    if (moved > 1) scrollParent(toggle!)?.scrollBy({ top: -moved, behavior: "instant" })
-  }
-
-  return (
-    <>
-      <div
-        ref={fold}
-        id={id}
-        data-slot="file-diff-fold"
-        data-folded={state.tall && !state.expanded ? "" : undefined}
-        style={{ "max-height": state.expanded ? undefined : `${FILE_DIFF_FOLD}px` }}
-      >
-        {props.children}
-      </div>
-      <Show when={state.tall || state.expanded}>
-        <button
-          ref={toggle}
-          type="button"
-          data-slot="file-diff-fold-toggle"
-          aria-expanded={state.expanded}
-          aria-controls={id}
-          onClick={flip}
-        >
-          {i18n.t(state.expanded ? "ui.common.showLess" : "ui.common.showMore")}
-          <Icon name="chevron-down" />
-        </button>
-      </Show>
-    </>
-  )
-}
-
 function FileAccordionItem(props: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -1486,7 +1414,7 @@ function FileAccordionItem(props: {
           data-slot="accordion-content"
           data-expanded=""
         >
-          <FileDiffFold>{props.children}</FileDiffFold>
+          {props.children}
         </div>
       </Show>
     </div>
@@ -1644,8 +1572,7 @@ export function toolErrorSubtitle(props: ToolProps, i18n: UiI18n) {
 
   if (props.tool === "read" || props.tool === "edit" || props.tool === "write") return getFilename(input.path ?? "")
 
-  if (props.tool === "list" || props.tool === "glob" || props.tool === "grep")
-    return displayFolder(input.path)
+  if (props.tool === "list" || props.tool === "glob" || props.tool === "grep") return displayFolder(input.path)
 
   if (props.tool === "webfetch") return input.url || undefined
 
@@ -1796,7 +1723,7 @@ ToolRegistry.register({
           <div
             data-component="tool-output"
             data-scrollable
-            tabIndex={0}
+            tabIndex={-1}
             role="region"
             aria-label={i18n.t("ui.scrollView.ariaLabel")}
           >
@@ -1829,7 +1756,7 @@ ToolRegistry.register({
           <div
             data-component="tool-output"
             data-scrollable
-            tabIndex={0}
+            tabIndex={-1}
             role="region"
             aria-label={i18n.t("ui.scrollView.ariaLabel")}
           >
@@ -1867,7 +1794,7 @@ ToolRegistry.register({
           <div
             data-component="tool-output"
             data-scrollable
-            tabIndex={0}
+            tabIndex={-1}
             role="region"
             aria-label={i18n.t("ui.scrollView.ariaLabel")}
           >
@@ -2059,7 +1986,7 @@ export function ConsoleOutput(props: { command?: string; output: string }) {
       <div
         data-slot="bash-scroll"
         data-scrollable
-        tabIndex={0}
+        tabIndex={-1}
         role="region"
         aria-label={i18n.t("ui.scrollView.ariaLabel")}
       >
@@ -2118,8 +2045,8 @@ ToolRegistry.register({
     const i18n = useI18n()
     const dialog = useDialog()
     const pending = () => props.status === "streaming" || props.status === "running"
-    const calls = createMemo(() => executeToolCalls(props.metadata))
-    const subtitle = createMemo(() => executeToolSubtitle(calls()))
+    const count = createMemo(() => executeToolCallCount(props.metadata))
+    const subtitle = createMemo(() => executeToolSubtitle(props.metadata))
     const code = createMemo(() => (toolInput(props.input).code ?? "").trimEnd())
 
     // A runtime failure shows its output on the failing row; a successful script shows its result below the calls.
@@ -2140,31 +2067,47 @@ ToolRegistry.register({
     )
 
     // A runtime failure belongs to the call that raised it; scripts can also fail outside any call.
-    const owner = createMemo(() => calls().findLastIndex((call) => call.status === "error"))
+    const owner = createMemo(() => executeToolErrorIndex(props.metadata))
+
+    // A script can make thousands of calls, and a row costs as much to style as a line of a diff, so the list shows the
+    // latest and reveals earlier ones on request.
+    const [shown, setShown] = createSignal(executeCallsShown)
+    const hidden = createMemo(() => Math.max(0, count() - shown()))
+    const visible = createMemo(() => executeToolCalls(props.metadata, hidden()))
+
+    const reveal = (event: { currentTarget: HTMLElement }) => {
+      const list = event.currentTarget.parentElement
+      setShown((count) => count + executeCallsRevealed)
+
+      // The button leaves with the last hidden call, so focus moves on to the first call rather than the page.
+      if (hidden() === 0) list?.querySelector<HTMLElement>('[data-slot="execute-tool-call"][tabindex]')?.focus()
+    }
 
     const sawPending = pending()
+    // A shimmer is six elements; a group opens dozens of finished scripts, so only one that ran while shown gets it.
+    const shimmered = createMemo((was: boolean) => was || pending(), false)
 
     // The script is complete once the call leaves streaming, so the dialog can show it while it runs.
     const viewable = () => props.status !== "streaming" && !!code()
 
     const openDetails = () =>
-      dialog.show(() => (
-        <ExecuteDetails code={code()} output={output()} error={error()} calls={calls().length} status={props.status} />
-      ))
+      dialog.show(() => <ExecuteDetails code={code()} output={output()} error={error()} status={props.status} />)
 
     return (
       <BasicTool
         {...props}
         icon="terminal"
         rail={false}
-        hasContent={calls().length > 0 || !!error() || !!output()}
+        hasContent={count() > 0 || !!error() || !!output()}
         compact
         allowOpenWhilePending
         trigger={(open) => (
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
               <span data-slot="basic-tool-tool-title">
-                <TextShimmer text={i18n.t("ui.tool.execute")} active={pending()} />
+                <Show when={shimmered()} fallback={i18n.t("ui.tool.execute")}>
+                  <TextShimmer text={i18n.t("ui.tool.execute")} active={pending()} />
+                </Show>
               </span>
               <Show when={!open() && subtitle()}>
                 {(text) => <ShellSubmessage text={text()} animate={sawPending} />}
@@ -2188,10 +2131,18 @@ ToolRegistry.register({
         }
       >
         <div data-component="execute-tool-calls">
-          <Index each={calls()}>
-            {(call, index) => <ExecuteCallRow call={call()} error={index === owner() ? error() : undefined} />}
+          <Show when={hidden()}>
+            {(count) => (
+              <button type="button" data-slot="execute-tool-call-more" onClick={reveal}>
+                {i18n.plural("ui.common.moreCount", count())}
+              </button>
+            )}
+          </Show>
+          <Index each={visible()}>
+            {(item) => <ExecuteCallRow call={item().call} error={item().index === owner() ? error() : undefined} />}
           </Index>
-          <Show when={owner() === -1 && error()}>{(text) => <ExecuteCallRow error={text()} />}</Show>
+          {/* A failure with no call, or one that belongs to a call still hidden above, shows on its own. */}
+          <Show when={owner() < hidden() && error()}>{(text) => <ExecuteCallRow error={text()} />}</Show>
           <Show when={output()}>{(value) => <ExecuteOutputRow output={value()} />}</Show>
         </div>
       </BasicTool>
@@ -2199,39 +2150,46 @@ ToolRegistry.register({
   },
 })
 
-function ExecuteDetails(props: { code: string; output: string; error?: string; calls: number; status?: string }) {
+const executeCallsShown = 10
+
+const executeCallsRevealed = 50
+
+function ExecuteDetails(props: { code: string; output: string; error?: string; status?: string }) {
   const i18n = useI18n()
   const fileComponent = useFileComponent()
   const lineCount = (text: string) => text.split("\n").length
-  const lines = (text: string) => i18n.plural("ui.tool.execute.lines", lineCount(text))
 
   // Code Mode returns structured results as compact JSON; show those indented, and highlight a bare JSON result.
   const output = createMemo(() => formatExecuteOutput(props.output))
 
-  // Code and output share one number gutter, sized to the longer block, so their content starts on the same column.
+  // Code and output/error share one number gutter, sized to the longer block, so their content starts on the same column.
   const numberDigits = () =>
-    String(Math.max(lineCount(props.code), props.output && !props.error ? lineCount(output().text) : 0)).length
+    String(
+      Math.max(
+        lineCount(props.code),
+        props.error ? lineCount(props.error) : props.output ? lineCount(output().text) : 0,
+      ),
+    ).length
+
+  const statusLabel = () =>
+    props.error
+      ? i18n.t("ui.toolErrorCard.failed")
+      : props.status === "running"
+        ? i18n.t("ui.tool.execute.running")
+        : i18n.t("ui.tool.execute.completed")
 
   return (
     <Dialog size="large" fit>
       <DialogHeader>
         <div data-slot="execute-details-title">
           <DialogTitle>{i18n.t("ui.tool.execute")}</DialogTitle>
-          <span data-slot="execute-details-status" data-status={props.error ? "error" : props.status}>
-            {props.error
-              ? i18n.t("ui.toolErrorCard.failed")
-              : props.status === "running"
-                ? i18n.t("ui.tool.execute.running")
-                : i18n.t("ui.tool.execute.completed")}
-          </span>
-          <span data-slot="execute-details-meta">{i18n.plural("ui.tool.execute.calls", props.calls)}</span>
+          <Badge variant={props.error ? "danger" : "neutral"}>{statusLabel()}</Badge>
         </div>
       </DialogHeader>
       <DialogBody class="min-h-0">
         <div data-component="execute-details" style={{ "--execute-details-number-width": `${numberDigits()}ch` }}>
           <ExecuteDetailsSection
             label={i18n.t("ui.tool.execute.code")}
-            meta={lines(props.code)}
             copy={props.code}
             copyLabel={i18n.t("ui.tool.execute.copyCode")}
           >
@@ -2240,6 +2198,7 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
               mode="text"
               file={{ name: "execute.js", contents: props.code, cacheKey: checksum(props.code) }}
               overflow="wrap"
+              lineHoverHighlight="disabled"
             />
           </ExecuteDetailsSection>
           <Show
@@ -2248,7 +2207,6 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
               <Show when={props.output}>
                 <ExecuteDetailsSection
                   label={i18n.t("ui.tool.execute.output")}
-                  meta={lines(output().text)}
                   copy={output().text}
                   copyLabel={i18n.t("ui.tool.execute.copyOutput")}
                 >
@@ -2261,6 +2219,7 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
                       cacheKey: checksum(output().text),
                     }}
                     overflow="wrap"
+                    lineHoverHighlight="disabled"
                   />
                 </ExecuteDetailsSection>
               </Show>
@@ -2272,7 +2231,15 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
                 copy={error()}
                 copyLabel={i18n.t("ui.toolErrorCard.copyError")}
               >
-                <pre data-slot="execute-details-error">{error()}</pre>
+                <div data-tone="danger">
+                  <Dynamic
+                    component={fileComponent}
+                    mode="text"
+                    file={{ name: "error.txt", contents: error(), cacheKey: checksum(error()) }}
+                    overflow="wrap"
+                    lineHoverHighlight="disabled"
+                  />
+                </div>
               </ExecuteDetailsSection>
             )}
           </Show>
@@ -2284,7 +2251,6 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
 
 function ExecuteDetailsSection(props: {
   label: string
-  meta?: string
   copy: string
   copyLabel: string
   children: JSX.Element
@@ -2296,7 +2262,6 @@ function ExecuteDetailsSection(props: {
     <section data-slot="execute-details-section">
       <header data-slot="execute-details-section-header">
         <span data-slot="execute-details-section-label">{props.label}</span>
-        <Show when={props.meta}>{(meta) => <span data-slot="execute-details-section-meta">{meta()}</span>}</Show>
         <Tooltip
           value={copy.copied() ? i18n.t("ui.message.copied") : props.copyLabel}
           placement="top"
@@ -2376,6 +2341,8 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
   const failed = () => !props.call || props.call.status === "error"
   const expandable = () => input().length > 0 || !!props.error
   const summary = () => (props.call ? args().join(", ") : props.error?.split("\n", 1)[0])
+  // Only a call that ran while shown gets a shimmer, kept so it fades out when the call finishes.
+  const shimmered = createMemo((was: boolean) => was || props.call?.status === "running", false)
 
   const toggle = (event: { currentTarget: HTMLElement }) => {
     if (!expandable() || selectsRowText(event.currentTarget)) return
@@ -2407,7 +2374,9 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
         <Show when={props.call}>
           {(call) => (
             <span data-slot="execute-tool-call-name">
-              <TextShimmer text={call().tool} active={call().status === "running"} />
+              <Show when={shimmered()} fallback={call().tool}>
+                <TextShimmer text={call().tool} active={call().status === "running"} />
+              </Show>
             </span>
           )}
         </Show>

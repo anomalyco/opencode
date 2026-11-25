@@ -7,7 +7,7 @@ use super::dispatch::{BlockTool, ICON_WIDTH, Inline, InlineTool, Props, Status, 
 use super::patch::{self, File};
 use crate::dialogs::execute::{self, Live};
 use crate::prelude::*;
-use crate::routes::session::messages::list::Context;
+use crate::routes::session::messages::list::{Context, Switch};
 use crate::routes::session::messages::shell::collapse_tool_output;
 use opentui::input::strip_ansi_sequences;
 
@@ -127,7 +127,9 @@ impl Execute {
             match rows.get(index) {
                 Some(row) => row.set(call),
                 None => {
-                    let row = Call::new(&inner.app, &inner.theme, call);
+                    let expanded = cx.toggles.switch();
+                    expanded.key(format!("execute {} {index}", props.part.id));
+                    let row = Call::new(&inner.app, &inner.theme, call, expanded);
                     inner.calls.add(row.root());
                     rows.push(row);
                 }
@@ -200,12 +202,12 @@ struct CallInner {
     text: Text,
     details: View,
     call: RefCell<ExecuteCall>,
-    expanded: Cell<bool>,
+    expanded: Switch,
     hover: Cell<bool>,
 }
 
 impl Call {
-    fn new(app: &App, theme: &opencode_ui::theme::Live, call: ExecuteCall) -> Self {
+    fn new(app: &App, theme: &opencode_ui::theme::Live, call: ExecuteCall, expanded: Switch) -> Self {
         let icon = Text::new(app, "").width(ICON_WIDTH).shrink(0.0);
         let text = Text::new(app, "").grow(1.0).wrap(WrapMode::None).truncate(true);
         let details = View::new(app)
@@ -227,7 +229,7 @@ impl Call {
             text,
             details,
             call: RefCell::new(call),
-            expanded: Cell::new(false),
+            expanded,
             hover: Cell::new(false),
         });
         inner.root.on_hover(bind!(inner, |inner, _, hovered| {
@@ -239,7 +241,7 @@ impl Call {
             if !inner.expandable() || cx.app().selected_text().is_some_and(|text| !text.is_empty()) {
                 return;
             }
-            inner.expanded.set(!inner.expanded.get());
+            inner.expanded.flip();
             inner.paint();
         }));
         inner.paint_border();

@@ -5,6 +5,7 @@ use opencode_drive::Manifest;
 use opentui::app::HeadlessOptions;
 use opentui::{App, AppOptions};
 use std::net::SocketAddr;
+use std::path::Path;
 use std::rc::Rc;
 
 pub fn manifest() -> Option<opentui::Result<Manifest>> {
@@ -23,12 +24,17 @@ pub fn run(manifest: Manifest, options: AppOptions, launch: Launch) -> opentui::
     })?;
     let version = launch.args.version.clone();
     crate::app::run_on(app, launch, |tui| {
-        let server = start(tui, manifest.ui_addr(), version)?;
+        let server = start(tui, manifest.ui_addr(), version, manifest.recording.as_deref())?;
         eprintln!("opencode drive ui websocket: {}", server.url());
         Ok(())
     })
 }
 
-pub fn start(tui: &Rc<Tui>, addr: SocketAddr, version: String) -> std::io::Result<opencode_drive::Server> {
-    opencode_drive::start(&tui.app, addr, version)
+pub fn start(
+    tui: &Rc<Tui>,
+    addr: SocketAddr,
+    version: String,
+    recording: Option<&Path>,
+) -> std::io::Result<opencode_drive::Server> {
+    opencode_drive::start(&tui.app, addr, version, recording)
 }

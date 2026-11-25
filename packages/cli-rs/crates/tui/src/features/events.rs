@@ -1,9 +1,9 @@
-//! Dispatch store signals to the TUI, then subscribers in registration order. A missed broadcast sends `Lagged` so
-//! consumers can resync.
+//! Dispatch store signals to the TUI, then subscribers in registration order.
 
 use std::sync::Arc;
 
-use opencode_api::generated::{McpServerStatus, SessionArchivedData, SessionDeleted, V2Event, V2EventServerConnected};
+use opencode_api::generated::{EventKind, McpServerStatus, V2Event};
+use opencode_api::kinds::EventKinds;
 
 use crate::prelude::*;
 
@@ -18,19 +18,20 @@ pub struct Events {
     deltas: DeltaSubscribers,
     /// The deltas are handed over before the next frame.
     deltas_due: Cell<bool>,
+    /// The signals a sync took, kept for their buffer.
+    signals: Cell<Vec<V2Event>>,
     next: Cell<u64>,
+    /// The route the usage alerts last looked at.
+    alerted_route: RefCell<Option<Rc<Route>>>,
 }
 
-#[derive(Clone)]
-pub(crate) struct Signal(pub Arc<V2Event>);
+/// One signal posted to the UI, as a test sends it.
+struct Signal(Arc<V2Event>);
 
-#[derive(Clone)]
-pub(crate) struct Lagged;
-
-/// Declares [`Handled`], the events [`handle`] and the handlers it calls act on, and [`HANDLED`], their tags, which the
-/// store passes on. The handlers match on [`Handled`], so acting on a type means adding it here.
+/// Declares [`Handled`], the events [`handle`] and the handlers it calls act on, and [`HANDLED`], their kinds, which
+/// the store passes on. The handlers match on [`Handled`], so acting on a type means adding it here.
 macro_rules! handled {
-    ($($tag:literal => $variant:ident($payload:ident)),* $(,)?) => {
+    ($($variant:ident($payload:ident)),* $(,)?) => {
         #[allow(dead_code, reason = "a handler may match a variant without reading its payload")]
         pub(crate) enum Handled<'a> {
             $($variant(&'a opencode_api::generated::$payload),)*
@@ -45,40 +46,28 @@ macro_rules! handled {
             }
         }
 
-        const HANDLED: &[(&str, &str)] = &[$(($tag, stringify!($variant))),*];
+        const HANDLED: [EventKind; [$(EventKind::$variant),*].len()] = [$(EventKind::$variant),*];
     };
 }
 
 handled! {
-    "server.connected" => ServerConnected(V2EventServerConnected),
-    "session.deleted" => SessionDeleted(SessionDeleted),
-    "session.inbox.enqueued" => SessionInboxEnqueued(SessionInboxEnqueued),
-    "session.execution.succeeded" => SessionExecutionSucceeded(SessionExecutionSucceeded),
-    "worktree.updated" => WorktreeUpdated(WorktreeUpdated),
-    "persistent-pty.added" => PersistentPtyAdded(PersistentPtyAdded),
-    "persistent-pty.removed" => PersistentPtyRemoved(PersistentPtyRemoved),
-    "persistent-pty.updated" => PersistentPtyUpdated(PersistentPtyUpdated),
-    "tui.command.execute" => TuiCommandExecute(TuiCommandExecute),
-    "tui.toast.show" => TuiToastShow(TuiToastShow),
-    "tui.prompt.append" => TuiPromptAppend(TuiPromptAppend),
-    "tui.session.select" => TuiSessionSelect(TuiSessionSelect),
+    ServerConnected(V2EventServerConnected),
+    SessionDeleted(SessionDeleted),
+    SessionInboxEnqueued(SessionInboxEnqueued),
+    SessionExecutionSucceeded(SessionExecutionSucceeded),
+    WorktreeUpdated(WorktreeUpdated),
+    PersistentPtyAdded(PersistentPtyAdded),
+    PersistentPtyRemoved(PersistentPtyRemoved),
+    PersistentPtyUpdated(PersistentPtyUpdated),
+    TuiCommandExecute(TuiCommandExecute),
+    TuiToastShow(TuiToastShow),
+    TuiPromptAppend(TuiPromptAppend),
+    TuiSessionSelect(TuiSessionSelect),
 }
 
 pub fn install(tui: &Tui) {
-    std::mem::forget(tui.data.listen(HANDLED.iter().map(|(tag, _)| *tag)));
-    tui.app.on_message(bind!(tui, |tui, _, Signal(event)| {
-        // Flush the previous signal's plugin actions before the next signal can navigate.
-        opencode_plugin::flush();
-        if let Some(event) = Handled::of(event) {
-            handle(&tui, &event);
-        }
-        let subscribers: Vec<_> =
-            tui.events.subscribers.borrow().iter().map(|(_, subscriber)| subscriber.clone()).collect();
-        for subscriber in subscribers {
-            subscriber(&tui, event);
-        }
-    }));
-    tui.app.on_message(bind!(tui, |tui, _, _: &Lagged| resync(&tui)));
+    std::mem::forget(tui.data.listen(HANDLED));
+    tui.app.on_message(bind!(tui, |tui, _, Signal(event)| signal(&tui, event)));
 }
 
 #[doc(hidden)]
@@ -88,51 +77,36 @@ pub mod testing {
     pub fn signal(tui: &Tui, event: V2Event) {
         let _ = tui.app.proxy().send(Signal(Arc::new(event)));
     }
-
-    /// Posts that the UI skipped signals, as the event pump does when it falls behind the store.
-    pub fn lagged(tui: &Tui) {
-        let _ = tui.app.proxy().send(Lagged);
-    }
 }
 
-/// After skipped signals, as after a reconnect: reads the location again and syncs every view. The store applied
-/// the skipped events, so the open tabs and the open session it saw deleted close as `session.deleted` closes them.
-fn resync(tui: &Tui) {
-    crate::features::location::reconnected(tui);
-    let mut open = tui.tabs.open_ids(tui);
-    if let Route::Session { id } = tui.route() {
-        open.push(id.0);
+/// Hands the events the store passed on since the last sync to the TUI and the subscribers, in order.
+pub(crate) fn signals(tui: &Tui) {
+    // Taken out of its cell, so a sync a handler runs takes its own.
+    let mut events = tui.events.signals.take();
+    tui.data.take_signals(&mut events);
+    for event in &events {
+        signal(tui, event);
     }
-    let deleted: Vec<SessionID> =
-        tui.data.read(|state| open.into_iter().map(SessionID).filter(|id| state.is_missing(id)).collect());
-    for id in deleted {
-        let event = SessionDeleted {
-            r#type: "session.deleted".to_owned(),
-            data: SessionArchivedData { session_id: id },
-            ..SessionDeleted::default()
-        };
-        handle(tui, &Handled::SessionDeleted(&event));
+    events.clear();
+    tui.events.signals.set(events);
+}
+
+fn signal(tui: &Tui, event: &V2Event) {
+    // Flush the previous signal's plugin actions before the next signal can navigate.
+    opencode_plugin::flush();
+    if let Some(event) = Handled::of(event) {
+        handle(tui, &event);
     }
-    tui.resync();
-    // Notify subscribers to resync after a missed broadcast, as on reconnect.
-    let event = V2Event::ServerConnected(V2EventServerConnected {
-        r#type: "server.connected".to_owned(),
-        ..V2EventServerConnected::default()
-    });
     let subscribers: Vec<_> =
         tui.events.subscribers.borrow().iter().map(|(_, subscriber)| subscriber.clone()).collect();
     for subscriber in subscribers {
-        subscriber(tui, &event);
+        subscriber(tui, event);
     }
 }
 
 /// Calls `subscriber` with each store signal, after the TUI's own handling, until the disposer drops. The store passes
 /// on the events of each type in `types`; `subscriber` also sees the types other subscribers asked for.
-pub fn subscribe<S: Into<String>>(
-    tui: &Tui,
-    types: impl IntoIterator<Item = S>,
-    subscriber: impl Fn(&Tui, &V2Event) + 'static,
-) -> Disposer {
+pub fn subscribe(tui: &Tui, types: impl Into<EventKinds>, subscriber: impl Fn(&Tui, &V2Event) + 'static) -> Disposer {
     let id = tui.events.next.get();
     tui.events.next.set(id + 1);
     tui.events.subscribers.borrow_mut().push((id, Rc::new(subscriber)));
@@ -174,21 +148,29 @@ pub fn deltas(tui: &Tui) {
             if !tui.events.deltas.borrow().iter().any(|(other, ..)| *other == id) {
                 continue;
             }
-            let events = listening.take();
-            if !events.is_empty() {
-                subscriber(&events);
-            }
+            listening.take(|events| {
+                if !events.is_empty() {
+                    subscriber(events);
+                }
+            });
         }
     }));
     tui.app.request_redraw();
 }
 
 pub fn sync(tui: &Tui, changes: &Changes) {
-    let default = tui.data.read(|state| state.default_location().clone());
-    if changes.location(&default) {
+    if tui.data.read(|state| changes.location(state.default_location())) {
         mcp_toasts(tui);
     }
-    crate::dialogs::model::usage_alerts(&tui.local);
+    // The alerts follow the local selections and catalogs on their own ([`crate::local::Local::sync`] tells of a
+    // catalog change); here they follow the route and the routed session's selection.
+    let route = tui.route();
+    let moved = tui.events.alerted_route.borrow().as_ref().is_none_or(|seen| !Rc::ptr_eq(seen, &route));
+    let session = matches!(&*route, Route::Session { id } if changes.has(id, Touched::INFO | Touched::SELECTED));
+    if moved || session {
+        crate::dialogs::model::usage_alerts(&tui.local);
+    }
+    *tui.events.alerted_route.borrow_mut() = Some(route);
 }
 
 fn handle(tui: &Tui, event: &Handled) {
@@ -227,7 +209,7 @@ fn handle(tui: &Tui, event: &Handled) {
             }
         }
         Handled::SessionExecutionSucceeded(event)
-            if tui.route() == (Route::Session { id: event.data.session_id.clone() })
+            if *tui.route() == (Route::Session { id: event.data.session_id.clone() })
                 && matches!(tui.local.usage(), Some(Some(_))) =>
         {
             tui.local.load_usage(true);
@@ -236,12 +218,13 @@ fn handle(tui: &Tui, event: &Handled) {
             tui.show_session(event.data.session_id.clone());
         }
         Handled::SessionDeleted(event) => {
-            let Route::Session { id } = tui.route() else { return };
-            if id != event.data.session_id {
+            let route = tui.route();
+            let Route::Session { id } = &*route else { return };
+            if *id != event.data.session_id {
                 return;
             }
             // The store already dropped the session; the title is the one last shown (`active`).
-            let title = tui.title.active(&id);
+            let title = tui.title.active(id);
             tui.navigate(Route::Home);
             tui.toasts.show(ToastOptions::new(
                 Variant::Info,

@@ -394,7 +394,9 @@ impl LimitWatch {
         for (index, message) in messages.iter().enumerate() {
             let SessionMessageInfo::Assistant(assistant) = message else { continue };
             let Some(error) = &assistant.error else {
-                self.live.borrow_mut().insert(assistant.id.0.clone());
+                if !self.live.borrow().contains(assistant.id.as_str()) {
+                    self.live.borrow_mut().insert(assistant.id.0.clone());
+                }
                 continue;
             };
             let free = error.r#type == "provider.free-limit";

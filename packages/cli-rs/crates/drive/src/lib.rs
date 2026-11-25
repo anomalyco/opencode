@@ -5,6 +5,7 @@ pub mod capture;
 pub mod keys;
 pub mod manifest;
 pub mod protocol;
+pub mod recording;
 
 use opentui::App;
 use opentui::input::{Input, Parser};
@@ -13,6 +14,7 @@ use protocol::{Envelope, Request};
 use serde_json::{Value, json};
 use std::cell::RefCell;
 use std::net::{SocketAddr, TcpListener, TcpStream};
+use std::path::Path;
 use std::rc::Rc;
 use std::sync::mpsc;
 use tokio_tungstenite::tungstenite::{self, Message};
@@ -33,12 +35,28 @@ impl Server {
 }
 
 /// Listens on `addr` and answers requests for `app`, which must be [headless](App::headless). The handshake reports
-/// `version`, as TS reports `app.version`. Call it on the UI thread before [`App::run`].
-pub fn start(app: &App, addr: SocketAddr, version: String) -> std::io::Result<Server> {
+/// `version`, as TS reports `app.version`. With `recording`, each frame is written to that timeline from now until
+/// `ui.recording.finish`. Call it on the UI thread before [`App::run`].
+pub fn start(app: &App, addr: SocketAddr, version: String, recording: Option<&Path>) -> std::io::Result<Server> {
     let listener = TcpListener::bind(addr)?;
     let addr = listener.local_addr()?;
-    let driver =
-        Rc::new(RefCell::new(Driver { parser: Parser::new(app.session()), mouse: keys::MouseState::default() }));
+    let recorder = match recording {
+        Some(path) => {
+            let (width, height) = app.size();
+            let recorder = Rc::new(RefCell::new(recording::Recorder::create(path, width, height)?));
+            app.on_headless_frame({
+                let recorder = recorder.clone();
+                move |_cx, frame| recorder.borrow_mut().frame(frame)
+            });
+            Some(recorder)
+        }
+        None => None,
+    };
+    let driver = Rc::new(RefCell::new(Driver {
+        parser: Parser::new(app.session()),
+        mouse: keys::MouseState::default(),
+        recorder,
+    }));
     app.on_message(move |cx, call: &Call| {
         let answer = driver.borrow_mut().answer(cx.app(), &call.request);
         let _ = call.reply.send(answer);
@@ -108,6 +126,7 @@ fn ask(proxy: &opentui::app::AppProxy, request: Request) -> Result<Value, String
 struct Driver {
     parser: Parser,
     mouse: keys::MouseState,
+    recorder: Option<Rc<RefCell<recording::Recorder>>>,
 }
 
 impl Driver {
@@ -120,6 +139,12 @@ impl Driver {
                 // As TS, read the current frame without painting one; only before the first frame is there none.
                 let frame = app.last_frame().map_or_else(|| app.capture(), Ok).map_err(|error| error.to_string())?;
                 return Ok(json!(capture::matches(&frame, text)));
+            }
+            // As TS, read the state without painting a frame.
+            Request::State => return Ok(state(app)),
+            Request::FinishRecording => {
+                let recorder = self.recorder.as_ref().ok_or("UI recording is not available")?;
+                return recorder.borrow_mut().finish().map(Value::from);
             }
             Request::Type { text } => self.feed(app, text.as_bytes())?,
             Request::Press { key, modifiers } => self.feed(app, &keys::press(key, *modifiers))?,
@@ -148,9 +173,7 @@ impl Driver {
             }
         }
         app.capture().map_err(|error| error.to_string())?;
-        // As Core's `currentFocusedEditor`: any focused input or textarea, the prompt or a dialog's search.
-        let editor = app.focused().is_some_and(|widget| widget.element().is_editor());
-        Ok(json!({ "focused": { "editor": editor }, "elements": [] }))
+        Ok(state(app))
     }
 
     /// Parses bytes as if typed and dispatches the events. A partial sequence at the end ends at once, so a lone
@@ -169,6 +192,13 @@ impl Driver {
         }
         Ok(())
     }
+}
+
+/// A `Frontend.State` with no elements: renderable numbers are a Core detail.
+fn state(app: &App) -> Value {
+    // As Core's `currentFocusedEditor`: any focused input or textarea, the prompt or a dialog's search.
+    let editor = app.focused().is_some_and(|widget| widget.element().is_editor());
+    json!({ "focused": { "editor": editor }, "elements": [] })
 }
 
 #[cfg(test)]
@@ -201,7 +231,7 @@ mod tests {
                 events.borrow_mut().push(format!("{:?} {} {} {:?}", mouse.kind, mouse.x, mouse.y, mouse.modifiers))
             }
         });
-        let server = start(&app, SocketAddr::from(([127, 0, 0, 1], 0)), "1.2.3".into()).unwrap();
+        let server = start(&app, SocketAddr::from(([127, 0, 0, 1], 0)), "1.2.3".into(), None).unwrap();
 
         let requests = [
             r#"{"jsonrpc":"2.0","id":1,"method":"simulation.handshake","params":{"client":{"name":"t","version":"1"},"expectedRole":"ui","offeredVersions":[1],"requiredCapabilities":["ui.capture"],"optionalCapabilities":[]}}"#,
@@ -224,6 +254,7 @@ mod tests {
             r#"{"jsonrpc":"2.0","id":17,"method":"ui.capture"}"#,
             r#"{"jsonrpc":"2.0","id":18,"method":"ui.state"}"#,
             r#"{"jsonrpc":"2.0","id":21,"method":"ui.click","params":{"target":1,"x":0,"y":0}}"#,
+            r#"{"jsonrpc":"2.0","id":22,"method":"ui.recording.finish"}"#,
             // Keys and mouse reports as Core's mock input encodes them, after the capture so the frame stays as asserted.
             r#"{"jsonrpc":"2.0","id":30,"method":"ui.press","params":{"key":"home"}}"#,
             r#"{"jsonrpc":"2.0","id":31,"method":"ui.press","params":{"key":"f5"}}"#,
@@ -245,7 +276,7 @@ mod tests {
             r#"{"jsonrpc":"2.0","id":52,"method":"ui.mouse","params":{"action":"move","x":1.5,"y":0}}"#,
             r#"{"jsonrpc":"2.0","id":53,"method":"simulation.handshake","params":{"client":{"name":"t","version":"1"},"expectedRole":"backend","offeredVersions":[1],"requiredCapabilities":[],"optionalCapabilities":[]}}"#,
             r#"{"jsonrpc":"2.0","id":54,"method":"simulation.handshake","params":{"client":{"name":"t","version":"1"},"expectedRole":"ui","offeredVersions":[2],"requiredCapabilities":[],"optionalCapabilities":[]}}"#,
-            r#"{"jsonrpc":"2.0","id":55,"method":"simulation.handshake","params":{"client":{"name":"t","version":"1"},"expectedRole":"ui","offeredVersions":[1],"requiredCapabilities":["ui.state","ui.type","ui.click"],"optionalCapabilities":[]}}"#,
+            r#"{"jsonrpc":"2.0","id":55,"method":"simulation.handshake","params":{"client":{"name":"t","version":"1"},"expectedRole":"ui","offeredVersions":[1],"requiredCapabilities":["ui.snapshot","ui.type","ui.click.semantic"],"optionalCapabilities":[]}}"#,
             r#"{"jsonrpc":"2.0","id":56,"method":"simulation.handshake","params":{"client":{"name":"t","version":"1"},"expectedRole":"ui","offeredVersions":[1,1],"requiredCapabilities":[],"optionalCapabilities":[]}}"#,
             r#"{"jsonrpc":"2.0","id":57,"method":"simulation.handshake","params":{"client":{"name":"t","version":"1"},"expectedRole":"ui","offeredVersions":[],"requiredCapabilities":[],"optionalCapabilities":[]}}"#,
             r#"{"jsonrpc":"2.0","id":58,"method":"ui.type"}"#,
@@ -296,8 +327,9 @@ mod tests {
         };
         assert_eq!(row(0).trim_end(), "Ada");
         assert_eq!(row(1).trim_end(), "submitted Ada");
-        assert!(result(18).unwrap_err().starts_with("ui.state is not supported"));
+        assert_eq!(result(18), Ok(json!({"focused": {"editor": true}, "elements": []})));
         assert!(result(21).unwrap_err().starts_with("ui.click is not supported"));
+        assert_eq!(result(22), Err("UI recording is not available".into()));
         let invalid = responses.last().unwrap();
         assert_eq!(invalid["jsonrpc"], "2.0");
         assert_eq!(invalid["id"], Value::Null);
@@ -307,13 +339,13 @@ mod tests {
             [
                 "Expected simulation endpoint role backend, received ui",
                 "No mutually supported simulation protocol version",
-                "Simulation endpoint is missing required capabilities: ui.state, ui.click",
+                "Simulation endpoint is missing required capabilities: ui.snapshot, ui.click.semantic",
             ]
         );
         assert!(result(56).is_err() && result(57).is_err());
         // What does not decode (50 to 52 and 58 to 61, and `ui.nope`) fails with a null `id`, as in TS.
         assert_eq!(responses.iter().filter(|response| response["id"].is_null()).count(), 8, "{responses:?}");
-        assert_eq!(responses.len(), 47);
+        assert_eq!(responses.len(), 48);
         assert_eq!(
             *events.borrow(),
             [

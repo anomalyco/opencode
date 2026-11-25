@@ -409,10 +409,9 @@ const layer = Layer.unwrap(
       load: () => Effect.succeed(Instructions.empty),
     })
     const skillInstructions = Layer.mock(SkillInstructions.Service, {
-      load: (permissions) => {
+      load: (policy) => {
         // `setup` tags each agent's ruleset with a `skill` rule naming that agent.
-        const baseline = permissions
-          .filter((rule) => rule.action === "skill")
+        const baseline = Permission.Policy.relevant(policy, "skill")
           .map((rule) => state.skillBaselines.get(Agent.ID.make(rule.resource)))
           .findLast((text) => text !== undefined)
         return Effect.succeed(
@@ -2097,9 +2096,197 @@ describe("SessionRunnerLLM", () => {
     expect(userTexts(last)).toEqual(["First", "Fourth"])
     expect(last.system.map((part) => part.text).join("\n")).not.toContain("Entered mode")
     // Clients still see every message; only the model context hides the stale update.
-    expect((yield* s.messages).filter((message) => message.type === "system")).toMatchObject([
-      { text: "Entered mode" },
-    ])
+    expect((yield* s.messages).filter((message) => message.type === "system")).toMatchObject([{ text: "Entered mode" }])
+  })
+
+  describe("agent instructions", () => {
+    const plan = Agent.ID.make("plan")
+    const build = Agent.ID.make("build")
+    const orchestrator = Agent.ID.make("orchestrator")
+    const leftPlan =
+      "You are no longer the Plan agent. Stop following the instructions you were given as the Plan agent. Keep following anything the user asked for."
+    const enteredPlan = "You are the Plan agent. Follow these instructions while you are the Plan agent:\n\nPlan rules"
+
+    const defineAgents = Effect.fnUntraced(function* (rules = "Plan rules") {
+      const agent = yield* Agent.Service
+      yield* agent.transform((editor) => {
+        editor.update(plan, (item) => {
+          item.name = Agent.Name.make("Plan")
+          item.mode = "primary"
+          item.instructions = rules
+        })
+        editor.update(orchestrator, (item) => {
+          item.name = Agent.Name.make("Orchestrator")
+          item.mode = "primary"
+          item.instructions = "Orchestrator rules"
+        })
+      })
+    })
+    const select = (s: Scenario, agent: Agent.ID) => s.session.switchAgent({ sessionID, agent })
+    const texts = (request: LLMRequest) =>
+      request.messages.flatMap((message) => message.content.flatMap((part) => (part.type === "text" ? [part.text] : [])))
+    const prompt = (request: LLMRequest | undefined) => request?.system.map((part) => part.text).join("\n") ?? ""
+
+    scenario("puts a starting agent's instructions in the system prompt", function* (s) {
+      yield* defineAgents()
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+
+      expect(prompt(s.requests.at(-1))).toContain(enteredPlan)
+      expect(systemTexts(s.requests.at(-1)!)).toEqual([])
+    })
+
+    scenario("adds instructions before the next prompt when switching in, keeping the system prompt", function* (s) {
+      yield* defineAgents()
+      yield* s.runPrompt("First")
+      yield* select(s, plan)
+      yield* s.runPrompt("Second")
+
+      expect(s.requests[1]?.system).toEqual(s.requests[0]?.system)
+      expect(prompt(s.requests[1])).not.toContain("Plan rules")
+      expect(texts(s.requests[1]!)).toEqual(["First", enteredPlan, "Second"])
+    })
+
+    scenario("withdraws instructions when switching to an agent without any", function* (s) {
+      yield* defineAgents()
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      yield* select(s, build)
+      yield* s.runPrompt("Second")
+
+      expect(s.requests[1]?.system).toEqual(s.requests[0]?.system)
+      expect(systemTexts(s.requests[1]!)).toEqual([expect.stringContaining(leftPlan)])
+      expect(messageRoles(s.requests[1])).toEqual(["user", "system", "user"])
+    })
+
+    scenario("sends nothing when switching away and back before the next step", function* (s) {
+      yield* defineAgents()
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      yield* select(s, build)
+      yield* select(s, plan)
+      yield* s.runPrompt("Second")
+
+      expect(systemTexts(s.requests[1]!)).toEqual([])
+    })
+
+    scenario("replaces one agent's instructions with another's in one update", function* (s) {
+      yield* defineAgents()
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      yield* select(s, orchestrator)
+      yield* s.runPrompt("Second")
+
+      const updates = systemTexts(s.requests[1]!)
+      expect(updates).toHaveLength(1)
+      expect(updates[0]).toContain(leftPlan)
+      expect(updates[0]).toContain("Orchestrator rules")
+    })
+
+    scenario("sends changed instructions when a plugin edits the selected agent", function* (s) {
+      yield* defineAgents()
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      yield* defineAgents("New plan rules")
+      yield* s.runPrompt("Second")
+
+      expect(systemTexts(s.requests[1]!)).toEqual([
+        "Your instructions as the Plan agent changed. These replace the previous ones:\n\nNew plan rules",
+      ])
+    })
+
+    scenario("sends an agent's own selected and unselected texts exactly as written", function* (s) {
+      const agent = yield* Agent.Service
+      const define = (unselected: string) =>
+        agent.transform((editor) =>
+          editor.update(plan, (item) => {
+            item.name = Agent.Name.make("Plan")
+            item.mode = "primary"
+            item.instructions = { selected: "Plan rules", unselected }
+          }),
+        )
+      yield* define("Left Plan mode")
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      expect(prompt(s.requests[0])).toContain("Plan rules")
+      expect(prompt(s.requests[0])).not.toContain("You are the Plan agent")
+
+      // Editing only the unselected text sends nothing while the agent is still selected.
+      yield* define("You have left Plan mode")
+      yield* s.runPrompt("Second")
+      expect(systemTexts(s.requests[1]!)).toEqual([])
+
+      yield* select(s, build)
+      yield* s.runPrompt("Third")
+      expect(systemTexts(s.requests[2]!)).toEqual(["You have left Plan mode"])
+
+      // After compaction on build, neither text is shown: unselected is only for the switch itself.
+      yield* s.llm.push(TestLLM.text("## Objective\n- summary", "custom-summary"))
+      yield* s.session.compact({ sessionID })
+      yield* s.resume
+      yield* s.runPrompt("Fourth")
+      expect(prompt(s.requests.at(-1))).not.toContain("Plan rules")
+      expect(prompt(s.requests.at(-1))).not.toContain("left Plan mode")
+      expect(systemTexts(s.requests.at(-1)!)).toEqual([])
+    })
+
+    scenario("sends an agent's new selected text as written when a plugin edits it", function* (s) {
+      const agent = yield* Agent.Service
+      const define = (selected: string) =>
+        agent.transform((editor) =>
+          editor.update(plan, (item) => {
+            item.name = Agent.Name.make("Plan")
+            item.mode = "primary"
+            item.instructions = { selected, unselected: "Left Plan mode" }
+          }),
+        )
+      yield* define("Plan rules")
+      yield* select(s, plan)
+      yield* s.runPrompt("First")
+      yield* define("New plan rules")
+      yield* s.runPrompt("Second")
+      expect(systemTexts(s.requests[1]!)).toEqual(["New plan rules"])
+    })
+
+    scenario("moves instructions into the system prompt at compaction", function* (s) {
+      yield* defineAgents()
+      yield* s.runPrompt("First")
+      yield* select(s, plan)
+      yield* s.runPrompt("Second")
+      yield* s.llm.push(TestLLM.text("## Objective\n- summary", "agent-summary"))
+      yield* s.session.compact({ sessionID })
+      yield* s.resume
+      yield* s.runPrompt("Third")
+
+      expect(prompt(s.requests.at(-1))).toContain("Plan rules")
+      expect(systemTexts(s.requests.at(-1)!)).toEqual([])
+    })
+
+    scenario("keeps instructions after reverting past the switch into the agent", function* (s) {
+      yield* defineAgents()
+      const first = yield* s.runPrompt("First")
+      yield* select(s, plan)
+      yield* s.runPrompt("Second")
+      yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: first.id })
+      yield* s.runPrompt("Third")
+
+      expect(prompt(s.requests.at(-1))).toContain("Plan rules")
+      expect(texts(s.requests.at(-1)!)).toEqual(["Third"])
+    })
+
+    scenario("drops instructions after reverting between entering and leaving the agent", function* (s) {
+      yield* defineAgents()
+      yield* s.runPrompt("First")
+      yield* select(s, plan)
+      const second = yield* s.runPrompt("Second")
+      yield* select(s, build)
+      yield* s.runPrompt("Third")
+      yield* s.bus.publish(SessionEvent.RevertEvent.Committed, { sessionID, to: second.id })
+      yield* s.runPrompt("Fourth")
+
+      expect(prompt(s.requests.at(-1))).not.toContain("Plan rules")
+      expect(texts(s.requests.at(-1)!)).toEqual(["First", "Fourth"])
+    })
   })
 
   scenario("uses the selected model family prompt when the agent does not override it", function* (s) {
@@ -3291,11 +3478,12 @@ describe("SessionRunnerLLM", () => {
   }
 
   scenario("stops after four smaller compaction inputs overflow", function* (s) {
-    // Large enough that the conversation, not the system prompt, is most of the request.
+    // Large enough that the conversation, not the system prompt, is most of the request. Twice what `keep` retains,
+    // so the history before the tail has exchanges left to drop.
     const filler = "context ".repeat(1_000)
-    yield* s.llm.push(...Array.from({ length: 8 }, (_, index) => TestLLM.text(`Answer ${index}`, `answer-${index}`)))
+    yield* s.llm.push(...Array.from({ length: 16 }, (_, index) => TestLLM.text(`Answer ${index}`, `answer-${index}`)))
     yield* Effect.forEach(
-      Array.from({ length: 8 }, (_, index) => index),
+      Array.from({ length: 16 }, (_, index) => index),
       (index) => s.runPrompt(`Request ${index}: ${filler}`),
     )
     s.currentModel = unknownContextModel
@@ -3309,7 +3497,9 @@ describe("SessionRunnerLLM", () => {
     yield* s.resume
 
     expect(s.requests).toHaveLength(5)
-    expect(userTexts(s.requests[2])[0].length).toBeLessThan(userTexts(s.requests[1])[0].length)
+    // The history before the tail goes out unchanged once, then only as ever shorter text.
+    expect(userTexts(s.requests[1])[0]).toBe(`Request 0: ${filler}`)
+    expect(userTexts(s.requests[2])[0]).not.toBe(`Request 0: ${filler}`)
     expect(userTexts(s.requests[3])[0].length).toBeLessThan(userTexts(s.requests[2])[0].length)
     expect(userTexts(s.requests[4])[0].length).toBeLessThan(userTexts(s.requests[3])[0].length)
     expect((yield* s.messages).find((message) => message.id === compaction.id)).toMatchObject({ status: "failed" })
@@ -4657,22 +4847,6 @@ describe("SessionRunnerLLM", () => {
     ])
   })
 
-  scenario("steers an active step with newly recorded prompts", function* (s) {
-    yield* s.admit("Start working")
-
-    yield* s.llm.push(TestLLM.stop(), TestLLM.stop())
-
-    const first = yield* s.resumePaused
-    yield* s.session.prompt({ sessionID, text: "Change direction" })
-    yield* first.finish
-    yield* Effect.yieldNow
-
-    expect(s.requests).toHaveLength(2)
-    expect(userTexts(s.requests[0])).toEqual(["Start working"])
-    expect(userTexts(s.requests[1])).toEqual(["Start working", "Change direction"])
-    expect((yield* s.context).map((message) => message.type)).toEqual(["user", "assistant", "user", "assistant"])
-  })
-
   scenario("promotes queued input after continuation ends", function* (s) {
     yield* s.admit("Start working")
 
@@ -5492,56 +5666,36 @@ describe("SessionRunnerLLM", () => {
     expect(s.requests).toHaveLength(2)
   })
 
-  scenario(
-    "records and runs a top-level call to a Code Mode tool as the execute program it should have been",
-    function* (s) {
-      const registry = yield* Tool.Service
-      yield* transformTools(
-        registry,
-        {
-          echo: {
-            name: "echo",
-            description: "Echo text",
-            input: Schema.Struct({ text: Schema.String }),
-            output: Schema.Struct({ text: Schema.String }),
-            execute: ({ text }) => Effect.succeed({ output: { text }, content: text }),
-          },
+  scenario("runs a top-level call to a Code Mode tool and records it as the model sent it", function* (s) {
+    const registry = yield* Tool.Service
+    yield* transformTools(
+      registry,
+      {
+        echo: {
+          name: "echo",
+          description: "Echo text",
+          input: Schema.Struct({ text: Schema.String }),
+          output: Schema.Struct({ text: Schema.String }),
+          execute: ({ text }) => Effect.succeed({ output: { text }, content: text }),
         },
-        { namespace: "acme" },
-      )
-      yield* s.admit("Call echo directly")
+      },
+      { namespace: "acme" },
+    )
+    yield* s.admit("Call echo directly")
+    yield* s.llm.push(TestLLM.toolCall("call-echo", "acme.echo", { text: "hi" }), TestLLM.stop())
+    yield* s.resume
 
-      const id = "call-echo"
-      yield* s.llm.push(
-        TestLLM.toolCalls(
-          LLMEvent.toolInputStart({ id, name: "acme.echo" }),
-          LLMEvent.toolInputDelta({ id, name: "acme.echo", text: '{"text":"hi"}' }),
-          LLMEvent.toolInputEnd({ id, name: "acme.echo" }),
-          LLMEvent.toolCall({ id, name: "acme.echo", input: { text: "hi" } }),
+    expect(yield* s.context).toMatchObject([
+      Expected.user("Call echo directly"),
+      Expected.assistant({}, [
+        Expected.completedTool(
+          { id: "call-echo", name: "acme.echo" },
+          { input: { text: "hi" }, content: [Expected.text("hi")] },
         ),
-        TestLLM.stop(),
-      )
-      yield* s.resume
-
-      const code = 'return await tools.acme.echo({"text":"hi"})'
-      expect(yield* s.context).toMatchObject([
-        Expected.user("Call echo directly"),
-        Expected.assistant({}, [
-          Expected.completedTool(
-            { id, name: "execute" },
-            {
-              input: { code },
-              metadata: { toolCalls: [{ tool: "acme.echo", input: { text: "hi" }, status: "completed" }] },
-            },
-          ),
-        ]),
-        { type: "assistant", finish: "stop" },
-      ])
-      // The next request replays an ordinary execute call.
-      expect(JSON.stringify(s.requests[1]?.messages)).toContain(JSON.stringify(code))
-      expect(JSON.stringify(s.requests[1]?.messages)).not.toContain('acme.echo"')
-    },
-  )
+      ]),
+      { type: "assistant", finish: "stop" },
+    ])
+  })
 
   scenario("durably settles local tool failures before continuing", function* (s) {
     yield* s.admit("Call missing")

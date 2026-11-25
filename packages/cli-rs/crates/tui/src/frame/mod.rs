@@ -158,7 +158,7 @@ pub fn mount_app(tui: &Tui, remount: bool) {
     let slot = crate::plugins::host::slot(tui, &holder, slot::APP, &SlotInput::default(), |_| {});
     tui.frame.column.add(&holder);
     *tui.frame.app.borrow_mut() = Some((holder, Rc::new(slot)));
-    sync_app(tui, &opencode_store::Changes::everything());
+    sync_app(tui, &opencode_store::Changes::everything(&tui.data));
 }
 
 /// Restyles the `app` slot's claims in place, or mounts the slot again when one cannot.
@@ -212,11 +212,11 @@ fn save_layout(resize: &Rc<PaneResize>, tui: &Tui, key: &'static str, width: u16
 
 /// `tabsAvailable`: tabs are on, one is open, and the route is not a plugin's.
 fn available(tui: &Tui) -> bool {
-    Tabs::enabled(tui) && !tui.tabs.tabs(tui).is_empty() && !matches!(tui.route(), Route::Plugin { .. })
+    Tabs::enabled(tui) && !tui.tabs.tabs(tui).is_empty() && !matches!(&*tui.route(), Route::Plugin { .. })
 }
 
 pub(crate) fn fullscreen_panel(tui: &Tui) -> bool {
-    matches!(tui.route(), Route::Session { id } if tui.panels.current().is_some_and(|panel| panel.session == id.0))
+    matches!(&*tui.route(), Route::Session { id } if tui.panels.current().is_some_and(|panel| panel.session == id.0))
         && tui.panels.presentation() == Presentation::Fullscreen
 }
 
@@ -238,7 +238,7 @@ pub fn refresh(tui: &Tui) {
     // The split is measured even while a full-screen panel hides the tabs.
     tui.panels.set_width(width - if available(tui) && vertical { i64::from(rail_width) } else { 0 });
     if let Some(panel) = tui.panels.current()
-        && !matches!(tui.route(), Route::Session { id } if id.0 == panel.session)
+        && !matches!(&*tui.route(), Route::Session { id } if id.0 == panel.session)
     {
         tui.panels.close(tui);
         return;
@@ -262,8 +262,8 @@ pub fn refresh(tui: &Tui) {
 }
 
 /// Brings the tabs' unread markers up to the store after a flush.
-pub(crate) fn observe_markers(tui: &Tui) {
-    strip::observe(&tui.frame.strip, tui);
+pub(crate) fn observe_markers(tui: &Tui, changes: &Changes) {
+    strip::observe(&tui.frame.strip, tui, changes);
     rail::observe(&tui.frame.rail, tui);
 }
 

@@ -2,7 +2,6 @@ import type { SessionUserActions } from "@opencode/session-ui/message"
 import type { ShellOutputInput } from "@opencode/client/promise"
 import { getFilename, sameDirectory } from "@opencode/util/path"
 import { useDialog } from "@opencode/ui/context/dialog"
-import { focusField, handOffFocus } from "@opencode/ui/context/field-focus"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode/ui/scroll-view"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate } from "@solidjs/router"
@@ -41,7 +40,7 @@ import { createSessionComposerController, type SessionComposerController } from 
 import { SessionQueuePanel } from "./queue-panel"
 import { SessionGoLimitTray } from "./go-limit-tray"
 import { SessionFreeLimitPanel, useFreeLimit } from "./free-limit-panel"
-import { SessionActivityChips, type SessionActivityItem } from "./activity-chips"
+import { reuseActivityItems, SessionActivityChips, type SessionActivityItem } from "./activity-chips"
 import { SessionComposerLane, useComposerLaneAlignment } from "./composer-lane"
 import { SessionTodoPill } from "./todo-pill"
 import { sessionTodos, todoFinished } from "./todos"
@@ -317,9 +316,8 @@ export function createActiveSessionRegion(input: {
     navigateMessageByOffset: input.timeline.actions.navigateMessage,
     jumpToMessage: input.timeline.actions.jumpToMessage,
     revert,
-    // A shortcut moved focus, so the ring shows.
     focusInput: () => {
-      if (promptRef && !input.session.data.isChild()) focusField(promptRef, true)
+      if (promptRef && !input.session.data.isChild()) promptRef.focus()
     },
     model: () => {
       const selection = controls().model.selection
@@ -373,7 +371,7 @@ export function createActiveSessionRegion(input: {
 
   const focusPrompt = () => {
     if (!promptRef) return
-    handOffFocus(promptRef)
+    promptRef.focus()
     setCursorPosition(promptRef, prompt.cursor() ?? promptLength(prompt.current()))
   }
 
@@ -463,34 +461,38 @@ export function ActiveSessionComposerRegion(props: {
     },
   )
 
-  const subagents = createMemo<SessionActivityItem[]>(() =>
-    props.model.region.state.background
-      .tasks()
-      .filter((task) => task.type === "subagent")
-      .map((task) => ({
-        ...task,
-        agent: task.agent ?? data.session.get(task.sessionID)?.agent,
-        key: task.id,
-        target: task.id,
-      })),
+  const subagents = createMemo<SessionActivityItem[]>((previous = []) =>
+    reuseActivityItems(
+      previous,
+      props.model.region.state.background
+        .tasks()
+        .filter((task) => task.type === "subagent")
+        .map((task) => ({
+          ...task,
+          agent: task.agent ?? data.session.get(task.sessionID)?.agent,
+          key: task.id,
+          target: task.id,
+        })),
+    ),
   )
 
-  const shells = createMemo<SessionActivityItem[]>(() =>
-    props.model.region.state.background
-      .tasks()
-      .flatMap((task) => (task.type === "shell" ? [{ ...task, key: task.id, target: task.id }] : [])),
+  const shells = createMemo<SessionActivityItem[]>((previous = []) =>
+    reuseActivityItems(
+      previous,
+      props.model.region.state.background
+        .tasks()
+        .flatMap((task) => (task.type === "shell" ? [{ ...task, key: task.id, target: task.id }] : [])),
+    ),
   )
 
-  const scripts = createMemo<SessionActivityItem[]>(() =>
-    props.model.region.state.background.scripts().map((task) => ({ ...task, key: task.id, target: task.id })),
+  const scripts = createMemo<SessionActivityItem[]>((previous = []) =>
+    reuseActivityItems(
+      previous,
+      props.model.region.state.background.scripts().map((task) => ({ ...task, key: task.id, target: task.id })),
+    ),
   )
 
   const alignment = useComposerLaneAlignment()
-  const todos = createMemo(() => sessionTodos(props.session.history.messages(), props.session.data.revertMessageID()))
-  // Like the old dock: the plan shows while the turn runs and still has work left, so stale todos never linger.
-
-  const todosVisible = () =>
-    todoEnabled() && props.session.data.working() && todos().length > 0 && !todos().every(todoFinished)
   // Matches the server: the highest-priority document that sets `experimental` decides. Migrated V1 sessions keep their
   // old `todowrite` calls, so without this check their last plan would come back.
 
@@ -499,6 +501,16 @@ export function ActiveSessionComposerRegion(props: {
       .list({ directory: location().directory })
       ?.flatMap((entry) => (entry.type === "document" && entry.info.experimental ? [entry.info.experimental] : []))
       .at(-1)?.todo === true
+
+  // Like the old dock: the plan shows while the turn runs and still has work left, so stale todos never linger. The
+  // transcript is read only then, so its changes cost nothing while no plan can show.
+  const todos = createMemo(() =>
+    todoEnabled() && props.session.data.working()
+      ? sessionTodos(props.session.history.messages(), props.session.data.revertMessageID())
+      : [],
+  )
+
+  const todosVisible = () => todos().length > 0 && !todos().every(todoFinished)
 
   const stop = (item: SessionActivityItem) => {
     const background = props.model.region.state.background

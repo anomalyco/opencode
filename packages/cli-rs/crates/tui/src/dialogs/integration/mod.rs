@@ -201,7 +201,7 @@ fn signed_out(connection: &ConnectionInfo) -> bool {
 }
 
 fn listed(local: &Local, only: Option<&IntegrationID>) -> Vec<IntegrationInfo> {
-    sorted(local.integrations().unwrap_or_default())
+    sorted(local.integrations().as_deref().map_or_else(Vec::new, <[_]>::to_vec))
         .into_iter()
         .filter(|integration| match only {
             Some(id) => integration.id == *id,

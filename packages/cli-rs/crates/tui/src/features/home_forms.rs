@@ -40,7 +40,7 @@ impl HomeForms {
     pub fn sync(&self, tui: &Tui, changes: &Changes) -> bool {
         let location = crate::features::location::home_target(tui);
         // A full sync (a reconnect) reads again: the store invalidated what it read before.
-        if self.read.borrow().as_ref() != Some(&location) || changes.all {
+        if self.read.borrow().as_ref() != Some(&location) || changes.all() {
             quiet(tui, tui.data.form_sync(GLOBAL, Some(&location)));
             *self.read.borrow_mut() = Some(location.clone());
         }

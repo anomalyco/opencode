@@ -431,10 +431,31 @@ export function createBrowserPane(input: {
               ),
             )
 
+            const attach = rpc.attach({ ...attachment, version: 4 }, options)
+
+            // A Location the server has only just started lists no plugin until its plugins have loaded, the browser's
+            // among them. Ten seconds outlasts a server that starts every open project at once, as after an update.
+            const loaded = client.plugin.list({ location: { directory: session.location.directory } }).pipe(
+              Effect.repeat({
+                until: (plugins) => plugins.data.length > 0,
+                schedule: Schedule.spaced("100 millis").pipe(Schedule.upTo({ duration: "10 seconds" })),
+              }),
+              Effect.ignore,
+            )
+
             return yield* Effect.raceAllFirst([
               receive,
               Stream.fromQueue(outbound).pipe(Stream.runForEach((send) => send)),
-              Deferred.await(connected).pipe(Effect.andThen(rpc.attach({ ...attachment, version: 4 }, options))),
+              Deferred.await(connected).pipe(
+                Effect.andThen(attach),
+                // A Location still loading its plugins has no browser RPC to call yet, so only one that lists its
+                // plugins and still refuses has no browser. An attachment the server accepted and then dropped stays
+                // dropped: the server evicted its idle Location, which another call would start again.
+                Effect.catchIf(
+                  (error) => attachmentFailure(error) === "unavailable" && selectBinding(machine.state, binding)?.status === "connecting",
+                  () => loaded.pipe(Effect.andThen(attach)),
+                ),
+              ),
             ])
           }).pipe(
             Effect.matchCause({

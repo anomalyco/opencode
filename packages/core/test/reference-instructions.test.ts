@@ -74,41 +74,6 @@ describe("ReferenceInstructions", () => {
     ),
   )
 
-  it.effect("announces added and removed references as deltas", () => {
-    const reference = (name: string, description: string) =>
-      Reference.Info.make({
-        name,
-        path: AbsolutePath.make(`/${name}`),
-        description,
-        source: Reference.LocalSource.make({ type: "local", path: AbsolutePath.make(`/${name}`), description }),
-      })
-    let references = [reference("docs", "Use for product documentation")]
-    return Effect.gen(function* () {
-      const instructions = yield* ReferenceInstructions.Service
-      const initialized = yield* readInitial(yield* instructions.load())
-
-      references = [reference("docs", "Use for product documentation"), reference("examples", "Use for examples")]
-      const added = yield* readUpdate(yield* instructions.load(), initialized)
-      expect(added.text).toBe(
-        [
-          "New project references are available in addition to those previously listed:",
-          "  <reference>",
-          "    <name>examples</name>",
-          "    <path>/examples</path>",
-          "    <description>Use for examples</description>",
-          "  </reference>",
-        ].join("\n"),
-      )
-
-      references = [reference("examples", "Use for examples")]
-      expect((yield* readUpdate(yield* instructions.load(), added)).text).toBe(
-        "The following project references are no longer available and must not be used: docs.",
-      )
-    }).pipe(
-      Effect.provide(instructionsLayer(Layer.mock(Reference.Service, { list: () => Effect.succeed(references) }))),
-    )
-  })
-
   it.effect("announces added, changed, and removed references in one delta", () => {
     const reference = (name: string, description: string) =>
       Reference.Info.make({

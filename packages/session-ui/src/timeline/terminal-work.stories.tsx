@@ -9,6 +9,7 @@ import {
   STORY_TIME,
   executeCodeDocument,
   executeLongDetailsDocument,
+  executeManyCallsDocument,
   expandedShellDocument,
   recoveryDocument,
   standaloneShellCompletedDocument,
@@ -187,6 +188,18 @@ export const ExecuteCode = {
       title="Execute code"
       description="Each Code Mode execution lists the tools its script called."
       document={executeCodeDocument}
+      width="786px"
+      shellToolDefaultOpen
+    />
+  ),
+}
+
+export const ExecuteManyCalls = {
+  render: () => (
+    <CurrentSessionTimelineStory
+      title="Execute many calls"
+      description="A script that made 75 calls lists its latest 10; the row above them reveals earlier calls 50 at a time."
+      document={executeManyCallsDocument}
       width="786px"
       shellToolDefaultOpen
     />

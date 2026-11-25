@@ -174,23 +174,42 @@ where
     S: Stream<Item = Result<Bytes, E>> + Send + Unpin,
     E: fmt::Display,
 {
-    struct State<S, A> {
+    read(body, activity, |payload| decode(&payload))
+}
+
+/// Decodes one event's payload. A lone UTF-16 surrogate escape, which `JSON.parse` keeps, decodes as U+FFFD.
+pub fn decode<T: DeserializeOwned>(payload: &str) -> Result<T, Error> {
+    serde_json::from_str(payload)
+        .or_else(|error| match well_formed(payload.as_bytes()) {
+            Some(text) => serde_json::from_slice(&text),
+            None => Err(error),
+        })
+        .map_err(|error| Error::MalformedResponse(error.to_string()))
+}
+
+/// [`events`] with each event's payload, its `data:` text, made an item by `item` instead of [`decode`]. The stream ends
+/// after the first error, `item`'s included.
+pub fn read<T, S, E, A, F>(body: S, activity: A, item: F) -> impl Stream<Item = Result<T, Error>> + Send
+where
+    T: Send,
+    S: Stream<Item = Result<Bytes, E>> + Send + Unpin,
+    E: fmt::Display,
+    A: FnMut() + Send + 'static,
+    F: FnMut(String) -> Result<T, Error> + Send + 'static,
+{
+    struct State<S, A, F> {
         body: S,
         activity: A,
+        item: F,
         decoder: Decoder,
         ready: VecDeque<String>,
         ended: bool,
     }
-    let state = State { body, activity, decoder: Decoder::new(), ready: VecDeque::new(), ended: false };
+    let state = State { body, activity, item, decoder: Decoder::new(), ready: VecDeque::new(), ended: false };
     futures_util::stream::unfold(state, |mut state| async move {
         loop {
             if let Some(data) = state.ready.pop_front() {
-                let item = serde_json::from_str(&data)
-                    .or_else(|error| match well_formed(data.as_bytes()) {
-                        Some(text) => serde_json::from_slice(&text),
-                        None => Err(error),
-                    })
-                    .map_err(|error| Error::MalformedResponse(error.to_string()));
+                let item = (state.item)(data);
                 if item.is_err() {
                     state.ended = true;
                     state.ready.clear();

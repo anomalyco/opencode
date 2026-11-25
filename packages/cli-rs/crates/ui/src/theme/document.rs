@@ -1,6 +1,5 @@
 //! Validates, expands and selects a mode from V2 theme documents.
 
-use opencode_api_types::js::truthy;
 use opencode_util::json_object;
 use serde_json::{Map, Value};
 
@@ -10,6 +9,8 @@ use super::{ThemeMode, mode_name};
 pub(crate) const STATES: [&str; 5] = ["disabled", "pressed", "focused", "selected", "hovered"];
 pub(crate) const VARIANTS: [&str; 3] = ["primary", "secondary", "destructive"];
 pub(crate) const STEPS: [u16; 9] = [100, 200, 300, 400, 500, 600, 700, 800, 900];
+/// The document keys of [`STEPS`].
+pub(crate) const STEP_KEYS: [&str; 9] = ["100", "200", "300", "400", "500", "600", "700", "800", "900"];
 const FEEDBACK: [&str; 4] = ["error", "warning", "success", "info"];
 const SYNTAX: [&str; 9] =
     ["comment", "keyword", "function", "variable", "string", "number", "type", "operator", "punctuation"];
@@ -33,131 +34,6 @@ const MARKDOWN: [&str; 14] = [
 /// The modes a document defines, light first.
 pub(crate) fn modes(document: &Value) -> Vec<ThemeMode> {
     [ThemeMode::Light, ThemeMode::Dark].into_iter().filter(|mode| document.get(mode_name(*mode)).is_some()).collect()
-}
-
-/// `selectThemeMode`: the requested mode if the document has it, else its first mode, merged over `base`.
-pub(crate) fn select(document: &Value, mode: ThemeMode) -> Result<(Map<String, Value>, ThemeMode), String> {
-    let modes = modes(document);
-    let selected = if modes.contains(&mode) { Some(mode) } else { modes.first().copied() };
-    let definition = selected.and_then(|mode| document.get(mode_name(mode))).filter(|value| truthy(value));
-    let (Some(selected), Some(definition)) = (selected, definition) else {
-        return Err("Theme must provide at least one mode".to_owned());
-    };
-    Ok((merge(&[document.get("base").unwrap_or(&Value::Null), definition]), selected))
-}
-
-/// `mergeTheme`: objects merge key by key, anything else replaces.
-pub(crate) fn merge(values: &[&Value]) -> Map<String, Value> {
-    let mut result = Map::new();
-    for value in values {
-        if let Value::Object(object) = value {
-            merge_into(&mut result, object);
-        }
-    }
-    result
-}
-
-fn merge_into(result: &mut Map<String, Value>, object: &Map<String, Value>) {
-    for (key, item) in object {
-        let Value::Object(inner) = item else {
-            result.insert(key.clone(), item.clone());
-            continue;
-        };
-        let mut next = match result.get(key) {
-            Some(Value::Object(existing)) => existing.clone(),
-            _ => Map::new(),
-        };
-        merge_into(&mut next, inner);
-        result.insert(key.clone(), Value::Object(next));
-    }
-}
-
-/// `expandTheme`: fills derived text colors and every action and form-field state.
-pub(crate) fn expand_theme(definition: &Map<String, Value>) -> Map<String, Value> {
-    let mut result = expand_tokens(definition);
-    if let Some(Value::Object(dialog)) = definition.get("@dialog") {
-        let mut expanded = expand_tokens(dialog);
-        if let Some(Value::Object(footer)) = dialog.get("@footer") {
-            expanded.insert("@footer".to_owned(), Value::Object(expand_tokens(footer)));
-        }
-        result.insert("@dialog".to_owned(), Value::Object(expanded));
-    }
-    result
-}
-
-fn expand_tokens(definition: &Map<String, Value>) -> Map<String, Value> {
-    let mut result = definition.clone();
-    if let Some(Value::Object(text)) = definition.get("text") {
-        result.insert("text".to_owned(), Value::Object(expand_text(text)));
-    }
-    if let Some(Value::Object(background)) = definition.get("background") {
-        let mut expanded = background.clone();
-        expand_section(&mut expanded, "background");
-        result.insert("background".to_owned(), Value::Object(expanded));
-    }
-    result
-}
-
-fn expand_text(text: &Map<String, Value>) -> Map<String, Value> {
-    let mut result = text.clone();
-    let present = |key: &str| text.get(key).is_some_and(truthy);
-    if text.get("muted").is_none_or(Value::is_null) && present("base") {
-        result.insert("muted".to_owned(), reference("text.base"));
-    }
-    if text.get("faint").is_none_or(Value::is_null) && (present("muted") || present("base")) {
-        result.insert("faint".to_owned(), reference("text.muted"));
-    }
-    expand_section(&mut result, "text");
-    if let Some(Value::Object(feedback)) = text.get("feedback") {
-        let expanded = feedback
-            .iter()
-            .map(|(kind, item)| {
-                let Value::Object(item) = item else { return (kind.clone(), item.clone()) };
-                let mut item = item.clone();
-                if item.get("muted").is_none_or(Value::is_null) && item.get("base").is_some_and(truthy) {
-                    item.insert("muted".to_owned(), reference(&format!("text.feedback.{kind}.base")));
-                }
-                (kind.clone(), Value::Object(item))
-            })
-            .collect();
-        result.insert("feedback".to_owned(), Value::Object(expanded));
-    }
-    result
-}
-
-/// Expands `action` and `formfield` of a text or background section.
-fn expand_section(section: &mut Map<String, Value>, path: &str) {
-    if let Some(Value::Object(actions)) = section.get("action") {
-        let expanded = actions
-            .iter()
-            .map(|(variant, value)| (variant.clone(), expand_states(value, &format!("{path}.action.{variant}"))))
-            .collect();
-        section.insert("action".to_owned(), Value::Object(expanded));
-    }
-    if let Some(formfield) = section.get("formfield") {
-        let expanded = expand_states(formfield, &format!("{path}.formfield"));
-        section.insert("formfield".to_owned(), expanded);
-    }
-}
-
-/// Points every missing state of a stateful color with a `base` at that base.
-fn expand_states(value: &Value, path: &str) -> Value {
-    let Value::Object(states) = value else { return value.clone() };
-    if !states.get("base").is_some_and(truthy) {
-        return value.clone();
-    }
-    let mut result = states.clone();
-    for state in STATES {
-        let key = format!("${state}");
-        if result.get(&key).is_none_or(Value::is_null) {
-            result.insert(key, reference(&format!("{path}.base")));
-        }
-    }
-    Value::Object(result)
-}
-
-fn reference(path: &str) -> Value {
-    Value::String(format!("${path}"))
 }
 
 /// Why a document failed the schema, as far as the theme-error message shows it.
@@ -343,10 +219,10 @@ fn hue(value: &Value) -> Check {
             Value::String(_) => return Err(Issue::Got(scale.clone())),
             Value::Object(steps) => {
                 let mut decoded = Map::new();
-                for step in STEPS {
-                    match steps.get(&step.to_string()) {
+                for step in STEP_KEYS {
+                    match steps.get(step) {
                         Some(Value::String(color)) if is_hex(color) => {
-                            decoded.insert(step.to_string(), Value::String(color.clone()));
+                            decoded.insert(step.to_owned(), Value::String(color.clone()));
                         }
                         _ => return Err(Issue::Other),
                     }
@@ -390,7 +266,7 @@ fn hue_color(value: &Value) -> Check {
     let reference = text
         .strip_prefix("$hue.")
         .and_then(|rest| rest.rsplit_once('.'))
-        .is_some_and(|(name, step)| !name.is_empty() && STEPS.iter().any(|known| known.to_string() == step));
+        .is_some_and(|(name, step)| !name.is_empty() && STEP_KEYS.contains(&step));
     if is_hex(text) || reference { Ok(value.clone()) } else { Err(Issue::Got(value.clone())) }
 }
 

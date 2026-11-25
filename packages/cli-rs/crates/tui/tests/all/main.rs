@@ -27,6 +27,7 @@ mod mcp;
 mod messages;
 mod models;
 mod navigate;
+mod perf;
 mod permission;
 mod plugin_behave;
 mod plugin_builtins;

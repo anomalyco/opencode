@@ -1199,8 +1199,9 @@ export function context(base: Base, carrier: Carrier) {
           return {
             async next(): Promise<IteratorResult<Json>> {
               while (!queue.length && !done) await new Promise<void>((resolve) => (wake = resolve))
-              if (queue.length) return { value: queue.shift(), done: false }
-              return { value: undefined, done: true }
+              // A cancelled subscription ends even with events still queued, as the TS client's does.
+              if (done) return { value: undefined, done: true }
+              return { value: queue.shift(), done: false }
             },
             async return(): Promise<IteratorResult<Json>> {
               end()

@@ -76,11 +76,6 @@ export interface Prepared<Event = SessionRequest> {
   readonly executeTool: (
     input: Parameters<Tool.Snapshot["execute"]>[0],
   ) => Effect.Effect<Tool.NormalizedResult, ExecuteError>
-  /**
-   * When `name` isn't a tool this request advertised but is one of its Code Mode tools, the expression a program calls
-   * it by, so the call can be recorded and run as the `execute` program it should have been.
-   */
-  readonly codeModeExpression?: (name: string) => string | undefined
 }
 
 export interface Input {
@@ -350,11 +345,7 @@ export const layer = Layer.effect(
             model.model.provider,
           ),
         ),
-        tools: Array.from(hooked, ([name, t]) => ({
-          ...t,
-          name,
-          freeform: t.freeform && model.capabilities.freeform?.includes(t.freeform.type) ? t.freeform : undefined,
-        })),
+        tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
         toolChoice: input.toolChoice,
         ...generation,
         providerOptions: Object.keys(providerOptions).length === 0 ? undefined : providerOptions,
@@ -445,8 +436,6 @@ export const layer = Layer.effect(
         // catch them and turn a "no" into model-visible output. Recover them here as failures,
         // including declines a tool rethrew and its wrapper attached to a Tool.Error, as Promise
         // plugin tools do.
-        codeModeExpression: (name: string) =>
-          hooked.has(name) || !hooked.has("execute") ? undefined : input.tools?.codeModeExpression?.(name),
         executeTool: (call: Parameters<Prepared["executeTool"]>[0]) =>
           tools.execute({ ...call, definitions: hooked }).pipe(
             Effect.catchCauseFilter(

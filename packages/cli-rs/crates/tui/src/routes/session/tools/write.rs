@@ -34,7 +34,7 @@ impl Write {
     }
 
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
-        let path = props.input_str("path");
+        let path = props.input.path().str();
         let completed = props.status() == Status::Completed;
         self.inline.root().visible(!completed);
         self.block.root().visible(completed);
@@ -54,7 +54,7 @@ impl Write {
             width: content_width(cx),
         });
         let path = path.unwrap_or_default();
-        let content = props.input_str("content").unwrap_or_default();
+        let content = opencode_ui::tool_info::WriteInput(props.input).content().text();
         let shown = fingerprint(&(content, path, props.metadata.get("diagnostics")));
         if self.shown.get() == Some(shown) {
             return;

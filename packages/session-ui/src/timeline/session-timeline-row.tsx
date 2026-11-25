@@ -111,6 +111,7 @@ export function createSessionTimelineRowRenderer(input: {
   editToolDefaultOpen: Accessor<boolean>
   timelineDetail?: Accessor<TimelineDetail>
   foldUserMessages?: Accessor<boolean>
+  inlineQuotes?: Accessor<boolean>
   disclosure: {
     value: (key: string) => boolean | undefined
     set: (key: string, open: boolean) => void
@@ -848,6 +849,25 @@ export function createSessionTimelineRowRenderer(input: {
       const variantOnly = value.previous?.providerID === value.model.providerID && value.previous.id === value.model.id
       const variant = value.model.variant ?? "default"
 
+      // A model's faster and slower speeds are models of their own ("gpt-5.5-fast"), so moving between them is a
+      // change of speed.
+      const info = match?.models?.[value.model.id]
+      const before = value.previous?.providerID === value.model.providerID && match?.models?.[value.previous.id]
+
+      if (
+        info &&
+        before &&
+        !variantOnly &&
+        (before.speed?.base ?? value.previous?.id) === (info.speed?.base ?? value.model.id)
+      )
+        return {
+          providerID: value.model.providerID,
+          variant: undefined,
+          label: info.speed
+            ? i18n.t("ui.sessionTimeline.notice.speedSwitched", { speed: info.speed.id })
+            : i18n.t("ui.sessionTimeline.notice.speedStandard"),
+        }
+
       return {
         providerID: value.model.providerID,
         variant: variantOnly ? undefined : value.model.variant,
@@ -1224,6 +1244,7 @@ export function createSessionTimelineRowRenderer(input: {
                         )
                       }
                       fold={input.foldUserMessages?.()}
+                      inlineQuotes={input.inlineQuotes?.()}
                       expanded={input.disclosure.value(`user-expanded:${message().id}`)}
                       onExpandedChange={(open) => input.disclosure.set(`user-expanded:${message().id}`, open)}
                     />
@@ -1325,9 +1346,7 @@ export function createSessionTimelineRowRenderer(input: {
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <div data-slot="session-turn-assistant-content" aria-hidden={phase(current().userMessageID).live}>
-              {content}
-            </div>
+            <div data-slot="session-turn-assistant-content">{content}</div>
           </div>
         </Frame>
       )

@@ -141,7 +141,8 @@ fn decode(contents: &str) -> Result<Manifest, String> {
 /// Accepts only a loopback WebSocket endpoint.
 fn endpoint(value: &str) -> Option<SocketAddr> {
     let url = opencode_api_types::js::parse_url(value).ok()?;
-    let port = url.port().filter(|port| *port >= 1)?;
+    // An explicit 0 asks the endpoint for a port of its own; a URL with no port has none to ask about.
+    let port = url.port()?;
     (url.scheme() == "ws" && url.host_str() == Some("127.0.0.1")).then(|| SocketAddr::from(([127, 0, 0, 1], port)))
 }
 
@@ -179,6 +180,7 @@ mod tests {
         );
         write("remote", r#"{"endpoints":{"ui":"ws://10.0.0.1:4100","backend":"ws://127.0.0.1:4101"}}"#);
         write("portless", r#"{"endpoints":{"ui":"ws://127.0.0.1","backend":"ws://127.0.0.1:4101"}}"#);
+        write("chosen", r#"{"endpoints":{"ui":"ws://127.0.0.1:0","backend":"ws://127.0.0.1:4101"}}"#);
         write(
             "zero",
             r#"{"endpoints":{"ui":"ws://127.0.0.1:1","backend":"ws://127.0.0.1:2"},"viewport":{"cols":0,"rows":2}}"#,
@@ -192,6 +194,8 @@ mod tests {
         for name in ["remote", "portless", "zero"] {
             assert!(get(name).unwrap_err().0.starts_with("Invalid Drive manifest: "), "{name}");
         }
+        // An explicit 0 is a port the endpoint chooses itself.
+        assert_eq!(get("chosen").unwrap().ui_addr(), SocketAddr::from(([127, 0, 0, 1], 0)));
         assert!(get("missing").unwrap_err().0.starts_with("Drive manifest not found: "));
 
         let registry = resolve(env(&[("OPENCODE_DRIVE", "good"), ("DRIVE_REGISTRY_DIR", instances.to_str().unwrap())]));

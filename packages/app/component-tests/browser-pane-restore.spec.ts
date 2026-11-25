@@ -270,7 +270,7 @@ story("toggles the element picker from the shortcut only inside the browser pane
   await expect(root.getByText("Registrations: 2", { exact: true })).toBeVisible()
 
   await root.getByRole("button", { name: "Blank page", exact: true }).click()
-  // The comment tool has no button in the bar; while it waits for a pick, the pane says so in a status line.
+  // While the comment tool waits for a pick, the pane says so in a status line.
   const picking = root.getByText("Click part of the page to comment on it. Press Escape to cancel.", { exact: true })
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.click()
@@ -320,22 +320,19 @@ story("keeps in-page shortcuts in the editor and forwards toolbar, review and cl
   await editor.press(`${mod}+k`)
   await expect(editor).toHaveValue("handled:k")
 
-  const toggle = root.getByRole("button", { name: "Toggle browser toolbar", exact: true })
+  // The toolbar's toggle is an item of the options menu, so the shortcut leaves the keyboard on that menu's button.
+  const toolbar = root.getByRole("region", { name: "Viewport", exact: true })
+  const options = root.getByRole("button", { name: "Browser options", exact: true })
   await editor.press(`${mod}+Shift+m`)
-  await expect(toggle).toHaveAttribute("aria-expanded", "true")
-  await expect(toggle).toBeFocused()
+  await expect(toolbar).toBeVisible()
+  await expect(options).toBeFocused()
   await root.getByRole("button", { name: "Device preset", exact: true }).press("ArrowDown")
   await page.getByRole("menuitem", { name: "More devices", exact: true }).press("ArrowRight")
   await expect(page.getByRole("menuitemradio", { name: "iPhone SE", exact: true })).toBeFocused()
   await page.keyboard.press(`${mod}+Shift+m`)
-  await expect(toggle).toHaveAttribute("aria-expanded", "false")
-  await expect(toggle).toBeFocused()
-  await expect(toggle).toHaveCSS("outline-style", "solid")
-  await toggle.click()
-  await expect(toggle).toBeFocused()
-  await expect(toggle).toHaveCSS("outline-style", "none")
-  await page.keyboard.press(`${mod}+Shift+m`)
-  await expect(toggle).toHaveCSS("outline-style", "solid")
+  await expect(toolbar).toBeHidden()
+  await expect(options).toBeFocused()
+  await expect(options).toHaveCSS("outline-style", "solid")
 
   // Shell shortcuts like ⌘⇧R and pane-scoped ⌘W are claimed before the page sees them.
   await editor.press(`${mod}+Shift+r`)
@@ -349,18 +346,18 @@ story("keeps in-page shortcuts in the editor and forwards toolbar, review and cl
 story("the pane's toolbar shortcut works from inside the options menu's More tools", async ({ page }) => {
   const root = page.getByTestId("browser-region-fixture")
   const mod = (await page.evaluate(() => /Mac|iPhone|iPad|iPod/.test(navigator.platform))) ? "Meta" : "Control"
-  const toggle = root.getByRole("button", { name: "Toggle browser toolbar", exact: true })
+  const toolbar = root.getByRole("region", { name: "Viewport", exact: true })
   await root.getByRole("button", { name: "Beta", exact: true }).click()
   await root.getByRole("button", { name: "First inventory", exact: true }).click()
   await expect(root.getByRole("tab", { name: "Preview", exact: true })).toHaveAttribute("aria-selected", "true")
-  await expect(toggle).toHaveAttribute("aria-expanded", "false")
+  await expect(toolbar).toBeHidden()
 
   // The submenu is a portal of its own, outside the pane: it must still count as the pane for the pane's shortcuts.
   await root.getByRole("button", { name: "Browser options", exact: true }).click()
   await page.getByRole("menuitem", { name: "More tools", exact: true }).press("ArrowRight")
   await expect(page.getByRole("menu", { name: "More tools", exact: true }).getByRole("menuitem").first()).toBeFocused()
   await page.keyboard.press(`${mod}+Shift+m`)
-  await expect(toggle).toHaveAttribute("aria-expanded", "true")
+  await expect(toolbar).toBeVisible()
 })
 
 story(

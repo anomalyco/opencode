@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "version": "2.3.0",
+  "version": "2.4.1",
   "name": "@opencode/core",
   "type": "module",
   "license": "MIT",
@@ -22,6 +22,7 @@
     "build": "bun run script/build.ts",
     "pack": "bun run script/pack.ts",
     "update-models-snapshot": "bun run script/update-models-snapshot.ts",
+    "generate:api-skill": "bun run script/generate-api-skill.ts",
     "test": "bun run script/test.ts",
     "typecheck": "bun check --no-script -b -p tsconfig.tests.json",
     "typecheck:tsc": "tsc -b tsconfig.json tsconfig.tests.json"

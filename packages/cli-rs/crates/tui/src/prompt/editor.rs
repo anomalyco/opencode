@@ -139,6 +139,8 @@ pub struct Inner {
     edge: View,
     bottom: View,
     metadata: Row,
+    /// The metadata row's box, which [`Row::measure`] measures.
+    meta: View,
     /// The page theme the prompt last painted in, which its marks' styles came from.
     theme: RefCell<Theme>,
     footer: Text,
@@ -216,8 +218,11 @@ impl Prompt {
     }
 
     pub fn sync(&self, tui: &Tui, changes: &Changes) {
-        if changes.location(&self.inner.location(tui)) {
-            self.inner.read_catalog(tui);
+        let location = changes.any_location().then(|| self.inner.location(tui));
+        if let Some(location) = location.filter(|location| changes.location(location)) {
+            if changes.location_parts(&location, Catalog::READS) {
+                self.inner.read_catalog(tui);
+            }
             if let Some(complete) = self.inner.autocomplete.get() {
                 complete.sync();
             }
@@ -226,11 +231,11 @@ impl Prompt {
             self.inner.footer_slots.borrow().1.iter().for_each(|slot| slot.sync(tui, changed));
         });
         let Some(session) = &self.inner.session else { return };
-        if changes.session(session) {
+        if changes.has(session, Touched::INFO) {
             self.inner.follow_directory(tui);
         }
-        if changes.session(session) || changes.status(session) {
-            if changes.status(session) && !self.inner.running(tui) {
+        if changes.has(session, Touched::INFO | Touched::STATUS) {
+            if changes.has(session, Touched::STATUS) && !self.inner.running(tui) {
                 self.inner.interrupt.set(0);
             }
             self.inner.refresh(tui);
@@ -359,6 +364,7 @@ pub fn mount(tui: &Tui, session: Option<&SessionID>) -> Prompt {
         edge,
         bottom,
         metadata,
+        meta,
         theme: RefCell::new(theme),
         footer,
         editor_file,
@@ -582,13 +588,12 @@ impl Inner {
     }
 
     pub(crate) fn location(&self, tui: &Tui) -> Location {
-        Location::new(self.session_info(tui).map_or_else(
-            || {
-                crate::features::location::current(tui)
-                    .map_or_else(|| tui.directory.clone(), |location| location.directory)
-            },
-            |session| session.location.directory.0,
-        ))
+        let session = self.session.as_ref().and_then(|id| {
+            tui.data.read(|state| state.session(id).map(|session| session.location.directory.0.clone()))
+        });
+        Location::new(session.unwrap_or_else(|| {
+            crate::features::location::current(tui).map_or_else(|| tui.directory.clone(), |location| location.directory)
+        }))
     }
 
     /// Reads the catalogs again after a home `/cd`.
@@ -602,7 +607,9 @@ impl Inner {
     fn read_catalog(&self, tui: &Tui) {
         let location = self.location(tui);
         let catalog = tui.data.read(|state| Catalog::read(state, &location));
-        if let Some(catalog) = catalog {
+        // Read again unchanged, it shows nothing new.
+        if let Some(catalog) = catalog.filter(|new| !self.catalog.borrow().as_deref().is_some_and(|old| old.same(new)))
+        {
             *self.catalog.borrow_mut() = Some(Rc::new(catalog));
             self.refresh(tui);
             self.submit_startup(tui);
@@ -656,6 +663,7 @@ impl Inner {
                     model,
                     provider,
                     variant: selection.model.as_ref().and_then(|model| model.variant.clone()),
+                    speed: selection.model.as_ref().and_then(|model| catalog.speed(model)),
                     limit: tui.local.limit_label(),
                 }
             }
@@ -769,7 +777,7 @@ impl Inner {
     /// Repaints after a change outside the store, the terminal size or the settings, which the footer slots read too.
     fn relayout(&self, tui: &Tui) {
         self.refresh(tui);
-        crate::plugins::host::changed(tui, &Changes::everything(), |changed| {
+        crate::plugins::host::changed(tui, &Changes::everything(&tui.data), |changed| {
             self.footer_slots.borrow().1.iter().for_each(|slot| slot.sync(tui, changed));
         });
     }
@@ -868,6 +876,13 @@ fn connect(inner: &Rc<Inner>) {
 
 /// Show and open the working directory from the footer.
 fn connect_location(inner: &Rc<Inner>) {
+    inner.meta.on_resize(bind!(inner, |prompt, _, rect| {
+        if prompt.metadata.measure(rect.width.max(0.0) as u16)
+            && let Some(tui) = prompt.tui.upgrade()
+        {
+            prompt.refresh(&tui);
+        }
+    }));
     inner.location_box.on_resize(bind!(inner, |prompt, _, rect| {
         let width = rect.width.max(0.0) as u16;
         if prompt.location_width.replace(width) != width

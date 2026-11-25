@@ -1,3 +1,15 @@
+/* Updated on viewport scroll; non-inherited so changing the bottom fade does not restyle every row inside it. */
+@property --search-list-fade-bottom {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+
+@property --search-list-edge {
+  syntax: "*";
+  inherits: false;
+}
+
 [data-component="search-list"] {
   /* Sticky headers and the top fade paint this, so rows scroll under an opaque band. */
   --search-list-surface: var(--v2-background-bg-base);

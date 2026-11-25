@@ -258,19 +258,27 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   const branches = Effect.fn("VcsGit.branches")(function* (cwd: string, options?: BranchOptions) {
     const search = options?.search?.trim().toLowerCase()
     // `refname:short` collapses `refs/remotes/<remote>/HEAD` to the bare remote name, so strip the namespace
-    // instead. Search and limit apply here because ref globs cannot cross `/` and `--count` precedes the filter.
+    // and exclude symbolic refs via `%(symref)` instead of filtering `/HEAD` suffixes. Search and limit apply
+    // here because ref globs cannot cross `/` and `--count` precedes the filter.
     return (yield* lines(
       [
         "for-each-ref",
         "--sort=refname",
         "--sort=-committerdate",
-        "--format=%(refname:lstrip=2)",
+        "--format=%(refname:lstrip=2)%00%(symref)",
         "refs/heads",
         "refs/remotes",
       ],
       { cwd },
     ))
-      .filter((item) => !item.endsWith("/HEAD") && (!search || item.toLowerCase().includes(search)))
+      .flatMap((line) => {
+        const sep = line.indexOf("\0")
+        if (sep === -1) return []
+        const name = line.slice(0, sep)
+        if (!name || line.slice(sep + 1)) return []
+        if (search && !name.toLowerCase().includes(search)) return []
+        return [name]
+      })
       .slice(0, options?.limit) satisfies BranchList
   })
 

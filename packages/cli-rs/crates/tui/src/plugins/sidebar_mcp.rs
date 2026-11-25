@@ -1,6 +1,6 @@
 //! Foldable MCP status list for the session's location.
 
-use opencode_api::generated::McpServer;
+use opencode_api::generated::{McpServer, McpServerStatus};
 use opencode_plugin::abi::v2::{Node, Place, Surface};
 use opencode_plugin::abi::{self, Click, Command, Layout, Placement, Span, Wrap};
 use opencode_plugin::slot;
@@ -43,8 +43,11 @@ fn setup(setup: &mut abi::Setup) -> Result<(), String> {
 }
 
 fn view(list: &[McpServer], open: bool) -> Node {
-    let on = list.iter().filter(|item| item.status.tag() == "connected").count();
-    let bad = list.iter().filter(|item| matches!(item.status.tag(), "failed" | "needs_auth")).count();
+    let on = list.iter().filter(|item| matches!(item.status, McpServerStatus::Connected(_))).count();
+    let bad = list
+        .iter()
+        .filter(|item| matches!(item.status, McpServerStatus::Failed(_) | McpServerStatus::NeedsAuth(_)))
+        .count();
     let mut title = vec![Span::new("MCP").fg("text.base").bold()];
     if !open {
         let errors = match bad {

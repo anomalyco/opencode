@@ -1,21 +1,27 @@
 use opencode_api::generated::*;
 
-use crate::state::{Data, Error, State, Task, evict_missing, is_tag};
+use crate::changes::Touched;
+use crate::core::{Effect, List, Ticket};
+use crate::state::{Error, Overlay, State};
 
 impl State {
     /// Pending permission requests of a session; none until read or asked.
-    pub fn permissions(&self, session: &SessionID) -> Option<&[PermissionRequest]> {
-        self.permission.get(session).map(Vec::as_slice)
+    pub fn permissions(&self, session: &(impl AsRef<str> + ?Sized)) -> Option<&[PermissionRequest]> {
+        self.sessions.get(session.as_ref())?.permissions.as_deref()
     }
 
     /// Sessions with pending permission requests.
     pub fn permission_sessions(&self) -> Vec<&SessionID> {
-        self.permission.iter().filter(|(_, requests)| !requests.is_empty()).map(|(session, _)| session).collect()
+        self.sessions
+            .iter()
+            .filter(|session| session.permissions.as_ref().is_some_and(|requests| !requests.is_empty()))
+            .map(|session| &session.id)
+            .collect()
     }
 
     pub(crate) fn on_permission_asked(&mut self, data: &PermissionAskedData) {
         // A session the store found missing shows nothing, whatever arrives late (model O9).
-        if self.missing.contains(&data.session_id) {
+        if self.is_missing(&data.session_id) {
             return;
         }
         let request = PermissionRequest {
@@ -28,62 +34,70 @@ impl State {
             source: data.source.clone(),
             message: data.message.clone(),
         };
-        if let Some(read) = self.permission_reads.get_mut(&data.session_id) {
+        let session = self.sessions.get_or_insert(&data.session_id);
+        if let Some(read) = &mut session.permission_read {
             read.record(&data.id.0, Some(request.clone()));
         }
-        let requests = self.permission.entry(data.session_id.clone()).or_default();
+        let requests = session.permissions.get_or_insert_default();
         if requests.iter().any(|item| item.id == data.id) {
             return;
         }
         requests.push(request);
-        self.log.permissions(&data.session_id);
+        self.touch(&data.session_id, Touched::PERMISSIONS);
     }
 
     pub(crate) fn remove_permission(&mut self, session: &SessionID, request: &PermissionID) {
-        if let Some(read) = self.permission_reads.get_mut(session) {
+        let Some(record) = self.sessions.get_mut(session) else { return };
+        if let Some(read) = &mut record.permission_read {
             read.record(&request.0, None);
         }
-        let Some(requests) = self.permission.get_mut(session) else { return };
+        let Some(requests) = &mut record.permissions else { return };
         let before = requests.len();
         requests.retain(|item| item.id != *request);
         if requests.len() != before {
-            self.log.permissions(session);
+            self.touch(session, Touched::PERMISSIONS);
         }
     }
-}
 
-impl Data {
-    /// Reads pending permissions once per invalidation. Requests opened or settled during the read take precedence
-    /// over its snapshot.
-    pub fn permission_sync(&self, session: &SessionID) -> Task<()> {
-        let (fetched, again) = (session.clone(), session.clone());
-        self.overlay_sync(
-            format!("session.permission:{}", session.0),
-            session.clone(),
-            |state| &mut state.permission_reads,
-            session.clone(),
-            |request| &request.id.0,
-            move |data| async move {
-                let list = data.client().permission_list(&PermissionListInput { session_id: fetched }).await;
-                Ok((list.map_err(|error| evict_missing(&data, error))?, ()))
-            },
-            |state, session, list, ()| {
-                state.permission.insert(session.clone(), list);
-                state.log.permissions(session);
-            },
-            move |data| data.permission_sync(&again),
-        )
+    /// Begins a read of the pending permission requests of the session of `ticket`, with an overlay of the requests asked
+    /// and replied to meanwhile.
+    pub(crate) fn begin_permissions(&mut self, ticket: Ticket) -> List {
+        let read = self.token();
+        let record = &mut self.sessions[ticket.session()];
+        record.permission_read = Some(Overlay::new(read));
+        List { ticket, session: record.id.clone(), read, started: self.deletion_epoch }
     }
 
-    /// Replies and drops the request; an already settled request counts as replied.
-    pub async fn permission_reply(&self, input: PermissionReplyInput) -> Result<(), Error> {
-        if let Err(error) = self.client().permission_reply(&input).await {
-            let error = Error::new(error);
-            if !is_tag(&error, "PermissionNotFoundError") {
-                return Err(error);
+    /// Publishes the permission read `read` with the requests asked and replied to during it, unless a newer read or
+    /// a deletion of the session since it began supersedes it. An overflowed overlay reads again instead.
+    pub(crate) fn complete_permissions(
+        &mut self,
+        list: List,
+        result: Result<Vec<PermissionRequest>, Error>,
+        effects: &mut Vec<Effect>,
+    ) {
+        let session = list.session;
+        let overlay = self
+            .sessions
+            .get_mut(&session)
+            .and_then(|record| record.permission_read.take_if(|current| current.ticket() == list.read));
+        let requests = match result {
+            Ok(requests) => requests,
+            Err(error) => return self.evict_missing(&error),
+        };
+        let Some(overlay) = overlay else { return };
+        if self.deleted_since(&session, list.started) {
+            return;
+        }
+        match overlay.apply(requests, |request| &request.id.0) {
+            Some(requests) => {
+                self.sessions.get_or_insert(&session).permissions = Some(requests);
+                self.touch(&session, Touched::PERMISSIONS);
+            }
+            None => {
+                self.invalidate_key(list.ticket.key);
+                effects.push(Effect::Permissions(session));
             }
         }
-        self.write(|state| state.remove_permission(&input.session_id, &input.request_id));
-        Ok(())
     }
 }

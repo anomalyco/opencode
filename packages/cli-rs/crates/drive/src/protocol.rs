@@ -5,9 +5,22 @@ use serde::Deserialize;
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 
-/// Capabilities are advertised in protocol order. Renderable IDs and recording are unsupported.
-pub const CAPABILITIES: &[&str] =
-    &["ui.type", "ui.press", "ui.enter", "ui.arrow", "ui.mouse", "ui.resize", "ui.matches", "ui.capture"];
+/// Capabilities are advertised in protocol order. opencode-drive requires `ui.focus` and `ui.click`, so they are
+/// offered, but with no renderable numbers they always fail; `ui.state` lists no elements.
+pub const CAPABILITIES: &[&str] = &[
+    "ui.type",
+    "ui.press",
+    "ui.enter",
+    "ui.arrow",
+    "ui.focus",
+    "ui.click",
+    "ui.mouse",
+    "ui.resize",
+    "ui.matches",
+    "ui.state",
+    "ui.capture",
+    "ui.recording.finish",
+];
 
 /// One decoded request. `id` is `None` for a notification, which gets a response only when it fails.
 #[derive(Debug, Clone, PartialEq)]
@@ -37,6 +50,8 @@ pub enum Request {
         text: String,
     },
     Capture,
+    State,
+    FinishRecording,
     /// A request of the protocol this endpoint does not implement.
     Unsupported(&'static str),
 }
@@ -75,9 +90,9 @@ pub fn decode(input: &str) -> Result<Envelope, String> {
             params_of::<Value>(method, params)?;
             Request::Unsupported(if method == "ui.focus" { "ui.focus" } else { "ui.click" })
         }
-        "ui.state" => Request::Unsupported("ui.state"),
+        "ui.state" => Request::State,
         "ui.snapshot" => Request::Unsupported("ui.snapshot"),
-        "ui.recording.finish" => Request::Unsupported("ui.recording.finish"),
+        "ui.recording.finish" => Request::FinishRecording,
         other => return Err(format!("method: unknown simulation UI method {other:?}")),
     };
     Ok(Envelope { id, request })
@@ -113,12 +128,7 @@ struct Resize {
 
 /// The message for a request this endpoint does not implement.
 pub fn unsupported(method: &str) -> String {
-    match method {
-        "ui.recording.finish" => "UI recording is not available".into(),
-        _ => format!(
-            "{method} is not supported by the Rust TUI: it has no renderable numbers; use ui.mouse with coordinates"
-        ),
-    }
+    format!("{method} is not supported by the Rust TUI: it has no renderable numbers; use ui.mouse with coordinates")
 }
 
 /// `JsonRpc.success`: nothing for a notification.

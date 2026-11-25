@@ -21,11 +21,12 @@ const TEXT_FIELD = [
 
 export interface DialogProps extends ParentProps {
   /**
-   * normal: 480px wide, for confirmations and small forms. large: 680×600, for palettes, pickers and lists.
-   * x-large: 880×680, for long documents and settings-like panels. Each clamps to the window.
+   * normal: 480px wide, for confirmations and small forms. tall: 480×600, for a short form that reveals a list under
+   * a choice. large: 680×600, for palettes, pickers and lists. x-large: 880×680, for long documents and settings-like
+   * panels. Each clamps to the window.
    */
-  size?: "normal" | "large" | "x-large"
-  /** Height follows the content, up to the size's height. Large sizes grow down from a fixed top edge. */
+  size?: "normal" | "tall" | "large" | "x-large"
+  /** Height follows the content, up to the size's height. Tall and larger sizes grow down from a fixed top edge. */
   fit?: boolean
   variant?: "default" | "settings"
   class?: ComponentProps<"div">["class"]
@@ -171,11 +172,14 @@ export function Dialog(props: DialogProps) {
                   ? active
                   : undefined
 
-              const field = Array.from(content.querySelectorAll<HTMLElement>(TEXT_FIELD)).find(
-                (element) => element.getClientRects().length > 0,
-              )
+              const target =
+                autofocus ??
+                kept ??
+                Array.from(content.querySelectorAll<HTMLElement>(TEXT_FIELD)).find(
+                  (element) => element.getClientRects().length > 0,
+                ) ??
+                content
 
-              const target = autofocus ?? kept ?? field ?? content
               target.focus({ preventScroll: true })
             })
           }}

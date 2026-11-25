@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { isoDay } from "../src/lib/format"
+import { formatPeriodDate } from "../src/lib/format"
 import { jsonUrl, markdownUrl, prefersMarkdown } from "../src/lib/language"
 
 describe("markdown negotiation", () => {
@@ -31,18 +31,13 @@ describe("agent format urls", () => {
   })
 })
 
-describe("iso days", () => {
-  test("series labels resolve against the update time", () => {
-    expect(isoDay("Aug 7", "2026-10-01T22:16:22.000Z")).toBe("2026-08-07")
-    expect(isoDay("Oct 1", "2026-10-01T22:16:22.000Z")).toBe("2026-10-01")
+describe("period dates", () => {
+  test("a day shows one date", () => {
+    expect(formatPeriodDate("2026-11-20", "2026-11-20")).toBe("Nov 20, 2026")
   })
 
-  test("labels from December stay in the previous year after New Year", () => {
-    expect(isoDay("Dec 30", "2027-01-02T08:00:00.000Z")).toBe("2026-12-30")
-    expect(isoDay("Jan 2", "2027-01-02T08:00:00.000Z")).toBe("2027-01-02")
-  })
-
-  test("unrecognized labels pass through", () => {
-    expect(isoDay("Week 32", "2026-10-01T22:16:22.000Z")).toBe("Week 32")
+  test("a week shows its range, across months and years", () => {
+    expect(formatPeriodDate("2026-11-16", "2026-11-20")).toBe("Nov 16 – 20, 2026")
+    expect(formatPeriodDate("2026-12-28", "2027-01-03")).toBe("Dec 28, 2026 – Jan 3, 2027")
   })
 })

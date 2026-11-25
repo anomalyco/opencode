@@ -1089,3 +1089,116 @@ test("folds a prompt past 12 lines to its first 8 and keeps it open after scroll
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
   await expect.poll(highlights).toBe(1)
 })
+
+// The thumb used to be written before the timeline's own scroll handler ran. The handler's first read of the scroll
+// position then recalculated style in every scroll event, and laid out again whenever the thumb changed size.
+for (const timeline of [
+  { name: "old", newTimeline: false },
+  { name: "new", newTimeline: true },
+]) {
+  test(`handles a scroll event without a forced style or layout pass in the ${timeline.name} timeline`, async ({
+    page,
+    browser,
+  }) => {
+    // One reply taller than two viewports: scrolling inside it mounts no row, so only the scroll handlers run.
+    await setupTimeline(page, {
+      settings: { newTimeline: timeline.newTimeline },
+      messages: [
+        userMessage([userText("Write a long reply.", { id: "prt_msg_0001_tall_text" })], {
+          id: "msg_0001_tall",
+          created: 1700000000000,
+        }),
+        assistantMessage(
+          [
+            {
+              id: "prt_msg_0002_tall_text",
+              type: "text",
+              text: Array.from({ length: 160 }, (_, line) => `Line ${line} of a long reply.`).join("\n\n"),
+            },
+          ],
+          { id: "msg_0002_tall", parentID: "msg_0001_tall", created: 1700000001000 },
+        ),
+        userMessage([userText("Thanks.", { id: "prt_msg_0003_tall_text" })], {
+          id: "msg_0003_tall",
+          created: 1700000002000,
+        }),
+        assistantMessage([{ id: "prt_msg_0004_tall_text", type: "text", text: "The end of the transcript." }], {
+          id: "msg_0004_tall",
+          parentID: "msg_0003_tall",
+          created: 1700000003000,
+        }),
+      ],
+    })
+
+    const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+    const end = scroller.getByText("The end of the transcript.", { exact: true })
+    await expect(end).toBeInViewport()
+    // A cold timeline scrolls itself to the end while it mounts, which undoes a scroll made before it is done.
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    await waitForVisualSettle(page, ["[data-timeline-virtual-content]"])
+    // Leave the end as a reader does, with a page key from the composer, which holds the focus: a scripted scroll is no
+    // reader input, so the timeline may go back to the end it follows. The pointer stays off the timeline: rows that
+    // pass under it change hover state, which dirties style by itself.
+    const editor = page.locator('[data-component="composer-editor"]')
+    await editor.press("PageUp")
+    await editor.press("PageUp")
+    await expect(end).not.toBeInViewport()
+    await waitForVisualSettle(page, ["[data-timeline-virtual-content]"])
+
+    const scrolls = await scroller.evaluateHandle((element) => {
+      const seen = { count: 0 }
+      element.addEventListener("scroll", () => seen.count++)
+
+      return seen
+    })
+
+    await browser.startTracing(page, {
+      categories: ["devtools.timeline", "disabled-by-default-devtools.timeline.stack"],
+    })
+
+    // Scroll events alone, as dragging the scrollbar or autoscroll sends them. A wheel event runs handlers of its own.
+    for (const step of Array.from({ length: 15 }, (_, index) => index + 1)) {
+      await scroller.evaluate((element) => (element.scrollTop -= 30))
+      await expect.poll(() => scrolls.evaluate((seen) => seen.count)).toBeGreaterThanOrEqual(step)
+    }
+
+    const trace: { traceEvents: TraceEvent[] } = JSON.parse((await browser.stopTracing()).toString())
+    const passes = forcedInScroll(trace.traceEvents)
+    expect(passes.scrolls).toBeGreaterThanOrEqual(15)
+    // Before, every scroll event forced one.
+    expect(passes.forced).toBeLessThanOrEqual(3)
+  })
+}
+
+type TraceEvent = {
+  name: string
+  ph: string
+  ts: number
+  dur?: number
+  pid: number
+  tid: number
+  args?: { data?: { type?: string; stackTrace?: unknown[] }; beginData?: { stackTrace?: unknown[] } }
+}
+
+// Style and layout passes that script forced while a scroll event was handled. Chrome records the script's stack on
+// such a pass; a pass of the rendering update has none.
+function forcedInScroll(events: TraceEvent[]) {
+  const scrolls = events.filter(
+    (event) => event.name === "EventDispatch" && event.ph === "X" && event.args?.data?.type === "scroll",
+  )
+
+  const forced = events.filter(
+    (event) =>
+      (event.name === "UpdateLayoutTree" || event.name === "Layout") &&
+      !!(event.args?.beginData?.stackTrace ?? event.args?.data?.stackTrace)?.length &&
+      scrolls.some(
+        (scroll) =>
+          scroll.pid === event.pid &&
+          scroll.tid === event.tid &&
+          event.ts >= scroll.ts &&
+          event.ts <= scroll.ts + (scroll.dur ?? 0),
+      ),
+  )
+
+  return { scrolls: scrolls.length, forced: forced.length }
+}

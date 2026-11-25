@@ -1063,11 +1063,11 @@ fn register(setup: &mut Setup<'_>, guest: &Rc<Guest>) {
         });
     }
     for (handler, types) in manifest.events.iter().enumerate() {
-        let (called, kinds) = (Rc::downgrade(guest), types.clone());
+        let (called, kinds) = (Rc::downgrade(guest), crate::EventKinds::named(types));
         let subscription = setup.host().on_event(
-            types,
+            kinds.clone(),
             Rc::new(move |event| {
-                if let Some(called) = called.upgrade().filter(|_| kinds.iter().any(|kind| kind == event.tag())) {
+                if let Some(called) = called.upgrade().filter(|_| kinds.contains(event)) {
                     called.call("on-event", Request::Event { handler, event: Box::new(event.clone()) }, false);
                 }
             }),

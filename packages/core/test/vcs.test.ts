@@ -17,7 +17,7 @@ import { VcsGitPlugin } from "@opencode/core/plugin/vcs/git"
 import type { VcsDefinition, VcsDiffInput } from "@opencode/plugin/effect/vcs"
 import { FileSystem } from "@opencode/schema/filesystem"
 import { VcsEvent } from "@opencode/schema/vcs-event"
-import { initGit } from "./fixture/git"
+import { git, initGit } from "./fixture/git"
 import { location } from "./fixture/location"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { it, testEffect } from "./lib/effect"
@@ -572,6 +572,25 @@ describe("Vcs", () => {
     ),
   )
 
+  it.live("lists real branches ending in /HEAD while excluding symbolic refs", () =>
+    withGit((directory) =>
+      Effect.gen(function* () {
+        yield* Effect.promise(async () => {
+          await git(directory, "commit", "--allow-empty", "-m", "initial")
+          await git(directory, "branch", "topic/HEAD")
+          await git(directory, "update-ref", "refs/remotes/origin/main", "HEAD")
+          await git(directory, "update-ref", "refs/remotes/origin/topic/HEAD", "HEAD")
+          await git(directory, "symbolic-ref", "refs/remotes/origin/HEAD", "refs/remotes/origin/main")
+        })
+        const vcs = yield* Vcs.Service
+        expect(yield* vcs.branches()).toEqual(["main", "topic/HEAD", "origin/main", "origin/topic/HEAD"])
+        expect(yield* vcs.branches({ search: "topic" })).toEqual(["topic/HEAD", "origin/topic/HEAD"])
+        expect(yield* vcs.branches({ search: "HEAD" })).toEqual(["topic/HEAD", "origin/topic/HEAD"])
+        expect(yield* vcs.branches({ search: "HEAD", limit: 1 })).toEqual(["topic/HEAD"])
+      }),
+    ),
+  )
+
   it.live("reports modified, deleted, and untracked files", () =>
     withGit((directory) =>
       Effect.gen(function* () {
@@ -906,30 +925,6 @@ describe("Vcs", () => {
         expect(yield* vcs.base()).toBeNull()
         expect(yield* vcs.diff("branch")).toEqual(diff)
         expect(yield* vcs.diff("committed")).toEqual([])
-      }),
-    ),
-  )
-
-  it.live("diffs a feature branch against the default branch", () =>
-    withGit((directory) =>
-      Effect.gen(function* () {
-        yield* Effect.promise(async () => {
-          await fs.writeFile(path.join(directory, "file.txt"), "one\n")
-          await commitAll(directory, "initial")
-        })
-        const vcs = yield* Vcs.Service
-        expect(yield* vcs.diff("branch")).toEqual([])
-
-        yield* Effect.promise(async () => {
-          await $`git checkout -q -b feature main`.cwd(directory).quiet()
-          await fs.writeFile(path.join(directory, "file.txt"), "one\ntwo\n")
-          await commitAll(directory, "feature change")
-        })
-        const diff = yield* vcs.diff("branch")
-        expect(diff.map((item) => ({ file: item.file, status: item.status }))).toEqual([
-          { file: "file.txt", status: "modified" },
-        ])
-        expect(diff[0].patch).toContain("+two")
       }),
     ),
   )

@@ -127,7 +127,10 @@ impl Mcp {
     fn servers(&self) -> Vec<McpServer> {
         let Some(tui) = self.tui.upgrade() else { return Vec::new() };
         let mut servers = tui.data.read(|state| {
-            state.location(Some(&self.location)).and_then(|data| data.mcp_server.clone()).unwrap_or_default()
+            state
+                .location(Some(&self.location))
+                .and_then(|data| data.mcp_server.as_deref().map(<[_]>::to_vec))
+                .unwrap_or_default()
         });
         servers.sort_by(|a, b| a.name.cmp(&b.name));
         servers

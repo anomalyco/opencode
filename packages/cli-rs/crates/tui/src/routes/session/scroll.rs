@@ -98,7 +98,7 @@ impl Controls {
         }
         let Some(session) = inner.transcript.session() else { return };
         let Some(anchor) =
-            tui.tabs.scroll_anchor(tui, &session.0).filter(|anchor| inner.transcript.mount_around(tui, &anchor.row))
+            tui.tabs.scroll_anchor(tui, &session.0).filter(|anchor| inner.transcript.mount_around(tui, anchor))
         else {
             return;
         };
@@ -440,7 +440,7 @@ impl Inner {
             &tui.app,
             bind!(self.this, |inner| {
                 let Some(tui) = inner.tui.upgrade() else { return };
-                let Some(y) = inner.transcript.row_y(&anchor.row) else {
+                let Some(y) = inner.transcript.row_y(&tui, &anchor) else {
                     inner.to_bottom(&tui);
                     return;
                 };
@@ -466,7 +466,7 @@ impl Inner {
             return;
         }
         let Some(session) = self.transcript.session() else { return };
-        let anchor = away.then(|| self.transcript.anchor()).flatten();
+        let anchor = away.then(|| self.transcript.anchor(tui)).flatten();
         tui.tabs.set_scroll_anchor(tui, &session.0, anchor);
     }
 

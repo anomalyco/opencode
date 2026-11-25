@@ -87,6 +87,7 @@ import { GlobTool } from "../tool/plugin/glob.js"
 import { GrepTool } from "../tool/plugin/grep.js"
 import { ImageGenerateTool } from "../tool/plugin/image-generate.js"
 import { VideoGenerateTool } from "../tool/plugin/video-generate.js"
+import { CdTool } from "../tool/plugin/cd.js"
 import { MachineTools } from "../tool/plugin/machine.js"
 import { McpEventTools } from "../tool/plugin/mcp-events.js"
 import { McpResourceTools } from "../tool/plugin/mcp-resource.js"
@@ -95,6 +96,7 @@ import { QuestionTool } from "../tool/plugin/question.js"
 import { ReadTool } from "../tool/plugin/read.js"
 import { ArtifactTools } from "../tool/plugin/artifact.js"
 import { AutomationTools } from "../tool/plugin/automation.js"
+import { SessionInterruptTool } from "../tool/plugin/session-interrupt.js"
 import { SessionSearchTools } from "../tool/plugin/session-search.js"
 import { ShellTool } from "../tool/plugin/shell.js"
 import { SkillTool } from "../tool/plugin/skill.js"
@@ -121,6 +123,7 @@ import { DynamicProviderPlugin } from "./provider/dynamic.js"
 import { OpencodePlugin } from "./provider/opencode.js"
 import { WebSearchPlugins } from "./websearch/index.js"
 import { SkillPlugin } from "./skill.js"
+import { McpSkillPlugin } from "./mcp-skill.js"
 import { VcsHgPlugin } from "./vcs/hg.js"
 import { ToolInputRepairPlugin } from "./tool-input-repair.js"
 import { OptimizePlugin } from "./optimize.js"
@@ -295,7 +298,9 @@ const pre = [
   ReadTool.Plugin,
   ArtifactTools.Plugin,
   AutomationTools.Plugin,
+  CdTool.Plugin,
   MachineTools.Plugin,
+  SessionInterruptTool.Plugin,
   SessionSearchTools.Plugin,
   ShellTool.Plugin,
   SkillTool.Plugin,
@@ -323,6 +328,7 @@ const post = [
   ConfigToolOutputPlugin.Plugin,
   ConfigCompatibilityPlugin.Plugin,
   ConfigSkillPlugin.Plugin,
+  McpSkillPlugin.Plugin,
   ConfigProviderPlugin.Plugin,
   // Run the dynamic npm SDK loader after SDK, instance, and external plugins register their `sdk` hooks.
   DynamicProviderPlugin,

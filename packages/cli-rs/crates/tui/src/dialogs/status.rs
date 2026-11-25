@@ -51,7 +51,7 @@ fn load(tui: &Tui) {
 }
 
 /// `data.location.mcp.server.list() ?? []` for the default location, in the server's order.
-fn servers(tui: &Tui) -> Vec<McpServer> {
+fn servers(tui: &Tui) -> std::sync::Arc<[McpServer]> {
     tui.data.read(|state| {
         let location = state.default_location().clone();
         state.location(Some(&location)).and_then(|data| data.mcp_server.clone()).unwrap_or_default()

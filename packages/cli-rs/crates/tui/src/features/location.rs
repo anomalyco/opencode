@@ -11,7 +11,7 @@ const DELAY: Duration = Duration::from_millis(500);
 
 #[derive(Default)]
 pub struct LocationState {
-    reference: RefCell<Option<Location>>,
+    pub(crate) reference: RefCell<Option<Location>>,
     error: RefCell<Option<Location>>,
     generation: Cell<u64>,
     home: RefCell<Option<Location>>,
@@ -86,22 +86,22 @@ pub fn session(tui: &Tui, id: &SessionID) {
 
 pub(crate) fn reconnected(tui: &Tui) {
     sync(tui, current(tui));
-    if let Route::Session { id } = tui.route() {
-        session(tui, &id);
+    if let Route::Session { id } = &*tui.route() {
+        session(tui, id);
     }
 }
 
 /// Upload the open session's environment when its connection becomes ready.
 pub(crate) fn connected_again(tui: &Tui) {
     tui.location.uploaded.borrow_mut().take();
-    if let Route::Session { id } = tui.route() {
-        session(tui, &id);
+    if let Route::Session { id } = &*tui.route() {
+        session(tui, id);
     }
 }
 
 pub(crate) fn set(tui: &Tui, location: Location) {
     *tui.location.reference.borrow_mut() = Some(location.clone());
-    tui.local.sync(&opencode_store::Changes::default());
+    tui.local.sync(&opencode_store::Changes::nothing(&tui.data));
     crate::client_mcp::sync(tui);
     if connected(tui) {
         sync(tui, Some(location));
@@ -118,15 +118,30 @@ fn sync(tui: &Tui, location: Option<Location>) {
     tui.location.generation.set(attempt);
     let target = tui.data.read(|state| (*state.default_location() != location).then(|| location.clone()));
     tui.location.error.borrow_mut().take();
-    let data = tui.data.clone();
+    let remote = tui.data.remote();
+    // The first try's read begins now; a retry's, on this thread once its delay ends.
+    let mut first = Some(tui.data.location_sync_info(target.as_ref()));
     tui.app.spawn(
         async move {
             let mut tries = 0;
             loop {
                 let read = async {
-                    data.location_sync_info(target.as_ref()).await?;
-                    let config = data.catalog_sync(Catalog::Config, target.as_ref());
-                    let (sync, config) = futures_util::future::join(data.location_sync(target.as_ref()), config).await;
+                    let info = match first.take() {
+                        Some(info) => info,
+                        None => {
+                            let target = target.clone();
+                            remote.call(move |data| data.location_sync_info(target.as_ref())).await?
+                        }
+                    };
+                    info.await?;
+                    let target = target.clone();
+                    let (sync, config) = remote
+                        .call(move |data| {
+                            let config = data.catalog_sync(Catalog::Config, target.as_ref());
+                            (data.location_sync(target.as_ref()), config)
+                        })
+                        .await?;
+                    let (sync, config) = futures_util::future::join(sync, config).await;
                     sync.and(config)
                 };
                 match read.await {

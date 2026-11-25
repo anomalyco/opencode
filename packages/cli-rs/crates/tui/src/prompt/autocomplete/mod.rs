@@ -1133,10 +1133,10 @@ fn command_items(tui: &Tui, location: &Location) -> Vec<Item> {
         .collect();
     let server =
         tui.data.read(|state| state.location(Some(location)).and_then(|data| data.command.clone()).unwrap_or_default());
-    items.extend(server.into_iter().map(|command| Item {
+    items.extend(server.iter().map(|command| Item {
         description: command.description.clone(),
         queueable: true,
-        ..Item::new(format!("/{}", command.name), Action::Slash(command.name))
+        ..Item::new(format!("/{}", command.name), Action::Slash(command.name.clone()))
     }));
     items.sort_by(|a, b| locale_compare(&a.display, &b.display));
     let max = items.iter().map(|item| item.display.encode_utf16().count()).max().unwrap_or(0);
@@ -1154,7 +1154,7 @@ fn agent_items(tui: &Tui, location: &Location) -> Vec<Item> {
     let agents =
         tui.data.read(|state| state.location(Some(location)).and_then(|data| data.agent.clone()).unwrap_or_default());
     agents
-        .into_iter()
+        .iter()
         .filter(|agent| !agent.hidden && agent.mode != AgentInfoMode::Primary)
         .map(|agent| Item {
             label: Some("agent"),
@@ -1175,7 +1175,7 @@ fn skill_items(tui: &Tui, location: &Location) -> Vec<Item> {
     let skills =
         tui.data.read(|state| state.location(Some(location)).and_then(|data| data.skill.clone()).unwrap_or_default());
     skills
-        .into_iter()
+        .iter()
         .map(|skill| Item {
             description: skill.description.clone(),
             label: Some("skill"),
@@ -1197,7 +1197,7 @@ fn reference_items(tui: &Tui, location: &Location) -> Vec<Item> {
         .data
         .read(|state| state.location(Some(location)).and_then(|data| data.reference.clone()).unwrap_or_default());
     references
-        .into_iter()
+        .iter()
         .filter(|reference| reference.hidden != Some(true))
         .map(|reference| {
             let source = match &reference.source {

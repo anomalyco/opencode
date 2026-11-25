@@ -30,7 +30,7 @@ impl Question {
     }
 
     pub fn update(&self, cx: &Context<'_>, props: &Props<'_>) {
-        let questions = questions(props.input.get("questions"));
+        let questions = questions(opencode_ui::tool_info::QuestionInput(props.input).questions().array());
         let answers = answers(props.metadata.get("answers"));
         self.inline.root().visible(answers.is_none());
         self.block.root().visible(answers.is_some());
@@ -81,11 +81,9 @@ impl Question {
     }
 }
 
-fn questions(value: Option<&Value>) -> Vec<String> {
-    value
-        .and_then(Value::as_array)
-        .into_iter()
-        .flatten()
+fn questions(items: &[Value]) -> Vec<String> {
+    items
+        .iter()
         .filter_map(|item| item.get("question")?.as_str())
         .filter(|question| !question.is_empty())
         .map(str::to_owned)
@@ -113,7 +111,7 @@ mod tests {
     #[test]
     fn questions_and_answers_parse_as_ts_does() {
         let input = json!([{ "question": "Which?" }, { "question": "" }, { "header": "x" }, "y"]);
-        assert_eq!(questions(Some(&input)), ["Which?"]);
+        assert_eq!(questions(input.as_array().unwrap()), ["Which?"]);
         assert_eq!(answers(Some(&json!({}))), None);
         assert_eq!(answers(None), None);
         assert_eq!(

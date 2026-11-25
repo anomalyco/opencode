@@ -16,8 +16,8 @@ type Hook = RefCell<Option<Weak<dyn Fn()>>>;
 /// The rows, in order.
 pub fn entries(tui: &Tui) -> Vec<(&'static str, String)> {
     let channel = opencode_local::channel::Channels::from_env().channel;
-    let session = match tui.route() {
-        Route::Session { id } => id.0,
+    let session = match &*tui.route() {
+        Route::Session { id } => id.0.clone(),
         _ => "n/a".to_owned(),
     };
     vec![
