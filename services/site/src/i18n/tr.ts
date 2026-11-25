@@ -57,7 +57,8 @@ export const dict = {
   "home.promo.close": "Masaüstü uygulaması duyurusunu kapat",
   "home.hero.title": "Açık kaynaklı kodlama ajanı",
   "home.hero.subtitle.a": "Ücretsiz modellerle başlayın ya da 200'den fazla sağlayıcıdan birini kullanın.",
-  "home.hero.subtitle.b": "OpenCode kendi makinenizde çalışır. Onu masaüstünüzden, terminalden, telefonunuzdan ya da kendi kodunuzdan kullanabilirsiniz.",
+  "home.hero.subtitle.b":
+    "OpenCode kendi makinenizde çalışır. Onu masaüstünüzden, terminalden, telefonunuzdan ya da kendi kodunuzdan kullanabilirsiniz.",
   "home.install.ariaLabel": "Kurulum seçenekleri",
   "home.what.title": "OpenCode nedir?",
   "home.what.body": "OpenCode açık kaynaklı bir kodlama ajanıdır.",
@@ -73,7 +74,8 @@ export const dict = {
   "home.what.anyEditor.body": "Terminal arayüzü, masaüstü uygulaması ve IDE uzantısı olarak kullanılabilir",
   "home.what.readDocs": "Dokümanları oku",
   "home.growth.title": "Açık kaynaklı kodlama ajanı",
-  "home.growth.body": "GitHub'da <strong>{{stars}}</strong>+ yıldız, <strong>{{contributors}}</strong> katılımcı ve <strong>{{commits}}</strong>+ commit ile OpenCode, her ay <strong>{{monthlyUsers}}</strong>+ geliştirici tarafından kullanılıyor ve güveniliyor.",
+  "home.growth.body":
+    "GitHub'da <strong>{{stars}}</strong>+ yıldız, <strong>{{contributors}}</strong> katılımcı ve <strong>{{commits}}</strong>+ commit ile OpenCode, her ay <strong>{{monthlyUsers}}</strong>+ geliştirici tarafından kullanılıyor ve güveniliyor.",
   "home.growth.githubStars": "GitHub yıldızı",
   "home.growth.contributors": "Katılımcılar",
   "home.growth.monthlyDevs": "Aylık geliştirici",
@@ -88,7 +90,8 @@ export const dict = {
   "home.faq.a4.p1": "Evet, ChatGPT Plus/Pro ya da GitHub Copilot aboneliklerinizi kullanabilirsiniz.",
   "home.faq.q5": "OpenCode'u sadece terminalde mi kullanabilirim?",
   "home.faq.q6": "OpenCode ne kadar?",
-  "home.faq.a6": "OpenCode %100 ücretsizdir. Ayrıca ücretsiz model setiyle gelir. Başka bir sağlayıcı bağlarsanız ek maliyetler olabilir.",
+  "home.faq.a6":
+    "OpenCode %100 ücretsizdir. Ayrıca ücretsiz model setiyle gelir. Başka bir sağlayıcı bağlarsanız ek maliyetler olabilir.",
   "home.faq.q7": "Veri ve gizlilik ne olacak?",
   "home.faq.a7.p1": "Verileriniz yalnızca ücretsiz modellerimizi kullandığınızda saklanır.",
   "home.faq.a7.p2.beforeModels": "Daha fazla bilgi:",
@@ -97,44 +100,57 @@ export const dict = {
   "home.faq.a8.p1": "Evet, OpenCode tamamen açık kaynaktır. Kaynak kodu",
   "home.faq.a8.p2": "'da",
   "home.faq.a8.mitLicense": "MIT Lisansı",
-  "home.faq.a8.p3": "altında herkese açıktır, yani herkes kullanabilir, değiştirebilir veya geliştirmeye katkıda bulunabilir. Topluluktan herkes issue açabilir, pull request gönderebilir ve işlevselliği genişletebilir.",
+  "home.faq.a8.p3":
+    "altında herkese açıktır, yani herkes kullanabilir, değiştirebilir veya geliştirmeye katkıda bulunabilir. Topluluktan herkes issue açabilir, pull request gönderebilir ve işlevselliği genişletebilir.",
   "zen.title": "OpenCode Models | Kodlama ajanları için güvenilir, optimize edilmiş modellerin seçilmiş seti",
   "zen.hero.title": "Kodlama ajanları için güvenilir, optimize modeller",
-  "zen.hero.body": "OpenCode Models, OpenCode'un kodlama ajanları için özel olarak test edip benchmark ettiği seçilmiş AI modellerine erişim sağlar. Sağlayıcılar arasında tutarsız performans ve kalite konusunda endişelenmeyin; çalışan, doğrulanmış modelleri kullanın.",
+  "zen.hero.body":
+    "OpenCode Models, OpenCode'un kodlama ajanları için özel olarak test edip benchmark ettiği seçilmiş AI modellerine erişim sağlar. Sağlayıcılar arasında tutarsız performans ve kalite konusunda endişelenmeyin; çalışan, doğrulanmış modelleri kullanın.",
   "zen.faq.q1": "OpenCode Models nedir?",
-  "zen.faq.a1": "OpenCode Models, OpenCode ekibi tarafından oluşturulan ve kodlama ajanları için test edilip benchmark edilen seçilmiş bir AI model setidir.",
+  "zen.faq.a1":
+    "OpenCode Models, OpenCode ekibi tarafından oluşturulan ve kodlama ajanları için test edilip benchmark edilen seçilmiş bir AI model setidir.",
   "zen.faq.q2": "OpenCode Models'i daha doğru yapan nedir?",
-  "zen.faq.a2": "OpenCode Models yalnızca kodlama ajanları için özel olarak test edilip benchmark edilmiş modelleri sunar. Biftek kesmek için tereyağı bıçağı kullanmazsın; kodlama için kötü modeller kullanma.",
+  "zen.faq.a2":
+    "OpenCode Models yalnızca kodlama ajanları için özel olarak test edilip benchmark edilmiş modelleri sunar. Biftek kesmek için tereyağı bıçağı kullanmazsın; kodlama için kötü modeller kullanma.",
   "zen.faq.q3": "OpenCode Models daha ucuz mu?",
-  "zen.faq.a3": "OpenCode Models kâr amaçlı değildir. OpenCode Models, model sağlayıcılarının maliyetlerini size yansıtır. OpenCode Models'in kullanımı arttıkça OpenCode daha iyi fiyatlar pazarlayabilir ve bunları size yansıtabilir.",
+  "zen.faq.a3":
+    "OpenCode Models kâr amaçlı değildir. OpenCode Models, model sağlayıcılarının maliyetlerini size yansıtır. OpenCode Models'in kullanımı arttıkça OpenCode daha iyi fiyatlar pazarlayabilir ve bunları size yansıtabilir.",
   "zen.faq.q4": "OpenCode Models ne kadar?",
   "zen.faq.a4.p1.beforePricing": "OpenCode",
   "zen.faq.a4.p1.pricingLink": "istek başı ücret alır",
-  "zen.faq.a4.p1.afterPricing": "ve hiçbir markup eklemez, yani model sağlayıcının ücretlendirdiği tutarı aynen ödersiniz.",
+  "zen.faq.a4.p1.afterPricing":
+    "ve hiçbir markup eklemez, yani model sağlayıcının ücretlendirdiği tutarı aynen ödersiniz.",
   "zen.faq.a4.p2.beforeAccount": "Toplam maliyetiniz kullanım miktarına bağlıdır ve aylık harcama limitlerini",
   "zen.faq.a4.p2.accountLink": "hesabınızda ayarlayabilirsiniz",
-  "zen.faq.a4.p3": "Maliyetleri karşılamak için OpenCode, $20 bakiye yüklemesi başına yalnızca $1.23 tutarında küçük bir ödeme işleme ücreti ekler.",
+  "zen.faq.a4.p3":
+    "Maliyetleri karşılamak için OpenCode, $20 bakiye yüklemesi başına yalnızca $1.23 tutarında küçük bir ödeme işleme ücreti ekler.",
   "zen.faq.q5": "Veri ve gizlilik ne olacak?",
-  "zen.faq.a5.beforeExceptions": "OpenCode Models'teki tüm modeller ABD'de ve AB'de barındırılır. Sağlayıcılar sıfır-retention politikasını uygular ve verilerinizi model eğitimi için kullanmaz; şu",
+  "zen.faq.a5.beforeExceptions":
+    "OpenCode Models'teki tüm modeller ABD'de ve AB'de barındırılır. Sağlayıcılar sıfır-retention politikasını uygular ve verilerinizi model eğitimi için kullanmaz; şu",
   "zen.faq.a5.exceptionsLink": "istisnalarla",
   "zen.faq.q6": "Harcama limitleri ayarlayabilir miyim?",
   "zen.faq.a6": "Evet, hesabınızda aylık harcama limitleri ayarlayabilirsiniz.",
   "zen.faq.q7": "İptal edebilir miyim?",
-  "zen.faq.a7": "Evet, istediğiniz zaman faturalandırmayı devre dışı bırakabilir ve kalan bakiyenizi kullanabilirsiniz.",
+  "zen.faq.a7":
+    "Evet, istediğiniz zaman faturalandırmayı devre dışı bırakabilir ve kalan bakiyenizi kullanabilirsiniz.",
   "zen.faq.q8": "OpenCode Models'i diğer kodlama ajanlarıyla kullanabilir miyim?",
-  "zen.faq.a8": "OpenCode Models OpenCode ile harika çalışır, ama OpenCode Models'i herhangi bir ajan ile kullanabilirsiniz. Tercih ettiğiniz kodlama ajanında kurulum talimatlarını izleyin.",
+  "zen.faq.a8":
+    "OpenCode Models OpenCode ile harika çalışır, ama OpenCode Models'i herhangi bir ajan ile kullanabilirsiniz. Tercih ettiğiniz kodlama ajanında kurulum talimatlarını izleyin.",
   "zen.cta.start": "OpenCode Models'i kullanmaya başlayın",
   "zen.pricing.title": "20$ Kullandıkça öde bakiyesi ekle",
   "zen.pricing.fee": "(+1,23$ kart işlem ücreti)",
-  "zen.pricing.body": "Herhangi bir ajan ile kullanın. Aylık harcama limitlerini belirleyin. İstediğiniz zaman iptal edin.",
+  "zen.pricing.body":
+    "Herhangi bir ajan ile kullanın. Aylık harcama limitlerini belirleyin. İstediğiniz zaman iptal edin.",
   "zen.problem.title": "OpenCode Models hangi sorunu çözüyor?",
-  "zen.problem.body": "Pek çok model mevcut ancak yalnızca birkaçı kodlama ajanlarıyla iyi çalışıyor. Çoğu sağlayıcı, bunları değişen sonuçlarla farklı şekilde yapılandırır.",
+  "zen.problem.body":
+    "Pek çok model mevcut ancak yalnızca birkaçı kodlama ajanlarıyla iyi çalışıyor. Çoğu sağlayıcı, bunları değişen sonuçlarla farklı şekilde yapılandırır.",
   "zen.problem.subtitle": "Bu sorunu yalnızca OpenCode kullanıcıları için değil, herkes için düzeltiyoruz.",
   "zen.problem.item1": "Seçilen modelleri test etme ve ekiplerine danışmanlık yapma",
   "zen.problem.item2": "Düzgün bir şekilde teslim edildiklerinden emin olmak için sağlayıcılarla çalışmak",
   "zen.problem.item3": "Önerdiğimiz tüm model-sağlayıcı kombinasyonlarının karşılaştırılması",
   "zen.how.title": "OpenCode Models nasıl çalışır?",
-  "zen.how.body": "OpenCode Models'i OpenCode ile kullanmanızı önersek de, OpenCode Models'i herhangi bir ajan ile kullanabilirsiniz.",
+  "zen.how.body":
+    "OpenCode Models'i OpenCode ile kullanmanızı önersek de, OpenCode Models'i herhangi bir ajan ile kullanabilirsiniz.",
   "zen.how.step1.title": "Kaydolun ve 20$ bakiye ekleyin",
   "zen.how.step1.beforeLink": "takip edin",
   "zen.how.step1.link": "kurulum talimatları",
@@ -144,16 +160,20 @@ export const dict = {
   "zen.how.step3.title": "Otomatik yükleme",
   "zen.how.step3.body": "isteğe bağlı otomatik yüklemeyi etkinleştirin, bakiye eşiğini ve yükleme tutarını seçin",
   "zen.privacy.title": "Gizliliğiniz bizim için önemlidir",
-  "zen.privacy.beforeExceptions": "OpenCode Models'teki tüm modeller ABD'de ve AB'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
+  "zen.privacy.beforeExceptions":
+    "OpenCode Models'teki tüm modeller ABD'de ve AB'de barındırılmaktadır. Sağlayıcılar sıfır saklama politikası izler ve verilerinizi model eğitimi için kullanmaz; şu",
   "zen.privacy.exceptionsLink": "aşağıdaki istisnalar",
   "go.title": "OpenCode Go | Herkes için düşük maliyetli kodlama modelleri",
-  "go.meta.description": "Go ayda 10$'dır; cömert kullanım limitleri ve önde gelen kodlama modellerine güvenilir erişim sunar.",
+  "go.meta.description":
+    "Go ayda 10$'dır; cömert kullanım limitleri ve önde gelen kodlama modellerine güvenilir erişim sunar.",
   "go.hero.title": "Herkes için düşük maliyetli kodlama modelleri",
-  "go.hero.body": "Go, dünya çapındaki programcılara ajan tabanlı kodlama getiriyor. En yetenekli açık kaynaklı modellere cömert limitler ve güvenilir erişim sunarak, maliyet veya erişilebilirlik konusunda endişelenmeden güçlü ajanlarla geliştirme yapmanızı sağlar.",
+  "go.hero.body":
+    "Go, dünya çapındaki programcılara ajan tabanlı kodlama getiriyor. En yetenekli açık kaynaklı modellere cömert limitler ve güvenilir erişim sunarak, maliyet veya erişilebilirlik konusunda endişelenmeden güçlü ajanlarla geliştirme yapmanızı sağlar.",
   "go.cta.text": "Go'ya abone ol",
   "go.graph.usageLimits": "Kullanım limitleri",
   "go.problem.title": "Go hangi sorunu çözüyor?",
-  "go.problem.body": "OpenCode deneyimini mümkün olduğunca çok kişiye ulaştırmaya odaklandık. OpenCode Go, ayda 10$ olan düşük maliyetli bir aboneliktir. Cömert limitler ve en yetenekli açık kaynak modellere güvenilir erişim sağlar.",
+  "go.problem.body":
+    "OpenCode deneyimini mümkün olduğunca çok kişiye ulaştırmaya odaklandık. OpenCode Go, ayda 10$ olan düşük maliyetli bir aboneliktir. Cömert limitler ve en yetenekli açık kaynak modellere güvenilir erişim sağlar.",
   "go.problem.item1": "Düşük maliyetli abonelik fiyatlandırması",
   "go.problem.item2": "Cömert limitler ve güvenilir erişim",
   "go.problem.item3": "Mümkün olduğunca çok programcı için geliştirildi",
@@ -169,11 +189,13 @@ export const dict = {
   "go.how.step3.title": "Kodlamaya başlayın",
   "go.how.step3.body": "açık kaynaklı modellere güvenilir erişimle",
   "go.faq.q1": "OpenCode Go nedir?",
-  "go.faq.a1": "Go, ajan tabanlı kodlama için yetenekli açık kaynaklı modellere güvenilir erişim sağlayan düşük maliyetli bir aboneliktir.",
+  "go.faq.a1":
+    "Go, ajan tabanlı kodlama için yetenekli açık kaynaklı modellere güvenilir erişim sağlayan düşük maliyetli bir aboneliktir.",
   "go.faq.q2": "Go hangi modelleri içerir?",
   "go.faq.a2": "Go, aşağıda listelenen modelleri cömert limitler ve güvenilir erişimle sunar.",
   "go.faq.q3": "Go, OpenCode Models ile aynı mı?",
-  "go.faq.a3": "Hayır. OpenCode Models kullandıkça öde modelidir; Go ise ayda 10$'dır ve özenle seçilmiş model seçeneklerine cömert limitlerle güvenilir erişim sunar.",
+  "go.faq.a3":
+    "Hayır. OpenCode Models kullandıkça öde modelidir; Go ise ayda 10$'dır ve özenle seçilmiş model seçeneklerine cömert limitlerle güvenilir erişim sunar.",
   "go.faq.q4": "Go ne kadar?",
   "go.faq.a4.p1.beforePricing": "Go'nun maliyeti",
   "go.faq.a4.p1.pricingLink": "ayda 10$",
@@ -189,22 +211,29 @@ export const dict = {
   "go.faq.a5.retention0": "0 gün",
   "go.faq.a5.used": "Kullanılır",
   "go.faq.a5.notUsed": "Kullanılmaz",
-  "go.faq.a5.grokRetention": "ZDR, durum bilgisi tutan Responses API, Files and Collections ve Batch API dahil olmak üzere saklanan verilere bağlı önemli API özelliklerini devre dışı bırakır.",
-  "go.faq.a5.gptRetention": "Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır.",
+  "go.faq.a5.grokRetention":
+    "ZDR, durum bilgisi tutan Responses API, Files and Collections ve Batch API dahil olmak üzere saklanan verilere bağlı önemli API özelliklerini devre dışı bırakır.",
+  "go.faq.a5.gptRetention":
+    "Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır.",
   "go.faq.a5.learnMore": "Daha fazla bilgi",
-  "go.faq.a5.deepseekRetention": "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 31 Aralık 2026 tarihine kadar geçerlidir.",
+  "go.faq.a5.deepseekRetention":
+    "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 31 Aralık 2026 tarihine kadar geçerlidir.",
   "go.faq.q6": "Kredi yükleyebilir miyim?",
   "go.faq.a6": "Daha fazla kullanıma ihtiyacınız varsa, hesabınıza kredi yükleyebilirsiniz.",
   "go.faq.q7": "İptal edebilir miyim?",
   "go.faq.a7": "Evet, istediğiniz zaman iptal edebilirsiniz.",
   "go.faq.q8": "Go'yu diğer kodlama ajanlarıyla kullanabilir miyim?",
-  "go.faq.a8": "Evet, Go'yu herhangi bir ajanla kullanabilirsiniz. Tercih ettiğiniz kodlama ajanındaki kurulum talimatlarını izleyin.",
+  "go.faq.a8":
+    "Evet, Go'yu herhangi bir ajanla kullanabilirsiniz. Tercih ettiğiniz kodlama ajanındaki kurulum talimatlarını izleyin.",
   "go.faq.q9": "Ücretsiz modeller ve Go arasındaki fark nedir?",
-  "go.faq.a9": "Ücretsiz modeller, Big Pickle'ı ve o sırada mevcut olan promosyonel modelleri içerir. Go ise kayan zaman aralıklarında daha yüksek istek kotalarıyla özenle seçilmiş model seçenekleri sunar: aylık kotanın %20'si her 5 saatte, %50'si haftada ve %100'ü ayda kullanılabilir. Modele özgü kullanım hakları farklılık gösterebilir (gerçek istek sayıları modele ve kullanıma göre değişir).",
+  "go.faq.a9":
+    "Ücretsiz modeller, Big Pickle'ı ve o sırada mevcut olan promosyonel modelleri içerir. Go ise kayan zaman aralıklarında daha yüksek istek kotalarıyla özenle seçilmiş model seçenekleri sunar: aylık kotanın %20'si her 5 saatte, %50'si haftada ve %100'ü ayda kullanılabilir. Modele özgü kullanım hakları farklılık gösterebilir (gerçek istek sayıları modele ve kullanıma göre değişir).",
   "workspace.nav.zen": "OpenCode Models",
-  "workspace.newUser.feature.lockin.body": "OpenCode Models'ı herhangi bir kodlama ajanıyla kullanın ve istediğiniz zaman opencode ile diğer sağlayıcıları kullanmaya devam edin.",
+  "workspace.newUser.feature.lockin.body":
+    "OpenCode Models'ı herhangi bir kodlama ajanıyla kullanın ve istediğiniz zaman opencode ile diğer sağlayıcıları kullanmaya devam edin.",
   "download.title": "OpenCode | macOS, Windows, Linux ve mobil için indir",
-  "download.meta.description": "OpenCode'u macOS, Windows ve Linux için indirin, iOS ve Android uygulamalarını edinin ya da terminal uygulamasını tek komutla kurun. Ücretsiz ve açık kaynak.",
+  "download.meta.description":
+    "OpenCode'u macOS, Windows ve Linux için indirin, iOS ve Android uygulamalarını edinin ya da terminal uygulamasını tek komutla kurun. Ücretsiz ve açık kaynak.",
   "download.hero.title": "OpenCode Desktop'u İndir",
   "download.hero.subtitle": "macOS, Windows ve Linux için Beta olarak sunuluyor",
   "download.hero.button": "{{os}} için indir",
@@ -227,12 +256,14 @@ export const dict = {
   "enterprise.form.error.invalidEmailFormat": "Geçersiz e-posta formatı.",
   "enterprise.form.error.internalServer": "İç sunucu hatası.",
   "brand.title": "OpenCode | Marka kuralları, logolar, yazı logoları ve renkler",
-  "brand.meta.description": "OpenCode marka kuralları. Logoyu ve yazı logolarını açık ve koyu sürümleriyle indirin, marka renklerini görün ve kullanım kurallarını öğrenin.",
+  "brand.meta.description":
+    "OpenCode marka kuralları. Logoyu ve yazı logolarını açık ve koyu sürümleriyle indirin, marka renklerini görün ve kullanım kurallarını öğrenin.",
   "brand.heading": "Marka kılavuzu",
   "brand.subtitle": "OpenCode markası ile çalışmanıza yardımcı olacak kaynaklar ve varlıklar.",
   "brand.downloadAll": "Tüm varlıkları indir",
   "changelog.title": "OpenCode | Her sürümün değişiklik günlüğü ve sürüm notları",
-  "changelog.meta.description": "Her OpenCode sürümünün notları. Masaüstü uygulaması, terminal arayüzü, mobil uygulama ve SDK'daki yeni özellikler, iyileştirmeler ve düzeltmeler.",
+  "changelog.meta.description":
+    "Her OpenCode sürümünün notları. Masaüstü uygulaması, terminal arayüzü, mobil uygulama ve SDK'daki yeni özellikler, iyileştirmeler ve düzeltmeler.",
   "changelog.hero.title": "Değişiklik günlüğü",
   "changelog.hero.subtitle": "OpenCode için yeni güncellemeler ve iyileştirmeler",
   "nav.data": "Veri",
@@ -240,7 +271,8 @@ export const dict = {
   "footer.feishu": "Feishu",
   "footer.wordmark.letters": "OpenCode yazı logosunun harfleri",
   "footer.wordmark.roleLetter": "sürüklenebilir harf",
-  "footer.wordmark.instructions": "Bir harfi taşımak için sürükleyin. Klavyeyle, harfi almak için Boşluk tuşuna, taşımak için ok tuşlarına, bırakmak için yine Boşluk tuşuna basın ya da tek seferde taşımak için Alt ve bir ok tuşuna basın.",
+  "footer.wordmark.instructions":
+    "Bir harfi taşımak için sürükleyin. Klavyeyle, harfi almak için Boşluk tuşuna, taşımak için ok tuşlarına, bırakmak için yine Boşluk tuşuna basın ya da tek seferde taşımak için Alt ve bir ok tuşuna basın.",
   "footer.wordmark.option": "{{letter}}, konum {{position}} / {{count}}",
   "footer.wordmark.picked": "{{letter}} alındı, konum {{position}}",
   "footer.wordmark.moved": "{{letter}} taşındı, yeni konum {{position}}",
@@ -251,8 +283,10 @@ export const dict = {
   "legal.englishGoverns": "Çeviri ile İngilizce metin farklıysa İngilizce sürüm geçerlidir.",
   "common.contactUs": "Bize ulaşın",
   "home.faq.a3.providers": "OpenCode ayrıca OpenAI, Anthropic ve xAI dahil tüm popüler sağlayıcılarla çalışır.",
-  "home.faq.a3.models.after": "[OpenCode Models](models) ise kodlama ajanları için test edip karşılaştırdığımız popüler kodlama modellerine erişim sağlar.",
-  "download.meta.descriptionAndroidSoon": "OpenCode'u macOS, Windows ve Linux için indirin, iOS uygulamasını edinin ya da terminal uygulamasını tek komutla kurun. Android çok yakında.",
+  "home.faq.a3.models.after":
+    "[OpenCode Models](models) ise kodlama ajanları için test edip karşılaştırdığımız popüler kodlama modellerine erişim sağlar.",
+  "download.meta.descriptionAndroidSoon":
+    "OpenCode'u macOS, Windows ve Linux için indirin, iOS uygulamasını edinin ya da terminal uygulamasını tek komutla kurun. Android çok yakında.",
   "changelog.unavailable": "Değişiklik günlüğü şu anda yüklenemedi.",
   "changelog.viewReleases": "Sürümleri GitHub'da görün",
   "changelog.entry.title": "{{title}} | OpenCode değişiklik günlüğü",
@@ -318,6 +352,7 @@ export const dict = {
   "site.product.isNew": "{{name}} yeni. Güncellemeleri burada görünecek.",
   "site.extensions": "Eklentiler",
   "site.contents": "İçindekiler",
+  "docs.section.overview": "Genel bakış",
   "docs.section.build": "Geliştirme",
   "docs.lockup.sectionDocs": "{{section}} dokümanları",
   "docs.lockup.switchLabel": "{{name}}, dokümanları değiştir",
@@ -353,10 +388,12 @@ export const dict = {
   "docs.callout.tip": "İpucu",
   "docs.callout.caution": "Dikkat",
   "docs.callout.danger": "Tehlike",
-  "docs.v1.markdownNote": "Bunlar OpenCode V1 dokümanlarıdır. OpenCode V2 için güncel dokümanlar https://opencode.ai/docs/llms.txt adresinde.",
+  "docs.v1.markdownNote":
+    "Bunlar OpenCode V1 dokümanlarıdır. OpenCode V2 için güncel dokümanlar https://opencode.ai/docs/llms.txt adresinde.",
   "site.companions": "OpenCode ile harika çalışır",
   "site.notFound.title": "Sayfa bulunamadı",
-  "site.arcade.alt": "Gece terk edilmiş bir oyun salonu. Bir makinenin ekranı hâlâ 404 yazısıyla parlıyor ve önündeki yerde bir jeton duruyor.",
+  "site.arcade.alt":
+    "Gece terk edilmiş bir oyun salonu. Bir makinenin ekranı hâlâ 404 yazısıyla parlıyor ve önündeki yerde bir jeton duruyor.",
   "site.arcade.token": "Oyun jetonu. Makineye atmak için Enter tuşuna basın.",
   "site.arcade.credit": "Kredi 1. Makine açılıyor.",
   "site.arcade.pressStart": "Start'a basın.",
@@ -435,8 +472,10 @@ export const dict = {
   "home.companies.labelShort": "22M+ dev'in tercihi",
   "home.providers.label": "Uyumlu olanlar",
   "home.tools.title": "Kendi araçlarınızı getirin",
-  "home.tools.lead": "Zaten kullandığınız hizmetleri [MCP sunucularıyla](mcp) bağlayın, OpenCode'u [eklentilerle](plugins) genişletin ve ajanlara iş akışlarınızı [becerilerle](skills) öğretin.",
-  "home.what.lead": "OpenCode açık kaynaklı bir kodlama ajanıdır. Onu masaüstü uygulamasında, terminalde, telefonunuzda ya da SDK ile kendi kodunuzdan kullanın. [Dokümanları okuyun](docs).",
+  "home.tools.lead":
+    "Zaten kullandığınız hizmetleri [MCP sunucularıyla](mcp) bağlayın, OpenCode'u [eklentilerle](plugins) genişletin ve ajanlara iş akışlarınızı [becerilerle](skills) öğretin.",
+  "home.what.lead":
+    "OpenCode açık kaynaklı bir kodlama ajanıdır. Onu masaüstü uygulamasında, terminalde, telefonunuzda ya da SDK ile kendi kodunuzdan kullanın. [Dokümanları okuyun](docs).",
   "home.what.anyDevice.title": "Her cihaz",
   "home.what.anyDevice.body": "Masaüstü uygulaması, terminal arayüzü, mobil uygulama ve araçlarınız için bir SDK",
   "home.what.plugins.title": "Eklentiler",
@@ -448,14 +487,17 @@ export const dict = {
   "home.what.skills.title": "Ajan becerileri",
   "home.what.skills.body": "SKILL.md dosyalarıyla ajanlara tekrar kullanılabilir iş akışları öğretin",
   "home.what.commands.title": "Özel komutlar",
-  "home.what.commands.body": "Tekrarlayan görevleri istediğiniz an çalıştırabileceğiniz eğik çizgi komutlarına dönüştürün",
+  "home.what.commands.body":
+    "Tekrarlayan görevleri istediğiniz an çalıştırabileceğiniz eğik çizgi komutlarına dönüştürün",
   "home.what.permissions.title": "İzinler",
-  "home.what.permissions.body": "Hangi eylemlerin kendiliğinden çalışacağını, hangilerinin onayınızı bekleyeceğini seçin",
+  "home.what.permissions.body":
+    "Hangi eylemlerin kendiliğinden çalışacağını, hangilerinin onayınızı bekleyeceğini seçin",
   "home.what.undo.title": "Geri al ve yinele",
   "home.what.undo.body": "Dosyalarınızdaki ve konuşmadaki son değişiklikleri /undo ile geri alın",
   "home.openSource.title": "Açık kaynak",
   "home.tools.label": "MCP sunucusu olan hizmetler",
-  "home.openSource.licence": "[MIT lisanslı](license). [Anomaly](anomaly) ve [{{count}} katkıcı](contributors) tarafından açıkta geliştiriliyor.",
+  "home.openSource.licence":
+    "[MIT lisanslı](license). [Anomaly](anomaly) ve [{{count}} katkıcı](contributors) tarafından açıkta geliştiriliyor.",
   "home.openSource.contributors": "OpenCode katkıcıları",
   "home.openSource.avatars": "OpenCode katkıcılarının avatarları",
   "home.openSource.avatarCommits": "{{login}} kullanıcısının OpenCode commit'leri",
@@ -463,12 +505,15 @@ export const dict = {
   "home.byos.providersLabel": "OpenCode planlarındaki model sağlayıcıları",
   "home.getStarted.freeModels": "Ücretsiz model",
   "home.console.headline": "AI ile çalışmak için ihtiyacınız olan her şey",
-  "home.console.body": "Sınır modeller ve açık ağırlıklı modeller için yüksek kaliteli çıkarım, cömert limitli uygun fiyatlı abonelikler ve ekibinizin harcamaları yönetip verimli çalışması için gereken araçlar.",
+  "home.console.body":
+    "Sınır modeller ve açık ağırlıklı modeller için yüksek kaliteli çıkarım, cömert limitli uygun fiyatlı abonelikler ve ekibinizin harcamaları yönetip verimli çalışması için gereken araçlar.",
   "home.console.cta": "Ücretsiz başla",
   "home.console.slimHeadline": "Console'da AI ile çalışmak için ihtiyacınız olan her şey var",
   "home.console.sales": "Satışla görüşün",
-  "home.faq.a1.body": "OpenCode, herhangi bir AI modeliyle kod yazmanıza ve çalıştırmanıza yardım eden açık kaynaklı bir ajandır. Masaüstü uygulaması, terminal arayüzü, mobil uygulama ve SDK olarak kullanılabilir.",
-  "home.faq.a5.body": "Hayır. OpenCode ayrıca [masaüstü uygulaması](desktop) ve [mobil uygulama](mobile) olarak da mevcut, [SDK](sdk) ise onu kendi kodunuzdan yönetmenizi sağlar.",
+  "home.faq.a1.body":
+    "OpenCode, herhangi bir AI modeliyle kod yazmanıza ve çalıştırmanıza yardım eden açık kaynaklı bir ajandır. Masaüstü uygulaması, terminal arayüzü, mobil uygulama ve SDK olarak kullanılabilir.",
+  "home.faq.a5.body":
+    "Hayır. OpenCode ayrıca [masaüstü uygulaması](desktop) ve [mobil uygulama](mobile) olarak da mevcut, [SDK](sdk) ise onu kendi kodunuzdan yönetmenizi sağlar.",
   "brand.ui.downloadLabel": "{{label}} indir",
   "brand.ui.downloadItem": "{{label}} indir, {{detail}}",
   "brand.ui.moreFormats": "Diğer biçimler, {{detail}}",
@@ -485,8 +530,10 @@ export const dict = {
   "brand.ui.avatarAlt": "OpenCode avatarı, {{name}}",
   "brand.ui.lockupAlt": "OpenCode logosu × {{partner}} logosu, × işaretinin her iki yanında 3 çizgi boşlukla.",
   "brand.ui.strokeAlt": "Bir çizgi, logonun dış hattının kalınlığıdır, yani genişliğinin dörtte biri.",
-  "brand.ui.clearSpaceAlt": "Her yanında iki çizgi boşluk olan logo. Bir çizgi, logonun dış hattının kalınlığıdır, yani logo genişliğinin dörtte biri.",
-  "brand.ui.clearSpaceWordmarkAlt": "Her yanında iki çizgi boşluk olan yazı logosu. Bir çizgi, yazı logosundaki harflerin kalınlığıdır, yani yüksekliğinin yedide biri.",
+  "brand.ui.clearSpaceAlt":
+    "Her yanında iki çizgi boşluk olan logo. Bir çizgi, logonun dış hattının kalınlığıdır, yani logo genişliğinin dörtte biri.",
+  "brand.ui.clearSpaceWordmarkAlt":
+    "Her yanında iki çizgi boşluk olan yazı logosu. Bir çizgi, yazı logosundaki harflerin kalınlığıdır, yani yüksekliğinin yedide biri.",
   "press.ui.copy": "Kopyala, {{label}}",
   "press.ui.copyFor": "Kopyala, {{label}} ({{product}})",
   "press.ui.copyText": "Metni kopyala",
@@ -507,9 +554,12 @@ export const dict = {
   "changelog.media.next": "Sonraki slayt",
   "changelog.releaseOnGithub": "{{tag}}[ sürümü, GitHub'da](sr)",
   "product.title": "OpenCode | Masaüstü, terminal ve mobil uygulamaları, SDK ve dahası",
-  "product.meta.description": "Tüm OpenCode ürünleri. Masaüstü, terminal ve mobil uygulamalarından SDK'ya, eklentilere ve Anomaly'nin diğer açık kaynak projelerine.",
-  "product.hero.subtitle": "Tek ajan, her yerde. Oturumu masaüstünde başlatın, telefondan yönlendirin, terminalde devam edin ya da kendi kodunuzdan yönetin.",
-  "home.meta.description": "OpenCode, nerede çalışıyorsanız orada çalışan açık kaynaklı kodlama ajanıdır. Claude, GPT ve Gemini dahil 200'den fazla sağlayıcının AI modellerini bağlayın ya da ücretsiz başlayın.",
+  "product.meta.description":
+    "Tüm OpenCode ürünleri. Masaüstü, terminal ve mobil uygulamalarından SDK'ya, eklentilere ve Anomaly'nin diğer açık kaynak projelerine.",
+  "product.hero.subtitle":
+    "Tek ajan, her yerde. Oturumu masaüstünde başlatın, telefondan yönlendirin, terminalde devam edin ya da kendi kodunuzdan yönetin.",
+  "home.meta.description":
+    "OpenCode, nerede çalışıyorsanız orada çalışan açık kaynaklı kodlama ajanıdır. Claude, GPT ve Gemini dahil 200'den fazla sağlayıcının AI modellerini bağlayın ya da ücretsiz başlayın.",
   "site.action.copyCommand": "[{{method}} komutunu ](sr)Kopyala",
   "site.action.copiedCommand": "[{{method}} komutu ](sr)Kopyalandı",
   "site.action.copyThisCommand": "[Komutu ](sr)Kopyala",
@@ -553,7 +603,8 @@ export const dict = {
   "home.features.range": "Özellik {{from}}–{{to}}",
   "home.fork.agents.body": "Ajanları Markdown ile tanımlayın ya da OpenCode olayları için [eklentiler](plugins) yazın.",
   "home.fork.agents.title": "Ajan ya da eklenti ekleyin",
-  "home.fork.build.body": "MIT lisanslı, bu yüzden CLI'ı ya da masaüstü uygulamasını derleyip kendi ürününüz olarak yayımlayabilirsiniz.",
+  "home.fork.build.body":
+    "MIT lisanslı, bu yüzden CLI'ı ya da masaüstü uygulamasını derleyip kendi ürününüz olarak yayımlayabilirsiniz.",
   "home.fork.build.title": "Kendi sürümünüzü yayımlayın",
   "home.fork.button": "GitHub'da fork'la",
   "home.fork.copy": "Komutları kopyala",
@@ -565,7 +616,8 @@ export const dict = {
   "home.getStarted.goDetail": "Go ya da Go Plus, aylık",
   "home.getStarted.goFurther": "Daha ileri gidin",
   "home.getStarted.goFurtherBody": "Kendi aboneliğiniz ya da OpenCode Go (aylık 10 $) ve Go Plus (aylık 40 $).",
-  "home.getStarted.moreModels": "Daha fazla model için {{subs}} ile giriş yapın ya da [OpenCode Go](go) (aylık 10 $) veya [OpenCode Go Plus](goPlus) (aylık 40 $) kullanın.",
+  "home.getStarted.moreModels":
+    "Daha fazla model için {{subs}} ile giriş yapın ya da [OpenCode Go](go) (aylık 10 $) veya [OpenCode Go Plus](goPlus) (aylık 40 $) kullanın.",
   "home.getStarted.mostPeople": "Çoğu kişi buradan başlar",
   "home.getStarted.startFree": "Ücretsiz başlayın",
   "home.getStarted.startFreeBody": "OpenCode'u indirin ve ücretsiz modelleri kullanın. Hesap gerekmez.",
@@ -584,7 +636,8 @@ export const dict = {
   "home.install.terminal": "Terminal",
   "home.openSource.builtInTheOpen": "Açıkta geliştiriliyor",
   "home.providers.aria": "Model sağlayıcıları",
-  "home.providers.grid": "[models.dev](modelsdev) üzerinden 200'den fazla sağlayıcı ve yerel modeller. [Sağlayıcı bağlayın](providers)",
+  "home.providers.grid":
+    "[models.dev](modelsdev) üzerinden 200'den fazla sağlayıcı ve yerel modeller. [Sağlayıcı bağlayın](providers)",
   "home.providers.inline": "[list](list) ya da 200'den fazla diğer modelden birini kullanın.",
   "site.arcade.back": "Geri",
   "site.arcade.bridge": "Dokunmatik kontroller bu sunucuda oyun salonu giriş köprüsünü gerektirir.",
@@ -607,13 +660,15 @@ export const dict = {
   "site.action.forOsBeta": "{{os}} için indir, Apple TestFlight beta",
   "site.action.storeBeta": "{{os}}, Apple TestFlight beta",
   "go.referral.ended.label": "Uyarı",
-  "go.referral.ended": "Tavsiye programı sona erdi. Tavsiye bağlantıları artık size veya bağlantıyı paylaşan kişiye kredi kazandırmıyor.",
+  "go.referral.ended":
+    "Tavsiye programı sona erdi. Tavsiye bağlantıları artık size veya bağlantıyı paylaşan kişiye kredi kazandırmıyor.",
   "legal.status.operational": "Tüm sistemler çalışıyor",
   "legal.status.degraded": "Düşük performans",
   "legal.status.outage": "Hizmet kesintisi",
   "legal.status.unknown": "Sistem durumu",
   "zen.faq.q9": "Para iadesi alabilir miyim?",
-  "zen.faq.a9": "Ücret son 14 gün içinde tahsil edildiyse ve bu satın alımdan gelen kredilerin hiçbirini kullanmadıysanız para iadesine hak kazanabilirsiniz. {{contact}} ve para iadesi talep edin.",
+  "zen.faq.a9":
+    "Ücret son 14 gün içinde tahsil edildiyse ve bu satın alımdan gelen kredilerin hiçbirini kullanmadıysanız para iadesine hak kazanabilirsiniz. {{contact}} ve para iadesi talep edin.",
   "go.promo.hy4": "Hy4 artık Go'da kullanılabilir.",
   "go.hero.tagline": "Herhangi bir ajanla kullanın. Gerekirse kredi yükleyin. İstediğiniz zaman iptal edin.",
   "go.plans.audience": "Go planları",
@@ -651,9 +706,11 @@ export const dict = {
   "go.graph.limitedRegions": "sınırlı bölgeler",
   "go.graph.limitedTime": "sınırlı süre",
   "go.faq.a5.notZdr": "ZDR değil",
-  "go.faq.a5.museRetention": "İstemlerinizi ve tamamlamalarınızı gelecekteki Meta modellerini eğitmek için kullanma izni karşılığında büyük ölçüde indirimli token fiyatları.",
+  "go.faq.a5.museRetention":
+    "İstemlerinizi ve tamamlamalarınızı gelecekteki Meta modellerini eğitmek için kullanma izni karşılığında büyük ölçüde indirimli token fiyatları.",
   "go.faq.q10": "Para iadesi alabilir miyim?",
-  "go.faq.a10": "Ücret son 14 gün içinde tahsil edildiyse ve ilgili faturalandırma döneminde Go kullanım hakkınızı hiç kullanmadıysanız para iadesine hak kazanabilirsiniz. {{contact}} ve para iadesi talep edin.",
+  "go.faq.a10":
+    "Ücret son 14 gün içinde tahsil edildiyse ve ilgili faturalandırma döneminde Go kullanım hakkınızı hiç kullanmadıysanız para iadesine hak kazanabilirsiniz. {{contact}} ve para iadesi talep edin.",
   "download.platform.windowsArm64": "Windows (ARM64)",
   "enterprise.form.inferenceSpend.label": "Şirketinizin mevcut aylık çıkarım (inference) harcaması nedir (USD)?",
   "enterprise.form.inferenceSpend.placeholder": "Bir aralık seçin (isteğe bağlı)",
