@@ -12,6 +12,7 @@ import { Flag } from "@opencode/core/flag"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
 import { Permission } from "@opencode/core/permission"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Ripgrep } from "@opencode/core/ripgrep"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
@@ -44,19 +45,28 @@ const withTools = <A, E, R>(
   directory: string,
   body: (registry: Tool.Interface) => Effect.Effect<A, E, R>,
   assertions?: Permission.AssertInput[],
+  scoped = false,
+  deniedBoundary?: string,
 ) =>
   Effect.gen(function* () {
     const registry = yield* Tool.Service
     return yield* body(registry)
   }).pipe(
     Effect.provide(
-      AppNodeBuilder.build(LayerNode.group([Tool.node, searchToolsNode]), [
+      AppNodeBuilder.build(LayerNode.group([Tool.node, searchToolsNode, PluginHooks.node]), [
         Config.node.replace(Config.testLayer()),
+        ...(scoped ? [Flag.node.replace(Flag.testLayer([], { overrides: "workspace_read_scope" }))] : []),
         Location.node.replace(
           Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
         ),
         Permission.node.replace(
           permissionLayer({
+            assertNotDenied: (input) =>
+              deniedBoundary && input.resources.some((resource) => resource.endsWith(deniedBoundary))
+                ? Effect.fail(
+                    new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources }),
+                  )
+                : Effect.void,
             assert: (input) =>
               Effect.sync(() => {
                 assertions?.push(input)
@@ -305,6 +315,201 @@ describe("search tools", () => {
           Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
         ),
     ),
+  )
+
+  const scopedGrep = process.platform === "linux" ? it.live : it.live.skip
+  scopedGrep("searches a verified physical or logical file through its held descriptor", () =>
+    Effect.gen(function* () {
+      const active = yield* tmpdirScoped()
+      const physical = yield* tmpdirScoped()
+      const outside = yield* tmpdirScoped()
+      const assertions: Permission.AssertInput[] = []
+      const file = path.join(physical.path, "target.txt")
+      yield* Effect.promise(() => fs.writeFile(file, "needle\nneedle\n"))
+      yield* Effect.promise(() => fs.writeFile(path.join(outside.path, "outside.txt"), "needle\n"))
+      yield* withTools(
+        active.path,
+        (registry) =>
+          Effect.gen(function* () {
+            const hooks = yield* PluginHooks.Service
+            const logical = path.join(active.path, "member")
+            yield* hooks.register("permission", "experimental.workspace.readScope", (event) =>
+              Effect.sync(() => {
+                if (event.sessionID === sessionID && event.directory === active.path)
+                  event.scopes.push({ members: [{ physical: physical.path, logical }] })
+              }),
+            )
+            const physicalResult = yield* executeTool(
+              registry,
+              call("grep", { path: file, pattern: "needle", limit: 1 }),
+            )
+            expect(physicalResult).toMatchObject({
+              status: "completed",
+              output: [{ entry: { path: path.relative(active.path, file) }, line: 1 }],
+              metadata: { matches: 1, truncated: true },
+            })
+            const logicalResult = yield* executeTool(
+              registry,
+              call("grep", { path: path.join(logical, "target.txt"), pattern: "needle" }),
+            )
+            expect(logicalResult).toMatchObject({
+              status: "completed",
+              output: [
+                { entry: { path: "member/target.txt" }, line: 1 },
+                { entry: { path: "member/target.txt" }, line: 2 },
+              ],
+            })
+            expect(assertions.map((request) => request.action)).toEqual(["read", "grep", "read", "grep"])
+            expect(assertions[0]).toMatchObject({ resources: ["member/target.txt", file] })
+
+            yield* Effect.promise(() => fs.rename(file, path.join(physical.path, "original.txt")))
+            yield* Effect.promise(() => fs.symlink(path.join(outside.path, "outside.txt"), file))
+            const changed = yield* executeTool(registry, call("grep", { path: file, pattern: "needle" }))
+            expect(changed.status).toBe("error")
+            const directory = yield* executeTool(registry, call("grep", { path: physical.path, pattern: "needle" }))
+            expect(directory).toMatchObject({
+              status: "completed",
+              output: [
+                { entry: { path: path.relative(active.path, path.join(physical.path, "original.txt")) }, line: 1 },
+                { entry: { path: path.relative(active.path, path.join(physical.path, "original.txt")) }, line: 2 },
+              ],
+            })
+            expect(assertions.filter((request) => request.action === "external_directory")).toEqual([])
+          }),
+        assertions,
+        true,
+      )
+    }),
+  )
+
+  scopedGrep("keeps a native external-directory denial effective for a logical scoped file", () =>
+    Effect.gen(function* () {
+      const active = yield* tmpdirScoped()
+      const physical = yield* tmpdirScoped()
+      const assertions: Permission.AssertInput[] = []
+      yield* Effect.promise(() => fs.writeFile(path.join(physical.path, "target.txt"), "needle\n"))
+      yield* withTools(
+        active.path,
+        (registry) =>
+          Effect.gen(function* () {
+            const hooks = yield* PluginHooks.Service
+            const logical = path.join(active.path, "member")
+            yield* hooks.register("permission", "experimental.workspace.readScope", (event) =>
+              Effect.sync(() => void event.scopes.push({ members: [{ physical: physical.path, logical }] })),
+            )
+            const result = yield* executeTool(
+              registry,
+              call("grep", { path: path.join(logical, "target.txt"), pattern: "needle" }),
+            )
+            expect(result.status).toBe("error")
+            expect(assertions).toEqual([])
+          }),
+        assertions,
+        true,
+        `${path.basename(physical.path)}/*`,
+      )
+    }),
+  )
+
+  scopedGrep("searches physical and logical directories without following child symlinks", () =>
+    Effect.gen(function* () {
+      const active = yield* tmpdirScoped()
+      const physical = yield* tmpdirScoped()
+      const outside = yield* tmpdirScoped()
+      const assertions: Permission.AssertInput[] = []
+      yield* Effect.promise(() => fs.mkdir(path.join(physical.path, ".ai")))
+      yield* Effect.promise(() => fs.writeFile(path.join(physical.path, "visible.ts"), "needle\n"))
+      yield* Effect.promise(() => fs.writeFile(path.join(physical.path, ".ai", "nested.ts"), "needle\n"))
+      yield* Effect.promise(() => fs.writeFile(path.join(outside.path, "secret.ts"), "needle\n"))
+      yield* withTools(
+        active.path,
+        (registry) =>
+          Effect.gen(function* () {
+            const hooks = yield* PluginHooks.Service
+            const logical = path.join(active.path, "member")
+            yield* hooks.register("permission", "experimental.workspace.readScope", (event) =>
+              Effect.sync(() => void event.scopes.push({ members: [{ physical: physical.path, logical }] })),
+            )
+            const physicalGrep = yield* executeTool(registry, call("grep", { path: physical.path, pattern: "needle" }))
+            expect(physicalGrep.status).toBe("completed")
+            if (physicalGrep.status === "completed") {
+              expect(physicalGrep.output.map((match: { entry: { path: string } }) => match.entry.path).sort()).toEqual(
+                [path.join(physical.path, ".ai/nested.ts"), path.join(physical.path, "visible.ts")]
+                  .map((file) => path.relative(active.path, file))
+                  .sort(),
+              )
+            }
+            yield* Effect.promise(() => fs.symlink(outside.path, path.join(physical.path, "linked")))
+            const logicalGrep = yield* executeTool(
+              registry,
+              call("grep", { path: path.join(logical, ".ai"), pattern: "needle" }),
+            )
+            expect(logicalGrep).toMatchObject({
+              status: "completed",
+              output: [{ entry: { path: "member/.ai/nested.ts" } }],
+            })
+            const defaultGlob = yield* executeTool(registry, call("glob", { path: logical, pattern: "**/*.ts" }))
+            expect(defaultGlob).toMatchObject({
+              status: "completed",
+              output: [{ path: "member/visible.ts" }],
+            })
+            const hiddenGlob = yield* executeTool(
+              registry,
+              call("glob", { path: physical.path, pattern: "**/*.ts", hidden: true }),
+            )
+            expect(hiddenGlob.status).toBe("completed")
+            if (hiddenGlob.status === "completed")
+              expect(hiddenGlob.output.map((entry: { path: string }) => entry.path).sort()).toEqual(
+                [path.join(physical.path, ".ai/nested.ts"), path.join(physical.path, "visible.ts")]
+                  .map((file) => path.relative(active.path, file))
+                  .sort(),
+              )
+            const invalidGlob = yield* executeTool(registry, call("glob", { path: logical, pattern: "[" }))
+            expect(invalidGlob).toMatchObject({
+              status: "error",
+              error: { message: "Invalid glob in pattern '[': unclosed character class; missing ']'" },
+            })
+            const invalidInclude = yield* executeTool(
+              registry,
+              call("grep", { path: logical, pattern: "needle", include: "[" }),
+            )
+            expect(invalidInclude).toMatchObject({
+              status: "error",
+              error: { message: "Invalid glob in include '[': unclosed character class; missing ']'" },
+            })
+            expect(assertions.every((request) => request.action !== "external_directory")).toBe(true)
+          }),
+        assertions,
+        true,
+      )
+    }),
+  )
+
+  scopedGrep("stops a directory search at a native denial on a nested directory", () =>
+    Effect.gen(function* () {
+      const active = yield* tmpdirScoped()
+      const physical = yield* tmpdirScoped()
+      const assertions: Permission.AssertInput[] = []
+      yield* Effect.promise(() => fs.mkdir(path.join(physical.path, "protected")))
+      yield* Effect.promise(() => fs.writeFile(path.join(physical.path, "protected", "secret.ts"), "needle\n"))
+      yield* withTools(
+        active.path,
+        (registry) =>
+          Effect.gen(function* () {
+            const hooks = yield* PluginHooks.Service
+            const logical = path.join(active.path, "member")
+            yield* hooks.register("permission", "experimental.workspace.readScope", (event) =>
+              Effect.sync(() => void event.scopes.push({ members: [{ physical: physical.path, logical }] })),
+            )
+            const result = yield* executeTool(registry, call("grep", { path: logical, pattern: "needle" }))
+            expect(result.status).toBe("error")
+            expect(assertions.every((request) => request.action !== "external_directory")).toBe(true)
+          }),
+        assertions,
+        true,
+        "/protected/*",
+      )
+    }),
   )
 
   for (const name of ["glob", "grep"] as const) {

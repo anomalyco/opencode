@@ -21,6 +21,7 @@ const ripgrepStub = (entry: string, onFind: (input: Ripgrep.FindInput) => void) 
   Layer.succeed(
     Ripgrep.Service,
     Ripgrep.Service.of({
+      validateGlob: () => Effect.void,
       find: (input) =>
         Effect.gen(function* () {
           onFind(input)
@@ -285,6 +286,7 @@ describe("FileSystemSearch", () => {
           Layer.succeed(
             Ripgrep.Service,
             Ripgrep.Service.of({
+              validateGlob: () => Effect.void,
               find: (input) =>
                 Effect.gen(function* () {
                   scans++
@@ -354,6 +356,7 @@ describe("FileSystemSearch", () => {
           Layer.succeed(
             Ripgrep.Service,
             Ripgrep.Service.of({
+              validateGlob: () => Effect.void,
               find: (input) =>
                 Effect.gen(function* () {
                   scans++

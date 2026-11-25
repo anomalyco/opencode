@@ -11,6 +11,7 @@ import { Permission } from "../../permission.js"
 import { Ripgrep } from "../../ripgrep.js"
 import { RelativePath } from "../../schema.js"
 import { ToolSearch } from "../search.js"
+import { ScopedSearch } from "../scoped-search.js"
 
 export const name = "grep"
 
@@ -80,9 +81,16 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              const target = yield* access.resolve({ path: input.path ?? "." })
+              const requested = input.path ?? "."
+              const target = yield* access.resolve({ path: requested })
               yield* ToolSearch.available(target.environment)
-              yield* access.authorizeExternal([target], context)
+              const candidate = yield* access.scope(target, context, "read")
+              const scoped = candidate.workspace
+                ? yield* access.authorizeRead(requested, context, { workspaceScope: true })
+                : candidate
+              if (candidate.workspace && !scoped.workspace)
+                return yield* new ToolFailure({ message: `Workspace assignment changed during search: ${requested}` })
+              if (!candidate.workspace) yield* access.authorizeExternal([target], context)
               yield* permission.assert({
                 action: name,
                 resources: [input.pattern],
@@ -98,19 +106,47 @@ export const Plugin = {
                 ...Permission.invocation(context),
               })
               const root = target.absolute
-              const type = yield* ToolSearch.pathType(target.environment.files, root, input.path ?? ".")
-              const cwd = type === "directory" ? root : path.dirname(root)
+              const type = scoped.workspace
+                ? undefined
+                : yield* ToolSearch.pathType(target.environment.files, root, requested)
+              const cwd = type === "directory" ? root : path.dirname(scoped.workspace?.absolute ?? root)
+              const workspace = scoped.workspace
+              const include = input.include
+              if (workspace && include)
+                yield* ripgrep.validateGlob({ environment: target.environment, cwd, pattern: include })
               const result = yield* ToolSearch.bounded(input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT, (limit) =>
-                ripgrep.grep({
-                  environment: target.environment,
-                  cwd,
-                  pattern: input.pattern,
-                  file: type === "file" ? path.basename(root) : undefined,
-                  include: input.include,
-                  literal: input.literal,
-                  caseSensitive: input.caseSensitive,
-                  limit,
-                }),
+                workspace
+                  ? ScopedSearch.files({
+                      workspace,
+                      requested,
+                      context,
+                      access,
+                      limit,
+                      hidden: true,
+                      file: include ? (relative) => ScopedSearch.matches(include, relative) : undefined,
+                      onFile: (file, relative, remaining) =>
+                        ripgrep.grep({
+                          environment: target.environment,
+                          cwd,
+                          pattern: input.pattern,
+                          file: `/proc/${process.pid}/fd/${file.fd}`,
+                          displayFile: path.resolve(root, relative),
+                          include: input.include,
+                          literal: input.literal,
+                          caseSensitive: input.caseSensitive,
+                          limit: remaining,
+                        }),
+                    })
+                  : ripgrep.grep({
+                      environment: target.environment,
+                      cwd,
+                      pattern: input.pattern,
+                      file: type === "file" ? path.basename(root) : undefined,
+                      include: input.include,
+                      literal: input.literal,
+                      caseSensitive: input.caseSensitive,
+                      limit,
+                    }),
               )
               return {
                 matches: result.items.map((match) =>

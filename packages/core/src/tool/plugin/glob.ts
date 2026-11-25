@@ -12,6 +12,7 @@ import { FileAccess } from "../../file-access.js"
 import { Ripgrep } from "../../ripgrep.js"
 import { RelativePath } from "../../schema.js"
 import { Permission } from "../../permission.js"
+import { ScopedSearch } from "../scoped-search.js"
 
 export const name = "glob"
 
@@ -62,9 +63,16 @@ export const Plugin = {
           execute: (input, context) =>
             Effect.gen(function* () {
               const searchPath = input.path === "undefined" || input.path === "null" ? undefined : input.path
-              const target = yield* access.resolve({ path: searchPath ?? ".", kind: "directory" })
+              const requested = searchPath ?? "."
+              const target = yield* access.resolve({ path: requested, kind: "directory" })
               yield* ToolSearch.available(target.environment)
-              yield* access.authorizeExternal([target], context)
+              const candidate = yield* access.scope(target, context, "read")
+              const scoped = candidate.workspace
+                ? yield* access.authorizeRead(requested, context, { workspaceScope: true })
+                : candidate
+              if (candidate.workspace && !scoped.workspace)
+                return yield* new ToolFailure({ message: `Workspace assignment changed during search: ${requested}` })
+              if (!candidate.workspace) yield* access.authorizeExternal([target], context)
               yield* permission.assert({
                 action: name,
                 resources: [input.pattern],
@@ -77,20 +85,41 @@ export const Plugin = {
                 },
                 ...Permission.invocation(context),
               })
-              const type = yield* ToolSearch.pathType(target.environment.files, target.absolute, searchPath ?? ".")
+              const type = scoped.workspace
+                ? "directory"
+                : yield* ToolSearch.pathType(target.environment.files, target.absolute, requested)
               if (type !== "directory")
                 return yield* Effect.fail(
                   new ToolFailure({ message: `Search path is not a directory: ${searchPath ?? "."}` }),
                 )
               const root = target.absolute
-              const result = yield* ToolSearch.bounded(input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT, (limit) =>
-                ripgrep.glob({
+              if (scoped.workspace)
+                yield* ripgrep.validateGlob({
                   environment: target.environment,
-                  cwd: root,
+                  cwd: path.dirname(scoped.workspace.absolute),
                   pattern: input.pattern,
-                  hidden: input.hidden,
-                  limit,
-                }),
+                })
+              const result = yield* ToolSearch.bounded(input.limit ?? FileSystem.DEFAULT_SEARCH_LIMIT, (limit) =>
+                scoped.workspace
+                  ? ScopedSearch.files({
+                      workspace: scoped.workspace,
+                      requested,
+                      context,
+                      access,
+                      limit,
+                      hidden: input.hidden ?? false,
+                      directoryOnly: true,
+                      file: (relative) => ScopedSearch.matches(input.pattern, relative),
+                      onFile: (_, relative) =>
+                        Effect.succeed([FileSystem.Entry.make({ path: RelativePath.make(relative), type: "file" })]),
+                    })
+                  : ripgrep.glob({
+                      environment: target.environment,
+                      cwd: root,
+                      pattern: input.pattern,
+                      hidden: input.hidden,
+                      limit,
+                    }),
               )
               return {
                 entries: result.items.map((entry) =>

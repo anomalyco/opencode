@@ -84,6 +84,8 @@ export interface GrepInput {
   readonly cwd: string
   readonly pattern: string
   readonly file?: string
+  /** Stable result name for a guarded descriptor path passed as `file`. */
+  readonly displayFile?: string
   readonly include?: string
   readonly literal?: boolean
   readonly caseSensitive?: boolean
@@ -92,6 +94,12 @@ export interface GrepInput {
 }
 
 export interface Interface {
+  /** Validate a native rg glob without searching a workspace pathname. */
+  readonly validateGlob: (input: {
+    readonly environment: Environment.Interface
+    readonly cwd: string
+    readonly pattern: string
+  }) => Effect.Effect<void, Error>
   readonly find: (input: FindInput) => Effect.Effect<readonly Entry[], Error>
   readonly glob: (input: GlobInput) => Effect.Effect<readonly Entry[], Error>
   readonly grep: (input: GrepInput) => Effect.Effect<readonly Match[], Error | InvalidPatternError>
@@ -184,6 +192,17 @@ const layer = Layer.effect(
     }
 
     return Service.of({
+      validateGlob: (input) =>
+        run({
+          environment: input.environment,
+          cwd: input.cwd,
+          limit: 1,
+          args: ["--no-config", "--files", `--glob=${input.pattern}`, "/dev/null"],
+          parse: () => Effect.undefined,
+        }).pipe(
+          Effect.asVoid,
+          Effect.catchTag("Ripgrep.InvalidPatternError", (cause) => Effect.fail(failure(cause.message, cause))),
+        ),
       glob: (input) =>
         run<string>({
           environment: input.environment,
@@ -248,6 +267,7 @@ const layer = Layer.effect(
             "--json",
             "--hidden",
             "--no-messages",
+            ...(input.displayFile ? ["--no-ignore"] : []),
             ...(input.literal ? ["--fixed-strings"] : []),
             ...(input.caseSensitive === false ? ["--ignore-case"] : []),
             ...(input.include ? [`--glob=${input.include}`] : []),
@@ -268,12 +288,9 @@ const layer = Layer.effect(
                     return {
                       ...match.data,
                       lines: {
-                        text:
-                          lines.length > MAX_LINE_CHARS
-                            ? TextBoundary.head(lines, MAX_LINE_CHARS) + "..."
-                            : lines,
+                        text: lines.length > MAX_LINE_CHARS ? TextBoundary.head(lines, MAX_LINE_CHARS) + "..." : lines,
                       },
-                      path: { text: normalizePath(rawText(match.data.path)) },
+                      path: { text: input.displayFile ?? normalizePath(rawText(match.data.path)) },
                       submatches: match.data.submatches.slice(0, MAX_SUBMATCHES).map((submatch) => ({
                         ...submatch,
                         match: { text: rawText(submatch.match) },
