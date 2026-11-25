@@ -339,6 +339,7 @@ const en = {
   "share.openSection": "Share {{title}}",
   "share.close": "Close",
   "share.settings": "Settings",
+  "share.customize": "Customize",
   "share.done": "Done",
   // A dropdown's accessible name: the setting, then its value.
   "share.option": "{{label}}: {{value}}",

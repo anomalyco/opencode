@@ -312,6 +312,7 @@ export const dict = {
   "share.openSection": "Compartir {{title}}",
   "share.close": "Cerrar",
   "share.settings": "Ajustes",
+  "share.customize": "Personalizar",
   "share.done": "Listo",
   "share.option": "{{label}}: {{value}}",
   "share.type": "Tipo",

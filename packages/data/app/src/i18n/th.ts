@@ -310,6 +310,7 @@ export const dict = {
   "share.openSection": "แชร์ {{title}}",
   "share.close": "ปิด",
   "share.settings": "การตั้งค่า",
+  "share.customize": "ปรับแต่ง",
   "share.done": "เสร็จ",
   "share.option": "{{label}}: {{value}}",
   "share.type": "ประเภท",

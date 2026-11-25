@@ -310,6 +310,7 @@ export const dict = {
   "share.openSection": "Del {{title}}",
   "share.close": "Luk",
   "share.settings": "Indstillinger",
+  "share.customize": "Tilpas",
   "share.done": "Færdig",
   "share.option": "{{label}}: {{value}}",
   "share.type": "Type",

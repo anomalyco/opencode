@@ -144,6 +144,34 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
   const [hovered, setHovered] = createSignal<string>()
   // The open dropdown or the date picker, by id; one at a time.
   const [menu, setMenu] = createSignal<string>()
+  // The editor opens on the card alone, the modal hugging it, with Close, Customize and Export; Customize reveals every
+  // setting, Mute and Shuffle, and the modal grows to its full size around them.
+  const [customizing, setCustomizing] = createSignal(false)
+  const [viewport, setViewport] = createSignal<{ width: number; height: number }>()
+  onMount(() => {
+    const measure = () => setViewport({ width: innerWidth, height: innerHeight })
+    measure()
+    addEventListener("resize", measure)
+    onCleanup(() => removeEventListener("resize", measure))
+  })
+  // The card as large as the full modal would show it, with the stage's padding across, and down the bar over it, the
+  // stage's padding and the section arrows under it (share.css). Never narrower than the bar's own buttons need.
+  const hug = () => {
+    const view = viewport()
+    if (!view) return undefined
+    const full = { width: Math.min(1200, view.width - 160), height: Math.min(800, view.height - 128) }
+    const across = 96
+    const down = 52 + 64 + 12 + 64
+    const [width, height] = size()
+    const scale = Math.min(1, (full.width - across) / width, (full.height - down) / height)
+    return { width: Math.max(400, Math.round(width * scale + across)), height: Math.round(height * scale + down) }
+  }
+  const customize = () => {
+    setCustomizing(true)
+    // Its button goes, so the focus moves on to the first setting.
+    requestAnimationFrame(() => bar?.querySelector<HTMLElement>("[data-slot=dropdown-trigger]")?.focus())
+  }
+
   // The bar compacts only when it has to: its full layout first, then step by step (share.css data-compact) until it
   // fits on one row. On phones the settings are in the sheet and this stays off.
   let bar: HTMLDivElement | undefined
@@ -293,6 +321,7 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     // Stepping to another section keeps the editor open, its music and its options.
     if (dialog?.open) return
     opening = true
+    setCustomizing(false)
     // Each opening plays from the start, even on the same card as last time.
     clock.key = ""
     setMenu(undefined)
@@ -608,6 +637,12 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
     <dialog
       ref={dialog}
       data-component="share-editor"
+      data-customize={customizing() ? "" : undefined}
+      style={
+        hug()
+          ? ({ "--hug-width": `${hug()!.width}px`, "--hug-height": `${hug()!.height}px` } as JSX.CSSProperties)
+          : undefined
+      }
       aria-label={i18n.t("share.open")}
       onKeyDown={(event) => {
         if (!(event.metaKey || event.ctrlKey) || event.key.toLowerCase() !== "z") return
@@ -956,6 +991,19 @@ export function ShareDialog(props: { updatedAt: string | null; url: string }) {
                     </g>
                   </svg>
                 </button>
+                <Show when={!customizing()}>
+                  <button type="button" data-slot="bar-button" data-variant="customize" onClick={customize}>
+                    <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
+                      <path
+                        d="M2 4.5h6M12 4.5h2M2 11.5h2M8 11.5h6M10 4.5a1.75 1.75 0 1 1 0 .01M6 11.5a1.75 1.75 0 1 1 0 .01"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.5"
+                      />
+                    </svg>
+                    {i18n.t("share.customize")}
+                  </button>
+                </Show>
                 <button
                   type="button"
                   data-slot="bar-button"

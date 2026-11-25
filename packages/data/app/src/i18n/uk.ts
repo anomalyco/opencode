@@ -317,6 +317,7 @@ export const dict = {
   "share.openSection": "Поділитися: {{title}}",
   "share.close": "Закрити",
   "share.settings": "Налаштування",
+  "share.customize": "Налаштувати",
   "share.done": "Готово",
   "share.option": "{{label}}: {{value}}",
   "share.type": "Тип",

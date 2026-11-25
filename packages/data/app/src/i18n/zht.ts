@@ -307,6 +307,7 @@ export const dict = {
   "share.openSection": "分享{{title}}",
   "share.close": "關閉",
   "share.settings": "設定",
+  "share.customize": "自訂",
   "share.done": "完成",
   "share.option": "{{label}}：{{value}}",
   "share.type": "類型",

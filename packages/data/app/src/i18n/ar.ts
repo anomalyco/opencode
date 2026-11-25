@@ -307,6 +307,7 @@ export const dict = {
   "share.openSection": "مشاركة {{title}}",
   "share.close": "إغلاق",
   "share.settings": "الإعدادات",
+  "share.customize": "تخصيص",
   "share.done": "تم",
   "share.option": "{{label}}: {{value}}",
   "share.type": "النوع",

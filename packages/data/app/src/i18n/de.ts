@@ -315,6 +315,7 @@ export const dict = {
   "share.openSection": "{{title}} teilen",
   "share.close": "Schließen",
   "share.settings": "Einstellungen",
+  "share.customize": "Anpassen",
   "share.done": "Fertig",
   "share.option": "{{label}}: {{value}}",
   "share.type": "Typ",

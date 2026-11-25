@@ -310,6 +310,7 @@ export const dict = {
   "share.openSection": "{{title}} 공유",
   "share.close": "닫기",
   "share.settings": "설정",
+  "share.customize": "사용자 지정",
   "share.done": "완료",
   "share.option": "{{label}}: {{value}}",
   "share.type": "유형",

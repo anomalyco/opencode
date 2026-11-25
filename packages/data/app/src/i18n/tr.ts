@@ -313,6 +313,7 @@ export const dict = {
   "share.openSection": "{{title}} paylaş",
   "share.close": "Kapat",
   "share.settings": "Ayarlar",
+  "share.customize": "Özelleştir",
   "share.done": "Bitti",
   "share.option": "{{label}}: {{value}}",
   "share.type": "Tür",

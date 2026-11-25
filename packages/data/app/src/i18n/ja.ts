@@ -312,6 +312,7 @@ export const dict = {
   "share.openSection": "{{title}}を共有",
   "share.close": "閉じる",
   "share.settings": "設定",
+  "share.customize": "カスタマイズ",
   "share.done": "完了",
   "share.option": "{{label}}: {{value}}",
   "share.type": "種類",
