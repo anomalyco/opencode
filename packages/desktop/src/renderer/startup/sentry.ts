@@ -1,5 +1,8 @@
 import pkg from "../../../package.json"
 
+// Errors reach Sentry only when someone clicks Report on the crash page, so no integration may capture on its own.
+const UNREPORTED_INTEGRATIONS = new Set(["Breadcrumbs", "GlobalHandlers", "BrowserApiErrors"])
+
 export function desktopVersion() {
   return import.meta.env.OPENCODE_VERSION ?? pkg.version
 }
@@ -17,13 +20,6 @@ export async function initializeSentry(version: string) {
       },
     },
     integrations: (integrations) =>
-      integrations.filter(
-        (integration) =>
-          integration.name !== "Breadcrumbs" &&
-          !(
-            import.meta.env.OPENCODE_CHANNEL === "prod" &&
-            (integration.name === "GlobalHandlers" || integration.name === "BrowserApiErrors")
-          ),
-      ),
+      integrations.filter((integration) => !UNREPORTED_INTEGRATIONS.has(integration.name)),
   })
 }
