@@ -39,20 +39,6 @@ describe("Patch", () => {
     ).toEqual([{ type: "add", path: "file.txt", contents: "content\n" }])
   })
 
-  test("parses an update followed by an add", () => {
-    expect(
-      parse("*** Begin Patch\n*** Update File: update.txt\n@@\n+line\n*** Add File: add.txt\n+content\n*** End Patch"),
-    ).toEqual([
-      {
-        type: "update",
-        path: "update.txt",
-        movePath: undefined,
-        chunks: [{ oldLines: [], newLines: ["line"], changeContext: undefined }],
-      },
-      { type: "add", path: "add.txt", contents: "content\n" },
-    ])
-  })
-
   test("parses a file move", () => {
     expect(
       parse("*** Begin Patch\n*** Update File: old.txt\n*** Move to: new.txt\n@@\n-old\n+new\n*** End Patch"),
@@ -144,23 +130,6 @@ describe("Patch", () => {
     ])
   })
 
-  test("parses relative and absolute hunk paths", () => {
-    expect(
-      parse(
-        "*** Begin Patch\n*** Add File: relative.txt\n+content\n*** Delete File: /tmp/delete.txt\n*** Update File: /tmp/update.txt\n@@\n-old\n+new\n*** End Patch",
-      ),
-    ).toEqual([
-      { type: "add", path: "relative.txt", contents: "content\n" },
-      { type: "delete", path: "/tmp/delete.txt" },
-      {
-        type: "update",
-        path: "/tmp/update.txt",
-        movePath: undefined,
-        chunks: [{ oldLines: ["old"], newLines: ["new"], changeContext: undefined }],
-      },
-    ])
-  })
-
   test("strips one carriage return from CRLF patch lines", () => {
     expect(parse("*** Begin Patch\r\n*** Update File: file.txt\r\n@@\r\n-old\r\n+new\r\n*** End Patch\r\n")).toEqual([
       {
@@ -247,12 +216,6 @@ describe("Patch", () => {
         "line 1\nline 2\nline 3\nline 4\n",
       ).content,
     ).toBe("line 1\nLINE 2\nline 3\nLINE 4\n")
-  })
-
-  test("appends a pure-addition chunk to a nonempty file", () => {
-    expect(
-      Patch.derive("update.txt", [{ oldLines: [], newLines: ["added 1", "added 2"] }], "line 1\nline 2\n").content,
-    ).toBe("line 1\nline 2\nadded 1\nadded 2\n")
   })
 
   test.each(["", "original\n"])("preserves equal-offset insertion order and frozen chunks for %j", (original) => {

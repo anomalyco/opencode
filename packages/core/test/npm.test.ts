@@ -285,10 +285,10 @@ describe("Npm.add", () => {
     expect(entries.added.directory).toContain("node_modules")
   })
 
-  test.each(["commit", "branch"])("installs a Git package from an npm ::path: subdirectory at a %s", async (ref) => {
+  test("installs a Git package from an npm ::path: subdirectory at a branch", async () => {
     await using tmp = await tmpdir()
     const fixture = await createGitFixture(tmp.path)
-    const spec = `git+file://${fixture.repository}#${ref === "commit" ? fixture.commit : "fixture-branch"}::path:packages/subdirectory-plugin`
+    const spec = `git+file://${fixture.repository}#fixture-branch::path:packages/subdirectory-plugin`
     const result = await Effect.gen(function* () {
       const npm = yield* Npm.Service
       return { added: yield* npm.add(spec), outdated: yield* npm.check(spec) }

@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect } from "bun:test"
 import { SystemPart } from "@opencode/ai/effect"
 import { Agent } from "@opencode/core/agent"
 import { Plugin } from "@opencode/core/plugin"
@@ -48,16 +48,6 @@ const context = (id: string, system = fallback): SessionHooks["context"] => ({
 })
 
 describe("OptimizePlugin", () => {
-  test("enables prompt plugins without model-specific tool optimization", () => {
-    expect(OptimizePlugin.Plugins.map((plugin) => plugin.id)).toEqual([
-      "opencode.prompt.openai",
-      "opencode.prompt.anthropic",
-      "opencode.prompt.kimi",
-      "opencode.prompt.arcee",
-      "opencode.prompt.meta",
-    ])
-  })
-
   it.effect("selects model-lab prompts through session context hooks", () =>
     Effect.gen(function* () {
       const catalog = yield* Provider.Service

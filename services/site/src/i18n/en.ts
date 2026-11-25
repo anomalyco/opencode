@@ -207,7 +207,7 @@ export const dict = {
   "go.faq.a5.notUsed": "Not used",
   "go.faq.a5.grokRetention": "ZDR disables important API features that depend on stored data, including the stateful Responses API, Files and Collections, and the Batch API.",
   "go.faq.a5.gptRetention": "Abuse monitoring logs are generated for all API feature usage and retained for up to 30 days.",
-  "go.faq.a5.deepseekRetention": "ZDR agreement is renewed monthly. The current agreement is valid through November 30, 2026.",
+  "go.faq.a5.deepseekRetention": "ZDR agreement is renewed monthly. The current agreement is valid through December 31, 2026.",
   "go.faq.a5.learnMore": "Learn more",
   "go.faq.q6": "Can I top up credit?",
   "go.faq.a6": "If you need more usage, you can top up credit in your account.",

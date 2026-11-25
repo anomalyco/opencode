@@ -192,7 +192,7 @@ export const dict = {
   "go.faq.a5.grokRetention": "ZDRでは、保存データに依存する重要なAPI機能（ステートフルなResponses API、Files and Collections、Batch APIなど）が無効になります。",
   "go.faq.a5.gptRetention": "不正使用監視ログはすべてのAPI機能の使用時に生成され、最大30日間保持されます。",
   "go.faq.a5.learnMore": "詳しく見る",
-  "go.faq.a5.deepseekRetention": "ZDR契約は毎月更新されます。現在の契約は2026年11月30日まで有効です。",
+  "go.faq.a5.deepseekRetention": "ZDR契約は毎月更新されます。現在の契約は2026年12月31日まで有効です。",
   "go.faq.q6": "クレジットをチャージできますか？",
   "go.faq.a6": "利用枠を追加したい場合は、アカウントでクレジットをチャージできます。",
   "go.faq.q7": "キャンセルできますか？",

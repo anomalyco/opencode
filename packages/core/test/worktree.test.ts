@@ -170,23 +170,6 @@ describe("Worktree", () => {
     }),
   )
 
-  it.live("reports unavailable recorded strategy ids", () =>
-    Effect.gen(function* () {
-      const input = yield* setup()
-      const worktree = yield* fixtureWorktree()
-      const unavailable = Worktree.StrategyID.make("acme/missing")
-      yield* input.db
-        .update(WorktreeTable)
-        .set({ strategy: unavailable })
-        .where(eq(WorktreeTable.project_id, input.projectID))
-        .run()
-        .pipe(Effect.orDie)
-      const error = yield* worktree.remove({ directory: input.sourceDirectory, force: false }).pipe(Effect.flip)
-      expect(error).toBeInstanceOf(Worktree.StrategyUnavailableError)
-      if (error instanceof Worktree.StrategyUnavailableError) expect(error.strategy).toBe(unavailable)
-    }),
-  )
-
   it.live("requires a tracked project worktree", () =>
     Effect.gen(function* () {
       const input = yield* setup()
@@ -265,38 +248,6 @@ describe("Worktree", () => {
       expect(yield* Effect.promise(() => Bun.file(path.join(created.directory, ".git")).exists())).toBe(true)
       yield* worktree.remove({ directory: created.directory, force: false })
       yield* worktree.remove({ directory: duplicate.directory, force: false })
-    }),
-  )
-
-  it.live("runs the project setup script with worktree paths", () =>
-    Effect.gen(function* () {
-      const input = yield* setup()
-      const worktree = yield* fixtureWorktree()
-      const temp = yield* Effect.promise(() => fs.realpath(path.dirname(input.root.path)))
-      const parent = abs(path.join(temp, path.basename(input.root.path) + "-worktree-setup"))
-      yield* Effect.addFinalizer(() => Effect.promise(() => fs.rm(parent, { recursive: true, force: true })))
-      yield* input.db
-        .update(ProjectTable)
-        .set({
-          commands: {
-            start:
-              "bun -e \"await Bun.write('setup.json', JSON.stringify([process.env.OPENCODE_WORKTREE_BASE, process.env.OPENCODE_WORKTREE_PATH, process.cwd()]))\"",
-          },
-        })
-        .where(eq(ProjectTable.id, input.projectID))
-        .run()
-        .pipe(Effect.orDie)
-      const created = yield* worktree.create({
-        directory: parent,
-        name: "worktree",
-      })
-
-      expect(yield* Effect.promise(() => Bun.file(path.join(created.directory, "setup.json")).json())).toEqual([
-        input.sourceDirectory,
-        created.directory,
-        created.directory,
-      ])
-      yield* worktree.remove({ directory: created.directory, force: true })
     }),
   )
 

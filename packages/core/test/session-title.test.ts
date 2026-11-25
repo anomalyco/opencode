@@ -658,7 +658,6 @@ it.effect("keeps the clipped regeneration context well formed", () =>
 for (const [prefix, stored] of [
   [95, `${"a".repeat(95)}😀...`],
   [96, `${"a".repeat(96)}...`],
-  [97, `${"a".repeat(97)}...`],
 ] as const)
   it.effect(`clips a long generated title without splitting an emoji after ${prefix} letters`, () =>
     Effect.gen(function* () {

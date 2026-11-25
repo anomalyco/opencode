@@ -192,7 +192,7 @@ export const dict = {
   "go.faq.a5.grokRetention": "ZDR deaktiverer vigtige API-funktioner, der afhænger af lagrede data, herunder den tilstandsbevarende Responses API, Files and Collections og Batch API.",
   "go.faq.a5.gptRetention": "Logfiler til overvågning af misbrug genereres ved al brug af API-funktioner og opbevares i op til 30 dage.",
   "go.faq.a5.learnMore": "Læs mere",
-  "go.faq.a5.deepseekRetention": "ZDR-aftalen fornyes månedligt. Den nuværende aftale er gyldig til og med 30. november 2026.",
+  "go.faq.a5.deepseekRetention": "ZDR-aftalen fornyes månedligt. Den nuværende aftale er gyldig til og med 31. december 2026.",
   "go.faq.q6": "Kan jeg tanke kredit op?",
   "go.faq.a6": "Hvis du har brug for mere forbrug, kan du tanke kredit op på din konto.",
   "go.faq.q7": "Kan jeg annullere?",
