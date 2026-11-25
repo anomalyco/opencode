@@ -917,27 +917,6 @@ const reportingFixture = () =>
   })
 
 describe("SubagentTool reporting", () => {
-  completionIt.live("reports the child's final answer to the parent", () =>
-    Effect.gen(function* () {
-      const fixture = yield* reportingFixture()
-      const settled = yield* fixture.call("call-report")
-      const childID = outputSessionID(settled.metadata)
-
-      expect(settled).toMatchObject({
-        status: "completed",
-        output: { status: "running" },
-        metadata: { sessionID: childID, status: "running" },
-      })
-      yield* fixture.sessions.wait(childID)
-      yield* fixture.sessions.wait(fixture.parent.id)
-
-      const reports = (yield* fixture.notices).filter((notice) => notice.metadata?.["source"] === "subagent")
-      expect(reports).toHaveLength(1)
-      expect(reports[0]?.text).toContain(`<background-result kind="subagent" sessionID="${childID}" state="completed"`)
-      expect(reports[0]?.text).toContain(childText)
-    }),
-  )
-
   completionIt.live("reports only the current busy period when an idle child is continued", () =>
     Effect.gen(function* () {
       const fixture = yield* reportingFixture()

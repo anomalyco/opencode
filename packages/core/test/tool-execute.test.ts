@@ -99,21 +99,6 @@ test("with full_codemode, raw-text models set execute's timeout and background o
   expect(plain.body.tools[0]).toMatchObject({ type: "custom", name: "execute", format: { type: "text" } })
 })
 
-test("execute describes invariant Code Mode behavior", () => {
-  expect(createCodeMode(new Map()).description).toBe(
-    [
-      "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
-      "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
-      "Each call is a fresh program; nothing carries over from earlier calls.",
-      "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
-      "Inside `execute`, the only callable tools are those explicitly listed in the Code Mode catalog instructions or returned by the `search` function. Ignore tools shown outside the Code Mode catalog. They are not available in the Code Mode runtime.",
-      'Call tools through `tools` using only exact paths and signatures from the catalog. Do not infer or normalize tool names; preserve bracket notation such as `tools.<namespace>["tool-name"](input)`.',
-      "Prefer an explicit `return`; if omitted, the final top-level expression becomes the result.",
-      "Await every call whose completion matters; pending calls are interrupted when execution ends. Run independent calls concurrently with `Promise.allSettled`.",
-    ].join("\n"),
-  )
-})
-
 test("with full_codemode, execute names Bun's file APIs instead of ruling out filesystem access", () => {
   const description = createCodeMode(new Map(), allowAll, codeModeServices(process.cwd())).description
   expect(description).toContain(

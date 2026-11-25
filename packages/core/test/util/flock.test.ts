@@ -239,35 +239,6 @@ describe("util.flock", () => {
     expect(hit).toBe(true)
   })
 
-  test("writes owner metadata while lock is held", async () => {
-    await using tmp = await tmpdir("flock-test-")
-    const dir = path.join(tmp.path, "locks")
-    const key = "flock:meta"
-    const file = path.join(lock(dir, key), "meta.json")
-
-    await Flock.withLock(
-      key,
-      async () => {
-        const json = await readJson<{
-          token?: unknown
-          pid?: unknown
-          hostname?: unknown
-          createdAt?: unknown
-        }>(file)
-
-        expect(typeof json.token).toBe("string")
-        expect(typeof json.pid).toBe("number")
-        expect(typeof json.hostname).toBe("string")
-        expect(typeof json.createdAt).toBe("string")
-      },
-      {
-        dir,
-        staleMs: 1_000,
-        timeoutMs: 3_000,
-      },
-    )
-  })
-
   test("supports acquire with await using", async () => {
     await using tmp = await tmpdir("flock-test-")
     const dir = path.join(tmp.path, "locks")

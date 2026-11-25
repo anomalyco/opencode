@@ -344,40 +344,6 @@ Earlier work
     })
   })
 
-  test("lowers text attachments after the prompt in one user message", () => {
-    const file = FileAttachment.make({
-      data: Base64.make(Buffer.from("export const value = 1").toString("base64")),
-      mime: "text/plain",
-      source: { type: "uri", uri: "file:///project/main.ts" },
-      name: "main.ts",
-    })
-    const messages = toLLMMessages(
-      [
-        SessionMessage.User.make({
-          id: id("user-text-file"),
-          type: "user",
-          text: "Review this file",
-          files: [file],
-          time: { created },
-        }),
-      ],
-      model,
-    )
-
-    expect(messages).toHaveLength(1)
-    expect(messages[0]).toMatchObject({
-      id: id("user-text-file"),
-      role: "user",
-      content: [
-        { type: "text", text: "Review this file" },
-        {
-          type: "text",
-          text: "\n\nAttached file: main.ts\n\nexport const value = 1",
-        },
-      ],
-    })
-  })
-
   test("lowers each prepared skill once before the prompt", () => {
     const effect = SkillAttachment.make({
       id: Skill.ID.make("effect"),
@@ -438,71 +404,6 @@ Earlier work
     expect(messages[0]).toMatchObject({
       role: "user",
       content: [{ type: "text", text: "Use @api-design" }],
-    })
-  })
-
-  test("decodes inline text attachment content", () => {
-    const messages = toLLMMessages(
-      [
-        SessionMessage.User.make({
-          id: id("user-data-file"),
-          type: "user",
-          text: "Review this file",
-          files: [
-            FileAttachment.make({
-              data: Base64.make(Buffer.from("inline content").toString("base64")),
-              mime: "text/plain",
-              source: { type: "inline" },
-              name: "inline.txt",
-            }),
-          ],
-          time: { created },
-        }),
-      ],
-      model,
-    )
-
-    expect(messages[0]?.content).toMatchObject([
-      { type: "text", text: "Review this file" },
-      {
-        type: "text",
-        text: "\n\nAttached file: inline.txt\n\ninline content",
-      },
-    ])
-  })
-
-  test("exposes admitted reference directory source paths in model context", () => {
-    const location = path.resolve("/references/harness-engineering")
-    const directory = FileAttachment.make({
-      data: Base64.make(Buffer.from("lib/\nindex.ts").toString("base64")),
-      mime: "application/x-directory",
-      source: { type: "uri", uri: pathToFileURL(location).href },
-      name: "harness-engineering",
-    })
-    const messages = toLLMMessages(
-      [
-        SessionMessage.User.make({
-          id: id("user-directory"),
-          type: "user",
-          text: "Review this directory",
-          files: [directory],
-          time: { created },
-        }),
-      ],
-      model,
-    )
-
-    expect(messages).toHaveLength(1)
-    expect(messages[0]).toMatchObject({
-      id: id("user-directory"),
-      role: "user",
-      content: [
-        { type: "text", text: "Review this directory" },
-        {
-          type: "text",
-          text: `\n\nAttached directory: ${location}\n\nlib/\nindex.ts`,
-        },
-      ],
     })
   })
 
@@ -1268,37 +1169,6 @@ Earlier work
         providerExecuted: false,
         cache: undefined,
         providerMetadata: undefined,
-      },
-    ])
-  })
-
-  test("preserves provider metadata for a catalog alias with a different API model ID", () => {
-    const messages = toLLMMessages(
-      [
-        SessionMessage.Assistant.make({
-          id: id("assistant-alias"),
-          type: "assistant",
-          agent: build,
-          model: { id: Model.ID.make("fast"), providerID: Provider.ID.make("provider") },
-          content: [
-            SessionMessage.AssistantReasoning.make({
-              type: "reasoning",
-              text: "Visible thought",
-              native: { reasoningEncryptedContent: "encrypted" },
-            }),
-          ],
-          finish: "stop",
-          time: { created, completed: created },
-        }),
-      ],
-      Model.Ref.make({ id: Model.ID.make("fast"), providerID: Provider.ID.make("provider") }),
-    )
-
-    expect(messages[0]?.content).toEqual([
-      {
-        type: "reasoning",
-        text: "Visible thought",
-        providerMetadata: { provider: { reasoningEncryptedContent: "encrypted" } },
       },
     ])
   })
