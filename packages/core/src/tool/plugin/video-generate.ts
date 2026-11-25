@@ -10,19 +10,20 @@ import { Global } from "@opencode/util/global"
 import { Effect, Schema, Scope, Stream } from "effect"
 import { toolFailure } from "../runtime.js"
 import { Config } from "../../config.js"
+import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Environment } from "../../environment/index.js"
 import { FileAccess } from "../../file-access.js"
-import { Flag } from "../../flag.js"
 import { BlobStore } from "../../blob-store.js"
 import { Job } from "../../job.js"
 import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
 import { Session } from "../../session.js"
+import { BackgroundResult } from "../../session/background-result.js"
 import { SessionMessage } from "../../session/message.js"
 import { SessionSchema } from "../../session/schema.js"
 import { VideoGeneration } from "../../video-generation.js"
 
-export const name = "experimental_video_generate"
+export const name = "generate_video"
 export const MAX_INPUT_BYTES = 100 * 1024 * 1024
 const CHUNK = 4 * 1024 * 1024
 const URL_TYPES: Record<string, string> = {
@@ -88,9 +89,9 @@ export const Output = Schema.Struct({
   model: Schema.String.annotate({ description: "providerID/modelID" }),
 })
 
-/** The completion notice for a background video job, tagged with its job ID like `<image id=…>` notices. */
+/** The completion notice for a background video job, tagged with its job ID like `<background-result kind="image" id=…>` notices. */
 export function notice(input: { id: string; state: string; body: string }) {
-  return `<video id="${input.id}" state="${input.state}">\n${input.body}\n</video>`
+  return BackgroundResult.render(`kind="video" id="${input.id}" state="${input.state}"`, input.body)
 }
 
 /** Where the job's `index`th video is saved: the path itself for the first, then `cat-1.mp4`, `cat-2.mp4`, … */
@@ -189,7 +190,6 @@ export const Plugin = {
     const models = yield* Model.Service
     const permission = yield* Permission.Service
     const config = yield* Config.Service
-    if (!(yield* Flag.enabled("video_generate"))) return
 
     const resolveModel = Effect.fn("VideoGenerateTool.resolveModel")(function* (
       input: string | undefined,
@@ -232,7 +232,7 @@ export const Plugin = {
             yield* permission.assert({
               action: "webfetch",
               resources: [value],
-              save: ["*"],
+              save: Permission.site(value),
               metadata: { url: value },
               ...Permission.invocation(context),
             })
@@ -272,6 +272,11 @@ export const Plugin = {
         ),
       )
 
+    // On by default, like image generation: `experimental.video_generate: false` is honored, but permissions are the
+    // supported way to turn it off. Internal plugins are not re-run on config changes, so reload the tool transform instead.
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
+
+    // Registered only while a video model is available, re-evaluated whenever the catalog changes.
     const wanted = models.available(["video"]).pipe(Effect.map((available) => available.length > 0))
     let enabled = false
     const refresh = wanted.pipe(
@@ -289,7 +294,7 @@ export const Plugin = {
 
     yield* ctx.tool
       .transform((editor) => {
-        if (!enabled) return
+        if (!enabled || videoGenerate(loaded.entries) === false) return
         editor.add({
           name,
           options: { codemode: false },
@@ -319,7 +324,7 @@ export const Plugin = {
                 yield* permission.assert({
                   action: "edit",
                   resources: [target.resource],
-                  save: ["*"],
+                  save: [FileAccess.always(target)],
                   ...Permission.invocation(context),
                 })
               }
@@ -381,10 +386,14 @@ export const Plugin = {
 }
 
 // Read per field so a later config that sets other experimental options doesn't hide this one.
-function configuredModel(entries: readonly Entry[]) {
-  const value = entries.findLast(
+function videoGenerate(entries: readonly Entry[]) {
+  return entries.findLast(
     (entry): entry is Document => entry.type === "document" && entry.info.experimental?.video_generate !== undefined,
   )?.info.experimental?.video_generate
+}
+
+function configuredModel(entries: readonly Entry[]) {
+  const value = videoGenerate(entries)
   return typeof value === "object" ? value.model : undefined
 }
 

@@ -1,6 +1,8 @@
 import { expect, test } from "bun:test"
 import { addressParts, externalAction, externalPage, pageHandoff, resolveAddress } from "./address"
-import { remember, suggest } from "./history"
+import { completion, filled } from "./history/page"
+import { suggestPages } from "./history/suggest"
+import { remember } from "./history/visits"
 import { normalizeURL, refusal } from "./policy"
 
 test("typed file paths never become a host or a search query, regardless of the desktop OS", () => {
@@ -93,7 +95,7 @@ test("the field draws the whole URL, split around its host, in exactly the input
   expect(urls.map((url) => Object.values(addressParts(url)).join(""))).toEqual(urls)
 })
 
-test("history keeps one newest-first visit per URL and suggests addresses that complete the query first", () => {
+test("the window's list keeps one newest-first visit per URL and, alone, suggests its matches newest first", () => {
   const visits = ["https://docs.example/mdn-guide", "https://developer.mozilla.org/", "https://www.mdn.dev/"].reduce(
     (list, url) => remember(list, { url, title: url.includes("mozilla") ? "MDN Web Docs" : "Other" }),
     remember([], { url: "https://developer.mozilla.org/", title: "Old title" }),
@@ -104,19 +106,57 @@ test("history keeps one newest-first visit per URL and suggests addresses that c
     ["https://developer.mozilla.org/", "MDN Web Docs"],
     ["https://docs.example/mdn-guide", "Other"],
   ])
-  // A leading www. and the scheme are not typed, so mdn completes www.mdn.dev; the others only contain it.
-  expect(suggest(visits, "MDN", 5).map((visit) => visit.url)).toEqual([
+  // A leading www. and the scheme are not typed, so mdn completes www.mdn.dev; the others have it as a word of the
+  // title or a part of the path.
+  expect(suggestPages("MDN", visits, [], 5).map((visit) => [visit.url, visit.completion])).toEqual([
+    ["https://www.mdn.dev/", ".dev"],
+    ["https://developer.mozilla.org/", undefined],
+    ["https://docs.example/mdn-guide", undefined],
+  ])
+  // A word found only inside a longer one comes after every word start, however new its page.
+  expect(suggestPages("ozilla", visits, [], 5).map((visit) => visit.url)).toEqual(["https://developer.mozilla.org/"])
+  expect(suggestPages("d", visits, [], 5).map((visit) => visit.url)).toEqual([
     "https://www.mdn.dev/",
     "https://developer.mozilla.org/",
     "https://docs.example/mdn-guide",
   ])
-  expect(suggest(visits, "  ", 5)).toEqual([])
+  expect(suggestPages("  ", visits, [], 5)).toEqual([])
   expect(
     Array.from({ length: 40 }, (_, index) => `https://example.com/${index}`).reduce(
       (list, url) => remember(list, { url, title: "" }),
       visits,
     ),
   ).toHaveLength(30)
+})
+
+test("an address completes the typed text and fills the field as Chrome's address bar does", () => {
+  const rune = "https://github.com/anomalyco/rune-desktop"
+
+  // The text may leave out the scheme and a leading www., in any case; a text that is not the start completes nothing.
+  const completions: readonly (readonly [text: string, url: string, rest: string | undefined])[] = [
+    ["gith", "https://github.com/", "ub.com"],
+    ["GitH", "https://github.com/", "ub.com"],
+    ["https://gith", "https://github.com/", "ub.com"],
+    ["md", "https://www.mdn.dev/", "n.dev"],
+    ["www.md", "https://www.mdn.dev/", "n.dev"],
+    ["github.com/anom", rune, "alyco/rune-desktop"],
+    // The whole address, with or without the slash that ends a bare host.
+    ["github.com", "https://github.com/", ""],
+    ["github.com/", "https://github.com/", ""],
+    ["hub", "https://github.com/", undefined],
+    ["gith ", "https://github.com/", undefined],
+    ["", "https://github.com/", undefined],
+  ]
+
+  expect(completions.map(([text, url]) => completion(text, url))).toEqual(completions.map(([, , rest]) => rest))
+  // A row's address in the field: https stays, http and the slash after a bare host go.
+  expect(["https://github.com/", rune, "http://localhost:3000/", "http://example.com/a/?b#c", "file:///C:/repo/index.html"].map(filled)).toEqual([
+    "https://github.com",
+    rune,
+    "localhost:3000",
+    "example.com/a/?b#c",
+    "file:///C:/repo/index.html",
+  ])
 })
 
 test("a local preview may be revealed by tab ID but never launched by URL", () => {

@@ -15,10 +15,10 @@ import { showToast } from "@opencode/ui/toast"
 import type { Job } from "./jobs-machine"
 
 /**
- * Settings › Browser: importing sign-ins, the extensions the profile runs and whether links open in the pane; then,
- * under Advanced, sharing with remote servers, the agent's pages, the cookie-file import, site permissions and stored
- * data. Every action goes through the jobs machine, so one runs at a time and each says how it ended beside
- * the control that started it.
+ * Settings › Browser: importing from another browser, the extensions the profile runs and whether links open in the
+ * pane; then, under Advanced, sharing with remote servers, the agent's pages, the cookie-file import, site permissions
+ * and stored data. Every action goes through the jobs machine, so one runs at a time and
+ * each says how it ended beside the control that started it.
  */
 export default function BrowserSettings(props: { target?: string }) {
   const ctx = usePlugin<typeof definition>()
@@ -85,7 +85,7 @@ export default function BrowserSettings(props: { target?: string }) {
   // one closed "Advanced" section.
   return (
     <ui.SettingsLayout title={ctx.t("settings.title")}>
-      <ui.SettingsSection title={ctx.t("settings.import.title")} footer={<Note>{ctx.t("settings.import.note")}</Note>}>
+      <ui.SettingsSection title={ctx.t("settings.import.title")}>
         <Show when={jobs.unsaved()}>
           {(message) => (
             <ui.SettingsRow
@@ -109,8 +109,7 @@ export default function BrowserSettings(props: { target?: string }) {
                   image={choice.source.icon}
                   fallback="outline-globe"
                   name={choice.source.name}
-                  detail={choice.source.profiles.length > 1 ? choice.profile.name : undefined}
-                  keep
+                  aside={choice.source.profiles.length > 1 ? choice.profile.name : undefined}
                   message={
                     jobs.importing(choice) ? jobs.notice() : results().get(resultKey(choice.source.id, choice.profile.id))
                   }
@@ -148,7 +147,7 @@ export default function BrowserSettings(props: { target?: string }) {
           description={ctx.t("settings.extensions.add.description")}
         >
           <ui.Button size="small" icon="plus" disabled={!jobs.available()} onClick={addExtension}>
-            {ctx.t("settings.extensions.add.action")}
+            {ctx.t("settings.extensions.add")}
           </ui.Button>
         </ui.SettingsRow>
       </ui.SettingsSection>
@@ -230,13 +229,18 @@ export default function BrowserSettings(props: { target?: string }) {
         </ui.SettingsSection>
         <ui.SettingsSection>
           <ui.SettingsRow
-            title={
-              <Identity
-                fallback="file-document"
-                name={ctx.t("settings.import.file.title")}
-                detail={ctx.t("settings.import.file.description")}
-                message={fileMessage()}
-              />
+            title={ctx.t("settings.import.file.title")}
+            description={
+              <Show when={fileMessage()} fallback={ctx.t("settings.import.file.description")}>
+                {(message) => (
+                  <span
+                    role={message().error ? "alert" : "status"}
+                    classList={{ "text-v2-state-fg-danger": message().error }}
+                  >
+                    {message().text}
+                  </span>
+                )}
+              </Show>
             }
           >
             <ui.Button
@@ -705,7 +709,7 @@ function AddExtension(props: { sources: readonly ProfileSource[]; close: () => v
               >
                 {pending().result.type === "unsupported"
                   ? ctx.t("settings.extensions.anyway")
-                  : ctx.t("settings.extensions.add.action")}
+                  : ctx.t("settings.extensions.add")}
               </ui.Button>
             </>
           )}
@@ -836,16 +840,16 @@ function Verdict(props: { level: ExtensionCompatibility["level"] }) {
 }
 
 /**
- * A row's subject: its icon, its name, and under it a detail or what the last action on it did; with `keep`, the
- * detail stays before the message, so rows of one browser still say which profile each is.
+ * A row's subject: its icon, its name with an optional muted aside beside it, and under it a detail, a note, or what
+ * the last action on it did.
  */
 function Identity(props: {
   image?: string
   fallback: IconName
   name: string
+  aside?: string
   detail?: string
   note?: JSX.Element
-  keep?: boolean
   message?: JobMessage
 }) {
   const note = children(() => props.note)
@@ -854,7 +858,12 @@ function Identity(props: {
     <span class="flex min-w-0 items-center gap-3">
       <Glyph image={props.image} fallback={props.fallback} />
       <span class="flex min-w-0 flex-col gap-1">
-        <span class="truncate">{props.name}</span>
+        <span class="flex min-w-0 items-baseline gap-1.5">
+          <span class="truncate">{props.name}</span>
+          <Show when={props.aside}>
+            {(aside) => <span class="min-w-0 truncate font-[440] text-v2-text-text-muted">{aside()}</span>}
+          </Show>
+        </span>
         <Show
           when={props.message}
           fallback={
@@ -871,7 +880,6 @@ function Identity(props: {
         >
           {(message) => (
             <span class="text-[13px] font-[440] leading-[var(--line-height-base)]">
-              <Show when={props.keep && props.detail}>{(detail) => <span class="text-v2-text-text-muted">{detail()} · </span>}</Show>
               <span
                 role={message().error ? "alert" : "status"}
                 classList={{ "text-v2-state-fg-danger": message().error, "text-v2-text-text-muted": !message().error }}

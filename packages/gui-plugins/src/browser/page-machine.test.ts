@@ -358,6 +358,24 @@ describe("restored tabs", () => {
     expect(documentGeneration(replay(visit("https://alpha.example/b"), loaded).state)).toBe(5)
   })
 
+  // Chromium names a document after its URL until its <title> parses (`electron-restore.test.ts` reads the real
+  // values). A restored tab published that name while it loaded, so its strip tab changed width twice.
+  test.each(["Alpha", ""])("the first commit keeps the saved title %p until the document names itself", (title) => {
+    const committed = replay(
+      [
+        { type: "navigation.started", url: "https://alpha.example/", isMainFrame: true, isSameDocument: false },
+        { type: "loading.started" },
+        { type: "navigation.committed", url: "https://alpha.example/", status: 200, title: "alpha.example" },
+      ],
+      createDocumentState({ ...restore, title }),
+    ).state
+
+    expect(documentTab(committed, history)).toMatchObject({ title, loading: true })
+    expect(documentTab(transitionDocument(committed, { type: "title.updated", title: "Real" }).state, history).title).toBe("Real")
+    // A document that never names itself takes Chromium's name once, when it stops loading.
+    expect(documentTab(transitionDocument(committed, { type: "loading.stopped", title: "alpha.example" }).state, history)).toMatchObject({ title: "alpha.example", loading: false })
+  })
+
   test("a failed first load consumes it too", () => {
     const result = replay(
       [

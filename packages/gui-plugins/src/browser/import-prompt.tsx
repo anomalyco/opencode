@@ -14,12 +14,12 @@ import { SiteChooser } from "./site-chooser"
 const CONFIRMATION_MS = 5_000
 
 /**
- * The pane's offer to bring sign-ins from the browser the user already uses, until they import or decline once. A
- * `bar` sits above a page, where a signed-out site is the reason to import; a `card` sits on the new tab page.
- * Nothing shows where no other browser is installed, or while main's profile is away.
+ * The pane's offer to bring sign-ins, and with them the history, from the browser the user already uses, until they
+ * import or decline once. A `bar` sits above a page, where a signed-out site is the reason to import; a `card` sits
+ * on the new tab page. Nothing shows where no other browser is installed, or while main's profile is away.
  *
- * Once cookies came in it says so, in place of the offer, for `CONFIRMATION_MS` or until the user closes it: a page that
- * loads again signed in is the proof, and this names where the sign-ins came from.
+ * Once an import brought something it says so, in place of the offer, for `CONFIRMATION_MS` or until the user closes
+ * it: a page that loads again signed in is the proof, and this names where the sign-ins came from.
  *
  * `imported` runs once cookies came in, for the pane to load its page again with them, and `closed` when the user
  * closes the confirmation.
@@ -40,23 +40,20 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
   const blocked = () => !jobs.available() || jobs.running() !== undefined || jobs.unsaved() !== undefined
   const message = () => jobs.unsaved() ?? jobs.notice() ?? jobs.describe(jobs.last())
 
-  // The import that brought cookies, with the browser's name, while its confirmation shows.
+  // The import that brought sign-ins or history, with the browser's name, while its confirmation shows.
   const confirmed = createMemo(() => {
     const last = jobs.last()
-    const count = last ? importedCookies(last.outcome) : 0
 
-    if (!last || count === 0 || last.job.type !== "import-browser") return undefined
+    if (!last || last.job.type !== "import-browser" || last.outcome.type !== "imported" || last.outcome.result.type !== "imported") return undefined
     const job = last.job
-    const choice = choices().find((item) => item.source.id === job.source && item.profile.id === job.profile)
-    const outcome = last.outcome
-    const partial = outcome.type === "imported" && outcome.result.type === "imported" && importLoss(outcome.result)
+    const result = last.outcome.result
+    const loss = importLoss(result)
 
-    return {
-      choice,
-      text: partial
-        ? (jobs.describe(last)?.text ?? "")
-        : ctx.plural("signins.imported.from", count, { browser: choice?.source.name ?? "" }),
-    }
+    // Nothing came, or only history while the sign-ins could not: the offer says why instead.
+    if (result.imported === 0 && (loss || !result.pages)) return undefined
+    const choice = choices().find((item) => item.source.id === job.source && item.profile.id === job.profile)
+
+    return { choice, text: loss ? (jobs.describe(last)?.text ?? "") : jobs.imported(result, choice?.source.name ?? "") }
   })
 
   // The pane shows the bar over a page and the card on the new tab page, each its own offer: one that goes while it
@@ -144,13 +141,8 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
             aria-label={ctx.t("signins.title")}
             class="mx-auto flex w-full max-w-[608px] flex-col gap-3 px-6 pt-12"
           >
-            <div class="flex flex-col gap-1">
-              <div class="text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
-                {ctx.t("signins.title")}
-              </div>
-              <div class="text-[13px] font-[440] leading-[var(--line-height-base)] text-v2-text-text-muted">
-                {ctx.t("signins.description")}
-              </div>
+            <div class="text-[13px] font-[530] leading-[var(--line-height-compact)] text-v2-text-text-base">
+              {ctx.t("signins.title")}
             </div>
             <div class="flex flex-col rounded-[8px] bg-v2-background-bg-layer-01 px-3 shadow-[inset_0_0_0_0.5px_var(--v2-border-border-muted)]">
               <For each={choices()}>
@@ -202,7 +194,7 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
             when={message()}
             fallback={
               <p class="min-w-0 flex-1 text-[13px] leading-[var(--line-height-compact)] text-v2-text-text-base">
-                {ctx.t("signins.bar")}
+                {ctx.t("signins.bar", { browser: choiceLabel(first()) })}
               </p>
             }
           >
@@ -224,7 +216,7 @@ export function SignInOffer(props: { variant: "bar" | "card"; imported: () => vo
               busy={jobs.importing(first())}
               onClick={() => run(first())}
             >
-              {ctx.t("signins.import", { browser: choiceLabel(first()) })}
+              {ctx.t("signins.action")}
             </ui.Button>
             <Menu gutter={4} modal={false} placement="bottom-end">
               <Tooltip placement="top" value={ctx.t("signins.other")}>

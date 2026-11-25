@@ -13,7 +13,7 @@ import { sweepSnapshots, type SnapshotScratch } from "./database"
 import { writeCookies } from "./import"
 import { createExtensionApis } from "./extension-api"
 import { clearStaging, download, stageExtension, swapIn } from "./install"
-import { createCookieMirror, type CookieMirror } from "./link"
+import { createSignInLinks } from "./link"
 import { cookiesPersist } from "./probe"
 import { extensionDigest } from "./integrity"
 import { createFilterGate, filterReady, filterKind } from "./filter-startup"
@@ -40,6 +40,7 @@ import {
   listSources,
   profileExtensions,
   readSource,
+  readSourceHistory,
   readSourceHosts,
   windowsIcons,
 } from "./sources"
@@ -115,24 +116,13 @@ export async function createBrowserProfile(input: {
   const directory = path.join(app.getPath("userData"), "browser-extensions")
   // Off until the user turns it on: a remote server's operator could use every sign-in and write cookies back.
   const sharing = input.storage.store("remote-sign-ins", { schema: Schema.Boolean, initial: false })
+
   // Remote servers' partitions, each with its cookie mirror while sign-ins are shared.
-  const links = new Map<Session, CookieMirror | undefined>()
-
-  const mirror = async (other: Session) => {
-    if (links.get(other) || !links.has(other)) return
-    const started = createCookieMirror({ profile: session, other })
-    links.set(other, started)
-    await started.started
-  }
-
-  const unmirror = async (other: Session, forget: boolean) => {
-    const current = links.get(other)
-
-    if (!current) return
-
-    if (links.has(other)) links.set(other, undefined)
-    await current.stop(forget)
-  }
+  const signIns = createSignInLinks<Session>({
+    profile: session,
+    sharing: () => sharing.value,
+    log: (level, message, data) => input.log.write(level, message, data),
+  })
 
   const errors = new Map<string, string>()
   const changed = new Set<string>()
@@ -486,6 +476,19 @@ export async function createBrowserProfile(input: {
 
       return importCookies(read, !!sites)
     },
+    /**
+     * The pages of a browser profile's history for an import, or with `sites` only the chosen sites'. None when the
+     * history cannot be read, as Safari's without Full Disk Access: the log says why, without any address.
+     */
+    async readHistory(source: string, profile: string, sites?: readonly string[]) {
+      const keep = sites ? (await import("./sites")).siteFilter(sites) : undefined
+      const read = await readSourceHistory(source, profile, scratch, keep)
+
+      if (!("failure" in read)) return read
+      input.log.write("warn", "another browser's history could not be read", { source, reason: read.failure })
+
+      return []
+    },
     async importFile(file: string): Promise<ImportResult> {
       // A cookie export is a few megabytes at most; anything far larger is not one.
       const size = await stat(file).then(
@@ -520,7 +523,7 @@ export async function createBrowserProfile(input: {
       await session.clearAuthCache()
       // Remote servers' pages sign out too, whether or not they shared the profile's sign-ins. Their proxy's own
       // sign-in is answered again on demand (network.ts).
-      await Promise.all([...links.keys()].map((other) => Promise.all([other.clearStorageData(), other.clearAuthCache()])))
+      await Promise.all(signIns.partitions().map((other) => Promise.all([other.clearStorageData(), other.clearAuthCache()])))
     },
     async browserExtensions(source: string, profile: string) {
       const folder = await chromiumProfileDirectory(source, profile)
@@ -637,37 +640,33 @@ export async function createBrowserProfile(input: {
     /** Whether remote servers' pages share the profile's sign-ins; see `link`. */
     remoteSignIns: () => sharing.value,
     /**
-     * Turns sharing sign-ins with remote servers on or off for every linked partition at once. Turning it off stops
-     * each mirror and removes the shared cookies from the remote partitions.
+     * Turns sharing sign-ins with remote servers on or off for every linked partition at once. Turning it on starts
+     * each partition's mirror and does not wait for its first copy. Turning it off stops each mirror and removes the
+     * shared cookies from the remote partitions.
      */
     async shareSignIns(enabled: boolean) {
       sharing.set(enabled)
-      await Promise.all([...links.keys()].map((other) => (enabled ? mirror(other) : unmirror(other, true))))
+      await signIns.share(enabled)
       input.changed()
     },
     /**
      * Registers the partition of a remote server's pages, which need that server's network. Only while the user
      * shares sign-ins with remote servers (`remoteSignIns`) does its cookie store mirror the profile's, both ways;
-     * otherwise it gets no cookie of the profile and writes none back. Returns the unlink. Site storage and extensions
-     * stay with the profile: Chromium shares neither across partitions, and in-memory partitions cannot load
-     * extensions.
+     * otherwise it gets no cookie of the profile and writes none back. Site storage and extensions stay with the
+     * profile: Chromium shares neither across partitions, and in-memory partitions cannot load extensions.
+     *
+     * It returns at once: the first copy of the sign-ins runs on its own, and nothing but a page that needs them
+     * waits for it (`signedIn`). `unlink` ends the mirror, and its copy when that is still under way.
      */
-    async link(other: Session) {
+    link(other: Session) {
       other.setUserAgent(session.getUserAgent())
-      links.set(other, undefined)
 
-      if (sharing.value) await mirror(other)
-
-      return () => {
-        void unmirror(other, false)
-        links.delete(other)
-      }
+      return signIns.link(other)
     },
     dispose() {
       closing.abort()
       void discard()
-      links.forEach((_mirror, other) => void unmirror(other, false))
-      links.clear()
+      signIns.dispose()
       apis.dispose()
       unload()
       release()

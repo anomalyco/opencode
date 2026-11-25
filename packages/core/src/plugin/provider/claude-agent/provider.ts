@@ -105,6 +105,12 @@ export const connection = Effect.fn("ClaudeProvider.connection")(function* (ctx:
   return ClaudeQueryOptions.connectionEnv({ settings: info.settings, headers: info.headers, body: info.body })
 })
 
+export const configDirs = Effect.fn("ClaudeProvider.configDirs")(function* (ctx: Context) {
+  const provider = yield* ctx.provider.get({ providerID: ID }).pipe(Effect.option)
+  if (Option.isNone(provider)) return []
+  return ClaudeQueryOptions.configDirs(provider.value.data.settings?.configDir)
+})
+
 // Claude Code lists Fable under whatever name the chat was started with, and each account caches its own list, while a
 // chat or the config may hold any ID that was ever listed. So no ID is dropped, and a model already offered under one
 // ID keeps it when Claude Code lists it under another.

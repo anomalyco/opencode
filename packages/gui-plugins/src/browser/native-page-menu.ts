@@ -13,7 +13,8 @@ export type PageMenuHost = {
   t: (key: string) => string
   extensions: (contents: number, params: Electron.ContextMenuParams) => Electron.MenuItemConstructorOptions[]
   navigate: (action: "back" | "forward" | "reload" | "hardReload") => Promise<void>
-  open: (url: string) => Promise<void>
+  /** Opens the address in a new tab of the pane: in front, or behind the current tab when `background`. */
+  open: (url: string, background?: boolean) => Promise<void>
   /** The plugin instance's file verifier, for a workspace file the menu opens. */
   verifier: HandlePath
 }

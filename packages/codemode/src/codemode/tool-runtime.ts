@@ -1,11 +1,7 @@
 import { Cause, Effect, Exit, Formatter, Schema } from "effect"
-import type { Json } from "../language/data.js"
-import { compareText } from "../language/runtime/operations.js"
 import type { DiagnosticKind } from "./codemode.js"
 import { ToolError, toolError } from "./tool-error.js"
-import { Host } from "../language/host-function.js"
-import { HostFailure } from "../language/runtime/model.js"
-import type { Run } from "../language/runtime/execute.js"
+import { Host, HostFailure, type Json, type Run } from "psychoscript/effect"
 import {
   decodeInput as decodeToolInput,
   decodeOutput as decodeToolOutput,
@@ -427,6 +423,22 @@ const rank = (
     .map(({ entry }) => entry)
 }
 
+// Each tool by its path and by the expression that calls it, for exact-match lookups. Both are unique per tool.
+const exactEntries = new WeakMap<
+  ReadonlyArray<SearchEntry>,
+  { readonly paths: Map<string, SearchEntry>; readonly expressions: Map<string, SearchEntry> }
+>()
+const exactLookup = (searchIndex: ReadonlyArray<SearchEntry>) => {
+  const known = exactEntries.get(searchIndex)
+  if (known !== undefined) return known
+  const made = {
+    paths: new Map(searchIndex.map((entry) => [entry.description.path, entry])),
+    expressions: new Map(searchIndex.map((entry) => [toolExpression(entry.description.path), entry])),
+  }
+  exactEntries.set(searchIndex, made)
+  return made
+}
+
 const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
   _tag: "CodeModeTool",
   description: "Search available tools",
@@ -442,18 +454,18 @@ const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
         if (ns === "tools") ns = undefined
         else if (ns.startsWith("tools.")) ns = ns.slice("tools.".length)
       }
-      const scoped =
-        ns === undefined
-          ? searchIndex
-          : searchIndex.filter((entry) => entry.description.path === ns || entry.description.path.startsWith(`${ns}.`))
+      const inScope = (entry: SearchEntry) =>
+        ns === undefined || entry.description.path === ns || entry.description.path.startsWith(`${ns}.`)
+      const scoped = ns === undefined ? searchIndex : searchIndex.filter(inScope)
       const trimmed = query.trim()
       const pathQuery = trimmed.startsWith("tools.") ? trimmed.slice("tools.".length) : trimmed
+      const lookup = exactLookup(searchIndex)
       const exact =
         pathQuery === ""
           ? undefined
-          : scoped.find(
-              (entry) => entry.description.path === pathQuery || toolExpression(entry.description.path) === trimmed,
-            )
+          : [lookup.paths.get(pathQuery), lookup.expressions.get(trimmed)]
+              .filter((entry): entry is SearchEntry => entry !== undefined && inScope(entry))
+              .toSorted((left, right) => left.position - right.position)[0]
       const ranked = exact !== undefined ? [exact] : rank(scoped, pathQuery, searchIndex)
       const items = ranked.slice(offset, offset + (request.limit ?? defaultSearchLimit)).map(({ description }) => ({
         ...description,
@@ -788,15 +800,18 @@ export const globals = <R>(
   }
 
   // `search("notes")` is shorthand for `search({ query: "notes" })`.
-  const searchCall = (args: ReadonlyArray<unknown>, call: Host.Call) =>
-    executeTool(
+  let searchTool: Tool | undefined
+  const searchCall = (args: ReadonlyArray<unknown>, call: Host.Call) => {
+    const tool = (searchTool ??= makeSearchTool(prepared.searchIndex))
+    return executeTool(
       "search",
-      makeSearchTool(prepared.searchIndex),
-      makeSearchTool(prepared.searchIndex).execute as ExecuteFn<unknown, unknown, R>,
+      tool,
+      tool.execute as ExecuteFn<unknown, unknown, R>,
       typeof args[0] === "string" ? [{ query: args[0] }, ...args.slice(1)] : args,
       call,
       false,
     )
+  }
   const search = Host.fn(searchCall, { type: "sync-thenable" })
   // Models often write `tools.search(...)` for the bare `search(...)`; it is honored unless a tool owns that path.
   const searchAlias = Host.fn(searchCall, { type: "async" })
@@ -858,3 +873,5 @@ const toJson = (value: unknown): Json | undefined => {
 }
 
 export * as ToolRuntime from "./tool-runtime.js"
+
+const compareText = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0)

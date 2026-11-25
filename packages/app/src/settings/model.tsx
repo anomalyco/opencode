@@ -543,6 +543,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         },
       },
       keybinds: {
+        all: () => store.keybinds ?? {},
         get: (action: string) => store.keybinds?.[action],
         set(action: string, keybind: string) {
           setStore("keybinds", action, keybind)

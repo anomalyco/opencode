@@ -22,7 +22,6 @@
     align-self: stretch;
     transition:
       background 85ms ease-out,
-      outline-color 85ms ease-out,
       box-shadow 85ms ease-out;
   }
 
@@ -205,5 +204,26 @@
   [data-component="text-input-v2"][data-invalid]:not([data-disabled]) [data-slot="text-input-v2-input"]::placeholder {
     color: var(--v2-state-fg-danger);
     opacity: 1;
+  }
+
+  /*
+    Forced colours remove the shadow that draws the field's edge and turn every outline the same system colour, so rest,
+    focus and invalid looked identical. The edge becomes a border (dashed when invalid) and focus gets the shared ring.
+  */
+  @media (forced-colors: active) {
+    [data-component="text-input-v2"] {
+      border: 1px solid CanvasText;
+      outline: none;
+    }
+
+    [data-component="text-input-v2"]:where([data-invalid]):not([data-disabled]) {
+      border: 2px dashed CanvasText;
+      outline: none;
+    }
+
+    [data-component="text-input-v2"]:focus-within:not([data-disabled]) {
+      outline: 2px solid Highlight;
+      outline-offset: 2px;
+    }
   }
 }

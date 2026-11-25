@@ -4,7 +4,7 @@
 import type { Schema } from "effect"
 import type { Context } from "./context.js"
 import { Registry, type Catalog, type Cleanup, type Contract, type Messages, type Persisted, type StoreDeclaration, type StoreFrom } from "./core.js"
-import type { Desktop, Layout, Locale, SessionRef, StorageScope, StoreOptions } from "./host-apis.js"
+import type { Desktop, Layout, Locale, OpenOptions, SessionRef, StorageScope, StoreOptions } from "./host-apis.js"
 import type { MainContext } from "./main.js"
 import type { Command, IconName, Panel, PanelTab, SlotMap } from "./registries.js"
 import { type JSX } from "solid-js"
@@ -312,10 +312,40 @@ export interface BuiltinDesktop extends Desktop {
    * @param enabled - Turns it on or off.
    */
   forceFocus(enabled: boolean): Promise<void>
+  /**
+   * Hands a file row's drag to the system, so the file drops into other apps (a file manager, a browser, a chat app)
+   * as the file itself. Call it from `dragstart` after setting the drag's data: a drop back into the app reads as
+   * that data, as the row's own drag would. The host cancels the event's drag when it hands it over; when the file is
+   * gone by then, nothing is dragged. When the system drag ends, the event's target gets the `dragend` its cancelled drag
+   * never fired. Windows desktop only: returns false elsewhere, and the event's own drag goes on.
+   *
+   * @param event - The row's `dragstart`.
+   * @param path - The file's absolute path on this computer.
+   * @returns Whether the system drag started in place of the event's.
+   */
+  dragOut(event: DragEvent, path: string): boolean
+}
+
+/** `OpenOptions` with the placement only built-ins use. */
+export interface BuiltinOpenOptions extends OpenOptions {
+  /**
+   * With `tab: "append"` or `"select"`, the stored tab the new tab lands directly after, as `${plugin}:${tab id}`,
+   * for a tab that belongs beside the one it came from. Defaults to the end of the strip, which is also where the tab
+   * lands when the strip does not store that key. A tab the strip stores already does not move.
+   */
+  readonly after?: string
 }
 
 /** `Layout` with the abilities only built-ins use. */
 export interface BuiltinLayout extends Layout {
+  /**
+   * `Layout.open`, which can also place the tab after another one.
+   *
+   * @param key - `${plugin}:${tab id}`.
+   * @param session - The session whose strip changes.
+   * @param options - How the tab lands; see `BuiltinOpenOptions`.
+   */
+  open(key: string, session: SessionRef, options?: BuiltinOpenOptions): void
   /** Whether the current session row can fit a readable conversation beside the minimum side pane. */
   fitsSide(): boolean
   /**

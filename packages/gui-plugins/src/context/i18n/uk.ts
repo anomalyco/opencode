@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Використання",
   "usage.cost": "Вартість",
   "usage.view": "Переглянути використання контексту",
-  "systemPrompt.title": "Системний запит",
   "rawMessages.title": "Необроблені повідомлення",
   "export.session": "Експортувати сесію",
   "stats.session": "Сесія",

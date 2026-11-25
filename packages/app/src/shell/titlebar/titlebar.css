@@ -119,6 +119,7 @@
     [data-slot="titlebar-v2"],
     [data-slot="collapsed-sidebar-toggle"],
     [data-slot="session-review-toggle"],
+    [data-slot="session-review-panel-toggle"],
     [data-session-title]
   )
   [data-component="icon-button-v2"][data-variant="ghost-muted"]:is(:focus-visible, [data-state="focus"]):not(

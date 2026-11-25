@@ -90,6 +90,12 @@ function submitInput(
   clientCommand?: (text: string) => (() => void | Promise<void>) | undefined,
   delivery: (alternate: boolean) => ComposerDelivery = () => "steer",
   ready?: Parameters<typeof createComposerSubmit>[0]["ready"],
+  comments: Parameters<typeof createComposerSubmit>[0]["comments"] = {
+    capture: () => [],
+    clear() {},
+    remove() {},
+    restore() {},
+  },
 ) {
   return createComposerSubmit({
     adapter,
@@ -107,7 +113,7 @@ function submitInput(
     resetHistory() {},
     closePopover() {},
     notify,
-    comments: { capture: () => [], clear() {}, restore() {} },
+    comments,
   })
 }
 
@@ -648,11 +654,11 @@ describe("Composer submission", () => {
         },
       )
 
-      expect(await submission.submitQuote("quote:c=selected", "Compare @src/api.ts with @here")).toBe(true)
+      expect(await submission.submitComment("quote:c=selected", "Compare @src/api.ts with @here")).toBe(true)
       expect(calls[0]).toBe("keep-preview")
       expect(requests).toHaveLength(1)
       expect(requests[0]?.text).toBe(
-        "The user quoted the following from earlier in the conversation:\n> Selected passage\n\nThe user made the following comment regarding this quote: Compare @src/api.ts with @here",
+        "> Selected passage\n\nCompare @src/api.ts with @here",
       )
       expect(requests[0]).toMatchObject({
         delivery,
@@ -674,6 +680,50 @@ describe("Composer submission", () => {
       ])
     },
   )
+
+  test("a file comment sends alone with Enter's delivery and leaves the composer and the file's comments", async () => {
+    const state = createMemoryComposerState({ prompt: "Keep this draft" }).capture()
+
+    state.context.add({
+      type: "file",
+      path: "src/api.ts",
+      selection: { startLine: 2, startChar: 0, endLine: 3, endChar: 0 },
+      comment: "Rename this",
+      commentID: "c1",
+    })
+    state.context.add({ type: "quote", text: "Unrelated passage", commentID: "other" })
+    const key = state.context.items()[0]?.key ?? ""
+
+    const requests: Parameters<ComposerSession["data"]["session"]["prompt"]>[0][] = []
+
+    const removed: string[] = []
+
+    const alternates: boolean[] = []
+
+    const submission = submitInput(
+      active(state, session({ calls: [], prompt: async (value) => void requests.push(value) })),
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      (alternate) => {
+        alternates.push(alternate)
+
+        return "queue"
+      },
+      undefined,
+      { capture: () => [], clear() {}, remove: (path, id) => void removed.push(`${path}#${id}`), restore() {} },
+    )
+
+    expect(await submission.submitComment(key, "Rename this", { alternate: false })).toBe(true)
+    expect(alternates).toEqual([false])
+    expect(requests[0]?.delivery).toBe("queue")
+    expect(requests[0]?.metadata).toMatchObject({ comments: [{ path: "src/api.ts", comment: "Rename this" }] })
+    expect(removed).toEqual(["src/api.ts#c1"])
+    expect(state.current()).toEqual([{ type: "text", content: "Keep this draft", start: 0, end: 15 }])
+    expect(state.context.items().map((item) => item.key)).toEqual(["quote:c=other"])
+  })
 
   test("a failed quote send retains its latest comment and prevents duplicate submissions while pending", async () => {
     const state = createMemoryComposerState({ prompt: "Keep this draft" }).capture()
@@ -701,10 +751,10 @@ describe("Composer submission", () => {
       { missingSelection() {}, unqueueable() {}, failed: (_kind, error) => void errors.push(String(error)) },
     )
 
-    const pending = submission.submitQuote("quote:c=selected", "Latest comment")
+    const pending = submission.submitComment("quote:c=selected", "Latest comment")
 
     await started.promise
-    expect(await submission.submitQuote("quote:c=selected", "Duplicate")).toBe(false)
+    expect(await submission.submitComment("quote:c=selected", "Duplicate")).toBe(false)
     failed.reject(new Error("Could not send"))
     expect(await pending).toBe(false)
     expect(errors).toHaveLength(1)
@@ -729,7 +779,7 @@ describe("Composer submission", () => {
 
     jest.useFakeTimers()
     state.quoteComment.set("quote:c=selected")
-    state.quoteComment.send("note", submission.submitQuote)
+    state.quoteComment.send("note", submission.submitComment)
     // A silent server holds a prompt for a minute per attempt; the send has not failed until the composer says so.
     jest.advanceTimersByTime(5 * 60_000)
     jest.useRealTimers()

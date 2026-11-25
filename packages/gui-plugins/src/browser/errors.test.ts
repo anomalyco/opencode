@@ -2,7 +2,7 @@ import { expect, test } from "bun:test"
 import { Browser } from "@opencode/plugin-browser/rpc"
 import { FileVerificationError } from "./file-verification"
 import { undrawableMessage } from "./capture"
-import { browserFailure, CodedError, missingArtifact, pageReports, protocolError } from "./errors"
+import { browserFailure, CodedError, keepsOpenedTab, missingArtifact, PageEndedError, pageReports, protocolError } from "./errors"
 import { NavigationDeadlineError } from "./navigation-deadline"
 
 const tabID = Browser.TabID.make(`tab_${crypto.randomUUID()}`)
@@ -14,6 +14,24 @@ test("an unavailable artifact reports a preview failure, not a stale frame", () 
   const verifier = browserFailure({ type: "snapshot", tabID }, new FileVerificationError())
   expect(verifier.code).toBe("file_verification_unavailable")
   expect(verifier.message).toContain("file verification could not be loaded")
+})
+
+test("a command stopped by its tab's page ending tells the agent why and how to go on, under the general failure code", () => {
+  const failure = (end: ConstructorParameters<typeof PageEndedError>[0]) => browserFailure({ type: "snapshot", tabID }, new PageEndedError(end))
+  const oom = failure({ cause: "renderer-gone", reason: "oom", exitCode: -536870904 })
+
+  expect(oom.code).toBe("operation_failed")
+  expect(oom.message).toBe(
+    `browser.snapshot failed. This tab's page process ended: out of memory (exit code -536870904${process.platform === "win32" ? ", 0xE0000008" : ""}). Reload the tab with browser.reload({tabID}) and inspect its state before repeating anything; the desktop log has the details.`,
+  )
+  expect(failure({ cause: "renderer-gone", reason: "crashed", exitCode: 2 }).message).toContain("page process ended: it crashed (exit code 2")
+  expect(failure({ cause: "renderer-gone", reason: "killed", exitCode: 1 }).message).toContain("page process ended: it was killed (exit code 1")
+  expect(failure({ cause: "debugger-detached", reason: "target closed" }).message).toContain("lost its debugger connection to it (target closed)")
+  expect(failure({ cause: "setup-failed", error: "Error", command: "Page.enable" }).message).toContain("it did not become ready")
+  expect(failure({ cause: "passkeys-unrestricted" }).message).toContain("passkeys could not be turned off")
+
+  for (const end of [{ cause: "target-crashed" }, { cause: "frame-unprepared" }, { cause: "passkeys-unrestricted" }] as const)
+    expect(failure(end).message).toContain("browser.reload({tabID})")
 })
 
 test("native preview failures never export the private loader address", () => {
@@ -53,6 +71,18 @@ test("the person's command does not fail for a load the tab reports itself, and 
   const action: Browser.Action = { type: "navigate", tabID, url: "https://example.com" }
   expect(browserFailure(action, stopped).code).toBe("navigation_failed")
   expect(browserFailure(action, load("ERR_NAME_NOT_RESOLVED", -105)).code).toBe("navigation_failed")
+})
+
+// `electron-open.test.ts` runs the person's rows through the real pane. The agent's commands come from the server,
+// so its rows are stated here: what an open that rejects leaves behind is this rule alone.
+test.each([
+  ["a page still loading at the deadline", new NavigationDeadlineError(), true, true],
+  ["a load Chromium failed", Object.assign(new Error("ERR_CONNECTION_REFUSED (-102)"), { code: "ERR_CONNECTION_REFUSED", errno: -102 }), true, false],
+  ["a navigation that committed no page", new CodedError("navigation_failed", "No page committed."), false, false],
+  ["a preview that could not load", new CodedError(Browser.FailureCode.previewUnavailable, "The preview could not be loaded"), false, false],
+  ["a pane that was not ready", new Error("Browser network is not ready; no tab was opened."), false, false],
+])("the tab an open just made, after %s: the person's stays %p, the agent's stays %p", (_label, error, person, agent) => {
+  expect([keepsOpenedTab(error, "user"), keepsOpenedTab(error, "agent")]).toEqual([person, agent])
 })
 
 test("native protocol errors keep the cause and give a valid recovery operation", () => {

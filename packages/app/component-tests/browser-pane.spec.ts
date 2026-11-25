@@ -545,32 +545,58 @@ story("paints a still of the page in place of the native view while a resize han
   await expect(still).toHaveCount(0)
 })
 
-story("keeps the native view live while a resize handle is dragged on macOS", async ({ page }) => {
-  const root = page.getByTestId("browser-pane-fixture")
-  const handle = root.getByTestId("pane-resize-handle")
-  const still = root.locator("#browser-panel img")
-  await pinPlatform(page, "MacIntel")
+for (const platform of ["MacIntel", "Win32"]) {
+  story(`keeps the native view live through a press, a drag and the release of a resize handle on ${platform}`, async ({ page }) => {
+    const root = page.getByTestId("browser-pane-fixture")
+    const handle = root.getByTestId("pane-resize-handle")
+    const native = root.getByTestId("native-Alpha")
+    const still = root.locator("#browser-panel img")
+    await pinPlatform(page, platform)
+    const box = await handle.boundingBox()
 
-  // macOS puts a native view's bounds and the DOM around it on the same frame, so the page keeps laying out through the
-  // drag instead of freezing behind a still. Read in the same task as each move, so a blink between frames cannot pass.
-  const visible = await handle.evaluate((element) => {
-    const read = () => document.querySelector('[data-testid="native-Alpha"]')?.getAttribute("data-visible")
-    const box = element.getBoundingClientRect()
-    const at = { bubbles: true, pointerId: 1, clientX: box.x + box.width / 2, clientY: box.y + box.height / 2 }
-    element.dispatchEvent(new PointerEvent("pointerdown", { ...at, button: 0 }))
-    document.dispatchEvent(new PointerEvent("pointermove", { ...at, clientX: at.clientX - 40 }))
-    const dragging = read()
-    document.dispatchEvent(new PointerEvent("pointermove", { ...at, clientX: at.clientX - 80 }))
-    const moved = read()
-    document.dispatchEvent(new PointerEvent("pointerup", at))
+    if (!box) throw new Error("Missing pane resize handle")
+    const at = { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+    const width = Number(await native.getAttribute("data-width"))
+    const calls = (await native.getAttribute("data-layout-calls")) ?? ""
 
-    return { dragging, moved }
+    // macOS and Windows put a native view's bounds and the DOM around it on the same frame, so the page keeps laying
+    // out through the drag instead of hiding behind a still, which blanks the box until the still paints. Every change
+    // of the view's visibility is recorded, so one hidden and shown again before the next frame cannot pass.
+    const flips = await native.evaluateHandle((element) => {
+      const flips: (string | null)[] = []
+      new MutationObserver((records) => flips.push(...records.map((record) => record.oldValue))).observe(element, {
+        attributeFilter: ["data-visible"],
+        attributeOldValue: true,
+      })
+
+      return flips
+    })
+
+    const frames = () =>
+      page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))))
+
+    // A real press: the handle takes the pointer, and main hears nothing until it moves.
+    await page.mouse.move(at.x, at.y)
+    await page.mouse.down()
+    await expect(handle).toHaveAttribute("data-dragging", "")
+    await frames()
+    await expect(native).toHaveAttribute("data-layout-calls", calls)
+
+    // Main gets the bounds of every move.
+    for (const moved of [10, 20, 30, 40]) {
+      await page.mouse.move(at.x - moved, at.y)
+      await expect(native).toHaveAttribute("data-width", String(width - moved))
+    }
+
+    await expect(still).toHaveCount(0)
+    await page.mouse.up()
+    await expect(handle).not.toHaveAttribute("data-dragging")
+    await frames()
+    await expect(native).toHaveAttribute("data-width", String(width - 40))
+    await expect(still).toHaveCount(0)
+    expect(await flips.jsonValue()).toEqual([])
   })
-
-  expect(visible).toEqual({ dragging: "true", moved: "true" })
-  await expect(handle).not.toHaveAttribute("data-dragging")
-  await expect(still).toHaveCount(0)
-})
+}
 
 story("shows the native view again when the window loses focus mid-drag", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
@@ -811,9 +837,10 @@ story("hides the native page under a dialog even when its still never arrives", 
 story("comments on a picked element over a still of the page", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("combobox", { name: "Picked element scenario" }).selectOption("zoomed")
-  const picker = commentTool(page, root)
+  const picker = commentTool(root)
   await picker.click()
   await expect(picker.picking).toBeAttached()
+  await expect(picker.button).toHaveAttribute("aria-pressed", "true")
   await expect(root.getByText("Picker: on", { exact: true })).toBeVisible()
   await expect(root.getByText("Session getter reads: 0", { exact: true })).toBeVisible()
   await expect(root.getByRole("status")).toHaveText(
@@ -822,6 +849,7 @@ story("comments on a picked element over a still of the page", async ({ page }) 
 
   await root.getByRole("button", { name: "Pick element", exact: true }).click()
   await expect(picker.picking).toHaveCount(0)
+  await expect(picker.button).toHaveAttribute("aria-pressed", "false")
   const editor = root.locator('[data-slot="browser-comment-editor"] textarea')
   await expect(editor).toBeFocused()
   await expect(editor).toHaveAttribute("placeholder", "Add an optional comment...")
@@ -860,7 +888,7 @@ story("comments on a picked element over a still of the page", async ({ page }) 
 
 story("cancels the picker and a comment with Escape", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  const picker = commentTool(page, root)
+  const picker = commentTool(root)
   await picker.click()
   await expect(picker.picking).toBeAttached()
   await page.keyboard.press("Escape")
@@ -879,7 +907,7 @@ story("cancels the picker and a comment with Escape", async ({ page }) => {
 
 story("leaves the picker off and Escape to the app when main never answers", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  const picker = commentTool(page, root)
+  const picker = commentTool(root)
   await root.getByRole("button", { name: "Drop picker requests", exact: true }).click()
   await picker.click()
   await expect(picker.picking).toHaveCount(0)
@@ -903,7 +931,7 @@ story("replaces an open page note with the comment for an element picked meanwhi
 
 story("cleans up the originating session's picker and comment after a session switch", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  const picker = commentTool(page, root)
+  const picker = commentTool(root)
   await picker.click()
   await expect(root.getByText("Picker Alpha: on", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "Beta", exact: true }).click()
@@ -923,7 +951,7 @@ story("cleans up the originating session's picker and comment after a session sw
 
 story("ends the native picker and highlight when the pane unmounts", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  const picker = commentTool(page, root)
+  const picker = commentTool(root)
   await picker.click()
   await expect(root.getByText("Picker: on", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "Unmount pane", exact: true }).click()
@@ -941,7 +969,7 @@ story("ends the native picker and highlight when the pane unmounts", async ({ pa
 
 story("keeps a comment draft but drops its ref when the page navigates", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
-  await commentTool(page, root).click()
+  await commentTool(root).click()
   await root.getByRole("button", { name: "Pick element", exact: true }).click()
   const editor = root.locator('[data-slot="browser-comment-editor"] textarea')
   await editor.fill("Still misaligned after the reload")
@@ -956,7 +984,7 @@ story("keeps a comment draft but drops its ref when the page navigates", async (
 story("grows the compact comment upward without flipping and keeps its actions inside the page", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("combobox", { name: "Picked element scenario" }).selectOption("low")
-  await commentTool(page, root).click()
+  await commentTool(root).click()
   await root.getByRole("button", { name: "Pick element", exact: true }).click()
   const editor = root.locator('[data-slot="browser-comment-editor"]')
   const field = editor.locator("textarea")
@@ -993,7 +1021,7 @@ story("grows the compact comment upward without flipping and keeps its actions i
   // Near the surface's top, growth stops at the opening bottom rather than pushing the card down.
   await field.press("Escape")
   await root.getByRole("combobox", { name: "Picked element scenario" }).selectOption("default")
-  await commentTool(page, root).click()
+  await commentTool(root).click()
   await root.getByRole("button", { name: "Pick element", exact: true }).click()
   await expect(field).toBeFocused()
   const nearTop = await editor.boundingBox()
@@ -1035,7 +1063,7 @@ story(
   async ({ page }) => {
     const root = page.getByTestId("browser-pane-fixture")
     const scenario = root.getByRole("combobox", { name: "Picked element scenario" })
-    const picker = commentTool(page, root)
+    const picker = commentTool(root)
     const editor = root.locator('[data-slot="browser-comment-editor"]')
     const overlay = root.locator('[data-component="browser-comment"]')
     await scenario.selectOption("long")
@@ -1338,30 +1366,212 @@ story("keeps the current page and restores its URL when an empty address is subm
   await expect(root.getByRole("button", { name: "Reload", exact: true })).toBeEnabled()
 })
 
-story("suggests visited pages and opens the first one that completes the typed address", async ({ page }) => {
+story("lists the typed text with visited pages, and opens the first row: the page the typing completes, else the text", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Seed history", exact: true }).click()
   const address = root.getByRole("combobox", { name: "Browser address", exact: true })
   await address.click()
   await address.pressSequentially("localhost")
   const options = page.getByRole("listbox", { name: "Suggestions" }).getByRole("option")
-  await expect(options).toHaveCount(1)
+  // The page whose address begins with the text is first and chosen; the search for the text follows it.
+  await expect(options).toHaveCount(2)
   await expect(options.first()).toHaveAttribute("aria-selected", "true")
-  // Arrow keys that pick IME candidates leave the suggestions alone.
+  await expect(address).toHaveValue("localhost:5173/settings")
+  // Arrow keys that pick IME candidates leave the list alone.
   await address.dispatchEvent("keydown", { key: "ArrowDown", isComposing: true })
   await expect(options.first()).toHaveAttribute("aria-selected", "true")
   await address.press("Enter")
   await expect(address).toHaveValue("http://localhost:5173/settings")
 
-  // A search query also opens the first match; stepping past the list leaves the typed text, which searches.
+  // Words that only match a page list it below the search for them, which is first and chosen; a step down opens it.
   await address.click()
   await address.pressSequentially("color format")
-  await expect(options).toHaveCount(1)
+  await expect(options).toHaveCount(2)
   await expect(options.first()).toHaveAttribute("aria-selected", "true")
-  await address.press("ArrowDown")
-  await expect(options.first()).toHaveAttribute("aria-selected", "false")
+  await expect(options.first()).toHaveText("color format-Google Search")
   await address.press("Enter")
   await expect(address).toHaveValue("https://www.google.com/search?q=color%20format")
+  await address.click()
+  await address.pressSequentially("color format")
+  await address.press("ArrowDown")
+  await expect(options.nth(1)).toHaveAttribute("aria-selected", "true")
+  await address.press("Enter")
+  await expect(address).toHaveValue("https://developer.mozilla.org/en-US/docs/Web/CSS/Guides/Colors/Color_format_converter")
+})
+
+story("finds imported pages by their words, completes the site a host begins, and forgets a page on Shift+Delete", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Seed imported history", exact: true }).click()
+  await expect(root.getByText("Main history: 59", { exact: true })).toBeVisible()
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  const options = page.getByRole("listbox", { name: "Suggestions" }).getByRole("option")
+  const addresses = () => options.locator('[data-slot="browser-page-row-url"]')
+
+  // Main answers after the field shows the text: under the search for it, the list fills with the best matches of 59
+  // pages, the most visited first, and a word found only inside another ("prune") last.
+  await address.click()
+  await address.pressSequentially("rune")
+  await expect(addresses()).toHaveText([
+    "Google Search",
+    "github.com/anomalyco/rune-desktop",
+    "github.com/anomalyco/rune-desktop/pulls",
+    "docs.rune.example/guide/getting-started",
+    "github.com/anomalyco/rune-desktop/issues/128",
+    "github.com/runelabs/rune-lang",
+  ])
+  await expect(options.nth(1).locator("mark")).toHaveText(["rune", "Rune", "rune"])
+  // The search row is the typed text itself, so it draws no match.
+  await expect(options.first().locator("mark")).toHaveCount(0)
+  await expect(options.first()).toHaveAttribute("aria-selected", "true")
+  // Imported pages have no icon of their own: the globe stands in, and none is fetched.
+  await expect(options.locator("img")).toHaveCount(0)
+
+  // Both words, in either order, wherever each starts a part of the address.
+  await address.fill("")
+  await address.pressSequentially("desk anom")
+  await expect(addresses()).toHaveText([
+    "Google Search",
+    "github.com/anomalyco/rune-desktop",
+    "github.com/anomalyco/rune-desktop/pulls",
+    "github.com/anomalyco/rune-desktop/issues/128",
+  ])
+
+  // Shift+Delete forgets the chosen page, in main's history too; on the typed text's row the key is the field's own.
+  await address.fill("")
+  await address.pressSequentially("rune")
+  await expect(options).toHaveCount(6)
+  await address.press("Shift+Delete")
+  await expect(root.getByText("Main history: 59", { exact: true })).toBeVisible()
+  await address.press("ArrowDown")
+  await address.press("Shift+Delete")
+  // The row that takes its place is the chosen one, and the field shows its address.
+  await expect(addresses().nth(1)).toHaveText("github.com/anomalyco/rune-desktop/pulls")
+  await expect(options.nth(1)).toHaveAttribute("aria-selected", "true")
+  await expect(address).toHaveValue("https://github.com/anomalyco/rune-desktop/pulls")
+  await expect(root.getByText("Main history: 58", { exact: true })).toBeVisible()
+
+  // Text that begins a host completes its site, which Enter opens.
+  await address.fill("")
+  await address.pressSequentially("gith")
+  await expect(addresses().first()).toHaveText("github.com/")
+  await expect(options.first()).toHaveAttribute("aria-selected", "true")
+  await address.press("Enter")
+  await expect(address).toHaveValue("https://github.com/")
+})
+
+story("keeps the first row chosen and moves through the list with Chrome's keys", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Seed imported history", exact: true }).click()
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  const list = page.getByRole("listbox", { name: "Suggestions" })
+  const options = list.getByRole("option")
+  const addresses = options.locator('[data-slot="browser-page-row-url"]')
+  const selection = () => address.evaluate((input: HTMLInputElement) => input.value.slice(input.selectionStart ?? 0, input.selectionEnd ?? 0))
+  // The places of the chosen rows: always exactly one while the list is open.
+  const chosen = () => options.evaluateAll((rows) => rows.flatMap((row, place) => (row.getAttribute("aria-selected") === "true" ? [place] : [])))
+
+  // The typed text completes to the site: the rest of its address is in the field, selected, and its row is chosen.
+  await address.click()
+  await address.pressSequentially("gith")
+  await expect(address).toHaveValue("github.com")
+  await expect.poll(selection).toBe("ub.com")
+  await expect(addresses.first()).toHaveText("github.com/")
+  await expect(options.nth(1)).toHaveText("gith-Google Search")
+  await expect(options).toHaveCount(6)
+  await expect.poll(chosen).toEqual([0])
+
+  // Backspace removes the completed part only; deleting never completes, so the typed text is first and chosen.
+  await address.press("Backspace")
+  await expect(address).toHaveValue("gith")
+  await expect(options.first()).toHaveText("gith-Google Search")
+  await expect(addresses.nth(1)).toHaveText("github.com/")
+  await expect.poll(chosen).toEqual([0])
+  // The next character completes again, and typing goes on through the selected part.
+  await address.pressSequentially("ub")
+  await expect(address).toHaveValue("github.com")
+  await expect.poll(selection).toBe(".com")
+
+  // Down and Up choose a row and put its text in the field; past either end the choice goes around.
+  await address.press("ArrowDown")
+  await expect(address).toHaveValue("github")
+  await expect.poll(chosen).toEqual([1])
+  await address.press("ArrowUp")
+  await expect(address).toHaveValue("https://github.com")
+  await address.press("ArrowUp")
+  await expect.poll(chosen).toEqual([5])
+  await expect(address).toHaveValue(/^https:\/\/github\.com\/.+/)
+  // Tab moves as Down does while the list is open, and keeps the focus in the field.
+  await address.press("Tab")
+  await expect.poll(chosen).toEqual([0])
+  await address.press("Tab")
+  await expect.poll(chosen).toEqual([1])
+  await expect(address).toBeFocused()
+
+  // Escape undoes one thing at a time: the row's text, the list, the typed text, then the focus.
+  await address.press("Escape")
+  await expect(address).toHaveValue("github.com")
+  await expect.poll(selection).toBe(".com")
+  await expect.poll(chosen).toEqual([0])
+  await address.press("Escape")
+  await expect(list).toBeHidden()
+  await expect(address).toHaveValue("github")
+  await address.press("Escape")
+  await expect(address).toHaveValue("https://alpha.example/")
+  await expect.poll(selection).toBe("https://alpha.example/")
+  await expect(address).toBeFocused()
+  await address.press("Escape")
+  await expect(address).not.toBeFocused()
+
+  // A caret that leaves the end takes the completed address into the text: the page stays first, and nothing is selected.
+  await address.focus()
+  await address.pressSequentially("gith")
+  await expect.poll(selection).toBe("ub.com")
+  await address.press("ArrowRight")
+  await expect(address).toHaveValue("github.com")
+  await expect.poll(selection).toBe("")
+  await expect(addresses.first()).toHaveText("github.com/")
+  await expect(options.nth(1)).toHaveText("github.com-Google Search")
+
+  // A click opens the row it is on, chosen or not.
+  await options.nth(2).click()
+  await expect(address).toHaveValue(/^https:\/\/github\.com\/.+/)
+  await expect(address).not.toBeFocused()
+})
+
+story("keeps the address bar working, and says so, while main's history cannot be read or cleared", async ({ page }) => {
+  const root = page.getByTestId("browser-pane-fixture")
+  await root.getByRole("button", { name: "Seed history", exact: true }).click()
+  await root.getByRole("button", { name: "Seed imported history", exact: true }).click()
+  await root.getByRole("button", { name: "History away", exact: true }).click()
+  const address = root.getByRole("combobox", { name: "Browser address", exact: true })
+  const options = page.getByRole("listbox", { name: "Suggestions" }).getByRole("option")
+
+  // Main rejects every question. The list still has the typed text and the window's own last pages.
+  await address.click()
+  await address.pressSequentially("localhost")
+  await expect(options).toHaveCount(2)
+  await expect(address).toHaveValue("localhost:5173/settings")
+  // The imported pages are out of reach, so their words find only the search for them, which Enter opens.
+  await address.fill("")
+  await address.pressSequentially("rune")
+  await expect(options).toHaveText(["rune-Google Search"])
+  await address.press("Enter")
+  await expect(address).toHaveValue("https://www.google.com/search?q=rune")
+
+  // Clearing empties the window's list at once and says that main's history stayed.
+  const clear = async () => {
+    await root.getByRole("button", { name: "Browser options", exact: true }).click()
+    await page.getByRole("menuitem", { name: "More tools", exact: true }).click()
+    await page.getByRole("menuitem", { name: "Clear history", exact: true }).click()
+  }
+
+  await clear()
+  await expect(root.getByText("Couldn't clear the history. Try again.", { exact: true })).toBeVisible()
+  await expect(root.getByText("Main history: 59", { exact: true })).toBeVisible()
+  // The item stays although the window's list is empty: main's history is still there to clear once it is back.
+  await root.getByRole("button", { name: "History away", exact: true }).click()
+  await clear()
+  await expect(root.getByText("Main history: 0", { exact: true })).toBeVisible()
 })
 
 story("lists recent pages on a blank tab and opens one", async ({ page }) => {
@@ -1397,6 +1607,9 @@ story("keeps a page note editable beside a tiny viewport and attaches it to the 
   await editor.click()
   await editor.fill("Check the header layout")
   await addPage(page, root)
+  // The menu gives the keyboard back to its button a task after it closes, and would take it from an editor focused
+  // in that task: the Enter below would then open the menu again.
+  await expect(root.getByRole("button", { name: "Browser options", exact: true })).toBeFocused()
   await expect(editor).toHaveValue("Check the header layout")
   await editor.press("Enter")
   await expect(root.getByTestId("fixture-comments").getByRole("listitem")).toHaveText([/: Check the header layout$/])
@@ -1409,6 +1622,8 @@ story("adds the whole page to the session and keeps the draft when the button is
   await editor.click()
   await editor.fill("Check the header layout")
   await addPage(page, root)
+  // As above: the menu's button has the keyboard again before the editor takes it.
+  await expect(root.getByRole("button", { name: "Browser options", exact: true })).toBeFocused()
   await expect(editor).toHaveValue("Check the header layout")
   await editor.press("Enter")
   await expect(root.getByTestId("fixture-comments").getByRole("listitem")).toHaveText([/: Check the header layout$/])
@@ -1419,9 +1634,10 @@ story("shows the page's cookies in the site information and clears them", async 
   await root.getByRole("button", { name: "Site information", exact: true }).click()
   const site = page.getByRole("dialog")
   await site.getByRole("button", { name: "Site settings", exact: true }).click()
-  await expect(site).toContainText("3 cookies in use")
+  // The row is "Cookies and site data", so its count needs no more words.
+  await expect(site.getByText("3 cookies", { exact: true })).toBeVisible()
   await site.getByRole("button", { name: "Clear", exact: true }).click()
-  await expect(site).toContainText("0 cookies in use")
+  await expect(site.getByText("0 cookies", { exact: true })).toBeVisible()
 })
 
 story("site information opens on the site and its connection, with the rest one step away", async ({ page }) => {
@@ -1431,19 +1647,19 @@ story("site information opens on the site and its connection, with the rest one 
   // First: where the person is and whether the connection is private. Nothing about cookies or agents yet.
   await expect(site).toContainText("alpha.example")
   await expect(site).toContainText("Connection is secure")
-  await expect(site).not.toContainText("cookies in use")
+  await expect(site).not.toContainText(/cookie/i)
   const settings = site.getByRole("button", { name: "Site settings", exact: true })
   await settings.click()
   // Second: everything else, with the way back holding the keyboard.
   await expect(site.getByRole("button", { name: "Back", exact: true })).toBeFocused()
-  await expect(site).toContainText("3 cookies in use")
+  await expect(site.getByText("3 cookies", { exact: true })).toBeVisible()
   await expect(site).toContainText("You stay signed in.")
   await expect(site.getByRole("button", { name: "Clear saved files for this site", exact: true })).toBeEnabled()
   await expect(site).toContainText("Agents you allow can use this page")
   // Escape steps back one view, then closes.
   await page.keyboard.press("Escape")
   await expect(settings).toBeFocused()
-  await expect(site).not.toContainText("cookies in use")
+  await expect(site).not.toContainText(/cookie/i)
   await page.keyboard.press("Escape")
   await expect(site).toBeHidden()
 })
@@ -1454,11 +1670,11 @@ story("says a failed cookie read failed and reads again on retry", async ({ page
   await root.getByRole("button", { name: "Site information", exact: true }).click()
   const site = page.getByRole("dialog")
   await site.getByRole("button", { name: "Site settings", exact: true }).click()
-  await expect(site).toContainText("Couldn't read this site's cookies.")
+  await expect(site.getByText("Could not read site data.", { exact: true })).toBeVisible()
   const retry = site.getByRole("button", { name: "Try again", exact: true })
   await expect(retry).toBeEnabled()
   await retry.click()
-  await expect(site).toContainText("3 cookies in use")
+  await expect(site.getByText("3 cookies", { exact: true })).toBeVisible()
   await expect(site.getByRole("button", { name: "Clear", exact: true })).toBeEnabled()
 })
 
@@ -1487,11 +1703,21 @@ function viewportControls(page: Page) {
   const root = page.getByTestId("browser-pane-fixture")
 
   const controls = root.getByRole("region", { name: "Viewport", exact: true })
+  const options = root.getByRole("button", { name: "Browser options", exact: true })
 
   return {
     root,
     controls,
-    viewport: root.getByRole("button", { name: "Toggle browser toolbar", exact: true }),
+    // The toolbar's toggle is under Browser options > More tools. The menu gives the keyboard back to its button a
+    // task after it closes, so the click waits for that: a control focused before then would lose the keyboard.
+    viewport: {
+      click: async () => {
+        await options.click()
+        await page.getByRole("menuitem", { name: "More tools", exact: true }).click()
+        await page.getByRole("menuitem", { name: /^Toggle browser toolbar/ }).click()
+        await expect(options).toBeFocused()
+      },
+    },
     preset: controls.getByRole("button", { name: "Device preset", exact: true }),
     option: (name: string) => page.getByRole("menuitemradio", { name, exact: true }),
     moreDevices: page.getByRole("menuitem", { name: "More devices", exact: true }),
@@ -1563,6 +1789,8 @@ story("restores the full pane when the toolbar closes and keeps the selected dev
     "Laptop",
     "Desktop",
   ])
+  // The rows show before the menu has the keyboard: until its first row is focused, a key still goes to the trigger.
+  await expect(option("Responsive")).toBeFocused()
   await page.keyboard.press("End")
   await expect(moreDevices).toBeFocused()
   await page.keyboard.press("ArrowRight")
@@ -2060,7 +2288,9 @@ story("asks for a site's sign-in with its realm, says the last one failed, and k
 story("the options menu lists everyday actions first and the rest under More tools, where each still runs", async ({ page }) => {
   const root = page.getByTestId("browser-pane-fixture")
   await root.getByRole("button", { name: "Seed history", exact: true }).click()
+  await root.getByRole("button", { name: "Seed imported history", exact: true }).click()
   await expect(root.getByText(/^Visits: \S/)).toBeVisible()
+  await expect(root.getByText("Main history: 59", { exact: true })).toBeVisible()
   await root.getByRole("button", { name: "Browser options", exact: true }).click()
   // Find, the zoom row (out, the zoom itself, in), Copy link and Add page; then More tools; then settings.
   await expect(page.getByRole("menu").first().getByRole("menuitem")).toHaveText([
@@ -2076,27 +2306,28 @@ story("the options menu lists everyday actions first and the rest under More too
   await expect(page.getByRole("group", { name: "Zoom", exact: true }).getByRole("menuitem")).toHaveCount(3)
   await page.getByRole("menuitem", { name: "More tools", exact: true }).click()
   await expect(page.getByRole("menu", { name: "More tools", exact: true }).getByRole("menuitem")).toHaveText([
-    /^Comment on part of the page/,
+    /^Toggle browser toolbar/,
     "Open in default browser",
     /^Reload without saved files/,
     "Clear history",
   ])
+  // Clearing forgets the window's last pages and main's history, imported pages included.
   await page.getByRole("menuitem", { name: "Clear history", exact: true }).click()
   await expect(root.getByText("Visits:", { exact: true })).toBeVisible()
-  // The bar keeps only what every browser has there.
+  await expect(root.getByText("Main history: 0", { exact: true })).toBeVisible()
+  // Neither has a button in the bar.
   await expect(root.getByRole("button", { name: "Add page to session", exact: true })).toHaveCount(0)
-  await expect(root.getByRole("button", { name: "Comment on part of the page", exact: true })).toHaveCount(0)
+  await expect(root.getByRole("button", { name: "Toggle browser toolbar", exact: true })).toHaveCount(0)
 })
 
-// The comment tool lives under Browser options > More tools. While it waits for a pick, the pane says so in a status
-// line for assistive technology, which these cases read where the old toolbar button had a pressed state.
-function commentTool(page: Page, root: Locator) {
+// The comment tool is a button in the bar. While it waits for a pick, the pane also says so in a status line for
+// assistive technology, which these cases read.
+function commentTool(root: Locator) {
+  const button = root.getByRole("button", { name: "Comment on part of the page", exact: true })
+
   return {
-    click: async () => {
-      await root.getByRole("button", { name: "Browser options", exact: true }).click()
-      await page.getByRole("menuitem", { name: "More tools", exact: true }).click()
-      await page.getByRole("menuitem", { name: /^Comment on part of the page/ }).click()
-    },
+    button,
+    click: () => button.click(),
     picking: root.getByText("Click part of the page to comment on it. Press Escape to cancel.", { exact: true }),
   }
 }

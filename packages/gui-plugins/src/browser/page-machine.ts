@@ -248,7 +248,9 @@ function committed(state: Open, event: Extract<DocumentEvent, { type: "navigatio
   const document = {
     generation: state.status === "restoring" ? state.generation : state.generation + 1,
     url: event.url,
-    title: same ? state.title : event.title,
+    // A restored tab keeps the title it was saved with, as a navigation on the same site does: its strip tab holds
+    // its label until the document names itself or stops loading.
+    title: same || state.status === "restoring" ? state.title : event.title,
     origin,
     icon: same ? state.icon : undefined,
     iconAttempt: same ? state.iconAttempt : state.iconAttempt + 1,

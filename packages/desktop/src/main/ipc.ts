@@ -1,9 +1,10 @@
 export * as Ipc from "./ipc"
 
-import { app, BrowserWindow, MessageChannelMain } from "electron"
+import { app, BrowserWindow, MessageChannelMain, powerMonitor } from "electron"
 import { Effect, Layer } from "effect"
 import { RpcServer } from "effect/rpc"
 import { DesktopRpcs } from "../shared/ipc-rpc"
+import { SystemResumed } from "../shared/ipc-rpc/events"
 import { DragCancelEvent, IpcTransportPort } from "../shared/ipc-transport"
 import { Plugins } from "./plugin"
 import { DesktopFiles, openExternalURL } from "./files"
@@ -19,9 +20,10 @@ import { ApplicationLifecycle } from "./lifecycle"
 import { createCliInstaller } from "./native/install-cli"
 import { createMenu, disposeMenu, refreshMenu } from "./native/menu"
 import { onNativeTranslations } from "./native/translations"
+import { emitIpcEvent } from "./ipc-events"
 import { DesktopCli } from "./service/desktop-cli"
 import { setStorageSnapshotObserver } from "./storage/snapshot"
-import { getLastFocusedWindow } from "./windows"
+import { getLastFocusedWindow, getMainWindows } from "./windows"
 import { isRendererUrl } from "./windows/scheme"
 import { receivesPluginPort } from "./windows/security"
 
@@ -106,6 +108,18 @@ export const registerIpcHandlers = Effect.gen(function* () {
     BrowserWindow.getAllWindows().forEach((win) => wire(win))
   })
   yield* Effect.addFinalizer(() => Effect.sync(() => app.off("browser-window-created", onWindowCreated)))
+
+  // A laptop that slept keeps reporting its event streams as connected until they time out, and Chromium sends no
+  // `online` event when the network never dropped from its point of view.
+  const resumed = () => {
+    const event = new SystemResumed()
+    getMainWindows().forEach((win) => emitIpcEvent(win.webContents, event))
+  }
+
+  if (process.platform === "win32") {
+    powerMonitor.on("resume", resumed)
+    yield* Effect.addFinalizer(() => Effect.sync(() => powerMonitor.off("resume", resumed)))
+  }
 
   return {
     installMenu: () => createMenu(menu),

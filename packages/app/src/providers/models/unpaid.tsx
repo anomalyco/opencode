@@ -16,7 +16,7 @@ import { ModelTooltip } from "./tooltip"
 
 type ModelState = ModelSelection
 
-const featuredProviders = ["opencode-go", "opencode", "openai", "anthropic", "google", "github-copilot"]
+const featuredProviders = ["opencode", "openai", "anthropic", "google", "github-copilot"]
 
 const displayModelName = (name: string) => name.replace(/\s+(?:\(free\)|free)$/i, "")
 
@@ -172,13 +172,9 @@ export const DialogSelectModelUnpaid: Component<{ model?: ModelState }> = (props
                         />
                         <span class="flex min-w-0 flex-col">
                           <span class="truncate">{providerName(provider)}</span>
-                          <Show when={provider.id === "opencode" || provider.id === "opencode-go"}>
+                          <Show when={provider.id === "opencode"}>
                             <span class="truncate font-[440] text-v2-text-text-muted">
-                              {language.t(
-                                provider.id === "opencode"
-                                  ? "dialog.provider.opencode.note"
-                                  : "dialog.provider.opencodeGo.tagline",
-                              )}
+                              {language.t("dialog.provider.opencode.note")}
                             </span>
                           </Show>
                         </span>

@@ -193,6 +193,13 @@ export const { use: usePins, provider: PinsProvider } = createSimpleContext({
       setUnread: (key: string, value: boolean) => setLocal("unread", key, value),
       pin: (ref: PinRef) => apply((value) => pin(value, ref)),
       unpin: (ref: PinRef) => apply((value) => unpin(value, ref)),
+      /** Unpins the session and closes its tab, if one is open. */
+      close: (ref: PinRef) => {
+        apply((value) => unpin(value, ref))
+        const index = tabs.store.findIndex((tab) => tabKey(tab) === keyOf(ref))
+
+        if (index !== -1) tabs.closeTab(index)
+      },
       newGroup: (ref: PinRef) => {
         const existing = groups().map((group) => ({ id: group.id, name: group.name, color: group.color }))
         const taken = new Set(existing.map((group) => group.name))
@@ -340,7 +347,8 @@ function PinnedGroupView(props: { group: PinGroup; orientation: Orientation }) {
       class="flex shrink-0 items-center rounded-[6px] focus-visible:-outline-offset-2"
       classList={{
         "size-7 justify-center hover:bg-v2-overlay-simple-overlay-hover": props.orientation === "horizontal",
-        "h-7 w-full gap-2 ps-2 pe-8 text-start group-hover/row:bg-v2-overlay-simple-overlay-hover": props.orientation === "vertical",
+        "group/toggle h-7 w-full gap-2 ps-2 pe-8 text-start group-hover/row:bg-v2-overlay-simple-overlay-hover":
+          props.orientation === "vertical",
       }}
       onClick={() => pins.toggle(props.group.id)}
       onContextMenu={(event) => {
@@ -365,7 +373,7 @@ function PinnedGroupView(props: { group: PinGroup; orientation: Orientation }) {
         </span>
         <Icon
           name="fill-triangle-down"
-          class="shrink-0 text-v2-icon-icon-muted transition-transform motion-reduce:transition-none"
+          class="shrink-0 text-v2-icon-icon-muted opacity-0 transition-[transform,opacity] motion-reduce:transition-none group-hover/row:opacity-100 group-focus-visible/toggle:opacity-100 [@media(hover:none)]:opacity-100"
           classList={{ "-rotate-90 rtl:rotate-90": !open() }}
         />
       </Show>
@@ -556,6 +564,7 @@ function PinnedSession(props: { pin: PinRef; orientation: Orientation; grouped?:
         loading={status.loading()}
         shortcut={shortcut()}
         onNavigate={() => pins.open(props.pin)}
+        onMiddleClick={() => pins.close(props.pin)}
         active={pins.isCurrent(props.pin)}
         orientation={props.orientation}
         menu={menu}

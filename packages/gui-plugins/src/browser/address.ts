@@ -12,7 +12,12 @@ export function resolveAddress(input: string) {
 
   if (!value || value.toLowerCase() === "about:blank") return "about:blank"
 
-  return searches(value) ? `${SEARCH}${encodeURIComponent(value)}` : value
+  return searches(value) ? searchAddress(value) : value
+}
+
+/** The web search for a text, which the address field's list offers for any text, an address too. */
+export function searchAddress(text: string) {
+  return `${SEARCH}${encodeURIComponent(text.trim())}`
 }
 
 /**

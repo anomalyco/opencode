@@ -7,6 +7,8 @@ import { deriveCbcKey, readChromiumCookies, readChromiumHosts, type ChromiumKey 
 import type { CookieRead } from "./cookie"
 import type { SnapshotScratch } from "./database"
 import { firefoxProfiles, readFirefoxCookies, readFirefoxHosts } from "./firefox"
+import type { PageVisit } from "../history"
+import { readChromiumHistory, readFirefoxHistory, readSafariHistory } from "./history"
 import { parseBinaryCookies } from "./safari"
 import type { CookieHost } from "./sites"
 
@@ -288,6 +290,31 @@ export async function readSourceHosts(
     }, readFailure)
 
   return readChromiumHosts(located.target.database, scratch).catch(readFailure)
+}
+
+/**
+ * The pages of a profile's browsing history, the most used and most recent first; with `keep`, only those of the
+ * hosts it keeps. `profile` must be an id `listSources` returned. Safari's history needs Full Disk Access, as its
+ * cookies do. The other browser's files are only copied, never written or locked.
+ */
+export async function readSourceHistory(
+  id: string,
+  profile: string,
+  scratch: SnapshotScratch,
+  keep?: (host: string) => boolean,
+): Promise<readonly PageVisit[] | SourceFailure> {
+  const located = await locateProfile(id, profile)
+
+  if (!located) return { failure: "read" }
+  const kept = { keep, now: Date.now() }
+
+  if (located.definition.engine === "firefox")
+    return readFirefoxHistory(path.join(located.target.directory, "places.sqlite"), scratch, kept).catch(readFailure)
+
+  if (located.definition.engine === "safari")
+    return readSafariHistory(path.join(located.definition.root, "Safari", "History.db"), scratch, kept).catch(readFailure)
+
+  return readChromiumHistory(path.join(located.target.directory, "History"), scratch, kept).catch(readFailure)
 }
 
 async function locateProfile(id: string, profile: string) {

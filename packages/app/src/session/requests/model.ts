@@ -12,7 +12,12 @@ import { useServerSDK } from "@/runtime/server/client"
 import { useLanguage } from "@/runtime/i18n/language"
 import { projectSettingsKey, useSettings } from "@/settings/model"
 import { useWorkspaceLocation } from "@/workspaces/location"
-import { sessionPermissionRequest, sessionFormRequest, sessionTreeIDs } from "@/session/requests/session-request-tree"
+import {
+  sessionFormRequest,
+  sessionMayHoldRequests,
+  sessionPermissionRequest,
+  sessionTreeIDs,
+} from "@/session/requests/session-request-tree"
 import { createWebSearchRequest } from "./websearch"
 import { createSessionBackground, mergeJobList } from "@/session/requests/background"
 import { createSteerBackground } from "@/session/requests/steer-background"
@@ -51,20 +56,16 @@ export function createSessionRequestModel() {
   })
 
   createEffect(() => {
-    const id = params.id
-
-    if (!id || serverSDK.connection.status() !== "connected") return
-    void Promise.all([data.shell.sync({ directory: sdk().directory }), data.session.permission.sync(id)]).catch(
-      () => undefined,
-    )
+    if (!params.id || serverSDK.connection.status() !== "connected") return
+    void data.shell.sync({ directory: sdk().directory }).catch(() => undefined)
   })
 
-  // Only a running Session can hold a pending form, and events keep loaded forms current. Comparing by value
-  // keeps every session update in a large subagent tree from re-requesting forms.
-  const formSessions = createMemo(
+  // Permissions and forms are per Session, so each one in the tree that may hold a request is read. Comparing by value
+  // keeps every session update in a large subagent tree from re-requesting them.
+  const requestSessions = createMemo(
     () =>
       sessionTreeIDs(data.session.list(), params.id).filter(
-        (id) => id === params.id || data.session.status(id) === "running",
+        (id) => id === params.id || sessionMayHoldRequests(data, id),
       ),
     [],
     { equals: (a, b) => a.join() === b.join() },
@@ -72,7 +73,12 @@ export function createSessionRequestModel() {
 
   createEffect(() => {
     if (serverSDK.connection.status() !== "connected") return
-    void Promise.all(formSessions().map((sessionID) => data.session.form.sync(sessionID))).catch(() => undefined)
+    void Promise.all(
+      requestSessions().flatMap((sessionID) => [
+        data.session.permission.sync(sessionID),
+        data.session.form.sync(sessionID),
+      ]),
+    ).catch(() => undefined)
   })
 
   const formRequest = createMemo((): FormInfo | undefined => {

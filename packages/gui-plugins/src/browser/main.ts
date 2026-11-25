@@ -1,11 +1,14 @@
+import path from "node:path"
 import { builtinMainContext } from "@opencode/plugin/gui/builtin"
 import { MenubarItem, type Plugin } from "@opencode/plugin/gui/main"
+import { BrowserHistory } from "./history/ipc"
+import type { HistoryStore } from "./history/store"
 import type { Pane } from "./pane"
 import type { Profile } from "./profile"
 import { RefsStore } from "./refs"
 import { viewportToolbarAvailable } from "./viewport-toolbar-machine"
 import { BrowserPane } from "./ipc"
-import { BrowserProfile } from "./profile/ipc"
+import { BrowserProfile, type ImportResult } from "./profile/ipc"
 import { BrowserSites, createSitePermissions } from "./site-permissions"
 import { createSystemMedia } from "./system-media"
 import { createHandlePath } from "./disk"
@@ -20,12 +23,18 @@ import {
 /** The profile's creation while it runs, and the profile once it is created. */
 type LoadedProfile = { profile?: Promise<Profile>; value?: Profile }
 
+/** The history store's opening while it runs, and the store once it is open. */
+type OpenedHistory = { store?: Promise<HistoryStore> }
+
+/** What an import that leaves the sign-ins behind brought of them: nothing, and nothing was lost. */
+const NO_COOKIES: ImportResult = { type: "imported", imported: 0, skipped: 0, protected: 0, failed: 0 }
+
 const setup: Plugin.MainSetup = (ctx) => {
   let paneState = createMainPaneState<Pane>()
   const loads = new Map<number, ReturnType<typeof Promise.withResolvers<Pane>>>()
   let disposing: Promise<void> | undefined
   const refs = ctx.storage.store("refs", RefsStore)
-  // The permission decisions the user kept for sites; "Sign out everywhere" keeps them, as they are settings.
+  // The permission decisions the user kept for sites; "Clear browsing data" keeps them, as they are settings.
   const sites = createSitePermissions(ctx.storage, () => sitesIpc.changed())
   // The desktop's one browser profile, created the first time a pane or the settings page needs it. A failed creation
   // is forgotten, so the next request tries again.
@@ -70,6 +79,76 @@ const setup: Plugin.MainSetup = (ctx) => {
     return pending
   }
 
+  // The browsing history, opened the first time a window asks it something or an import brings pages: nothing reads
+  // it at startup. An opening that failed is forgotten, so the next request tries again.
+  const opened: OpenedHistory = {}
+
+  const historyDirectory = async () => {
+    const { app } = await import("electron")
+
+    return path.join(app.getPath("userData"), "browser-history")
+  }
+
+  // With `adopt`, the store takes over the pages the windows listed before it existed: read once, the first time a
+  // store opens. A store that replaces a deleted one starts empty.
+  const openHistory = async (adopt: boolean) => {
+    const { createHistoryStore } = await import("./history/store")
+    const { earlierVisits } = await import("./history/earlier")
+    const store = createHistoryStore({ directory: await historyDirectory() })
+    store.adopt(() => (adopt ? earlierVisits(builtinMainContext(ctx).storage) : []))
+
+    return store
+  }
+
+  const opening = (pending: Promise<HistoryStore>) => {
+    opened.store = pending
+    pending.catch((cause: unknown) => {
+      ctx.log.write("warn", "browser history failed to open", { cause: String(cause) })
+
+      if (opened.store === pending) opened.store = undefined
+    })
+
+    return pending
+  }
+
+  const history = () => {
+    if (ctx.signal.aborted) return Promise.reject(new Error("browser.history.unavailable"))
+
+    return opened.store ?? opening(openHistory(true))
+  }
+
+  // Forgets every page. A store that cannot be opened or cleared, as one whose file is damaged, is cleared by
+  // deleting its file: nothing in it can be kept anyway. Rejects only while the pages are still on disk.
+  const clearHistory = async () => {
+    const store = await history().catch(() => undefined)
+
+    const cleared = store
+      ? await Promise.try(() => store.clear()).then(
+          () => true,
+          () => false,
+        )
+      : false
+
+    if (cleared) return
+    const { removeHistoryStore } = await import("./history/store")
+    const directory = await historyDirectory()
+
+    // The file is let go before it is deleted. Whoever asks meanwhile waits for the store that replaces it, which
+    // starts empty: the windows clear their own lists, and those are not taken over a second time.
+    store?.close()
+    const removed = removeHistoryStore(directory)
+    void opening(removed.then(() => openHistory(false)))
+    await removed
+  }
+
+  // The history of the other browser comes with its sign-ins. It never fails an import that brought cookies: history
+  // that cannot be read or stored is no pages.
+  const importHistory = async (current: Profile, source: string, profile: string, sites: readonly string[] | undefined) => {
+    const pages = await current.readHistory(source, profile, sites)
+
+    return pages.length > 0 ? (await history()).add(pages) : 0
+  }
+
   const dispatch = (event: MainPaneEvent<Pane>) => {
     const next = transitionMainPane(paneState, event)
     paneState = next.state
@@ -100,6 +179,7 @@ const setup: Plugin.MainSetup = (ctx) => {
                   system: createSystemMedia(ctx.app.packaged ? undefined : (line) => ctx.log.write("info", line)),
                   toolbar: viewportToolbarAvailable(ctx.app.channel),
                   verifier,
+                  log: ctx.log,
                   emit: (window, value) => provider.emit("event", value, window),
                 }),
               })
@@ -204,10 +284,49 @@ const setup: Plugin.MainSetup = (ctx) => {
     sources: async () => (await profile()).sources(),
     sites: async (input) => (await profile()).sites(input.source, input.profile),
     importBrowser: (input) =>
-      serial(async () => (await profile()).importBrowser(input.source, input.profile, input.sites)),
+      serial(async () => {
+        const current = await profile()
+        // Without sign-ins no cookie is read or written, so the other browser's cookie key is never asked for either:
+        // no Keychain or key-store prompt. Without history its pages are not read and the history store is not opened.
+        const result = input.cookies === false ? NO_COOKIES : await current.importBrowser(input.source, input.profile, input.sites)
+
+        if (result.type !== "imported" || !input.history) return result
+
+        const pages = await importHistory(current, input.source, input.profile, input.sites).catch((cause: unknown) => {
+          ctx.log.write("warn", "another browser's history was not imported", { source: input.source, cause: String(cause) })
+
+          return 0
+        })
+
+        return { ...result, pages }
+      }),
     importFile: (input) => serial(async () => (await profile()).importFile(input.path)),
     summary: async () => (await profile()).summary(),
-    clear: () => serial(async () => (await profile()).clear()),
+    // Signing out everywhere also forgets where the person has been. The sign-out runs first and is whole whatever
+    // the history store does, and the history is cleared whether or not the sign-out worked. Neither failure hides
+    // the other: a sign-out that failed rejects, as it always did, and `history` says whether the history went.
+    clear: () =>
+      serial(async () => {
+        const signedOut = await profile()
+          .then((current) => current.clear())
+          .then(
+            () => undefined,
+            (cause: unknown) => ({ cause }),
+          )
+
+        const forgotten = await clearHistory().then(
+          () => true,
+          (cause: unknown) => {
+            ctx.log.write("warn", "browser history could not be cleared", { cause: String(cause) })
+
+            return false
+          },
+        )
+
+        if (signedOut) throw signedOut.cause
+
+        return { history: forgotten }
+      }),
     browserExtensions: async (input) => (await profile()).browserExtensions(input.source, input.profile),
     install: (input) => serial(async () => (await profile()).install(input)),
     remove: (input) => serial(async () => (await profile()).remove(input.id)),
@@ -241,6 +360,17 @@ const setup: Plugin.MainSetup = (ctx) => {
     enable: (input) => serial(async () => (await profile()).enable(input.id, input.enabled)),
   })
 
+  // Only the windows' address field asks: the pane, which the agent's tools drive, has no way to it.
+  ctx.provide(BrowserHistory, {
+    prepare: async () => (await history()).prepare(),
+    search: async (input) => (await history()).search(input.query, input.limit),
+    visit: async (input) => (await history()).visit(input.url, input.title),
+    retitle: async (input) => (await history()).retitle(input.url, input.title),
+    remove: async (input) => (await history()).remove(input.url),
+    // Rejects while the pages are still on disk, so the window can say that they are.
+    clear: () => serial(clearHistory),
+  })
+
   const sitesIpc = ctx.provide(BrowserSites, {
     state: () => ({ decisions: sites.list() }),
     set: async (input) => sites.set(input),
@@ -255,6 +385,8 @@ const setup: Plugin.MainSetup = (ctx) => {
     await disposing
     const value = loaded.value ?? (await loaded.profile?.catch(() => undefined))
     value?.dispose()
+    const store = await opened.store?.catch(() => undefined)
+    store?.close()
     await verifier.close()
   })
 }

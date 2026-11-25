@@ -60,7 +60,7 @@ function TitlebarItemButton(props: { item: TitlebarItem; vertical?: boolean }) {
     >
       <button
         type="button"
-        class="relative z-10 flex h-full w-full items-center overflow-hidden rounded-full text-v2-icon-icon-accent transition-[background-color] duration-150 ease-out focus-visible:outline-none disabled:opacity-60 motion-reduce:transition-none [app-region:no-drag]"
+        class="relative z-10 flex h-full w-full items-center overflow-hidden rounded-full text-v2-icon-icon-accent transition-[background-color] duration-150 ease-out focus-visible:-outline-offset-2 disabled:opacity-60 motion-reduce:transition-none [app-region:no-drag]"
         classList={{ "justify-start": props.vertical, "justify-end": !props.vertical }}
         onClick={() => props.item.run?.()}
         disabled={!!props.item.busy}

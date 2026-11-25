@@ -75,10 +75,6 @@
     transition: none;
   }
 }
-[data-slot="home-session-search-field"]:has(> input[data-keyboard-focus]:focus) {
-  outline: 2px solid var(--v2-border-border-focus);
-  outline-offset: 2px;
-}
 
 @media (forced-colors: active) {
   [data-component="home-session-search-row"][aria-selected="true"] {
@@ -95,15 +91,11 @@
   outline-offset: -2px;
 }
 
-/* Keyboard focus scrolls a row clear of the sticky search and date header above it (68/84/108px plus 28px). */
+/* Keyboard focus scrolls a row clear of the sticky search and its 28px date header (from 68/108px), with 4px to spare. */
 [data-component="home-session-row"] {
   scroll-margin-top: 100px;
 
   @media (width >= 48rem) {
-    scroll-margin-top: 116px;
-  }
-
-  @media (width >= 64rem) {
     scroll-margin-top: 140px;
   }
 }

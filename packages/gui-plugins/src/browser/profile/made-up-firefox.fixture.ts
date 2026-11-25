@@ -7,7 +7,8 @@ import { DatabaseSync } from "node:sqlite"
  * A made-up Firefox profile where this system's Firefox keeps its profiles, under a new temporary home, and the
  * environment that points every location the browser list reads at that home, so no browser on this machine is read.
  * Its profile `Profiles/work.default` has cookies of github.com (a domain cookie, a host-only one and a subdomain's, plus
- * a partitioned and a container cookie that never import), bank.test and mail.test.
+ * a partitioned and a container cookie that never import), bank.test and mail.test. Its history, in Firefox's own
+ * `moz_places` table, has two pages of github.com and one of bank.test, a bookmark never visited and a hidden place.
  */
 export async function madeUpFirefox() {
   const home = await mkdtemp(path.join(tmpdir(), "browser-sources-"))
@@ -45,5 +46,22 @@ export async function madeUpFirefox() {
   insert.run("mail.test", "session", "mail-secret", "/", later, 1, 1, 1, "", 0)
   db.close()
 
-  return { home, env }
+  const places = new DatabaseSync(path.join(root, "Profiles", "work.default", "places.sqlite"))
+
+  // As Firefox 147 creates it.
+  places.exec(
+    "CREATE TABLE moz_places (id INTEGER PRIMARY KEY, url LONGVARCHAR, title LONGVARCHAR, rev_host LONGVARCHAR, visit_count INTEGER DEFAULT 0, hidden INTEGER DEFAULT 0 NOT NULL, typed INTEGER DEFAULT 0 NOT NULL, frecency INTEGER DEFAULT -1 NOT NULL, last_visit_date INTEGER, guid TEXT, foreign_count INTEGER DEFAULT 0 NOT NULL, url_hash INTEGER DEFAULT 0 NOT NULL, description TEXT, preview_image_url TEXT, site_name TEXT, origin_id INTEGER, recalc_frecency INTEGER NOT NULL DEFAULT 0, alt_frecency INTEGER, recalc_alt_frecency INTEGER NOT NULL DEFAULT 0)",
+  )
+
+  const place = places.prepare("INSERT INTO moz_places (url, title, visit_count, hidden, typed, last_visit_date) VALUES (?, ?, ?, ?, ?, ?)")
+  // Firefox counts a visit's time in microseconds.
+  const visited = (daysAgo: number) => (Date.now() - daysAgo * 86_400_000) * 1000
+  place.run("https://github.com/anomalyco/rune-desktop", "anomalyco/rune-desktop", 12, 0, 1, visited(1))
+  place.run("https://github.com/", "GitHub", 3, 0, 0, visited(40))
+  place.run("https://www.bank.test/accounts", null, 2, 0, 0, visited(2))
+  place.run("https://bookmarked.test/", "Never visited", 0, 0, 0, null)
+  place.run("https://github.com/redirect", "A redirect hop", 5, 1, 0, visited(1))
+  places.close()
+
+  return { home, env, profile: path.join(root, "Profiles", "work.default") }
 }

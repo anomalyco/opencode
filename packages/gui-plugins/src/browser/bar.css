@@ -76,8 +76,7 @@
     background-color: transparent;
   }
 
-  [data-slot="browser-address-display"],
-  [data-slot="browser-address-hint"] {
+  [data-slot="browser-address-display"] {
     position: absolute;
     inset: 0;
     display: flex;
@@ -85,10 +84,6 @@
     overflow: hidden;
     white-space: pre;
     pointer-events: none;
-  }
-
-  [data-slot="browser-address-hint"] {
-    color: var(--v2-text-text-muted);
   }
 
   /* One line of the whole URL, ending in an ellipsis where the field ends. The scheme and the path are muted around

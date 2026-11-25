@@ -1,8 +1,8 @@
-import { createSignal, onCleanup, untrack } from "solid-js"
+import { createSignal, getOwner, onCleanup, runWithOwner, untrack } from "solid-js"
 import { createKeyed, createLatest, usePlugin, type IpcClient } from "@opencode/plugin/gui"
 import type { Choice } from "./choices"
 import type definition from "./index"
-import { BrowserProfile, type ExtensionCompatibility, type ProfileSource } from "./profile/ipc"
+import { BrowserProfile, type ExtensionCompatibility, type ImportResult, type ProfileSource } from "./profile/ipc"
 import {
   importedCookies,
   importLoss,
@@ -69,6 +69,18 @@ export function createProfileJobs(
     return current.status === "active" ? `${current.generation}:${version()}` : undefined
   }
 
+  // A question belongs to the surface that asked, so it goes with it.
+  const owner = getOwner()
+
+  // What the person is asked before the one job that deletes: clearing the browsing data.
+  const question = () => ({
+    title: ctx.t("settings.clear.confirm.title"),
+    description: ctx.t("settings.clear.confirm.description"),
+    confirm: ctx.t("settings.clear.confirm.action"),
+    cancel: ctx.t("common.cancel"),
+    danger: true,
+  })
+
   const dispatch = (event: JobsEvent) => {
     const next = transitionJobs(untrack(state), event)
     setState(next.state)
@@ -76,9 +88,26 @@ export function createProfileJobs(
   }
 
   const run = (effect: JobsEffect) => {
+    if (effect.type === "confirm") {
+      const attempt = effect.attempt
+
+      // The app's own confirmation: it starts on Cancel, and Escape or a click outside answers no. It closes with
+      // the surface that asked, which is a no too, as is a question that could not be asked.
+      const asked = runWithOwner(owner, () => ctx.dialogs.confirm(question())) ?? Promise.resolve(false)
+
+      return void asked.then(
+        (confirmed) => dispatch({ type: "answered", attempt, confirmed }),
+        () => dispatch({ type: "answered", attempt, confirmed: false }),
+      )
+    }
+
     if (effect.type === "notify") {
       setVersion((value) => value + 1)
       input.finished?.(effect.finished)
+
+      // Signing out everywhere forgets where the person has been: main's history went with the cookies, and the
+      // window's list of the last pages goes here.
+      if (effect.finished.outcome.type === "cleared") ctx.stores.history.set({ visits: [] })
 
       // Cookies came in: the user is signed in, so the pane stops offering the import. Last, as it may unmount the
       // surface that runs this.
@@ -145,6 +174,18 @@ export function createProfileJobs(
   // On macOS a Chromium browser's cookie key is in the login Keychain, and the system asks before handing it over.
   const keychain = (job: Job) => mac && source(job)?.engine === "chromium"
 
+  /**
+   * The one line for an import that lost nothing. An import from a browser says what came, in words: sign-ins,
+   * history, both, or nothing. A cookie file names no browser and brings only cookies, which it counts.
+   */
+  const imported = (result: Extract<ImportResult, { type: "imported" }>, browser?: string) => {
+    if (!browser) return ctx.plural("signins.imported", result.imported)
+
+    if (result.imported > 0) return ctx.t(result.pages ? "signins.imported.history.from" : "signins.imported.from", { browser })
+
+    return ctx.t(result.pages ? "signins.imported.history.only.from" : "signins.imported.none.from", { browser })
+  }
+
   /** What to say about a finished job; undefined for one whose result the surface already shows. */
   const describe = (finished: Finished | undefined): JobMessage | undefined => {
     if (!finished || finished.outcome.type === "changed") return undefined
@@ -161,7 +202,9 @@ export function createProfileJobs(
       return { text: ctx.t(type === "import-browser" || type === "import-file" ? "settings.failed.import" : "settings.failed.install"), error: true }
     }
 
-    if (outcome.type === "cleared") return { text: ctx.t("settings.cleared"), error: false }
+    // The sign-out worked; history that stayed behind is said, or "everywhere" would be a false claim.
+    if (outcome.type === "cleared")
+      return outcome.history ? { text: ctx.t("settings.cleared"), error: false } : { text: ctx.t("settings.cleared.history"), error: true }
 
     if (outcome.type === "installed") {
       const result = outcome.result
@@ -201,32 +244,37 @@ export function createProfileJobs(
     if (result.type === "failed" && result.reason === "key" && browser && keychain(finished.job))
       return { text: ctx.t("signins.failed.keychain", { browser }), error: true }
 
+    // A cookie file that cannot be read is no browser's data, and there is no browser to close.
+    if (result.type === "failed" && result.reason === "read" && finished.job.type === "import-file")
+      return { text: ctx.t("signins.failed.read.file"), error: true }
+
     if (result.type === "failed") return { text: ctx.t(`signins.failed.${result.reason}`), error: true }
 
     const loss = importLoss(result)
 
-    if (loss?.reason === "other")
-      return {
-        text: ctx.plural("signins.imported.incomplete", result.imported, { omitted: loss.count }),
-        error: result.imported === 0,
-      }
+    // A cookie file is cookies and says so in counts: how many came, and how many did not. A browser's import never
+    // counts cookies.
+    if (loss?.reason === "other" && finished.job.type === "import-file")
+      return { text: ctx.plural("signins.imported.incomplete", result.imported, { omitted: loss.count }), error: result.imported === 0 }
 
-    if (result.imported === 0 && loss)
+    if (result.imported === 0 && loss?.reason === "protected")
       return {
         text: browser ? ctx.t("signins.protected.named", { browser }) : ctx.t("signins.protected"),
         error: true,
       }
 
-    // Chrome and Edge on Windows mix readable cookies with app-bound ones: say what was left behind and what to do.
+    // No sign-in could be brought and no history came with them: nothing was imported.
+    if (result.imported === 0 && loss && !result.pages)
+      return { text: browser ? ctx.t("signins.imported.none.from", { browser }) : ctx.t("settings.failed.import"), error: true }
+
+    // Some sign-ins stayed behind, as Chrome's and Edge's app-bound ones on Windows do: their sites open signed out.
     if (loss)
       return {
-        text: browser
-          ? ctx.plural("signins.imported.partial.named", result.imported, { browser, protected: result.protected })
-          : ctx.plural("signins.imported.partial", result.imported, { protected: result.protected }),
+        text: browser ? ctx.t("signins.imported.partial.named", { browser }) : ctx.t("signins.imported.partial"),
         error: false,
       }
 
-    return { text: ctx.plural("signins.imported", result.imported), error: result.imported === 0 }
+    return { text: imported(result, browser), error: result.imported === 0 && !result.pages }
   }
 
   return {
@@ -245,6 +293,8 @@ export function createProfileJobs(
     },
     last: () => lastFinished(state()),
     describe,
+    /** The one line that says what a browser's import brought: "Imported sign-ins and history from Helium". */
+    imported,
     /** What to say while a job runs: on macOS, what the Keychain prompt in front of the window asks, and how to answer. */
     notice: (): JobMessage | undefined => {
       const job = runningJob(state())
@@ -284,7 +334,10 @@ async function perform(client: Client, job: Job, signal: AbortSignal): Promise<O
     case "import-browser":
       return {
         type: "imported",
-        result: await client.importBrowser({ source: job.source, profile: job.profile, sites: job.sites }, { signal }),
+        result: await client.importBrowser(
+          { source: job.source, profile: job.profile, sites: job.sites, cookies: job.signins !== false, history: job.history !== false },
+          { signal },
+        ),
       }
     case "import-file":
       return { type: "imported", result: await client.importFile({ path: job.path }, { signal }) }
@@ -315,8 +368,6 @@ async function perform(client: Client, job: Job, signal: AbortSignal): Promise<O
 
       return { type: "changed" }
     case "clear":
-      await client.clear({ signal })
-
-      return { type: "cleared" }
+      return { type: "cleared", history: (await client.clear({ signal })).history }
   }
 }

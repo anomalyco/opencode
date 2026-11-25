@@ -914,7 +914,7 @@ test.describe("Working", () => {
 
       const trigger = page
         .locator('[data-component="collapsed-tool-group"]')
-        .getByRole("button", { name: "Used 2 Shell", exact: true, includeHidden: true })
+        .getByRole("button", { name: "Used 2 Shell", exact: true })
 
       await expect(trigger).toHaveAttribute("aria-expanded", "false")
       await expect(working).toBeVisible()
@@ -2037,18 +2037,17 @@ test("quotes plain timeline text into the composer, with or without a comment", 
     .poll(() => prompts)
     .toEqual([
       [
-        "The user quoted the following from earlier in the conversation:",
         "> Explain the build",
-        "> ",
-        "> It has two steps:",
-        "> compile",
-        "> bundle",
-        "The user quoted the following from earlier in the conversation:",
+        ">",
         "> It has two steps:",
         "> compile",
         "> bundle",
         "",
-        "The user made the following comment regarding this quote: Why two?",
+        "> It has two steps:",
+        "> compile",
+        "> bundle",
+        "",
+        "Why two?",
       ].join("\n"),
     ])
   expect(metadata).toEqual([
@@ -2815,14 +2814,13 @@ test("quotes table rows and diff lines selected across a diff viewer", async ({ 
     .poll(() => prompts)
     .toEqual([
       [
-        "The user quoted the following from earlier in the conversation:",
         "> a.ts\trename",
-        "> ",
+        ">",
         "> -export const value = 'before'",
         "> +export const value = 'after'",
-        "The user quoted the following from earlier in the conversation:",
+        "",
         "> a.ts\trename",
-        "> ",
+        ">",
         "> -export const value = 'before'",
       ].join("\n"),
     ])
@@ -3103,6 +3101,8 @@ test("opens an optional comment beside the quote action and skips it with Alt-cl
   await chips.nth(0).hover()
   await page.getByRole("button", { name: "Remove attachment" }).click()
   await expect(chips).toHaveCount(0)
+  // Removing the last chip hands focus back to the editor a task later, and its caret would replace the next selection.
+  await expect(editor).toBeFocused()
 
   // A slow tooltip names the action and its shortcut.
   await select("The first sentence to quote.")

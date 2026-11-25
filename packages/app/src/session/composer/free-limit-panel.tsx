@@ -87,7 +87,7 @@ export function SessionFreeLimitPanel(props: { resetAt: number | null; selection
 
   const subscribe = () => {
     platform.openExternal(GO_URL)
-    connect("opencode-go")
+    connect("opencode")
   }
 
   return (

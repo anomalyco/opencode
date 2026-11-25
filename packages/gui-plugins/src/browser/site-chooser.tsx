@@ -23,18 +23,20 @@ const ROW_HEIGHT = 32
 const TYPE_AHEAD_MS = 700
 
 /**
- * The import dialog, "Import from <browser>": one sentence of what comes over, and "Import all". A quiet "Choose
- * sites" reveals, in place, the sites the browser profile has cookies for, one row per registrable domain with its
- * cookie count, every one ticked until the person changes that; the button then names how many sites it brings. Main
- * reads the list from the cookies' hosts alone. Lists stay only while the dialog is open, so switching back to a
- * profile does not read it again; neither the lists nor the choice is stored.
+ * The import dialog, "Import from <browser>": what comes over, as two ticked boxes, "Sign-ins" and "Browsing history",
+ * and "Import". A quiet "Choose sites" reveals, in place under the boxes, the sites the browser profile has cookies
+ * for, one row per registrable domain, every one ticked until the person changes that; the button then names how many
+ * sites it brings. Main reads the list from the cookies' hosts alone. Lists stay only while the dialog is open, so
+ * switching back to a profile does not read it again; neither the lists nor any choice is stored: an import is a
+ * one-off, and each starts from everything.
  *
  * The import runs as a job of `jobs`, the surface that opened the dialog, which reports how it ended in its own place
  * (a Settings row, the pane's offer). A clean import closes the dialog; a partial or failed one keeps it open and says
  * why. `reveal` opens it with the list shown. `site` opens it with the list shown and searched for a page's
  * registrable domain, as a passkey request's, on the first browser profile that lists exactly that site; with
  * `choose`, that site alone is chosen there, and without it nothing is. A site that only contains it, such as
- * `github.com` for `hub.com`, is shown but never chosen.
+ * `github.com` for `hub.com`, is shown but never chosen. Opened so, the dialog is about one site's sign-in: it
+ * shows no boxes and brings sign-ins only.
  */
 export function SiteChooser(props: {
   choices: readonly Choice[]
@@ -75,6 +77,8 @@ export function SiteChooser(props: {
     seeking: !!props.site,
     revealed: !!props.site || !!props.reveal,
     custom: !!props.site,
+    signins: true,
+    history: true,
   })
 
   // The import this dialog started, compared by identity with the jobs' own, which a store would wrap in a proxy.
@@ -160,7 +164,9 @@ export function SiteChooser(props: {
   const clean = () => {
     const outcome = finished()?.outcome
 
-    return !!outcome && importedCookies(outcome) > 0 && outcome.type === "imported" && outcome.result.type === "imported" && !importLoss(outcome.result)
+    if (outcome?.type !== "imported" || outcome.result.type !== "imported" || importLoss(outcome.result)) return false
+
+    return outcome.result.imported > 0 || !!outcome.result.pages
   }
 
   // Closes the dialog host's dialog, outside Solid, once the import it started ended cleanly.
@@ -221,8 +227,9 @@ export function SiteChooser(props: {
   const selectShown = () => choose((next) => shown().forEach((item) => next.add(item.site)))
   const clearShown = () => choose((next) => shown().forEach((item) => next.delete(item.site)))
 
-  // "Import all" needs no list: it works while the list is still being read, as the one-click import does.
+  // Importing everything needs no list: it works while the list is still being read, as the one-click import does.
   const canImport = () =>
+    (!!props.site || state.signins || state.history) &&
     (state.custom ? sites().size > 0 : result()?.type !== "listed" || all().length > 0) &&
     props.jobs.available() &&
     !busy() &&
@@ -232,14 +239,15 @@ export function SiteChooser(props: {
     if (!canImport()) return
     const current = choice()
 
-    const next: Job = everything()
-      ? { type: "import-browser", source: current.source.id, profile: current.profile.id }
-      : {
-          type: "import-browser",
-          source: current.source.id,
-          profile: current.profile.id,
-          sites: all().flatMap((item) => (sites().has(item.site) ? [item.site] : [])),
-        }
+    const next: Job = {
+      type: "import-browser",
+      source: current.source.id,
+      profile: current.profile.id,
+      sites: everything() ? undefined : all().flatMap((item) => (sites().has(item.site) ? [item.site] : [])),
+      // Opened for a page's site, the import is that site's sign-in and no history.
+      signins: !!props.site || state.signins,
+      history: !props.site && state.history,
+    }
 
     setJob(next)
     props.jobs.start(next)
@@ -320,11 +328,6 @@ export function SiteChooser(props: {
   return (
     <ui.Dialog
       title={ctx.t("signins.import", { browser: choiceLabel(choice()) })}
-      description={
-        result()?.type === "listed"
-          ? ctx.plural("import.description", all().length, { number: number(all().length) })
-          : ctx.t("import.description.loading")
-      }
       size={state.revealed ? "large" : "fit"}
       footer={
         <>
@@ -337,30 +340,53 @@ export function SiteChooser(props: {
             {ctx.t("common.cancel")}
           </ui.Button>
           <ui.Button variant="contrast" disabled={!canImport()} busy={!!job() && props.jobs.running() === job()} onClick={start}>
-            {everything() ? ctx.t("import.all") : ctx.plural("import.some", sites().size, { number: number(sites().size) })}
+            {everything() ? ctx.t("signins.action") : ctx.plural("import.some", sites().size, { number: number(sites().size) })}
           </ui.Button>
         </>
       }
     >
-      <Show
-        when={state.revealed}
-        fallback={
-          <Show when={message()}>
-            {(current) => (
-              <p
-                role={current().error ? "alert" : "status"}
-                class="py-1 text-[13px] leading-[var(--line-height-base)]"
-                classList={{ "text-v2-state-fg-danger": current().error, "text-v2-text-text-muted": !current().error }}
-              >
-                {current().text}
-              </p>
-            )}
-          </Show>
-        }
-      >
-        {/* The dialog's body scrolls, so it clips at its edges. The search field and the profile select draw their edge and
-            their focus ring just outside their box: the vertical padding keeps both inside the clip. */}
-        <div data-component="browser-site-chooser" class="flex h-full min-h-0 flex-col gap-3 py-1">
+      <div data-component="browser-site-chooser" class="flex h-full min-h-0 flex-col">
+        {/* What comes over: both, until the person unticks one. The rows are the first thing in the body with or without
+            the list, so they stay where they are when "Choose sites" opens it. Each box sits 6px inside its 28px row,
+            which keeps its focus ring inside the body's clip. Enter on a box imports, as it does on the list. */}
+        <Show when={!props.site}>
+        <div
+          class="flex shrink-0 flex-col"
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" || event.isComposing) return
+            event.preventDefault()
+            start()
+          }}
+        >
+          <div class="flex h-7 items-center">
+            <Checkbox
+              appearance="compact"
+              surface={state.revealed ? "base" : "layer-1"}
+              checked={state.signins}
+              disabled={busy()}
+              onChange={(signins) => setState("signins", signins)}
+            >
+              {ctx.t("import.signins")}
+            </Checkbox>
+          </div>
+          <div class="flex h-7 items-center">
+            <Checkbox
+              appearance="compact"
+              surface={state.revealed ? "base" : "layer-1"}
+              checked={state.history}
+              disabled={busy()}
+              onChange={(history) => setState("history", history)}
+            >
+              {ctx.t("import.history")}
+            </Checkbox>
+          </div>
+        </div>
+        </Show>
+        <Show when={state.revealed}>
+        {/* The dialog's body scrolls, so it clips at its edges. The search field and the profile select draw their edge
+            and their focus ring just outside their box, and the list's frame its edge just inside the body's end: the
+            padding keeps them inside the clip. Under the boxes the search field starts 8px lower. */}
+        <div class="flex min-h-0 flex-1 flex-col gap-3 pb-1" classList={{ "pt-2": !props.site, "pt-1": !!props.site }}>
         <div class="flex items-center gap-2">
           <TextInput
             appearance="large"
@@ -472,7 +498,6 @@ export function SiteChooser(props: {
                     {(site) => (
                       <Show when={placed().get(site)}>
                         {(row) => {
-                          const item = () => shown()[row().index]
                           const active = () => activeSite() === site
 
                           return (
@@ -496,18 +521,12 @@ export function SiteChooser(props: {
                               }}
                             >
                               <Checkbox appearance="compact" surface="layer-1" presentation checked={sites().has(site)} />
-                              {/* The name and the smaller count share a baseline. */}
-                              <span class="flex min-w-0 flex-1 items-baseline gap-2">
-                                {/* A long name loses its start, so the registrable domain at its end stays in view. */}
-                                <span
-                                  class="min-w-0 flex-1 truncate text-[13px] leading-[var(--line-height-base)] text-v2-text-text-base [direction:rtl] ltr:text-left rtl:text-right"
-                                  title={site}
-                                >
-                                  <bdi dir="ltr">{site}</bdi>
-                                </span>
-                                <bdi dir="auto" class="shrink-0 text-[12px] leading-[var(--line-height-compact)] tabular-nums text-v2-text-text-muted">
-                                  {ctx.plural("sites.cookies", item()?.cookies ?? 0, { number: number(item()?.cookies ?? 0) })}
-                                </bdi>
+                              {/* A long name loses its start, so the registrable domain at its end stays in view. */}
+                              <span
+                                class="min-w-0 flex-1 truncate text-[13px] leading-[var(--line-height-base)] text-v2-text-text-base [direction:rtl] ltr:text-left rtl:text-right"
+                                title={site}
+                              >
+                                <bdi dir="ltr">{site}</bdi>
                               </span>
                             </div>
                           )
@@ -542,11 +561,13 @@ export function SiteChooser(props: {
             )}
           </Show>
         </div>
+        </div>
+        </Show>
         <Show when={message()}>
           {(current) => (
             <p
               role={current().error ? "alert" : "status"}
-              class="shrink-0 text-[13px] leading-[var(--line-height-base)]"
+              class="shrink-0 py-1 text-[13px] leading-[var(--line-height-base)]"
               classList={{ "text-v2-state-fg-danger": current().error, "text-v2-text-text-muted": !current().error }}
             >
               {current().text}
@@ -554,7 +575,6 @@ export function SiteChooser(props: {
           )}
         </Show>
       </div>
-      </Show>
     </ui.Dialog>
   )
 }
@@ -562,7 +582,7 @@ export function SiteChooser(props: {
 /**
  * The dialog's state: the profile shown and the search; the chosen sites of one profile, so switching profiles starts
  * from none; the active row and whether the list has the keyboard; how often the list was read again; what the
- * type-ahead has so far; and whether it still looks for the profile that has the searched site.
+ * type-ahead has so far; whether it still looks for the profile that has the searched site; and what comes over.
  */
 type ChooserState = {
   profile: string
@@ -577,6 +597,10 @@ type ChooserState = {
   revealed: boolean
   /** The person changed which sites come over, or the dialog opened for one site; before that, every site does. */
   custom: boolean
+  /** The sign-ins come over; ticked until the person unticks it. */
+  signins: boolean
+  /** The browsing history comes over; ticked until the person unticks it. */
+  history: boolean
 }
 
 /** The list's scrolling viewport and the listbox in it, once they mount. */

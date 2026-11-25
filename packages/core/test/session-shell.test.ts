@@ -290,7 +290,7 @@ describe("Session.shell", () => {
         expect(completion.payload.text).toContain("user output")
         expect(completion.payload.text).toContain("user error")
         if (exit === 0) expect(completion.payload.text).not.toContain("Exit code")
-        if (exit !== 0) expect(completion.payload.text).toContain(`\n\nExit code: ${exit}\n</shell>`)
+        if (exit !== 0) expect(completion.payload.text).toContain(`\n\nExit code: ${exit}\n</background-result>`)
         expect(fixture.control.wakes).toEqual([])
       }),
     )

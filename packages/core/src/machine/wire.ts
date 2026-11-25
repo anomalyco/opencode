@@ -24,10 +24,14 @@ const exit = { type: Schema.Literal("exit"), id: ProcessID, bytes: Schema.Number
 /** A file call and its reply carry the same `req`. */
 const fs = { type: Schema.Literal("fs"), req: Schema.Number }
 
-/** The first message of every connection, reconnects included. */
+/**
+ * The first message of every connection, reconnects included. It names no machine: which machine sent it is the link's
+ * to prove, never the worker's to say.
+ */
 export const Hello = Schema.Struct({
   type: Schema.Literal("hello"),
-  name: Schema.String,
+  /** The version of the messages after the handshake: a home that does not know a worker's version ends the connection. */
+  protocol: Schema.Literal(2),
   os: Schema.String,
   arch: Schema.String,
   /** The worker's home directory, an absolute POSIX path: where `~` in a path on this machine starts. */
@@ -58,7 +62,21 @@ export const FromWorker = Schema.Union([
     message: Schema.String,
   }),
   /** `offset` is the position of the first byte of `data` in the process's merged stdout and stderr. */
-  Schema.Struct({ type: Schema.Literal("output"), id: ProcessID, offset: Schema.Number, data: Bytes }),
+  Schema.Struct({
+    type: Schema.Literal("output"),
+    id: ProcessID,
+    offset: Schema.Number,
+    stream: Schema.Literals(["stdout", "stderr"]),
+    data: Bytes,
+  }),
+  Schema.Struct({ type: Schema.Literal("stdin"), id: ProcessID, req: Schema.Number, ok: Schema.Literal(true) }),
+  Schema.Struct({
+    type: Schema.Literal("stdin"),
+    id: ProcessID,
+    req: Schema.Number,
+    ok: Schema.Literal(false),
+    message: Schema.String,
+  }),
   Schema.Struct({ ...exit, code: Schema.Number }),
   Schema.Struct({ ...exit, code: Schema.Null, signal: Schema.String }),
   Schema.Struct({
@@ -106,7 +124,10 @@ export const ToWorker = Schema.Union([
     cwd: Schema.String,
     /** Set over the worker's own environment. */
     env: Schema.Record(Schema.String, Schema.String),
+    stdin: Schema.Boolean,
   }),
+  /** Acknowledged after writing to the OS pipe. Null closes it; never replayed. */
+  Schema.Struct({ type: Schema.Literal("stdin"), id: ProcessID, req: Schema.Number, data: Schema.NullOr(Bytes) }),
   /** Sends output from byte `from` on, then the exit once every byte is sent. Replaces an earlier attach. */
   Schema.Struct({ type: Schema.Literal("attach"), id: ProcessID, from: Schema.Number }),
   Schema.Struct({ type: Schema.Literal("kill"), id: ProcessID, signal: Signal }),

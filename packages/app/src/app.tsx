@@ -21,6 +21,7 @@ import {
 import { Dynamic } from "solid-js/web"
 import { CommandProvider } from "@/shell/commands/command"
 import { DesktopCommands } from "@/shell/commands/desktop"
+import { KeySequenceHint } from "@/shell/commands/key-sequence"
 import { ProjectIconsProvider } from "@/shell/layout/project-icons"
 import { GlobalProvider } from "@/runtime/server/runtime"
 import { LanguageProvider, UiI18nBridge, type Locale } from "@/runtime/i18n/language"
@@ -30,6 +31,7 @@ import { TabsProvider } from "@/shell/tabs/tabs"
 import { ErrorPage } from "@/shell/errors/error"
 import { AppRoutes, File, preloadRoute } from "@/shell/routes/routes"
 import { PluginRoot } from "@/runtime/plugin/root"
+import { baseRouter } from "@/runtime/platform/base-path-router"
 
 export { preloadRoute }
 
@@ -57,6 +59,10 @@ function BodyTypography() {
   return null
 }
 
+// Prod crashes reach Sentry only when someone clicks Report; other channels send them as they happen.
+// Builds that set no channel, such as the web app's, count as prod.
+const CAPTURES_CRASHES = ["local", "dev", "beta"].includes(import.meta.env.VITE_OPENCODE_CHANNEL ?? "")
+
 export function AppBaseProviders(
   props: ParentProps<{
     locale?: Locale
@@ -75,7 +81,8 @@ export function AppBaseProviders(
           <UiI18nBridge>
             <ErrorBoundary
               fallback={(error) => {
-                void import("@sentry/solid").then(({ captureException }) => captureException(error))
+                if (CAPTURES_CRASHES)
+                  void import("@sentry/solid").then(({ captureException }) => captureException(error))
 
                 return <ErrorPage error={error} />
               }}
@@ -116,6 +123,7 @@ export function AppInterface(props: {
               {rootProps.children}
               <VoiceOverlay />
             </VoiceProvider>
+            <KeySequenceHint />
           </CommandProvider>
         </ProjectIconsProvider>
       </GlobalProvider>
@@ -125,7 +133,7 @@ export function AppInterface(props: {
   return (
     <ServersProvider canonicalLocalServer={props.canonicalLocalServer} servers={props.servers}>
       <SettingsProvider>
-        <Dynamic component={props.router ?? Router} root={Root}>
+        <Dynamic component={props.router ?? baseRouter ?? Router} root={Root}>
           <AppRoutes />
         </Dynamic>
       </SettingsProvider>

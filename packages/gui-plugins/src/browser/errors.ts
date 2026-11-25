@@ -2,6 +2,7 @@ import { Browser } from "@opencode/plugin-browser/rpc"
 import { CAPTURE_DEADLINE_MS, FULL_PAGE_DEADLINE_MS } from "./capture"
 import { FileVerificationError } from "./file-verification"
 import { NavigationDeadlineError } from "./navigation-deadline"
+import { exitCodeHex, type PageEnd } from "./page-log"
 
 /** A failure the server acts on by its code, such as a wait whose condition never held. */
 export class CodedError extends Error {
@@ -11,6 +12,55 @@ export class CodedError extends Error {
     options?: ErrorOptions,
   ) {
     super(message, options)
+  }
+}
+
+/**
+ * What an agent's command hears when the page of its tab stopped under it: why, as the desktop log has it, and how to
+ * go on. The tab stays, unloaded, with `page_crashed` as its load error.
+ */
+export class PageEndedError extends Error {
+  constructor(readonly end: PageEnd) {
+    super(`${pageEnded(end)} Reload the tab with browser.reload({tabID}) and inspect its state before repeating anything; the desktop log has the details.`)
+  }
+}
+
+function pageEnded(end: PageEnd) {
+  switch (end.cause) {
+    case "renderer-gone":
+      return `This tab's page process ended: ${processGone(end.reason)} (exit code ${end.exitCode}${process.platform === "win32" ? `, ${exitCodeHex(end.exitCode)}` : ""}).`
+    case "target-crashed":
+      return "This tab's page process ended: Chromium reported a crash."
+    case "debugger-detached":
+      return `This tab's page was stopped: the desktop lost its debugger connection to it (${end.reason.slice(0, 100)}).`
+    case "setup-failed":
+      return "This tab's page was stopped: it did not become ready."
+    case "frame-unprepared":
+      return "This tab's page was stopped: one of its frames could not be prepared."
+    case "passkeys-unrestricted":
+      return "This tab's page was stopped: passkeys could not be turned off for it, which a tab the agent drives requires."
+  }
+}
+
+/** Electron's reason for a process that is gone, in words. */
+function processGone(reason: string) {
+  switch (reason) {
+    case "crashed":
+      return "it crashed"
+    case "oom":
+      return "out of memory"
+    case "killed":
+      return "it was killed"
+    case "abnormal-exit":
+      return "it exited abnormally"
+    case "launch-failed":
+      return "it failed to start"
+    case "integrity-failure":
+      return "it failed a code integrity check"
+    case "clean-exit":
+      return "it exited"
+    default:
+      return reason.slice(0, 100)
   }
 }
 
@@ -26,6 +76,20 @@ export function pageReports(error: Error) {
 
   // Chromium's load errors carry its negative number beside the name; Node's own `ERR_` errors have no `errno`.
   return "errno" in error && "code" in error && String(error.code).startsWith("ERR_")
+}
+
+/**
+ * Whether the tab that a `tabs.open` or a preview just made stays when its first load rejects. A tab that shows a page
+ * closes only for the person, the agent's close tool or the page itself, so:
+ * - a page still loading when the command's deadline passed goes on loading, and its tab stays whoever opened it;
+ * - a load Chromium failed says why in the tab, where the person can try again, so their tab stays. The agent hears
+ *   the failure instead, and its open leaves no tab behind;
+ * - a navigation that committed no page (cancelled, or it became a download) and any other failure leave no tab.
+ */
+export function keepsOpenedTab(error: Error, origin: "agent" | "user") {
+  if (error instanceof NavigationDeadlineError) return true
+
+  return origin === "user" && !(error instanceof CodedError) && pageReports(error)
 }
 
 export function missingArtifact() {

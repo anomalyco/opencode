@@ -12,6 +12,7 @@ import {
   untrack,
 } from "solid-js"
 import { Button } from "@opencode/ui/button"
+import { Loader } from "@opencode/ui/loader"
 import { Command, createKeyed, LinkHandler, MenuItem, SettingsPage, Style, type Plugin } from "@opencode/plugin/gui"
 import { BuiltinAppLink, builtinContext, BuiltinCommand, BuiltinPanel, BuiltinPromptGate, onIdle, type BuiltinPanelTab } from "@opencode/plugin/gui/builtin"
 import { Browser, type ExperimentalBrowserTab } from "@opencode/plugin/gui/browser"
@@ -29,6 +30,7 @@ import {
   type BrowserModelEvent,
 } from "./model-machine"
 import { PageIcon } from "./page-icon"
+import { savedTab, tabIcon, tabTitle } from "./saved-tabs"
 import { artifactLink, artifactWebURL } from "./artifact-link"
 import { attachable } from "./prompt-gate"
 import { remotePath, workspacePrefix } from "./remote-address"
@@ -155,6 +157,23 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
   }
 
   onCleanup(() => dispatchModel({ type: "disposed" }))
+
+  // A strip tab drawn from the saved state can be closed or selected while the model's chunk still loads: the model
+  // takes that once it is there. A load that fails takes nothing, and the panel says so.
+  const withModel = (run: (value: Model) => void) => {
+    const loaded = untrack(model)
+
+    if (loaded) return run(loaded)
+    dispatchModel({ type: "load.requested" })
+    const loading = untrack(modelState)
+
+    if (loading.status !== "loading") return
+    void loads.get(loading.attempt)?.then(() => {
+      const value = untrack(model)
+
+      if (value && !ctx.signal.aborted) run(value)
+    })
+  }
 
   const opened = createMemo((seen: boolean) => seen || !!sessions.current(), false)
   createKeyed(opened, () => dispatchModel({ type: "load.requested" }))
@@ -412,8 +431,9 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     const view = sessions.current()
     const value = model()
 
-    // Only once the desktop's pane answers.
-    if (!view || !value?.available(view) || !value.attached(view)) return undefined
+    // Only once the desktop's pane answers, and still while another window holds the session's browser: opening it
+    // here takes it back.
+    if (!view || !value?.available(view) || !value.openable(view)) return undefined
 
     // A launcher of the side panel's new tab view, between Review and Terminal.
     return {
@@ -462,18 +482,22 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     },
     get entries() {
       return [
-        { id: "settings-browser-links", title: ctx.t("settings.links.title"), keywords: "links open system browser" },
-        { id: "settings-browser-agent-pages", title: ctx.t("settings.agentPages.title"), keywords: "agent preview automatic browser pane" },
+        { id: "settings-browser-links", title: ctx.t("settings.links.title"), keywords: "links open system default browser opencode's browser web shift click" },
+        {
+          id: "settings-browser-agent-pages",
+          title: ctx.t("settings.agentPages.title"),
+          keywords: "open the browser when the agent shows a page agent preview automatic browser pane tab file",
+        },
         {
           id: "settings-browser-remote",
           title: ctx.t("settings.remote.title"),
           keywords: "remote server sign in cookies share",
         },
-        { id: "settings-browser-cookies", title: ctx.t("settings.cookies.title"), keywords: "cookies sign out" },
+        { id: "settings-browser-cookies", title: ctx.t("settings.cookies.title"), keywords: "cookies sign out browsing data history clear" },
         {
           id: "settings-browser-import",
           title: ctx.t("settings.import.title"),
-          keywords: "import cookies chrome edge firefox safari helium arc brave sign in",
+          keywords: "import cookies history chrome edge firefox safari helium arc brave sign in",
         },
         { id: "settings-browser-extensions", title: ctx.t("settings.extensions.title"), keywords: "extensions" },
         {
@@ -495,13 +519,26 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
   const tabs = new Map<string, Map<string, BuiltinPanelTab>>()
 
   const create = (session: string, id: string): BuiltinPanelTab => {
-    const text = () => {
-      const tab = model()?.tab({ key: session }, id)
+    // The tab's page as the last run left it. The strip draws it until the desktop reports the tab again, and keeps
+    // its title and icon until the tab's page has its own, so the label never changes while a restored page loads.
+    const saved = () => savedTab(ctx.stores.tabs.value, session, id)
+    const page = () => model()?.tab({ key: session }, id) ?? saved()
 
-      return !tab?.url || tab.url === "about:blank" ? ctx.t("tab.new") : tab.title || tab.url
+    const text = () => {
+      const tab = page()
+
+      // A tab a link opened keeps this label until its page names itself, so it is relabelled once: never with
+      // Chromium's name for a document that has not named itself, which is its address.
+      const unnamed = !tab?.url || tab.url === "about:blank" || model()?.unnamed({ key: session }, id)
+
+      return unnamed ? ctx.t("tab.new") : tabTitle(tab, saved()) || tab.url
     }
 
-    const icon = () => model()?.page({ key: session }, id)?.icon
+    const icon = () => {
+      const tab = page()
+
+      return tab && tabIcon(tab, model()?.page({ key: session }, id)?.icon, saved())
+    }
 
     return {
       id,
@@ -517,15 +554,43 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
           </Show>
         </div>
       ),
-      // Listed only to hold the restored selection until the desktop's first inventory names the tab, or the model
-      // failed to load and the panel says so.
+      // A tab the last run saved draws at once. Any other is listed only to hold the restored selection until the
+      // desktop's first inventory names it, or the model failed to load and the panel says so.
       get hidden() {
-        return selectBrowserTabHidden(modelState(), (value) => !!value.tab({ key: session }, id))
+        return selectBrowserTabHidden(modelState(), (value) => !!value.tab({ key: session }, id), !!saved())
       },
       group: "browser",
       dom: { tab: `session-side-panel-browser-tab-${id}`, panel: "session-side-panel-browser-tabpanel" },
     }
   }
+
+  // What a tab's panel shows while its content cannot be known yet: the model's chunk loads, or the desktop has not
+  // reported the session's tabs.
+  const Waiting = () => (
+    <div
+      role="status"
+      aria-label={ctx.t("common.loading")}
+      class="size-full flex items-center justify-center text-v2-icon-icon-muted"
+    >
+      <Loader class="size-4" />
+    </div>
+  )
+
+  // The browser could not open: its model failed to load (`detail` says why), or the session's server has no browser
+  // or keeps refusing the pane. The strip keeps the tab, which can still be closed.
+  const Failed = (props: { detail?: string; retry: () => void }) => (
+    <div role="alert" class="size-full flex flex-col items-center justify-center gap-3 px-4 text-center">
+      <div class="flex flex-col gap-1">
+        <div class="text-13-regular text-text-strong">{ctx.t("model.failed")}</div>
+        <Show when={props.detail}>
+          <div class="text-12-regular text-text-weak break-words">{props.detail}</div>
+        </Show>
+      </div>
+      <Button size="small" variant="outline" onClick={() => props.retry()}>
+        {ctx.t("common.retry")}
+      </Button>
+    </div>
+  )
 
   const SessionBrowserPane = lazy(() => import("./panel"))
   onCleanup(onIdle(() => void SessionBrowserPane.preload()))
@@ -548,42 +613,49 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
       return [...next.values()]
     },
-    // The pane shows nothing until the desktop's first inventory names its tabs.
+    // Until the desktop's first inventory names its tabs, the pane has no page to show: the tab's content loads, or
+    // says that the browser could not open. Every wait ends in the pane or in that.
     render: (props) => (
-      <Switch>
+      <Switch fallback={<Waiting />}>
         <Match when={model()}>
           {(value) => (
-            <Show when={!value().pending(props.session)}>
-              <Suspense>
-                <SessionBrowserPane
-                  tab={() => props.tab}
-                  session={props.session}
-                  screen={props.screen}
-                  model={value()}
-                />
-              </Suspense>
-            </Show>
+            <Switch
+              fallback={
+                <Suspense>
+                  <SessionBrowserPane
+                    tab={() => props.tab}
+                    session={props.session}
+                    screen={props.screen}
+                    model={value()}
+                  />
+                </Suspense>
+              }
+            >
+              <Match when={value().pending(props.session)}>
+                <Waiting />
+              </Match>
+              <Match when={value().unavailable(props.session)}>
+                <Failed retry={() => value().retry(props.session)} />
+              </Match>
+            </Switch>
           )}
         </Match>
         <Match when={selectBrowserModelError(modelState())}>
-          {(error) => (
-            <div role="alert" class="size-full flex flex-col items-center justify-center gap-3 px-4 text-center">
-              <div class="flex flex-col gap-1">
-                <div class="text-13-regular text-text-strong">{ctx.t("model.failed")}</div>
-                <div class="text-12-regular text-text-weak break-words">{error()}</div>
-              </div>
-              <Button size="small" variant="outline" onClick={() => dispatchModel({ type: "retry.requested" })}>
-                {ctx.t("common.retry")}
-              </Button>
-            </div>
-          )}
+          {(error) => <Failed detail={error()} retry={() => dispatchModel({ type: "retry.requested" })} />}
         </Match>
       </Switch>
     ),
-    close: (input) => model()?.closeTab(input.session, input.tab.id),
+    close(input) {
+      const session = input.session
+      const id = input.tab.id
+
+      withModel((value) => value.closeTab(session, id))
+    },
     // A blank new tab does not come back; a page comes back as a new tab on its address.
     closed(input) {
-      const url = model()?.tab(input.session, input.tab.id)?.url
+      const url = (
+        model()?.tab(input.session, input.tab.id) ?? savedTab(ctx.stores.tabs.value, input.session.key, input.tab.id)
+      )?.url
 
       if (!url || url === "about:blank") return false
 
@@ -592,7 +664,13 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     restore: (input) => {
       if (input.data) model()?.openURL(input.session, input.data)
     },
-    focus: (input) => model()?.focusTab(input.session, input.tab.id),
+    focus(input) {
+      const session = input.session
+      const id = input.tab.id
+      const restored = input.restored
+
+      withModel((value) => value.focusTab(session, id, restored))
+    },
     // A blank tab starts in its address field, like a browser's new tab.
     enter: () => {
       const pane = model()?.pane()

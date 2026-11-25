@@ -220,6 +220,7 @@ void electron.app.whenReady().then(async () => {
     sites,
     system,
     verifier,
+    log: { write: () => undefined },
     emit: () => undefined,
   })
 

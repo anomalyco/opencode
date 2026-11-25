@@ -589,6 +589,87 @@ export const executeCodeDocument = document([
   }),
 ] satisfies SessionMessageInfo[])
 
+// A script that read a source tree file by file: its rows start at the latest calls.
+export const executeManyCallsDocument = document([
+  user("msg_user_execute_many", "Find every state machine in the app.", 52_100),
+  assistant({
+    id: "msg_assistant_execute_many",
+    offset: 52_200,
+    completed: 52_900,
+    content: [
+      completedTool({
+        id: "tool_execute_many_calls",
+        name: "execute",
+        offset: 52_300,
+        args: {
+          code: 'const files = await Array.fromAsync(new Bun.Glob("src/**/*.ts").scan())\nreturn files.filter((file) => Bun.file(file).name?.endsWith("machine.ts")).length',
+        },
+        output: "48",
+        metadata: {
+          toolCalls: Array.from({ length: 75 }, (_, index) => ({
+            tool: "Bun",
+            status: "completed",
+            input: { method: "file", path: `src/session/module-${index}.ts` },
+          })),
+        },
+      }),
+    ],
+  }),
+] satisfies SessionMessageInfo[])
+
+const executeWorktreeNames = [
+  "child-permission-sync",
+  "frontmatter-flow-repair",
+  "command-legacy-variant",
+  "service-discovery-validation",
+  "sampled-checksum-tail",
+]
+
+export const executeLongDetailsDocument = document([
+  user("msg_user_execute_long", "Create a worktree for each issue.", 52_100),
+  assistant({
+    id: "msg_assistant_execute_long",
+    offset: 52_200,
+    completed: 52_900,
+    content: [
+      completedTool({
+        id: "tool_execute_worktrees",
+        name: "execute",
+        offset: 52_300,
+        args: {
+          code: [
+            "const names = [",
+            ...executeWorktreeNames.map((name) => `  "${name}",`),
+            "];",
+            "",
+            "const results = await Promise.allSettled(",
+            "  names.map((name) => tools.opencode.worktree_create({ name }))",
+            ");",
+            "",
+            "return names.map((name, i) => ({",
+            "  name,",
+            '  result: results[i].status === "fulfilled" ? results[i].value : String(results[i].reason),',
+            "}));",
+          ].join("\n"),
+        },
+        output: JSON.stringify(
+          executeWorktreeNames.map((name) => ({
+            name,
+            result: { directory: `/Users/dev/.local/share/opencode/worktree/012780/${name}` },
+          })),
+        ),
+        metadata: {
+          toolCalls: executeWorktreeNames.map((name) => ({
+            tool: "opencode.worktree_create",
+            status: "completed",
+            input: { name },
+          })),
+        },
+      }),
+    ],
+  }),
+] satisfies SessionMessageInfo[])
+
 export const terminalFailedDocument = document([
   user("msg_user_terminal_failed", "Run the focused Session UI tests.", 53_000),
   assistant({
@@ -1098,7 +1179,7 @@ export function subagentReport(id: string, created: number, report: SubagentRepo
     id,
     type: "synthetic",
     description: report.description,
-    text: `<subagent sessionID="${report.childID}" state="${report.state}" description="${report.description}">\n${report.body}\n</subagent>`,
+    text: `<background-result kind="subagent" sessionID="${report.childID}" state="${report.state}" description="${report.description}">\n${report.body}\n</background-result>`,
     metadata: { source: "subagent", childID: report.childID, agent: report.agent, state: report.state },
     time: { created },
   }

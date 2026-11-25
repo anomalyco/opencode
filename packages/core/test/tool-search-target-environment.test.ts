@@ -18,7 +18,7 @@ import { Tool } from "@opencode/core/tool"
 import { GlobTool } from "@opencode/core/tool/plugin/glob"
 import { GrepTool } from "@opencode/core/tool/plugin/grep"
 import { recordingEnvironmentLayer } from "./fixture/environment"
-import { elsewhere } from "./fixture/target-environment"
+import { elsewhere, machineOptions } from "./fixture/target-environment"
 import { withTempDir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
@@ -50,9 +50,12 @@ describe("search tools", () => {
         const sessionSpawns: ChildProcess.Command[] = []
         const target = yield* Layer.build(recordingEnvironmentLayer(targetSpawns))
         const session = yield* Layer.build(recordingEnvironmentLayer(sessionSpawns))
+        const recorded = Context.get(target, Environment.Service)
         const other = elsewhere(tmp.path, {
-          ...Context.get(target, Environment.Service),
           id: Environment.ID.make("elsewhere"),
+          files: recorded.files,
+          spawner: recorded.spawner,
+          ...machineOptions,
         })
         const execute = (registry: Tool.Interface, name: string, input: unknown) =>
           executeTool(registry, {
@@ -81,6 +84,7 @@ describe("search tools", () => {
                   Environment.Service,
                   Environment.Service.of({
                     id: Environment.localID,
+                    local: true,
                     files: Environment.makeFiles(Environment.makeMemoryDriver()),
                     spawner: Context.get(session, Environment.Service).spawner,
                   }),

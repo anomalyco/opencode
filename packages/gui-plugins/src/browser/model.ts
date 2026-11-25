@@ -2,7 +2,7 @@ import { FileVerificationError } from "./file-verification"
 import { builtinContext } from "@opencode/plugin/gui/builtin"
 import { FileSource } from "../file/contract"
 import { ACTIVATION_DELAY_MS } from "./activation-delay"
-import { attachable } from "./prompt-gate"
+import { attachable, attachesUnopened, unheld } from "./prompt-gate"
 import { batch, createRoot, createSignal, getOwner, onCleanup, untrack } from "solid-js"
 import { createStore, reconcile, unwrap } from "solid-js/store"
 import { makeEventListener } from "@solid-primitives/event-listener"
@@ -20,7 +20,11 @@ import {
   type ShortcutEvent,
   type Zoom,
 } from "./connection"
-import { recordable, remember, withIcon } from "./history"
+import { BrowserHistory } from "./history/ipc"
+import { pageKey } from "./history/page"
+import { HISTORY_ANSWER } from "./history/suggest"
+import { recordable, remember, withIcon } from "./history/visits"
+import { forgetTabs, saveIcon, saveTabs } from "./saved-tabs"
 import type definition from "./index"
 import { workspaceFileURL } from "./link"
 import { workspacePrefix } from "./remote-address"
@@ -45,9 +49,13 @@ import {
   sessionPending,
   sessionRegistration,
   sessionAttaching,
+  sessionOpenable,
+  sessionReplaced,
   sessionSuspended,
   sessionTab,
   sessionTabs,
+  sessionUnavailable,
+  tabUnnamed,
   unseenActivity,
   revealGuard,
   transition,
@@ -125,8 +133,19 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       : { status: current.status }
   }
 
+  // Main's history of every page, which the address field searches. Away on the web and while main's plugin restarts:
+  // the window's own list of the last pages then answers alone.
+  const historyIpc = ctx.use(BrowserHistory)
+
+  const historyClient = () => {
+    const current = historyIpc()
+
+    return current.status === "active" ? current.value : undefined
+  }
+
   const owner = getOwner()
   const history = ctx.stores.history
+  const saved = ctx.stores.tabs
   const [state, setState] = createStore<ModelState>({ machine: createInitialState(untrack(ipc)), pages: {}, chrome: {} })
   const machine = () => state.machine
   const [panes, setPanes] = createSignal<readonly PaneHandle[]>([])
@@ -145,9 +164,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const key = (tabID: string) => `${ctx.id}:${tabID}`
 
   // A failure code `failure.ts` has no sentence for still reads as what the person tried. It is logged with its code,
-  // so a new one is noticed and gets a sentence of its own.
+  // which is main's message, and the action, so a new one is noticed and gets a sentence of its own. As one string:
+  // the desktop log writes each argument with `String()`, which turns an object of fields into "[object Object]".
   const noteFailure = (code: string, action: Browser.Action | undefined) => {
-    if (!commandFailure(code, action?.type).known) console.warn("[browser] unmapped failure", { code, action: action?.type })
+    if (!commandFailure(code, action?.type).known)
+      console.warn(`[browser] unmapped failure: ${code.slice(0, 300)} (action: ${action?.type ?? "none"})`)
   }
 
   const dispatch = (event: Event) => {
@@ -177,11 +198,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     if (effect.type === "present-held") {
       const drive = drives.get(effect.sessionKey)
 
-      // Asked again as a request that arrives now, so the screen, the pane and the setting are read now.
-      if (drive)
-        dispatch({ ...presentation(drive), type: "pane.activity", attempt: effect.attempt, tabID: effect.tabID, reveal: effect.reveal, visible: layout.state(key(effect.tabID), drive.ref) === "visible" })
+      if (!drive) return
+      restore(drive.ref)
 
-      return
+      // Asked again as a request that arrives now, so the screen, the pane and the setting are read now.
+      return dispatch({ ...presentation(drive), type: "pane.activity", attempt: effect.attempt, tabID: effect.tabID, reveal: effect.reveal, visible: layout.state(key(effect.tabID), drive.ref) === "visible" })
     }
 
     if (effect.type === "present-file") {
@@ -248,12 +269,19 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       return
     }
 
-    if (effect.type === "record-history") return record(effect.sessionKey)
+    if (effect.type === "record-history") {
+      save(effect.sessionKey)
+
+      return record(effect.sessionKey)
+    }
 
     if (effect.type === "detach") return detach(effect.sessionKey)
 
     if (effect.type === "forget-tabs") {
       const ref = drives.get(effect.sessionKey)?.ref
+      const rest = forgetTabs(saved.value, effect.sessionKey)
+
+      if (rest) saved.set(rest)
 
       if (ref) void client()?.forget({server: ref.server.id, session:ref.id}).catch(() => undefined)
     }
@@ -327,6 +355,17 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     opened: layout.side.opened(drive.ref),
   })
 
+  // The browser tabs the session's strip stores, once the stored layout has loaded: before that it reads as empty.
+  const stored = (ref: SessionRef) => (layout.ready() ? untrack(() => layout.stored(ref)) : undefined)
+
+  // The host can drop a session's strip with no plugin hearing of it. Before the strip is written for one tab, and
+  // when the person comes to the session, it gets back the tabs the desktop still holds, so no tab stands alone.
+  const restore = (ref: SessionRef) => {
+    const kept = stored(ref)
+
+    if (kept) dispatch({ type: "strip.read", sessionKey: ref.key, stored: kept })
+  }
+
   const receive = (drive: Drive, attempt: number, event: PaneEvent) => {
     const sessionKey = drive.ref.key
 
@@ -362,16 +401,21 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       if (event.error !== undefined) noteFailure(event.error, undefined)
 
-      return dispatch({ type: "pane.state", sessionKey, attempt, state: event.state, error: event.error })
+      return dispatch({ type: "pane.state", sessionKey, attempt, state: event.state, error: event.error, unnamed: event.unnamed, placed: event.placed, stored: stored(drive.ref) })
     }
 
     if (event.type === "embed")
       return dispatch({ type: "pane.embed", sessionKey, attempt, tabID: event.tabID, embed: event.embed })
 
-    if (event.type === "focus") return dispatch({ type: "pane.focus", sessionKey, attempt, tabID: event.tabID })
+    if (event.type === "focus") {
+      restore(drive.ref)
+
+      return dispatch({ type: "pane.focus", sessionKey, attempt, tabID: event.tabID })
+    }
 
     if (event.type === "activity" || event.type === "preview") {
       if (event.type === "preview") return dispatch({ ...presentation(drive), attempt, type: "pane.file", path: event.path })
+      restore(drive.ref)
 
       return dispatch({ ...presentation(drive), attempt, type: "pane.activity", tabID: event.tabID, reveal: event.reveal, visible: layout.state(key(event.tabID), drive.ref) === "visible" })
     }
@@ -430,7 +474,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     )
   }
 
-  // Closes every stored tab a native inventory lacks, then adds the tabs it newly lists.
+  // Closes every stored tab a native inventory lacks, then adds the tabs it newly lists and the ones the strip lost.
   const syncStrip = (effect: Extract<MachineEffect, { type: "sync-strip" }>) => {
     const ref = drives.get(effect.sessionKey)?.ref
 
@@ -453,9 +497,22 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       }
 
       effect.open.forEach((tabID) => {
-        if (layout.state(key(tabID), ref) === "closed") layout.open(key(tabID), ref, { tab: "append" })
+        if (layout.state(key(tabID), ref) !== "closed") return
+        // A tab a page or link opened stands after the tab it came from, and one the strip lost after the tab before
+        // it; the strip holds other panels' tabs too.
+        const after = effect.placed?.find((item) => item.tabID === tabID)?.after
+        builtinContext(ctx).layout.open(key(tabID), ref, { tab: "append", after: after && key(after) })
       })
     })
+  }
+
+  // The session's tabs as the desktop reports them. The strip draws them when the app opens again, before the desktop
+  // has attached, and holds each label until the tab's page has its own again.
+  const save = (sessionKey: string) => {
+    const tabs = sessionBrowser(machine(), sessionKey)?.tabs
+    const next = tabs && saveTabs(saved.value, sessionKey, tabs)
+
+    if (next) saved.set(next)
   }
 
   // Pages the user or the agent opened, once loaded: only a tab whose page exists has a real URL and title, as a
@@ -469,7 +526,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       if (tab.loading || tab.loadError || !attachment.embeds[tab.id] || !recordable(tab.url)) return
       const visit = `${tab.url}\n${tab.title}`
 
-      if (recorded.get(`${sessionKey}\n${tab.id}`) === visit) return
+      const previous = recorded.get(`${sessionKey}\n${tab.id}`)
+
+      if (previous === visit) return
       recorded.set(`${sessionKey}\n${tab.id}`, visit)
       history.set({
         visits: remember(
@@ -478,6 +537,13 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           state.pages[sessionKey]?.[tab.id]?.icon,
         ),
       })
+
+      // Main's history counts the visit; a page that only reported its title since is the same visit. Main keeps web
+      // pages alone, and a visit it misses while it is away is one the window's list still has.
+      const page = { url: tab.url, title: tab.title }
+      const main = pageKey(tab.url) ? historyClient() : undefined
+      const sent = previous?.startsWith(`${tab.url}\n`) ? main?.retitle(page, { signal: ctx.signal }) : main?.visit(page, { signal: ctx.signal })
+      void sent?.catch(() => undefined)
     })
   }
 
@@ -487,6 +553,9 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     const visits = url && event.icon ? withIcon(history.value.visits, url, event.icon) : undefined
 
     if (visits) history.set({ visits })
+    const kept = event.icon ? saveIcon(saved.value, sessionKey, event.tabID, event.icon) : undefined
+
+    if (kept) saved.set(kept)
   }
 
   const detach = (sessionKey: string) => {
@@ -505,11 +574,11 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   // The SDK removes the listener when the Ipc's generation ends.
   createKeyed(pane, (current) => current.on("event", (value) => listeners.get(value.binding)?.(value.event)))
 
-  const wakeCurrent = () => {
+  const wakeCurrent = (takes: boolean) => {
     if (document.visibilityState !== "visible") return
     const view = sessions.current()
 
-    if (view) dispatch({ type: "session.wake", sessionKey: view.key })
+    if (view) dispatch({ type: "session.wake", sessionKey: view.key, takes })
   }
 
   // The pane's Ipc goes away while its main plugin reloads or is not active, taking every binding with it.
@@ -517,7 +586,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     pane,
     () => {
       dispatch({ type: "ipc.changed", ipc: untrack(ipc) })
-      wakeCurrent()
+      wakeCurrent(false)
     },
     {
       // A pane that is starting and one that does not run are both no pane here, and they differ: a starting one
@@ -579,7 +648,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
           )
           onCleanup(
             data.on("session.execution.started", (event) => {
-              if (event.data.sessionID === ref.id) dispatch({ type: "session.wake", sessionKey })
+              if (event.data.sessionID === ref.id) dispatch({ type: "session.wake", sessionKey, takes: false })
             }),
           )
         },
@@ -598,7 +667,14 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       // The server finished creating the session.
       createKeyed(
         () => !ref.pending,
-        () => dispatch({ type: "session.wake", sessionKey }),
+        () => dispatch({ type: "session.wake", sessionKey, takes: false }),
+      )
+
+      // The window that took the session let it go, as when it closed: the server revoked the grant its attachment
+      // held. The session's details are read only while it is taken.
+      createKeyed(
+        () => sessionReplaced(machine(), sessionKey) && unheld(ref),
+        () => dispatch({ type: "session.released", sessionKey }),
       )
 
       // The strip can be written once the server reports the session's location.
@@ -632,15 +708,24 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   createKeyed(
     () => sessions.current()?.key,
     (sessionKey) => {
+      const drive = drives.get(sessionKey)
+
       dispatch({ type: "session.routed", sessionKey })
-      wakeCurrent()
+
+      // Now, not with the desktop's next report, which a quiet page never sends.
+      if (drive) restore(drive.ref)
+      // The person came to this session here, so one another window took comes back.
+      wakeCurrent(true)
       // The route moved on: the person no longer sees this session.
       onCleanup(() => dispatch({ type: "screen.left", sessionKey }))
     },
     { otherwise: () => dispatch({ type: "session.routed", sessionKey: undefined }) },
   )
-  makeEventListener(window, "focus", wakeCurrent)
-  makeEventListener(document, "visibilitychange", wakeCurrent)
+  // Focus, a press and a key wake a suspended pane and never take a session from the window that holds it: that
+  // would fail the commands an agent has in flight there.
+  const stir = () => wakeCurrent(false)
+  makeEventListener(window, "focus", stir)
+  makeEventListener(document, "visibilitychange", stir)
   // The window is neither hidden nor minimized, so the person sees what a pane draws.
   const [windowShown, setWindowShown] = createSignal(document.visibilityState === "visible")
   makeEventListener(document, "visibilitychange", () => {
@@ -651,10 +736,12 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
     if (!shown && view) dispatch({ type: "screen.left", sessionKey: view.key })
   })
-  makeEventListener(document, "pointerdown", wakeCurrent)
-  makeEventListener(document, "keydown", wakeCurrent)
+  makeEventListener(document, "pointerdown", stir)
+  makeEventListener(document, "keydown", stir)
 
   const attached = (session: Session) => sessionAttached(machine(), session.key)
+
+  const openable = (session: Session) => sessionOpenable(machine(), session.key)
 
   const available = (session: SessionRef) =>
     sessionSupported(machine(), session.key) && !!session.id && session.server.compatible && !layout.narrow()
@@ -707,6 +794,14 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   // A prompt waits only while an attachment for its session is in flight on a server that can answer it.
   const attaching = (session: SessionRef) => sessionAttaching(machine(), session.key, attachable(session, online()))
 
+  // A session that runs in a tab nobody has opened since the app started attaches as the routed one does. Keyed by the
+  // sessions it applies to, so each attaches once when it starts to run, and a later run wakes its attachment itself.
+  const unopened = () => sessions.list().filter((ref) => attachesUnopened(ref, online()))
+  createKeyed(
+    () => unopened().map((ref) => ref.key).join("\n"),
+    () => unopened().forEach(attach),
+  )
+
   // A prompt is about to go to the session. Its first step lists the browser tools only if the server already holds
   // this desktop's attachment, so the session attaches now, routed or not, and the send waits while that is in flight
   // and can still succeed. In every other state it resolves at once: a server that is not connected or not compatible,
@@ -716,7 +811,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   const ready = (session: SessionRef, signal: AbortSignal) => {
     if (!untrack(() => attachable(session, online()))) return Promise.resolve()
     attach(session)
-    dispatch({ type: "session.wake", sessionKey: session.key })
+    // The person's prompt goes out from this window, so its session's browser is this window's.
+    dispatch({ type: "session.wake", sessionKey: session.key, takes: true })
 
     if (!untrack(() => attaching(session)) || signal.aborted) return Promise.resolve()
     const settled = Promise.withResolvers<void>()
@@ -741,6 +837,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
   return {
     available,
     attached,
+    openable,
     ready,
     canOpen,
     openFile,
@@ -750,7 +847,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       const ref = sessions.list().find(item => item.key === sessionKey)
 
       if (ref?.server.compatible) attach(ref)
-      dispatch({ type: "session.wake", sessionKey })
+      dispatch({ type: "session.wake", sessionKey, takes: false })
       const target = registrations.get(sessionKey)
 
       if (!target) throw new Error("browser.pane.unavailable")
@@ -758,7 +855,7 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       return target.registration.createTab(owner, url, () => sessions.current()?.key === sessionKey)
     },
     async closeOwned(sessionKey: string, owner: string, id: ExperimentalBrowserTab) {
-      dispatch({ type: "session.wake", sessionKey })
+      dispatch({ type: "session.wake", sessionKey, takes: false })
       const target = registrations.get(sessionKey)
 
       if (!target) return false
@@ -770,6 +867,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     /** Opens a blank tab for the user, whose pane then focuses the address field. */
     open(session: SessionRef) {
       if (!available(session)) return
+      // Opening the browser here takes it back from another window, which would otherwise answer the command.
+      dispatch({ type: "session.wake", sessionKey: session.key, takes: true })
       dispatch({ type: "session.command", sessionKey: session.key, action: { type: "tabs.open" }, focusAddress: true })
     },
     /** Whether the user just opened this blank tab; true once, for the pane that focuses its address. */
@@ -855,6 +954,8 @@ export function createModel(ctx: SetupContext<typeof definition>) {
       return !!ref && !!state.chrome[session.key]?.[tabID]?.prompt && layout.state(key(tabID), ref) !== "visible"
     },
     unseen: (session: Session, tabID: string) => unseenActivity(machine(), session.key, tabID),
+    /** The tab keeps its new-tab label until its page names itself. */
+    unnamed: (session: Session, tabID: string) => tabUnnamed(machine(), session.key, tabID),
     seen: (session: Session, tabID: Browser.TabID) => dispatch({ type: "activity.seen", sessionKey: session.key, tabID }),
     revealGuard: (session: Session, tabID: string) => revealGuard(machine(), session.key, tabID),
     windowShown,
@@ -915,11 +1016,47 @@ export function createModel(ctx: SetupContext<typeof definition>) {
 
       return !visit.url.startsWith("workspace:") || (!!session?.id && visit.url.startsWith(workspacePrefix(session.id)))
     }),
+    /**
+     * Whether there may be history to clear: the window's list has pages, or this is the desktop app, where main's
+     * history may hold pages the window never listed, as imported ones.
+     */
+    historyClearable: () => history.value.visits.length > 0 || !!ctx.desktop,
+    /**
+     * Forgets every page: the window's list, and main's history with the pages imported from other browsers. Answers
+     * whether main's history went, so the pane never lets the person believe it did: false when main could not clear
+     * it, or cannot be reached. On the web there is no history but the window's list.
+     */
     clearHistory: () => {
       recorded.clear()
       history.set({ visits: [] })
+      const main = historyClient()
+
+      if (!main) return Promise.resolve(!ctx.desktop)
+
+      return main.clear({ signal: ctx.signal }).then(
+        () => true,
+        () => false,
+      )
+    },
+    /** The person is about to type an address: main reads its history into memory ahead of the first search. */
+    prepareHistory: () => void historyClient()?.prepare({ signal: ctx.signal }).catch(() => undefined),
+    /**
+     * The pages of main's history that match what the person typed in the address field, best first. None while main
+     * is away, as on the web.
+     */
+    searchHistory: (query: string, signal: AbortSignal) =>
+      historyClient()?.search({ query, limit: HISTORY_ANSWER }, { signal: AbortSignal.any([ctx.signal, signal]) }) ?? Promise.resolve([]),
+    /** Forgets one page, as the person asked from the address field's suggestions. */
+    forgetPage: (url: string) => {
+      const key = pageKey(url)
+
+      history.set({ visits: history.value.visits.filter((visit) => visit.url !== url && (!key || pageKey(visit.url) !== key)) })
+      void historyClient()?.remove({ url }, { signal: ctx.signal }).catch(() => undefined)
     },
     pending: (session: SessionRef) => sessionPending(machine(), session),
+    /** The browser could not open and has no tabs to show: the pane says so and offers `retry`. */
+    unavailable: (session: Session) => sessionUnavailable(machine(), session.key),
+    retry: (session: Session) => dispatch({ type: "session.retry", sessionKey: session.key }),
     /**
      * Tab IDs to list in the side panel: the desktop's inventory, limited to tabs stored in the strip. Until the first
      * inventory arrives, the stored tabs, so a restored selection holds; that inventory then prunes the ones it lacks.
@@ -968,19 +1105,33 @@ export function createModel(ctx: SetupContext<typeof definition>) {
     closeTab(session: Session, tabID: string) {
       const item = tab(session, tabID)
 
-      if (item) command(session, { type: "tabs.close", tabID: item.id })
+      if (item) return command(session, { type: "tabs.close", tabID: item.id })
+      // A tab drawn from the saved state, which the desktop has not reported yet: its attachment remembers the close.
+      const ref = sessions.list().find((entry) => entry.key === session.key)
+
+      if (ref?.server.compatible) attach(ref)
+      dispatch({ type: "strip.tab.closed", sessionKey: session.key, tabID })
     },
     /** Closes a tab through the strip, as its close button does, so ⌘⇧T can reopen it. */
     close(session: SessionRef, tabID: string) {
       if (layout.state(key(tabID), session) === "closed") return this.closeTab(session, tabID)
       layout.close(key(tabID), session)
     },
-    focusTab(session: Session, tabID: string) {
+    /** The strip selected a tab. `restored` is the selection it mounted with, not the person's choice. */
+    focusTab(session: Session, tabID: string, restored: boolean) {
       const item = tab(session, tabID)
 
-      if (item) dispatch({ type: "activity.seen", sessionKey: session.key, tabID: item.id })
+      if (!item) {
+        // A tab drawn from the saved state, which the desktop has not reported yet. The desktop restores the tab it
+        // had in front by itself, so only the person's pick of one waits for it.
+        if (!restored) dispatch({ type: "strip.tab.selected", sessionKey: session.key, tabID })
 
-      if (item && item.id !== sessionBrowser(machine(), session.key)?.focusedTabID)
+        return
+      }
+
+      dispatch({ type: "activity.seen", sessionKey: session.key, tabID: item.id })
+
+      if (item.id !== sessionBrowser(machine(), session.key)?.focusedTabID)
         command(session, { type: "tabs.focus", tabID: item.id })
     },
     /** The page's element picker starting, stopping, or picking an element. */

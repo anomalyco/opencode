@@ -1,0 +1,276 @@
+// Generates Rust API types and endpoints from ClientApi.
+import { compile, type Endpoint } from "@opencode/httpapi-codegen"
+import { ClientApi, clientNamespace, groupNames, promiseOmitEndpoints } from "@opencode/protocol/client"
+import { Schema, SchemaAST, SchemaRepresentation } from "effect"
+import { HttpApiSchema } from "effect/http-api"
+import { emitMethod, type Field, type Method } from "../rust/methods.ts"
+import { pascal, Types } from "../rust/types.ts"
+
+const root = new URL("..", import.meta.url).pathname.replace(/script\/$/, "")
+const directory = `${root}crates/api/src/generated`
+const typesFile = `${root}crates/api-types/src/types.rs`
+const clientFile = `${root}crates/api-types/src/client.rs`
+const operationsFile = `${root}crates/plugin/src/luau/operations.json`
+const samplesFile = `${root}crates/plugin/src/luau/client-samples.json`
+const resolveEncoding = SchemaAST.resolveAt<{ readonly _tag: string }>("~httpApiEncoding")
+// As `resolveHttpApiStatus` in httpapi-codegen: a no-content success (204) keeps its status on the
+// context annotations.
+const resolveStatus = (ast: SchemaAST.AST) =>
+  SchemaAST.resolveAt<number>("httpApiStatus")(ast) ??
+  (ast.checks === undefined ? (ast.context?.annotations?.httpApiStatus as number | undefined) : undefined)
+
+const contract = compile(ClientApi, { groupNames, omitEndpoints: promiseOmitEndpoints, namespace: clientNamespace })
+
+type Root = { readonly ast: SchemaAST.AST }
+const roots: Array<Root> = []
+const add = (ast: SchemaAST.AST) => {
+  const item = { ast }
+  roots.push(item)
+  return item
+}
+
+const plans = contract.groups.flatMap((group) =>
+  group.endpoints.map((endpoint) => {
+    const opaque = endpoint.payloads[0] !== undefined && !flattenable(endpoint.payloads[0])
+    const binaryBody =
+      endpoint.payloads[0] !== undefined && resolveEncoding(endpoint.payloads[0].ast)?._tag === "Uint8Array"
+    const sources = {
+      params: endpoint.params,
+      query: endpoint.query,
+      headers: endpoint.headers,
+      payload: endpoint.payloads[0],
+    }
+    const fields = endpoint.input.map((field) => {
+      const schema = sources[field.source]!
+      if (opaque && field.source === "payload")
+        return { ...field, root: binaryBody ? undefined : add(Schema.toEncoded(schema).ast) }
+      const ast = (field.source === "query" ? Schema.toType(schema) : Schema.toEncoded(schema)).ast
+      if (!SchemaAST.isObjects(ast)) throw new Error(`Input schema must be a struct: ${endpoint.operation.name}`)
+      const property = ast.propertySignatures.find((item) => item.name === field.name)!
+      return { ...field, root: add(property.type) }
+    })
+    const wildcard = endpoint.endpoint.path.endsWith("*")
+      ? [
+          {
+            name: endpoint.input.some((field) => field.name === "path") ? "wildcard" : "path",
+            source: "wildcard" as const,
+            optional: false,
+            root: undefined,
+          },
+        ]
+      : []
+    const success = endpoint.successes[0]
+    const kind = streamKind(success)
+    const output = (() => {
+      if (kind === "sse") return add(sseData(success))
+      if (HttpApiSchema.isNoContent(success.ast) || resolveEncoding(success.ast)?._tag === "Uint8Array")
+        return undefined
+      const ast = Schema.toEncoded(success).ast
+      if (!endpoint.unwrapData) return add(ast)
+      if (!SchemaAST.isObjects(ast)) throw new Error(`Invalid data envelope: ${endpoint.operation.name}`)
+      return add(ast.propertySignatures.find((item) => item.name === "data")!.type)
+    })()
+    for (const error of endpoint.errors) add(Schema.toEncoded(error.schema).ast)
+    const successKind: Method["success"] =
+      kind === "sse"
+        ? "sse"
+        : HttpApiSchema.isNoContent(success.ast)
+          ? "empty"
+          : resolveEncoding(success.ast)?._tag === "Uint8Array"
+            ? "binary"
+            : endpoint.unwrapData
+              ? "data"
+              : "json"
+    return { group, endpoint, opaque, binaryBody, fields: [...fields, ...wildcard], output, success: successKind }
+  }),
+)
+
+const document = SchemaRepresentation.toRepresentations(
+  normalize(roots.map((item) => item.ast)) as [SchemaAST.AST, ...Array<SchemaAST.AST>],
+)
+const representation = new Map(roots.map((item, index) => [item, document.representations[index]]))
+const types = new Types(document.references)
+for (const name of ["Client", "Call", "Error", "SseResponse", "Reply", "Sse"]) types.name(name)
+
+const methods = plans.map((plan) =>
+  emitMethod(types, {
+    group: plan.group,
+    endpoint: plan.endpoint,
+    prefix: `${pascal(plan.group.identifier)}${plan.endpoint.clientPath.map(pascal).join("")}`,
+    opaque: plan.opaque,
+    binaryBody: plan.binaryBody,
+    fields: plan.fields.map(
+      (field): Field => ({
+        name: field.name,
+        source: field.source,
+        optional: field.optional,
+        representation: field.root === undefined ? undefined : representation.get(field.root),
+      }),
+    ),
+    success: plan.success,
+    output: plan.output === undefined ? undefined : representation.get(plan.output),
+    successStatus: resolveStatus(plan.endpoint.successes[0].ast) ?? 200,
+  }),
+)
+// Declared error bodies get types too, for `DeclaredError::decode`, which checks their tag.
+const tagged = new Set<string>()
+for (const ref of Object.keys(document.references)) {
+  if (!/Error$/.test(ref)) continue
+  const name = types.type({ _tag: "Reference", $ref: ref }, ref)
+  const body = types.deref(document.references[ref])
+  if (body._tag !== "Objects" || tagged.has(name) || !/^[A-Z][A-Za-z0-9]*$/.test(name)) continue
+  const tag = ["_tag", "name"]
+    .map((key) => body.propertySignatures.find((property) => property.name === key))
+    .map((property) => (property === undefined ? undefined : types.deref(property.type)))
+    .find((type) => type?._tag === "Literal" && typeof type.literal === "string")
+  if (tag?._tag !== "Literal") continue
+  tagged.add(name)
+  types.items.push(
+    `impl crate::TaggedError for ${name} {\n    const TAG: &'static str = ${JSON.stringify(tag.literal)};\n}`,
+  )
+}
+// The streamed events the store applies and drops, decoded without allocating their strings.
+types.views([
+  "SessionTextDelta",
+  "SessionReasoningDelta",
+  "SessionToolInputDelta",
+  "SessionCompactionDelta",
+])
+types.items.push(types.tagModule())
+
+const header = "// Generated by script/gen/api.ts from ClientApi. Do not edit.\n"
+await Bun.write(
+  typesFile,
+  `${header}#![allow(clippy::all, clippy::pedantic, non_camel_case_types)]\n\nuse indexmap::IndexMap;\n\nuse serde::{Deserialize, Serialize};\n\n${types.items.join("\n\n")}\n`,
+)
+await Bun.write(
+  `${directory}/methods.rs`,
+  `${header}#![allow(clippy::all, clippy::pedantic)]\n\nuse super::types::*;\nuse crate::client::{Call, Client};\nuse crate::error::Error;\nuse crate::transport::SseResponse;\nuse opencode_api_types::client;
+
+macro_rules! endpoint {
+    ($doc:literal, $name:ident, $builder:ident, $send:ident, $output:ty $(, $arg:ident: $input:ty)?) => {
+        #[doc = $doc]
+        pub async fn $name(&self $(, $arg: &$input)?) -> Result<$output, Error> {
+            self.$send(Self::$builder($($arg)?)?).await
+        }
+        pub fn $builder($($arg: &$input)?) -> Result<Call, Error> {
+            client::$name($($arg)?).try_into()
+        }
+    };
+}
+
+impl Client {\n${methods.map((method) => method.method).join("\n")}\n}\n`,
+)
+await Bun.write(
+  clientFile,
+  `${header}//! Typed request builders. The API client sends requests with its credentials; plugins send them through their host.
+#![allow(clippy::all, clippy::pedantic)]
+
+use crate::call::{Call, Reply, Sse, path_wildcard};
+use crate::types::*;
+
+${methods.map((method) => method.builder).join("\n\n")}
+
+/// Builds a request from its operation name and JSON input, or returns \`None\` for an unknown operation.
+#[cfg(feature = "probe")]
+pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_json::Value>, String>> {
+    fn field<T: serde::de::DeserializeOwned>(input: &serde_json::Value, name: &str) -> Result<T, String> {
+        serde_json::from_value(input.get(name).cloned().unwrap_or_default()).map_err(|error| format!("{name}: {error}"))
+    }
+    match name {
+${methods.map((method) => `        ${method.probe}`).join("\n")}
+        _ => None,
+    }
+}
+`,
+)
+// The operations table, by name, for the Luau prelude's `plugin.client` and the Luau stub's types.
+const operations = Object.fromEntries(methods.map((method) => [method.name, method.operation]))
+if (Object.keys(operations).length !== methods.length) throw new Error("two endpoints have one client name")
+// One operation a line: diffs stay readable, and the carrier embeds no indentation.
+const lines = (rows: Array<[string, unknown]>) =>
+  `{\n${rows.map(([name, row]) => `${JSON.stringify(name)}:${JSON.stringify(row)}`).join(",\n")}\n}\n`
+await Bun.write(operationsFile, lines(Object.entries(operations)))
+await Bun.write(samplesFile, lines(methods.map((method) => [method.name, method.sample])))
+await Bun.write(
+  `${directory}/mod.rs`,
+  `${header}//! HTTP API types and endpoint methods.\n\nmod methods;\n\npub use opencode_api_types::types;\npub use types::*;\n\n/// Endpoints in the generated client.\npub const ENDPOINTS: usize = ${plans.length};\n`,
+)
+const format = Bun.spawnSync(["rustfmt", "--edition", "2024", `${directory}/mod.rs`, typesFile, clientFile], {
+  stdout: "inherit",
+  stderr: "inherit",
+})
+if (format.exitCode !== 0) process.exit(format.exitCode ?? 1)
+console.log(`api: ${plans.length} endpoints, ${types.items.length} items`)
+
+function flattenable(schema: Schema.Top) {
+  const ast = Schema.toType(schema).ast
+  return SchemaAST.isObjects(ast) && ast.indexSignatures.length === 0
+}
+
+function streamKind(schema: Schema.Top) {
+  if (!("_tag" in schema)) return undefined
+  if (schema._tag === "StreamSse") return "sse"
+  if (schema._tag === "StreamUint8Array") throw new Error("Byte streams are not supported")
+  return undefined
+}
+
+// The encoded data schema of an SSE endpoint, as `streamEncodedDataSchema` in httpapi-codegen.
+function sseData(schema: Endpoint["successes"][number]) {
+  const events = (schema as unknown as { readonly events: Schema.Top }).events.ast
+  if (!SchemaAST.isObjects(events)) throw new Error("Invalid SSE data schema")
+  const data = events.propertySignatures.find((field) => field.name === "data")!.type
+  // oxlint-disable-next-line no-restricted-globals -- Effect exposes this runtime helper without a public type.
+  const replaceEncoding = Reflect.get(SchemaAST, "replaceEncoding") as (
+    ast: SchemaAST.AST,
+    encoding: undefined,
+  ) => SchemaAST.AST
+  return Schema.toEncoded(Schema.make<Schema.Top>(replaceEncoding(data, undefined))).ast
+}
+
+// Declarations become their fields or JSON, as `codegenAsts` in httpapi-codegen, and equal named
+// schemas share one reference.
+function normalize(input: ReadonlyArray<SchemaAST.AST>) {
+  const cache = new WeakMap<SchemaAST.AST, SchemaAST.AST>()
+  const references = new Map<string, SchemaAST.AST>()
+  const recur = (ast: SchemaAST.AST): SchemaAST.AST => {
+    const cached = cache.get(ast)
+    if (cached !== undefined) return cached
+    const identifier = SchemaAST.resolveIdentifier(ast)
+    const output = step(ast)
+    const key =
+      identifier === undefined
+        ? undefined
+        : `${identifier}\0${ast.context?.isOptional === true}\0${JSON.stringify(SchemaRepresentation.toJson(SchemaRepresentation.toRepresentation(output)))}`
+    const reference = key === undefined ? undefined : references.get(key)
+    if (reference !== undefined) {
+      cache.set(ast, reference)
+      return reference
+    }
+    cache.set(ast, output)
+    if (key !== undefined) references.set(key, output)
+    return output
+  }
+  const step = (ast: SchemaAST.AST): SchemaAST.AST => {
+    if (SchemaAST.isDeclaration(ast) && ast.annotations?.toCode === undefined) {
+      const representation = ast.annotations?.representation
+      if (
+        typeof representation === "object" &&
+        representation !== null &&
+        "id" in representation &&
+        representation.id === "effect/schema/Json"
+      ) {
+        return Schema.Json.ast
+      }
+      if (ast.annotations?.["~constructor"] !== undefined && ast.typeParameters[0] !== undefined) {
+        const identifier = SchemaAST.resolveIdentifier(ast)
+        const fields = recur(ast.typeParameters[0])
+        if (identifier === undefined) return fields
+        return Schema.make<Schema.Top>(fields).annotate({ identifier }).ast
+      }
+    }
+    if (!("recur" in ast) || typeof ast.recur !== "function") return ast
+    return ast.recur(recur)
+  }
+  return input.map(recur)
+}
