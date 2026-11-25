@@ -232,7 +232,8 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
     )
   }
 
-  const focus = (i: number) => {
+  // The arrow keys and End land in the custom answer's field rather than on its toggle, so the answer is typed at once.
+  const focus = (i: number, field = false) => {
     const next = clamp(i)
     setStore("focus", next)
 
@@ -241,7 +242,8 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
     if (focusFrame !== undefined) cancelAnimationFrame(focusFrame)
     focusFrame = requestAnimationFrame(() => {
       focusFrame = undefined
-      const el = next === options().length ? customRef : optsRef[next]
+      const custom = field ? customInput : customRef
+      const el = next === options().length ? custom : optsRef[next]
       el?.focus({ preventScroll: true })
       const row = el?.closest<HTMLElement>('[data-slot="question-option"]')
 
@@ -330,7 +332,7 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
 
   const move = (step: number) => {
     if (store.editing || sending()) return
-    focus(store.focus + step)
+    focus(store.focus + step, true)
   }
 
   const nav = (event: KeyboardEvent) => {
@@ -416,7 +418,7 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
 
     if (event.key !== "End") return
     event.preventDefault()
-    focus(count() - 1)
+    focus(count() - 1, true)
   }
 
   const selectOption = (optIndex: number) => {
@@ -745,6 +747,21 @@ export const SessionQuestionDockClassic: Component<{ request: FormInfo; onSubmit
                 }
 
                 if ((e.metaKey || e.ctrlKey) && !e.altKey) return
+
+                // Up from the start of the field returns to the answers above it.
+                if (
+                  e.key === "ArrowUp" &&
+                  !e.shiftKey &&
+                  !e.altKey &&
+                  e.currentTarget.selectionStart === 0 &&
+                  e.currentTarget.selectionEnd === 0
+                ) {
+                  e.preventDefault()
+                  setStore("editing", false)
+                  focus(options().length - 1)
+
+                  return
+                }
 
                 // The other Enter starts a new line, as the field does by itself.
                 if (questionEnter(e, submitKey()) !== "submit") return

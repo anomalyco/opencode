@@ -165,10 +165,44 @@ story("keeps classic long answer lists inside the panel and scrolls them", async
     .toEqual({ fits: true, scrolls: true })
 
   await first.press("End")
-  await expect(question.getByRole("checkbox", { name: "Type your own answer…", exact: true })).toBeFocused()
+  await expect(question.getByRole("textbox", { name: "Type your own answer…", exact: true })).toBeFocused()
   await expect(question.locator('[data-slot="question-option"][data-custom="true"]')).toBeInViewport({ ratio: 1 })
   await question.getByRole("button", { name: "Next", exact: true }).click()
   await expect(question.getByRole("radio", { name: "One pull request", exact: true })).toBeFocused()
+})
+
+story("classic arrow keys land in the custom answer's field and Up from its start leaves it", async ({ mount, page }) => {
+  const component = await mount("app-current-session-surface--question-request")
+  const question = component.locator('[data-component="dock-prompt"][data-kind="question"]')
+  const focused = question.getByRole("radio", { name: /Focused/ })
+  const wide = question.getByRole("radio", { name: /Wide/ })
+  const custom = question.getByRole("radio", { name: "Type your own answer…", exact: true })
+  const input = question.getByRole("textbox", { name: "Type your own answer…", exact: true })
+  await expect(focused).toBeFocused()
+  await page.keyboard.press("1")
+  await expect(focused).toBeChecked()
+
+  await page.keyboard.press("ArrowDown")
+  await page.keyboard.press("ArrowDown")
+  await expect(input).toBeFocused()
+  await expect(custom).not.toBeChecked()
+  await expect(focused).toBeChecked()
+
+  await page.keyboard.press("ArrowUp")
+  await expect(wide).toBeFocused()
+  await expect(focused).toBeChecked()
+
+  await page.keyboard.press("End")
+  await expect(input).toBeFocused()
+  await page.keyboard.type("S")
+  await expect(custom).toBeChecked()
+  await expect(focused).not.toBeChecked()
+
+  await page.keyboard.press("ArrowUp")
+  await expect(input).toBeFocused()
+  await page.keyboard.press("ArrowUp")
+  await expect(wide).toBeFocused()
+  await expect(custom).toBeChecked()
 })
 
 story.describe("on a 393x852 mobile viewport", () => {
