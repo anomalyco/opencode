@@ -6,7 +6,7 @@ import { OpenCode, type OpenCodeEvent } from "../src/promise"
 type Listener = Parameters<CreateDataInput["event"]["listen"]>[0]
 
 /** A data store over a fake server whose flag endpoint answers with `flag(directory)`. */
-function setup(flag: (directory: string) => Response) {
+function setup(flag: (directory: string) => Response | Promise<Response>) {
   const listeners = new Set<Listener>()
   const requests: string[] = []
   const api = OpenCode.make({
@@ -43,9 +43,11 @@ function setup(flag: (directory: string) => Response) {
     dispose,
   }))
   const emit = (event: OpenCodeEvent) => listeners.forEach((listener) => listener({ name: event.type, details: event }))
-  const count = (directory = "/project") =>
-    requests.filter((request) => request === `/api/experimental/flag ${directory}`).length
-  return { ...root, emit, count }
+  const count = (directory?: string) =>
+    requests.filter((request) =>
+      directory ? request === `/api/experimental/flag ${directory}` : request.startsWith("/api/experimental/flag "),
+    ).length
+  return { ...root, emit, count, requests }
 }
 
 const until = async (check: () => boolean) => {
@@ -191,6 +193,67 @@ test("keeps each location's flags apart", async () => {
     ])
     expect(app.data.location.flag("full_codemode", { directory: "/on" })).toBe(true)
     expect(app.data.location.flag("full_codemode", { directory: "/off" })).toBe(false)
+  } finally {
+    app.dispose()
+  }
+})
+
+test("reconnect with an aliased location refreshes flags once and updates both keys", async () => {
+  const state = { enabled: true }
+  const app = setup(() => Response.json({ location: { directory: "/real" }, data: { full_codemode: state.enabled } }))
+  try {
+    await app.data.location.flags.sync({ directory: "/alias" })
+    expect(app.count()).toBe(1)
+    expect(app.data.location.flag("full_codemode", { directory: "/alias" })).toBe(true)
+    expect(app.data.location.flag("full_codemode", { directory: "/real" })).toBe(true)
+
+    state.enabled = false
+    app.emit({ id: "evt_connected", created: 1, type: "server.connected", data: {} } as OpenCodeEvent)
+    await until(
+      () =>
+        !app.data.location.flag("full_codemode", { directory: "/alias" }) &&
+        !app.data.location.flag("full_codemode", { directory: "/real" }),
+    )
+    expect(app.count()).toBe(2)
+  } finally {
+    app.dispose()
+  }
+})
+
+test("reconnect refreshes a flags sync that is still in flight", async () => {
+  const first = Promise.withResolvers<Response>()
+  let calls = 0
+  const app = setup((directory) => {
+    calls++
+    if (calls === 1) return first.promise
+    return Response.json({ location: { directory }, data: { full_codemode: true } })
+  })
+  const location = { directory: "/project" }
+  try {
+    const initial = app.data.location.flags.sync(location)
+    await until(() => app.count() === 1)
+    app.emit({ id: "evt_connected", created: 1, type: "server.connected", data: {} } as OpenCodeEvent)
+    first.resolve(Response.json({ location, data: { full_codemode: false } }))
+    await initial
+    await until(() => app.data.location.flag("full_codemode", location))
+    expect(app.count()).toBe(2)
+  } finally {
+    app.dispose()
+  }
+})
+
+test("location.sync does not wait on flags before starting the other location reads", async () => {
+  const pending = Promise.withResolvers<Response>()
+  const app = setup(() => pending.promise)
+  const location = { directory: "/project" }
+  try {
+    await app.data.location.syncInfo(location)
+    const syncing = app.data.location.sync(location)
+    await until(() => app.requests.includes("/api/vcs /project"))
+    expect(app.requests).toContain("/api/experimental/flag /project")
+    pending.resolve(Response.json({ location, data: { full_codemode: true } }))
+    await syncing
+    expect(app.data.location.flag("full_codemode", location)).toBe(true)
   } finally {
     app.dispose()
   }

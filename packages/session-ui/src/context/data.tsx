@@ -95,6 +95,9 @@ export const {
       get agents() {
         return props.agents ?? true
       },
+      get flags() {
+        return props.flags
+      },
       /** Whether the server reports `key` on for the session's location; off when unknown. */
       flag(key: string) {
         return props.flags?.[key] === true
