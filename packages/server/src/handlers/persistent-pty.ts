@@ -23,6 +23,7 @@ import { makeAutomation } from "./automation"
 import { makeJob } from "./job"
 import { makeMachine, makeMachineLink } from "./machine"
 import { makeMediaGet } from "./media"
+import { makePreference } from "./preference"
 import { makePush } from "./push"
 import { type Outbound, runPtySocket } from "./pty-socket"
 
@@ -39,6 +40,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const machine = yield* makeMachine
     const machineLink = yield* makeMachineLink
     const push = yield* makePush
+    const preference = yield* makePreference
 
     return handlers
       .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
@@ -58,6 +60,9 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
       .handle("push.session.set", (ctx) => push.setSessionBell(ctx.params.sessionID, ctx.payload))
       .handle("push.session.remove", (ctx) => push.removeSessionBell(ctx.params.sessionID))
       .handle("push.settings.set", (ctx) => push.setSettings(ctx.payload))
+      .handle("preference.items", (ctx) => preference.items(ctx.params.name))
+      .handle("preference.update", (ctx) => preference.update(ctx.params.name, ctx.payload))
+      .handle("preference.clear", (ctx) => preference.clear(ctx.params.name))
       .handle("artifacts.providers", (ctx) => artifact.providers(ctx.query, ctx.request))
       .handle("artifacts.list", (ctx) => artifact.list(ctx.query, ctx.request))
       .handle("artifacts.create", (ctx) => artifact.create(ctx.query, ctx.payload, ctx.request))

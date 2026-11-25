@@ -2675,6 +2675,28 @@ export type ExperimentalPushSettingsSetOperation<E = never> = (
   input: ExperimentalPushSettingsSetInput,
 ) => Effect.Effect<ExperimentalPushSettingsSetOutput, E>
 
+export type ExperimentalPreferenceItemsInput = { readonly name: string }
+export type ExperimentalPreferenceItemsOutput = { readonly [x: string]: string }
+export type ExperimentalPreferenceItemsOperation<E = never> = (
+  input: ExperimentalPreferenceItemsInput,
+) => Effect.Effect<ExperimentalPreferenceItemsOutput, E>
+
+export type ExperimentalPreferenceUpdateInput = {
+  readonly name: string
+  readonly insert: { readonly [x: string]: string }
+  readonly remove: ReadonlyArray<string>
+}
+export type ExperimentalPreferenceUpdateOutput = void
+export type ExperimentalPreferenceUpdateOperation<E = never> = (
+  input: ExperimentalPreferenceUpdateInput,
+) => Effect.Effect<ExperimentalPreferenceUpdateOutput, E>
+
+export type ExperimentalPreferenceClearInput = { readonly name: string }
+export type ExperimentalPreferenceClearOutput = void
+export type ExperimentalPreferenceClearOperation<E = never> = (
+  input: ExperimentalPreferenceClearInput,
+) => Effect.Effect<ExperimentalPreferenceClearOutput, E>
+
 export interface ExperimentalApi<E = never> {
   readonly persistentPty: {
     readonly read: ExperimentalPersistentPtyReadOperation<E>
@@ -2726,6 +2748,11 @@ export interface ExperimentalApi<E = never> {
       readonly remove: ExperimentalPushSessionRemoveOperation<E>
     }
     readonly settings: { readonly set: ExperimentalPushSettingsSetOperation<E> }
+  }
+  readonly preference: {
+    readonly items: ExperimentalPreferenceItemsOperation<E>
+    readonly update: ExperimentalPreferenceUpdateOperation<E>
+    readonly clear: ExperimentalPreferenceClearOperation<E>
   }
 }
 
