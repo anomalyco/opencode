@@ -61,6 +61,7 @@ function DialogConnectedModels(props: {
   const data = useData()
   const location = useLocation()
   const [query, setQuery] = createSignal("")
+  const searching = createMemo(() => query().trim().length > 0)
   // Under new designs, favoriting does not reorder the list until the dialog is reopened.
   const favoritesAtOpen = [...local.model.favorite()]
   const favoritePriority = new Set(favoritesAtOpen.map(modelPreferenceKey))
@@ -82,16 +83,63 @@ function DialogConnectedModels(props: {
   )
   const models = createMemo(() => data.location.model.list(location.ref) ?? [])
 
-  const showExtra = createMemo(() => connected() && !props.providerID)
+  const modelOptions = createMemo(() =>
+    sortModelOptions(
+      models()
+        .filter((model) => model.status !== "deprecated")
+        .filter((model) => (props.providerID ? model.providerID === props.providerID : true))
+        // A model's faster and slower speeds are chosen with the speed selector.
+        .filter((model) => !local.model.isSpeed({ providerID: model.providerID, modelID: model.id }))
+        .map((model) => {
+          const providerName = providers().get(model.providerID)?.name ?? model.providerID
+          const value = { providerID: model.providerID, modelID: model.id }
+          const favorite = isFavorite(value)
+          const category = connected() ? (freeGroup(model) ? "Free" : providerName) : undefined
+          return {
+            value,
+            providerID: model.providerID,
+            providerName,
+            title: model.name,
+            releaseDate: model.time.released,
+            searchCategory: category,
+            get description() {
+              if (newDesigns()) return searching() ? providerName : undefined
+              return favorite ? "(Favorite)" : undefined
+            },
+            get category() {
+              // In search results the provider is shown inline and the footer can show the favorite marker.
+              return newDesigns() && searching() ? undefined : category
+            },
+            footer: trailing(model, favorite),
+            free: isFreeModel(model),
+            onSelect() {
+              props.onSelect(model.providerID, model.id)
+            },
+          }
+        }),
+      connected(),
+    ),
+  )
 
   const options = createMemo(() => {
     const needle = query().trim()
-    const showSections = showExtra() && needle.length === 0
-    const favorites = connected() ? (newDesigns() ? favoritesAtOpen : local.model.favorite()) : []
+    if (needle) {
+      return prioritizeFavorites(
+        sortModelOptions(
+          fuzzysort.go(needle, modelOptions(), { keys: ["title", "searchCategory"] }).map((item) => item.obj),
+          false,
+        ),
+        favoritePriority,
+      )
+    }
+
+    if (!connected()) return prioritizeFavorites(modelOptions(), favoritePriority)
+    if (props.providerID) return modelOptions()
+
+    const favorites = newDesigns() ? favoritesAtOpen : local.model.favorite()
     const recents = local.model.recent()
 
     function toOptions(items: typeof favorites, category: string) {
-      if (!showSections) return []
       return items.flatMap((item) => {
         const model = models().find((model) => model.providerID === item.providerID && model.id === item.modelID)
         if (!model) return []
@@ -121,69 +169,19 @@ function DialogConnectedModels(props: {
       "Recent",
     )
 
-    const modelOptions = sortModelOptions(
-      models()
-        .filter((model) => model.status !== "deprecated")
-        .filter((model) => (props.providerID ? model.providerID === props.providerID : true))
-        // A model's faster and slower speeds are chosen with the speed selector.
-        .filter((model) => !local.model.isSpeed({ providerID: model.providerID, modelID: model.id }))
-        .map((model) => {
-          const provider = providers().get(model.providerID)
-          const value = { providerID: model.providerID, modelID: model.id }
-          const favorite = isFavorite(value)
-          return {
-            value,
-            providerID: model.providerID,
-            providerName: provider?.name ?? model.providerID,
-            title: model.name,
-            releaseDate: model.time.released,
-            description: newDesigns() ? undefined : favorite ? "(Favorite)" : undefined,
-            category: connected() ? (freeGroup(model) ? "Free" : (provider?.name ?? model.providerID)) : undefined,
-            footer: trailing(model, favorite),
-            free: isFreeModel(model),
-            onSelect() {
-              props.onSelect(model.providerID, model.id)
-            },
-          }
-        })
-        .filter((option) => {
-          if (!showSections) return true
-          if (
-            favorites.some(
-              (item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID,
-            )
-          )
-            return false
-          if (
-            recents.some((item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID)
-          )
-            return false
-          return true
-        }),
-      connected(),
+    const listed = modelOptions().filter(
+      (option) =>
+        !favorites.some(
+          (item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID,
+        ) &&
+        !recents.some((item) => item.providerID === option.value.providerID && item.modelID === option.value.modelID),
     )
-
-    if (needle) {
-      const results = prioritizeFavorites(
-        sortModelOptions(
-          fuzzysort.go(needle, modelOptions, { keys: ["title", "category"] }).map((item) => item.obj),
-          false,
-        ),
-        favoritePriority,
-      )
-      // Search results name the provider inline. Without a category, the trailing slot keeps the favorite marker
-      // instead of falling back to the provider name.
-      if (!newDesigns()) return results
-      return results.map((option) => ({ ...option, description: option.providerName, category: undefined }))
-    }
-
-    if (!connected()) return prioritizeFavorites(modelOptions, favoritePriority)
 
     return [
       ...favoriteOptions,
       ...recentOptions,
-      ...modelOptions.filter((option) => option.category !== "Free"),
-      ...modelOptions.filter((option) => option.category === "Free"),
+      ...listed.filter((option) => option.category !== "Free"),
+      ...listed.filter((option) => option.category === "Free"),
     ]
   })
 

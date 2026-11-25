@@ -1,3 +1,4 @@
+import type { ModelInfo } from "@opencode/client"
 import { createStore } from "solid-js/store"
 import { dedupeWith } from "effect/Array"
 import { createSimpleContext } from "./helper"
@@ -45,8 +46,18 @@ export const { use: useLocal, provider: LocalProvider } = createSimpleContext({
     const models = () => data.location.model.list(location.ref)
     const providers = () => data.location.provider.list(location.ref)
 
+    const modelIndex = createMemo(() => {
+      const index = new Map<string, Map<string, ModelInfo>>()
+      for (const model of models() ?? []) {
+        const provider = index.get(model.providerID) ?? new Map<string, ModelInfo>()
+        if (!provider.has(model.id)) provider.set(model.id, model)
+        index.set(model.providerID, provider)
+      }
+      return index
+    })
+
     function findModel(model: ModelPreferenceModel) {
-      return models()?.find((item) => item.providerID === model.providerID && item.id === model.modelID)
+      return modelIndex().get(model.providerID)?.get(model.modelID)
     }
 
     function isModelValid(model: ModelPreferenceModel) {
