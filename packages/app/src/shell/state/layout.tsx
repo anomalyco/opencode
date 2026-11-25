@@ -337,6 +337,30 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
     })
     onCleanup(() => dispatchIntent({ type: "disposed" }))
 
+    /** Commits a placed session strip and selection, updating preview and recently-closed state together. */
+    const commitTabs = (session: string, placed: SessionTabs, preview?: { value: string | undefined }) =>
+      batch(() => {
+        setStore("sessionTabs", session, {
+          all: placed.all,
+          active: placed.active,
+          panes: placed.panes,
+          selected: placed.selected,
+        })
+
+        if (preview) setEphemeral("sessionTabPreview", session, preview.value)
+
+        // A tab that opens again leaves "Recently closed".
+        const closed = store.sessionView[session]?.closed
+
+        if (closed?.some((entry) => placed.all.includes(entry.key)))
+          setStore(
+            "sessionView",
+            session,
+            "closed",
+            closed.filter((entry) => !placed.all.includes(entry.key)),
+          )
+      })
+
     /** Writes a session's strip and selection, carrying pane placement over from the stored strip. */
     const writeTabs = (session: string, next: SessionTabs, preview?: { value: string | undefined }) =>
       untrack(() => {
@@ -344,27 +368,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
         const target = selectPaneTarget(intentState(), session)
         const placed = placeSessionTabs(previous, next, target)
 
-        batch(() => {
-          setStore("sessionTabs", session, {
-            all: placed.all,
-            active: placed.active,
-            panes: placed.panes,
-            selected: placed.selected,
-          })
-
-          if (preview) setEphemeral("sessionTabPreview", session, preview.value)
-
-          // A tab that opens again leaves "Recently closed".
-          const closed = store.sessionView[session]?.closed
-
-          if (closed?.some((entry) => placed.all.includes(entry.key)))
-            setStore(
-              "sessionView",
-              session,
-              "closed",
-              closed.filter((entry) => !placed.all.includes(entry.key)),
-            )
-        })
+        commitTabs(session, placed, preview)
 
         if (target && placed.all.some((tab) => !previous.all.includes(tab) && paneTargetMatches(target, tab)))
           dispatchIntent({ type: "pane.consumed", session, attempt: target.attempt })
@@ -778,7 +782,7 @@ export const { use: useLayout, provider: LayoutProvider } = createSimpleContext(
             const current = store.sessionTabs[session]
 
             if (!current?.all.includes(tab)) return
-            writeTabs(session, moveSessionTab(current, tab, pane, before))
+            untrack(() => commitTabs(session, moveSessionTab(current, tab, pane, before)))
           },
           /**
            * Opens the next new tab a pane's "+" menu creates in `pane`; with `plugin`, only that plugin's tab, and with
