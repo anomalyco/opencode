@@ -11,6 +11,8 @@ export function mountTimelineVirtualizer(input: {
   rowHeight: number
   immediate?: boolean
   viewportHeight?: number
+  /** Builds the view, and lets the virtualizer watch it, before it is in the page. "Attach view" puts it there. */
+  staged?: boolean
 }) {
   const host = document.createElement("main")
   host.dataset.testid = "timeline-virtualizer-fixture"
@@ -55,7 +57,7 @@ export function mountTimelineVirtualizer(input: {
       },
       onContentResize: () => {
         if (content) return
-        content = host.querySelector<HTMLDivElement>("[data-timeline-virtual-content]")!
+        content = container.querySelector<HTMLDivElement>("[data-timeline-virtual-content]")!
         reveal.observe(content, { attributes: true, attributeFilter: ["style"] })
       },
       onScheduleScrollState: (element) => {
@@ -85,6 +87,8 @@ export function mountTimelineVirtualizer(input: {
         pendingMarkdown: content.querySelectorAll('[data-component="markdown"]:not([data-markdown-ready])').length,
         viewportHeight: viewport.clientHeight,
         scrollTop: viewport.scrollTop,
+        // The native scrolls delivered since the view was built, or since it last left the page.
+        scrolls: Number(host.dataset.scrolls),
         clipped: mounted.flatMap((element) =>
           element.firstElementChild!.getBoundingClientRect().height > element.offsetHeight + 1
             ? [element.dataset.timelineKey]
@@ -97,6 +101,31 @@ export function mountTimelineVirtualizer(input: {
       resize.disconnect()
       reveal.disconnect()
     })
+
+    const view = (
+      <div ref={container} style={{ height: `${input.viewportHeight ?? 180}px`, width: "400px" }}>
+        <timeline.View
+          header={null}
+          deferred={() => false}
+          renderRow={(row) => (
+            <div
+              data-component="markdown"
+              data-markdown-ready={state.ready ? "" : undefined}
+              style={{
+                height: `${input.rowHeight + (state.grown && row().userMessageID === `message-${input.count - 1}` ? 40 : 0)}px`,
+              }}
+              data-timeline-part-ids={row().userMessageID === "message-0" ? "prt_first,prt_grouped" : undefined}
+            >
+              {row().userMessageID}
+            </div>
+          )}
+        />
+      </div>
+    )
+
+    // A view that waits outside the page belongs to the page's document, as one that has been shown does. The
+    // virtualizer watches only such an element.
+    if (input.staged) document.createElement("div").append(container)
 
     return (
       <div data-testid="timeline-controls" data-pinned={follow.following()} data-anchored={!!follow.anchor()}>
@@ -121,6 +150,13 @@ export function mountTimelineVirtualizer(input: {
         >
           Reconnect ready rows
         </button>
+        <button type="button" onClick={(event) => event.currentTarget.parentElement!.append(container)}>
+          Attach view
+        </button>
+        {/* What navigation to a message does before it scrolls there. */}
+        <button type="button" onClick={() => follow.dispatch({ type: "detach" })}>
+          Leave the end
+        </button>
         <button type="button" onClick={() => scrollToEnd()}>
           Scroll to end
         </button>
@@ -136,24 +172,7 @@ export function mountTimelineVirtualizer(input: {
         >
           Anchor first row
         </button>
-        <div ref={container} style={{ height: `${input.viewportHeight ?? 180}px`, width: "400px" }}>
-          <timeline.View
-            header={null}
-            deferred={() => false}
-            renderRow={(row) => (
-              <div
-                data-component="markdown"
-                data-markdown-ready={state.ready ? "" : undefined}
-                style={{
-                  height: `${input.rowHeight + (state.grown && row().userMessageID === `message-${input.count - 1}` ? 40 : 0)}px`,
-                }}
-                data-timeline-part-ids={row().userMessageID === "message-0" ? "prt_first,prt_grouped" : undefined}
-              >
-                {row().userMessageID}
-              </div>
-            )}
-          />
-        </div>
+        {input.staged ? undefined : view}
       </div>
     )
   }
