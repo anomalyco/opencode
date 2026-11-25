@@ -132,6 +132,31 @@ test("titlebar search lists recent sessions and opens the typed match", async ({
   await expect(page.getByRole("heading", { name: paletteSession.title, exact: true })).toBeVisible()
 })
 
+test("titlebar search finds archived sessions dimmed but keeps them out of recent sessions", async ({ page }) => {
+  const archived = {
+    ...paletteSession,
+    id: "ses_command_palette_archived",
+    title: "Palette archived session",
+    time: { ...paletteSession.time, updated: paletteSession.time.updated + 1, archived: 1700000000500 },
+  }
+  await openPaletteWorkspace(page, true, [paletteSession, archived])
+  await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
+  const dialog = page.getByRole("dialog")
+  const input = dialog.getByRole("combobox")
+  const row = dialog.getByRole("option", { name: /Palette archived session/ })
+  await expect(dialog.getByRole("option", { name: /Palette fixture session/ })).toBeVisible()
+  await expect(row).toHaveCount(0)
+  await input.fill("Palette")
+  await expect(dialog.getByRole("option")).toHaveCount(2)
+  await expect(row.locator(".command-palette-title")).toHaveClass(/opacity-70/)
+  await expect(
+    dialog.getByRole("option", { name: /Palette fixture session/ }).locator(".command-palette-title"),
+  ).not.toHaveClass(/opacity-70/)
+  await row.click()
+  await expect(dialog).toHaveCount(0)
+  await expect(page.getByRole("heading", { name: archived.title, exact: true })).toBeVisible()
+})
+
 test("titlebar search asks for one bounded result set after a pause in typing", async ({ page }) => {
   await openPaletteWorkspace(page, true)
   const searches: URL[] = []
