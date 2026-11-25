@@ -1099,9 +1099,17 @@
     }
   }
 
+  /* A call's name reads as a step, in the face of the timeline's titles; what it ran on stays code. */
   [data-slot="execute-tool-call-name"] {
     flex-shrink: 0;
+    font-family: var(--v2-font-family-sans);
+    font-weight: 440;
+    letter-spacing: -0.04px;
     color: var(--v2-text-text-base);
+  }
+
+  [data-slot="execute-tool-call"][data-kind="output"] [data-slot="execute-tool-call-name"] {
+    color: var(--v2-text-text-muted);
   }
 
   [data-slot="execute-tool-call-args"] {
@@ -1200,6 +1208,11 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
+}
+
+/* A script's title labels the steps under it, so it is muted as the timeline's other labels are. */
+[data-component="collapsible"] [data-slot="basic-tool-tool-title"][data-execute-title] {
+  color: var(--v2-text-text-muted);
 }
 
 [data-slot="execute-tool-call-marker"] [data-slot="icon-svg"] {
@@ -1451,6 +1464,11 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+
+  /* An opened group spaces its items as the timeline spaces blocks; a script's changes stay by the script. */
+  > [data-slot="context-tool-group-item"] + [data-slot="context-tool-group-item"]:not([data-script-change]) {
+    margin-top: 8px;
+  }
 
   [data-slot="context-tool-group-item"] {
     min-width: 0;

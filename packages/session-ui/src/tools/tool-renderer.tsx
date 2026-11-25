@@ -612,7 +612,14 @@ export function CurrentContextToolGroup(props: {
                             </Show>
                           }
                         >
-                          {(part) => <div data-slot="context-tool-group-item">{part.render()}</div>}
+                          {(part) => (
+                            <div
+                              data-slot="context-tool-group-item"
+                              data-script-change={part.file.via === "script" ? "" : undefined}
+                            >
+                              {part.render()}
+                            </div>
+                          )}
                         </Show>
                       }
                     >
@@ -2112,7 +2119,7 @@ ToolRegistry.register({
         trigger={
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
-              <span data-slot="basic-tool-tool-title">
+              <span data-slot="basic-tool-tool-title" data-execute-title="">
                 <Show when={shimmered()} fallback={i18n.t("ui.tool.execute")}>
                   <TextShimmer text={i18n.t("ui.tool.execute")} active={pending()} />
                 </Show>

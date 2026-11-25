@@ -445,6 +445,13 @@
     padding-top: 0;
   }
 
+  /* An opened group spaces its items as the timeline spaces blocks; a script's changes stay by the script. */
+  [data-component="context-tool-group-list"]
+    > [data-slot="context-tool-group-item"]
+    + [data-slot="context-tool-group-item"]:not([data-script-change]) {
+    margin-top: calc(var(--timeline-gap-m) - var(--timeline-gap-s));
+  }
+
   [data-component="context-tool-group-list"] [data-slot="context-tool-group-item"],
   [data-component="context-tool-group-list"] [data-slot="timeline-event-item"],
   [data-component="timeline-event-list"] [data-slot="timeline-event-item"] {

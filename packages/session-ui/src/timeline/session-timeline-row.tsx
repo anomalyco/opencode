@@ -806,8 +806,14 @@ export function createSessionTimelineRowRenderer(input: {
       classList={{
         "min-w-0 w-full max-w-full": true,
         "md:max-w-session md:mx-auto": input.centered?.(),
-        "pt-2": Predicate.isTagged(props.row, "AssistantPart") && props.row.spacing === "tool",
-        "pt-4": Predicate.isTagged(props.row, "AssistantPart") && props.row.spacing === "content",
+        // Blocks stand a step further apart than a script stands from its own changes.
+        "pt-2":
+          Predicate.isTagged(props.row, "AssistantPart") &&
+          props.row.spacing === "tool" &&
+          TimelineRow.scriptChanges(props.row),
+        "pt-4":
+          Predicate.isTagged(props.row, "AssistantPart") &&
+          (props.row.spacing === "content" || (props.row.spacing === "tool" && !TimelineRow.scriptChanges(props.row))),
         "pt-6": Predicate.isTagged(props.row, "Error"),
       }}
     >

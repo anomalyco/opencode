@@ -478,6 +478,11 @@ export function sameFileFact(previous: FileFact, next: FileFact) {
 
 const scriptFilePart = /^(.*?):file:(\d+):/
 
+/** Whether a part id names a change a script made, which draws as part of the script's block. */
+export function isScriptFilePartID(partID: string) {
+  return scriptFilePart.test(partID)
+}
+
 /** The change a script made that a part id names, read from that one entry of the script's part in the message. */
 export function scriptFileFact(content: readonly Content[], messageID: string, partID: string) {
   const match = scriptFilePart.exec(partID)

@@ -9,7 +9,8 @@ story("spaces an error between a shell result and expanded updates", async ({ mo
   const errorBox = (await error.boundingBox())!
   const updatesBox = (await updates.boundingBox())!
   expect(errorBox.y - (shellBox.y + shellBox.height)).toBe(24)
-  expect(updatesBox.y - (errorBox.y + errorBox.height)).toBe(8)
+  // Blocks stand a step apart (16px); only a script's own changes keep the 8px under it.
+  expect(updatesBox.y - (errorBox.y + errorBox.height)).toBe(16)
   expect(updatesBox.x).toBe(errorBox.x)
   await updates.click()
   const notice = timeline.locator('[data-slot="session-timeline-notice"]')
