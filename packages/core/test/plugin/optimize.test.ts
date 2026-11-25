@@ -16,6 +16,7 @@ import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 import PROMPT_META from "../../src/plugin/system-prompt/meta.txt"
 import PROMPT_GPT from "../../src/plugin/system-prompt/gpt.txt"
+import PROMPT_GPT_6_2 from "../../src/plugin/system-prompt/gpt-6.2.txt"
 import PROMPT_ASTRA from "../../src/plugin/system-prompt/gpt-astra.txt"
 import PROMPT_KIMI from "../../src/plugin/system-prompt/kimi.txt"
 import PROMPT_TRINITY from "../../src/plugin/system-prompt/trinity.txt"
@@ -63,7 +64,20 @@ describe("OptimizePlugin", () => {
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       yield* catalog.transform((editor) => {
-        for (const id of ["gpt-5", "gpt-4.1", "gpt-5-codex", "gpt-6", "gpt-6-astra", "gpt-5-astra"])
+        for (const id of [
+          "gpt-5",
+          "gpt-4.1",
+          "gpt-5-codex",
+          "gpt-6",
+          "gpt-6-astra",
+          "gpt-5-astra",
+          "gpt-6.1-sol",
+          "gpt-oss-120b",
+          "gpt-6.2-sol",
+          "gpt-6.2-astra",
+          "gpt-7",
+          "gpt-latest",
+        ])
           editor.models.update(Provider.ID.make("test"), Model.ID.make(id), () => {})
         editor.models.update(Provider.ID.make("test"), Model.ID.make("meta/muse-spark-1.1"), (model) => {
           model.name = "Muse Spark"
@@ -80,6 +94,12 @@ describe("OptimizePlugin", () => {
         ["gpt-6", PROMPT_GPT],
         ["gpt-6-astra", PROMPT_ASTRA],
         ["gpt-5-astra", PROMPT_ASTRA],
+        ["gpt-6.1-sol", PROMPT_GPT],
+        ["gpt-oss-120b", PROMPT_GPT],
+        ["gpt-6.2-sol", PROMPT_GPT_6_2],
+        ["gpt-6.2-astra", PROMPT_GPT_6_2],
+        ["gpt-7", PROMPT_GPT_6_2],
+        ["gpt-latest", PROMPT_GPT_6_2],
         ["gemini-2.5-pro", fallback],
         ["claude-sonnet-4", appended],
         ["kimi-k2", PROMPT_KIMI],

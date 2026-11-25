@@ -7,16 +7,23 @@ import { Effect } from "effect"
 import { SessionSystemPrompt } from "../session/system-prompt.js"
 
 import PROMPT_GPT from "./system-prompt/gpt.txt"
+import PROMPT_GPT_6_2 from "./system-prompt/gpt-6.2.txt"
 import PROMPT_ASTRA from "./system-prompt/gpt-astra.txt"
 import PROMPT_KIMI from "./system-prompt/kimi.txt"
 import PROMPT_META from "./system-prompt/meta.txt"
 import PROMPT_TRINITY from "./system-prompt/trinity.txt"
 import PROMPT_ANTHROPIC from "./system-prompt/anthropic.txt"
 
+const LEGACY_GPT = /gpt-(?:[1-5](?:\.\d+)?|6(?:\.[01])?|oss)(?![.\d])/
+
+// OpenAI prompts are derived from Codex's model prompts. GPT-6.2 Sol and Astra share the
+// same core prompt in Codex, so gpt-6.2.txt intentionally covers both; older models keep
+// their separate gpt.txt / gpt-astra.txt prompts.
 export const OpenAIPlugin = make("opencode.prompt.openai", (model) => {
   const id = model.id.toLowerCase()
   if (!id.includes("gpt")) return undefined
-  return id.includes("astra") ? PROMPT_ASTRA : PROMPT_GPT
+  if (LEGACY_GPT.test(id)) return id.includes("astra") ? PROMPT_ASTRA : PROMPT_GPT
+  return PROMPT_GPT_6_2
 })
 
 export const AnthropicPlugin = make(
