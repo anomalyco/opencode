@@ -26,7 +26,6 @@ const layer = Layer.effectDiscard(
     // session's execution clears its notification instead.
     const asking = new Map<Session.ID, Set<string>>()
 
-
     const topLevel = Effect.fn("PushWatcher.topLevel")(function* (sessionID: Session.ID) {
       let session = yield* sessions.get(sessionID)
       while (session.parentID) session = yield* sessions.get(session.parentID)
