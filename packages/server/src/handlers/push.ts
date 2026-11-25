@@ -1,16 +1,23 @@
-import { Effect } from "effect"
+import { Effect, Option } from "effect"
 import { HttpApiSchema } from "effect/http-api"
 import { PushList } from "@opencode/core/push/list"
 import { InvalidRequestError, PushDeviceNotFoundError } from "@opencode/protocol/errors"
+import { Session } from "@opencode/core/session"
 import type { Push } from "@opencode/schema/push"
-import type { Session } from "@opencode/schema/session"
 
 export const makePush = Effect.gen(function* () {
   const list = yield* PushList.Service
+  const sessions = yield* Session.Service
 
   const invalid = (error: PushList.InvalidError) => new InvalidRequestError({ message: error.reason })
   const notFound = (error: PushList.NotFoundError) =>
     new PushDeviceNotFoundError({ deviceID: error.id, message: error.message })
+  // A subagent's notifications follow its top-level session's bell, so a bell on the subagent would do nothing.
+  const rejectSubagent = Effect.fnUntraced(function* (sessionID: Session.ID) {
+    const session = Option.getOrUndefined(yield* sessions.get(sessionID).pipe(Effect.option))
+    if (session?.parentID)
+      return yield* new InvalidRequestError({ message: "Set the bell on the top-level session, not on a subagent" })
+  })
 
   return {
     get: Effect.fn("PushHandler.get")(function* () {
@@ -31,6 +38,7 @@ export const makePush = Effect.gen(function* () {
       sessionID: Session.ID,
       bell: Push.Bell,
     ) {
+      yield* rejectSubagent(sessionID)
       return {
         data: yield* list.setDeviceBell(id, sessionID, bell).pipe(
           Effect.catchTags({
@@ -45,6 +53,7 @@ export const makePush = Effect.gen(function* () {
       return HttpApiSchema.NoContent.make()
     }),
     setSessionBell: Effect.fn("PushHandler.setSessionBell")(function* (sessionID: Session.ID, bell: Push.Bell) {
+      yield* rejectSubagent(sessionID)
       return { data: yield* list.setSessionBell(sessionID, bell).pipe(Effect.mapError(invalid)) }
     }),
     removeSessionBell: Effect.fn("PushHandler.removeSessionBell")(function* (sessionID: Session.ID) {

@@ -135,6 +135,19 @@ it.live("updates phones and sets session bells", () =>
     })
     expect(pastUntil.status).toBe(400)
 
+    const parent = yield* request("/api/session", { method: "POST", body: JSON.stringify({ title: "Parent" }) })
+    const child = yield* request("/api/session", {
+      method: "POST",
+      body: JSON.stringify({ parentID: parent.body.data.id, title: "Child" }),
+    })
+    const subagent = { method: "PUT", body: JSON.stringify({ level: "none" }) }
+    expect((yield* request(`${device}/session/${child.body.data.id}`, subagent)).status).toBe(400)
+    expect((yield* request(`/api/experimental/push/session/${child.body.data.id}`, subagent)).status).toBe(400)
+    expect((yield* request(`/api/experimental/push/session/${parent.body.data.id}`, subagent)).status).toBe(200)
+    expect((yield* request(`/api/experimental/push/session/${parent.body.data.id}`, { method: "DELETE" })).status).toBe(
+      204,
+    )
+
     expect((yield* request(`${device}/session/ses_push`, { method: "DELETE" })).status).toBe(204)
     expect((yield* request("/api/experimental/push/session/ses_push", { method: "DELETE" })).status).toBe(204)
     const cleared = (yield* request("/api/experimental/push")).body.data
