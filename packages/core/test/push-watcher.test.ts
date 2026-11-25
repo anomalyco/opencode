@@ -272,33 +272,22 @@ describe("PushWatcher", () => {
       yield* prompt("user")
       yield* waitUntil(Effect.sync(() => boxes.length === 8))
 
-      // Archiving the session removes whatever is still showing for it.
-      yield* ask("per_3")
-      yield* step(parentID)
-      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: parentID })
-      yield* waitUntil(Effect.sync(() => boxes.length === 10))
-      yield* bus.publish(SessionEvent.Archived, { sessionID: parentID })
-      yield* waitUntil(Effect.sync(() => boxes.length === 12))
-      expect(
-        cleared()
-          .slice(4, 6)
-          .map((item) => item.id)
-          .sort(),
-      ).toEqual([parentID, "per_3"].sort())
-
-      // So does deleting it.
-      yield* ask("per_4")
-      yield* step(parentID)
-      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: parentID })
-      yield* waitUntil(Effect.sync(() => boxes.length === 14))
-      yield* bus.publish(SessionEvent.Deleted, { sessionID: parentID })
-      yield* waitUntil(Effect.sync(() => boxes.length === 16))
-      expect(
-        cleared()
-          .slice(6)
-          .map((item) => item.id)
-          .sort(),
-      ).toEqual([parentID, "per_4"].sort())
+      // Archiving or deleting the session removes whatever is still showing for it.
+      for (const gone of [SessionEvent.Archived, SessionEvent.Deleted]) {
+        const before = boxes.length
+        yield* ask("per_3")
+        yield* step(parentID)
+        yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: parentID })
+        yield* waitUntil(Effect.sync(() => boxes.length === before + 2))
+        yield* bus.publish(gone, { sessionID: parentID })
+        yield* waitUntil(Effect.sync(() => boxes.length === before + 4))
+        expect(
+          cleared()
+            .slice(-2)
+            .map((item) => item.id)
+            .sort(),
+        ).toEqual([parentID, "per_3"].sort())
+      }
 
       expect(silent.slice(0, 8)).toEqual([undefined, true, undefined, true, undefined, true, undefined, true])
       expect(cleared().slice(0, 4)).toEqual([
