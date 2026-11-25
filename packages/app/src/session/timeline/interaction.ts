@@ -72,6 +72,8 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
 
   let page = (_direction: 1 | -1) => {}
 
+  let wheel = (_event: WheelEvent) => {}
+
   let scrollStateFrame: (() => void) | undefined
   let scrollStateTarget: HTMLDivElement | undefined
   const [historyState, setHistoryState] = createSignal(createTimelineHistoryState())
@@ -225,7 +227,8 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
     const element = target instanceof Element ? target : undefined
     const nested = element?.closest("[data-scrollable]")
 
-    if (nested && nested !== scroller) return
+    // Only while that region can scroll: a gesture over one that holds all of its content scrolls the timeline.
+    if (nested && nested !== scroller && nested.scrollHeight > nested.clientHeight) return
     cursor.dispatch(SCROLL_MOVED_EVENT)
   }
 
@@ -466,6 +469,11 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
       },
       setPage: (scroll: (direction: 1 | -1) => void) => {
         page = scroll
+      },
+      // A wheel over what lies over the timeline outside its view scrolls it as one inside the view does.
+      wheel: (event: WheelEvent) => wheel(event),
+      setWheel: (handler: (event: WheelEvent) => void) => {
+        wheel = handler
       },
     },
   }

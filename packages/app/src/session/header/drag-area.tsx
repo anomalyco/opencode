@@ -25,7 +25,12 @@ export function SessionHeaderGap(props: { active: boolean; register?: (gap: HTML
  * pane over the gap rather than placed in the header: the header sticks inside the timeline's scroller, and Chromium
  * only recomputes drag regions on layout, so a region inside it would stay behind on scroll.
  */
-export function SessionHeaderDrag(props: { pane?: HTMLElement; gap?: HTMLElement }) {
+export function SessionHeaderDrag(props: {
+  pane?: HTMLElement
+  gap?: HTMLElement
+  /** The area lies over the timeline, outside its view, so the timeline hears a wheel over it here. */
+  onWheel?: (event: WheelEvent) => void
+}) {
   const [rect, setRect] = createSignal<{ x: number; y: number; width: number; height: number }>()
 
   // Rename, truncation, readout updates and pane resizes all resize the gap; nothing here runs while the timeline scrolls.
@@ -79,6 +84,8 @@ export function SessionHeaderDrag(props: { pane?: HTMLElement; gap?: HTMLElement
             height: `${value().height}px`,
           }}
           data-tauri-drag-region
+          // Not passive: the timeline takes the wheel from the browser to scroll as far itself.
+          on:wheel={{ passive: false, handleEvent: (event: WheelEvent) => props.onWheel?.(event) }}
         />
       )}
     </Show>

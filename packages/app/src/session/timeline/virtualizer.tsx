@@ -138,6 +138,8 @@ type Input = {
   setScrollToEnd?: (fn: (behavior?: ScrollBehavior) => void) => void
   /** Pages the timeline for keys pressed outside it, such as PageUp in the composer. */
   setPage?: (fn: (direction: 1 | -1) => void) => void
+  /** Hears a wheel over what lies over the timeline outside its view: the window's drag area over the session header. */
+  setWheel?: (fn: (event: WheelEvent) => void) => void
   reveal?: TimelineRouteReveal
 }
 
@@ -832,6 +834,10 @@ export function createTimelineVirtualizer(input: Input) {
       // The page is the reader's scroll, as the same key in the transcript is: it leaves the end, and arrives at it.
       seen.reader += seen.top - from
     })
+    input.setWheel?.((event) => {
+      handleOverWheel(event)
+      handleViewWheel(event)
+    })
   })
 
   createEffect(
@@ -1128,30 +1134,53 @@ export function createTimelineVirtualizer(input: Input) {
     virtualizer["scrollState"] = null
   }
 
-  // Heard on the whole view: a wheel over the session header or the jump button, which lie over the timeline, scrolls
-  // it too, and its event never reaches the scroll element.
-  const handleViewWheel = (event: WheelEvent) => {
-    // A wheel with no vertical distance moves nothing in the timeline: a sideways one, over a code block for example.
-    // It is not the reader scrolling, so it ends no seek and says nothing about where the reader is headed.
-    if (!active() || !event.deltaY) return
-    const upward = event.deltaY < 0
-    const root = listRoot()
+  // The scroller of its own that a wheel is over, such as a shell's output in a row, when its content overflows.
+  const scrollerUnder = (event: WheelEvent) => {
     const marked = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-scrollable]") : null
 
-    // The scroller in a row that the wheel is over, such as a shell's output, when its content overflows.
-    const inner =
-      marked && marked !== root && root?.contains(marked) && marked.scrollHeight > marked.clientHeight
-        ? marked
-        : undefined
+    return marked && marked !== listRoot() && viewRoot()?.contains(marked) && marked.scrollHeight > marked.clientHeight
+      ? marked
+      : undefined
+  }
+
+  // Heard on the whole view, and on the window's drag area over the session header: the header and the jump button lie
+  // over the timeline, and the event of a wheel over them never reaches the scroll element.
+  const handleViewWheel = (event: WheelEvent) => {
+    // A wheel with no vertical distance moves nothing in the timeline: a sideways one, over a code block for example.
+    // Neither does one with the control key, which zooms: a pinch on a trackpad arrives as one. It is not the reader
+    // scrolling, so it ends no seek and says nothing about where the reader is headed.
+    if (!active() || !event.deltaY || event.ctrlKey) return
+    const upward = event.deltaY < 0
+    const root = listRoot()
+    const inner = scrollerUnder(event)
 
     // While that scroller has room in the wheel's direction it takes the wheel, and the timeline does not move. That
     // is not the reader scrolling the timeline either: a wheel up inside a shell's output stopped the timeline from
     // following, and the reply that streamed next stayed out of view.
     if (inner && (upward ? inner.scrollTop > 0 : inner.scrollHeight - inner.clientHeight - inner.scrollTop > 1)) return
-    input.onUserScroll(event.target)
+    const over = !inner && event.target instanceof Node && !root?.contains(event.target)
+    // At a scroller's limit, and over what lies over the timeline, the wheel is the timeline's: it ends a seek as one
+    // over the rows does.
+    input.onUserScroll(inner || over ? root : event.target)
     // At its limit the browser passes the wheel on to the timeline, but not when the wheel gesture began while the
-    // scroller had room: the rest of that gesture stays with the scroller and scrolls nothing.
-    dispatchIntent(upward, !!inner)
+    // scroller had room: the rest of that gesture stays with the scroller and scrolls nothing. A wheel over what lies
+    // over the timeline that neither `handleOverWheel` nor the scrollbar's thumb took is the browser's in the same way.
+    dispatchIntent(upward, !!inner || (over && !event.defaultPrevented))
+  }
+
+  // What lies over the timeline is not inside its scroll element. For a wheel there the browser goes by the layers it
+  // composites, not by the element under the pointer: it scrolled the timeline while the rows were text, and nothing
+  // once a row held a scroller of its own, such as a shell's output. So the timeline takes the wheel from the browser
+  // and scrolls as far itself, once. Taking it needs a listener that is not passive, which is on those elements only:
+  // over the rows the compositor never waits on the main thread to scroll.
+  const handleOverWheel = (event: WheelEvent) => {
+    const root = listRoot()
+
+    // The browser does not wait for the page once it scrolls for a wheel gesture: the rest of that gesture is its own.
+    if (!active() || !root || !event.deltaY || event.ctrlKey || !event.cancelable || scrollerUnder(event)) return
+    event.preventDefault()
+    // The scroll is the reader's, so it is made outside the timeline's own writes: it leaves the end, and arrives at it.
+    root.scrollBy({ top: event.deltaY, behavior: "instant" })
   }
 
   const handleListTouchStart = (event: TouchEvent) => {
@@ -1401,6 +1430,7 @@ export function createTimelineVirtualizer(input: Input) {
           }}
           style={{ bottom: `${bottomInset() + 32}px` }}
           inert={!input.scroll().overflow || !input.scroll().jump}
+          on:wheel={{ passive: false, handleEvent: handleOverWheel }}
         >
           <button
             type="button"
@@ -1428,7 +1458,12 @@ export function createTimelineVirtualizer(input: Input) {
         </div>
         <Show when={input.showHeader()}>
           {/* The scroll viewport's fade masks anything outside the chat, including the review toggle when open. */}
-          <div class="pointer-events-none absolute inset-x-0 top-0 z-30">{props.header}</div>
+          <div
+            class="pointer-events-none absolute inset-x-0 top-0 z-30"
+            on:wheel={{ passive: false, handleEvent: handleOverWheel }}
+          >
+            {props.header}
+          </div>
         </Show>
         <ScrollView
           data-slot="session-timeline-scroll"
@@ -1515,6 +1550,7 @@ export function createTimelineVirtualizer(input: Input) {
       input.setRevealMessage?.(() => {})
       input.setScrollToEnd?.(() => {})
       input.setPage?.(() => {})
+      input.setWheel?.(() => {})
     }
   })
 

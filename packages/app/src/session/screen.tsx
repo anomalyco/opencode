@@ -346,6 +346,7 @@ function SessionScreenContent(props: {
             reveal={timeline.view.reveal}
             setScrollToEnd={timeline.view.setScrollToEnd}
             setPage={timeline.view.setPage}
+            setWheel={timeline.view.setWheel}
             search={
               <Show when={active()}>
                 <TimelineSearchBar controller={timelineSearch} />
@@ -496,7 +497,7 @@ function SessionScreenContent(props: {
               </SessionPanelFrame>
             </Show>
             <Show when={windowDragEnabled(platform)}>
-              <SessionHeaderDrag pane={chat} gap={headerGap()} />
+              <SessionHeaderDrag pane={chat} gap={headerGap()} onWheel={timeline.view.wheel} />
             </Show>
 
             {/* Hidden rather than unmounted: removing it makes the transcript frame the last child, and structural
