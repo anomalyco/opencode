@@ -1,6 +1,6 @@
 export * as PushSender from "./sender.js"
 
-import { Clock, Context, Effect, Layer, Option, Schema, Scope } from "effect"
+import { Context, Effect, Layer, Option, Schema, Scope } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
 import type { Push } from "@opencode/schema/push"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -34,11 +34,8 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Pu
 
 const maxMessageBytes = 2600
 const attempts = 3
-// How long a sent notification can still be cleared. Older ones are forgotten so the record doesn't grow forever.
-const clearableFor = 7 * 24 * 60 * 60 * 1000
-
 // Which phones were sent a notification, so a clear goes only to them.
-const Sent = Schema.Struct({ sessionID: Schema.String, devices: Schema.Array(Schema.String), at: Schema.Number })
+const Sent = Schema.Struct({ sessionID: Schema.String, devices: Schema.Array(Schema.String) })
 const decodeSent = Schema.decodeUnknownOption(Sent)
 const sentKey = (id: string) => `push:sent:${id}`
 const sentPrefix = "push:sent:"
@@ -109,23 +106,8 @@ const layer = Layer.effect(
       yield* Effect.logWarning("gave up sending a push notification", { deviceID: device.id, attempts })
     })
 
-    // Every record, dropping expired ones and any that can't be read.
-    const readSent = Effect.fn("PushSender.readSent")(function* (now: number) {
-      const records: (typeof Sent.Type & { id: string })[] = []
-      let after: string | undefined
-      while (true) {
-        const page = yield* kv.scan({ prefix: sentPrefix, after, limit: 1000 })
-        for (const entry of page.entries) {
-          const sent = decodeSent(entry.value)
-          if (Option.isNone(sent) || now - sent.value.at > clearableFor) {
-            yield* kv.remove(entry.key)
-            continue
-          }
-          records.push({ id: entry.key.slice(sentPrefix.length), ...sent.value })
-        }
-        if (!page.next) return records
-        after = page.next
-      }
+    const getSent = Effect.fn("PushSender.getSent")(function* (id: string) {
+      return Option.getOrUndefined(decodeSent(yield* kv.get(sentKey(id))))
     })
 
     const deliver = Effect.fn("PushSender.deliver")(function* (notification: Notification) {
@@ -139,13 +121,11 @@ const layer = Layer.effect(
         return true
       })
       if (devices.length === 0) return
-      const now = yield* Clock.currentTimeMillis
-      const previous = (yield* readSent(now)).find((record) => record.id === notification.id)
+      const previous = yield* getSent(notification.id)
       // Recorded before pushing, so a clear that comes while the pushes are in flight still reaches these phones.
       yield* kv.set(sentKey(notification.id), {
         sessionID: notification.sessionID,
         devices: Array.from(new Set([...(previous?.devices ?? []), ...devices.map((device) => device.id)])),
-        at: now,
       })
       yield* Effect.forEach(
         devices,
@@ -160,10 +140,9 @@ const layer = Layer.effect(
     const clear = Effect.fn("PushSender.clear")(function* (ids: ReadonlyArray<string>) {
       const cleared: (typeof Sent.Type & { id: string })[] = []
       for (const id of ids) {
-        const sent = decodeSent(yield* kv.get(sentKey(id)))
-        if (Option.isNone(sent)) continue
+        const sent = yield* getSent(id)
         yield* kv.remove(sentKey(id))
-        cleared.push({ id, ...sent.value })
+        if (sent) cleared.push({ id, ...sent })
       }
       if (cleared.length === 0) return
       const targets = yield* list.targets()
@@ -181,8 +160,18 @@ const layer = Layer.effect(
     })
 
     const clearSession = Effect.fn("PushSender.clearSession")(function* (sessionID: string) {
-      const records = yield* readSent(yield* Clock.currentTimeMillis)
-      yield* clear(records.filter((record) => record.sessionID === sessionID).map((record) => record.id))
+      const ids: string[] = []
+      let after: string | undefined
+      while (true) {
+        const page = yield* kv.scan({ prefix: sentPrefix, after, limit: 1000 })
+        for (const entry of page.entries) {
+          const sent = decodeSent(entry.value)
+          if (Option.isSome(sent) && sent.value.sessionID === sessionID) ids.push(entry.key.slice(sentPrefix.length))
+        }
+        if (!page.next) break
+        after = page.next
+      }
+      yield* clear(ids)
     })
 
     return Service.of({
