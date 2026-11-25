@@ -192,7 +192,7 @@ export const dict = {
   "go.faq.a5.grokRetention": "ZDR, durum bilgisi tutan Responses API, Files and Collections ve Batch API dahil olmak üzere saklanan verilere bağlı önemli API özelliklerini devre dışı bırakır.",
   "go.faq.a5.gptRetention": "Tüm API özelliklerinin kullanımı için kötüye kullanım izleme günlükleri oluşturulur ve 30 güne kadar saklanır.",
   "go.faq.a5.learnMore": "Daha fazla bilgi",
-  "go.faq.a5.deepseekRetention": "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 30 Kasım 2026 tarihine kadar geçerlidir.",
+  "go.faq.a5.deepseekRetention": "ZDR anlaşması aylık olarak yenilenir. Mevcut anlaşma 31 Aralık 2026 tarihine kadar geçerlidir.",
   "go.faq.q6": "Kredi yükleyebilir miyim?",
   "go.faq.a6": "Daha fazla kullanıma ihtiyacınız varsa, hesabınıza kredi yükleyebilirsiniz.",
   "go.faq.q7": "İptal edebilir miyim?",

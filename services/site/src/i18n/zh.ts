@@ -193,7 +193,7 @@ export const dict = {
   "go.faq.a5.grokRetention": "ZDR 会禁用依赖所存储数据的重要 API 功能，包括有状态的 Responses API、Files and Collections 和 Batch API。",
   "go.faq.a5.gptRetention": "所有 API 功能的使用都会生成滥用监控日志，并最多保留 30 天。",
   "go.faq.a5.learnMore": "了解更多",
-  "go.faq.a5.deepseekRetention": "ZDR 协议每月续签。当前协议有效期至 2026 年 11 月 30 日。",
+  "go.faq.a5.deepseekRetention": "ZDR 协议每月续签。当前协议有效期至 2026 年 12 月 31 日。",
   "go.faq.q6": "我可以充值余额吗？",
   "go.faq.a6": "如果您需要更多用量，可以在账户中充值余额。",
   "go.faq.q7": "我可以取消吗？",
