@@ -1,3 +1,4 @@
+import { Badge } from "@opencode/ui/badge"
 import { Button } from "@opencode/ui/button"
 import { Checkbox } from "@opencode/ui/checkbox"
 import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
@@ -358,9 +359,17 @@ export function SiteChooser(props: {
         <DialogTitleGroup
           // With a profile picker, the picker names the browser, so the title does not repeat it.
           title={
-            props.choices.length > 1
-              ? ctx.t("settings.import.title")
-              : ctx.t("signins.import", { browser: choiceLabel(choice()) })
+            <Show when={props.choices.length === 1} fallback={ctx.t("settings.import.title")}>
+              {/* The profile of a browser that has several, as its Settings row shows it. */}
+              <span class="flex min-w-0 items-center gap-1.5">
+                <span class="truncate">{ctx.t("signins.import", { browser: choice().source.name })}</span>
+                <Show when={choice().source.profiles.length > 1}>
+                  <Badge appearance="standard" class="min-w-0 shrink">
+                    <span class="truncate">{choice().profile.name}</span>
+                  </Badge>
+                </Show>
+              </span>
+            </Show>
           }
         />
       </DialogHeader>
