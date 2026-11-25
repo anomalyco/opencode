@@ -1,3 +1,7 @@
+[data-timeline-row] [data-component="tool-trigger"] {
+  content-visibility: visible;
+}
+
 [data-component="tool-trigger"] {
   content-visibility: auto;
   width: 100%;
