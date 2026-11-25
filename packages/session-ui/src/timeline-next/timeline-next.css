@@ -336,7 +336,9 @@
 
 /* Rows are spaced by block: rows that continue a block sit the small gap below the one above, and a
    row starting a block (the user's message, the agent's work in reply, an interruption) sits the large gap below.
-   The gap is the frame's only space above its content; rows add none of their own. */
+   The row directly above holds the gap, below its content: the turn gap before a turn's first row, else the row
+   before. It is a frame's only space; rows add none of their own. A gap above a row's content would grow that row
+   when the row before it loads, and move the rows on screen. */
 [data-timeline="next"] {
   --timeline-gap-s: 16px;
   --timeline-gap-m: 20px;
@@ -344,15 +346,15 @@
 }
 
 [data-timeline="next"][data-timeline-gap="s"] {
-  padding-top: var(--timeline-gap-s);
+  padding-bottom: var(--timeline-gap-s);
 }
 
 [data-timeline="next"][data-timeline-gap="m"] {
-  padding-top: var(--timeline-gap-m);
+  padding-bottom: var(--timeline-gap-m);
 }
 
 [data-timeline="next"][data-timeline-gap="l"] {
-  padding-top: var(--timeline-gap-l);
+  padding-bottom: var(--timeline-gap-l);
 }
 
 /* Rows are as tall as their text, so the gaps between them are the gaps that show. A row's 28px click area stays: 6px of
