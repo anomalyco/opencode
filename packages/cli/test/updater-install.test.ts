@@ -182,6 +182,7 @@ installs.forEach(({ method, command }) => {
       const test = yield* fixture()
       yield* test.updater.upgrade(method, "v2.3.4-beta.1")
       expect(test.commands).toEqual([command(test.prefixArgs)])
+      expect(test.requests).toHaveLength(1)
     }),
   )
 })
@@ -379,6 +380,7 @@ it.live("bun ignores install cache cleanup failures", () =>
         }
       })
       const result = yield* test.updater.upgrade("curl", "v2.3.4-beta.1").pipe(Effect.flip, Effect.option)
+      expect(test.requests).toEqual([])
       const installer = test.commands[0]?.[3]
       expect(installer).toStartWith(path.join(test.global.cache, "update-"))
       expect(test.commands).toEqual([
