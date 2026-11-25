@@ -7,7 +7,7 @@ import { FileSystem } from "../filesystem.js"
 
 /** Refuses a search where none can run yet: it needs a ripgrep binary the environment's spawner can start. */
 export const available = (environment: Environment.Interface) =>
-  environment.searchable
+  environment.rg
     ? Effect.void
     : Effect.fail(new ToolFailure({ message: `Search is not available on ${environment.id} yet.` }))
 

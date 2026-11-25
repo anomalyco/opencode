@@ -10,13 +10,11 @@ import { Environment } from "./environment/index.js"
 import { EnvironmentPath } from "./environment/path.js"
 import { Flag } from "./flag.js"
 import { Location } from "./location.js"
-import { Machines } from "./machine/machines.js"
 import { Permission } from "./permission.js"
 import { Project } from "./project.js"
 import { AbsolutePath } from "./schema.js"
 import type { SessionErrors } from "./session/error.js"
 import type { Tool } from "./tool.js"
-import { Workspace } from "./workspace.js"
 
 export const Kind = Schema.Literals(["file", "directory"])
 export type Kind = typeof Kind.Type
@@ -134,7 +132,6 @@ const layer = Layer.effect(
     const permission = yield* Permission.Service
     const flags = yield* Flag.Service
     const environments = yield* Environments.Service
-    const machines = yield* Machines.Service
 
     // The flag and the working directory are read once per operation by `locate` and `resolve`, which both call this.
     const place = Effect.fnUntraced(function* (
@@ -149,7 +146,7 @@ const layer = Layer.effect(
       const crossEnvironment = enabled && environment.id === Environment.localID
       const parsed =
         !base && crossEnvironment
-          ? yield* EnvironmentPath.typed(text, machines).pipe(
+          ? yield* EnvironmentPath.typed(text, environments.has).pipe(
               Effect.mapError((cause) => new Environment.Failed({ path: text, cause })),
             )
           : undefined
@@ -164,23 +161,24 @@ const layer = Layer.effect(
         } satisfies Environment.Place
       }
       // Another environment's paths follow its own path rules (falling back to POSIX when unknown). Only `~` and `~/`
-      // are expanded: paired machines report their home in hello, while sandboxes do not expose a home directory.
+      // are expanded when the target environment exposes `home` (e.g. a paired machine's hello or a sandbox with home).
       // With the flag off no home is asked for, so a base on another machine refuses every `~`.
-      const target = crossEnvironment
-        ? yield* environments.lookup(id).pipe(
-            Effect.catchTags({
-              "Machines.NotFound": () => Effect.undefined,
-              "Workspace.NotFound": () => Effect.undefined,
-            }),
-          )
-        : undefined
-      const rules = target ? (target.path ?? path) : path.posix
       const written = parsed?.path ?? text
       const isHome = written === "~" || written.startsWith("~/")
+      const target = crossEnvironment
+        ? yield* environments
+            .lookup(id)
+            .pipe(
+              Effect.catch((cause) =>
+                isHome ? Effect.fail(new Environment.Failed({ path: text, cause })) : Effect.undefined,
+              ),
+            )
+        : undefined
+      const rules = target ? (target.path ?? path) : path.posix
       const rooted =
-        crossEnvironment && isHome && !Workspace.isID(id)
+        crossEnvironment && isHome && target?.home
           ? rules.join(
-              yield* machines.home(id).pipe(Effect.mapError((cause) => new Environment.Failed({ path: text, cause }))),
+              yield* target.home.pipe(Effect.mapError((cause) => new Environment.Failed({ path: text, cause }))),
               written.slice(1),
             )
           : written
@@ -350,5 +348,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Environment.node, Environments.node, Flag.node, Location.node, Machines.node, Permission.node],
+  deps: [Environment.node, Environments.node, Flag.node, Location.node, Permission.node],
 })

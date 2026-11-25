@@ -75,11 +75,8 @@ test("reuses D1 reads across lookups for 1 minute", async () => {
   db.insert({ channel: "reuse", version: "1.0.0", time: 1, active: true })
   setSystemTime(new Date("2026-10-13T00:00:00Z"))
 
-  expect(
-    await Promise.all([lookup(db.env, "reuse/cli/opencode"), lookup(db.env, "reuse/cli/opencode")]).then((responses) =>
-      Promise.all(responses.map(version)),
-    ),
-  ).toEqual(["1.0.0", "1.0.0"])
+  expect(await version(await lookup(db.env, "reuse/cli/opencode"))).toBe("1.0.0")
+  expect(await version(await lookup(db.env, "reuse/cli/opencode"))).toBe("1.0.0")
   expect(db.queries).toHaveLength(2)
 
   db.sqlite.query("UPDATE artifact SET active = 0").run()
@@ -90,6 +87,20 @@ test("reuses D1 reads across lookups for 1 minute", async () => {
 
   setSystemTime(new Date("2026-10-13T00:01:01Z"))
   expect(await version(await lookup(db.env, "reuse/cli/opencode"))).toBe("1.0.1")
+  expect(db.queries).toHaveLength(4)
+})
+
+// Workers rejects a request that reads a D1 result stream another request started.
+test("does not share in-flight D1 reads between concurrent lookups", async () => {
+  const db = database()
+  db.insert({ channel: "concurrent", version: "1.0.0", time: 1, active: true })
+  setSystemTime(new Date("2026-10-13T02:00:00Z"))
+
+  expect(
+    await Promise.all([lookup(db.env, "concurrent/cli/opencode"), lookup(db.env, "concurrent/cli/opencode")]).then(
+      (responses) => Promise.all(responses.map(version)),
+    ),
+  ).toEqual(["1.0.0", "1.0.0"])
   expect(db.queries).toHaveLength(4)
 })
 
@@ -148,9 +159,7 @@ test("ignores minimum artifacts outside the latest channel", async () => {
   db.insert({ channel: "dev", version: "0.0.0-dev-18952", time: 2, active: true })
 
   expect(
-    await version(
-      await lookup(db.env, "dev/cli/opencode", { "User-Agent": "opencode/dev/0.0.0-dev-18952/cli" }),
-    ),
+    await version(await lookup(db.env, "dev/cli/opencode", { "User-Agent": "opencode/dev/0.0.0-dev-18952/cli" })),
   ).toBe("0.0.0-dev-18952")
   expect(await version(await lookup(db.env, "dev/cli/opencode?current=garbage"))).toBe("0.0.0-dev-18952")
 })
