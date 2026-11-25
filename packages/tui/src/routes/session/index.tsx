@@ -2035,7 +2035,14 @@ function AssistantFooter(props: { message: SessionMessageAssistant }) {
         ?.name ?? `${props.message.model.providerID}/${props.message.model.id}`,
   )
   const messages = createMemo(() => data.session.message.list(ctx.sessionID))
-  const turn = () => ({ index: ctx.messageIndex(props.message.id), legacy: ctx.legacyTurns() })
+  const turn = () => {
+    const session = data.session.get(ctx.sessionID)
+    return {
+      index: ctx.messageIndex(props.message.id),
+      legacy: ctx.legacyTurns(),
+      forkCreatedAt: session?.fork ? session.time.created : undefined,
+    }
+  }
   const duration = createMemo(() => SessionTurn.duration(messages(), props.message, turn()))
   const tokensPerSecond = createMemo(() => SessionTurn.tokensPerSecond(messages(), props.message, turn()))
   const interrupted = createMemo(() => props.message.error?.message === "Step interrupted")
