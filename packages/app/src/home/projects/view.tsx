@@ -1,4 +1,6 @@
 import { createMemo, For, type JSX, onCleanup, Show, splitProps } from "solid-js"
+import { useAutomationSource } from "@/automations/source"
+import { useNavigate } from "@solidjs/router"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Popover } from "@kobalte/core/popover"
@@ -393,11 +395,25 @@ export function HomeUtilityNav(props: {
   onOpenHelp: () => void
   language: ReturnType<typeof useLanguage>
 }) {
+  const navigate = useNavigate()
+  const automations = useAutomationSource()
+
   return (
     <div
       class={`${props.class ?? ""} min-w-0 flex-row justify-between gap-1 lg:flex-col lg:justify-start lg:pr-3 [&>button]:w-auto lg:[&>button]:w-full`}
       classList={props.classList}
     >
+      <Show when={automations.available()}>
+        <HomeProjectNavButton
+          type="button"
+          data-action="home-automations"
+          class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
+          onClick={() => navigate("/automations")}
+        >
+          <Icon name="clock" size="small" />
+          <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("automations.title")}</span>
+        </HomeProjectNavButton>
+      </Show>
       <HomeProjectNavButton
         type="button"
         class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
