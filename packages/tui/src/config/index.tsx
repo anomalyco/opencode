@@ -2,7 +2,7 @@ export * as Config from "."
 
 import { createBindingLookup } from "@opentui/keymap/extras"
 import { Vcs } from "@opencode/schema/vcs"
-import { Schema } from "effect"
+import { Effect, Schema } from "effect"
 import { createContext, createMemo, onCleanup, type JSX, useContext } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
 import { safeWatch } from "../util/watch"
@@ -11,9 +11,16 @@ import { TuiKeybind } from "./keybind"
 
 export interface Interface {
   readonly path?: string
-  readonly get: () => Promise<Info>
+  readonly get: (warn?: (message: string) => void) => Promise<Info>
   readonly update: (update: (draft: any) => void) => Promise<Info>
 }
+
+export const load = Effect.fnUntraced(function* (source: Interface) {
+  let warning: string | undefined
+  const info = yield* Effect.tryPromise(() => source.get((message) => (warning = message)))
+  const options = { terminalSuspend: process.platform !== "win32" }
+  return { config: resolve(info, options), options, warning }
+})
 
 export const AttentionSoundName = Schema.Literals([
   "default",

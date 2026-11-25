@@ -71,6 +71,24 @@ test("preserves the schema in an existing cli.json", async () => {
   expect(await Bun.file(file).json()).toEqual(config)
 })
 
+test("reports the field that prevents cli.json from loading", async () => {
+  await using directory = await tmpdir()
+  const file = path.join(directory.path, "cli.json")
+  await Bun.write(file, JSON.stringify({ leader: "ctrl+x", session: { sidebar: "hide" } }))
+
+  const warnings: string[] = []
+  const loaded = await run(
+    directory.path,
+    Effect.gen(function* () {
+      const service = yield* Config.Service
+      return yield* service.get((warning) => warnings.push(warning))
+    }),
+  )
+
+  expect(warnings).toEqual([expect.stringContaining("leader")])
+  expect(loaded).toEqual({})
+})
+
 test("merges inline CLI config content over the global config", async () => {
   await using directory = await tmpdir()
   const file = path.join(directory.path, "cli.json")

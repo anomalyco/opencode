@@ -134,7 +134,7 @@ export default Runtime.handler(Commands, (input) =>
       },
       config: {
         path: config.path,
-        get: () => runPromise(config.get()),
+        get: (warn) => runPromise(config.get(warn)),
         update: (update) => runPromise(config.update(update)),
       },
       updater: {
