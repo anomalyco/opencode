@@ -307,7 +307,11 @@ async fn previews_added_files_as_new_and_deleted_files_as_empty() {
                 session,
                 "call_add",
                 "patch",
-                json!({ "patchText": patch(&["*** Add File: added.ts", "+one"]) }),
+                json!({ "patchText": patch(&[
+                    "*** Add File: added.ts", "+one",
+                    "*** Add File: notes.md", "+# Title", "+",
+                    "*** Add File: blank.txt", "+",
+                ]) }),
                 json!({}),
             ));
             events.push(permission_asked(
@@ -359,7 +363,11 @@ async fn previews_added_files_as_new_and_deleted_files_as_empty() {
             json!([diff("file.ts", json!("one\r\ntwo\r\n"), "one\r\nthree\r\n")]),
             json!([diff("first.ts", json!("one\n"), "two\n"), diff("second.ts", json!("alpha\n"), "beta\n"),]),
             json!([diff("written.ts", Value::Null, "two\n")]),
-            json!([diff("added.ts", Value::Null, "one\n")]),
+            json!([
+                diff("added.ts", Value::Null, "one\n"),
+                diff("notes.md", Value::Null, "# Title\n\n"),
+                diff("blank.txt", Value::Null, "\n"),
+            ]),
             json!([diff("gone.ts", json!("gone\n"), "")]),
             Value::Null,
             Value::Null,
