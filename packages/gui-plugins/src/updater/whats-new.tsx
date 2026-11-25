@@ -167,7 +167,7 @@ function sliceHighlights(list: { tag?: string; highlights: Highlight[] }[], curr
     .slice(0, 5)
 }
 
-function DialogReleaseNotes(props: { highlights: readonly Highlight[]; dialog: DialogHandle }) {
+export function DialogReleaseNotes(props: { highlights: readonly Highlight[]; dialog: DialogHandle }) {
   const ctx = usePlugin<typeof definition>()
   const [index, setIndex] = createSignal(0)
 
