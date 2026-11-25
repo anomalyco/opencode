@@ -855,6 +855,7 @@ export function TitlebarTabStrip(props: {
   // A section's divider shows only when a row renders on each side of it, not beside tabs still loading.
   const dividedSections = createMemo(() => {
     const visible = new Set(visibleTabIds())
+
     const rendered = (section: TabStripSection) =>
       (vertical() && !!section.header) || section.tabs.some((tab) => visible.has(tabKey(tab)))
 
