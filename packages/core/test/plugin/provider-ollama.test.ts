@@ -1,14 +1,17 @@
 import { Bus } from "@opencode/core/bus"
+import { Agent } from "@opencode/schema/agent"
 import { Config } from "@opencode/core/config"
 import { Environment, makeFiles } from "@opencode/core/environment/index"
 import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { Integration } from "@opencode/core/integration"
 import { Model } from "@opencode/core/model"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { PluginHost } from "@opencode/core/plugin/host"
 import { OllamaPlugin, make } from "@opencode/core/plugin/provider/ollama"
 import { ProviderPlugins } from "@opencode/core/plugin/provider"
 import { Provider } from "@opencode/core/provider"
+import { Session } from "@opencode/core/session"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { describe, expect } from "bun:test"
 import { Duration, Effect, Layer, Schema } from "effect"
@@ -123,6 +126,53 @@ describe("OllamaPlugin", () => {
           expect(requests).toContainEqual({ method: "POST", path: "/api/show", model: "removed-model" })
         }),
       ({ server }) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
+  it.live("gives title and generate requests the model's output limit, fitted to its context window", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() => Bun.serve({ port: 0, fetch: () => Response.json({ models: [] }) })),
+      (server) =>
+        Effect.gen(function* () {
+          const providers = yield* Provider.Service
+          const hooks = yield* PluginHooks.Service
+          const ollama = Provider.ID.make("ollama")
+          yield* providers.transform((editor) => {
+            editor.models.update(ollama, Model.ID.make("capped"), (model) => {
+              model.limit.output = 8_192
+            })
+            editor.models.update(ollama, Model.ID.make("small"), (model) => {
+              model.limit.context = 4_096
+            })
+          })
+          yield* addPlugin(server.url.origin)
+          const request = (providerID: Provider.ID, id: string, maxTokens?: number) => ({
+            sessionID: Session.ID.make("ses_test"),
+            model: Model.Ref.make({ providerID, id: Model.ID.make(id) }),
+            system: [],
+            messages: [],
+            options: maxTokens === undefined ? {} : { maxTokens },
+          })
+          const title = (providerID: Provider.ID, id: string, maxTokens?: number) =>
+            hooks
+              .trigger("session", "title", request(providerID, id, maxTokens))
+              .pipe(Effect.map((event) => event.options.maxTokens))
+          const generate = (providerID: Provider.ID, id: string) =>
+            hooks
+              .trigger("session", "generate", { ...request(providerID, id), agent: Agent.ID.make("build"), tools: {} })
+              .pipe(Effect.map((event) => event.options.maxTokens))
+
+          expect(yield* title(ollama, "capped")).toBe(8_192)
+          expect(yield* generate(ollama, "capped")).toBe(8_192)
+          // Never more than the model's context window holds.
+          expect(yield* title(ollama, "small")).toBe(4_096)
+          expect(yield* generate(ollama, "small")).toBe(4_096)
+          // A model the catalog doesn't list gets the same default as an agent step.
+          expect(yield* title(ollama, "unlisted")).toBe(32_000)
+          expect(yield* title(ollama, "capped", 64)).toBe(64)
+          expect(yield* title(Provider.ID.openai, "gpt-5.5")).toBeUndefined()
+        }),
+      (server) => Effect.promise(() => server.stop(true)),
     ),
   )
 

@@ -47,6 +47,8 @@ export const make = createLocalProviderPlugin({
   name: "Ollama",
   origin: "http://127.0.0.1:11434",
   stripPathSuffix: /\/(?:v1|api)$/,
+  // `num_predict` defaults to -1, unbounded.
+  unboundedOutput: true,
   discover: (client) =>
     Effect.gen(function* () {
       const cached = shows.get(client.root)

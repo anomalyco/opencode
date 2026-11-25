@@ -1,4 +1,5 @@
 import { define } from "@opencode/plugin/effect/plugin"
+import type { SessionRequest } from "@opencode/plugin/effect/session"
 import type { Entry } from "@opencode/schema/config"
 import { Duration, Effect, FiberSet, Option, Schedule, type Schema, Semaphore, Stream } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
@@ -6,6 +7,7 @@ import photonWasm from "#photon-wasm"
 import { Config } from "../../config.js"
 import { Environment } from "../../environment/index.js"
 import { Model } from "../../model.js"
+import { SessionModelRequest } from "../../session/model-request.js"
 import type { PluginInternal } from "../internal.js"
 import { foldSettings } from "./configured.js"
 import { activeCredential } from "./credential-settings.js"
@@ -34,6 +36,8 @@ export function createLocalProviderPlugin<Discovered>(input: {
   readonly name: string
   readonly origin: string
   readonly stripPathSuffix?: RegExp
+  /** The server keeps generating when a request sets no output limit, so titles and generate requests get one. */
+  readonly unboundedOutput?: boolean
   readonly discover: (client: LocalDiscoveryClient) => Effect.Effect<readonly Discovered[], unknown>
   readonly model: (item: NoInfer<Discovered>) => LocalModel
 }) {
@@ -95,6 +99,23 @@ export function createLocalProviderPlugin<Discovered>(input: {
             })
           }
         })
+
+        // Agent steps send the model's default output limit, but titles and generate requests leave it to the provider,
+        // so on a server without a limit of its own a model stuck in a loop never finishes. Give them the model's limit,
+        // never more than its context window; later hooks can still change or remove it. The prompt isn't subtracted:
+        // only servers that count the limit down opt in, not ones that reject a prompt plus limit past the window.
+        const defaultOutputLimit = (event: SessionRequest) =>
+          Effect.gen(function* () {
+            if (event.options.maxTokens !== undefined) return
+            const models = yield* ctx.model.list().pipe(Effect.orElseSucceed(() => undefined))
+            const model =
+              models?.data.find((item) => item.providerID === event.model.providerID && item.id === event.model.id) ??
+              Model.Info.default(event.model.providerID, event.model.id)
+            event.options.maxTokens = SessionModelRequest.outputLimit(model.limit, { measured: 0, estimated: 0 })
+          })
+        if (input.unboundedOutput)
+          for (const name of ["title", "generate"] as const)
+            yield* ctx.session.hook(name, defaultOutputLimit, { providerID: input.providerID })
 
         const discover = Effect.fn("LocalProviderPlugin.discover")(function* () {
           const current = source.current

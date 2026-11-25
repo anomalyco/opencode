@@ -199,6 +199,34 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("sends max_tokens to local servers that ignore max_completion_tokens", () =>
+    Effect.gen(function* () {
+      const prepare = (provider: string, baseURL: string) =>
+        compileRequest(
+          ai.request({
+            model: OpenAICompatibleChat.route.with({ provider, endpoint: { baseURL } }).model({ id: "qwen3:8b" }),
+            prompt: "Say hello.",
+            maxTokens: 20,
+          }),
+        )
+
+      // The local provider plugins send their own ID, even for a remote or proxied host.
+      for (const [provider, baseURL] of [
+        ["ollama", "https://ollama.example.test/v1"],
+        ["lmstudio", "http://127.0.0.1:1234/v1"],
+      ]) {
+        const prepared = yield* prepare(provider, baseURL)
+        expect(prepared.body).toMatchObject({ max_tokens: 20 })
+        expect(prepared.body).not.toHaveProperty("max_completion_tokens")
+      }
+
+      // vLLM honors max_completion_tokens.
+      const vllm = yield* prepare("vllm", "http://127.0.0.1:8000/v1")
+      expect(vllm.body).toMatchObject({ max_completion_tokens: 20 })
+      expect(vllm.body).not.toHaveProperty("max_tokens")
+    }),
+  )
+
   it.effect("enables ZAI tool streaming except for GLM 4.5 models", () =>
     Effect.gen(function* () {
       const prepare = (provider: string, baseURL: string, id: string) =>

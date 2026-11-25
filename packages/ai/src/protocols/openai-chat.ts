@@ -769,7 +769,8 @@ const hasToolHistory = (messages: ReadonlyArray<LLMRequest["messages"][number]>)
 // explicit `compatibility.maxTokensField` is not set. Aligned with
 // models.dev provider naming: DeepSeek, Moonshot AI, Together AI, ZAI
 // (Zhipu + Coding Plan variants), Nvidia, Cerebras, Chutes, etc. still
-// require `max_tokens`.
+// require `max_tokens`. Ollama and LM Studio document only `max_tokens`;
+// Ollama ignores `max_completion_tokens`, leaving the output unbounded.
 const detectMaxTokensField = (
   provider: string,
   baseURL: string | undefined,
@@ -798,7 +799,9 @@ const detectMaxTokensField = (
     p === "cloudflare-ai-gateway" ||
     url.includes("gateway.ai.cloudflare.com") ||
     p === "cloudflare-workers-ai" ||
-    url.includes("api.cloudflare.com")
+    url.includes("api.cloudflare.com") ||
+    p === "ollama" ||
+    p === "lmstudio"
   )
     return "max_tokens"
   return "max_completion_tokens"
