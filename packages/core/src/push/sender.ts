@@ -16,7 +16,7 @@ export interface Notification {
   readonly sessionID: string
   readonly title: string
   readonly body: string
-  readonly data: Record<string, string>
+  readonly data: Record<string, string | ReadonlyArray<string>>
   /** True when the notification needs the person, so phones at level `attention` get it. */
   readonly attention: boolean
 }
@@ -51,11 +51,11 @@ const shorten = (text: string, bytes: number) => {
 }
 
 /**
- * The JSON the phone decrypts, with the body shortened so the box stays within the relay's limit. Only the body can be
- * long: a question's text is free-form, while titles are short and `data` holds ids and names.
+ * The JSON the phone decrypts, shortened so the box stays within the relay's limit. Only a question's body and a
+ * permission's `data.resources` can be long. Cut resources keep their order and come with `truncated: "true"`.
  */
 export const message = (notification: Notification) => {
-  const make = (body: string) =>
+  const make = (body: string, data = notification.data) =>
     JSON.stringify({
       v: 1,
       id: notification.id,
@@ -63,11 +63,22 @@ export const message = (notification: Notification) => {
       sessionID: notification.sessionID,
       title: notification.title,
       body,
-      data: notification.data,
+      data,
     })
-  const over = Buffer.byteLength(make(notification.body), "utf8") - maxMessageBytes
-  if (over <= 0) return make(notification.body)
-  return make(shorten(notification.body, over))
+  const over = (text: string) => Buffer.byteLength(text, "utf8") - maxMessageBytes
+  const whole = make(notification.body)
+  if (over(whole) <= 0) return whole
+  const resources = notification.data.resources
+  if (!Array.isArray(resources)) return make(shorten(notification.body, over(whole)))
+  const cut = (kept: ReadonlyArray<string>) =>
+    make(notification.body, { ...notification.data, resources: kept, truncated: "true" })
+  const kept: string[] = []
+  for (const resource of resources) {
+    const next = cut([...kept, resource])
+    if (over(next) > 0) return cut([...kept, shorten(resource, over(next))])
+    kept.push(resource)
+  }
+  return cut(kept)
 }
 
 export const level = (device: PushList.Stored, sessions: Record<string, Push.Bell>, sessionID: string) =>

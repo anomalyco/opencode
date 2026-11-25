@@ -183,7 +183,7 @@ describe("PushWatcher", () => {
       yield* bus.publish(Permission.Event.Asked, {
         id: Permission.ID.make("per_1"),
         sessionID: childID,
-        action: "shell",
+        action: "bash",
         resources: ["git push"],
       })
       yield* waitUntil(Effect.sync(() => boxes.length === 2))
@@ -204,34 +204,10 @@ describe("PushWatcher", () => {
           type: "permission",
           sessionID: parentID,
           title: "Fix the login bug",
-          body: "Run: git push",
-          data: { requestID: "per_1", sessionID: childID, action: "shell" },
+          body: "Needs permission: bash",
+          data: { requestID: "per_1", sessionID: childID, action: "bash", resources: ["git push"] },
         },
       ])
-    }),
-  )
-
-  it.live("says what a permission asks for", () =>
-    Effect.gen(function* () {
-      const bus = yield* Bus.Service
-      const key = yield* phone()
-      const cases: [string, string[], string][] = [
-        ["external_directory", ["*"], "Access: any folder"],
-        ["skill", ["release-notes"], "Use skill: release-notes"],
-        ["question", ["*"], "Use question"],
-      ]
-
-      for (const [index, [action, resources]] of cases.entries()) {
-        yield* bus.publish(Permission.Event.Asked, {
-          id: Permission.ID.make(`per_${index}`),
-          sessionID: parentID,
-          action,
-          resources,
-        })
-        yield* waitUntil(Effect.sync(() => boxes.length === index + 1))
-      }
-
-      expect(boxes.map((box) => open(key, box).body)).toEqual(cases.map((item) => item[2]))
     }),
   )
   it.live("clears a notification once it is answered, interrupted or followed by a new prompt", () =>

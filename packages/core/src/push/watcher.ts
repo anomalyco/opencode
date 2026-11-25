@@ -19,22 +19,6 @@ const bodies = {
   failed: "Failed",
 }
 
-const verbs: Record<string, string> = {
-  shell: "Run",
-  edit: "Edit",
-  read: "Read",
-  webfetch: "Fetch",
-  websearch: "Search",
-  external_directory: "Access",
-}
-
-const permissionBody = (request: Permission.Request) => {
-  const shown = request.resources.filter((resource) => resource !== "*")
-  if (shown.length === 0)
-    return request.action === "external_directory" ? "Access: any folder" : `Use ${request.action}`
-  return `${verbs[request.action] ?? `Use ${request.action}`}: ${shown.join(", ")}`
-}
-
 const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
@@ -95,9 +79,14 @@ const layer = Layer.effectDiscard(
         type: "permission",
         sessionID: session.id,
         title: session.title || "OpenCode",
-        body: permissionBody(request),
+        body: `Needs permission: ${request.action}`,
         // A reply has to name the session that asked, which may be a subagent's.
-        data: { requestID: request.id, sessionID: request.sessionID, action: request.action },
+        data: {
+          requestID: request.id,
+          sessionID: request.sessionID,
+          action: request.action,
+          resources: request.resources,
+        },
         attention: true,
       })
     })
