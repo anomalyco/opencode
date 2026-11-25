@@ -127,6 +127,8 @@ export const dict = {
   "command.session.unarchive": "Unarchive session",
   "command.session.rename": "Rename session",
   "command.session.rename.description": "Rename the session, or generate a new title when run without one",
+  "command.session.title.generate": "Generate session title",
+  "command.session.title.generate.description": "Generate a new title from the conversation so far",
   "command.session.delete": "Delete session",
 
   "palette.search.placeholder": "Search files, commands, and sessions",

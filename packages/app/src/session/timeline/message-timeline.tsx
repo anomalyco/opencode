@@ -310,6 +310,14 @@ function MessageTimelineView(
             onSelect: (source, input) => (source === "slash" ? props.title.set(input ?? "") : props.title.edit()),
           },
           {
+            id: "session.title.generate",
+            category: language.t("command.category.session"),
+            title: language.t("command.session.title.generate"),
+            description: language.t("command.session.title.generate.description"),
+            disabled: !sessionID() || !!parentID() || title().editing,
+            onSelect: () => props.title.set(""),
+          },
+          {
             id: "session.delete",
             category: language.t("command.category.session"),
             title: language.t("command.session.delete"),
