@@ -268,6 +268,7 @@ const it = testEffect(
       Bus.node,
       SessionProjector.node,
       SessionStore.node,
+      SessionInbox.node,
       Session.node,
       Automation.node,
       Instance.node,

@@ -17,6 +17,8 @@ export type WorkspaceLastUsed = Settings["workspaces"]["lastUsed"][string]
 
 export type FollowUpBehavior = Settings["general"]["followUpBehavior"]
 
+export type QuestionSubmitKey = Settings["general"]["questionSubmitKey"]
+
 export type BackgroundActivity = Settings["general"]["backgroundActivity"]
 
 export type TimelineWidth = Settings["general"]["timelineWidth"]
@@ -145,6 +147,9 @@ const generalSchema = Persistence.struct({
   // Owned by the review plugin, which copies it out once; kept so settings rewrites cannot drop it first.
   mobileDiffWrap: Persistence.optional(Schema.Boolean),
   followUpBehavior: Schema.Literals(["queue", "steer"]),
+  // The key that moves a question dock on, or submits it on the last question. The other Enter selects an answer or
+  // starts a new line in the custom answer.
+  questionSubmitKey: Schema.Literals(["enter", "mod+enter"]),
 })
 
 const appearanceSchema = Persistence.struct({
@@ -321,6 +326,7 @@ export const defaultSettings: Settings = {
     sidebarOrganize: "list",
     mobileTitlebarPosition: "top",
     followUpBehavior: "steer",
+    questionSubmitKey: "enter",
   },
   appearance: { fontSize: 14, mono: "", sans: "", terminal: "", tabLayout: "horizontal", reduceMotion: "system" },
   keybinds: {},
@@ -490,6 +496,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         setFollowUpBehavior(value: FollowUpBehavior) {
           setStore("general", "followUpBehavior", value)
         },
+        questionSubmitKey: withFallback(
+          () => store.general?.questionSubmitKey,
+          defaultSettings.general.questionSubmitKey,
+        ),
+        setQuestionSubmitKey(value: QuestionSubmitKey) {
+          setStore("general", "questionSubmitKey", value)
+        },
       },
       visibility: {
         customAgents: showCustomAgents,
@@ -528,9 +541,7 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         /** The navigation prototype (Experimental → Consolidated): pinned sessions and groups, and Tabs or List. */
         navigationPrototype: createMemo(() => sidebarOrganize() === "consolidated"),
         navigation: createMemo(() =>
-          sidebarOrganize() === "consolidated" && store.appearance?.navigation === "list"
-            ? "list"
-            : "tabs",
+          sidebarOrganize() === "consolidated" && store.appearance?.navigation === "list" ? "list" : "tabs",
         ),
         setNavigation(value: "tabs" | "list") {
           setStore("appearance", "navigation", value)

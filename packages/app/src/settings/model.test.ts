@@ -105,6 +105,7 @@ describe("settings schema", () => {
         sidebarOrganize: "list",
         mobileTitlebarPosition: "top",
         followUpBehavior: "steer",
+        questionSubmitKey: "enter",
       },
       appearance: {
         fontSize: 14,
@@ -157,6 +158,7 @@ describe("settings schema", () => {
         releaseNotes: undefined,
         reasoningMode: 3,
         followUpBehavior: "invalid",
+        questionSubmitKey: "invalid",
         backgroundActivity: "invalid",
         timelineWidth: "invalid",
         newQuestionUI: "invalid",
@@ -175,6 +177,7 @@ describe("settings schema", () => {
       autoSave: false,
       timelineDetail: timelinePresets[2].value,
       followUpBehavior: "steer",
+      questionSubmitKey: "enter",
       backgroundActivity: "left",
       timelineWidth: "comfortable",
       newQuestionUI: false,

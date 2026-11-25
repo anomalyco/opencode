@@ -284,7 +284,7 @@ const layer = (options: Options) =>
         const row = yield* load(workspaceID)
         // Bindings are persisted before provision resolves and never nulled; a raced
         // destroy deletes the whole row and surfaces as NotFound from load above.
-        if (!row.binding) return yield* Effect.die(`workspace ${workspaceID} has no binding after provision`)
+        if (!row.binding) return yield* Effect.die(new Error(`workspace ${workspaceID} has no binding after provision`))
         const driver = yield* registry.get(row.provider)
         const scope = yield* Scope.fork(lifetime)
         const environment = yield* driver
