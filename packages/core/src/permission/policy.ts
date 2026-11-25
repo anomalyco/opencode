@@ -190,9 +190,9 @@ export function hasDeny(policy: Policy, action: string): boolean {
 export function relevant(policy: Policy, action: string): Permission.Ruleset {
   switch (policy._tag) {
     case "rules":
-      return policy.rules.filter((rule) => Wildcard.match(action, rule.action))
+      return policy.rules.filter((rule) => matchesAction(rule, action))
     case "override":
-      return [...relevant(policy.base, action), ...policy.next.filter((rule) => Wildcard.match(action, rule.action))]
+      return [...relevant(policy.base, action), ...policy.next.filter((rule) => matchesAction(rule, action))]
     case "restrict":
       return [
         ...relevant(policy.base, action),
@@ -213,7 +213,7 @@ export function relevant(policy: Policy, action: string): Permission.Ruleset {
 function liveScoped(initial: Permission.Ruleset, rules: Permission.Ruleset, action: string): Permission.Ruleset {
   return rules.reduce<Permission.Rule[]>(
     (acc, rule) => {
-      if (!Wildcard.match(action, rule.action)) return acc
+      if (!matchesAction(rule, action)) return acc
       if (isUniversalPattern(rule.resource)) return []
       acc.push(rule)
       return acc

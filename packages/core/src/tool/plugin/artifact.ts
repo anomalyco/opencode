@@ -3,13 +3,16 @@ export * as ArtifactTools from "./artifact.js"
 import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { optional } from "@opencode/schema/schema"
+import { FSUtil } from "@opencode/util/fs-util"
 import path from "path"
 import { Effect, Schema, Stream } from "effect"
 import { Artifact } from "../../artifact.js"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
+import { Environment } from "../../environment/index.js"
 import { FileAccess } from "../../file-access.js"
 import { Flag } from "../../flag.js"
+import { Location } from "../../location.js"
 import { Permission } from "../../permission.js"
 
 const Files = Schema.Record(Schema.String, Schema.String).pipe(optional)
@@ -45,8 +48,7 @@ export const UpdateToolInput = Schema.Struct({
   id: Artifact.ID.annotate({ description: "Artifact ID (art_...) to update." }),
   title: Schema.String.pipe(optional).annotate({ description: "Updated title, or omit to keep the current title." }),
   files: Files.annotate({
-    description:
-      "Replacement UTF-8 file map keyed by relative path. Pass this or directory, not both.",
+    description: "Replacement UTF-8 file map keyed by relative path. Pass this or directory, not both.",
   }),
   directory: Directory,
   entry: Schema.String.pipe(optional).annotate({ description: "Updated entry file path." }),
@@ -68,6 +70,9 @@ export const Plugin = {
     const artifacts = yield* Artifact.Service
     const access = yield* FileAccess.Service
     const permission = yield* Permission.Service
+    const fsutil = yield* FSUtil.Service
+    const location = yield* Location.Service
+    const currentWorkingDirectory = yield* Environment.workingDirectoryResolver
 
     const promptSnapshot = { text: yield* renderCreateDescription(artifacts) }
     const refreshTools = Effect.gen(function* () {
@@ -95,14 +100,94 @@ export const Plugin = {
         if (input.files !== undefined && directory === undefined) return { files: input.files, complete: false }
         if (input.files !== undefined || directory === undefined)
           return yield* new ToolFailure({ message: "Pass either files or directory" })
-        const files = yield* readFolder(yield* access.authorizeRead(directory, context)).pipe(
+        const files = yield* readFolder(directory, context).pipe(
           Effect.catchIf(
-            (error) => !(error instanceof ToolFailure),
+            (error) =>
+              error instanceof Environment.NotFound ||
+              error instanceof Environment.WrongKind ||
+              error instanceof Environment.Failed,
             (error) => Effect.fail(new ToolFailure({ message: `Unable to read ${directory}`, error })),
           ),
         )
         return { files, complete: true }
       })
+
+    // Reads a folder the caller may read: with artifact.json only what it declares, and every file's own read rules
+    // checked before any bytes are. Symlinks inside it are refused, so nothing outside it is published.
+    const readFolder = Effect.fnUntraced(function* (directory: string, context: FileAccess.Invocation) {
+      const folder = yield* access.authorizeRead(directory, context)
+      const files = folder.environment.files
+      const rules = folder.environment.path ?? path
+      const root = folder.machine === undefined ? yield* realFolder(folder, context) : folder.absolute
+      const refuse = (message: string) => Effect.fail(new ToolFailure({ message }))
+      if ((yield* files.stat(root)).type !== "directory") return yield* refuse(`${folder.resource} is not a folder`)
+      const place = { absolute: folder.absolute, environment: { id: folder.environment.id } }
+      const resolve = (relative: string) => access.resolve({ path: relative, base: place, kind: "file" })
+      const authorize = (targets: readonly FileAccess.Target[]) =>
+        permission.assert({
+          action: "read",
+          resources: targets.map((target) => target.resource),
+          save: [FileAccess.always(folder)],
+          ...Permission.invocation(context),
+        })
+      const absolute = (relative: string) => rules.join(root, ...relative.split("/"))
+      const manifest = yield* files
+        .stat(absolute(Artifact.manifestFile))
+        .pipe(Effect.catchTag("Environment.NotFound", () => Effect.undefined))
+      if (manifest !== undefined && manifest.type !== "file")
+        return yield* refuse(`Can't publish ${Artifact.manifestFile}: symlinks and special files aren't published`)
+      const raw =
+        manifest === undefined
+          ? undefined
+          : yield* resolve(Artifact.manifestFile).pipe(
+              Effect.flatMap((target) => authorize([target])),
+              Effect.andThen(files.read(absolute(Artifact.manifestFile))),
+              Effect.map((result) => result.bytes),
+            )
+      const declared = raw === undefined ? undefined : yield* Artifact.readManifest(raw)
+      const out: Record<string, Uint8Array> = raw === undefined ? {} : { [Artifact.manifestFile]: raw }
+      // Iterating an array visits what is pushed onto it while it runs, so this walks every subfolder.
+      const pending = declared
+        ? [declared.assets, declared.server, ...declared.migrations].filter((item) => item !== undefined)
+        : [""]
+      const found: { readonly relative: string; readonly size: number }[] = []
+      for (const relative of pending) {
+        // A declared path that doesn't exist is named by the artifact's own checks.
+        const info = yield* files
+          .stat(relative ? absolute(relative) : root)
+          .pipe(Effect.catchTag("Environment.NotFound", () => Effect.undefined))
+        if (info === undefined) continue
+        if (info.type === "directory") {
+          for (const entry of yield* files.list(relative ? absolute(relative) : root))
+            if (!entry.name.startsWith(".") && entry.name !== "node_modules")
+              pending.push(relative ? `${relative}/${entry.name}` : entry.name)
+          continue
+        }
+        if (info.type !== "file")
+          return yield* refuse(`Can't publish ${relative}: symlinks and special files aren't published`)
+        if (info.size > maxFileBytes) return yield* refuse(`${relative} is over the 25 MiB limit for one file`)
+        found.push({ relative, size: info.size })
+      }
+      if (found.reduce((total, file) => total + file.size, 0) > maxTotalBytes)
+        return yield* refuse("The folder is over the 100 MiB limit")
+      if (found.length > 0) yield* authorize(yield* Effect.forEach(found, (file) => resolve(file.relative)))
+      for (const file of found) out[file.relative] = (yield* files.read(absolute(file.relative))).bytes
+      return out
+    })
+
+    // A folder is read where it really is. When that's outside the working directory and project, as through a
+    // symlinked folder or parent, reading it there needs approval too.
+    const realFolder = Effect.fnUntraced(function* (folder: FileAccess.Target, context: FileAccess.Invocation) {
+      const real = yield* fsutil.resolve(folder.absolute)
+      if (real === folder.absolute) return real
+      const worktree = location.project.directory
+      const roots = yield* Effect.forEach(
+        [(yield* currentWorkingDirectory).absolute, ...(worktree === path.parse(worktree).root ? [] : [worktree])],
+        fsutil.resolve,
+      )
+      if (!roots.some((item) => FSUtil.contains(item, real))) yield* access.authorizeRead(real, context)
+      return real
+    })
 
     // Publishing past this server needs an explicit allow: a blanket `"permission": "allow"` doesn't grant it.
     const publish = (context: FileAccess.Invocation, title: string) => ({
@@ -243,35 +328,3 @@ function renderCreateDescription(artifacts: Artifact.Interface) {
 
 const maxFileBytes = 25 * 1024 * 1024
 const maxTotalBytes = 100 * 1024 * 1024
-
-/** Reads a folder the caller may read, refusing symlinks so nothing outside it is published. */
-const readFolder = Effect.fnUntraced(function* (target: FileAccess.Target) {
-  const files = target.environment.files
-  const rules = target.environment.path ?? path
-  const out: Record<string, Uint8Array> = {}
-  const state = { total: 0 }
-  const refuse = (message: string) => Effect.fail(new ToolFailure({ message }))
-  if ((yield* files.stat(target.absolute)).type !== "directory")
-    return yield* refuse(`${target.resource} is not a folder`)
-  // Iterating an array visits what is pushed onto it while it runs, so this walks every subfolder.
-  const folders: { readonly absolute: string; readonly prefix: string }[] = [{ absolute: target.absolute, prefix: "" }]
-  for (const folder of folders) {
-    for (const entry of yield* files.list(folder.absolute)) {
-      if (entry.name.startsWith(".") || entry.name === "node_modules") continue
-      const absolute = rules.join(folder.absolute, entry.name)
-      const relative = folder.prefix ? `${folder.prefix}/${entry.name}` : entry.name
-      if (entry.type === "directory") {
-        folders.push({ absolute, prefix: relative })
-        continue
-      }
-      if (entry.type !== "file")
-        return yield* refuse(`Can't publish ${relative}: symlinks and special files aren't published`)
-      const info = yield* files.stat(absolute)
-      state.total += info.size
-      if (info.size > maxFileBytes) return yield* refuse(`${relative} is over the 25 MiB limit for one file`)
-      if (state.total > maxTotalBytes) return yield* refuse("The folder is over the 100 MiB limit")
-      out[relative] = (yield* files.read(absolute)).bytes
-    }
-  }
-  return out
-})

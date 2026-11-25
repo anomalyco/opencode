@@ -8,6 +8,7 @@ import { Artifact } from "@opencode/core/artifact"
 import { ArtifactTable } from "@opencode/core/artifact/sql"
 import { Config } from "@opencode/core/config"
 import { Database } from "@opencode/core/database/database"
+import { Environment } from "@opencode/core/environment/index"
 import { FileAccess } from "@opencode/core/file-access"
 import artifactMigration from "@opencode/core/database/migration/20261125001949_artifact"
 import providerMigration from "@opencode/core/database/migration/20261125002931_artifact-provider"
@@ -21,6 +22,7 @@ import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { ArtifactTools } from "@opencode/core/tool/plugin/artifact"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
 import { Document, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
@@ -39,7 +41,12 @@ const toolPaths = [
   "opencode.artifact_delete",
 ]
 
-const buildLayer = (artifactsEnabled: boolean, dir: string, asserted: Permission.AssertInput[] = []) => {
+const buildLayer = (
+  artifactsEnabled: boolean,
+  dir: string,
+  asserted: Permission.AssertInput[] = [],
+  deny: (input: Permission.AssertInput) => boolean = () => false,
+) => {
   const entries = artifactsEnabled
     ? [
         new Document({
@@ -56,7 +63,9 @@ const buildLayer = (artifactsEnabled: boolean, dir: string, asserted: Permission
       Artifact.node,
       Config.node,
       Database.node,
+      Environment.node,
       FileAccess.node,
+      FSUtil.node,
       Flag.node,
       KV.node,
       Global.node,
@@ -70,7 +79,20 @@ const buildLayer = (artifactsEnabled: boolean, dir: string, asserted: Permission
       Global.node.replace(Global.layerWith({ data: path.join(dir, ".data") })),
       Image.node.replace(imagePassthrough),
       Location.node.replace(Location.boundNode(ref)),
-      Permission.node.replace(permissionLayer({ assert: (input) => Effect.sync(() => void asserted.push(input)) })),
+      Permission.node.replace(
+        permissionLayer({
+          assert: (input) =>
+            Effect.sync(() => void asserted.push(input)).pipe(
+              Effect.andThen(
+                deny(input)
+                  ? Effect.fail(
+                      new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources }),
+                    )
+                  : Effect.void,
+              ),
+            ),
+        }),
+      ),
     ],
   )
 }
@@ -570,7 +592,81 @@ describe("experimental.artifacts service and tools", () => {
         )
         const audience = yield* refused({ visibility: "public", files: { "index.html": "" } })
         expect(audience.message).toContain("it doesn't support public artifacts. Active providers that can: cloud.")
+        const unserved = yield* refused({
+          provider: cloudID,
+          files: {
+            "artifact.json": JSON.stringify({ assets: "public", bindings: [{ name: "DB", kind: "kv" }] }),
+            "public/index.html": "",
+          },
+        })
+        expect(unserved.message).toBe("artifact.json's bindings and crons need a server bundle")
+        const unmigrated = yield* refused({
+          provider: cloudID,
+          files: {
+            "artifact.json": JSON.stringify({
+              server: "server.js",
+              bindings: [{ name: "DB", kind: "sqlite", migrations: ["migrations"] }],
+            }),
+            "server.js": "export default {}",
+          },
+        })
+        expect(unmigrated.message).toBe("artifact.json's migrations folder migrations has no files")
+        // A saved approval matches a destination as a rule, so one with a wildcard is refused.
+        yield* artifacts.transform((editor) =>
+          editor.add({
+            ...cloud(inputs),
+            id: Artifact.ProviderID.make("wild"),
+            destination: () => Effect.succeed("wild:*"),
+          }),
+        )
+        expect(
+          yield* refused({ provider: Artifact.ProviderID.make("wild"), files: { "index.html": "" } }),
+        ).toBeInstanceOf(Artifact.ProviderError)
         expect(inputs).toHaveLength(2)
+      }).pipe(Effect.provide(buildLayer(true, dir)))
+    }),
+  )
+
+  it.live("carries over only the public files a read left out, and only into the same layout", () =>
+    Effect.gen(function* () {
+      const dir = (yield* tmpdirScoped("opencode-artifact-carry-")).path
+      yield* Effect.gen(function* () {
+        const artifacts = yield* Artifact.Service
+        const inputs = new Array<Parameters<Artifact.ProviderImplementation["create"]>[0]>()
+        yield* artifacts.transform((editor) => editor.add(cloud(inputs)))
+        const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+        // Past the inline limit, so a read leaves the server bundle out too.
+        const bundle = `export default {}\n//${"x".repeat(65 * 1024)}`
+        const manifest = JSON.stringify({ assets: "public", server: "server.js" })
+        const created = yield* artifacts.create({
+          title: "App",
+          provider: Artifact.ProviderID.make("cloud"),
+          files: {
+            "artifact.json": manifest,
+            "public/index.html": "<h1>v1</h1>",
+            "public/logo.png": png,
+            "server.js": bundle,
+          },
+        })
+        expect((yield* artifacts.get(created.id)).omitted).toEqual({
+          "public/logo.png": png.length,
+          "server.js": bundle.length,
+        })
+
+        // The same layout keeps the image the read left out, and the server bundle must be sent again.
+        expect(
+          yield* artifacts
+            .update(created.id, { files: { "artifact.json": manifest, "public/index.html": "<h1>v2</h1>" } })
+            .pipe(Effect.flip),
+        ).toBeInstanceOf(Artifact.InvalidError)
+        yield* artifacts.update(created.id, {
+          files: { "artifact.json": manifest, "public/index.html": "<h1>v2</h1>", "server.js": bundle },
+        })
+        expect(Object.keys(inputs[1]?.assets ?? {}).toSorted()).toEqual(["index.html", "logo.png"])
+
+        // Without artifact.json every file is public, so nothing the read left out carries over.
+        yield* artifacts.update(created.id, { files: { "index.html": "<h1>flat</h1>" } })
+        expect(Object.keys(inputs[2]?.assets ?? {})).toEqual(["index.html"])
       }).pipe(Effect.provide(buildLayer(true, dir)))
     }),
   )
@@ -578,6 +674,8 @@ describe("experimental.artifacts service and tools", () => {
   it.live("publishes a folder through the tools, asking before it publishes past this server", () =>
     Effect.gen(function* () {
       const dir = (yield* tmpdirScoped("opencode-artifact-folder-")).path
+      const outside = (yield* tmpdirScoped("opencode-artifact-elsewhere-")).path
+      const elsewhere = yield* Effect.promise(() => fs.realpath(outside))
       const asserted: Permission.AssertInput[] = []
       const site = path.join(dir, "site")
       yield* Effect.promise(async () => {
@@ -589,6 +687,18 @@ describe("experimental.artifacts service and tools", () => {
         await fs.writeFile(path.join(site, ".env"), "SECRET=1")
         await fs.writeFile(path.join(site, "node_modules/lib/index.js"), "")
         await fs.writeFile(path.join(dir, "secret.txt"), "secret")
+        await fs.mkdir(path.join(dir, "keys"))
+        await fs.writeFile(path.join(dir, "keys/index.html"), "<h1>Keys</h1>")
+        await fs.writeFile(path.join(dir, "keys/credentials.json"), "{}")
+        await fs.mkdir(path.join(dir, "app/dist"), { recursive: true })
+        await fs.mkdir(path.join(dir, "app/src"))
+        await fs.writeFile(path.join(dir, "app/artifact.json"), JSON.stringify({ assets: "dist" }))
+        await fs.writeFile(path.join(dir, "app/dist/index.html"), "<h1>App</h1>")
+        await fs.writeFile(path.join(dir, "app/src/main.ts"), "")
+        await fs.symlink(path.join(dir, "secret.txt"), path.join(dir, "app/src/secret.txt"))
+        await fs.mkdir(path.join(elsewhere, "site"))
+        await fs.writeFile(path.join(elsewhere, "site/index.html"), "<h1>Elsewhere</h1>")
+        await fs.symlink(path.join(elsewhere, "site"), path.join(dir, "linked"))
       })
       yield* Effect.gen(function* () {
         const artifacts = yield* Artifact.Service
@@ -638,7 +748,64 @@ describe("experimental.artifacts service and tools", () => {
           yield* failCodeMode(registry, session.id, "artifact_create", { title: "Big", directory: "site" }),
         ).toContain("big.bin is over the 25 MiB limit for one file")
         expect(inputs).toHaveLength(2)
-      }).pipe(Effect.provide(buildLayer(true, dir, asserted)))
+
+        // Every file's own read rules apply, before any of it is read or published.
+        expect(asserted.find((input) => input.action === "read" && input.resources.length > 1)?.resources).toEqual(
+          expect.arrayContaining(["site/index.html", "site/logo.png", "site/sub/app.js"]),
+        )
+        expect(
+          yield* failCodeMode(registry, session.id, "artifact_create", { title: "Keys", directory: "keys" }),
+        ).toContain("Permission denied: read")
+        expect(inputs).toHaveLength(2)
+
+        // With artifact.json, only what it declares is read; the rest, symlinks included, stays unread.
+        yield* callCodeMode(registry, session.id, "artifact_create", {
+          title: "App",
+          directory: "app",
+          provider: "cloud",
+        })
+        expect(Object.keys(inputs[2]?.assets ?? {})).toEqual(["index.html"])
+        expect(asserted.flatMap((input) => input.resources).filter((resource) => resource.startsWith("app/"))).toEqual([
+          "app/artifact.json",
+          "app/dist/index.html",
+        ])
+
+        // A folder whose real path is elsewhere needs approval there too.
+        yield* callCodeMode(registry, session.id, "artifact_create", {
+          title: "Linked",
+          directory: "linked",
+          provider: "cloud",
+        })
+        expect(
+          asserted.some(
+            (input) =>
+              input.action === "external_directory" &&
+              input.resources.some((resource) => resource.startsWith(elsewhere)),
+          ),
+        ).toBe(true)
+
+        // Only this server's own provider publishes without asking, and a plugin can't replace it.
+        yield* artifacts.transform((editor) => {
+          editor.add({
+            ...cloud(inputs),
+            id: Artifact.ProviderID.make("lan"),
+            audiences: ["local"],
+            defaultAudience: "local",
+          })
+          editor.add({ ...cloud(inputs), id: Artifact.LocalProviderID })
+        })
+        yield* callCodeMode(registry, session.id, "artifact_create", {
+          title: "LAN",
+          files: { "index.html": "" },
+          provider: "lan",
+        })
+        expect(publishes().at(-1)?.resources).toEqual(["cloud:acct_1:local"])
+        expect((yield* artifacts.providers()).find((item) => item.id === Artifact.LocalProviderID)?.name).toBe("Local")
+      }).pipe(
+        Effect.provide(
+          buildLayer(true, dir, asserted, (input) => input.resources.some((item) => item.endsWith("credentials.json"))),
+        ),
+      )
     }),
   )
 })

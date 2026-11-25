@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { describe, expect } from "bun:test"
 import { Effect, Layer } from "effect"
 import { TestClock } from "effect/testing"
@@ -94,14 +95,17 @@ const withConsole = <A, E, R>(use: (console: ReturnType<typeof fakeConsole>) => 
   Effect.acquireUseRelease(Effect.sync(fakeConsole), use, (console) => Effect.promise(() => console.server.stop(true)))
 
 /** Signs in to the fake Console and starts the plugin. */
-const start = Effect.fnUntraced(function* (console: ReturnType<typeof fakeConsole>) {
+const start = Effect.fnUntraced(function* (
+  console: ReturnType<typeof fakeConsole>,
+  metadata: Record<string, unknown> = { orgID: "org_1" },
+) {
   const credentials = yield* Credential.Service
   yield* credentials.create({
     integrationID: Integration.ID.make("opencode"),
     value: Credential.Key.make({
       type: "key",
       key: "secret",
-      metadata: { server: console.server.url.origin, orgID: "org_1" },
+      metadata: { server: console.server.url.origin, ...metadata },
     }),
   })
   const host = yield* PluginHost.make(yield* Plugin.Service, "test")
@@ -171,7 +175,7 @@ describe("OpencodePlugin artifacts", () => {
           expect(
             (yield* database.db.select().from(ArtifactTable).where(eq(ArtifactTable.id, created.id)).get())
               ?.destination,
-          ).toBe("console:org_1")
+          ).toBe(`console:${console.server.url.host}:org_1`)
           expect(console.state.uploads).toHaveLength(2)
           expect(console.state.prepared[0]).not.toHaveProperty("replace")
           expect(console.state.published[0]).toMatchObject({
@@ -275,6 +279,62 @@ describe("OpencodePlugin artifacts", () => {
           },
           ArtifactConformance.expected.console,
         )
+      }),
+    ),
+  )
+
+  it.effect("pins a key's fingerprint, never the key, when the sign-in names no workspace", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const artifacts = yield* Artifact.Service
+        const database = yield* Database.Service
+        yield* start(console, {})
+        const created = yield* artifacts.create({ title: "Report", files })
+        const row = yield* database.db.select().from(ArtifactTable).where(eq(ArtifactTable.id, created.id)).get()
+        expect(row?.destination).toBe(
+          `console:${console.server.url.host}:key-${createHash("sha256").update("secret").digest("hex").slice(0, 12)}`,
+        )
+      }),
+    ),
+  )
+
+  it.effect("adopts a destination for an artifact published before pinning only once Console has it", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const artifacts = yield* Artifact.Service
+        const database = yield* Database.Service
+        yield* start(console)
+        const created = yield* artifacts.create({ title: "Report", files })
+        const pin = (destination: string | null) =>
+          database.db.update(ArtifactTable).set({ destination }).where(eq(ArtifactTable.id, created.id)).run()
+        yield* pin(null)
+        console.state.gone = true
+        expect(yield* artifacts.update(created.id, { files }).pipe(Effect.flip)).toBeInstanceOf(Artifact.InvalidError)
+        expect(yield* artifacts.remove(created.id).pipe(Effect.flip)).toBeInstanceOf(Artifact.InvalidError)
+        expect(console.state.deleted).toEqual([])
+        expect((yield* artifacts.info(created.id)).id).toBe(created.id)
+
+        console.state.gone = false
+        yield* artifacts.update(created.id, { files })
+        const row = yield* database.db.select().from(ArtifactTable).where(eq(ArtifactTable.id, created.id)).get()
+        expect(row?.destination).toBe(`console:${console.server.url.host}:org_1`)
+      }),
+    ),
+  )
+
+  it.effect("refreshes only the public files from Console's live copy, keeping artifact.json", () =>
+    withConsole((console) =>
+      Effect.gen(function* () {
+        const artifacts = yield* Artifact.Service
+        yield* start(console)
+        const created = yield* artifacts.create({
+          title: "Site",
+          files: { "artifact.json": JSON.stringify({ assets: "public" }), "public/index.html": "<h1>Hi</h1>" },
+        })
+        expect(console.state.published[0]?.body).toMatchObject({ files: [{ path: "index.html" }] })
+        const content = yield* artifacts.get(created.id)
+        expect(content).toMatchObject({ source: "live" })
+        expect(Object.keys(content.files).toSorted()).toEqual(["artifact.json", "public/index.html"])
       }),
     ),
   )

@@ -6,7 +6,7 @@ import fs from "node:fs/promises"
 import path from "node:path"
 import { and, desc, eq } from "drizzle-orm"
 import { lookup } from "mime-types"
-import type { ArtifactProviderDefinition, ArtifactPublishInput } from "@opencode/plugin/effect/artifact"
+import type { ArtifactProviderDefinition, ArtifactPublishInput, ArtifactTarget } from "@opencode/plugin/effect/artifact"
 import {
   Binding,
   Capability,
@@ -267,6 +267,8 @@ const layer = Layer.effect(
       }),
       editor: (draft) => ({
         add: (provider) => {
+          // This server's own provider is never replaced, so a plugin can't publish past it without asking.
+          if (provider.id === LocalProviderID) return
           draft.providers.set(provider.id, provider)
         },
         remove: (id) => {
@@ -336,19 +338,45 @@ const layer = Layer.effect(
       )
     }
 
-    const destinationOf = (provider: ProviderImplementation, row: typeof ArtifactTable.$inferSelect) =>
-      call(provider, provider.destination({ id: row.id, title: row.title, receipt: row.receipt ?? undefined }))
+    // Saved approvals match destinations as rules, so one with a wildcard would approve more than itself.
+    const destinationOf = (provider: ProviderImplementation, target: ArtifactTarget) =>
+      call(
+        provider,
+        provider.destination(target).pipe(
+          Effect.filterOrFail(
+            (destination) => !/[*?]/.test(destination),
+            (destination) => new Error(`Destination ${destination} must not contain * or ?`),
+          ),
+        ),
+      )
+    const rowTarget = (row: typeof ArtifactTable.$inferSelect) => ({
+      id: row.id,
+      title: row.title,
+      receipt: row.receipt ?? undefined,
+    })
 
     // An artifact pinned elsewhere, such as another Console workspace or cloud account, is never changed or forgotten
-    // from here. One published before destinations were pinned takes the current one.
+    // from here. One published before destinations were pinned takes the current one only once the provider reads it
+    // there.
     const requireDestination = Effect.fnUntraced(function* (
       provider: ProviderImplementation,
       row: typeof ArtifactTable.$inferSelect,
     ) {
-      const destination = yield* destinationOf(provider, row)
-      if (row.destination === null || row.destination === destination) return destination
+      const destination = yield* destinationOf(provider, rowTarget(row))
+      if (row.destination === destination) return destination
+      const confirmed =
+        row.destination === null && provider.read
+          ? yield* provider.read(row.id, row.receipt ?? undefined).pipe(
+              Effect.as(true),
+              Effect.orElseSucceed(() => false),
+            )
+          : false
+      if (confirmed) return destination
       return yield* new InvalidError({
-        reason: `Artifact ${row.id} was published to ${row.destination}, but provider ${provider.id} now publishes to ${destination}. Switch back to change or delete it.`,
+        reason:
+          row.destination === null
+            ? `Provider ${provider.id} can't find artifact ${row.id} at ${destination}, so it isn't changed or deleted there.`
+            : `Artifact ${row.id} was published to ${row.destination}, but provider ${provider.id} now publishes to ${destination}. Switch back to change or delete it.`,
         field: "provider",
       })
     })
@@ -415,8 +443,8 @@ const layer = Layer.effect(
           const visibility = input.visibility ?? provider.defaultAudience
           yield* requireSupport(provider, bundle.needs, visibility, input.visibility)
           const id = ID.create()
-          const destination = yield* call(provider, provider.destination({ id, title }))
-          if (visibility !== "local" && options?.authorize)
+          const destination = yield* destinationOf(provider, { id, title })
+          if (provider.id !== LocalProviderID && options?.authorize)
             yield* options.authorize({ provider: provider.id, destination, visibility })
           const now = yield* Clock.currentTimeMillis
           const created = yield* call(
@@ -454,18 +482,32 @@ const layer = Layer.effect(
         // A live copy pinned elsewhere is another artifact, so read the snapshot instead.
         const read =
           provider?.read &&
-          (existing.destination === null || existing.destination === (yield* destinationOf(provider, existing)))
+          (existing.destination === null ||
+            existing.destination === (yield* destinationOf(provider, rowTarget(existing))))
             ? provider.read
             : undefined
         // An artifact migrated from KV has no snapshot unless its provider was local.
         if (!read && !(yield* snapshotExists(id)))
           return yield* new ProviderNotFoundError({ providerID: existing.provider })
+        const snapshot = yield* readDirectoryFiles(itemDir(id))
+        // A host serves only public assets, so the live copy replaces those and keeps artifact.json and server files.
+        const assets = existing.manifest.assets
         const files = read
           ? yield* read(id, existing.receipt ?? undefined).pipe(
               Effect.mapError((cause) => new ProviderError({ providerID: existing.provider, cause })),
-              Effect.tap((live) => saveSnapshot(id, live)),
+              Effect.map((live) => ({
+                ...Object.fromEntries(
+                  Object.entries(snapshot).filter(
+                    ([filePath]) => manifestFile in snapshot && (assets === undefined || !within(assets, filePath)),
+                  ),
+                ),
+                ...Object.fromEntries(
+                  Object.entries(live).map(([filePath, bytes]) => [assets ? `${assets}/${filePath}` : filePath, bytes]),
+                ),
+              })),
+              Effect.tap((refreshed) => saveSnapshot(id, refreshed)),
             )
-          : yield* readDirectoryFiles(itemDir(id))
+          : snapshot
         return Content.make({
           info: toInfo(existing),
           ...inlineFiles(files, snapshotEntry(existing)),
@@ -484,11 +526,23 @@ const layer = Layer.effect(
           const title = input.title === undefined ? existing.title : input.title.trim()
           if (!title) return yield* new InvalidError({ reason: "Artifact title must not be empty", field: "title" })
           const supplied = yield* normalizeFiles(input.files)
-          // Files a read leaves out (binary, or past its limits) can't be sent back, so they stay unless replaced.
+          // Files a read leaves out (binary, or past its limits) can't be sent back, so they stay unless replaced. Only
+          // public assets carry over, and only into the same layout, so a private file never becomes public.
           const previous = options?.complete ? {} : yield* readDirectoryFiles(itemDir(id))
           const omitted = inlineFiles(previous, snapshotEntry(existing)).omitted
+          const assets = existing.manifest.assets
+          const manifest = supplied[manifestFile]
+          const sameLayout =
+            manifest === undefined
+              ? !(manifestFile in previous)
+              : manifestFile in previous && assets !== undefined && (yield* readManifest(manifest)).assets === assets
           const files = {
-            ...Object.fromEntries(Object.entries(previous).filter(([filePath]) => filePath in omitted)),
+            ...Object.fromEntries(
+              Object.entries(previous).filter(
+                ([filePath]) =>
+                  sameLayout && filePath in omitted && (assets === undefined || filePath.startsWith(`${assets}/`)),
+              ),
+            ),
             ...supplied,
           }
           const bundle = yield* readBundle(files, input.entry, existing.entry)
@@ -497,7 +551,7 @@ const layer = Layer.effect(
           const visibility = existing.visibility ?? provider.defaultAudience
           yield* requireSupport(provider, bundle.needs, visibility, visibility)
           const destination = yield* requireDestination(provider, existing)
-          if (visibility !== "local" && options?.authorize)
+          if (provider.id !== LocalProviderID && options?.authorize)
             yield* options.authorize({ provider: provider.id, destination, visibility })
           const now = yield* Clock.currentTimeMillis
           const sessionID = input.sessionID ?? existing.session_id ?? undefined
@@ -643,7 +697,7 @@ function normalizeFiles(files: Files) {
   })
 }
 
-const manifestFile = "artifact.json"
+export const manifestFile = "artifact.json"
 
 const ManifestFile = Schema.fromJsonString(
   Schema.Struct({
@@ -654,6 +708,22 @@ const ManifestFile = Schema.fromJsonString(
     crons: Schema.optional(Schema.Array(Cron)),
   }),
 )
+
+/** Reads an artifact.json and the paths it declares: its assets folder, server bundle and migration folders. */
+export const readManifest = Effect.fnUntraced(function* (raw: Uint8Array) {
+  const declared = yield* Schema.decodeUnknownEffect(ManifestFile)(decoder.decode(raw)).pipe(
+    Effect.mapError((error) => new InvalidError({ reason: `Invalid artifact.json: ${error.message}`, field: "files" })),
+  )
+  return {
+    declared,
+    assets: declared.assets === undefined ? undefined : yield* normalizePath(declared.assets),
+    server: declared.server === undefined ? undefined : yield* normalizePath(declared.server),
+    migrations: yield* Effect.forEach(
+      (declared.bindings ?? []).flatMap((binding) => binding.migrations ?? []),
+      normalizePath,
+    ),
+  }
+})
 
 /**
  * Splits published files into what a provider serves and runs. Without `artifact.json` every file is a public asset.
@@ -667,19 +737,11 @@ function readBundle(files: Readonly<Record<string, Uint8Array>>, requested?: str
       const entry = yield* resolveEntry(files, requested ?? (previous && files[previous] ? previous : undefined))
       return bundle(files, entry, { spa: false, bindings: [], crons: [] }, {}, files)
     }
-    const declared = yield* Schema.decodeUnknownEffect(ManifestFile)(decoder.decode(raw)).pipe(
-      Effect.mapError(
-        (error) => new InvalidError({ reason: `Invalid artifact.json: ${error.message}`, field: "files" }),
-      ),
-    )
-    const assets = declared.assets === undefined ? undefined : yield* normalizePath(declared.assets)
-    const server = declared.server === undefined ? undefined : yield* normalizePath(declared.server)
-    const migrations = yield* Effect.forEach(
-      (declared.bindings ?? []).flatMap((binding) => binding.migrations ?? []),
-      normalizePath,
-    )
+    const { declared, assets, server, migrations } = yield* readManifest(raw)
     if (assets === undefined && server === undefined)
       return yield* invalid("artifact.json must name an assets folder, a server bundle, or both")
+    if (server === undefined && ((declared.bindings ?? []).length > 0 || (declared.crons ?? []).length > 0))
+      return yield* invalid("artifact.json's bindings and crons need a server bundle")
     const roots = [assets, server, ...migrations, manifestFile].filter((root) => root !== undefined)
     const overlap = roots.flatMap((a, index) =>
       roots.slice(index + 1).flatMap((b) => (within(a, b) || within(b, a) ? [[a, b]] : [])),
@@ -698,6 +760,8 @@ function readBundle(files: Readonly<Record<string, Uint8Array>>, requested?: str
       return yield* invalid(`artifact.json's assets folder ${assets} has no files`)
     if (server !== undefined && files[server] === undefined)
       return yield* invalid(`artifact.json's server bundle ${server} is missing`)
+    const empty = migrations.find((root) => !entries.some(([filePath]) => filePath.startsWith(`${root}/`)))
+    if (empty !== undefined) return yield* invalid(`artifact.json's migrations folder ${empty} has no files`)
     const serverFiles = Object.fromEntries(
       entries.filter(([filePath]) =>
         [server, ...migrations].some((root) => root !== undefined && within(root, filePath)),

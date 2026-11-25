@@ -9,7 +9,8 @@ import { Database } from "@opencode/core/database/database"
 
 const encoder = new TextEncoder()
 const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d])
-const server = "export default { fetch: (request) => Response.json({ url: request.url }) }"
+const server = (version: number) =>
+  `export default { fetch: (request) => Response.json({ url: request.url, version: ${version} }) }`
 const app = (manifest: object, files: Record<string, string>) => ({
   files: { "artifact.json": JSON.stringify(manifest), ...files },
 })
@@ -20,15 +21,15 @@ export const fixtures = {
   "static-binary": { files: { "index.html": "<img src='./logo.png'>", "logo.png": png } },
   "nested-entry": { files: { "docs/guide.html": "<h1>Guide</h1>" }, entry: "docs/guide.html" },
   "spa-index": app({ assets: "dist", spa: true }, { "dist/index.html": "<div id='app'></div>", "src/main.ts": "" }),
-  "fetch-echo": app({ server: "server.js" }, { "server.js": server }),
+  "fetch-echo": app({ server: "server.js" }, { "server.js": server(1) }),
   sqlite: app(
     { server: "server.js", bindings: [{ name: "DB", kind: "sqlite", migrations: ["migrations"] }] },
-    { "server.js": server, "migrations/0001_init.sql": "CREATE TABLE note (id integer PRIMARY KEY);" },
+    { "server.js": server(1), "migrations/0001_init.sql": "CREATE TABLE note (id integer PRIMARY KEY);" },
   ),
-  blob: app({ server: "server.js", bindings: [{ name: "FILES", kind: "blob" }] }, { "server.js": server }),
+  blob: app({ server: "server.js", bindings: [{ name: "FILES", kind: "blob" }] }, { "server.js": server(1) }),
   cron: app(
     { server: "server.js", crons: [{ schedule: "0 * * * *", path: "/tasks/hourly" }] },
-    { "server.js": server },
+    { "server.js": server(1) },
   ),
 } satisfies Record<string, { readonly files: Artifact.Files; readonly entry?: string }>
 
@@ -61,7 +62,10 @@ export const expected = {
 
 export interface Subject {
   readonly provider: Artifact.ProviderID
-  /** A published file as a reader of the artifact gets it, or undefined when the host serves none. */
+  /**
+   * What a reader of the artifact gets at `path`, relative to its URL and with any query, or undefined when the host
+   * serves nothing there.
+   */
   readonly fetch: (info: Artifact.Info, path: string) => Effect.Effect<Uint8Array | undefined, unknown>
   /** How many requests the host has had, so a refusal can show it had none. */
   readonly calls: () => number
@@ -82,17 +86,27 @@ export const run = Effect.fnUntraced(function* (subject: Subject, matrix: Matrix
     }
     if (Exit.isFailure(exit)) throw new Error(`${subject.provider} should accept ${name}: ${exit.cause}`)
     const info = exit.value
-    const entry = Object.entries(fixture.files).find(
-      ([filePath]) => filePath === ("entry" in fixture ? fixture.entry : info.entry),
-    )
-    expect(yield* subject.fetch(info, info.entry)).toEqual(bytes(entry?.[1] ?? ""))
+    const files: Artifact.Files = fixture.files
+    const manifest = files["artifact.json"]
+    const declared: { assets?: string; server?: string } = typeof manifest === "string" ? JSON.parse(manifest) : {}
+    if (declared.server !== undefined) {
+      // Server code answers at its own paths, and its source is never served.
+      expect(yield* echo(subject, info)).toMatchObject({ version: 1 })
+      expect(yield* subject.fetch(info, declared.server)).not.toEqual(bytes(server(1)))
+      const updated = yield* artifacts.update(info.id, { files: { ...files, [declared.server]: server(2) } })
+      expect(updated.url).toBe(info.url)
+      expect(yield* echo(subject, updated)).toMatchObject({ version: 2 })
+      yield* artifacts.remove(info.id)
+      expect(yield* subject.fetch(info, "echo?q=1")).toBeUndefined()
+      continue
+    }
+    const entry = declared.assets === undefined ? info.entry : `${declared.assets}/${info.entry}`
+    expect(yield* subject.fetch(info, info.entry)).toEqual(bytes(files[entry] ?? ""))
     if (name === "static-binary") {
       expect(yield* subject.fetch(info, "logo.png")).toEqual(png)
       expect((yield* artifacts.get(info.id)).omitted).toEqual({ "logo.png": png.length })
     }
-    const updated = yield* artifacts.update(info.id, {
-      files: { ...fixture.files, [entry?.[0] ?? info.entry]: "<p>v2</p>" },
-    })
+    const updated = yield* artifacts.update(info.id, { files: { ...files, [entry]: "<p>v2</p>" } })
     expect(updated.url).toBe(info.url)
     expect(yield* subject.fetch(updated, updated.entry)).toEqual(bytes("<p>v2</p>"))
     yield* artifacts.remove(info.id)
@@ -117,5 +131,16 @@ export const run = Effect.fnUntraced(function* (subject: Subject, matrix: Matrix
   expect(subject.calls()).toBe(calls)
   expect((yield* artifacts.info(pinned.id)).id).toBe(pinned.id)
 })
+
+/** What the fixtures' server answers at `echo?q=1`: the URL it was asked for, as the request reached it. */
+const echo = (subject: Subject, info: Artifact.Info) =>
+  subject.fetch(info, "echo?q=1").pipe(
+    Effect.map((response) => {
+      const body = JSON.parse(new TextDecoder().decode(response))
+      const url = new URL(body.url)
+      expect(url.pathname + url.search).toEndWith("/echo?q=1")
+      return body
+    }),
+  )
 
 const bytes = (value: string | Uint8Array) => (typeof value === "string" ? encoder.encode(value) : value)

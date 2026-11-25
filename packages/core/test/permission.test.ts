@@ -134,6 +134,13 @@ test("grants artifact_publish only through an allow that names it", () => {
   expect(Permission.evaluate("read", "src/index.ts", [all]).effect).toBe("allow")
 })
 
+test("leaves artifact_publish out of the rules a blanket allow scopes", () => {
+  const policy = Permission.Policy.fromRules([{ action: "*", resource: "console:*", effect: "allow" }])
+  expect(Permission.Policy.scopedRules(policy, "artifact_publish")).toEqual([])
+  expect(Permission.Policy.relevant(policy, "artifact_publish")).toEqual([])
+  expect(Permission.Policy.scopedRules(policy, "read")).toHaveLength(1)
+})
+
 describe("Permission.isActionDenied", () => {
   const rule = (action: string, resource: string, effect: Permission.Rule["effect"]): Permission.Rule => ({
     action,
