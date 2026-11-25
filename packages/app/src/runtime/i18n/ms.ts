@@ -849,6 +849,8 @@ export const dict = {
     "OpenCode menggunakan fail pada volum boleh tanggal untuk projek yang anda buka dan arahan yang anda jalankan di sana.",
   "desktop.contextMenu.spellcheck": "Semakan Ejaan",
   "desktop.contextMenu.spellcheckLanguages": "Bahasa Semakan Ejaan",
+  "desktop.contextMenu.openLink": "Buka Pautan dalam Pelayar",
+  "desktop.contextMenu.copyLink": "Salin Pautan",
   "session.location.unavailable": "Lokasi sesi tidak tersedia",
   "session.location.description": "Pilih direktori lain untuk meneruskan sesi ini.",
   "session.location.choose": "Pilih direktori",

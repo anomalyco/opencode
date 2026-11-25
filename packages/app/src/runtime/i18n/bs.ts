@@ -923,6 +923,8 @@ export const dict = {
     "OpenCode koristi datoteke na prenosivim diskovima za projekte koje otvorite i komande koje tamo pokrenete.",
   "desktop.contextMenu.spellcheck": "Provjera pravopisa",
   "desktop.contextMenu.spellcheckLanguages": "Jezici za provjeru pravopisa",
+  "desktop.contextMenu.openLink": "Otvori link u pregledniku",
+  "desktop.contextMenu.copyLink": "Kopiraj link",
   "session.location.unavailable": "Lokacija sesije nije dostupna",
   "session.location.description": "Odaberite drugi direktorij da nastavite ovu sesiju.",
   "session.location.choose": "Odaberi direktorij",

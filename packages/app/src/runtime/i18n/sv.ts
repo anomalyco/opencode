@@ -852,6 +852,8 @@ export const dict = {
     "OpenCode använder filer på flyttbara volymer för projekt du öppnar och kommandon du kör där.",
   "desktop.contextMenu.spellcheck": "Stavningskontroll",
   "desktop.contextMenu.spellcheckLanguages": "Språk för stavningskontroll",
+  "desktop.contextMenu.openLink": "Öppna länk i webbläsaren",
+  "desktop.contextMenu.copyLink": "Kopiera länk",
   "session.location.unavailable": "Sessionens plats är inte tillgänglig",
   "session.location.description": "Välj en annan katalog för att fortsätta den här sessionen.",
   "session.location.choose": "Välj katalog",

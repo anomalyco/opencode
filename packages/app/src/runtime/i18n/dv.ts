@@ -879,6 +879,8 @@ export const dict = {
     "ތިބާ ހުޅުވާ ޕްރޮޖެކްޓްތަކާއި އެތަނުގައި ހިންގާ ކޮމާންޑްތަކަށް OpenCode އިން ރިމޫވަބަލް ވޮލިއުމްތަކުގައިވާ ފައިލްތައް ބޭނުންކުރެއެވެ.",
   "desktop.contextMenu.spellcheck": "ސްޕެލްޗެކް",
   "desktop.contextMenu.spellcheckLanguages": "ސްޕެލްޗެކް ބަސްތައް",
+  "desktop.contextMenu.openLink": "ލިންކް ބްރައުޒަރުގައި ހުޅުވާ",
+  "desktop.contextMenu.copyLink": "ލިންކް ކޮޕީ ކުރޭ",
   "session.location.unavailable": "ސެޝަންގެ ލޮކޭޝަން ނުލިބެއެވެ",
   "session.location.description": "މި ސެޝަން ކުރިއަށް ގެންދިއުމަށް އެހެން ޑައިރެކްޓަރީއެއް ހޮވާށެވެ.",
   "session.location.choose": "ޑައިރެކްޓަރީ ހޮވާ",

@@ -905,6 +905,8 @@ export const dict = {
     "يستخدم OpenCode الملفات على وحدات التخزين القابلة للإزالة للمشاريع التي تفتحها والأوامر التي تشغّلها فيها.",
   "desktop.contextMenu.spellcheck": "التدقيق الإملائي",
   "desktop.contextMenu.spellcheckLanguages": "لغات التدقيق الإملائي",
+  "desktop.contextMenu.openLink": "فتح الرابط في المتصفح",
+  "desktop.contextMenu.copyLink": "نسخ الرابط",
   "session.location.unavailable": "موقع الجلسة غير متاح",
   "session.location.description": "اختر دليلًا آخر لمتابعة هذه الجلسة.",
   "session.location.choose": "اختيار دليل",

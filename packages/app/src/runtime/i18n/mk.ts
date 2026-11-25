@@ -855,6 +855,8 @@ export const dict = {
     "OpenCode користи датотеки на преносливи волумени за проектите што ги отворате и командите што ги извршувате таму.",
   "desktop.contextMenu.spellcheck": "Проверка на правопис",
   "desktop.contextMenu.spellcheckLanguages": "Јазици за проверка на правопис",
+  "desktop.contextMenu.openLink": "Отвори ја врската во прелистувач",
+  "desktop.contextMenu.copyLink": "Копирај ја врската",
   "session.location.unavailable": "Локацијата на сесијата е недостапна",
   "session.location.description": "Изберете друг директориум за да ја продолжите сесијата.",
   "session.location.choose": "Избери директориум",

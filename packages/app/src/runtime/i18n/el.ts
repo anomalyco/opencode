@@ -871,6 +871,8 @@ export const dict = {
     "Το OpenCode χρησιμοποιεί αρχεία σε αφαιρούμενους τόμους για τα έργα που ανοίγετε και τις εντολές που εκτελείτε εκεί.",
   "desktop.contextMenu.spellcheck": "Ορθογραφικός έλεγχος",
   "desktop.contextMenu.spellcheckLanguages": "Γλώσσες ορθογραφικού ελέγχου",
+  "desktop.contextMenu.openLink": "Άνοιγμα συνδέσμου στο πρόγραμμα περιήγησης",
+  "desktop.contextMenu.copyLink": "Αντιγραφή συνδέσμου",
   "session.location.unavailable": "Η τοποθεσία της συνεδρίας δεν είναι διαθέσιμη",
   "session.location.description": "Επιλέξτε άλλον κατάλογο για να συνεχίσετε αυτήν τη συνεδρία.",
   "session.location.choose": "Επιλογή καταλόγου",

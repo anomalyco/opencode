@@ -866,6 +866,8 @@ export const dict = {
     "OpenCode izmanto failus noņemamos sējumos projektiem, ko tur atverat, un komandām, ko tur izpildāt.",
   "desktop.contextMenu.spellcheck": "Pareizrakstības pārbaude",
   "desktop.contextMenu.spellcheckLanguages": "Pareizrakstības pārbaudes valodas",
+  "desktop.contextMenu.openLink": "Atvērt saiti pārlūkā",
+  "desktop.contextMenu.copyLink": "Kopēt saiti",
   "session.location.unavailable": "Sesijas atrašanās vieta nav pieejama",
   "session.location.description": "Izvēlieties citu direktoriju, lai turpinātu šo sesiju.",
   "session.location.choose": "Izvēlēties direktoriju",

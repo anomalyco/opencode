@@ -858,6 +858,8 @@ export const dict = {
     "OpenCode는 사용자가 연 프로젝트와 그곳에서 실행한 명령을 위해 이동식 볼륨의 파일을 사용합니다.",
   "desktop.contextMenu.spellcheck": "맞춤법 검사",
   "desktop.contextMenu.spellcheckLanguages": "맞춤법 검사 언어",
+  "desktop.contextMenu.openLink": "브라우저에서 링크 열기",
+  "desktop.contextMenu.copyLink": "링크 복사",
   "session.location.unavailable": "세션 위치를 사용할 수 없음",
   "session.location.description": "이 세션을 계속하려면 다른 디렉터리를 선택하세요.",
   "session.location.choose": "디렉터리 선택",

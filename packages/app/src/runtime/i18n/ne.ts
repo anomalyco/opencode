@@ -856,6 +856,8 @@ export const dict = {
     "तपाईंले खोल्ने परियोजना र त्यहाँ चलाउने आदेशहरूका लागि OpenCode ले हटाउन मिल्ने भोल्युमका फाइलहरू प्रयोग गर्छ।",
   "desktop.contextMenu.spellcheck": "हिज्जे जाँच",
   "desktop.contextMenu.spellcheckLanguages": "हिज्जे जाँचका भाषाहरू",
+  "desktop.contextMenu.openLink": "लिङ्क ब्राउजरमा खोल्नुहोस्",
+  "desktop.contextMenu.copyLink": "लिङ्क प्रतिलिपि गर्नुहोस्",
   "session.location.unavailable": "सत्रको स्थान उपलब्ध छैन",
   "session.location.description": "यो सत्र जारी राख्न अर्को निर्देशिका छान्नुहोस्।",
   "session.location.choose": "निर्देशिका छान्नुहोस्",

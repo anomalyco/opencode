@@ -861,6 +861,8 @@ export const dict = {
     "OpenCodeは、リムーバブルボリュームで開いたプロジェクトや実行したコマンドのために、そのボリューム上のファイルを使用します。",
   "desktop.contextMenu.spellcheck": "スペルチェック",
   "desktop.contextMenu.spellcheckLanguages": "スペルチェックの言語",
+  "desktop.contextMenu.openLink": "ブラウザでリンクを開く",
+  "desktop.contextMenu.copyLink": "リンクをコピー",
   "session.location.unavailable": "セッションの場所を利用できません",
   "session.location.description": "このセッションを続行するには、別のディレクトリを選択してください。",
   "session.location.choose": "ディレクトリを選択",

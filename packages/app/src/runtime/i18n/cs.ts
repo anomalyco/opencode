@@ -875,6 +875,8 @@ export const dict = {
     "OpenCode používá soubory na vyměnitelných svazcích pro projekty, které otevřete, a příkazy, které v nich spustíte.",
   "desktop.contextMenu.spellcheck": "Kontrola pravopisu",
   "desktop.contextMenu.spellcheckLanguages": "Jazyky kontroly pravopisu",
+  "desktop.contextMenu.openLink": "Otevřít odkaz v prohlížeči",
+  "desktop.contextMenu.copyLink": "Kopírovat odkaz",
   "session.location.unavailable": "Umístění relace není dostupné",
   "session.location.description": "Chcete-li v této relaci pokračovat, vyberte jiný adresář.",
   "session.location.choose": "Vybrat adresář",

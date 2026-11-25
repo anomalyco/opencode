@@ -846,6 +846,8 @@ export const dict = {
     "OpenCode açýan taslamalaryňyz we şol ýerde işledýän buýruklaryňyz üçin aýrylýan diskleridäki faýllary ulanýar.",
   "desktop.contextMenu.spellcheck": "Orfografiýa barlagy",
   "desktop.contextMenu.spellcheckLanguages": "Orfografiýa barlagynyň dilleri",
+  "desktop.contextMenu.openLink": "Baglanyşygy brauzerde aç",
+  "desktop.contextMenu.copyLink": "Baglanyşygy göçür",
   "session.location.unavailable": "Sessiýanyň ýerleşişi elýeterli däl",
   "session.location.description": "Bu sessiýany dowam etmek üçin başga katalog saýlaň.",
   "session.location.choose": "Katalog saýlaň",

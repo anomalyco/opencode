@@ -847,6 +847,8 @@ export const dict = {
     "OpenCode משתמש בקבצים בכוננים נשלפים עבור פרויקטים שאתה פותח ופקודות שאתה מריץ בהם.",
   "desktop.contextMenu.spellcheck": "בדיקת איות",
   "desktop.contextMenu.spellcheckLanguages": "שפות לבדיקת איות",
+  "desktop.contextMenu.openLink": "פתח קישור בדפדפן",
+  "desktop.contextMenu.copyLink": "העתק קישור",
   "session.location.unavailable": "מיקום ההפעלה אינו זמין",
   "session.location.description": "בחר תיקייה אחרת כדי להמשיך בהפעלה זו.",
   "session.location.choose": "בחר תיקייה",

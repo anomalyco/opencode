@@ -914,6 +914,8 @@ export const dict = {
     "OpenCode menggunakan berkas di volume yang dapat dilepas untuk proyek yang Anda buka dan perintah yang Anda jalankan di sana.",
   "desktop.contextMenu.spellcheck": "Pemeriksa ejaan",
   "desktop.contextMenu.spellcheckLanguages": "Bahasa Pemeriksa Ejaan",
+  "desktop.contextMenu.openLink": "Buka Tautan di Browser",
+  "desktop.contextMenu.copyLink": "Salin Tautan",
   "session.location.unavailable": "Lokasi sesi tidak tersedia",
   "session.location.description": "Pilih direktori lain untuk melanjutkan sesi ini.",
   "session.location.choose": "Pilih direktori",

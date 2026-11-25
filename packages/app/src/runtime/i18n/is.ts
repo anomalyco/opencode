@@ -846,6 +846,8 @@ export const dict = {
   "desktop.picker.error.sizeLimit": "Valin viðhengi fara yfir {{limit}} MB hámarkið",
   "desktop.contextMenu.spellcheck": "Stafsetningarleiðrétting",
   "desktop.contextMenu.spellcheckLanguages": "Tungumál stafsetningarleiðréttingar",
+  "desktop.contextMenu.openLink": "Opna tengil í vafra",
+  "desktop.contextMenu.copyLink": "Afrita tengil",
   "session.location.unavailable": "Staðsetning setu ekki tiltæk",
   "session.location.description": "Veldu aðra möppu til að halda þessari setu áfram.",
   "session.location.choose": "Velja möppu",

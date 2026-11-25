@@ -4,6 +4,7 @@ import { getCACertificates, setDefaultCACertificates } from "node:tls"
 import { app, shell } from "electron"
 import { Effect, Path } from "effect"
 import { APP_USER_MODEL_ID } from "../constants"
+import { openExternalURL } from "../files"
 import { isCollidingDevShortcut } from "../identity"
 import { DesktopPaths } from "../paths"
 import { getUserShell, loadShellEnv } from "../service/shell-env"
@@ -16,6 +17,7 @@ import { nativeT } from "../native/translations"
 // window is up instead of holding up startup with its dependency tree.
 export const installContextMenu = Effect.gen(function* () {
   const { default: contextMenu } = yield* Effect.promise(() => import("electron-context-menu"))
+  const runFork = Effect.runForkWith(yield* Effect.context())
   contextMenu({
     showSaveImageAs: true,
     showLookUpSelection: false,
@@ -34,7 +36,20 @@ export const installContextMenu = Effect.gen(function* () {
       get selectAll() {
         return nativeT("desktop.menu.selectAll")
       },
+      get copyLink() {
+        return nativeT("desktop.contextMenu.copyLink")
+      },
     },
+    prepend: (_actions, params) =>
+      /^https?:/i.test(params.linkURL)
+        ? [
+            {
+              label: nativeT("desktop.contextMenu.openLink"),
+              click: () => runFork(openExternalURL(params.linkURL)),
+            },
+            { type: "separator" },
+          ]
+        : [],
     append: (_actions, params) => (params.isEditable ? spellcheckMenuItems() : []),
   })
 })

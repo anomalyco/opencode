@@ -840,6 +840,8 @@ export const dict = {
     "OpenCode ໃຊ້ໄຟລ໌ໃນໄດຣຟ໌ແບບຖອດໄດ້ສຳລັບໂຄງການທີ່ທ່ານເປີດ ແລະຄຳສັ່ງທີ່ທ່ານແລ່ນຢູ່ບ່ອນນັ້ນ.",
   "desktop.contextMenu.spellcheck": "ກວດການສະກົດຄຳ",
   "desktop.contextMenu.spellcheckLanguages": "ພາສາກວດການສະກົດຄຳ",
+  "desktop.contextMenu.openLink": "ເປີດລິ້ງໃນບຣາວເຊີ",
+  "desktop.contextMenu.copyLink": "ສຳເນົາລິ້ງ",
   "session.location.unavailable": "ບໍ່ມີສະຖານທີ່ຂອງເຊດຊັນ",
   "session.location.description": "ເລືອກໄດເລກະທໍລີອື່ນເພື່ອສືບຕໍ່ເຊດຊັນນີ້.",
   "session.location.choose": "ເລືອກໄດເລກະທໍລີ",
