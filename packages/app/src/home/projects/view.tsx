@@ -2,6 +2,7 @@ import { createMemo, For, type JSX, onCleanup, Show, splitProps } from "solid-js
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Popover } from "@kobalte/core/popover"
+import { createOverlayFocus } from "@opencode/ui/context/overlay-focus"
 import {
   displayName,
   getProjectAvatarGenerated,
@@ -82,21 +83,42 @@ export type HomeProjectsViewProps = {
   onOpenHelp: () => void
   /** With `dropdown`, opens the panel from a compact picker at the end of Home's search field. */
   scope?: boolean
+  /** With several servers and no project chosen, names the focused server instead of "All projects". */
+  serverScope?: boolean
 }
 
 export function HomeProjectsView(props: HomeProjectsViewProps) {
   const [state, setState] = createStore({ open: false })
+
+  const overlayFocus = createOverlayFocus()
+
+  let trigger: HTMLButtonElement | undefined
+
   const selected = createMemo(() => props.projects.find((project) => project.worktree === props.selection.directory))
 
   const server = createMemo(() =>
     props.servers.find((server) => ServerConnection.key(server) === props.selection.server),
   )
 
+  const scopedServer = () => (props.serverScope && props.servers.length > 1 && !selected() ? server() : undefined)
+
+  const label = () => {
+    const project = selected()
+
+    if (project) return displayName(project)
+    const item = scopedServer()
+
+    return item ? props.serverLabel(item) : props.language.t("home.projects.all")
+  }
+
   return (
     <Show when={props.dropdown} fallback={<HomeProjectsPanel {...props} />}>
       <Popover
         open={state.open}
-        onOpenChange={(open) => setState("open", open)}
+        onOpenChange={(open) => {
+          overlayFocus.openChanged(open)
+          setState("open", open)
+        }}
         placement={props.scope ? "bottom-end" : "bottom-start"}
         sameWidth={!props.scope}
         gutter={props.scope ? 8 : 6}
@@ -105,20 +127,17 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
           when={props.scope}
           fallback={
             <Popover.Trigger
+              ref={trigger}
               data-component="home-projects-dropdown"
               aria-label={props.language.t("home.projects")}
-              class="flex h-10 w-full min-w-0 items-center gap-2 rounded-[6px] bg-v2-background-bg-base px-1.5 text-start text-v2-text-text-base outline-none hover:bg-v2-background-bg-layer-01"
+              class="flex h-10 w-full min-w-0 items-center gap-2 rounded-[6px] bg-v2-background-bg-base px-1.5 text-start text-v2-text-text-base hover:bg-v2-background-bg-layer-01 focus-visible:-outline-offset-2"
             >
-              <Show when={selected()} fallback={<Icon name="folder" />}>
+              <Show when={selected()} fallback={<Icon name={scopedServer() ? "server" : "folder"} />}>
                 {(project) => <HomeProjectAvatar project={project()} />}
               </Show>
               <span class="flex min-w-0 flex-1 flex-col leading-[var(--line-height-compact)]">
-                <bdi class="truncate">
-                  <Show when={selected()} fallback={props.language.t("home.projects.all")}>
-                    {(project) => displayName(project())}
-                  </Show>
-                </bdi>
-                <Show when={props.servers.length > 1 && server()}>
+                <bdi class="truncate">{label()}</bdi>
+                <Show when={props.servers.length > 1 && !scopedServer() && server()}>
                   {(server) => (
                     <bdi class="truncate text-v2-text-text-muted opacity-70">
                       {props.serverLabel(server())}
@@ -131,23 +150,30 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
           }
         >
           <Popover.Trigger
+            ref={trigger}
             data-action="home-project-scope"
             aria-label={props.language.t("home.projects")}
-            class="relative z-20 -me-1 flex h-7 min-w-0 max-w-[220px] shrink-0 items-center gap-1.5 rounded-[4px] ps-2 pe-1.5 text-[13px] leading-[var(--line-height-compact)] [font-weight:440] text-v2-text-text-muted outline-none hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base focus-visible:bg-v2-overlay-simple-overlay-hover data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-base"
+            class="relative z-20 -me-1 flex h-7 min-w-0 max-w-[220px] shrink-0 items-center gap-1.5 rounded-[4px] ps-2 pe-1.5 text-[13px] leading-[var(--line-height-compact)] [font-weight:440] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-base"
             onMouseDown={(event: MouseEvent) => event.preventDefault()}
           >
-            <Show when={selected()}>{(project) => <HomeProjectAvatar project={project()} />}</Show>
-            <bdi class="min-w-0 truncate">
-              <Show when={selected()} fallback={props.language.t("home.projects.all")}>
-                {(project) => displayName(project())}
-              </Show>
-            </bdi>
+            <Show
+              when={selected()}
+              fallback={
+                <Show when={scopedServer()}>
+                  <Icon name="server" class="shrink-0 text-v2-icon-icon-muted" />
+                </Show>
+              }
+            >
+              {(project) => <HomeProjectAvatar project={project()} />}
+            </Show>
+            <bdi class="min-w-0 truncate">{label()}</bdi>
             <Icon name="chevron-down" class="shrink-0 text-v2-icon-icon-muted" />
           </Popover.Trigger>
         </Show>
         <Popover.Portal>
           <Popover.Content
             aria-label={props.language.t("home.projects")}
+            onCloseAutoFocus={(event) => overlayFocus.restore(event, trigger)}
             dir={props.language.direction()}
             style={props.scope ? { width: "280px" } : undefined}
             class="z-50 max-h-[min(70dvh,var(--kb-popper-content-available-height))] overflow-hidden rounded-[10px] bg-v2-background-bg-base p-1.5 shadow-[var(--v2-elevation-floating)] outline-none data-[expanded]:animate-in data-[expanded]:fade-in data-[expanded]:slide-in-from-top-2 duration-150 ease-out motion-reduce:animate-none"
@@ -246,6 +272,7 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
       <div data-slot="home-projects-scroll" class="flex min-h-0 min-w-0 shrink flex-col">
         <div
           data-slot="home-projects-viewport"
+          data-focus-scope
           data-scrollable
           class="min-h-0 flex-1 overflow-y-auto"
           ref={(element) => {
@@ -706,14 +733,13 @@ function HomeProjectNavButton(props: JSX.ButtonHTMLAttributes<HTMLButtonElement>
   return (
     <button
       {...rest}
+      data-slot="home-project-nav-button"
       class={`
         flex h-7 min-w-0 w-full shrink-0 cursor-default items-center gap-2 rounded-[6px] bg-transparent px-1.5 text-left
-        text-v2-text-text-muted [font-weight:440] transition-[background-color,color,box-shadow] duration-[120ms] ease-in-out
+        text-v2-text-text-muted [font-weight:440] transition-[background-color,color] duration-[120ms] ease-in-out
         hover:bg-v2-background-bg-layer-01 hover:text-v2-text-text-base
         data-[selected]:bg-v2-background-bg-layer-03 data-[selected]:text-v2-text-text-base
         data-[selected]:hover:bg-v2-background-bg-layer-03
-        focus-visible:bg-v2-background-bg-layer-01 focus-visible:text-v2-text-text-base focus-visible:outline-none
-        focus-visible:[box-shadow:inset_0_0_0_0.5px_var(--v2-border-border-muted)]
         ${local.class ?? ""}
       `}
       classList={local.classList}

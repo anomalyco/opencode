@@ -151,6 +151,11 @@
   --tab-overlay: var(--v2-overlay-simple-overlay-hover);
 }
 
+/* Full-width rows: the ring sits inside, clear of the sidebar's edges. */
+[data-titlebar-tab-action]:focus-visible {
+  outline-offset: -2px;
+}
+
 [data-titlebar-tab-action]:is(:active, [data-state="pressed"]) {
   --tab-overlay: var(--v2-overlay-simple-overlay-pressed);
 }
@@ -568,4 +573,8 @@
     ) {
     transition: none;
   }
+}
+[data-slot="sidebar-project-row"]:has(> button:first-child:focus-visible) {
+  outline: 2px solid var(--v2-border-border-focus);
+  outline-offset: -2px;
 }

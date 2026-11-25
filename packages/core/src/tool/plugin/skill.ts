@@ -44,7 +44,9 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              const skill = yield* skills.get(input.id)
+              const skill = yield* skills
+                .resolve(input.id)
+                .pipe(Effect.mapError((error) => unableToLoad(input.id, error)))
               if (!skill) return yield* unableToLoad(input.id)
               return yield* Effect.gen(function* () {
                 yield* permission.assert({
@@ -53,8 +55,11 @@ export const Plugin = {
                   save: [skill.id],
                   ...Permission.invocation(context),
                 })
-                const files = yield* skills.files(skill.id)
-                const { directory, output: content } = yield* Skill.prepare(fs, skill, files)
+                const { directory, output: content } = yield* Skill.prepare(
+                  fs,
+                  { ...skill, content: yield* skills.instructions(skill.id) },
+                  yield* skills.files(skill.id),
+                )
                 return {
                   output: { directory, content },
                   content,

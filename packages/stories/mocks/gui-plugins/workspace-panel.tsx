@@ -10,11 +10,22 @@ import { builtins } from "../../../gui-plugins/src/renderer"
 import { fileTabId } from "../../../gui-plugins/src/file/path"
 import { BuiltinPanel, type BuiltinLayout } from "../../../plugin/src/gui/builtin"
 import { PanelContext } from "../../../plugin/src/gui/host"
-import type { Layout, PanelFrame, Storage } from "../../../plugin/src/gui"
+import type { ComposerDelivery, Layout, PanelFrame, Storage } from "../../../plugin/src/gui"
 import { createStoryHostApis } from "../../src/plugin"
 import { createWorkspace, type ChangesScenario } from "./workspace"
 
 export type { ChangesScenario } from "./workspace"
+
+export type CommentDelivery = "Send" | "Steer" | "Queue" | "Unavailable"
+
+/** The composer delivery a story's Delivery control names. */
+function commentDelivery(value: CommentDelivery | undefined): ComposerDelivery | undefined {
+  if (value === "Send") return "send"
+
+  if (value === "Steer") return "steer"
+
+  if (value === "Queue") return "queue"
+}
 
 const plugins = builtins.filter((plugin) => ["file", "review", "microsoft-office"].includes(plugin.id))
 
@@ -38,8 +49,10 @@ export default function WorkspacePanel(props: {
   plugin: "file" | "review"
   path?: string
   scenario?: ChangesScenario
+  /** How the composer would send a comment now. Defaults to Unavailable. */
+  delivery?: CommentDelivery
 }) {
-  const workspace = createWorkspace(props.scenario ?? "Changes")
+  const workspace = createWorkspace(props.scenario ?? "Changes", () => commentDelivery(props.delivery))
 
   if (props.path?.includes("/")) workspace.screen.file.tree.expand(props.path.slice(0, props.path.lastIndexOf("/")))
 
@@ -53,19 +66,30 @@ export default function WorkspacePanel(props: {
 
   const [opened, setOpened] = createSignal(true)
 
+  const [side, setSide] = createSignal<"start" | "end">("start")
+
   const frame: PanelFrame = {
     visible: () => true,
     present: () => true,
     placement: () => "side",
     reserve: () => false,
     animate: () => false,
-    sidebar: { opened, width, resize: setWidth, toggle: () => setOpened((value) => !value), transition: () => false },
+    sidebar: {
+      opened,
+      width,
+      resize: setWidth,
+      toggle: () => setOpened((value) => !value),
+      transition: () => false,
+      side,
+      move: setSide,
+    },
     open: () => [tab()],
   }
 
   const scroll = new Map<string, ReturnType<Layout["scroll"]["get"]>>()
 
   const layout: BuiltinLayout = {
+    fitsSide: () => true,
     narrow: () => false,
     ready: () => true,
     open: (key) => setTab(key.slice(key.indexOf(":") + 1)),

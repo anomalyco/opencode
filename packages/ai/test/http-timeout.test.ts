@@ -275,6 +275,7 @@ describe("HTTP transport timeouts", () => {
       for (const effect of Object.values(calls)) yield* check(effect)
       yield* check(
         Realtime.connect({
+          engine: Realtime.engines[1],
           model: "gpt-realtime",
           apiKey: Redacted.make("test"),
           transport: { type: "websocket" },

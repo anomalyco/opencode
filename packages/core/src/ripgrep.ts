@@ -6,7 +6,7 @@ import { Entry, Match } from "@opencode/schema/filesystem"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { collectStream, waitForAbort } from "@opencode/util/process"
 import { TextBoundary } from "@opencode/util/text-boundary"
-import { Environment } from "./environment/index.js"
+import type { Environment } from "./environment/index.js"
 import { NonNegativeInt, PositiveInt, RelativePath } from "./schema.js"
 import { RipgrepBinary } from "./ripgrep/binary.js"
 
@@ -58,6 +58,7 @@ export class InvalidPatternError extends Schema.TaggedError<InvalidPatternError>
 }) {}
 
 export interface FindInput {
+  readonly environment: Environment.Interface
   readonly cwd: string
   readonly pattern: string
   readonly limit: number
@@ -69,6 +70,7 @@ export interface FindInput {
 }
 
 export interface GlobInput {
+  readonly environment: Environment.Interface
   readonly cwd: string
   readonly pattern: string
   readonly limit: number
@@ -78,6 +80,7 @@ export interface GlobInput {
 }
 
 export interface GrepInput {
+  readonly environment: Environment.Interface
   readonly cwd: string
   readonly pattern: string
   readonly file?: string
@@ -110,10 +113,10 @@ const isInvalidPattern = (stderr: string) =>
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const environment = yield* Environment.Service
     const binary = yield* RipgrepBinary.Service
 
     const run = <A>(input: {
+      readonly environment: Environment.Interface
       readonly cwd: string
       readonly args: string[]
       readonly limit: number
@@ -124,9 +127,15 @@ const layer = Layer.effect(
     }) => {
       const program = Effect.scoped(
         Effect.gen(function* () {
-          // Hosted environments will resolve rg through their driver image; the spawner is the execution seam.
-          const handle = yield* environment.spawner.spawn(
-            ChildProcess.make(yield* binary.filepath, input.args, { cwd: input.cwd, extendEnv: true, stdin: "ignore" }),
+          const command = input.environment.local
+            ? yield* binary.filepath
+            : input.environment.rg
+              ? yield* input.environment.rg.pipe(
+                  Effect.mapError((cause) => failure(`Unable to resolve ripgrep on ${input.environment.id}`, cause)),
+                )
+              : yield* failure(`Search is not available on ${input.environment.id} yet.`)
+          const handle = yield* input.environment.spawner.spawn(
+            ChildProcess.make(command, input.args, { cwd: input.cwd, extendEnv: true, stdin: "ignore" }),
           )
           const stderrFiber = yield* collectStream(handle.stderr, ERROR_BYTES).pipe(
             Effect.map((output) => output.buffer.toString("utf8")),
@@ -177,6 +186,7 @@ const layer = Layer.effect(
     return Service.of({
       glob: (input) =>
         run<string>({
+          environment: input.environment,
           cwd: input.cwd,
           limit: input.limit,
           signal: input.signal,
@@ -205,6 +215,7 @@ const layer = Layer.effect(
         ),
       find: (input) =>
         run<Entry>({
+          environment: input.environment,
           cwd: input.cwd,
           limit: input.limit,
           signal: input.signal,
@@ -297,4 +308,4 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [Environment.node, RipgrepBinary.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [RipgrepBinary.node] })

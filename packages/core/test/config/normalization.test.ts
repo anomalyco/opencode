@@ -321,6 +321,16 @@ describe("ConfigNormalize", () => {
     ])
   })
 
+  test("maps the media tools' old experimental names in native rules", () => {
+    const rule = { action: "experimental_image_generate", resource: "*", effect: "deny" }
+    const result = normalized({
+      permissions: [rule],
+      agents: { build: { permissions: [{ ...rule, action: "experimental_video_generate" }] } },
+    }).encoded
+    expect(result.permissions).toEqual([{ ...rule, action: "generate_image" }])
+    expect(result.agents).toMatchObject({ build: { permissions: [{ ...rule, action: "generate_video" }] } })
+  })
+
   test.each(["agent", "mode"])("preserves legacy %s permission source order", (key) => {
     const build = {
       tools: { write: false, read: true },
@@ -614,14 +624,26 @@ describe("ConfigNormalize", () => {
     }
   })
 
-  test("normalizes every registered flag as a boolean", () => {
+  test("normalizes flag booleans and keeps automations at the top level", () => {
     const result = normalized({
-      experimental: { todo: true, media_blob: false, automations: "yes", full_codemode: true },
+      automations: false,
+      experimental: {
+        todo: true,
+        media_blob: false,
+        artifacts: "yes",
+        full_codemode: true,
+        automations: false,
+        schedules: false,
+      },
     })
+    expect(result.encoded.automations).toBe(false)
     expect(result.encoded.experimental).toEqual({ todo: true, media_blob: false, full_codemode: true })
     expect(result.diagnostics.map((item) => [item.kind, item.path])).toEqual([
-      ["invalid", ["experimental", "automations"]],
+      ["removed", ["experimental", "automations"]],
+      ["removed", ["experimental", "schedules"]],
+      ["invalid", ["experimental", "artifacts"]],
     ])
+    expect(normalized({ experimental: { automations: false, schedules: false } }).encoded).toEqual({})
   })
 
   test("accepts deprecated codemode_vm and ignores retired codemodeVm without diagnostics", () => {

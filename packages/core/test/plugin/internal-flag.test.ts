@@ -51,6 +51,7 @@ const instances = Layer.effect(
             resolve: (name) => Effect.succeed({ directory: "", name }),
             check: () => Effect.succeed(false),
             update: unexpected,
+            follows: () => Effect.succeed(false),
             reject: () => Effect.succeed(false),
             which: () => Effect.undefined,
           }),

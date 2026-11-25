@@ -184,7 +184,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
 
   const titlebarItems = useTitlebarItems()
   const hideVerticalTitlebar = createMemo(() => !!props.verticalTabs && !windows())
-  const actionInSidebarHeader = () => !windows() && !macTrafficLights()
+  const actionInSidebarHeader = () => !windows() && !macTrafficLights() && !linux()
 
   command.register(() => [
     {
@@ -201,9 +201,21 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
     },
   ])
 
+  // The desktop router keeps its history in memory, so the mouse's Back and Forward buttons do nothing on their own.
+  // The web app's browser already traverses its real history for them.
+  if (platform.platform === "desktop")
+    makeEventListener(window, "mouseup", (event) => {
+      if (event.button !== 3 && event.button !== 4) return
+      event.preventDefault()
+
+      if (event.button === 3) return history.back()
+      history.forward()
+    })
+
   return (
     <header
       data-slot="titlebar-v2"
+      data-focus-scope
       hidden={hideVerticalTitlebar()}
       classList={{
         "shrink-0 relative flex flex-row h-9 bg-v2-background-bg-deep overflow-visible": true,
@@ -732,11 +744,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                           tabs.select(tab)
                           el?.scrollIntoView({ behavior: "instant", block: "nearest" })
                         }}
-                        onClose={(tab) => {
-                          const index = tabsStore.findIndex((item) => tabKey(item) === tabKey(tab))
-
-                          if (index !== -1) tabsStoreActions.closeTab(index)
-                        }}
+                        onClose={tabGroups.closeTab}
                         onCloseTabs={(items, keep) => tabsStoreActions.closeTabs(items.map(tabKey), keep)}
                         onReorder={(keys) => tabsStoreActions.reorder(keys)}
                       />
@@ -757,7 +765,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                         "ps-3.5": windows() && !props.verticalTabs,
                       }}
                     >
-                      <Show when={windows() || linux()}>
+                      <Show when={(windows() || linux()) && !hideVerticalTitlebar()}>
                         <WindowsAppMenu command={command} platform={platform} />
                       </Show>
                       <Show when={windows() && props.verticalTabs}>
@@ -781,7 +789,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                           >
                             <MobileDrawerTrigger
                               data-slot="mobile-tabs-trigger"
-                              class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base focus-visible:outline-none [app-region:no-drag]"
+                              class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base focus-visible:-outline-offset-2 [app-region:no-drag]"
                               aria-label={language.t("titlebar.tabs")}
                             >
                               <Show when={currentTab()} fallback={<Icon name="grid-plus" class="shrink-0" />}>
@@ -846,7 +854,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                 <button
                                   type="button"
                                   data-action="mobile-tabs-new-session"
-                                  class="flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
+                                  class="flex h-7 w-full shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base hover:bg-v2-background-bg-layer-02 focus-visible:-outline-offset-2"
                                   onClick={() => {
                                     openNewTab()
                                     closeMobileTabs()
@@ -861,7 +869,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                     data-action="mobile-tabs-home"
                                     data-state={layout.route().type === "home" ? "pressed" : undefined}
                                     aria-current={layout.route().type === "home" ? "page" : undefined}
-                                    class="flex h-7 w-full items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint data-[state=pressed]:text-v2-text-text-base focus-visible:outline-none"
+                                    class="flex h-7 w-full items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint data-[state=pressed]:text-v2-text-text-base focus-visible:-outline-offset-2"
                                     onClick={() => {
                                       if (layout.route().type !== "home") toggleHome()
                                       closeMobileTabs()
@@ -874,7 +882,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                     <button
                                       type="button"
                                       data-action="mobile-tabs-settings"
-                                      class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
+                                      class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:-outline-offset-2"
                                       onClick={() => dispatchMobileTabs({ type: "settings.requested" })}
                                     >
                                       <Icon name="settings-gear" />
@@ -883,7 +891,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                     <button
                                       type="button"
                                       data-action="mobile-tabs-help"
-                                      class="flex h-7 shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:outline-none focus-visible:bg-v2-background-bg-layer-02"
+                                      class="flex h-7 shrink-0 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-faint hover:bg-v2-background-bg-layer-02 focus-visible:-outline-offset-2"
                                       onClick={() => {
                                         closeMobileTabs()
                                         platform.openExternal("https://opencode.ai/desktop-feedback")
@@ -946,7 +954,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                   <Show when={!windows()}>
                                     <div
                                       data-slot="sidebar-header"
-                                      data-has-action={actionInSidebarHeader() ? "" : undefined}
+                                      data-has-action={actionInSidebarHeader() || linux() ? "" : undefined}
                                       class="flex w-full shrink-0 gap-2"
                                       classList={{
                                         "items-start pt-2.5 pb-[3px]": actionInSidebarHeader(),
@@ -968,6 +976,12 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                           }}
                                           aria-hidden="true"
                                         />
+                                      </Show>
+                                      <Show when={linux()}>
+                                        {/* The menu glyph sits 2px further into its slot than the sidebar icons sit into their rows. */}
+                                        <div class="-ms-0.5 shrink-0">
+                                          <WindowsAppMenu command={command} platform={platform} />
+                                        </div>
                                       </Show>
                                       <Show when={actionInSidebarHeader()} fallback={<div class="flex-1" />}>
                                         <div class="min-w-0 flex-1">{firstSidebarAction()}</div>

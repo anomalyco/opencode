@@ -112,7 +112,7 @@ deprecated, are left out.
 
 | Field          | Meaning                                                                                                                                                                                                                                                                             |
 | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `type`         | The kind of model. Only `chat` is listed for now; decision, voice, and image models may be added later.                                                                                                                                                                             |
+| `type`         | The kind of model, such as `chat`, `embedding`, `image`, or `decision`.                                                                                                                                                                                                             |
 | `id`           | The model ID to send in requests. It is also the key in `models`.                                                                                                                                                                                                                   |
 | `name`         | Display name.                                                                                                                                                                                                                                                                       |
 | `limit`        | `context` is the context window. `input` caps a request's input when the model sets one. `output` caps the response.                                                                                                                                                                |
@@ -124,7 +124,8 @@ deprecated, are left out.
 ### Model API
 
 `api` has one entry, keyed by the protocol the model speaks: `chat-completions` for OpenAI Chat Completions, `responses`
-for OpenAI Responses, `messages` for Anthropic Messages, and `generate-content` for Gemini. It is the protocol's
+for OpenAI Responses, `messages` for Anthropic Messages, `generate-content` for Gemini, and `embeddings` for
+[OpenAI Embeddings](/console/models#embedding-models). It is the protocol's
 models.dev entry with the vendor's URL replaced by Console's, and the other protocols left out.
 
 | Field            | Meaning                                                                                                                                                                                                                                            |
@@ -183,8 +184,8 @@ Trimmed to one model and its common fields:
 ```
 
 Without a key, a list has every public model. With a key, it has only the models that key's workspace can use, so a
-service account key needs **Models › Read**. Send it in `Authorization: Bearer` or `x-api-key`. Only chat models are
-listed, and models that are private or deprecated are left out.
+service account key needs **Models › Read**. Send it in `Authorization: Bearer` or `x-api-key`. Models that are
+private or deprecated are left out.
 
 Each item starts with OpenAI's `id`, `object`, `created`, and `owned_by`, then the same models.dev fields the
 [Console list](#fields) uses: `name`, `type`, `limit`, `cost`, `capabilities`, `modalities`, `api`, `family`,

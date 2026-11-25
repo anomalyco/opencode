@@ -22,12 +22,99 @@ const fixture = Effect.gen(function* () {
 })
 const absolute = (value: string) => AbsolutePath.make(value)
 
+const synthetic = (size: number, slice: (offset: number, length: number) => Uint8Array, maximum = Infinity) => {
+  const calls: { readonly offset: number; readonly length: number }[] = []
+  const files: Environment.Files = {
+    ...Environment.makeFiles(Environment.makeMemoryDriver()),
+    read: (_, range) =>
+      Effect.sync(() => {
+        if (!range) throw new Error("Expected a range read")
+        calls.push(range)
+        return {
+          info: { type: "file" as const, size, mtimeMs: 0 },
+          bytes: slice(range.offset, Math.min(range.length, maximum, size - range.offset)),
+        }
+      }),
+  }
+  return {
+    calls,
+    read: (page: ReadToolFileSystem.PageInput) =>
+      ReadToolFileSystem.read(files, absolute(path.resolve("synthetic.txt")), "synthetic.txt", page),
+  }
+}
+
+describe("ReadToolFileSystem scan ranges", () => {
+  for (const sample of [
+    { page: { offset: 163_741, limit: 10 }, offset: 163_741, lines: 10, next: 163_751, calls: 7 },
+    { page: { offset: -100 }, offset: 163_741, lines: 100, calls: 7 },
+    { page: { offset: 163_841 }, offset: 163_741, lines: 100, calls: 7 },
+    { page: { offset: 1, limit: 10 }, offset: 1, lines: 10, next: 11, calls: 1 },
+  ]) {
+    it.effect(`counts reads on a 20 MiB file at offset ${sample.page.offset}`, () =>
+      Effect.gen(function* () {
+        const line = "x".repeat(127) + "\n"
+        const file = synthetic(20 * 1024 * 1024, (offset, length) =>
+          Buffer.alloc(length + (offset % 128), line).subarray(offset % 128),
+        )
+        expect(yield* file.read(sample.page)).toEqual({
+          type: "text",
+          content: Array.from({ length: sample.lines }, () => line.slice(0, -1)).join("\n"),
+          offset: sample.offset,
+          lineCount: sample.lines,
+          ...(sample.next === undefined ? {} : { next: sample.next }),
+        })
+        expect(file.calls).toHaveLength(sample.calls)
+        expect(file.calls[0]).toEqual({ offset: 0, length: 256 * 1024 })
+        expect(file.calls.every((call) => call.length <= 4 * 1024 * 1024)).toBe(true)
+      }),
+    )
+  }
+
+  it.effect("bounds reads to 256 KiB after reaching the requested page", () =>
+    Effect.gen(function* () {
+      const boundary = 1.25 * 1024 * 1024
+      const file = synthetic(boundary + 2 * 256 * 1024 + 5, (offset, length) => {
+        const bytes = Buffer.alloc(length, "x")
+        if (offset < boundary && offset + length >= boundary) bytes.write("\none\n", boundary - offset - 5)
+        return bytes
+      })
+      expect(yield* file.read({ offset: 2, limit: 2 })).toEqual({
+        type: "text",
+        content: `one\n${"x".repeat(2_000)}... (line truncated to 2000 chars)`,
+        offset: 2,
+        lineCount: 2,
+      })
+      // Once the scan reaches line 2 (after the 256 KiB + 1 MiB seek), later reads stay capped at 256 KiB.
+      expect(file.calls[0]?.length).toBe(256 * 1024)
+      expect(file.calls[1]?.length).toBe(1024 * 1024)
+      expect(file.calls.slice(2).every((call) => call.length <= 256 * 1024)).toBe(true)
+    }),
+  )
+
+  it.effect("keeps scan requests at least 256 KiB after a short read", () =>
+    Effect.gen(function* () {
+      const content = Buffer.from("x\n".repeat(4_000) + "target\n")
+      const file = synthetic(content.length, (offset, length) => content.subarray(offset, offset + length), 1_024)
+      expect(yield* file.read({ offset: 4_001, limit: 1 })).toEqual({
+        type: "text",
+        content: "target",
+        offset: 4_001,
+        lineCount: 1,
+      })
+      // Every non-EOF scan read requests the remaining file (never shrinking to 4 KiB after a 1 KiB short read).
+      expect(
+        file.calls.every((call) => call.offset + call.length === content.length || call.length >= 256 * 1024),
+      ).toBe(true)
+    }),
+  )
+})
+
 describe("ReadTool text serialization", () => {
   const cases: {
     name: string
     content: string
     page: ReadToolFileSystem.PageInput
-    output: ReadToolFileSystem.TextContent
+    output: ReadToolFileSystem.TextPage
     model: string
   }[] = [
     {
@@ -158,7 +245,8 @@ describe("ReadToolFileSystem", () => {
     Effect.gen(function* () {
       const { environment, files, directory } = yield* fixture
       const file = absolute(path.join(directory, "dense.txt"))
-      const read = (page?: ReadToolFileSystem.PageInput) => ReadToolFileSystem.read(environment, file, "dense.txt", page)
+      const read = (page?: ReadToolFileSystem.PageInput) =>
+        ReadToolFileSystem.read(environment, file, "dense.txt", page)
       const prefix = "x\r\n".repeat(1_999)
       for (const ending of ["last", "last\n", "last\r\n", "\n"]) {
         const content = prefix + ending
@@ -347,8 +435,7 @@ describe("ReadToolFileSystem", () => {
           Effect.map((result) => String(ReadTool.toModelContent(name, page.offset, result)).split("\n")),
         )
       const lines = Array.from({ length: 3_000 }, (_, index) => `${index + 1}`.padEnd(100, "x"))
-      const expected = (from: number) =>
-        lines.slice(from - 1).map((line, index) => `${from + index}: ${line}`)
+      const expected = (from: number) => lines.slice(from - 1).map((line, index) => `${from + index}: ${line}`)
 
       expect(yield* read("lf.txt", lines.join("\n") + "\n", { offset: 5_000 })).toEqual([
         "Read file lf.txt, lines 2901-3000 (offset 5000 is past the end; the file has 3000 lines)",
@@ -385,7 +472,9 @@ describe("ReadToolFileSystem", () => {
       const capped = yield* read("wide.txt", wide.join("\n") + "\n", { offset: 201 })
       expect(capped[0]).toBe("Read file wide.txt, lines 176-200 (offset 201 is past the end; the file has 200 lines)")
       expect(capped.slice(1)).toEqual(
-        wide.slice(175).map((line, index) => `${176 + index}: ${line.slice(0, 2_000)}... (line truncated to 2000 chars)`),
+        wide
+          .slice(175)
+          .map((line, index) => `${176 + index}: ${line.slice(0, 2_000)}... (line truncated to 2000 chars)`),
       )
 
       // Matches whole-file reads: a null byte anywhere in the file rejects a past-end read.

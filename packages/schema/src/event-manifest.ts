@@ -12,6 +12,7 @@ import { FileSystem } from "./filesystem.js"
 import { FileSystemV1 } from "./filesystem-v1.js"
 import { Form } from "./form.js"
 import { InstallationEvent } from "./installation-event.js"
+import { Job } from "./job.js"
 import { Integration } from "./integration.js"
 import { LegacyEventV1 } from "./legacy-event.js"
 import { LspEvent } from "./lsp-event.js"
@@ -37,6 +38,7 @@ import { VcsEvent } from "./vcs-event.js"
 import { WorkspaceEvent } from "./workspace-event.js"
 import { WorktreeEvent } from "./worktree-event.js"
 import { WebSearch } from "./websearch.js"
+import { Push } from "./push.js"
 
 const coreDefinitions = Event.inventory(...SessionEvent.Definitions)
 
@@ -64,8 +66,10 @@ const featureDefinitions = Event.inventory(
   ...Pty.Event.Definitions,
   ...PersistentPty.Event.Definitions,
   ...Shell.Event.Definitions,
+  ...Job.Event.Definitions,
   ...Form.Event.Definitions,
   ...WebSearch.Event.Definitions,
+  ...Push.Event.Definitions,
   ...Artifact.Event.Definitions,
 )
 

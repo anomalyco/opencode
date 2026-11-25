@@ -10,7 +10,7 @@ import { getFilename } from "@opencode/util/path"
 import { usePlugin, type MountedSession, type SessionScreen } from "@opencode/plugin/gui"
 import { current, useShared } from "./context"
 import { OpenInAppMenuItemsV2, useOpenInApp } from "./open-in-app"
-import { resolveOpenInAppPath, workspaceFileUrl } from "./path"
+import { resolveOpenInAppPath } from "./path"
 
 export function ArtifactToolbar(props: {
   session: MountedSession
@@ -129,7 +129,7 @@ export function ArtifactToolbar(props: {
                 <Show when={browser()}>
                   {(pane) => (
                     <Menu.Item
-                      onSelect={() => pane().open(props.session, workspaceFileUrl(props.screen.file.root, props.path))}
+                      onSelect={() => pane().openFile(props.session, props.path)}
                     >
                       {ctx.t("view.openInBrowser")}
                     </Menu.Item>

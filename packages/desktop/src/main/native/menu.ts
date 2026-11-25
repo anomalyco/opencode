@@ -96,8 +96,8 @@ function build(deps: Deps, provider: MenubarProvider) {
   Menu.setApplicationMenu(built)
 }
 
-export function sendMenuCommand(win: BrowserWindow, id: string) {
-  emitIpcEvent(win.webContents, new MenuCommandTriggered({ id }))
+export function sendMenuCommand(win: BrowserWindow, id: string, accelerator: boolean) {
+  emitIpcEvent(win.webContents, new MenuCommandTriggered({ id, accelerator }))
 }
 
 function nativeMenu(menu: DesktopMenu, extra: readonly MenubarEntry[], deps: Deps): MenuItemConstructorOptions {
@@ -145,10 +145,10 @@ function nativeItem(entry: DesktopMenuEntry, deps: Deps): MenuItemConstructorOpt
   if (entry.command) {
     const command = entry.command
 
-    item.click = () => {
+    item.click = (_item, _window, event) => {
       const win = deps.commandWindow()
 
-      if (win) sendMenuCommand(win, command)
+      if (win) sendMenuCommand(win, command, !!event.triggeredByAccelerator)
     }
   }
 

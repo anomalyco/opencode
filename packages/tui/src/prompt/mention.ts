@@ -82,6 +82,27 @@ export function realignPromptInputMentions(
   }
 }
 
+/**
+ * The web composer stores mention ranges as string indexes and the TUI as cells; the two differ after a tab or a wide
+ * character. A range that does not cover its text in cells but does as string indexes is converted to cells.
+ */
+export function promptMentionsToCells<T extends PromptInput.Prompt>(prompt: T, widthMethod: WidthMethod): T {
+  const cells = (index: number) => measureEditText(prompt.text.slice(0, index), { widthMethod })
+  const convert = <M extends { mention?: PromptMention }>(item: M): M => {
+    const mention = item.mention
+    if (!mention?.text || prompt.text.slice(mention.start, mention.end) !== mention.text) return item
+    for (let at = prompt.text.indexOf(mention.text); at !== -1; at = prompt.text.indexOf(mention.text, at + 1))
+      if (cells(at) === mention.start) return item
+    return { ...item, mention: { ...mention, start: cells(mention.start), end: cells(mention.end) } }
+  }
+  return {
+    ...prompt,
+    files: prompt.files?.map(convert),
+    agents: prompt.agents?.map(convert),
+    skills: prompt.skills?.map(convert),
+  }
+}
+
 export function expandPromptInputPastedText(
   input: PromptInput.Prompt,
   pasted: readonly { text: string; source: { start: number; end: number } }[],

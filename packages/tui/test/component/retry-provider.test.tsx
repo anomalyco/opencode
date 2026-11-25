@@ -4,11 +4,13 @@ import { createTestRenderer, ManualClock } from "@opentui/core/testing"
 import { testRender } from "@opentui/solid"
 import { createSignal, Show } from "solid-js"
 import { RetryProvider, RetryProviderRenderable } from "../../src/component/retry-provider"
+import { countTickers } from "../fixture/animation-ticks"
 
 async function fixture() {
   const clock = new ManualClock()
   const app = await createTestRenderer({ width: 60, height: 2, clock })
   app.renderer.pause()
+  const tickers = countTickers()
   const text = new TextRenderable(app.renderer, { fg: "#eeeeee", bg: "#111111", attributes: TextAttributes.BOLD })
   const provider = new RetryProviderRenderable(app.renderer, {
     value: { id: "call-1", provider: "exa", running: true },
@@ -24,6 +26,7 @@ async function fixture() {
   return {
     ...app,
     clock,
+    tickers,
     text,
     provider,
     renderOnce,
@@ -34,6 +37,7 @@ async function fixture() {
     [Symbol.dispose]: () => {
       provider.destroy()
       app.renderer.destroy()
+      tickers[Symbol.dispose]()
     },
   }
 }
@@ -44,18 +48,18 @@ test("only an already-painted running call starts a provider transition", async 
   app.provider.value = { id: "call-1", provider: "parallel", running: true }
   await app.renderOnce()
   expect(app.captureCharFrame().trim()).toBe('Web Search via Parallel "query"')
-  expect(app.renderer.liveRequestCount).toBe(0)
+  expect(app.tickers()).toBe(0)
   app.provider.value = { id: "call-1", provider: "parallel", running: true }
   app.provider.value = { id: "call-1", provider: "parallel", running: false }
   app.provider.value = { id: "call-1", provider: "tavily", running: false }
   await app.renderOnce()
   expect(app.captureCharFrame().trim()).toBe('Web Search via Tavily "query"')
-  expect(app.renderer.liveRequestCount).toBe(0)
+  expect(app.tickers()).toBe(0)
   // A new invocation/history view must not animate from the previous call's label.
   app.provider.value = { id: "call-2", provider: "exa", running: true }
   await app.renderOnce()
   expect(app.captureCharFrame().trim()).toBe('Web Search via Exa "query"')
-  expect(app.renderer.liveRequestCount).toBe(0)
+  expect(app.tickers()).toBe(0)
 })
 
 test("fades only the provider, changes width while invisible, and settles without a timer", async () => {
@@ -66,7 +70,7 @@ test("fades only the provider, changes width while invisible, and settles withou
   app.provider.value = { id: "call-1", provider: "parallel", running: true }
   await app.renderOnce()
   expect(app.captureSpans()).toEqual(initial)
-  expect(app.renderer.liveRequestCount).toBe(1)
+  expect(app.tickers()).toBe(1)
   await app.step(40)
   const middle = app.captureSpans().lines[0].spans
   expect(middle.find((span) => span.text.includes("Exa"))?.fg.toInts()).not.toEqual(
@@ -89,7 +93,7 @@ test("fades only the provider, changes width while invisible, and settles withou
   await app.step(80)
   expect(app.captureCharFrame().trim()).toBe('Web Search via Parallel "query"')
   expect(app.captureSpans().lines[0].spans[0].fg.toInts()).toEqual(initial.lines[0].spans[0].fg.toInts())
-  expect(app.renderer.liveRequestCount).toBe(0)
+  expect(app.tickers()).toBe(0)
 })
 
 test("coalesces rapid fallbacks and does not restart on completion", async () => {
@@ -102,7 +106,7 @@ test("coalesces rapid fallbacks and does not restart on completion", async () =>
   app.provider.value = { id: "call-1", provider: "firecrawl", running: false }
   await app.step(180)
   expect(app.captureCharFrame().trim()).toBe('Web Search via Firecrawl "query"')
-  expect(app.renderer.liveRequestCount).toBe(0)
+  expect(app.tickers()).toBe(0)
 })
 
 test("retargets a fading-in provider without flashing back to full brightness", async () => {
@@ -117,7 +121,7 @@ test("retargets a fading-in provider without flashing back to full brightness", 
   expect(app.captureSpans()).toEqual(middle)
   await app.step(220)
   expect(app.captureCharFrame().trim()).toBe('Web Search via Tavily "query"')
-  expect(app.renderer.liveRequestCount).toBe(0)
+  expect(app.tickers()).toBe(0)
 })
 
 test("disabling animations settles immediately and recursive destruction releases active work", async () => {
@@ -128,17 +132,17 @@ test("disabling animations settles immediately and recursive destruction release
   app.provider.enabled = false
   await app.renderOnce()
   expect(app.captureCharFrame().trim()).toBe('Web Search via Parallel "query"')
-  expect(app.renderer.liveRequestCount).toBe(0)
+  expect(app.tickers()).toBe(0)
   app.provider.value = { id: "call-1", provider: "exa", running: true }
   await app.renderOnce()
   expect(app.captureCharFrame().trim()).toBe('Web Search via Exa "query"')
-  expect(app.renderer.liveRequestCount).toBe(0)
+  expect(app.tickers()).toBe(0)
   app.provider.enabled = true
   app.provider.value = { id: "call-1", provider: "tavily", running: true }
-  expect(app.renderer.liveRequestCount).toBe(1)
+  expect(app.tickers()).toBe(1)
   app.text.remove(app.provider)
   app.provider.destroyRecursively()
-  expect(app.renderer.liveRequestCount).toBe(0)
+  expect(app.tickers()).toBe(0)
 })
 
 test("a hidden first paint does not arm the transition", async () => {
@@ -147,13 +151,13 @@ test("a hidden first paint does not arm the transition", async () => {
   await app.renderOnce()
   app.provider.value = { id: "call-1", provider: "parallel", running: true }
   await app.renderOnce()
-  expect(app.renderer.liveRequestCount).toBe(0)
+  expect(app.tickers()).toBe(0)
   app.text.visible = true
   await app.renderOnce()
   expect(app.captureCharFrame().trim()).toBe('Web Search via Parallel "query"')
-  expect(app.renderer.liveRequestCount).toBe(0)
+  expect(app.tickers()).toBe(0)
   app.provider.value = { id: "call-1", provider: "tavily", running: true }
-  expect(app.renderer.liveRequestCount).toBe(1)
+  expect(app.tickers()).toBe(1)
 })
 
 test("offscreen and ancestor-clipped rows show the latest provider on entry, without animation", async () => {
@@ -162,7 +166,7 @@ test("offscreen and ancestor-clipped rows show the latest provider on entry, wit
   await app.renderOnce()
   app.provider.value = { id: "call-1", provider: "parallel", running: true }
   await app.renderOnce()
-  expect(app.renderer.liveRequestCount).toBe(0)
+  expect(app.tickers()).toBe(0)
   app.text.top = 0
   await app.renderOnce()
   expect(app.captureCharFrame().trim()).toBe('Web Search via Parallel "query"')
@@ -174,11 +178,11 @@ test("offscreen and ancestor-clipped rows show the latest provider on entry, wit
   await app.renderOnce()
   app.provider.value = { id: "call-1", provider: "tavily", running: true }
   await app.renderOnce()
-  expect(app.renderer.liveRequestCount).toBe(0)
+  expect(app.tickers()).toBe(0)
   app.text.top = 0
   await app.renderOnce()
   expect(app.captureCharFrame().trim()).toBe('Web Search via Tavily "query"')
-  expect(app.renderer.liveRequestCount).toBe(0)
+  expect(app.tickers()).toBe(0)
 })
 
 test("a transition settles when hidden and waits for a new paint before animating again", async () => {
@@ -189,24 +193,24 @@ test("a transition settles when hidden and waits for a new paint before animatin
   await app.step(40)
   app.text.visible = false
   await app.step(40)
-  expect(app.renderer.liveRequestCount).toBe(0)
+  expect(app.tickers()).toBe(0)
   expect(app.captureCharFrame().trim()).toBe("")
   app.text.visible = true
   app.provider.value = { id: "call-1", provider: "tavily", running: true }
-  expect(app.renderer.liveRequestCount).toBe(0)
+  expect(app.tickers()).toBe(0)
   await app.renderOnce()
   expect(app.captureCharFrame().trim()).toBe('Web Search via Tavily "query"')
   app.provider.value = { id: "call-1", provider: "exa", running: true }
-  expect(app.renderer.liveRequestCount).toBe(1)
+  expect(app.tickers()).toBe(1)
   app.text.top = 4
-  // Frame callbacks run before the frame's layout, so the move is observed one frame later.
+  // Ticks run before the frame's layout, so the move is observed one frame later.
   await app.step(40)
   await app.step(40)
-  expect(app.renderer.liveRequestCount).toBe(0)
+  expect(app.tickers()).toBe(0)
   app.text.top = 0
   await app.renderOnce()
   expect(app.captureCharFrame().trim()).toBe('Web Search via Exa "query"')
-  expect(app.renderer.liveRequestCount).toBe(0)
+  expect(app.tickers()).toBe(0)
 })
 
 test("Solid unmount releases a running transition and its frame listener", async () => {
@@ -223,13 +227,14 @@ test("Solid unmount releases a running transition and its frame listener", async
     ),
     { width: 60, height: 2, clock },
   )
+  using tickers = countTickers()
   try {
     app.renderer.pause()
     await app.renderOnce()
     setProvider("parallel")
-    await app.waitFor(() => app.renderer.liveRequestCount === 1)
+    await app.waitFor(() => tickers() === 1)
     setVisible(false)
-    await app.waitFor(() => app.renderer.liveRequestCount === 0)
+    await app.waitFor(() => tickers() === 0)
     await app.renderOnce()
     expect(app.captureCharFrame().trim()).toBe("")
     expect(app.renderer.listenerCount("frame")).toBe(0)
@@ -257,6 +262,7 @@ test("the Solid inline span inherits colors and wraps like ordinary text after a
     ),
     { width: 24, height: 6, clock },
   )
+  using tickers = countTickers()
   try {
     app.renderer.pause()
     await app.renderOnce()
@@ -275,7 +281,7 @@ test("the Solid inline span inherits colors and wraps like ordinary text after a
     expect(lines.slice(0, 2)).toEqual(lines.slice(2, 4))
     expect(app.captureCharFrame()).not.toContain("Firecrawl")
     expect(app.captureSpans().lines[0].spans[0].fg.equals(RGBA.fromHex("#222222"))).toBe(true)
-    expect(app.renderer.liveRequestCount).toBe(0)
+    expect(tickers()).toBe(0)
   } finally {
     app.renderer.destroy()
   }

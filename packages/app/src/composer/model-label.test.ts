@@ -149,3 +149,29 @@ test("tuple keys keep slash-containing provider and model identities separate", 
   expect(label(labels, "company", "openai/gpt")).toEqual({ provider: "Company", model: "First model" })
   expect(label(labels, "company/openai", "gpt")).toEqual({ provider: "Other", model: "Second model" })
 })
+
+test("a model's faster and slower speeds show under the model's own name", () => {
+  const labels = composerModelLabels(
+    new Map([
+      [
+        "openai",
+        {
+          id: "openai",
+          name: "OpenAI",
+          models: {
+            "gpt-5.5": { id: "gpt-5.5", name: "GPT-5.5" },
+            "gpt-5.5-fast": { id: "gpt-5.5-fast", name: "GPT-5.5 Fast", speed: { base: "gpt-5.5" } },
+            // Its model is not offered, so it is listed under its own name.
+            "gpt-6-flex": { id: "gpt-6-flex", name: "GPT-6 Flex", speed: { base: "gpt-6" } },
+          },
+        },
+      ],
+    ]),
+  )
+
+  const label = (id: string) => labels.get(composerModelLabelKey("openai", id))?.model
+
+  expect(label("gpt-5.5")).toBe("GPT-5.5")
+  expect(label("gpt-5.5-fast")).toBe("GPT-5.5")
+  expect(label("gpt-6-flex")).toBe("GPT-6 Flex")
+})

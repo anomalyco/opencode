@@ -1,10 +1,11 @@
 export * as CodeModeJob from "./job.js"
 
 import { Identifier } from "@opencode/schema/identifier"
-import { Cause, Context, Deferred, Effect, Exit, Option, type Scope, Semaphore } from "effect"
+import { Cause, Context, Deferred, Duration, Effect, Exit, Option, type Scope, Semaphore } from "effect"
 import { extension } from "mime-types"
 import { Flag } from "../flag.js"
 import { Job } from "../job.js"
+import { BackgroundResult } from "../session/background-result.js"
 import type { Session } from "../session.js"
 import type { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
@@ -14,13 +15,17 @@ export function notice(job: Pick<Job.Info, "id" | "status" | "output" | "error">
   const body = job.status === "running" ? "Interrupted by server restart." : (job.output ?? job.error ?? state)
   return {
     description: "Script",
-    text: `<codemode id="${job.id}" state="${state}">\n${body}\n</codemode>`,
+    text: BackgroundResult.render(`kind="codemode" id="${job.id}" state="${state}"`, body),
     metadata: { source: "codemode", jobID: job.id, state },
   }
 }
 
+const BLOCK_TIMEOUT = "2 minutes"
+
 type Execute = (context: Tool.Context) => Effect.Effect<Tool.NormalizedResult, Tool.Error>
-type Run = (context: Tool.Context, execute: Execute) => ReturnType<Execute>
+/** The execute call's own `timeout` and `background` inputs, which only exist with `full_codemode`. */
+export type Options = { readonly timeout?: number; readonly background?: boolean }
+type Run = (context: Tool.Context, execute: Execute, options?: Options) => ReturnType<Execute>
 
 /** Only a session drain can hand off work and report its result. */
 export const Current = Context.Reference<Run | undefined>("@opencode/CodeModeJob", { defaultValue: () => undefined })
@@ -42,7 +47,7 @@ export const make = Effect.fnUntraced(function* (
     return bounded.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
   })
 
-  return Effect.fn("CodeModeJob.execute")(function* (context: Tool.Context, execute: Execute) {
+  return Effect.fn("CodeModeJob.execute")(function* (context: Tool.Context, execute: Execute, options?: Options) {
     if (!(yield* flags.enabled("full_codemode"))) return yield* execute(context)
     const id = `cm_${Identifier.ascending()}`
     const sessionID = context.sessionID
@@ -51,6 +56,7 @@ export const make = Effect.fnUntraced(function* (
     const progress = Semaphore.makeUnsafe(1)
     return yield* Effect.uninterruptibleMask((restore) =>
       Effect.gen(function* () {
+        yield* context.progress({ background: true })
         yield* jobs.start({
           id,
           type: "codemode",
@@ -62,23 +68,39 @@ export const make = Effect.fnUntraced(function* (
               progress: (update) =>
                 progress.withPermit(
                   Deferred.isDone(detached).pipe(
-                    Effect.flatMap((done) => (done ? Effect.void : context.progress(update))),
+                    // The background flag tells clients this script can move to the background.
+                    Effect.flatMap((done) => (done ? Effect.void : context.progress({ ...update, background: true }))),
                   ),
                 ),
             }).pipe(Effect.provideService(Job.BlockingParent, id), Effect.interruptible, Effect.exit)
-            yield* Deferred.done(result, exit)
+            // With one text part, bounding the result gives the same text as bounding the body, so the full output
+            // is saved once and the step's own truncation keeps the bounded result.
+            const single =
+              Exit.isSuccess(exit) &&
+              exit.value.metadata?.truncated === undefined &&
+              exit.value.content.filter((part) => part.type === "text").length === 1
+            const bounded = single ? Exit.succeed(yield* output.truncate(exit.value)) : exit
+            yield* Deferred.done(result, bounded)
             if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) return yield* Effect.failCause(exit.cause)
-            const text = Exit.isFailure(exit)
-              ? Cause.pretty(exit.cause)
-              : exit.value.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
-            const body = yield* truncate(text)
+            const text = Exit.isFailure(bounded)
+              ? Cause.pretty(bounded.cause)
+              : bounded.value.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+            const body = single ? text : yield* truncate(text)
             if (Exit.isFailure(exit) || exit.value.metadata?.error === true) return yield* Effect.fail(new Error(body))
             return body
           }),
         })
-        const blocked = yield* restore(jobs.block({ id, sessionID }).pipe(Effect.timeoutOption("10 seconds"))).pipe(
-          Effect.onInterrupt(() => jobs.cancel(id)),
-        )
+        const blocked = options?.background
+          ? Option.none()
+          : yield* restore(
+              jobs
+                .block({ id, sessionID })
+                .pipe(
+                  Effect.timeoutOption(
+                    options?.timeout === undefined ? BLOCK_TIMEOUT : Duration.millis(options.timeout),
+                  ),
+                ),
+            ).pipe(Effect.onInterrupt(() => jobs.cancel(id)))
         if (Option.isSome(blocked) && blocked.value?.type === "finished") return yield* Deferred.await(result)
         const job = yield* jobs.background(id)
         if (!job?.notificationID) return yield* Effect.interrupt

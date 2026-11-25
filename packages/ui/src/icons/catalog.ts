@@ -294,6 +294,10 @@ const icons = {
     viewBox: "0 0 16 16",
     body: `<circle cx="5" cy="12" r="1.5" stroke="currentColor"/><path d="M5.22983 10.4384V5.43842M6.55305 11.8019H8.83276C9.94392 11.8019 10.8421 10.8962 10.8327 9.78506L10.7966 5.50012" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><circle cx="5" cy="4" r="1.5" stroke="currentColor"/><circle cx="11" cy="4" r="1.5" stroke="currentColor"/>`,
   },
+  pin: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M9.5 2.5L13.5 6.5M10.5 3.5L7.5 6.5H5.5L9.5 10.5V8.5L12.5 5.5M7.5 8.5L2.5 13.5" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,
+  },
   edit: {
     viewBox: "0 0 16 16",
     body: `<path d="M8.5 2.5H2.5V13.5H13.5V7.5M7.5 8.5V6.5L12.5 1.5L14.5 3.5L9.5 8.5H7.5Z" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/>`,
@@ -304,7 +308,7 @@ const icons = {
   },
   "settings-gear": {
     viewBox: "0 0 16 16",
-    body: `<path d="M1.5 11V5L8 1.5L14.5 5V11L8 14.5L1.5 11Z" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M10.5 8C10.5 9.38071 9.38071 10.5 8 10.5C6.61929 10.5 5.5 9.38071 5.5 8C5.5 6.61929 6.61929 5.5 8 5.5C9.38071 5.5 10.5 6.61929 10.5 8Z" stroke="currentColor"/>`,
+    body: `<path d="M1.5 11V5L8 1L14.5 5V11L8 15L1.5 11Z" stroke-linecap="round" stroke-linejoin="round" stroke="currentColor"/><path d="M10.5 8C10.5 9.38071 9.38071 10.5 8 10.5C6.61929 10.5 5.5 9.38071 5.5 8C5.5 6.61929 6.61929 5.5 8 5.5C9.38071 5.5 10.5 6.61929 10.5 8Z" stroke="currentColor"/>`,
   },
   "cloud-upload": {
     viewBox: "0 0 20 20",
@@ -473,6 +477,12 @@ const icons = {
   "outline-rotate-clockwise": {
     viewBox: "0 0 16 16",
     body: `<path d="M14.1992 8C14.1992 9.18669 13.8473 10.3467 13.188 11.3334C12.5288 12.3201 11.5917 13.0892 10.4953 13.5433C9.39897 13.9974 8.19257 14.1162 7.02868 13.8847C5.86479 13.6532 4.7957 13.0818 3.95658 12.2426C3.11747 11.4035 2.54602 10.3344 2.31451 9.17054C2.083 8.00666 2.20182 6.80026 2.65594 5.7039C3.11007 4.60754 3.87911 3.67047 4.8658 3.01118C5.85249 2.35189 7.01253 2 8.19922 2C9.87922 2 11.4859 2.66667 12.6926 3.82667L14.1992 5.33333M10.866 5.33333L14.1992 5.33333L14.1993 2" stroke="currentColor" stroke-linecap="square" stroke-linejoin="round"/>`,
+  },
+  // A browser extension, as every browser draws it: a piece with a tab on top and on the right, and a notch on the
+  // left and at the bottom. OpenCode's own extensions keep `extensions`.
+  puzzle: {
+    viewBox: "0 0 16 16",
+    body: `<path d="M1.5 4.5H4.5V3.5a2 2 0 0 1 4 0V4.5H11.5V7.5H12.5a2 2 0 0 1 0 4H11.5V14.5H8.5V13.5a2 2 0 0 0-4 0V14.5H1.5V11.5H2.5a2 2 0 0 0 0-4H1.5Z" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>`,
   },
   "outline-globe-plus": {
     viewBox: "0 0 16 16",

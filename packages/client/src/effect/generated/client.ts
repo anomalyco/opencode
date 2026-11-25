@@ -273,6 +273,30 @@ import type {
   ExperimentalArtifactsDeleteOutput,
   ExperimentalJobListInput,
   ExperimentalJobListOutput,
+  ExperimentalJobCancelInput,
+  ExperimentalJobCancelOutput,
+  ExperimentalMachineListOutput,
+  ExperimentalMachineAddInput,
+  ExperimentalMachineAddOutput,
+  ExperimentalMachineRemoveInput,
+  ExperimentalMachineRemoveOutput,
+  ExperimentalPushGetOutput,
+  ExperimentalPushDeviceRegisterInput,
+  ExperimentalPushDeviceRegisterOutput,
+  ExperimentalPushDeviceRemoveInput,
+  ExperimentalPushDeviceRemoveOutput,
+  ExperimentalPushDeviceUpdateInput,
+  ExperimentalPushDeviceUpdateOutput,
+  ExperimentalPushDeviceSessionSetInput,
+  ExperimentalPushDeviceSessionSetOutput,
+  ExperimentalPushDeviceSessionRemoveInput,
+  ExperimentalPushDeviceSessionRemoveOutput,
+  ExperimentalPushSessionSetInput,
+  ExperimentalPushSessionSetOutput,
+  ExperimentalPushSessionRemoveInput,
+  ExperimentalPushSessionRemoveOutput,
+  ExperimentalPushSettingsSetInput,
+  ExperimentalPushSettingsSetOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1751,6 +1775,126 @@ const EndpointExperimentalJobList = (raw: RawClient["server.experimental"]) => (
     ),
   )
 
+const EndpointExperimentalJobCancel = (raw: RawClient["server.experimental"]) => (input: ExperimentalJobCancelInput) =>
+  preserveEffect<ExperimentalJobCancelOutput>()(
+    raw["job.cancel"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointExperimentalMachineList = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalMachineListOutput>()(
+    raw["machine.list"]({}).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointExperimentalMachineAdd =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalMachineAddInput) =>
+    preserveEffect<ExperimentalMachineAddOutput>()(
+      raw["machine.add"]({ payload: { name: input["name"], reach: input["reach"], replace: input["replace"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalMachineRemove =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalMachineRemoveInput) =>
+    preserveEffect<ExperimentalMachineRemoveOutput>()(
+      raw["machine.remove"]({ params: { name: input["name"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalPushGet = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalPushGetOutput>()(
+    raw["push.get"]({}).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointExperimentalPushDeviceRegister =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceRegisterInput) =>
+    preserveEffect<ExperimentalPushDeviceRegisterOutput>()(
+      raw["push.device.register"]({
+        params: { deviceID: input["deviceID"] },
+        payload: {
+          callbackURL: input["callbackURL"],
+          expiresAt: input["expiresAt"],
+          publicKey: input["publicKey"],
+          platform: input["platform"],
+          name: input["name"],
+          settings: input["settings"],
+        },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalPushDeviceRemove =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceRemoveInput) =>
+    preserveEffect<ExperimentalPushDeviceRemoveOutput>()(
+      raw["push.device.remove"]({ params: { deviceID: input["deviceID"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalPushDeviceUpdate =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceUpdateInput) =>
+    preserveEffect<ExperimentalPushDeviceUpdateOutput>()(
+      raw["push.device.update"]({
+        params: { deviceID: input["deviceID"] },
+        payload: { paused: input["paused"], settings: input["settings"] },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalPushDeviceSessionSet =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceSessionSetInput) =>
+    preserveEffect<ExperimentalPushDeviceSessionSetOutput>()(
+      raw["push.device.session.set"]({
+        params: { deviceID: input["deviceID"], sessionID: input["sessionID"] },
+        payload: { level: input["level"], until: input["until"] },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalPushDeviceSessionRemove =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceSessionRemoveInput) =>
+    preserveEffect<ExperimentalPushDeviceSessionRemoveOutput>()(
+      raw["push.device.session.remove"]({
+        params: { deviceID: input["deviceID"], sessionID: input["sessionID"] },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalPushSessionSet =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushSessionSetInput) =>
+    preserveEffect<ExperimentalPushSessionSetOutput>()(
+      raw["push.session.set"]({
+        params: { sessionID: input["sessionID"] },
+        payload: { level: input["level"], until: input["until"] },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalPushSessionRemove =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushSessionRemoveInput) =>
+    preserveEffect<ExperimentalPushSessionRemoveOutput>()(
+      raw["push.session.remove"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalPushSettingsSet =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushSettingsSetInput) =>
+    preserveEffect<ExperimentalPushSettingsSetOutput>()(
+      raw["push.settings.set"]({ payload: { paused: input["paused"], until: input["until"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   persistentPty: {
     read: EndpointExperimentalPersistentPtyRead(raw),
@@ -1780,7 +1924,26 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     update: EndpointExperimentalArtifactsUpdate(raw),
     delete: EndpointExperimentalArtifactsDelete(raw),
   },
-  job: { list: EndpointExperimentalJobList(raw) },
+  job: { list: EndpointExperimentalJobList(raw), cancel: EndpointExperimentalJobCancel(raw) },
+  machine: {
+    list: EndpointExperimentalMachineList(raw),
+    add: EndpointExperimentalMachineAdd(raw),
+    remove: EndpointExperimentalMachineRemove(raw),
+  },
+  push: {
+    get: EndpointExperimentalPushGet(raw),
+    device: {
+      register: EndpointExperimentalPushDeviceRegister(raw),
+      remove: EndpointExperimentalPushDeviceRemove(raw),
+      update: EndpointExperimentalPushDeviceUpdate(raw),
+      session: {
+        set: EndpointExperimentalPushDeviceSessionSet(raw),
+        remove: EndpointExperimentalPushDeviceSessionRemove(raw),
+      },
+    },
+    session: { set: EndpointExperimentalPushSessionSet(raw), remove: EndpointExperimentalPushSessionRemove(raw) },
+    settings: { set: EndpointExperimentalPushSettingsSet(raw) },
+  },
 })
 
 const EndpointShellList = (raw: RawClient["server.shell"]) => (input?: ShellListInput) =>

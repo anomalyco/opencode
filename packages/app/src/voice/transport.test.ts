@@ -146,18 +146,23 @@ afterEach(() => {
 
 type Voice = OpenCodeClient["experimental"]["voice"]
 
-const live = { model: "gpt-live-1", provider: "openai", available: true, transports: ["webrtc" as const] }
+const live = {
+  model: "gpt-live-1",
+  name: "GPT-Live 1",
+  engine: "openai-live",
+  provider: "openai",
+  available: true,
+  transports: ["webrtc" as const],
+}
 
 function open(models: Voice["models"] = () => Promise.resolve({ models: [live] })) {
-  const voice: Voice = {
-    models,
-    session: () => Promise.resolve({ transport: { type: "webrtc", sdp: "v=0 answer" } }),
-  }
+  const session = jest.fn<Voice["session"]>(() => Promise.resolve({ transport: { type: "webrtc", sdp: "v=0 answer" } }))
+  const voice: Voice = { models, session }
 
   const dropped = jest.fn()
   const transport = new VoiceTransport({ voice, event: () => {}, levels: () => {}, dropped })
 
-  return { transport, dropped, peer: FakePeer.last }
+  return { transport, dropped, session, peer: FakePeer.last }
 }
 
 // Lets the transport's awaited WebRTC calls settle; fake timers leave promise jobs alone.
@@ -181,6 +186,24 @@ const failure = (promise: Promise<unknown>) =>
     () => undefined,
     (error: VoiceFailure) => error.reason,
   )
+
+test("a call starts the newest available GPT-Live model the server lists", async () => {
+  const realtime = { ...live, model: "gpt-realtime-9", engine: "openai-realtime" }
+  const newest = { ...live, model: "gpt-live-3", available: false }
+  const result = open(() => Promise.resolve({ models: [realtime, newest, { ...live, model: "gpt-live-2" }, live] }))
+  void result.transport.join({ id: "ses_1" }, "")
+  await settle()
+
+  expect(result.session.mock.calls[0][0]).toMatchObject({ model: "gpt-live-2", session: { model: "gpt-live-2" } })
+})
+
+test("a server without an available GPT-Live model fails the join as unavailable", async () => {
+  const realtime = { ...live, model: "gpt-realtime-9", engine: "openai-realtime" }
+  const result = open(() => Promise.resolve({ models: [realtime, { ...live, available: false }] }))
+
+  expect(await failure(result.transport.join({ id: "ses_1" }, ""))).toBe("unavailable")
+  expect(result.session).not.toHaveBeenCalled()
+})
 
 test("a microphone granted after End is stopped at once, and the join fails as a connection failure", async () => {
   const result = open()

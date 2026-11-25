@@ -17,15 +17,26 @@ export interface RadioGroupProps extends ParentProps<ComponentProps<typeof Root>
   label?: JSX.Element
   description?: JSX.Element
   hideLabel?: boolean
+  /** Background of the controls. */
+  surface?: "base" | "layer-1"
 }
 
 export function RadioGroup(props: RadioGroupProps) {
-  const [local, others] = splitProps(props, ["class", "classList", "children", "label", "description", "hideLabel"])
+  const [local, others] = splitProps(props, [
+    "class",
+    "classList",
+    "children",
+    "label",
+    "description",
+    "hideLabel",
+    "surface",
+  ])
 
   return (
     <Root
       {...others}
       data-component="radio-v2"
+      data-surface={local.surface ?? "base"}
       classList={{
         ...local.classList,
         [local.class ?? ""]: !!local.class,
