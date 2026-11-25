@@ -191,13 +191,15 @@ export const layer = (options?: Options) =>
         // Logging out drops the saved remote config, so the source supplies nothing until a fresh fetch succeeds.
         if (!variables) return yield* wellknown.clearCached(entry.origin).pipe(Effect.as([]))
         // A failed refresh keeps the last resolved config so remote providers and allowlists do not disappear.
-        const configs = yield* wellknown.resolve(entry, variables).pipe(
-          Effect.catch((error) =>
-            Effect.logWarning("failed to load wellknown config", { source: entry.origin, error }).pipe(
-              Effect.andThen(wellknown.cached(entry.origin)),
+        const configs = yield* wellknown
+          .resolve(entry, variables)
+          .pipe(
+            Effect.catch((error) =>
+              Effect.logWarning("failed to load wellknown config", { source: entry.origin, error }).pipe(
+                Effect.andThen(wellknown.cached(entry.origin)),
+              ),
             ),
-          ),
-        )
+          )
         return yield* Effect.forEach(configs, (config) =>
           ConfigVariable.substitute({
             type: "virtual",
@@ -467,19 +469,20 @@ export const layer = (options?: Options) =>
         ),
         Effect.forkScoped({ startImmediately: true }),
       )
-      yield* bus.subscribe(Credential.Event.Switched).pipe(
-        Stream.filterEffect((event) =>
-          wellknown.entries().pipe(
-            Effect.map((entries) => entries.some((entry) => entry.integrationID === event.data.integrationID)),
-            Effect.orElseSucceed(() => false),
+      yield* bus
+        .subscribe(Credential.Event.Switched, {
+          overflow: "slide",
+          where: (event) => wellknown.snapshot().some((entry) => entry.integrationID === event.data.integrationID),
+        })
+        .pipe(
+          Stream.runForEach(() =>
+            reload().pipe(
+              Effect.catchCause((cause) => Effect.logError("failed to reload wellknown config", { cause })),
+            ),
           ),
-        ),
-        Stream.runForEach(() =>
-          reload().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload wellknown config", { cause }))),
-        ),
-        Effect.forkScoped({ startImmediately: true }),
-      )
-      yield* bus.subscribe(WellKnown.Event.Updated).pipe(
+          Effect.forkScoped({ startImmediately: true }),
+        )
+      yield* bus.subscribe(WellKnown.Event.Updated, { overflow: "slide" }).pipe(
         Stream.runForEach(() =>
           reload().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload wellknown sources", { cause }))),
         ),

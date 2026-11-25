@@ -43,7 +43,7 @@ export const track = Effect.fnUntraced(function* (
       return reload
     }),
   )
-  yield* bus.subscribe([ModelsDev.Event.Refreshed, Event.Updated]).pipe(
+  yield* bus.subscribe([ModelsDev.Event.Refreshed, Event.Updated], { overflow: "slide" }).pipe(
     Stream.runForEach(() => update),
     Effect.forkScoped({ startImmediately: true }),
   )

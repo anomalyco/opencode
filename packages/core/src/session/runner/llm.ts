@@ -105,10 +105,12 @@ const layer = Layer.effect(
                     entering || !continuing ? "input" : "steer",
                   )
                   if (next?.type === "compaction")
-                    yield* bus.publishAll([
-                      [SessionEvent.InboxDelivered, { sessionID, inboxID: next.id }],
-                      [SessionEvent.Compaction.Started, { sessionID, reason: "manual", inputID: next.id }],
-                    ])
+                    yield* restore(
+                      bus.publishAll([
+                        [SessionEvent.InboxDelivered, { sessionID, inboxID: next.id }],
+                        [SessionEvent.Compaction.Started, { sessionID, reason: "manual", inputID: next.id }],
+                      ]),
+                    )
                   if (next?.type === "move")
                     yield* restore(
                       Effect.gen(function* () {

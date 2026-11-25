@@ -32,7 +32,7 @@ export const Plugin = define({
     // `integration.use` names the account behind each integration's active connection. Reading stored metadata
     // never refreshes a credential.
     const current = { accounts: ManagedPolicy.accounts(yield* credentials.all()) }
-    yield* bus.subscribe([Credential.Event.Updated, Credential.Event.Switched]).pipe(
+    yield* bus.subscribe([Credential.Event.Updated, Credential.Event.Switched], { overflow: "slide" }).pipe(
       Stream.runForEach(() =>
         Effect.gen(function* () {
           const next = ManagedPolicy.accounts(yield* credentials.all())

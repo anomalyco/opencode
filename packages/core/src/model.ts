@@ -285,7 +285,7 @@ const layer = Layer.effect(
         },
       )
     })
-    yield* bus.subscribe(Provider.Event.Updated).pipe(
+    yield* bus.subscribe(Provider.Event.Updated, { overflow: "slide" }).pipe(
       Stream.runForEach(() => notify),
       Effect.forkScoped({ startImmediately: true }),
     )
@@ -334,11 +334,7 @@ export const node = makeLocationNode({ service: Service, layer, deps: [Provider.
 
 // Signed out, only free OpenCode models are enabled. Clients default to the first available model, so keep
 // these free models ahead of each new free launch instead of letting release order pick the default.
-const PREFERRED_FREE = [
-  "big-pickle",
-  "deepseek-v4.1-flash-free",
-  "muse-spark-1.3-contributor-free",
-]
+const PREFERRED_FREE = ["big-pickle", "deepseek-v4.1-flash-free", "muse-spark-1.3-contributor-free"]
 
 function preferFree(models: Info[]) {
   const freeOnly = models.every(

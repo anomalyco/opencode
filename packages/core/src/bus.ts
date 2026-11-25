@@ -1,6 +1,6 @@
 export * as Bus from "./bus.js"
 
-import { Cause, Clock, Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
+import { Cause, Clock, Context, Effect, Layer, Option, PubSub, Queue, Schema, Stream } from "effect"
 import { Event } from "@opencode/schema/event"
 import type { EventLog } from "@opencode/schema/event-log"
 import { and, asc, eq, gt, lte, sql } from "drizzle-orm"
@@ -64,6 +64,55 @@ export class InvalidDurableEventError extends Schema.TaggedError<InvalidDurableE
     message: Schema.String,
   },
 ) {}
+
+export class SubscriberOverflowError extends Schema.TaggedError<SubscriberOverflowError>()("Bus.SubscriberOverflow", {
+  capacity: Schema.Int,
+  eventID: Event.ID,
+  eventType: Schema.String,
+}) {}
+
+export type SubscriberOverflow = "fail" | "slide" | "backpressure"
+
+export interface SubscribeOptions<A> {
+  readonly capacity?: number
+  /** Backpressure waits up to five seconds, then fails only this subscriber. */
+  readonly overflow?: SubscriberOverflow
+  readonly where?: (event: A) => boolean
+  /** Runs after registration, before queued events are consumed. Recovery loops use it to avoid a resubscription gap. */
+  readonly onSubscribed?: Effect.Effect<void>
+}
+
+export const restartOnOverflow = <A, R>(
+  subscribe: (onSubscribed: Effect.Effect<void>) => Stream.Stream<A, SubscriberOverflowError, R>,
+  onOverflow?: Effect.Effect<void, unknown, R>,
+): Stream.Stream<A, never, R> =>
+  Stream.unwrap(
+    Effect.gen(function* () {
+      const context = yield* Effect.context<R>()
+      const recover = (onOverflow ?? Effect.void).pipe(Effect.orDie, Effect.provide(context))
+      let recovering = false
+      const loop = (): Stream.Stream<A, never, R> =>
+        subscribe(
+          Effect.suspend(() => {
+            if (!recovering) return Effect.void
+            recovering = false
+            return recover
+          }),
+        ).pipe(
+          Stream.catchIf(
+            (error): error is SubscriberOverflowError => error instanceof SubscriberOverflowError,
+            () =>
+              Stream.unwrap(
+                Effect.sync(() => {
+                  recovering = true
+                  return loop()
+                }),
+              ),
+          ),
+        )
+      return loop()
+    }),
+  )
 
 const envelope = (aggregateID: string, seq: number, version: number) => ({
   aggregateID,
@@ -136,12 +185,19 @@ export interface Subscribe {
    * With an ambient Location, delivery is restricted to that Location and global
    * events. Unlocated Session events use the Session's owner at publication time.
    * Session moves reach both the old and new Location, without changing the event.
+   * The channel is bounded. It fails on overflow unless the caller selects sliding
+   * or backpressure.
    */
-  (): Stream.Stream<Event.Payload>
-  <D extends Event.Definition>(definition: D): Stream.Stream<Event.Payload<D>>
+  (input: undefined, options?: SubscribeOptions<Event.Payload>): Stream.Stream<Event.Payload, SubscriberOverflowError>
+  (options?: SubscribeOptions<Event.Payload>): Stream.Stream<Event.Payload, SubscriberOverflowError>
+  <D extends Event.Definition>(
+    definition: D,
+    options?: SubscribeOptions<Event.Payload<D>>,
+  ): Stream.Stream<Event.Payload<D>, SubscriberOverflowError>
   <const D extends readonly [Event.Definition, ...Event.Definition[]]>(
     definitions: D,
-  ): Stream.Stream<SubscribePayload<D>>
+    options?: SubscribeOptions<SubscribePayload<D>>,
+  ): Stream.Stream<SubscribePayload<D>, SubscriberOverflowError>
 }
 
 const isDefinition = (input: Event.Definition | readonly Event.Definition[]): input is Event.Definition =>
@@ -188,6 +244,19 @@ interface Options {
   readonly logReadPageSize?: number
   /** Retain durable event payloads for historical log reads and replay. */
   readonly persist?: boolean
+  /** Maximum queued events for each live subscriber. */
+  readonly subscriberCapacity?: number
+}
+
+const BACKPRESSURE_TIMEOUT = "5 seconds"
+
+type LiveSubscriber = {
+  readonly queue: Queue.Queue<Event.Payload, SubscriberOverflowError>
+  readonly capacity: number
+  readonly types: ReadonlySet<string> | undefined
+  readonly overflow: SubscriberOverflow
+  readonly where: ((event: Event.Payload) => boolean) | undefined
+  readonly location: Location.Ref | undefined
 }
 
 export function configured(options?: Options) {
@@ -202,16 +271,17 @@ export function configured(options?: Options) {
         const { Location } = yield* Effect.promise(() => import("./location.js"))
         const { SessionTable } = yield* Effect.promise(() => import("./session/sql.js"))
         const pubsub = {
-          live: yield* PubSub.unbounded<Event.Payload>(),
           durable: new Map<string, Set<PubSub.PubSub<void>>>(),
-          typed: new Map<string, Set<PubSub.PubSub<Event.Payload>>>(),
         }
+        const live = new Set<LiveSubscriber>()
+        const typed = new Map<string, Set<LiveSubscriber>>()
         const projectors = new Map<string, Subscriber[]>()
         const listeners = new Array<Subscriber>()
         const durableLocks = KeyedMutex.makeUnsafe<string>()
         const { db } = yield* Database.Service
         const logReadPageSize = options?.logReadPageSize ?? 512
         const persist = options?.persist ?? false
+        const subscriberCapacity = options?.subscriberCapacity ?? 4_096
         const sessions = new Map<SessionID, Location.Ref>()
         // Keep routing separate from the public event, and retain its snapshot
         // while a slow subscriber drains events queued before a move or deletion.
@@ -271,17 +341,38 @@ export function configured(options?: Options) {
           }
         })
 
+        function registerSubscriber(subscriber: LiveSubscriber) {
+          if (subscriber.types === undefined) {
+            live.add(subscriber)
+            return
+          }
+          for (const type of subscriber.types) typed.set(type, (typed.get(type) ?? new Set()).add(subscriber))
+        }
+
+        function removeSubscriber(subscriber: LiveSubscriber) {
+          live.delete(subscriber)
+          if (subscriber.types === undefined) return
+          for (const type of subscriber.types) {
+            const subscribers = typed.get(type)
+            subscribers?.delete(subscriber)
+            if (subscribers?.size === 0) typed.delete(type)
+          }
+        }
+
         yield* Effect.addFinalizer(() =>
           Effect.gen(function* () {
-            yield* PubSub.shutdown(pubsub.live)
+            const queues = new Set([
+              ...Array.from(live, (subscriber) => subscriber.queue),
+              ...Array.from(typed.values()).flatMap((subscribers) =>
+                Array.from(subscribers, (subscriber) => subscriber.queue),
+              ),
+            ])
+            live.clear()
+            typed.clear()
+            yield* Effect.forEach(queues, Queue.shutdown, { discard: true })
             yield* Effect.forEach(
               pubsub.durable.values(),
               (pubsubs) => Effect.forEach(pubsubs, PubSub.shutdown, { discard: true }),
-              { discard: true },
-            )
-            yield* Effect.forEach(
-              pubsub.typed.values(),
-              (subscribers) => Effect.forEach(subscribers, PubSub.shutdown, { discard: true }),
               { discard: true },
             )
           }),
@@ -492,6 +583,37 @@ export function configured(options?: Options) {
             ),
           )
 
+        const matches = (subscriber: LiveSubscriber, event: Event.Payload) => {
+          if (subscriber.where && !subscriber.where(event)) return false
+          if (subscriber.location === undefined) return true
+          const location = subscriber.location
+          const same = (ref: Location.Ref) =>
+            ref.directory === location.directory && ref.workspaceID === location.workspaceID
+          const refs = routes.get(event)
+          if (refs) return refs.some(same)
+          return !event.location || same(event.location)
+        }
+
+        const overflow = Effect.fnUntraced(function* (subscriber: LiveSubscriber, event: Event.Payload) {
+          removeSubscriber(subscriber)
+          Queue.failCauseUnsafe(
+            subscriber.queue,
+            Cause.fail(
+              new SubscriberOverflowError({
+                capacity: subscriber.capacity,
+                eventID: event.id,
+                eventType: event.type,
+              }),
+            ),
+          )
+          yield* Effect.logWarning("Event subscriber exceeded its capacity", {
+            capacity: subscriber.capacity,
+            eventID: event.id,
+            eventType: event.type,
+            types: subscriber.types ? Array.from(subscriber.types) : undefined,
+          })
+        })
+
         function notify(event: Event.Payload, isolateListeners: boolean) {
           return Effect.gen(function* () {
             yield* Effect.forEach(
@@ -499,11 +621,23 @@ export function configured(options?: Options) {
               (listener) => (isolateListeners ? observe(event, listener) : listener(event)),
               { discard: true },
             )
-            // Type subscribers resume inline and may publish follow-up events, so live subscribers get this one first.
-            yield* PubSub.publish(pubsub.live, event)
-            const typed = pubsub.typed.get(event.type)
-            if (typed)
-              yield* Effect.forEach(typed, (subscriber) => PubSub.publish(subscriber, event), { discard: true })
+            const subscribers = [...live, ...(typed.get(event.type) ?? [])].filter((subscriber) =>
+              matches(subscriber, event),
+            )
+            // Fast subscribers receive the event before a slow backpressure consumer waits.
+            for (const subscriber of subscribers) {
+              if (subscriber.overflow === "backpressure") continue
+              if (!Queue.offerUnsafe(subscriber.queue, event)) yield* overflow(subscriber, event)
+            }
+            yield* Effect.forEach(
+              subscribers.filter((subscriber) => subscriber.overflow === "backpressure"),
+              (subscriber) =>
+                Queue.offer(subscriber.queue, event).pipe(
+                  Effect.timeoutOption(BACKPRESSURE_TIMEOUT),
+                  Effect.flatMap((result) => (Option.isNone(result) ? overflow(subscriber, event) : Effect.void)),
+                ),
+              { concurrency: "unbounded", discard: true },
+            )
           })
         }
 
@@ -556,7 +690,7 @@ export function configured(options?: Options) {
               )
             }
             return yield* durableLocks.withLock(aggregateID)(
-              Effect.uninterruptible(
+              Effect.uninterruptibleMask((restore) =>
                 Effect.gen(function* () {
                   const committed = yield* db
                     .transaction(
@@ -642,7 +776,7 @@ export function configured(options?: Options) {
                       discard: true,
                     },
                   )
-                  yield* Effect.forEach(committed.events, (event) => notify(event, true), { discard: true })
+                  yield* restore(Effect.forEach(committed.events, (event) => notify(event, true), { discard: true }))
                   return committed.events as PublishResult<I>
                 }),
               ),
@@ -705,62 +839,54 @@ export function configured(options?: Options) {
             .pipe(Effect.orDie)
         }
 
-        const local = <A extends Event.Payload>(stream: Stream.Stream<A>) =>
-          Stream.unwrap(
-            Effect.serviceOption(Location.Service).pipe(
-              Effect.map((location) =>
-                Option.match(location, {
-                  onNone: () => stream,
-                  onSome: (location) => {
-                    const matches = (ref: Location.Ref) =>
-                      ref.directory === location.directory && ref.workspaceID === location.workspaceID
-                    return stream.pipe(
-                      Stream.filter((event) => {
-                        const refs = routes.get(event)
-                        if (refs) return refs.some(matches)
-                        return !event.location || matches(event.location)
-                      }),
-                    )
-                  },
-                }),
-              ),
-            ),
-          )
-
-        function subscribe(): Stream.Stream<Event.Payload>
-        function subscribe<D extends Event.Definition>(definition: D): Stream.Stream<Event.Payload<D>>
+        function subscribe(): Stream.Stream<Event.Payload, SubscriberOverflowError>
+        function subscribe<D extends Event.Definition>(
+          definition: D,
+          options?: SubscribeOptions<Event.Payload<D>>,
+        ): Stream.Stream<Event.Payload<D>, SubscriberOverflowError>
         function subscribe<const D extends readonly [Event.Definition, ...Event.Definition[]]>(
           definitions: D,
-        ): Stream.Stream<SubscribePayload<D>>
-        function subscribe(input?: Event.Definition | readonly Event.Definition[]): Stream.Stream<Event.Payload> {
-          if (input === undefined) return streamLive()
-          const types = new Set((isDefinition(input) ? [input] : input).map((definition) => definition.type))
-          // One PubSub per subscription, registered under each type, keeps publish order across types.
-          return local(
-            Stream.unwrap(
-              Effect.acquireRelease(
-                PubSub.unbounded<Event.Payload>().pipe(
-                  Effect.tap((subscriber) =>
-                    Effect.sync(() => {
-                      for (const type of types)
-                        pubsub.typed.set(type, (pubsub.typed.get(type) ?? new Set()).add(subscriber))
-                    }),
-                  ),
+          options?: SubscribeOptions<SubscribePayload<D>>,
+        ): Stream.Stream<SubscribePayload<D>, SubscriberOverflowError>
+        function subscribe(
+          input?: Event.Definition | readonly Event.Definition[],
+          options?: SubscribeOptions<Event.Payload>,
+        ): Stream.Stream<Event.Payload, SubscriberOverflowError> {
+          const types =
+            input === undefined ? undefined : new Set((isDefinition(input) ? [input] : input).map((item) => item.type))
+          return Stream.unwrap(
+            Effect.gen(function* () {
+              const capacity = options?.capacity ?? subscriberCapacity
+              if (!Number.isSafeInteger(capacity) || capacity <= 0)
+                return yield* Effect.die(new RangeError("Subscriber capacity must be a positive integer"))
+              const overflow = options?.overflow ?? "fail"
+              const queue =
+                overflow === "backpressure"
+                  ? yield* Queue.bounded<Event.Payload, SubscriberOverflowError>(capacity)
+                  : overflow === "slide"
+                    ? yield* Queue.sliding<Event.Payload, SubscriberOverflowError>(capacity)
+                    : yield* Queue.dropping<Event.Payload, SubscriberOverflowError>(capacity)
+              const location = Option.getOrUndefined(yield* Effect.serviceOption(Location.Service))
+              const subscriber: LiveSubscriber = {
+                queue,
+                capacity,
+                types,
+                overflow,
+                where: options?.where,
+                location,
+              }
+              registerSubscriber(subscriber)
+              yield* Effect.addFinalizer(() =>
+                Effect.sync(() => removeSubscriber(subscriber)).pipe(
+                  Effect.andThen(Queue.shutdown(queue)),
+                  Effect.asVoid,
                 ),
-                (subscriber) =>
-                  Effect.sync(() => {
-                    for (const type of types) {
-                      const subscribers = pubsub.typed.get(type)
-                      subscribers?.delete(subscriber)
-                      if (subscribers?.size === 0) pubsub.typed.delete(type)
-                    }
-                  }).pipe(Effect.andThen(PubSub.shutdown(subscriber))),
-              ).pipe(Effect.flatMap(PubSub.subscribe), Effect.map(Stream.fromSubscription)),
-            ),
+              )
+              if (options?.onSubscribed) yield* options.onSubscribed
+              return Stream.fromQueue(queue)
+            }),
           )
         }
-
-        const streamLive = (): Stream.Stream<Event.Payload> => local(Stream.fromPubSub(pubsub.live))
 
         const readAfter = (
           aggregateID: string,

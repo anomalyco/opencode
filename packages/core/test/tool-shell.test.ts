@@ -217,7 +217,7 @@ const fakeDaemonIt = testEffect(
             }),
           ),
         ),
-        deps: [Bus.node, Global.node],
+        deps: [Bus.node, Global.node, SessionStore.node],
       }),
     ),
   ]).pipe(Layer.provide(noFlagOverrides)),

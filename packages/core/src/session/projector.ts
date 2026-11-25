@@ -1173,7 +1173,24 @@ const layer = Layer.effectDiscard(
         yield* SessionBlob.releaseFrom(db, event.data.sessionID, boundary.seq)
       }),
     )
-    yield* bus.subscribe([SessionEvent.Step.Ended, SessionEvent.Step.Failed, SessionEvent.UsageRecorded]).pipe(
+    const reconcileUsage = db
+      .select({ sessionID: SessionTable.id })
+      .from(SessionTable)
+      .all()
+      .pipe(
+        Effect.orDie,
+        Effect.flatMap((rows) =>
+          Effect.forEach(rows, (row) => publishSessionUsage(db, bus, row.sessionID), { discard: true }),
+        ),
+      )
+    yield* Bus.restartOnOverflow(
+      (onSubscribed) =>
+        bus.subscribe([SessionEvent.Step.Ended, SessionEvent.Step.Failed, SessionEvent.UsageRecorded], {
+          overflow: "backpressure",
+          onSubscribed,
+        }),
+      reconcileUsage,
+    ).pipe(
       Stream.runForEach((event) => {
         if (
           event.type === SessionEvent.Step.Failed.type &&

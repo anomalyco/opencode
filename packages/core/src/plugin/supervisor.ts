@@ -237,15 +237,16 @@ export const layer = Layer.effectDiscard(
       if (!release) release = yield* registry.hold()
       yield* Queue.offer(triggers, observed)
     })
-    const watch = <A>(stream: Stream.Stream<A>) =>
+    const watch = <A, E>(stream: Stream.Stream<A, E>) =>
       stream.pipe(
         Stream.runForEach(() => notify),
+        Effect.catchCause((cause) => Effect.logWarning("plugin supervisor event source stopped", { cause })),
         Effect.forkScoped({ startImmediately: true }),
       )
     yield* watch(sources.changes())
     yield* watch(modules.changes())
     yield* watch(updates.intervals().pipe(Stream.tap((next) => Effect.sync(() => (cycle = next)))))
-    yield* watch(bus.subscribe([Event.Updated, SdkPlugins.Updated]))
+    yield* watch(bus.subscribe([Event.Updated, SdkPlugins.Updated], { overflow: "slide" }))
     yield* watch(
       updates.changes().pipe(
         Stream.filter((update) => packages.has(update.target)),

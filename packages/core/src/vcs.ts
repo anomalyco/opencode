@@ -157,19 +157,23 @@ const layer = Layer.effect(
         vcs.type === "git"
           ? (file: string) => path.basename(file) === "HEAD" && FSUtil.contains(store, file)
           : (file: string) => path.resolve(file) === path.join(store, "branch")
-      yield* bus.subscribe(FileSystem.Event.Changed).pipe(
-        Stream.filter((event) => isBranchMetadata(event.data.file)),
-        Stream.runForEach((event) =>
-          refresh().pipe(
-            Effect.catchCauseIf(
-              (cause) => !Cause.hasInterrupts(cause),
-              (cause) => Effect.logWarning("vcs refresh failed", { file: event.data.file, cause }),
+      yield* bus
+        .subscribe(FileSystem.Event.Changed, {
+          overflow: "slide",
+          where: (event) => isBranchMetadata(event.data.file),
+        })
+        .pipe(
+          Stream.runForEach((event) =>
+            refresh().pipe(
+              Effect.catchCauseIf(
+                (cause) => !Cause.hasInterrupts(cause),
+                (cause) => Effect.logWarning("vcs refresh failed", { file: event.data.file, cause }),
+              ),
+              Effect.withSpan("Vcs.refreshBranch", { attributes: { file: event.data.file } }),
             ),
-            Effect.withSpan("Vcs.refreshBranch", { attributes: { file: event.data.file } }),
           ),
-        ),
-        Effect.forkScoped({ startImmediately: true }),
-      )
+          Effect.forkScoped({ startImmediately: true }),
+        )
     }
 
     return Service.of({

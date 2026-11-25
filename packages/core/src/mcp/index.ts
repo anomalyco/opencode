@@ -617,11 +617,9 @@ export const layer = (options?: Options) =>
                 .pipe(
                   Effect.raceFirst(waitForAbort(input.signal)),
                   Effect.ensuring(Effect.sync(() => key && urlElicitations.delete(key))),
-                  Effect.map(
-                    (state): McpClient.ElicitationResult => ({
-                      action: state.status === "answered" ? "accept" : "cancel",
-                    }),
-                  ),
+                  Effect.map((state): McpClient.ElicitationResult => ({
+                    action: state.status === "answered" ? "accept" : "cancel",
+                  })),
                 )
             }
             const params = input.params
@@ -764,13 +762,11 @@ export const layer = (options?: Options) =>
         if (entry.tagged?.source !== source)
           entry.tagged = {
             source,
-            tools: source.map(
-              (tool): Tool => ({
-                ...tool,
-                server: name,
-                codemode: entry.config.codemode,
-              }),
-            ),
+            tools: source.map((tool): Tool => ({
+              ...tool,
+              server: name,
+              codemode: entry.config.codemode,
+            })),
           }
         return entry.tagged.tools
       }
@@ -982,10 +978,27 @@ export const layer = (options?: Options) =>
             yield* entry.connection.start
           }).pipe(locks.withLock(name))
         })
+      const reconcileCredentials = Effect.suspend(() =>
+        Effect.forEach(
+          Array.from(entries.values()).flatMap((entry) => (entry.integrationID ? [entry.integrationID] : [])),
+          (integrationID) => Effect.sync(() => fork(reconnect(integrationID))),
+          { discard: true },
+        ),
+      )
       fork(
-        bus
-          .subscribe(Credential.Event.Switched)
-          .pipe(Stream.runForEach((event) => Effect.sync(() => fork(reconnect(event.data.integrationID))))),
+        Bus.restartOnOverflow(
+          (onSubscribed) =>
+            bus.subscribe(Credential.Event.Switched, {
+              overflow: "backpressure",
+              where: (event) =>
+                Array.from(entries).some(([, entry]) => entry.integrationID === event.data.integrationID),
+              onSubscribed,
+            }),
+          reconcileCredentials,
+        ).pipe(
+          Stream.runForEach((event) => Effect.sync(() => fork(reconnect(event.data.integrationID)))),
+          Effect.catchCause((cause) => Effect.logWarning("MCP credential listener stopped", { cause })),
+        ),
       )
       const state: State.Interface<Data, Editor> = State.create<Data, Editor>({
         name: "mcp",
@@ -1021,14 +1034,12 @@ export const layer = (options?: Options) =>
         servers: Effect.fn("MCP.servers")(function* () {
           return Array.from(entries)
             .toSorted(([a], [b]) => a.localeCompare(b))
-            .map(
-              ([name, entry]): ServerInfo => ({
-                name,
-                status: entry.status,
-                title: entry.connection.client?.title,
-                integrationID: entry.integrationID,
-              }),
-            )
+            .map(([name, entry]): ServerInfo => ({
+              name,
+              status: entry.status,
+              title: entry.connection.client?.title,
+              integrationID: entry.integrationID,
+            }))
         }),
         add: Effect.fn("MCP.add")(function* (server, config) {
           const name = ServerName.make(server)
