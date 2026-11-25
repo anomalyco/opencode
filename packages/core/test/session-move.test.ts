@@ -581,3 +581,52 @@ describe("Session.move", () => {
     ),
   )
 })
+
+describe("Session.move home expansion", () => {
+  const isolated = testEffect(Layer.empty)
+  // `~\` is the native form on Windows; elsewhere both spellings are `~/`.
+  for (const separator of new Set(["/", path.sep]))
+    isolated.live(`expands a destination written as ~${separator}dest`, () =>
+      Effect.gen(function* () {
+        const tmp = yield* tmpdirScoped()
+        const home = path.join(tmp.path, "home")
+        const destination = path.join(home, "dest")
+        yield* Effect.promise(() => mkdir(destination, { recursive: true }))
+        const context = yield* Layer.build(
+          AppNodeBuilder.build(LayerNode.group([SessionMove.node, SessionStore.node, Bus.node, Project.node]), [
+            Global.node.replace(
+              Global.layerWith({
+                home,
+                data: path.join(tmp.path, "data"),
+                cache: path.join(tmp.path, "cache"),
+                config: path.join(tmp.path, "config"),
+                state: path.join(tmp.path, "state"),
+                tmp: path.join(tmp.path, "tmp"),
+                bin: path.join(tmp.path, "cache", "bin"),
+                log: path.join(tmp.path, "data", "log"),
+                repos: path.join(tmp.path, "data", "repos"),
+              }),
+            ),
+            Project.node.replace(globalProjectNode),
+            SessionExecution.node.replace(SessionExecution.noopLayer),
+            offlineModels,
+          ]),
+        )
+        const moves = Context.get(context, SessionMove.Service)
+        const store = Context.get(context, SessionStore.Service)
+        const bus = Context.get(context, Bus.Service)
+        yield* Context.get(context, Project.Service).resolve(AbsolutePath.make(destination))
+        const sessionID = Session.ID.create()
+        yield* bus.publish(SessionEvent.Created, {
+          sessionID,
+          slug: "move-home",
+          version: "test",
+          projectID: Project.ID.global,
+          location: Location.Ref.make({ directory: AbsolutePath.make(path.join(tmp.path, "source")) }),
+        })
+
+        yield* moves.move({ sessionID, directory: AbsolutePath.make(`~${separator}dest`) })
+        expect((yield* store.get(sessionID))?.location.directory).toBe(AbsolutePath.make(destination))
+      }),
+    )
+})
