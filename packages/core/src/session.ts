@@ -229,6 +229,8 @@ export interface Interface {
   readonly generate: (input: {
     sessionID: SessionSchema.ID
     prompt: string
+    /** Serves this call with another model without changing the Session's selection. */
+    model?: Model.Ref
   }) => Effect.Effect<SessionGenerate.Result, NotFoundError | SessionGenerate.Error>
   readonly command: (input: {
     sessionID: SessionSchema.ID
@@ -512,7 +514,7 @@ const layer = Layer.effect(
       prompt: (input, onAccepted) => sessions.forSession(input.sessionID).prompt(input, onAccepted),
       generate: Effect.fn("Session.generate")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        return yield* SessionGenerate.generate({ session, prompt: input.prompt }).pipe(
+        return yield* SessionGenerate.generate({ session, prompt: input.prompt, model: input.model }).pipe(
           Effect.provideService(Instance.Service, instances),
           Effect.provideService(Database.Service, database),
           Effect.provideService(LLMClient.Service, llm),

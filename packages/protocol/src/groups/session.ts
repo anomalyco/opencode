@@ -708,7 +708,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
     .add(
       HttpApiEndpoint.post("session.generate", "/api/session/:sessionID/generate", {
         params: { sessionID: Session.ID },
-        payload: Schema.Struct({ prompt: Schema.String }),
+        payload: Schema.Struct({ prompt: Schema.String, model: Model.Ref.pipe(Schema.optional) }),
         success: Schema.Struct({
           // Same `tokens` and `cost` an assistant message reports for a step.
           data: Schema.Struct({ text: Schema.String, tokens: TokenUsage.Info, cost: Money.USD }),
@@ -721,7 +721,7 @@ export const makeSessionGroup = <I extends HttpApiMiddleware.AnyId, S, FormI ext
             identifier: "session.generate",
             summary: "Generate text from session context",
             description:
-              "Generate transient text from the current session context without mutating session history. Its tokens and cost count toward the session's totals.",
+              "Generate transient text from the current session context without mutating session history. Its tokens and cost count toward the session's totals. An optional model serves this call without changing the session's selection; it may be on another provider.",
           }),
         ),
     )

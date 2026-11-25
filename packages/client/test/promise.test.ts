@@ -1089,7 +1089,11 @@ test("session methods use the public HTTP contract", async () => {
     text: "Hello",
     resume: false,
   })
-  const generated = await client.session.generate({ sessionID: "ses_test", prompt: "Summarize this session" })
+  const generated = await client.session.generate({
+    sessionID: "ses_test",
+    prompt: "Summarize this session",
+    model: { id: "kimi-k3.1-pro", providerID: "deepinfra" },
+  })
   const synthetic = await client.session.synthetic({
     sessionID: "ses_test",
     text: "Completed",
@@ -1111,6 +1115,11 @@ test("session methods use the public HTTP contract", async () => {
   expect(admitted.id).toBe("msg_test")
   expect(generated.text).toBe("A transient answer")
   expect(generated.tokens.cache.read).toBe(40)
+  const generateRequest = requests.find((request) => request.url.endsWith("/api/session/ses_test/generate"))
+  expect(JSON.parse(String(generateRequest?.init?.body))).toEqual({
+    prompt: "Summarize this session",
+    model: { id: "kimi-k3.1-pro", providerID: "deepinfra" },
+  })
   expect(interrupted).toEqual({ interrupted: true })
   expect(synthetic).toMatchObject({ type: "synthetic", data: { text: "Completed" }, delivery: "queue" })
   expect(context).toEqual([])

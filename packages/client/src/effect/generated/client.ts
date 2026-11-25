@@ -692,7 +692,10 @@ const EndpointSessionInboxUpdate = (raw: RawClient["server.session"]) => (input:
 
 const EndpointSessionGenerate = (raw: RawClient["server.session"]) => (input: SessionGenerateInput) =>
   preserveEffect<SessionGenerateOutput>()(
-    raw["session.generate"]({ params: { sessionID: input["sessionID"] }, payload: { prompt: input["prompt"] } }).pipe(
+    raw["session.generate"]({
+      params: { sessionID: input["sessionID"] },
+      payload: { prompt: input["prompt"], model: input["model"] },
+    }).pipe(
       Effect.mapError(mapClientError),
       Effect.map((value) => value.data),
     ),

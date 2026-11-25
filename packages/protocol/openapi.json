@@ -3847,7 +3847,7 @@
             }
           }
         },
-        "description": "Generate transient text from the current session context without mutating session history. Its tokens and cost count toward the session's totals.",
+        "description": "Generate transient text from the current session context without mutating session history. Its tokens and cost count toward the session's totals. An optional model serves this call without changing the session's selection; it may be on another provider.",
         "summary": "Generate text from session context",
         "requestBody": {
           "content": {
@@ -3857,6 +3857,16 @@
                 "properties": {
                   "prompt": {
                     "type": "string"
+                  },
+                  "model": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/components/schemas/Model.Ref"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
                   }
                 },
                 "required": ["prompt"],
