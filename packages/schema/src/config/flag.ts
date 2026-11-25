@@ -30,6 +30,8 @@ export const registry = {
     "List a session's subagents, with their session IDs, and its running background jobs in its compaction checkpoints, so the agent can still continue or account for them after compacting.",
   sqlite_fts:
     "Build an SQLite full-text index of session titles and message text in the background, and enable the opencode.session.search and opencode.session.read tools. The index covers every session in the database and starts while any loaded location enables it; SQLite keeps it current from then on, also after this is turned off.",
+  web_preferences:
+    "Keep the web app's preferences (settings, theme, color scheme and language) on the server, so they survive a new port or host and cleared site data, and follow you to other browsers that use the same server.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 

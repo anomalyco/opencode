@@ -68,6 +68,8 @@ export function AppBaseProviders(
     locale?: Locale
     onNativeTranslations?: Parameters<typeof LanguageProvider>[0]["onNativeTranslations"]
     onThemeApplied?: (mode: "light" | "dark", scheme: "system" | "light" | "dark") => void
+    /** The selected theme or color scheme was written to `localStorage` under `key`. */
+    onThemeStored?: (key: string, value: string) => void
   }>,
 ) {
   onMount(() => onCleanup(installFocusRescue()))
@@ -76,7 +78,10 @@ export function AppBaseProviders(
     <MetaProvider>
       <Title>OpenCode</Title>
       <Font />
-      <ThemeProvider onThemeApplied={(mode, scheme) => props.onThemeApplied?.(mode, scheme)}>
+      <ThemeProvider
+        onThemeApplied={(mode, scheme) => props.onThemeApplied?.(mode, scheme)}
+        onStored={(key, value) => props.onThemeStored?.(key, value)}
+      >
         <LanguageProvider locale={props.locale} onNativeTranslations={props.onNativeTranslations}>
           <UiI18nBridge>
             <ErrorBoundary

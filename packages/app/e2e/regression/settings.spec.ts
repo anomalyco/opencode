@@ -100,6 +100,10 @@ test("Ctrl+, opens settings as soon as the app loads", async ({ page }) => {
     seed: { tabs: [] },
   })
   await page.goto("/")
+  // The first render waits for the server's preferences, so `goto` can return before the app takes keys.
+  await expect(page.getByRole("button", { name: "Settings", exact: true })).toBeVisible({
+    timeout: APP_READY_TIMEOUT,
+  })
   await page.keyboard.press("Control+,")
   await expect(page.getByTestId("settings-screen")).toBeVisible()
   await expect(page).toHaveURL("/settings")
@@ -2769,6 +2773,28 @@ test("the Side tabs interface mode switches to vertical tabs and survives reload
   await expect(layout.getByRole("radio", { name: "Side tabs", exact: true })).toBeChecked()
   await expect(page.locator('[data-slot="vertical-tabs-sidebar"]')).toBeVisible()
   await expect(page.locator('[data-slot="titlebar-tabs"]')).toHaveCount(0)
+})
+
+test("settings come back from the server after the browser's storage is cleared", async ({ page }) => {
+  const { settings } = await open(page, { preferences: {} })
+  const layout = settings.getByRole("group", { name: "Interface layout", exact: true })
+
+  const saved = page.waitForResponse((response) => {
+    const request = response.request()
+
+    if (request.method() !== "PATCH" || new URL(request.url()).pathname !== "/api/experimental/preference/default.dat")
+      return false
+
+    return JSON.parse(request.postDataJSON().insert["settings.v3"] ?? "{}").appearance?.tabLayout === "vertical"
+  })
+
+  await layout.getByText("Side tabs", { exact: true }).click()
+  await saved
+  await page.evaluate(() => localStorage.clear())
+
+  await page.reload()
+  await expect(layout.getByRole("radio", { name: "Side tabs", exact: true })).toBeChecked()
+  await expect(page.locator('[data-slot="vertical-tabs-sidebar"]')).toBeVisible()
 })
 
 test("settings lines its sidebar and content up with Home's columns", async ({ page }) => {

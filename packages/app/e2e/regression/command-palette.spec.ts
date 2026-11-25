@@ -339,7 +339,15 @@ test("titlebar search keeps recent order stable across agent steps", async ({ pa
     time: { created: 1700000001000, updated: 1700000001000 },
   }
 
+  // Home reads the records of its first sessions just after it lists them. The step must reach the server after that
+  // read, as it does for a session the app already shows; a read after it would already carry the step's time.
+  const read = page.waitForResponse(
+    (response) =>
+      response.request().method() === "GET" && new URL(response.url()).pathname === `/api/session/${busy.id}`,
+  )
+
   const mock = await openPaletteWorkspace(page, true, [busy, fresh])
+  await read
   // A step bumps the busy session's time on the server, but only a finished run reorders recent sessions.
   busy.time.updated = 1700000002000
   // SAFETY: a step in a session whose transcript is not open; only its session ID and time matter here.

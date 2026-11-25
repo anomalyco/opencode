@@ -297,6 +297,12 @@ import type {
   ExperimentalPushSessionRemoveOutput,
   ExperimentalPushSettingsSetInput,
   ExperimentalPushSettingsSetOutput,
+  ExperimentalPreferenceItemsInput,
+  ExperimentalPreferenceItemsOutput,
+  ExperimentalPreferenceUpdateInput,
+  ExperimentalPreferenceUpdateOutput,
+  ExperimentalPreferenceClearInput,
+  ExperimentalPreferenceClearOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1895,6 +1901,30 @@ const EndpointExperimentalPushSettingsSet =
       ),
     )
 
+const EndpointExperimentalPreferenceItems =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPreferenceItemsInput) =>
+    preserveEffect<ExperimentalPreferenceItemsOutput>()(
+      raw["preference.items"]({ params: { name: input["name"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalPreferenceUpdate =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPreferenceUpdateInput) =>
+    preserveEffect<ExperimentalPreferenceUpdateOutput>()(
+      raw["preference.update"]({
+        params: { name: input["name"] },
+        payload: { insert: input["insert"], remove: input["remove"] },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalPreferenceClear =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPreferenceClearInput) =>
+    preserveEffect<ExperimentalPreferenceClearOutput>()(
+      raw["preference.clear"]({ params: { name: input["name"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   persistentPty: {
     read: EndpointExperimentalPersistentPtyRead(raw),
@@ -1943,6 +1973,11 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     },
     session: { set: EndpointExperimentalPushSessionSet(raw), remove: EndpointExperimentalPushSessionRemove(raw) },
     settings: { set: EndpointExperimentalPushSettingsSet(raw) },
+  },
+  preference: {
+    items: EndpointExperimentalPreferenceItems(raw),
+    update: EndpointExperimentalPreferenceUpdate(raw),
+    clear: EndpointExperimentalPreferenceClear(raw),
   },
 })
 

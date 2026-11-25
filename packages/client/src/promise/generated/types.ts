@@ -2712,6 +2712,7 @@ export type ConfigEntry =
           mcp_skills?: boolean
           compaction_jobs?: boolean
           sqlite_fts?: boolean
+          web_preferences?: boolean
           video_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
           part_rows?: boolean
           image_generate?: boolean | { model?: string | { providerID: string; model: string; variant?: string } }
@@ -4992,6 +4993,22 @@ export type ExperimentalPushSessionRemoveOutput = void
 export type ExperimentalPushSettingsSetInput = { readonly paused: boolean; readonly until?: number | undefined }
 
 export type ExperimentalPushSettingsSetOutput = { data: PushSettings }["data"]
+
+export type ExperimentalPreferenceItemsInput = { readonly name: string }
+
+export type ExperimentalPreferenceItemsOutput = { data: { [x: string]: string } }["data"]
+
+export type ExperimentalPreferenceUpdateInput = {
+  readonly name: string
+  readonly insert: { readonly [x: string]: string }
+  readonly remove: ReadonlyArray<string>
+}
+
+export type ExperimentalPreferenceUpdateOutput = void
+
+export type ExperimentalPreferenceClearInput = { readonly name: string }
+
+export type ExperimentalPreferenceClearOutput = void
 
 export type ShellListInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 

@@ -1,24 +1,20 @@
 import { NodeHttpServerRequest } from "@effect/platform-node"
 import { type WebSocket, WebSocketServer } from "@effect/platform-node-shared/NodeWS"
 import { Environment } from "@opencode/core/environment/index"
-import { Flag } from "@opencode/core/flag"
-import { Location } from "@opencode/core/location"
-import { LocationServiceMap } from "@opencode/core/location-services"
 import { Frames } from "@opencode/core/machine/frames"
 import { Identity } from "@opencode/core/machine/identity"
 import { Iroh } from "@opencode/core/machine/iroh"
 import { Join } from "@opencode/core/machine/join"
 import { Link } from "@opencode/core/machine/link"
 import { Machines } from "@opencode/core/machine/machines"
-import { AbsolutePath } from "@opencode/core/schema"
 import { ConflictError, ForbiddenError, InvalidRequestError, MachineNotFoundError } from "@opencode/protocol/errors"
 import { isWebSocketUpgrade, type MachineAddPayload } from "@opencode/protocol/groups/machine"
-import { Global } from "@opencode/util/global"
 import { Context, Effect, Latch, Option, Scope, Semaphore } from "effect"
 import { HttpMiddleware, type HttpServerRequest, HttpServerResponse } from "effect/http"
 import { HttpApiSchema } from "effect/http-api"
 import { Socket } from "effect/socket"
 import { IncomingMessage } from "node:http"
+import { baseFlag } from "../base-flag"
 
 /** Handshakes in progress across the server: what strangers can hold open at once, each for at most ten seconds. */
 const MAX_HANDSHAKES = 32
@@ -53,15 +49,8 @@ export const Watch = Context.Reference<(sockets: WebSocketServer) => void>("@ope
   defaultValue: () => () => {},
 })
 
-/** Whether the `machines` flag is on in the server's base configuration, where the video routes read theirs. */
-export const machinesEnabled = Effect.gen(function* () {
-  const global = yield* Global.Service
-  const locations = yield* LocationServiceMap.Service
-  return Flag.enabled("machines").pipe(
-    Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(global.config) }))),
-    Effect.orElseSucceed(() => false),
-  )
-})
+/** Whether the `machines` flag is on in the server's base configuration. */
+export const machinesEnabled = baseFlag("machines")
 
 /** Sends the close and drops the connection at once, without the time a machine has to answer it. */
 const drop = (socket: WebSocket) => {

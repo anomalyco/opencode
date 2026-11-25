@@ -177,6 +177,9 @@ export interface MockServerConfig {
   password?: Resolvable<string>
   // Serves GET /auth/connect/:code: `code` redeems once for `token` (send it as the password); others answer 401.
   pairing?: { code: string; token: string }
+  // The web app's stored preferences by namespace, then key; preference writes change it. Without it the server holds
+  // none and accepts every write.
+  preferences?: Record<string, Record<string, string>>
 }
 
 // The page relays events as opaque values.
@@ -969,6 +972,25 @@ function mockHandlers(
         usageLimits: () => Effect.succeed({ location: location(config), data: null }),
         // No scenario runs background jobs (Code Mode scripts or subagent work), so none is running.
         jobList: () => Effect.succeed({ data: [] }),
+        // Without `preferences` the server holds none and accepts every write.
+        preferenceItems: (ctx) => Effect.sync(() => ({ data: config.preferences?.[ctx.params.name] ?? {} })),
+        preferenceUpdate: (ctx) =>
+          Effect.sync(() => {
+            if (!config.preferences) return HttpApiSchema.NoContent.make()
+            const merged = { ...config.preferences[ctx.params.name], ...ctx.payload.insert }
+
+            config.preferences[ctx.params.name] = Object.fromEntries(
+              Object.entries(merged).filter(([key]) => !ctx.payload.remove.includes(key)),
+            )
+
+            return HttpApiSchema.NoContent.make()
+          }),
+        preferenceClear: (ctx) =>
+          Effect.sync(() => {
+            if (config.preferences) config.preferences[ctx.params.name] = {}
+
+            return HttpApiSchema.NoContent.make()
+          }),
         worktreeList: () =>
           Effect.sync(() => {
             if (config.worktrees) return resolve(config.worktrees)

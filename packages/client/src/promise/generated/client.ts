@@ -303,6 +303,12 @@ import type {
   ExperimentalPushSessionRemoveOutput,
   ExperimentalPushSettingsSetInput,
   ExperimentalPushSettingsSetOutput,
+  ExperimentalPreferenceItemsInput,
+  ExperimentalPreferenceItemsOutput,
+  ExperimentalPreferenceUpdateInput,
+  ExperimentalPreferenceUpdateOutput,
+  ExperimentalPreferenceClearInput,
+  ExperimentalPreferenceClearOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1964,6 +1970,42 @@ export function make(options: ClientOptions) {
               requestOptions,
             ).then((value) => value.data),
         },
+      },
+      preference: {
+        items: (input: ExperimentalPreferenceItemsInput, requestOptions?: RequestOptions) =>
+          request<{ readonly data: ExperimentalPreferenceItemsOutput }>(
+            {
+              method: "GET",
+              path: `/api/experimental/preference/${encodeURIComponent(input.name)}`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403],
+              empty: false,
+            },
+            requestOptions,
+          ).then((value) => value.data),
+        update: (input: ExperimentalPreferenceUpdateInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalPreferenceUpdateOutput>(
+            {
+              method: "PATCH",
+              path: `/api/experimental/preference/${encodeURIComponent(input.name)}`,
+              body: { insert: input["insert"], remove: input["remove"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 403],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        clear: (input: ExperimentalPreferenceClearInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalPreferenceClearOutput>(
+            {
+              method: "DELETE",
+              path: `/api/experimental/preference/${encodeURIComponent(input.name)}`,
+              successStatus: 204,
+              declaredStatuses: [400, 401, 403],
+              empty: true,
+            },
+            requestOptions,
+          ),
       },
       migration: {
         v1: {
