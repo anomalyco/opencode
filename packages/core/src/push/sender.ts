@@ -1,10 +1,11 @@
 export * as PushSender from "./sender.js"
 
-import { Clock, Context, Effect, Layer, Scope } from "effect"
+import { Clock, Context, Effect, Layer, Option, Schema, Scope } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
 import type { Push } from "@opencode/schema/push"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { httpClient } from "@opencode/util/effect/app-node-platform"
+import { KV } from "../kv.js"
 import { PushCrypto } from "./crypto.js"
 import { PushList } from "./list.js"
 
@@ -35,6 +36,12 @@ const maxMessageBytes = 2600
 const attempts = 3
 // How long a sent notification can still be cleared. Older ones are forgotten so the record doesn't grow forever.
 const clearableFor = 7 * 24 * 60 * 60 * 1000
+
+// Which phones were sent a notification, so a clear goes only to them.
+const Sent = Schema.Struct({ sessionID: Schema.String, devices: Schema.Array(Schema.String), at: Schema.Number })
+const decodeSent = Schema.decodeUnknownOption(Sent)
+const sentKey = (id: string) => `push:sent:${id}`
+const sentPrefix = "push:sent:"
 
 /** Drops characters from the end of `text` until its JSON is at least `bytes` shorter, then adds "…". */
 const shorten = (text: string, bytes: number) => {
@@ -73,12 +80,9 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const list = yield* PushList.Service
+    const kv = yield* KV.Service
     const http = yield* HttpClient.HttpClient
     const scope = yield* Scope.Scope
-
-    // Which phones were sent each notification, so a clear goes only to them. Lost on restart, when the phone keeps
-    // the notification until the app is opened.
-    const sent = new Map<string, { sessionID: string; devices: Set<string>; at: number }>()
 
     // The relay delivers a silent box without an alert: it only wakes the app.
     const post = (url: string, box: string, silent: boolean) =>
@@ -105,33 +109,48 @@ const layer = Layer.effect(
       yield* Effect.logWarning("gave up sending a push notification", { deviceID: device.id, attempts })
     })
 
-    const sendTo = Effect.fn("PushSender.sendTo")(function* (
-      device: PushList.Stored,
-      sessions: Record<string, Push.Bell>,
-      notification: Notification,
-      now: number,
-    ) {
-      if (device.paused) return
-      const wanted = level(device, sessions, notification.sessionID)
-      if (wanted === "none") return
-      if (wanted === "attention" && !notification.attention) return
-      const devices = sent.get(notification.id)?.devices ?? new Set()
-      devices.add(device.id)
-      sent.set(notification.id, { sessionID: notification.sessionID, devices, at: now })
-      yield* push(device, message(notification), false)
+    // Every record, dropping expired ones and any that can't be read.
+    const readSent = Effect.fn("PushSender.readSent")(function* (now: number) {
+      const records: (typeof Sent.Type & { id: string })[] = []
+      let after: string | undefined
+      while (true) {
+        const page = yield* kv.scan({ prefix: sentPrefix, after, limit: 1000 })
+        for (const entry of page.entries) {
+          const sent = decodeSent(entry.value)
+          if (Option.isNone(sent) || now - sent.value.at > clearableFor) {
+            yield* kv.remove(entry.key)
+            continue
+          }
+          records.push({ id: entry.key.slice(sentPrefix.length), ...sent.value })
+        }
+        if (!page.next) return records
+        after = page.next
+      }
     })
 
     const deliver = Effect.fn("PushSender.deliver")(function* (notification: Notification) {
       const targets = yield* list.targets()
       if (targets.settings.paused) return
+      const devices = targets.devices.filter((device) => {
+        if (device.paused) return false
+        const wanted = level(device, targets.sessions, notification.sessionID)
+        if (wanted === "none") return false
+        if (wanted === "attention" && !notification.attention) return false
+        return true
+      })
+      if (devices.length === 0) return
       const now = yield* Clock.currentTimeMillis
-      for (const [id, entry] of sent) {
-        if (now - entry.at > clearableFor) sent.delete(id)
-      }
+      const previous = (yield* readSent(now)).find((record) => record.id === notification.id)
+      // Recorded before pushing, so a clear that comes while the pushes are in flight still reaches these phones.
+      yield* kv.set(sentKey(notification.id), {
+        sessionID: notification.sessionID,
+        devices: Array.from(new Set([...(previous?.devices ?? []), ...devices.map((device) => device.id)])),
+        at: now,
+      })
       yield* Effect.forEach(
-        targets.devices,
+        devices,
         (device) =>
-          sendTo(device, targets.sessions, notification, now).pipe(
+          push(device, message(notification), false).pipe(
             Effect.ignoreCause({ log: "Warn", message: "Failed to send a push notification" }),
           ),
         { concurrency: "unbounded", discard: true },
@@ -139,17 +158,19 @@ const layer = Layer.effect(
     })
 
     const clear = Effect.fn("PushSender.clear")(function* (ids: ReadonlyArray<string>) {
-      const cleared = ids.flatMap((id) => {
-        const entry = sent.get(id)
-        sent.delete(id)
-        return entry ? [{ id, ...entry }] : []
-      })
+      const cleared: (typeof Sent.Type & { id: string })[] = []
+      for (const id of ids) {
+        const sent = decodeSent(yield* kv.get(sentKey(id)))
+        if (Option.isNone(sent)) continue
+        yield* kv.remove(sentKey(id))
+        cleared.push({ id, ...sent.value })
+      }
       if (cleared.length === 0) return
       const targets = yield* list.targets()
       yield* Effect.forEach(
         cleared.flatMap((item) =>
           targets.devices
-            .filter((device) => item.devices.has(device.id))
+            .filter((device) => item.devices.includes(device.id))
             .map((device) =>
               push(device, JSON.stringify({ v: 1, id: item.id, type: "clear", sessionID: item.sessionID }), true),
             ),
@@ -159,16 +180,17 @@ const layer = Layer.effect(
       )
     })
 
+    const clearSession = Effect.fn("PushSender.clearSession")(function* (sessionID: string) {
+      const records = yield* readSent(yield* Clock.currentTimeMillis)
+      yield* clear(records.filter((record) => record.sessionID === sessionID).map((record) => record.id))
+    })
+
     return Service.of({
       send: (notification) => deliver(notification).pipe(Effect.forkIn(scope), Effect.asVoid),
       clear: (ids) => clear(ids).pipe(Effect.forkIn(scope), Effect.asVoid),
-      clearSession: (sessionID) =>
-        clear(Array.from(sent).flatMap(([id, entry]) => (entry.sessionID === sessionID ? [id] : []))).pipe(
-          Effect.forkIn(scope),
-          Effect.asVoid,
-        ),
+      clearSession: (sessionID) => clearSession(sessionID).pipe(Effect.forkIn(scope), Effect.asVoid),
     })
   }),
 )
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [PushList.node, httpClient] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [PushList.node, KV.node, httpClient] })
