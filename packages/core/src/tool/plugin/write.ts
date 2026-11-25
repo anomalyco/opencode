@@ -68,15 +68,10 @@ export const Plugin = {
                   written.formatted !== undefined && written.formatted !== before
                     ? [fileDiff(written.resource, before, written.formatted)]
                     : []
+                const message = `${written.existed ? "Wrote" : "Created"} file successfully: ${written.resource}`
                 return {
-                  output: `${written.existed ? "Wrote" : "Created"} file successfully: ${written.resource}`,
-                  content: [
-                    ...formatterResult(changes),
-                    {
-                      type: "text" as const,
-                      text: `${written.existed ? "Wrote" : "Created"} file successfully: ${written.resource}`,
-                    },
-                  ],
+                  output: message,
+                  content: [{ type: "text" as const, text: message }, ...formatterResult(changes)],
                 }
               }),
               Effect.mapError((error) => new ToolFailure({ message: `Unable to write ${input.path}`, error })),

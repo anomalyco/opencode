@@ -288,28 +288,24 @@ export const Plugin = {
                 const target = change.type === "update" && change.moveTarget ? change.moveTarget : change.target
                 return patchFile(change, formatted.get(FileAccess.key(target)))
               })
-              const changes = prepared.flatMap((change, index) => {
+              const changes = prepared.flatMap((change) => {
                 if (change.type === "delete") return []
                 const target = change.type === "update" && change.moveTarget ? change.moveTarget : change.target
                 const final = formatted.get(FileAccess.key(target))
-                return final !== undefined && final !== change.after ? [files[index]!] : []
+                return final !== undefined && final !== change.after
+                  ? [fileDiff(target.resource, change.after, final)]
+                  : []
               })
+              const message = [
+                "Success. Updated the following files:",
+                ...files.map(
+                  (file) => `${file.status === "added" ? "A" : file.status === "deleted" ? "D" : "M"} ${file.file}`,
+                ),
+              ].join("\n")
               return {
                 // The multi-file patch contract intentionally leaves structured output empty.
                 output: {},
-                content: [
-                  ...formatterResult(changes),
-                  {
-                    type: "text" as const,
-                    text: [
-                      "Success. Updated the following files:",
-                      ...files.map(
-                        (file) =>
-                          `${file.status === "added" ? "A" : file.status === "deleted" ? "D" : "M"} ${file.file}`,
-                      ),
-                    ].join("\n"),
-                  },
-                ],
+                content: [{ type: "text" as const, text: message }, ...formatterResult(changes)],
                 metadata: { files },
               }
             }).pipe(fileMutation.withLock(lockTargets), Effect.mapError(toolFailure("Unable to apply patch")))

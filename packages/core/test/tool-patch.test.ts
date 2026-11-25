@@ -331,7 +331,7 @@ describe("PatchTool", () => {
         )
         expect(settled.status).toBe("completed")
         if (settled.status !== "completed") return
-        expect(settled.content?.[0]).toMatchObject({
+        expect(settled.content?.[1]).toMatchObject({
           type: "text",
           text: expect.stringContaining("A formatter changed these files"),
         })

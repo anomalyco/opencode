@@ -160,7 +160,7 @@ const alignLines = (before: string[], after: string[]) => {
   return result
 }
 
-/** JS and TS whitespace outside literals can change without changing the tokens a model intends to match. */
+/** JS and TS horizontal whitespace outside literals can change without changing the code's meaning. */
 const tokenExtensions = new Set([".js", ".mjs", ".cjs", ".ts", ".mts", ".cts"])
 
 interface Token {
@@ -169,27 +169,108 @@ interface Token {
   readonly end: number
 }
 
+const operators = [
+  ">>>=",
+  "===",
+  "!==",
+  "**=",
+  "<<=",
+  ">>=",
+  "&&=",
+  "||=",
+  "??=",
+  "...",
+  ">>>",
+  "=>",
+  "==",
+  "!=",
+  "<=",
+  ">=",
+  "&&",
+  "||",
+  "??",
+  "?.",
+  "++",
+  "--",
+  "+=",
+  "-=",
+  "*=",
+  "/=",
+  "%=",
+  "&=",
+  "|=",
+  "^=",
+  "**",
+  "<<",
+  ">>",
+]
+
+const regexPrefixes = new Set([
+  "(",
+  "[",
+  "{",
+  ",",
+  ";",
+  ":",
+  "=",
+  "=>",
+  "==",
+  "!=",
+  "===",
+  "!==",
+  "!",
+  "?",
+  "&&",
+  "||",
+  "??",
+  "return",
+  "throw",
+  "case",
+  "new",
+  "delete",
+  "typeof",
+  "void",
+  "in",
+  "of",
+  "instanceof",
+  "yield",
+  "await",
+])
+
 const tokenize = (value: string) => {
   const result: Token[] = []
   let index = 0
-  const push = (start: number, end: number) => {
-    const text = value.slice(start, end)
-    if (text !== "") result.push({ text, start, end })
+  let previous: Token | undefined
+  const push = (start: number, end: number, text = value.slice(start, end)) => {
+    const token = { text, start, end }
+    result.push(token)
+    previous = token
   }
   while (index < value.length) {
     const char = value[index]!
-    if (/\s/u.test(char)) {
+    if (char === "\n") {
+      push(index, ++index)
+      continue
+    }
+    if (/[^\S\n]/u.test(char)) {
       index++
       continue
     }
-    if (char === "/" && (value[index + 1] === "/" || value[index + 1] === "*")) {
+    if (char === "/" && value[index + 1] === "/") {
       const start = index
-      const close = value[index + 1] === "/" ? value.indexOf("\n", index) : value.indexOf("*/", index + 2)
-      index = close === -1 ? value.length : close + (value[index + 1] === "/" ? 0 : 2)
+      const close = value.indexOf("\n", index)
+      index = close === -1 ? value.length : close
       push(start, index)
       continue
     }
-    if (char === "'" || char === '"' || char === "`") {
+    if (char === "/" && value[index + 1] === "*") {
+      const start = index
+      const close = value.indexOf("*/", index + 2)
+      index = close === -1 ? value.length : close + 2
+      push(start, index)
+      continue
+    }
+    if (char === "'" || char === '"') {
       const start = index
       index++
       while (index < value.length) {
@@ -208,21 +289,47 @@ const tokenize = (value: string) => {
       push(start, index)
       continue
     }
-    const start = index
-    index++
-    push(start, index)
+    if (char === "/" && (previous === undefined || regexPrefixes.has(previous.text))) {
+      const start = index
+      index++
+      let inClass = false
+      while (index < value.length && value[index] !== "\n") {
+        const current = value[index]!
+        if (current === "\\") index += 2
+        else if (current === "[") {
+          inClass = true
+          index++
+        } else if (current === "]") {
+          inClass = false
+          index++
+        } else if (current === "/" && !inClass) {
+          index++
+          break
+        } else index++
+      }
+      while (index < value.length && /[a-z]/iu.test(value[index]!)) index++
+      push(start, index)
+      continue
+    }
+    const operator = operators.find((item) => value.startsWith(item, index))
+    if (operator) {
+      push(index, index + operator.length, operator)
+      index += operator.length
+      continue
+    }
+    push(index, ++index)
   }
   return result
 }
 
-/** Matches token sequences only. A unique span lets a formatter change spacing or line breaks without a false miss. */
+/** Matches token sequences only. Line breaks stay significant; only horizontal whitespace can differ. */
 const findTokenOccurrences = (content: string, search: string) => {
+  if (content.includes("`") || search.includes("`")) return []
   const pattern = tokenize(search)
   if (pattern.length === 0) return []
   const leading = search.slice(0, pattern[0]!.start)
   const trailing = search.slice(pattern.at(-1)!.end)
-  // Blank padding is not formatting. Let the trailing-whitespace tier own those misses.
-  if (!/^[ \t]*$/u.test(leading) || (trailing !== "" && !/^\r?\n$/u.test(trailing))) return []
+  if (!/^[ \t]*$/u.test(leading) || !/^[ \t]*$/u.test(trailing)) return []
   const source = tokenize(content)
   const result: Match[] = []
   let index = 0
@@ -358,13 +465,13 @@ export const Plugin = {
                 codemode: {
                   pinned: true,
                   description:
-                    "Edit a file by replacing `oldString` with `newString` (must differ). Preserve exact indentation without line-number prefixes. Use `\\n` for line breaks; existing LF/CRLF endings are preserved unless `oldString` and `newString` differ only in `\\r`. `oldString` must match once unless `replaceAll` is true; add context to disambiguate.",
+                    "Edit a file by replacing `oldString` with `newString` (must differ). Preserve exact indentation without line-number prefixes. Use `\\n` for line breaks; existing LF/CRLF endings are preserved unless `oldString` and `newString` differ only in `\\r`. `oldString` must match once unless `replaceAll` is true; add context to disambiguate. After an exact miss, JS/TS files also retry a unique token match that differs only in horizontal whitespace; line breaks and literal contents stay significant.",
                 },
                 permission: "edit",
               }
             : { codemode: false, permission: "edit" },
           description:
-            "Edit the contents of a file by finding and replacing exact text. When editing text from Read output, preserve the exact indentation (tabs or spaces) and omit the line-number prefix, such as `1: `. Never include the prefix in oldString or newString. Write line breaks as \\n; the file's existing CRLF or LF line endings are matched and preserved. To change line endings themselves, make oldString and newString differ only in \\r; that edit applies to the exact bytes. If there is no exact match, the edit retries while ignoring typographic quote, dash, and space variants, then trailing whitespace on each line. The edit fails if oldString is not found. By default, oldString must identify a UNIQUE location. Multiple matches FAIL unless replaceAll is true. Add more surrounding context to disambiguate, or set replaceAll to true to replace every occurrence. Use replaceAll when the change should apply to every occurrence, such as renaming a variable.",
+            "Edit the contents of a file by finding and replacing exact text. When editing text from Read output, preserve the exact indentation (tabs or spaces) and omit the line-number prefix, such as `1: `. Never include the prefix in oldString or newString. Write line breaks as \\n; the file's existing CRLF or LF line endings are matched and preserved. To change line endings themselves, make oldString and newString differ only in \\r; that edit applies to the exact bytes. If there is no exact match, the edit retries while ignoring typographic quote, dash, and space variants, then trailing whitespace on each line. JS/TS files then retry a unique token match that differs only in horizontal whitespace; line breaks and literal contents stay significant. The edit fails if oldString is not found. By default, oldString must identify a UNIQUE location. Multiple matches FAIL unless replaceAll is true. Add more surrounding context to disambiguate, or set replaceAll to true to replace every occurrence. Use replaceAll when the change should apply to every occurrence, such as renaming a variable.",
           input: Input,
           output: Output,
           execute: (input, context) => {
@@ -424,7 +531,7 @@ export const Plugin = {
                 })
                 const hint = readable ? missHint(source, input.oldString, input.newString) : undefined
                 return yield* new ToolFailure({
-                  message: `Could not find oldString in ${input.path}. It must match exactly, including whitespace and indentation.${hint ? `\n\n${hint}` : ""}`,
+                  message: `Could not find oldString in ${input.path}. It must match the file text. JS/TS files also accept a unique token match that differs only in horizontal whitespace.${hint ? `\n\n${hint}` : ""}`,
                 })
               }
               if (replacements > 1 && input.replaceAll !== true) {
@@ -443,11 +550,14 @@ export const Plugin = {
               const formatted =
                 result.formatted ?? (yield* FileMutation.readText(target.environment.files, target.absolute)).text
               const diff = fileDiff(result.resource, source, formatted)
-              const changes = result.formatted !== undefined && result.formatted !== replaced ? [diff] : []
+              const changes =
+                result.formatted !== undefined && result.formatted !== replaced
+                  ? [fileDiff(result.resource, replaced, result.formatted)]
+                  : []
               const message = `Edited ${result.resource} (${replacements} replacement${replacements === 1 ? "" : "s"})`
               return {
                 output: message,
-                content: [...formatterResult(changes), { type: "text" as const, text: message }],
+                content: [{ type: "text" as const, text: message }, ...formatterResult(changes)],
                 metadata: { files: [diff] },
               }
             }).pipe(fileMutation.withLock([input.path]), Effect.mapError(toolFailure(`Unable to edit ${input.path}`)))

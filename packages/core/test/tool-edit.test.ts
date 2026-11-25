@@ -212,12 +212,46 @@ describe("EditTool", () => {
               )
               expect(settled.status).toBe("completed")
               if (settled.status !== "completed") return
-              expect(settled.content?.[0]).toMatchObject({
+              expect(settled.content?.[1]).toMatchObject({
                 type: "text",
                 text: expect.stringContaining("A formatter changed these files"),
               })
+              const notice = settled.content?.[1]?.type === "text" ? settled.content[1].text : ""
+              expect(notice).not.toContain("-before")
               expect(settled.metadata?.files?.[0]?.patch).toContain("-before\n+AFTER")
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("AFTER\n")
+            }),
+          ),
+        ),
+      )
+    }),
+  )
+
+  it.live("shows only formatter changes and caps the model notice", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "large.txt")
+      edit.formatFile = (file) =>
+        Effect.promise(async () => {
+          const source = await fs.readFile(file, "utf8")
+          const extra = Array.from({ length: 100 }, (_, index) => `line ${index}`).join("\n")
+          await fs.writeFile(file, `${source}${extra}\n`)
+          return true
+        })
+      return Effect.promise(() => fs.writeFile(target, "before\n")).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            Effect.gen(function* () {
+              const settled = yield* executeTool(
+                registry,
+                call({ path: "large.txt", oldString: "before", newString: "after" }),
+              )
+              expect(settled.status).toBe("completed")
+              if (settled.status !== "completed") return
+              const notice = settled.content?.[1]?.type === "text" ? settled.content[1].text : ""
+              expect(notice).not.toContain("-before")
+              expect(notice).toContain("re-read the file before editing")
+              expect(notice.split("\n").length).toBeLessThan(60)
             }),
           ),
         ),
@@ -419,7 +453,7 @@ describe("EditTool", () => {
                 error: {
                   type: "tool.execution",
                   message:
-                    "Could not find oldString in matches.txt. It must match exactly, including whitespace and indentation.",
+                    "Could not find oldString in matches.txt. It must match the file text. JS/TS files also accept a unique token match that differs only in horizontal whitespace.",
                 },
               })
               expect(
@@ -446,7 +480,8 @@ describe("EditTool", () => {
       const target = path.join(tmp.path, "miss.ts")
       const miss = (oldString: string, newString: string) =>
         withTool(tmp.path, edit, (registry) => executeTool(registry, call({ path: "miss.ts", oldString, newString })))
-      const missed = "Could not find oldString in miss.ts. It must match exactly, including whitespace and indentation."
+      const missed =
+        "Could not find oldString in miss.ts. It must match the file text. JS/TS files also accept a unique token match that differs only in horizontal whitespace."
       return Effect.promise(() =>
         fs.writeFile(
           target,
@@ -659,6 +694,36 @@ describe("EditTool", () => {
             }),
           ),
         ),
+      )
+    }),
+  )
+
+  it.live("does not token match whitespace that changes JS syntax", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const cases = [
+        { name: "asi.ts", content: "function run(){return\nx}\n", old: "function run(){return x}" },
+        { name: "call.ts", content: "const a = b\n(c)\n", old: "const a = b(c)" },
+        { name: "increment.ts", content: "const a = b + +c\n", old: "const a = b ++c" },
+        { name: "regex.ts", content: "const re = /a b/\n", old: "const re = /a  b/" },
+        { name: "template.ts", content: "const value = `a${`b`}c`\n", old: "const value = `a${`d`}c`" },
+      ]
+      return Effect.promise(() =>
+        Promise.all(cases.map((item) => fs.writeFile(path.join(tmp.path, item.name), item.content))),
+      ).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            Effect.forEach(
+              cases,
+              (item) =>
+                executeTool(registry, call({ path: item.name, oldString: item.old, newString: "changed" })).pipe(
+                  Effect.tap((result) => Effect.sync(() => expect(result.status).toBe("error"))),
+                ),
+              { discard: true },
+            ),
+          ),
+        ),
+        Effect.tap(() => Effect.sync(() => expect(edit.writes).toEqual([]))),
       )
     }),
   )

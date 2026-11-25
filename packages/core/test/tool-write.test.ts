@@ -166,7 +166,7 @@ describe("WriteTool", () => {
         Effect.gen(function* () {
           const settled = yield* executeTool(registry, call({ path: "formatted.txt", content: "format me" }))
           expect(settled.status).toBe("completed")
-          expect(settled.content?.[0]).toMatchObject({
+          expect(settled.content?.[1]).toMatchObject({
             type: "text",
             text: expect.stringContaining("A formatter changed these files"),
           })
