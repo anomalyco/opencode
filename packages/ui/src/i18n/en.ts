@@ -307,6 +307,7 @@ const source = {
   "ui.tool.execute.calls.other": "{{count}} calls",
   "ui.tool.execute.lines.one": "{{count}} line",
   "ui.tool.execute.lines.other": "{{count}} lines",
+  "ui.tool.execute.toolCount": "{{count}} {{tool}}",
   "ui.tool.patch": "Patch",
   "ui.tool.questions": "Questions",
   "ui.tool.questions.numbered": "Questions {{number}}",

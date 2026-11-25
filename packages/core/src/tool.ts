@@ -313,6 +313,7 @@ const layer = Layer.effect(
           // Without Code Mode its tools would be unreachable, so expose them as direct tools instead.
           const codeModeEnabled = codeModeAvailable(policy)
           const full = codeModeEnabled && options?.services !== undefined && (yield* flags.enabled("full_codemode"))
+          const described = codeModeEnabled && (yield* flags.enabled("execute_description"))
           const data = state.get()
           if (catalogData !== data) {
             catalogData = data
@@ -334,7 +335,7 @@ const layer = Layer.effect(
           const codemode = !codeModeEnabled
             ? undefined
             : (() => {
-                const key = `${full ? "1" : "0"}\0${codemodeEntries.map(([name]) => name).join("\0")}`
+                const key = `${full ? "1" : "0"}${described ? "1" : "0"}\0${codemodeEntries.map(([name]) => name).join("\0")}`
                 // Discovery is immutable for a registry revision and visible tool set. Keep executors
                 // fresh, but share the inventory, whose prepared runtime and much larger rendered catalog
                 // are cached by identity, and the execute tool's definition across steps.
@@ -354,6 +355,7 @@ const layer = Layer.effect(
                   permission,
                   full ? options.services : undefined,
                   options?.api,
+                  { description: described },
                 )
                 const entry = cached ?? {
                   inventory,

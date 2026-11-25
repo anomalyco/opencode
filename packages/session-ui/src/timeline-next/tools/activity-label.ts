@@ -1,6 +1,6 @@
 import type { UiI18n } from "@opencode/ui/context/i18n"
 import { getFilename } from "@opencode/util/path"
-import { factsOf, summarize, type FactMode, type FactPart } from "../../timeline/facts"
+import { factsOf, scriptCalls, summarize, toolName, type Fact, type FactMode } from "../../timeline/facts"
 import { launchKeys, verbKeys, workKey } from "../events"
 import type { ActivityGroupPart } from "./context-group"
 
@@ -17,21 +17,41 @@ const modeVerb = {
 /**
  * A group's parts as facts. What background work reported counts as its outcome; notices count nothing. A script's
  * files count where they are placed, so only those in the group.
+ *
+ * A script counts as the calls it made, a call repeated with the same input once, so a loop that polls reads as one
+ * poll. Its edits count through the files it changed. One that made no other calls counts as a command.
  */
 export function activityFacts(parts: readonly ActivityGroupPart[]) {
-  const facts = factsOf(
-    parts.flatMap((part, index): FactPart[] => {
-      // Thoughts one after another count as one, as they show.
-      if (part.type === "reasoning") return parts[index - 1]?.type === "reasoning" ? [] : [part]
+  const seen = new Set<string>()
 
-      if (part.type === "tool") return [part]
+  const facts = parts.flatMap((part, index): Fact[] => {
+    // Thoughts one after another count as one, as they show.
+    if (part.type === "reasoning") return parts[index - 1]?.type === "reasoning" ? [] : factsOf([part])
 
-      if (part.type !== "event") return []
-      const { kind, verb, failed } = part.event
+    if (part.type === "tool" && toolName(part.name) === "execute") {
+      const own = factsOf([part])
+      const calls = scriptCalls(part, own[0]?.id).filter((call) => call.fact.mode !== "edit")
 
-      return [{ type: "outcome", id: part.id, outcome: { kind, verb, failed, key: workKey(part.event) } }]
-    }),
-  )
+      if (!calls.length) return own
+
+      return [
+        ...calls.flatMap((call) => {
+          if (seen.has(call.key)) return []
+          seen.add(call.key)
+
+          return [call.fact]
+        }),
+        ...own.filter((fact) => fact.kind !== "call"),
+      ]
+    }
+
+    if (part.type === "tool") return factsOf([part])
+
+    if (part.type !== "event") return []
+    const { kind, verb, failed } = part.event
+
+    return [{ kind: "outcome", id: part.id, outcome: { kind, verb, failed, key: workKey(part.event) } }]
+  })
 
   return [
     ...facts.filter((fact) => fact.kind !== "file" || fact.via !== "script"),
@@ -162,5 +182,6 @@ function toolTitle(name: string, i18n: UiI18n) {
     skill: "ui.tool.skill",
   }[name]
 
-  return key ? i18n.t(key) : name
+  // A script calls a namespaced tool by its path; its own name reads better.
+  return key ? i18n.t(key) : (name.split(".").at(-1) ?? name)
 }

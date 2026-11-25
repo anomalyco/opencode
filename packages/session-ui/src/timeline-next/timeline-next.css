@@ -488,6 +488,11 @@
     }
   }
 
+  /* A script's code button stands a little apart from its description. */
+  [data-component="tool-part-wrapper"][data-tool="execute"] [data-slot="basic-tool-action"] {
+    margin-inline-start: 4px;
+  }
+
   /* A row's action is as tall as its line, so its button never makes the row taller. */
   [data-slot="basic-tool-action"] {
     height: var(--line-height-compact);

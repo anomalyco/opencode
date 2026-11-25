@@ -14,6 +14,7 @@ import {
   type ToolProps,
 } from "../../tools/tool-renderer"
 import { ErrorCard } from "./error-card"
+import { ExecuteTool } from "./execute"
 import { GlobTool, GrepTool, ListTool, WebFetchTool, WebSearchTool } from "./explore"
 import { PatchTool } from "./patch"
 import { ShellTool } from "./shell"
@@ -27,6 +28,7 @@ const tools = new Map<string, Component<ToolProps>>([
   ["websearch", WebSearchTool],
   ["shell", ShellTool],
   ["patch", PatchTool],
+  ["execute", ExecuteTool],
 ])
 
 /**
@@ -61,7 +63,7 @@ export function ToolDisplay(props: ToolProps & { id: string; error?: string; sto
 
   return (
     <Show when={!hideQuestion()}>
-      <div data-component="tool-part-wrapper" data-timeline-part-id={props.id}>
+      <div data-component="tool-part-wrapper" data-tool={props.tool} data-timeline-part-id={props.id}>
         <Switch>
           <Match when={stopped()}>
             {(stopped) => <Dynamic component={render()} {...props} output={stopped().output} />}

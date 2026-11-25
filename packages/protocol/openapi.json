@@ -18552,6 +18552,9 @@
               "full_codemode": {
                 "type": "boolean"
               },
+              "execute_description": {
+                "type": "boolean"
+              },
               "machines": {
                 "type": "boolean"
               },

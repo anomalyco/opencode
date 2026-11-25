@@ -26,12 +26,14 @@ const it = testEffect(
   ),
 )
 
-const tool = (full: boolean) =>
+const tool = (full: boolean, options?: CodeModeTool.Options) =>
   CodeModeTool.create(
     { tools: new Map(), namespaces: new Map() },
     () => Effect.die("unused"),
     {} as Permission.Interface,
     full ? (Context.empty() as never) : undefined,
+    undefined,
+    options,
   )
 
 const context = (sessionID: string): Tool.Context => ({
@@ -99,6 +101,26 @@ describe("execute timeout and background", () => {
     }),
   )
 
+  it.effect("asks for a description before the code when descriptions are on", () =>
+    Effect.sync(() => {
+      expect(Object.keys(tool(false, { description: true }).input.fields)).toEqual(["description", "code"])
+      expect(Object.keys(tool(true, { description: true }).input.fields)).toEqual([
+        "description",
+        "code",
+        "timeout",
+        "background",
+      ])
+      const decode = Schema.decodeUnknownSync(tool(true, { description: true }).input)
+      expect<object>(decode({ description: "Find unused exports", code: "1" })).toEqual({
+        description: "Find unused exports",
+        code: "1",
+      })
+      expect(Schema.decodeUnknownSync(tool(false, { description: true }).input)({ code: "1" })).toEqual({ code: "1" })
+      expect(tool(false, { description: true }).description).toContain("`description`")
+      expect(tool(false).description).not.toContain("`description`")
+    }),
+  )
+
   it.live("background returns a job ID at once and notifies on completion", () =>
     Effect.gen(function* () {
       const h = yield* harness
@@ -126,6 +148,25 @@ describe("execute timeout and background", () => {
       yield* Deferred.await(h.notified)
       expect(h.notices[0]?.metadata).toMatchObject({ jobID: result.metadata?.jobID, state: "completed" })
       expect(h.notices[0]?.text).toContain("done")
+    }),
+  )
+
+  it.live("a script moved to the background keeps the calls it made so far", () =>
+    Effect.gen(function* () {
+      const h = yield* harness
+      const done = { tool: "read", status: "completed", input: { path: "a.ts" } }
+      const result = yield* h.run(
+        context("ses_bg_calls"),
+        (ctx) =>
+          ctx
+            .progress({ toolCalls: [done, { tool: "shell", status: "running", input: { command: "sleep" } }] })
+            .pipe(Effect.andThen(script(300)())),
+        { timeout: 50 },
+      )
+      // A call still in flight when the script moved shows as done: the row no longer follows it.
+      expect(result.metadata).toMatchObject({
+        toolCalls: [done, { tool: "shell", status: "completed", input: { command: "sleep" } }],
+      })
     }),
   )
 
