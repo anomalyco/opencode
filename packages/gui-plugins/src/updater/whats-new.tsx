@@ -167,7 +167,7 @@ function sliceHighlights(list: { tag?: string; highlights: Highlight[] }[], curr
     .slice(0, 5)
 }
 
-function DialogReleaseNotes(props: { highlights: readonly Highlight[]; dialog: DialogHandle }) {
+export function DialogReleaseNotes(props: { highlights: readonly Highlight[]; dialog: DialogHandle }) {
   const ctx = usePlugin<typeof definition>()
   const [index, setIndex] = createSignal(0)
 
@@ -218,7 +218,8 @@ function DialogReleaseNotes(props: { highlights: readonly Highlight[]; dialog: D
 
   return (
     <Dialog size="large" class="min-h-0 overflow-hidden">
-      <div class="flex flex-1 min-w-0 min-h-0 outline-none" tabIndex={0} autofocus onKeyDown={handleKeyDown}>
+      {/* Keys reach this handler from the buttons inside, which take focus, so the wrapper itself is not a Tab stop. */}
+      <div class="flex flex-1 min-w-0 min-h-0" onKeyDown={handleKeyDown}>
         {/* Left side - Text content */}
         <div class="flex flex-col flex-1 min-w-0 p-8">
           {/* Top section - feature content (fixed position from top) */}
@@ -235,18 +236,15 @@ function DialogReleaseNotes(props: { highlights: readonly Highlight[]; dialog: D
           {/* Bottom section - buttons and indicators (fixed position) */}
           <div class="flex flex-col gap-12">
             <div class="flex flex-col items-start gap-3">
-              <Show
-                when={isLast()}
-                fallback={
-                  <Button variant="neutral" size="large" onClick={handleNext}>
-                    {ctx.t("releaseNotes.action.next")}
-                  </Button>
-                }
+              {/* One button that becomes Get started on the last page, so focus stays on it. */}
+              <Button
+                variant={isLast() ? "contrast" : "neutral"}
+                size="large"
+                autofocus
+                onClick={() => (isLast() ? handleClose() : handleNext())}
               >
-                <Button variant="contrast" size="large" onClick={handleClose}>
-                  {ctx.t("releaseNotes.action.getStarted")}
-                </Button>
-              </Show>
+                {isLast() ? ctx.t("releaseNotes.action.getStarted") : ctx.t("releaseNotes.action.next")}
+              </Button>
 
               <Button variant="ghost" size="small" onClick={handleDisable}>
                 {ctx.t("releaseNotes.action.hideFuture")}

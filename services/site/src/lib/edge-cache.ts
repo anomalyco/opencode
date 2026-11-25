@@ -33,24 +33,25 @@ export function staleValue<T>(options: {
   /** False when the page reads fine without the value (the status bars), so its HTML may still be kept. */
   marksStandIn?: boolean
 }) {
+  // Only settled values are shared between requests: a promise never settles once the request that
+  // made it has ended. A refresh marks `tried` when it starts, so other reads don't start their own
+  // until the retry window passes, and one whose request ended can't block the next.
   const state: {
     value?: T
     time: number
     tried: number
-    pending?: Promise<T | undefined>
-    stored?: Promise<void>
+    stored?: boolean
   } = {
     time: 0,
     tried: 0,
   }
 
   const refresh = () => {
-    state.pending ??= options
+    state.tried = Date.now()
+    return options
       .load()
       .catch(() => undefined)
       .then(async (value) => {
-        state.pending = undefined
-        state.tried = Date.now()
         if (value === undefined) {
           if (state.value !== undefined) state.time = Date.now()
           return state.value
@@ -60,25 +61,26 @@ export function staleValue<T>(options: {
         await writeStored(options.key, { time: state.time, value })
         return value
       })
-    return state.pending
   }
 
   return async function read(wait = options.wait): Promise<{ value: T | undefined; standIn: boolean }> {
-    state.stored ??= readStored<T>(options.key).then((stored) => {
-      if (!stored || state.value !== undefined) return
-      state.value = stored.value
-      state.time = stored.time
-    })
-    await state.stored
+    if (!state.stored) {
+      const stored = await readStored<T>(options.key)
+      state.stored = true
+      if (stored && state.value === undefined) {
+        state.value = stored.value
+        state.time = stored.time
+      }
+    }
     const due =
       Date.now() - state.time >= options.freshFor && Date.now() - state.tried >= Math.min(options.freshFor, 60_000)
     if (state.value !== undefined) {
       if (due) background(refresh())
       return { value: state.value, standIn: false }
     }
-    // Only the read that starts a refresh waits for it; reads while it runs take the stand-in at
-    // once, unless they asked to wait longer than pages do (feeds).
-    if (state.pending ? wait <= options.wait : !due) return standIn()
+    // Only the read that starts a refresh waits for it; reads while it runs, or inside the retry window
+    // after a failed one, take the stand-in at once (feeds included), so a failing source is backed off.
+    if (!due) return standIn()
     const pending = refresh()
     background(pending)
     const value = await Promise.race([pending, new Promise<undefined>((resolve) => setTimeout(resolve, wait))])

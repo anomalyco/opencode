@@ -12,11 +12,20 @@ diagnostics plus the context needed to reproduce and resolve it.
 
 ## Workflow
 
-1. Collect the standard diagnostics below.
-2. Ask only for missing details that are necessary to reproduce or understand
+1. Check that it is a bug. Read the documentation page for the area at
+   <https://opencode.ai/docs/>. If OpenCode works as documented, tell the user
+   instead of filing an issue.
+2. Search for an existing issue with
+   `gh issue list --repo anomalyco/opencode --state all --search "<keywords>"`.
+   If one matches, give the user its URL and offer to add their details there
+   instead of opening a new one.
+3. Collect the standard diagnostics below. Compare the opencode version with the
+   latest release (`gh release view --repo anomalyco/opencode --json tagName`).
+   If the user is behind, ask them to update and check whether it still happens.
+4. Ask only for missing details that are necessary to reproduce or understand
    impact.
-3. Draft the issue in the standard format below.
-4. Publish it with GitHub CLI after the user confirms the title and body.
+5. Draft the issue in the standard format below.
+6. Publish it with GitHub CLI after the user confirms the title and body.
 
 Do not publish an issue without user confirmation. If GitHub CLI is not
 installed or not authenticated, explain the blocker and provide the exact issue
@@ -24,9 +33,17 @@ title/body for the user.
 
 ## Standard Diagnostics
 
+The runtime diagnostics snapshot at the end of this skill already has most of
+these values. Use them, and only run commands for values it marks unavailable or
+that the user says differ, for example when the bug is in another install.
+
 Collect these values when possible:
 
 - opencode version: run `opencode --version`.
+- Client: the TUI, the desktop app, `opencode run`, the web app, or a server
+  started with `opencode serve`.
+- Model and provider: the provider and model ID in use when the problem
+  happened, if the problem involves a model.
 - Operating system: run `uname -a` on Unix-like systems, or `ver` on Windows.
 - Terminal: inspect `$TERM`, `$TERM_PROGRAM`, `$COLORTERM`, and any obvious
   terminal app context the user provides.
@@ -34,14 +51,20 @@ Collect these values when possible:
   Windows when relevant.
 - Install/channel context: include whether this appears to be local, dev, beta,
   or release if the version output or environment reveals it.
-- Active plugins: inspect opencode config for configured plugins when possible.
-  Check likely config locations such as `opencode.json`, `opencode.jsonc`,
-  `.opencode/opencode.json`, and `~/.config/opencode/opencode.json`. Record
-  configured plugin entries, local plugin files under `.opencode/plugin/` or
-  `.opencode/plugins/`, and note if plugin status could not be determined.
+- Active plugins: the snapshot lists plugins from opencode config only. Also
+  check `plugins` in `~/.config/opencode/cli.json` for terminal plugins, and
+  local plugin files under `.opencode/plugin/` or `.opencode/plugins/`. Record
+  plugin names and versions, and note if plugin status could not be determined.
 
 If a diagnostic command fails, include `Unavailable` with the reason instead of
 guessing.
+
+## Logs
+
+OpenCode writes logs to `opencode.log` in the log directory named in the
+snapshot, or `opencode-<channel>.log` for builds run from source. Find the
+lines around the failure, such as the error and the few lines before it, and
+include only those, at most about 40 lines. Never attach a whole log file.
 
 ## User-Specific Context
 
@@ -57,8 +80,11 @@ Capture the details that make the issue actionable:
   config, installing a plugin, changing terminal, or switching workspace.
 - Workarounds tried and whether they helped.
 
-Avoid pasting secrets. Redact tokens, API keys, private URLs, usernames, and
-project-specific confidential data unless the user explicitly says it is safe.
+Include only what helps someone reproduce or fix the bug. Issues are public.
+Redact tokens, API keys, authorization headers, private URLs, usernames in paths,
+and project-specific confidential data unless the user explicitly says it is
+safe. Do not include prompts, conversation text, or file contents unless they are
+needed to reproduce the bug and the user agrees.
 
 ## Issue Format
 
@@ -73,6 +99,8 @@ otherwise:
 ## Environment
 
 - opencode version: <!-- value or Unavailable: reason -->
+- Client: <!-- TUI, desktop, run, web, or serve -->
+- Model and provider: <!-- provider/model, or Not relevant -->
 - OS: <!-- value or Unavailable: reason -->
 - Terminal: <!-- value or Unavailable: reason -->
 - Shell: <!-- value or Unavailable: reason -->
@@ -95,7 +123,7 @@ otherwise:
 
 ## Additional Context
 
-<!-- Logs, config snippets, screenshots, frequency, workarounds, related notes. -->
+<!-- Log excerpt, config snippets, screenshots, frequency, workarounds, related issues. -->
 ```
 
 Keep the title short and searchable. Prefer the form:

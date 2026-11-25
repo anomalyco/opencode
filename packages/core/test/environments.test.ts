@@ -40,18 +40,9 @@ describe("EnvironmentPath", () => {
   const cases: ReadonlyArray<readonly [string, { environment: string; path: string } | undefined]> = [
     ["local:/tmp/out.txt", { environment: "local", path: "/tmp/out.txt" }],
     ["local:~/notes.md", { environment: "local", path: "~/notes.md" }],
-    ["local:~", { environment: "local", path: "~" }],
-    ["gpu:/work/train.py", { environment: "gpu", path: "/work/train.py" }],
-    ["gpu:~/notes", { environment: "gpu", path: "~/notes" }],
     ["wrk_01JXYZ:/workspace/app.ts", { environment: "wrk_01JXYZ", path: "/workspace/app.ts" }],
-    ["wrk_sandbox:/", { environment: "wrk_sandbox", path: "/" }],
     ["wrk_:/x", undefined],
-    ["C:/Users/x", undefined],
-    ["https://host/x", undefined],
-    ["skill://thing", undefined],
     ["local:relative", undefined],
-    ["wrk_sandbox:relative", undefined],
-    ["/plain/path", undefined],
   ]
 
   for (const [input, expected] of cases) {

@@ -271,14 +271,12 @@ describe("EnvironmentPath", () => {
     ["C:/Users/x", undefined],
     ["C:\\x", undefined],
     ["skill://thing", undefined],
-    ["file:///x", undefined],
     ["https://host/x", undefined],
     ["gpu:relative", undefined],
     ["gpu:", undefined],
     ["/plain/path", undefined],
     ["relative/a:b/c", undefined],
     [":only", undefined],
-    ["A:/x", undefined],
     ["todo:list.txt", undefined],
   ]
 

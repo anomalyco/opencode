@@ -37,11 +37,11 @@
   }
 }
 
-/* A stretch of thoughts alone lists them without a group around them. */
-[data-timeline="next"] [data-component="thought-rows"] {
+/* Thoughts one after another read as one, a paragraph apart. */
+[data-timeline="next"] [data-slot="reasoning-part-run"] {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
 /* A script's changes, each its own card, keep the spacing of a direct patch's files. */

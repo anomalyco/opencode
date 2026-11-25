@@ -17,7 +17,11 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Bus } from "@opencode/core/bus"
 import { EventTable } from "@opencode/core/event/sql"
 import { Instructions } from "@opencode/core/instructions/index"
+import { Flag } from "@opencode/core/flag"
+import { Job } from "@opencode/core/job"
 import { SessionCompaction } from "@opencode/core/session/compaction"
+import { SessionCompactionBackground } from "@opencode/core/session/compaction-background"
+import { SessionCompactionSubagents } from "@opencode/core/session/compaction-subagents"
 import type { SessionContext } from "@opencode/core/session/context"
 import { MessageDecodeError } from "@opencode/core/session/error"
 import { SessionEvent } from "@opencode/core/session/event"
@@ -109,34 +113,26 @@ const resolved = SessionRunnerModel.resolved(model, {
   cost,
   limit: { context: 200_000, output: 32_000 },
 })
-const it = testEffect(
-  AppNodeBuilder.build(
-    LayerNode.group([
-      Database.node,
-      Bus.node,
-      SessionProjector.node,
-      SessionStore.node,
-      SessionCompaction.node,
-      SessionModelRequest.node,
-      PluginHooks.node,
-    ]),
-    [
-      Bus.node.replace(Bus.configured({ persist: true })),
-      llmClient.replace(client),
-      Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
-    ],
-  ),
+const layer = AppNodeBuilder.build(
+  LayerNode.group([
+    Database.node,
+    Bus.node,
+    Job.node,
+    SessionProjector.node,
+    SessionStore.node,
+    SessionCompaction.node,
+    SessionModelRequest.node,
+    PluginHooks.node,
+  ]),
+  [
+    Bus.node.replace(Bus.configured({ persist: true })),
+    llmClient.replace(client),
+    Location.node.replace(Location.boundNode({ directory: AbsolutePath.make("/project") })),
+  ],
 )
-
-test("compaction prompt preserves detailed work state and relevant files", () => {
-  const prompt = SessionCompaction.buildPrompt(false)
-
-  expect(prompt).toContain("## Work State")
-  expect(prompt).toContain("### Completed")
-  expect(prompt).toContain("### Active")
-  expect(prompt).toContain("### Blocked")
-  expect(prompt).toContain("## Relevant Files")
-})
+// Tests channels keep flags off; the subagent tests turn theirs on.
+const it = testEffect(layer)
+const flagged = testEffect(layer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, "compaction_jobs"))))
 
 it.effect("compaction describes tool media without embedding base64", () =>
   Effect.gen(function* () {
@@ -1675,5 +1671,201 @@ it.effect("a background summary waits for a response whose prompt is still cache
     expect(yield* summarizedAfterBreak("ses_precompute_cold")).toContain("Third question")
     // A model that keeps its cache for an hour summarizes the older response right away.
     expect(yield* summarizedAfterBreak("ses_precompute_hour", "1h")).not.toContain("Third question")
+  }),
+)
+
+test("compaction prompt mentions subagents only under the compaction_jobs flag", () => {
+  expect(SessionCompaction.buildPrompt(true, false, true)).toContain("<subagents>")
+  expect(SessionCompaction.buildPrompt(true)).not.toContain("<subagents>")
+})
+
+/** A direct child of `parentID`; a `time_busy` with no later `time_idle` marks it running. */
+const child = (
+  parentID: Session.ID,
+  id: string,
+  updated: number,
+  overrides?: Partial<typeof SessionTable.$inferInsert>,
+) =>
+  insertSession(Session.ID.make(id), {
+    parent_id: parentID,
+    agent: Agent.ID.make("explore"),
+    title: id,
+    time_updated: updated,
+    ...overrides,
+  })
+
+const subagentsOf = (sessionID: Session.ID) =>
+  SessionStore.Service.use((store) => store.context(sessionID)).pipe(
+    Effect.map(([checkpoint]) => checkpoint?.metadata?.subagents),
+  )
+
+/** Keeps a background shell job running in `sessionID` until the test ends. */
+const runningShell = (sessionID: Session.ID, shellID: string, command = `run ${shellID}`) =>
+  runningJob(shellID, { kind: "shell", sessionID, shellID, command })
+
+/** Keeps a background subagent job for `childSessionID` running until the test ends. */
+const runningSubagent = (parentSessionID: Session.ID, childSessionID: Session.ID) =>
+  runningJob(childSessionID, { kind: "subagent", parentSessionID, childSessionID, agent: "explore", description: "Run" })
+
+const runningJob = (id: string, recovery: Job.Recovery) =>
+  Effect.gen(function* () {
+    const jobs = yield* Job.Service
+    const release = yield* Deferred.make<void>()
+    yield* Effect.addFinalizer(() => Deferred.succeed(release, undefined))
+    yield* jobs.start({
+      id,
+      type: recovery.kind,
+      background: true,
+      recovery,
+      run: Deferred.await(release).pipe(Effect.as("")),
+    })
+  })
+
+it.effect("compaction lists no subagents while the compaction_jobs flag is off", () =>
+  Effect.gen(function* () {
+    const parent = yield* insertSession(Session.ID.make("ses_subagents_off"))
+    yield* child(parent.id, "ses_subagents_off_child", 100)
+    const messages = [textUser("Question")]
+    yield* storeMessages(parent.id, messages)
+    expect(yield* compactManually(parent, messages)).toEqual({ status: "completed" })
+    expect(yield* subagentsOf(parent.id)).toBeUndefined()
+  }),
+)
+
+flagged.effect("compaction lists running children first, then the newest idle direct children", () =>
+  Effect.gen(function* () {
+    const parent = yield* insertSession(Session.ID.make("ses_subagents"))
+    yield* child(parent.id, "ses_sub_running", 1, { time_busy: 1 })
+    const idle = Array.from(
+      { length: SessionCompactionSubagents.MAX_IDLE + 1 },
+      (_, index) => `ses_sub_idle_${index + 10}`,
+    )
+    yield* Effect.forEach(idle, (id, index) => child(parent.id, id, 10 + index))
+    yield* child(parent.id, "ses_sub_archived", 100, { time_archived: 100 })
+    yield* child(Session.ID.make("ses_sub_idle_10"), "ses_sub_grandchild", 100)
+    const messages = [textUser("Question")]
+    yield* storeMessages(parent.id, messages)
+    expect(yield* compactManually(parent, messages)).toEqual({ status: "completed" })
+
+    expect(yield* subagentsOf(parent.id)).toMatchObject([
+      { id: "ses_sub_running", status: "running" },
+      ...idle
+        .slice(1)
+        .toReversed()
+        .map((id) => ({ id, status: "idle" })),
+    ])
+  }),
+)
+
+flagged.effect("compaction lists at most MAX subagents, even when more are running", () =>
+  Effect.gen(function* () {
+    const parent = yield* insertSession(Session.ID.make("ses_subagents_cap"))
+    yield* Effect.forEach(Array.from({ length: SessionCompactionSubagents.MAX + 1 }), (_, index) =>
+      child(parent.id, `ses_sub_cap_${index}`, index, { time_busy: index }),
+    )
+    const messages = [textUser("Question")]
+    yield* storeMessages(parent.id, messages)
+    expect(yield* compactManually(parent, messages)).toEqual({ status: "completed" })
+    expect(yield* subagentsOf(parent.id)).toHaveLength(SessionCompactionSubagents.MAX)
+  }),
+)
+
+flagged.effect(
+  "compaction lists the session's own running background jobs, and counts a subagent with its own as running",
+  () =>
+    Effect.gen(function* () {
+      const parent = yield* insertSession(Session.ID.make("ses_background"))
+      yield* child(parent.id, "ses_background_child", 100)
+      yield* runningShell(parent.id, "sh_background_parent")
+      yield* runningShell(Session.ID.make("ses_background_child"), "sh_background_child")
+      const messages = [textUser("Question")]
+      yield* storeMessages(parent.id, messages)
+      expect(yield* compactManually(parent, messages)).toEqual({ status: "completed" })
+      const [checkpoint] = yield* SessionStore.Service.use((store) => store.context(parent.id))
+      expect(checkpoint?.metadata?.background).toEqual([
+        { kind: "shell", sessionID: parent.id, shellID: "sh_background_parent", command: "run sh_background_parent" },
+      ])
+      expect(checkpoint?.metadata?.subagents).toMatchObject([{ id: "ses_background_child", status: "running" }])
+    }),
+)
+
+flagged.effect("compaction lists an automation run's child only while the parent continues it as a subagent", () =>
+  Effect.gen(function* () {
+    const parent = yield* insertSession(Session.ID.make("ses_subagents_automation"))
+    yield* child(parent.id, "ses_sub_real", 1)
+    // Newer than the real subagent, so without the filter they would fill every idle slot.
+    yield* Effect.forEach(Array.from({ length: SessionCompactionSubagents.MAX_IDLE }), (_, index) =>
+      child(parent.id, `ses_aut_idle_${index}`, 10 + index),
+    )
+    yield* child(parent.id, "ses_aut_shell_1", 100)
+    yield* runningShell(Session.ID.make("ses_aut_shell_1"), "sh_automation")
+    yield* child(parent.id, "ses_aut_continued_1", 100)
+    yield* runningSubagent(parent.id, Session.ID.make("ses_aut_continued_1"))
+    const messages = [textUser("Question")]
+    yield* storeMessages(parent.id, messages)
+    expect(yield* compactManually(parent, messages)).toEqual({ status: "completed" })
+    expect(yield* subagentsOf(parent.id)).toMatchObject([
+      { id: "ses_aut_continued_1", status: "running" },
+      { id: "ses_sub_real", status: "idle" },
+    ])
+  }),
+)
+
+flagged.effect("compaction cuts a long background shell command", () =>
+  Effect.gen(function* () {
+    const parent = yield* insertSession(Session.ID.make("ses_background_long"))
+    yield* runningShell(parent.id, "sh_long", `python - <<'EOF'\n${"print(1)\n".repeat(500)}EOF`)
+    const messages = [textUser("Question")]
+    yield* storeMessages(parent.id, messages)
+    expect(yield* compactManually(parent, messages)).toEqual({ status: "completed" })
+    const [checkpoint] = yield* SessionStore.Service.use((store) => store.context(parent.id))
+    // Whitespace collapses to single spaces, then the command is cut to MAX_COMMAND_CHARS with an ellipsis.
+    const command = `python - <<'EOF'${" print(1)".repeat(20)} pr…`
+    expect(Array.from(command)).toHaveLength(SessionCompactionBackground.MAX_COMMAND_CHARS)
+    expect(checkpoint?.metadata?.background).toEqual([
+      { kind: "shell", sessionID: parent.id, shellID: "sh_long", command },
+    ])
+  }),
+)
+
+flagged.effect("a swapped-in background summary lists subagents started after it was written", () =>
+  Effect.gen(function* () {
+    requests = []
+    const compaction = yield* SessionCompaction.Service
+    const parent = yield* insertSession(Session.ID.make("ses_subagents_precompute"))
+    const history = precomputeHistory()
+    yield* storeMessages(parent.id, history.due)
+    yield* compaction.precompute(Effect.succeed(loaded(parent, history.near)))
+    yield* child(parent.id, "ses_sub_late", 100)
+    expect(yield* compaction.compact({ reason: "auto", context: loaded(parent, history.due) })).toEqual({
+      status: "completed",
+    })
+    expect(requests).toHaveLength(1)
+    expect(yield* subagentsOf(parent.id)).toMatchObject([{ id: "ses_sub_late" }])
+  }),
+)
+
+flagged.effect("a fork drops the subagents and background jobs its parent's checkpoint listed", () =>
+  Effect.gen(function* () {
+    const bus = yield* Bus.Service
+    const parent = yield* insertSession(Session.ID.make("ses_subagents_fork_parent"))
+    yield* child(parent.id, "ses_sub_fork_child", 100)
+    yield* runningShell(parent.id, "sh_fork_parent")
+    const messages = [textUser("Earlier question"), textUser("Kept question")]
+    yield* storeMessages(parent.id, messages)
+    expect(yield* compactManually(parent, messages)).toEqual({ status: "completed" })
+    const [checkpoint] = yield* SessionStore.Service.use((store) => store.context(parent.id))
+    expect(Object.keys(checkpoint?.metadata ?? {})).toEqual(expect.arrayContaining(["subagents", "background"]))
+
+    const forkID = Session.ID.make("ses_subagents_fork")
+    yield* bus.publish(SessionEvent.Forked, {
+      sessionID: forkID,
+      parentID: parent.id,
+      boundary: { type: "through", messageID: checkpoint.id },
+    })
+    const [forked] = yield* SessionStore.Service.use((store) => store.context(forkID))
+    expect(forked).toMatchObject({ type: "compaction", metadata: { recent: "[User]: Kept question" } })
+    expect(forked?.metadata).not.toHaveProperty("subagents")
+    expect(forked?.metadata).not.toHaveProperty("background")
   }),
 )

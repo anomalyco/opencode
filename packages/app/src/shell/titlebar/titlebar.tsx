@@ -42,6 +42,7 @@ import { RecentlyClosedTabsMenu } from "./recently-closed-tabs-menu"
 import { useSettingsCommand, useSettingsDialog } from "@/settings/command"
 import { TitlebarItems, useTitlebarItems } from "@/runtime/plugin/titlebar-items"
 import { createRouteTabSync } from "./route-sync"
+import { createAutoTabSections } from "./auto-tab-sections"
 import {
   INITIAL_MOBILE_TABS_STATE,
   selectMobileTabsOpen,
@@ -676,6 +677,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   const prototype = () => settings.appearance.navigationPrototype()
                   const pinnedTop = createPinnedLeading("horizontal")
                   const pinnedSide = createPinnedLeading("vertical")
+                  const grouped = createAutoTabSections({ hidden: pins.holds, currentTab })
 
                   const pinMenu = (tab: Tab) => {
                     const ref = pins.refOf(tab)
@@ -707,6 +709,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                     <TitlebarTabStrip
                       orientation="vertical"
                       leading={pinnedSide()}
+                      sections={grouped.vertical()}
                       hidden={pins.holds}
                       tabContextMenu={pinMenu}
                       tabs={tabsStore}
@@ -916,6 +919,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               </Show>
                               <TitlebarTabStrip
                                 leading={prototype() ? pinnedTop() : undefined}
+                                sections={prototype() ? grouped.horizontal() : undefined}
                                 hidden={prototype() ? pins.holds : undefined}
                                 tabContextMenu={prototype() ? pinMenu : undefined}
                                 tabs={tabsStore}

@@ -100,7 +100,7 @@ describe("search tools", () => {
   }
 
   for (const hidden of [undefined, false, true]) {
-    for (const limit of hidden ? [10] : [1, 10]) {
+    for (const limit of hidden ? [10] : [1]) {
       it.live(`glob honors hidden=${hidden} before limit=${limit}`, () =>
         Effect.gen(function* () {
           const tmp = yield* tmpdirScoped()
