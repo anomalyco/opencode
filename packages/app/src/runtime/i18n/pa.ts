@@ -870,7 +870,6 @@ export const dict = {
   "session.location.description": "ایہہ سیشن جاری رکھن لئی کوئی ہور ڈائریکٹری چنو۔",
   "session.location.choose": "ڈائریکٹری چنو",
   "session.location.worktree": "ورک ٹری چنو",
-  "session.location.worktreesFailed": "ورک ٹری لوڈ نئیں ہو سکیاں",
   "session.rewind.toast.title": "واپس کیتا گیا",
   "session.rewind.toast.undo": "کالعدم کرو",
   "session.location.moving": "سیشن منتقل ہو رہیا اے…",

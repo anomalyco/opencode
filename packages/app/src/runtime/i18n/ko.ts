@@ -862,7 +862,6 @@ export const dict = {
   "session.location.description": "이 세션을 계속하려면 다른 디렉터리를 선택하세요.",
   "session.location.choose": "디렉터리 선택",
   "session.location.worktree": "작업 트리 선택",
-  "session.location.worktreesFailed": "작업 트리를 불러오지 못했습니다",
   "session.rewind.toast.title": "되돌림",
   "session.rewind.toast.undo": "실행 취소",
   "session.location.moving": "세션 이동 중…",

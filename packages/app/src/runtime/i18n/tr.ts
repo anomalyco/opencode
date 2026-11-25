@@ -928,7 +928,6 @@ export const dict = {
   "session.location.description": "Bu oturuma devam etmek için başka bir dizin seçin.",
   "session.location.choose": "Dizin seç",
   "session.location.worktree": "Çalışma ağacı seç",
-  "session.location.worktreesFailed": "Çalışma ağaçları yüklenemedi",
   "session.rewind.toast.title": "Geri alındı",
   "session.rewind.toast.undo": "Geri al",
   "session.location.moving": "Oturum taşınıyor…",

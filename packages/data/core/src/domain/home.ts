@@ -163,7 +163,7 @@ export class StatsDataError extends Error {
   override name = "StatsDataError"
 
   constructor(readonly cause: unknown) {
-    super("Failed to load stats data")
+    super(`Failed to load stats data: ${cause instanceof Error ? cause.message : String(cause)}`)
   }
 }
 
@@ -176,6 +176,8 @@ const RETENTION_MIN_ELIGIBLE_USER_WEEKS = 100
 const RETENTION_COHORT_WEEKS = 7
 const NEW_MODEL_WINDOW_DAYS = 30
 const TOP_MODEL_SEGMENT_LIMIT = 9
+// The weekly series also colors this many past leaders that fell out of the past 7 days' top models.
+const WEEKLY_PAST_LEADER_LIMIT = 2
 const WEEKLY_BUCKETS = 20
 const QUERY_CACHE_TTL_MS = 5 * 60 * 1000
 const QUERY_CACHE_MAX_ENTRIES = 256
@@ -223,7 +225,7 @@ type ModelAggregate = {
 }
 
 type RawRow = Record<string, unknown>
-type CachedQuery = { expiresAt: number; value: Promise<RawRow[]> }
+type CachedQuery = { expiresAt: number; value: RawRow[] }
 
 const queryCache = new Map<string, CachedQuery>()
 
@@ -404,22 +406,17 @@ async function listRetentionWeekly(): Promise<RetentionMetricRow[]> {
   }
 }
 
+// Only resolved rows are cached: a Worker request cannot await I/O started by another request that has ended.
 async function queryRows(query: string, params: string[] = []) {
   const key = JSON.stringify([query, params])
-  const now = Date.now()
   const cached = queryCache.get(key)
-  if (cached && cached.expiresAt > now) return cached.value
+  if (cached && cached.expiresAt > Date.now()) return cached.value
   if (cached) queryCache.delete(key)
 
-  const value = new Client({ url: databaseUrl() }).execute(query, params).then((result) => result.rows as RawRow[])
-  const entry = { expiresAt: now + QUERY_CACHE_TTL_MS, value }
-  queryCache.set(key, entry)
+  const value = (await new Client({ url: databaseUrl() }).execute(query, params)).rows as RawRow[]
+  queryCache.set(key, { expiresAt: Date.now() + QUERY_CACHE_TTL_MS, value })
   if (queryCache.size > QUERY_CACHE_MAX_ENTRIES) queryCache.delete(queryCache.keys().next().value!)
-
-  return value.catch((cause) => {
-    if (queryCache.get(key) === entry) queryCache.delete(key)
-    throw cause
-  })
+  return value
 }
 
 function databaseUrl() {
@@ -535,14 +532,14 @@ export function buildStatsHomeData(
         weekly,
         SITE_PRODUCT,
         weeks,
-        topModels(normalized, SITE_PRODUCT, rankWindow, "tokens"),
+        weeklyModels(normalized, weekly, weeks, rankWindow, "tokens"),
         "tokens",
       ),
       users: buildUsagePoints(
         weekly,
         SITE_PRODUCT,
         weeks,
-        topModels(normalized, SITE_PRODUCT, rankWindow, "users"),
+        weeklyModels(normalized, weekly, weeks, rankWindow, "users"),
         "users",
       ),
       market: buildMarketShare(weekly, SITE_PRODUCT, weeks),
@@ -823,6 +820,22 @@ function topModels(rows: StatMetricRow[], product: UsageProduct, rankWindow: Dat
     .toSorted((a, b) => modelUsageValue(b, metric) - modelUsageValue(a, metric))
     .slice(0, TOP_MODEL_SEGMENT_LIMIT)
     .map((item) => item.model)
+}
+
+// The weekly series reaches back 20 weeks, so the biggest models over that span keep their own color too.
+function weeklyModels(
+  daily: StatMetricRow[],
+  weekly: StatMetricRow[],
+  weeks: Bucket[],
+  rankWindow: DateWindow,
+  metric: "tokens" | "users",
+) {
+  const current = topModels(daily, SITE_PRODUCT, rankWindow, metric)
+  const leaders = aggregateByModelName(rowsForProduct(weekly, SITE_PRODUCT, weeks[0]!.start, weeks.at(-1)!.end))
+    .toSorted((a, b) => modelUsageValue(b, metric) - modelUsageValue(a, metric))
+    .map((item) => item.model)
+    .filter((model) => !current.includes(model))
+  return [...current, ...leaders.slice(0, WEEKLY_PAST_LEADER_LIMIT)]
 }
 
 function buildUsagePoints(

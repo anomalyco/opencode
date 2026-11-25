@@ -870,7 +870,6 @@ export const dict = {
   "session.location.description": "Alege alt director pentru a continua această sesiune.",
   "session.location.choose": "Alege directorul",
   "session.location.worktree": "Alege arborele de lucru",
-  "session.location.worktreesFailed": "Nu s-au putut încărca arborii de lucru",
   "session.rewind.toast.title": "Revenire efectuată",
   "session.rewind.toast.undo": "Anulează",
   "session.location.moving": "Se mută sesiunea…",
