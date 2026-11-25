@@ -1191,7 +1191,19 @@ const layer = () =>
               // release (kill) the process before its exit is observed.
               yield* Deferred.await(command.done).pipe(Effect.catch(() => Effect.void))
             }),
-          ).pipe(Effect.catchTag("AppProcessError", (error) => Deferred.fail(ready, error))),
+          ).pipe(
+            Effect.catchTag("AppProcessError", (error) => Deferred.fail(ready, error)),
+            // A defect before `ready` settles must settle it too, or `create` waits forever: no process is
+            // registered, so no timeout or backgrounding can end the wait. After `ready`, keep the defect visible.
+            Effect.catchDefect((defect) =>
+              Deferred.isDoneUnsafe(ready)
+                ? Effect.logError("shell process failed after create settled", {
+                    command: invocation.command,
+                    defect,
+                  })
+                : Deferred.fail(ready, new AppProcess.AppProcessError({ command: invocation.command, cause: defect })),
+            ),
+          ),
         )
 
         const command = yield* Deferred.await(ready)
