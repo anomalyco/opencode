@@ -145,8 +145,8 @@ const shortenOptions = (data: Data, over: Over) => {
 /**
  * The JSON the phone decrypts, shortened so the box stays within the relay's limit. Bulk goes before small facts: a
  * turn's text is dropped, then a failed turn's error message is cut, then a permission's resources (its `save` is
- * dropped only when that isn't enough), then the body, a question's text, its options and its title. Anything cut or left out of
- * `data` sets `truncated: true`. Ids are never cut.
+ * dropped only when that isn't enough), then the body, a question's text, its options and its title. Anything cut or
+ * left out of `data` sets `truncated: true`. Ids are never cut. The format is described in specs/v2/push.md.
  */
 export const message = (notification: Notification) => {
   const make = (data: Data, body: string) =>
