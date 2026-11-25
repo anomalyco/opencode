@@ -60,6 +60,8 @@ export interface CaptureInput {
    */
   readonly ignores?: Repository
   readonly maximumUntrackedFileBytes?: number
+  readonly maximumUntrackedFiles?: number
+  readonly maximumUntrackedTotalBytes?: number
 }
 
 export class OperationError extends Schema.TaggedError<OperationError>()("Git.OperationError", {
@@ -164,6 +166,8 @@ export interface Interface {
       scope: RelativePath
       ignores?: Repository
       maximumUntrackedFileBytes?: number
+      maximumUntrackedFiles?: number
+      maximumUntrackedTotalBytes?: number
     }) => Effect.Effect<{ readonly skipped: readonly RelativePath[] }, OperationError>
     readonly ignored: (input: {
       repository: Repository
@@ -554,35 +558,175 @@ const layer = Layer.effect(
       return { tracked, untracked }
     })
 
+    const sourceExcludeFile = Effect.fnUntraced(function* (source?: Repository) {
+      if (!source) return undefined
+      const file = path.join(source.commonDirectory, "info", "exclude")
+      return (yield* fs.existsSafe(file)) ? file : undefined
+    })
+
+    const listIgnoredCached = Effect.fnUntraced(function* (
+      repository: Repository,
+      scope: RelativePath,
+      index?: string,
+      excludeFrom?: string,
+    ) {
+      return yield* repositoryOperation(
+        "refresh",
+        repository,
+        [
+          "ls-files",
+          "--cached",
+          "--ignored",
+          ...(excludeFrom ? [`--exclude-from=${excludeFrom}`] : []),
+          "--exclude-standard",
+          "-z",
+          "--",
+          literalPathspec(scope),
+        ],
+        { index },
+      ).pipe(Effect.map((result) => nuls(result.text).map((file) => RelativePath.make(file.replace(/\/$/, "")))))
+    })
+
+    const trackedIn = Effect.fnUntraced(function* (repository: Repository, paths: readonly RelativePath[]) {
+      if (!paths.length) return new Set<RelativePath>()
+      const found = yield* Effect.forEach(pathGroups(paths), (group) =>
+        repositoryOperation("refresh", repository, [
+          "--literal-pathspecs",
+          "ls-files",
+          "--cached",
+          "-z",
+          "--",
+          ...group,
+        ]).pipe(Effect.map((result) => nuls(result.text).map((file) => RelativePath.make(file)))),
+      )
+      return new Set(found.flat())
+    })
+
+    const fileSize = (worktree: AbsolutePath, file: RelativePath) =>
+      fs.stat(path.join(worktree, file)).pipe(
+        Effect.map((info) => (info.type === "File" ? Number(info.size) : undefined)),
+        Effect.orElseSucceed(() => undefined),
+      )
+
+    const ignoreFingerprint = Effect.fnUntraced(function* (
+      repository: Repository,
+      scopes: readonly RelativePath[],
+      ignores?: Repository,
+    ) {
+      const home = process.env.HOME || os.homedir()
+      const files = new Set<string>([
+        path.join(repository.gitDirectory, "info", "exclude"),
+        path.join(process.env.XDG_CONFIG_HOME || path.join(home, ".config"), "git", "ignore"),
+        ...(ignores
+          ? [path.join(ignores.commonDirectory, "info", "exclude"), path.join(ignores.commonDirectory, "config")]
+          : []),
+      ])
+      for (const scope of scopes) {
+        files.add(path.join(repository.worktree, ".gitignore"))
+        if (scope === ".") continue
+        const parts = scope.split("/").filter(Boolean)
+        for (let i = 0; i < parts.length; i++)
+          files.add(path.join(repository.worktree, ...parts.slice(0, i + 1), ".gitignore"))
+      }
+      const stamps = yield* Effect.forEach([...files], stamp, { concurrency: "unbounded" })
+      return stamps.join("\0")
+    })
+
     const updateIndex = Effect.fnUntraced(function* (input: {
       repository: Repository
       changes: { tracked: readonly RelativePath[]; untracked: readonly RelativePath[] }
       ignores?: Repository
       maximumUntrackedFileBytes?: number
+      maximumUntrackedFiles?: number
+      maximumUntrackedTotalBytes?: number
       index?: string
       excluded?: ReadonlySet<RelativePath>
+      ignoredCached?: readonly RelativePath[]
+      skipUntracked?: boolean
     }) {
-      const candidates = [...input.changes.tracked, ...input.changes.untracked]
-      if (!candidates.length) return { skipped: [] }
+      const untracked = input.skipUntracked ? [] : input.changes.untracked
+      const ignoredCached = input.ignoredCached ?? []
+      const candidates = [...input.changes.tracked, ...untracked]
+      if (!candidates.length && !ignoredCached.length)
+        return { skipped: [] as RelativePath[], oversized: [] as RelativePath[], changed: false }
       const excluded =
         input.excluded ??
-        (input.ignores ? yield* ignored({ repository: input.ignores, paths: candidates }) : new Set<RelativePath>())
-      const maximum = input.maximumUntrackedFileBytes
-      const skipped = maximum
-        ? (yield* Effect.forEach(
-            input.changes.untracked.filter((item) => !excluded.has(item)),
-            (item) =>
-              fs.stat(path.join(input.repository.worktree, item)).pipe(
-                Effect.map((info) => (info.type === "File" && Number(info.size) > maximum ? item : undefined)),
-                Effect.orElseSucceed(() => undefined),
-              ),
-            { concurrency: 8 },
-          )).filter((item): item is RelativePath => item !== undefined)
-        : []
-      const skip = new Set(skipped)
-      const added = candidates.filter((item) => !excluded.has(item) && !skip.has(item))
-      // Untracked paths are not in the index, so only tracked paths that are now ignored need removing.
-      const removed = input.changes.tracked.filter((item) => excluded.has(item))
+        (input.ignores && candidates.length
+          ? yield* ignored({ repository: input.ignores, paths: candidates })
+          : new Set<RelativePath>())
+      const ignoredCachedSet = new Set(ignoredCached)
+      const activeTracked = input.changes.tracked.filter((item) => !excluded.has(item) && !ignoredCachedSet.has(item))
+      const activeUntracked = untracked.filter((item) => !excluded.has(item))
+      const maximumFile = input.maximumUntrackedFileBytes
+      const maximumFiles = input.maximumUntrackedFiles
+      const maximumTotal = input.maximumUntrackedTotalBytes
+
+      // Skip the whole untracked batch when it exceeds the count cap so partial prefixes cannot accumulate across captures.
+      const countExceeded = maximumFiles !== undefined && activeUntracked.length > maximumFiles
+      if (countExceeded)
+        yield* Effect.logWarning("skipping untracked files in snapshot capture: file count exceeds limit", {
+          directory: input.repository.worktree,
+          count: activeUntracked.length,
+          limit: maximumFiles,
+        })
+
+      const untrackedSizes =
+        !countExceeded && (maximumFile !== undefined || maximumTotal !== undefined)
+          ? yield* Effect.forEach(
+              activeUntracked,
+              (item) => fileSize(input.repository.worktree, item).pipe(Effect.map((size) => ({ item, size }))),
+              { concurrency: 8 },
+            )
+          : []
+      const oversizedUntracked =
+        maximumFile !== undefined
+          ? untrackedSizes
+              .filter((entry) => entry.size !== undefined && entry.size > maximumFile)
+              .map((entry) => entry.item)
+          : []
+      const oversizedUntrackedSet = new Set(oversizedUntracked)
+      const totalUntrackedBytes = untrackedSizes
+        .filter((entry) => !oversizedUntrackedSet.has(entry.item))
+        .reduce((total, entry) => total + (entry.size ?? 0), 0)
+      const totalExceeded = !countExceeded && maximumTotal !== undefined && totalUntrackedBytes > maximumTotal
+      if (totalExceeded)
+        yield* Effect.logWarning("skipping untracked files in snapshot capture: total size exceeds limit", {
+          directory: input.repository.worktree,
+          bytes: totalUntrackedBytes,
+          limit: maximumTotal,
+          count: activeUntracked.length - oversizedUntracked.length,
+        })
+
+      // Files already in the snapshot index but untracked in the source repo must still obey maximumUntrackedFileBytes.
+      const trackedOversized =
+        maximumFile !== undefined && input.ignores && activeTracked.length
+          ? (yield* Effect.forEach(
+              activeTracked,
+              (item) =>
+                fileSize(input.repository.worktree, item).pipe(
+                  Effect.map((size) => (size !== undefined && size > maximumFile ? item : undefined)),
+                ),
+              { concurrency: 8 },
+            )).filter((item): item is RelativePath => item !== undefined)
+          : []
+      const sourceTracked =
+        trackedOversized.length && input.ignores
+          ? yield* trackedIn(input.ignores, trackedOversized)
+          : new Set<RelativePath>()
+      const evictedOversized = trackedOversized.filter((item) => !sourceTracked.has(item))
+      const evictedSet = new Set(evictedOversized)
+
+      const addedTracked = activeTracked.filter((item) => !evictedSet.has(item))
+      const addedUntracked =
+        countExceeded || totalExceeded ? [] : activeUntracked.filter((item) => !oversizedUntrackedSet.has(item))
+      const added = [...addedTracked, ...addedUntracked]
+      const removed = [
+        ...new Set([
+          ...input.changes.tracked.filter((item) => excluded.has(item)),
+          ...ignoredCached,
+          ...evictedOversized,
+        ]),
+      ]
       // update-index takes literal paths, so large lists avoid add's quadratic pathspec matching.
       if (removed.length)
         yield* repositoryOperation("refresh", input.repository, ["update-index", "--force-remove", "-z", "--stdin"], {
@@ -592,7 +736,7 @@ const layer = Layer.effect(
       // update-index drops a tracked file replaced by an embedded repository; a second line for the same path,
       // in the same call, records its gitlink. For a path that already is a gitlink the repeat is a no-op.
       const embedded = (yield* Effect.forEach(
-        input.changes.tracked.filter((item) => !excluded.has(item)),
+        addedTracked,
         (item) =>
           fs
             .existsSafe(path.join(input.repository.worktree, item, ".git"))
@@ -608,7 +752,9 @@ const layer = Layer.effect(
             { stdin: [...added, ...embedded].join("\0") + "\0", index: input.index },
           ),
         )
-      return { skipped }
+      const oversized = [...oversizedUntracked, ...evictedOversized]
+      const skipped = countExceeded || totalExceeded ? [...activeUntracked, ...evictedOversized] : oversized
+      return { skipped, oversized, changed: removed.length > 0 || added.length > 0 }
     })
 
     const refresh = Effect.fn("Git.index.refresh")(function* (input: {
@@ -616,8 +762,21 @@ const layer = Layer.effect(
       scope: RelativePath
       ignores?: Repository
       maximumUntrackedFileBytes?: number
+      maximumUntrackedFiles?: number
+      maximumUntrackedTotalBytes?: number
     }) {
-      return yield* updateIndex({ ...input, changes: yield* listChanges(input.repository, input.scope) })
+      const excludeFrom = yield* sourceExcludeFile(input.ignores)
+      const [changes, ignoredCached] = yield* Effect.all(
+        [
+          listChanges(input.repository, input.scope, undefined, excludeFrom),
+          input.ignores
+            ? listIgnoredCached(input.repository, input.scope, undefined, excludeFrom)
+            : Effect.succeed([] as RelativePath[]),
+        ],
+        { concurrency: 2 },
+      )
+      const result = yield* updateIndex({ ...input, changes, ignoredCached })
+      return { skipped: result.skipped }
     })
 
     const ignored = Effect.fn("Git.index.ignored")(function* (input: {
@@ -753,11 +912,21 @@ const layer = Layer.effect(
             )
             return { value, installed }
           }),
-        (index) => fs.remove(index, { force: true }).pipe(Effect.ignore),
+        (index) =>
+          Effect.all(
+            [
+              fs.remove(index, { force: true }).pipe(Effect.ignore),
+              fs.remove(`${index}.lock`, { force: true }).pipe(Effect.ignore),
+            ],
+            { discard: true },
+          ),
       )
 
     // A clean capture returns the tree last written from the exact index it scanned.
-    const lastCaptures = new Map<string, { readonly fingerprint: string; readonly tree: TreeID }>()
+    const lastCaptures = new Map<
+      string,
+      { readonly fingerprint: string; readonly ignoreStamp?: string; readonly tree: TreeID }
+    >()
     const preparedStores = new Set<string>()
     const pendingCaptures = new Map<string, Deferred.Deferred<TreeID, OperationError>>()
     // Untracked files skipped for size, by path, with the stamp they had when skipped.
@@ -769,8 +938,10 @@ const layer = Layer.effect(
      * therefore exactly its own index plus the worktree changes against it.
      */
     const attemptCapture = Effect.fnUntraced(function* (input: CaptureInput) {
-      const sourceExclude = input.ignores ? path.join(input.ignores.commonDirectory, "info", "exclude") : undefined
-      const excludeFrom = sourceExclude && (yield* fs.existsSafe(sourceExclude)) ? sourceExclude : undefined
+      const excludeFrom = yield* sourceExcludeFile(input.ignores)
+      const currentIgnoreStamp = input.ignores
+        ? yield* ignoreFingerprint(input.repository, input.scopes, input.ignores)
+        : undefined
       const result = yield* withTemporaryIndex(input.repository, (index) =>
         Effect.gen(function* () {
           const scanned = yield* indexFingerprint(index)
@@ -779,11 +950,35 @@ const layer = Layer.effect(
             (scope) => listChanges(input.repository, scope, index, excludeFrom),
             { concurrency: "unbounded" },
           )
+          const tracked = [...new Set(changes.flatMap((change) => change.tracked))]
+          const untracked = [...new Set(changes.flatMap((change) => change.untracked))]
           const last = lastCaptures.get(input.repository.gitDirectory)
-          const untracked = changes.flatMap((change) => change.untracked)
+          const hasGitignoreChange = tracked.some(isGitignore) || untracked.some(isGitignore)
+          const checkIgnoredCached =
+            input.ignores !== undefined &&
+            (!last || last.fingerprint !== scanned || last.ignoreStamp !== currentIgnoreStamp || hasGitignoreChange)
+          const ignoredCached = checkIgnoredCached
+            ? [
+                ...new Set(
+                  (yield* Effect.forEach(
+                    input.scopes,
+                    (scope) => listIgnoredCached(input.repository, scope, index, excludeFrom),
+                    { concurrency: "unbounded" },
+                  )).flat(),
+                ),
+              ]
+            : []
+          const untrackedCountExceeded =
+            input.maximumUntrackedFiles !== undefined && untracked.length > input.maximumUntrackedFiles
+          if (untrackedCountExceeded)
+            yield* Effect.logWarning("skipping untracked files in snapshot capture: file count exceeds limit", {
+              directory: input.repository.worktree,
+              count: untracked.length,
+              limit: input.maximumUntrackedFiles,
+            })
           const oversized = oversizedFiles.get(input.repository.gitDirectory)
           const stillOversized = new Set(
-            oversized
+            !untrackedCountExceeded && oversized
               ? (yield* Effect.forEach(
                   untracked.filter((file) => oversized.has(file)),
                   (file) =>
@@ -794,9 +989,11 @@ const layer = Layer.effect(
                 )).filter((file): file is RelativePath => file !== undefined)
               : [],
           )
+          const sameIndex = Boolean(scanned && last?.fingerprint === scanned)
+          if (sameIndex && last && !tracked.length && !ignoredCached.length && untrackedCountExceeded) return last.tree
           // Paths the source ignores are listed as untracked on every scan; they leave the index unchanged.
           const excluded =
-            scanned && last?.fingerprint === scanned && changes.every((change) => !change.tracked.length)
+            sameIndex && !tracked.length && !ignoredCached.length && !untrackedCountExceeded
               ? input.ignores
                 ? yield* ignored({
                     repository: input.ignores,
@@ -804,26 +1001,41 @@ const layer = Layer.effect(
                   })
                 : new Set<RelativePath>()
               : undefined
-          if (last && excluded && untracked.every((file) => excluded.has(file) || stillOversized.has(file)))
+          if (
+            last &&
+            excluded &&
+            !ignoredCached.length &&
+            untracked.every((file) => excluded.has(file) || stillOversized.has(file))
+          )
             return last.tree
-          const skipped = (yield* Effect.forEach(changes, (change) =>
-            updateIndex({ ...input, changes: change, index, excluded }),
-          )).flatMap((update) => update.skipped)
+          const update = yield* updateIndex({
+            ...input,
+            changes: { tracked, untracked },
+            index,
+            excluded,
+            ignoredCached,
+            skipUntracked: untrackedCountExceeded,
+          })
           oversizedFiles.set(
             input.repository.gitDirectory,
             new Map(
               (yield* Effect.forEach(
-                skipped,
+                update.oversized,
                 (file) => oversizedStamp(input, file).pipe(Effect.map((value) => [file, value] as const)),
                 { concurrency: 8 },
               )).filter((entry): entry is readonly [RelativePath, string] => entry[1] !== undefined),
             ),
           )
+          if (sameIndex && last && !update.changed) return last.tree
           return yield* writeTree(input.repository, index)
         }),
       )
       if (result.installed)
-        lastCaptures.set(input.repository.gitDirectory, { fingerprint: result.installed, tree: result.value })
+        lastCaptures.set(input.repository.gitDirectory, {
+          fingerprint: result.installed,
+          ignoreStamp: currentIgnoreStamp,
+          tree: result.value,
+        })
       if (!result.installed) lastCaptures.delete(input.repository.gitDirectory)
       return result.value
     })
@@ -849,6 +1061,8 @@ const layer = Layer.effect(
         input.scopes,
         input.ignores?.gitDirectory,
         input.maximumUntrackedFileBytes,
+        input.maximumUntrackedFiles,
+        input.maximumUntrackedTotalBytes,
       ])
       const pending = pendingCaptures.get(key)
       if (pending) {
@@ -923,7 +1137,18 @@ const layer = Layer.effect(
         : false
       yield* (
         copied ? fs.rename(temporary, indexFile(repository)) : fs.remove(indexFile(repository), { force: true })
-      ).pipe(Effect.ignore, Effect.ensuring(fs.remove(temporary, { force: true }).pipe(Effect.ignore)))
+      ).pipe(
+        Effect.ignore,
+        Effect.ensuring(
+          Effect.all(
+            [
+              fs.remove(temporary, { force: true }).pipe(Effect.ignore),
+              fs.remove(`${temporary}.lock`, { force: true }).pipe(Effect.ignore),
+            ],
+            { discard: true },
+          ),
+        ),
+      )
     })
 
     // Stores created by earlier releases would otherwise keep their original settings; only OpenCode's include file is rewritten, never `config`.
@@ -1536,6 +1761,10 @@ function nuls(text: string) {
 /** Pathspec magic that matches exactly one path, so names with `*`, `?`, `[`, or a leading `:` are not patterns. */
 function literalPathspec(file: string) {
   return `:(literal)${file}`
+}
+
+function isGitignore(file: RelativePath) {
+  return file === ".gitignore" || file.endsWith("/.gitignore")
 }
 
 /**

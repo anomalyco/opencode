@@ -7,6 +7,8 @@ import { Bus } from "@opencode/core/bus"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { EventTable } from "@opencode/core/event/sql"
+import { Git } from "@opencode/core/git"
+import { Location } from "@opencode/core/location"
 import { Project } from "@opencode/core/project"
 import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
@@ -22,9 +24,14 @@ import { Tool } from "@opencode/core/tool"
 import { Permission } from "@opencode/core/permission"
 import { ToolOutput } from "@opencode/core/tool-output"
 import { Money } from "@opencode/schema/money"
+import { Global } from "@opencode/util/global"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { asc, eq } from "drizzle-orm"
 import { Cause, Deferred, Effect, Exit, Fiber, Layer } from "effect"
+import { TestClock } from "effect/testing"
+import path from "path"
+import fs from "fs/promises"
+import { withTempDir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
@@ -432,4 +439,135 @@ it.live("leaves an interrupted step as a crash would while the server hands its 
       ],
     })
   }),
+)
+
+it.effect("completes a step when snapshot capture hangs past its timeout", () =>
+  withTempDir((tmp) =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const llm = yield* TestLLM.Test
+      const sessionID = Session.ID.create()
+      const assistantMessageID = SessionMessage.ID.create()
+      const project = AbsolutePath.make(yield* Effect.promise(() => fs.realpath(tmp.path)))
+      const source = new Git.Repository({
+        worktree: project,
+        gitDirectory: AbsolutePath.make(path.join(project, ".git")),
+        commonDirectory: AbsolutePath.make(path.join(project, ".git")),
+      })
+      const firstStarted = yield* Deferred.make<void>()
+      const secondStarted = yield* Deferred.make<void>()
+      let captures = 0
+      const baseGit = yield* Git.Service.pipe(Effect.provide(AppNodeBuilder.build(Git.node)))
+      const snapshotLayer = AppNodeBuilder.build(Snapshot.node, [
+        Location.node.replace(
+          Layer.succeed(
+            Location.Service,
+            Location.Service.of({
+              directory: project,
+              project: { id: Project.ID.make("proj-step-timeout"), directory: project, canonical: project },
+              vcs: { type: "git", store: source.gitDirectory },
+            }),
+          ),
+        ),
+        Global.node.replace(Global.layerWith({ data: tmp.path, config: path.join(tmp.path, "config") })),
+        Git.node.replace(
+          Layer.succeed(
+            Git.Service,
+            Git.Service.of({
+              ...baseGit,
+              repo: {
+                ...baseGit.repo,
+                discover: () => Effect.succeed(source),
+                create: (input) =>
+                  Effect.succeed(
+                    new Git.Repository({
+                      worktree: input.worktree,
+                      gitDirectory: input.gitDirectory,
+                      commonDirectory: input.gitDirectory,
+                    }),
+                  ),
+              },
+              tree: {
+                ...baseGit.tree,
+                capture: () =>
+                  Effect.suspend(() => {
+                    captures++
+                    return Deferred.succeed(captures === 1 ? firstStarted : secondStarted, undefined).pipe(
+                      Effect.andThen(Effect.never),
+                    )
+                  }),
+              },
+            }),
+          ),
+        ),
+      ])
+      yield* Effect.gen(function* () {
+        const steps = yield* SessionStep.make
+        yield* db
+          .insert(ProjectTable)
+          .values({ id: Project.ID.global, worktree: project, sandboxes: [] })
+          .onConflictDoNothing()
+          .run()
+        yield* db
+          .insert(SessionTable)
+          .values({ id: sessionID, project_id: Project.ID.global, slug: "step", directory: project, version: "test" })
+          .run()
+        const model = SessionRunnerModel.resolved(
+          LanguageModel.make({ id: "test-model", provider: "test", route: OpenAIChat.route }),
+          {
+            capabilities: { tools: true, input: ["text"], output: ["text"] },
+            limit: { context: 100_000, output: 1_000 },
+            cost: [],
+          },
+        )
+        yield* llm.push(
+          TestLLM.complete(
+            { reason: { normalized: "stop" }, usage: { inputTokens: 5, outputTokens: 1 } },
+            LLMEvent.textStart({ id: "t1" }),
+            LLMEvent.textDelta({ id: "t1", text: "PONG" }),
+            LLMEvent.textEnd({ id: "t1", text: "PONG" }),
+          ),
+        )
+
+        const fiber = yield* steps
+          .attempt({
+            isLocationClosed: () => false,
+            sessionID,
+            assistantMessageID,
+            agent: Agent.defaultID,
+            model,
+            prepared: {
+              retry: () => Effect.void,
+              request: ai.request({ model: model.model, prompt: "Reply with PONG" }),
+              options: {},
+              executeTool: () => Effect.die("no tools"),
+            },
+            retry: () => Effect.succeed({ retry: false }),
+            recoverContinuation: true,
+            recoverOverflow: Effect.succeed(false),
+          })
+          .pipe(Effect.forkChild({ startImmediately: true }))
+
+        yield* Deferred.await(firstStarted)
+        yield* Effect.yieldNow
+        yield* TestClock.adjust(Snapshot.CAPTURE_TIMEOUT)
+        yield* Deferred.await(secondStarted)
+        yield* Effect.yieldNow
+        yield* TestClock.adjust(Snapshot.CAPTURE_TIMEOUT)
+
+        const outcome = yield* Fiber.join(fiber)
+        expect(outcome).toEqual(SessionStep.Outcome.Completed({ needsContinuation: false }))
+        expect(captures).toBe(2)
+        const [message] = yield* SessionHistory.withParts(
+          db,
+          yield* db.select().from(SessionMessageTable).where(eq(SessionMessageTable.id, assistantMessageID)).all(),
+        )
+        expect(message?.data).toMatchObject({
+          finish: "stop",
+          content: [{ type: "text", text: "PONG" }],
+        })
+        expect(message?.data).not.toHaveProperty("snapshot")
+      }).pipe(Effect.provide(snapshotLayer))
+    }),
+  ),
 )
