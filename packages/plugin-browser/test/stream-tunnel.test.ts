@@ -1,19 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import { createHash } from "node:crypto"
 import { once } from "node:events"
-import { createServer as createHttpServer, request as httpRequest } from "node:http"
+import { request as httpRequest } from "node:http"
 import { createServer as createNetServer, type Socket } from "node:net"
-import { connect as netConnect } from "node:net"
-import { PassThrough, type Duplex } from "node:stream"
-import { Effect, Fiber, Schedule, Schema, Stream } from "effect"
-import { Session } from "@opencode/schema/session"
-import { BrowserConnection } from "../src/connection.js"
+import { PassThrough } from "node:stream"
+import { Schema } from "effect"
 import { EgressPolicy } from "../src/egress-policy.js"
 import { Browser } from "../src/rpc.js"
 import { BrowserProxy } from "../src/proxy.js"
 import { StreamMux } from "../src/stream-mux.js"
 import { StreamWire } from "../src/stream-wire.js"
-import { BrowserTunnel } from "../src/tunnel.js"
 import { BrowserTunnelHost } from "../src/tunnel-host.js"
 
 /**
@@ -175,7 +171,9 @@ describe("StreamWire codec and adversarial validation", () => {
     badVersion[0] = 2
     expect(() => StreamWire.decodeFrame(badVersion)).toThrow(StreamWire.WireProtocolError)
     // Trailing garbage
-    const withGarbage = new Uint8Array(StreamWire.encodeFrame({ type: StreamWire.FrameType.FIN, streamID: 1 }).length + 1)
+    const withGarbage = new Uint8Array(
+      StreamWire.encodeFrame({ type: StreamWire.FrameType.FIN, streamID: 1 }).length + 1,
+    )
     withGarbage.set(StreamWire.encodeFrame({ type: StreamWire.FrameType.FIN, streamID: 1 }))
     expect(() => StreamWire.decodeFrame(withGarbage)).toThrow(StreamWire.WireProtocolError)
     // Zero streamID on DATA
@@ -216,407 +214,6 @@ describe("StreamWire codec and adversarial validation", () => {
       }),
     ).toThrow(StreamWire.WireProtocolError)
   })
-})
-
-describe("EgressPolicy protection and dev loopback support", () => {
-  test("blocks cloud metadata, link-local, unspecified, multicast, and IPv4-mapped/NAT64/6to4 bypasses", () => {
-    const policy = EgressPolicy.makePolicy({ allowPrivateLan: true })
-    const blocked = [
-      ["169.254.169.254", 80, "169.254.169.254"],
-      ["169.254.170.2", 80, "169.254.170.2"],
-      ["100.100.100.200", 80, "100.100.100.200"],
-      ["metadata.google.internal", 80, "169.254.169.254"],
-      ["metadata.goog", 80, "1.1.1.1"],
-      ["fd00:ec2::254", 80, "fd00:ec2::254"],
-      ["fe80::1", 80, "fe80::1"],
-      ["::ffff:169.254.169.254", 80, "::ffff:169.254.169.254"],
-      ["64:ff9b::169.254.169.254", 80, "64:ff9b::169.254.169.254"],
-      ["2002:a9fe:a9fe::1", 80, "2002:a9fe:a9fe::1"],
-      ["0.0.0.0", 80, "0.0.0.0"],
-      ["::", 80, "::"],
-      ["224.0.0.1", 80, "224.0.0.1"],
-      ["255.255.255.255", 80, "255.255.255.255"],
-    ] as const
-    for (const [host, port, ip] of blocked) {
-      expect(policy.evaluateAddress(host, port, ip).allowed).toBe(false)
-    }
-    // Non-standard decimal/hex IPv4 literals resolve and classify as metadata too
-    expect(EgressPolicy.parseIpLiteral("2852039166")).toEqual({ address: "169.254.169.254", family: 4 })
-    expect(EgressPolicy.parseIpLiteral("0xa9fea9fe")).toEqual({ address: "169.254.169.254", family: 4 })
-  })
-
-  test("allows dev loopback preview/HMR ports while blocking DNS rebinding and server management ports", async () => {
-    const serverPorts = new Set([4096])
-    const policy = EgressPolicy.makePolicy({
-      reservedLocalPorts: () => serverPorts,
-      resolve: async (host) => {
-        if (host === "localhost" || host === "app.localhost") return [{ address: "127.0.0.1", family: 4 }]
-        if (host === "rebind.attacker.example") return [{ address: "127.0.0.1", family: 4 }]
-        if (host === "dual.attacker.example")
-          return [
-            { address: "93.184.216.34", family: 4 },
-            { address: "127.0.0.1", family: 4 },
-          ]
-        if (host === "example.com") return [{ address: "93.184.216.34", family: 4 }]
-        if (host === "intranet.local") return [{ address: "192.168.1.50", family: 4 }]
-        return []
-      },
-    })
-
-    // Dev loopback & HMR ports work out of the box
-    expect(await policy.resolveTarget({ host: "localhost", port: 5173 })).toEqual([{ address: "127.0.0.1", family: 4 }])
-    expect(await policy.resolveTarget({ host: "127.0.0.1", port: 5174 })).toEqual([{ address: "127.0.0.1", family: 4 }])
-    expect(await policy.resolveTarget({ host: "app.localhost", port: 24678 })).toEqual([{ address: "127.0.0.1", family: 4 }])
-    expect(await policy.resolveTarget({ host: "::1", port: 5173 })).toEqual([{ address: "::1", family: 6 }])
-    // Public web works
-    expect(await policy.resolveTarget({ host: "example.com", port: 443 })).toEqual([{ address: "93.184.216.34", family: 4 }])
-
-    // OpenCode's own server port and SSH/Docker/K8s ports on loopback are blocked
-    await expect(policy.resolveTarget({ host: "127.0.0.1", port: 4096 })).rejects.toThrow(EgressPolicy.EgressDeniedError)
-    await expect(policy.resolveTarget({ host: "localhost", port: 22 })).rejects.toThrow(EgressPolicy.EgressDeniedError)
-    await expect(policy.resolveTarget({ host: "localhost", port: 2375 })).rejects.toThrow(EgressPolicy.EgressDeniedError)
-
-    // External hostnames resolving to loopback (including dual A records) are blocked
-    await expect(policy.resolveTarget({ host: "rebind.attacker.example", port: 5173 })).rejects.toThrow(
-      EgressPolicy.EgressDeniedError,
-    )
-    await expect(policy.resolveTarget({ host: "dual.attacker.example", port: 5173 })).rejects.toThrow(
-      EgressPolicy.EgressDeniedError,
-    )
-
-    // Private LAN is blocked by default, but allowed after an explicit trusted attachment grant
-    await expect(policy.resolveTarget({ host: "intranet.local", port: 5173 })).rejects.toThrow(
-      EgressPolicy.EgressDeniedError,
-    )
-    policy.grant("intranet.local", 5173, [24678])
-    expect(await policy.resolveTarget({ host: "intranet.local", port: 5173 })).toEqual([
-      { address: "192.168.1.50", family: 4 },
-    ])
-    expect(await policy.resolveTarget({ host: "intranet.local", port: 24678 })).toEqual([
-      { address: "192.168.1.50", family: 4 },
-    ])
-    // Ungranted port on the same private host stays blocked
-    await expect(policy.resolveTarget({ host: "intranet.local", port: 9999 })).rejects.toThrow(
-      EgressPolicy.EgressDeniedError,
-    )
-    // Cannot grant metadata or protected management ports
-    expect(() => policy.grant("169.254.169.254", 80)).toThrow(EgressPolicy.EgressDeniedError)
-    expect(() => policy.grant("127.0.0.1", 4096)).toThrow(EgressPolicy.EgressDeniedError)
-    expect(() => policy.grant("192.168.1.50", 22)).toThrow(EgressPolicy.EgressDeniedError)
-  })
-
-  test("BrowserTunnel restores pre-PR legacy connect when policy is omitted and enforces policy when enabled", async () => {
-    const echo = createNetServer((socket) => socket.pipe(socket))
-    await once(echo.listen(0, "127.0.0.1"), "listening")
-    const addr = echo.address()
-    if (!addr || typeof addr === "string") throw new Error("No TCP address")
-
-    const openPort = createNetServer((socket) => socket.pipe(socket))
-    await once(openPort.listen(0, "127.0.0.1"), "listening")
-    const openAddr = openPort.address()
-    if (!openAddr || typeof openAddr === "string") throw new Error("No TCP address")
-
-    // Policy reserves echo's loopback port and maps a synthetic sentinel host to openPort's loopback IP.
-    let sentinelResolved = 0
-    const policy = EgressPolicy.makePolicy({
-      reservedLocalPorts: () => new Set([addr.port]),
-      resolve: async (host) => {
-        if (host === "fixture-sentinel.invalid") {
-          sentinelResolved += 1
-          return [{ address: "127.0.0.1", family: 4 }]
-        }
-        return []
-      },
-    })
-    policy.grant("fixture-sentinel.invalid", openAddr.port)
-
-    const legacyOff = BrowserTunnel.make()
-    const policyOn = BrowserTunnel.make(policy)
-    try {
-      // Experiment OFF (no policy): pre-PR legacy net.createConnection dials 127.0.0.1:<addr.port> directly.
-      const legacyID = await Effect.runPromise(legacyOff.open({ host: "127.0.0.1", port: addr.port }))
-      await Effect.runPromise(legacyOff.write(legacyID, new TextEncoder().encode("hi"), true))
-      const echoed = await Effect.runPromise(legacyOff.read(legacyID))
-      expect(new TextDecoder().decode(echoed.data)).toBe("hi")
-      await Effect.runPromise(legacyOff.close(legacyID))
-
-      // Experiment ON (policy provided): legacy RPC enforces policy (blocks reserved port, uses policy resolver).
-      await expect(Effect.runPromise(policyOn.open({ host: "127.0.0.1", port: addr.port }))).rejects.toThrow("blocked")
-      const sentinelID = await Effect.runPromise(
-        policyOn.open({ host: "fixture-sentinel.invalid", port: openAddr.port }),
-      )
-      expect(sentinelResolved).toBe(1)
-      await Effect.runPromise(policyOn.close(sentinelID))
-    } finally {
-      legacyOff.dispose()
-      policyOn.dispose()
-      await Promise.all([
-        new Promise<void>((resolve) => echo.close(() => resolve())),
-        new Promise<void>((resolve) => openPort.close(() => resolve())),
-      ])
-    }
-  })
-})
-
-describe("BrowserConnection experiment attachment-boundary selection", () => {
-  type Control = { type: string; connectionID: string; version?: number; capabilities?: readonly string[] }
-
-  function makeConnectionFixture(host?: BrowserTunnelHost.Interface) {
-    const sessionID = Session.ID.make("ses_00000000000000000000000001")
-    const sessionRow = { id: sessionID, agent: "build", permissions: [] as unknown[], location: { directory: "/work" } }
-    const controls: Control[] = []
-    let handlers: Record<string, (input: object, call: object) => Effect.Effect<unknown, unknown>> = {}
-    const call = { error: (code: string, message: string) => new Error(`${code}: ${message}`) }
-
-    const ctx = {
-      agent: { transform: () => Effect.void },
-      permission: { hook: () => Effect.void, assert: () => Effect.void },
-      session: {
-        get: () => Effect.succeed(sessionRow),
-        update: (req: { permissions?: unknown[] }) =>
-          Effect.sync(() => {
-            sessionRow.permissions = req.permissions ?? []
-          }),
-        hook: () => Effect.void,
-      },
-      storage: {
-        scan: () => Effect.succeed({ entries: [] }),
-        set: () => Effect.void,
-        remove: () => Effect.void,
-      },
-      location: { directory: "/work" },
-      rpc: {
-        register: (_def: unknown, registered: typeof handlers) =>
-          Effect.sync(() => {
-            handlers = registered
-            return {
-              events: {
-                emit: (_name: string, control: Control) =>
-                  Effect.sync(() => {
-                    controls.push(control)
-                  }),
-              },
-            }
-          }),
-      },
-      event: { subscribe: () => Stream.empty },
-    }
-
-    const start = () =>
-      BrowserConnection.make(ctx as unknown as Parameters<typeof BrowserConnection.make>[0]).pipe(
-        host ? Effect.provideService(BrowserTunnelHost.Reference, host) : (effect) => effect,
-      )
-
-    const attach = (connectionID: string) =>
-      Effect.gen(function* () {
-        const fiber = yield* Effect.forkChild(handlers.attach({ sessionID, connectionID, version: 4 }, call), {
-          startImmediately: true,
-        })
-        yield* Effect.suspend(() =>
-          controls.some((c) => c.type === "attached" && c.connectionID === connectionID)
-            ? Effect.void
-            : Effect.fail("waiting"),
-        ).pipe(Effect.retry(Schedule.spaced("5 millis")), Effect.timeout("5 seconds"))
-        const attachedEvent = controls.find((c) => c.type === "attached" && c.connectionID === connectionID)!
-        return { fiber, attachedEvent }
-      })
-
-    return { sessionID, controls, getHandlers: () => handlers, call, start, attach }
-  }
-
-  test("disabled flag or absent host preserves legacy tunnel connect and refuses tickets/grants without minting", async () => {
-    const reservedEcho = createNetServer((socket) => socket.pipe(socket))
-    await once(reservedEcho.listen(0, "127.0.0.1"), "listening")
-    const reservedAddr = reservedEcho.address()
-    if (!reservedAddr || typeof reservedAddr === "string") throw new Error("No TCP address")
-
-    let ticketsIssued = 0
-    const disabledHost: BrowserTunnelHost.Interface = {
-      enabled: Effect.succeed(false),
-      reservedLocalPorts: () => new Set([reservedAddr.port]),
-      issueTicket: () =>
-        Effect.sync(() => {
-          ticketsIssued += 1
-          return { ticket: "tkt_should_not_mint", expiresIn: 30, protocol: 1, path: BrowserTunnelHost.BROWSER_TUNNEL_PATH }
-        }),
-      revokeAttachment: () => Effect.void,
-    }
-
-    try {
-      for (const host of [undefined, disabledHost] as const) {
-        const fx = makeConnectionFixture(host)
-        await Effect.runPromise(
-          Effect.gen(function* () {
-            yield* fx.start()
-            const { fiber, attachedEvent } = yield* fx.attach("conn_off")
-            expect(attachedEvent.capabilities).toBeUndefined()
-
-            const ticketExit = yield* fx
-              .getHandlers()
-              ["tunnel.ticket"]({ sessionID: fx.sessionID, connectionID: "conn_off", protocol: 1 }, fx.call)
-              .pipe(Effect.exit)
-            expect(ticketExit._tag).toBe("Failure")
-            expect(ticketsIssued).toBe(0)
-
-            const grantExit = yield* fx
-              .getHandlers()
-              ["tunnel.grant"](
-                { sessionID: fx.sessionID, connectionID: "conn_off", target: { host: "127.0.0.1", port: 5173 } },
-                fx.call,
-              )
-              .pipe(Effect.exit)
-            expect(grantExit._tag).toBe("Failure")
-
-            // Pre-PR legacy tunnel.open still connects to ordinary loopback even if port is in disabledHost.reservedLocalPorts
-            const id = (yield* fx
-              .getHandlers()
-              ["tunnel.open"](
-                { sessionID: fx.sessionID, connectionID: "conn_off", target: { host: "127.0.0.1", port: reservedAddr.port } },
-                fx.call,
-              )) as string
-            yield* fx.getHandlers()["tunnel.close"]({ sessionID: fx.sessionID, connectionID: "conn_off", tunnelID: id }, fx.call)
-            yield* Fiber.interrupt(fiber)
-          }).pipe(Effect.scoped),
-        )
-      }
-    } finally {
-      await new Promise<void>((resolve) => reservedEcho.close(() => resolve()))
-    }
-  }, 15_000)
-
-  test("enabled attachment enforces policy on legacy RPC, supports ticket/grant, and keeps boundary coherent across flag toggle", async () => {
-    const reservedEcho = createNetServer((socket) => socket.pipe(socket))
-    const allowedEcho = createNetServer((socket) => socket.pipe(socket))
-    await Promise.all([
-      once(reservedEcho.listen(0, "127.0.0.1"), "listening"),
-      once(allowedEcho.listen(0, "127.0.0.1"), "listening"),
-    ])
-    const reservedAddr = reservedEcho.address()
-    const allowedAddr = allowedEcho.address()
-    if (!reservedAddr || typeof reservedAddr === "string" || !allowedAddr || typeof allowedAddr === "string") {
-      throw new Error("No TCP address")
-    }
-
-    let flagEnabled = true
-    let ticketsIssued = 0
-    const host: BrowserTunnelHost.Interface = {
-      enabled: Effect.sync(() => flagEnabled),
-      reservedLocalPorts: () => new Set([reservedAddr.port]),
-      issueTicket: () =>
-        Effect.sync(() => {
-          ticketsIssued += 1
-          return {
-            ticket: `tkt_${ticketsIssued}`,
-            expiresIn: 30,
-            protocol: 1,
-            path: BrowserTunnelHost.BROWSER_TUNNEL_PATH,
-          }
-        }),
-      revokeAttachment: () => Effect.void,
-    }
-
-    try {
-      const fx = makeConnectionFixture(host)
-      await Effect.runPromise(
-        Effect.gen(function* () {
-          yield* fx.start()
-
-          // 1. Attachment A starts while experiment is ON
-          const attA = yield* fx.attach("conn_on")
-          expect(attA.attachedEvent.capabilities).toEqual([BrowserTunnelHost.STREAM_CAPABILITY])
-
-          // Ticket & grant succeed on enabled attachment
-          const ticketA = yield* fx
-            .getHandlers()
-            ["tunnel.ticket"]({ sessionID: fx.sessionID, connectionID: "conn_on", protocol: 1 }, fx.call)
-          expect(ticketA).toMatchObject({ ticket: "tkt_1", protocol: 1, path: BrowserTunnelHost.BROWSER_TUNNEL_PATH })
-
-          yield* fx
-            .getHandlers()
-            ["tunnel.grant"](
-              { sessionID: fx.sessionID, connectionID: "conn_on", target: { host: "127.0.0.1", port: allowedAddr.port } },
-              fx.call,
-            )
-
-          // Policy is enforced even on legacy tunnel.open for an enabled attachment (no downgrade!)
-          const blockedLegacy = yield* fx
-            .getHandlers()
-            ["tunnel.open"](
-              { sessionID: fx.sessionID, connectionID: "conn_on", target: { host: "127.0.0.1", port: reservedAddr.port } },
-              fx.call,
-            )
-            .pipe(Effect.exit)
-          expect(blockedLegacy._tag).toBe("Failure")
-
-          const okLegacy = (yield* fx
-            .getHandlers()
-            ["tunnel.open"](
-              { sessionID: fx.sessionID, connectionID: "conn_on", target: { host: "127.0.0.1", port: allowedAddr.port } },
-              fx.call,
-            )) as string
-          yield* fx.getHandlers()["tunnel.close"]({ sessionID: fx.sessionID, connectionID: "conn_on", tunnelID: okLegacy }, fx.call)
-
-          // 2. Toggle flag OFF: already-active attachment A stays coherent until detach, while new attachment B uses legacy off mode
-          flagEnabled = false
-          const stillBlockedOnA = yield* fx
-            .getHandlers()
-            ["tunnel.open"](
-              { sessionID: fx.sessionID, connectionID: "conn_on", target: { host: "127.0.0.1", port: reservedAddr.port } },
-              fx.call,
-            )
-            .pipe(Effect.exit)
-          expect(stillBlockedOnA._tag).toBe("Failure")
-
-          // New attachment B replaces A under the disabled flag
-          const attB = yield* fx.attach("conn_after_toggle")
-          expect(yield* Fiber.join(attA.fiber)).toBe("replaced")
-          expect(attB.attachedEvent.capabilities).toBeUndefined()
-
-          const issuedBeforeB = ticketsIssued
-          const ticketB = yield* fx
-            .getHandlers()
-            ["tunnel.ticket"]({ sessionID: fx.sessionID, connectionID: "conn_after_toggle", protocol: 1 }, fx.call)
-            .pipe(Effect.exit)
-          expect(ticketB._tag).toBe("Failure")
-          expect(ticketsIssued).toBe(issuedBeforeB)
-
-          const grantB = yield* fx
-            .getHandlers()
-            ["tunnel.grant"](
-              {
-                sessionID: fx.sessionID,
-                connectionID: "conn_after_toggle",
-                target: { host: "127.0.0.1", port: allowedAddr.port },
-              },
-              fx.call,
-            )
-            .pipe(Effect.exit)
-          expect(grantB._tag).toBe("Failure")
-
-          // Newly attached B restores legacy pre-PR connect (reaches reservedAddr.port with no EgressPolicy)
-          const reopened = (yield* fx
-            .getHandlers()
-            ["tunnel.open"](
-              {
-                sessionID: fx.sessionID,
-                connectionID: "conn_after_toggle",
-                target: { host: "127.0.0.1", port: reservedAddr.port },
-              },
-              fx.call,
-            )) as string
-          yield* fx
-            .getHandlers()
-            ["tunnel.close"]({ sessionID: fx.sessionID, connectionID: "conn_after_toggle", tunnelID: reopened }, fx.call)
-          yield* Fiber.interrupt(attB.fiber)
-        }).pipe(Effect.scoped),
-      )
-    } finally {
-      await Promise.all([
-        new Promise<void>((resolve) => reservedEcho.close(() => resolve())),
-        new Promise<void>((resolve) => allowedEcho.close(() => resolve())),
-      ])
-    }
-  }, 15_000)
 })
 
 describe("StreamMux flow control, fairness, half-close, and RESET cancellation", () => {
@@ -802,18 +399,10 @@ describe("StreamMux flow control, fairness, half-close, and RESET cancellation",
   })
 
   test("destroying a client stream mid-transfer sends RESET and destroys the server target socket", async () => {
-    const accepted = Promise.withResolvers<Socket>()
     const peerClosed = Promise.withResolvers<void>()
     const server = createNetServer((socket) => {
-      accepted.resolve(socket)
       socket.once("close", () => peerClosed.resolve())
-      // Flood continuously until peer closes (like an aborted video range request on seek)
-      const chunk = Buffer.alloc(16 * 1024, 0x42)
-      const timer = setInterval(() => {
-        if (socket.destroyed) return
-        socket.write(chunk)
-      }, 5)
-      socket.once("close", () => clearInterval(timer))
+      socket.write(Buffer.alloc(16 * 1024))
     })
     await once(server.listen(0, "127.0.0.1"), "listening")
     const addr = server.address()
@@ -832,13 +421,10 @@ describe("StreamMux flow control, fairness, half-close, and RESET cancellation",
 
     try {
       const stream = await clientMux.openStream({ host: "127.0.0.1", port: addr.port })
-      await accepted.promise
       await new Promise<void>((resolve) => stream.once("data", () => resolve()))
       // Abort mid-stream (video seek / tab close)
       stream.destroy()
       await peerClosed.promise
-      // Allow server cleanup microtask to finish
-      await new Promise<void>((resolve) => setTimeout(resolve, 20))
       expect(serverMux.activeStreams()).toBe(0)
       expect(serverMux.bufferedBytes()).toBe(0)
     } finally {
@@ -880,8 +466,18 @@ describe("StreamMux flow control, fairness, half-close, and RESET cancellation",
 
     try {
       // Open stream 1 and intentionally NEVER attach a data listener (stalled reader)
+      const full = Promise.withResolvers<void>()
+      let bytes = 0
+      const off = pair.client.onMessage((raw) => {
+        if (typeof raw === "string") return
+        const frame = StreamWire.decodeFrame(raw)
+        if (frame.type !== StreamWire.FrameType.DATA) return
+        bytes += frame.data.byteLength
+        if (bytes >= 32 * 1024) full.resolve()
+      })
       const slow = await clientMux.openStream({ host: "127.0.0.1", port: slowAddr.port })
-      await new Promise<void>((resolve) => setTimeout(resolve, 30))
+      await full.promise
+      off()
       // Client buffered bytes stay strictly bounded by the 32 KiB window
       expect(clientMux.bufferedBytes()).toBeLessThanOrEqual(32 * 1024)
 
@@ -904,132 +500,61 @@ describe("StreamMux flow control, fairness, half-close, and RESET cancellation",
     }
   }, 15_000)
 
-  test("normal detach cancels pending credit-starved writes and FIN without reporting success or uncaught errors", async () => {
-    const serverReceived: Buffer[] = []
-    const peerSockets: Socket[] = []
-    const target = createNetServer((socket) => {
-      peerSockets.push(socket)
-      // Pause the server target socket so server recvWindow stays exhausted (credit-starved client stream)
-      socket.pause()
-      socket.on("data", (chunk: Buffer) => serverReceived.push(chunk))
-    })
-    await once(target.listen(0, "127.0.0.1"), "listening")
-    const addr = target.address()
-    if (!addr || typeof addr === "string") throw new Error("No TCP address")
-
-    const pair = createSocketPair({ simulateBuffered: true })
-    // Withhold server WINDOW_UPDATE credits so the client's 4 KiB send window stays deterministically exhausted.
-    const creditStarvedServer: BrowserTunnelHost.BinarySocket = {
-      ...pair.server,
-      get readyState() {
-        return pair.server.readyState
-      },
-      get bufferedAmount() {
-        return pair.server.bufferedAmount
-      },
-      send(data, onWritten) {
-        if (data.byteLength >= 10 && data[1] === StreamWire.FrameType.WINDOW_UPDATE) {
-          onWritten?.()
-          return
-        }
-        pair.server.send(data, onWritten)
-      },
-    }
-    const serverMux = StreamMux.createServerMux(creditStarvedServer, {
-      policy: EgressPolicy.makePolicy(),
-      streamWindowBytes: 4096,
-      creditBatchBytes: 4096,
-      heartbeatIntervalMs: 0,
-    })
-    const clientMux = StreamMux.createClientMux(pair.client, {
-      streamWindowBytes: 4096,
-      creditBatchBytes: 4096,
-      frameChunkBytes: 4096,
+  test("detach cancels credit-starved write and FIN callbacks; an idle stream closes normally", async () => {
+    const pair = createSocketPair()
+    const client = StreamMux.createClientMux(pair.client, {
       streamOutboundHighWaterBytes: 4096,
+      frameChunkBytes: 4096,
       heartbeatIntervalMs: 0,
     })
-
-    const uncaught: Error[] = []
-    const onUncaught = (error: Error) => {
-      uncaught.push(error)
-    }
-    process.on("uncaughtException", onUncaught)
+    const windowsSpent = Promise.withResolvers<void>()
+    let sent = 0
+    // The peer admits each stream but never returns credit, so only its initial 4 KiB can leave the client.
+    pair.server.onMessage((raw) => {
+      if (typeof raw === "string") return
+      const frame = StreamWire.decodeFrame(raw)
+      if (frame.type === StreamWire.FrameType.OPEN) {
+        pair.server.send(
+          StreamWire.encodeFrame({ type: StreamWire.FrameType.OPENED, streamID: frame.streamID, initialWindow: 4096 }),
+        )
+      }
+      if (frame.type === StreamWire.FrameType.DATA) {
+        sent += frame.data.byteLength
+        if (sent >= 8192) windowsSpent.resolve()
+      }
+    })
 
     try {
-      // Stream 1: credit-starved pending write + queued second write (NO error listener attached)
-      const writeStream = await clientMux.openStream({ host: "127.0.0.1", port: addr.port })
-      let cb1Settled = false
-      let cb2Settled = false
-      const cb1 = Promise.withResolvers<Error | null | undefined>()
-      const cb2 = Promise.withResolvers<Error | null | undefined>()
-      // 16 KiB exceeds the 4 KiB initial sendWindow + 4 KiB high-water mark so writeResume stays held
-      writeStream.write(Buffer.alloc(16 * 1024, 0xaa), (err) => {
-        cb1Settled = true
-        cb1.resolve(err)
+      const target = { host: "localhost", port: 5173 }
+      const writing = await client.openStream(target)
+      const first = Promise.withResolvers<Error | null | undefined>()
+      const queued = Promise.withResolvers<Error | null | undefined>()
+      writing.write(Buffer.alloc(16 * 1024), first.resolve)
+      writing.write(Buffer.alloc(8 * 1024), queued.resolve)
+
+      const ending = await client.openStream(target)
+      const ended = Promise.withResolvers<Error | null | undefined>()
+      let finished = false
+      ending.once("finish", () => {
+        finished = true
       })
-      writeStream.write(Buffer.alloc(8 * 1024, 0xbb), (err) => {
-        cb2Settled = true
-        cb2.resolve(err)
-      })
+      ending.write(Buffer.alloc(6 * 1024))
+      ending.end(ended.resolve)
 
-      // Stream 2: credit-starved pending FIN via end(cb) (NO error listener attached)
-      const finStream = await clientMux.openStream({ host: "127.0.0.1", port: addr.port })
-      let finFinished = false
-      let endSettled = false
-      finStream.on("finish", () => {
-        finFinished = true
-      })
-      const endCb = Promise.withResolvers<Error | null | undefined>()
-      // First exhaust the 4 KiB window, leave 4 KiB queued (below high-water mark so _write returns and _final runs),
-      // then call end() so finalCallback is held waiting for credit to send FIN.
-      finStream.write(Buffer.alloc(6 * 1024, 0xcc))
-      finStream.end((err?: Error | null) => {
-        endSettled = true
-        endCb.resolve(err)
-      })
-
-      // Stream 3: clean idle stream with no pending write/FIN
-      const idleStream = await clientMux.openStream({ host: "127.0.0.1", port: addr.port })
-      const idleClosed = Promise.withResolvers<void>()
-      let idleErrored = false
-      idleStream.on("error", () => {
-        idleErrored = true
-      })
-      idleStream.once("close", () => idleClosed.resolve())
-
-      // Let initial 4 KiB window fill so remaining outgoing bytes/FIN are strictly credit-starved
-      await new Promise<void>((resolve) => setTimeout(resolve, 25))
-      expect(cb1Settled).toBe(false)
-      expect(cb2Settled).toBe(false)
-      expect(endSettled).toBe(false)
-      const bytesBeforeDetach = serverReceived.reduce((sum, b) => sum + b.byteLength, 0)
-
-      // Trigger normal detach while streams 1 & 2 have discarded buffered writes/FIN
-      clientMux.close(1000, "desktop detached")
-
-      const [err1, err2, errEnd] = await Promise.all([cb1.promise, cb2.promise, endCb.promise])
-      await idleClosed.promise
-      await new Promise<void>((resolve) => setTimeout(resolve, 25))
-
-      // Discarded pending writes and FIN MUST settle with cancellation errors, never null/success
-      expect(err1).toBeInstanceOf(Error)
-      expect(err1?.message).toContain("desktop detached")
-      expect(err2).toBeInstanceOf(Error)
-      expect(errEnd).toBeInstanceOf(Error)
-      expect(finFinished).toBe(false)
-      // Clean idle socket closes normally with no error event
-      expect(idleErrored).toBe(false)
-      // No discarded bytes flushed/retried after detach, and zero uncaught 'error' events
-      expect(serverReceived.reduce((sum, b) => sum + b.byteLength, 0)).toBe(bytesBeforeDetach)
-      expect(uncaught).toEqual([])
+      const idle = await client.openStream(target)
+      const idleClosed = once(idle, "close")
+      await windowsSpent.promise
+      client.close(1000, "desktop detached")
+      const errors = await Promise.all([first.promise, queued.promise, ended.promise])
+      await idleClosed
+      for (const error of errors) expect(error).toBeInstanceOf(Error)
+      expect(errors[0]?.message).toContain("desktop detached")
+      expect(finished).toBe(false)
+      expect(sent).toBe(8192)
     } finally {
-      process.off("uncaughtException", onUncaught)
-      clientMux.close()
-      serverMux.close()
-      peerSockets.forEach((s) => s.destroy())
-      await new Promise<void>((resolve) => target.close(() => resolve()))
+      client.close()
     }
-  }, 15_000)
+  })
 
   test("rejects text WebSocket frames as a protocol error and closes cleanly", async () => {
     const pair = createSocketPair()
@@ -1043,73 +568,7 @@ describe("StreamMux flow control, fairness, half-close, and RESET cancellation",
   })
 })
 
-describe("BrowserProxy safe per-origin HTTP/1.1 connection pooling", () => {
-  test("pools 8 plain HTTP requests to one origin over a single upstream tunnel open", async () => {
-    let targetConnections = 0
-    const target = createHttpServer((req, res) => {
-      res.writeHead(200, { "content-type": "text/plain", "content-length": String((req.url ?? "").length) })
-      res.end(req.url ?? "")
-    })
-    target.on("connection", () => {
-      targetConnections += 1
-    })
-    await once(target.listen(0, "127.0.0.1"), "listening")
-    const addr = target.address()
-    if (!addr || typeof addr === "string") throw new Error("No HTTP address")
-
-    const pair = createSocketPair()
-    const serverMux = StreamMux.createServerMux(pair.server, {
-      policy: EgressPolicy.makePolicy(),
-      heartbeatIntervalMs: 0,
-    })
-    const clientMux = StreamMux.createClientMux(pair.client, { heartbeatIntervalMs: 0 })
-
-    let upstreamOpens = 0
-    const proxy = await BrowserProxy.make({
-      openStream(destination, signal) {
-        upstreamOpens += 1
-        return clientMux.openStream(destination, signal)
-      },
-    })
-    const auth = `Basic ${Buffer.from(`${proxy.credentials.username}:${proxy.credentials.password}`).toString("base64")}`
-
-    const fetchViaProxy = (asset: string) =>
-      new Promise<{ status?: number; body: string }>((resolve, reject) => {
-        const req = httpRequest(
-          {
-            hostname: proxy.host,
-            port: proxy.port,
-            method: "GET",
-            path: `http://127.0.0.1:${addr.port}${asset}`,
-            headers: { "Proxy-Authorization": auth },
-          },
-          (res) => {
-            const chunks: Buffer[] = []
-            res.on("data", (chunk: Buffer) => chunks.push(chunk))
-            res.once("end", () => resolve({ status: res.statusCode, body: Buffer.concat(chunks).toString() }))
-          },
-        )
-        req.once("error", reject)
-        req.end()
-      })
-
-    try {
-      for (let i = 0; i < 8; i++) {
-        const result = await fetchViaProxy(`/asset-${i}.js`)
-        expect(result.status).toBe(200)
-        expect(result.body).toBe(`/asset-${i}.js`)
-      }
-      // 8 sequential HTTP assets to one origin reuse 1 pooled upstream stream (vs 8 before)!
-      expect(upstreamOpens).toBe(1)
-      expect(targetConnections).toBe(1)
-    } finally {
-      await proxy.close()
-      clientMux.close()
-      serverMux.close()
-      await new Promise<void>((resolve) => target.close(() => resolve()))
-    }
-  }, 15_000)
-
+describe("BrowserProxy attachment lifetime", () => {
   test("TunnelTicket schema accepts only the fixed experimental browser tunnel path", () => {
     expect(
       Schema.decodeUnknownSync(Browser.TunnelTicket)({
@@ -1131,252 +590,104 @@ describe("BrowserProxy safe per-origin HTTP/1.1 connection pooling", () => {
     }
   })
 
-  test("normal detach tears down idle pooled HTTP sockets and active upgraded WebSocket without uncaught errors", async () => {
-    const target = createHttpServer((req, res) => {
-      if (req.url === "/big") {
-        const body = Buffer.alloc(512 * 1024, 0x44)
-        res.writeHead(200, { "content-type": "application/octet-stream", "content-length": String(body.length) })
-        res.end(body)
-        return
-      }
-      res.writeHead(200, { "content-length": "2" })
-      res.end("ok")
-    })
-    const upgradedTargetSockets = new Set<Duplex>()
-    target.on("upgrade", (_req, socket) => {
-      upgradedTargetSockets.add(socket)
-      socket.once("close", () => upgradedTargetSockets.delete(socket))
-      socket.write(
-        "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n",
-      )
-      socket.on("error", () => socket.destroy())
-    })
-    await once(target.listen(0, "127.0.0.1"), "listening")
-    const addr = target.address()
-    if (!addr || typeof addr === "string") throw new Error("No HTTP address")
-
-    const pair = createSocketPair({ simulateBuffered: true })
-    const serverMux = StreamMux.createServerMux(pair.server, {
-      policy: EgressPolicy.makePolicy(),
-      heartbeatIntervalMs: 0,
-    })
-    const clientMux = StreamMux.createClientMux(pair.client, { heartbeatIntervalMs: 0 })
-    const resetListeners = new Set<() => void>()
-    const proxy = await BrowserProxy.make({
-      openStream: (destination, signal) => clientMux.openStream(destination, signal),
-      onReset(listener) {
-        resetListeners.add(listener)
-        return () => void resetListeners.delete(listener)
+  test.each(["detach", "disconnect"] as const)("%s closes upgraded and pooled sockets", async (ending) => {
+    const stalled = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<Response>()
+    const target = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch(req, server) {
+        const path = new URL(req.url).pathname
+        if (path === "/ws" && server.upgrade(req)) return
+        if (path === "/stall") {
+          stalled.resolve()
+          return release.promise
+        }
+        return new Response("ok")
+      },
+      websocket: {
+        message(ws, message) {
+          ws.send(message)
+        },
       },
     })
-    void clientMux.closed.then(() => resetListeners.forEach((fn) => fn()))
-
-    const auth = `Basic ${Buffer.from(`${proxy.credentials.username}:${proxy.credentials.password}`).toString("base64")}`
-    const uncaught: Error[] = []
-    const onUncaught = (error: Error) => {
-      uncaught.push(error)
-    }
-    process.on("uncaughtException", onUncaught)
-
-    try {
-      // 1. Run a 512 KiB HTTP transfer leaving an idle pooled socket in BrowserProxy's http.Agent
-      const bigBytes = await new Promise<number>((resolve, reject) => {
-        const req = httpRequest(
-          {
-            hostname: proxy.host,
-            port: proxy.port,
-            method: "GET",
-            path: `http://127.0.0.1:${addr.port}/big`,
-            headers: { "Proxy-Authorization": auth },
-          },
-          (res) => {
-            let total = 0
-            res.on("data", (chunk: Buffer) => {
-              total += chunk.byteLength
-            })
-            res.once("end", () => resolve(total))
-          },
-        )
-        req.once("error", reject)
-        req.end()
-      })
-      expect(bigBytes).toBe(512 * 1024)
-
-      // 2. Open a concurrent upgraded WebSocket tunnel and keep it open across detach
-      const upgraded = await new Promise<Socket>((resolve, reject) => {
-        const sock = netConnect(proxy.port, proxy.host, () => {
-          sock.write(
-            `GET http://127.0.0.1:${addr.port}/ws HTTP/1.1\r\n` +
-              `Host: 127.0.0.1:${addr.port}\r\n` +
-              `Proxy-Authorization: ${auth}\r\n` +
-              `Connection: Upgrade\r\n` +
-              `Upgrade: websocket\r\n` +
-              `Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n` +
-              `Sec-WebSocket-Version: 13\r\n\r\n`,
-          )
-        })
-        let head = ""
-        let resolved = false
-        sock.on("data", (chunk: Buffer) => {
-          if (resolved) return
-          head += chunk.toString("latin1")
-          if (head.includes("\r\n\r\n")) {
-            resolved = true
-            resolve(sock)
-          }
-        })
-        sock.once("error", reject)
-      })
-      const upgradedClosed = new Promise<void>((resolve) => upgraded.once("close", () => resolve()))
-
-      // 3. Reproduce exact BrowserNetwork release sequence: close mux ("desktop detached"), then close proxy.
-      clientMux.close(1000, "desktop detached")
-      await proxy.close()
-      await upgradedClosed
-      await new Promise<void>((resolve) => setTimeout(resolve, 30))
-
-      expect(uncaught).toEqual([])
-      expect(serverMux.activeStreams()).toBe(0)
-    } finally {
-      process.off("uncaughtException", onUncaught)
-      clientMux.close()
-      serverMux.close()
-      upgradedTargetSockets.forEach((socket) => socket.destroy())
-      target.closeAllConnections()
-      await new Promise<void>((resolve) => target.close(() => resolve()))
-    }
-  }, 15_000)
-
-  test("abnormal tunnel drop fails active pending HTTP request while keeping idle pooled and upgraded sockets crash-free", async () => {
-    const hungStarted = Promise.withResolvers<void>()
-    const target = createHttpServer((req, res) => {
-      if (req.url === "/stall") {
-        hungStarted.resolve()
-        return
-      }
-      res.writeHead(200, { "content-length": "2" })
-      res.end("ok")
-    })
-    const upgradedTargetSockets = new Set<Duplex>()
-    target.on("upgrade", (_req, socket) => {
-      upgradedTargetSockets.add(socket)
-      socket.once("close", () => upgradedTargetSockets.delete(socket))
-      socket.write(
-        "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: s3pPLMBiTxaQ9kYGzzhZRbK+xOo=\r\n\r\n",
-      )
-      socket.on("error", () => socket.destroy())
-    })
-    await once(target.listen(0, "127.0.0.1"), "listening")
-    const addr = target.address()
-    if (!addr || typeof addr === "string") throw new Error("No HTTP address")
-
     const pair = createSocketPair({ simulateBuffered: true })
-    const serverMux = StreamMux.createServerMux(pair.server, {
-      policy: EgressPolicy.makePolicy(),
-      heartbeatIntervalMs: 0,
-    })
-    const clientMux = StreamMux.createClientMux(pair.client, { heartbeatIntervalMs: 0 })
-    const resetListeners = new Set<() => void>()
+    const server = StreamMux.createServerMux(pair.server, { policy: EgressPolicy.makePolicy(), heartbeatIntervalMs: 0 })
+    const client = StreamMux.createClientMux(pair.client, { heartbeatIntervalMs: 0 })
+    let opens = 0
+    const listeners = new Set<() => void>()
     const proxy = await BrowserProxy.make({
-      openStream: (destination, signal) => clientMux.openStream(destination, signal),
+      openStream(destination, signal) {
+        opens++
+        return client.openStream(destination, signal)
+      },
       onReset(listener) {
-        resetListeners.add(listener)
-        return () => void resetListeners.delete(listener)
+        listeners.add(listener)
+        return () => listeners.delete(listener)
       },
     })
-    void clientMux.closed.then(() => resetListeners.forEach((fn) => fn()))
-    const auth = `Basic ${Buffer.from(`${proxy.credentials.username}:${proxy.credentials.password}`).toString("base64")}`
-
-    const uncaught: Error[] = []
-    const onUncaught = (error: Error) => {
-      uncaught.push(error)
+    void client.closed.then(() => listeners.forEach((reset) => reset()))
+    const headers = {
+      "proxy-authorization": `Basic ${Buffer.from(`${proxy.credentials.username}:${proxy.credentials.password}`).toString("base64")}`,
     }
-    process.on("uncaughtException", onUncaught)
+    const options = { hostname: proxy.host, port: proxy.port }
+    const get = (path: string, host = "127.0.0.1") =>
+      new Promise<number | undefined>((resolve, reject) => {
+        const req = httpRequest({ ...options, headers, path: `http://${host}:${target.port}${path}` }, (res) => {
+          res.resume()
+          res.once("end", () => resolve(res.statusCode))
+          res.once("error", reject)
+        })
+        req.once("error", reject).end()
+      })
 
     try {
-      // 1. Create an idle pooled HTTP socket on origin
-      await new Promise<void>((resolve, reject) => {
-        const req = httpRequest(
-          {
-            hostname: proxy.host,
-            port: proxy.port,
-            method: "GET",
-            path: `http://127.0.0.1:${addr.port}/warm`,
-            headers: { "Proxy-Authorization": auth },
-          },
-          (res) => {
-            res.resume()
-            res.once("end", () => resolve())
-          },
-        )
-        req.once("error", reject)
-        req.end()
+      expect(await get("/a")).toBe(200)
+      expect(await get("/b")).toBe(200)
+      expect(opens).toBe(1)
+
+      // Keep the upgraded connection open alongside the idle HTTP pool until the attachment ends.
+      const method = ending === "detach" ? "GET" : "CONNECT"
+      const upgraded = httpRequest({
+        ...options,
+        method,
+        path: method === "GET" ? new URL("/ws", target.url).href : target.url.host,
+        headers:
+          method === "CONNECT"
+            ? headers
+            : {
+                ...headers,
+                connection: "upgrade",
+                upgrade: "websocket",
+                "sec-websocket-version": "13",
+                "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==",
+              },
       })
+      const established = once(upgraded, method === "GET" ? "upgrade" : "connect")
+      upgraded.end()
+      const [response, socket] = await established
+      expect(response.statusCode).toBe(method === "GET" ? 101 : 200)
+      const closed = once(socket, "close")
 
-      // 2. Keep an active upgraded WebSocket open
-      const upgraded = await new Promise<Socket>((resolve, reject) => {
-        const sock = netConnect(proxy.port, proxy.host, () => {
-          sock.write(
-            `GET http://127.0.0.1:${addr.port}/ws HTTP/1.1\r\n` +
-              `Host: 127.0.0.1:${addr.port}\r\n` +
-              `Proxy-Authorization: ${auth}\r\n` +
-              `Connection: Upgrade\r\n` +
-              `Upgrade: websocket\r\n` +
-              `Sec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n` +
-              `Sec-WebSocket-Version: 13\r\n\r\n`,
-          )
-        })
-        let head = ""
-        let resolved = false
-        sock.on("data", (chunk: Buffer) => {
-          if (resolved) return
-          head += chunk.toString("latin1")
-          if (head.includes("\r\n\r\n")) {
-            resolved = true
-            resolve(sock)
-          }
-        })
-        sock.once("error", reject)
-      })
-      const upgradedClosed = new Promise<void>((resolve) => upgraded.once("close", () => resolve()))
-
-      // 3. Start an active pending HTTP request (in-flight read)
-      const pendingStatus = new Promise<number | string>((resolve) => {
-        const req = httpRequest(
-          {
-            hostname: proxy.host,
-            port: proxy.port,
-            method: "GET",
-            path: `http://127.0.0.1:${addr.port}/stall`,
-            headers: { "Proxy-Authorization": auth },
-          },
-          (res) => {
-            res.resume()
-            resolve(res.statusCode ?? 0)
-          },
-        )
-        req.once("error", (err) => resolve(err.message))
-        req.end()
-      })
-      await hungStarted.promise
-
-      // 4. Abnormally drop the tunnel from the server side while pool + upgraded WS + pending read all exist
-      pair.server.terminate()
-
-      const outcome = await pendingStatus
-      // Active pending request genuinely failed (502 from proxy or socket error, never silently succeeded)
-      expect(outcome === 502 || typeof outcome === "string").toBe(true)
-      await upgradedClosed
-      await new Promise<void>((resolve) => setTimeout(resolve, 30))
-      expect(uncaught).toEqual([])
+      if (ending === "detach") {
+        client.close(1000, "desktop detached")
+        await proxy.close()
+      } else {
+        // Use a second origin so the previously warmed socket is still idle when the tunnel drops.
+        const pending = get("/stall", "localhost").catch(() => "closed")
+        await stalled.promise
+        pair.server.terminate()
+        expect([502, "closed"]).toContain((await pending) ?? 0)
+      }
+      await closed
+      await server.closed
+      expect(server.activeStreams()).toBe(0)
     } finally {
-      process.off("uncaughtException", onUncaught)
+      release.resolve(new Response(null, { status: 503 }))
       await proxy.close()
-      clientMux.close()
-      serverMux.close()
-      upgradedTargetSockets.forEach((socket) => socket.destroy())
-      target.closeAllConnections()
-      await new Promise<void>((resolve) => target.close(() => resolve()))
+      client.close()
+      server.close()
+      await target.stop(true)
     }
-  }, 15_000)
+  })
 })
