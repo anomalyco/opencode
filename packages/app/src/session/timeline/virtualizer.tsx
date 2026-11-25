@@ -527,6 +527,11 @@ export function createTimelineVirtualizer(input: Input) {
 
       const root = listRoot()
       const press = pressed
+      // The press closed something in its row.
+      const closed =
+        !!press &&
+        performance.now() - press.at < pressHold &&
+        sizes.some(([, value]) => value.key === press.key && value.size < press.height)
 
       if (press && (press.opened === false || performance.now() - press.at >= pressHold)) pressed = undefined
       else if (press && sizes.some(([, value]) => value.key === press.key && value.size > press.height)) {
@@ -586,6 +591,12 @@ export function createTimelineVirtualizer(input: Input) {
 
       if (untrack(coldHidden)) pinColdBottom()
       dispatchCold(CHECK_REQUESTED)
+      const state = input.follow.peek()
+
+      // The reader closed what a press had opened, and the view that stayed for that press is at the end again. Its
+      // offset did not move, so no scroll event says so. Not where navigation sent the view: its target is where it stays.
+      if (closed && root && state.type === "detached" && state.by !== "navigation" && atReachableEnd(root))
+        input.follow.dispatch({ type: "follow" })
 
       if (untrack(coldHidden) || !input.follow.following() || isGliding(input.follow.peek())) return
 
