@@ -1042,7 +1042,7 @@ const layer = Layer.effect(
           if (Option.isNone(at)) return yield* new InvalidError({ reason: `Invalid time: ${trigger.at}` })
           if (at.value <= now) return yield* new InvalidError({ reason: `Time is in the past: ${trigger.at}` })
           const stored: Trigger = RELATIVE.test(trigger.at.trim())
-            ? { type: "at", at: new Date(at.value).toISOString(), tz: trigger.tz }
+            ? { ...trigger, at: new Date(at.value).toISOString() }
             : trigger
           return { trigger: stored, due: at.value }
         }
