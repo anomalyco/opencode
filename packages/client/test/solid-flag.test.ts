@@ -100,7 +100,6 @@ test("location.shutdown invalidates flags without fetching, so an evicted locati
     state.enabled = false
     app.emit({ id: "evt_shutdown", created: 1, type: "location.shutdown", location, data: {} })
     app.emit({ id: "evt_connected", created: 2, type: "server.connected", data: {} } as OpenCodeEvent)
-    app.emit({ id: "evt_config", created: 3, type: "config.updated", location, data: {} })
     await Bun.sleep(50)
     expect(app.count()).toBe(1)
     // The last value stays until the location syncs again.
@@ -109,6 +108,26 @@ test("location.shutdown invalidates flags without fetching, so an evicted locati
     await app.data.location.sync(location)
     expect(app.count()).toBe(2)
     expect(app.data.location.flag("full_codemode", location)).toBe(false)
+  } finally {
+    app.dispose()
+  }
+})
+
+test("config.updated from a location that shut down refreshes its flags again", async () => {
+  const state = { enabled: true }
+  const app = setup((directory) => Response.json({ location: { directory }, data: { full_codemode: state.enabled } }))
+  const location = { directory: "/project" }
+  try {
+    await app.data.location.flags.sync(location)
+    state.enabled = false
+    app.emit({ id: "evt_shutdown", created: 1, type: "location.shutdown", location, data: {} })
+    app.emit({ id: "evt_connected", created: 2, type: "server.connected", data: {} } as OpenCodeEvent)
+    await Bun.sleep(50)
+    expect(app.count()).toBe(1)
+
+    app.emit({ id: "evt_config", created: 3, type: "config.updated", location, data: {} })
+    await until(() => !app.data.location.flag("full_codemode", location))
+    expect(app.count()).toBe(2)
   } finally {
     app.dispose()
   }

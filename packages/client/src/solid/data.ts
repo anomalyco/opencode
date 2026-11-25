@@ -1573,7 +1573,9 @@ export function createData(config: CreateDataInput) {
       }
       case "config.updated":
         refreshLocation("config", result.location.config, location)
-        if (!dormantFlags.has(locationKey(location))) refreshLocation("flags", flags, location)
+        // Only a running location reports config.updated, so refetching its flags boots nothing.
+        dormantFlags.delete(locationKey(location))
+        refreshLocation("flags", flags, location)
         if (hasLocation("websearch", location)) refresh(() => result.location.websearch.refresh(location))
         break
       case "websearch.updated":
@@ -1651,9 +1653,9 @@ export function createData(config: CreateDataInput) {
 
   const vcs = locationResource("vcs", (location) => api().vcs.get({ location }))
   const usageLimits = locationResource("usageLimits", (location) => api().experimental.usage.limits({ location }))
-  // A server older than the flag endpoint answers it with a 404 and no JSON body: every flag is off there.
-  // Locations whose flags were invalidated by location.shutdown; refreshes skip them until something syncs them again.
+  // Locations whose flags were invalidated by location.shutdown; reconnects skip them until something syncs them again.
   const dormantFlags = new Set<string>()
+  // A server older than the flag endpoint answers it with a 404 and no JSON body: every flag is off there.
   const flagResource = locationResource(
     "flags",
     (location) =>
