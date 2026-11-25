@@ -1,6 +1,6 @@
 export * as PushSender from "./sender.js"
 
-import { Context, Effect, Layer, Option, Schema, Scope } from "effect"
+import { Clock, Context, Effect, Layer, Option, Schema, Scope } from "effect"
 import { FetchHttpClient, HttpClient, HttpClientRequest } from "effect/http"
 import type { Push } from "@opencode/schema/push"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -9,14 +9,45 @@ import { KV } from "../kv.js"
 import { PushCrypto } from "./crypto.js"
 import { PushList } from "./list.js"
 
+export interface Option {
+  readonly label: string
+  /** Only when it differs from the label. */
+  readonly value?: string
+}
+
+/** The first question of a form. */
+export interface Question {
+  readonly key: string
+  readonly type: string
+  readonly options?: ReadonlyArray<Option>
+  readonly truncated?: true
+}
+
+export interface Data {
+  readonly requestID?: string
+  readonly formID?: string
+  readonly sessionID?: string
+  readonly action?: string
+  readonly resources?: ReadonlyArray<string>
+  readonly save?: ReadonlyArray<string>
+  readonly count?: number
+  readonly question?: Question
+  readonly outcome?: "succeeded" | "failed"
+  readonly text?: string
+  readonly error?: { readonly type: string; readonly message?: string }
+  readonly truncated?: true
+}
+
 export interface Notification {
   /** What a later `clear` names: the permission request, the form, or the session for a finished turn. */
   readonly id: string
   readonly type: "session.idle" | "question" | "permission"
   readonly sessionID: string
+  /** When the event happened, in ms since the epoch. */
+  readonly time: number
   readonly title: string
   readonly body: string
-  readonly data: Record<string, string | ReadonlyArray<string>>
+  readonly data: Data
   /** True when the notification needs the person, so phones at level `attention` get it. */
   readonly attention: boolean
 }
@@ -54,27 +85,20 @@ const shorten = (text: string, bytes: number) => {
   return chars.join("") + "…"
 }
 
-type Data = Notification["data"]
+type Over = (data: Data) => number
 
-const without = (data: Data, key: string): Data => Object.fromEntries(Object.entries(data).filter(([k]) => k !== key))
-
-const shortenText = (data: Data, key: string, over: (data: Data) => number) => {
-  const value = data[key]
-  if (typeof value !== "string" || over(data) <= 0) return data
-  const short = shorten(value, over(data))
-  if (short === undefined) return without(data, key)
-  return { ...data, [key]: short }
-}
-
-const shortenList = (data: Data, key: string, over: (data: Data) => number) => {
-  const items = data[key]
-  if (!Array.isArray(items) || items.length === 0 || over(data) <= 0) return data
-  const cut = (kept: ReadonlyArray<string>) => ({ ...data, [key]: kept, truncated: "true" })
-  const kept: string[] = []
+/** Keeps `items` in order while they fit. The first that doesn't is shortened if that fits, and the rest are dropped. */
+const cutList = <T>(
+  items: ReadonlyArray<T>,
+  cut: (kept: ReadonlyArray<T>) => Data,
+  over: Over,
+  shortenItem: (item: T, bytes: number) => T | undefined,
+) => {
+  const kept: T[] = []
   for (const item of items) {
     const next = cut([...kept, item])
     if (over(next) > 0) {
-      const short = shorten(item, over(next))
+      const short = shortenItem(item, over(next))
       if (short === undefined || over(cut([...kept, short])) > 0) return cut(kept)
       return cut([...kept, short])
     }
@@ -83,10 +107,31 @@ const shortenList = (data: Data, key: string, over: (data: Data) => number) => {
   return cut(kept)
 }
 
+const shortenError = (data: Data, over: Over): Data => {
+  if (data.error?.message === undefined || over(data) <= 0) return data
+  return { ...data, error: { ...data.error, message: shorten(data.error.message, over(data)) } }
+}
+
+const shortenResources = (data: Data, over: Over) => {
+  if (!data.resources?.length || over(data) <= 0) return data
+  return cutList(data.resources, (kept) => ({ ...data, resources: kept, truncated: true }), over, shorten)
+}
+
+// An option is never shortened: without a value, its label is what a reply sends.
+const shortenOptions = (data: Data, over: Over) => {
+  const question = data.question
+  if (!question?.options?.length || over(data) <= 0) return data
+  const cut = (kept: ReadonlyArray<Option>): Data => ({
+    ...data,
+    question: { ...question, options: kept, truncated: true },
+  })
+  return cutList(question.options, cut, over, () => undefined)
+}
+
 /**
- * The JSON the phone decrypts, shortened so the box stays within the relay's limit. A finished turn's error is cut
- * first, then its text is dropped. A permission's resources or a question's choices keep their order and come with
- * `truncated: "true"`. The body is cut last; ids never are.
+ * The JSON the phone decrypts, shortened so the box stays within the relay's limit. A failed turn's error message is
+ * cut first, then the turn's text and a permission's `save` are dropped. A permission's resources or a question's
+ * options keep their order and come with `truncated: true`. The body is cut last; ids never are.
  */
 export const message = (notification: Notification) => {
   const make = (data: Data, body = notification.body) =>
@@ -95,14 +140,16 @@ export const message = (notification: Notification) => {
       id: notification.id,
       type: notification.type,
       sessionID: notification.sessionID,
+      time: notification.time,
       title: notification.title,
       body,
       data,
     })
   const over = (data: Data) => Buffer.byteLength(make(data), "utf8") - maxMessageBytes
-  const error = shortenText(notification.data, "error", over)
-  const text = over(error) > 0 ? without(error, "text") : error
-  const data = shortenList(shortenList(text, "resources", over), "choices", over)
+  const error = shortenError(notification.data, over)
+  const text = over(error) > 0 ? { ...error, text: undefined } : error
+  const save = over(text) > 0 ? { ...text, save: undefined } : text
+  const data = shortenOptions(shortenResources(save, over), over)
   if (over(data) <= 0) return make(data)
   return make(data, shorten(notification.body, over(data)) ?? "…")
 }
@@ -183,12 +230,13 @@ const layer = Layer.effect(
       }
       if (cleared.length === 0) return
       const targets = yield* list.targets()
+      const time = yield* Clock.currentTimeMillis
       yield* Effect.forEach(
         cleared.flatMap((item) =>
           targets.devices
             .filter((device) => item.devices.includes(device.id))
             .map((device) =>
-              push(device, JSON.stringify({ v: 1, id: item.id, type: "clear", sessionID: item.sessionID }), true),
+              push(device, JSON.stringify({ v: 1, id: item.id, type: "clear", sessionID: item.sessionID, time }), true),
             ),
         ),
         Effect.ignoreCause({ log: "Warn", message: "Failed to clear a push notification" }),

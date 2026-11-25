@@ -161,6 +161,7 @@ describe("PushWatcher", () => {
           id: parentID,
           type: "session.idle",
           sessionID: parentID,
+          time: expect.any(Number),
           title: "Fix the login bug",
           body: "Finished",
           data: { outcome: "succeeded", text: "Fixed the login bug." },
@@ -170,9 +171,10 @@ describe("PushWatcher", () => {
           id: parentID,
           type: "session.idle",
           sessionID: parentID,
+          time: expect.any(Number),
           title: "Fix the login bug",
           body: "Failed",
-          data: { outcome: "failed", error: "x" },
+          data: { outcome: "failed", error: { type: "unknown", message: "x" } },
         },
       ])
     }),
@@ -195,7 +197,7 @@ describe("PushWatcher", () => {
             type: "string",
             options: [
               { value: "Postgres", label: "Postgres", description: "The production database" },
-              { value: "SQLite", label: "SQLite" },
+              { value: "sqlite", label: "SQLite" },
             ],
             custom: true,
           },
@@ -212,6 +214,7 @@ describe("PushWatcher", () => {
         sessionID: childID,
         action: "bash",
         resources: ["git push"],
+        save: ["git push *"],
       })
       yield* waitUntil(Effect.sync(() => boxes.length === 2))
 
@@ -221,15 +224,18 @@ describe("PushWatcher", () => {
           id: "frm_1",
           type: "question",
           sessionID: parentID,
+          time: expect.any(Number),
           title: "Fix the login bug",
           body: "Which database?",
           data: {
             formID: "frm_1",
             sessionID: grandchildID,
-            field: "q0",
-            kind: "string",
-            choices: ["Postgres", "SQLite"],
-            more: "1",
+            count: 2,
+            question: {
+              key: "q0",
+              type: "string",
+              options: [{ label: "Postgres" }, { label: "SQLite", value: "sqlite" }],
+            },
           },
         },
         {
@@ -237,9 +243,16 @@ describe("PushWatcher", () => {
           id: "per_1",
           type: "permission",
           sessionID: parentID,
+          time: expect.any(Number),
           title: "Fix the login bug",
           body: "Needs permission: bash",
-          data: { requestID: "per_1", sessionID: childID, action: "bash", resources: ["git push"] },
+          data: {
+            requestID: "per_1",
+            sessionID: childID,
+            action: "bash",
+            resources: ["git push"],
+            save: ["git push *"],
+          },
         },
       ])
     }),
@@ -325,10 +338,10 @@ describe("PushWatcher", () => {
 
       expect(silent.slice(0, 8)).toEqual([undefined, true, undefined, true, undefined, true, undefined, true])
       expect(cleared().slice(0, 4)).toEqual([
-        { v: 1, id: "per_1", type: "clear", sessionID: parentID },
-        { v: 1, id: "frm_1", type: "clear", sessionID: parentID },
-        { v: 1, id: "per_2", type: "clear", sessionID: parentID },
-        { v: 1, id: parentID, type: "clear", sessionID: parentID },
+        { v: 1, id: "per_1", type: "clear", sessionID: parentID, time: expect.any(Number) },
+        { v: 1, id: "frm_1", type: "clear", sessionID: parentID, time: expect.any(Number) },
+        { v: 1, id: "per_2", type: "clear", sessionID: parentID, time: expect.any(Number) },
+        { v: 1, id: parentID, type: "clear", sessionID: parentID, time: expect.any(Number) },
       ])
     }),
   )

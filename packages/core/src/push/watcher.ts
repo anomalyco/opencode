@@ -3,6 +3,7 @@ export * as PushWatcher from "./watcher.js"
 import { Effect, Layer, Option, Schema, Stream } from "effect"
 import { Form } from "@opencode/schema/form"
 import { Permission } from "@opencode/schema/permission"
+import { SessionError } from "@opencode/schema/session-error"
 import { SessionEvent } from "@opencode/schema/session-event"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "../bus.js"
@@ -40,7 +41,8 @@ const layer = Layer.effectDiscard(
       sessionID: Session.ID,
       outcome: keyof typeof bodies,
       ran: boolean,
-      error?: string,
+      time: number,
+      error?: SessionError.Error,
     ) {
       if (!(yield* list.hasDevices())) return
       const session = yield* sessions.get(sessionID)
@@ -58,41 +60,49 @@ const layer = Layer.effectDiscard(
         id: sessionID,
         type: "session.idle",
         sessionID,
+        time,
         title: session.title || "OpenCode",
         body: bodies[outcome],
-        data: { outcome, ...(text && { text }), ...(error && { error }) },
+        data: { outcome, ...(text && { text }), ...(error && { error: { type: error.type, message: error.message } }) },
         attention: false,
       })
     })
 
-    const question = Effect.fn("PushWatcher.question")(function* (form: Form.Info) {
+    const question = Effect.fn("PushWatcher.question")(function* (form: Form.Info, time: number) {
       if (form.metadata?.kind !== "question") return
       const sessionID = Schema.decodeUnknownOption(Session.ID)(form.sessionID)
       if (Option.isNone(sessionID)) return
       if (!(yield* list.hasDevices())) return
       const session = yield* topLevel(sessionID.value)
       const field = form.fields[0]
-      const choice = field.type === "string" || field.type === "multiselect" ? field : undefined
+      const options = field.type === "string" || field.type === "multiselect" ? (field.options ?? []) : []
       yield* sender.send({
         id: form.id,
         type: "question",
         sessionID: session.id,
+        time,
         title: session.title || "OpenCode",
         body: field.description || field.title || form.title,
         // The top-level session is the one to open and the one bells apply to; the form belongs to this one.
         data: {
           formID: form.id,
           sessionID: sessionID.value,
-          field: field.key,
-          kind: field.type,
-          ...(choice?.options?.length && { choices: choice.options.map((option) => option.label) }),
-          ...(form.fields.length > 1 && { more: String(form.fields.length - 1) }),
+          count: form.fields.length,
+          question: {
+            key: field.key,
+            type: field.type,
+            ...(options.length > 0 && {
+              options: options.map((option) =>
+                option.value === option.label ? { label: option.label } : { label: option.label, value: option.value },
+              ),
+            }),
+          },
         },
         attention: true,
       })
     })
 
-    const permission = Effect.fn("PushWatcher.permission")(function* (request: Permission.Request) {
+    const permission = Effect.fn("PushWatcher.permission")(function* (request: Permission.Request, time: number) {
       if (!(yield* list.hasDevices())) return
       const session = yield* topLevel(request.sessionID)
       asking.set(request.sessionID, (asking.get(request.sessionID) ?? new Set()).add(request.id))
@@ -100,6 +110,7 @@ const layer = Layer.effectDiscard(
         id: request.id,
         type: "permission",
         sessionID: session.id,
+        time,
         title: session.title || "OpenCode",
         body: `Needs permission: ${request.action}`,
         // A reply has to name the session that asked, which may be a subagent's.
@@ -108,6 +119,7 @@ const layer = Layer.effectDiscard(
           sessionID: request.sessionID,
           action: request.action,
           resources: request.resources,
+          ...(request.save?.length && { save: request.save }),
         },
         attention: true,
       })
@@ -115,7 +127,10 @@ const layer = Layer.effectDiscard(
 
     yield* bus.subscribe([Form.Event.Created, Permission.Event.Asked]).pipe(
       Stream.runForEach((event) => {
-        const notify = event.type === "form.created" ? question(event.data.form) : permission(event.data)
+        const notify =
+          event.type === "form.created"
+            ? question(event.data.form, event.created)
+            : permission(event.data, event.created)
         return notify.pipe(Effect.ignoreCause({ log: "Warn", message: "Failed to notify phones" }))
       }),
       Effect.forkScoped({ startImmediately: true }),
@@ -177,11 +192,11 @@ const layer = Layer.effectDiscard(
           if (event.type === "session.execution.interrupted") return sender.clear(unanswered)
           if (event.type === "session.execution.succeeded" && !ran) return sender.clear(unanswered)
           const outcome = event.type === "session.execution.succeeded" ? "succeeded" : "failed"
-          const error = event.type === "session.execution.failed" ? event.data.error.message : undefined
+          const error = event.type === "session.execution.failed" ? event.data.error : undefined
           return sender
             .clear(unanswered)
             .pipe(
-              Effect.andThen(finished(sessionID, outcome, ran, error)),
+              Effect.andThen(finished(sessionID, outcome, ran, event.created, error)),
               Effect.ignoreCause({ log: "Warn", message: "Failed to notify phones" }),
             )
         }),
