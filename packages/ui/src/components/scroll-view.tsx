@@ -57,7 +57,15 @@ export interface ScrollViewProps extends ComponentProps<"div"> {
 }
 
 export const scrollKey = (event: Pick<KeyboardEvent, "key" | "altKey" | "ctrlKey" | "metaKey" | "shiftKey">) => {
-  if (event.altKey || event.ctrlKey || event.metaKey) return
+  // Ctrl+Home and Ctrl+End, Cmd on macOS, go to an edge as Home and End do. The browser animates the ones it handles
+  // itself, and a scroll write made while it does moves where the animation ends by the distance of the write.
+  const edge =
+    (event.ctrlKey || event.metaKey) &&
+    !event.altKey &&
+    !event.shiftKey &&
+    (event.key === "Home" || event.key === "End")
+
+  if (!edge && (event.altKey || event.ctrlKey || event.metaKey)) return
 
   if (event.shiftKey && event.key !== " ") return
 
@@ -458,7 +466,7 @@ export function ScrollView(props: ScrollViewProps) {
 
     const next = scrollKey(e)
 
-    // Modified navigation (for example Ctrl+Home) stays native, but must read
+    // Other modified navigation (for example Ctrl+ArrowUp) stays native, but must read
     // the same reconciled geometry as the keys handled by this component.
     const intent =
       next ??

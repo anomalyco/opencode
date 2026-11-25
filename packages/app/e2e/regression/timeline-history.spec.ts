@@ -666,6 +666,47 @@ test.describe("timeline history", () => {
     await expect(editor).toHaveText("keep this draft")
   })
 
+  for (const newTimeline of [false, true]) {
+    for (const key of ["ControlOrMeta+Home", "ControlOrMeta+End"] as const) {
+      const edge = key === "ControlOrMeta+Home" ? "start" : "end"
+
+      test(`${key} takes the ${newTimeline ? "new" : "old"} timeline to its ${edge}`, async ({ page }) => {
+        // The browser animated these keys itself. A scroll write made while it does moves where the animation ends by
+        // the distance of the write, and the timeline writes the offset for each batch of rows that measure on the way.
+        await setupTimeline(page, {
+          settings: { newTimeline },
+          sessionMessages: validateTimelineMessages([
+            ...historyMessages(40),
+            userMessage(),
+            assistantMessage([textPart("prt_edge_tail", "The newest answer.")]),
+          ]),
+        })
+
+        const scroller = timelineScroller(page)
+        const top = () => scroller.evaluate((element) => element.scrollTop)
+
+        const fromEnd = () =>
+          scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)
+
+        await expect(page.getByText("The newest answer.", { exact: true })).toBeInViewport()
+        await expect.poll(top).toBeGreaterThan(1000)
+
+        if (edge === "start") {
+          await scroller.press(key)
+          await expect.poll(top).toBe(0)
+
+          return
+        }
+
+        // Home is one write of the timeline's own.
+        await scroller.press("Home")
+        await expect.poll(top).toBe(0)
+        await scroller.press(key)
+        await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+      })
+    }
+  }
+
   test("a message hash and message navigation keep the prompt in view and the hash in step", async ({ page }) => {
     const messages = validateTimelineMessages([
       ...historyMessages(20),

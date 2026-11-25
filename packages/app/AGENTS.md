@@ -133,7 +133,8 @@ This section is the single source for what may move or restyle the session timel
 
 - A native scroll write (`scrollTo`, `scrollTop =`) forces a layout when anything is dirty. TanStack corrects the scroll position once for each row it resizes above the view, so a batch of measured rows forced one layout for each row.
 - `scrollToFn` in `src/session/timeline/virtualizer.tsx` holds the corrections made while a batch of sizes is applied and writes the last one once. Keep scroll writes for size changes on that path, and call `flushHeldScroll` before code inside the batch reads the native offset.
-- Keeper: "corrects the scroll position once for each batch of rows an older page measures" in `e2e/regression/timeline-history.spec.ts`.
+- The browser animates a scroll key that it handles itself, and each scroll write made while it animates moves where the animation ends by the distance of the write. `ScrollView` therefore handles Ctrl+Home and Ctrl+End (Cmd on macOS) as it does Home and End, with one instant write (`scrollKey` in `packages/ui/src/components/scroll-view.tsx`), and the timeline hears the key as the reader's scroll. Left to the browser, Ctrl+Home from the end did not stop the timeline from following: the end was written back while the animation ran, and the view rested 4,936 to 7,460px from the top. Ctrl+End from the top rested 460 to 729px short of the end, by the corrections for the rows that measured on the way.
+- Keepers: "corrects the scroll position once for each batch of rows an older page measures" and "ControlOrMeta+Home takes the … timeline to its start" in `e2e/regression/timeline-history.spec.ts`.
 
 ### `:has()` selectors
 
