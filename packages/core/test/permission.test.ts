@@ -122,6 +122,25 @@ test("Permission.site saves a web URL's site as written, and only the URL itself
     expect(Permission.site(url)).toEqual([])
 })
 
+it.live("honors a native read denial on either resource in a two-alias check", () =>
+  Effect.gen(function* () {
+    const logical = "member/.env"
+    const physical = "/workspace/physical/.env"
+    const allowed = { action: "read", resource: "*", effect: "allow" } as const
+    yield* setup([allowed])
+    const permission = yield* Permission.Service
+    const input = assertion({ resources: [logical, physical] })
+    yield* permission.assert(input)
+
+    for (const resource of [logical, physical, "*"]) {
+      yield* setRules([allowed, { action: "read", resource, effect: "deny" }])
+      const rejected = yield* permission.assert(input).pipe(Effect.flip)
+      expect(rejected).toBeInstanceOf(Permission.BlockedError)
+      expect(yield* permission.list()).toHaveLength(0)
+    }
+  }),
+)
+
 describe("Permission.isActionDenied", () => {
   const rule = (action: string, resource: string, effect: Permission.Rule["effect"]): Permission.Rule => ({
     action,
