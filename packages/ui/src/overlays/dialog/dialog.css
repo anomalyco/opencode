@@ -160,7 +160,7 @@
     }
   }
 
-  &:is([data-size="large"], [data-size="x-large"]) {
+  &:is([data-size="tall"], [data-size="large"], [data-size="x-large"]) {
     align-items: flex-start;
 
     [data-slot="dialog-container"] {
@@ -169,10 +169,14 @@
     }
   }
 
-  &:is([data-size="large"], [data-size="x-large"]) [data-slot="dialog-container"] {
+  &:is([data-size="tall"], [data-size="large"], [data-size="x-large"]) [data-slot="dialog-container"] {
     --dialog-height: min(calc(100vh - 96px), 600px);
     width: min(calc(100vw - 32px), 680px);
     background: var(--v2-background-bg-base);
+  }
+
+  &[data-size="tall"] [data-slot="dialog-container"] {
+    width: min(calc(100vw - 32px), 480px);
   }
 
   &[data-size="x-large"] [data-slot="dialog-container"] {

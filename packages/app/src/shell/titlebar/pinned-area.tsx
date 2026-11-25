@@ -387,7 +387,7 @@ function PinnedGroupView(props: { group: PinGroup; orientation: Orientation }) {
       data-group-color={props.group.color}
       class="relative flex shrink-0"
       classList={{
-        "flex-row items-center gap-1": props.orientation === "horizontal",
+        "flex-row items-center": props.orientation === "horizontal",
         "w-full flex-col gap-[3px]": props.orientation === "vertical",
       }}
     >
