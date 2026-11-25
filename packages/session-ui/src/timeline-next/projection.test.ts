@@ -112,7 +112,11 @@ describe("New timeline projection", () => {
     const user = { id: "user", type: "user", text: "Go", time: { created: 0 } } as const
 
     // Each row the turn shows after the prompt, with the parts it holds.
-    const shape = (messages: SessionMessageInfo[], status: SessionStatus, detail: TimelineDetail = everything) =>
+    const rowsAfterPrompt = (
+      messages: SessionMessageInfo[],
+      status: SessionStatus,
+      detail: TimelineDetail = everything,
+    ) =>
       createRoot((dispose) => {
         const projection = createNextTimelineProjection({
           sessionMessages: () => messages,
@@ -129,6 +133,7 @@ describe("New timeline projection", () => {
 
           return [`${row.group.type} ${refs.map((ref) => ref.partID).join(",")}`]
         })
+
         dispose()
 
         return result
@@ -141,7 +146,7 @@ describe("New timeline projection", () => {
         step("b", 3, { content: [{ type: "text", text: "" }, reasoning(3, 4), shell], time: { created: 3 } }),
       ]
 
-      expect(shape(messages, { type: "idle" })).toEqual(["thought a:reasoning:0,b:reasoning:0", "part shell"])
+      expect(rowsAfterPrompt(messages, { type: "idle" })).toEqual(["thought a:reasoning:0,b:reasoning:0", "part shell"])
     })
 
     test("text between two thoughts keeps them apart", () => {
@@ -153,7 +158,11 @@ describe("New timeline projection", () => {
         }),
       ]
 
-      expect(shape(messages, { type: "idle" })).toEqual(["part a:reasoning:0", "part a:text:0", "part a:reasoning:1"])
+      expect(rowsAfterPrompt(messages, { type: "idle" })).toEqual([
+        "part a:reasoning:0",
+        "part a:text:0",
+        "part a:reasoning:1",
+      ])
     })
 
     test("a finished thought stays Thinking while the model may think again", () => {
@@ -163,7 +172,7 @@ describe("New timeline projection", () => {
         step("b", 3, { content: [], time: { created: 3 } }),
       ]
 
-      expect(shape(messages, { type: "busy" })).toEqual(["Thinking a:reasoning:0"])
+      expect(rowsAfterPrompt(messages, { type: "busy" })).toEqual(["Thinking a:reasoning:0"])
     })
 
     test("the next thought joins the live one", () => {
@@ -173,8 +182,8 @@ describe("New timeline projection", () => {
         step("b", 3, { content: [reasoning(3)], time: { created: 3 } }),
       ]
 
-      expect(shape(messages, { type: "busy" })).toEqual(["Thinking a:reasoning:0,b:reasoning:0"])
-      expect(shape(messages, { type: "busy" }, detailed)).toEqual(["Thinking a:reasoning:0,b:reasoning:0"])
+      expect(rowsAfterPrompt(messages, { type: "busy" })).toEqual(["Thinking a:reasoning:0,b:reasoning:0"])
+      expect(rowsAfterPrompt(messages, { type: "busy" }, detailed)).toEqual(["Thinking a:reasoning:0,b:reasoning:0"])
     })
 
     test("a call settles the thoughts before it", () => {
@@ -184,7 +193,7 @@ describe("New timeline projection", () => {
         step("b", 3, { content: [reasoning(3, 4), shell], time: { created: 3 } }),
       ]
 
-      expect(shape(messages, { type: "busy" })).toEqual(["thought a:reasoning:0,b:reasoning:0", "part shell"])
+      expect(rowsAfterPrompt(messages, { type: "busy" })).toEqual(["thought a:reasoning:0,b:reasoning:0", "part shell"])
     })
   })
 
