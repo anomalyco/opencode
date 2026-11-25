@@ -286,5 +286,18 @@ const DELIMITERS: &[(&str, &str)] = &[
     (".", ""),
 ];
 
-const SPACING: &[(&str, usize)] =
-    &[(",", 0), (":", 1), (";", 1), ("!", 0), ("quad", 2), ("qquad", 4), ("enspace", 1), ("thinspace", 0)];
+const SPACING: &[(&str, usize)] = &[
+    // `\ ` is the LaTeX control space: a backslash followed by a literal space, tab, CR, or LF.
+    (" ", 1),
+    ("\t", 1),
+    ("\r", 1),
+    ("\n", 1),
+    (",", 0),
+    (":", 1),
+    (";", 1),
+    ("!", 0),
+    ("quad", 2),
+    ("qquad", 4),
+    ("enspace", 1),
+    ("thinspace", 0),
+];
