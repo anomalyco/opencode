@@ -109,6 +109,19 @@ describe("FileAccess.authorizeRead", () => {
       })
       expect(logicalDirectory.workspace?.absolute).toBe(AbsolutePath.make(nested))
 
+      const outside = yield* tmpdirScoped()
+      const outsideFile = path.join(outside.path, "outside.txt")
+      yield* Effect.promise(() => fs.writeFile(outsideFile, "outside workspace"))
+      yield* Effect.promise(() => fs.rename(file, path.join(physical.path, "original.txt")))
+      yield* Effect.promise(() => fs.symlink(outsideFile, file))
+      const changed = yield* ReadToolFileSystem.readWorkspace(
+        target.workspace,
+        target.absolute,
+        target.resource,
+        {},
+      ).pipe(Effect.flip)
+      expect(changed._tag).toBe("Environment.Failed")
+
       const missing = yield* access.authorizeRead(path.join(logical, "missing"), invocation, { workspaceScope: true })
       if (!missing.workspace) throw new Error("Expected a guarded file target")
       const absent = yield* ReadToolFileSystem.readWorkspace(
@@ -130,7 +143,7 @@ describe("FileAccess.authorizeRead", () => {
         target.resource,
         {},
       ).pipe(Effect.flip)
-      expect(rejected._tag).toBe("Environment.Failed")
+      expect(rejected).toMatchObject({ _tag: "Environment.Failed", cause: "Unverified workspace assignment" })
     }).pipe(provide(requests, undefined, "workspace_read_scope"))
   })
 
