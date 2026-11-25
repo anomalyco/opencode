@@ -329,7 +329,7 @@ export function searchableSources(messages: readonly SessionMessageInfo[]) {
 export function findMatchesInParts(parts: readonly SearchablePart[], query: string) {
   if (!query) return EMPTY_MATCHES
 
-  return parts.flatMap((part) => matchesOf(part, countHits(part.lower, query)))
+  return listMatches(parts, (part) => countHits(part.lower, query))
 }
 
 /**
@@ -347,14 +347,14 @@ export function createMatchFinder() {
       counted.counts = new WeakMap()
     }
 
-    return parts.flatMap((part) => {
+    return listMatches(parts, (part) => {
       const known = counted.counts.get(part)
 
-      if (known !== undefined) return matchesOf(part, known)
+      if (known !== undefined) return known
       const count = countHits(part.lower, query)
       counted.counts.set(part, count)
 
-      return matchesOf(part, count)
+      return count
     })
   }
 }
@@ -367,11 +367,18 @@ function countHits(lower: string, query: string) {
   return count
 }
 
-function matchesOf(part: SearchablePart, count: number) {
-  return Array.from(
-    { length: count },
-    (_, occurrence): TimelineSearchMatch => ({ revealID: part.revealID, partID: part.partID, occurrence }),
-  )
+// One list, filled in place: a single letter has more than 100,000 hits in a long session.
+function listMatches(parts: readonly SearchablePart[], count: (part: SearchablePart) => number) {
+  const matches: TimelineSearchMatch[] = []
+
+  for (const part of parts) {
+    const hits = count(part)
+
+    for (let occurrence = 0; occurrence < hits; occurrence++)
+      matches.push({ revealID: part.revealID, partID: part.partID, occurrence })
+  }
+
+  return matches
 }
 
 function queryChanged(state: Active, value: string, matches: readonly TimelineSearchMatch[]): TimelineSearchTransition {

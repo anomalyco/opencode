@@ -4,7 +4,7 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { useData } from "@/runtime/server/current"
 import { readMarkdownText } from "@opencode/session-ui/markdown-worker"
 import { scrollPort } from "@opencode/ui/scroll-port"
-import { batch, createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js"
 import { unwrap } from "solid-js/store"
 import {
   createMatchFinder,
@@ -38,9 +38,9 @@ const FOLD_TOGGLE = '[data-slot="user-message-fold-toggle"]'
 // Matches the fold's mask in session-ui's message-part.css.
 const FOLD_FADE = 40
 
-// Text inside a part that Find does not read: the label of a control, such as a folded message's Read more button,
-// a formula, whose glyphs are not its source, and what a closed disclosure hides.
-const UNSEEN = `button, ${FOLD_TOGGLE}, math, .katex, details:not([open]) > :not(summary)`
+// Messages whose text is handed to the worker in one task when Find opens. Reading a transcript of 6,468 messages took
+// 10 to 20 ms in one go.
+const PRIME_CHUNK = 400
 
 const PENDING_MARKDOWN = '[data-component="markdown"]:not([data-markdown-ready])'
 
@@ -60,17 +60,40 @@ function clearHighlights() {
   CSS.highlights.delete(HIGHLIGHT_ACTIVE)
 }
 
-function blockOf(node: Text, body: HTMLElement) {
-  for (let element = node.parentElement; element && element !== body; element = element.parentElement) {
-    if (BLOCKS.has(element.localName)) return element
-  }
+// Text inside a part that Find does not read: the label of a control, such as a folded message's Read more button,
+// a formula, whose glyphs are not its source, and what a closed disclosure hides. Told by name and not by a selector:
+// this runs for every element of every mounted part on each pass.
+function unseen(element: Element) {
+  const name = element.localName
 
-  return body
+  if (name === "button" || name === "math") return true
+
+  if (name === "span") return element.classList.contains("katex")
+  const parent = element.parentElement
+
+  return name !== "summary" && parent instanceof HTMLDetailsElement && !parent.open
+}
+
+// The block a text node is a line of. Nodes of one element share it, so it is looked up once for each element.
+function blockOf(node: Text, body: HTMLElement, known: Map<Element, Element>) {
+  const parent = node.parentElement
+
+  if (!parent) return body
+  const cached = known.get(parent)
+
+  if (cached) return cached
+  let block: Element = parent
+
+  while (block !== body && !BLOCKS.has(block.localName) && block.parentElement) block = block.parentElement
+  known.set(parent, block)
+
+  return block
 }
 
 /**
  * The query's hits in the text the mounted parts show. `rendered` is given that text for each part whose Markdown
- * has rendered: it is what Find counts in, so the count is the number of hits the reader can see.
+ * has rendered: it is what Find counts in, so the count is the number of hits the reader can see. Without it, the
+ * walk ends at the active match: a seek's probe wants no more.
  */
 function collectRanges(
   root: HTMLElement,
@@ -83,6 +106,7 @@ function collectRanges(
   const active: Range[] = []
   const lower = query.toLowerCase()
   const parts = new Map<string, { occurrence: number; lines: string[]; pending: boolean }>()
+  const blocks = new Map<Element, Element>()
 
   for (const body of root.querySelectorAll<HTMLElement>(TEXT_SELECTORS)) {
     const partID = body.closest("[data-timeline-part-id]")?.getAttribute("data-timeline-part-id") ?? undefined
@@ -129,15 +153,15 @@ function collectRanges(
 
         if (node.localName === "br") broken = true
 
-        return node.matches(UNSEEN) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_SKIP
+        return unseen(node) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_SKIP
       },
     })
 
     // SAFETY: the filter accepts Text nodes only.
     let node = walker.nextNode() as Text | null
 
-    while (node) {
-      const block = blockOf(node, body)
+    while (node && (rendered || active.length === 0)) {
+      const block = blockOf(node, body, blocks)
 
       if (broken || block !== line.block) end()
       broken = false
@@ -151,6 +175,8 @@ function collectRanges(
     }
 
     end()
+
+    if (!rendered && active.length > 0) break
   }
 
   if (rendered) parts.forEach((part, partID) => !part.pending && rendered(partID, part.lines.join("\n")))
@@ -229,10 +255,28 @@ export function createTranscriptSearch(
   let seekFrame: number | undefined
   // Advances when a part is read after Find gave its text out, so that the matches are counted again.
   const [readings, setReadings] = createSignal(0)
+  let readingFrame: number | undefined
+  let primeTimer: ReturnType<typeof setTimeout> | undefined
+
   // Find counts in the text a part shows. The worker reads it from the Markdown a slice at a time, and a mounted
-  // part is read where it is rendered.
-  const text = createSearchText({ read: readMarkdownText, changed: () => setReadings((count) => count + 1) })
+  // part is read where it is rendered. The readings of one frame are counted together: the worker answers up to 65
+  // times for a long session, and a pass over the mounted parts reads each of them.
+  const text = createSearchText({
+    read: readMarkdownText,
+    changed: () => {
+      readingFrame ??= requestAnimationFrame(() => {
+        readingFrame = undefined
+        setReadings((count) => count + 1)
+      })
+    },
+  })
+
   const findMatches = createMatchFinder()
+  onCleanup(() => {
+    clearTimeout(primeTimer)
+
+    if (readingFrame !== undefined) cancelAnimationFrame(readingFrame)
+  })
 
   const sourcesOf = (sessionID: string | undefined) =>
     sessionID ? searchableSources(input.messages(sessionID)) : NO_SOURCES
@@ -281,15 +325,14 @@ export function createTranscriptSearch(
       return
     }
 
-    // One count for all the parts a pass reads, not one for each.
-    batch(() => applyHighlights(root, q, activePartID(), activeOccurrence(), text.rendered))
+    applyHighlights(root, q, activePartID(), activeOccurrence(), text.rendered)
     let frame: number | undefined
 
     const scheduleApply = () => {
       if (frame !== undefined) return
       frame = requestAnimationFrame(() => {
         frame = undefined
-        batch(() => applyHighlights(root, query(), activePartID(), activeOccurrence(), text.rendered))
+        applyHighlights(root, query(), activePartID(), activeOccurrence(), text.rendered)
       })
     }
 
@@ -323,7 +366,19 @@ export function createTranscriptSearch(
 
     // The worker starts on the transcript now, so that it is read by the time a query needs it. Read from the plain
     // messages: the store makes a proxy for each message it hands out for the first time, 50 ms for 6,468 of them.
-    if (sessionID) text.prime(searchableSources(unwrap(untrack(() => input.messages(sessionID)))))
+    if (sessionID) prime(sessionID, unwrap(untrack(() => input.messages(sessionID))), 0)
+  }
+
+  // A few hundred messages in a task, so that opening Find holds up no frame.
+  function prime(sessionID: string, messages: readonly SessionMessageInfo[], from: number) {
+    clearTimeout(primeTimer)
+    primeTimer = undefined
+
+    if (state.status === "closed" || state.sessionID !== sessionID) return
+    text.prime(searchableSources(messages.slice(from, from + PRIME_CHUNK)))
+
+    if (from + PRIME_CHUNK < messages.length)
+      primeTimer = setTimeout(() => prime(sessionID, messages, from + PRIME_CHUNK), 0)
   }
 
   function dispatch(event: TimelineSearchEvent) {
