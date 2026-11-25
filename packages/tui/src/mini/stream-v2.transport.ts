@@ -902,13 +902,13 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     }
   }
 
-  const projectedMessages = async (client: OpenCodeClient, signal: AbortSignal) =>
-    (
-      await client.message.list(
-        { sessionID: input.sessionID, limit: input.replayLimit ?? 200, order: "desc" },
-        { signal },
-      )
-    ).data.toReversed()
+  const projectedMessages = async (client: OpenCodeClient, signal: AbortSignal) => {
+    const page = await client.message.list(
+      { sessionID: input.sessionID, limit: input.replayLimit ?? 200, order: "desc" },
+      { signal },
+    )
+    return { ...page, data: page.data.toReversed() }
+  }
 
   const waitForSession = async (initial: OpenCodeClient) => {
     let client = initial
@@ -930,7 +930,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
 
   const settleSession = async (initial: OpenCodeClient) => {
     const client = await waitForSession(initial)
-    for (const message of await projectedMessages(client, controller.signal)) renderMessage(message, true)
+    for (const message of (await projectedMessages(client, controller.signal)).data) renderMessage(message, true)
     paintIdle(blockerStatus(state.view))
     await input.footer.idle()
   }
@@ -999,7 +999,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     syncPending()
     state.permissions = permissions
     pruneToolSources()
-    for (const message of projected) renderMessage(message, next.render)
+    for (const message of projected.data) renderMessage(message, next.render)
     state.permissions = await resolvePermissionSources(client, permissions, attempt)
     if (!current(attempt)) return
     pruneToolSources()
@@ -1011,7 +1011,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     syncBlockers()
     await subagents.hydrate({
       sdk: client,
-      messages: [...projected],
+      messages: [...projected.data],
       active,
       signal: attempt.signal,
       reconnect: next.reconnect,
@@ -1671,7 +1671,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     const replayBuffer = { attempt, events: buffered }
     let failure: unknown
     let reset = false
-    let localStart = 0
+    let replayRows = localRows
     state.buffered = replayBuffer
     try {
       await input.footer.idle()
@@ -1694,13 +1694,31 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       state.shellEnded.clear()
       state.errors.clear()
       const projected = await hydrate(attempt, { render: true })
-      // A full replay window evicts older history. Do not append its cached
-      // prefix after the newest messages, but keep local output past the boundary.
-      if (projected?.length === (input.replayLimit ?? 200))
-        localStart = Math.max(
-          0,
-          localRows.findIndex((row) => !!row.commit.messageID && state.messageIDs.has(row.commit.messageID)),
+      if (projected?.cursor.next && projected.data.length === (input.replayLimit ?? 200)) {
+        // Cursors also exist on the last non-empty page. Check for an older
+        // message before evicting cached history or local-only notices.
+        const older = await attempt.client.message.list(
+          { sessionID: input.sessionID, limit: 1, cursor: projected.cursor.next },
+          { signal: attempt.signal },
         )
+        if (!current(attempt)) return false
+        if (older.data.length > 0) {
+          const replayIDs = new Set(projected.data.map((message) => message.id))
+          const start = localRows.findIndex((row) => !!row.commit.messageID && replayIDs.has(row.commit.messageID))
+          // With no overlap, completed cached messages are outside the window.
+          // Preserve local notices and live output not yet in the projection.
+          replayRows =
+            start >= 0
+              ? localRows.slice(start)
+              : localRows.filter(
+                  (row) =>
+                    !row.commit.messageID ||
+                    row.commit.toolState === "running" ||
+                    ((row.commit.kind === "assistant" || row.commit.kind === "reasoning") &&
+                      row.commit.phase === "progress"),
+                )
+        }
+      }
     } catch (error) {
       failure = error
     } finally {
@@ -1709,7 +1727,7 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
     if (!current(attempt)) return false
     try {
       if (reset) {
-        for (const row of localRows.slice(localStart)) {
+        for (const row of replayRows) {
           if (row.commit.image && row.commit.messageID && row.commit.partID) {
             const key = streamPartKey(row.commit.messageID, row.commit.partID)
             if (state.imageIDs.has(key)) continue
