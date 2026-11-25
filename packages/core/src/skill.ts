@@ -30,6 +30,15 @@ export type Name = Skill.Name
 
 export { Event } from "@opencode/schema/skill"
 
+export class NotFoundError extends Schema.TaggedError<NotFoundError>()("Skill.NotFoundError", {
+  skill: Schema.String,
+}) {}
+
+export class FileNotFoundError extends Schema.TaggedError<FileNotFoundError>()("Skill.FileNotFoundError", {
+  skill: Schema.String,
+  file: Schema.String,
+}) {}
+
 export class LoadError extends Schema.TaggedError<LoadError>()("Skill.LoadError", {
   skill: Schema.String,
   message: Schema.String,
@@ -123,8 +132,11 @@ export interface Interface extends State.Transformable<Editor> {
   readonly content: (id: ID) => Effect.Effect<string, LoadError>
   /** Paths of the skill's virtual files besides SKILL.md. */
   readonly files: (id: ID) => Effect.Effect<ReadonlyArray<string> | undefined>
-  /** One virtual file, loaded when it isn't inline. */
-  readonly file: (id: ID, file: string) => Effect.Effect<string | Uint8Array | undefined, LoadError>
+  /**
+   * One file of a skill by its path relative to the skill's folder, loaded when it isn't inline. `SKILL.md` is the
+   * body without frontmatter. Any path that isn't one of the skill's files, unsafe ones included, is not found.
+   */
+  readonly read: (id: ID, file: string) => Effect.Effect<Uint8Array, NotFoundError | FileNotFoundError | LoadError>
   readonly list: () => Effect.Effect<Info[]>
 }
 
@@ -183,29 +195,33 @@ const layer = Layer.effect(
       ),
     })
 
+    const content = Effect.fn("Skill.content")(function* (id: ID) {
+      const current = state.get()
+      const loader = current.loaders.get(id)
+      const inline = current.skills.get(id)?.content ?? ""
+      if (inline || !loader) return inline
+      return yield* loader
+    })
+
     return Service.of({
       transform: state.transform,
       reload: state.reload,
       get: Effect.fn("Skill.get")(function* (id) {
         return state.get().skills.get(id)
       }),
-      content: Effect.fn("Skill.content")(function* (id) {
-        const current = state.get()
-        const loader = current.loaders.get(id)
-        const content = current.skills.get(id)?.content ?? ""
-        if (content || !loader) return content
-        return yield* loader
-      }),
+      content,
       files: Effect.fn("Skill.files")(function* (id) {
         const current = state.get()
         if (!current.skills.has(id)) return undefined
         return Array.from(current.files.get(id)?.keys() ?? [])
       }),
-      file: Effect.fn("Skill.file")(function* (id, file) {
+      read: Effect.fn("Skill.read")(function* (id, file) {
         const current = state.get()
-        const value = current.skills.has(id) ? current.files.get(id)?.get(file) : undefined
-        if (value === undefined || typeof value === "string" || value instanceof Uint8Array) return value
-        return yield* value
+        if (!current.skills.has(id)) return yield* new NotFoundError({ skill: id })
+        const value = file === "SKILL.md" ? yield* content(id) : current.files.get(id)?.get(file)
+        if (value === undefined) return yield* new FileNotFoundError({ skill: id, file })
+        const loaded = typeof value === "string" || value instanceof Uint8Array ? value : yield* value
+        return typeof loaded === "string" ? new TextEncoder().encode(loaded) : loaded
       }),
       list: Effect.fn("Skill.list")(function* () {
         return Array.from(state.get().skills.values())

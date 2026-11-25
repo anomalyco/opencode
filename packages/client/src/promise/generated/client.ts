@@ -211,6 +211,8 @@ import type {
   CommandListOutput,
   SkillListInput,
   SkillListOutput,
+  ExperimentalSkillFileInput,
+  ExperimentalSkillFileOutput,
   RpcCallInput,
   RpcCallOutput,
   EventSubscribeInput,
@@ -1412,6 +1414,21 @@ export function make(options: ClientOptions) {
               successStatus: 204,
               declaredStatuses: [400, 401, 404],
               empty: true,
+            },
+            requestOptions,
+          ),
+      },
+      skill: {
+        file: (input: ExperimentalSkillFileInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSkillFileOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/skill/${encodeURIComponent(input.skillID)}/file/${encodePath(input.path)}`,
+              query: { location: input["location"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404, 502],
+              empty: false,
+              binary: true,
             },
             requestOptions,
           ),
