@@ -18,7 +18,8 @@ export type State =
 
 export interface Interface {
   readonly state: SubscriptionRef.SubscriptionRef<State>
-  readonly refresh: () => Effect.Effect<void>
+  // Also measures the context windows of `models`, IDs a chat reported that the check may not list
+  readonly refresh: (models?: readonly string[]) => Effect.Effect<void>
   // What a chat's own process found when it started
   readonly report: (next: State) => Effect.Effect<void>
 }
@@ -32,11 +33,11 @@ export const make = Effect.fn("ClaudeStatus.make")(function* (
   const lock = yield* Semaphore.make(1)
 
   // Serialized so a reconnect checks again after startup, rather than racing it with an older account snapshot.
-  const refresh = Effect.fn("ClaudeStatus.refresh")(function* () {
+  const refresh = Effect.fn("ClaudeStatus.refresh")(function* (models?: readonly string[]) {
     const executable = io.which()
     if (!executable) return yield* SubscriptionRef.set(state, { type: "missing" })
     const env = ClaudeQueryOptions.withoutDefaultFolder(yield* connection(), io)
-    const next = yield* ClaudeProbe.run(ClaudeQueryOptions.base({ executable, io, connection: env })).pipe(
+    const next = yield* ClaudeProbe.run(ClaudeQueryOptions.base({ executable, io, connection: env }), models).pipe(
       Effect.map((probe): State => ({ type: "ready", probe, configDir: env.CLAUDE_CONFIG_DIR })),
       Effect.catch((error) =>
         Effect.logWarning("Claude Code login check failed", { cause: error.cause }).pipe(

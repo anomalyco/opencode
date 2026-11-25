@@ -47,6 +47,24 @@ describe("login check", () => {
     }),
   )
 
+  it.effect("measures IDs a chat reported that the check does not list", () =>
+    Effect.gen(function* () {
+      const claude = FakeClaude.make([FakeClaude.expectStartup()], { windows: { "claude-fable-5-2": 1_000_000 } })
+      const result = yield* ClaudeProbe.run(
+        ClaudeQueryOptions.base({ executable: FakeIO.EXECUTABLE, io: FakeIO.make({ claude }) }),
+        ["claude-fable-5-2", "opus"],
+      )
+      expect(result.contextWindows).toEqual({ "claude-fable-5-2": 1_000_000 })
+      expect(result.models.some((model) => model.value === "claude-fable-5-2")).toBe(false)
+      const models = claude.runs[0]!.received.flatMap((message) =>
+        message.request?.subtype === "set_model" ? [message.request.model] : [],
+      )
+      expect(models.filter((model) => model === "opus")).toHaveLength(1)
+      expect(models.at(-1)).toBe("claude-fable-5-2")
+      claude.check()
+    }),
+  )
+
   it.effect("closes stuck context discovery without turning it into a login failure", () =>
     Effect.gen(function* () {
       const steps = FakeClaude.replay("startup").slice(0, 3)

@@ -74,14 +74,18 @@ export const register = Effect.fn("ClaudeProvider.register")(function* (
         const stored = Schema.decodeUnknownOption(Catalog)(yield* ctx.storage.get(CATALOG_KEY))
         const next = {
           priceSource: priceSource(state.probe.account, baseURL),
-          models: fromClaude(state.probe.models, Option.getOrElse(stored, () => current.catalog).models),
+          models: fromClaude(
+            state.probe.models,
+            Option.getOrElse(stored, () => current.catalog).models,
+            state.probe.contextWindows,
+          ),
         }
         const unknown = next.models.filter(
           (model) => !model.hidden && model.contextWindow === undefined && !checked.has(model.id),
         )
         if (state.fromChat && unknown.length > 0) {
           for (const model of unknown) checked.add(model.id)
-          yield* status.refresh().pipe(Effect.forkScoped)
+          yield* status.refresh(unknown.map((model) => model.id)).pipe(Effect.forkScoped)
         }
         if (JSON.stringify(next) === JSON.stringify(current.catalog)) return
         current.catalog = next
@@ -115,7 +119,11 @@ export const configDirs = Effect.fn("ClaudeProvider.configDirs")(function* (ctx:
 // chat or the config may hold any ID that was ever listed. So no ID is dropped, and a model already offered under one
 // ID keeps it when Claude Code lists it under another.
 // Context windows only come from the full check, so a chat's startup report keeps the saved ones.
-function fromClaude(models: readonly ClaudeProbe.Model[], saved: readonly CatalogModel[]): CatalogModel[] {
+function fromClaude(
+  models: readonly ClaudeProbe.Model[],
+  saved: readonly CatalogModel[],
+  windows: ClaudeProbe.Result["contextWindows"],
+): CatalogModel[] {
   // "default" follows Claude Code's own default, which can change under a running opencode session
   const listed = models.filter((model) => model.value !== "default")
   const result = new Map<string, CatalogModel>()
@@ -136,14 +144,15 @@ function fromClaude(models: readonly ClaudeProbe.Model[], saved: readonly Catalo
       id: model.value,
       name: model.displayName,
       efforts: model.supportedEffortLevels ?? [],
-      contextWindow: model.contextWindow ?? (offered ?? own)?.contextWindow,
+      contextWindow: model.contextWindow ?? offered?.contextWindow ?? own?.contextWindow,
       resolvedModel: model.resolvedModel,
     }
     if (offered) result.set(offered.id, { ...entry, id: offered.id })
     result.set(entry.id, offered ? { ...entry, hidden: true } : entry)
   }
   for (const model of saved) {
-    if (!result.has(model.id)) result.set(model.id, { ...model, hidden: true })
+    if (!result.has(model.id))
+      result.set(model.id, { ...model, contextWindow: windows?.[model.id] ?? model.contextWindow, hidden: true })
   }
   return [...result.values()]
 }

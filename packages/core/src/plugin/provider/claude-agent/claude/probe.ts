@@ -12,6 +12,8 @@ export interface Result {
   readonly version: string | undefined
   readonly account: AccountInfo
   readonly models: readonly Model[]
+  // Windows of IDs a chat reported that this check does not list
+  readonly contextWindows?: Readonly<Record<string, number>>
 }
 
 export class ProbeError extends Schema.TaggedError<ProbeError>()("ClaudeProbe.ProbeError", {
@@ -41,7 +43,7 @@ function atLeast(version: string, minimum: string) {
 }
 
 // The input never sends a message, so no model call is made and no tokens are used.
-export const run = Effect.fn("ClaudeProbe.run")(function* (options: Options) {
+export const run = Effect.fn("ClaudeProbe.run")(function* (options: Options, measure: readonly string[] = []) {
   const stop = Promise.withResolvers<void>()
   return yield* Effect.acquireUseRelease(
     Effect.tryPromise({
@@ -66,8 +68,15 @@ export const run = Effect.fn("ClaudeProbe.run")(function* (options: Options) {
         // The version is checked when a chat starts, and that chat's error tells the user to update.
         const version = init.claude_code_version
         const models: Model[] = init.models.map((model) => ({ ...model }))
-        if (version && atLeast(version, CONTEXT_DISCOVERY_VERSION)) yield* discoverContext(session, models)
-        return { version, account: init.account, models } satisfies Result
+        const unlisted: Array<{ value: string; contextWindow?: number }> = measure
+          .filter((id) => !models.some((model) => model.value === id))
+          .map((value) => ({ value }))
+        if (version && atLeast(version, CONTEXT_DISCOVERY_VERSION))
+          yield* discoverContext(session, [...models, ...unlisted])
+        const contextWindows = Object.fromEntries(
+          unlisted.flatMap((model) => (model.contextWindow === undefined ? [] : [[model.value, model.contextWindow]])),
+        )
+        return { version, account: init.account, models, contextWindows } satisfies Result
       }),
     (session) =>
       Effect.sync(() => {
@@ -79,7 +88,7 @@ export const run = Effect.fn("ClaudeProbe.run")(function* (options: Options) {
 
 // Sets each model's context window in place, so models discovered before a timeout keep theirs.
 const discoverContext = Effect.fn("ClaudeProbe.discoverContext")(
-  function* (session: Query, models: readonly Model[]) {
+  function* (session: Query, models: ReadonlyArray<{ readonly value: string; contextWindow?: number }>) {
     for (const model of models) {
       if (model.value === "default") continue
       yield* Effect.tryPromise(async () => {

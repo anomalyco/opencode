@@ -183,11 +183,17 @@ function loadProbeControls() {
   return controls
 }
 
-function probeResponse(message: any, model: string | undefined) {
+// A model in `windows` was not recorded, so it answers like a recorded one with its own context window.
+function probeResponse(message: any, model: string | undefined, windows?: Readonly<Record<string, number>>) {
   probeControls ??= loadProbeControls()
-  const reply = probeControls.get(`${model}/${message.request?.subtype}`)
+  const window = model === undefined ? undefined : windows?.[model]
+  const reply = probeControls.get(`${window === undefined ? model : "opus"}/${message.request?.subtype}`)
   if (!reply) return
-  return { ...reply, response: { ...reply.response, request_id: message.request_id } }
+  const response =
+    window !== undefined && reply.response.response
+      ? { ...reply.response.response, maxTokens: window, rawMaxTokens: window }
+      : reply.response.response
+  return { ...reply, response: { ...reply.response, request_id: message.request_id, response } }
 }
 
 // One `claude` the SDK started: its flags, its environment and every message the SDK wrote to it
@@ -201,7 +207,10 @@ export interface Run {
 
 export type Fake = ReturnType<typeof make>
 
-export function make(script: readonly Step[], options?: { readonly probes?: boolean }) {
+export function make(
+  script: readonly Step[],
+  options?: { readonly probes?: boolean; readonly windows?: Readonly<Record<string, number>> },
+) {
   const runs: Run[] = []
   const errors: string[] = []
   const transcripts = new Map<string, SessionMessage[]>()
@@ -265,7 +274,7 @@ export function make(script: readonly Step[], options?: { readonly probes?: bool
         : type === step?.type
     if (!matches && isProbe(run.args)) {
       const model = run.received.findLast((message) => message.request?.subtype === "set_model")?.request.model
-      const reply = probeResponse(message, model)
+      const reply = probeResponse(message, model, options?.windows)
       if (reply) {
         process.stdout.write(JSON.stringify(reply) + "\n")
         return

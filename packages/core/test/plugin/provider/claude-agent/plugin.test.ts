@@ -80,6 +80,27 @@ const connectionStatus = Effect.gen(function* () {
   return integration?.connections[0]?.status
 })
 
+const chatOnHaiku = Effect.gen(function* () {
+  const aisdk = yield* AISDK.Service
+  const sdk = yield* aisdk.runSDK({
+    model: Model.Info.make({
+      ...Model.Info.default(ClaudeProvider.ID, haiku.id),
+      modelID: haiku.id,
+      package: Provider.aisdk(ClaudeProvider.PACKAGE),
+    }),
+    package: ClaudeProvider.PACKAGE,
+    options: {},
+  })
+  const model: LanguageModelV3 = sdk.sdk.languageModel("haiku")
+  const result = yield* Effect.promise(() =>
+    model.doStream({
+      prompt: TestSessions.prompt("Remember the marker COPPER-OTTER. Reply only with that marker."),
+      headers: { [RequestKind.SESSION_HEADER]: "session-a", [RequestKind.HEADER]: "primary" },
+    }),
+  )
+  expect(TestSessions.text(yield* Effect.promise(() => TestSessions.collect(result.stream)))).toBe("COPPER-OTTER")
+})
+
 function find(models: readonly Model.Info[], id: string) {
   const model = models.find((model) => model.id === id)
   if (!model) throw new Error(`Expected model ${id}`)
@@ -279,29 +300,84 @@ describe("ClaudeAgentPlugin models", () => {
         { probes: true },
       )
       const registry = yield* addPlugin(FakeIO.make({ claude }))
-
-      const aisdk = yield* AISDK.Service
-      const sdk = yield* aisdk.runSDK({
-        model: Model.Info.make({
-          ...Model.Info.default(ClaudeProvider.ID, haiku.id),
-          modelID: haiku.id,
-          package: Provider.aisdk(ClaudeProvider.PACKAGE),
-        }),
-        package: ClaudeProvider.PACKAGE,
-        options: {},
-      })
-      const model: LanguageModelV3 = sdk.sdk.languageModel("haiku")
-      const result = yield* Effect.promise(() =>
-        model.doStream({
-          prompt: TestSessions.prompt("Remember the marker COPPER-OTTER. Reply only with that marker."),
-          headers: { [RequestKind.SESSION_HEADER]: "session-a", [RequestKind.HEADER]: "primary" },
-        }),
-      )
-      expect(TestSessions.text(yield* Effect.promise(() => TestSessions.collect(result.stream)))).toBe("COPPER-OTTER")
+      yield* chatOnHaiku
       expect(yield* store.get("sessions/session-a")).toMatchObject({ claudeSessionID: expect.any(String) })
 
       yield* eventually(claudeModels, (models) =>
         models.some((model) => model.id === "sonnet" && model.limit.context === 1_000_000),
+      )
+      yield* registry.close()
+      claude.check()
+    }),
+  )
+
+  it.live("keeps a saved context window when a chat lists the model under another ID", () =>
+    Effect.gen(function* () {
+      const store = yield* storage
+      const listed = FakeClaude.expectStartup().reply.models.filter(
+        (model) => model.value !== "default" && model.value !== "fable",
+      )
+      yield* store.set("models", {
+        models: [
+          ...listed.map((model) => ({
+            id: model.value,
+            name: model.displayName,
+            efforts: [],
+            contextWindow: 200_000,
+            resolvedModel: model.resolvedModel ?? model.value,
+          })),
+          {
+            id: "fable",
+            name: "Fable 5.1",
+            efforts: [],
+            contextWindow: 777_000,
+            resolvedModel: "claude-fable-5-1",
+            hidden: true,
+          },
+          // The chat lists this model as `fable`, and no full check has measured this ID
+          { id: "claude-fable-5-1", name: "Fable 5.1", efforts: [], resolvedModel: "claude-fable-5-1" },
+        ],
+      })
+      yield* connect
+      const claude = FakeClaude.make([
+        FakeClaude.expectStartup(),
+        FakeClaude.expectTurn(),
+        FakeClaude.expectInterrupt(),
+      ])
+      const registry = yield* addPlugin(FakeIO.make({ claude }))
+      yield* chatOnHaiku
+      // The saved row has no efforts, so the chat's report has been applied once it has some
+      const models = yield* eventually(claudeModels, (models) => find(models, "claude-fable-5-1").variants.length > 0)
+      expect(find(models, "claude-fable-5-1").limit.context).toBe(777_000)
+      yield* registry.close()
+      claude.check()
+    }),
+  )
+
+  it.live("measures the context window of a model a chat lists and the full check does not", () =>
+    Effect.gen(function* () {
+      const store = yield* storage
+      yield* store.set("models", { models: [{ id: "haiku", name: "Haiku", efforts: [], contextWindow: 123_456 }] })
+      yield* connect
+      const startup = FakeClaude.expectStartup()
+      const fable = {
+        value: "claude-fable-5-2",
+        resolvedModel: "claude-fable-5-2",
+        displayName: "Fable 5.2",
+        description: "Fable 5.2",
+      }
+      const claude = FakeClaude.make(
+        [
+          { ...startup, reply: { ...startup.reply, models: [...startup.reply.models, fable] } },
+          FakeClaude.expectTurn(),
+          FakeClaude.expectInterrupt(),
+        ],
+        { probes: true, windows: { "claude-fable-5-2": 1_000_000 } },
+      )
+      const registry = yield* addPlugin(FakeIO.make({ claude }))
+      yield* chatOnHaiku
+      yield* eventually(claudeModels, (models) =>
+        models.some((model) => model.id === "claude-fable-5-2" && model.limit.context === 1_000_000),
       )
       yield* registry.close()
       claude.check()
