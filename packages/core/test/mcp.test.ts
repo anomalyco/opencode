@@ -83,6 +83,7 @@ import { location } from "./fixture/location"
 import { host } from "./plugin/host"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
+import { disabledWatcher } from "./fixture/watcher"
 import {
   codeModeListings,
   executeTool,
@@ -2341,6 +2342,7 @@ const shutdownIt = testEffect(
         ),
       ),
       Environment.node.replace(hostEnvironmentLayer),
+      disabledWatcher,
     ],
   ),
 )

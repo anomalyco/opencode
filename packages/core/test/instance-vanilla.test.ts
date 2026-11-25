@@ -15,6 +15,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
+import { disabledWatcher } from "./fixture/watcher"
 import { testEffect } from "./lib/effect"
 import { Database } from "../src/database/database"
 import { Bus } from "../src/bus"
@@ -49,6 +50,7 @@ const instances = Layer.effect(
     const bindings: LayerNode.Replacements = [
       Global.node.replace(tempGlobalLayer),
       offlineModels,
+      disabledWatcher,
       LocationServiceMap.node.replace(Layer.succeed(LocationServiceMap.Service, map)),
       Instance.node.replace(
         Layer.succeed(Instance.Service, {
@@ -64,6 +66,7 @@ const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, LocationServiceMap.node]), [
     Global.node.replace(tempGlobalLayer),
     offlineModels,
+    disabledWatcher,
     LocationServiceMap.node.replace(instances),
   ]),
 )
