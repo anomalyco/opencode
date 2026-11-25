@@ -4,6 +4,7 @@ Each directory is a separately installable OpenCode plugin. Plugins are currentl
 
 These packages are not bundled with OpenCode or loaded automatically. Do not add them to Core's dependencies, its built-in plugin registry, or the repository's `.opencode/plugins/` directory.
 
-| Plugin                   | Directory                |
-| ------------------------ | ------------------------ |
-| [Figma](figma/README.md) | `packages/plugins/figma` |
+| Plugin                                         | Directory                           |
+| ---------------------------------------------- | ----------------------------------- |
+| [Figma](figma/README.md)                       | `packages/plugins/figma`            |
+| [Vercel artifacts](vercel-artifacts/README.md) | `packages/plugins/vercel-artifacts` |
