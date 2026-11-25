@@ -143,9 +143,6 @@ const LEADER_TTL = 2 * MAX_SLEEP
 const DISABLED_RETRY = HOUR
 /** How long an automation whose prompt failed waits before trying again. */
 const FAILED_RETRY = 5 * MINUTE
-/** How long an automation whose code failed waits before trying again, up to MAX_CODE_FAILURES. */
-const CODE_FAILED_RETRY = MINUTE
-const MAX_CODE_FAILURES = 3
 const TICK_CONCURRENCY = 4
 
 const duration = (value: string) =>
@@ -437,35 +434,19 @@ const layer = Layer.effect(
       row: Row,
       now: number,
       outcome: Extract<AutomationCode.Outcome, { ok: false }>,
+      event?: AutomationEvent.Message,
     ) {
       const ended = yield* Clock.currentTimeMillis
-      const strikes = row.failures + 1
       // Preserve the diagnostic even when logs alone would fill the budget.
       const reason = outcome.output === undefined ? outcome.error : `${outcome.error}\n${outcome.output}`
-      const output = (prefix = "") => AutomationCode.boundedOutput(prefix + reason)
-      if (row.trigger.type === "event") return yield* pauseWith(row, now, output())
-      if (!outcome.invalid && strikes < MAX_CODE_FAILURES) {
-        return yield* settle(row, {
-          failures: strikes,
-          last_outcome: "failed",
-          last_output: output(),
-          retry_at: ended + CODE_FAILED_RETRY,
-          time_updated: ended,
-        })
-      }
-      return yield* settle(
-        row,
-        {
-          status: "paused",
-          failures: strikes,
-          last_run_at: now,
-          last_outcome: "failed",
-          last_output: output(outcome.invalid ? "Paused: " : `Paused after ${strikes} failed runs: `),
-          retry_at: null,
-          time_updated: ended,
-        },
-        { evenIfPaused: true },
-      )
+      return yield* settle(row, {
+        failures: row.failures + 1,
+        last_outcome: "failed",
+        last_output: AutomationCode.boundedOutput(reason),
+        retry_at: null,
+        ...advance(row, ended, false, event),
+        time_updated: ended,
+      })
     })
 
     const runShell = Effect.fnUntraced(function* (
@@ -625,7 +606,15 @@ const layer = Layer.effect(
           runs: row.run_count,
           ...(event && { event: AutomationEvent.input(event) }),
         }).pipe(inDirectory(row.directory))
-        if (!outcome.ok) return yield* codeFailed(row, now, outcome)
+        if (!outcome.ok && outcome.unavailable)
+          return yield* settle(row, {
+            last_outcome: "skipped",
+            last_output: `skipped: ${outcome.error}`,
+            retry_at: null,
+            ...advance(row, yield* Clock.currentTimeMillis, false, event),
+            time_updated: now,
+          })
+        if (!outcome.ok) return yield* codeFailed(row, now, outcome, event)
 
         const values = {
           ...(outcome.state !== undefined && { state: outcome.state }),
@@ -648,13 +637,11 @@ const layer = Layer.effect(
           ),
           Effect.result,
         )
-        if (Result.isFailure(sent))
-          return yield* codeFailed(row, now, {
-            ok: false,
-            output: outcome.output,
-            error: sent.failure.message,
-            invalid: sent.failure instanceof InvalidError || sent.failure instanceof FileSystem.DirectoryNotFoundError,
-          })
+        if (Result.isFailure(sent)) {
+          const error = sent.failure
+          if (error instanceof InvalidError || error instanceof FileSystem.DirectoryNotFoundError) return yield* error
+          return yield* codeFailed(row, now, { ok: false, output: outcome.output, error: error.message }, event)
+        }
       },
       (effect, row, now, _event?: AutomationEvent.Message) =>
         effect.pipe(Effect.catchTag("Automation.InvalidError", (error) => pauseWith(row, now, error.reason))),
@@ -906,7 +893,19 @@ const layer = Layer.effect(
                 })
                 return true
               }
-              yield* runAction(current, at, update)
+              yield* runAction(current, at, update).pipe(
+                Effect.catchIf(
+                  (error) => !(error instanceof FileSystem.DirectoryNotFoundError),
+                  (error) =>
+                    settle(current, {
+                      last_outcome: "failed",
+                      last_output: AutomationCode.boundedOutput(error.message),
+                      retry_at: null,
+                      ...advance(current, at, false, update),
+                      time_updated: at,
+                    }),
+                ),
+              )
               return (yield* find(id)).status === "active"
             }, delivery.withPermit),
           ),
