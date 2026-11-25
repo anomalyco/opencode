@@ -129,13 +129,13 @@ export const Plugin = {
                 return { output, path: input.path }
               }
 
+              const page = { offset: input.offset, limit: input.limit }
               const read = (target: FileAccess.Target) =>
-                ReadToolFileSystem.read(target.environment.files, target.absolute, target.resource, {
-                  offset: input.offset,
-                  limit: input.limit,
-                })
+                target.workspaceFile
+                  ? ReadToolFileSystem.readWorkspaceFile(target.workspaceFile, target.absolute, target.resource, page)
+                  : ReadToolFileSystem.read(target.environment.files, target.absolute, target.resource, page)
 
-              const requested = yield* access.authorizeRead(input.path, context)
+              const requested = yield* access.authorizeRead(input.path, context, { workspaceScope: true })
               const result = yield* read(requested).pipe(
                 Effect.map((content) => ({ content, target: requested, path: input.path })),
                 Effect.catchIf(
@@ -144,7 +144,10 @@ export const Plugin = {
                     Effect.gen(function* () {
                       const alternate = yield* alternatePath(requested).pipe(Effect.orElseSucceed(() => undefined))
                       if (!alternate) return yield* missing({ input: input.path, requested, context })
-                      const target = yield* access.authorizeRead(alternate, context, { siblingOf: requested })
+                      const target = yield* access.authorizeRead(alternate, context, {
+                        siblingOf: requested,
+                        workspaceScope: true,
+                      })
                       const content = yield* read(target).pipe(
                         Effect.catchIf(
                           (error) => error instanceof Environment.NotFound,

@@ -11,6 +11,7 @@ import { EnvironmentPath } from "./environment/path.js"
 import { Flag } from "./flag.js"
 import { Location } from "./location.js"
 import { Permission } from "./permission.js"
+import { PluginHooks } from "./plugin/hooks.js"
 import { Project } from "./project.js"
 import { AbsolutePath } from "./schema.js"
 import type { SessionErrors } from "./session/error.js"
@@ -50,6 +51,11 @@ export interface Target {
   readonly environment: Environment.Interface
   /** The machine the file is on, when it is not on this server. */
   readonly machine?: Environment.ID
+  readonly workspaceFile?: {
+    readonly root: string
+    readonly relative: string
+    readonly verify: () => Effect.Effect<void, Environment.Failed>
+  }
 }
 
 export function externalDirectoryRequest(targets: readonly Target[]) {
@@ -79,7 +85,9 @@ export type Invocation = Pick<Tool.Context, "sessionID" | "agent" | "messageID" 
 
 export interface ReadOptions {
   /** A target already authorized by this invocation, used for filename recovery. */
-  readonly siblingOf: Target
+  readonly siblingOf?: Target
+  /** The caller can consume an opened, scoped regular file without reopening its pathname. */
+  readonly workspaceScope?: boolean
 }
 
 export interface Interface {
@@ -130,6 +138,7 @@ const layer = Layer.effect(
     const location = yield* Location.Service
     const currentWorkingDirectory = yield* Environment.workingDirectoryResolver
     const permission = yield* Permission.Service
+    const hooks = yield* PluginHooks.Service
     const flags = yield* Flag.Service
     const environments = yield* Environments.Service
 
@@ -316,19 +325,74 @@ const layer = Layer.effect(
     ) {
       // A local sibling keeps the Location's resolution exactly as without recovery; a machine's candidate has no
       // Location to resolve against, so it takes the machine and the sibling's directory.
-      const siblingPath = options?.siblingOf.environment.path ?? path
+      const siblingOf = options?.siblingOf
+      const siblingPath = siblingOf?.environment.path ?? path
       const base =
-        options === undefined || options.siblingOf.environment.id === environment.id
+        siblingOf === undefined || siblingOf.environment.id === environment.id
           ? undefined
           : {
-              absolute: AbsolutePath.make(siblingPath.dirname(options.siblingOf.absolute)),
-              environment: options.siblingOf.environment,
+              absolute: AbsolutePath.make(siblingPath.dirname(siblingOf.absolute)),
+              environment: siblingOf.environment,
             }
-      const target = yield* resolve({ path: file, base, kind: options ? "file" : undefined })
+      const target = yield* resolve({ path: file, base, kind: siblingOf ? "file" : undefined })
+      if (
+        options?.workspaceScope &&
+        process.platform === "linux" &&
+        target.environment.id === Environment.localID &&
+        (yield* flags.enabled("workspace_read_scope"))
+      ) {
+        const assignedMember = Effect.fnUntraced(function* () {
+          const result = yield* hooks.trigger("permission", "experimental.workspace.readScope", {
+            sessionID: context.sessionID,
+            directory: location.directory,
+            scopes: [],
+          })
+          if (result.scopes.length === 0) return
+          const scope = result.scopes[0]
+          if (
+            result.scopes.length !== 1 ||
+            !scope ||
+            scope.members.length === 0 ||
+            scope.members.some(
+              (member) =>
+                !path.isAbsolute(member.physical) ||
+                member.physical === "/" ||
+                path.resolve(member.physical) !== member.physical ||
+                path.resolve(member.logical) !== member.logical ||
+                member.logical === location.directory ||
+                !FSUtil.contains(location.directory, member.logical),
+            )
+          )
+            return yield* new Environment.Failed({ path: target.absolute, cause: "Unverified workspace assignment" })
+
+          const members = scope.members.filter((member) => FSUtil.contains(member.physical, target.absolute))
+          if (members.length > 1)
+            return yield* new Environment.Failed({ path: target.absolute, cause: "Ambiguous workspace assignment" })
+          const member = members[0]
+          if (!member || member.physical === target.absolute || !target.externalDirectory) return
+          return member
+        })
+        const member = yield* assignedMember()
+        if (member) {
+          const relative = path.relative(member.physical, target.absolute)
+          const resource = slash(path.relative(location.directory, path.join(member.logical, relative)))
+          yield* permission.assert({
+            action: "read",
+            resources: [resource, target.resource],
+            ...Permission.invocation(context),
+          })
+          const verify = Effect.fnUntraced(function* () {
+            const current = yield* assignedMember()
+            if (current?.physical !== member.physical || current.logical !== member.logical)
+              return yield* new Environment.Failed({ path: target.absolute, cause: "Workspace assignment changed" })
+          })
+          return { ...target, resource, workspaceFile: { root: member.physical, relative, verify } }
+        }
+      }
       const sibling =
-        options !== undefined &&
-        target.environment.id === options.siblingOf.environment.id &&
-        (target.environment.path ?? path).dirname(target.absolute) === siblingPath.dirname(options.siblingOf.absolute)
+        siblingOf !== undefined &&
+        target.environment.id === siblingOf.environment.id &&
+        (target.environment.path ?? path).dirname(target.absolute) === siblingPath.dirname(siblingOf.absolute)
 
       // Filename recovery shares the directory approval, but checks the recovered file's own read rules.
       if (!sibling) yield* authorizeExternal([target], context)
@@ -348,5 +412,5 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [Environment.node, Environments.node, Flag.node, Location.node, Permission.node],
+  deps: [Environment.node, Environments.node, Flag.node, Location.node, Permission.node, PluginHooks.node],
 })

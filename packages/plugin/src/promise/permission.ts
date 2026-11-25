@@ -2,7 +2,7 @@ import type { PermissionApi } from "@opencode/client/promise/api"
 import type { Agent } from "@opencode/schema/agent"
 import type { Permission } from "@opencode/schema/permission"
 import type { Session } from "@opencode/schema/session"
-import type { AssertInput } from "../permission.js"
+import type { AssertInput, WorkspaceReadScopeHook } from "../permission.js"
 import type { Hooks } from "./registration.js"
 
 export interface PermissionEvaluation {
@@ -18,6 +18,7 @@ export interface PermissionEvaluation {
 
 export interface PermissionHooks {
   readonly evaluate: PermissionEvaluation
+  readonly "experimental.workspace.readScope": WorkspaceReadScopeHook
 }
 
 export type PermissionDomain = Pick<PermissionApi, "list" | "get" | "reply"> & {

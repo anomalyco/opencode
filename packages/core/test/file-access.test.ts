@@ -3,13 +3,16 @@ import fs from "fs/promises"
 import path from "path"
 import { Effect } from "effect"
 import { FileAccess } from "@opencode/core/file-access"
+import { Flag } from "@opencode/core/flag"
 import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { AbsolutePath } from "@opencode/core/schema"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
+import { ReadToolFileSystem } from "../src/tool/read-filesystem"
 import { tempLocationLayer } from "./fixture/location"
 import { tmpdirScoped } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
@@ -23,10 +26,11 @@ const invocation = {
 }
 const slash = (file: string) => file.replaceAll("\\", "/")
 
-function provide(requests: Permission.AssertInput[], denied?: string) {
+function provide(requests: Permission.AssertInput[], denied?: string, flags?: string) {
   return Effect.provide(
-    AppNodeBuilder.build(LayerNode.group([FileAccess.node, Location.node]), [
+    AppNodeBuilder.build(LayerNode.group([FileAccess.node, Location.node, PluginHooks.node]), [
       Location.node.replace(tempLocationLayer),
+      ...(flags ? [Flag.node.replace(Flag.testLayer([], { overrides: flags }))] : []),
       Permission.node.replace(
         permissionLayer({
           assert: (input) =>
@@ -46,6 +50,59 @@ function provide(requests: Permission.AssertInput[], denied?: string) {
 }
 
 describe("FileAccess.authorizeRead", () => {
+  // The guarded file uses Linux descriptor-relative traversal.
+  const scopedRead = process.platform === "linux" ? it.live : it.live.skip
+
+  scopedRead("scopes a physical file to its native session and revalidates before reading", () => {
+    const requests: Permission.AssertInput[] = []
+    return Effect.gen(function* () {
+      const access = yield* FileAccess.Service
+      const hooks = yield* PluginHooks.Service
+      const location = yield* Location.Service
+      const physical = yield* tmpdirScoped()
+      const file = path.join(physical.path, "scope.txt")
+      yield* Effect.promise(() => fs.writeFile(file, "bound workspace content"))
+      const logical = path.join(location.directory, "member")
+      yield* hooks.register("permission", "experimental.workspace.readScope", (event) =>
+        Effect.sync(() => {
+          if (event.sessionID === invocation.sessionID && event.directory === location.directory)
+            event.scopes.push({ members: [{ physical: physical.path, logical }] })
+        }),
+      )
+      const target = yield* access.authorizeRead(file, invocation, { workspaceScope: true })
+      if (!target.workspaceFile) throw new Error("Expected a guarded file")
+      expect(requests).toMatchObject([{ action: "read", resources: ["member/scope.txt", file] }])
+      expect(requests[0].save).toBeUndefined()
+      const output = yield* ReadToolFileSystem.readWorkspaceFile(
+        target.workspaceFile,
+        target.absolute,
+        target.resource,
+        {},
+      )
+      expect(output).toMatchObject({ type: "text", content: "bound workspace content" })
+
+      yield* access.authorizeRead(
+        file,
+        { ...invocation, sessionID: Session.ID.make("ses_other") },
+        { workspaceScope: true },
+      )
+      expect(requests.map((request) => request.action)).toEqual(["read", "external_directory", "read"])
+
+      yield* hooks.register("permission", "experimental.workspace.readScope", (event) =>
+        Effect.sync(() => {
+          event.scopes.push(null)
+        }),
+      )
+      const rejected = yield* ReadToolFileSystem.readWorkspaceFile(
+        target.workspaceFile,
+        target.absolute,
+        target.resource,
+        {},
+      ).pipe(Effect.flip)
+      expect(rejected._tag).toBe("Environment.Failed")
+    }).pipe(provide(requests, undefined, "workspace_read_scope"))
+  })
+
   it.live("returns an absolute target and preserves invocation identity on the read assertion", () => {
     const requests: Permission.AssertInput[] = []
     return Effect.gen(function* () {

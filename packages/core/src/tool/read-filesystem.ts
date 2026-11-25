@@ -6,6 +6,8 @@ import { TextBoundary } from "@opencode/util/text-boundary"
 import { Effect, Schema } from "effect"
 import { Environment } from "../environment/index.js"
 import type { Files } from "../environment/index.js"
+import { openWorkspaceFile } from "../environment/guarded-read.js"
+import type { FileAccess } from "../file-access.js"
 import { Mime } from "../mime.js"
 import { AbsolutePath, NonNegativeInt, PositiveInt } from "../schema.js"
 
@@ -108,7 +110,7 @@ export type Output = typeof Output.Type
 export type Media = MediaContent & { readonly name: string; readonly bytes: Uint8Array }
 
 export const read = Effect.fn("ReadTool.read")(function* (
-  files: Files,
+  files: Pick<Files, "read" | "list">,
   input: AbsolutePath,
   resource: string,
   page: PageInput = {},
@@ -160,8 +162,46 @@ export const read = Effect.fn("ReadTool.read")(function* (
   return yield* textPage(files, input, resource, first, page)
 })
 
+export const readWorkspaceFile = (
+  workspace: NonNullable<FileAccess.Target["workspaceFile"]>,
+  input: AbsolutePath,
+  resource: string,
+  page: PageInput,
+) => {
+  const attempt = <A>(operation: () => Promise<A>) =>
+    Effect.tryPromise({ try: operation, catch: (cause) => new Environment.Failed({ path: input, cause }) })
+
+  return Effect.acquireUseRelease(
+    workspace.verify().pipe(Effect.andThen(attempt(() => openWorkspaceFile(workspace.root, workspace.relative)))),
+    (file) =>
+      read(
+        {
+          list: () => Effect.fail(new Environment.Failed({ path: input, cause: "Expected a regular workspace file" })),
+          read: (_, range) =>
+            attempt(async () => {
+              const stat = await file.stat()
+              if (range === undefined && stat.size > MAX_MEDIA_INGEST_BYTES)
+                throw new Error("Workspace file grew beyond the read limit")
+              const offset = range?.offset ?? 0
+              const size = Math.max(0, stat.size - offset)
+              const buffer = Buffer.alloc(Math.min(range?.length ?? size, size))
+              const { bytesRead } = await file.read(buffer, 0, buffer.length, offset)
+              return {
+                info: { type: "file", size: stat.size, mtimeMs: stat.mtimeMs },
+                bytes: buffer.subarray(0, bytesRead),
+              }
+            }),
+        },
+        input,
+        resource,
+        page,
+      ),
+    (file) => attempt(() => file.close()).pipe(Effect.ignore),
+  )
+}
+
 const readFile = (
-  files: Files,
+  files: Pick<Files, "read">,
   input: AbsolutePath,
   resource: string,
   range?: { readonly offset: number; readonly length: number },
@@ -176,7 +216,7 @@ const readFile = (
 type Checkpoint = { byte: number; length: number; firstLine: number; start: number; lastLine: number }
 
 const textPage = Effect.fnUntraced(function* (
-  files: Files,
+  files: Pick<Files, "read">,
   input: AbsolutePath,
   resource: string,
   first: { bytes: Uint8Array; info: { size: number } },

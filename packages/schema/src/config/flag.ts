@@ -26,10 +26,12 @@ export const registry = {
     'Let Code Mode scripts call the OpenCode HTTP API with fetch("opencode:///api/..."), in-process and already signed in, with no permission checks. Only in local and dev builds, and off there until you opt in with OPENCODE_FLAGS=opencode_api or experimental.opencode_api: true.',
   sqlite_fts:
     "Build an SQLite full-text index of session titles and message text in the background, and enable the opencode.session.search and opencode.session.read tools. The index covers every session in the database and starts while any loaded location enables it; SQLite keeps it current from then on, also after this is turned off.",
+  workspace_read_scope:
+    "Restrict the experimental regular-file read slice to a trusted adapter's verified workspace scope. Off by default in every build; opt in with OPENCODE_FLAGS=workspace_read_scope or experimental.workspace_read_scope: true.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 
-export const optInOnly: ReadonlySet<Key> = new Set(["todo", "opencode_api"])
+export const optInOnly: ReadonlySet<Key> = new Set(["todo", "opencode_api", "workspace_read_scope"])
 
 /** Flags that stay off outside local and dev builds, whatever `OPENCODE_FLAGS` or config say. */
 export const localOnly: ReadonlySet<Key> = new Set(["opencode_api"])
