@@ -141,6 +141,22 @@ export const writeScopedTextPreservingBom = Effect.fn("FileMutation.writeScopedT
   }
 })
 
+/** Commit patch text exactly; patch derivation already owns its BOM decision. */
+export const writeScopedExactText = Effect.fn("FileMutation.writeScopedExactText")(function* (
+  target: FileAccess.Target,
+  content: string,
+) {
+  if (!target.workspace) throw new Error("Expected a scoped target")
+  yield* target.workspace.verify()
+  return yield* Effect.tryPromise({
+    try: () =>
+      replaceWorkspaceFile(target.workspace!.root, target.workspace!.relative, new TextEncoder().encode(content), () =>
+        Effect.runPromise(target.workspace!.verify()),
+      ),
+    catch: (cause) => new Environment.Failed({ path: target.absolute, cause }),
+  })
+})
+
 export const syncTextBom = Effect.fn("FileMutation.syncTextBom")(function* (
   files: Files,
   target: string,

@@ -9,6 +9,7 @@ import { Config } from "@opencode/core/config"
 import { Environment } from "@opencode/core/environment/index"
 import { FileAccess } from "@opencode/core/file-access"
 import { FileMutation } from "@opencode/core/file-mutation"
+import { FileWrite } from "@opencode/core/file-write"
 import { Flag } from "@opencode/core/flag"
 import { Formatter } from "@opencode/core/formatter"
 import { Location } from "@opencode/core/location"
@@ -29,6 +30,7 @@ const patchToolNode = makeLocationNode({
     Tool.node,
     FileAccess.node,
     FileMutation.node,
+    FileWrite.node,
     Environment.node,
     Formatter.node,
     Location.node,

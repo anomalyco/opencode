@@ -9,6 +9,7 @@ import { Config } from "@opencode/core/config"
 import { Flag } from "@opencode/core/flag"
 import { Formatter } from "@opencode/core/formatter"
 import { FileMutation } from "@opencode/core/file-mutation"
+import { FileWrite } from "@opencode/core/file-write"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
 import { PluginHooks } from "@opencode/core/plugin/hooks"
@@ -32,6 +33,7 @@ const patchToolNode = makeLocationNode({
     Tool.node,
     FileAccess.node,
     FileMutation.node,
+    FileWrite.node,
     Environment.node,
     Formatter.node,
     Location.node,
@@ -53,6 +55,10 @@ let afterEditApproval = (): Effect.Effect<void> => Effect.void
 let formatFile = (_target: string): Effect.Effect<boolean> => Effect.succeed(false)
 
 const permission = permissionLayer({
+  assertNotDenied: (input) =>
+    input.action === denyAction
+      ? Effect.fail(new Permission.BlockedError({ rules: [], permission: input.action, resources: input.resources }))
+      : Effect.void,
   assert: (input) =>
     Effect.sync(() => {
       assertions.push(input)
@@ -164,7 +170,7 @@ const withTempTool = <A, E, R>(body: (directory: string, registry: Tool.Interfac
 describe("PatchTool", () => {
   const scopedPatch = process.platform === "linux" ? it.live : it.live.skip
 
-  scopedPatch("rejects a managed member before any raw patch mutation", () =>
+  scopedPatch("adds and updates a managed member through both aliases while rejecting unsupported hunks", () =>
     withTempDir((logical) =>
       withTempDir((physical) => {
         reset()
@@ -190,13 +196,111 @@ describe("PatchTool", () => {
               expect(
                 yield* executeTool(
                   registry,
-                  call("*** Begin Patch\n*** Add File: member/new.txt\n+blocked\n*** End Patch"),
+                  call("*** Begin Patch\n*** Add File: member/new.txt\n+before\n*** End Patch"),
                 ),
               ).toMatchObject({
-                status: "error",
+                status: "completed",
               })
-              expect(yield* exists(path.join(physical.path, "new.txt"))).toBe(false)
-              expect(assertions).toEqual([])
+              expect(yield* Effect.promise(() => fs.readFile(path.join(physical.path, "new.txt"), "utf8"))).toBe(
+                "before\n",
+              )
+              expect(assertions).toMatchObject([
+                {
+                  action: "edit",
+                  resources: ["member/new.txt", path.join(physical.path, "new.txt")],
+                },
+              ])
+              expect(assertions[0]?.verifiedWorkspace).toBeUndefined()
+              expect(
+                yield* executeTool(
+                  registry,
+                  call(
+                    `*** Begin Patch\n*** Update File: ${path.join(physical.path, "new.txt")}\n@@\n-before\n+after\n*** End Patch`,
+                    "call-physical",
+                  ),
+                ),
+              ).toMatchObject({ status: "completed" })
+              expect(yield* Effect.promise(() => fs.readFile(path.join(physical.path, "new.txt"), "utf8"))).toBe(
+                "after\n",
+              )
+              denyAction = "read"
+              expect(
+                yield* executeTool(
+                  registry,
+                  call(
+                    "*** Begin Patch\n*** Update File: member/new.txt\n@@\n-after\n+denied\n*** End Patch",
+                    "call-denied",
+                  ),
+                ),
+              ).toMatchObject({ status: "error" })
+              denyAction = undefined
+              expect(yield* Effect.promise(() => fs.readFile(path.join(physical.path, "new.txt"), "utf8"))).toBe(
+                "after\n",
+              )
+              denyAction = "edit"
+              expect(
+                yield* executeTool(
+                  registry,
+                  call(
+                    "*** Begin Patch\n*** Update File: member/new.txt\n@@\n-after\n+denied\n*** End Patch",
+                    "call-edit-denied",
+                  ),
+                ),
+              ).toMatchObject({ status: "error" })
+              denyAction = undefined
+              expect(yield* Effect.promise(() => fs.readFile(path.join(physical.path, "new.txt"), "utf8"))).toBe(
+                "after\n",
+              )
+              expect(
+                yield* executeTool(
+                  registry,
+                  call(
+                    "*** Begin Patch\n*** Add File: member/other.txt\n+other\n*** Delete File: member/new.txt\n*** End Patch",
+                    "call-delete",
+                  ),
+                ),
+              ).toMatchObject({ status: "error" })
+              expect(yield* exists(path.join(physical.path, "other.txt"))).toBe(false)
+              expect(
+                yield* executeTool(
+                  registry,
+                  call(
+                    "*** Begin Patch\n*** Update File: member/new.txt\n*** Move to: member/moved.txt\n@@\n-after\n+after\n*** End Patch",
+                    "call-move",
+                  ),
+                ),
+              ).toMatchObject({ status: "error" })
+              expect(yield* exists(path.join(physical.path, "moved.txt"))).toBe(false)
+              expect(
+                yield* executeTool(
+                  registry,
+                  call(
+                    "*** Begin Patch\n*** Add File: member/staged.txt\n+first\n*** Update File: member/staged.txt\n@@\n-first\n+second\n*** End Patch",
+                    "call-staged",
+                  ),
+                ),
+              ).toMatchObject({ status: "completed" })
+              expect(yield* Effect.promise(() => fs.readFile(path.join(physical.path, "staged.txt"), "utf8"))).toBe(
+                "second\n",
+              )
+              expect(
+                yield* executeTool(
+                  registry,
+                  call(
+                    "*** Begin Patch\n*** Add File: member/mixed.txt\n+blocked\n*** Add File: outside.txt\n+blocked\n*** End Patch",
+                    "call-mixed",
+                  ),
+                ),
+              ).toMatchObject({ status: "error" })
+              expect(yield* exists(path.join(physical.path, "mixed.txt"))).toBe(false)
+              expect(yield* exists(path.join(logical.path, "outside.txt"))).toBe(false)
+              expect(
+                yield* executeTool(
+                  registry,
+                  call("*** Begin Patch\n*** Add File: member/.git/config\n+blocked\n*** End Patch", "call-git"),
+                ),
+              ).toMatchObject({ status: "error" })
+              expect(yield* exists(path.join(physical.path, ".git"))).toBe(false)
             }),
           logical.path,
           true,

@@ -58,6 +58,7 @@ const patchNode = makeLocationNode({
     Tool.node,
     FileAccess.node,
     FileMutation.node,
+    FileWrite.node,
     Environment.node,
     Formatter.node,
     Location.node,

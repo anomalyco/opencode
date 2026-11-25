@@ -12,6 +12,7 @@ import { toolFailure } from "../runtime.js"
 import { Environment } from "../../environment/index.js"
 import { Formatter } from "../../formatter.js"
 import { FileMutation } from "../../file-mutation.js"
+import { FileWrite } from "../../file-write.js"
 import { FileAccess } from "../../file-access.js"
 import { Patch } from "@opencode/util/patch"
 import { Permission } from "../../permission.js"
@@ -54,6 +55,7 @@ export const Plugin = {
   effect: Effect.fn("PatchTool.Plugin")(function* (ctx: Context) {
     const access = yield* FileAccess.Service
     const fileMutation = yield* FileMutation.Service
+    const fileWrite = yield* FileWrite.Service
     const formatter = yield* Formatter.Service
     const permission = yield* Permission.Service
     const config = yield* Config.Service
@@ -94,7 +96,7 @@ export const Plugin = {
                 message: `${operation}: ${errorMessage(error)}${completed.length ? `. Completed before failure: ${completed.join(", ")}` : ""}`,
               })
             }
-            return Effect.gen(function* () {
+            const stock = Effect.gen(function* () {
               if (!input.patchText) return yield* new ToolFailure({ message: "patchText is required" })
               const hunks = yield* Effect.fromResult(parsed).pipe(
                 Effect.mapError((error) => new ToolFailure({ message: `patch verification failed: ${error.message}` })),
@@ -106,8 +108,8 @@ export const Plugin = {
               const updates = new Map<string, { target: FileAccess.Target; content: string | null }>()
               const resolveTarget = Effect.fnUntraced(function* (value: string) {
                 const target = yield* access.resolve({ path: value, kind: "file" })
-                // Patch has sequential multi-file, move, and delete semantics. Keep its raw pathname IO unavailable
-                // for a managed physical member until those operations have guarded implementations.
+                // The stock path uses pathname IO. A managed physical member takes the guarded add/update route below;
+                // delete, move, and mixed patches remain unavailable there.
                 if ((yield* access.scope(target, context, "write")).workspace)
                   return yield* new Environment.Failed({
                     path: target.absolute,
@@ -307,6 +309,111 @@ export const Plugin = {
                 metadata: { files },
               }
             }).pipe(fileMutation.withLock(lockTargets), Effect.mapError(toolFailure("Unable to apply patch")))
+            return Effect.gen(function* () {
+              if (!input.patchText || !Result.isSuccess(parsed) || parsed.success.length === 0) return yield* stock
+              const candidates = yield* Effect.forEach(parsed.success, (hunk) =>
+                Effect.gen(function* () {
+                  const target = yield* access.scope(
+                    yield* access.resolve({ path: hunk.path, kind: "file" }),
+                    context,
+                    "write",
+                  )
+                  const move =
+                    hunk.type === "update" && hunk.movePath
+                      ? yield* access.scope(
+                          yield* access.resolve({ path: hunk.movePath, kind: "file" }),
+                          context,
+                          "write",
+                        )
+                      : undefined
+                  return { hunk, target, move }
+                }),
+              )
+              if (!candidates.some((item) => item.target.workspace || item.move?.workspace)) return yield* stock
+              if (candidates.some((item) => !item.target.workspace || item.hunk.type === "delete" || item.move))
+                return yield* new ToolFailure({
+                  message: "Scoped patch supports only add and update hunks within one managed workspace",
+                })
+              if (new Set(candidates.map((item) => item.target.workspace!.root)).size !== 1)
+                return yield* new ToolFailure({ message: "Scoped patch cannot span managed workspaces" })
+              return yield* fileMutation.withLock(candidates.map((item) => item.target.workspace!.absolute))(
+                Effect.gen(function* () {
+                  const prepared: Prepared[] = []
+                  const staged = new Map<string, string>()
+                  for (const item of candidates) {
+                    const target = yield* fileWrite.target(item.hunk.path, context)
+                    if (
+                      !target.workspace ||
+                      target.workspace.root !== item.target.workspace!.root ||
+                      target.workspace.absolute !== item.target.workspace!.absolute
+                    )
+                      return yield* new Environment.Failed({
+                        path: target.absolute,
+                        cause: "Workspace assignment changed",
+                      })
+                    const file = FileAccess.key({ ...target, absolute: target.workspace.absolute })
+                    yield* permission.assertNotDenied({
+                      action: "read",
+                      resources: target.workspace.resources,
+                      ...Permission.invocation(context),
+                    })
+                    if (item.hunk.type === "add") {
+                      const content =
+                        item.hunk.contents.endsWith("\n") || item.hunk.contents === ""
+                          ? item.hunk.contents
+                          : `${item.hunk.contents}\n`
+                      prepared.push({ ...item.hunk, target, content, before: "", after: Bom.split(content).text })
+                      staged.set(file, content)
+                      continue
+                    }
+                    if (item.hunk.type !== "update")
+                      return yield* new ToolFailure({ message: "Scoped patch deletion is unsupported" })
+                    const hunk = item.hunk
+                    const original =
+                      staged.get(file) ??
+                      (yield* Effect.gen(function* () {
+                        const current = yield* FileMutation.readScopedEditableText(target)
+                        return Bom.join(current.text, current.bom)
+                      }))
+                    const update = yield* Effect.try({
+                      try: () => Patch.derive(hunk.path, hunk.chunks, original),
+                      catch: (error) =>
+                        new ToolFailure({ message: `patch verification failed: ${errorMessage(error)}` }),
+                    })
+                    const content = Patch.joinBom(update.content, update.bom)
+                    prepared.push({ ...hunk, target, content, before: Bom.split(original).text, after: update.content })
+                    staged.set(file, content)
+                  }
+                  const patchFiles = prepared.map((change) => patchFile(change))
+                  const resources = [...new Set(prepared.flatMap((change) => change.target.workspace!.resources))]
+                  yield* permission.assert({
+                    action: "edit",
+                    resources,
+                    metadata: {
+                      filepath: prepared.map((change) => change.target.resource).join(", "),
+                      diff: patchFiles.map((file) => `${file.patch}\n`).join(""),
+                      files: patchFiles,
+                    },
+                    ...Permission.invocation(context),
+                  })
+                  for (const change of prepared) {
+                    if (change.type === "delete") continue
+                    yield* FileMutation.writeScopedExactText(change.target, change.content).pipe(
+                      Effect.mapError((error) => fail(`Failed to write ${change.target.resource}`, error)),
+                    )
+                    completed.push(change.target.resource)
+                  }
+                  return {
+                    output: {},
+                    content: [
+                      "Success. Updated the following files:",
+                      ...patchFiles.map((file) => `${file.status === "added" ? "A" : "M"} ${file.file}`),
+                    ].join("\n"),
+                    metadata: { files: patchFiles },
+                  }
+                }),
+              )
+            }).pipe(Effect.mapError(toolFailure("Unable to apply patch")))
           },
         }),
       )
