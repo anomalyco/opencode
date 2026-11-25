@@ -461,6 +461,7 @@ export function createTimelineController(input: {
           () => {
             // A generated title arrives with the response's session event; sync in case the response beat it.
             data.session.invalidate(sessionID)
+
             return data.session.sync(sessionID)
           },
           (cause: unknown) => {
