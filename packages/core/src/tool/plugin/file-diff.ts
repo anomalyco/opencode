@@ -1,5 +1,5 @@
 import { FileDiff } from "@opencode/schema/file-diff"
-import { createTwoFilesPatch, diffLines } from "diff"
+import { formatPatch, structuredPatch } from "diff"
 
 export function fileDiff(
   file: string,
@@ -7,17 +7,13 @@ export function fileDiff(
   after: string,
   status: typeof FileDiff.Info.Type.status = "modified",
 ): typeof FileDiff.Info.Type {
-  const counts = diffLines(before, after).reduce(
-    (result, item) => ({
-      additions: result.additions + (item.added ? (item.count ?? 0) : 0),
-      deletions: result.deletions + (item.removed ? (item.count ?? 0) : 0),
-    }),
-    { additions: 0, deletions: 0 },
-  )
-  return {
-    file,
-    patch: createTwoFilesPatch(file, file, before, after),
-    status,
-    ...counts,
-  }
+  const patch = structuredPatch(file, file, before, after)
+  let additions = 0
+  let deletions = 0
+  for (const hunk of patch.hunks)
+    for (const line of hunk.lines) {
+      if (line[0] === "+") additions++
+      else if (line[0] === "-") deletions++
+    }
+  return { file, patch: formatPatch(patch), status, additions, deletions }
 }
