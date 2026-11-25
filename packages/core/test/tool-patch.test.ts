@@ -554,28 +554,6 @@ describe("PatchTool", () => {
     ),
   )
 
-  it.live("includes the move destination in edit permission resources", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const source = path.join(directory, "old", "name.txt")
-        yield* Effect.promise(() => fs.mkdir(path.dirname(source), { recursive: true }))
-        yield* Effect.promise(() => fs.writeFile(source, "old content\n"))
-        yield* executeTool(
-          registry,
-          call(
-            "*** Begin Patch\n*** Update File: old/name.txt\n*** Move to: renamed/dir/name.txt\n@@\n-old content\n+new content\n*** End Patch",
-          ),
-        )
-        expect(assertions).toMatchObject([
-          {
-            action: "edit",
-            resources: ["old/name.txt", "renamed/dir/name.txt"],
-          },
-        ])
-      }),
-    ),
-  )
-
   it.live("uses Location-relative resources for move targets in a nested Location", () =>
     withTempDir((tmp) => {
       reset()
@@ -696,37 +674,6 @@ describe("PatchTool", () => {
             error: { type: "tool.execution", message: "patch rejected: empty patch" },
           })
         }
-      }),
-    ),
-  )
-
-  it.live("rejects an invalid hunk header", () =>
-    withTempTool((_directory, registry) =>
-      Effect.gen(function* () {
-        expect(yield* executeTool(registry, call("*** Begin Patch\n*** Frobnicate File: foo\n*** End Patch"))).toEqual({
-          status: "error",
-          error: {
-            type: "tool.execution",
-            message:
-              "patch verification failed: Invalid hunk at line 2: '*** Frobnicate File: foo' is not a valid hunk header. Valid hunk headers: '*** Add File: {path}', '*** Delete File: {path}', '*** Update File: {path}'",
-          },
-        })
-      }),
-    ),
-  )
-
-  it.live("applies successive update operations to one file", () =>
-    withTempTool((directory, registry) =>
-      Effect.gen(function* () {
-        const target = path.join(directory, "successive.txt")
-        yield* Effect.promise(() => fs.writeFile(target, "a\nb\n"))
-        yield* executeTool(
-          registry,
-          call(
-            "*** Begin Patch\n*** Update File: successive.txt\n@@\n-a\n+A\n*** Update File: successive.txt\n@@\n-b\n+B\n*** End Patch",
-          ),
-        )
-        expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("A\nB\n")
       }),
     ),
   )

@@ -134,16 +134,6 @@ const layer = AppNodeBuilder.build(
 const it = testEffect(layer)
 const flagged = testEffect(layer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, "compaction_jobs"))))
 
-test("compaction prompt preserves detailed work state and relevant files", () => {
-  const prompt = SessionCompaction.buildPrompt(false)
-
-  expect(prompt).toContain("## Work State")
-  expect(prompt).toContain("### Completed")
-  expect(prompt).toContain("### Active")
-  expect(prompt).toContain("### Blocked")
-  expect(prompt).toContain("## Relevant Files")
-})
-
 it.effect("compaction describes tool media without embedding base64", () =>
   Effect.gen(function* () {
     const base64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAAB"

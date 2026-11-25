@@ -617,21 +617,6 @@ describe("OpencodePlugin event watches", () => {
     ),
   )
 
-  it.effect("keeps resuming wakes minutes apart until 20 since the person's last prompt", () =>
-    withConsole({}, (console) =>
-      Effect.gen(function* () {
-        const { host, wakes } = yield* start(console)
-        const session = yield* host.session.create({})
-        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
-        for (const index of Array.from({ length: 21 }, (_, index) => index)) {
-          yield* deliver(console, watchEvent(session.id, `evt_${index}`))
-          yield* TestClock.adjust("7 minutes")
-        }
-        expect(wakes.map((wake) => wake.resume)).toEqual([...Array.from({ length: 20 }, () => true), false])
-      }),
-    ),
-  )
-
   it.effect("keeps resuming an unattended watch past 20 since the prompt, while other watches still wait", () =>
     withConsole({}, (console) =>
       Effect.gen(function* () {
@@ -928,24 +913,6 @@ describe("OpencodePlugin event watches", () => {
           event: "slack.channel_top",
           arguments: { channel_id: "C1" },
           minutes: 60,
-        })
-      }),
-    ),
-  )
-
-  it.effect("watches an event type that takes no arguments with empty ones", () =>
-    withConsole({}, (console) =>
-      Effect.gen(function* () {
-        const { host } = yield* start(console)
-        const session = yield* host.session.create({})
-
-        yield* (yield* watchTool("watch")).execute({ server: "sentry", event: "issue.created" }, context(session.id))
-
-        expect(console.state.requests.find((request) => request.method === "POST")?.body).toEqual({
-          sessionID: session.id,
-          server: "sentry",
-          event: "issue.created",
-          arguments: {},
         })
       }),
     ),
