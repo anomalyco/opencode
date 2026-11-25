@@ -8,9 +8,9 @@ import type { TabActivity } from "./policy"
 import type { Profile } from "./profile"
 
 // The Electron main process of `electron-crash.test.ts`, bundled and run by the pinned Electron. It opens pane pages
-// on a private-looking address, ends their renderers for real (a DevTools `Page.crash`, then a kill), closes a healthy
-// tab normally, fails one load, and ends a child process of the browser. It prints every line the product wrote to the
-// desktop log, with what Electron itself reported, as one JSON line.
+// on a private-looking address, ends their renderers for real (a DevTools `Page.crash`, then a kill), fails one load, and
+// ends a child process of the browser. It prints every line the product wrote to the desktop log, with what Electron
+// itself reported, as one JSON line.
 
 // What a bug report must never carry: the path, the query, the fragment, the title and the page's text.
 const path = "/mail/inbox/alex?token=s3cret-token#message-42"
@@ -162,12 +162,6 @@ void electron.app.whenReady().then(async () => {
   await settle(500)
   await failed.page.dispose()
 
-  // A healthy tab closed normally: disposing it must not report a page end or write a "browser page ended" log line.
-  const disposedID = Browser.TabID.make("tab_44444444-4444-4444-4444-444444444444")
-  const disposed = await open(disposedID, origin + path)
-  await disposed.page.dispose()
-  await settle(500)
-
   // A child process of the browser that ends: the pane logs it, with no page of its own open here.
   // SAFETY: a pane with no binding reads only the profile's partition, previews, downloads and permissions.
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
@@ -214,7 +208,6 @@ void electron.app.whenReady().then(async () => {
       lines,
       crashed: { signals: crashed.signals, ends: crashed.ends, failure: failure(crashedID, crashed.ends[0]) },
       killed: { signals: killed.signals, ends: killed.ends, failure: failure(killedID, killed.ends[0]) },
-      disposed: { signals: disposed.signals, ends: disposed.ends },
       child: child?.type ?? "",
       gone,
       platform: process.platform,

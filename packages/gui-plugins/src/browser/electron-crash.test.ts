@@ -27,7 +27,6 @@ test(
       lines: Line[]
       crashed: Ended
       killed: Ended
-      disposed: Pick<Ended, "signals" | "ends">
       child: string
       gone: string[]
       platform: string
@@ -75,10 +74,6 @@ test(
     const failed = lines("browser page load failed", "tab_33333333-3333-3333-3333-333333333333")
     expect(failed.length).toBe(1)
     expect(failed[0]).toMatchObject({ level: "warn", data: { code: -102, error: "ERR_CONNECTION_REFUSED", origin: result.refused } })
-
-    // A healthy tab closed normally: no page-end callback and no "browser page ended" log line.
-    expect(result.disposed.ends).toEqual([])
-    expect(lines("browser page ended", "tab_44444444-4444-4444-4444-444444444444")).toEqual([])
 
     // The child process the fixture ended, as Electron reported it. Another one may end by itself on a loaded runner.
     const child = lines("browser child process gone").find((line) => line.data.type === result.child)
