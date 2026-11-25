@@ -21,3 +21,16 @@ export function fileDiff(
     ...counts,
   }
 }
+
+export function formatterResult(files: ReadonlyArray<typeof FileDiff.Info.Type>) {
+  if (files.length === 0) return []
+  return [
+    {
+      type: "text" as const,
+      text: [
+        "A formatter changed these files after this call. Use the final diff below for the next edit.",
+        ...files.map((file) => file.patch),
+      ].join("\n"),
+    },
+  ]
+}

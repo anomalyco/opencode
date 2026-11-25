@@ -9,6 +9,7 @@ export * as EditTool from "./edit.js"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { ToolFailure } from "@opencode/ai/effect"
 import { Effect, Schema } from "effect"
+import path from "path"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
@@ -16,7 +17,7 @@ import { toolFailure } from "../runtime.js"
 import { FileMutation } from "../../file-mutation.js"
 import { FileWrite } from "../../file-write.js"
 import { Permission } from "../../permission.js"
-import { fileDiff } from "./file-diff.js"
+import { fileDiff, formatterResult } from "./file-diff.js"
 
 export const name = "edit"
 
@@ -159,11 +160,88 @@ const alignLines = (before: string[], after: string[]) => {
   return result
 }
 
+/** JS and TS whitespace outside literals can change without changing the tokens a model intends to match. */
+const tokenExtensions = new Set([".js", ".mjs", ".cjs", ".ts", ".mts", ".cts"])
+
+interface Token {
+  readonly text: string
+  readonly start: number
+  readonly end: number
+}
+
+const tokenize = (value: string) => {
+  const result: Token[] = []
+  let index = 0
+  const push = (start: number, end: number) => {
+    const text = value.slice(start, end)
+    if (text !== "") result.push({ text, start, end })
+  }
+  while (index < value.length) {
+    const char = value[index]!
+    if (/\s/u.test(char)) {
+      index++
+      continue
+    }
+    if (char === "/" && (value[index + 1] === "/" || value[index + 1] === "*")) {
+      const start = index
+      const close = value[index + 1] === "/" ? value.indexOf("\n", index) : value.indexOf("*/", index + 2)
+      index = close === -1 ? value.length : close + (value[index + 1] === "/" ? 0 : 2)
+      push(start, index)
+      continue
+    }
+    if (char === "'" || char === '"' || char === "`") {
+      const start = index
+      index++
+      while (index < value.length) {
+        if (value[index] === "\\") index += 2
+        else if (value[index] === char) {
+          index++
+          break
+        } else index++
+      }
+      push(start, index)
+      continue
+    }
+    if (/[\p{L}\p{N}_$]/u.test(char)) {
+      const start = index
+      while (index < value.length && /[\p{L}\p{N}_$]/u.test(value[index]!)) index++
+      push(start, index)
+      continue
+    }
+    const start = index
+    index++
+    push(start, index)
+  }
+  return result
+}
+
+/** Matches token sequences only. A unique span lets a formatter change spacing or line breaks without a false miss. */
+const findTokenOccurrences = (content: string, search: string) => {
+  const pattern = tokenize(search)
+  if (pattern.length === 0) return []
+  const leading = search.slice(0, pattern[0]!.start)
+  const trailing = search.slice(pattern.at(-1)!.end)
+  // Blank padding is not formatting. Let the trailing-whitespace tier own those misses.
+  if (!/^[ \t]*$/u.test(leading) || (trailing !== "" && !/^\r?\n$/u.test(trailing))) return []
+  const source = tokenize(content)
+  const result: Match[] = []
+  let index = 0
+  while (index + pattern.length <= source.length) {
+    if (pattern.every((token, offset) => source[index + offset]!.text === token.text)) {
+      result.push({ start: source[index]!.start, end: source[index + pattern.length - 1]!.end })
+      index += pattern.length
+      continue
+    }
+    index++
+  }
+  return result
+}
+
 /**
  * Matches against the LF view Read shows the model, then maps offsets back to the source, so CRLF and mixed line
  * endings neither block matches nor leak into untouched regions.
  */
-const matchView = (source: string, oldString: string, newString: string) => {
+const matchView = (source: string, oldString: string, newString: string, extension: string) => {
   const view = source.replaceAll(crlf, "\n")
   const removed = [...source.matchAll(/\r\n/g)].map((match, index) => match.index - index)
   const fileEnding = lineEnding(source, "\n")
@@ -173,11 +251,17 @@ const matchView = (source: string, oldString: string, newString: string) => {
   // These one-to-one mappings preserve offsets into the LF view.
   const unicode = exact.length > 0 ? [] : findOccurrences(normalizeForMatch(view), normalizeForMatch(search))
   const trailing = exact.length > 0 || unicode.length > 0 ? [] : findLineOccurrences(view, search)
+  const tokens =
+    exact.length > 0 || unicode.length > 0 || trailing.length > 0 || !tokenExtensions.has(extension)
+      ? []
+      : findTokenOccurrences(view, search)
   return {
-    matches: (exact.length > 0 ? exact : unicode.length > 0 ? unicode : trailing).map((match) => ({
-      start: match.start + countBefore(removed, match.start),
-      end: match.end + countBefore(removed, match.end),
-    })),
+    matches: (exact.length > 0 ? exact : unicode.length > 0 ? unicode : trailing.length > 0 ? trailing : tokens).map(
+      (match) => ({
+        start: match.start + countBefore(removed, match.start),
+        end: match.end + countBefore(removed, match.end),
+      }),
+    ),
     replace: (match: Match) => {
       const region = source.slice(match.start, match.end)
       return withRegionEndings(region, replacement, lineEnding(region, fileEnding))
@@ -317,7 +401,7 @@ export const Plugin = {
               const endingsOnly = input.oldString.replaceAll("\r", "") === input.newString.replaceAll("\r", "")
               const { matches, replace } = endingsOnly
                 ? { matches: findOccurrences(source, input.oldString), replace: () => input.newString }
-                : matchView(source, input.oldString, input.newString)
+                : matchView(source, input.oldString, input.newString, path.extname(target.absolute).toLowerCase())
               const replacements = matches.length
               const replaced = (input.replaceAll === true ? matches : matches.slice(0, 1))
                 .toReversed()
@@ -358,9 +442,13 @@ export const Plugin = {
               const result = yield* fileWrite.commit(target, replaced)
               const formatted =
                 result.formatted ?? (yield* FileMutation.readText(target.environment.files, target.absolute)).text
+              const diff = fileDiff(result.resource, source, formatted)
+              const changes = result.formatted !== undefined && result.formatted !== replaced ? [diff] : []
+              const message = `Edited ${result.resource} (${replacements} replacement${replacements === 1 ? "" : "s"})`
               return {
-                output: `Edited ${result.resource} (${replacements} replacement${replacements === 1 ? "" : "s"})`,
-                metadata: { files: [fileDiff(result.resource, source, formatted)] },
+                output: message,
+                content: [...formatterResult(changes), { type: "text" as const, text: message }],
+                metadata: { files: [diff] },
               }
             }).pipe(fileMutation.withLock([input.path]), Effect.mapError(toolFailure(`Unable to edit ${input.path}`)))
           },

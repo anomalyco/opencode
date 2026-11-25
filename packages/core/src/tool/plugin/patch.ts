@@ -17,7 +17,7 @@ import { Patch } from "@opencode/util/patch"
 import { Permission } from "../../permission.js"
 import DESCRIPTION from "../patch.txt"
 import GRAMMAR from "../patch-grammar.txt"
-import { fileDiff } from "./file-diff.js"
+import { fileDiff, formatterResult } from "./file-diff.js"
 
 export const name = "patch"
 
@@ -288,15 +288,28 @@ export const Plugin = {
                 const target = change.type === "update" && change.moveTarget ? change.moveTarget : change.target
                 return patchFile(change, formatted.get(FileAccess.key(target)))
               })
+              const changes = prepared.flatMap((change, index) => {
+                if (change.type === "delete") return []
+                const target = change.type === "update" && change.moveTarget ? change.moveTarget : change.target
+                const final = formatted.get(FileAccess.key(target))
+                return final !== undefined && final !== change.after ? [files[index]!] : []
+              })
               return {
                 // The multi-file patch contract intentionally leaves structured output empty.
                 output: {},
                 content: [
-                  "Success. Updated the following files:",
-                  ...files.map(
-                    (file) => `${file.status === "added" ? "A" : file.status === "deleted" ? "D" : "M"} ${file.file}`,
-                  ),
-                ].join("\n"),
+                  ...formatterResult(changes),
+                  {
+                    type: "text" as const,
+                    text: [
+                      "Success. Updated the following files:",
+                      ...files.map(
+                        (file) =>
+                          `${file.status === "added" ? "A" : file.status === "deleted" ? "D" : "M"} ${file.file}`,
+                      ),
+                    ].join("\n"),
+                  },
+                ],
                 metadata: { files },
               }
             }).pipe(fileMutation.withLock(lockTargets), Effect.mapError(toolFailure("Unable to apply patch")))

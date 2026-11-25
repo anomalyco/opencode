@@ -164,8 +164,11 @@ describe("WriteTool", () => {
         })
       return withTool(tmp.path, fixture, (registry) =>
         Effect.gen(function* () {
-          expect(yield* executeTool(registry, call({ path: "formatted.txt", content: "format me" }))).toMatchObject({
-            status: "completed",
+          const settled = yield* executeTool(registry, call({ path: "formatted.txt", content: "format me" }))
+          expect(settled.status).toBe("completed")
+          expect(settled.content?.[0]).toMatchObject({
+            type: "text",
+            text: expect.stringContaining("A formatter changed these files"),
           })
           expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("FORMAT ME")
         }),

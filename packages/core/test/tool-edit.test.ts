@@ -212,6 +212,10 @@ describe("EditTool", () => {
               )
               expect(settled.status).toBe("completed")
               if (settled.status !== "completed") return
+              expect(settled.content?.[0]).toMatchObject({
+                type: "text",
+                text: expect.stringContaining("A formatter changed these files"),
+              })
               expect(settled.metadata?.files?.[0]?.patch).toContain("-before\n+AFTER")
               expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("AFTER\n")
             }),
@@ -579,6 +583,86 @@ describe("EditTool", () => {
     }),
   )
 
+  it.live("matches an earlier edit after a formatter changes spacing", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const target = path.join(tmp.path, "sample.ts")
+      edit.formatFile = (file) =>
+        Effect.promise(async () => {
+          const source = await fs.readFile(file, "utf8")
+          await fs.writeFile(file, source.replace(/function run\(\)\{return (\d)\}/g, "function run() { return $1 }"))
+          return true
+        })
+      return Effect.promise(() => fs.writeFile(target, "function run(){return 1}\n")).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            Effect.gen(function* () {
+              const first = yield* executeTool(
+                registry,
+                call({ path: "sample.ts", oldString: "return 1", newString: "return 2" }),
+              )
+              expect(first.status).toBe("completed")
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("function run() { return 2 }\n")
+
+              const second = yield* executeTool(
+                registry,
+                call({
+                  path: "sample.ts",
+                  oldString: "function run(){return 2}",
+                  newString: "function run(){return 3}",
+                }),
+              )
+              expect(second.status).toBe("completed")
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("function run() { return 3 }\n")
+            }),
+          ),
+        ),
+      )
+    }),
+  )
+
+  it.live("does not token match string literals or indentation-sensitive files", () =>
+    withTempDir((tmp) => {
+      const edit = makeEditFixture()
+      const script = path.join(tmp.path, "values.ts")
+      const python = path.join(tmp.path, "script.py")
+      const jsx = path.join(tmp.path, "view.tsx")
+      return Effect.promise(() =>
+        Promise.all([
+          fs.writeFile(script, 'const value = "hello world"\n'),
+          fs.writeFile(python, "def run():\n  return 1\n"),
+          fs.writeFile(jsx, "<div>hello world</div>\n"),
+        ]),
+      ).pipe(
+        Effect.andThen(
+          withTool(tmp.path, edit, (registry) =>
+            Effect.gen(function* () {
+              expect(
+                yield* executeTool(
+                  registry,
+                  call({ path: "values.ts", oldString: 'const value="hello  world"', newString: "changed" }),
+                ),
+              ).toMatchObject({ status: "error" })
+              expect(
+                yield* executeTool(
+                  registry,
+                  call({ path: "script.py", oldString: "def run():\nreturn 1", newString: "changed" }),
+                ),
+              ).toMatchObject({ status: "error" })
+              expect(
+                yield* executeTool(
+                  registry,
+                  call({ path: "view.tsx", oldString: "<div>helloworld</div>", newString: "changed" }),
+                ),
+              ).toMatchObject({ status: "error" })
+              expect(edit.writes).toEqual([])
+            }),
+          ),
+        ),
+      )
+    }),
+  )
+
   it.live("ignores trailing whitespace while preserving untouched lines", () =>
     withTempDir((tmp) => {
       const edit = makeEditFixture()
@@ -730,7 +814,10 @@ describe("EditTool", () => {
       // A CRLF file with a block pasted in from an LF editor, edited with surrounding context.
       const target = path.join(tmp.path, "store.cs")
       return Effect.promise(() =>
-        fs.writeFile(target, "All(item.Sku);\r\n\r\nFind(sku);\r\n\r\nvoid Add()\n{\n  _items[item.Sku] = item;\n}\r\n"),
+        fs.writeFile(
+          target,
+          "All(item.Sku);\r\n\r\nFind(sku);\r\n\r\nvoid Add()\n{\n  _items[item.Sku] = item;\n}\r\n",
+        ),
       ).pipe(
         Effect.andThen(
           withTool(tmp.path, edit, (registry) =>
@@ -774,7 +861,10 @@ describe("EditTool", () => {
           withTool(tmp.path, edit, (registry) =>
             Effect.gen(function* () {
               expect(
-                yield* executeTool(registry, call({ path: "strip.sh", oldString: "\r", newString: "", replaceAll: true })),
+                yield* executeTool(
+                  registry,
+                  call({ path: "strip.sh", oldString: "\r", newString: "", replaceAll: true }),
+                ),
               ).toMatchObject({ status: "completed", output: "Edited strip.sh (2 replacements)" })
               expect(
                 yield* executeTool(registry, call({ path: "whole.sh", oldString: "x\r\ny\r\n", newString: "x\ny\n" })),
@@ -814,7 +904,10 @@ describe("EditTool", () => {
             Effect.gen(function* () {
               // The typography tier matches the curly quote, and the replacement writes the same bytes back.
               expect(
-                yield* executeTool(registry, call({ path: "quote.txt", oldString: "it's here", newString: "it’s here" })),
+                yield* executeTool(
+                  registry,
+                  call({ path: "quote.txt", oldString: "it's here", newString: "it’s here" }),
+                ),
               ).toEqual({
                 status: "error",
                 error: {
