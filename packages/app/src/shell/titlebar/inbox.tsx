@@ -7,6 +7,7 @@ import {
   createUniqueId,
   For,
   on,
+  onCleanup,
   Show,
   useContext,
   type Accessor,
@@ -33,7 +34,7 @@ import { sessionLabel, sessionTitle } from "@/session/title"
 import { createSessionExporter } from "@/session/commands/export-session"
 import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { RenameDialog } from "./project-session-row"
-import { createSessionInbox, inboxArchived, type InboxEntry, type InboxStatus } from "./inbox-model"
+import { createSessionInbox, inboxArchived, inboxWaiting, type InboxEntry, type InboxStatus } from "./inbox-model"
 import { compareWorking, workingSince } from "./inbox-working"
 import { elapsedTime } from "@/shell/sessions/duration"
 import { useGlobal } from "@/runtime/server/runtime"
@@ -42,6 +43,7 @@ import { tabKey, useTabs, type DraftTab } from "@/shell/tabs/tabs"
 import { createDraftComposerState } from "@/composer/state"
 import { pinnedRefs, pinKey } from "@/shell/tabs/pins"
 import { usePins } from "./pinned-area"
+import { createSessionRowNavigation } from "./tab-strip"
 import { isAttachment } from "@/composer/prompt-parts"
 
 const RECENT_LIMIT = 10
@@ -137,11 +139,10 @@ export function SidebarInbox() {
 
     const rest = list.filter((entry) => !order.has(entry.key))
 
-    const active = rest.filter((entry) => !inboxArchived(entry))
+    // An archived session that asks for something joins Needs attention until it's answered, then goes back to Archived.
+    const needs = rest.filter(inboxWaiting).toSorted((a, b) => (a.since ?? Infinity) - (b.since ?? Infinity))
 
-    const needs = active
-      .filter((entry) => entry.status === "approval" || entry.status === "input")
-      .toSorted((a, b) => (a.since ?? Infinity) - (b.since ?? Infinity))
+    const active = rest.filter((entry) => !inboxArchived(entry))
 
     // Unread results stay in Recent at their own place, so reading one doesn't move it.
     const settled = active
@@ -154,7 +155,7 @@ export function SidebarInbox() {
     const working = active.filter((entry) => entry.status === "working").toSorted(compareWorking)
 
     const archived = rest
-      .filter(inboxArchived)
+      .filter((entry) => inboxArchived(entry) && !inboxWaiting(entry))
       .toSorted((a, b) => (b.session.time.archived ?? 0) - (a.session.time.archived ?? 0))
 
     const shown = [...needs, ...recent, ...working, ...(state.archivedExpanded ? archived : [])]
@@ -170,6 +171,42 @@ export function SidebarInbox() {
       working,
       shown,
     }
+  })
+
+  // The vertical tab strip's shortcuts, over the session rows in the order they show: ⌘1-9, ⌥↑/⌥↓ and ⇧⌥↑/⇧⌥↓.
+  const rowRefs = new Map<string, HTMLElement>()
+
+  const navigationKeys = () => {
+    const visible = sections()
+
+    const working = state.workingExpanded ? visible.working : []
+
+    return [
+      ...visible.current,
+      ...visible.needs,
+      ...visible.recent,
+      ...(shelf() ? [] : working),
+      ...(state.archivedExpanded ? visible.archived : []),
+      ...(shelf() ? working : []),
+    ].map((entry) => entry.key)
+  }
+
+  createSessionRowNavigation({
+    keys: navigationKeys,
+    current: () => inbox.entries().find((entry) => inbox.selected(entry))?.key,
+    unread: (key) => {
+      const status = inbox.byKey().get(key)?.status
+
+      return status === "done" || status === "failed"
+    },
+    navigate: (key, reveal) => {
+      const entry = inbox.byKey().get(key)
+
+      if (!entry) return
+      inbox.open(entry)
+
+      if (reveal) rowRefs.get(key)?.scrollIntoView({ behavior: "instant", block: "nearest" })
+    },
   })
 
   // The inbox lists sessions, not tabs, so drafts get their own group: the open one and every other still holding
@@ -241,6 +278,10 @@ export function SidebarInbox() {
         <Show when={inbox.byKey().get(key)}>
           {(entry) => (
             <InboxSessionCard
+              ref={(element) => {
+                rowRefs.set(key, element)
+                onCleanup(() => rowRefs.get(key) === element && rowRefs.delete(key))
+              }}
               project={entry().ctx.projects.forSession(entry().session)}
               directory={entry().session.location.directory}
               title={entry().session.title}
@@ -789,6 +830,7 @@ export function InboxDraftCard(props: {
 }
 
 export function InboxSessionCard(props: {
+  ref?: (element: HTMLButtonElement) => void
   project?: LocalProject
   directory: string
   title?: string
@@ -829,6 +871,7 @@ export function InboxSessionCard(props: {
   return (
     <Menu.Context modal={false}>
       <Menu.Context.Trigger
+        ref={props.ref}
         as="button"
         type="button"
         id={id}
@@ -842,7 +885,7 @@ export function InboxSessionCard(props: {
         class="group flex h-[54px] w-full shrink-0 flex-col gap-1.5 rounded-[6px] p-2 text-start hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2 data-[state=active]:bg-v2-overlay-simple-overlay-pressed"
         classList={{
           "transition-opacity hover:opacity-100 focus-visible:opacity-100": !props.selected,
-          "opacity-50": props.archived && !props.selected,
+          "opacity-50": props.archived && !props.selected && !inboxWaiting(props),
         }}
         onClick={props.onOpen}
       >

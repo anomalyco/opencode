@@ -431,6 +431,11 @@ export function inboxArchived(entry: InboxEntry) {
   return entry.session.time.archived !== undefined
 }
 
+/** Waiting on a person: a permission to decide or a question to answer. */
+export function inboxWaiting(entry: Pick<InboxEntry, "status">) {
+  return entry.status === "approval" || entry.status === "input"
+}
+
 export function inboxBusy(status: InboxStatus) {
   return status === "working" || status === "approval" || status === "input"
 }
