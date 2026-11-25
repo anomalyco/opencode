@@ -608,6 +608,22 @@
         "typescript": "catalog:",
       },
     },
+    "packages/plugins/cloudflare-artifacts": {
+      "name": "@opencode/plugin-cloudflare-artifacts",
+      "version": "2.4.1",
+      "devDependencies": {
+        "@opencode/core": "workspace:*",
+        "@opencode/plugin": "workspace:*",
+        "@tsconfig/bun": "1.0.9",
+        "@types/bun": "1.4.3",
+        "@typescript/native": "npm:typescript@7.1.0-beta",
+        "drizzle-orm": "catalog:",
+        "effect": "catalog:",
+      },
+      "peerDependencies": {
+        "@opencode/plugin": "^2.0.27 || ^0.0.0-dev",
+      },
+    },
     "packages/plugins/figma": {
       "name": "@opencode/plugin-figma",
       "version": "2.4.1",
@@ -1886,6 +1902,8 @@
     "@opencode/plugin": ["@opencode/plugin@workspace:packages/plugin"],
 
     "@opencode/plugin-browser": ["@opencode/plugin-browser@workspace:packages/plugin-browser"],
+
+    "@opencode/plugin-cloudflare-artifacts": ["@opencode/plugin-cloudflare-artifacts@workspace:packages/plugins/cloudflare-artifacts"],
 
     "@opencode/plugin-figma": ["@opencode/plugin-figma@workspace:packages/plugins/figma"],
 
