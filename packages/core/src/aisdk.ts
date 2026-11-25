@@ -894,7 +894,7 @@ function usage(input: Extract<LanguageModelV3StreamPart, { type: "finish" }>["us
 }
 
 function finishReason(value: LanguageModelV3FinishReason): FinishReason {
-  return value.unified === "other" ? "unknown" : value.unified
+  return Schema.is(FinishReason)(value.unified) ? value.unified : "unknown"
 }
 
 function providerMetadata(value: unknown) {

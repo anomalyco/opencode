@@ -920,6 +920,19 @@ Object.entries({
   ),
 )
 
+;["model_length", undefined, null].forEach((reason) =>
+  it.effect(`normalizes the AI SDK V2 finish reason ${JSON.stringify(reason)} outside the enum to unknown`, () =>
+    Effect.gen(function* () {
+      const response = yield* generateV2(reason as unknown as LanguageModelV2FinishReason, {
+        inputTokens: 3,
+        outputTokens: 1,
+        totalTokens: 4,
+      })
+      expect(response.finishReason).toEqual({ normalized: "unknown", raw: undefined })
+    }),
+  ),
+)
+
 it.effect("reads AI SDK V2 flat usage", () =>
   Effect.gen(function* () {
     const response = yield* generateV2("stop", {
