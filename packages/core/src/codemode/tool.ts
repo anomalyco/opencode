@@ -77,6 +77,11 @@ class Run extends Context.Service<
   }
 >()("@opencode/CodeModeTool/Run") {}
 
+/** The `execute` call a script's tool calls run under. */
+export const Parent = Context.Reference<CallID | undefined>("@opencode/CodeModeTool/Parent", {
+  defaultValue: () => undefined,
+})
+
 /** The session's Location and file services, which a run with the experimental `path` and `Bun` globals acts through. */
 export type Services = Location.Service | CodeModeBun.Services
 
@@ -215,13 +220,13 @@ export const create = (
                   const call = executeTool(name, tool, input, {
                     ...context,
                     id,
-                    parent: context.id,
                     codemode: true,
                     // Progress replaces the execute call's own, so an inner tool's updates would hide the call rows.
                     progress: () => Effect.void,
                     // A stop is the execute call's to handle: a nested call never fails it with its own error.
                     cancel: undefined,
                   }).pipe(
+                    Effect.provideService(Parent, context.id),
                     Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
                   )
                   // The name the program called, so a namespaced tool that happens to be named edit or write records nothing.
