@@ -467,19 +467,20 @@ export const layer = (options?: Options) =>
         ),
         Effect.forkScoped({ startImmediately: true }),
       )
-      yield* bus.subscribe(Credential.Event.Switched).pipe(
-        Stream.filterEffect((event) =>
-          wellknown.entries().pipe(
-            Effect.map((entries) => entries.some((entry) => entry.integrationID === event.data.integrationID)),
-            Effect.orElseSucceed(() => false),
+      yield* bus
+        .subscribe(Credential.Event.Switched, {
+          overflow: "slide",
+          where: (event) => wellknown.snapshot().some((entry) => entry.integrationID === event.data.integrationID),
+        })
+        .pipe(
+          Stream.runForEach(() =>
+            reload().pipe(
+              Effect.catchCause((cause) => Effect.logError("failed to reload wellknown config", { cause })),
+            ),
           ),
-        ),
-        Stream.runForEach(() =>
-          reload().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload wellknown config", { cause }))),
-        ),
-        Effect.forkScoped({ startImmediately: true }),
-      )
-      yield* bus.subscribe(WellKnown.Event.Updated).pipe(
+          Effect.forkScoped({ startImmediately: true }),
+        )
+      yield* bus.subscribe(WellKnown.Event.Updated, { overflow: "slide" }).pipe(
         Stream.runForEach(() =>
           reload().pipe(Effect.catchCause((cause) => Effect.logError("failed to reload wellknown sources", { cause }))),
         ),

@@ -215,7 +215,7 @@ export const GoogleVertexPlugin = define({
         }
       }
     })
-    yield* bus.subscribe([Credential.Event.Updated, Credential.Event.Switched]).pipe(
+    yield* bus.subscribe([Credential.Event.Updated, Credential.Event.Switched], { overflow: "slide" }).pipe(
       Stream.runForEach(() =>
         Effect.gen(function* () {
           const next = yield* load()

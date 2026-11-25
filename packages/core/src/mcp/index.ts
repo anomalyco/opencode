@@ -982,10 +982,27 @@ export const layer = (options?: Options) =>
             yield* entry.connection.start
           }).pipe(locks.withLock(name))
         })
+      const reconcileCredentials = Effect.suspend(() =>
+        Effect.forEach(
+          Array.from(entries.values()).flatMap((entry) => (entry.integrationID ? [entry.integrationID] : [])),
+          (integrationID) => Effect.sync(() => fork(reconnect(integrationID))),
+          { discard: true },
+        ),
+      )
       fork(
-        bus
-          .subscribe(Credential.Event.Switched)
-          .pipe(Stream.runForEach((event) => Effect.sync(() => fork(reconnect(event.data.integrationID))))),
+        Bus.restartOnOverflow(
+          (onSubscribed) =>
+            bus.subscribe(Credential.Event.Switched, {
+              overflow: "backpressure",
+              where: (event) =>
+                Array.from(entries).some(([, entry]) => entry.integrationID === event.data.integrationID),
+              onSubscribed,
+            }),
+          reconcileCredentials,
+        ).pipe(
+          Stream.runForEach((event) => Effect.sync(() => fork(reconnect(event.data.integrationID)))),
+          Effect.catchCause((cause) => Effect.logWarning("MCP credential listener stopped", { cause })),
+        ),
       )
       const state: State.Interface<Data, Editor> = State.create<Data, Editor>({
         name: "mcp",

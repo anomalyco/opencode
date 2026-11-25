@@ -285,7 +285,7 @@ const layer = Layer.effect(
         },
       )
     })
-    yield* bus.subscribe(Provider.Event.Updated).pipe(
+    yield* bus.subscribe(Provider.Event.Updated, { overflow: "slide" }).pipe(
       Stream.runForEach(() => notify),
       Effect.forkScoped({ startImmediately: true }),
     )
