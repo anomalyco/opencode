@@ -139,6 +139,7 @@ test("titlebar search finds archived sessions dimmed but keeps them out of recen
     title: "Palette archived session",
     time: { ...paletteSession.time, updated: paletteSession.time.updated + 1, archived: 1700000000500 },
   }
+
   await openPaletteWorkspace(page, true, [paletteSession, archived])
   await page.getByRole("banner").getByRole("button", { name: "Search sessions", exact: true }).click()
   const dialog = page.getByRole("dialog")
@@ -157,7 +158,9 @@ test("titlebar search finds archived sessions dimmed but keeps them out of recen
   await expect(page.getByRole("heading", { name: archived.title, exact: true })).toBeVisible()
 })
 
-test("titlebar search asks for one bounded result set after a pause in typing", async ({ page }) => {
+test("titlebar search asks for one bounded active and one bounded archived result set after a pause in typing", async ({
+  page,
+}) => {
   await openPaletteWorkspace(page, true)
   const searches: URL[] = []
   page.on("request", (request) => {
@@ -196,13 +199,17 @@ test("titlebar search asks for one bounded result set after a pause in typing", 
     }
   })
 
-  const request = new URL((await searched).url())
+  await searched
   await expect(dialog.getByRole("option", { name: /Palette fixture session/ })).toBeVisible()
-  expect(searches).toHaveLength(1)
-  expect(request.searchParams.get("limit")).toBe("50")
-  expect(request.searchParams.get("parentID")).toBe("null")
-  expect(request.searchParams.get("archived")).toBe("false")
-  expect(request.searchParams.get("cursor")).toBeNull()
+  await expect.poll(() => searches.length).toBe(2)
+  expect(searches.map((url) => url.searchParams.get("archived")).toSorted()).toEqual(["false", "true"])
+
+  for (const url of searches) {
+    expect(url.searchParams.get("search")).toBe("Palette fixture")
+    expect(url.searchParams.get("limit")).toBe("50")
+    expect(url.searchParams.get("parentID")).toBe("null")
+    expect(url.searchParams.get("cursor")).toBeNull()
+  }
 })
 
 test("titlebar search shows one server's matches while another server's search fails", async ({ page }) => {

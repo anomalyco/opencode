@@ -1220,10 +1220,8 @@ function mockHandlers(
 
               return session.parentID === ctx.query.parentID
             })
-            // As on the server, leaving `archived` out lists archived and active sessions alike.
             .filter(
               (session) =>
-                ctx.query.archived === undefined ||
                 !!currentSession(session, config.directory).time.archived === (ctx.query.archived === "true"),
             )
             .filter((session) =>
