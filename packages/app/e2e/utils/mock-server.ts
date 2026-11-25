@@ -12,6 +12,7 @@ import {
   MockApi,
   MockBadRequest,
   MockInternal,
+  MockMessageNotFound,
   MockNotFound,
   MockPtyFeatureUnsupported,
   MockPtyNotFound,
@@ -1470,7 +1471,7 @@ function mockHandlers(
                 .pageMessages(ctx.params.sessionID, Number.MAX_SAFE_INTEGER)
                 .items.find((item) => item.id === ctx.params.messageID)
 
-            if (!message) return yield* new MockNotFound({ message: "Message not found" })
+            if (!message) return yield* new MockMessageNotFound({ ...ctx.params, message: "Message not found" })
 
             return { data: message }
           }),

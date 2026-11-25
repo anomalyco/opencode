@@ -178,7 +178,25 @@ describe("visibleTimelineMessages", () => {
       "msg_2",
       "msg_3",
     ])
-    expect(visibleTimelineMessages(messages, [], "msg_0")).toEqual([])
+    // A boundary that is not loaded is older than every loaded message while older messages are left to load.
+    expect(visibleTimelineMessages(messages, [], "msg_0", true)).toEqual([])
+    // With the whole transcript loaded, the session no longer has that boundary, so it hides nothing.
+    expect(visibleTimelineMessages(messages, [], "msg_0", false)).toEqual(messages)
+  })
+
+  test("a staged revert keeps the messages before its boundary, whatever their IDs sort like", () => {
+    // A scheduled prompt sorts after the boundary, and a prompt sent before its turn ended sorts before it.
+    const transcript = [
+      { ...messages[0], id: "msg_sch_1" },
+      messages[1],
+      { ...messages[3], id: "msg_5" },
+      { ...messages[2], id: "msg_3" },
+    ] satisfies SessionMessageInfo[]
+
+    expect(visibleTimelineMessages(transcript, [], "msg_5").map((message) => message.id)).toEqual([
+      "msg_sch_1",
+      "msg_2",
+    ])
   })
 
   test("keeps a pre-promotion failed idle marker after the pending input that triggered it", () => {

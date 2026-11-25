@@ -19,7 +19,10 @@ import {
   partDelta,
   partUpdated,
   reasoningPart,
+  recordTimelineFrames,
   renderedPartID,
+  revertCommitted,
+  revertStaged,
   session,
   sessionID,
   setupTimeline,
@@ -1501,6 +1504,179 @@ test.describe("background work", () => {
     await header.locator('[data-slot="session-title-parent"]').click()
     await expect(page).toHaveURL(new RegExp(`/session/${sessionID}$`))
   })
+})
+
+test.describe("revert", () => {
+  const reply = (id: string, text: string, created: number) =>
+    ({
+      id,
+      type: "assistant",
+      agent: "build",
+      model: { id: "model", providerID: "provider" },
+      content: [{ type: "text", text }],
+      time: { created, completed: created },
+    }) satisfies SessionMessageAssistant
+
+  // In transcript order. Message IDs do not sort in that order: a scheduled prompt sorts after every other ID, and
+  // the last reply, whose ID is older than the prompt before it, sorts before the boundary.
+  const messages = [
+    { id: "msg_sch_0001", type: "user", text: "Scheduled prompt", time: { created: 1 } },
+    reply("msg_0002", "Scheduled reply", 2),
+    { id: "msg_0005", type: "user", text: "Boundary prompt", time: { created: 3 } },
+    reply("msg_0004", "Boundary reply", 4),
+  ] satisfies SessionMessageInfo[]
+
+  const all = messages.map((message) => message.id)
+
+  // The messages that have a row in the timeline, in order.
+  const shown = (page: Page) =>
+    page.evaluate(() => [
+      ...new Set(
+        [...document.querySelectorAll<HTMLElement>("[data-timeline-key]")].flatMap(
+          (row) => row.dataset.timelineKey?.match(/msg_(?:sch_)?\d{4}/) ?? [],
+        ),
+      ),
+    ])
+
+  // Like the server, a page ends before the cursor's message, and every page that has a message gives a cursor. So
+  // a client cannot tell from the newest page whether older messages exist.
+  const pages =
+    (transcript: () => SessionMessageInfo[], size?: number) => (_: string, limit: number, before?: string) => {
+      const list = transcript()
+      const end = before ? list.findIndex((message) => message.id === before) : list.length
+      const items = list.slice(Math.max(0, end - (size ?? limit)), end)
+
+      return { items, cursor: items[0]?.id }
+    }
+
+  for (const newTimeline of [false, true]) {
+    const name = newTimeline ? "new" : "old"
+
+    test(`a staged revert keeps the messages before its boundary on the ${name} timeline`, async ({ page }) => {
+      const timeline = await setupTimeline(page, { sessionMessages: messages, settings: { newTimeline } })
+      await expect.poll(() => shown(page)).toEqual(all)
+
+      await timeline.send(revertStaged({ sessionID, revert: { messageID: "msg_0005" } }))
+      await expect.poll(() => shown(page)).toEqual(["msg_sch_0001", "msg_0002"])
+
+      // The whole transcript is loaded, so the session no longer has a boundary that is not in it: nothing is reverted.
+      await timeline.send(revertStaged({ sessionID, revert: { messageID: "msg_0003" } }))
+      await expect.poll(() => shown(page)).toEqual(all)
+    })
+
+    test(`a staged revert at a message in an older page leaves the messages before it on the ${name} timeline`, async ({
+      page,
+    }) => {
+      // The newest page holds only messages after the boundary, and their IDs sort before the boundary's.
+      const paged = [
+        ...messages.slice(0, 2),
+        { id: "msg_0009", type: "user", text: "Boundary prompt", time: { created: 3 } },
+        reply("msg_0008", "Boundary reply", 4),
+        { id: "msg_0007", type: "user", text: "Later prompt", time: { created: 5 } },
+        reply("msg_0006", "Later reply", 6),
+      ] satisfies SessionMessageInfo[]
+
+      await setupTimeline(page, {
+        sessionMessages: paged,
+        settings: { newTimeline },
+        sessions: [session({ revert: { messageID: "msg_0009" } })],
+        pageMessages: pages(() => paged, 2),
+      })
+      await expect.poll(() => shown(page)).toEqual(["msg_sch_0001", "msg_0002"])
+    })
+
+    test(`a staged revert whose boundary the session no longer has stops paging at 1,000 messages on the ${name} timeline`, async ({
+      page,
+    }) => {
+      // 530 turns. The session's revert names a message that is in none of them.
+      const long = Array.from({ length: 530 }, (_, index) => [
+        { id: `msg_${1000 + index}a`, type: "user", text: `Prompt ${index}`, time: { created: index * 2 } },
+        reply(`msg_${1000 + index}b`, `Reply ${index}.`, index * 2 + 1),
+      ]).flat() satisfies SessionMessageInfo[]
+
+      const serve = pages(() => long)
+      const served = { messages: 0 }
+
+      await setupTimeline(page, {
+        sessionMessages: long,
+        settings: { newTimeline },
+        sessions: [session({ revert: { messageID: "msg_0000" } })],
+        pageMessages: (id, limit, before) => {
+          const result = serve(id, limit, before)
+
+          served.messages += result.items.length
+
+          return result
+        },
+      })
+
+      // Until the limit every loaded message counts as reverted, so none shows and older pages load. Then they show,
+      // and paging stops short of the session's 1,060 messages.
+      await expect(page.getByText("Reply 529.", { exact: true })).toBeInViewport()
+      await expect(page.getByText("Prompt 529", { exact: true })).toBeVisible()
+      expect(served.messages).toBeGreaterThanOrEqual(1_000)
+      expect(served.messages).toBeLessThan(long.length)
+    })
+
+    test(`a committed revert leaves the messages before its boundary on the ${name} timeline`, async ({ page }) => {
+      const timeline = await setupTimeline(page, { sessionMessages: messages, settings: { newTimeline } })
+      await expect.poll(() => shown(page)).toEqual(all)
+
+      await timeline.send(revertCommitted({ sessionID, to: "msg_0005" }))
+      await expect.poll(() => shown(page)).toEqual(["msg_sch_0001", "msg_0002"])
+    })
+
+    test(`a committed revert whose boundary is not loaded keeps the rows until the transcript is read again on the ${name} timeline`, async ({
+      page,
+    }) => {
+      // A prompt that came after a committed revert. Its long reply fills the view, so no older page loads and the
+      // client cannot tell whether the session has older messages.
+      const left = [
+        { id: "msg_0007", type: "user", text: "Later prompt", time: { created: 5 } },
+        reply("msg_0006", notes("Later", 30), 6),
+      ] satisfies SessionMessageInfo[]
+
+      const loaded = left.map((message) => message.id)
+      const server = { messages: left, reads: 0, hold: Promise.resolve() }
+
+      const timeline = await setupTimeline(page, {
+        sessionMessages: left,
+        settings: { newTimeline },
+        pageMessages: pages(() => server.messages, 8),
+        onMessages: (request) => {
+          if (!request.before && request.phase === "start") server.reads += 1
+        },
+        beforeMessagesResponse: () => server.hold,
+      })
+
+      await expect.poll(() => shown(page)).toEqual(loaded)
+
+      // The server has a reply that no event brought, and the next read of the transcript waits.
+      const read = Promise.withResolvers<void>()
+      const reads = server.reads
+
+      server.messages = [...left, reply("msg_0012", "Arrived reply", 7)]
+      server.hold = read.promise
+
+      const frames = await recordTimelineFrames(page)
+
+      // The event of the revert comes late: the transcript that was read is already the one it left.
+      await timeline.send(revertCommitted({ sessionID, to: "msg_0005" }))
+      await expect.poll(() => server.reads).toBe(reads + 1)
+      await frames.frame()
+      read.resolve()
+      await expect(page.getByText("Arrived reply", { exact: true })).toBeVisible()
+
+      // Each frame from the event until the read landed: the rows that were loaded.
+      const missing = (await frames.stop()).filter(
+        (keys) =>
+          !keys.some((key) => key.includes("msg_0012")) && !loaded.every((id) => keys.some((key) => key.includes(id))),
+      )
+
+      expect(missing).toEqual([])
+      await expect.poll(() => shown(page)).toEqual([...loaded, "msg_0012"])
+    })
+  }
 })
 
 test.describe("compaction", () => {

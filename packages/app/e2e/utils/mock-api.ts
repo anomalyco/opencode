@@ -60,6 +60,13 @@ export class MockInternal extends Schema.TaggedError<MockInternal>()("MockIntern
   message: Schema.String,
 }) {}
 
+// The server's error for a message the session does not have; a link to such a message is dropped.
+export class MockMessageNotFound extends Schema.TaggedError<MockMessageNotFound>()("MessageNotFoundError", {
+  sessionID: Schema.String,
+  messageID: Schema.String,
+  message: Schema.String,
+}) {}
+
 // The server's error for an unknown shell command; the timeline shows that shell's output as missing.
 export class MockShellNotFound extends Schema.TaggedError<MockShellNotFound>()("ShellNotFoundError", {
   id: Schema.String,
@@ -555,7 +562,7 @@ const Group = HttpApiGroup.make("mock")
     HttpApiEndpoint.get("messageGet", "/api/session/:sessionID/message/:messageID", {
       params: { ...SessionParams, messageID: Schema.String },
       success: Json,
-      error: MockNotFound.pipe(HttpApiSchema.status(404)),
+      error: MockMessageNotFound.pipe(HttpApiSchema.status(404)),
     }),
   )
   .add(

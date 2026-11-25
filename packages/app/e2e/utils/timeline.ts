@@ -361,6 +361,14 @@ export function inboxDelivered(data: Extract<OpenCodeEvent, { type: "session.inb
   return makeEvent("session.inbox.delivered", data)
 }
 
+export function revertStaged(data: Extract<OpenCodeEvent, { type: "session.revert.staged" }>["data"]) {
+  return makeEvent("session.revert.staged", data)
+}
+
+export function revertCommitted(data: Extract<OpenCodeEvent, { type: "session.revert.committed" }>["data"]) {
+  return makeEvent("session.revert.committed", data)
+}
+
 export function compactionStarted(data: Extract<OpenCodeEvent, { type: "session.compaction.started" }>["data"]) {
   return makeEvent("session.compaction.started", data)
 }
@@ -433,6 +441,56 @@ export function validateTimelineMessages(input: readonly TimelineMessage[]): Tim
   })
 
   return messages
+}
+
+/**
+ * Records the key of every timeline row at each animation frame, until `stop` returns the frames. It shows what a
+ * reader saw between two moments, which the state before and the state after cannot.
+ */
+export async function recordTimelineFrames(page: Page) {
+  const recording = await page.evaluateHandle(() => {
+    const frames: string[][] = []
+    const state = { frames, running: true }
+
+    const sample = () => {
+      if (!state.running) return
+      state.frames.push(
+        [...document.querySelectorAll<HTMLElement>("[data-timeline-key]")].flatMap(
+          (row) => row.dataset.timelineKey ?? [],
+        ),
+      )
+      requestAnimationFrame(sample)
+    }
+
+    requestAnimationFrame(sample)
+
+    return state
+  })
+
+  return {
+    /** Resolves when a frame that starts after this call is recorded, so the recording covers the present state. */
+    frame: () =>
+      recording.evaluate((state) => {
+        const from = state.frames.length
+
+        return new Promise<void>((resolve) => {
+          const wait = () => (state.frames.length > from ? resolve() : requestAnimationFrame(wait))
+
+          requestAnimationFrame(wait)
+        })
+      }),
+    async stop() {
+      const frames = await recording.evaluate((state) => {
+        state.running = false
+
+        return state.frames
+      })
+
+      await recording.dispose()
+
+      return frames
+    },
+  }
 }
 
 export async function waitForVisualSettle(page: Page, selectors: string[], stableFrames = 3) {

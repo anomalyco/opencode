@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionMessageUser } from "@opencode/client/promise"
+import type { SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
 import {
   createSessionRevertState,
   selectCursorAfterRevert,
@@ -19,7 +19,7 @@ const m3 = user("msg_3")
 
 const messages = [user("msg_1"), m2, m3]
 
-const delivered = { messages, inboxIDs: new Set<string>() }
+const delivered = { messages, older: false, inboxIDs: new Set<string>() }
 
 const draft = (text: string): RevertDraftSnapshot => ({
   prompt: [{ type: "text", content: text, start: 0, end: text.length }],
@@ -31,6 +31,7 @@ const undo = (revertMessageID?: string, inboxIDs = new Set<string>()): SessionRe
   type: "undo.requested",
   revertMessageID,
   messages,
+  older: false,
   inboxIDs,
 })
 
@@ -39,6 +40,7 @@ const rewindTo = (messageID: string, revertMessageID?: string, inboxIDs = new Se
   messageID,
   revertMessageID,
   messages,
+  older: false,
   inboxIDs,
 })
 
@@ -67,7 +69,7 @@ const last = (events: SessionRevertEvent[], from?: SessionRevertState) => {
 }
 
 const view = (state: SessionRevertState, revertMessageID?: string) =>
-  viewSessionRevert(state, { messages, revertMessageID })
+  viewSessionRevert(state, { messages, older: false, revertMessageID })
 
 describe("transitionSessionRevert", () => {
   test("refuses every request while an operation runs, so two pipelines never share a Session", () => {
@@ -278,6 +280,7 @@ describe("transitionSessionRevert", () => {
       attempt: 5,
       prompt,
       messages,
+      older: false,
       inboxIDs: queued,
     })
 
@@ -356,10 +359,59 @@ describe("transitionSessionRevert", () => {
   })
 })
 
+describe("a transcript whose IDs do not sort in its order", () => {
+  // A scheduled prompt sorts after every other ID, and the reply is a boundary that is not a prompt.
+  const scheduled = user("msg_sch_1")
+
+  const reply: SessionMessageInfo = {
+    id: "msg_2a",
+    type: "assistant",
+    agent: "build",
+    model: { id: "model", providerID: "provider" },
+    content: [],
+    time: { created: 1 },
+  }
+
+  const transcript = { messages: [scheduled, m2, reply, m3], older: false, inboxIDs: new Set<string>() }
+
+  test("undo rewinds the prompt before the boundary in the transcript", () => {
+    const step = transitionSessionRevert(createSessionRevertState(), {
+      type: "undo.requested",
+      revertMessageID: "msg_2",
+      ...transcript,
+    })
+
+    expect(step.state).toMatchObject({ status: "running", operation: { type: "rewind", message: scheduled } })
+  })
+
+  test("the boundary decides what undo and the cursor see by its place", () => {
+    const state = createSessionRevertState()
+
+    expect(viewSessionRevert(state, { ...transcript, revertMessageID: "msg_2" }).canUndo).toBe(true)
+    expect(viewSessionRevert(state, { ...transcript, revertMessageID: "msg_sch_1" }).canUndo).toBe(false)
+    expect(selectCursorAfterRevert(transcript, "msg_2")).toBe("msg_sch_1")
+    expect(selectCursorAfterRevert(transcript, "msg_2a")).toBe("msg_2")
+  })
+
+  test("a boundary that is not loaded is older than the loaded prompts only while it may be in an older page", () => {
+    const state = createSessionRevertState()
+    const partial = { ...transcript, older: true }
+
+    expect(selectCursorAfterRevert(partial, "msg_0")).toBeUndefined()
+    expect(viewSessionRevert(state, { ...partial, revertMessageID: "msg_0" }).canUndo).toBe(false)
+    // Otherwise the session no longer has that boundary: undo takes the newest prompt.
+    expect(selectCursorAfterRevert(transcript, "msg_0")).toBe("msg_3")
+    expect(viewSessionRevert(state, { ...transcript, revertMessageID: "msg_0" })).toMatchObject({
+      canUndo: true,
+      canRedo: true,
+    })
+  })
+})
+
 describe("selectCursorAfterRevert", () => {
   test("selects the prompt before the boundary, or the latest delivered prompt without one", () => {
     expect(selectCursorAfterRevert(delivered, "msg_3")).toBe("msg_2")
     expect(selectCursorAfterRevert(delivered, "msg_1")).toBeUndefined()
-    expect(selectCursorAfterRevert({ messages, inboxIDs: new Set(["msg_3"]) }, undefined)).toBe("msg_2")
+    expect(selectCursorAfterRevert({ ...delivered, inboxIDs: new Set(["msg_3"]) }, undefined)).toBe("msg_2")
   })
 })

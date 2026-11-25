@@ -422,6 +422,10 @@ export function createData(config: CreateDataInput) {
     typeof config.omitToolFileData === "function" ? config.omitToolFileData() : config.omitToolFileData === true
   const stored = (message: SessionMessageInfo) => (omitFiles() ? omitMessageFileData(message) : message)
   const sync = createSync()
+  // What a read of the transcript and a committed revert's event know of each other, by session. `applied`: the read
+  // came first and showed that the revert at `boundary` was committed, so its event has nothing left to do.
+  // `awaited`: the event came first and could not place the boundary, so the read under way brings what it left.
+  const revertReads = new Map<string, { readonly status: "applied" | "awaited"; readonly boundary: string }>()
   let activeUpdates: Map<string, DataSessionStatus | undefined> | undefined
   // Job events that arrive while a tree's list is in flight, applied over its response: the latest info, or undefined
   // once settled.
@@ -443,6 +447,29 @@ export function createData(config: CreateDataInput) {
         sessionID,
         (store.session.pending[sessionID] ?? []).filter((item) => item.id !== inboxID),
       )
+  }
+
+  // A read of the newest page is about to replace the transcript: what it says about a staged revert. `read` holds
+  // the IDs of the messages it brought.
+  function settleRevert(sessionID: string, read: ReadonlySet<string>) {
+    const pointer = store.session.info[sessionID]?.revert?.messageID
+    const awaited = revertReads.get(sessionID)
+    if (awaited?.status === "awaited") {
+      // A read that holds the boundary started before the server committed the revert. It still lands, and the read
+      // that the event started lands after it.
+      if (read.has(awaited.boundary)) return
+      revertReads.delete(sessionID)
+      if (pointer === awaited.boundary) setStore("session", "info", sessionID, "revert", undefined)
+      return
+    }
+    if (!pointer || read.has(pointer)) return
+    const at = messageIndex.get(sessionID)?.get(pointer)
+    const previous = at ? store.session.message[sessionID]?.[at - 1]?.id : undefined
+    // The server's transcript has no gaps. A read that holds the message before the boundary and not the boundary
+    // shows that the server committed the revert, which also cleared its pointer.
+    if (!previous || !read.has(previous)) return
+    revertReads.set(sessionID, { status: "applied", boundary: pointer })
+    setStore("session", "info", sessionID, "revert", undefined)
   }
 
   function removePermission(sessionID: string, requestID: string) {
@@ -731,6 +758,7 @@ export function createData(config: CreateDataInput) {
 
   function evictSession(sessionID: string) {
     if (sessionOutbox.has(sessionID)) return
+    revertReads.delete(sessionID)
     sync.invalidate(`session.pending:${sessionID}`)
     sync.invalidate(`session.message:${sessionID}`)
     messageLoads.delete(sessionID)
@@ -787,6 +815,7 @@ export function createData(config: CreateDataInput) {
   function removeSession(sessionID: string) {
     activeUpdates?.set(sessionID, undefined)
     removeJobTree(sessionID)
+    revertReads.delete(sessionID)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
     anchored.delete(sessionID)
@@ -1363,30 +1392,63 @@ export function createData(config: CreateDataInput) {
         refresh(() => result.session.sync(event.data.sessionID))
         return
       case "session.revert.staged":
+        revertReads.delete(event.data.sessionID)
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "revert", event.data.revert)
         return
       case "session.revert.cleared":
+        revertReads.delete(event.data.sessionID)
         if (store.session.info[event.data.sessionID])
           setStore("session", "info", event.data.sessionID, "revert", undefined)
         return
-      case "session.revert.committed":
-        if (store.session.info[event.data.sessionID]) {
-          setStore("session", "info", event.data.sessionID, "revert", undefined)
+      case "session.revert.committed": {
+        const sessionID = event.data.sessionID
+        const read = revertReads.get(sessionID)
+        revertReads.delete(sessionID)
+        // The server removes the boundary message and every message after it, by their place in the transcript. IDs
+        // do not sort in that order.
+        const at = messageIndex.get(sessionID)?.get(event.data.to)
+        // Older messages are left to load.
+        const more = store.session.messageCursor[sessionID] !== undefined
+        // A read already brought the transcript that this revert left: the whole transcript is loaded, or the read
+        // held the message before the boundary and not the boundary.
+        const applied = !more || (read?.status === "applied" && read.boundary === event.data.to)
+        // The boundary may be in an older page, which makes every loaded message one that the server removed, or a
+        // read may have applied the revert. Only the server knows, so the transcript is read again. Until that read
+        // lands, the loaded messages and the staged pointer stay: nothing that is shown goes, and nothing that the
+        // pointer hides shows.
+        const unknown = at === undefined && !applied && !!store.session.message[sessionID]
+        if (unknown) revertReads.set(sessionID, { status: "awaited", boundary: event.data.to })
+        if (!unknown && store.session.info[sessionID]) setStore("session", "info", sessionID, "revert", undefined)
+        const removed = new Set<string>()
+        if (at !== undefined)
+          message.update(sessionID, (draft, index) => {
+            for (const item of draft.splice(at)) {
+              index.delete(item.id)
+              removed.add(item.id)
+            }
+          })
+        // The projector also deletes the inbox items enqueued at or after the boundary, without a cancel event. Their
+        // rows went with the messages. Only the server knows when an item was enqueued, so the inbox is read again.
+        const pending = store.session.pending[sessionID] ?? []
+        if (pending.length > 0) {
+          setStore(
+            "session",
+            "pending",
+            sessionID,
+            pending.filter((item) => !removed.has(item.id)),
+          )
+          sync.invalidate(`session.pending:${sessionID}`)
+          refresh(() => result.session.pending.sync(sessionID))
         }
-        // The projector also deletes inbox items enqueued at or after the boundary without a cancel event.
-        setStore(
-          "session",
-          "pending",
-          event.data.sessionID,
-          (store.session.pending[event.data.sessionID] ?? []).filter((item) => item.id < event.data.to),
-        )
-        message.update(event.data.sessionID, (draft, index) => {
-          const position = draft.findIndex((item) => item.id >= event.data.to)
-          if (position === -1) return
-          for (const item of draft.splice(position)) index.delete(item.id)
-        })
+        // Nothing loaded is left, and the cursor names a removed message, so the transcript is read again.
+        const emptied = more && store.session.message[sessionID]?.length === 0
+        if (!unknown && !emptied) return
+        if (emptied) setStore("session", "messageCursor", sessionID, undefined)
+        sync.invalidate(`session.message:${sessionID}`)
+        refresh(() => result.session.message.sync(sessionID))
         return
+      }
       case "session.compaction.delta":
         if (!store.session.message[event.data.sessionID]) return
         message.update(event.data.sessionID, (draft) => {
@@ -2113,6 +2175,7 @@ export function createData(config: CreateDataInput) {
             // inbox.delivered event (and maybe its enqueued echo) while the event stream was down.
             const delivered = [...admitted].filter((id) => ids.has(id))
             batch(() => {
+              settleRevert(sessionID, ids)
               delivered.forEach((id) => {
                 outbox.delete(id)
                 removePending(sessionID, id)

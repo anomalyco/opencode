@@ -12,6 +12,7 @@ import { pinPromptMedia } from "@/composer/media"
 import { clonePrompt, promptLength } from "@/composer/prompt-parts"
 import { showToast } from "@/shell/notifications/toast"
 import type { SessionModel } from "./model"
+import { olderMayHoldRevert } from "./session-domain"
 import {
   createSessionRevertState,
   REVERT_TIMEOUT_MS,
@@ -22,7 +23,6 @@ import {
   type SessionRevertOperation,
   type SessionRevertState,
 } from "./revert-machine"
-import { selectSessionUserMessages } from "./session-domain"
 
 const IDLE = createSessionRevertState()
 
@@ -48,7 +48,8 @@ export function createSessionRevert(input: {
     const sessionID = input.session.identity.params.id
 
     return viewSessionRevert((sessionID && sessions()[sessionID]) || IDLE, {
-      messages: input.session.history.userMessages(),
+      messages: input.session.history.messages(),
+      older: input.session.history.older(),
       revertMessageID: input.session.data.revertMessageID(),
     })
   })
@@ -90,11 +91,12 @@ export function createSessionRevert(input: {
   }
 
   const snapshot = (sessionID: string) => {
-    const messages = selectSessionUserMessages(data.session.message.list(sessionID))
+    const messages = data.session.message.list(sessionID)
 
     return {
       messages,
-      inboxIDs: new Set(messages.flatMap((item) => (data.session.input.has(sessionID, item.id) ? [item.id] : []))),
+      older: olderMayHoldRevert(messages.length, data.session.message.more(sessionID)),
+      inboxIDs: new Set(data.session.input.list(sessionID)),
     }
   }
 

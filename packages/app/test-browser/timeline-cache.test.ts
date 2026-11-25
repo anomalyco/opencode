@@ -178,7 +178,7 @@ function setup() {
             parentID: () => state.parents[state.id],
             status: () => ({ type: "idle" }),
           },
-          history: { messages: () => state.messages[state.id] ?? [] },
+          history: { messages: () => state.messages[state.id] ?? [], older: () => false },
         },
         (source, active) => {
           const id = source.identity.sessionID()!

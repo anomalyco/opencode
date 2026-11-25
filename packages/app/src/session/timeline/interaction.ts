@@ -1,8 +1,10 @@
+import { isMessageNotFoundError } from "@opencode/client/promise"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { useLocation } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type Accessor } from "solid-js"
 import { createStore } from "solid-js/store"
 import { frameLoop } from "@opencode/ui/motion"
+import { useServerSDK } from "@/runtime/server/client"
 import type { SessionModel } from "../model"
 import { createTimelineCursor } from "./cursor"
 import { cursorMessageID, freshCursorMessageID, hasFreshCursorOrSeek, SCROLL_MOVED_EVENT } from "./cursor-machine"
@@ -29,6 +31,7 @@ import { createTimelineModel } from "./model"
 /** `visible`: the conversation is on screen, not behind another narrow-screen view. */
 export function createSessionTimelineInteraction(session: SessionModel, visible: Accessor<boolean>) {
   const location = useLocation<{ reveal?: string }>()
+  const sdk = useServerSDK()
   const timeline = createTimelineModel({ session })
 
   const [state, setState] = createStore<{
@@ -160,8 +163,23 @@ export function createSessionTimelineInteraction(session: SessionModel, visible:
     following: follow.following,
     visibleUserMessages,
     syncing: () => timeline.resource.loading,
-    revertMessageID: session.data.revertMessageID,
-    oldestMessageID: oldestMessage,
+    inTranscript: (messageID) => timeline.messages().some((message) => message.id === messageID),
+    lookupMessage: (messageID) => {
+      const id = session.identity.params.id
+
+      // Every message ID has this prefix, so the server is not asked about any other hash.
+      if (!id || !messageID.startsWith("msg_")) return Promise.resolve(false)
+
+      return sdk.api.session.message
+        .get({ sessionID: id, messageID }, { signal: AbortSignal.timeout(HISTORY_LOAD_TIMEOUT_MS) })
+        .then(
+          () => true,
+          (error) => {
+            if (isMessageNotFoundError(error)) return false
+            throw error
+          },
+        )
+    },
     historyStatus: createMemo(() => historySeekStatus(historyState())),
     scroller: () => scroller,
     anchor,
