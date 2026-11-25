@@ -1646,7 +1646,9 @@ pub enum HostRequest {
     /// [`Read::limits`].
     Limits,
     /// [`Read::providers`].
-    Providers,
+    Providers {
+        location: Option<LocationRef>,
+    },
     /// [`Read::info`].
     Info,
     /// [`Read::mcp_servers`].
@@ -2658,8 +2660,8 @@ pub trait Read {
     fn limits(&self) -> Option<UsageLimitsInfo> {
         None
     }
-    /// The providers where the TUI works; `None` while they are not loaded.
-    fn providers(&self) -> Option<std::sync::Arc<[ProviderInfo]>> {
+    /// The providers of `location`, or of the location the TUI works in for `None`; `None` while they are not loaded.
+    fn providers(&self, _location: Option<&LocationRef>) -> Option<std::sync::Arc<[ProviderInfo]>> {
         None
     }
     /// The value stored under one of the plugin's declared storage keys ([`Setup::storage_key`]). It shows a
@@ -3133,8 +3135,8 @@ impl Read for HostHandle {
         self.read(&HostRequest::Limits)
     }
 
-    fn providers(&self) -> Option<std::sync::Arc<[ProviderInfo]>> {
-        self.read::<Vec<_>>(&HostRequest::Providers).map(Into::into)
+    fn providers(&self, location: Option<&LocationRef>) -> Option<std::sync::Arc<[ProviderInfo]>> {
+        self.read::<Vec<_>>(&HostRequest::Providers { location: location.cloned() }).map(Into::into)
     }
 
     fn storage_get(&self, key: &str) -> Option<serde_json::Value> {

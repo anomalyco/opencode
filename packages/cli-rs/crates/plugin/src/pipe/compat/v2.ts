@@ -485,11 +485,7 @@ export function context(base: Base, carrier: Carrier) {
       integration: collection("integrations"),
       mcp: { server: collection("mcp-servers"), resource: none("location.mcp.resource") },
       model: collection("models"),
-      provider: {
-        list: () => read("providers", { type: "providers" }) ?? undefined,
-        sync: () => synced("providers", { type: "providers" }),
-        invalidate() {},
-      },
+      provider: collection("providers"),
       reference: listed("reference", ["reference.updated"]),
       skill: listed("skill", ["skill.updated"]),
     },

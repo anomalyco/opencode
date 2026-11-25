@@ -263,7 +263,7 @@ pub(super) fn definitions() -> Vec<(&'static str, Value)> {
                 Models { } { location: nullable(reference("LocationRef")) },
                 Model { } { },
                 Limits { } { },
-                Providers { } { },
+                Providers { } { location: nullable(reference("LocationRef")) },
                 Info { } { },
                 McpServers { } { location: nullable(reference("LocationRef")) },
                 Integrations { } { location: nullable(reference("LocationRef")) },

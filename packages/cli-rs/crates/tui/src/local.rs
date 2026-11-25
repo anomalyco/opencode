@@ -8,8 +8,8 @@ use std::sync::{Arc, mpsc};
 
 use opencode_api::client::Client;
 use opencode_api::generated::{
-    AgentInfo, AgentInfoMode, IntegrationInfo, LocationQueryInput, ModelInfo, ModelRef, ModelSpeed, ProviderInfo,
-    SessionInfo, UsageLimitsInfo,
+    AgentInfo, AgentInfoMode, IntegrationInfo, LocationQueryInput, ModelInfo, ModelInfoStatus, ModelRef, ModelSpeed,
+    ProviderInfo, SessionInfo, UsageLimitsInfo,
 };
 use opencode_local::model_pref::{self, Model, ModelPreferences, Preference};
 use opencode_local::storage::Storage;
@@ -467,8 +467,12 @@ impl Local {
 
     pub fn connected(&self) -> bool {
         self.catalog(|data| {
-            data.and_then(|data| data.integration.as_ref())
-                .is_some_and(|list| list.iter().any(|item| !item.connections.is_empty()))
+            let Some(data) = data else { return false };
+            has_connected_provider(
+                data.integration.as_deref().unwrap_or(&[]),
+                data.provider.as_deref().unwrap_or(&[]),
+                data.model.as_deref().unwrap_or(&[]),
+            )
         })
     }
 
@@ -1123,4 +1127,92 @@ fn listed(data: Option<&LocationData>) -> impl Iterator<Item = &AgentInfo> + Clo
 
 pub(crate) fn is(info: &ModelInfo, model: &Model) -> bool {
     info.provider_id.0 == model.provider_id && info.id == model.model_id
+}
+
+/// Any stored or detected connection, or a listed provider with models beyond the keyless OpenCode catalog, such as
+/// one declared only in config. Matches `hasConnectedProvider` in `packages/tui/src/util/connected-provider.ts`.
+pub fn has_connected_provider(
+    integrations: &[IntegrationInfo],
+    providers: &[ProviderInfo],
+    models: &[ModelInfo],
+) -> bool {
+    if integrations.iter().any(|integration| !integration.connections.is_empty()) {
+        return true;
+    }
+    let providers: HashSet<&str> = providers.iter().map(|provider| provider.id.0.as_str()).collect();
+    models.iter().any(|model| {
+        model.provider_id.0 != "opencode"
+            && !matches!(model.status, ModelInfoStatus::Deprecated)
+            && providers.contains(model.provider_id.0.as_str())
+    })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::{Value, json};
+
+    fn integration(connections: Value) -> IntegrationInfo {
+        serde_json::from_value(json!({
+            "id": "provider", "name": "Provider", "methods": [], "connections": connections,
+        }))
+        .unwrap()
+    }
+
+    fn provider(id: &str) -> ProviderInfo {
+        serde_json::from_value(json!({
+            "id": id, "name": id, "activation": "enabled", "package": "openai-compatible",
+        }))
+        .unwrap()
+    }
+
+    fn model(provider_id: &str, status: &str) -> ModelInfo {
+        serde_json::from_value(json!({
+            "id": "m", "modelID": "m", "providerID": provider_id, "name": "M",
+            "capabilities": { "tools": true, "input": ["text"], "output": ["text"] },
+            "variants": [], "time": { "released": 0 }, "cost": [], "status": status, "enabled": true,
+            "limit": { "context": 128000, "output": 4096 },
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn has_connected_provider_matches_typescript() {
+        let opencode = model("opencode", "active");
+        let ollama = model("ollama", "active");
+        let deprecated = model("ollama", "deprecated");
+        let providers = vec![provider("opencode"), provider("ollama")];
+        let cases = [
+            ("nothing listed", vec![], vec![], vec![], false),
+            (
+                "only OpenCode's keyless models",
+                vec![integration(json!([]))],
+                providers.clone(),
+                vec![opencode.clone()],
+                false,
+            ),
+            (
+                "a stored credential",
+                vec![integration(json!([{
+                    "type": "credential", "method": "key", "id": "cred_1", "label": "Work",
+                }]))],
+                vec![],
+                vec![],
+                true,
+            ),
+            (
+                "a detected environment variable",
+                vec![integration(json!([{ "type": "env", "name": "OPENAI_API_KEY" }]))],
+                vec![],
+                vec![],
+                true,
+            ),
+            ("a provider declared only in config", vec![], providers.clone(), vec![opencode, ollama.clone()], true),
+            ("only deprecated models", vec![], providers, vec![deprecated], false),
+            ("models of a provider that is not listed", vec![], vec![provider("opencode")], vec![ollama], false),
+        ];
+        for (name, integrations, providers, models, expected) in cases {
+            assert_eq!(has_connected_provider(&integrations, &providers, &models), expected, "{name}");
+        }
+    }
 }

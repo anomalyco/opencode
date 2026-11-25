@@ -4071,6 +4071,16 @@
         {
           "type": "object",
           "properties": {
+            "location": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/LocationRef"
+                },
+                {
+                  "type": "null"
+                }
+              ]
+            },
             "type": {
               "const": "providers"
             }
