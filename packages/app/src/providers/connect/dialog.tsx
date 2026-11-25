@@ -31,6 +31,7 @@ import { CONSOLE_INTEGRATION, type ProviderDialogBody } from "./dialog-machine"
 import { connectMethods, selectProviderConnectView, type ProviderConnectMethod } from "./machine"
 import type { ProviderFormInput, ProviderFormView } from "./form-machine"
 import { ConsoleAuthorization } from "./console"
+import { CustomProviderForm } from "./custom"
 import { StepActions, WaitingButton } from "./step-actions"
 import { DialogChatGPTPlanWelcome } from "./chatgpt-welcome"
 import { authServerName } from "./remote"
@@ -144,88 +145,94 @@ export const DialogConnectProvider: Component<{
               </div>
             )}
           </Match>
-          <Match when={view().provider}>
-            {(provider) => (
-              <>
-                <nav
-                  aria-label={language.t("provider.connect.breadcrumb.label")}
-                  class="flex min-w-0 flex-1 items-center gap-1 text-[13px] leading-5 tracking-[-0.04px]"
-                >
-                  <For each={view().crumbs}>
-                    {(crumb, index) => {
-                      const last = () => index() === view().crumbs.length - 1
-                      const target = () => crumb.target
+          <Match when={view().crumbs.length > 0}>
+            <>
+              <nav
+                aria-label={language.t("provider.connect.breadcrumb.label")}
+                class="flex min-w-0 flex-1 items-center gap-1 text-[13px] leading-5 tracking-[-0.04px]"
+              >
+                <For each={view().crumbs}>
+                  {(crumb, index) => {
+                    const last = () => index() === view().crumbs.length - 1
+                    const target = () => crumb.target
 
-                      const label = () =>
-                        crumb.kind === "root" ? language.t("provider.connect.breadcrumb.root") : providerName()
+                    const label = () =>
+                      crumb.kind === "root"
+                        ? language.t("provider.connect.breadcrumb.root")
+                        : crumb.kind === "custom"
+                          ? language.t("provider.custom.title")
+                          : providerName()
 
-                      const content = () => (
-                        <>
-                          <Show when={crumb.kind === "provider"}>
-                            <ProviderModelIcon
-                              provider={{ id: provider(), name: providerName() }}
-                              class="shrink-0 text-v2-icon-icon-base"
-                            />
-                          </Show>
-                          <span class="min-w-0 truncate">{label()}</span>
-                        </>
-                      )
+                    const content = () => (
+                      <>
+                        <Show when={crumb.kind === "provider"}>
+                          <ProviderModelIcon
+                            provider={{ id: view().provider ?? "", name: providerName() }}
+                            class="shrink-0 text-v2-icon-icon-base"
+                          />
+                        </Show>
+                        <span class="min-w-0 truncate">{label()}</span>
+                      </>
+                    )
 
-                      return (
-                        <>
-                          <Show when={index() > 0}>
-                            <Icon name="chevron-right" class="shrink-0 text-v2-icon-icon-muted" />
-                          </Show>
-                          <Switch>
-                            <Match when={last()}>
-                              {/* A sign-in started from the accounts list ends at the provider, which leads back to it. */}
-                              <Show
-                                when={target()}
-                                fallback={
-                                  <span class="flex min-w-0 items-center gap-1.5 font-[530] text-v2-text-text-base">
-                                    {content()}
-                                  </span>
-                                }
-                              >
-                                {(value) => (
-                                  <button
-                                    type="button"
-                                    class="flex min-w-0 items-center gap-1.5 rounded-[4px] font-[530] text-v2-text-text-base hover:text-v2-text-text-muted"
-                                    onClick={() => controller.navigate(value())}
-                                  >
-                                    {content()}
-                                  </button>
-                                )}
-                              </Show>
-                            </Match>
-                            <Match when={target()}>
+                    return (
+                      <>
+                        <Show when={index() > 0}>
+                          <Icon name="chevron-right" class="shrink-0 text-v2-icon-icon-muted" />
+                        </Show>
+                        <Switch>
+                          <Match when={last()}>
+                            {/* A sign-in started from the accounts list ends at the provider, which leads back to it. */}
+                            <Show
+                              when={target()}
+                              fallback={
+                                <span class="flex min-w-0 items-center gap-1.5 font-[530] text-v2-text-text-base">
+                                  {content()}
+                                </span>
+                              }
+                            >
                               {(value) => (
                                 <button
                                   type="button"
-                                  class="flex min-w-0 shrink items-center gap-1.5 rounded-[4px] font-[440] text-v2-text-text-faint hover:text-v2-text-text-base"
+                                  class="flex min-w-0 items-center gap-1.5 rounded-[4px] font-[530] text-v2-text-text-base hover:text-v2-text-text-muted"
                                   onClick={() => controller.navigate(value())}
                                 >
                                   {content()}
                                 </button>
                               )}
-                            </Match>
-                            <Match when={true}>
-                              <span class="flex min-w-0 shrink items-center gap-1.5 font-[440] text-v2-text-text-faint">
+                            </Show>
+                          </Match>
+                          <Match when={target()}>
+                            {(value) => (
+                              <button
+                                type="button"
+                                class="flex min-w-0 shrink items-center gap-1.5 rounded-[4px] font-[440] text-v2-text-text-faint hover:text-v2-text-text-base"
+                                onClick={() => controller.navigate(value())}
+                              >
                                 {content()}
-                              </span>
-                            </Match>
-                          </Switch>
-                        </>
-                      )
-                    }}
-                  </For>
-                </nav>
-                {/* The breadcrumb shows where the dialog is; the dialog itself is named for what it does. */}
-                <div class="sr-only">
-                  <DialogTitle>{language.t("provider.connect.title", { provider: providerName() })}</DialogTitle>
-                </div>
-              </>
-            )}
+                              </button>
+                            )}
+                          </Match>
+                          <Match when={true}>
+                            <span class="flex min-w-0 shrink items-center gap-1.5 font-[440] text-v2-text-text-faint">
+                              {content()}
+                            </span>
+                          </Match>
+                        </Switch>
+                      </>
+                    )
+                  }}
+                </For>
+              </nav>
+              {/* The breadcrumb shows where the dialog is; the dialog itself is named for what it does. */}
+              <div class="sr-only">
+                <DialogTitle>
+                  {frame() === "custom"
+                    ? language.t("provider.custom.title")
+                    : language.t("provider.connect.title", { provider: providerName() })}
+                </DialogTitle>
+              </div>
+            </>
           </Match>
           <Match when={true}>
             <DialogTitleGroup
@@ -261,13 +268,27 @@ export const DialogConnectProvider: Component<{
           <div data-slot="search-dialog-divider" class="!-mx-2" />
         </Show>
         <div ref={focusHost} tabIndex={-1} class="flex min-h-0 flex-1 flex-col outline-none">
-          <Show
-            keyed
-            when={view().provider}
-            fallback={<ProviderPicker directory={props.directory} onSelect={controller.select} onPrepare={holdFocus} />}
+          <Switch
+            fallback={
+              <ProviderPicker
+                directory={props.directory}
+                onSelect={controller.select}
+                onCustom={controller.openCustom}
+                onPrepare={holdFocus}
+              />
+            }
           >
-            {(provider) => <ProviderSteps provider={provider} controller={controller} />}
-          </Show>
+            <Match when={frame() === "custom"}>
+              <CustomProviderForm
+                location={controller.location}
+                taken={controller.takenIDs}
+                onCreated={controller.created}
+              />
+            </Match>
+            <Match when={view().provider} keyed>
+              {(provider) => <ProviderSteps provider={provider} controller={controller} />}
+            </Match>
+          </Switch>
         </div>
       </DialogBody>
     </Dialog>
@@ -297,7 +318,15 @@ const providerNote = (id: string) => {
   if (id === "opencode-go") return "dialog.provider.opencodeGo.tagline" as const
 }
 
-function ProviderPicker(props: { directory?: string; onSelect: (provider: string) => void; onPrepare?: () => void }) {
+// The row that opens the custom provider form. It takes part in keyboard selection like an integration row.
+const CUSTOM_ROW = "__custom__"
+
+function ProviderPicker(props: {
+  directory?: string
+  onSelect: (provider: string) => void
+  onCustom: () => void
+  onPrepare?: () => void
+}) {
   const integrations = useIntegrations(() => props.directory)
   const language = useLanguage()
 
@@ -340,16 +369,31 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
       .toSorted((a, b) => a.name.localeCompare(b.name)),
   )
 
+  // Last in Services, like any other provider, rather than promoted above the catalog.
+  const custom = createMemo(() => {
+    const query = store.filter.trim().toLowerCase()
+
+    return (
+      !query ||
+      `${language.t("provider.custom.title")} ${language.t("provider.custom.row.description")} custom openai anthropic`
+        .toLowerCase()
+        .includes(query)
+    )
+  })
+
   const groups = () => [
-    { title: language.t("dialog.provider.connected"), items: connected },
-    { title: language.t("dialog.provider.group.popular"), items: popular },
-    { title: language.t("dialog.provider.group.services"), items: services },
+    { title: language.t("dialog.provider.connected"), items: connected, custom: false },
+    { title: language.t("dialog.provider.group.popular"), items: popular, custom: false },
+    { title: language.t("dialog.provider.group.services"), items: services, custom: true },
   ]
 
   // An integration that only reads environment variables has nothing to connect from here.
   const disabled = (row: IntegrationInfo) => connectMethods(row).length === 0 && providerAccounts(row).length === 0
 
-  const rows = createMemo(() => [...connected(), ...popular(), ...services()].filter((row) => !disabled(row)))
+  const rows = createMemo(() => [
+    ...[...connected(), ...popular(), ...services()].filter((row) => !disabled(row)).map((row) => row.id),
+    ...(custom() ? [CUSTOM_ROW] : []),
+  ])
 
   let picker: HTMLDivElement | undefined
   let search: HTMLInputElement | undefined
@@ -358,6 +402,8 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
 
   const connect = (provider: string) => {
     props.onPrepare?.()
+
+    if (provider === CUSTOM_ROW) return props.onCustom()
     props.onSelect(provider)
   }
 
@@ -365,11 +411,11 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
     const items = rows()
 
     if (items.length === 0) return
-    const index = items.findIndex((provider) => provider.id === store.active)
+    const index = items.indexOf(store.active ?? "")
     const next = index < 0 ? (direction > 0 ? 0 : items.length - 1) : (index + direction + items.length) % items.length
-    setStore("active", items[next].id)
+    setStore("active", items[next])
     picker
-      ?.querySelector<HTMLElement>(`[data-provider-id="${CSS.escape(items[next].id)}"]`)
+      ?.querySelector<HTMLElement>(`[data-provider-id="${CSS.escape(items[next])}"]`)
       ?.focus({ preventScroll: true })
     event.preventDefault()
   }
@@ -404,7 +450,7 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
         <div class="flex min-h-0 flex-1 flex-col gap-0.5 overflow-y-auto pb-8 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <For each={groups()}>
             {(group) => (
-              <Show when={group.items().length > 0}>
+              <Show when={group.items().length > 0 || (group.custom && custom())}>
                 <section class="flex flex-col gap-0.5">
                   <div class="px-2 pt-2.5 pb-0.5 text-[12px] font-[440] leading-[18px] tracking-[0.05px] text-v2-text-text-faint">
                     {group.title}
@@ -476,11 +522,30 @@ function ProviderPicker(props: { directory?: string; onSelect: (provider: string
                       )
                     }}
                   </For>
+                  <Show when={group.custom && custom()}>
+                    <button
+                      type="button"
+                      data-provider-id={CUSTOM_ROW}
+                      data-action="custom-provider"
+                      class="flex min-h-8 w-full items-center gap-2 rounded-md py-1.5 ps-2 pe-2 text-left text-[13px] leading-5 tracking-[-0.04px] hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2"
+                      classList={{ "bg-v2-overlay-simple-overlay-hover": store.active === CUSTOM_ROW }}
+                      onMouseEnter={() => setStore("active", CUSTOM_ROW)}
+                      onClick={() => connect(CUSTOM_ROW)}
+                    >
+                      <Icon name="plus" class="shrink-0 text-v2-icon-icon-base" />
+                      <span class="min-w-0 truncate font-[440] text-v2-text-text-base">
+                        {language.t("provider.custom.title")}
+                      </span>
+                      <span class="min-w-0 shrink-[999] truncate font-[440] text-v2-text-text-muted">
+                        {language.t("provider.custom.row.description")}
+                      </span>
+                    </button>
+                  </Show>
                 </section>
               </Show>
             )}
           </For>
-          <Show when={all().length === 0}>
+          <Show when={all().length === 0 && !custom()}>
             <div class="flex h-24 items-center justify-center text-[13px] font-[440] text-v2-text-text-muted">
               {language.t("dialog.provider.empty")}
             </div>

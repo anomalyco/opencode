@@ -39,7 +39,7 @@ export const ProviderHandler = HttpApiBuilder.group(Api, "server.provider", (han
           const providers = yield* Provider.Service
           const integrations = yield* Integration.Service
           // Only new IDs: reusing a catalog or configured ID would send its stored credentials to this endpoint.
-          if ((yield* providers.get(input.id)) || (yield* integrations.get(Integration.ID.make(input.id))))
+          if ((yield* providers.get(Provider.ID.make(input.id))) || (yield* integrations.get(Integration.ID.make(input.id))))
             return yield* new ConflictError({ resource: input.id, message: `Provider already exists: ${input.id}` })
           yield* requireConnectable(Integration.ID.make(input.id))
           const config = yield* Config.Service

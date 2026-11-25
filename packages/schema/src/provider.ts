@@ -151,7 +151,7 @@ export const CustomModel = Schema.Struct({
 /** A provider added from a client: written to the global config, with its API key stored as a credential. */
 export interface Custom extends Schema.Schema.Type<typeof Custom> {}
 export const Custom = Schema.Struct({
-  id: ID.check(Schema.isPattern(/^[a-z0-9][a-z0-9-_]*$/u)),
+  id: Schema.String.check(Schema.isPattern(/^[a-z0-9][a-z0-9-_]*$/u)),
   name: Schema.String.check(Schema.isMinLength(1)),
   package: CustomPackage,
   baseURL: Schema.String.check(Schema.isPattern(/^https?:\/\/[^\s]+$/u)),

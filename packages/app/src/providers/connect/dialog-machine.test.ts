@@ -652,3 +652,70 @@ test("the Console sign-in link copy result belongs to its attempt", () => {
   const stale = replay([{ type: "link.copied", session, attemptID: "att_0", copied: false }], copied.state)
   expect(stale.state).toBe(copied.state)
 })
+
+test("the custom provider form sits between the list and the new provider's models", () => {
+  const opened = replay([{ type: "custom.opened" }])
+
+  expect(opened.state.status).toBe("custom")
+  expect(opened.effects).toEqual([])
+  expect(selectProviderDialogView(opened.state)).toMatchObject({
+    provider: undefined,
+    frame: "custom",
+    crumbs: [{ kind: "root", target: "picker" }, { kind: "custom" }],
+  })
+
+  const created = replay(
+    [{ type: "custom.created", provider: "acme", accounts: accounts(1), firstModel: "acme:qwen3-coder" }],
+    opened.state,
+  )
+
+  expect(provider(created.state)).toMatchObject({
+    provider: "acme",
+    accounts: accounts(1),
+    step: { kind: "models", selectedModel: "acme:qwen3-coder", collapsed: {} },
+    closed: false,
+  })
+  expect(created.state.session).toBe(opened.state.session + 1)
+  expect(created.effects).toEqual([
+    { type: "controller.sync", provider: "acme" },
+    { type: "connected.notify", provider: "acme" },
+    { type: "models.reveal", provider: "acme" },
+    { type: "toast.connected", provider: "acme" },
+  ])
+  expect(selectProviderDialogView(created.state).frame).toBe("models")
+})
+
+test("a custom provider whose models did not load closes the dialog", () => {
+  const created = replay([
+    { type: "custom.opened" },
+    { type: "custom.created", provider: "acme", accounts: none, firstModel: undefined },
+  ])
+
+  expect(provider(created.state).closed).toBe(true)
+  expect(created.effects.slice(-2)).toEqual([{ type: "toast.connected", provider: "acme" }, { type: "dialog.close" }])
+})
+
+test("the custom provider form goes back to the list and ignores provider events", () => {
+  const opened = replay([{ type: "custom.opened" }]).state
+
+  expect(transitionProviderDialog(opened, { type: "custom.opened" }).state).toBe(opened)
+  expect(transitionProviderDialog(opened, { type: "navigate", target: "accounts" }).state).toBe(opened)
+  expect(transitionProviderDialog(opened, { type: "account.add" }).state).toBe(opened)
+
+  const back = replay([{ type: "navigate", target: "picker" }], opened)
+  expect(back.state.status).toBe("picker")
+  expect(back.effects).toEqual([])
+
+  // A provider can still be chosen without going back first, as when another flow selects one.
+  expect(provider(replay([selected("openai", false)], opened).state).provider).toBe("openai")
+  // Only the form creates a custom provider.
+  const picker = createProviderDialogState({ standalone: false })
+  expect(
+    transitionProviderDialog(picker, {
+      type: "custom.created",
+      provider: "acme",
+      accounts: none,
+      firstModel: undefined,
+    }).state,
+  ).toBe(picker)
+})
