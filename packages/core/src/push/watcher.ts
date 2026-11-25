@@ -12,7 +12,7 @@ import { PushSender } from "./sender.js"
 
 // A client with the session already open reports the view the moment the turn ends, whether or not anyone is
 // looking. Only a later view counts as the user having seen it.
-const viewedAfter = 10_000
+const viewedAfter = 5_000
 
 const bodies = {
   succeeded: "Finished",
