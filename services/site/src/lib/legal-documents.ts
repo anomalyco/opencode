@@ -1,13 +1,14 @@
 import { absoluteUrl, blocks, type MarkdownContext } from "~/lib/markdown"
 import { legalDate, legalDatesLine, legalHeadings, legalVersions, type LegalDocumentContent } from "~/lib/legal"
 import { privacyPolicy } from "~/lib/legal/privacy-policy"
+import { refundPolicy } from "~/lib/legal/refund-policy"
 import { termsOfService } from "~/lib/legal/terms-of-service"
 
 // Every legal document at once, for the legal index, its Markdown, the feed and the sitemap. A
 // document's own page imports only its document, so it doesn't load the others.
 
 /** The published legal documents, in the order the legal pages list them. */
-export const legalDocuments: LegalDocumentContent[] = [privacyPolicy, termsOfService]
+export const legalDocuments: LegalDocumentContent[] = [privacyPolicy, refundPolicy, termsOfService]
 
 /**
  * Every document the legal pages list. Drafts pending legal review are kept outside the repository
