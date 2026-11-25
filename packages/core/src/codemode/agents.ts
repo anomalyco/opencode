@@ -19,6 +19,31 @@ import {
 import { Instructions } from "../instructions/index.js"
 import { CodeModeExecution } from "./execution.js"
 
+/** Key stored in a child session's metadata when started by Code Mode's `agent()`. */
+export const METADATA_KEY = "codemodeAgent"
+
+export interface SessionMarker {
+  readonly childID: string
+  readonly structured: boolean
+  readonly schema?: JsonSchema.JsonSchema
+  readonly wrapped?: boolean
+}
+
+/** Reads the marker written on a child session created by `agent()`, ignoring inherited parent markers. */
+export function sessionMarker(
+  sessionID: string,
+  metadata: Readonly<Record<string, unknown>> | undefined,
+): SessionMarker | undefined {
+  const entry = metadata?.[METADATA_KEY]
+  if (!isRecord(entry) || entry.childID !== sessionID || typeof entry.structured !== "boolean") return undefined
+  return {
+    childID: entry.childID,
+    structured: entry.structured,
+    ...(isRecord(entry.schema) ? { schema: entry.schema as JsonSchema.JsonSchema } : {}),
+    ...(typeof entry.wrapped === "boolean" ? { wrapped: entry.wrapped } : {}),
+  }
+}
+
 /** A schema a script passed, ready to send to a model and to check its answer against. */
 export interface Output {
   /** Sent to the model. Its root is always an object; another root is wrapped as `{ value }`. */
@@ -205,6 +230,19 @@ export const display = (name: string, args: ReadonlyArray<unknown>) => {
  * Normalizes a schema from a script: drops `z` methods and markers, wraps a non-object root as `{ value }`, and checks
  * that it is JSON Schema we can validate against. Fails with a message for the script otherwise.
  */
+export function compile(json: JsonSchema.JsonSchema, wrapped: boolean): Result.Result<Output, string> {
+  // Patterns guide the model but are not enforced: a regex written by one model and run on another's output could
+  // block the server.
+  const codec = Result.try(() =>
+    Schema.make<Schema.Codec<unknown>>(
+      SchemaRepresentation.fromJsonSchemaDocument(JsonSchema.fromSchemaDraft2020_12(json), { patterns: "ignore" }).ast,
+    ),
+  )
+  if (Result.isFailure(codec))
+    return Result.fail(`schema is not a JSON Schema this runtime can validate against: ${String(codec.failure)}`)
+  return Result.succeed({ json, wrapped, codec: codec.success })
+}
+
 export function output(schema: unknown): Result.Result<Output, string> {
   const cleaned = clean(schema)
   if (!isRecord(cleaned)) return Result.fail("schema must be an object: a z schema or a JSON Schema.")
@@ -214,16 +252,7 @@ export function output(schema: unknown): Result.Result<Output, string> {
   const root: JsonSchema.JsonSchema = wrapped
     ? { type: "object", properties: { value: json }, required: ["value"], additionalProperties: false }
     : json
-  // Patterns guide the model but are not enforced: a regex written by one model and run on another's output could
-  // block the server.
-  const codec = Result.try(() =>
-    Schema.make<Schema.Codec<unknown>>(
-      SchemaRepresentation.fromJsonSchemaDocument(JsonSchema.fromSchemaDraft2020_12(root), { patterns: "ignore" }).ast,
-    ),
-  )
-  if (Result.isFailure(codec))
-    return Result.fail(`schema is not a JSON Schema this runtime can validate against: ${String(codec.failure)}`)
-  return Result.succeed({ json: root, wrapped, codec: codec.success })
+  return compile(root, wrapped)
 }
 
 /** Checks a model's answer against `output`; the failure lists what to fix, for the model to try again. */
@@ -321,6 +350,7 @@ const AgentOptions = Schema.Struct({
 const LlmOptions = Schema.Struct({
   model: Schema.optional(Schema.String),
   system: Schema.optional(Schema.String),
+  label: Schema.optional(Schema.String),
   schema: Schema.optional(Schema.Unknown),
   retries: Schema.optional(Retries),
 })

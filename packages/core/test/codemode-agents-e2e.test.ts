@@ -149,6 +149,10 @@ const harness = Effect.fnUntraced(function* () {
         agent.mode = "subagent"
         agent.permissions.push({ action: "*", resource: "*", effect: "allow" })
       })
+      editor.update(Agent.ID.make("readonly"), (agent) => {
+        agent.mode = "subagent"
+        agent.permissions.push({ action: "*", resource: "*", effect: "deny" })
+      })
     }),
   ).pipe(Effect.provide(locations.get(location)))
   const sessions = Context.get(context, Session.Service)
@@ -179,7 +183,9 @@ const harness = Effect.fnUntraced(function* () {
         throw new Error(`execute did not complete: ${JSON.stringify(part)}`)
       return part.state.content.flatMap((item) => (item.type === "text" ? [item.text] : [])).join("\n")
     })
-  return { sessions, parent, llm, run }
+  const store = Context.get(context, SessionStore.Service)
+  const restart = Context.get(context, SessionRestart.Service)
+  return { sessions, parent, llm, run, store, restart }
 })
 
 const toolNames = (request: LLMRequest) => request.tools.map((tool) => tool.name)
@@ -203,7 +209,8 @@ describe("agent()", () => {
 
       const requests = yield* h.llm.requests()
       const child = requests.filter((request) => request.model.id === "reviewer")
-      expect(child).toHaveLength(3)
+      // Accepted structured_output ends the child's turn immediately: no 3rd model step.
+      expect(child).toHaveLength(2)
       expect(child[0]?.tools.find((tool) => tool.name === "structured_output")).toMatchObject({
         inputSchema: {
           type: "object",
@@ -220,6 +227,44 @@ describe("agent()", () => {
       )
       const [session] = (yield* h.sessions.list({ parentID: h.parent.id })).data
       expect(session?.title).toBe("bug hunt")
+    }),
+  )
+
+  e2e.live("lets a deny-by-default subagent (like explore) call structured_output", () =>
+    Effect.gen(function* () {
+      const h = yield* harness()
+      const result = yield* h.run(
+        `return await agent("Check auth", { agent: "readonly", schema: z.object({ ok: z.boolean() }) })`,
+        {
+          readonly: [
+            TestLLM.toolCall("call-ok", "structured_output", { ok: true }),
+            TestLLM.text("Done", "readonly-done"),
+          ],
+        },
+      )
+      expect(JSON.parse(result)).toEqual({ ok: true })
+      const child = (yield* h.llm.requests()).filter((request) => request.model.id === "readonly")
+      expect(child).toHaveLength(1)
+    }),
+  )
+
+  e2e.live("releases an orphaned agent() child on restart instead of reviving it", () =>
+    Effect.gen(function* () {
+      const h = yield* harness()
+      const childID = Session.ID.create()
+      yield* h.sessions.create({
+        id: childID,
+        parentID: h.parent.id,
+        title: "orphan",
+        agent: Agent.ID.make("reviewer"),
+        metadata: { [CodeModeAgents.METADATA_KEY]: { childID, structured: false } },
+      })
+      yield* h.store.claim(childID)
+      expect(yield* h.store.listSuspended()).toContain(childID)
+
+      yield* h.restart.resumeSuspendedSessions
+      expect(yield* h.store.listSuspended()).not.toContain(childID)
+      expect(yield* h.llm.requests()).toHaveLength(0)
     }),
   )
 

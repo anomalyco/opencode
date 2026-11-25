@@ -5,7 +5,7 @@ export * as CodeModeAgentsPlugin from "./codemode-agents.js"
 import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import type { SessionHooks } from "@opencode/plugin/effect/session"
-import { Effect, Result } from "effect"
+import { Effect, Result, type Schema } from "effect"
 import { Agent } from "../../agent.js"
 import { CodeModeAgents } from "../../codemode/agents.js"
 import { Config } from "../../config.js"
@@ -15,7 +15,7 @@ import { Permission } from "../../permission.js"
 import { AbsolutePath } from "../../schema.js"
 import { Session } from "../../session.js"
 import type { SessionMessage } from "../../session/message.js"
-import type { SessionSchema } from "../../session/schema.js"
+import { SessionSchema } from "../../session/schema.js"
 import { SubagentCompletion } from "../../session/subagent-completion.js"
 import { SubagentDepth } from "../../session/subagent-depth.js"
 import { toSessionError } from "../../session/to-session-error.js"
@@ -43,11 +43,16 @@ export const Plugin = {
     const models = yield* Model.Service
     const registry = yield* CodeModeAgents.Service
     const skills = yield* Skill.Service
-    // The children an agent() call with a schema waits on, and the value each one returned.
-    const expected = new Map<
-      SessionSchema.ID,
-      { readonly output: CodeModeAgents.Output; value?: { readonly value: unknown } }
-    >()
+
+    const expectedOutput = (sessionID: SessionSchema.ID) =>
+      sessions.get(sessionID).pipe(
+        Effect.map((session) => {
+          const marker = CodeModeAgents.sessionMarker(session.id, session.metadata)
+          if (!marker?.structured || marker.schema === undefined) return undefined
+          return { schema: marker.schema, wrapped: marker.wrapped === true }
+        }),
+        Effect.orElseSucceed(() => undefined),
+      )
 
     yield* ctx.tool
       .transform((editor) =>
@@ -55,38 +60,43 @@ export const Plugin = {
           name: OUTPUT_TOOL,
           options: { codemode: false },
           description:
-            "Return your final result to the script that started you. Call it exactly once, when your work is done, then end your turn.",
+            "Return your final result to the script that started you. Call it once when your work is done; your turn ends immediately once the result is accepted.",
           // Each child is shown its own schema by the context hook below; the result is checked against it here.
           input: { type: "object" },
           execute: (input: unknown, context) =>
             Effect.gen(function* () {
-              const entry = expected.get(context.sessionID)
-              if (entry === undefined)
+              const expected = yield* expectedOutput(context.sessionID)
+              if (expected === undefined)
                 return yield* new ToolFailure({
                   message: `${OUTPUT_TOOL} only works in an agent started by a Code Mode script with a schema.`,
                 })
-              const checked = CodeModeAgents.check(entry.output, input)
+              const compiled = CodeModeAgents.compile(expected.schema, expected.wrapped)
+              if (Result.isFailure(compiled))
+                return yield* new ToolFailure({ message: `Invalid stored output schema: ${compiled.failure}` })
+              const checked = CodeModeAgents.check(compiled.success, input)
               if (Result.isFailure(checked))
                 return yield* new ToolFailure({
                   message: `The result does not match the required schema:\n${checked.failure}\n\nCall ${OUTPUT_TOOL} again with a corrected result.`,
                 })
-              entry.value = { value: checked.success }
-              return { content: "Result recorded and returned to the script. End your turn now." }
+              return {
+                content: "Result recorded and returned to the script.",
+                metadata: { endsTurn: true },
+              }
             }),
         }),
       )
       .pipe(Effect.orDie)
 
     const shape = (event: SessionHooks["context"]) =>
-      Effect.sync(() => {
-        const entry = expected.get(event.sessionID)
+      Effect.gen(function* () {
         const tool = event.tools[OUTPUT_TOOL]
         if (tool === undefined) return
-        if (entry === undefined) {
+        const expected = yield* expectedOutput(event.sessionID)
+        if (expected === undefined) {
           delete event.tools[OUTPUT_TOOL]
           return
         }
-        tool.input = entry.output.json
+        tool.input = expected.schema
       })
     yield* ctx.session.hook("context", shape)
     yield* ctx.session.hook("compaction", shape)
@@ -99,9 +109,27 @@ export const Plugin = {
         yield* sessions.resume(childID).pipe(Effect.onInterrupt(() => sessions.interrupt(childID)))
         const [last] = yield* sessions.messages({ sessionID: childID, limit: 1, order: "desc", type: "assistant" })
         if (last?.type === "assistant" && last.error !== undefined)
-          return yield* new CodeModeAgents.CallError({ message: last.error.message, limit: isLimit(last.error.type) })
+          return yield* new CodeModeAgents.CallError({
+            message: `${last.error.message} (session ${childID})`,
+            limit: isLimit(last.error.type),
+          })
         return last
       })
+
+    const recordedOutput = (childID: SessionSchema.ID, output: CodeModeAgents.Output) =>
+      sessions.messages({ sessionID: childID, order: "desc", type: "assistant" }).pipe(
+        Effect.map((messages) => {
+          for (const message of messages) {
+            if (message.type !== "assistant") continue
+            for (const part of [...message.content].reverse()) {
+              if (part.type !== "tool" || part.name !== OUTPUT_TOOL || part.state.status !== "completed") continue
+              const checked = CodeModeAgents.check(output, part.state.input)
+              if (Result.isSuccess(checked)) return { value: checked.success }
+            }
+          }
+          return undefined
+        }),
+      )
 
     const agent = Effect.fn("CodeModeAgents.agent")(function* (
       input: CodeModeAgents.AgentInput,
@@ -124,30 +152,40 @@ export const Plugin = {
       })
       const model =
         input.model === undefined ? (info.model ?? parent.model) : yield* resolveModelRef(models, input.model)
+      const output = input.output
+      const id = SessionSchema.ID.create()
+      // Stored durably on the child so schema validation and restart handling never depend on process memory.
+      const marker: Record<string, Schema.Json> =
+        output === undefined
+          ? { childID: id, structured: false }
+          : { childID: id, structured: true, schema: output.json as Schema.Json, wrapped: output.wrapped }
       const child = yield* sessions.create({
+        id,
         parentID: parent.id,
         title: input.label ?? title(input.prompt),
         agent: info.id,
         model,
+        metadata: { ...(parent.metadata ?? {}), [CodeModeAgents.METADATA_KEY]: marker },
+        // Deny-by-default subagents such as `explore` strip tools outside their allowlist; let them return their answer.
+        ...(output === undefined
+          ? {}
+          : { permissions: [...(parent.permissions ?? []), { action: OUTPUT_TOOL, resource: "*", effect: "allow" }] }),
       })
-      const output = input.output
       if (output === undefined) return SubagentCompletion.text(yield* drain(child.id, frame(input.prompt, false)))
-      expected.set(child.id, { output })
-      return yield* Effect.gen(function* () {
-        yield* drain(child.id, frame(input.prompt, true))
-        // One reminder: a model that answered in text usually calls the tool when told.
-        if (expected.get(child.id)?.value === undefined)
-          yield* drain(
-            child.id,
-            `You ended without calling ${OUTPUT_TOOL}. Call it now with your result, and do nothing else.`,
-          )
-        const value = expected.get(child.id)?.value
-        if (value === undefined)
-          return yield* fail(
-            `The agent finished without returning a result that matches the schema (session ${child.id}).`,
-          )
-        return value.value
-      }).pipe(Effect.ensuring(Effect.sync(() => expected.delete(child.id))))
+      yield* drain(child.id, frame(input.prompt, true))
+      const first = yield* recordedOutput(child.id, output)
+      if (first !== undefined) return first.value
+      // One reminder: a model that answered in text usually calls the tool when told.
+      yield* drain(
+        child.id,
+        `You ended without calling ${OUTPUT_TOOL}. Call it now with your result, and do nothing else.`,
+      )
+      const second = yield* recordedOutput(child.id, output)
+      if (second === undefined)
+        return yield* fail(
+          `The agent finished without returning a result that matches the schema (session ${child.id}).`,
+        )
+      return second.value
     })
 
     const llm = Effect.fn("CodeModeAgents.llm")(function* (
@@ -226,7 +264,7 @@ const frame = (prompt: string, structured: boolean) =>
     "You are a subagent started by a Code Mode script. The script reads your result as data; no person reads it.",
     "- Do the task below, and only that task.",
     structured
-      ? `- When you are done, call the \`${OUTPUT_TOOL}\` tool exactly once with your result. Its input schema is the shape the script needs. Do not put the result in a text reply.`
+      ? `- When you are done, call the \`${OUTPUT_TOOL}\` tool once with your result. Its input schema is the shape the script needs; your turn ends as soon as it is accepted. Do not put the result in a text reply.`
       : "- End with the result itself as your final message: no greetings, confirmations or summary of what you did. If asked for JSON, reply with only the JSON, with no code fence.",
     "",
     "Task:",

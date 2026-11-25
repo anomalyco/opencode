@@ -37,7 +37,7 @@ const label = await llm(`Is this a bug report or a feature request?\n\n${issue.b
 })
 ```
 
-Options: `schema`, `system`, `model`, `retries`. It sees only `system` and `prompt`, so include the text it should work on. Use it to classify, extract, summarize, deduplicate or judge text the script already has. If the step needs to read files or run commands, use agent().
+Options: `schema`, `system`, `model`, `label`, `retries`. It sees only `system` and `prompt`, so include the text it should work on. Use it to classify, extract, summarize, deduplicate or judge text the script already has. If the step needs to read files or run commands, use agent().
 
 ## Schemas
 
