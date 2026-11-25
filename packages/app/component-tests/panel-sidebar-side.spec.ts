@@ -66,6 +66,7 @@ const pickWithKeyboard = async (page: Page, side: "Left" | "Right") => {
   await page.keyboard.press("ArrowRight")
   await expect(page.getByRole("menuitemradio", { name: "Left" })).toBeFocused()
   await expect(page.getByRole("menuitemradio", { name: "Left" })).toHaveAttribute("aria-checked", "true")
+
   if (side === "Right") await page.keyboard.press("ArrowDown")
   await expect(page.getByRole("menuitemradio", { name: side })).toBeFocused()
   await page.keyboard.press("Enter")
