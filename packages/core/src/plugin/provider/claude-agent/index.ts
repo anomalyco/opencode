@@ -51,6 +51,15 @@ export const make = (io: ClaudeIO.Interface, registry = ClaudeSessions.registry(
           }),
           Effect.forkScoped({ startImmediately: true }),
         )
+      // A finished subagent is rarely messaged again, so its process stops without waiting for IDLE_MS.
+      // Background work, its own or a descendant's, wakes it again, so its process stays until none is left.
+      yield* ctx.session.hook("experimental.idle", (event) =>
+        Effect.gen(function* () {
+          if (event.background.length > 0) return
+          const session = yield* ctx.session.get({ sessionID: event.sessionID }).pipe(Effect.orDie)
+          if (session.parentID) yield* sessions.retire(event.sessionID)
+        }),
+      )
       yield* ClaudeProvider.register(ctx, status, io)
       yield* ClaudeIntegration.register(ctx, status)
       yield* ClaudeAISDK.register(ctx, sessions)
