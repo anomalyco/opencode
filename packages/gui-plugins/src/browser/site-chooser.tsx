@@ -40,11 +40,11 @@ const TYPE_AHEAD_MS = 700
  *
  * The import runs as a job of `jobs`, the surface that opened the dialog, which reports how it ended in its own place
  * (a Settings row, the pane's offer). A clean import closes the dialog; a partial or failed one keeps it open and says
- * why. `reveal` opens it on "Only sites I choose", with the list shown. `site` opens it with the list shown and searched for a page's
- * registrable domain, as a passkey request's, on the first browser profile that lists exactly that site; with
- * `choose`, that site alone is chosen there, and without it nothing is. A site that only contains it, such as
- * `github.com` for `hub.com`, is shown but never chosen. Opened so, the dialog is about one site's sign-in: it
- * shows no boxes and brings sign-ins only.
+ * why. `reveal` opens it on "Only sites I choose", with the list shown. `site` opens it with the list shown and
+ * searched for a page's registrable domain, as a passkey request's, on the first browser profile that lists exactly
+ * that site; with `choose`, that site alone is chosen there, and without it nothing is. A site that only contains
+ * it, such as `github.com` for `hub.com`, is shown but never chosen. Opened so, the dialog is about one site's
+ * sign-in: it shows no boxes and brings sign-ins only.
  */
 export function SiteChooser(props: {
   choices: readonly Choice[]
@@ -342,7 +342,6 @@ export function SiteChooser(props: {
     if (found !== undefined) moveTo(found)
   }
 
-  // The import this dialog started is running, which the button shows as it does a busy one.
   const importing = () => !!job() && props.jobs.running() === job()
 
   const allChosen = () => shown().length > 0 && shownChosen() === shown().length
@@ -439,8 +438,8 @@ export function SiteChooser(props: {
                 </div>
               </section>
             </Show>
-            {/* Which sites, for both: every one, or the ones ticked in the list under the choice. Opened for one site, only
-            the list shows, with that site searched for. */}
+            {/* Which sites, for both: every one, or the ones ticked in the list under the choice. Opened for one site,
+                only the list shows, with that site searched for. */}
             <section
               class="flex min-h-0 flex-1 flex-col gap-1"
               aria-labelledby={props.site ? undefined : `${id}-sites`}
