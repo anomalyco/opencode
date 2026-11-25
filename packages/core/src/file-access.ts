@@ -456,7 +456,12 @@ const layer = Layer.effect(
             ...Permission.invocation(context),
           })
         const resources = scoped.workspace.resources
-        yield* permission.assert({ action: "read", resources, ...Permission.invocation(context) })
+        yield* permission.assert({
+          action: "read",
+          resources,
+          verifiedWorkspace: true,
+          ...Permission.invocation(context),
+        })
         return scoped
       }
       const sibling =

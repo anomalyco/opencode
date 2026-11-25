@@ -78,6 +78,7 @@ describe("FileAccess.authorizeRead", () => {
       const target = yield* access.authorizeRead(file, invocation, { workspaceScope: true })
       if (!target.workspace) throw new Error("Expected a guarded file")
       expect(requests).toMatchObject([{ action: "read", resources: ["member/scope.txt", file] }])
+      expect(requests[0]?.verifiedWorkspace).toBe(true)
       expect(requests[0].save).toBeUndefined()
       const output = yield* ReadToolFileSystem.readWorkspace(target.workspace, target.absolute, target.resource, {})
       expect(output).toMatchObject({ type: "text", content: "bound workspace content" })
@@ -88,6 +89,7 @@ describe("FileAccess.authorizeRead", () => {
         { workspaceScope: true },
       )
       expect(requests.map((request) => request.action)).toEqual(["read", "external_directory", "read"])
+      expect(requests[2]?.verifiedWorkspace).toBeUndefined()
 
       const nested = path.join(physical.path, "nested")
       yield* Effect.promise(() => fs.mkdir(nested))

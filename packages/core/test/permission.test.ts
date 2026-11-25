@@ -284,6 +284,33 @@ describe("Permission.isActionDenied", () => {
 })
 
 describe("Permission", () => {
+  it.effect("keeps verified workspace provenance in evaluation and configured denies first", () =>
+    Effect.gen(function* () {
+      yield* setup([{ action: "read", resource: "*", effect: "deny" }])
+      const service = yield* Permission.Service
+      const hooks = yield* PluginHooks.Service
+      const seen: Array<boolean | undefined> = []
+      yield* hooks.register("permission", "evaluate", (event) =>
+        Effect.sync(() => {
+          seen.push(event.verifiedWorkspace)
+        }),
+      )
+      const denied = yield* service.assert(assertion({ verifiedWorkspace: true })).pipe(Effect.flip)
+      expect(denied).toBeInstanceOf(Permission.BlockedError)
+      expect(seen).toEqual([])
+      yield* setRules([{ action: "read", resource: "*", effect: "allow" }])
+      yield* service.assert(assertion({ verifiedWorkspace: true }))
+      yield* service.assert(assertion({ id: Permission.ID.create("per_plain") }))
+      expect(seen).toEqual([true, undefined])
+      yield* setRules([])
+      const request = yield* service.ask(
+        assertion({ id: Permission.ID.create("per_guarded"), verifiedWorkspace: true }),
+      )
+      expect(request.effect).toBe("ask")
+      expect(yield* service.get(request.id)).not.toHaveProperty("verifiedWorkspace")
+    }),
+  )
+
   it.effect("returns the evaluated effect and only queues prompts", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])

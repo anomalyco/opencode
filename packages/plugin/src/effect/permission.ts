@@ -13,6 +13,7 @@ export interface PermissionEvaluation {
   readonly action: string
   readonly resources: ReadonlyArray<string>
   readonly metadata?: Record<string, unknown>
+  readonly verifiedWorkspace?: true
   readonly source?: Permission.Source
   effect: Permission.Effect
   message?: string

@@ -35,6 +35,8 @@ export type Reply = typeof Reply.Type
 export interface AssertInput extends Omit<Request, "id" | "message"> {
   readonly id?: ID
   readonly agent?: Agent.ID
+  /** Internal provenance for a native guarded workspace file operation; never persisted on a Request. */
+  readonly verifiedWorkspace?: true
 }
 
 /** The requester fields of a permission request made by a tool call. */
@@ -217,6 +219,7 @@ const layer = Layer.effect(
         action: input.action,
         resources: input.resources,
         metadata: input.metadata,
+        verifiedWorkspace: input.verifiedWorkspace,
         source: row(input.source),
         effect,
       })

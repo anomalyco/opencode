@@ -162,6 +162,7 @@ describe("WriteTool", () => {
               expect(fixture.assertions).toMatchObject([
                 { action: "edit", resources: ["member/new.txt", path.join(physical.path, "new.txt")] },
               ])
+              expect(fixture.assertions[0]?.verifiedWorkspace).toBe(true)
               expect(fixture.writes).toEqual([])
               expect(formatterCalls).toBe(0)
               expect(
@@ -216,6 +217,7 @@ describe("WriteTool", () => {
           expect(fixture.assertions).toMatchObject([
             { sessionID, action: "edit", resources: ["src/new.txt"], save: ["*"] },
           ])
+          expect(fixture.assertions[0]?.verifiedWorkspace).toBeUndefined()
           expect(fixture.assertions[0]?.metadata).toMatchObject({
             files: [
               {

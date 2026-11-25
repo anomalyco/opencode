@@ -80,6 +80,7 @@ const layer = Layer.effect(
       yield* permission.assert({
         action: "edit",
         resources: target.workspace?.resources ?? [target.resource],
+        ...(target.workspace ? { verifiedWorkspace: true as const } : {}),
         ...(target.workspace ? {} : { save: [FileAccess.always(target)] }),
         metadata: preview ? { files: [preview] } : undefined,
         ...Permission.invocation(context),
