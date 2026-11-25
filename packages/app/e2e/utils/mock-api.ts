@@ -242,6 +242,28 @@ const Group = HttpApiGroup.make("mock")
   .add(HttpApiEndpoint.get("usageLimits", "/api/experimental/usage/limits", { success: Json }))
   .add(HttpApiEndpoint.get("jobList", "/api/experimental/job", { success: Json }))
   .add(
+    HttpApiEndpoint.get("preferenceItems", "/api/experimental/preference/:name", {
+      params: { name: Schema.String },
+      success: Json,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.patch("preferenceUpdate", "/api/experimental/preference/:name", {
+      params: { name: Schema.String },
+      payload: Schema.Struct({
+        insert: Schema.Record(Schema.String, Schema.String),
+        remove: Schema.Array(Schema.String),
+      }),
+      success: NoContent,
+    }),
+  )
+  .add(
+    HttpApiEndpoint.delete("preferenceClear", "/api/experimental/preference/:name", {
+      params: { name: Schema.String },
+      success: NoContent,
+    }),
+  )
+  .add(
     HttpApiEndpoint.get("worktreeList", "/api/worktree", {
       query: Schema.Struct({ projectID: Schema.String }),
       success: Json,

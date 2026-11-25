@@ -2,6 +2,7 @@
 
 import "@/runtime/polyfills"
 import { init } from "@sentry/solid"
+import { createEffect } from "solid-js"
 import { render } from "solid-js/web"
 import { AppBaseProviders, AppInterface } from "@/app"
 import { loadInitialLocale } from "@/runtime/i18n/language"
@@ -11,9 +12,16 @@ import { isStandalone, PwaRoutePersistence, restorePwaRoute } from "@/runtime/pl
 import { KeyboardInsets } from "@/runtime/platform/keyboard"
 import en from "@/runtime/i18n/en"
 import zh from "@/runtime/i18n/zh"
+import {
+  hydrateServerPreferences,
+  recordPreference,
+  serverPreferencesSignedIn,
+} from "@/runtime/persistence/server-preferences"
 import { authFromToken } from "@/runtime/server/api"
+import { isServerHealthy } from "@/runtime/server/health-machine"
+import { useGlobal } from "@/runtime/server/runtime"
 import pkg from "../package.json"
-import { ServerConnection } from "@/runtime/server/registry"
+import { ServerConnection, useServers } from "@/runtime/server/registry"
 
 const getLocale = () => {
   if (typeof navigator === "undefined") return "en" as const
@@ -77,43 +85,65 @@ if (import.meta.env.VITE_SENTRY_DSN) {
   })
 }
 
+// A server that refused the stored password answers once the user signs in; its preferences then load.
+function ServerPreferencesSignIn(props: { server: ServerConnection.Key }) {
+  const global = useGlobal()
+  const servers = useServers()
+
+  createEffect(() => {
+    if (!isServerHealthy(global.servers.health[props.server])) return
+    const conn = servers.list.find((item) => ServerConnection.key(item) === props.server)
+    serverPreferencesSignedIn(conn && ServerConnection.http(conn)?.password)
+  })
+
+  return null
+}
+
 if (root instanceof HTMLElement && root.dataset.opencodeMounted === undefined) {
   // Lazy chunks can import the entry chunk back under a distinct URL, so claim the root before async startup.
   root.dataset.opencodeMounted = ""
-  void loadInitialLocale().then((locale) => {
-    const auth = authFromToken(new URLSearchParams(location.search).get("auth_token"))
-    clearAuthToken()
-    const standalone = isStandalone()
-    root.dataset.standalone = String(standalone)
+  const auth = authFromToken(new URLSearchParams(location.search).get("auth_token"))
+  clearAuthToken()
+  // The server's preferences land in localStorage before anything reads it.
+  void (
+    web.currentServerUrl
+      ? hydrateServerPreferences({ url: web.currentServerUrl, password: auth?.password })
+      : Promise.resolve()
+  )
+    .then(() => loadInitialLocale())
+    .then((locale) => {
+      const standalone = isStandalone()
+      root.dataset.standalone = String(standalone)
 
-    if (standalone) restorePwaRoute()
+      if (standalone) restorePwaRoute()
 
-    const server: ServerConnection.Http | undefined = web.currentServerUrl
-      ? {
-          type: "http",
-          authToken: !!auth,
-          http: {
-            url: web.currentServerUrl,
-            ...auth,
-          },
-        }
-      : undefined
+      const server: ServerConnection.Http | undefined = web.currentServerUrl
+        ? {
+            type: "http",
+            authToken: !!auth,
+            http: {
+              url: web.currentServerUrl,
+              ...auth,
+            },
+          }
+        : undefined
 
-    render(
-      () => (
-        <PlatformProvider value={web.platform}>
-          <AppBaseProviders locale={locale}>
-            <AppInterface
-              canonicalLocalServer={server ? ServerConnection.key(server) : undefined}
-              servers={server ? [server] : []}
-            >
-              <KeyboardInsets />
-              {standalone && <PwaRoutePersistence />}
-            </AppInterface>
-          </AppBaseProviders>
-        </PlatformProvider>
-      ),
-      root,
-    )
-  })
+      render(
+        () => (
+          <PlatformProvider value={web.platform}>
+            <AppBaseProviders locale={locale} onThemeStored={(key, value) => recordPreference(undefined, key, value)}>
+              <AppInterface
+                canonicalLocalServer={server ? ServerConnection.key(server) : undefined}
+                servers={server ? [server] : []}
+              >
+                <KeyboardInsets />
+                {standalone && <PwaRoutePersistence />}
+                {server && <ServerPreferencesSignIn server={ServerConnection.key(server)} />}
+              </AppInterface>
+            </AppBaseProviders>
+          </PlatformProvider>
+        ),
+        root,
+      )
+    })
 }

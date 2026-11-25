@@ -240,8 +240,16 @@ const initialLocale =
         () => "en" as const,
       )
 
+/** The first render's locale, read again because the server's preferences may have replaced the stored one. */
 export function loadInitialLocale() {
-  return initialLocale
+  const locale = readStoredLocale() ?? detectLocale()
+
+  if (locale === warm) return initialLocale
+
+  return loadDict(locale).then(
+    () => locale,
+    () => "en" as const,
+  )
 }
 
 export const { use: useLanguage, provider: LanguageProvider } = createSimpleContext({

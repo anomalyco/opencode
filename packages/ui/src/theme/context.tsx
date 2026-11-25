@@ -192,6 +192,8 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     defaultTheme?: string
     /** The window shows the theme: its colors, or until a registered theme arrives, those cached from the last run. */
     onThemeApplied?: (mode: "light" | "dark", scheme: ColorScheme) => void
+    /** The selected theme or color scheme was written to `localStorage` under `key`. */
+    onStored?: (key: string, value: string) => void
   }) => {
     // An id no theme has yet stays selected until `settle`: a registered theme can arrive after startup.
     const initial = createThemeState({
@@ -248,9 +250,17 @@ export const { use: useTheme, provider: ThemeProvider } = createSimpleContext({
     }
 
     const run = (effect: ThemeEffect) => {
-      if (effect.type === "persist-theme") return write(STORAGE_KEYS.THEME_ID, effect.id)
+      if (effect.type === "persist-theme") {
+        write(STORAGE_KEYS.THEME_ID, effect.id)
 
-      if (effect.type === "persist-scheme") return write(STORAGE_KEYS.COLOR_SCHEME, effect.scheme)
+        return props.onStored?.(STORAGE_KEYS.THEME_ID, effect.id)
+      }
+
+      if (effect.type === "persist-scheme") {
+        write(STORAGE_KEYS.COLOR_SCHEME, effect.scheme)
+
+        return props.onStored?.(STORAGE_KEYS.COLOR_SCHEME, effect.scheme)
+      }
 
       if (effect.type === "cache-theme") return cacheThemeVariants(effect.theme)
 

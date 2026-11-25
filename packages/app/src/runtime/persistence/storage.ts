@@ -9,6 +9,7 @@ import { ScopedKey, ServerScope } from "@/runtime/server/scope"
 import { persistStore } from "./persist"
 import { canWriteBackHydration } from "./persist-machine"
 import { Persistence } from "./schema"
+import { recordPreference } from "./server-preferences"
 import {
   canEvict,
   INITIAL_LOCAL_STORAGE_STATE,
@@ -404,7 +405,8 @@ type LocalStorageView = {
 }
 
 // A failed write never stops later reads, writes or removals: each call tries storage again, and the
-// cache only answers a read that storage cannot.
+// cache only answers a read that storage cannot. Writes and removals go to the server too while the web app's
+// preferences are mirrored there (`server-preferences.ts`).
 function localStorageView(prefix?: string): LocalStorageView {
   const item = (key: string) => (prefix ? `${prefix}:${key}` : key)
 
@@ -425,7 +427,12 @@ function localStorageView(prefix?: string): LocalStorageView {
 
       return stored
     },
-    setItem: (key, value) => write(item(key), value),
+    setItem: (key, value) => {
+      const stored = write(item(key), value)
+      recordPreference(prefix, key, value)
+
+      return stored
+    },
     removeItem: (key) => {
       const name = item(key)
       cacheDelete(name)
@@ -433,6 +440,8 @@ function localStorageView(prefix?: string): LocalStorageView {
       try {
         localStorage.removeItem(name)
       } catch {}
+
+      recordPreference(prefix, key, null)
     },
   }
 }
