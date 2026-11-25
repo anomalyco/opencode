@@ -13,6 +13,8 @@ export GH_TOKEN=$WINGET_GITHUB_TOKEN
 
 upstream=microsoft/winget-pkgs
 fork=$(gh api -X POST "repos/$upstream/forks" -F default_branch_only=true --jq .full_name)
+# The fork cannot build on upstream master's tree until it has those objects, so bring it up to date first.
+gh api -X POST "repos/$fork/merge-upstream" -f branch=master --silent
 for dir in "$1"/*/; do
   id=$(basename "$dir")
   folder="manifests/a/${id//.//}/$OPENCODE_VERSION"
@@ -26,7 +28,6 @@ for dir in "$1"/*/; do
     echo "$id $OPENCODE_VERSION already has a pull request"
     continue
   fi
-  # Forks share objects with their upstream, so the branch can start from upstream master without syncing the fork.
   head=$(gh api "repos/$upstream/git/ref/heads/master" --jq .object.sha)
   tree=$(
     for file in "$dir"*.yaml; do
