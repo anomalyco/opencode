@@ -751,7 +751,7 @@ export const dict = {
   "settings.timeline.custom": "自定义",
   "settings.timeline.advanced": "高级",
   "settings.timeline.advanced.description": "设置每个活动类别的位置和详细信息。",
-  "settings.timeline.category.shell": "壳牌",
+  "settings.timeline.category.shell": "Shell 命令",
   "settings.timeline.category.edit": "编辑",
   "settings.timeline.category.thinking": "思考",
   "settings.timeline.category.subagents": "子代理",
@@ -1469,6 +1469,13 @@ export const dict = {
   "usage.signedOut.body": "连接 OpenCode Console 以查看你工作区的预算和 Go 用量。",
   "usage.error": "无法加载用量限制。",
   "usage.retry": "重试",
+  "settings.general.row.sharedSidePanel.title": "跨会话保持侧面板打开",
+  "settings.general.row.sharedSidePanel.description": "在一个会话中打开或关闭它会应用于所有会话",
+  "settings.helpFeedback": "帮助与反馈",
+  "settings.experimental.row.tabGroups.title": "标签组",
+  "settings.experimental.row.tabGroups.description": "在侧边标签页中将会话标签分组，并支持内联会话搜索",
+  "settings.timeline.row.wrapCodeBlocks.title": "代码块换行",
+  "settings.timeline.row.wrapCodeBlocks.description": "代码块中的长行换行显示，而不是滚动。悬停时仍可切换每个代码块",
 } satisfies Partial<Record<Keys, string>>
 
 export default dict

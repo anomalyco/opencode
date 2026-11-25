@@ -390,17 +390,17 @@ when the agent uses the tab. `close` returns true only for a tab closed now; a p
 
 `@opencode/plugin/gui/builtin` holds what only the built-ins use. It is never published and is not in the modules a plugin bundle may require; a public SDK module never imports it.
 
-| Export                                                  | What it adds                                                                                   |
-| ------------------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| `onIdle(fn)`                                            | Runs work while the main thread is idle, e.g. a lazy chunk's preload                           |
-| `BuiltinPanel`, `BuiltinPanelTab`                       | `legacy` stored keys of a panel; `first` and stable `dom` ids of a tab                         |
-| `BuiltinCommand`                                        | `follows`: share another command's shortcut inside `scope`                                     |
-| `BuiltinAppLink`                                        | Review a person's activation of an application link in the desktop conversation                |
-| `BuiltinPromptGate`                                     | Work the host waits for, for at most one second, before it sends a prompt or a command         |
-| `BuiltinStore`, `BuiltinStoreFrom`                      | Window stores imported from parts of the app's own keys                                        |
+| Export                                                  | What it adds                                                                                     |
+| ------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `onIdle(fn)`                                            | Runs work while the main thread is idle, e.g. a lazy chunk's preload                             |
+| `BuiltinPanel`, `BuiltinPanelTab`                       | `legacy` stored keys of a panel; `first` and stable `dom` ids of a tab                           |
+| `BuiltinCommand`                                        | `follows`: share another command's shortcut inside `scope`                                       |
+| `BuiltinAppLink`                                        | Review a person's activation of an application link in the desktop conversation                  |
+| `BuiltinPromptGate`                                     | Work the host waits for, for at most one second, before it sends a prompt or a command           |
+| `BuiltinStore`, `BuiltinStoreFrom`                      | Window stores imported from parts of the app's own keys                                          |
 | `builtinContext(ctx)`                                   | `ctx.desktop.forceFocus`, `ctx.locale.setDirection`, `ctx.provideFor` for per-consumer contracts |
-| `builtinMainContext(ctx)`, `MainStoreFrom`, `Lifecycle` | Main stores imported from settings files or other namespaces, and `lifecycle.restart(handoff)` |
-| `builtinCatalog(catalog)`, `BuiltinCatalog`             | Locales other than English as loaders, loaded when the user picks the locale                   |
+| `builtinMainContext(ctx)`, `MainStoreFrom`, `Lifecycle` | Main stores imported from settings files or other namespaces, and `lifecycle.restart(handoff)`   |
+| `builtinCatalog(catalog)`, `BuiltinCatalog`             | Locales other than English as loaders, loaded when the user picks the locale                     |
 
 Each registry token has the same id as the public one, so the host reads every item through it. The host builds every context with the built-in members; `builtinContext` and `builtinMainContext` only type them. A plugin bundle's catalog holds every locale inline, and the host rejects a bundle whose catalog has a loader.
 
@@ -594,11 +594,18 @@ export const Pairing = Ipc.define({
 <!-- source: src/pairing/index.ts -->
 
 ```ts
+import { builtinCatalog } from "@opencode/plugin/gui/builtin"
 import { Plugin } from "@opencode/plugin/gui"
 import en from "./i18n/en"
 import pair from "./icons/pair.svg?raw"
 
-export default Plugin.define({ icons: { pair }, i18n: { en } })
+export default Plugin.define({
+  icons: { pair },
+  i18n: builtinCatalog({
+    en,
+    zh: () => import("./i18n/zh"),
+  }),
+})
 ```
 
 3. **Provide it from main.** Whether main keeps the display awake is a main store, read synchronously and imported once from the key the desktop kept it under before; a built-in names that older home through `builtinMainContext`. Remote access runs `opencode service` through `ctx.cli`, one command at a time through the machine in `main-machine.ts`, with the same `createDispatch` loop as the settings page: a read stops when its caller goes away, a change goes on when the window closes, and every command has a timeout, so a hung one never holds the queue. `ctx.onCleanup` disposes the machine, which releases the blocker.
