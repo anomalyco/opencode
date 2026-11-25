@@ -32,18 +32,22 @@ const info = (id: string, description: string) =>
     content: `# ${id}`,
   })
 
+const file = (value: string) => {
+  const parsed = Skill.parseFilePath(value)
+  if (!parsed) throw new Error(`unsafe test path: ${value}`)
+  return parsed
+}
+
 describe("Skill.parseAddress", () => {
   test("parses skill:// paths into an ID, a file and the canonical URI", () => {
-    expect(Skill.parseAddress("skill://docs:pdf/references/FORMS.md")).toEqual({
-      id: Skill.ID.make("docs:pdf"),
-      file: "references/FORMS.md",
-      uri: "skill://docs:pdf/references/FORMS.md",
-    })
-    expect(Skill.parseAddress("skill://docs:pdf/references/")).toMatchObject({
-      file: "references",
-      uri: "skill://docs:pdf/references",
-    })
-    expect(Skill.parseAddress("skill://docs:pdf")).toMatchObject({ file: "", uri: "skill://docs:pdf" })
+    const address = Skill.parseAddress("skill://docs:pdf/references/FORMS.md")
+    expect(address?.id).toBe(Skill.ID.make("docs:pdf"))
+    expect(address?.file).toBe(file("references/FORMS.md"))
+    expect(address?.uri).toBe("skill://docs:pdf/references/FORMS.md")
+    expect(Skill.parseAddress("skill://docs:pdf/references/")?.uri).toBe("skill://docs:pdf/references")
+    const folder = Skill.parseAddress("skill://docs:pdf")
+    expect(folder?.file).toBeUndefined()
+    expect(folder?.uri).toBe("skill://docs:pdf")
   })
 
   test("refuses anything that isn't a safe skill:// path", () => {
@@ -55,6 +59,14 @@ describe("Skill.parseAddress", () => {
       "skill://pdf/a\\b",
     ])
       expect(Skill.parseAddress(value)).toBeUndefined()
+  })
+})
+
+describe("Skill.parseFilePath", () => {
+  test("accepts paths inside a skill's folder and nothing else", () => {
+    expect(Skill.parseFilePath("references/FORMS.md")).toBe(file("references/FORMS.md"))
+    for (const value of ["", "../secret", "a/../../b", "/etc/passwd", "C:\\x", "https://x/y", "a\\b"])
+      expect(Skill.parseFilePath(value)).toBeUndefined()
   })
 })
 
@@ -250,10 +262,10 @@ describe("Skill", () => {
       const id = Skill.ID.make("remote")
 
       expect((yield* skill.list()).map((item) => item.content)).toEqual([""])
-      expect(yield* skill.files(id)).toEqual(["references/a.md", "references/b.md"])
+      expect((yield* skill.files(id))?.map(String)).toEqual(["references/a.md", "references/b.md"])
       expect(loaded).toEqual([])
       expect(yield* skill.content(id)).toBe("# remote")
-      expect(new TextDecoder().decode(yield* skill.read(id, "references/a.md"))).toBe("A")
+      expect(new TextDecoder().decode(yield* skill.read(id, file("references/a.md")))).toBe("A")
       expect(loaded).toEqual(["SKILL.md", "references/a.md"])
     }),
   )
@@ -290,15 +302,16 @@ describe("Skill", () => {
         })
 
         const files = yield* skill.files(Skill.ID.make("review"))
-        expect(files).toEqual(["references/a.md", "references/b.md"])
-        expect(new TextDecoder().decode(yield* skill.read(Skill.ID.make("review"), "references/a.md"))).toBe("A")
-        expect((yield* skill.read(Skill.ID.make("review"), "../secret").pipe(Effect.flip))._tag).toBe(
+        expect(files?.map(String)).toEqual(["references/a.md", "references/b.md"])
+        expect(new TextDecoder().decode(yield* skill.read(Skill.ID.make("review"), file("references/a.md")))).toBe("A")
+        expect((yield* skill.read(Skill.ID.make("review"), file("missing.md")).pipe(Effect.flip))._tag).toBe(
           "Skill.FileNotFoundError",
         )
         const fs = yield* FSUtil.Service
         const prepared = yield* Skill.prepare(
           { ...fs, scan: () => Effect.die(new Error("unexpected disk scan")) },
           virtual,
+          Skill.locate(virtual),
           files,
         )
         expect(prepared).toEqual({

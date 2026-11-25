@@ -55,9 +55,12 @@ export const Plugin = {
                   save: [skill.id],
                   ...Permission.invocation(context),
                 })
+                const location = yield* skills.location(skill.id)
+                if (!location) return yield* unableToLoad(input.id)
                 const { directory, output: content } = yield* Skill.prepare(
                   fs,
                   { ...skill, content: yield* skills.instructions(skill.id) },
+                  location,
                   yield* skills.files(skill.id),
                 )
                 return {

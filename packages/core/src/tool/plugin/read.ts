@@ -77,9 +77,9 @@ export const Plugin = {
                 if (!parsed) return yield* new ToolFailure({ message: `File not found: ${input.path}` })
                 const id = parsed.id
                 const skill = yield* skills.get(id)
-                if (!skill || Skill.locate(skill)._tag !== "virtual")
+                if (!skill || (yield* skills.location(id))?._tag !== "virtual")
                   return yield* new ToolFailure({ message: `File not found: ${input.path}` })
-                const files = ["SKILL.md", ...((yield* skills.files(id)) ?? [])]
+                const files = [Skill.manifest, ...((yield* skills.files(id)) ?? [])]
                 yield* permission.assert({
                   action: "skill",
                   resources: [skill.id],
@@ -113,7 +113,7 @@ export const Plugin = {
                 )
                 const output = yield* ReadToolFileSystem.read(
                   virtualFs,
-                  AbsolutePath.make(`/${parsed.file}`),
+                  AbsolutePath.make(`/${parsed.file ?? ""}`),
                   input.path,
                   {
                     offset: input.offset,

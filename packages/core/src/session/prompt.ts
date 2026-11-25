@@ -52,9 +52,7 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
     delivery: request.input.delivery ?? "steer",
   })
   const input = event.prompt
-  const files = input.files
-    ? yield* Effect.forEach(input.files, materializeAttachment, { concurrency: 8 })
-    : undefined
+  const files = input.files ? yield* Effect.forEach(input.files, materializeAttachment, { concurrency: 8 }) : undefined
   const requested = input.skills
   const selected = yield* Effect.gen(function* () {
     if (!requested?.length) return undefined
@@ -69,10 +67,12 @@ export const prepare = Effect.fn("SessionPrompt.prepare")(function* (request: {
         prepared.set(skill.id, skill.name)
         const content = yield* skillService.instructions(skill.id)
         const files = yield* skillService.files(skill.id)
+        const location = yield* skillService.location(skill.id)
+        if (!location) return yield* new SkillNotFoundError({ skill: attachment.id })
         return {
           id: skill.id,
           name: skill.name,
-          text: (yield* Skill.prepare(fs, { ...skill, content }, files).pipe(Effect.orDie)).output,
+          text: (yield* Skill.prepare(fs, { ...skill, content }, location, files).pipe(Effect.orDie)).output,
           mention: attachment.mention,
         }
       }),

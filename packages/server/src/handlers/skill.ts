@@ -13,10 +13,12 @@ export const SkillHandler = HttpApiBuilder.group(Api, "server.skill", (handlers)
         const skills = yield* Skill.Service
         // The path after /api/experimental/skill/<id>/file/.
         const raw = new URL(ctx.request.url, "http://localhost").pathname.split("/").slice(6).join("/")
+        const notFound = new FileNotFoundError({ path: raw, message: `File not found: ${raw}` })
         const file = yield* Effect.try({
-          try: () => decodeURIComponent(raw),
-          catch: () => new FileNotFoundError({ path: raw, message: `File not found: ${raw}` }),
+          try: () => Skill.parseFilePath(decodeURIComponent(raw)),
+          catch: () => notFound,
         })
+        if (!file) return yield* notFound
         return yield* skills.read(ctx.params.skillID, file).pipe(
           Effect.catchTags({
             "Skill.NotFoundError": (error) =>

@@ -107,6 +107,10 @@ describe("SkillTool", () => {
           const skills = Layer.mock(Skill.Service, {
             get: (id) => Effect.succeed(current.find((skill) => skill.id === id)),
             resolve: (id) => Effect.succeed(current.find((skill) => skill.id === id)),
+            location: (id) => {
+              const skill = current.find((item) => item.id === id)
+              return Effect.succeed(skill && Skill.locate(skill))
+            },
             instructions: (id) => Effect.succeed(current.find((skill) => skill.id === id)?.content ?? ""),
             files: () => Effect.undefined,
             list: () => Effect.succeed(current),

@@ -3,7 +3,7 @@ export * as Skill from "./skill.js"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import path from "path"
-import { Context, Effect, Layer, Schema, Types } from "effect"
+import { Brand, Context, Effect, Layer, Schema, Types } from "effect"
 import { Skill } from "@opencode/schema/skill"
 import { Bus } from "./bus.js"
 import { PermissionPolicy } from "./permission/policy.js"
@@ -70,10 +70,19 @@ export type Location = { readonly _tag: "disk"; readonly directory: string } | {
 export const locate = (skill: Pick<Info, "path">): Location =>
   isUri(skill.path) ? { _tag: "virtual" } : { _tag: "disk", directory: path.dirname(skill.path) }
 
-/** A `skill://<id>/<file>` path, parsed. `file` is `""` for the skill's folder. */
+/** A safe path relative to a skill's folder, such as `references/FORMS.md`. Only the parsers below produce one. */
+export type FilePath = string & Brand.Brand<"Skill.FilePath">
+const FilePath = Brand.nominal<FilePath>()
+
+export const manifest = FilePath("SKILL.md")
+
+export const parseFilePath = (value: string): FilePath | undefined =>
+  SkillDiscovery.isSafeRelativePath(value) ? FilePath(value) : undefined
+
+/** A `skill://<id>/<file>` path, parsed. `file` is absent for the skill's folder. */
 export interface Address {
   readonly id: ID
-  readonly file: string
+  readonly file?: FilePath
   /** The canonical form, so `skill://id/file/` can't slip past a rule for `skill://id/file`. */
   readonly uri: string
 }
@@ -86,11 +95,10 @@ export const parseAddress = (value: string): Address | undefined => {
   const file = slash === -1 ? "" : trimmed.slice(slash + 1)
   if (!SkillDiscovery.isSafeSegment(id)) return undefined
   if (file !== "" && !file.split("/").every(SkillDiscovery.isSafeSegment)) return undefined
-  return { id: ID.make(id), file, uri: uri(id, file || undefined) }
+  return { id: ID.make(id), ...(file ? { file: FilePath(file) } : {}), uri: uri(id, file || undefined) }
 }
 
-export const toModelOutput = (skill: Info, files: ReadonlyArray<string>) => {
-  const location = locate(skill)
+export const toModelOutput = (skill: Info, files: ReadonlyArray<string>, location = locate(skill)) => {
   const directory = location._tag === "virtual" ? uri(skill.id) : location.directory
   return [
     `<skill_content name="${skill.name}">`,
@@ -112,9 +120,9 @@ export const toModelOutput = (skill: Info, files: ReadonlyArray<string>) => {
 export const prepare = Effect.fn("Skill.prepare")(function* (
   fs: FSUtil.Interface,
   skill: Info,
-  virtualFiles?: ReadonlyArray<string>,
+  location: Location,
+  virtualFiles?: ReadonlyArray<FilePath>,
 ) {
-  const location = locate(skill)
   if (location._tag === "virtual") {
     const directory = uri(skill.id)
     const files = (virtualFiles ?? [])
@@ -124,7 +132,7 @@ export const prepare = Effect.fn("Skill.prepare")(function* (
       .map((file) => uri(skill.id, file))
     return {
       directory,
-      output: toModelOutput(skill, files),
+      output: toModelOutput(skill, files, location),
     }
   }
   const directory = location.directory
@@ -143,7 +151,7 @@ export const prepare = Effect.fn("Skill.prepare")(function* (
       : []
   return {
     directory,
-    output: toModelOutput(skill, files),
+    output: toModelOutput(skill, files, location),
   }
 })
 
@@ -152,9 +160,11 @@ type Body = { readonly _tag: "inline" } | { readonly _tag: "lazy"; readonly load
 
 type Entry = {
   readonly info: Types.DeepMutable<Info>
+  /** Parsed from `info.path` when the skill is added or updated. */
+  location: Location
   readonly body: Body
-  /** Virtual files besides SKILL.md, by path relative to the skill's folder. */
-  readonly files: ReadonlyMap<string, File>
+  /** Virtual files besides SKILL.md. */
+  readonly files: ReadonlyMap<FilePath, File>
   readonly origin?: Origin
 }
 
@@ -182,12 +192,14 @@ export interface Interface extends State.Transformable<Editor> {
   /** The skill's SKILL.md body, loaded when the skill doesn't have it inline. */
   readonly content: (id: ID) => Effect.Effect<string, LoadError>
   /** Paths of the skill's virtual files besides SKILL.md. */
-  readonly files: (id: ID) => Effect.Effect<ReadonlyArray<string> | undefined>
+  readonly files: (id: ID) => Effect.Effect<ReadonlyArray<FilePath> | undefined>
+  /** Where the skill's files live. */
+  readonly location: (id: ID) => Effect.Effect<Location | undefined>
   /**
    * One file of a skill by its path relative to the skill's folder, loaded when it isn't inline. `SKILL.md` is the
-   * body without frontmatter. Any path that isn't one of the skill's files, unsafe ones included, is not found.
+   * body without frontmatter. Any path that isn't one of the skill's files is not found.
    */
-  readonly read: (id: ID, file: string) => Effect.Effect<Uint8Array, NotFoundError | FileNotFoundError | LoadError>
+  readonly read: (id: ID, file: FilePath) => Effect.Effect<Uint8Array, NotFoundError | FileNotFoundError | LoadError>
   readonly list: () => Effect.Effect<Info[]>
   /** The skill with this ID, or the one a resolver finds for it. */
   readonly resolve: (id: string) => Effect.Effect<Info | undefined, LoadError>
@@ -212,10 +224,15 @@ const layer = Layer.effect(
           const content = skill.content
           editor.entries.set(skill.id, {
             info: { ...skill, content: typeof content === "string" ? content : "" },
+            location: locate(skill),
             body: typeof content === "string" ? { _tag: "inline" } : { _tag: "lazy", load: content },
+            // Files are named by whoever adds the skill, so unsafe paths are dropped here.
             files: new Map(
               Object.entries(files ?? {})
-                .filter(([file]) => file !== "SKILL.md")
+                .flatMap(([file, value]) => {
+                  const parsed = parseFilePath(file)
+                  return parsed && parsed !== manifest ? [[parsed, value] as const] : []
+                })
                 .toSorted(([a], [b]) => a.localeCompare(b)),
             ),
             origin,
@@ -223,10 +240,11 @@ const layer = Layer.effect(
         },
         update: (id, update) => {
           const key = ID.make(id)
-          const current = editor.entries.get(key)?.info
-          if (!current) return
-          update(current)
-          current.id = key
+          const entry = editor.entries.get(key)
+          if (!entry) return
+          update(entry.info)
+          entry.info.id = key
+          entry.location = locate(entry.info)
         },
         remove: (id) => {
           editor.entries.delete(ID.make(id))
@@ -264,10 +282,13 @@ const layer = Layer.effect(
         const entry = state.get().entries.get(id)
         return entry && Array.from(entry.files.keys())
       }),
+      location: Effect.fn("Skill.location")(function* (id) {
+        return state.get().entries.get(id)?.location
+      }),
       read: Effect.fn("Skill.read")(function* (id, file) {
         const entry = state.get().entries.get(id)
         if (!entry) return yield* new NotFoundError({ skill: id })
-        const value = file === "SKILL.md" ? yield* content(id) : entry.files.get(file)
+        const value = file === manifest ? yield* content(id) : entry.files.get(file)
         if (value === undefined) return yield* new FileNotFoundError({ skill: id, file })
         const loaded = typeof value === "string" || value instanceof Uint8Array ? value : yield* value
         return typeof loaded === "string" ? new TextEncoder().encode(loaded) : loaded
