@@ -26,10 +26,10 @@ import { withoutParentSpan } from "./request-tracing"
  * or disabled.
  *
  * - Database runs on the injected `DurableObjectStorage` SQLite.
- * - `ServerWorkerd.create` configures `Workspace` with `keepWarm: 0`,
- *   `pollInterval: null`, and `storage.setAlarm` scheduling, exposing `handler.alarm()`
- *   so the Durable Object can hibernate at zero idle cost. (Kept out of base
- *   `replacements()` until SDK embedders wire `alarm()` too.)
+ * - `Workspace` is configured with `keepWarm: 0`, `pollInterval: null`, and
+ *   `storage.setAlarm` scheduling so the Durable Object can hibernate at zero
+ *   idle cost. Callers forward the Durable Object's `alarm()` method to
+ *   `handler.alarm()` (or `opencode.alarm()` via `@opencode/sdk/workerd`).
  * - Watcher and fff are disabled through their existing option flags; pty, fff,
  *   and photon native modules resolve to inert stubs under the `workerd` bundle
  *   condition.
@@ -66,19 +66,6 @@ export interface Handler {
 }
 
 /**
- * Workspace replacement for Durable Object hosts that wire `alarm()`: closes connections immediately when idle
- * (`keepWarm: 0`), disables background polling (`pollInterval: null`), and schedules idle suspension via `storage.setAlarm`.
- */
-export const alarmWorkspaceReplacement = (storage: DurableObjectStorage): LayerNode.Replacement =>
-  Workspace.node.replace(
-    Workspace.configured({
-      keepWarm: 0,
-      pollInterval: null,
-      onIdleScheduled: (atMs) => Effect.tryPromise(() => storage.setAlarm(atMs)),
-    }),
-  )
-
-/**
  * Builds the web-standard fetch + alarm handler for a Durable Object. The
  * application layer builds eagerly in the caller's scope, so hold it in the
  * Durable Object instance rather than per request.
@@ -92,7 +79,7 @@ export const create = Effect.fn("ServerWorkerd.create")(function* (options: Opti
   // teardown. The write-ahead execution claim plus ServerFetch.make's boot-time resume
   // recovers such orphaned turns by replaying the drain from durable history on the next wake.
   const server = yield* ServerFetch.makeWithContext(serverOptions(options), {
-    overrides: [...replacements(options), alarmWorkspaceReplacement(options.storage)],
+    overrides: replacements(options),
   })
   const run = Effect.runPromiseWith(yield* withoutParentSpan(Effect.context()))
   const workspace = Context.get(server.context, Workspace.Service)
@@ -122,6 +109,13 @@ export function replacements(options: Options): LayerNode.Replacements {
   return [
     Database.node.replace(Database.configuredClient(sqliteLayer({ storage: options.storage }))),
     Identity.node.replace(Identity.kvNode),
+    Workspace.node.replace(
+      Workspace.configured({
+        keepWarm: 0,
+        pollInterval: null,
+        onIdleScheduled: (atMs) => Effect.tryPromise(() => options.storage.setAlarm(atMs)),
+      }),
+    ),
     CrossSpawnSpawner.node.replace(EnvironmentUnavailable.layer),
     Snapshot.node.replace(Snapshot.noopLayer),
     Vcs.node.replace(vcsLayer),

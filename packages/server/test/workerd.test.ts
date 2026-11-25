@@ -102,7 +102,6 @@ it.effect("closes workerd workspace connections immediately and suspends idle wo
     })
     const layer = AppNodeBuilder.build(Workspace.node, [
       ...ServerWorkerd.replacements({ storage }),
-      ServerWorkerd.alarmWorkspaceReplacement(storage),
       WorkspaceDriver.node.replace(WorkspaceDriver.registryNode({ fake: fakeDriver })),
     ])
 
