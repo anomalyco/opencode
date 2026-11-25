@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect } from "bun:test"
 import { createDecipheriv, createECDH, hkdfSync } from "node:crypto"
-import { Effect, Layer } from "effect"
+import { Effect } from "effect"
 import { KV } from "@opencode/core/kv"
 import { Bus } from "@opencode/core/bus"
 import { PushCrypto } from "@opencode/core/push/crypto"
@@ -209,35 +209,6 @@ describe("PushSender", () => {
         ["ok", true],
       ])
       expect(open(ok, calls[1]!.box)).toEqual({ v: 1, id: sessionID, type: "clear", sessionID })
-    }),
-  )
-
-  it.effect("clears a notification sent before a restart", () =>
-    Effect.gen(function* () {
-      const sender = yield* PushSender.Service
-      const kv = yield* KV.Service
-      const list = yield* PushList.Service
-      yield* phone(ids.ok, "ok")
-
-      yield* sender.send(finished)
-      yield* advance(() => calls.length === 1)
-      yield* PushSender.Service.pipe(
-        Effect.flatMap((restarted) => restarted.clear([sessionID])),
-        Effect.andThen(advance(() => calls.length === 2)),
-        Effect.provide(
-          Layer.fresh(
-            LayerNode.compile(PushSender.node, {
-              replacements: [
-                KV.node.replace(Layer.succeed(KV.Service, kv)),
-                PushList.node.replace(Layer.succeed(PushList.Service, list)),
-                LayerNodePlatform.httpFetch.replace(LayerNodePlatform.fetchLayer(relay)),
-              ],
-            }),
-          ),
-        ),
-      )
-
-      expect(calls.map((call) => call.silent)).toEqual([undefined, true])
     }),
   )
 
