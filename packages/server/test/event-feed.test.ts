@@ -138,6 +138,65 @@ describe("EventFeed", () => {
     }),
   )
 
+  it.effect("fails a slow subscriber when its byte budget is exceeded before its frame capacity", () =>
+    Effect.gen(function* () {
+      const source = makeSource()
+      const feed = yield* EventFeed.make(source.observe, {
+        capacity: 10,
+        maxBytes: 1,
+        encode: (event) => event.id,
+      })
+      const slow = yield* feed.subscribe()
+
+      yield* source.publish(event("one"))
+      yield* source.publish(event("two"))
+
+      const result = yield* slow.pipe(Stream.take(2), Stream.runCollect, Effect.exit)
+      expect(Exit.isFailure(result)).toBeTrue()
+      if (Exit.isSuccess(result)) return
+      expect(Option.getOrUndefined(Exit.findErrorOption(result))).toBeInstanceOf(EventFeed.SubscriberOverflowError)
+    }),
+  )
+
+  it.effect("counts cumulative UTF-8 bytes against the subscriber budget", () =>
+    Effect.gen(function* () {
+      const source = makeSource()
+      const feed = yield* EventFeed.make(source.observe, {
+        capacity: 10,
+        maxBytes: Buffer.byteLength("é") * 2 - 1,
+        encode: () => "é",
+      })
+      const slow = yield* feed.subscribe()
+
+      yield* source.publish(event("one"))
+      yield* source.publish(event("two"))
+
+      const result = yield* slow.pipe(Stream.take(2), Stream.runCollect, Effect.exit)
+      expect(Exit.isFailure(result)).toBeTrue()
+      if (Exit.isSuccess(result)) return
+      expect(Option.getOrUndefined(Exit.findErrorOption(result))).toBeInstanceOf(EventFeed.SubscriberOverflowError)
+    }),
+  )
+
+  it.effect("releases subscriber byte credit when a frame is consumed", () =>
+    Effect.gen(function* () {
+      const source = makeSource()
+      const maxBytes = Buffer.byteLength("evt_three")
+      const feed = yield* EventFeed.make(source.observe, {
+        capacity: 10,
+        maxBytes,
+        encode: (event) => event.id,
+      })
+      const stream = yield* feed.subscribe()
+
+      for (const id of ["one", "two", "three"]) {
+        yield* source.publish(event(id))
+        const received = yield* stream.pipe(Stream.take(1), Stream.runCollect)
+        expect(Array.from(received)).toEqual([`evt_${id}`])
+      }
+    }),
+  )
+
   it.effect("delivers global credential events to public subscribers", () =>
     Effect.gen(function* () {
       const source = makeSource()
