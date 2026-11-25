@@ -50,6 +50,10 @@ function replay(events: TimelineHistoryEvent[], from = createTimelineHistoryStat
 
 const attempt = (state: TimelineHistoryState) => state.attempt
 
+// The messages each page asks for, in order.
+const sizes = (effects: readonly TimelineHistoryEffect[]) =>
+  effects.flatMap((effect) => (effect.type === "load.start" ? [effect.messages] : []))
+
 // `oldest` is the oldest loaded message once the page settles; the newest page's is the one before it.
 const loaded = (state: TimelineHistoryState, oldest: string, more = true, following = false) =>
   ({
@@ -88,7 +92,7 @@ describe("history machine", () => {
   test("a failed page stops the fill and seek loops and cools down scroll retries", () => {
     const loading = fillLoading()
     expect(loading.state.status).toBe("loading")
-    expect(loading.effects).toEqual([{ type: "load.start", sessionID: "ses_a", attempt: attempt(loading.state) }])
+    expect(loading.effects).toEqual([{ type: "load.start", sessionID: "ses_a", attempt: attempt(loading.state), messages: 20 }])
 
     const failed = transitionTimelineHistory(loading.state, { type: "page.failed", attempt: attempt(loading.state) })
     expect(failed.state).toMatchObject({ status: "failed", coolingDown: true })
@@ -107,7 +111,7 @@ describe("history machine", () => {
 
     const retried = transitionTimelineHistory(cooled.state, SCROLL_TOP_EVENT)
     expect(retried.state.status).toBe("loading")
-    expect(retried.effects).toEqual([{ type: "load.start", sessionID: "ses_a", attempt: attempt(retried.state) }])
+    expect(retried.effects).toEqual([{ type: "load.start", sessionID: "ses_a", attempt: attempt(retried.state), messages: 20 }])
   })
 
   test("a short, following view checks its fill once the cooldown ends, without a content change", () => {
@@ -123,7 +127,7 @@ describe("history machine", () => {
       load: true,
     })
 
-    expect(retried.effects).toEqual([{ type: "load.start", sessionID: "ses_a", attempt: attempt(retried.state) }])
+    expect(retried.effects).toEqual([{ type: "load.start", sessionID: "ses_a", attempt: attempt(retried.state), messages: 20 }])
   })
 
   test("a content change retries a cooled-down failure through one fill probe", () => {
@@ -196,7 +200,7 @@ describe("history machine", () => {
     const loading = transitionTimelineHistory(idle, SCROLL_TOP_EVENT)
 
     expect(loading.state.status).toBe("loading")
-    expect(loading.effects).toEqual([{ type: "load.start", sessionID: "ses_a", attempt: attempt(loading.state) }])
+    expect(loading.effects).toEqual([{ type: "load.start", sessionID: "ses_a", attempt: attempt(loading.state), messages: 20 }])
   })
 
   test("a prepend keeps paging while the detached view is still near the top", () => {
@@ -214,6 +218,117 @@ describe("history machine", () => {
     const rested = settled(false)
     expect(rested.state).toEqual({ status: "idle", target: sessionA, attempt: attempt(prepended.state) })
     expect(rested.effects).toEqual([])
+  })
+
+  test("a reader who keeps scrolling toward the top while a page loads gets the next page when it lands", () => {
+    const loading = replay([sync(), SCROLL_TOP_EVENT]).state
+    const advanced = transitionTimelineHistory(loading, SCROLL_TOP_EVENT)
+
+    // The page under way is kept: the scroll only marks it.
+    expect(advanced.state).toEqual({
+      status: "loading",
+      target: sessionA,
+      attempt: attempt(loading),
+      advanced: true,
+      messages: 20,
+    })
+    expect(advanced.effects).toEqual([])
+    expectIgnored(advanced.state, SCROLL_TOP_EVENT)
+
+    // With less than the runway above the reader, the next page loads without another scroll.
+    const prepended = transitionTimelineHistory(advanced.state, loaded(advanced.state, "msg_0000"))
+    expect(prepended.state).toMatchObject({ status: "idle", probe: "runway" })
+    expect(prepended.effects).toEqual([
+      { type: "probe.schedule", probe: "runway", attempt: attempt(prepended.state) },
+    ])
+
+    const next = transitionTimelineHistory(prepended.state, {
+      type: "probe.settled",
+      attempt: attempt(prepended.state),
+      load: true,
+    })
+
+    // The reader has to move again for the page after that one.
+    expect(next.state).toMatchObject({ status: "loading", advanced: false })
+  })
+
+  test("a page that leaves a moving reader short of the runway doubles the next one, up to the largest page", () => {
+    // The reader keeps scrolling toward the top while each page loads, and it lands with less than the runway above.
+    const first = replay([sync(), SCROLL_TOP_EVENT])
+    const pages = ["msg_0000", "msg_0001", "msg_0002", "msg_0003"].reduce(
+      (acc, oldest) => {
+        const advanced = transitionTimelineHistory(acc.state, SCROLL_TOP_EVENT).state
+        const prepended = transitionTimelineHistory(advanced, loaded(advanced, oldest)).state
+        const next = transitionTimelineHistory(prepended, {
+          type: "probe.settled",
+          attempt: attempt(prepended),
+          load: true,
+        })
+
+        return { state: next.state, sizes: [...acc.sizes, ...sizes(next.effects)] }
+      },
+      { state: first.state, sizes: sizes(first.effects) },
+    )
+
+    expect(pages.sizes).toEqual([20, 40, 80, 80, 80])
+
+    // A page that lands with the runway above the reader ends the run: the next scroll starts small again.
+    const advanced = transitionTimelineHistory(pages.state, SCROLL_TOP_EVENT).state
+    const prepended = transitionTimelineHistory(advanced, loaded(advanced, "msg_0004")).state
+    const rested = transitionTimelineHistory(prepended, {
+      type: "probe.settled",
+      attempt: attempt(prepended),
+      load: false,
+    })
+    expect(rested.state).toEqual({ status: "idle", target: sessionA, attempt: attempt(prepended) })
+    expect(sizes(transitionTimelineHistory(rested.state, SCROLL_TOP_EVENT).effects)).toEqual([20])
+  })
+
+  test("a reader left at the top by a page, or scrolling in the frame it landed, gets a larger one", () => {
+    // The page added less than the distance to the top: the reader did not move, and is still there.
+    const loading = replay([sync(), SCROLL_TOP_EVENT]).state
+    const prepended = transitionTimelineHistory(loading, loaded(loading, "msg_0000"))
+    expect(prepended.state).toMatchObject({ status: "idle", probe: "top", messages: 20 })
+    expect(
+      sizes(
+        transitionTimelineHistory(prepended.state, {
+          type: "probe.settled",
+          attempt: attempt(prepended.state),
+          load: true,
+        }).effects,
+      ),
+    ).toEqual([40])
+
+    // The scroll comes before the probe's frame: it takes the probe's place.
+    const scrolled = transitionTimelineHistory(prepended.state, SCROLL_TOP_EVENT)
+    expect(scrolled.effects).toEqual([
+      { type: "probe.cancel" },
+      { type: "load.start", sessionID: "ses_a", attempt: attempt(scrolled.state), messages: 40 },
+    ])
+  })
+
+  test("a view that fills, and a search for a message, keep the page size", () => {
+    // Filling must not load more than the view takes, however many pages that is.
+    const filled = ["msg_0000", "msg_0001", "msg_0002"].reduce(
+      (acc, oldest) => {
+        const prepended = transitionTimelineHistory(acc.state, loaded(acc.state, oldest, true, true)).state
+        const next = transitionTimelineHistory(prepended, {
+          type: "probe.settled",
+          attempt: attempt(prepended),
+          load: true,
+        })
+
+        return { state: next.state, sizes: [...acc.sizes, ...sizes(next.effects)] }
+      },
+      { state: fillLoading().state, sizes: sizes(fillLoading().effects) },
+    )
+    expect(filled.sizes).toEqual([20, 20, 20, 20])
+
+    const sought = replay([sync(), SEEK_REQUESTED_EVENT])
+    expect(sizes(sought.effects)).toEqual([20])
+    const landed = transitionTimelineHistory(sought.state, loaded(sought.state, "msg_0000")).state
+    const rested = transitionTimelineHistory(landed, { type: "probe.settled", attempt: attempt(landed), load: false })
+    expect(sizes(transitionTimelineHistory(rested.state, SEEK_REQUESTED_EVENT).effects)).toEqual([20])
   })
 
   test.each<{ name: string; top: number; previousTop: number; viewport: number; loads: boolean }>([
@@ -271,7 +386,8 @@ describe("history machine", () => {
     const idle = replay([sync()]).state
     expectIgnored(idle, sync())
 
-    const loading = transitionTimelineHistory(idle, SCROLL_TOP_EVENT).state
+    // The first scroll while a page loads marks it; that is covered above.
+    const loading = replay([sync(), SCROLL_TOP_EVENT, SCROLL_TOP_EVENT]).state
     expectIgnored(loading, SCROLL_TOP_EVENT)
     expectIgnored(loading, SEEK_REQUESTED_EVENT)
     expectIgnored(loading, FILL_REQUESTED_EVENT)
@@ -301,7 +417,9 @@ describe("history machine", () => {
     const loading = transitionTimelineHistory(idle, SCROLL_TOP_EVENT).state
     const failed = transitionTimelineHistory(loading, { type: "page.failed", attempt: attempt(loading) }).state
 
-    expect([idle, loading, failed].map(canRequestScrollPage)).toEqual([true, false, false])
+    const advanced = transitionTimelineHistory(loading, SCROLL_TOP_EVENT).state
+
+    expect([idle, loading, advanced, failed].map(canRequestScrollPage)).toEqual([true, true, false, false])
     expect([idle, loading, failed].map(canRequestFillProbe)).toEqual([true, false, false])
     expect([idle, loading, failed].map(canSeekHistory)).toEqual([true, false, false])
 

@@ -15,6 +15,7 @@ import {
   shell,
   status,
   textPart,
+  toolPart,
   userID,
   userMessage,
   validateTimelineMessages,
@@ -233,6 +234,116 @@ test.describe("timeline history", () => {
     // rest of the session.
     await page.clock.runFor(1_000)
     expect(requests).toEqual([undefined, messages[8]!.id])
+  })
+
+  // At the top a wheel or a key cannot scroll, so no scroll event says the reader still wants older messages.
+  test("upward input at the top asks for the page after the one that is loading", async ({ page }) => {
+    const text = Array.from({ length: 40 }, (_, index) => `Paragraph ${index}.`).join("\n\n")
+
+    const messages = Array.from({ length: 6 }, (_, turn) => [
+      userMessage([textPart(`prt_intent_${turn}_prompt`, `Prompt ${turn}`)], {
+        id: `msg_intent_${turn}_a_user`,
+        created: turn * 2 + 1,
+      }),
+      assistantMessage([textPart(`prt_intent_${turn}_reply`, text)], {
+        id: `msg_intent_${turn}_b_assistant`,
+        parentID: `msg_intent_${turn}_a_user`,
+        created: turn * 2 + 2,
+      }),
+    ]).flat()
+
+    // The first older page waits until the reader has asked again.
+    const asked = Promise.withResolvers<void>()
+    const older = Promise.withResolvers<void>()
+    const requests: (string | undefined)[] = []
+    await setupTimeline(page, {
+      sessionMessages: messages,
+      pageMessages: (_, limit, before) => {
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        const start = Math.max(0, end - Math.min(4, limit))
+
+        return { items: messages.slice(start, end), cursor: start ? messages[start]!.id : undefined }
+      },
+      beforeMessagesResponse: ({ before }) => {
+        if (!before) return Promise.resolve()
+        asked.resolve()
+
+        return older.promise
+      },
+      onMessages: (request) => {
+        if (request.phase === "start") requests.push(request.before)
+      },
+    })
+    const scroller = timelineScroller(page)
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    await scroller.evaluate((element) => {
+      element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1 }))
+      element.scrollTop = 0
+    })
+    await asked.promise
+    await scroller.evaluate((element) => {
+      element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -100 }))
+    })
+    older.resolve()
+    // The page lands above the reader with less than the runway. The next one follows without a scroll.
+    await expect.poll(() => requests).toEqual([undefined, messages[8]!.id, messages[4]!.id])
+  })
+
+  // One page of 20 messages for each round trip was all a reader got, however little height it added.
+  test("pages grow for a reader the last one left at the top", async ({ page }) => {
+    const text = Array.from({ length: 40 }, (_, index) => `Paragraph ${index}.`).join("\n\n")
+
+    // A run of tool calls is one row, so a page of them adds next to no height.
+    const steps = Array.from({ length: 220 }, (_, index) => {
+      const id = String(index + 1).padStart(4, "0")
+
+      return assistantMessage(
+        [
+          toolPart(
+            `prt_grow_${id}`,
+            "read",
+            "completed",
+            { filePath: `src/file-${id}.ts` },
+            { output: "ok", title: `src/file-${id}.ts` },
+          ),
+        ],
+        { id: `msg_${id}_grow_assistant`, parentID: "msg_0000_grow_user", created: 2 + index },
+      )
+    })
+
+    const messages: SessionMessageInfo[] = [
+      userMessage([textPart("prt_grow_prompt", "Read the files")], { id: "msg_0000_grow_user", created: 1 }),
+      ...steps,
+      userMessage([textPart("prt_grow_next", "Summarise them")], { id: "msg_9000_grow_user", created: 1_000 }),
+      assistantMessage([textPart("prt_grow_reply", text)], {
+        id: "msg_9001_grow_assistant",
+        parentID: "msg_9000_grow_user",
+        created: 1_001,
+      }),
+    ]
+
+    const limits: number[] = []
+    await setupTimeline(page, {
+      sessionMessages: messages,
+      pageMessages: (_, limit, before) => {
+        if (before) limits.push(limit)
+        const end = before ? messages.findIndex((message) => message.id === before) : messages.length
+        // The newest page is the last turn alone, which fills the view.
+        const start = Math.max(0, end - (before ? limit : 2))
+
+        return { items: messages.slice(start, end), cursor: start ? messages[start]!.id : undefined }
+      },
+    })
+    const scroller = timelineScroller(page)
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    expect(limits).toEqual([])
+    await scroller.evaluate((element) => {
+      element.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -1 }))
+      element.scrollTop = 0
+    })
+    // Each page lands on a reader who is still at the top, until the first prompt is loaded.
+    await expect.poll(() => limits).toEqual([20, 40, 80, 80, 80])
+    await expect(scroller.getByText("Read the files", { exact: true })).toBeAttached()
   })
 
   test("keeps visible rows fixed while an older page prepends", async ({ page }) => {

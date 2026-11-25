@@ -1502,6 +1502,20 @@ test("loads bounded message pages", async () => {
   }
 })
 
+test("loads an older page of the size asked for", async () => {
+  const setup = transcript(notes(1, 120))
+  try {
+    await setup.data.session.message.sync("ses_refresh")
+    await setup.data.session.message.loadMore("ses_refresh", { limit: 60 })
+
+    expect(setup.server.requests).toEqual(["message?limit=20&order=desc", "message?limit=60&cursor=msg_101"])
+    expect(setup.ids()).toEqual(notes(41, 120).map((message) => message.id))
+    expect(setup.data.session.message.more("ses_refresh")).toBe(true)
+  } finally {
+    setup.dispose()
+  }
+})
+
 test.each(["success", "failure", "cancel", "cancel-retry", "cancel-page", "join-cancel", "join-failure"])(
   "bulk history (%s)",
   async (mode) => {

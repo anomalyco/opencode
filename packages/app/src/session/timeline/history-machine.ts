@@ -9,6 +9,13 @@ export const HISTORY_RUNWAY_MIN = 2400
 // The same in screens, for page keys, which move a screen at a time.
 export const HISTORY_RUNWAY_SCREENS = 2
 
+// The messages in an older page.
+export const HISTORY_PAGE_MESSAGES = 20
+
+// The most messages in a page for a reader the pages do not keep up with. A page this size lands in about the frame
+// time of a 20-message page at the same depth; twice as many take 1.5 to 2 times as long.
+export const HISTORY_PAGE_MESSAGES_MAX = 80
+
 // A page that never settles fails, so paging cannot stay "loading" forever.
 export const HISTORY_LOAD_TIMEOUT_MS = 30_000
 
@@ -22,9 +29,10 @@ export type HistoryTarget = {
 
 /**
  * A layout check queued for the next frame. `fill`: a following view whose content does not overflow loads more.
- * `top`: a detached view still near the top after a prepend loads more.
+ * `top`: a detached view still near the top after a prepend loads more. `runway`: so does one with less than the
+ * runway above it, whose reader kept scrolling toward the top while the page loaded.
  */
-export type HistoryProbe = "fill" | "top"
+export type HistoryProbe = "fill" | "top" | "runway"
 
 // `attempt` advances on every change of phase, so a probe, page or cooldown result from an earlier one is ignored.
 export type TimelineHistoryState =
@@ -35,8 +43,18 @@ export type TimelineHistoryState =
       readonly target: HistoryTarget
       readonly attempt: number
       readonly probe?: HistoryProbe
+      /** The messages in the page that just landed, while its probe is pending. */
+      readonly messages?: number
     }
-  | { readonly status: "loading"; readonly target: HistoryTarget; readonly attempt: number }
+  | {
+      readonly status: "loading"
+      readonly target: HistoryTarget
+      readonly attempt: number
+      /** The reader scrolled toward the top while this page loaded, so the next one follows without another scroll. */
+      readonly advanced: boolean
+      /** The messages this page asks for. */
+      readonly messages: number
+    }
   /**
    * The last page failed. Once `coolingDown` ends, the reader's own scroll retries it, and a following view checks its
    * fill once; a hash target does not, so a detached view does not poll a broken server.
@@ -68,7 +86,10 @@ export type TimelineHistoryEvent =
       /** The oldest loaded message. */
       readonly oldest: string | undefined
     }
-  /** A detached reader scrolled at the top, or toward it with less than the runway above the view. */
+  /**
+   * A detached reader scrolled at the top, or toward it with less than the runway above the view. Upward input at
+   * the top counts too: it cannot scroll, so no scroll reports it.
+   */
   | { readonly type: "scroll.top" }
   /** The content or the view changed size while following. */
   | { readonly type: "fill.requested" }
@@ -92,7 +113,7 @@ export type TimelineHistoryEvent =
 export type TimelineHistoryEffect =
   | { readonly type: "probe.schedule"; readonly probe: HistoryProbe; readonly attempt: number }
   | { readonly type: "probe.cancel" }
-  | { readonly type: "load.start"; readonly sessionID: string; readonly attempt: number }
+  | { readonly type: "load.start"; readonly sessionID: string; readonly attempt: number; readonly messages: number }
   | { readonly type: "load.abort" }
   | { readonly type: "cooldown.start"; readonly attempt: number }
   | { readonly type: "cooldown.cancel" }
@@ -135,7 +156,14 @@ export function transitionTimelineHistory(
 
   if (state.status === "inactive") return unchanged(state)
 
-  if (event.type === "scroll.top") return canRequestScrollPage(state) ? load(state) : unchanged(state)
+  if (event.type === "scroll.top") {
+    if (!canRequestScrollPage(state)) return unchanged(state)
+
+    if (state.status === "loading") return changed({ ...state, advanced: true })
+
+    // A scroll in the frame a page landed, before its probe ran: the page left the reader short, as below.
+    return load(state, state.status === "idle" && state.probe && state.probe !== "fill" ? grown(state.messages) : undefined)
+  }
 
   if (event.type === "seek.requested") return canSeekHistory(state) ? load(state) : unchanged(state)
 
@@ -145,8 +173,10 @@ export function transitionTimelineHistory(
   if (event.type === "probe.settled") {
     if (state.status !== "idle" || !state.probe || state.attempt !== event.attempt) return unchanged(state)
 
-    // The probe already ran, so there is nothing to cancel.
-    if (event.load) return load(state, NO_EFFECTS)
+    // The page that landed left the reader short of the runway, or at the top: the next one is twice the size, so
+    // a reader who outruns the pages does not catch them up. A view that fills keeps the page size: it must not
+    // load more than the fill takes. The probe already ran, so there is nothing to cancel.
+    if (event.load) return load(state, state.probe === "fill" ? undefined : grown(state.messages), NO_EFFECTS)
 
     return changed({ status: "idle", target: state.target, attempt: state.attempt })
   }
@@ -169,7 +199,13 @@ export function transitionTimelineHistory(
     if (event.oldest === event.previous)
       return changed({ status: "exhausted", target: state.target, attempt, stalled: { oldest: event.oldest } })
 
-    return probe(state.target, attempt, event.following ? "fill" : "top", NO_EFFECTS)
+    return probe(
+      state.target,
+      attempt,
+      event.following ? "fill" : state.advanced ? "runway" : "top",
+      NO_EFFECTS,
+      state.messages,
+    )
   }
 
   return changed({ status: "failed", target: state.target, attempt, coolingDown: true }, [
@@ -193,9 +229,13 @@ export function scrollLoadsHistory(top: number, previousTop: number, viewportHei
   return top < HISTORY_SCROLL_THRESHOLD || (top < previousTop && top < historyRunway(viewportHeight))
 }
 
-/** A scroll that asks for a page may request it. */
+/** A scroll that asks for a page may request it, or tell a page that is loading that the reader is still coming. */
 export function canRequestScrollPage(state: TimelineHistoryState) {
-  return state.status === "idle" || (state.status === "failed" && !state.coolingDown)
+  return (
+    state.status === "idle" ||
+    (state.status === "failed" && !state.coolingDown) ||
+    (state.status === "loading" && !state.advanced)
+  )
 }
 
 /** A following view may check whether its content still leaves room for older messages. */
@@ -265,13 +305,22 @@ function enter(
   return changed({ status: "idle", target, attempt }, effects)
 }
 
-function load(state: Active, released = cancel(state)): TimelineHistoryTransition {
+function load(
+  state: Active,
+  messages = HISTORY_PAGE_MESSAGES,
+  released = cancel(state),
+): TimelineHistoryTransition {
   const attempt = state.attempt + 1
 
-  return changed({ status: "loading", target: state.target, attempt }, [
+  return changed({ status: "loading", target: state.target, attempt, advanced: false, messages }, [
     ...released,
-    { type: "load.start", sessionID: state.target.sessionID, attempt },
+    { type: "load.start", sessionID: state.target.sessionID, attempt, messages },
   ])
+}
+
+// The size of the page after one of `messages` that did not cover the reader's distance.
+function grown(messages = HISTORY_PAGE_MESSAGES) {
+  return Math.min(HISTORY_PAGE_MESSAGES_MAX, messages * 2)
 }
 
 function probe(
@@ -279,8 +328,9 @@ function probe(
   attempt: number,
   kind: HistoryProbe,
   effects: readonly TimelineHistoryEffect[],
+  messages?: number,
 ): TimelineHistoryTransition {
-  return changed({ status: "idle", target, attempt, probe: kind }, [
+  return changed({ status: "idle", target, attempt, probe: kind, ...(messages === undefined ? {} : { messages }) }, [
     ...effects,
     { type: "probe.schedule", probe: kind, attempt },
   ])

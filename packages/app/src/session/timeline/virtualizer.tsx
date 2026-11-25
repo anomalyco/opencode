@@ -123,6 +123,8 @@ type Input = {
   onScheduleScrollState: (element: HTMLDivElement) => void
   onUserScroll: (target?: EventTarget | null) => void
   onHistoryScroll: () => void
+  /** The reader gave upward input: a wheel, a key or a page from the composer. */
+  onHistoryIntent?: () => void
   canRenderImmediately?: (
     row: TimelineRow.TimelineRow,
     disclosure: Readonly<Record<string, boolean | undefined>>,
@@ -959,6 +961,8 @@ export function createTimelineVirtualizer(input: Input) {
     intentEvent.upward = upward
     intentEvent.overflow = upward && !!root && root.scrollHeight - root.clientHeight > MIN_OVERFLOW
     input.follow.dispatch(intentEvent)
+
+    if (upward) input.onHistoryIntent?.()
   }
 
   const handleListWheel = (event: WheelEvent) => {

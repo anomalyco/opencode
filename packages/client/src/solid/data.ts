@@ -2136,6 +2136,8 @@ export function createData(config: CreateDataInput) {
           sessionID: string,
           options?: {
             all?: boolean
+            /** Messages to read in the page. */
+            limit?: number
             signal?: AbortSignal
             /** Runs synchronously inside the store-publication batch. */
             beforePublish?: () => void
@@ -2168,7 +2170,7 @@ export function createData(config: CreateDataInput) {
               const response = await api().message.list(
                 {
                   sessionID,
-                  limit: options?.all ? 200 : messagePageLimit,
+                  limit: options?.all ? 200 : (options?.limit ?? messagePageLimit),
                   cursor: next,
                 },
                 { signal },
