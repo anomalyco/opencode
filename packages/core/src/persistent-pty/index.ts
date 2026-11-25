@@ -118,6 +118,8 @@ export type CreatePipeInput = {
   readonly args: readonly string[]
   /** Absolute. */
   readonly cwd: string
+  /** Verified by the caller; the daemon opens this cwd beneath its physical root at launch. Linux only. */
+  readonly guardedCwd?: { readonly root: string; readonly relative: string }
   /** The child's whole environment; the daemon's own is not inherited. */
   readonly env: Readonly<Record<string, string>>
   readonly groupID: string
@@ -464,12 +466,14 @@ const makeLayer = (options: Options = {}) =>
               program: input.program,
               args: input.args,
               cwd: input.cwd,
+              ...(input.guardedCwd ? { guarded_cwd: input.guardedCwd } : {}),
               env: input.env,
               group_id: input.groupID,
               output_path: input.outputPath,
               metadata: input.metadata,
             },
             true,
+            input.guardedCwd ? "guarded_cwd" : undefined,
           )
           .pipe(Effect.mapError(pipeError))
         if (response.type !== "created") return yield* unexpectedPipe(response)

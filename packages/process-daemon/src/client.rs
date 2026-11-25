@@ -179,6 +179,7 @@ impl TerminalClient {
             program: request.program,
             args: request.args,
             cwd: request.cwd,
+            guarded_cwd: request.guarded_cwd,
             env: request.env,
             group_id: request.group_id,
             output_path: request.output_path,

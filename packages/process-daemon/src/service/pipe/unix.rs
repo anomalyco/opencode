@@ -11,11 +11,17 @@
 //! - A cancelled reader closes the pipe, so leftover writers get `SIGPIPE`
 //!   once the drain deadline passes.
 
+#[cfg(target_os = "linux")]
+use std::fs::File;
 use std::fs::OpenOptions;
 use std::io::{self, PipeReader, PipeWriter, Read};
 use std::os::fd::AsFd;
+#[cfg(target_os = "linux")]
+use std::os::fd::AsRawFd;
 use std::os::unix::fs::OpenOptionsExt;
 use std::os::unix::process::CommandExt;
+#[cfg(target_os = "linux")]
+use std::path::{Component, Path, PathBuf};
 use std::process::{Child, Command, Stdio};
 use std::sync::{Arc, Mutex, PoisonError, RwLock};
 use std::time::{Duration, Instant};
@@ -82,6 +88,21 @@ impl TerminalHandle {
             exited,
             exited_writer,
         } = Pipes::new()?;
+        // Authorization selects an inode when this request is handled. Keeping its descriptor through spawn means
+        // a later symlink change cannot redirect the child; a later rename cannot change the selected inode.
+        #[cfg(target_os = "linux")]
+        let guarded = request
+            .guarded_cwd
+            .as_ref()
+            .map(open_guarded_cwd)
+            .transpose()?;
+        #[cfg(target_os = "linux")]
+        if let Some(scope) = &request.guarded_cwd {
+            anyhow::ensure!(
+                request.cwd == scope.root.join(&scope.relative),
+                "guarded cwd does not match cwd"
+            );
+        }
         // Before spawning, so a bad path fails the request with nothing to clean up.
         // The reader is the file's only writer, so it needs no append mode.
         let sink = OpenOptions::new()
@@ -100,16 +121,29 @@ impl TerminalHandle {
         let mut command = Command::new(&request.program);
         command
             .args(&request.args)
-            .current_dir(&request.cwd)
             .env_clear()
             .envs(&request.env)
             .stdin(Stdio::null())
             .stdout(output_writer)
             .stderr(stderr)
             .process_group(0);
+        #[cfg(target_os = "linux")]
+        if guarded.is_none() {
+            command.current_dir(&request.cwd);
+        }
+        #[cfg(not(target_os = "linux"))]
+        command.current_dir(&request.cwd);
         // SAFETY: only async-signal-safe calls run between fork and exec.
         unsafe {
-            command.pre_exec(reset_signals);
+            command.pre_exec(move || {
+                #[cfg(target_os = "linux")]
+                if let Some(directory) = &guarded {
+                    if libc::fchdir(directory.as_raw_fd()) != 0 {
+                        return Err(io::Error::last_os_error());
+                    }
+                }
+                reset_signals()
+            });
         }
         let child = {
             let _guard = SPAWN_LOCK.write().unwrap_or_else(PoisonError::into_inner);
@@ -137,6 +171,65 @@ impl TerminalHandle {
             },
         )
     }
+}
+
+#[cfg(target_os = "linux")]
+fn open_guarded_cwd(request: &crate::service::GuardedCwd) -> Result<File> {
+    use anyhow::{bail, ensure};
+
+    ensure!(
+        request.root.is_absolute(),
+        "guarded cwd root must be absolute"
+    );
+    ensure!(
+        std::fs::canonicalize(&request.root)? == request.root,
+        "guarded cwd root must be canonical"
+    );
+    let segments = if request.relative.as_os_str().is_empty() {
+        Vec::new()
+    } else {
+        request
+            .relative
+            .components()
+            .map(|component| match component {
+                Component::Normal(segment) => Ok(segment.to_owned()),
+                _ => bail!("guarded cwd must contain only relative child segments"),
+            })
+            .collect::<Result<Vec<_>>>()?
+    };
+    ensure!(
+        request.relative == segments.iter().collect::<PathBuf>(),
+        "guarded cwd must contain only relative child segments"
+    );
+    let mut directory = OpenOptions::new()
+        .read(true)
+        .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW)
+        .open(&request.root)?;
+    verify_directory(&directory, &request.root)?;
+    let mut expected = request.root.clone();
+    for segment in segments {
+        verify_directory(&directory, &expected)?;
+        expected.push(segment);
+        directory = OpenOptions::new()
+            .read(true)
+            .custom_flags(libc::O_DIRECTORY | libc::O_NOFOLLOW)
+            .open(
+                PathBuf::from(format!("/proc/self/fd/{}", directory.as_raw_fd()))
+                    .join(expected.file_name().unwrap()),
+            )?;
+        verify_directory(&directory, &expected)?;
+    }
+    verify_directory(&directory, &expected)?;
+    Ok(directory)
+}
+
+#[cfg(target_os = "linux")]
+fn verify_directory(directory: &File, expected: &Path) -> Result<()> {
+    anyhow::ensure!(
+        std::fs::read_link(format!("/proc/self/fd/{}", directory.as_raw_fd()))? == expected,
+        "guarded cwd changed during open"
+    );
+    Ok(())
 }
 
 /// Runs in the child between fork and exec. The daemon blocks SIGTERM and

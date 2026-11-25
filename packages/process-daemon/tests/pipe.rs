@@ -5,6 +5,8 @@ use std::env;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
+#[cfg(target_os = "linux")]
+use opencode_pty::service::GuardedCwd;
 use opencode_pty::service::{
     CreatePipe, CreatePty, MAX_METADATA_BYTES, PipeMetadata, ProcessExit, ProcessInfo, ProcessMode,
     ProcessSignal, TerminalId, TerminalLifecycle, TerminalService,
@@ -33,6 +35,7 @@ fn pipe(script: &str, output: &Path) -> CreatePipe {
         program: "/bin/sh".to_string(),
         args: vec!["-c".to_string(), script.to_string()],
         cwd: env::current_dir().expect("cwd"),
+        guarded_cwd: None,
         env: HashMap::from([("PATH".to_string(), env::var("PATH").unwrap_or_default())]),
         group_id: "pipe".to_string(),
         output_path: output.to_path_buf(),
@@ -425,6 +428,43 @@ fn rejected_requests_never_touch_the_output_file_or_run() {
     // Give a wrongly spawned child time to run before checking.
     std::thread::sleep(Duration::from_millis(100));
     assert!(!marker.0.exists());
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn guarded_cwd_opens_at_launch_and_rejects_a_new_symlink() {
+    let root = TempPath::new("guard-root");
+    let outside = TempPath::new("guard-outside");
+    std::fs::create_dir(&root.0).unwrap();
+    std::fs::create_dir(&outside.0).unwrap();
+    std::fs::create_dir(root.0.join("child")).unwrap();
+    let service = TerminalService::default();
+    let output = TempPath::new("guard-output");
+    let request = CreatePipe {
+        cwd: root.0.join("child"),
+        guarded_cwd: Some(GuardedCwd {
+            root: root.0.clone(),
+            relative: "child".into(),
+        }),
+        ..pipe("pwd", &output.0)
+    };
+    let info = service.create_pipe(request.clone()).unwrap();
+    assert_eq!(
+        run(&service, info.id, &output).output.trim(),
+        request.cwd.to_str().unwrap()
+    );
+    service.terminate(info.id).unwrap();
+
+    std::fs::remove_dir(root.0.join("child")).unwrap();
+    std::os::unix::fs::symlink(&outside.0, root.0.join("child")).unwrap();
+    assert!(service.create_pipe(request).is_err());
+    assert_eq!(
+        std::fs::read_to_string(&output.0).unwrap().trim(),
+        root.0.join("child").to_str().unwrap()
+    );
+    std::fs::remove_file(root.0.join("child")).unwrap();
+    std::fs::remove_dir(&root.0).unwrap();
+    std::fs::remove_dir(&outside.0).unwrap();
 }
 
 #[test]

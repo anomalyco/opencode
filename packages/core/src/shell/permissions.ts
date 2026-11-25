@@ -24,8 +24,12 @@ export const requests = Effect.fnUntraced(function* <E>(
     readonly policy: Effect.Effect<PermissionPolicy.Policy, E>
   },
 ) {
+  // Relative operands resolve from the directory the child will actually use.
+  const scanTarget = input.target.workspace
+    ? { ...input.target, absolute: input.target.workspace.absolute }
+    : input.target
   const scanned = yield* Effect.result(
-    ShellParse.scan(input.command, input.program, input.target.absolute, {
+    ShellParse.scan(input.command, input.program, scanTarget.absolute, {
       home: input.target.machine === undefined ? undefined : null,
     }),
   )
@@ -43,9 +47,12 @@ export const requests = Effect.fnUntraced(function* <E>(
   const parsed = scanned.success
   // Directory arguments are relative to the command's working directory on the same machine.
   const directories = yield* Effect.forEach(parsed.directories, (directory) =>
-    access.resolve({ path: directory, base: input.target, kind: "directory" }),
+    access.resolve({ path: directory, base: scanTarget, kind: "directory" }),
   )
-  const external = FileAccess.externalDirectoryRequest([input.target, ...directories])
+  const external = FileAccess.externalDirectoryRequest([
+    ...(input.target.workspace ? [] : [input.target]),
+    ...directories,
+  ])
   const command =
     parsed.commands.length > 0 || input.once
       ? {

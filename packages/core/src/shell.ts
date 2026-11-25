@@ -26,6 +26,7 @@ import { FSUtil } from "@opencode/util/fs-util"
 import { TextBoundary } from "@opencode/util/text-boundary"
 import { Bus } from "./bus.js"
 import { Environment } from "./environment/index.js"
+import type { FileAccess } from "./file-access.js"
 import { FileRetention } from "./file-retention.js"
 import { Location } from "./location.js"
 import { Global } from "@opencode/util/global"
@@ -79,6 +80,7 @@ const Stored = Schema.Struct({
   id: Shell.ID,
   command: Schema.String,
   shell: Schema.String,
+  cwd: Schema.optional(Schema.String),
   location: Schema.Struct({ directory: Schema.String, workspaceID: Schema.optionalKey(Schema.String) }),
   metadata: Shell.Metadata,
   toolCall: Schema.optional(ToolCall),
@@ -152,7 +154,7 @@ type Ended = {
 export interface Interface {
   readonly create: <E = never, R = never>(
     input: CreateInput,
-    before?: (input: ShellCreateBefore) => Effect.Effect<void, E, R>,
+    before?: (input: ShellCreateBefore) => Effect.Effect<void | FileAccess.WorkspaceTarget, E, R>,
   ) => Effect.Effect<Shell.Info, E | AppProcess.AppProcessError, R>
   // Currently running commands only; exited shells are retained for get/output but excluded here.
   readonly list: () => Effect.Effect<Shell.Info[]>
@@ -252,6 +254,7 @@ interface Runs<E> {
     readonly info: Info
     readonly args: readonly string[]
     readonly env: Readonly<Record<string, string>>
+    readonly workspace?: FileAccess.WorkspaceTarget
     readonly timeout: number
     readonly toolCall: ToolCall | undefined
     readonly waited: boolean
@@ -301,6 +304,7 @@ type CommandCreate = {
   readonly cwd: string
   /** The command's whole environment. */
   readonly env: Readonly<Record<string, string>>
+  readonly workspace?: FileAccess.WorkspaceTarget
   readonly projectID: string
   readonly outputPath: string
   readonly metadata: Stored
@@ -358,6 +362,7 @@ const commandRuns = <E>(host: CommandHost<E>) =>
         id: run.info.id,
         command: run.info.command,
         shell: run.info.shell,
+        cwd: run.info.cwd,
         location: {
           directory: location.directory,
           ...(location.workspaceID !== undefined ? { workspaceID: location.workspaceID } : {}),
@@ -514,7 +519,8 @@ const commandRuns = <E>(host: CommandHost<E>) =>
         const created = yield* host.create({
           program: input.info.shell,
           args: input.args,
-          cwd: input.info.cwd,
+          cwd: input.workspace?.absolute ?? input.info.cwd,
+          workspace: input.workspace,
           env: input.env,
           projectID: location.project.id,
           outputPath: input.info.file,
@@ -566,7 +572,7 @@ const commandRuns = <E>(host: CommandHost<E>) =>
               id: stored.id,
               status,
               command: stored.command,
-              cwd: process.cwd,
+              cwd: stored.cwd ?? process.cwd,
               shell: stored.shell,
               file: process.outputPath,
               ...(process.pid !== undefined ? { pid: process.pid } : {}),
@@ -655,7 +661,16 @@ const daemonLayer = Layer.effect(
       remove: () => pty.terminatePipe(info.id),
     })
     const runs = yield* commandRuns({
-      create: (input) => pty.createPipe({ ...input, groupID: input.projectID }).pipe(Effect.map(pipe)),
+      create: (input) =>
+        pty
+          .createPipe({
+            ...input,
+            groupID: input.projectID,
+            guardedCwd: input.workspace
+              ? { root: input.workspace.root, relative: input.workspace.relative }
+              : undefined,
+          })
+          .pipe(Effect.map(pipe)),
       list: () => pty.listPipes().pipe(Effect.map((items) => items.map(pipe))),
       lost: "Command was killed: the process daemon stopped",
     })
@@ -961,7 +976,7 @@ const layer = () =>
 
       const create = Effect.fn("Shell.create")(function* <E = never, R = never>(
         input: CreateInput,
-        before?: (input: ShellCreateBefore) => Effect.Effect<void, E, R>,
+        before?: (input: ShellCreateBefore) => Effect.Effect<void | FileAccess.WorkspaceTarget, E, R>,
       ) {
         const sessionID = input.metadata?.sessionID
         const workingDirectory = yield* currentWorkingDirectory
@@ -985,9 +1000,15 @@ const layer = () =>
           },
         }
         yield* hooks.trigger("shell", "create.before", invocation)
-        if (before) yield* before(invocation)
+        const workspace = (before ? yield* before(invocation) : undefined) ?? undefined
         // Absolute for the server's own commands, so the command reports the same cwd wherever it runs.
         if (target.local) invocation.cwd = path.resolve(workingDirectory.absolute, invocation.cwd)
+        // The permission wait can outlive the assignment or directory. Verify immediately before asking the
+        // daemon to open the cwd; the daemon separately anchors its lookup at launch time.
+        if (workspace)
+          yield* workspace
+            .verify()
+            .pipe(Effect.mapError((cause) => new AppProcess.AppProcessError({ command: invocation.command, cause })))
 
         // Created per command: the directory can be removed while the Location stays open.
         yield* fs
@@ -1010,10 +1031,18 @@ const layer = () =>
         }
         yield* annotate(info)
 
+        if (workspace && (!runs || !target.local))
+          return yield* Effect.fail(
+            new AppProcess.AppProcessError({
+              command: invocation.command,
+              cause: new Error("Guarded workspace shell commands require a compatible local process daemon"),
+            }),
+          )
         if (runs && target.local) {
           const created = yield* runs
             .create({
               info,
+              workspace,
               args,
               // The daemon replaces the environment, so variables removed by hooks stay removed, like the spawner.
               env: Object.fromEntries(
@@ -1027,9 +1056,18 @@ const layer = () =>
               Effect.map(Option.some),
               Effect.catchTags({
                 "PersistentPty.UnavailableError": (error) =>
-                  Effect.logWarning("process daemon unavailable; spawning shell command instead", {
-                    error: error.message,
-                  }).pipe(Effect.as(Option.none<Info>())),
+                  workspace
+                    ? Effect.fail(
+                        new AppProcess.AppProcessError({
+                          command: invocation.command,
+                          cause: new Error(
+                            `Guarded workspace shell command requires a compatible process daemon: ${error.message}`,
+                          ),
+                        }),
+                      )
+                    : Effect.logWarning("process daemon unavailable; spawning shell command instead", {
+                        error: error.message,
+                      }).pipe(Effect.as(Option.none<Info>())),
                 // The daemon may have run it: never run it again here.
                 "PersistentPty.RequestError": (cause) =>
                   Effect.fail(new AppProcess.AppProcessError({ command: invocation.command, cause })),

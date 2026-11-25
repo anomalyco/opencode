@@ -276,12 +276,20 @@ pub struct CreatePipe {
     pub args: Vec<String>,
     /// Absolute.
     pub cwd: PathBuf,
+    /// Physical root and child path for a cwd selected from a verified workspace scope.
+    pub guarded_cwd: Option<GuardedCwd>,
     /// The child's whole environment; nothing is inherited from the daemon.
     pub env: HashMap<String, String>,
     pub group_id: String,
     /// Absolute. Truncated on open; receives every output byte.
     pub output_path: PathBuf,
     pub metadata: PipeMetadata,
+}
+
+#[derive(Clone, Debug, serde::Deserialize, serde::Serialize)]
+pub struct GuardedCwd {
+    pub root: PathBuf,
+    pub relative: PathBuf,
 }
 
 pub struct TerminalService {
@@ -324,6 +332,9 @@ impl TerminalService {
         validate_program(&request.program)?;
         if !request.cwd.is_absolute() {
             bail!("cwd must be absolute");
+        }
+        if request.guarded_cwd.is_some() && !cfg!(target_os = "linux") {
+            bail!("guarded cwd requires Linux");
         }
         if !request.output_path.is_absolute() {
             bail!("output_path must be absolute");

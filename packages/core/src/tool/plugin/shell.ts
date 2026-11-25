@@ -340,11 +340,22 @@ export const Plugin = {
               kind: "directory",
             })
       invocation.cwd = target.absolute
+      const scoped = yield* access.scope(target, context, "shell-cwd")
+      if (scoped.workspace) {
+        const physical = yield* access.resolve({ path: scoped.workspace.absolute, kind: "directory" })
+        const external = FileAccess.externalDirectoryRequest([scoped, physical])
+        if (external) yield* permission.assertNotDenied({ ...external, ...Permission.invocation(context) })
+        yield* permission.assertNotDenied({
+          action: "read",
+          resources: scoped.workspace.resources,
+          ...Permission.invocation(context),
+        })
+      }
       const timeout = invocation.timeout
       const requests = yield* ShellPermissions.requests(access, {
         command: invocation.command,
         program: invocation.shell,
-        target,
+        target: scoped,
         policy: Effect.gen(function* () {
           const session = yield* sessions.get(context.sessionID)
           const agent = yield* agents.resolve(context.agent)
@@ -357,6 +368,10 @@ export const Plugin = {
         { discard: true },
       )
       // Approval can outlive the directory, so validate immediately before spawning.
+      if (scoped.workspace) {
+        yield* scoped.workspace.verify()
+        return { timeout, workspace: scoped.workspace }
+      }
       const workdir = yield* Environment.typeFollowing(target.environment.files, target.absolute).pipe(
         Effect.catchTag("Environment.NotFound", () =>
           Effect.fail(
@@ -370,7 +385,7 @@ export const Plugin = {
       )
       if (workdir !== "directory")
         return yield* Effect.fail(new Error(`Working directory is not a directory: ${target.absolute}`))
-      return timeout
+      return { timeout, workspace: undefined }
     })
 
     // Not in this Location's scope: a daemon command outlives a Location that closes while the server runs, and
@@ -498,11 +513,13 @@ export const Plugin = {
                         invocation.env.AI_AGENT ||= "opencode"
                         invocation.env.OPENCODE_SESSION_ID = context.sessionID
                         // Asking for permission can take a while; a stop then ends the call before any command starts.
-                        finalTimeout = yield* restore(
+                        const prepared = yield* restore(
                           Effect.raceFirst(prepare(invocation, context, { cwd, target }), stoppedBeforeStart),
                         )
+                        finalTimeout = prepared.timeout
                         // A foreground timeout moves the command to the background instead of stopping it.
                         if (timeoutBackgrounds) invocation.timeout = 0
+                        return prepared.workspace
                       }),
                   )
                   yield* context.progress({ shellID: info.id })

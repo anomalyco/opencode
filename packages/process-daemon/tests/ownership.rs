@@ -13,7 +13,7 @@ use opencode_pty::daemon::Registration;
 use opencode_pty::protocol::{
     AttachmentRole, Envelope, Request, Response, read_frame, write_frame,
 };
-use opencode_pty::service::{ProcessInfo, ProcessMode};
+use opencode_pty::service::{GuardedCwd, ProcessInfo, ProcessMode};
 
 struct Daemon {
     child: Child,
@@ -314,10 +314,13 @@ fn rename_is_served() {
     use opencode_pty::protocol::{SubscriptionEvent, read_subscription_event};
 
     let mut daemon = Daemon::start();
-    assert!(daemon.registration.features.is_empty());
+    assert_eq!(
+        daemon.registration.features,
+        opencode_pty::protocol::features()
+    );
     assert!(matches!(
         daemon.request(Request::Ping),
-        Response::Pong { protocol: 9, features, .. } if features.is_empty()
+        Response::Pong { protocol: 9, features, .. } if features == opencode_pty::protocol::features()
     ));
     let (owner, response) = daemon.own(None);
     assert!(matches!(response, Response::Owned));
@@ -596,6 +599,10 @@ fn pipe_processes_survive_handoff_and_stay_out_of_pty_lists() {
             "echo before; sleep 1; echo after; exit 4".into(),
         ],
         cwd: daemon.directory.clone(),
+        guarded_cwd: cfg!(target_os = "linux").then(|| GuardedCwd {
+            root: daemon.directory.clone(),
+            relative: PathBuf::new(),
+        }),
         env: Default::default(),
         group_id: "ownership".into(),
         output_path: output_file.clone(),
@@ -667,6 +674,7 @@ fn pipe_processes_do_not_inherit_the_daemons_blocked_signals() {
             program: "/bin/sh".into(),
             args: vec!["-c".into(), "exec sleep 1000".into()],
             cwd: daemon.directory.clone(),
+            guarded_cwd: None,
             env: Default::default(),
             group_id: "ownership".into(),
             output_path: daemon.root.join(format!("{name}.out")),

@@ -1027,6 +1027,7 @@ mod tests {
             program: program.into(),
             args: args.iter().map(|arg| arg.to_string()).collect(),
             cwd: std::env::current_dir().unwrap(),
+            guarded_cwd: None,
             env: ["PATH", "SystemRoot", "TEMP"]
                 .into_iter()
                 .filter_map(|name| Some((name.to_string(), std::env::var(name).ok()?)))

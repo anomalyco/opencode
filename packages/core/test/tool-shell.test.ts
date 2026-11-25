@@ -62,22 +62,24 @@ const assertions: Permission.AssertInput[] = []
 let denyAction: string | undefined
 let afterPermission = (_input: Permission.AssertInput): Effect.Effect<void> => Effect.void
 
-const permission = permissionLayer({
-  assert: (input) =>
-    Effect.sync(() => assertions.push(input)).pipe(
-      Effect.andThen(Effect.suspend(() => afterPermission(input))),
-      Effect.andThen(
-        input.action === denyAction
-          ? Effect.fail(
-              new Permission.BlockedError({
-                rules: [],
-                permission: input.action,
-                resources: input.resources,
-              }),
-            )
-          : Effect.void,
-      ),
+const checkPermission = (input: Permission.AssertInput) =>
+  Effect.sync(() => assertions.push(input)).pipe(
+    Effect.andThen(Effect.suspend(() => afterPermission(input))),
+    Effect.andThen(
+      input.action === denyAction
+        ? Effect.fail(
+            new Permission.BlockedError({
+              rules: [],
+              permission: input.action,
+              resources: input.resources,
+            }),
+          )
+        : Effect.void,
     ),
+  )
+const permission = permissionLayer({
+  assert: checkPermission,
+  assertNotDenied: checkPermission,
 })
 
 const reset = () => {
@@ -185,6 +187,9 @@ const noFlagOverrides = Layer.succeed(Flag.Overrides, undefined)
 const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements).pipe(Layer.provide(noFlagOverrides)))
 const shellLayer = AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(shellPluginSupervisor)])
 const it = testEffect(shellLayer.pipe(Layer.provideMerge(noFlagOverrides)))
+const scopedShellIt = testEffect(
+  shellLayer.pipe(Layer.provideMerge(Layer.succeed(Flag.Overrides, "workspace_read_scope"))),
+)
 const codeModeIt = testEffect(shellLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, "full_codemode"))))
 // On the real process daemon (when its binary is compatible; otherwise this falls back to spawning).
 const daemonIt = testEffect(
@@ -1345,6 +1350,47 @@ describe("ShellTool", () => {
           ),
       ),
     { timeout: 15_000 },
+  )
+
+  scopedShellIt.live("checks a physical assigned cwd and fails closed without a compatible daemon", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        if (process.platform !== "linux") return
+        reset()
+        const active = path.join(tmp.path, "active")
+        const assigned = path.join(tmp.path, "assigned")
+        yield* Effect.promise(() => Promise.all([fs.mkdir(active), fs.mkdir(assigned)]))
+        yield* withSession(active, (registry) =>
+          Effect.gen(function* () {
+            const hooks = yield* PluginHooks.Service
+            yield* hooks.register("permission", "experimental.workspace.readScope", (event) =>
+              Effect.sync(() => {
+                if (event.sessionID === sessionID)
+                  event.scopes.push({ members: [{ physical: assigned, logical: path.join(active, "member") }] })
+              }),
+            )
+            const result = yield* executeTool(registry, call({ command: "pwd", workdir: assigned }))
+            expect(result).toMatchObject({
+              status: "error",
+              error: { message: expect.stringContaining("compatible process daemon") },
+            })
+            expect(assertions.map((item) => item.action)).toEqual(["external_directory", "read", "shell"])
+            expect(assertions[0]?.resources).toEqual([path.join(assigned, "*")])
+            expect(assertions[1]?.resources).toEqual(["member", assigned])
+
+            reset()
+            denyAction = "read"
+            const denied = yield* executeTool(registry, call({ command: "pwd", workdir: assigned }, "denied-cwd"))
+            expect(denied).toMatchObject({
+              status: "error",
+              error: { message: expect.stringContaining("Permission denied: read") },
+            })
+            expect(assertions.map((item) => item.action)).toEqual(["external_directory", "read"])
+            reset()
+          }),
+        )
+      }),
+    ),
   )
 
   it.live(

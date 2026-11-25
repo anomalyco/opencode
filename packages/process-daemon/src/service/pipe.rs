@@ -123,6 +123,7 @@ fn new_pipe_info(id: TerminalId, pid: u32, request: CreatePipe) -> ProcessInfo {
         program,
         args,
         cwd,
+        guarded_cwd: _,
         env: _,
         group_id,
         output_path,

@@ -8,6 +8,24 @@ import { makeDaemonTransport } from "../src/persistent-pty/daemon"
 import { frame, listen, pong, temporaryDirectory, terminal, writeRegistration } from "./fixture/persistent-pty-daemon"
 import { it } from "./lib/effect"
 
+it.live("refuses guarded cwd before sending to a daemon without the capability", () =>
+  Effect.gen(function* () {
+    const { root, directory } = yield* temporaryRuntime()
+    const socketPath = path.join(directory, "daemon.sock")
+    let creates = 0
+    yield* listen(socketPath, (_socket, request) => {
+      if (request.op === "ping") return pong
+      if (request.op === "create_pipe") creates++
+      return { type: "ok" }
+    })
+    yield* Effect.promise(() => writeRegistration(directory, socketPath))
+    const daemon = yield* makeDaemonTransport(root, "daemon")
+    const error = yield* Effect.flip(daemon.request({ op: "create_pipe", guarded_cwd: {} }, true, "guarded_cwd"))
+    expect(error).toMatchObject({ kind: "protocol", message: expect.stringContaining("guarded_cwd") })
+    expect(creates).toBe(0)
+  }),
+)
+
 it.live("rediscovers a same-protocol daemon after its registration rotates", () =>
   Effect.gen(function* () {
     const { root, directory } = yield* temporaryRuntime()

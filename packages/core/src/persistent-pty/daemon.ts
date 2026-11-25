@@ -186,7 +186,11 @@ export class DaemonError extends Data.TaggedError("PersistentPty.DaemonError")<{
 }> {}
 
 export interface DaemonTransport {
-  readonly request: (value: object, start?: boolean) => Effect.Effect<WireResponse, DaemonError>
+  readonly request: (
+    value: object,
+    start?: boolean,
+    requiredFeature?: string,
+  ) => Effect.Effect<WireResponse, DaemonError>
   readonly requestIfRunning: (value: object) => Effect.Effect<WireResponse | undefined, DaemonError>
   /** Waits on its own connection, with no timeout, until the pipe process exits. Never starts the daemon. */
   readonly wait: (id: number) => Effect.Effect<Exited, DaemonError>
@@ -372,18 +376,32 @@ export const makeDaemonTransport = Effect.fn("PersistentPty.makeDaemonTransport"
       )
     })
 
-  const attempt = Effect.fn("PersistentPty.daemon.request-attempt")((value: object, shouldStart: boolean) =>
-    withRegistration(shouldStart, (current) => oneShot(current, value)),
+  const attempt = Effect.fn("PersistentPty.daemon.request-attempt")(
+    (value: object, shouldStart: boolean, requiredFeature?: string) =>
+      withRegistration(shouldStart, (current) =>
+        requiredFeature && !current.features.includes(requiredFeature)
+          ? Effect.fail(
+              new DaemonError({
+                kind: "protocol",
+                message: `opencode-pty does not support required feature: ${requiredFeature}`,
+              }),
+            )
+          : oneShot(current, value),
+      ),
   )
 
-  const request = Effect.fn("PersistentPty.daemon.request")(function* (value: object, shouldStart = false) {
-    return yield* attempt(value, shouldStart).pipe(
+  const request = Effect.fn("PersistentPty.daemon.request")(function* (
+    value: object,
+    shouldStart = false,
+    requiredFeature?: string,
+  ) {
+    return yield* attempt(value, shouldStart, requiredFeature).pipe(
       Effect.catch((error) => {
-        if (error.kind === "registration") return attempt(value, shouldStart)
+        if (error.kind === "registration") return attempt(value, shouldStart, requiredFeature)
         if (error.kind !== "connect") return Effect.fail(error)
         registration = undefined
         if (!shouldStart) return Effect.fail(error)
-        return attempt(value, true)
+        return attempt(value, true, requiredFeature)
       }),
     )
   })

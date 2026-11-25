@@ -10,8 +10,11 @@ use crate::service::{
 };
 
 pub const PROTOCOL_VERSION: u32 = 9;
-/// Additive capabilities of this daemon. Breaking changes bump
-/// `PROTOCOL_VERSION`; everything in protocol 9 needs no feature.
+/// Additive capabilities of this daemon. Breaking changes bump `PROTOCOL_VERSION`.
+/// Clients must require a feature before sending an optional security-sensitive request field.
+#[cfg(target_os = "linux")]
+pub const FEATURES: &[&str] = &["guarded_cwd"];
+#[cfg(not(target_os = "linux"))]
 pub const FEATURES: &[&str] = &[];
 
 pub fn features() -> Vec<String> {
@@ -57,6 +60,8 @@ pub enum Request {
         program: String,
         args: Vec<String>,
         cwd: PathBuf,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        guarded_cwd: Option<crate::service::GuardedCwd>,
         env: HashMap<String, String>,
         group_id: String,
         output_path: PathBuf,
@@ -363,9 +368,15 @@ mod tests {
     }
 
     #[test]
-    fn version_9_has_no_features() {
+    fn version_9_advertises_supported_features() {
         assert_eq!(PROTOCOL_VERSION, 9);
-        assert!(features().is_empty());
+        assert_eq!(
+            features(),
+            FEATURES
+                .iter()
+                .map(|feature| feature.to_string())
+                .collect::<Vec<_>>()
+        );
         // `features` is required.
         assert!(
             serde_json::from_value::<Response>(

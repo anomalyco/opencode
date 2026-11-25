@@ -88,6 +88,7 @@ fn pipe(
         program: program.into(),
         args,
         cwd: env::current_dir().expect("cwd"),
+        guarded_cwd: None,
         env,
         group_id: "pipe".into(),
         output_path: output.to_path_buf(),
