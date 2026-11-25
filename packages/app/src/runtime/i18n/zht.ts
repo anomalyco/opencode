@@ -926,6 +926,7 @@ export const dict = {
   "command.prompt.mode.toggle": "切換 Shell 模式",
   "command.permissions.autoaccept.project": "自動接受此專案的權限",
   "command.session.archive": "封存工作階段",
+  "command.session.unarchive": "取消封存工作階段",
   "command.session.rename": "重新命名工作階段",
   "command.session.delete": "刪除工作階段",
   "palette.group.recentSessions": "最近工作階段",

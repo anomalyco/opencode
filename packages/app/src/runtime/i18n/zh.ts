@@ -930,6 +930,7 @@ export const dict = {
   "command.prompt.mode.toggle": "切换 Shell 模式",
   "command.permissions.autoaccept.project": "为此项目自动接受权限",
   "command.session.archive": "归档会话",
+  "command.session.unarchive": "取消归档会话",
   "command.session.rename": "重命名会话",
   "command.session.delete": "删除会话",
   "palette.group.recentSessions": "最近会话",
