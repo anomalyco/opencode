@@ -12,6 +12,7 @@ import {
 import { fromPathname, LOCALE_HEADER, pageUrl, parseLocale, prefersMarkdown, route, strip } from "./lib/language"
 import { parsePath, type Target, type TextFormat } from "./lib/data-path"
 import { noindexOutsideProduction } from "./lib/noindex"
+import { serverFunctionErrors } from "./lib/server-function"
 import { loadComparePage, loadHomePage, loadLabPage, loadModelPage } from "./lib/page-data"
 import { labOgCard, modelOgCard } from "./og/card-data"
 import { ogResponse } from "./og/response"
@@ -73,7 +74,7 @@ const pageMiddleware = createMiddleware({
 })
 
 // The noindex header outside production first (lib/noindex.ts), so every response carries it.
-export default [noindexOutsideProduction, ...pageMiddleware]
+export default [noindexOutsideProduction, serverFunctionErrors, ...pageMiddleware]
 
 async function canonicalPath(target: Target) {
   if (target.kind !== "lab" && target.kind !== "model") return undefined
