@@ -213,6 +213,63 @@ test("serves the public API without an Access identity", async () => {
   expect(await version(trailing)).toBe("1.0.0")
 })
 
+test("answers HEAD lookups like GET", async () => {
+  const db = database()
+  db.sqlite
+    .query(
+      "INSERT INTO artifact (channel, name, distribution, version, metadata, active, minimum, time_created, time_updated) VALUES ('head', 'desktop', 'opencode', '1.0.0', ?, 1, 0, 1, 1)",
+    )
+    .run(
+      JSON.stringify({
+        files: { "opencode-desktop-win-x64.exe": { url: "https://example.com/opencode-desktop-win-x64.exe" } },
+        manifests: { "desktop.yml": { path: "opencode-desktop-win-x64.exe" } },
+      }),
+    )
+  const send = (method: string, pathname: string) =>
+    worker.fetch(new Request(`https://opencode.ai/update/api/head/desktop/opencode${pathname}`, { method }), db.env, {
+      waitUntil: () => {},
+    })
+
+  for (const pathname of ["/opencode-desktop-win-x64.exe", "/latest.yml", "", "/missing.dmg"]) {
+    const [get, head] = await Promise.all([send("GET", pathname), send("HEAD", pathname)])
+    expect(head.status).toBe(get.status)
+    expect(head.headers.get("Location")).toBe(get.headers.get("Location"))
+    expect(head.headers.get("Content-Type")).toBe(get.headers.get("Content-Type"))
+  }
+  const file = await send("HEAD", "/opencode-desktop-win-x64.exe")
+  expect(file.status).toBe(302)
+  expect(file.headers.get("Location")).toBe("https://example.com/opencode-desktop-win-x64.exe")
+})
+
+test.each([
+  ["HEAD", "https://opencode.ai/update/admin", 403],
+  ["HEAD", "https://opencode.ai/update/admin/activate", 403],
+  ["PUT", "https://opencode.ai/update/api/latest/cli/opencode", 405],
+  ["DELETE", "https://opencode.ai/update/api/latest/cli/opencode", 405],
+] as const)("keeps %s %s answering %p", async (method, url, status) => {
+  expect((await request(url, { method })).status).toBe(status)
+})
+
+test("logs the data lake send error", async () => {
+  const db = database()
+  const error = new Error("pipeline unavailable")
+  let pending: Promise<unknown> | undefined
+  const logged: unknown[][] = []
+  const original = console.error
+  console.error = (...args: unknown[]) => logged.push(args)
+  try {
+    await worker.fetch(
+      new Request("https://opencode.ai/update/"),
+      { ...db.env, EVENTS: { send: () => Promise.reject(error) } } as unknown as Env,
+      { waitUntil: (promise) => (pending = promise) },
+    )
+    await pending
+  } finally {
+    console.error = original
+  }
+  expect(logged).toEqual([["Failed to send update request event to the data lake", error]])
+})
+
 test("caches rollout fallback reads across caller IPs and overlapping releases", async () => {
   const db = database()
   const base = Date.parse("2026-10-13T00:00:00Z")

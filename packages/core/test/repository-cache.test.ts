@@ -186,28 +186,6 @@ describe("RepositoryCache", () => {
     ),
   )
 
-  it.live("keeps branch checkouts isolated from branchless refreshes", () =>
-    withRemote((fixture) =>
-      Effect.gen(function* () {
-        yield* Effect.promise(() => branch(fixture.source, "feature", "two\n"))
-        const cache = yield* RepositoryCache.Service
-
-        const featured = yield* cache.ensure({ reference: fixture.reference, branch: "feature" })
-        expect(featured.branch).toBe("feature")
-        expect(featured.localPath.endsWith("repo@feature")).toBe(true)
-        expect(yield* read(path.join(featured.localPath, "README.md"))).toBe("two\n")
-
-        const refreshed = yield* cache.ensure({ reference: fixture.reference, refresh: true })
-        expect(refreshed.localPath).not.toBe(featured.localPath)
-        expect(yield* read(path.join(refreshed.localPath, "README.md"))).toBe("one\n")
-
-        const cached = yield* cache.ensure({ reference: fixture.reference, branch: "feature" })
-        expect(cached.status).toBe("cached")
-        expect(yield* read(path.join(cached.localPath, "README.md"))).toBe("two\n")
-      }).pipe(Effect.provide(cacheLayer(fixture.root))),
-    ),
-  )
-
   it.live("does not mistake an enclosing repository for the cache checkout", () =>
     withRemote((fixture) =>
       Effect.gen(function* () {

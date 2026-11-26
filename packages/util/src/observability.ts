@@ -1,6 +1,6 @@
 export * as Observability from "./observability.js"
 
-import * as NodeFileSystem from "@effect/platform-node/NodeFileSystem"
+import { filesystem } from "./effect/app-node-platform.js"
 import { LayerNode } from "./effect/layer-node.js"
 import { Effect, Layer, Logger, References, Schema } from "effect"
 import { FetchHttpClient } from "effect/http"
@@ -29,7 +29,7 @@ export function layer(
     channel: options.channel ?? "local",
   }
   const local = Logger.layer(Logging.loggers(app.channel === "local", app.channel), { mergeWithExisting: false }).pipe(
-    Layer.provide(NodeFileSystem.layer),
+    Layer.provide(LayerNode.compile(filesystem)),
     Layer.orDie,
     Layer.merge(Layer.succeed(References.MinimumLogLevel, Logging.minimumLogLevel())),
   )
@@ -39,7 +39,7 @@ export function layer(
         [...Logging.loggers(app.channel === "local", app.channel), ...Otlp.loggers(options, app)],
         { mergeWithExisting: false },
       ).pipe(
-        Layer.provide(NodeFileSystem.layer),
+        Layer.provide(LayerNode.compile(filesystem)),
         Layer.provide(OtlpSerialization.layerJson),
         Layer.provide(FetchHttpClient.layer),
         Layer.provide(OtlpExporter.layerFlusher),

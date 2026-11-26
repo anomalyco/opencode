@@ -20,6 +20,7 @@ const documents = {
     "packages/console/app/src/lib/legal/privacy-policy.ts",
     "packages/console/app/src/routes/legal/privacy-policy/index.tsx",
   ],
+  "/legal/refund-policy": ["services/site/src/lib/legal/refund-policy.ts"],
   "/legal/terms-of-service": [
     "services/site/src/lib/legal/terms-of-service.ts",
     "packages/console/app/src/lib/legal/terms-of-service.ts",

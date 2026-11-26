@@ -257,7 +257,8 @@
   background: var(--tab-separator);
 }
 
-[data-titlebar-tab-slot][data-active="true"] + [data-titlebar-tab-slot]::before {
+[data-titlebar-tab-slot][data-active="true"] + [data-titlebar-tab-slot]::before,
+[data-tab-group-separator] + [data-titlebar-tab-slot]::before {
   display: none;
 }
 

@@ -38,6 +38,7 @@ import { VcsEvent } from "./vcs-event.js"
 import { WorkspaceEvent } from "./workspace-event.js"
 import { WorktreeEvent } from "./worktree-event.js"
 import { WebSearch } from "./websearch.js"
+import { Push } from "./push.js"
 
 const coreDefinitions = Event.inventory(...SessionEvent.Definitions)
 
@@ -68,6 +69,7 @@ const featureDefinitions = Event.inventory(
   ...Job.Event.Definitions,
   ...Form.Event.Definitions,
   ...WebSearch.Event.Definitions,
+  ...Push.Event.Definitions,
   ...Artifact.Event.Definitions,
 )
 

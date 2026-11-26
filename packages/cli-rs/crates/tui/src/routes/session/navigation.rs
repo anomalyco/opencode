@@ -166,6 +166,7 @@ impl Inner {
             );
             return;
         }
+        self.transcript.clear_resize_pin();
         self.navigation.replace(Some(id.clone()));
         self.set_slack(slack);
         self.update_away();

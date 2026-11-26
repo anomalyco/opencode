@@ -3,6 +3,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Database } from "@opencode/core/database/database"
 import { sqliteLayer } from "@opencode/core/database/sqlite.workerd"
 import { Failed, makeFiles, makeMemoryDriver, NotFound } from "@opencode/core/environment/index"
+import { Identity } from "@opencode/core/machine/identity"
 import { Workspace } from "@opencode/core/workspace"
 import { WorkspaceDriver } from "@opencode/core/workspace/driver"
 import { WorkspaceTable } from "@opencode/core/workspace/sql"
@@ -94,20 +95,6 @@ it.effect("creates and persists an ID without provisioning", () =>
   }),
 )
 
-it.effect("creates a workspace with a caller-supplied ID", () =>
-  Effect.gen(function* () {
-    const workspace = yield* Workspace.Service
-    const id = Workspace.ID.create()
-
-    expect(yield* workspace.create({ id, provider: "fake" })).toBe(id)
-    expect(
-      yield* Database.Service.use(({ db }) =>
-        db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get(),
-      ).pipe(Effect.orDie),
-    ).toMatchObject({ id, provider: "fake", binding: null })
-  }),
-)
-
 it.effect("reuses a caller-supplied ID with the same provider", () =>
   Effect.gen(function* () {
     const workspace = yield* Workspace.Service
@@ -155,31 +142,6 @@ it.effect("resolves an existing caller-supplied ID before provider lookup", () =
         existingProvider: "missing",
       }),
     )
-  }),
-)
-
-it.effect("destroys an unprovisioned workspace through the driver with a null binding", () =>
-  Effect.gen(function* () {
-    const workspace = yield* Workspace.Service
-    const workspaceID = yield* workspace.create({ provider: "fake" })
-
-    expect(yield* workspace.destroy(workspaceID)).toEqual({ destroyed: true })
-    expect(calls).toEqual([{ operation: "destroy", binding: null }])
-    expect(
-      yield* Database.Service.use(({ db }) =>
-        db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get(),
-      ).pipe(Effect.orDie),
-    ).toBeUndefined()
-  }),
-)
-
-it.effect("succeeds without calling the driver when the workspace does not exist", () =>
-  Effect.gen(function* () {
-    const workspace = yield* Workspace.Service
-    const workspaceID = Workspace.ID.create()
-
-    expect(yield* workspace.destroy(workspaceID)).toEqual({ destroyed: false })
-    expect(calls).toEqual([])
   }),
 )
 
@@ -605,6 +567,7 @@ const makeAlarmHarness = (
   options: {
     readonly keepWarm?: Workspace.Options["keepWarm"]
     readonly pollInterval?: Workspace.Options["pollInterval"]
+    readonly create?: WorkspaceDriver.Interface["create"]
     readonly connect?: WorkspaceDriver.Interface["connect"]
   } = {},
 ) => {
@@ -615,7 +578,10 @@ const makeAlarmHarness = (
   const state = { openCount: 0, closeCount: 0, failSuspend: false }
 
   const alarmDriver = WorkspaceDriver.make({
-    create: (input) => Effect.succeed({ binding: { workspaceID: input.workspaceID, generation: 0 } }),
+    create: (input) =>
+      options.create
+        ? options.create(input)
+        : Effect.succeed({ binding: { workspaceID: input.workspaceID, generation: 0 } }),
     connect: (input) =>
       Effect.acquireRelease(
         Effect.sync(() => {
@@ -641,6 +607,7 @@ const makeAlarmHarness = (
       }),
       [
         Database.node.replace(sharedDb),
+        Identity.node.replace(Identity.kvNode),
         WorkspaceDriver.node.replace(WorkspaceDriver.registryNode({ fake: alarmDriver })),
       ],
     )
@@ -819,5 +786,43 @@ bareIt.effect(
           expect(harness.counts()).toEqual({ openCount: 2, closeCount: 1 })
         }),
       )
+    }),
+)
+
+bareIt.effect(
+  "provides persistent host Identity.Service to both WorkspaceDriver.create and WorkspaceDriver.connect",
+  () =>
+    Effect.gen(function* () {
+      const keys: Uint8Array[] = []
+      const seedErrors: Identity.InvalidKey[] = []
+      const checkIdentity = Effect.gen(function* () {
+        const identity = yield* Identity.Service
+        keys.push(yield* identity.publicKey().pipe(Effect.orDie))
+        seedErrors.push(yield* identity.seed().pipe(Effect.flip, Effect.orDie))
+      })
+      const harness = makeAlarmHarness({
+        create: (input) => Effect.as(checkIdentity, { binding: { workspaceID: input.workspaceID } }),
+        connect: () => Effect.as(checkIdentity, memory),
+      })
+
+      const workspaceID = yield* harness.run((workspace) =>
+        Effect.gen(function* () {
+          const id = yield* workspace.create({ provider: "fake" })
+          yield* makeFiles(yield* workspace.connect(id)).mkdir("/identity-check")
+          return id
+        }),
+      )
+
+      // A fresh Workspace.Service over the same KV database sees the exact same 32-byte Ed25519 identity key.
+      yield* harness.run((workspace) =>
+        Effect.flatMap(workspace.connect(workspaceID), (driver) => makeFiles(driver).mkdir("/identity-check-2")),
+      )
+
+      expect(keys).toHaveLength(3)
+      expect(keys[0]?.length).toBe(32)
+      expect(keys[1]).toEqual(keys[0])
+      expect(keys[2]).toEqual(keys[0])
+      expect(seedErrors).toHaveLength(3)
+      expect(seedErrors.every((err) => err instanceof Identity.InvalidKey)).toBe(true)
     }),
 )

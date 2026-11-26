@@ -6,9 +6,6 @@ import { buildOgWorker } from "../script/build-og-worker"
 import { parsePath } from "../src/lib/data-path"
 import type { OgCard } from "../src/og/card"
 
-// The catalog module behind the card builders defines a router query at import time, which throws outside a Solid
-// server runtime.
-mock.module("@solidjs/router", () => ({ query: (fn: unknown) => fn }))
 const { labOgCard, modelOgCard, ogImageAlt, ogImageUrl, ogVersion } = await import("../src/og/card-data")
 
 // The real in-process renderer, counted, and an in-memory stand-in for the Worker's edge cache, which local runs lack.
