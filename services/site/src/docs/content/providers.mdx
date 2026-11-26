@@ -57,6 +57,18 @@ enabled.
 }
 ```
 
+## Hugging Face
+
+Run `/connect`, select **Hugging Face**, and enter a [token](https://huggingface.co/settings/tokens) with the
+**Make calls to Inference Providers** permission. Use `/models` to see which models are available.
+
+To use a listed model for one run, prefix its full Hub ID with `huggingface/`. For example, to run
+`Qwen/Qwen3-Coder-Next`:
+
+```bash
+opencode run --model huggingface/Qwen/Qwen3-Coder-Next "Explain the structure of this project"
+```
+
 ## Custom
 
 Add a provider when its API is not already in the catalog. This OpenAI-compatible example defines the credential,
