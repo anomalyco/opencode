@@ -217,11 +217,12 @@ test("syncing via a non-canonical directory stores flags under the canonical key
     expect(app.count()).toBe(1)
     expect(app.requests).toContain("/api/experimental/flag /real")
     expect(app.data.location.flags.list({ directory: "/real" })).toEqual({ full_codemode: true })
-    expect(app.data.location.flags.list({ directory: "/alias" })).toBeUndefined()
+    expect(app.data.location.flag("full_codemode", { directory: "/alias" })).toBe(true)
 
     state.enabled = false
     app.emit({ id: "evt_config", created: 1, type: "config.updated", location: { directory: "/real" }, data: {} })
     await until(() => !app.data.location.flag("full_codemode", { directory: "/real" }))
+    expect(app.data.location.flag("full_codemode", { directory: "/alias" })).toBe(false)
     expect(app.count()).toBe(2)
 
     app.emit({ id: "evt_shutdown", created: 2, type: "location.shutdown", location: { directory: "/real" }, data: {} })

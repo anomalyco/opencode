@@ -1655,9 +1655,9 @@ export function createData(config: CreateDataInput) {
   const usageLimits = locationResource("usageLimits", (location) => api().experimental.usage.limits({ location }))
   // Locations whose flags were invalidated by location.shutdown; reconnects skip them until something syncs them again.
   const dormantFlags = new Set<string>()
-  const canonicalDirectory = new Map<string, string>()
+  const [canonicalDirectory, setCanonicalDirectory] = createStore<Record<string, string>>({})
   const canonicalRef = (location: LocationRef) => {
-    const directory = canonicalDirectory.get(location.directory)
+    const directory = canonicalDirectory[location.directory]
     return directory ? { directory, workspaceID: location.workspaceID } : location
   }
   // A server older than the flag endpoint answers it with a 404 and no JSON body: every flag is off there.
@@ -1670,11 +1670,16 @@ export function createData(config: CreateDataInput) {
       }),
   )
   const flags = {
-    ...flagResource,
-    sync: (ref?: LocationRef) => {
-      dormantFlags.delete(locationKey(ref ?? defaultLocation()))
-      return flagResource.sync(ref)
+    list: (ref?: LocationRef) => {
+      const location = ref ?? defaultLocation()
+      return flagResource.list(location) ?? flagResource.list(canonicalRef(location))
     },
+    sync: (ref?: LocationRef) => {
+      const location = canonicalRef(ref ?? defaultLocation())
+      dormantFlags.delete(locationKey(location))
+      return flagResource.sync(location)
+    },
+    invalidate: (ref?: LocationRef) => flagResource.invalidate(canonicalRef(ref ?? defaultLocation())),
   }
   const shells = locationResource("shell", async (location) => {
     const response = await api().shell.list({ location })
@@ -2429,7 +2434,7 @@ export function createData(config: CreateDataInput) {
           const key = locationKey(location)
           if (!store.location[key]) setStore("location", key, {})
           setStore("location", key, "info", location)
-          if (location.directory !== current.directory) canonicalDirectory.set(current.directory, location.directory)
+          if (location.directory !== current.directory) setCanonicalDirectory(current.directory, location.directory)
           if (!ref) {
             setDefaultLocation({ directory: location.directory })
           }
@@ -2439,7 +2444,7 @@ export function createData(config: CreateDataInput) {
         await result.location.syncInfo(ref)
         const location = ref ?? defaultLocation()
         await Promise.all([
-          flags.sync(canonicalRef(location)),
+          flags.sync(location),
           result.location.vcs.sync(location),
           result.location.agent.sync(location),
           result.location.command.sync(location),
@@ -2468,7 +2473,7 @@ export function createData(config: CreateDataInput) {
         result.location.provider.invalidate(location)
         result.location.reference.invalidate(location)
         result.location.skill.invalidate(location)
-        flags.invalidate(canonicalRef(location))
+        flags.invalidate(location)
         result.shell.invalidate(location)
         result.session.form.invalidate("global", location)
       },
