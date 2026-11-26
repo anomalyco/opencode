@@ -138,3 +138,38 @@ fn two_quick_writes_both_reach_the_file() {
         info.mouse == Some(false) && info.session.and_then(|s| s.scrollbar) == Some(true)
     }));
 }
+
+#[test]
+fn removing_theme_from_cli_json_reverts_to_opencode() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    let app = TestApp::new(100, 30);
+    let (tui, file) = mount_with_file(&app, home.path(), "{}\n");
+    let default_bg = tui.theme.borrow().theme().background.base;
+    assert_eq!(tui.theme.borrow().selected(), "opencode");
+
+    let replace = |content: &str| {
+        let temp = file.with_extension("json.edit");
+        std::fs::write(&temp, content).unwrap();
+        std::fs::rename(&temp, &file).unwrap();
+    };
+
+    // Adding and removing the entire theme block reverts to the default theme.
+    replace("{\n  \"theme\": { \"name\": \"gruvbox\" }\n}\n");
+    assert!(app.wait_until(WAIT, || tui.theme.borrow().selected() == "gruvbox"), "gruvbox never loaded");
+    assert_ne!(tui.theme.borrow().theme().background.base, default_bg);
+
+    replace("{}\n");
+    assert!(app.wait_until(WAIT, || tui.theme.borrow().selected() == "opencode"), "theme removal did not revert");
+    assert_eq!(tui.theme.borrow().theme().background.base, default_bg);
+
+    // Removing only theme.name reverts the theme while keeping the pinned mode.
+    replace("{\n  \"theme\": { \"name\": \"gruvbox\", \"mode\": \"light\" }\n}\n");
+    assert!(app.wait_until(WAIT, || tui.theme.borrow().selected() == "gruvbox"), "gruvbox light never loaded");
+    assert_eq!(tui.theme.borrow().mode(), opencode_ui::theme::ThemeMode::Light);
+    let gruvbox_light_bg = tui.theme.borrow().theme().background.base;
+
+    replace("{\n  \"theme\": { \"mode\": \"light\" }\n}\n");
+    assert!(app.wait_until(WAIT, || tui.theme.borrow().selected() == "opencode"), "theme.name removal did not revert");
+    assert_eq!(tui.theme.borrow().mode(), opencode_ui::theme::ThemeMode::Light);
+    assert_ne!(tui.theme.borrow().theme().background.base, gruvbox_light_bg);
+}

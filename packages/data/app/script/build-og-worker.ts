@@ -1,5 +1,5 @@
-// Builds the OG Worker (src/og/worker.ts) into .og-worker: the bundle, the Wasm engines, and the site's OpenTUI
-// Mono fonts as TrueType (Satori can't read WOFF2). services/data/script/build.ts runs this and deploys every file there. It is
+// Builds the OG Worker (src/og/worker.ts) into .og-worker: the bundle, the Wasm engines, and the site's OpenMono
+// fonts as TrueType (Satori can't read WOFF2). services/data/script/build.ts runs this and deploys every file there. It is
 // outside .output because the site's own build replaces that directory. test/og.test.ts builds it too, so PR CI
 // catches a broken build before the deploy does.
 import { mkdir, rm } from "node:fs/promises"
@@ -38,9 +38,9 @@ export async function buildOgWorker(out: string) {
     ...["regular", "bold"].flatMap((weight) =>
       ["latin", "rest"].map(async (group) =>
         Bun.write(
-          path.join(out, `opentui-mono-${weight}-${group}.bin`),
+          path.join(out, `openmono-${weight}-${group}.bin`),
           await decompress(
-            await Bun.file(path.join(root, `src/asset/fonts/opentui-mono-${weight}-${group}.woff2`)).bytes(),
+            await Bun.file(path.join(root, `src/asset/fonts/openmono-${weight}-${group}.woff2`)).bytes(),
           ),
         ),
       ),

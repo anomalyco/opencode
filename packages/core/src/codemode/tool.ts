@@ -1,6 +1,6 @@
 export * as CodeModeTool from "./tool.js"
 
-import { ToolFailure } from "@opencode/ai/effect"
+import { ToolFailure, type ToolDefinition } from "@opencode/ai/effect"
 import { CodeMode, Namespace, Tool } from "@opencode/codemode"
 import type {
   Content,
@@ -77,6 +77,11 @@ class Run extends Context.Service<
   }
 >()("@opencode/CodeModeTool/Run") {}
 
+/** The `execute` call a script's tool calls run under. */
+export const Parent = Context.Reference<CallID | undefined>("@opencode/CodeModeTool/Parent", {
+  defaultValue: () => undefined,
+})
+
 /** The session's Location and file services, which a run with the experimental `path` and `Bun` globals acts through. */
 export type Services = Location.Service | CodeModeBun.Services
 
@@ -92,6 +97,8 @@ export type Api = CodeModeApi.Service | Location.Service
 export type Inventory = {
   readonly tools: ReadonlyMap<string, Info>
   readonly namespaces?: ReadonlyMap<string, ToolNamespace>
+  /** Each tool's registered direct definition, by registry ID. */
+  readonly definitions?: ReadonlyMap<string, ToolDefinition>
 }
 
 const extensions = [CodeModeFetch.extension, CodeModePath.extension, CodeModeBun.extension] as const
@@ -115,8 +122,11 @@ const executionServices = (
 // the runtime also has Bun's file APIs.
 const description = (full: boolean) =>
   [
-    "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
+    full
+      ? "Run JavaScript in a confined Code Mode runtime to work with files and data, script tool calls and HTTP requests, and compose their results."
+      : "Run JavaScript in a confined Code Mode runtime to script tool calls and HTTP requests and compose their results.",
     "Write plain JavaScript and send it exactly as written: no code fence, and no JSON or other wrapper around it.",
+    "Each call is a fresh program; nothing carries over from earlier calls.",
     full
       ? "`fetch` is available for HTTP requests, and Bun's file APIs (`Bun.file`, `Bun.write`, `Bun.Glob`) for files, in place of Node's `fs`. Imports and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`."
       : "`fetch` is available for HTTP requests. Imports, direct filesystem access, and timers are unavailable: there is no `setTimeout` or sleep. All other external access goes through `tools`.",
@@ -156,13 +166,14 @@ export const create = (
     name: "execute",
     description: description(services !== undefined),
     input: services ? FullInput : CodeMode.Input,
-    freeform: { type: "text" },
+    freeform: { type: "text", field: "code" },
     output: ExecuteOutput,
     execute: ({ code }, context) =>
       Effect.gen(function* () {
         const callIndex = yield* Ref.make(0)
         const files = yield* Ref.make<Array<CollectedFiles>>([])
-        const calls = yield* Ref.make<Array<ExecuteCall>>([])
+        // Changed only under the lock; each publish and the result take a copy.
+        const calls: Array<ExecuteCall> = []
         const lock = Semaphore.makeUnsafe(1)
         // Each update replaces the last, so send at most one per 100 ms; a trailing one carries the latest rows.
         // A success drops a pending one when the scope closes, since the result carries the final rows.
@@ -174,14 +185,14 @@ export const create = (
           yield* Ref.set(publishedAt, yield* Clock.currentTimeMillis)
           const changed = diffs.files()
           yield* context.progress({
-            toolCalls: yield* Ref.get(calls),
+            toolCalls: calls.slice(),
             ...(changed.length > 0 ? { files: changed } : {}),
           })
         })
-        const record = (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) =>
+        const record = (update: (items: Array<ExecuteCall>) => void) =>
           lock.withPermit(
             Effect.gen(function* () {
-              yield* Ref.update(calls, update)
+              update(calls)
               if (yield* Ref.get(trailing)) return
               const wait = (yield* Ref.get(publishedAt)) + 100 - (yield* Clock.currentTimeMillis)
               if (wait <= 0) return yield* publish
@@ -191,7 +202,7 @@ export const create = (
           )
         // The files the program changes, shown under the call as it runs and when it ends in the foreground. A failed
         // or stopped one keeps them too, since they really changed.
-        const diffs = CodeModeDiffs.make(record((items) => items))
+        const diffs = CodeModeDiffs.make(record(() => {}))
         const result = yield* runtime(inventory)
           .execute(code, undefined, {
             extensions: runExtensions(services !== undefined),
@@ -215,6 +226,7 @@ export const create = (
                     // A stop is the execute call's to handle: a nested call never fails it with its own error.
                     cancel: undefined,
                   }).pipe(
+                    Effect.provideService(Parent, context.id),
                     Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
                   )
                   // The name the program called, so a namespaced tool that happens to be named edit or write records nothing.
@@ -235,7 +247,7 @@ export const create = (
             Effect.provide(yield* executionServices(context, permission, services, api)),
             Effect.provideService(CodeModeDiffs.Service, diffs),
           )
-        const toolCalls = yield* Ref.get(calls)
+        const toolCalls = calls.slice()
         const collected = (yield* Ref.get(files))
           .toSorted((left, right) => left.index - right.index)
           .flatMap((item) => item.files)
@@ -271,20 +283,18 @@ export const create = (
 }
 
 // Rows appear in start order; the same call object arrives at both hooks, so a call finds its row again.
-function progressHooks(record: (update: (items: Array<ExecuteCall>) => Array<ExecuteCall>) => Effect.Effect<unknown>) {
+function progressHooks(record: (update: (items: Array<ExecuteCall>) => void) => Effect.Effect<unknown>) {
   const rows = new WeakMap<object, number>()
   const start = (call: object, entry: ExecuteCall) =>
     record((items) => {
       rows.set(call, items.length)
-      return [...items, entry]
+      items.push(entry)
     })
   const settle = (call: object, result: CodeMode.CallResult) => {
     const index = rows.get(call)
     if (index === undefined) return Effect.void
     return record((items) => {
-      const next = [...items]
-      next[index] = { ...items[index], status: result.status === "success" ? "completed" : "error" }
-      return next
+      items[index] = { ...items[index], status: result.status === "success" ? "completed" : "error" }
     })
   }
   return {
@@ -407,7 +417,11 @@ function inventoryTools(inventory: Inventory) {
   const root: ToolNode = { children: new Map() }
   for (const namespace of inventory.namespaces?.values() ?? []) getNode(root, namespace.name).namespace = namespace
   for (const [name, registration] of inventory.tools) {
-    const child = definition(registration, true)
+    const codemode = registration.options?.codemode
+    // Without Code Mode overrides, the Code Mode definition is the direct one.
+    const child =
+      (typeof codemode === "object" && codemode !== null ? undefined : inventory.definitions?.get(name)) ??
+      definition(registration, true)
     getNode(root, qualifiedName(registration)).tool = Tool.make({
       description: child.description,
       input: child.inputSchema,

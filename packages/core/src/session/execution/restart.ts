@@ -3,7 +3,7 @@ export * as SessionRestart from "./restart.js"
 import { Cause, Context, Effect, Layer, Option, Schema } from "effect"
 import { isReadonlyArrayNonEmpty } from "effect/Array"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
-import { Shell as ShellSchema } from "@opencode/schema/shell"
+import { ID } from "@opencode/schema/shell"
 import { FSUtil } from "@opencode/util/fs-util"
 import { BlobStore } from "../../blob-store.js"
 import { Bus } from "../../bus.js"
@@ -281,7 +281,7 @@ export const layer = (options?: Options) =>
       ) {
         const shell = background.status === "running" ? yield* shellOf(recovery.sessionID) : undefined
         const info =
-          shell && Schema.is(ShellSchema.ID)(recovery.shellID)
+          shell && Schema.is(ID)(recovery.shellID)
             ? yield* shell.get(recovery.shellID).pipe(Effect.option)
             : Option.none()
         if (!shell || Option.isNone(info)) return yield* recoverToolJob(background, recovery)

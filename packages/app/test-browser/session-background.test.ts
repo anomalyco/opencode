@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test"
 import type { JobInfo, SessionInfo, SessionMessageAssistantTool, ShellInfo } from "@opencode/client/promise"
-import { createRoot } from "solid-js"
+import { createRoot, createSignal } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createSessionBackground } from "@/session/requests/background"
 
@@ -62,6 +62,44 @@ const notification = (id: string, metadata: Record<string, string>) => ({
 })
 
 describe("createSessionBackground", () => {
+  // A history page shifts every message's index; the messages already loaded did not change.
+  test("reads only the messages of a history page that lands", () => {
+    createRoot((dispose) => {
+      const reads: Record<string, number> = {}
+
+      const message = (id: string) => {
+        const content = [tool(`${id}-part`, "subagent", { sessionID: id }, { description: `${id} call` })]
+
+        return {
+          ...assistant(id, content, 1),
+          get content() {
+            reads[id] = (reads[id] ?? 0) + 1
+
+            return content
+          },
+        }
+      }
+
+      const [messages, setMessages] = createSignal([message("later"), message("latest")])
+
+      const background = createSessionBackground({
+        sessionID: () => "root",
+        messages,
+        sessions: () => [session("older", "root", 1), session("later", "root", 2), session("latest", "root", 3)],
+        status: () => "running",
+        shells: () => [],
+      })
+
+      expect(background.tasks().map((task) => task.label)).toEqual(["older", "later call", "latest call"])
+      const before = { ...reads }
+      setMessages((loaded) => [message("older"), ...loaded])
+      expect(background.tasks().map((task) => task.label)).toEqual(["older call", "later call", "latest call"])
+      expect(reads).toEqual({ ...before, older: reads.older })
+      expect(reads.older).toBeGreaterThan(0)
+      dispose()
+    })
+  })
+
   test("counts a subagent from its session status, whatever its call or completion notices say", () => {
     createRoot((dispose) => {
       const [store, setStore] = createStore<{ status: Record<string, "idle" | "running"> }>({
@@ -313,19 +351,33 @@ describe("createSessionBackground", () => {
         ],
       })
 
+      const owned = (id: string) => ({ ...shell(id, id), metadata: { sessionID: "root", callID: "script-part" } })
+
       const background = createSessionBackground({
         sessionID: () => "root",
         messages: () => store.messages,
         sessions: () => [],
         status: () => "idle",
-        shells: () => [],
+        // The script's shells name its call. A shell that names none is the user's own.
+        shells: () => [owned("test"), owned("left"), { ...shell("serve", "serve"), time: { started: 1 } }],
         jobs: () => [
           { kind: "codemode", id: "cm_script", sessionID: "root", status: "running", time: { started: 11 } },
           { kind: "codemode", id: "cm_other", sessionID: "other", status: "running", time: { started: 11 } },
+          // A shell call that timed out left its command running, which gives the shell a job.
+          {
+            kind: "shell",
+            id: "left",
+            sessionID: "root",
+            status: "running",
+            time: { started: 0 },
+            shellID: "left",
+            command: "left",
+          },
         ],
       })
 
       expect(background.scripts()).toEqual([])
+      expect(background.tasks().map((task) => task.id)).toEqual(["left", "serve"])
 
       setStore("messages", [
         assistant("current", [tool("script-part", "execute", { jobID: "cm_script" }, { code: "await build()" })]),

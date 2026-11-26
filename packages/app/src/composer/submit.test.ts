@@ -658,7 +658,7 @@ describe("Composer submission", () => {
       expect(calls[0]).toBe("keep-preview")
       expect(requests).toHaveLength(1)
       expect(requests[0]?.text).toBe(
-        "The user quoted the following from earlier in the conversation:\n> Selected passage\n\nThe user made the following comment regarding this quote: Compare @src/api.ts with @here",
+        "> Selected passage\n\nCompare @src/api.ts with @here",
       )
       expect(requests[0]).toMatchObject({
         delivery,

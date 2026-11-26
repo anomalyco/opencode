@@ -85,7 +85,7 @@ pub fn view(tui: &Tui, cx: &Rc<DialogCx>, props: Props) -> View {
     draw();
     *hook.borrow_mut() = Some(Rc::downgrade(&draw));
 
-    let scroll = ScrollBox::new(app).scrollbars(false).max_height(20);
+    let scroll = cx.scroll_box().scrollbars(false).max_height(20);
     scroll.content_view().min_height(0);
     scroll.add(&Text::new(app, props.error.clone()).fg(theme.text.base).wrap(WrapMode::Word));
     cx.keep_scroll(&scroll);

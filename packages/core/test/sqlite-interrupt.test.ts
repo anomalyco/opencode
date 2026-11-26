@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test"
 import { Effect, Fiber, Layer, References } from "effect"
 import { SqlClient } from "effect/sql"
+import { sql } from "drizzle-orm"
+import { EffectDrizzleSqlite } from "@opencode/core/database/drizzle"
 import { sqliteLayer as bunSqliteLayer } from "@opencode/core/database/sqlite.bun"
 import { sqliteLayer as workerdSqliteLayer } from "@opencode/core/database/sqlite.workerd"
 import { makeDurableObjectStorage } from "./fixture/durable-object-storage"
@@ -56,6 +58,19 @@ describe("sqlite transaction interrupts", () => {
     const leaked = await sweep(
       () => bunSqliteLayer({ filename: ":memory:", disableWAL: true }),
       (sql) => sql.withTransaction(sql`SELECT 2`),
+    )
+    expect(leaked).toEqual([])
+  })
+
+  test("bun client releases the connection when a queued drizzle transaction is interrupted", async () => {
+    const leaked = await sweep(
+      () => bunSqliteLayer({ filename: ":memory:", disableWAL: true }),
+      (client) =>
+        EffectDrizzleSqlite.makeWithDefaults().pipe(
+          Effect.provideService(SqlClient.SqlClient, client),
+          Effect.provideService(References.MaxOpsBeforeYield, 2048),
+          Effect.flatMap((db) => db.transaction((tx) => tx.run(sql`SELECT 2`))),
+        ),
     )
     expect(leaked).toEqual([])
   })

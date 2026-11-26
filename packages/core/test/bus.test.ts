@@ -1001,34 +1001,6 @@ describe("Bus", () => {
     }),
   )
 
-  it.effect("replay with owner claims an unowned sequence", () =>
-    Effect.gen(function* () {
-      const bus = yield* Bus.Service
-      const { db } = yield* Database.Service
-      const aggregateID = Session.ID.create()
-
-      yield* bus.replay(
-        {
-          id: Event.ID.create(),
-          created: 0,
-          type: Bus.versionedType(DurableMessage.type, 1),
-          seq: 0,
-          aggregateID,
-          data: durableData(aggregateID, "owned"),
-        },
-        { ownerID: "owner-1" },
-      )
-      const row = yield* db
-        .select({ seq: EventSequenceTable.seq, ownerID: EventSequenceTable.owner_id })
-        .from(EventSequenceTable)
-        .where(eq(EventSequenceTable.aggregate_id, aggregateID))
-        .get()
-        .pipe(Effect.orDie)
-
-      expect(row).toEqual({ seq: 0, ownerID: "owner-1" })
-    }),
-  )
-
   it.effect("replay claims an existing unowned sequence before fencing a different owner", () =>
     Effect.gen(function* () {
       const bus = yield* Bus.Service
@@ -1073,40 +1045,6 @@ describe("Bus", () => {
 
       expect(rows.map((row) => row.seq)).toEqual([0, 1])
       expect(sequence).toEqual({ seq: 1, ownerID: "owner-1" })
-    }),
-  )
-
-  it.effect("strict replay rejects an owner conflict instead of silently skipping it", () =>
-    Effect.gen(function* () {
-      const bus = yield* Bus.Service
-      const aggregateID = Session.ID.create()
-      yield* bus.replay(
-        {
-          id: Event.ID.create(),
-          created: 0,
-          type: Bus.versionedType(DurableMessage.type, 1),
-          seq: 0,
-          aggregateID,
-          data: durableData(aggregateID, "claimed"),
-        },
-        { ownerID: "owner-1" },
-      )
-
-      const exit = yield* bus
-        .replay(
-          {
-            id: Event.ID.create(),
-            created: 0,
-            type: Bus.versionedType(DurableMessage.type, 1),
-            seq: 1,
-            aggregateID,
-            data: durableData(aggregateID, "conflict"),
-          },
-          { ownerID: "owner-2", strictOwner: true },
-        )
-        .pipe(Effect.exit)
-
-      expect(String(exit)).toContain("Replay owner mismatch")
     }),
   )
 

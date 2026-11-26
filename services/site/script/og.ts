@@ -177,6 +177,14 @@ const cards: Card[] = [
     shows: "the Privacy Policy document with its summary, at an angle",
     shot: angled(`${stills}/privacy-policy.jpg`, [290, 0, 1000, 900], 470),
   },
+  // No still of its own: the legal page's, which lists it.
+  {
+    path: "/legal/refund-policy",
+    title: "Refund Policy",
+    description: "When OpenCode refunds Go subscriptions and Models credits.",
+    shows: "the legal page listing the privacy policy, refund policy and terms, at an angle",
+    shot: angled(`${stills}/legal.jpg`, [290, 40, 1000, 800], 470),
+  },
   {
     path: "/legal/terms-of-service",
     title: "Terms of Use",

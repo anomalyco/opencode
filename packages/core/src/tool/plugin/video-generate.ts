@@ -83,11 +83,7 @@ export const Input = Schema.Struct({
   }),
 })
 
-export const Output = Schema.Struct({
-  id: Schema.String.annotate({ description: "The video job's ID, repeated in its completion notice" }),
-  path: Schema.String.annotate({ description: "Where the first video will be saved" }),
-  model: Schema.String.annotate({ description: "providerID/modelID" }),
-})
+export const Output = Schema.String
 
 /** The completion notice for a background video job, tagged with its job ID like `<background-result kind="image" id=…>` notices. */
 export function notice(input: { id: string; state: string; body: string }) {
@@ -232,7 +228,7 @@ export const Plugin = {
             yield* permission.assert({
               action: "webfetch",
               resources: [value],
-              save: ["*"],
+              save: Permission.site(value),
               metadata: { url: value },
               ...Permission.invocation(context),
             })
@@ -297,7 +293,7 @@ export const Plugin = {
         if (!enabled || videoGenerate(loaded.entries) === false) return
         editor.add({
           name,
-          options: { codemode: false },
+          options: { codemode: true },
           description,
           input: Input,
           output: Output,
@@ -368,8 +364,7 @@ export const Plugin = {
                 title: input.prompt,
               })
               return {
-                output: { id, path: file, model: ref },
-                content: [
+                output: [
                   // The model is named only when the tool picked it.
                   `Video job ${id} started in the background${input.model ? "" : ` with ${ref}`}. It will be saved to ${file}; if the model returns more than one video, the others are saved next to it with -1, -2, … added to the name.`,
                   "You will be notified automatically when it finishes or fails. Videos usually take a few minutes.",

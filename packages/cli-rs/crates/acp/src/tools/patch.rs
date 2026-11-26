@@ -49,13 +49,15 @@ pub fn parse(patch_text: &str) -> Option<Vec<Hunk>> {
         }
         if let Some(path) = header.strip_prefix("*** Add File: ") {
             let path = js_trim(path).to_owned();
-            let mut content = Vec::new();
+            let mut content = String::new();
             index += 1;
             while index < end && !is_boundary(js_trim(lines[index])) {
-                content.push(lines[index].strip_prefix('+')?);
+                // Every + line is a whole line of the file, as in Codex, so a final empty + line is a blank last line.
+                content.push_str(lines[index].strip_prefix('+')?);
+                content.push('\n');
                 index += 1;
             }
-            hunks.push(Hunk::Add { path, contents: content.join("\n") });
+            hunks.push(Hunk::Add { path, contents: content });
             continue;
         }
         if let Some(path) = header.strip_prefix("*** Delete File: ") {
@@ -317,7 +319,7 @@ mod tests {
         assert_eq!(
             parse(text),
             Some(vec![
-                Hunk::Add { path: "a.txt".into(), contents: "one\ntwo".into() },
+                Hunk::Add { path: "a.txt".into(), contents: "one\ntwo\n".into() },
                 Hunk::Delete { path: "b.txt".into() },
                 Hunk::Update {
                     path: "c.txt".into(),
@@ -334,6 +336,14 @@ mod tests {
         assert_eq!(parse("*** Begin Patch\n*** End Patch"), Some(Vec::new()));
         assert_eq!(parse("nope"), None);
         assert_eq!(parse("*** Begin Patch\n*** Update File: c.txt\n*** End Patch"), None);
+    }
+
+    #[test]
+    fn keeps_a_final_empty_plus_line_of_an_added_file() {
+        let add = |lines: &str| parse(&format!("*** Begin Patch\n*** Add File: a.md\n{lines}*** End Patch"));
+        assert_eq!(add("+# Title\n+\n"), Some(vec![Hunk::Add { path: "a.md".into(), contents: "# Title\n\n".into() }]));
+        assert_eq!(add("+\n"), Some(vec![Hunk::Add { path: "a.md".into(), contents: "\n".into() }]));
+        assert_eq!(add(""), Some(vec![Hunk::Add { path: "a.md".into(), contents: String::new() }]));
     }
 
     #[test]

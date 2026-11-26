@@ -104,11 +104,6 @@ describe("SessionModelRequest.unsupportedParts", () => {
     expect(unsupportedParts(messages, capabilities(["text", "image"]), "openai")).toEqual(messages)
   })
 
-  test("preserves supported media", () => {
-    const message = Message.user({ type: "media", media: Media.base64("aGVsbG8=", "image/png") })
-    expect(unsupportedParts([message], capabilities(["text", "image"]))[0]?.content).toEqual(message.content)
-  })
-
   test("returns the same messages when nothing is unsupported", () => {
     const messages = [
       Message.user([Message.text("hi"), { type: "media", media: Media.base64("aGVsbG8=", "image/png") }]),

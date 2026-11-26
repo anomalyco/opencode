@@ -5,8 +5,7 @@ import { onCleanup, onMount } from "solid-js"
 
 /**
  * The OpenCode lockup, as on opencode.ai and the Console: the OpenCode mark, linking to the site's home (right-click
- * for the logo menu), then DATA, linking to the Data home (hover, or its chevron on touch screens, for the product
- * menu). The menus are the shared ones in packages/nav-menus.
+ * for the logo menu), then DATA, linking to the Data home. The logo menu and lockup styles come from packages/nav-menus.
  */
 export function ProductLockup(props: {
   href: string
@@ -31,13 +30,7 @@ export function ProductLockup(props: {
           <path data-part="code" d="M180 60H60V240H180V60ZM240 300H0V0H240V300Z" />
         </svg>
       </a>
-      <a
-        data-nav-product="data"
-        href={props.href}
-        aria-label={props.nameLabel}
-        aria-haspopup="menu"
-        aria-expanded="false"
-      >
+      <a data-nav-name href={props.href} aria-label={props.nameLabel}>
         Data
       </a>
     </div>

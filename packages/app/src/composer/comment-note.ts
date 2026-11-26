@@ -64,14 +64,11 @@ export function formatNoteComment(input: NoteComment) {
 
 /** Each quoted line is prefixed, so quoted text cannot end the quote early and read as the user's own words. */
 export function formatQuoteComment(input: QuoteComment) {
-  const quote = `The user quoted the following from ${input.source?.subject ?? "earlier in the conversation"}:\n${input.text
-    .split("\n")
-    .map((line) => `> ${line}`)
-    .join("\n")}`
-
-  if (!input.comment) return quote
-
-  return `${quote}\n\nThe user made the following comment regarding this quote: ${input.comment}`
+  return [
+    ...(input.source ? [`From ${input.source.subject}:`] : []),
+    ...input.text.split("\n").map((line) => (line ? `> ${line}` : ">")),
+    ...(input.comment ? ["", input.comment] : []),
+  ].join("\n")
 }
 
 /** Restores a sent comment to the composer, for example after a revert or fork. */
