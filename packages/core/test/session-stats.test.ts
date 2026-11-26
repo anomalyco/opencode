@@ -1,4 +1,6 @@
 import { describe, expect } from "bun:test"
+import path from "node:path"
+import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { Agent } from "@opencode/schema/agent"
 import { Model } from "@opencode/schema/model"
 import { Money } from "@opencode/schema/money"
@@ -18,9 +20,12 @@ import { SessionHistory } from "@opencode/core/session/history"
 import { SessionStats } from "@opencode/core/session/stats"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import { DateTime, Effect, Layer, Schema } from "effect"
+import { DateTime, Deferred, Effect, Exit, Fiber, Layer, Logger, Schema } from "effect"
+import { Reactivity } from "effect/reactivity"
+import { SqlClient, Statement } from "effect/sql"
 import { TestClock } from "effect/testing"
 import { makeDurableObjectStorage } from "./fixture/durable-object-storage"
+import { withTempDir } from "./fixture/tmpdir"
 import { testEffect } from "./lib/effect"
 
 const it = testEffect(
@@ -397,6 +402,426 @@ describe("SessionStats", () => {
       expect(stats.cost).toBe(Money.USD.make(120 * 1.5 + 1))
     }),
   )
+
+  it.live("produces identical stats in the read-only worker and in-process on a file-backed database", () =>
+    withTempDir((tmp) => {
+      const file = path.join(tmp.path, "stats.db")
+      const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+        Bus.node.replace(Bus.configured({ persist: true })),
+        Database.node.replace(Database.configured({ path: file })),
+      ])
+      return Effect.gen(function* () {
+        const database = yield* Database.Service
+        const db = database.db
+        const bus = yield* Bus.Service
+        expect(database.path).toBe(file)
+
+        const now = Date.now()
+        const day = 24 * 60 * 60 * 1_000
+        const day1 = now - 3 * day
+        const day2 = now - 2 * day
+        const day3 = now - day
+        const forkCreated = now - 12 * 60 * 60 * 1_000
+
+        yield* db
+          .insert(ProjectTable)
+          .values([
+            { id: projectID, worktree: AbsolutePath.make("/stats"), name: "stats", sandboxes: [] },
+            { id: otherProjectID, worktree: AbsolutePath.make("/other"), name: "other", sandboxes: [] },
+          ])
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .insert(SessionTable)
+          .values([
+            { id: sessionID, project_id: projectID, slug: "root", directory: "/stats", version: "test" },
+            {
+              id: childID,
+              project_id: projectID,
+              parent_id: sessionID,
+              slug: "child",
+              directory: "/stats",
+              version: "test",
+            },
+            {
+              id: forkID,
+              project_id: projectID,
+              fork_session_id: sessionID,
+              slug: "fork",
+              directory: "/stats",
+              version: "test",
+              time_created: forkCreated,
+            },
+            { id: otherSessionID, project_id: otherProjectID, slug: "other", directory: "/other", version: "test" },
+          ])
+          .run()
+          .pipe(Effect.orDie)
+
+        const partMessage = messageRow(sessionID, 2, assistant("msg_worker_parts", day1 + 1_000, [], "sonnet", 1))
+        const hybridMessage = messageRow(
+          sessionID,
+          3,
+          assistant("msg_worker_hybrid", day2, [
+            SessionMessage.AssistantTool.make({
+              type: "tool",
+              id: "call_inline_edit",
+              name: "edit",
+              state: SessionMessage.ToolStateError.make({
+                status: "error",
+                input: {},
+                error: { type: "tool", message: "boom" },
+              }),
+              time: {
+                created: DateTime.makeUnsafe(day2),
+                completed: DateTime.makeUnsafe(day2 + 1_500),
+              },
+            }),
+          ]),
+        )
+        yield* db
+          .insert(SessionMessageTable)
+          .values([
+            messageRow(
+              sessionID,
+              1,
+              SessionMessage.User.make({
+                id: SessionMessage.ID.make("msg_worker_user"),
+                type: "user",
+                text: "x".repeat(4_096),
+                time: { created: DateTime.makeUnsafe(day1) },
+              }),
+            ),
+            partMessage,
+            hybridMessage,
+            messageRow(childID, 1, assistant("msg_worker_child", day3, [], "opus", 2)),
+            messageRow(forkID, 1, assistant("msg_worker_fork_copied", day1, [], "sonnet", 1)),
+            messageRow(forkID, 2, assistant("msg_worker_fork_new", forkCreated + 1_000, [], "haiku", 1)),
+            messageRow(otherSessionID, 1, assistant("msg_worker_other", day2, [], "other-model", 3)),
+          ])
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .insert(SessionPartTable)
+          .values([
+            {
+              message_id: partMessage.id,
+              session_id: sessionID,
+              ordinal: 0,
+              type: "tool",
+              call_id: "call_part_read",
+              time_created: day1 + 1_000,
+              time_updated: day1 + 1_000,
+              data: SessionHistory.encodePart(
+                SessionMessage.AssistantTool.make({
+                  type: "tool",
+                  id: "call_part_read",
+                  name: "read",
+                  state: SessionMessage.ToolStateCompleted.make({
+                    status: "completed",
+                    input: {},
+                    content: [{ type: "text", text: "ok" }],
+                  }),
+                  time: {
+                    created: DateTime.makeUnsafe(day1 + 1_000),
+                    ran: DateTime.makeUnsafe(day1 + 1_100),
+                    completed: DateTime.makeUnsafe(day1 + 1_350),
+                  },
+                }),
+              ),
+            },
+            {
+              message_id: hybridMessage.id,
+              session_id: sessionID,
+              ordinal: 0,
+              type: "tool",
+              call_id: "call_part_pending",
+              time_created: day2,
+              time_updated: day2,
+              data: SessionHistory.encodePart(
+                SessionMessage.AssistantTool.make({
+                  type: "tool",
+                  id: "call_part_pending",
+                  name: "bash",
+                  state: SessionMessage.ToolStateRunning.make({ status: "running", input: {}, metadata: {} }),
+                  time: { created: DateTime.makeUnsafe(day2) },
+                }),
+              ),
+            },
+          ])
+          .run()
+          .pipe(Effect.orDie)
+
+        yield* bus.publish(SessionEvent.UsageRecorded, {
+          sessionID,
+          source: "compaction",
+          cost: Money.USD.make(0.4),
+          tokens: { input: 7, output: 3, reasoning: 1, cache: { read: 2, write: 1 } },
+        })
+        yield* bus.publish(SessionEvent.UsageRecorded, {
+          sessionID,
+          source: "title",
+          cost: Money.USD.make(9.99),
+          tokens: { input: 99, output: 99, reasoning: 0, cache: { read: 0, write: 0 } },
+        })
+        yield* bus.publish(SessionEvent.UsageRecorded, {
+          sessionID: otherSessionID,
+          source: "compaction",
+          cost: Money.USD.make(1.2),
+          tokens: { input: 5, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
+        })
+
+        let spawned = 0
+        const workerGet = SessionStats.makeGet(SessionStats.runInWorker(undefined, () => spawned++))
+        const inProcessService = { db }
+        const cases = [
+          { from: day1 - day, to: Date.now() + day, timezone: "America/New_York", tools: "detail" as const },
+          { from: day1 - day, to: Date.now() + day, timezone: "UTC", tools: "summary" as const },
+          { projectID, to: Date.now() + day, timezone: "UTC", tools: "none" as const },
+        ]
+        for (const query of cases) {
+          const fromWorker = yield* workerGet(query)
+          const fromMain = yield* SessionStats.get(query).pipe(
+            Effect.provideService(Database.Service, inProcessService),
+          )
+          expect(fromWorker).toEqual(fromMain)
+        }
+        expect(spawned).toBe(cases.length)
+      }).pipe(Effect.provide(layer), Effect.scoped)
+    }),
+  )
+
+  it.live("keeps the main event loop responsive while a file-backed stats query runs in a worker", () =>
+    withTempDir((tmp) => {
+      const file = path.join(tmp.path, "responsive.db")
+      const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+        Database.node.replace(Database.configured({ path: file })),
+      ])
+      return Effect.gen(function* () {
+        const db = (yield* Database.Service).db
+        const base = Date.UTC(2026, 0, 1)
+        yield* db
+          .insert(ProjectTable)
+          .values({ id: projectID, worktree: AbsolutePath.make("/stats"), name: "stats", sandboxes: [] })
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .insert(SessionTable)
+          .values({ id: sessionID, project_id: projectID, slug: "root", directory: "/stats", version: "test" })
+          .run()
+          .pipe(Effect.orDie)
+
+        const messages = Array.from({ length: 150 }, (_, i) =>
+          messageRow(sessionID, i + 1, assistant(`msg_resp_${i}`, base + i * 60_000, [], "sonnet", 1)),
+        )
+        yield* Effect.forEach(
+          DatabaseBatch.insertBatches(SessionMessageTable, messages),
+          (batch) => db.insert(SessionMessageTable).values(batch).run().pipe(Effect.orDie),
+          { discard: true },
+        )
+
+        let done = false
+        const fiber = yield* Effect.forkChild(
+          SessionStats.get({ from: base, to: base + 30 * 24 * 60 * 60 * 1_000, timezone: "UTC", tools: "detail" }).pipe(
+            Effect.ensuring(
+              Effect.sync(() => {
+                done = true
+              }),
+            ),
+          ),
+          { startImmediately: true },
+        )
+        let ticks = 0
+        while (!done) {
+          ticks++
+          yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, 1)))
+        }
+        const stats = yield* Fiber.join(fiber)
+        expect(ticks).toBeGreaterThan(0)
+        expect(stats.steps).toBe(150)
+      }).pipe(Effect.provide(layer), Effect.scoped)
+    }),
+  )
+
+  it.live("terminates the stats worker cleanly when the fiber is interrupted", () =>
+    withTempDir((tmp) => {
+      const file = path.join(tmp.path, "interrupt.db")
+      const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+        Database.node.replace(Database.configured({ path: file })),
+      ])
+      return Effect.gen(function* () {
+        const spawned = yield* Deferred.make<void>()
+        const exited = yield* Deferred.make<void>()
+        const get = SessionStats.makeGet(
+          SessionStats.runInWorker(new URL("./fixture/stats-hang-worker.ts", import.meta.url), (worker) => {
+            worker.once("exit", () => Deferred.doneUnsafe(exited, Effect.void))
+            Deferred.doneUnsafe(spawned, Effect.void)
+          }),
+        )
+
+        const fiber = yield* Effect.forkChild(get({ tools: "none" }), { startImmediately: true })
+        yield* Deferred.await(spawned)
+        yield* Fiber.interrupt(fiber)
+
+        expect(Exit.hasInterrupts(yield* Fiber.await(fiber))).toBe(true)
+        yield* Deferred.await(exited).pipe(Effect.timeout("5 seconds"))
+      }).pipe(Effect.provide(layer), Effect.scoped)
+    }),
+  )
+
+  it.live("falls back to in-process stats when the worker cannot start, warning once", () =>
+    withTempDir((tmp) => {
+      const file = path.join(tmp.path, "fallback.db")
+      const warnings: unknown[] = []
+      const logger = Logger.make(({ logLevel, message }) => {
+        if (logLevel === "Warn") warnings.push(message)
+      })
+      const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+        Database.node.replace(Database.configured({ path: file })),
+      ])
+      return Effect.gen(function* () {
+        const db = (yield* Database.Service).db
+        const created = Date.UTC(2026, 0, 2, 10)
+        yield* db
+          .insert(ProjectTable)
+          .values({ id: projectID, worktree: AbsolutePath.make("/stats"), name: "stats", sandboxes: [] })
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .insert(SessionTable)
+          .values({ id: sessionID, project_id: projectID, slug: "root", directory: "/stats", version: "test" })
+          .run()
+          .pipe(Effect.orDie)
+        yield* db
+          .insert(SessionMessageTable)
+          .values(messageRow(sessionID, 1, assistant("msg_fallback", created, [])))
+          .run()
+          .pipe(Effect.orDie)
+
+        const get = SessionStats.makeGet(
+          SessionStats.runInWorker(new URL("./missing-stats-worker.js", import.meta.url)),
+        )
+        const query = { from: Date.UTC(2026, 0, 1), to: Date.UTC(2026, 1, 1), timezone: "UTC", tools: "none" as const }
+        const first = yield* get(query)
+        const second = yield* get(query)
+        expect(first.steps).toBe(1)
+        expect(second).toEqual(first)
+        expect(warnings).toHaveLength(1)
+      }).pipe(Effect.provide(layer), Effect.provide(Logger.layer([logger])), Effect.scoped)
+    }),
+  )
+
+  it.effect("queries compaction events in a single indexed query instead of O(sessions) batches", () => {
+    const executed: Array<{ query: string; params: ReadonlyArray<unknown> }> = []
+    const recordingClient = Layer.effect(
+      SqlClient.SqlClient,
+      Effect.gen(function* () {
+        const client = yield* SqlClient.SqlClient
+        const connection = yield* client.reserve
+        const record = (query: string, params: ReadonlyArray<unknown>) => {
+          executed.push({ query, params })
+        }
+        return yield* SqlClient.make({
+          acquirer: Effect.succeed({
+            ...connection,
+            execute: (query, params, transform) => {
+              record(query, params)
+              return connection.execute(query, params, transform)
+            },
+            executeRaw: (query, params) => {
+              record(query, params)
+              return connection.executeRaw(query, params)
+            },
+            executeValues: (query, params) => {
+              record(query, params)
+              return connection.executeValues(query, params)
+            },
+          }),
+          compiler: Statement.makeCompilerSqlite(),
+          driver: client.driver,
+          spanAttributes: [],
+        })
+      }),
+    ).pipe(
+      Layer.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })),
+      Layer.provide(Reactivity.layer),
+      Layer.orDie,
+    )
+
+    const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+      Bus.node.replace(Bus.configured({ persist: true })),
+      Database.node.replace(Database.configuredClient(recordingClient)),
+    ])
+
+    return Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      const bus = yield* Bus.Service
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: projectID, worktree: AbsolutePath.make("/stats"), name: "stats", sandboxes: [] })
+        .run()
+        .pipe(Effect.orDie)
+
+      const ids = Array.from({ length: 250 }, (_, i) => Session.ID.make(`ses_idx_${String(i).padStart(3, "0")}`))
+      const created = Date.UTC(2026, 0, 2, 10)
+      yield* Effect.forEach(
+        DatabaseBatch.insertBatches(
+          SessionTable,
+          ids.map((id, i) => ({
+            id,
+            project_id: projectID,
+            slug: `session-${i}`,
+            directory: "/stats",
+            version: "test",
+          })),
+        ),
+        (batch) => db.insert(SessionTable).values(batch).run().pipe(Effect.orDie),
+        { discard: true },
+      )
+      yield* Effect.forEach(
+        DatabaseBatch.insertBatches(
+          SessionMessageTable,
+          ids.map((id, i) => messageRow(id, 1, assistant(`msg_idx_${i}`, created, []))),
+        ),
+        (batch) => db.insert(SessionMessageTable).values(batch).run().pipe(Effect.orDie),
+        { discard: true },
+      )
+
+      yield* TestClock.setTime(created + 1_000)
+      yield* bus.publish(SessionEvent.UsageRecorded, {
+        sessionID: ids[0]!,
+        source: "compaction",
+        cost: Money.USD.make(0.5),
+        tokens: { input: 5, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
+      })
+      yield* bus.publish(SessionEvent.UsageRecorded, {
+        sessionID: ids[249]!,
+        source: "compaction",
+        cost: Money.USD.make(0.5),
+        tokens: { input: 5, output: 5, reasoning: 0, cache: { read: 0, write: 0 } },
+      })
+
+      executed.length = 0
+      const stats = yield* SessionStats.get({
+        from: Date.UTC(2026, 0, 1),
+        to: Date.UTC(2026, 1, 1),
+        projectID,
+        timezone: "UTC",
+        tools: "none",
+      })
+
+      const eventQueries = executed.filter((entry) => entry.query.includes('"event"'))
+      expect(eventQueries).toHaveLength(1)
+      expect(executed.filter((entry) => entry.query.includes('from "session_v2"'))).toHaveLength(0)
+
+      const plan = yield* db.$client
+        .unsafe<{ detail: string }>(`EXPLAIN QUERY PLAN ${eventQueries[0]!.query}`, [...eventQueries[0]!.params])
+        .pipe(Effect.orDie)
+      expect(plan.map((step) => step.detail).join("\n")).toContain("event_usage_recorded_created_idx")
+
+      expect(stats.sessions).toBe(250)
+      expect(stats.cost).toBe(Money.USD.make(250 * 1.5 + 1))
+    }).pipe(Effect.provide(layer), Effect.scoped)
+  })
 })
 
 function assistant(

@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "6fdb1fc8-74cd-4f15-8faa-e109d3030da9",
-  "prevIds": ["74cace2e-430e-4672-bf3b-eba14ae0c399"],
+  "id": "327dfd3d-429f-4048-bfd5-1bb3daf12f69",
+  "prevIds": ["6fdb1fc8-74cd-4f15-8faa-e109d3030da9"],
   "ddl": [
     {
       "name": "account_state",
@@ -2451,6 +2451,24 @@
       "where": null,
       "origin": "manual",
       "name": "event_aggregate_type_seq_idx",
+      "entityType": "indexes",
+      "table": "event"
+    },
+    {
+      "columns": [
+        {
+          "value": "created",
+          "isExpression": false
+        },
+        {
+          "value": "aggregate_id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": "\"event\".\"type\" = 'session.usage.recorded.1'",
+      "origin": "manual",
+      "name": "event_usage_recorded_created_idx",
       "entityType": "indexes",
       "table": "event"
     },

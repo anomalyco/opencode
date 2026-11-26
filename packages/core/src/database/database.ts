@@ -16,6 +16,7 @@ type DatabaseShape = Effect.Success<typeof makeDatabase>
 
 export interface Interface {
   db: DatabaseShape
+  readonly path?: string
 }
 
 export const Options = Schema.Struct({
@@ -32,7 +33,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/st
 // cross-object I/O.
 // Only a database file the user opens imports their legacy auth.json; in-memory and injected databases belong to
 // embedders and tests, which must not pick up the user's credentials.
-const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>, legacyCredentials = false) =>
+const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>, legacyCredentials = false, path?: string) =>
   Layer.effect(
     Service,
     Effect.gen(function* () {
@@ -51,7 +52,7 @@ const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>, legacyCredentia
       const semaphore = yield* lock
       yield* semaphore.withPermit(DatabaseMigration.apply(db, { legacyCredentials }))
 
-      return { db }
+      return path === undefined ? { db } : { db, path }
     }).pipe(Effect.orDie),
   )
 
@@ -73,7 +74,7 @@ export function layer(options: Options = { path: ":memory:" }) {
       const provide = (filename: string) =>
         (filename === ":memory:"
           ? databaseLayer(Semaphore.make(1))
-          : databaseLayer(Effect.succeed(lockFor(filename)), true)
+          : databaseLayer(Effect.succeed(lockFor(filename)), true, filename)
         ).pipe(Layer.provide(sqliteLayer({ filename })))
       const filename = options.path ?? ":memory:"
       if (filename === ":memory:") return provide(filename)

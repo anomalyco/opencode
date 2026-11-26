@@ -322,6 +322,9 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       )
       yield* tx.run(`CREATE UNIQUE INDEX \`event_aggregate_seq_idx\` ON \`event\` (\`aggregate_id\`,\`seq\`);`)
       yield* tx.run(`CREATE INDEX \`event_aggregate_type_seq_idx\` ON \`event\` (\`aggregate_id\`,\`type\`,\`seq\`);`)
+      yield* tx.run(
+        `CREATE INDEX \`event_usage_recorded_created_idx\` ON \`event\` (\`created\`,\`aggregate_id\`) WHERE "event"."type" = 'session.usage.recorded.1';`,
+      )
       yield* tx.run(`CREATE INDEX \`job_session_idx\` ON \`job\` (\`session_id\`);`)
       yield* tx.run(`CREATE INDEX \`job_child_session_idx\` ON \`job\` (\`child_session_id\`);`)
       yield* tx.run(`CREATE INDEX \`job_id_idx\` ON \`job\` (\`id\`);`)

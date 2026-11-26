@@ -1,4 +1,5 @@
 import { sqliteTable, text, integer, index, uniqueIndex } from "drizzle-orm/sqlite-core"
+import { sql } from "drizzle-orm"
 import { Event } from "@opencode/schema/event"
 
 export const EventSequenceTable = sqliteTable("event_sequence", {
@@ -22,5 +23,10 @@ export const EventTable = sqliteTable(
   (table) => [
     uniqueIndex("event_aggregate_seq_idx").on(table.aggregate_id, table.seq),
     index("event_aggregate_type_seq_idx").on(table.aggregate_id, table.type, table.seq),
+    // Partial index matching Event.versionedType(SessionEvent.UsageRecorded.type, 1)
+    // so SessionStats compaction queries scan only usage events in the requested time range.
+    index("event_usage_recorded_created_idx")
+      .on(table.created, table.aggregate_id)
+      .where(sql`${table.type} = 'session.usage.recorded.1'`),
   ],
 )
