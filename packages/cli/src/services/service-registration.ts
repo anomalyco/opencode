@@ -1,6 +1,6 @@
 export * as ServiceRegistration from "./service-registration"
 
-import { Service, type Info } from "@opencode/client/effect/service"
+import { Service, ServiceRecovery, type Info } from "@opencode/client/effect/service"
 import path from "node:path"
 import { Effect, FileSystem, Schedule, Schema } from "effect"
 import { HttpServer } from "effect/http"
@@ -44,6 +44,15 @@ export const register = Effect.fnUntraced(function* (options: {
         fs.rename(temp, options.file).pipe(Effect.retry({ times: 20, schedule: Schedule.spaced("10 millis") })),
       ),
     )
+  const recovered = yield* Effect.promise(() => ServiceRecovery.take(options.file).catch(() => undefined))
+  if (recovered !== undefined)
+    yield* Effect.logWarning("previous managed service was killed by client recovery", {
+      previousServicePID: recovered.pid,
+      previousVersion: recovered.version,
+      signal: recovered.signal,
+      reason: recovered.reason,
+      killedAt: recovered.at,
+    })
   yield* current.pipe(
     Effect.catchCause((cause) =>
       Effect.logWarning("managed service registration check failed; shutting down", {

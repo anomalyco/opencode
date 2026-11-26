@@ -4,10 +4,11 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
+import { ServiceRecovery } from "../service-recovery.js"
 import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
-export { headers }
+export { headers, ServiceRecovery }
 /** Contents of the local service registration file. */
 export type Info = typeof Info.Type
 
@@ -81,7 +82,11 @@ export const ensure = Effect.fn("service.ensure")(function* (options: EnsureOpti
         yield* announce("missing")
         yield* Effect.logWarning("Background service is unresponsive; recovery cannot preserve persistent terminals")
         yield* Effect.tryPromise(() => PtyHandoff.clear(options.file ?? fallback()))
-        yield* terminate(info, options, timing)
+        const signal = yield* terminate(info, options, timing)
+        if (signal !== undefined)
+          yield* Effect.tryPromise(() => ServiceRecovery.record(options.file ?? fallback(), info, signal)).pipe(
+            Effect.ignore,
+          )
         pool.evict(info.pid)
         pool.recruitNow()
         timeouts = undefined
@@ -181,7 +186,7 @@ const stopped = Effect.fnUntraced(function* (pid: number) {
 
 const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
   const current = yield* read(options.file)
-  if (current === undefined || !same(current, info)) return
+  if (current === undefined || !same(current, info)) return undefined
   yield* signal(info.pid, "SIGTERM")
   const done = yield* stopped(info.pid).pipe(Effect.retry(poll(timing)), Effect.option)
   // The registration can disappear or change hands before this process exits. Only the PID we
@@ -190,10 +195,12 @@ const terminate = Effect.fnUntraced(function* (info: Info, options: { readonly f
     yield* signal(info.pid, "SIGKILL")
     yield* stopped(info.pid).pipe(Effect.retry(poll(timing)))
   }
+  const sent = Option.isNone(done) ? "SIGKILL" : "SIGTERM"
   const latest = yield* read(options.file)
-  if (latest === undefined || !same(latest, info)) return
+  if (latest === undefined || !same(latest, info)) return sent
   const fs = yield* FileSystem.FileSystem
   yield* fs.remove(options.file ?? fallback()).pipe(Effect.ignore)
+  return sent
 })
 
 /** Effect-based local service lifecycle operations. */

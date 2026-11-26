@@ -4,6 +4,7 @@ import { contenderPool, spawnServiceContender } from "../service-contender.js"
 import { defaultEnsureTiming, ensureTiming, type EnsureTiming } from "../service-timing.js"
 import { matchesVersion } from "../service-version.js"
 import { PtyHandoff } from "../pty-handoff.js"
+import { ServiceRecovery } from "../service-recovery.js"
 import { decide, fallback, headers, probeResult, same } from "../service-probe.js"
 
 export * from "../service.js"
@@ -61,7 +62,9 @@ export async function ensure(options: EnsureOptions = {}): Promise<Endpoint> {
           announce("missing")
           console.warn("Background service is unresponsive; recovery cannot preserve persistent terminals")
           await PtyHandoff.clear(options.file ?? fallback())
-          await terminate(registration.info, options, timing)
+          const signal = await terminate(registration.info, options, timing)
+          if (signal !== undefined)
+            await ServiceRecovery.record(options.file ?? fallback(), registration.info, signal).catch(() => undefined)
           pool.evict(registration.info.pid)
           pool.recruitNow()
           timeouts = undefined
@@ -152,17 +155,20 @@ async function waitUntilStopped(pid: number, timing: EnsureTiming) {
 
 async function terminate(info: Info, options: { readonly file?: string }, timing: EnsureTiming) {
   const current = await read(options.file)
-  if (current === undefined || !same(current, info)) return
+  if (current === undefined || !same(current, info)) return undefined
   signal(info.pid, "SIGTERM")
+  let sent: "SIGTERM" | "SIGKILL" = "SIGTERM"
   // The registration can disappear or change hands before this process exits. Only the PID we
   // signalled can tell us whether it has stopped, so escalate based on that process.
   if (!(await waitUntilStopped(info.pid, timing))) {
     signal(info.pid, "SIGKILL")
+    sent = "SIGKILL"
     if (!(await waitUntilStopped(info.pid, timing))) throw new Error(`Server process ${info.pid} is still running`)
   }
   const latest = await read(options.file)
-  if (latest === undefined || !same(latest, info)) return
+  if (latest === undefined || !same(latest, info)) return sent
   await rm(options.file ?? fallback(), { force: true })
+  return sent
 }
 
 function delay(milliseconds: number) {

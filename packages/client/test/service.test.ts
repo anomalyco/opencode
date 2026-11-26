@@ -196,6 +196,7 @@ test("evicts an unresponsive registered service before starting its replacement"
   expect(await existing.exited).toBe(stoppedExitCode)
   expect(replacement.pid).not.toBe(original.pid)
   expect(endpoint.url).toBe(replacement.url)
+  expect(await Bun.file(registration + ".recovery").json()).toMatchObject({ pid: original.pid, signal: "SIGTERM" })
   expect(await status(endpoint.url)).toMatchObject({ version: "test", pid: replacement.pid })
 })
 
