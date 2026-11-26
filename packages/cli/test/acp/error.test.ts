@@ -1,6 +1,15 @@
 import { describe, expect, test } from "bun:test"
 import { ACPError } from "../../src/acp/error"
-import { delivered, rpcError, startSession, textDelta, type Wire } from "./wire-fixture"
+import {
+  delivered,
+  durableEvent,
+  failed,
+  rpcError,
+  startSession,
+  succeeded,
+  textDelta,
+  type Wire,
+} from "./wire-fixture"
 
 describe("acp errors", () => {
   test("wraps unknown defects without leaking raw details", () => {
@@ -48,4 +57,43 @@ describe("acp error boundary over the wire", () => {
       expect(acp.logs.map((log) => String(log.message)).toSorted()).toEqual(logs)
     },
   )
+})
+
+describe("acp terminal error metadata", () => {
+  test("propagates provider status and retry delay into JSON-RPC error data", async () => {
+    const rateLimit = { type: "provider.rate-limit", message: "Rate limit reached", status: 429, retryAfterMs: 60000 }
+    const expected = {
+      code: -32603,
+      data: { service: "session", errorName: "provider.rate-limit", status: 429, retryAfterMs: 60000 },
+    }
+
+    await using execution = await startSession({
+      onPrompt: ({ sessionID, id }) => [delivered(sessionID, id), failed(sessionID, rateLimit), succeeded(sessionID)],
+    })
+    expect(await rpcError(execution.prompt(execution.sessionId, "hello"))).toMatchObject(expected)
+
+    await using step = await startSession({
+      onPrompt: ({ sessionID, id }) => [
+        delivered(sessionID, id),
+        durableEvent("session.step.failed", {
+          sessionID,
+          assistantMessageID: "msg_rate_limit",
+          error: rateLimit,
+        }),
+        succeeded(sessionID),
+      ],
+    })
+    expect(await rpcError(step.prompt(step.sessionId, "hello"))).toMatchObject(expected)
+
+    await using plain = await startSession({
+      onPrompt: ({ sessionID, id }) => [
+        delivered(sessionID, id),
+        failed(sessionID, { type: "provider.rate-limit", message: "slow down" }),
+        succeeded(sessionID),
+      ],
+    })
+    const plainData = (await rpcError(plain.prompt(plain.sessionId, "hello"))).data
+    expect(plainData).not.toHaveProperty("status")
+    expect(plainData).not.toHaveProperty("retryAfterMs")
+  })
 })
