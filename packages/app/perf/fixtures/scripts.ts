@@ -24,10 +24,9 @@ export function scriptTools(): SessionMessageAssistant["content"] {
       content: [{ type: "text", text: `${count} files` }],
       metadata: {
         toolCalls: Array.from({ length: count }, (_, call) => ({
-          tool: "Bun",
+          tool: "read",
           status: "completed",
           input: {
-            method: "file",
             path: `C:/OpenCode/TimelineStateRegression/packages/app/src/module-${script}-${call}.ts`,
           },
         })),
