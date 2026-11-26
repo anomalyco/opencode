@@ -37,8 +37,16 @@ const start = Effect.fnUntraced(function* () {
     })
 })
 
+// A later app may send keys this server doesn't know, such as the format versions it reads.
 const register = (publicKey: string, callbackURL = `${relay}/v2/notify/sealed`) =>
-  JSON.stringify({ callbackURL, expiresAt: Date.now() + 86_400_000, publicKey, platform: "android", name: "Pixel" })
+  JSON.stringify({
+    callbackURL,
+    expiresAt: Date.now() + 86_400_000,
+    publicKey,
+    platform: "android",
+    name: "Pixel",
+    formats: [1],
+  })
 
 const phoneKey = () => {
   const phone = createECDH("prime256v1")
