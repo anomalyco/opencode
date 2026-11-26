@@ -1,0 +1,9 @@
+[bindings.swift]
+# One Swift module with psychoscript-mobile's bindings (`import PsychoScript`); the C declarations live in the
+# xcframework's `PsychoScriptFFI` module, this crate's in a header of its own.
+module_name = "PsychoScript"
+ffi_module_name = "PsychoScriptFFI"
+ffi_module_filename = "WidgetMobileFFI"
+
+[bindings.kotlin]
+package_name = "ai.opencode.widgets"
