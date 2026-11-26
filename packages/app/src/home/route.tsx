@@ -39,9 +39,11 @@ function HomeOverview() {
   const home = createHomeController()
   const automations = useAutomationSource()
   const navigate = useNavigate()
+
   const projects = createHomeProjectsController(home, {
     automations: { available: automations.available, open: () => navigate("/automations") },
   })
+
   const sessions = createHomeSessionsController(home)
   const search = createHomeSessionSearchController(home, sessions, settings.appearance.navigationPrototype)
 

@@ -14,6 +14,8 @@ import type { HomeController } from "../model"
 import { createProjectActions } from "./actions"
 import type { HomeAutomationsEntry } from "./view"
 
+export type HomeProjectsUtility = { settings: () => void; help: () => void; automations?: HomeAutomationsEntry }
+
 export const HomeServersSchema = Schema.Struct({
   collapsed: Persistence.record(Persistence.fallback(Schema.Boolean, () => false)),
 })
@@ -48,6 +50,13 @@ export function createHomeProjectsController(home: HomeController, options?: { a
       onSelect: (result) => home.project.add(conn, homeProjectDirectories(result)),
     })
   }
+
+  const utility: HomeProjectsUtility = {
+    settings: openSettings,
+    help: () => platform.openExternal("https://opencode.ai/desktop-feedback"),
+  }
+
+  if (options?.automations) utility.automations = options.automations
 
   return {
     copy: {
@@ -101,11 +110,7 @@ export function createHomeProjectsController(home: HomeController, options?: { a
       canReveal: actions.canReveal,
       reveal: actions.reveal,
     },
-    utility: {
-      settings: openSettings,
-      help: () => platform.openExternal("https://opencode.ai/desktop-feedback"),
-      ...(options?.automations ? { automations: options.automations } : {}),
-    } as { settings: () => void; help: () => void; automations?: HomeAutomationsEntry },
+    utility,
   }
 }
 
