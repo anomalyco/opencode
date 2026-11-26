@@ -4502,10 +4502,18 @@ export type SkillUpdated = _Event1<"skill.updated", any>
 
 export type SnapshotID = string
 
+export type SpaceChange = {
+    key: SpaceKey,
+    value: SpaceValue?,
+}
+
+--- Covers this write and every change before it.
 export type SpaceCursor = string
 
---- Covers every change up to this page; save it to subscribe or sync from.
 export type SpaceCursor1 = string
+
+--- Covers every change up to this page; save it to subscribe or sync from.
+export type SpaceCursor2 = string
 
 export type SpaceDelta = {
     type: "delta",
@@ -4513,8 +4521,8 @@ export type SpaceDelta = {
     epoch: SpaceEpoch,
     revision: SpaceRevision,
     entries: { SpaceEntry },
-    cursor: SpaceCursor1,
-    next: SpaceCursor?,
+    cursor: SpaceCursor2,
+    next: SpaceCursor1?,
     deleted: { SpaceKey },
 }
 
@@ -4540,8 +4548,8 @@ export type SpaceSnapshot = {
     epoch: SpaceEpoch,
     revision: SpaceRevision,
     entries: { SpaceEntry },
-    cursor: SpaceCursor1,
-    next: SpaceCursor?,
+    cursor: SpaceCursor2,
+    next: SpaceCursor1?,
 }
 
 export type SpaceValue = string
@@ -5513,21 +5521,12 @@ export type Client = {
             }) -> (string?, string?),
         },
         space: {
-            delete: (input: {
-                space: string,
-                key: string,
-            }) -> (nil, string?),
             reset: (input: {}?) -> (nil, string?),
-            set: (input: {
-                space: string,
-                key: string,
-                value: SpaceValue,
-            }) -> (nil, string?),
             subscribe: (input: {
                 stream: string,
                 spaces: { {
                     space: SpaceName,
-                    cursor: SpaceCursor,
+                    cursor: SpaceCursor1,
                 } },
             }) -> (nil, string?),
             sync: (input: {
@@ -5538,6 +5537,13 @@ export type Client = {
                 stream: string,
                 spaces: { SpaceName },
             }) -> (nil, string?),
+            write: (input: {
+                space: string,
+                changes: { SpaceChange },
+            }) -> ({
+                revision: SpaceRevision,
+                cursor: SpaceCursor,
+            }?, string?),
         },
         usage: {
             limits: (input: {

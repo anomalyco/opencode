@@ -11584,22 +11584,27 @@ pub struct ExperimentalPushSettingsSetInput {
 /// Output of `Client::experimental_push_settings_set`.
 pub type ExperimentalPushSettingsSetOutput = PushSettings;
 
-/// Input of `Client::experimental_space_set`.
-#[derive(Debug, Clone, PartialEq, Default)]
-pub struct ExperimentalSpaceSetInput {
-    pub space: SpaceName,
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct SpaceChange {
     pub key: SpaceKey,
-    pub value: SpaceValue,
+    #[serde(default)]
+    pub value: Option<SpaceValue>,
 }
 
-/// Input of `Client::experimental_space_delete`.
+/// Input of `Client::experimental_space_write`.
 #[derive(Debug, Clone, PartialEq, Default)]
-pub struct ExperimentalSpaceDeleteInput {
+pub struct ExperimentalSpaceWriteInput {
     pub space: SpaceName,
-    pub key: SpaceKey,
+    pub changes: Vec<SpaceChange>,
 }
 
 string_type!(SpaceCursor, "`Space.Cursor`");
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalSpaceWriteOutput {
+    pub revision: SpaceRevision,
+    pub cursor: SpaceCursor,
+}
 
 /// Input of `Client::experimental_space_sync`.
 #[derive(Debug, Clone, PartialEq, Default)]

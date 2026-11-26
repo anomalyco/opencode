@@ -1908,19 +1908,12 @@ pub fn experimental_push_settings_set(
     call
 }
 
-/// `PUT /api/experimental/space/:space/:key` (`space.set`)
-pub fn experimental_space_set(input: &ExperimentalSpaceSetInput) -> Call<()> {
-    let mut call = Call::new("PUT", String::new(), Reply::Empty, 204, &[400, 401]);
-    call.path = format!("/api/experimental/space/{}/{}", call.param(&input.space), call.param(&input.key));
+/// `POST /api/experimental/space/:space/write` (`space.write`)
+pub fn experimental_space_write(input: &ExperimentalSpaceWriteInput) -> Call<ExperimentalSpaceWriteOutput> {
+    let mut call = Call::new("POST", String::new(), Reply::Json, 200, &[400, 401]);
+    call.path = format!("/api/experimental/space/{}/write", call.param(&input.space));
     call.object();
-    call.field("value", &input.value);
-    call
-}
-
-/// `DELETE /api/experimental/space/:space/:key` (`space.delete`)
-pub fn experimental_space_delete(input: &ExperimentalSpaceDeleteInput) -> Call<()> {
-    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401]);
-    call.path = format!("/api/experimental/space/{}/{}", call.param(&input.space), call.param(&input.key));
+    call.field("changes", &input.changes);
     call
 }
 
@@ -3237,18 +3230,10 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
             })
             .cast())
         })()),
-        "experimental.space.set" => Some((|| {
-            Ok(experimental_space_set(&ExperimentalSpaceSetInput {
+        "experimental.space.write" => Some((|| {
+            Ok(experimental_space_write(&ExperimentalSpaceWriteInput {
                 space: field(input, "space")?,
-                key: field(input, "key")?,
-                value: field(input, "value")?,
-            })
-            .cast())
-        })()),
-        "experimental.space.delete" => Some((|| {
-            Ok(experimental_space_delete(&ExperimentalSpaceDeleteInput {
-                space: field(input, "space")?,
-                key: field(input, "key")?,
+                changes: field(input, "changes")?,
             })
             .cast())
         })()),

@@ -214,8 +214,7 @@ impl Client {
     endpoint!(" `PUT /api/experimental/push/session/:sessionID` (`push.session.set`)", experimental_push_session_set, experimental_push_session_set_call, data, ExperimentalPushSessionSetOutput, input: ExperimentalPushSessionSetInput);
     endpoint!(" `DELETE /api/experimental/push/session/:sessionID` (`push.session.remove`)", experimental_push_session_remove, experimental_push_session_remove_call, empty, (), input: ExperimentalPushSessionRemoveInput);
     endpoint!(" `PUT /api/experimental/push/settings` (`push.settings.set`)", experimental_push_settings_set, experimental_push_settings_set_call, data, ExperimentalPushSettingsSetOutput, input: ExperimentalPushSettingsSetInput);
-    endpoint!(" `PUT /api/experimental/space/:space/:key` (`space.set`)", experimental_space_set, experimental_space_set_call, empty, (), input: ExperimentalSpaceSetInput);
-    endpoint!(" `DELETE /api/experimental/space/:space/:key` (`space.delete`)", experimental_space_delete, experimental_space_delete_call, empty, (), input: ExperimentalSpaceDeleteInput);
+    endpoint!(" `POST /api/experimental/space/:space/write` (`space.write`)", experimental_space_write, experimental_space_write_call, json, ExperimentalSpaceWriteOutput, input: ExperimentalSpaceWriteInput);
     endpoint!(" `GET /api/experimental/space/:space` (`space.sync`)", experimental_space_sync, experimental_space_sync_call, json, ExperimentalSpaceSyncOutput, input: ExperimentalSpaceSyncInput);
     endpoint!(" `POST /api/experimental/space/subscribe` (`space.subscribe`)", experimental_space_subscribe, experimental_space_subscribe_call, empty, (), input: ExperimentalSpaceSubscribeInput);
     endpoint!(" `POST /api/experimental/space/unsubscribe` (`space.unsubscribe`)", experimental_space_unsubscribe, experimental_space_unsubscribe_call, empty, (), input: ExperimentalSpaceUnsubscribeInput);
