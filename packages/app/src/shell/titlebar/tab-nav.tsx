@@ -667,6 +667,9 @@ export function TabNavItem(
               <Menu.Item disabled={!props.session} onSelect={() => startRename("menu")}>
                 {language.t("common.rename")}
               </Menu.Item>
+              <Show when={props.contextMenuExtra}>{(extra) => extra()()}</Show>
+              <SessionReadMenuItem server={props.server} session={props.session} />
+              <SessionCopyMenu session={props.session} />
               <Menu.Item
                 disabled={!props.session || exporter.exporting({ server: props.server, sessionID: props.session.id })}
                 onSelect={() => {
@@ -677,16 +680,6 @@ export function TabNavItem(
               >
                 {language.t("common.export")}…
               </Menu.Item>
-              <SessionCopyMenu session={props.session} />
-              <SessionReadMenuItem server={props.server} session={props.session} />
-              <Show when={props.contextMenuExtra}>
-                {(extra) => (
-                  <>
-                    <Menu.Separator />
-                    {extra()()}
-                  </>
-                )}
-              </Show>
               <Menu.Separator />
               <TabCloseMenuItems
                 orientation={props.orientation}

@@ -1331,6 +1331,7 @@ function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean })
 
   const menu = (rename: () => void) => (
     <>
+      <Menu.Item onSelect={rename}>{language.t("common.rename")}</Menu.Item>
       <Show
         when={props.pinned}
         fallback={<Menu.Item onSelect={props.onPin}>{language.t("sidebar.recent.pin")}</Menu.Item>}
@@ -1350,9 +1351,7 @@ function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boolean })
         {language.t("sidebar.recent.hide")}
       </Menu.Item>
       <Menu.Separator />
-      <Menu.Item onSelect={rename}>{language.t("common.rename")}</Menu.Item>
       <Menu.Item onSelect={props.onArchive}>{language.t("common.archive")}</Menu.Item>
-      <Menu.Separator />
       <Menu.Item onSelect={props.onDelete}>{language.t("common.delete")}…</Menu.Item>
     </>
   )

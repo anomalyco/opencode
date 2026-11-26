@@ -206,8 +206,8 @@ test("the session context menu renames, exports, and deletes a Home session", as
     "Open",
     "Open in background",
     "Rename",
-    "Export…",
     "Copy",
+    "Export…",
     "Delete…",
   ])
   const menu = await page.locator('[data-component="menu-v2-content"]').boundingBox()

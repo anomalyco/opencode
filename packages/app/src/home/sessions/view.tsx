@@ -924,14 +924,14 @@ function HomeSessionRow(
             >
               {props.language.t("common.rename")}
             </Menu.Item>
+            <SessionReadMenuItem server={props.server} session={props.record.session} />
+            <SessionCopyMenu session={props.record.session} />
             <Menu.Item
               disabled={props.isExportingSession(props.server, props.record.session)}
               onSelect={() => props.onExportSession(props.server, props.record.session)}
             >
               {props.language.t("common.export")}…
             </Menu.Item>
-            <SessionCopyMenu session={props.record.session} />
-            <SessionReadMenuItem server={props.server} session={props.record.session} />
             <Menu.Separator />
             <Menu.Item onSelect={() => props.onDeleteSession(props.server, props.record.session)}>
               {props.language.t("common.delete")}…

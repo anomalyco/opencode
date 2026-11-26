@@ -297,11 +297,6 @@ export function SidebarInbox() {
               actions={
                 <>
                   <Menu.Item
-                    onSelect={() => (pinned(entry()) ? pins.unpin(pinRef(entry())) : pins.pin(pinRef(entry())))}
-                  >
-                    {language.t(pinned(entry()) ? "sidebar.recent.unpin" : "sidebar.recent.pin")}
-                  </Menu.Item>
-                  <Menu.Item
                     onSelect={() => {
                       const current = entry()
 
@@ -316,14 +311,18 @@ export function SidebarInbox() {
                     {language.t("common.rename")}
                   </Menu.Item>
                   <Menu.Item
+                    onSelect={() => (pinned(entry()) ? pins.unpin(pinRef(entry())) : pins.pin(pinRef(entry())))}
+                  >
+                    {language.t(pinned(entry()) ? "sidebar.recent.unpin" : "sidebar.recent.pin")}
+                  </Menu.Item>
+                  <SessionReadMenuItem server={entry().server} session={entry().session} />
+                  <SessionCopyMenu session={entry().session} />
+                  <Menu.Item
                     disabled={exporter.exporting({ server: entry().server, sessionID: entry().session.id })}
                     onSelect={() => exporter.export({ server: entry().server, sessionID: entry().session.id })}
                   >
                     {language.t("common.export")}…
                   </Menu.Item>
-                  <SessionCopyMenu session={entry().session} />
-                  <SessionReadMenuItem server={entry().server} session={entry().session} />
-                  <Menu.Separator />
                 </>
               }
               onOpen={() => inbox.open(entry())}
@@ -972,13 +971,13 @@ export function InboxSessionCard(props: {
       <Menu.Context.Portal>
         <Menu.Context.Content>
           {props.actions}
+          <Menu.Separator />
           <Show
             when={props.archived}
             fallback={<Menu.Item onSelect={props.onArchive}>{language.t("common.archive")}</Menu.Item>}
           >
             <Menu.Item onSelect={props.onUnarchive}>{language.t("sidebar.inbox.unarchive")}</Menu.Item>
           </Show>
-          <Menu.Separator />
           <Menu.Item onSelect={props.onDelete}>{language.t("common.delete")}…</Menu.Item>
         </Menu.Context.Content>
       </Menu.Context.Portal>

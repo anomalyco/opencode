@@ -538,9 +538,8 @@ function PinnedSession(props: { pin: PinRef; orientation: Orientation; grouped?:
 
   const menu = (rename: () => void): JSX.Element => (
     <>
-      <PinMenuItems pin={props.pin} />
-      <Menu.Separator />
       <Menu.Item onSelect={rename}>{language.t("common.rename")}</Menu.Item>
+      <PinMenuItems pin={props.pin} />
     </>
   )
 

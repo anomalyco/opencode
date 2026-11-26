@@ -18,7 +18,6 @@ export function SessionCopyMenu(props: { session: SessionInfo | undefined }) {
         : await writeClipboard(text)
 
       if (!written) throw new Error(failure.description)
-      showToast({ variant: "success", icon: "circle-check", title: language.t("common.copied"), description: text })
     } catch (err) {
       showToast({
         variant: "error",

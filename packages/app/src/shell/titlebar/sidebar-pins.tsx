@@ -399,6 +399,7 @@ function PinnedSessionRow(props: {
 
   const menu = (rename: () => void) => (
     <>
+      <Menu.Item onSelect={rename}>{language.t("common.rename")}</Menu.Item>
       <Menu.Item onSelect={() => props.pins.unpin(props.item.server, props.item.session.id)}>
         {language.t("sidebar.recent.unpin")}
       </Menu.Item>
@@ -407,13 +408,11 @@ function PinnedSessionRow(props: {
       >
         {language.t(muted() ? "sidebar.recent.unmute" : "sidebar.recent.mute")}
       </Menu.Item>
-      <Menu.Separator />
-      <Menu.Item onSelect={rename}>{language.t("common.rename")}</Menu.Item>
+      <SessionReadMenuItem server={props.item.server} session={props.item.session} />
+      <SessionCopyMenu session={props.item.session} />
       <Menu.Item disabled={exporter.exporting(exportTarget())} onSelect={() => exporter.export(exportTarget())}>
         {language.t("common.export")}…
       </Menu.Item>
-      <SessionCopyMenu session={props.item.session} />
-      <SessionReadMenuItem server={props.item.server} session={props.item.session} />
       <Show when={props.open}>
         <Menu.Separator />
         <Menu.Item onSelect={props.onClose}>{language.t("common.closeTab")}</Menu.Item>

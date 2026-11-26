@@ -334,8 +334,8 @@ for (const [tabLayout, direction, label] of [
     await tabB.click({ button: "right" })
     await expect(menu.getByRole("menuitem")).toHaveText([
       "Rename",
-      "Export…",
       "Copy",
+      "Export…",
       "Close tab",
       "Close other tabs",
       label,
@@ -788,9 +788,9 @@ test("an unread tab whose run failed shows the failed dot, as the inbox does", a
   await tab(c.id).locator("[data-titlebar-tab-link]").click({ button: "right" })
   await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText([
     "Rename",
-    "Export…",
-    "Copy",
     "Mark as unread",
+    "Copy",
+    "Export…",
     "Close tab",
     "Close other tabs",
     "Close tabs to the right",
@@ -2483,6 +2483,17 @@ test("the inbox lists archived sessions in a collapsed section and pins sessions
   ])
 
   await rows.filter({ hasText: "Older inbox session" }).click({ button: "right" })
+  await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText([
+    "Rename",
+    "Pin",
+    "Mark as read",
+    "Copy",
+    "Export…",
+    "Archive",
+    "Delete…",
+  ])
+  // Archive and Delete share the menu's only separator.
+  await expect(page.getByRole("menu").getByRole("separator")).toHaveCount(1)
   await page.getByRole("menuitem", { name: "Pin", exact: true }).click()
 
   const recent = inbox.getByRole("group", { name: "Recent", exact: true }).locator('[data-slot="sidebar-inbox-item"]')

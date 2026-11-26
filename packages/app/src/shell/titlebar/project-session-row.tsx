@@ -214,14 +214,14 @@ export function ProjectSessionRow(props: {
           >
             {language.t("common.rename")}
           </Menu.Item>
+          <SessionReadMenuItem server={props.server} session={props.session} />
+          <SessionCopyMenu session={props.session} />
           <Menu.Item
             disabled={!ctx() || exporter.exporting(exportTarget())}
             onSelect={() => exporter.export(exportTarget())}
           >
             {language.t("common.export")}…
           </Menu.Item>
-          <SessionCopyMenu session={props.session} />
-          <SessionReadMenuItem server={props.server} session={props.session} />
           <Menu.Separator />
           <Menu.Item disabled={!ctx()} onSelect={() => dialog.show(() => <DeleteDialog />)}>
             {language.t("common.delete")}…
