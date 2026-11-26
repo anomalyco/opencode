@@ -19,6 +19,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Lo
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const scope = yield* Scope.Scope
     const location = yield* Location.Service
     const watcher = yield* Watcher.Service
     const bus = yield* Bus.Service
@@ -30,59 +31,102 @@ const layer = Layer.effect(
         file: update.path,
         event: update.type === "create" ? "add" : update.type === "update" ? "change" : "unlink",
       })
-    const target = yield* Effect.cached(
+    const realPath = (target: string) => fs.realPath(target).pipe(Effect.orElseSucceed(() => target))
+    const repository = yield* Effect.cached(
       Effect.gen(function* () {
         if (location.vcs?.type === "git") {
-          const resolved = (yield* git.repo.discover(location.directory))?.gitDirectory
-          const vcs = resolved ? yield* fs.realPath(resolved).pipe(Effect.orElseSucceed(() => resolved)) : undefined
-          if (vcs) return { path: path.join(vcs, "HEAD"), aliases: [".git", vcs, ...(resolved ? [resolved] : [])] }
+          const discovered = yield* git.repo.discover(location.directory)
+          const resolved = discovered?.gitDirectory
+          const vcs = resolved ? yield* realPath(resolved) : undefined
+          if (vcs && discovered) {
+            const common = yield* realPath(discovered.commonDirectory)
+            return {
+              head: path.join(vcs, "HEAD"),
+              common,
+              aliases: [".git", vcs, common, ...(resolved ? [resolved] : [])],
+            }
+          }
         }
         if (location.vcs?.type === "hg") {
           const store = location.vcs.store
-          const vcs = yield* fs.realPath(store).pipe(Effect.orElseSucceed(() => store))
-          return { path: path.join(vcs, "branch"), aliases: [".hg", vcs] }
+          const vcs = yield* realPath(store)
+          return { head: path.join(vcs, "branch"), common: undefined, aliases: [".hg", vcs] }
         }
       }).pipe(
-        Effect.withSpan("LocationWatcher.target", { attributes: { directory: location.directory } }),
+        Effect.withSpan("LocationWatcher.repository", { attributes: { directory: location.directory } }),
         Effect.catchCause((cause) =>
           Effect.logError("failed to resolve location watcher target", { cause }).pipe(Effect.as(undefined)),
         ),
       ),
     )
+    // HEAD changes on a branch switch only. A commit, merge or reset rewrites the branch ref it points at
+    // instead, which a detached HEAD does not have.
+    const target = Effect.gen(function* () {
+      const found = yield* repository
+      if (!found) return
+      const paths = [found.head]
+      if (found.common) {
+        const head = yield* fs.readFileStringSafe(found.head).pipe(Effect.orElseSucceed(() => undefined))
+        const name = head?.match(/^ref:\s*(refs\/heads\/\S+)/)?.[1]
+        const branch = name && path.join(found.common, name)
+        if (branch && FSUtil.contains(found.common, branch)) paths.push(branch)
+      }
+      return { paths, aliases: found.aliases, follows: !!found.common }
+    })
     const lock = Semaphore.makeUnsafe(1)
     let stopped = false
-    let active: { path: string; scope: Scope.Closeable } | undefined
-    const reconcile = () =>
+    const active = new Map<string, Scope.Closeable>()
+    const reconcile = (): Effect.Effect<void> =>
       lock.withPermit(
         Effect.gen(function* () {
           if (stopped) return
           const resolved = yield* target
-          const ignore = policy.current()
-          const next = resolved && !resolved.aliases.some((alias) => ignore.includes(alias)) ? resolved.path : undefined
-          if (active?.path === next) return
-          if (active) yield* Scope.close(active.scope, Exit.void)
-          active = undefined
-          if (!next) return
-          const scope = yield* Scope.make()
-          active = { path: next, scope }
-          yield* Effect.gen(function* () {
-            const updates = yield* watcher.subscribe({ path: next, type: "file" })
-            yield* Stream.runForEach(updates, publish)
-          }).pipe(
-            Effect.catchCauseIf(
-              (cause) => !Cause.hasInterrupts(cause),
-              (cause) => Effect.logError("location watcher subscription failed", { path: next, cause }),
+          const next =
+            resolved && !resolved.aliases.some((alias) => policy.current().includes(alias)) ? resolved.paths : []
+          yield* Effect.forEach(
+            [...active].filter(([path]) => !next.includes(path)),
+            ([path, owned]) =>
+              Effect.andThen(
+                Effect.sync(() => active.delete(path)),
+                Scope.close(owned, Exit.void),
+              ),
+          )
+          yield* Effect.forEach(
+            next.flatMap((path, index) =>
+              active.has(path) ? [] : [{ path, head: index === 0 && !!resolved?.follows }],
             ),
-            Effect.forkIn(scope, { startImmediately: true }),
+            (watch) =>
+              Effect.gen(function* () {
+                const owned = yield* Scope.make()
+                active.set(watch.path, owned)
+                yield* Effect.gen(function* () {
+                  // HEAD may move while its watch is acquired and names another ref after a switch;
+                  // re-resolve from outside this scope, which the re-resolve may close.
+                  const updates = yield* watcher.subscribe(
+                    { path: watch.path, type: "file" },
+                    watch.head ? reconcileLater : undefined,
+                  )
+                  yield* Stream.runForEach(updates, (update) =>
+                    publish(update).pipe(Effect.andThen(watch.head ? reconcileLater : Effect.void)),
+                  )
+                }).pipe(
+                  Effect.catchCauseIf(
+                    (cause) => !Cause.hasInterrupts(cause),
+                    (cause) => Effect.logError("location watcher subscription failed", { path: watch.path, cause }),
+                  ),
+                  Effect.forkIn(owned, { startImmediately: true }),
+                )
+              }),
           )
         }).pipe(Effect.withSpan("LocationWatcher.reconcile", { attributes: { directory: location.directory } })),
       )
+    const reconcileLater = reconcile().pipe(Effect.forkIn(scope), Effect.asVoid)
     yield* Effect.addFinalizer(() =>
       lock.withPermit(
         Effect.gen(function* () {
           stopped = true
-          if (active) yield* Scope.close(active.scope, Exit.void)
-          active = undefined
+          yield* Effect.forEach(active.values(), (owned) => Scope.close(owned, Exit.void))
+          active.clear()
         }),
       ),
     )

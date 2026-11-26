@@ -2,7 +2,7 @@ import { $ } from "bun"
 import { describe, expect } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
-import { Deferred, Duration, Effect, Fiber, Layer, Logger, Option, Schedule, Stream } from "effect"
+import { Deferred, Duration, Effect, Fiber, Layer, Logger, Option, Queue, Schedule, Stream } from "effect"
 import { Config } from "@opencode/core/config"
 import { ConfigLocationWatcherPlugin } from "@opencode/core/config/plugin/location-watcher"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -338,9 +338,130 @@ describe("LocationWatcher subscriptions", () => {
           yield* Effect.sync(() => subscriptions.length).pipe(
             Effect.filterOrFail((count) => count > 0),
             Effect.retry(Schedule.spaced("10 millis")),
+            Effect.timeout("5 seconds"),
           )
           yield* Effect.sleep("10 millis")
-          expect(subscriptions).toEqual([{ path: path.join(directory, ".git", "HEAD"), type: "file" }])
+          const ref = yield* Effect.promise(() => $`git symbolic-ref HEAD`.cwd(directory).text())
+          expect(subscriptions).toEqual([
+            { path: path.join(directory, ".git", "HEAD"), type: "file" },
+            { path: path.join(directory, ".git", ref.trimEnd()), type: "file" },
+          ])
+        }),
+      { vcs: "git", watcher },
+    )
+  })
+
+  it.live("follows the branch ref that HEAD points at", () => {
+    const subscriptions: Watcher.WatchInput[] = []
+    const queues = new Map<string, Queue.Queue<Watcher.Update>>()
+    const released: string[] = []
+    const watcher = Layer.succeed(
+      Watcher.Service,
+      Watcher.Service.of({
+        subscribe: (input) =>
+          Effect.gen(function* () {
+            subscriptions.push(input)
+            const queue = yield* Queue.unbounded<Watcher.Update>()
+            queues.set(input.path, queue)
+            return Stream.fromQueue(queue).pipe(Stream.ensuring(Effect.sync(() => released.push(input.path))))
+          }),
+      }),
+    )
+    const until = (check: () => boolean) =>
+      Effect.sync(check).pipe(
+        Effect.filterOrFail(Boolean),
+        Effect.retry(Schedule.spaced("10 millis")),
+        Effect.timeout("5 seconds"),
+      )
+    return withTmp(
+      (directory) =>
+        Effect.gen(function* () {
+          const fs = yield* FSUtil.Service
+          const gitdir = path.join(directory, ".git")
+          const head = path.join(gitdir, "HEAD")
+          const setHead = (content: string) =>
+            nextUpdate(
+              (event) => event.file === head,
+              fs
+                .writeFileString(head, content)
+                .pipe(Effect.andThen(Queue.offer(queues.get(head)!, { path: head, type: "update" }))),
+            )
+          yield* LocationWatcher.Service
+          yield* until(() => subscriptions.length === 2)
+          const initial = path.join(
+            gitdir,
+            (yield* Effect.promise(() => $`git symbolic-ref HEAD`.cwd(directory).text())).trimEnd(),
+          )
+          expect(subscriptions).toEqual([
+            { path: head, type: "file" },
+            { path: initial, type: "file" },
+          ])
+
+          yield* Effect.promise(() => $`git branch review/topic`.cwd(directory).quiet())
+          const switched = path.join(gitdir, "refs", "heads", "review", "topic")
+          expect(yield* setHead("ref: refs/heads/review/topic\r\n")).toEqual({ file: head, event: "change" })
+          yield* until(() => subscriptions.length === 3 && released.length === 1)
+          expect(subscriptions[2]).toEqual({ path: switched, type: "file" })
+          expect(released).toEqual([initial])
+
+          expect(
+            yield* nextUpdate(
+              (event) => event.file === switched,
+              Queue.offer(queues.get(switched)!, { path: switched, type: "update" }),
+            ),
+          ).toEqual({ file: switched, event: "change" })
+          yield* Effect.sleep("10 millis")
+          expect(subscriptions).toHaveLength(3)
+
+          const detached = yield* Effect.promise(() => $`git rev-parse HEAD`.cwd(directory).text())
+          yield* setHead(detached)
+          yield* until(() => released.length === 2)
+          yield* Effect.sleep("10 millis")
+          expect(released).toEqual([initial, switched])
+          expect(subscriptions).toHaveLength(3)
+
+          // A symbolic HEAD outside refs/heads names no branch to follow.
+          yield* setHead("ref: refs/tags/v1\n")
+          yield* Effect.sleep("50 millis")
+          expect(subscriptions).toHaveLength(3)
+          expect(released).toEqual([initial, switched])
+
+          // A crafted HEAD naming a path outside the common directory adds no ref watch.
+          yield* setHead("ref: refs/heads/../../../outside\n")
+          yield* Effect.sleep("50 millis")
+          expect(subscriptions).toHaveLength(3)
+          expect(released).toEqual([initial, switched])
+        }),
+      { vcs: "git", watcher },
+    )
+  })
+
+  it.live("reads HEAD again once its watch is acquired", () => {
+    const acquiring = Deferred.makeUnsafe<void>()
+    const acquire = Deferred.makeUnsafe<void>()
+    const switched = Deferred.makeUnsafe<void>()
+    const watcher = Watcher.layer().pipe(
+      Layer.provide(
+        Layer.succeed(Watcher.Native, {
+          subscribe: (input) =>
+            (path.basename(input.target) === "HEAD"
+              ? Deferred.succeed(acquiring, undefined).pipe(Effect.andThen(Deferred.await(acquire)))
+              : path.basename(input.target) === "switched"
+                ? Deferred.succeed(switched, undefined)
+                : Effect.void
+            ).pipe(Effect.as({ unsubscribe: () => Promise.resolve() })),
+        }),
+      ),
+    )
+    return withTmp(
+      (directory) =>
+        Effect.gen(function* () {
+          yield* LocationWatcher.Service
+          yield* Deferred.await(acquiring).pipe(Effect.timeout("5 seconds"))
+          // No update can arrive for a move that happens while the HEAD watch is still being acquired.
+          yield* Effect.promise(() => $`git checkout -b switched`.cwd(directory).quiet())
+          yield* Deferred.succeed(acquire, undefined)
+          yield* Deferred.await(switched).pipe(Effect.timeout("5 seconds"))
         }),
       { vcs: "git", watcher },
     )
@@ -405,10 +526,10 @@ describe("LocationWatcher subscriptions", () => {
             const policy = yield* LocationWatcherPolicy.Service
             const bus = yield* Bus.Service
             yield* Effect.sync(() => subscriptions.length).pipe(
-              Effect.filterOrFail((count) => count === 1),
+              Effect.filterOrFail((count) => count === 2),
               Effect.retry(Schedule.spaced("10 millis")),
             )
-            expect(counts.active).toBe(1)
+            expect(counts.active).toBe(2)
 
             entries.current = [new Document({ type: "document", info: new Info({ watcher: { ignore: [".git"] } }) })]
             yield* ConfigLocationWatcherPlugin.Plugin.effect(
@@ -418,23 +539,23 @@ describe("LocationWatcher subscriptions", () => {
               Effect.filterOrFail((count) => count === 0),
               Effect.retry(Schedule.spaced("10 millis")),
             )
-            expect(counts.released).toBe(1)
+            expect(counts.released).toBe(2)
 
             entries.current = []
             yield* bus.publish(Event.Updated, {})
             yield* Effect.sync(() => subscriptions.length).pipe(
-              Effect.filterOrFail((count) => count === 2),
+              Effect.filterOrFail((count) => count === 4),
               Effect.retry(Schedule.spaced("10 millis")),
             )
-            expect(counts.active).toBe(1)
+            expect(counts.active).toBe(2)
 
             yield* policy.reload()
-            expect(subscriptions).toHaveLength(2)
+            expect(subscriptions).toHaveLength(4)
           }),
         { vcs: "git", watcher, config },
       )
       expect(counts.active).toBe(0)
-      expect(counts.released).toBe(2)
+      expect(counts.released).toBe(4)
     })
   })
 
@@ -647,6 +768,25 @@ describeNative("LocationWatcher", () => {
           expect(
             yield* nextUpdate((event) => event.file === head, fs.writeFileString(head, `ref: refs/heads/${branch}\n`)),
           ).toEqual({ file: head, event: "change" })
+        }),
+      { vcs: "git" },
+    ),
+  )
+
+  it.live("publishes the branch ref events a commit rewrites", () =>
+    withTmp(
+      (directory) =>
+        Effect.gen(function* () {
+          const fs = yield* FSUtil.Service
+          const head = path.join(directory, ".git", "HEAD")
+          const ref = path.join(directory, ".git", (yield* fs.readFileStringSafe(head))!.trim().slice("ref: ".length))
+          yield* ready(ref)
+          expect(
+            yield* nextUpdate(
+              (event) => event.file === ref,
+              Effect.promise(() => $`git commit --allow-empty -m next`.cwd(directory).quiet()),
+            ),
+          ).toEqual({ file: ref, event: "change" })
         }),
       { vcs: "git" },
     ),
