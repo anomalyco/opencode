@@ -541,7 +541,9 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             ])
 
             command.register("tabs", () => {
-              const current = currentTab()
+              // The Inbox lists sessions in place of tabs, so the shortcuts that close or reopen tabs do nothing there.
+              const tabbed = settings.appearance.tabLayout() !== "inbox"
+              const current = tabbed ? currentTab() : undefined
 
               const closeCurrent = () => {
                 if (current === tabs.preview()) {
@@ -576,14 +578,14 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                   keybind: "mod+alt+w",
                   onSelect: closeCurrent,
                 },
-                {
+                tabbed && {
                   id: "tab.reopenClosed",
                   category: language.t("command.category.file"),
                   title: language.t("command.tab.reopenClosed"),
                   keybind: "mod+shift+t",
                   onSelect: () => tabsStoreActions.reopenClosedTab(),
                 },
-              ].filter((v) => v !== undefined)
+              ].filter((v) => !!v)
             })
 
             // A draft registers this command under the same key and shadows it while mounted, searching projects in place.

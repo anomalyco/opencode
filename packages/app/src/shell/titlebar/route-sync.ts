@@ -5,6 +5,7 @@ import { tabKey, useTabs } from "@/shell/tabs/tabs"
 import { useProjectNavigation } from "@/shell/project-navigation"
 import { tabProjectDirectory } from "@/shell/tabs/project-sessions"
 import { rootSession } from "@/shell/routes/session"
+import { useSettings } from "@/settings/model"
 import {
   cachedRootID,
   INITIAL_ROUTE_TAB_STATE,
@@ -17,12 +18,13 @@ import {
 // A root lookup that has not answered by then counts as failed, so the route can still take a tab once it resolves.
 const RESOLVE_TIMEOUT_MS = 15_000
 
-/** Keeps the tab strip in step with the route: finds the tab that shows it, and adds or remembers that tab. */
+/** Keeps the tab strip in step with the route: finds the tab that shows it, and adds (outside Inbox) or remembers it. */
 export function createRouteTabSync() {
   const layout = useLayout()
   const global = useGlobal()
   const tabs = useTabs()
   const projectNavigation = useProjectNavigation()
+  const settings = useSettings()
   const [routeState, setRouteState] = createSignal(INITIAL_ROUTE_TAB_STATE)
   const lookups = new Map<number, { controller: AbortController; timer: ReturnType<typeof setTimeout> }>()
 
@@ -181,6 +183,7 @@ export function createRouteTabSync() {
               ? route.sessionId
               : ctx && cachedRootID(route.sessionId, (id) => ctx.data.session.get(id)),
         serverReady: !!ctx,
+        addsTabs: settings.appearance.tabLayout() !== "inbox",
       },
     })
   })
