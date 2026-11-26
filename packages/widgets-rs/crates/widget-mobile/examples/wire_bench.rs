@@ -1,4 +1,4 @@
-//! The binary format (`ValueEncoder.widget()`) against JSON on the bench workloads (`tests/fixtures/workloads`),
+//! The binary format (`widget_encoder()`) against JSON on the bench workloads (`tests/fixtures/workloads`),
 //! host and Rust client together:
 //!
 //! ```sh

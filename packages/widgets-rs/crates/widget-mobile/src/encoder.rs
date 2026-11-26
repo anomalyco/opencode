@@ -323,8 +323,9 @@ fn load_stops(d: &Data) -> psychoscript_gpu::SavedStops {
 /// protocol 2 (`widgets.md`, Native hosts): steps run `<program>\nreturn __widget_native_step(__input())` with
 /// `run_bytes`, live runs `<program>\nreturn await __widget_live(__input(), true)`. A program of another protocol isn't
 /// run: `Runtime` of kind `OlderProtocol` (a program error) or `NewerProtocol` (a client error). A value it can't write
-/// fails with `Runtime` of kind `InvalidView`, `InvalidDraw` or `InvalidGpu` (the spec's phase `view`, `draw` or
-/// `gpu`), else `InvalidDataValue`, at the call's line and column when the call threw it.
+/// fails with `Runtime` of kind `InvalidView` or `InvalidDraw` (the spec's phase `view` or `draw`), else
+/// `InvalidDataValue`, at the call's line and column when the call threw it. A live run's GPU batches don't fail it:
+/// their errors stop canvases (`onGpuCanvas`, phase `gpu`).
 #[uniffi::export]
 pub fn widget_encoder() -> Arc<ValueEncoder> {
     ValueEncoder::new(Widget)

@@ -1,7 +1,7 @@
-//! The binary path (`ValueEncoder.widget()`, a native host) against the JSON path, through the crate's API:
-//! `run_bytes` and live posts on the bench workloads (`fixtures/workloads`: the widget prelude at opencode
-//! 60732569a and the templates of opencode's binary-format bench, with their inputs) and on the native-host
-//! conformance fixtures (`widget-wire/tests/fixtures/wire`) decode to what the prelude's own tree reads as; the
+//! The binary path (`widget_encoder()`, a native host) against the JSON path, through psychoscript-mobile's API:
+//! `run_bytes` and live posts on the bench workloads (`fixtures/workloads`: the templates of opencode's binary-format
+//! bench, with their inputs, on `packages/widget/src/prelude.js` in place) and on the native-host conformance
+//! fixtures (`packages/widget/test/fixtures/wire`, in place) decode to what the prelude's own tree reads as; the
 //! encoder's failures are program errors.
 
 use std::sync::mpsc::{Receiver, Sender, channel};
