@@ -96,23 +96,30 @@ export const Plugin = {
 
         editor.add({
           name: "artifact_read",
-          description: "Read an artifact's metadata and file contents so you can inspect or update it.",
+          description:
+            "Read an artifact's metadata and file contents so you can inspect or update it. Binary files and text past 64 KiB a file or 256 KiB in all are listed in omitted with their byte size instead.",
           input: ReadToolInput,
           output: Artifact.Content,
           options: { namespace: "opencode", codemode: true },
           execute: (input) =>
             artifacts.get(input.id).pipe(
-              Effect.map((content) => ({
-                output: content,
-                content: `${content.info.title} (${content.info.id} · ${Object.keys(content.files).length} files)`,
-              })),
+              Effect.map((content) => {
+                const omitted = Object.entries(content.omitted)
+                  .map(([filePath, bytes]) => `${filePath} (${bytes} bytes)`)
+                  .join(", ")
+                return {
+                  output: content,
+                  content: `${content.info.title} (${content.info.id} · ${Object.keys(content.files).length} files)${omitted ? `; omitted: ${omitted}` : ""}`,
+                }
+              }),
               Effect.mapError(failure),
             ),
         })
 
         editor.add({
           name: "artifact_update",
-          description: "Replace an existing artifact's files at the same ID and URL.",
+          description:
+            "Replace an existing artifact's files at the same ID and URL. Files a read listed in omitted are kept unless you send that path, and can be overwritten but not deleted; text files you were shown and leave out are removed.",
           input: UpdateToolInput,
           output: Artifact.Info,
           options: { namespace: "opencode", codemode: true },

@@ -54,7 +54,12 @@ export const Info = Schema.Struct({
 export interface Content extends Schema.Schema.Type<typeof Content> {}
 export const Content = Schema.Struct({
   info: Info,
+  /** UTF-8 text files up to 64 KiB each and 256 KiB in all, by path. */
   files: Schema.Record(Schema.String, Schema.String),
+  /** The byte size of each file left out of `files`: binary, or past those limits. */
+  omitted: Schema.Record(Schema.String, Schema.Finite),
+  /** `live` from the provider, or `snapshot` from the copy saved when it was last published. */
+  source: Schema.Literals(["live", "snapshot"]),
 }).annotate({ identifier: "Artifact.Content" })
 
 export interface CreateInput extends Schema.Schema.Type<typeof CreateInput> {}

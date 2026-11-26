@@ -71,7 +71,7 @@ export const ArtifactEndpoints = [
     params,
     query: LocationQuery,
     success: Location.response(Artifact.Content),
-    error: itemErrors,
+    error: [ProviderNotFoundError, ...itemErrors],
   })
     .annotateMerge(locationQueryOpenApi)
     .annotateMerge(annotations("get", "Read artifact", "Read an artifact's metadata and file contents.")),
@@ -88,7 +88,7 @@ export const ArtifactEndpoints = [
     params,
     query: LocationQuery,
     success: HttpApiSchema.NoContent,
-    error: itemErrors,
+    error: [ProviderNotFoundError, ...itemErrors],
   })
     .annotateMerge(locationQueryOpenApi)
     .annotateMerge(annotations("delete", "Delete artifact", "Remove an artifact and its stored files.")),

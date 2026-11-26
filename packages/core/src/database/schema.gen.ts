@@ -38,6 +38,20 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
         );
       `)
       yield* tx.run(`
+        CREATE TABLE \`artifact\` (
+          \`id\` text PRIMARY KEY,
+          \`project_id\` text NOT NULL,
+          \`session_id\` text,
+          \`directory\` text NOT NULL,
+          \`provider\` text NOT NULL,
+          \`title\` text NOT NULL,
+          \`entry\` text NOT NULL,
+          \`url\` text NOT NULL,
+          \`time_created\` integer NOT NULL,
+          \`time_updated\` integer NOT NULL
+        );
+      `)
+      yield* tx.run(`
         CREATE TABLE \`automation\` (
           \`id\` text PRIMARY KEY,
           \`project_id\` text NOT NULL,
@@ -315,6 +329,8 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
           CONSTRAINT \`fk_worktree_project_id_project_id_fk\` FOREIGN KEY (\`project_id\`) REFERENCES \`project\`(\`id\`) ON DELETE CASCADE
         );
       `)
+      yield* tx.run(`CREATE INDEX \`artifact_project_idx\` ON \`artifact\` (\`project_id\`,\`time_updated\`);`)
+      yield* tx.run(`CREATE INDEX \`artifact_session_idx\` ON \`artifact\` (\`session_id\`);`)
       yield* tx.run(`CREATE INDEX \`automation_project_idx\` ON \`automation\` (\`project_id\`);`)
       yield* tx.run(`CREATE INDEX \`automation_session_idx\` ON \`automation\` (\`session_id\`);`)
       yield* tx.run(

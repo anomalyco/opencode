@@ -1,13 +1,20 @@
+import fs from "node:fs/promises"
 import path from "node:path"
 import { describe, expect } from "bun:test"
+import { sql } from "drizzle-orm"
 import { Effect, Layer, Stream } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Artifact } from "@opencode/core/artifact"
+import { ArtifactTable } from "@opencode/core/artifact/sql"
 import { Config } from "@opencode/core/config"
+import { Database } from "@opencode/core/database/database"
+import artifactMigration from "@opencode/core/database/migration/20261125001949_artifact"
 import { Flag } from "@opencode/core/flag"
 import { Image } from "@opencode/core/image"
+import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { Permission } from "@opencode/core/permission"
+import { PluginHost } from "@opencode/core/plugin/host"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { ArtifactTools } from "@opencode/core/tool/plugin/artifact"
@@ -45,7 +52,9 @@ const buildLayer = (artifactsEnabled: boolean, dir: string) => {
     LayerNode.group([
       Artifact.node,
       Config.node,
+      Database.node,
       Flag.node,
+      KV.node,
       Global.node,
       Location.node,
       Permission.node,
@@ -92,9 +101,7 @@ describe("experimental.artifacts service and tools", () => {
         const registry = yield* Tool.Service
         expect(yield* artifacts.enabled()).toBe(false)
         expect(
-          yield* artifacts
-            .create({ title: "Draft", files: { "index.html": "<h1>hi</h1>" } })
-            .pipe(Effect.flip),
+          yield* artifacts.create({ title: "Draft", files: { "index.html": "<h1>hi</h1>" } }).pipe(Effect.flip),
         ).toBeInstanceOf(Artifact.DisabledError)
 
         yield* registerToolPlugin(ArtifactTools.Plugin, {
@@ -158,9 +165,7 @@ describe("experimental.artifacts service and tools", () => {
         expect(createTool?.description).toContain(
           "Default provider (cloudflare [static, server-code, sqlite, durable-objects]): Artifacts deploy to Cloudflare with SQLite and Durable Objects.",
         )
-        expect(createTool?.description).toContain(
-          "Other active providers (pass provider to override): local [static].",
-        )
+        expect(createTool?.description).toContain("Other active providers (pass provider to override): local [static].")
 
         const createdInfo = (yield* callCodeMode(registry, session.id, "artifact_create", {
           title: "Flamegraph report",
@@ -192,6 +197,25 @@ describe("experimental.artifacts service and tools", () => {
         })) as Artifact.Info
         expect(localInfo.provider).toBe(Artifact.LocalProviderID)
 
+        // A read names the files it leaves out, and update says it keeps them.
+        const large = yield* artifacts.create({
+          title: "Large",
+          provider: Artifact.LocalProviderID,
+          files: { "index.html": "<h1>hi</h1>", "data.json": "0".repeat(65 * 1024) },
+        })
+        const read = yield* executeTool(registry, {
+          sessionID: session.id,
+          ...toolIdentity,
+          call: { type: "tool-call", id: "call-read", name: "opencode_artifact_read", input: { id: large.id } },
+        })
+        expect(read.content?.[0]).toEqual({
+          type: "text",
+          text: `Large (${large.id} · 1 files); omitted: data.json (66560 bytes)`,
+        })
+        expect(rawTools.find((item) => item.id === "opencode_artifact_update")?.description).toContain(
+          "Files a read listed in omitted are kept unless you send that path",
+        )
+
         // Update replaces files at the same ID and URL
         const updatedInfo = (yield* callCodeMode(registry, session.id, "artifact_update", {
           id: createdInfo.id,
@@ -210,6 +234,202 @@ describe("experimental.artifacts service and tools", () => {
           })
           .pipe(Effect.flip)
         expect(traversal).toBeInstanceOf(Artifact.InvalidError)
+      }).pipe(Effect.provide(buildLayer(true, dir)))
+    }),
+  )
+  it.live("saves the last published files and reads them when the host has no live copy", () =>
+    Effect.gen(function* () {
+      const dir = (yield* tmpdirScoped("opencode-artifact-snapshot-")).path
+
+      yield* Effect.gen(function* () {
+        const artifacts = yield* Artifact.Service
+        const remote = new Map<Artifact.ID, Readonly<Record<string, Uint8Array>>>()
+        const failDelete = { value: false }
+        const host = (id: string, live: boolean): Artifact.ProviderImplementation => ({
+          id: Artifact.ProviderID.make(id),
+          name: id,
+          capabilities: ["static"],
+          prompt: id,
+          create: (input) => Effect.sync(() => void remote.set(input.id, input.files)).pipe(Effect.as({})),
+          update: (artifactID, input) =>
+            Effect.sync(() => void remote.set(artifactID, input.files)).pipe(Effect.as({})),
+          ...(live ? { read: (artifactID: Artifact.ID) => Effect.sync(() => remote.get(artifactID) ?? {}) } : {}),
+          delete: (artifactID) =>
+            failDelete.value
+              ? Effect.fail(new Error("host is down"))
+              : Effect.sync(() => void remote.delete(artifactID)),
+        })
+        yield* artifacts.transform((editor) => {
+          editor.add(host("bucket", false))
+          editor.add(host("console", true))
+        })
+
+        // A write-only host is read back from the snapshot, which inlines text up to its limits.
+        const page = yield* artifacts.create({
+          title: "Report",
+          provider: Artifact.ProviderID.make("bucket"),
+          files: {
+            "index.html": "<h1>Report</h1>",
+            "a.txt": "a".repeat(64 * 1024),
+            "b.txt": "b".repeat(64 * 1024),
+            "c.txt": "c".repeat(64 * 1024),
+            "d.txt": "d".repeat(64 * 1024),
+            "big.txt": "x".repeat(65 * 1024),
+          },
+        })
+        const snapshot = yield* artifacts.get(page.id)
+        expect(snapshot.source).toBe("snapshot")
+        expect(Object.keys(snapshot.files)).toEqual(["index.html", "a.txt", "b.txt", "c.txt"])
+        expect(snapshot.omitted).toEqual({ "big.txt": 65 * 1024, "d.txt": 64 * 1024 })
+
+        // An update keeps the files that read left out, since they can't be sent back, and drops the rest it omits.
+        yield* artifacts.update(page.id, { files: { "index.html": "<h1>v2</h1>", "d.txt": "d" } })
+        expect(Object.keys(remote.get(page.id) ?? {}).toSorted()).toEqual(["big.txt", "d.txt", "index.html"])
+        expect((yield* artifacts.get(page.id)).files).toEqual({ "index.html": "<h1>v2</h1>", "d.txt": "d" })
+
+        // A host others edit is read live, and the snapshot follows it.
+        const shared = yield* artifacts.create({
+          title: "Shared",
+          provider: Artifact.ProviderID.make("console"),
+          files: { "index.html": "<h1>v1</h1>" },
+        })
+        const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+        remote.set(shared.id, { "index.html": new TextEncoder().encode("<h1>edited</h1>"), "logo.png": png })
+        const live = yield* artifacts.get(shared.id)
+        expect(live).toMatchObject({
+          source: "live",
+          files: { "index.html": "<h1>edited</h1>" },
+          omitted: { "logo.png": 8 },
+        })
+        expect(
+          new Uint8Array(
+            yield* Effect.promise(() => fs.readFile(path.join(dir, ".data/artifacts", shared.id, "logo.png"))),
+          ),
+        ).toEqual(png)
+
+        yield* artifacts.transform((editor) => editor.remove(Artifact.ProviderID.make("console")))
+        expect(yield* artifacts.get(shared.id)).toMatchObject({
+          source: "snapshot",
+          files: { "index.html": "<h1>edited</h1>" },
+          omitted: { "logo.png": 8 },
+        })
+
+        // Deleting needs the host: without it, or when it fails, the record stays.
+        expect(yield* artifacts.remove(shared.id).pipe(Effect.flip)).toBeInstanceOf(Artifact.ProviderNotFoundError)
+        expect((yield* artifacts.info(shared.id)).id).toBe(shared.id)
+        failDelete.value = true
+        expect(yield* artifacts.remove(page.id).pipe(Effect.flip)).toBeInstanceOf(Artifact.ProviderError)
+        expect((yield* artifacts.list()).map((item) => item.id).toSorted()).toEqual([page.id, shared.id].toSorted())
+      }).pipe(Effect.provide(buildLayer(true, dir)))
+    }),
+  )
+
+  it.live("lists this project's artifacts, newest update first, and locates any by ID", () =>
+    Effect.gen(function* () {
+      const dir = (yield* tmpdirScoped("opencode-artifact-list-")).path
+
+      yield* Effect.gen(function* () {
+        const artifacts = yield* Artifact.Service
+        const database = yield* Database.Service
+        const location = yield* Location.Service
+        const row = (projectID: string, updated: number, provider = "local") => ({
+          id: Artifact.ID.create(),
+          project_id: projectID as typeof location.project.id,
+          directory: projectID === location.project.id ? dir : "/elsewhere",
+          provider: Artifact.ProviderID.make(provider),
+          title: `updated ${updated}`,
+          entry: "index.html",
+          url: "https://example.test/",
+          time_created: 1,
+          time_updated: updated,
+        })
+        const rows = [
+          row(location.project.id, 1),
+          row(location.project.id, 3),
+          row(location.project.id, 2, "console"),
+          row("prj_other", 4),
+        ]
+        yield* database.db.insert(ArtifactTable).values(rows).run()
+
+        expect((yield* artifacts.list()).map((item) => item.title)).toEqual(["updated 3", "updated 2", "updated 1"])
+        expect(
+          (yield* artifacts.list({ provider: Artifact.ProviderID.make("console") })).map((item) => item.title),
+        ).toEqual(["updated 2"])
+        expect(yield* Artifact.locate(database, rows[3]!.id)).toBe("/elsewhere")
+        expect(yield* Artifact.locate(database, Artifact.ID.create())).toBeUndefined()
+        expect(yield* artifacts.info(rows[3]!.id).pipe(Effect.flip)).toBeInstanceOf(Artifact.NotFoundError)
+      }).pipe(Effect.provide(buildLayer(true, dir)))
+    }),
+  )
+
+  it.live("keeps the artifacts a previous release saved in KV", () =>
+    Effect.gen(function* () {
+      const dir = (yield* tmpdirScoped("opencode-artifact-upgrade-")).path
+
+      yield* Effect.gen(function* () {
+        const artifacts = yield* Artifact.Service
+        const database = yield* Database.Service
+        const kv = yield* KV.Service
+        const location = yield* Location.Service
+        const sessions = yield* Session.Service
+        const session = yield* sessions.create({ location: Location.Ref.make({ directory: AbsolutePath.make(dir) }) })
+        const local = Artifact.ID.create()
+        const shared = Artifact.ID.create()
+        const legacy = (id: Artifact.ID, provider: string, url: string) => ({
+          info: {
+            id,
+            provider,
+            sessionID: session.id,
+            title: `${provider} page`,
+            entry: "index.html",
+            url,
+            time: { created: 100, updated: 200 },
+          },
+          directory: dir,
+          projectID: location.project.id,
+        })
+        const consoleStorage = PluginHost.storage(kv, "opencode.provider.opencode")
+        yield* kv.set(`artifact:item:${local}`, legacy(local, "local", `/api/experimental/artifacts/${local}/view/`))
+        yield* kv.set(
+          `artifact:item:${shared}`,
+          legacy(shared, "console", "https://opencode.ai/console/artifacts/shared"),
+        )
+        yield* consoleStorage.set(`artifact-slug:${shared}`, "console-page-abc123")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(path.join(dir, ".data/artifacts", local, "assets"), { recursive: true })
+          await fs.writeFile(path.join(dir, ".data/artifacts", local, "index.html"), "<h1>legacy</h1>")
+          await fs.writeFile(path.join(dir, ".data/artifacts", local, "assets/app.js"), "console.log(1)")
+        })
+        // The database as the previous release left it, before this migration.
+        yield* database.db.run(sql`DROP TABLE artifact`)
+        yield* database.db.transaction((tx) => artifactMigration.up(tx))
+
+        expect(yield* artifacts.list()).toEqual(
+          [
+            { id: shared, provider: "console", url: "https://opencode.ai/console/artifacts/shared" },
+            { id: local, provider: "local", url: `/api/experimental/artifacts/${local}/view/` },
+          ]
+            .toSorted((a, b) => b.id.localeCompare(a.id))
+            .map((item) => ({
+              ...item,
+              provider: Artifact.ProviderID.make(item.provider),
+              sessionID: session.id,
+              title: `${item.provider} page`,
+              entry: "index.html",
+              time: { created: 100, updated: 200 },
+            })),
+        )
+        expect(new TextDecoder().decode((yield* artifacts.readLocalFile(local, "assets/app.js")).bytes)).toBe(
+          "console.log(1)",
+        )
+        expect((yield* artifacts.get(local)).files).toEqual({
+          "index.html": "<h1>legacy</h1>",
+          "assets/app.js": "console.log(1)",
+        })
+        expect(yield* consoleStorage.get(`artifact-slug:${shared}`)).toBe("console-page-abc123")
+        // Only local artifacts had files on disk, so another host's can't be read until it's loaded.
+        expect(yield* artifacts.get(shared).pipe(Effect.flip)).toBeInstanceOf(Artifact.ProviderNotFoundError)
+        expect(yield* kv.get(`artifact:item:${local}`)).toBeUndefined()
       }).pipe(Effect.provide(buildLayer(true, dir)))
     }),
   )

@@ -13567,11 +13567,14 @@
             }
           },
           "404": {
-            "description": "ArtifactNotFoundError | LocationNotFoundError",
+            "description": "ProviderNotFoundError | ArtifactNotFoundError | LocationNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ProviderNotFoundErrorEncoded"
+                    },
                     {
                       "$ref": "#/components/schemas/ArtifactNotFoundErrorEncoded"
                     },
@@ -13801,11 +13804,14 @@
             }
           },
           "404": {
-            "description": "ArtifactNotFoundError | LocationNotFoundError",
+            "description": "ProviderNotFoundError | ArtifactNotFoundError | LocationNotFoundError",
             "content": {
               "application/json": {
                 "schema": {
                   "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/ProviderNotFoundErrorEncoded"
+                    },
                     {
                       "$ref": "#/components/schemas/ArtifactNotFoundErrorEncoded"
                     },
@@ -17491,9 +17497,19 @@
             "additionalProperties": {
               "type": "string"
             }
+          },
+          "omitted": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "number"
+            }
+          },
+          "source": {
+            "type": "string",
+            "enum": ["live", "snapshot"]
           }
         },
-        "required": ["info", "files"],
+        "required": ["info", "files", "omitted", "source"],
         "additionalProperties": false
       },
       "Artifact.CreateInput": {

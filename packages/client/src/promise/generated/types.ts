@@ -2365,7 +2365,12 @@ export type AutomationTrigger =
   | AutomationTriggerCron
   | AutomationTriggerEvent
 
-export type ArtifactContent = { info: ArtifactInfo; files: { [x: string]: string } }
+export type ArtifactContent = {
+  info: ArtifactInfo
+  files: { [x: string]: string }
+  omitted: { [x: string]: number }
+  source: "live" | "snapshot"
+}
 
 export type PushDevice = {
   id: PushDeviceID
