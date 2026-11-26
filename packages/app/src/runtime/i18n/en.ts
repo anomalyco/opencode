@@ -1483,6 +1483,12 @@ export const dict = {
   "workspace.delete.location": "Location",
   "workspace.delete.button": "Delete worktree",
 
+  "deepLink.open.title": "Open “{{name}}” as a project?",
+  "deepLink.open.description": "A link asked OpenCode to open this folder.",
+  "deepLink.open.folder": "Folder",
+  "deepLink.open.warning": "Opening a folder runs the plugins and settings inside it. Only open folders you trust.",
+  "deepLink.open.button": "Open project",
+
   "lab.components": "Components",
   "lab.search": "Search components",
   "lab.theme": "Light or dark",
