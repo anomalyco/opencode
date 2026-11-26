@@ -87,11 +87,17 @@ async function parse(pkg: string): Promise<Target | undefined> {
 // than most plugins declare, so the tag resolves to an old release whose peers conflict
 // with the current tree and the install fails with ERESOLVE, while an explicit version
 // installs fine. Pin the tag to the registry's current `latest` before reifying.
-const resolveSpec = (pkg: string, target: Target | undefined, dir: string) =>
+// Updates must bypass the packument cache, or the pin would hide a newer `latest` from
+// Arborist's own `preferOnline` lookup.
+const resolveSpec = (pkg: string, target: Target | undefined, dir: string, update: boolean) =>
   Effect.gen(function* () {
     if (target?.type !== "registry" || target.spec !== "latest") return pkg
     const { manifest } = yield* Effect.promise(() => import("pacote"))
-    const options = { ...(yield* NpmConfig.load(dir)), ignoreScripts: true }
+    const options = {
+      ...(yield* NpmConfig.load(dir)),
+      ...(update ? { preferOnline: true } : {}),
+      ignoreScripts: true,
+    }
     const version = yield* Effect.tryPromise(() => manifest(`${target.name}@latest`, options)).pipe(Effect.option)
     return Option.isSome(version) && version.value.version ? `${target.name}@${version.value.version}` : pkg
   })
@@ -274,7 +280,7 @@ const layer = Layer.effect(
       }
 
       yield* mkdir(dir)
-      const spec = yield* resolveSpec(pkg, target, dir)
+      const spec = yield* resolveSpec(pkg, target, dir, update)
       const startedAt = yield* Clock.currentTimeMillis
       // Arborist keys lockfile entries relative to the root's real path. When the cache
       // directory is reached through a symlink (macOS `/var` → `/private/var`, a linked

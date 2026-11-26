@@ -79,17 +79,21 @@ async function createRegistryFixture(directory: string) {
         state.audits++
         return Response.json({})
       }
+      // Like the public registry, let clients cache the packument so updates must opt into fresh data.
       if (decodeURIComponent(url.pathname) === "/@fixture/registry-plugin")
-        return Response.json({
-          name: "@fixture/registry-plugin",
-          "dist-tags": { latest: state.latest },
-          versions: Object.fromEntries(
-            [...tarballs.keys()].map((version) => [
-              version,
-              { name: "@fixture/registry-plugin", version, dist: { tarball: `${url.origin}/${version}.tgz` } },
-            ]),
-          ),
-        })
+        return Response.json(
+          {
+            name: "@fixture/registry-plugin",
+            "dist-tags": { latest: state.latest },
+            versions: Object.fromEntries(
+              [...tarballs.keys()].map((version) => [
+                version,
+                { name: "@fixture/registry-plugin", version, dist: { tarball: `${url.origin}/${version}.tgz` } },
+              ]),
+            ),
+          },
+          { headers: { "cache-control": "public, max-age=300" } },
+        )
       const tarball = tarballs.get(url.pathname.slice(1).replace(".tgz", ""))
       return tarball ? new Response(tarball) : new Response("missing", { status: 404 })
     },
