@@ -657,6 +657,16 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("maps Z.AI's sensitive finish to a content-filter finish", () =>
+    Effect.gen(function* () {
+      const filtered = yield* LLMClient.generate(request).pipe(
+        Effect.provide(fixedResponse(sseEvents(deltaChunk({}, "sensitive")))),
+      )
+
+      expect(filtered.finishReason).toEqual({ normalized: "content-filter", raw: "sensitive" })
+    }),
+  )
+
   it.effect("names the content filter that blocked a response", () =>
     Effect.gen(function* () {
       const finish = (choice: object) =>
