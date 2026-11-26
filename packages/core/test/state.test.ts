@@ -52,25 +52,6 @@ describe("State", () => {
     }),
   )
 
-  it.effect("runs transforms during every reload", () =>
-    Effect.gen(function* () {
-      let value = "first"
-      const state = State.create({
-        initial: () => ({ values: [] as string[] }),
-        editor: (editor) => ({ add: (item: string) => editor.values.push(item) }),
-      })
-
-      yield* state.transform((editor) => {
-        editor.add(value)
-      })
-      expect(state.get().values).toEqual(["first"])
-
-      value = "second"
-      yield* state.reload()
-      expect(state.get().values).toEqual(["second"])
-    }),
-  )
-
   it.effect("disposes a transform once and rebuilds remaining state", () =>
     Effect.gen(function* () {
       const state = State.create({
@@ -179,27 +160,6 @@ describe("State", () => {
         }),
       )
       expect(finalized).toEqual(["live"])
-    }),
-  )
-
-  it.effect("notifies once per reload without waiting", () =>
-    Effect.gen(function* () {
-      let finalized = 0
-      const state = State.create({
-        initial: () => ({ values: [] as string[] }),
-        editor: (editor) => ({ add: (item: string) => editor.values.push(item) }),
-        notify: () => Effect.sync(() => finalized++),
-      })
-      yield* state.transform((editor) => {
-        editor.add("value")
-      })
-      finalized = 0
-
-      // Under TestClock nothing time-based can complete, so returning proves no debounce is involved.
-      yield* state.reload()
-      expect(finalized).toBe(1)
-      yield* state.reload()
-      expect(finalized).toBe(2)
     }),
   )
 

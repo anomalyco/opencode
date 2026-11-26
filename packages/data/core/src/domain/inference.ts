@@ -225,6 +225,7 @@ function buildStatsQuery(
   const periodEndValue = sqlString(period.end.toISOString())
   const ingestEndValue = sqlString(new Date(period.end.getTime() + DAY_MS).toISOString())
   const sourceTable = [source.namespace, source.table].map(sqlIdentifier).join(".")
+  // The free branch skips custom (BYOK) requests: their model names are the caller's own and can end in -free.
   const sourceFreeTier = freeTierSql("model_tier", "model_requested")
   const dimensions =
     family === "usage"
@@ -312,7 +313,7 @@ WITH normalized AS (
       (source = 'inference-legacy' AND started_at < ${sqlString(LIVE_SOURCE_START)})
       OR (source = 'inference' AND started_at >= ${sqlString(LIVE_SOURCE_START)})
     )
-    AND (product IN (${GO_PRODUCTS.map(sqlString).join(", ")}) OR (${sourceFreeTier}))
+    AND (product IN (${GO_PRODUCTS.map(sqlString).join(", ")}) OR (COALESCE(product, '') <> 'custom' AND (${sourceFreeTier})))
     AND ${ROUTED_ONLY}
     AND model_requested IS NOT NULL
     AND model_requested <> ''

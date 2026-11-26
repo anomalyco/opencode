@@ -1,4 +1,4 @@
-import type { IntegrationInfo } from "@opencode/client/promise"
+import type { IntegrationInfo, PluginInfo } from "@opencode/client/promise"
 import { QueryClient, QueryClientProvider } from "@tanstack/solid-query"
 import type { ParentProps } from "solid-js"
 import { LocalProvider } from "@/providers/models/selection"
@@ -503,6 +503,28 @@ type DialogStoryRuntimeOptions = {
 
 const REDIRECT_PASTE = ["openai", "gitlab", "snowflake-cortex"]
 
+/** Package plugins for the Plugins tab: two with a newer version, so its update controls show. */
+const storyPlugins: PluginInfo[] = [
+  {
+    id: "wakatime",
+    source: { type: "package", target: "opencode-wakatime@latest", version: "1.2.0", outdated: true },
+    features: { server: true },
+    state: { status: "active" },
+  },
+  {
+    id: "notifier",
+    source: { type: "package", target: "opencode-notifier@latest", version: "0.4.1", outdated: true },
+    features: { server: true, tui: true },
+    state: { status: "active" },
+  },
+  {
+    id: "review",
+    source: { type: "package", target: "@acme/opencode-review@latest", version: "2.0.3" },
+    features: { server: true },
+    state: { status: "active" },
+  },
+]
+
 export function createStoryFetch(overrides: IntegrationInfo[] = []): typeof fetch {
   const integrations = [
     ...overrides,
@@ -715,11 +737,21 @@ export function createStoryFetch(overrides: IntegrationInfo[] = []): typeof fetc
 
     if (pathname === "/api/session/active") return jsonResponse({ data: {} })
 
+    if (pathname === "/api/plugin") return jsonResponse({ location, data: storyPlugins, ready: true })
+
+    if (pathname === "/api/plugin/check") return jsonResponse({ location, data: storyPlugins })
+
+    // Long enough to see Updating; the list keeps its flags, as a server whose check has not caught up would.
+    if (pathname === "/api/plugin/update")
+      return new Promise<Response>((resolve) => setTimeout(() => resolve(noContentResponse()), 1500))
+
     if (pathname === "/api/config" || pathname === "/api/config/shell") return jsonResponse([])
 
     if (pathname === "/api/mcp/resource") return jsonResponse({ location, data: { resources: [], templates: [] } })
 
     if (pathname.startsWith("/api/experimental/media/")) return new Response(null, { status: 404 })
+
+    if (pathname === "/api/experimental/flag") return jsonResponse({ location, data: {} })
 
     return jsonResponse({ location, data: [] })
   }

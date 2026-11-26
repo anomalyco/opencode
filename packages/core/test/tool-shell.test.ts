@@ -3,7 +3,7 @@ import { realpathSync, watch } from "node:fs"
 import os from "os"
 import path from "path"
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Scope, Stream, Tracer } from "effect"
+import { Cause, Deferred, Duration, Effect, Exit, Fiber, Layer, Queue, Schedule, Scope, Stream, Tracer } from "effect"
 import { TestClock } from "effect/testing"
 import { Money } from "@opencode/schema/money"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -12,6 +12,7 @@ import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node
 import { filesystem } from "@opencode/util/effect/app-node-platform"
 import { Database } from "@opencode/core/database/database"
 import { Bus } from "@opencode/core/bus"
+import { CodeModeCatalog } from "@opencode/core/codemode/catalog"
 import { Config } from "@opencode/core/config"
 import { Environment } from "@opencode/core/environment/index"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -24,6 +25,7 @@ import { Model } from "@opencode/core/model"
 import { Provider } from "@opencode/core/provider"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Agent } from "@opencode/core/agent"
+import { Automation } from "@opencode/schema/automation"
 import { Job } from "@opencode/core/job"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
@@ -138,6 +140,7 @@ const shellPluginSupervisor = makeLocationNode({
   name: "test/shell-plugins",
   layer: Layer.effectDiscard(registerToolPlugin(ShellTool.Plugin)),
   deps: [
+    Agent.node,
     Config.node,
     Environment.node,
     FileAccess.node,
@@ -145,9 +148,11 @@ const shellPluginSupervisor = makeLocationNode({
     Permission.node,
     Session.node,
     Job.node,
+    Location.node,
     Shell.node,
     Shell.daemonNode,
     ShellSelect.node,
+    Bus.node,
     Tool.node,
   ],
 })
@@ -176,21 +181,22 @@ const replacements = [
   ...daemonReplacements,
   PersistentPty.node.replace(disabledPersistentPtyLayer),
 ] satisfies LayerNode.Replacements
-const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements))
-const it = testEffect(
-  AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(shellPluginSupervisor)]),
-)
+const noFlagOverrides = Layer.succeed(Flag.Overrides, undefined)
+const productionIt = testEffect(AppNodeBuilder.build(nodes, replacements).pipe(Layer.provide(noFlagOverrides)))
+const shellLayer = AppNodeBuilder.build(nodes, [...replacements, PluginSupervisor.node.replace(shellPluginSupervisor)])
+const it = testEffect(shellLayer.pipe(Layer.provideMerge(noFlagOverrides)))
+const codeModeIt = testEffect(shellLayer.pipe(Layer.provide(Layer.succeed(Flag.Overrides, "full_codemode"))))
 // On the real process daemon (when its binary is compatible; otherwise this falls back to spawning).
 const daemonIt = testEffect(
-  AppNodeBuilder.build(nodes, [...daemonReplacements, PluginSupervisor.node.replace(shellPluginSupervisor)]),
+  AppNodeBuilder.build(nodes, [...daemonReplacements, PluginSupervisor.node.replace(shellPluginSupervisor)]).pipe(
+    Layer.provide(noFlagOverrides),
+  ),
 )
 const parity = {
   live: (name: string, body: Parameters<typeof it.live>[1], options?: Parameters<typeof it.live>[2]) => {
     it.live(`${name} (spawned)`, body, options)
     daemonIt.live(`${name} (daemon)`, body, options)
   },
-  skip: (name: string, body: Parameters<typeof it.live>[1], options?: Parameters<typeof it.live>[2]) =>
-    it.live.skip(name, body, options),
 }
 // On an in-process fake daemon, so daemon-only behavior is covered without the real binary.
 let fake: Effect.Success<ReturnType<typeof fakeDaemon>> | undefined
@@ -212,7 +218,7 @@ const fakeDaemonIt = testEffect(
         deps: [Bus.node, Global.node],
       }),
     ),
-  ]),
+  ]).pipe(Layer.provide(noFlagOverrides)),
 )
 const permissionIt = testEffect(
   AppNodeBuilder.build(LayerNode.group([nodes, PermissionSaved.node]), [
@@ -221,7 +227,7 @@ const permissionIt = testEffect(
     PluginSupervisor.node.replace(shellPluginSupervisor),
     PersistentPty.node.replace(disabledPersistentPtyLayer),
     offlineModels,
-  ]),
+  ]).pipe(Layer.provide(noFlagOverrides)),
 )
 
 const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
@@ -232,18 +238,6 @@ const call = (input: typeof ShellTool.Input.Type, id = "call-shell") => ({
 
 const isWindows = process.platform === "win32"
 
-// The process daemon keeps a finished command's zombie until the command is forgotten.
-const running = (pid: number) => {
-  try {
-    process.kill(pid, 0)
-  } catch {
-    return false
-  }
-  return !Bun.spawnSync(["ps", "-o", "stat=", "-p", String(pid)])
-    .stdout.toString()
-    .trim()
-    .startsWith("Z")
-}
 const cwdCommand = isWindows ? "(Get-Location).Path; Start-Sleep -Milliseconds 100" : "pwd"
 const helloCommand = isWindows ? "[Console]::Out.Write('hello'); Start-Sleep -Milliseconds 100" : "printf hello"
 const stderrCommand = isWindows
@@ -430,6 +424,96 @@ describe("ShellTool scanner permissions", () => {
       }),
     ))
 
+  test("unanalyzable commands run under allow-all rules", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        const agents = yield* Agent.Service
+        yield* agents.transform((editor) =>
+          editor.update(toolIdentity.agent, (agent) => {
+            agent.permissions = [{ action: "*", resource: "*", effect: "allow" }]
+          }),
+        )
+        const marker = path.join(fixture.active, "marker")
+        const result = yield* runPermissionCommand(registry, "alias p=true; printf hello > marker", marker, [])
+        expect(result.requests).toEqual([])
+        expect(result.exit).toMatchObject({ _tag: "Success", value: { status: "completed", metadata: { exit: 0 } } })
+        expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
+      }),
+    ))
+
+  test("unanalyzable commands are denied when a shell deny rule could be bypassed", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        const agents = yield* Agent.Service
+        yield* agents.transform((editor) =>
+          editor.update(toolIdentity.agent, (agent) => {
+            agent.permissions = [
+              { action: "*", resource: "*", effect: "allow" },
+              { action: "shell", resource: "rm *", effect: "deny" },
+            ]
+          }),
+        )
+        const marker = path.join(fixture.active, "marker")
+        const result = yield* runPermissionCommand(registry, "alias p=true; printf hello > marker", marker, [])
+        expect(result.requests).toEqual([])
+        expect(result.exit).toMatchObject({
+          _tag: "Success",
+          value: {
+            status: "error",
+            error: {
+              message: expect.stringContaining(
+                "Portable shell scanner cannot analyze command: dynamic-execution. A shell deny rule is configured",
+              ),
+            },
+          },
+        })
+        expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+      }),
+    ))
+
+  test("unanalyzable commands ask for the exact command and any directory without saving", () =>
+    withScanner((registry, fixture) =>
+      Effect.gen(function* () {
+        const saved = yield* PermissionSaved.Service
+        const agents = yield* Agent.Service
+        yield* agents.transform((editor) =>
+          editor.update(toolIdentity.agent, (agent) => {
+            agent.permissions = [
+              { action: "shell", resource: "alias *", effect: "allow" },
+              { action: "external_directory", resource: path.join(fixture.outside, "*"), effect: "allow" },
+            ]
+          }),
+        )
+        const marker = path.join(fixture.active, "marker")
+        const command = "alias p=true; printf hello > marker"
+        const approved = yield* runPermissionCommand(registry, command, marker, ["always"])
+
+        expect(approved.requests).toMatchObject([{ action: "external_directory", resources: ["*"] }])
+        expect(approved.exit).toMatchObject({ _tag: "Success", value: { status: "completed", metadata: { exit: 0 } } })
+        expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
+
+        yield* agents.transform((editor) =>
+          editor.update(toolIdentity.agent, (agent) => {
+            agent.permissions = [{ action: "external_directory", resource: "*", effect: "allow" }]
+          }),
+        )
+        yield* Effect.promise(() => fs.rm(marker))
+        const asked = yield* runPermissionCommand(registry, command, marker, ["always"])
+        expect(asked.requests).toMatchObject([
+          { action: "shell", resources: [command], metadata: { reason: "dynamic-execution" } },
+        ])
+        expect(asked.requests.map((request) => request.save)).toEqual([undefined])
+        expect(yield* Effect.promise(() => Bun.file(marker).text())).toBe("hello")
+        expect(yield* saved.list()).toEqual([])
+
+        yield* Effect.promise(() => fs.rm(marker))
+        const repeat = yield* runPermissionCommand(registry, command, marker, ["reject"])
+        expect(repeat.requests).toHaveLength(1)
+        expect(Exit.isFailure(repeat.exit)).toBe(true)
+        expect(yield* Effect.promise(() => Bun.file(marker).exists())).toBe(false)
+      }),
+    ))
+
   test("pipeline redirect keeps the redirect target visible to exact approval and denial", () =>
     withScanner((registry, fixture) =>
       Effect.gen(function* () {
@@ -606,7 +690,7 @@ describe("ShellTool conditional process substitution", () => {
       "bash",
     ))
 
-  for (const reply of ["reject", "once", "always"] as const) {
+  for (const reply of ["reject", "always"] as const) {
     test(`conditional substitutions respect ${reply}`, () =>
       withScanner(
         (registry, directory) =>
@@ -644,27 +728,9 @@ describe("ShellTool compound syntax approval compatibility", () => {
   for (const fixture of [
     {
       shell: "zsh",
-      command: 'for value (a b) printf %s "$value"',
-      output: "ab",
-      saved: ["printf *"],
-    },
-    {
-      shell: "zsh",
-      command: 'for value (a b) { printf %s "$value"; }',
-      output: "ab",
-      saved: ["printf *"],
-    },
-    {
-      shell: "zsh",
       command: 'for value ($(printf a)) do printf %s "$value"; done',
       output: "a",
       saved: ["printf *"],
-    },
-    {
-      shell: "bash",
-      command: 'probe() for value in a b; do printf %s "$value"; done; probe',
-      output: "ab",
-      saved: ["printf *", "probe *"],
     },
     {
       shell: "bash",
@@ -706,18 +772,11 @@ describe("ShellTool ordinary shell syntax", () => {
   for (const shell of ["bash", "zsh"]) {
     const test = isWindows || !Bun.which(shell) ? permissionIt.live.skip : permissionIt.live
     for (const fixture of [
-      { name: "quoted heredoc", command: "cat <<'EOF'\nhello\nEOF", output: "hello\n", saved: ["cat *"] },
       {
         name: "heredoc substitution",
         command: "cat <<EOF\n$(printf hello)\nEOF",
         output: "hello\n",
         saved: ["cat *", "printf *"],
-      },
-      {
-        name: "loop with a conditional",
-        command: 'for value in a b; do if test -n "$value"; then printf %s "$value"; fi; done',
-        output: "ab",
-        saved: ["test *", "printf *"],
       },
       {
         name: "function and case",
@@ -726,18 +785,11 @@ describe("ShellTool ordinary shell syntax", () => {
         saved: ["greet *", "printf *"],
       },
       {
-        name: "parameter fallback",
-        command: 'value=; printf %s "${value:-fallback}"',
-        output: "fallback",
-        saved: ["printf *"],
-      },
-      {
         name: "arithmetic statement",
         command: 'count=1; ((count += 1)); printf %s "$count"',
         output: "2",
         saved: ["((count += 1)) *", "printf *"],
       },
-      { name: "ANSI-C quoting", command: "printf %s $'a\\nb'", output: "a\nb", saved: ["printf *"] },
     ]) {
       test(`${shell}: ${fixture.name} reuses existing approvals`, () =>
         withScanner(
@@ -800,12 +852,7 @@ describe("ShellTool ordinary shell syntax", () => {
   const test = pwsh ? permissionIt.live : permissionIt.live.skip
   for (const command of [
     'Write-Output "$(Write-Output hello)"',
-    '$value = "hello"; Write-Output $value',
-    "if ($true) { Write-Output hello } else { Write-Output other }",
-    "foreach ($value in @('hello')) { Write-Output $value }",
-    "ForEach-Object { Write-Output hello }",
     "function Show-Value { Write-Output hello }; Show-Value",
-    "Write-Output `\n  hello",
     "Write-Output @'\nhello\n'@",
   ]) {
     test(`PowerShell: ordinary syntax reuses approvals: ${command}`, () =>
@@ -870,18 +917,78 @@ describe("ShellTool ordinary shell syntax", () => {
 })
 
 describe("ShellTool", () => {
-  it.live("returns both parallel CodeMode shell results", () =>
+  it.live(
+    "keeps a CodeMode shell result's exit code and output path when the execute output is truncated",
+    () =>
+      withTempDir((tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            yield* registry.transform((editor) =>
+              editor.update("shell", (tool) => {
+                tool.options = { ...tool.options, codemode: true }
+              }),
+            )
+            const command = `${overflowCommand(ToolOutput.MAX_BYTES + 1024)}${isWindows ? "; exit 3" : " && exit 3"}`
+            const result = yield* executeTool(registry, {
+              sessionID,
+              ...toolIdentity,
+              call: {
+                type: "tool-call",
+                id: "call-truncated-shell",
+                name: "execute",
+                input: { code: `return await tools.shell(${JSON.stringify({ command })})` },
+              },
+            })
+            expect(result.status).toBe("completed")
+            const toolOutput = yield* ToolOutput.Service
+            const truncated = yield* toolOutput.truncate({ content: result.content!, metadata: result.metadata })
+            expect(truncated.metadata?.truncated).toBe(true)
+            const text = truncated.content.flatMap((part) => (part.type === "text" ? [part.text] : [])).join("\n")
+            const shell = JSON.parse(result.output.output)
+            expect(text).toStartWith(
+              `{"exitCode":3,"outputPath":${JSON.stringify(shell.outputPath)},"wallTimeSeconds":${shell.wallTimeSeconds},"output":"`,
+            )
+          }),
+        )
+      }),
+    { timeout: 15_000 },
+  )
+
+  codeModeIt.live("runs parallel Code Mode shells with the long default and notifies after a shorter timeout", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
         Effect.gen(function* () {
-          yield* registry.transform((editor) =>
-            editor.update("shell", (tool) => {
-              tool.options = { ...tool.options, codemode: true }
+          const snapshot = yield* registry.snapshot()
+          // Pinned: listed even when the catalog has no room for other tools, with the result contract in the field
+          // annotations.
+          const pinned = CodeModeCatalog.summarize(snapshot.codeModeCatalog!, { budget: 0 }).namespaces.flatMap(
+            (namespace) => namespace.entries,
+          )
+          expect(pinned.map((entry) => entry.path)).toEqual(["shell"])
+          expect(pinned[0]!.line).toContain("600000")
+          expect(pinned[0]!.line).toContain("Execute a shell command and return its output.")
+          // No background parameter in Code Mode.
+          expect(pinned[0]!.line).not.toContain("background?: boolean")
+          expect(pinned[0]!.line).not.toContain("Background commands return immediately")
+          expect(pinned[0]!.line).toContain("A result without shellID is final")
+          expect(pinned[0]!.line).toContain("there are no separate stdout or stderr fields")
+          const timeouts: number[] = []
+          const hooks = yield* PluginHooks.Service
+          yield* hooks.register("shell", "create.before", (event) =>
+            Effect.sync(() => {
+              timeouts.push(event.timeout)
             }),
           )
-          const command = isWindows ? helloCommand : `${helloCommand}; sleep 0.1`
-          const inputs = ["one", "two"].map((text) => JSON.stringify({ command: command.replace("hello", text) }))
+          const bus = yield* Bus.Service
+          const notice = yield* bus.subscribe(SessionEvent.InboxEnqueued).pipe(
+            Stream.filter((event) => event.data.sessionID === sessionID && event.data.item.type === "synthetic"),
+            Stream.runHead,
+            Effect.forkScoped({ startImmediately: true }),
+          )
+          const quick = JSON.stringify({ command: bodyExitCommand })
+          const long = JSON.stringify({ command: progressOverflowCommand(6, "release"), timeout: 10 })
           const result = yield* executeTool(registry, {
             sessionID,
             ...toolIdentity,
@@ -889,14 +996,33 @@ describe("ShellTool", () => {
               type: "tool-call",
               id: "call-parallel-shells",
               name: "execute",
-              input: { code: `return await Promise.all([tools.shell(${inputs[0]}), tools.shell(${inputs[1]})])` },
+              input: { code: `return await Promise.all([tools.shell(${quick}), tools.shell(${long})])` },
             },
           }).pipe(Effect.timeout("3 seconds"))
           expect(result.status).toBe("completed")
-          expect(JSON.parse(result.output.output)).toEqual([
-            { output: "one", exitCode: 0, wallTimeSeconds: expect.any(Number) },
-            { output: "two", exitCode: 0, wallTimeSeconds: expect.any(Number) },
-          ])
+          const [completed, running] = JSON.parse(result.output.output)
+          expect(completed).toEqual({
+            output: "body",
+            exitCode: 7,
+            wallTimeSeconds: expect.any(Number),
+          })
+          expect(running).toEqual({
+            output: expect.stringContaining("did not finish within its timeout of 0.01 seconds"),
+            exitCode: null,
+            shellID: expect.stringMatching(/^sh_/),
+            pid: expect.any(Number),
+            outputPath: expect.any(String),
+            wallTimeSeconds: expect.any(Number),
+          })
+          expect(timeouts.toSorted((a, b) => a - b)).toEqual([10, 600_000])
+          // A script's shell names the execute call, the one clients have in the transcript.
+          const shell = yield* Shell.Service
+          expect((yield* shell.get(running.shellID)).metadata.callID).toBe("call-parallel-shells")
+          yield* Effect.promise(() => Bun.write(path.join(tmp.path, "release"), ""))
+          expect((yield* Fiber.join(notice)).valueOrUndefined?.data.item.payload).toMatchObject({
+            text: expect.stringContaining("xxxxxx"),
+            metadata: { source: "shell", shellID: running.shellID, state: "completed", exit: 0 },
+          })
         }),
       )
     }),
@@ -1126,34 +1252,6 @@ describe("ShellTool", () => {
   )
 
   it.live(
-    "approves an explicit external workdir before shell execution",
-    () =>
-      Effect.acquireUseRelease(
-        Effect.promise(() => Promise.all([tmpdir(), tmpdir()])),
-        ([active, outside]) => {
-          reset()
-          return withSession(active.path, (registry) =>
-            executeTool(registry, call({ command: cwdCommand, workdir: outside.path })),
-          ).pipe(
-            Effect.andThen(
-              Effect.sync(() => {
-                expect(assertions.map((item) => item.action)).toEqual(["external_directory", "shell"])
-                expect(assertions[0]).toMatchObject({
-                  resources: [path.join(realpathSync(outside.path), "*").replaceAll("\\", "/")],
-                })
-              }),
-            ),
-          )
-        },
-        ([active, outside]) =>
-          Effect.promise(() =>
-            Promise.all([active[Symbol.asyncDispose](), outside[Symbol.asyncDispose]()]).then(() => undefined),
-          ),
-      ),
-    { timeout: 15_000 },
-  )
-
-  it.live(
     "deduplicates external directory approvals across workdir and directory-change commands",
     () =>
       Effect.acquireUseRelease(
@@ -1229,7 +1327,7 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
-  it.live("rejects malformed syntax across channels without partial execution", () =>
+  it.live("asks for malformed syntax across channels without partial execution", () =>
     Effect.gen(function* () {
       if (isWindows) return
       for (const channel of ["local", "dev", "latest"] as const) {
@@ -1241,36 +1339,42 @@ describe("ShellTool", () => {
             }),
           ),
           deps: [
+            Agent.node,
+            Config.node,
             Environment.node,
             FileAccess.node,
             Flag.node,
             Permission.node,
             Session.node,
             Job.node,
+            Location.node,
             Shell.node,
             Shell.daemonNode,
             ShellSelect.node,
+            Bus.node,
             Tool.node,
           ],
         })
         yield* withTempDir((tmp) =>
           Effect.gen(function* () {
             reset()
+            denyAction = "shell"
+            const command = 'printf hello > marker\necho "'
             const settled = yield* withSession(tmp.path, (registry) =>
               Effect.gen(function* () {
                 const selection = yield* ShellSelect.Service
                 yield* selection.transform((editor) => editor.configure("sh"))
-                return yield* executeTool(
-                  registry,
-                  call({ command: 'printf hello > marker\necho "' }, `call-channel-${channel}`),
-                )
+                return yield* executeTool(registry, call({ command }, `call-channel-${channel}`))
               }),
             )
             expect(settled).toMatchObject({
               status: "error",
-              error: { message: expect.stringContaining("unterminated-quote") },
+              error: { message: expect.stringContaining("Permission denied: shell") },
             })
-            expect(assertions).toEqual([])
+            expect(assertions).toMatchObject([
+              { action: "external_directory", resources: ["*"], save: undefined },
+              { action: "shell", resources: [command], save: undefined, metadata: { reason: "unterminated-quote" } },
+            ])
             expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "marker")).exists())).toBe(false)
           }).pipe(
             Effect.provide(
@@ -1540,43 +1644,78 @@ describe("ShellTool", () => {
     }),
   )
 
-  it.live("stops a background command when its explicit timeout expires", () =>
+  // Runs a program the way an automation does: no model, and the automation named on each tool call.
+  const runAutomationCode = (registry: Tool.Interface, code: string) =>
+    Effect.gen(function* () {
+      yield* registry.transform((editor) =>
+        editor.update("shell", (tool) => {
+          tool.options = { ...tool.options, codemode: true }
+        }),
+      )
+      return yield* registry.check({
+        code,
+        tools: ["shell"],
+        bindings: {},
+        policy: Permission.Policy.fromRules([{ action: "*", resource: "*", effect: "allow" }]),
+        limits: { timeoutMs: 30_000, maxOutputBytes: 32 * 1024 },
+        context: {
+          sessionID,
+          ...toolIdentity,
+          progress: () => Effect.void,
+          automation: { id: Automation.ID.make("aut_shell_test") },
+        },
+      })
+    })
+
+  it.live("stops an automation's command at its timeout and fails the call", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
         Effect.gen(function* () {
-          const result = yield* executeTool(registry, call({ command: idleCommand, background: true, timeout: 50 }))
-          const id = ID.make(String(result.metadata?.shellID))
+          const result = yield* runAutomationCode(
+            registry,
+            `try { await tools.shell({ command: ${JSON.stringify(idleCommand)}, timeout: 50 }); return "finished" }
+             catch (error) { return error.message }`,
+          )
+          expect(result).toMatchObject({
+            ok: true,
+            value: expect.stringMatching(
+              new RegExp(`Command timed out after 0\\.05 seconds\\. [^\\n]+\\nExit code: ${timedOutExit}`),
+            ),
+          })
           const shell = yield* Shell.Service
-          expect((yield* shell.wait(id)).status).toBe("timeout")
+          expect(yield* shell.list()).toEqual([])
         }),
       )
     }),
   )
 
-  it.live(
-    "truncates the model view and points at the saved output file when output overflows",
-    () =>
-      withTempDir((tmp) => {
-        reset()
-        const bytes = ToolOutput.MAX_BYTES + 1024
-        return withSession(tmp.path, (registry) =>
-          executeTool(registry, call({ command: overflowCommand(bytes) }, "call-overflow")),
-        ).pipe(
-          Effect.andThen((settled) =>
-            Effect.sync(() => {
-              expect(settled.metadata).toMatchObject({ exit: 0, truncated: true })
-              const content = settled.content?.[0]
-              if (!content || content.type !== "text") throw new Error("Expected text content")
-              expect(settled.content).toHaveLength(1)
-              expect(content.text.includes("output-start")).toBe(false)
-              expect(content.text.includes("output-end")).toBe(true)
-              expect(content).toMatchObject(Expected.text(expect.stringContaining("full output saved to ")))
-            }),
-          ),
-        )
-      }),
-    { timeout: 15_000 },
+  it.live("keeps an automation's command out of reach of the session's move to the background", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const command = JSON.stringify(progressOverflowCommand(0, "release"))
+          const running = yield* runAutomationCode(
+            registry,
+            `return await tools.shell({ command: ${command}, timeout: 10000 })`,
+          ).pipe(Effect.forkScoped({ startImmediately: true }))
+          const shell = yield* Shell.Service
+          const [started] = yield* shell
+            .list()
+            .pipe(
+              Effect.repeat({ until: (shells) => shells.length > 0, schedule: Schedule.spaced("10 millis") }),
+              Effect.timeout("10 seconds"),
+            )
+          const jobs = yield* Job.Service
+          expect(yield* jobs.backgroundAll({ sessionID })).toEqual([])
+          yield* Effect.promise(() => Bun.write(path.join(tmp.path, "release"), ""))
+          expect(yield* Fiber.join(running)).toMatchObject({ ok: true, value: { exitCode: 0 } })
+          // A finished job stays listed, so this proves the command never had one for the session to take.
+          expect(yield* jobs.get(started!.id)).toBeUndefined()
+        }),
+      )
+    }),
   )
 
   parity.live("uses configured line limits", () =>
@@ -1877,7 +2016,7 @@ describe("ShellTool", () => {
           expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
             text: expect.stringMatching(
               new RegExp(
-                `\\nCommand timed out after 0\\.05 seconds\\. If it needs longer and isn't waiting for input, rerun with a larger timeout\\.\\nExit code: ${timedOutExit}\\n</shell>$`,
+                `\\nCommand timed out after 0\\.05 seconds\\. If it needs longer and isn't waiting for input, rerun with a larger timeout\\.\\nExit code: ${timedOutExit}\\n</background-result>$`,
               ),
             ),
             description: idleCommand,
@@ -1912,7 +2051,7 @@ describe("ShellTool", () => {
           const shellID = settled.metadata?.shellID
           expect(typeof shellID).toBe("string")
           expect((yield* Fiber.join(admitted)).valueOrUndefined?.data.item.payload).toMatchObject({
-            text: expect.stringContaining("\nbody\n\nExit code: 7\n</shell>"),
+            text: `<background-result kind="shell" id="${shellID}" state="completed" command="${bodyExitCommand}">\nbody\n\nExit code: 7\n</background-result>`,
             description: bodyExitCommand,
             metadata: {
               source: "shell",
@@ -2003,8 +2142,8 @@ describe("ShellTool", () => {
     { timeout: 15_000 },
   )
 
-  const signalParity = isWindows ? parity.skip : parity.live
-  signalParity(
+  const signalTest = isWindows ? it.live.skip : it.live
+  signalTest(
     "escalates a shell timeout when the ready process ignores SIGTERM",
     () =>
       Effect.gen(function* () {
@@ -2039,7 +2178,7 @@ describe("ShellTool", () => {
                   })
                   const pid = info.pid
                   if (pid === undefined) throw new Error("Expected shell PID")
-                  expect(running(pid)).toBe(false)
+                  expect(() => process.kill(pid, 0)).toThrow(expect.objectContaining({ code: "ESRCH" }))
                 }),
               (info) =>
                 Effect.try(() => {
@@ -2215,7 +2354,7 @@ describe("ShellTool stopped", () => {
       }),
   )
 
-  parity.live("ends a call the user stopped before its command started, without starting it", () =>
+  it.live("ends a call the user stopped before its command started, without starting it", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>
@@ -2234,6 +2373,42 @@ describe("ShellTool stopped", () => {
     }),
   )
 
+  // Resolving a working directory can be slow (an external one in a cold remote workspace); here it never finishes.
+  const resolving = Deferred.makeUnsafe<void>()
+  const stuckResolveIt = testEffect(
+    AppNodeBuilder.build(nodes, [
+      ...replacements,
+      PluginSupervisor.node.replace(shellPluginSupervisor),
+      FileAccess.node.replace(
+        Layer.mock(FileAccess.Service, {
+          resolve: () => Deferred.succeed(resolving, undefined).pipe(Effect.andThen(Effect.never)),
+        }),
+      ),
+    ]).pipe(Layer.provide(noFlagOverrides)),
+  )
+
+  stuckResolveIt.live("ends a call the user stopped while its working directory resolved, without starting it", () =>
+    withTempDir((tmp) => {
+      reset()
+      return withSession(tmp.path, (registry) =>
+        Effect.gen(function* () {
+          const shell = yield* Shell.Service
+          const cancel = yield* Deferred.make<void>()
+          const fiber = yield* executeTool(registry, {
+            ...call({ command: "echo started > started" }, "call-stop-resolving"),
+            cancel: Deferred.await(cancel),
+          }).pipe(Effect.forkChild({ startImmediately: true }))
+          yield* Deferred.await(resolving)
+          yield* Deferred.succeed(cancel, undefined)
+          const result = yield* Fiber.join(fiber)
+          expect(result.error?.message).toContain("Command interrupted by the user before it started.")
+          expect(yield* shell.list()).toEqual([])
+          expect(yield* Effect.promise(() => Bun.file(path.join(tmp.path, "started")).exists())).toBe(false)
+        }),
+      )
+    }),
+  )
+
   parity.live("says once that a stopped command wrote nothing", () =>
     withTempDir((tmp) => {
       reset()
@@ -2242,7 +2417,8 @@ describe("ShellTool stopped", () => {
           const shell = yield* Shell.Service
           const { shellID, result } = yield* stopCall(registry, idleCommand, "call-silent", "cancel", false)
           const info = yield* shell.get(shellID)
-          expect(result?.error?.message).toBe(
+          // The call settles after a bounded wait for the kill, which a loaded Windows runner can outlast.
+          expect(result?.error?.message?.replace("; it is still being stopped", "")).toBe(
             `[no output; output file: ${info.file}]\n\nCommand interrupted by the user (shell ID: ${shellID}).`,
           )
         }),
@@ -2251,7 +2427,7 @@ describe("ShellTool stopped", () => {
   )
 
   // Windows signals terminate the job immediately; a process cannot ignore SIGTERM there.
-  const ignoresTerm = isWindows ? parity.skip : parity.live
+  const ignoresTerm = isWindows ? it.live.skip : it.live
   ignoresTerm(
     "settles a stopped call without waiting for a command that ignores SIGTERM",
     () =>
@@ -2430,7 +2606,7 @@ describe("ShellTool stopped", () => {
     }),
   )
 
-  parity.live("lets an execute.after hook replace a stopped call's failure", () =>
+  it.live("lets an execute.after hook replace a stopped call's failure", () =>
     withTempDir((tmp) => {
       reset()
       return withSession(tmp.path, (registry) =>

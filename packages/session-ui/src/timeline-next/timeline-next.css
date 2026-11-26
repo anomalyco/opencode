@@ -37,11 +37,16 @@
   }
 }
 
-/* A stretch of thoughts alone lists them without a group around them. */
-[data-timeline="next"] [data-component="thought-rows"] {
+/* Thoughts one after another read as one, a paragraph apart. */
+[data-timeline="next"] [data-slot="reasoning-part-run"] {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
+}
+
+/* A script's changes, each its own card, keep the spacing of a direct patch's files. */
+[data-timeline="next"] [data-script-change="patch"] + [data-script-change="patch"] {
+  margin-top: var(--timeline-gap-s);
 }
 
 /* Each changed file is its own accordion, rather than one stacked group, as far from the next
@@ -261,16 +266,10 @@
       pointer-events: none;
     }
 
-    &:hover [data-slot="timeline-event-item-title"] {
-      text-decoration: underline;
-      text-decoration-color: color-mix(in oklch, currentColor 40%, transparent);
-      text-underline-offset: 2px;
-    }
-
     &:focus-visible {
-      outline: 1px solid var(--v2-text-text-accent);
+      outline: 2px solid var(--v2-border-border-focus);
       outline-offset: 2px;
-      border-radius: 2px;
+      border-radius: 4px;
     }
   }
 
@@ -294,54 +293,42 @@
     flex-shrink: 0;
   }
 
-  /* A subagent's status chip: its outline, fill and glyph say what happened, so no status word follows the title.
-     Updated is info blue softened toward muted; the others use their state colors as they are. */
+  /* A subagent's status: a bar and word, in the state's color, say what happened, so no status word follows the
+     title. Updated is info blue softened toward muted; the others use their state colors as they are. */
   [data-slot="timeline-event-item-status"] {
-    box-sizing: border-box;
     display: inline-flex;
     flex-shrink: 0;
     align-items: center;
-    gap: 4px;
-    height: 18px;
-    padding: 0 6px;
-    border: 1px solid transparent;
-    border-radius: 4px;
-    font-size: 12px;
+    gap: 6px;
     font-weight: 530;
-    line-height: 16px;
     white-space: nowrap;
 
-    [data-slot="timeline-event-item-glyph"] {
+    &::before {
+      content: "";
       flex-shrink: 0;
-      width: 12px;
-      height: 12px;
-      margin-left: -1px;
-      color: currentColor;
+      width: 3px;
+      height: 10px;
+      border-radius: 999px;
+      background: currentColor;
     }
 
     &[data-state="started"] {
-      border-color: color-mix(in srgb, var(--v2-text-text-muted) 35%, transparent);
       color: var(--v2-text-text-faint);
     }
 
     &[data-state="updated"] {
-      border-style: dashed;
-      border-color: color-mix(in srgb, var(--v2-state-fg-info) 50%, transparent);
       color: color-mix(in srgb, var(--v2-state-fg-info) 70%, var(--v2-text-text-muted));
     }
 
     &[data-state="completed"] {
-      background: color-mix(in srgb, var(--v2-state-fg-success) 16%, transparent);
       color: var(--v2-state-fg-success);
     }
 
     &[data-state="failed"] {
-      background: var(--v2-state-bg-danger);
       color: var(--v2-state-fg-danger);
     }
 
     &[data-state="stopped"] {
-      border-color: color-mix(in srgb, var(--v2-text-text-muted) 55%, transparent);
       color: var(--v2-text-text-muted);
     }
   }
@@ -349,7 +336,9 @@
 
 /* Rows are spaced by block: rows that continue a block sit the small gap below the one above, and a
    row starting a block (the user's message, the agent's work in reply, an interruption) sits the large gap below.
-   The gap is the frame's only space above its content; rows add none of their own. */
+   The row directly above holds the gap, below its content: the turn gap before a turn's first row, else the row
+   before. It is a frame's only space; rows add none of their own. A gap above a row's content would grow that row
+   when the row before it loads, and move the rows on screen. */
 [data-timeline="next"] {
   --timeline-gap-s: 16px;
   --timeline-gap-m: 20px;
@@ -357,15 +346,15 @@
 }
 
 [data-timeline="next"][data-timeline-gap="s"] {
-  padding-top: var(--timeline-gap-s);
+  padding-bottom: var(--timeline-gap-s);
 }
 
 [data-timeline="next"][data-timeline-gap="m"] {
-  padding-top: var(--timeline-gap-m);
+  padding-bottom: var(--timeline-gap-m);
 }
 
 [data-timeline="next"][data-timeline-gap="l"] {
-  padding-top: var(--timeline-gap-l);
+  padding-bottom: var(--timeline-gap-l);
 }
 
 /* Rows are as tall as their text, so the gaps between them are the gaps that show. A row's 28px click area stays: 6px of
@@ -377,16 +366,6 @@
 
     > [data-slot="timeline-event-item"] {
       gap: 8px;
-      margin-inline: -6px;
-      padding-inline: 6px;
-      border-radius: var(--radius-sm);
-
-      @media (hover: hover) {
-        &:hover:not([aria-disabled]) {
-          cursor: pointer;
-          background-color: var(--v2-overlay-simple-overlay-hover);
-        }
-      }
     }
   }
 
@@ -641,16 +620,26 @@
   overflow: clip visible;
 }
 
-/* Keyboard focus marks the row's line of text, rounded, inside its click area. The trigger itself also holds that
-   area and, open, the gap below the row, so filling it would paint a band across the gap. */
+/* Keyboard focus rings the row's line of text, rounded, inside its click area. The trigger itself also holds that area
+   and, open, the gap below the row, so a ring on it would take in the gap. */
 [data-timeline="next"] [data-slot="collapsible-trigger"]:focus-visible {
-  background-color: transparent;
+  outline: none;
 
   > [data-component="tool-trigger"] {
     border-radius: 4px;
-    background-color: var(--surface-raised-base-hover);
-    box-shadow: 0 0 0 4px var(--surface-raised-base-hover);
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: 2px;
   }
+}
+
+/* An open group's sticky header ends the gap above its first row and would paint over that row's ring. Its last 4px,
+   the width of a ring outside its row, stay unpainted, so the ring shows there and a row scrolling under the header
+   still passes beneath it. */
+[data-timeline="next"]
+  [data-component="collapsed-tool-group"]
+  > [data-component="collapsible"].tool-collapsible
+  > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+  clip-path: inset(-8px -8px min(4px, var(--tool-content-gap)) -8px);
 }
 
 /* A command set in its monospace face sits on the line's top rather than its baseline, so the row stays one line tall

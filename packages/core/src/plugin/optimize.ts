@@ -7,14 +7,27 @@ import { Effect } from "effect"
 import { SessionSystemPrompt } from "../session/system-prompt.js"
 
 import PROMPT_GPT from "./system-prompt/gpt.txt"
+import PROMPT_GPT_6_2 from "./system-prompt/gpt-6.2.txt"
 import PROMPT_ASTRA from "./system-prompt/gpt-astra.txt"
 import PROMPT_KIMI from "./system-prompt/kimi.txt"
 import PROMPT_META from "./system-prompt/meta.txt"
 import PROMPT_TRINITY from "./system-prompt/trinity.txt"
 import PROMPT_ANTHROPIC from "./system-prompt/anthropic.txt"
 
+const GPT_6_2 = [
+  "gpt-6.2",
+  "gpt-6-2",
+  "gpt-62",
+  "gpt-latest",
+  "gpt-sol-latest",
+  "gpt-astra-latest",
+  "gpt-terra-latest",
+]
+
 export const OpenAIPlugin = make("opencode.prompt.openai", (model) => {
   const id = model.id.toLowerCase()
+  // Derived from Codex's prompts, where GPT-6.2 Sol and Astra share the same core instructions.
+  if (GPT_6_2.some((prefix) => id.includes(prefix))) return PROMPT_GPT_6_2
   if (!id.includes("gpt")) return undefined
   return id.includes("astra") ? PROMPT_ASTRA : PROMPT_GPT
 })
@@ -28,25 +41,6 @@ export const AnthropicPlugin = make(
   },
   "append",
 )
-
-// Both OpenAIToolsPlugin and AnthropicToolsPlugin are disabled intentionally until we can figure out a good ux for displaying
-// heavy grep/glob usage done via shell or other mechanisms
-
-export const OpenAIToolsPlugin = make("opencode.optimize.openai.tools", (model, tools) => {
-  const ids = [model.id, model.modelID, model.family].join(" ").toLowerCase()
-  if (!ids.includes("gpt")) return undefined
-  delete tools.grep
-  delete tools.glob
-  return undefined
-})
-
-export const AnthropicToolsPlugin = make("opencode.optimize.anthropic.tools", (model, tools) => {
-  const ids = [model.id, model.modelID, model.family].join(" ").toLowerCase()
-  if (!ids.includes("claude")) return undefined
-  delete tools.grep
-  delete tools.glob
-  return undefined
-})
 
 export const KimiPlugin = make("opencode.prompt.kimi", (model) =>
   model.id.toLowerCase().includes("kimi") ? PROMPT_KIMI : undefined,
@@ -77,7 +71,7 @@ export const resolveModel = (ctx: Context, event: SessionHooks["context"]) =>
 
 function make(
   id: string,
-  optimize: (model: Model.Info, tools: SessionHooks["context"]["tools"]) => string | undefined,
+  optimize: (model: Model.Info) => string | undefined,
   mode: "override" | "append" = "override",
 ) {
   return define({
@@ -86,8 +80,7 @@ function make(
       const hook = (event: SessionHooks["context"]) =>
         Effect.gen(function* () {
           const model = yield* resolveModel(ctx, event)
-          // Curate tools before rendering their guidance, including for agents with a custom system prompt.
-          const template = optimize(model, event.tools)
+          const template = optimize(model)
           if (!template) return
           if ((yield* ctx.agent.get({ agentID: event.agent })).data.system) return
           const system = event.system[0]

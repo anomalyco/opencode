@@ -119,6 +119,10 @@ import type {
   ExperimentalGenerateTextOutput,
   ExperimentalGenerateImageInput,
   ExperimentalGenerateImageOutput,
+  ExperimentalGenerateVideoCreateInput,
+  ExperimentalGenerateVideoCreateOutput,
+  ExperimentalGenerateVideoGetInput,
+  ExperimentalGenerateVideoGetOutput,
   ExperimentalGenerateDecisionsInput,
   ExperimentalGenerateDecisionsOutput,
   ExperimentalVoiceModelsOutput,
@@ -243,18 +247,19 @@ import type {
   ExperimentalPersistentPtyRemoveOutput,
   ExperimentalPersistentPtyConnectTokenInput,
   ExperimentalPersistentPtyConnectTokenOutput,
-  ExperimentalScheduleCreateInput,
-  ExperimentalScheduleCreateOutput,
-  ExperimentalScheduleListInput,
-  ExperimentalScheduleListOutput,
-  ExperimentalScheduleGetInput,
-  ExperimentalScheduleGetOutput,
-  ExperimentalSchedulePauseInput,
-  ExperimentalSchedulePauseOutput,
-  ExperimentalScheduleResumeInput,
-  ExperimentalScheduleResumeOutput,
-  ExperimentalScheduleDeleteInput,
-  ExperimentalScheduleDeleteOutput,
+  ExperimentalBrowserTunnelOutput,
+  ExperimentalAutomationCreateInput,
+  ExperimentalAutomationCreateOutput,
+  ExperimentalAutomationListInput,
+  ExperimentalAutomationListOutput,
+  ExperimentalAutomationGetInput,
+  ExperimentalAutomationGetOutput,
+  ExperimentalAutomationPauseInput,
+  ExperimentalAutomationPauseOutput,
+  ExperimentalAutomationResumeInput,
+  ExperimentalAutomationResumeOutput,
+  ExperimentalAutomationDeleteInput,
+  ExperimentalAutomationDeleteOutput,
   ExperimentalArtifactsProvidersInput,
   ExperimentalArtifactsProvidersOutput,
   ExperimentalArtifactsListInput,
@@ -269,6 +274,30 @@ import type {
   ExperimentalArtifactsDeleteOutput,
   ExperimentalJobListInput,
   ExperimentalJobListOutput,
+  ExperimentalJobCancelInput,
+  ExperimentalJobCancelOutput,
+  ExperimentalMachineListOutput,
+  ExperimentalMachineAddInput,
+  ExperimentalMachineAddOutput,
+  ExperimentalMachineRemoveInput,
+  ExperimentalMachineRemoveOutput,
+  ExperimentalPushGetOutput,
+  ExperimentalPushDeviceRegisterInput,
+  ExperimentalPushDeviceRegisterOutput,
+  ExperimentalPushDeviceRemoveInput,
+  ExperimentalPushDeviceRemoveOutput,
+  ExperimentalPushDeviceUpdateInput,
+  ExperimentalPushDeviceUpdateOutput,
+  ExperimentalPushDeviceSessionSetInput,
+  ExperimentalPushDeviceSessionSetOutput,
+  ExperimentalPushDeviceSessionRemoveInput,
+  ExperimentalPushDeviceSessionRemoveOutput,
+  ExperimentalPushSessionSetInput,
+  ExperimentalPushSessionSetOutput,
+  ExperimentalPushSessionRemoveInput,
+  ExperimentalPushSessionRemoveOutput,
+  ExperimentalPushSettingsSetInput,
+  ExperimentalPushSettingsSetOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -313,6 +342,8 @@ import type {
   WebsearchQueryOutput,
   ExperimentalUsageLimitsInput,
   ExperimentalUsageLimitsOutput,
+  ExperimentalFlagGetInput,
+  ExperimentalFlagGetOutput,
   ConfigGetInput,
   ConfigGetOutput,
   ConfigShellsOutput,
@@ -950,6 +981,36 @@ const EndpointExperimentalGenerateImage =
       ),
     )
 
+const EndpointExperimentalGenerateVideoCreate =
+  (raw: RawClient["server.generate"]) => (input: ExperimentalGenerateVideoCreateInput) =>
+    preserveEffect<ExperimentalGenerateVideoCreateOutput>()(
+      raw["generate.video.create"]({
+        payload: {
+          model: input["model"],
+          prompt: input["prompt"],
+          start: input["start"],
+          end: input["end"],
+          references: input["references"],
+          duration: input["duration"],
+          aspect: input["aspect"],
+          resolution: input["resolution"],
+          sound: input["sound"],
+        },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalGenerateVideoGet =
+  (raw: RawClient["server.generate"]) => (input: ExperimentalGenerateVideoGetInput) =>
+    preserveEffect<ExperimentalGenerateVideoGetOutput>()(
+      raw["generate.video.get"]({ params: { id: input["id"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
 const EndpointExperimentalGenerateDecisions =
   (raw: RawClient["server.generate"]) => (input: ExperimentalGenerateDecisionsInput) =>
     preserveEffect<ExperimentalGenerateDecisionsOutput>()(
@@ -964,6 +1025,7 @@ const EndpointExperimentalGenerateDecisions =
 const adaptGroupExperimentalGenerate = (raw: RawClient["server.generate"]) => ({
   text: EndpointExperimentalGenerateText(raw),
   image: EndpointExperimentalGenerateImage(raw),
+  video: { create: EndpointExperimentalGenerateVideoCreate(raw), get: EndpointExperimentalGenerateVideoGet(raw) },
   decisions: EndpointExperimentalGenerateDecisions(raw),
 })
 
@@ -1582,18 +1644,20 @@ const EndpointExperimentalPersistentPtyConnectToken =
       ),
     )
 
-const EndpointExperimentalScheduleCreate =
-  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleCreateInput) =>
-    preserveEffect<ExperimentalScheduleCreateOutput>()(
-      raw["schedule.create"]({
+const EndpointExperimentalBrowserTunnel = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalBrowserTunnelOutput>()(raw["browser.tunnel"]({}).pipe(Effect.mapError(mapClientError)))
+
+const EndpointExperimentalAutomationCreate =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalAutomationCreateInput) =>
+    preserveEffect<ExperimentalAutomationCreateOutput>()(
+      raw["automation.create"]({
         payload: {
           sessionID: input["sessionID"],
+          directory: input["directory"],
           name: input["name"],
-          when: input["when"],
-          if: input["if"],
-          until: input["until"],
-          ends: input["ends"],
-          prompt: input["prompt"],
+          trigger: input["trigger"],
+          action: input["action"],
+          expires: input["expires"],
         },
       }).pipe(
         Effect.mapError(mapClientError),
@@ -1601,46 +1665,48 @@ const EndpointExperimentalScheduleCreate =
       ),
     )
 
-const EndpointExperimentalScheduleList =
-  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleListInput) =>
-    preserveEffect<ExperimentalScheduleListOutput>()(
-      raw["schedule.list"]({ query: { sessionID: input["sessionID"] } }).pipe(
+const EndpointExperimentalAutomationList =
+  (raw: RawClient["server.experimental"]) => (input?: ExperimentalAutomationListInput) =>
+    preserveEffect<ExperimentalAutomationListOutput>()(
+      raw["automation.list"]({ query: { sessionID: input?.["sessionID"], directory: input?.["directory"] } }).pipe(
         Effect.mapError(mapClientError),
         Effect.map((value) => value.data),
       ),
     )
 
-const EndpointExperimentalScheduleGet =
-  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleGetInput) =>
-    preserveEffect<ExperimentalScheduleGetOutput>()(
-      raw["schedule.get"]({ params: { scheduleID: input["scheduleID"] } }).pipe(
+const EndpointExperimentalAutomationGet =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalAutomationGetInput) =>
+    preserveEffect<ExperimentalAutomationGetOutput>()(
+      raw["automation.get"]({ params: { automationID: input["automationID"] } }).pipe(
         Effect.mapError(mapClientError),
         Effect.map((value) => value.data),
       ),
     )
 
-const EndpointExperimentalSchedulePause =
-  (raw: RawClient["server.experimental"]) => (input: ExperimentalSchedulePauseInput) =>
-    preserveEffect<ExperimentalSchedulePauseOutput>()(
-      raw["schedule.pause"]({ params: { scheduleID: input["scheduleID"] } }).pipe(
+const EndpointExperimentalAutomationPause =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalAutomationPauseInput) =>
+    preserveEffect<ExperimentalAutomationPauseOutput>()(
+      raw["automation.pause"]({ params: { automationID: input["automationID"] } }).pipe(
         Effect.mapError(mapClientError),
         Effect.map((value) => value.data),
       ),
     )
 
-const EndpointExperimentalScheduleResume =
-  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleResumeInput) =>
-    preserveEffect<ExperimentalScheduleResumeOutput>()(
-      raw["schedule.resume"]({ params: { scheduleID: input["scheduleID"] } }).pipe(
+const EndpointExperimentalAutomationResume =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalAutomationResumeInput) =>
+    preserveEffect<ExperimentalAutomationResumeOutput>()(
+      raw["automation.resume"]({ params: { automationID: input["automationID"] } }).pipe(
         Effect.mapError(mapClientError),
         Effect.map((value) => value.data),
       ),
     )
 
-const EndpointExperimentalScheduleDelete =
-  (raw: RawClient["server.experimental"]) => (input: ExperimentalScheduleDeleteInput) =>
-    preserveEffect<ExperimentalScheduleDeleteOutput>()(
-      raw["schedule.delete"]({ params: { scheduleID: input["scheduleID"] } }).pipe(Effect.mapError(mapClientError)),
+const EndpointExperimentalAutomationDelete =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalAutomationDeleteInput) =>
+    preserveEffect<ExperimentalAutomationDeleteOutput>()(
+      raw["automation.delete"]({ params: { automationID: input["automationID"] } }).pipe(
+        Effect.mapError(mapClientError),
+      ),
     )
 
 const EndpointExperimentalArtifactsProviders =
@@ -1715,6 +1781,126 @@ const EndpointExperimentalJobList = (raw: RawClient["server.experimental"]) => (
     ),
   )
 
+const EndpointExperimentalJobCancel = (raw: RawClient["server.experimental"]) => (input: ExperimentalJobCancelInput) =>
+  preserveEffect<ExperimentalJobCancelOutput>()(
+    raw["job.cancel"]({ params: { id: input["id"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const EndpointExperimentalMachineList = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalMachineListOutput>()(
+    raw["machine.list"]({}).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointExperimentalMachineAdd =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalMachineAddInput) =>
+    preserveEffect<ExperimentalMachineAddOutput>()(
+      raw["machine.add"]({ payload: { name: input["name"], reach: input["reach"], replace: input["replace"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalMachineRemove =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalMachineRemoveInput) =>
+    preserveEffect<ExperimentalMachineRemoveOutput>()(
+      raw["machine.remove"]({ params: { name: input["name"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalPushGet = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalPushGetOutput>()(
+    raw["push.get"]({}).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointExperimentalPushDeviceRegister =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceRegisterInput) =>
+    preserveEffect<ExperimentalPushDeviceRegisterOutput>()(
+      raw["push.device.register"]({
+        params: { deviceID: input["deviceID"] },
+        payload: {
+          callbackURL: input["callbackURL"],
+          expiresAt: input["expiresAt"],
+          publicKey: input["publicKey"],
+          platform: input["platform"],
+          name: input["name"],
+          settings: input["settings"],
+        },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalPushDeviceRemove =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceRemoveInput) =>
+    preserveEffect<ExperimentalPushDeviceRemoveOutput>()(
+      raw["push.device.remove"]({ params: { deviceID: input["deviceID"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalPushDeviceUpdate =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceUpdateInput) =>
+    preserveEffect<ExperimentalPushDeviceUpdateOutput>()(
+      raw["push.device.update"]({
+        params: { deviceID: input["deviceID"] },
+        payload: { paused: input["paused"], settings: input["settings"] },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalPushDeviceSessionSet =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceSessionSetInput) =>
+    preserveEffect<ExperimentalPushDeviceSessionSetOutput>()(
+      raw["push.device.session.set"]({
+        params: { deviceID: input["deviceID"], sessionID: input["sessionID"] },
+        payload: { level: input["level"], until: input["until"] },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalPushDeviceSessionRemove =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceSessionRemoveInput) =>
+    preserveEffect<ExperimentalPushDeviceSessionRemoveOutput>()(
+      raw["push.device.session.remove"]({
+        params: { deviceID: input["deviceID"], sessionID: input["sessionID"] },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalPushSessionSet =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushSessionSetInput) =>
+    preserveEffect<ExperimentalPushSessionSetOutput>()(
+      raw["push.session.set"]({
+        params: { sessionID: input["sessionID"] },
+        payload: { level: input["level"], until: input["until"] },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalPushSessionRemove =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushSessionRemoveInput) =>
+    preserveEffect<ExperimentalPushSessionRemoveOutput>()(
+      raw["push.session.remove"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalPushSettingsSet =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushSettingsSetInput) =>
+    preserveEffect<ExperimentalPushSettingsSetOutput>()(
+      raw["push.settings.set"]({ payload: { paused: input["paused"], until: input["until"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   persistentPty: {
     read: EndpointExperimentalPersistentPtyRead(raw),
@@ -1728,13 +1914,14 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     remove: EndpointExperimentalPersistentPtyRemove(raw),
     connectToken: EndpointExperimentalPersistentPtyConnectToken(raw),
   },
-  schedule: {
-    create: EndpointExperimentalScheduleCreate(raw),
-    list: EndpointExperimentalScheduleList(raw),
-    get: EndpointExperimentalScheduleGet(raw),
-    pause: EndpointExperimentalSchedulePause(raw),
-    resume: EndpointExperimentalScheduleResume(raw),
-    delete: EndpointExperimentalScheduleDelete(raw),
+  browser: { tunnel: EndpointExperimentalBrowserTunnel(raw) },
+  automation: {
+    create: EndpointExperimentalAutomationCreate(raw),
+    list: EndpointExperimentalAutomationList(raw),
+    get: EndpointExperimentalAutomationGet(raw),
+    pause: EndpointExperimentalAutomationPause(raw),
+    resume: EndpointExperimentalAutomationResume(raw),
+    delete: EndpointExperimentalAutomationDelete(raw),
   },
   artifacts: {
     providers: EndpointExperimentalArtifactsProviders(raw),
@@ -1744,7 +1931,26 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     update: EndpointExperimentalArtifactsUpdate(raw),
     delete: EndpointExperimentalArtifactsDelete(raw),
   },
-  job: { list: EndpointExperimentalJobList(raw) },
+  job: { list: EndpointExperimentalJobList(raw), cancel: EndpointExperimentalJobCancel(raw) },
+  machine: {
+    list: EndpointExperimentalMachineList(raw),
+    add: EndpointExperimentalMachineAdd(raw),
+    remove: EndpointExperimentalMachineRemove(raw),
+  },
+  push: {
+    get: EndpointExperimentalPushGet(raw),
+    device: {
+      register: EndpointExperimentalPushDeviceRegister(raw),
+      remove: EndpointExperimentalPushDeviceRemove(raw),
+      update: EndpointExperimentalPushDeviceUpdate(raw),
+      session: {
+        set: EndpointExperimentalPushDeviceSessionSet(raw),
+        remove: EndpointExperimentalPushDeviceSessionRemove(raw),
+      },
+    },
+    session: { set: EndpointExperimentalPushSessionSet(raw), remove: EndpointExperimentalPushSessionRemove(raw) },
+    settings: { set: EndpointExperimentalPushSettingsSet(raw) },
+  },
 })
 
 const EndpointShellList = (raw: RawClient["server.shell"]) => (input?: ShellListInput) =>
@@ -1939,6 +2145,13 @@ const adaptGroupExperimentalUsage = (raw: RawClient["server.usage"]) => ({
   limits: EndpointExperimentalUsageLimits(raw),
 })
 
+const EndpointExperimentalFlagGet = (raw: RawClient["server.flag"]) => (input?: ExperimentalFlagGetInput) =>
+  preserveEffect<ExperimentalFlagGetOutput>()(
+    raw["experimental.flag.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroupExperimentalFlag = (raw: RawClient["server.flag"]) => ({ get: EndpointExperimentalFlagGet(raw) })
+
 const EndpointConfigGet = (raw: RawClient["server.config"]) => (input?: ConfigGetInput) =>
   preserveEffect<ConfigGetOutput>()(
     raw["config.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
@@ -1978,6 +2191,7 @@ const adaptClient = (raw: RawClient) => {
       file: adaptGroupExperimentalFile(raw["server.fs"]),
       migration: adaptGroupExperimentalMigration(raw["server.migration"]),
       usage: adaptGroupExperimentalUsage(raw["server.usage"]),
+      flag: adaptGroupExperimentalFlag(raw["server.flag"]),
       config: adaptGroupExperimentalConfig(raw["server.config"]),
     },
     message: adaptGroupMessage(raw["server.message"]),

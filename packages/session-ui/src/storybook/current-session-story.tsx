@@ -11,7 +11,6 @@ import { CURRENT_SESSION_ID, STORY_TIME } from "./current-session-fixtures"
 
 export function CurrentSessionProviders(props: {
   document: SessionDocument
-  backgroundCompaction?: boolean
   readMedia?: ReadMediaUrlFn
   turnDiff?: TurnDiffSource
   children: JSX.Element
@@ -20,7 +19,6 @@ export function CurrentSessionProviders(props: {
     <DataProvider
       directory="C:/workspaces/opencode"
       sessionID={props.document.sessionID}
-      backgroundCompaction={props.backgroundCompaction}
       readMedia={props.readMedia}
       data={{
         agent: [
@@ -95,7 +93,6 @@ export function CurrentSessionTimelineStory(props: {
   editToolDefaultOpen?: boolean
   turnDiffs?: boolean
   turnDiff?: TurnDiffSource
-  backgroundCompaction?: boolean
   readMedia?: ReadMediaUrlFn
 }) {
   // Inline story documents rebuild their messages on every prop read, and the timeline projection keys text by identity.
@@ -135,12 +132,7 @@ export function CurrentSessionTimelineStory(props: {
         <Show when={revision()} keyed>
           {(revision) => (
             <div data-story-revision={revision}>
-              <CurrentSessionProviders
-                document={document()}
-                backgroundCompaction={props.backgroundCompaction}
-                readMedia={props.readMedia}
-                turnDiff={props.turnDiff}
-              >
+              <CurrentSessionProviders document={document()} readMedia={props.readMedia} turnDiff={props.turnDiff}>
                 <SessionTimeline
                   document={document()}
                   presentation={props.presentation}
@@ -148,6 +140,8 @@ export function CurrentSessionTimelineStory(props: {
                   shellToolDefaultOpen={props.shellToolDefaultOpen}
                   editToolDefaultOpen={props.editToolDefaultOpen}
                   turnDiffs={props.turnDiffs}
+                  // Stories show the timeline as local and dev builds do.
+                  inlineQuotes
                 />
               </CurrentSessionProviders>
             </div>

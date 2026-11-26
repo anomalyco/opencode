@@ -914,7 +914,7 @@ test.describe("Working", () => {
 
       const trigger = page
         .locator('[data-component="collapsed-tool-group"]')
-        .getByRole("button", { name: "Used 2 Shell", exact: true, includeHidden: true })
+        .getByRole("button", { name: "Used 2 Shell", exact: true })
 
       await expect(trigger).toHaveAttribute("aria-expanded", "false")
       await expect(working).toBeVisible()
@@ -1483,22 +1483,19 @@ test.describe("background work", () => {
 
     const title = header.getByRole("heading")
     const before = await title.boundingBox()
-    const exit = await pauseExitAnimations(working)
+    const exit = await seekExit(working, 100)
 
     await timeline.transport.send(status("idle", 1, childID))
-    await expect.poll(() => exit.evaluate((animations) => animations.length)).toBeGreaterThan(0)
-    await exit.evaluate((animations) => animations.forEach((animation) => (animation.currentTime = 100)))
-    await expect(working).toBeAttached()
 
-    const midway = await title.boundingBox()
+    const midway = await exit.evaluate((state) => state.sibling)
 
-    expect(midway!.x).toBeLessThan(before!.x)
-    await exit.evaluate((animations) => animations.forEach((animation) => animation.finish()))
+    expect(midway).toBeLessThan(before!.x)
+    await exit.evaluate((state) => state.animations.forEach((animation) => animation.finish()))
     await expect(working).toHaveCount(0)
 
     const after = await title.boundingBox()
 
-    expect(after!.x).toBeLessThan(midway!.x)
+    expect(after!.x).toBeLessThan(midway)
     expect(after!.x).toBeCloseTo(before!.x - 24, 0)
     await exit.dispose()
     await header.locator('[data-slot="session-title-parent"]').click()
@@ -1566,16 +1563,11 @@ test.describe("compaction", () => {
     await expect(page.locator('[data-component="session-working"]')).toBeVisible()
   })
 
-  test("shows an automatic compaction as one quiet divider with background compaction on", async ({ page }) => {
-    const config = page.waitForResponse((response) => new URL(response.url()).pathname === "/api/config")
-
+  test("shows an automatic compaction as one quiet divider", async ({ page }) => {
     const timeline = await setupTimeline(page, {
       sessionMessages: [user, completed],
       sessionStatus: { [sessionID]: { type: "busy" } },
-      configEntries: [{ type: "document", info: { experimental: { background_compaction: true } } }],
     })
-
-    await config
 
     await timeline.send(compactionStarted({ sessionID, reason: "auto" }))
     await timeline.send(compactionDelta({ sessionID, text: "Partial automatic summary." }))
@@ -1640,11 +1632,17 @@ test.describe("compaction", () => {
         await timeline.send(compactionDelta({ sessionID, text: outcome.partial }))
         await expect(compactions).toHaveCount(index + 1)
         const compaction = compactions.nth(index)
-        await expect(compaction).toContainText(outcome.partial)
+
+        // An automatic compaction runs as one quiet divider; a manual one streams its summary.
+        if (outcome.reason === "auto")
+          await expect(compaction.locator('[data-slot="session-compaction-divider"]')).toHaveAttribute(
+            "data-state",
+            "running",
+          )
+
+        if (outcome.reason === "manual") await expect(compaction).toContainText(outcome.partial)
 
         if (name === "interrupted") {
-          await expect(compaction.getByRole("status").getByLabel("Compacting", { exact: true })).toBeVisible()
-
           const request = page.waitForRequest(
             (request) =>
               request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/interrupt`,
@@ -2039,18 +2037,17 @@ test("quotes plain timeline text into the composer, with or without a comment", 
     .poll(() => prompts)
     .toEqual([
       [
-        "The user quoted the following from earlier in the conversation:",
         "> Explain the build",
-        "> ",
-        "> It has two steps:",
-        "> compile",
-        "> bundle",
-        "The user quoted the following from earlier in the conversation:",
+        ">",
         "> It has two steps:",
         "> compile",
         "> bundle",
         "",
-        "The user made the following comment regarding this quote: Why two?",
+        "> It has two steps:",
+        "> compile",
+        "> bundle",
+        "",
+        "Why two?",
       ].join("\n"),
     ])
   expect(metadata).toEqual([
@@ -2817,14 +2814,13 @@ test("quotes table rows and diff lines selected across a diff viewer", async ({ 
     .poll(() => prompts)
     .toEqual([
       [
-        "The user quoted the following from earlier in the conversation:",
         "> a.ts\trename",
-        "> ",
+        ">",
         "> -export const value = 'before'",
         "> +export const value = 'after'",
-        "The user quoted the following from earlier in the conversation:",
+        "",
         "> a.ts\trename",
-        "> ",
+        ">",
         "> -export const value = 'before'",
       ].join("\n"),
     ])
@@ -3105,6 +3101,8 @@ test("opens an optional comment beside the quote action and skips it with Alt-cl
   await chips.nth(0).hover()
   await page.getByRole("button", { name: "Remove attachment" }).click()
   await expect(chips).toHaveCount(0)
+  // Removing the last chip hands focus back to the editor a task later, and its caret would replace the next selection.
+  await expect(editor).toBeFocused()
 
   // A slow tooltip names the action and its shortcut.
   await select("The first sentence to quote.")
@@ -3321,22 +3319,29 @@ test("reaches the quote action from the keyboard and blocks a selection over the
   await page.mouse.up()
 })
 
-function pauseExitAnimations(locator: Locator) {
-  return locator.evaluateHandle((element) => {
+// Presence unmounts an element once its exit's duration has passed, even while the exit is paused, so a paused exit
+// cannot be held across test round trips. Seek and measure the next sibling in the task that starts the exit instead.
+function seekExit(locator: Locator, ms: number) {
+  return locator.evaluateHandle((element, ms) => {
     const animations: Animation[] = []
 
-    const pause = (event: AnimationEvent) => {
-      if (event.target !== element || event.animationName !== "exit") return
+    const sibling = new Promise<number>((resolve) => {
+      const observer = new MutationObserver(() => {
+        if (element.getAttribute("data-visible") !== "false") return
+        observer.disconnect()
+        animations.push(...element.getAnimations())
+        animations.forEach((animation) => {
+          animation.pause()
+          animation.currentTime = ms
+        })
+        resolve(element.nextElementSibling!.getBoundingClientRect().x)
+      })
 
-      animations.push(...element.getAnimations())
-      animations.forEach((animation) => animation.pause())
-      element.removeEventListener("animationstart", pause)
-    }
+      observer.observe(element, { attributes: true, attributeFilter: ["data-visible"] })
+    })
 
-    element.addEventListener("animationstart", pause)
-
-    return animations
-  })
+    return { animations, sibling }
+  }, ms)
 }
 
 function notes(label: string, count: number) {

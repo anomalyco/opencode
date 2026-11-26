@@ -228,6 +228,7 @@ export function createPaneDrag(input: {
                 {(target) => (
                   <div
                     data-slot={target().strip ? "pane-drop-indicator" : "pane-drop-zone"}
+                    data-floating-overlay
                     data-pane={target().pane}
                     class="absolute"
                     classList={{
@@ -247,6 +248,7 @@ export function createPaneDrag(input: {
               <div
                 class="absolute max-w-60 h-7 px-2.5 flex items-center rounded-md bg-v2-background-bg-base text-13-regular text-v2-text-text-base truncate shadow-[var(--v2-elevation-raised)] opacity-90"
                 style={{ left: `${current().x + 12}px`, top: `${current().y + 12}px` }}
+                data-floating-overlay
               >
                 {current().title}
               </div>

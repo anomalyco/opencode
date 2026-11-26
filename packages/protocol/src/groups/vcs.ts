@@ -9,7 +9,7 @@ import { ConflictError, InvalidRequestError, ServiceUnavailableError } from "../
 
 const InitQuery = Schema.Struct({
   ...LocationQuery.fields,
-  provider: Schema.optional(Schema.String),
+  provider: Schema.optional(Schema.String).annotateKey({ description: "VCS provider to initialize. Defaults to git." }),
 })
 
 export class VcsInitNotSupportedError extends Schema.TaggedError<VcsInitNotSupportedError>()(

@@ -3,8 +3,12 @@ import { FileTree } from "@pierre/trees"
 import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
 import { Button } from "@opencode/ui/button"
 import { Divider } from "@opencode/ui/divider"
+import { Icon } from "@opencode/ui/icon"
+import { Menu } from "@opencode/ui/menu"
+import { MenuScroll } from "@opencode/ui/menu-scroll"
 import {
   displayName,
+  getProjectAvatarGenerated,
   getProjectAvatarSource,
   getProjectAvatarVariant,
   ProjectAvatar,
@@ -26,10 +30,11 @@ import {
   pickerMode,
   createPriorityTaskQueue,
   createDirectorySearch,
+  displayInputDirectory,
   displayPickerPath,
   shortenPickerRecentPath,
+  pickerBreadcrumbs,
   pickerParent,
-  pickerRoot,
   listPickerDirectory,
   pickerRelativePath,
   pickerAbsolutePath,
@@ -45,6 +50,7 @@ import {
 } from "./tree-machine"
 import {
   createPickerComboboxState,
+  ownsPickerEscape,
   pickerComboboxView,
   transitionPickerCombobox,
   type PickerComboboxEffect,
@@ -152,22 +158,42 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
 
         return true
       })
-      .slice(0, 5)
+      .slice(0, 10)
   })
 
   const search = createDirectorySearch({ sdk, home, location, base: () => treeView().root || start() })
 
-  const fullSelectionPath = createMemo(() => {
-    const value = treeView().result
+  const breadcrumbs = createMemo(() => {
+    const root = treeView().root
+    const crumbs = root ? pickerBreadcrumbs(root, home()) : []
+    // Deep paths collapse the folders between / and ~ and the last two into an ellipsis that opens the one above them.
+    const lead = crumbs[1]?.label === "~" ? 2 : 1
 
-    return value ? displayPickerPath(value, "", home()) : ""
+    if (crumbs.length <= lead + 3) return crumbs
+
+    return [...crumbs.slice(0, lead), { label: "…", path: crumbs[crumbs.length - 3].path }, ...crumbs.slice(-2)]
   })
 
-  const shortSelectionPath = createMemo(() => {
-    const value = treeView().result
+  const committed = createMemo(() => {
+    const selected = treeView().selected
 
-    return value ? shortenPickerRecentPath(value, home()) : ""
+    if (!selected) return ""
+
+    return policy.action === "file" ? displayPickerPath(selected, "", home()) : displayInputDirectory(selected, home())
   })
+
+  function atSelection(input: HTMLInputElement) {
+    if (!input.value) return true
+
+    const end = input.value.length
+
+    return input.value === committed() && input.selectionStart === end && input.selectionEnd === end
+  }
+
+  function choose(directory: string) {
+    dispatchCombobox({ type: "dismissed" })
+    dispatchTree({ type: "directory.chosen", ...navigation(directory), fromInput: false })
+  }
 
   function navigation(path: string) {
     return { path, home: home(), fallback: start() || home(), located: Boolean(location()) }
@@ -195,6 +221,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
         root: treeView().root,
         fallback: start() || home(),
         locationDirectory: location()?.directory,
+        committed: committed(),
       })
 
       if (next.state !== previous) setMachines((current) => ({ ...current, combobox: next.state }))
@@ -309,6 +336,8 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
       return
     }
 
+    if (effect.type === "submit") return resolve()
+
     if (effect.type === "tree.focus-initial") {
       if (!tree?.getFocusedPath()) tree?.focusNearestPath(null)
 
@@ -343,13 +372,20 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
 
     if (effect.type === "search.cancel") return stopSearch()
 
-    if (effect.type === "selection.clear") return dispatchTree({ type: "selection.cleared" })
+    if (effect.type === "submit") return resolve()
 
     if (effect.type === "choose.directory") {
-      return dispatchTree({ type: "directory.chosen", ...navigation(effect.path), fromInput: true })
+      return dispatchTree({
+        type: "directory.chosen",
+        ...navigation(effect.path),
+        fromInput: true,
+        submit: effect.submit,
+      })
     }
 
     dispatchTree({ type: "file.chosen", absolute: effect.absolute, home: home() })
+
+    if (effect.submit) resolve()
   }
 
   function stopSearch() {
@@ -457,7 +493,7 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
           box-shadow: none !important;
           color: var(--v2-text-text-muted) !important;
           font-size: 13px !important;
-          font-weight: 440 !important;
+          font-weight: 500 !important;
           letter-spacing: -0.04px !important;
         }
         button[data-type="item"]:hover {
@@ -477,12 +513,11 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
           background:
             linear-gradient(0deg, var(--v2-overlay-simple-overlay-pressed), var(--v2-overlay-simple-overlay-pressed)),
             var(--v2-background-bg-base) !important;
-          box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base) !important;
           color: var(--v2-text-text-base) !important;
-          font-weight: 530 !important;
         }
         button[data-type="item"]:focus-visible {
           outline: none !important;
+          box-shadow: inset 0 0 0 1px var(--v2-border-border-focus) !important;
         }
         [data-item-type="folder"] > [data-item-section="icon"] {
           width: auto !important;
@@ -519,19 +554,51 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
           -webkit-mask-image: ${FOLDER_OPEN_MASK};
           mask-image: ${FOLDER_OPEN_MASK};
         }
+        /* The tree renders rows in its shadow root, which only takes text decorations, so this repeats Badge's neutral compact style. */
         [data-item-section="decoration"] > span {
+          box-sizing: border-box;
+          display: inline-flex;
+          align-items: center;
           height: 16px;
           padding: 0 4px;
           border-radius: 2px;
-          background: var(--v2-background-bg-layer-03);
+          border: 0.5px solid var(--v2-border-border-base);
+          background: var(--v2-background-bg-layer-02);
           color: var(--v2-text-text-muted);
           font-size: 11px;
           font-weight: 530;
-          line-height: 12px;
+          line-height: 1;
           letter-spacing: 0.05px;
+          font-variant-numeric: tabular-nums;
+        }
+        [data-item-section="spacing"] {
+          padding-inline-start: 6.5px;
+        }
+        [data-item-section="spacing-item"] {
+          border-left: none;
+          margin-right: 0;
+          border-inline-start: 1px solid color-mix(in srgb, var(--v2-border-border-muted) 50%, transparent);
+          margin-inline-end: calc(var(--trees-level-gap) - 1px);
+          transform: none;
+        }
+        /* The tree always reserves a lane for git change letters. */
+        [data-item-section="git"] {
+          display: none;
         }
         [data-file-tree-virtualized-scroll] {
           overscroll-behavior: contain;
+        }
+        /* @pierre/trees reveals middle-truncation markers at height > 1lh, which trips on subpixel rounding at
+           fractional UI zoom; overflowing text wraps to >= 2lh, so 1.5lh sits cleanly between fitting and overflowing rows. */
+        [data-truncate-marker] {
+          opacity: 0;
+          transition: opacity var(--truncate-internal-marker-fade-out-duration) ease-in-out;
+        }
+        @container measure (height > 1.5lh) {
+          [data-truncate-marker] {
+            opacity: 1;
+            transition: opacity var(--truncate-internal-marker-fade-in-duration) ease-in-out;
+          }
         }
       `,
       onExpansionChange(change) {
@@ -557,6 +624,8 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
     if (path) dispatchTree({ type: "navigate", ...navigation(path) })
   })
 
+  createEffect(on(committed, () => dispatchCombobox({ type: "synced" }), { defer: true }))
+
   // Suggestions search against the root and location, so a search started before either arrived runs again.
   createEffect(
     on([() => location()?.directory, treeRoot], () => dispatchCombobox({ type: "context.changed" }), {
@@ -578,9 +647,10 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
           <DialogTitle>{props.title ?? language.t("command.project.open")}</DialogTitle>
           <Show when={subtitle()}>
             {(value) => (
-              <div class="directory-picker-subtitle" dir="ltr">
-                {value()}
-              </div>
+              <span class="directory-picker-server" dir="ltr">
+                <Icon name="server" />
+                <span class="truncate">{value()}</span>
+              </span>
             )}
           </Show>
         </div>
@@ -597,6 +667,9 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
             showClearButton={!!comboboxView().input}
             onClearClick={() => dispatchCombobox({ type: "cleared" })}
             class="directory-picker-input"
+            data-owns-escape={ownsPickerEscape(machines().combobox, committed()) ? "" : undefined}
+            appearance="large"
+            leadingIcon={<Icon name="magnifying-glass" />}
             onInput={(event) => dispatchCombobox({ type: "input.changed", value: event.currentTarget.value })}
             role="combobox"
             aria-label={language.t("dialog.directory.search.placeholder")}
@@ -605,6 +678,19 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
             aria-controls="directory-picker-suggestions"
             aria-activedescendant={comboboxView().activeDescendant}
             onKeyDown={(event) => {
+              // Goes up a level from the shown selection; a held key that just cleared the text must not keep climbing.
+              if (
+                event.key === "Backspace" &&
+                !event.repeat &&
+                !event.isComposing &&
+                atSelection(event.currentTarget)
+              ) {
+                event.preventDefault()
+                const selected = treeView().selected
+
+                return selected ? choose(pickerParent(selected)) : navigate(pickerParent(treeView().root))
+              }
+
               const next = dispatchCombobox({
                 type: "key.down",
                 key: event.key,
@@ -617,118 +703,162 @@ export function DirectoryPickerDialog(props: DirectoryPickerDialogProps) {
               if (next.stopPropagation) event.stopPropagation()
             }}
           />
-          <div class="directory-picker-actions">
-            <Button size="normal" variant="ghost" onClick={() => navigate(home() || treeView().root)}>
-              ~
-            </Button>
-            <Button
-              size="normal"
-              variant="ghost"
-              onClick={() => navigate(pickerRoot(treeView().root) || treeView().root)}
-            >
-              {language.t("dialog.directory.root")}
-            </Button>
-            <Button
-              size="normal"
-              variant="ghost"
-              onClick={() => navigate(pickerParent(treeView().selected || treeView().root))}
-            >
-              {language.t("dialog.directory.parent")}
-            </Button>
-          </div>
           <Show when={comboboxView().listboxOpen}>
-            <div id="directory-picker-suggestions" role="listbox" class="directory-picker-suggestions">
-              <For each={comboboxView().items}>
-                {(suggestion, index) => (
-                  <button
-                    id={`directory-picker-suggestion-${index()}`}
-                    data-directory-path={suggestion.absolute}
-                    role="option"
-                    aria-selected={index() === comboboxView().active}
-                    data-active={index() === comboboxView().active ? "" : undefined}
-                    onPointerMove={() => dispatchCombobox({ type: "item.hovered", index: index() })}
-                    onClick={() => dispatchCombobox({ type: "item.clicked", index: index() })}
-                  >
-                    {displayPickerPath(suggestion.absolute, comboboxView().input, home())}
-                    {suggestion.type === "directory" ? "/" : ""}
-                  </button>
-                )}
-              </For>
+            <div data-component="menu-v2-content" class="directory-picker-suggestions">
+              <MenuScroll viewportClass="directory-picker-suggestions-viewport">
+                <div id="directory-picker-suggestions" role="listbox">
+                  <For each={comboboxView().items}>
+                    {(suggestion, index) => (
+                      <div
+                        id={`directory-picker-suggestion-${index()}`}
+                        data-component="menu-v2-item"
+                        data-directory-path={suggestion.absolute}
+                        role="option"
+                        aria-selected={index() === comboboxView().active}
+                        data-highlighted={index() === comboboxView().active ? "" : undefined}
+                        onPointerMove={() => dispatchCombobox({ type: "item.hovered", index: index() })}
+                        onClick={() => dispatchCombobox({ type: "item.clicked", index: index() })}
+                      >
+                        <span data-slot="menu-v2-item-content">
+                          <Icon name={suggestion.type === "directory" ? "folder" : "open-file"} />
+                          <span class="directory-picker-item-name">
+                            {pickerBreadcrumbs(suggestion.absolute, home()).at(-1)?.label}
+                          </span>
+                          <bdi dir="ltr" class="directory-picker-item-path">
+                            {shortenPickerRecentPath(pickerParent(suggestion.absolute), home())}
+                          </bdi>
+                        </span>
+                      </div>
+                    )}
+                  </For>
+                </div>
+              </MenuScroll>
             </div>
           </Show>
         </div>
         <Show when={recentProjects().length > 0}>
-          <div class="directory-picker-recent">
-            <div class="directory-picker-recent-label">{language.t("dialog.directory.recent")}</div>
-            <div class="directory-picker-recent-list">
-              <For each={recentProjects()}>
-                {(project) => {
-                  const name = () => displayName(project)
-                  const fullPath = () => displayPickerPath(project.worktree, "", home())
-                  const shortPath = () => shortenPickerRecentPath(project.worktree, home())
+          <div class="directory-picker-recent" aria-label={language.t("dialog.directory.recent")} role="group">
+            <For each={recentProjects().slice(0, 3)}>
+              {(project) => {
+                const name = () => displayName(project)
+                const shortPath = () => shortenPickerRecentPath(project.worktree, home())
 
-                  return (
-                    <Tooltip placement="top" value={<bdi dir="ltr">{fullPath()}</bdi>}>
-                      <Button
-                        size="normal"
-                        variant="neutral"
-                        class="directory-picker-recent-item"
-                        aria-label={language.t("dialog.directory.recentProject", {
-                          name: name(),
-                          path: shortPath(),
-                        })}
-                        onClick={() => {
-                          dispatchCombobox({ type: "dismissed" })
-                          dispatchTree({ type: "directory.chosen", ...navigation(project.worktree), fromInput: false })
-                        }}
-                      >
-                        <ProjectAvatar
-                          class="shrink-0"
-                          aria-hidden="true"
-                          fallback={name()}
-                          src={getProjectAvatarSource(project.id, project.icon)}
-                          variant={getProjectAvatarVariant(project.icon?.color)}
-                        />
-                        <span class="min-w-0 truncate">{name()}</span>
-                      </Button>
-                    </Tooltip>
-                  )
-                }}
-              </For>
-            </div>
+                return (
+                  <Tooltip
+                    placement="top"
+                    value={<bdi dir="ltr">{displayPickerPath(project.worktree, "", home())}</bdi>}
+                  >
+                    <Button
+                      size="small"
+                      variant="neutral"
+                      class="directory-picker-recent-item"
+                      aria-label={language.t("dialog.directory.recentProject", { name: name(), path: shortPath() })}
+                      onClick={() => choose(project.worktree)}
+                    >
+                      <ProjectAvatar
+                        class="shrink-0"
+                        aria-hidden="true"
+                        fallback={name()}
+                        src={getProjectAvatarSource(project.id, project.icon)}
+                        variant={getProjectAvatarVariant(project.icon?.color)}
+                        generated={getProjectAvatarGenerated(project)}
+                      />
+                      <span class="min-w-0 truncate">{name()}</span>
+                    </Button>
+                  </Tooltip>
+                )
+              }}
+            </For>
+            <Show when={recentProjects().length > 3}>
+              <Menu gutter={4} modal={false} placement="bottom-start">
+                <Menu.Trigger as={Button} size="small" variant="neutral">
+                  {language.t("dialog.directory.moreProjects")}
+                </Menu.Trigger>
+                <Menu.Portal>
+                  <Menu.Content class="directory-picker-recent-menu">
+                    <For each={recentProjects().slice(3)}>
+                      {(project) => {
+                        const name = () => displayName(project)
+                        const shortPath = () => shortenPickerRecentPath(project.worktree, home())
+
+                        return (
+                          <Menu.Item
+                            aria-label={language.t("dialog.directory.recentProject", {
+                              name: name(),
+                              path: shortPath(),
+                            })}
+                            onSelect={() => choose(project.worktree)}
+                          >
+                            <ProjectAvatar
+                              class="shrink-0"
+                              aria-hidden="true"
+                              fallback={name()}
+                              src={getProjectAvatarSource(project.id, project.icon)}
+                              variant={getProjectAvatarVariant(project.icon?.color)}
+                              generated={getProjectAvatarGenerated(project)}
+                            />
+                            <span class="directory-picker-item-name">{name()}</span>
+                            <bdi dir="ltr" class="directory-picker-item-path">
+                              {shortPath()}
+                            </bdi>
+                          </Menu.Item>
+                        )
+                      }}
+                    </For>
+                  </Menu.Content>
+                </Menu.Portal>
+              </Menu>
+            </Show>
           </div>
         </Show>
-        <div
-          class="directory-picker-browser"
-          ref={container}
-          // The modal's scroll lock sees only the shadow host, not the tree's inner scroller. Stopping the event here
-          // keeps the lock from cancelling it, and the passive listener leaves the scroller to the compositor.
-          on:touchmove={(event) => event.stopPropagation()}
-          on:wheel={{ handleEvent: (event: WheelEvent) => event.stopPropagation(), passive: true }}
-        >
-          <Show when={treeView().loading}>
-            <div class="directory-picker-state">{language.t("common.loading")}</div>
-          </Show>
-          <Show when={treeView().error}>
-            <div class="directory-picker-state">{language.t("dialog.directory.readError")}</div>
-          </Show>
+        <div class="directory-picker-folder">
+          <div class="directory-picker-folder-header">
+            <nav class="directory-picker-breadcrumbs" aria-label={language.t("dialog.directory.breadcrumbs")} dir="ltr">
+              <For each={breadcrumbs()}>
+                {(crumb, index) => (
+                  <>
+                    <Show when={index() > 0}>
+                      <Icon name="chevron-right" class="directory-picker-breadcrumb-separator" />
+                    </Show>
+                    <button
+                      type="button"
+                      class="directory-picker-breadcrumb"
+                      aria-current={index() === breadcrumbs().length - 1 ? "location" : undefined}
+                      onClick={() => navigate(crumb.path)}
+                    >
+                      {crumb.label}
+                    </button>
+                  </>
+                )}
+              </For>
+            </nav>
+          </div>
+          <div
+            class="directory-picker-browser"
+            ref={container}
+            // The modal's scroll lock sees only the shadow host, not the tree's inner scroller. Stopping the event here
+            // keeps the lock from cancelling it, and the passive listener leaves the scroller to the compositor.
+            on:touchmove={(event) => event.stopPropagation()}
+            on:wheel={{ handleEvent: (event: WheelEvent) => event.stopPropagation(), passive: true }}
+          >
+            <Show when={treeView().loading}>
+              <div class="directory-picker-state">{language.t("common.loading")}</div>
+            </Show>
+            <Show when={treeView().error}>
+              <div class="directory-picker-state">{language.t("dialog.directory.readError")}</div>
+            </Show>
+          </div>
         </div>
       </DialogBody>
       <DialogFooter>
-        <Tooltip
-          placement="top"
-          disabled={!fullSelectionPath() || fullSelectionPath() === shortSelectionPath()}
-          value={<bdi dir="ltr">{fullSelectionPath()}</bdi>}
-          class="directory-picker-selection"
-        >
-          <span dir="ltr" class="directory-picker-selection-text">
-            {shortSelectionPath()}
-          </span>
-        </Tooltip>
         <Button variant="neutral" onClick={() => dialog.close()}>
           {language.t("common.cancel")}
         </Button>
-        <Button variant="contrast" disabled={!treeView().result} onClick={resolve}>
+        <Button
+          variant="contrast"
+          disabled={!treeView().result && !comboboxView().input}
+          onClick={() => dispatchCombobox({ type: "submitted" })}
+        >
           {action[policy.action]}
         </Button>
       </DialogFooter>

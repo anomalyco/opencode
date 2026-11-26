@@ -8,6 +8,7 @@ import { Cause, Context, Effect, Layer, Schema } from "effect"
 import path from "path"
 import { Bus } from "../bus.js"
 import { Database } from "../database/database.js"
+import { FileAccess } from "../file-access.js"
 import { Instance } from "../instance/service.js"
 import { Location } from "../location.js"
 import { LocationServiceMap } from "../location-service-map.js"
@@ -75,10 +76,10 @@ const layer = Layer.effect(
       session: Session.Info,
       input: Parameters<Interface["move"]>[0],
     ) {
-      const value = input.directory.trim()
-      const expanded =
-        value === "~" ? global.home : value.startsWith("~/") ? path.join(global.home, value.slice(2)) : value
-      const directory = AbsolutePath.make(path.resolve(session.location.directory, expanded))
+      // Resolved like a tool's path: `~`, `~/` and, on Windows, `~\` expand to the home directory.
+      const directory = AbsolutePath.make(
+        FileAccess.resolvePath(session.location.directory, input.directory.trim(), global.home),
+      )
       const info = yield* fs.stat(directory).pipe(Effect.orElseSucceed(() => undefined))
       if (!info) return yield* new DestinationNotFoundError({ directory })
       if (info.type !== "Directory") return yield* new DestinationNotDirectoryError({ directory })
@@ -115,7 +116,7 @@ const layer = Layer.effect(
       )
     })
 
-    return Service.of({
+    const service: Interface = Service.of({
       move: Effect.fn("SessionMove.move")(function* (input) {
         const session = yield* get(input.sessionID)
         const destination = yield* resolveDestination(session, input)
@@ -126,7 +127,7 @@ const layer = Layer.effect(
           payload: destination,
           delivery: input.delivery ?? "steer",
         })
-        yield* SessionInbox.serialized(
+        yield* admission.serialized(
           input.sessionID,
           Effect.gen(function* () {
             const latest = yield* get(input.sessionID)
@@ -155,8 +156,27 @@ const layer = Layer.effect(
           }),
         )
         yield* execution.wake(input.sessionID)
+        const children = yield* store.list({ directory: session.location.directory, parentID: session.id })
+        yield* Effect.forEach(
+          children.filter((child) => child.location.workspaceID === session.location.workspaceID),
+          (child) =>
+            service
+              .move({
+                sessionID: child.id,
+                directory: destination.location.directory,
+                workspaceID: input.workspaceID,
+                delivery: input.delivery,
+              })
+              .pipe(
+                Effect.catch((error) =>
+                  Effect.logWarning("session move did not reach child", { sessionID: child.id, error }),
+                ),
+              ),
+          { discard: true },
+        )
       }),
     })
+    return service
   }),
 )
 

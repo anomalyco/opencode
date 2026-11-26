@@ -10,12 +10,16 @@ import {
   Effect,
   Exit,
   Layer,
+  Option,
   Ref,
   Schema,
   Scope,
   SynchronizedRef,
 } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { Event } from "@opencode/schema/job"
+import type { Info as JobInfo } from "@opencode/schema/job"
+import { Bus } from "./bus.js"
 import { Database } from "./database/database.js"
 import { JobList } from "./job/list.js"
 import { type Recovery, RecoverySchema } from "./job/recovery.js"
@@ -24,6 +28,11 @@ import { SessionMessage } from "./session/message.js"
 import { SessionSchema } from "./session/schema.js"
 
 export type { Recovery }
+
+/** A session-wide background request releases the outer blocker; its nested waits keep their own deadlines. */
+export const BlockingParent = Context.Reference<string | undefined>("@opencode/Job/BlockingParent", {
+  defaultValue: () => undefined,
+})
 
 const Background = Schema.Struct({
   id: Schema.String,
@@ -99,6 +108,7 @@ type FinishResult = {
   cancel?: Effect.Effect<void>
   scope?: Scope.Closeable
   generation?: Scope.Closeable
+  listed?: JobInfo
 }
 
 type BackgroundResult = {
@@ -196,6 +206,7 @@ function recoveryTitle(job: Active, recovery: Recovery): string | null {
   if (job.info.title !== undefined) return job.info.title
   if (recovery.kind === "shell") return recovery.command
   if (recovery.kind === "subagent") return recovery.description
+  if (recovery.kind === "codemode") return "Code Mode script"
   return recovery.path
 }
 
@@ -242,6 +253,12 @@ export const make = Effect.gen(function* () {
     generations: yield* Ref.make(0),
     scope: yield* Scope.Scope,
   }
+  const bus = Option.getOrUndefined(yield* Effect.serviceOption(Bus.Service))
+
+  // Clients follow listed jobs through this instead of polling the list.
+  const updated = (listed: JobInfo | undefined) =>
+    bus && listed ? bus.publish(Event.Updated, { info: listed }).pipe(Effect.asVoid) : Effect.void
+  const listed = (info: Info, recovery: Recovery | undefined) => (recovery ? JobList.item(info, recovery) : undefined)
 
   const consume = (id: string, generation: Scope.Closeable) =>
     SynchronizedRef.update(state.jobs, (jobs) => {
@@ -338,6 +355,7 @@ export const make = Effect.gen(function* () {
       }),
     )
     if (result.info && result.done) yield* Deferred.succeed(result.done, result.info)
+    if (result.done && result.info) yield* updated(listed(result.info, active.recovery))
     if (result.scope) {
       yield* Scope.close(result.scope, Exit.void).pipe(Effect.forkIn(state.scope, { startImmediately: true }))
     }
@@ -398,6 +416,7 @@ export const make = Effect.gen(function* () {
             return [{ info: snapshot(job), job }, new Map(jobs).set(input.id, job)]
           }),
         )
+        if ("job" in result && result.job.isBackgrounded) yield* updated(listed(result.info, result.job.recovery))
         if ("job" in result)
           yield* restore(input.run).pipe(
             Effect.exit,
@@ -440,6 +459,8 @@ export const make = Effect.gen(function* () {
   })
 
   const block: Interface["block"] = Effect.fnUntraced(function* (input) {
+    const parent = yield* BlockingParent
+    const tracksSession = parent === undefined || parent === input.id
     const result = yield* SynchronizedRef.modify(state.jobs, (jobs): readonly [BlockStart, Map<string, Active>] => {
       const job = jobs.get(input.id)
       if (!job) return [{ type: "missing" }, jobs]
@@ -447,10 +468,12 @@ export const make = Effect.gen(function* () {
       if (job.isBackgrounded) return [{ type: "backgrounded", info: snapshot(job) }, jobs]
       return [
         { type: "wait", wait: { done: job.done, backgrounded: job.backgrounded, generation: job.scope } },
-        new Map(jobs).set(input.id, {
-          ...job,
-          blockingSessions: incrementSession(job.blockingSessions, input.sessionID),
-        }),
+        tracksSession
+          ? new Map(jobs).set(input.id, {
+              ...job,
+              blockingSessions: incrementSession(job.blockingSessions, input.sessionID),
+            })
+          : jobs,
       ]
     })
     if (result.type === "missing") return undefined
@@ -464,7 +487,7 @@ export const make = Effect.gen(function* () {
       Deferred.await(result.wait.backgrounded).pipe(Effect.map((info) => ({ type: "backgrounded" as const, info }))),
     ).pipe(
       Effect.tap((outcome) => (outcome.type === "finished" ? consume(input.id, result.wait.generation) : Effect.void)),
-      Effect.ensuring(removeBlock(input)),
+      Effect.ensuring(tracksSession ? removeBlock(input) : Effect.void),
     )
   })
 
@@ -483,6 +506,7 @@ export const make = Effect.gen(function* () {
   })
 
   const background: Interface["background"] = Effect.fn("Job.background")(function* (id) {
+    let moved: JobInfo | undefined
     const result = yield* SynchronizedRef.modifyEffect(
       state.jobs,
       Effect.fnUntraced(function* (jobs): Effect.fn.Return<readonly [BackgroundResult, Map<string, Active>]> {
@@ -491,14 +515,17 @@ export const make = Effect.gen(function* () {
         if (!job || (job.info.status !== "running" && !job.recovery)) return [{}, jobs]
         if (job.isBackgrounded) return [{ info: snapshot(job) }, jobs]
         const next = yield* markBackground(job)
+        moved = listed(next.info, next.recovery)
         return [{ info: snapshot(next), backgrounded: job.backgrounded }, new Map(jobs).set(id, next)]
       }),
     )
     if (result.info && result.backgrounded) yield* Deferred.succeed(result.backgrounded, result.info)
+    yield* updated(moved)
     return result.info
   })
 
   const backgroundAll: Interface["backgroundAll"] = Effect.fn("Job.backgroundAll")(function* (input) {
+    const moved: (JobInfo | undefined)[] = []
     const result = yield* SynchronizedRef.modifyEffect(
       state.jobs,
       Effect.fnUntraced(function* (jobs): Effect.fn.Return<
@@ -513,12 +540,14 @@ export const make = Effect.gen(function* () {
           if (!job.blockingSessions.has(input.sessionID)) continue
           const updated = yield* markBackground(job)
           results.push({ info: snapshot(updated), backgrounded: job.backgrounded })
+          moved.push(listed(updated.info, updated.recovery))
           next.set(id, updated)
         }
         return [results, next]
       }),
     )
     yield* Effect.forEach(result, (item) => Deferred.succeed(item.backgrounded, item.info), { discard: true })
+    yield* Effect.forEach(moved, updated, { discard: true })
     return result.map((item) => item.info)
   })
 
@@ -543,13 +572,21 @@ export const make = Effect.gen(function* () {
         // Settling work owns its outbox row: the settlement commit writes or deletes it.
         if (persist && !job.settling) yield* persistBackground(next)
         return [
-          { info: snapshot(next), done: job.done, scope: job.scope, generation: job.scope, cancel: job.cancel },
+          {
+            info: snapshot(next),
+            done: job.done,
+            scope: job.scope,
+            generation: job.scope,
+            cancel: job.cancel,
+            listed: listed(next.info, job.recovery),
+          },
           new Map(jobs).set(id, next),
         ]
       }),
     )
     if (result.cancel) yield* result.cancel
     if (result.info && result.done) yield* Deferred.succeed(result.done, result.info)
+    if (result.done) yield* updated(result.listed)
     if (result.scope) yield* Scope.close(result.scope, Exit.void)
     if (result.generation) yield* consume(id, result.generation)
     return result.info
@@ -727,4 +764,4 @@ export const make = Effect.gen(function* () {
 
 const layer = Layer.effect(Service, make)
 
-export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node] })
+export const node = makeGlobalNode({ service: Service, layer, deps: [Database.node, Bus.node] })

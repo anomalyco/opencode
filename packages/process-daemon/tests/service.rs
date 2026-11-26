@@ -447,7 +447,7 @@ fn bursty_output_does_not_disconnect_a_healthy_observer() {
 fn controller_switches_without_disconnecting_observers() {
     let service = TerminalService::new(64 * 1024);
     let terminal = service
-        .create_pty(command("sleep 0.05; printf 'streamed\\n'; sleep 0.2"))
+        .create_pty(command("cat"))
         .expect("terminal created");
     let controller = service
         .attach(
@@ -493,12 +493,12 @@ fn controller_switches_without_disconnecting_observers() {
         .resize_for(terminal.id, Some("controller-a".to_string()), 90, 25)
         .expect("controller resizes");
 
-    let saw_output = |events: &crossbeam_channel::Receiver<StreamEvent>| {
+    let saw_reclaimed = |events: &crossbeam_channel::Receiver<StreamEvent>| {
         let deadline = Instant::now() + Duration::from_secs(2);
         while Instant::now() < deadline {
             match events.recv_timeout(Duration::from_millis(50)) {
                 Ok(StreamEvent::Output { bytes, .. })
-                    if bytes.windows(8).any(|value| value == b"streamed") =>
+                    if bytes.windows(9).any(|value| value == b"reclaimed") =>
                 {
                     return true;
                 }
@@ -508,8 +508,6 @@ fn controller_switches_without_disconnecting_observers() {
         }
         false
     };
-    assert!(saw_output(&controller.events));
-    assert!(saw_output(&observer.events));
 
     let takeover = service
         .attach(
@@ -539,6 +537,8 @@ fn controller_switches_without_disconnecting_observers() {
             b"reclaimed\n".to_vec(),
         )
         .expect("former controller reclaims control and writes");
+    assert!(saw_reclaimed(&controller.events));
+    assert!(saw_reclaimed(&observer.events));
     assert!(
         service
             .write_for(

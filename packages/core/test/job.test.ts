@@ -1,7 +1,11 @@
 import { describe, expect } from "bun:test"
 import { Database } from "@opencode/core/database/database"
 import jobMigration from "@opencode/core/database/migration/20261030054400_job"
+import { CodeModeJob } from "@opencode/core/codemode/job"
+import { Flag } from "@opencode/core/flag"
 import { Job } from "@opencode/core/job"
+import type { Tool } from "@opencode/core/tool"
+import { ToolOutput } from "@opencode/core/tool-output"
 import { JobTable } from "@opencode/core/job/sql"
 import { KVTable } from "@opencode/core/kv/sql"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
@@ -909,6 +913,56 @@ describe("Job", () => {
         },
       ])
       yield* jobs.completeBackground(notificationID)
+    }),
+  )
+
+  it.live("a Code Mode script moved to the background sends no more progress, so no more of its changes", () =>
+    Effect.gen(function* () {
+      const jobs = yield* Job.Service
+      const scope = yield* Scope.Scope
+      const sessionID = SessionSchema.ID.make("ses_codemode_background")
+      const run = yield* CodeModeJob.make(jobs, () => Effect.die("no notice expected"), scope).pipe(
+        Effect.provideService(Flag.Service, { enabled: () => Effect.succeed(true) } as unknown as Flag.Interface),
+        Effect.provideService(ToolOutput.Service, {
+          truncate: Effect.succeed,
+          save: () => Effect.succeed(""),
+        } as unknown as ToolOutput.Interface),
+      )
+      if (!run) throw new Error("expected a Code Mode job runner")
+      const progress: Tool.Metadata[] = []
+      const sent = yield* Deferred.make<void>()
+      const gate = yield* Deferred.make<void>()
+      const done = yield* Deferred.make<void>()
+      const fiber = yield* run(
+        {
+          sessionID,
+          progress: (update: Tool.Metadata) => Effect.sync(() => progress.push(update)),
+        } as unknown as Tool.Context,
+        (context) =>
+          Effect.gen(function* () {
+            yield* context.progress({ files: [{ file: "a.ts", status: "added" }] })
+            yield* Deferred.succeed(sent, undefined)
+            yield* Deferred.await(gate)
+            yield* context.progress({
+              files: [
+                { file: "a.ts", status: "added" },
+                { file: "b.ts", status: "added" },
+              ],
+            })
+            yield* Deferred.succeed(done, undefined)
+            return {
+              content: [{ type: "text" as const, text: "ok" }],
+              output: "ok",
+            } as unknown as Tool.NormalizedResult
+          }),
+      ).pipe(Effect.forkIn(scope, { startImmediately: true }))
+      yield* Deferred.await(sent)
+      yield* jobs.backgroundAll({ sessionID })
+      expect((yield* Fiber.join(fiber)).metadata).toMatchObject({ jobID: expect.any(String) })
+      yield* Deferred.succeed(gate, undefined)
+      yield* Deferred.await(done)
+
+      expect(progress.filter((update) => update.files).map((update) => (update.files as unknown[]).length)).toEqual([1])
     }),
   )
 })

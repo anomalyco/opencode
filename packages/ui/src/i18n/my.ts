@@ -49,6 +49,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "မှတ်ချက်ပေးခြင်း",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "မှတ်ချက်ထည့်ပါ။",
+  "ui.lineComment.add": "မှတ်ချက်ထည့်ပါ။",
+  "ui.lineComment.actions": "ရွေးချယ်မှု လုပ်ဆောင်ချက်များ",
   "ui.lineComment.contextPlaceholder": "ဤပြောင်းလဲမှုအတွက် အကြောင်းအရာကို ထည့်ပါ။",
   "ui.lineComment.submit": "မှတ်ချက်",
   "ui.lineComment.cancel": "မလုပ်တော့",

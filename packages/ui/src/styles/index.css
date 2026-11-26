@@ -28,6 +28,7 @@
 @import "../components/popover.css" layer(components);
 @import "../components/progress.css" layer(components);
 @import "../components/resize-handle.css" layer(components);
+@import "../components/spinner-frames.css" layer(components);
 @import "../components/spinner.css" layer(components);
 @import "../components/error-details.css" layer(components);
 @import "../components/scroll-view.css" layer(components);

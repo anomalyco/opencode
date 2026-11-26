@@ -271,8 +271,6 @@ export const dict = {
 
   "dialog.directory.action.selectFile": "Вибрати файл",
   "dialog.directory.action.selectFolder": "Вибрати папку",
-  "dialog.directory.root": "Корінь",
-  "dialog.directory.parent": "Батьківська папка",
   "dialog.directory.readError": "Не вдалося прочитати цю папку",
 
   "dialog.server.add.title": "Додати сервер",
@@ -947,7 +945,6 @@ export const dict = {
   "session.location.description": "Виберіть інший каталог, щоб продовжити цю сесію.",
   "session.location.choose": "Вибрати каталог",
   "session.location.worktree": "Вибрати робоче дерево",
-  "session.location.worktreesFailed": "Не вдалося завантажити робочі дерева",
   "session.rewind.toast.title": "Скинуто",
   "session.rewind.toast.undo": "Скасувати",
   "session.location.moving": "Переміщення сесії…",
@@ -1011,7 +1008,7 @@ export const dict = {
   "provider.connect.breadcrumb.root": "Підключення",
   "provider.connect.breadcrumb.label": "Кроки підключення",
   "provider.connect.methods.description": "Виберіть спосіб підключення {{provider}}.",
-  "provider.connect.opencode.name": "OpenCode Console",
+  "provider.connect.opencode.name": "OpenCode",
   "provider.connect.opencode.freeName": "OpenCode Free",
   "provider.connect.console.retry": "Спробувати ще раз",
   "provider.connect.console.serviceKeyDescription":
@@ -1241,6 +1238,7 @@ export const dict = {
   "session.timeline.status.working": "Працює",
   "session.running.stop.subagent": "Перервати субагента",
   "session.running.stop.shell": "Завершити команду оболонки",
+  "session.running.stop.script": "Скасувати скрипт",
   "session.activity.subagents.one": "{{count}} субагент",
   "session.activity.subagents.few": "{{count}} субагенти",
   "session.activity.subagents.many": "{{count}} субагентів",
@@ -1249,6 +1247,10 @@ export const dict = {
   "session.activity.shells.few": "{{count}} оболонки",
   "session.activity.shells.many": "{{count}} оболонок",
   "session.activity.shells.other": "{{count}} оболонки",
+  "session.activity.scripts.one": "{{count}} скрипт",
+  "session.activity.scripts.few": "{{count}} скрипти",
+  "session.activity.scripts.many": "{{count}} скриптів",
+  "session.activity.scripts.other": "{{count}} скрипта",
   "session.activity.shell.back": "Назад до фонової роботи",
   "session.activity.shell.stop": "Зупинити",
   "session.activity.shell.stopping": "Зупинення…",
@@ -1290,7 +1292,6 @@ export const dict = {
   "common.closeTabsBelow": "Закрити вкладки нижче",
   "sidebar.inbox.empty": "Тут з’являться сесії, з якими ви працюєте",
   "sidebar.inbox.section.needsAttention": "Потребують уваги",
-  "sidebar.inbox.section.unread": "Непрочитані",
   "sidebar.inbox.showMore": "Показати більше",
   "sidebar.inbox.showLess": "Показати менше",
   "sidebar.inbox.announce.approval": "{{title}} потребує схвалення.",
@@ -1301,7 +1302,6 @@ export const dict = {
   "sidebar.inbox.section.working": "Виконуються",
   "sidebar.inbox.section.recent": "Нещодавні",
   "sidebar.inbox.section.archived": "Архівовані",
-  "sidebar.inbox.archived.title": "Архівовані сесії",
   "sidebar.inbox.unarchive": "Розархівувати",
   "sidebar.inbox.status.approval": "Схвалення",
   "sidebar.inbox.status.input": "Запитання",
@@ -1338,11 +1338,6 @@ export const dict = {
   "sidebar.recent.unpin": "Відкріпити",
   "sidebar.recent.moveUp": "Перемістити вгору",
   "sidebar.recent.moveDown": "Перемістити вниз",
-  "settings.experimental.row.newIcons.title": "Нові іконки",
-  "settings.experimental.row.newIcons.description": "Попередній перегляд оновленого набору іконок",
-  "settings.experimental.row.foldUserMessages.title": "Згортати довгі повідомлення",
-  "settings.experimental.row.foldUserMessages.description":
-    "Згортати ваші повідомлення довші за 12 рядків під кнопку «Читати далі»",
   "settings.experimental.row.newTimeline.title": "Нова хронологія",
   "settings.experimental.row.newTimeline.description":
     "Перероблена хронологія сесії, що групує дії агента, з одним рядком статусу під кроком",
@@ -1353,14 +1348,10 @@ export const dict = {
   "settings.experimental.row.sidebarOrganize.description":
     "Виберіть, як показувати сесії на бічній панелі. Застосовується лише до бічних вкладок.",
   "settings.experimental.sidebarOrganize.recent": "Нещодавні",
-  "settings.experimental.sidebarOrganize.projects": "Проєкти",
   "settings.experimental.sidebarOrganize.list": "Один список",
   "settings.experimental.sidebarOrganize.customize": "Налаштувати",
-  "sidebar.organize.projects": "Проєкти",
   "sidebar.organize.openTab": "Відкрити вкладку",
   "sidebar.organize.showMore": "Показати більше",
-  "sidebar.organize.showLess": "Показати менше",
-  "sidebar.organize.empty": "Ще немає сесій",
   "sidebar.view.sessions": "Сесії",
   "sidebar.view.options": "Параметри перегляду",
   "sidebar.view.grouping": "Групувати за",
@@ -1475,6 +1466,9 @@ export const dict = {
     "Показувати субагентів окремо. Групувати іншу активність зі згорнутими деталями.",
   "settings.timeline.description.quiet":
     "Показувати субагентів окремо й групувати редагування. Приховати іншу активність.",
+  "settings.timeline.row.foldUserMessages.title": "Згортати довгі повідомлення",
+  "settings.timeline.row.foldUserMessages.description":
+    "Згортати ваші повідомлення довші за 12 рядків під кнопку «Читати далі»",
   "settings.timeline.row.turnDiffs.title": "Змінені файли",
   "settings.timeline.row.turnDiffs.description":
     "Показувати список файлів, змінених кожним кроком, після його завершення",

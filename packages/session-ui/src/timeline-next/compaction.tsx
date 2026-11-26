@@ -4,7 +4,6 @@ import { useI18n } from "@opencode/ui/context/i18n"
 import { createEffect, createMemo, createSignal, onCleanup, Show, untrack } from "solid-js"
 import { BasicTool } from "../components/basic-tool"
 import { LinkedText } from "../components/linked-text"
-import { useData } from "../context"
 import {
   createCompactionEntranceState,
   DISPOSED_COMPACTION_ENTRANCE_EVENT,
@@ -30,11 +29,10 @@ export function CompactionQueued() {
 
 /**
  * A compaction, drawn with the timeline's own dividers: as tall as their text, with a plain line, spaced like the rows
- * around them. An automatic one with background compaction on is one quiet divider instead.
+ * around them. An automatic one is one quiet divider instead.
  */
 export function CompactionMessage(props: { message: SessionMessageCompaction; error: string }) {
   const i18n = useI18n()
-  const data = useData()
   const summary = () => (props.message.status === "failed" ? "" : props.message.summary)
 
   const error = () => {
@@ -81,7 +79,7 @@ export function CompactionMessage(props: { message: SessionMessageCompaction; er
 
   return (
     <Show
-      when={!data.backgroundCompaction || props.message.reason === "manual" || props.message.status === "failed"}
+      when={props.message.reason === "manual" || props.message.status === "failed"}
       fallback={
         <QuietCompaction
           id={props.message.id}
@@ -191,7 +189,7 @@ function QuietCompaction(props: { id: string; created: number; running: boolean;
         </span>
         <span
           data-slot="session-compaction-label"
-          class="relative flex shrink-0 whitespace-nowrap text-[13px] font-[440] leading-text-compact tracking-[-0.04px]"
+          class="relative flex shrink-0 whitespace-pre text-[13px] font-[440] leading-text-compact tracking-[-0.04px]"
         >
           <span>{label().stem}</span>
           <span data-slot="session-compaction-ending" class="grid justify-items-start">
@@ -223,10 +221,14 @@ function QuietCompaction(props: { id: string; created: number; running: boolean;
   )
 }
 
-/** Splits Compacting and Compacted at their shared stem, so only the ending changes when the compaction ends. */
+/**
+ * Splits Compacting and Compacted at their shared stem, so only the ending changes when the compaction ends. It splits
+ * between whole characters as they are read, so a vowel sign stays with its consonant.
+ */
 function splitEnding(running: string, done: string) {
-  const chars = [...running]
-  const others = [...done]
+  const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" })
+  const chars = Array.from(graphemes.segment(running), (part) => part.segment)
+  const others = Array.from(graphemes.segment(done), (part) => part.segment)
   const at = chars.findIndex((char, index) => char !== others[index])
   const stem = chars.slice(0, at === -1 ? chars.length : at).join("")
 

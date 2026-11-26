@@ -102,7 +102,7 @@ export const DialogManageModels: Component = () => {
           title={language.t("dialog.model.manage")}
           description={language.t("dialog.model.manage.description")}
         />
-        <Button variant="neutral" size="small" icon="plus" onClick={handleConnectProvider}>
+        <Button variant="neutral" size="small" icon="plus" class="-me-0.5" onClick={handleConnectProvider}>
           {language.t("command.provider.connect")}
         </Button>
       </DialogHeader>
@@ -111,7 +111,7 @@ export const DialogManageModels: Component = () => {
           <TextInput
             type="search"
             appearance="base"
-            class="!w-full self-stretch"
+            class="!h-8 !w-full self-stretch"
             leadingIcon={<Icon name="magnifying-glass" />}
             value={list.filter()}
             onInput={(event) => list.onInput(event.currentTarget.value)}
@@ -123,7 +123,7 @@ export const DialogManageModels: Component = () => {
             autofocus
             aria-label={language.t("dialog.model.search.placeholder")}
             showClearButton={!!list.filter()}
-            clearIcon="circle-xmark"
+            clearIcon="close"
             clearLabel={language.t("common.clear")}
             onClearClick={() => list.clear()}
           />

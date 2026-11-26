@@ -1,6 +1,6 @@
-import { RGBA, TextAttributes } from "@opentui/core"
+import { RGBA, TextAttributes, type BoxRenderable } from "@opentui/core"
 import { useTerminalDimensions } from "@opentui/solid"
-import { createMemo, Show } from "solid-js"
+import { createMemo, createSignal, Show } from "solid-js"
 import { useTheme } from "../../context/theme"
 import { Locale } from "../../util/locale"
 import { stringWidth } from "../../util/string-width"
@@ -12,6 +12,8 @@ export function PromptMetadataRow(props: {
   model: string
   provider: string
   variant?: string
+  /** The model's selected speed; unset at its standard speed. */
+  speed?: string
   /** What the workspace's limits leave for the model, once it is running low. */
   limit?: { readonly text: string; readonly danger: boolean }
   muted: boolean
@@ -22,22 +24,34 @@ export function PromptMetadataRow(props: {
 }) {
   const theme = useTheme()
   const dimensions = useTerminalDimensions()
+  // The row's own width once laid out: beside the session tabs the prompt is narrower than the terminal.
+  const [measured, setMeasured] = createSignal<number>()
   const layout = createMemo(() => {
     if (props.mode === "shell") return { agent: props.agent ?? "Shell", model: "" }
     return promptMetadataLayout({
-      width: Math.max(0, dimensions().width - (dimensions().width < 44 ? 9 : 13)),
+      width: measured() ?? Math.max(0, dimensions().width - (dimensions().width < 44 ? 9 : 13)),
       terminalWidth: dimensions().width,
       agent: props.agent ?? "",
       auto: props.auto,
       model: props.model,
       provider: props.provider,
       variant: props.variant,
+      speed: props.speed,
       limit: props.limit?.text,
     })
   })
 
   return (
-    <box flexDirection="row" gap={1} flexGrow={1} flexShrink={1} minWidth={0}>
+    <box
+      flexDirection="row"
+      gap={1}
+      flexGrow={1}
+      flexShrink={1}
+      minWidth={0}
+      onSizeChange={function (this: BoxRenderable) {
+        setMeasured(this.width)
+      }}
+    >
       <Show
         when={(props.mode === "shell" || props.agent) && (layout().agent || layout().model)}
         fallback={<box height={1} />}
@@ -72,12 +86,27 @@ export function PromptMetadataRow(props: {
             <Show when={layout().variant}>
               {(variant) => (
                 <>
-                  <text fg={fade(theme.text.muted, props.variantAlpha)}>·</text>
+                  <text flexShrink={0} fg={fade(theme.text.muted, props.variantAlpha)}>
+                    ·
+                  </text>
                   <text
+                    flexShrink={0}
                     fg={fade(theme.text.feedback.warning.base, props.variantAlpha)}
                     attributes={TextAttributes.BOLD}
                   >
                     {variant()}
+                  </text>
+                </>
+              )}
+            </Show>
+            <Show when={layout().speed}>
+              {(speed) => (
+                <>
+                  <text flexShrink={0} fg={fade(theme.text.muted, props.modelAlpha)}>
+                    ·
+                  </text>
+                  <text flexShrink={0} fg={fade(props.muted ? theme.text.muted : theme.text.base, props.modelAlpha)}>
+                    {speed()}
                   </text>
                 </>
               )}
@@ -111,6 +140,7 @@ type Layout = {
   model: string
   provider?: string
   variant?: string
+  speed?: string
   limit?: string
 }
 
@@ -122,36 +152,31 @@ function promptMetadataLayout(input: {
   model: string
   provider: string
   variant?: string
+  speed?: string
   limit?: string
 }) {
   const agent = input.terminalWidth < 44 ? undefined : input.agent
   const provider = input.terminalWidth < 44 ? "" : input.provider
   const limit = input.limit
+  const selection = { variant: input.variant, speed: input.speed, limit }
   const candidates: Layout[] = [
-    { agent, auto: input.auto, model: input.model, provider, variant: input.variant, limit },
-    { agent, model: input.model, provider, variant: input.variant, limit },
-    {
-      agent,
-      model: input.model,
-      provider: provider.split(" / ").at(-1) ?? provider,
-      variant: input.variant,
-      limit,
-    },
-    { agent, model: input.model, variant: input.variant, limit },
+    { agent, auto: input.auto, model: input.model, provider, ...selection },
+    { agent, model: input.model, provider, ...selection },
+    { agent, model: input.model, provider: provider.split(" / ").at(-1) ?? provider, ...selection },
+    { agent, model: input.model, ...selection },
   ]
   const fit = candidates.find((candidate) => stringWidth(text(candidate)) <= input.width)
   if (fit) return fit
 
   const prefix = agent ? `${agent} · ` : ""
-  const suffix = `${input.variant ? ` · ${input.variant}` : ""}${limit ? `  ${limit}` : ""}`
+  const suffix = `${input.variant ? ` · ${input.variant}` : ""}${input.speed ? ` · ${input.speed}` : ""}${limit ? `  ${limit}` : ""}`
   return {
     agent,
     model: Locale.truncateWidth(
       input.model,
       Math.max(9, input.width - stringWidth(prefix) - stringWidth(suffix)),
     ).replace(/\s+…$/, "…"),
-    variant: input.variant,
-    limit,
+    ...selection,
   }
 }
 
@@ -162,6 +187,7 @@ function text(input: Layout) {
     ...(input.model ? [...(input.agent ? ["·"] : []), input.model] : []),
     ...(input.provider ? [input.provider] : []),
     ...(input.variant ? ["·", input.variant] : []),
+    ...(input.speed ? ["·", input.speed] : []),
     ...(input.limit ? [` ${input.limit}`] : []),
   ].join(" ")
 }

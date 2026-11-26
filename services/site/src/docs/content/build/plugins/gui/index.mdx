@@ -237,8 +237,8 @@ vite build --watch
 
 ## Define the GUI plugin
 
-`Plugin.define` declares the systems the plugin runs on, its stored window state, and its copy. The host reads these
-declarations before either setup runs.
+`Plugin.define` declares the systems the plugin runs on, its stored window state, its icons, and its copy. The host
+reads these declarations before either setup runs.
 
 ```ts title="src/gui/definition.ts"
 import { Schema } from "effect"
@@ -262,6 +262,8 @@ export const definition = Plugin.define({
 - `os` limits the plugin to some operating systems. Omit it to run on every OS. A plugin whose `os` leaves out this
   system does not run, and **Settings > Extensions > Plugins** keeps its row with "Not available on this system."
 - `stores` declares [stored state](#stored-state) for windows. Read it as `ctx.stores.<key>`.
+- `icons` declares the plugin's [own icons](#icons), each an SVG file's text. Read an icon's name as
+  `ctx.icons.<name>`.
 - `i18n` holds copy by locale. Write every locale inline; English fills every key a locale lacks. Read it with
   `ctx.t(key, params)` and `ctx.plural(key, count)`. In a window, `ctx.t` also reads the app's shared keys, such as `common.*`. In `main`, a missing key returns the key.
 - Define `setup`, `main`, or both. A GUI without either fails to load.
@@ -276,6 +278,7 @@ export const definition = Plugin.define({
 interface Declarations {
   os?: ("macos" | "windows" | "linux")[]
   stores?: Record<string, StoreDeclaration>
+  icons?: Record<string, string>
   i18n?: { en: Messages; [locale: string]: Messages }
 }
 
@@ -300,11 +303,12 @@ src/
 ├── rpc.ts              RPC contract between the server part and its clients
 ├── gui.tsx             ./gui-experimental entry: export default Plugin.define({ ...definition, setup, main })
 └── gui/
-    ├── definition.ts   Plugin.define: os, stores, i18n
+    ├── definition.ts   Plugin.define: os, stores, icons, i18n
     ├── contract.ts     Tokens other code may import: Ipc, Contract, Registry
     ├── window.tsx      Window setup: Plugin.Setup<typeof definition>
     ├── main.ts         Main setup: Plugin.MainSetup (desktop only)
     ├── page.tsx        Components that panels and pages render
+    ├── icons/logo.svg  The plugin's own icons
     └── i18n/en.ts      English copy
 ```
 
@@ -349,7 +353,8 @@ import { setup } from "./gui/window"
 export default Plugin.define({ ...definition, setup, main })
 ```
 
-- `Plugin.Setup<typeof definition>` is the type of a window setup. It types `ctx.stores` from the declared stores.
+- `Plugin.Setup<typeof definition>` is the type of a window setup. It types `ctx.stores` from the declared stores and
+  `ctx.icons` from the declared icons.
 - `Plugin.MainSetup` is the type of a main setup, and `Plugin.Cleanup` the type of the cleanup function either setup
   may return.
 - Import registries, tokens, and helpers such as `Command`, `SettingsPage`, `Panel`, `Slot`, `Contract`, `Ipc`,
@@ -617,6 +622,128 @@ export const setup: Plugin.Setup<typeof definition> = (ctx) => {
 
 `usePlugin` throws outside a plugin contribution. In a component that another plugin renders, it returns that plugin's
 context, so wrap a component you provide on a contract with `bindPlugin`; see [Contracts](#contracts).
+
+## Icons
+
+Every `icon` field of the SDK, and `ctx.ui.Icon`, takes an `IconName`: the name of one of the app's own icons, or of
+an icon your plugin declares. Any other string fails to compile.
+
+```ts
+ctx.add(TitlebarItem, () => ({ id: "sync", label: ctx.t("sync"), icon: "server", run: () => sync() }))
+```
+
+### Declare your own icons
+
+For artwork the app does not have, such as your product's mark, keep the SVG file in your package and declare it in
+`icons`. Import the file with `?raw`, which the `gui()` preset bundles as text.
+
+```ts title="src/gui/definition.ts"
+import { Plugin } from "@opencode/plugin/gui"
+import logo from "./icons/logo.svg?raw"
+
+export const definition = Plugin.define({
+  icons: { logo },
+})
+```
+
+Then pass the icon's name from `ctx.icons` wherever an `IconName` goes.
+
+```tsx title="src/gui/window.tsx"
+import { ComposerPill, Slot, type Plugin } from "@opencode/plugin/gui"
+import type { definition } from "./definition"
+
+export const setup: Plugin.Setup<typeof definition> = (ctx) => {
+  ctx.add(ComposerPill, {
+    id: "sync",
+    show: () => ({ label: ctx.t("synced"), icon: ctx.icons.logo, tone: "success" }),
+  })
+
+  ctx.add(Slot, { at: "window.bottom", render: () => <ctx.ui.Icon name={ctx.icons.logo} size="small" /> })
+}
+```
+
+- `ctx.icons` has one name for each icon you declare. A name you did not declare fails to compile.
+- The host registers your icons before `setup` runs and withdraws them when the plugin goes away.
+- A value that is not an SVG document fails the plugin when it starts.
+- For the `?raw` import to type-check, add `"vite/client"` to `types` in your `tsconfig.json`.
+
+### Draw an icon
+
+The host draws your icon as it draws its own: at the size and in the color of the place that shows it.
+
+```xml title="src/gui/icons/logo.svg"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+  <circle cx="8" cy="8" r="6.5" stroke="currentColor" />
+  <path d="M5 8.5 7 10.5 11 6" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" />
+</svg>
+```
+
+- The `viewBox` frames the drawing, or the `width` and `height` when there is none. The host scales it to 14, 16 or
+  20 pixels, so draw on a 16-pixel grid.
+- Draw with `currentColor`. The icon then takes the color of its place, such as a pill's `tone` or a menu row's muted
+  icon color.
+- An `id` in the drawing belongs to the whole window. Keep ids unique, or leave them out.
+
+### Animate an icon
+
+An icon can move, for example to show that work is in progress. Use SVG animation elements, such as `animate` and
+`animateTransform`, inside the file.
+
+```xml title="src/gui/icons/working.svg"
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" fill="none">
+  <circle cx="8" cy="8" r="6.5" stroke="currentColor" />
+  <circle cx="8" cy="8" r="2" fill="currentColor">
+    <animate attributeName="r" values="2;4.5;2" dur="2.4s" repeatCount="indefinite" />
+  </circle>
+</svg>
+```
+
+- Every place that shows the icon moves in step.
+- The animation goes on while the host renders the place again, such as when a pill's `show` runs again.
+- Under the user's reduced motion setting, the host holds every icon on its first frame. Make the first frame the
+  resting drawing.
+- An icon that no place shows costs nothing.
+
+### Stored icon names
+
+An icon's name is a string, `<plugin id>:<name>`, so the host stores it like the name of one of its own icons. A
+[composer note or quote](#attach-to-the-composer) keeps it with the draft and the sent message, and a
+[closed tab](#reopen-closed-tabs) keeps it with the session's layout.
+
+```ts
+ctx.screen.current()?.composer.attach({
+  type: "note",
+  origin: ctx.id,
+  commentID: crypto.randomUUID(),
+  label: "button#submit",
+  icon: ctx.icons.logo,
+  subject: 'element <button id="submit">Save</button>',
+  comment: "",
+})
+```
+
+- While your plugin is not active, the icon draws nothing and keeps its size.
+- Read the name from `ctx.icons` where you use it. A name written by hand fails to compile.
+
+#### Reference
+
+```ts
+type IconName = AppIconName | PluginIconName
+
+// One of the app's own icons, such as "folder", "github" or "terminal".
+type AppIconName = string
+
+// The name of an icon the plugin declared, from ctx.icons.
+type PluginIconName = string
+
+interface Declarations {
+  icons?: Record<string, string>
+}
+
+interface SetupContext<D> extends Context {
+  icons: Record<string, PluginIconName>
+}
+```
 
 ## Registries
 
@@ -1213,6 +1340,8 @@ ctx.add(ComposerPill, {
 
 - `label` is the pill's text and truncates when long. `icon` is optional.
 - `tone` colors the icon: `"success"`, `"warning"` or `"danger"`.
+- For a glyph the app does not have, such as a status mark that moves, [declare your own icon](#icons) and pass
+  `ctx.icons.<name>`. It takes the `tone` like any icon, and its animation goes on while `show` runs again.
 - `rows` make the pill open a menu under the heading `title`, or `label` without one. Each row has its own `icon`,
   `tone` and muted `detail`, and runs `run` when picked; a row without `run` only shows.
 - Without `rows`, the pill runs `run` on click.
@@ -1569,14 +1698,15 @@ ctx.add(Command, () => ({
 
 The sections below cover each API. `ctx.options`, `ctx.client`, and `ctx.app` are the
 [shared context](#shared-context), `ctx.provide`, `ctx.use`, and `ctx.main` work with
-[contracts and tokens](#contracts-and-tokens), and `ctx.stores` holds the stores the plugin
-[declares](#define-the-gui-plugin).
+[contracts and tokens](#contracts-and-tokens), `ctx.stores` holds the stores the plugin
+[declares](#define-the-gui-plugin), and `ctx.icons` holds the names of the [icons](#icons) it declares.
 
 #### Reference
 
 ```ts
 interface SetupContext<D> extends Context {
   stores: Record<string, Persisted<unknown> | ((session: SessionRef) => Persisted<unknown>)>
+  icons: Record<string, PluginIconName>
 }
 
 interface Context {
@@ -2160,8 +2290,9 @@ ctx.add(Panel, {
 })
 ```
 
-- `Icon`, `Button`, and `IconButton` take any `IconName`, as every `icon` field of the SDK does. An `IconButton`'s
-  `label` is its accessible name; wrap it in `Tooltip` to show it on hover.
+- `Icon`, `Button`, and `IconButton` take any `IconName`, as every `icon` field of the SDK does: one of the app's
+  icons, or one of [your own](#icons) from `ctx.icons`. An `IconButton`'s `label` is its accessible name; wrap it in
+  `Tooltip` to show it on hover.
 - `busy` on a button replaces its icon with the loading indicator and disables it until it is `false` again.
 - Use `Loader` for every loading state that is not the AI working, such as a pane, a search, or a connection that
   loads.

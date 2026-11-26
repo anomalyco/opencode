@@ -10,12 +10,8 @@ import type { McpClient } from "./client.js"
 
 export type Failure = Extract<Mcp.Status, { readonly status: "failed" | "needs_auth" }>
 
-/** A catalog the server can change: its tools, prompts or resources. */
-export type Kind = "tools" | "prompts" | "resources"
-
-// Unshared connections to one remote endpoint, from any number of Locations, take turns at their
-// handshake so the endpoint does not receive a startup burst.
-const endpointLoads = KeyedMutex.makeUnsafe<string>()
+/** A catalog the server can change: its tools, prompts, resources or skills. */
+export type Kind = "tools" | "prompts" | "resources" | "skills"
 
 /**
  * What a connection reports to its owner. Each runs inline, in order, so the owner can keep its own
@@ -51,8 +47,8 @@ export interface Input {
    */
   readonly shared?: boolean
   readonly clientInfo?: { readonly name: string; readonly version: string }
-  /** Declares MCP Events; see `McpClient.ConnectOptions.events`. */
-  readonly mcpEvents?: boolean
+  /** Lists the server's MCP Skills when it offers them. */
+  readonly skills?: boolean
   /** Read on every attempt, so a credential change applies to the next one. */
   readonly authProvider: Effect.Effect<AuthProvider | undefined>
   readonly elicitation: McpClient.ElicitationHandler
@@ -64,6 +60,11 @@ export interface Input {
   readonly scope: Scope.Scope
   /** Serializes lifecycle work. Callbacks and recovery take it; `start` and `stop` expect the caller to hold it. */
   readonly lock: <A, E>(effect: Effect.Effect<A, E>) => Effect.Effect<A, E>
+  /**
+   * Unshared connections to one remote endpoint, from any number of Locations on the same host, take turns at
+   * their handshake so the endpoint does not receive a startup burst.
+   */
+  readonly endpointLoads: KeyedMutex.KeyedMutex<string>
   /** Runs callbacks from the live connection. */
   readonly callbacks: (effect: Effect.Effect<void>) => unknown
   /** Runs recovery that a background request triggered. */
@@ -82,6 +83,8 @@ export interface Connection {
   /** The server's tool list as listed. Each refresh replaces the array. */
   readonly tools: ReadonlyArray<McpClient.Tool> | undefined
   readonly prompts: ReadonlyArray<McpClient.Prompt> | undefined
+  /** The server's skill entries as listed, when it offers MCP Skills. Each refresh replaces the array. */
+  readonly skills: ReadonlyArray<McpClient.Skill> | undefined
   /** Connects and lists tools; a failure is reported through `failed`. */
   readonly start: Effect.Effect<void>
   readonly stop: Effect.Effect<void>
@@ -102,6 +105,7 @@ export function make(input: Input): Connection {
     client?: McpClient.Connection
     tools?: ReadonlyArray<McpClient.Tool>
     prompts?: ReadonlyArray<McpClient.Prompt>
+    skills?: ReadonlyArray<McpClient.Skill>
   } = {}
 
   // Runs a connection callback under the lock, dropping it if the connection is no longer the live
@@ -127,6 +131,16 @@ export function make(input: Input): Connection {
       }),
       Effect.andThen(input.events.changed("prompts")),
     )
+
+  const refreshSkills = (client: McpClient.Connection) =>
+    client.skills
+      ? client.skills.list().pipe(
+          Effect.map((skills) => {
+            state.skills = skills
+          }),
+          Effect.andThen(input.events.changed("skills")),
+        )
+      : Effect.void
 
   // Re-establishes a connection whose HTTP session the server dropped, unless another path already
   // replaced it while this one waited for the lock.
@@ -158,7 +172,8 @@ export function make(input: Input): Connection {
     client.onSessionExpired(() => input.fork(recover(client)))
     client.onToolsChanged(() => live(refreshTools(client).pipe(Effect.andThen(input.events.changed("tools")))))
     client.onPromptsChanged(() => live(refreshPrompts(client)))
-    client.onResourcesChanged(() => live(input.events.changed("resources")))
+    // MCP Skills announces a changed skill list as a resource list change.
+    client.onResourcesChanged(() => live(input.events.changed("resources").pipe(Effect.andThen(refreshSkills(client)))))
   }
 
   const start: Effect.Effect<void> = Effect.suspend(() =>
@@ -186,7 +201,8 @@ export function make(input: Input): Connection {
         elicitation: input.elicitation,
         clientInfo: input.clientInfo,
         roots: !input.shared,
-        events: input.mcpEvents,
+        events: true,
+        skills: input.skills,
       }).pipe(
         Effect.flatMap(
           (client): Effect.Effect<{ client: McpClient.Connection; tools?: ReadonlyArray<McpClient.Tool> }, Error> =>
@@ -197,7 +213,8 @@ export function make(input: Input): Connection {
         Effect.provideService(Environment.Service, input.environment),
         Effect.provideService(FetchHttpClient.Fetch, input.fetch),
         Scope.provide(scope),
-        (effect) => (config.type === "remote" && !input.shared ? endpointLoads.withLock(config.url)(effect) : effect),
+        (effect) =>
+          config.type === "remote" && !input.shared ? input.endpointLoads.withLock(config.url)(effect) : effect,
         Effect.exit,
       )
       if (Exit.isSuccess(result) && !result.value.tools) {
@@ -209,9 +226,11 @@ export function make(input: Input): Connection {
         state.client = result.value.client
         state.tools = result.value.tools
         state.prompts = []
+        state.skills = []
         watch(result.value.client)
         yield* input.events.connected
         whenLive(result.value.client)(refreshPrompts(result.value.client))
+        whenLive(result.value.client)(refreshSkills(result.value.client))
         return
       }
       yield* Scope.close(scope, Exit.void)
@@ -236,10 +255,12 @@ export function make(input: Input): Connection {
     state.client = undefined
     state.tools = undefined
     state.prompts = undefined
+    state.skills = undefined
     yield* Scope.close(scope, Exit.void)
     yield* input.events.changed("tools")
     yield* input.events.changed("resources")
     yield* input.events.changed("prompts")
+    yield* input.events.changed("skills")
   })
 
   return {
@@ -251,6 +272,9 @@ export function make(input: Input): Connection {
     },
     get prompts() {
       return state.prompts
+    },
+    get skills() {
+      return state.skills
     },
     start,
     stop,

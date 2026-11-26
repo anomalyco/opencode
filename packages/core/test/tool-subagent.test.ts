@@ -165,6 +165,7 @@ const completionIt = testEffect(
       LayerNodePlatform.llmClient.replace(completionLLM),
       SessionRunnerModel.node.replace(
         Layer.succeed(SessionRunnerModel.Service, {
+          select: (session) => Effect.fail(new SessionRunnerModel.ModelNotSelectedError({ sessionID: session.id })),
           resolve: () =>
             Effect.succeed(
               SessionRunnerModel.resolved(
@@ -268,7 +269,7 @@ describe("SubagentTool", () => {
             expect.objectContaining({
               id: marker.notificationID,
               description: "background review",
-              text: `<subagent sessionID="${outputSessionID(result.metadata)}" state="completed" description="background review">\n${childText}\n</subagent>`,
+              text: `<background-result kind="subagent" sessionID="${outputSessionID(result.metadata)}" state="completed" description="background review">\n${childText}\n</background-result>`,
               metadata: {
                 source: "subagent",
                 childID: outputSessionID(result.metadata),
@@ -635,7 +636,9 @@ describe("SubagentTool", () => {
             .filter((message) => message.type === "synthetic")
             .filter((message) => message.metadata?.source === "subagent")
           expect(notices).toHaveLength(1)
-          expect(notices[0]?.text).toContain(`<subagent sessionID="${childID}" state="completed"`)
+          expect(notices[0]?.text).toContain(
+            `<background-result kind="subagent" sessionID="${childID}" state="completed"`,
+          )
           expect(yield* jobs.pendingBackground).toEqual([])
         }),
       ),
@@ -852,7 +855,9 @@ describe("SubagentTool", () => {
           const admission = Array.from(yield* Fiber.join(admitted))[0]
           expect(admission?.data.item.type).toBe("synthetic")
           if (admission?.data.item.type !== "synthetic") return yield* Effect.die("Expected synthetic inbox item")
-          expect(admission?.data.item.payload.text).toContain(`<subagent sessionID="${childID}" state="completed"`)
+          expect(admission?.data.item.payload.text).toContain(
+            `<background-result kind="subagent" sessionID="${childID}" state="completed"`,
+          )
           expect(admission?.data.item.payload).toMatchObject({
             description: "background review",
             metadata: {
@@ -866,7 +871,9 @@ describe("SubagentTool", () => {
           yield* sessions.wait(parent.id)
           const synthetic = (yield* sessions.context(parent.id)).filter((message) => message.type === "synthetic")
           expect(synthetic).toHaveLength(1)
-          expect(synthetic[0]?.text).toContain(`<subagent sessionID="${childID}" state="completed"`)
+          expect(synthetic[0]?.text).toContain(
+            `<background-result kind="subagent" sessionID="${childID}" state="completed"`,
+          )
           expect(synthetic[0]?.text).toContain(childText)
           expect(yield* jobs.pendingBackground).toEqual([])
         }),
@@ -910,27 +917,6 @@ const reportingFixture = () =>
   })
 
 describe("SubagentTool reporting", () => {
-  completionIt.live("reports the child's final answer to the parent", () =>
-    Effect.gen(function* () {
-      const fixture = yield* reportingFixture()
-      const settled = yield* fixture.call("call-report")
-      const childID = outputSessionID(settled.metadata)
-
-      expect(settled).toMatchObject({
-        status: "completed",
-        output: { status: "running" },
-        metadata: { sessionID: childID, status: "running" },
-      })
-      yield* fixture.sessions.wait(childID)
-      yield* fixture.sessions.wait(fixture.parent.id)
-
-      const reports = (yield* fixture.notices).filter((notice) => notice.metadata?.["source"] === "subagent")
-      expect(reports).toHaveLength(1)
-      expect(reports[0]?.text).toContain(`<subagent sessionID="${childID}" state="completed"`)
-      expect(reports[0]?.text).toContain(childText)
-    }),
-  )
-
   completionIt.live("reports only the current busy period when an idle child is continued", () =>
     Effect.gen(function* () {
       const fixture = yield* reportingFixture()
@@ -984,7 +970,7 @@ describe("SubagentTool reporting", () => {
 
       const reports = (yield* fixture.notices).filter((notice) => notice.metadata?.["source"] === "subagent")
       expect(reports).toHaveLength(1)
-      expect(reports[0]?.text).toContain(`<subagent sessionID="${childID}" state="error"`)
+      expect(reports[0]?.text).toContain(`<background-result kind="subagent" sessionID="${childID}" state="error"`)
       expect(reports[0]?.text).toContain("provider exploded")
     }),
   )

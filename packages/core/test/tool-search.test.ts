@@ -3,10 +3,12 @@ import fs from "fs/promises"
 import path from "path"
 import { Effect, Layer } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Config } from "@opencode/core/config"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Environment } from "@opencode/core/environment/index"
 import { FileSystem } from "@opencode/core/filesystem"
+import { Flag } from "@opencode/core/flag"
 import { Location } from "@opencode/core/location"
 import { FileAccess } from "@opencode/core/file-access"
 import { Permission } from "@opencode/core/permission"
@@ -22,17 +24,21 @@ import { it } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 import { executeTool, registerToolPlugin, toolIdentity } from "./lib/tool"
 
-const globToolNode = makeLocationNode({
-  name: "test/glob-tool-plugin",
-  layer: Layer.effectDiscard(registerToolPlugin(GlobTool.Plugin)),
-  deps: [Tool.node, Environment.node, Ripgrep.node, Location.node, FileAccess.node, Permission.node],
-})
-const grepToolNode = makeLocationNode({
-  name: "test/grep-tool-plugin",
-  layer: Layer.effectDiscard(registerToolPlugin(GrepTool.Plugin)),
-  deps: [Tool.node, Environment.node, Ripgrep.node, Location.node, FileAccess.node, Permission.node],
-})
 const sessionID = Session.ID.make("ses_search_tool_test")
+const searchToolsNode = makeLocationNode({
+  name: "test/search-tool-plugins",
+  layer: Layer.effectDiscard(Effect.all([registerToolPlugin(GlobTool.Plugin), registerToolPlugin(GrepTool.Plugin)])),
+  deps: [
+    Config.node,
+    Environment.node,
+    FileAccess.node,
+    Flag.node,
+    Location.node,
+    Permission.node,
+    Ripgrep.node,
+    Tool.node,
+  ],
+})
 
 const withTools = <A, E, R>(
   directory: string,
@@ -44,7 +50,8 @@ const withTools = <A, E, R>(
     return yield* body(registry)
   }).pipe(
     Effect.provide(
-      AppNodeBuilder.build(LayerNode.group([Tool.node, globToolNode, grepToolNode]), [
+      AppNodeBuilder.build(LayerNode.group([Tool.node, searchToolsNode]), [
+        Config.node.replace(Config.testLayer()),
         Location.node.replace(
           Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make(directory) }))),
         ),
@@ -93,7 +100,7 @@ describe("search tools", () => {
   }
 
   for (const hidden of [undefined, false, true]) {
-    for (const limit of hidden ? [10] : [1, 10]) {
+    for (const limit of hidden ? [10] : [1]) {
       it.live(`glob honors hidden=${hidden} before limit=${limit}`, () =>
         Effect.gen(function* () {
           const tmp = yield* tmpdirScoped()

@@ -128,9 +128,7 @@ export const baseTranscript = (input: {
     messages: input.messages.flatMap((message) =>
       toLLMMessages([message], input.model.ref, providerMetadataKey).map(
         (item): SessionRequestMessage =>
-          message.metadata === undefined || item.id !== message.id
-            ? item
-            : { ...item, metadata: message.metadata },
+          message.metadata === undefined || item.id !== message.id ? item : { ...item, metadata: message.metadata },
       ),
     ),
   }
@@ -347,11 +345,7 @@ export const layer = Layer.effect(
             model.model.provider,
           ),
         ),
-        tools: Array.from(hooked, ([name, t]) => ({
-          ...t,
-          name,
-          freeform: t.freeform && model.capabilities.freeform?.includes(t.freeform.type) ? t.freeform : undefined,
-        })),
+        tools: Array.from(hooked, ([name, t]) => ({ ...t, name })),
         toolChoice: input.toolChoice,
         ...generation,
         providerOptions: Object.keys(providerOptions).length === 0 ? undefined : providerOptions,

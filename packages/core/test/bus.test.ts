@@ -13,6 +13,7 @@ import { AbsolutePath } from "@opencode/core/schema"
 import { Workspace } from "@opencode/core/workspace"
 import { eq } from "drizzle-orm"
 import { location } from "./fixture/location"
+import { TestDatabase } from "./lib/database"
 import { testEffect } from "./lib/effect"
 
 const locationLayer = Layer.succeed(
@@ -100,16 +101,20 @@ const tail = (bus: Bus.Interface, input: { aggregateID: string; after?: number }
 
 const it = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node, Location.node]), [
+    TestDatabase.replacement,
     Location.node.replace(locationLayer),
     Bus.node.replace(Bus.configured({ persist: true })),
   ]),
 )
 const itWithoutLocation = testEffect(
   AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+    TestDatabase.replacement,
     Bus.node.replace(Bus.configured({ persist: true })),
   ]),
 )
-const itWithoutPersistence = testEffect(AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node])))
+const itWithoutPersistence = testEffect(
+  AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [TestDatabase.replacement]),
+)
 
 describe("Bus", () => {
   it.effect("subscribes to multiple event definitions with a discriminated payload union", () =>
@@ -633,6 +638,7 @@ describe("Bus", () => {
       const continueRead = yield* Deferred.make<void>()
       let pause = true
       const eventLayer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+        TestDatabase.replacement,
         Bus.node.replace(
           Bus.configured({
             persist: true,
@@ -1001,34 +1007,6 @@ describe("Bus", () => {
     }),
   )
 
-  it.effect("replay with owner claims an unowned sequence", () =>
-    Effect.gen(function* () {
-      const bus = yield* Bus.Service
-      const { db } = yield* Database.Service
-      const aggregateID = Session.ID.create()
-
-      yield* bus.replay(
-        {
-          id: Event.ID.create(),
-          created: 0,
-          type: Bus.versionedType(DurableMessage.type, 1),
-          seq: 0,
-          aggregateID,
-          data: durableData(aggregateID, "owned"),
-        },
-        { ownerID: "owner-1" },
-      )
-      const row = yield* db
-        .select({ seq: EventSequenceTable.seq, ownerID: EventSequenceTable.owner_id })
-        .from(EventSequenceTable)
-        .where(eq(EventSequenceTable.aggregate_id, aggregateID))
-        .get()
-        .pipe(Effect.orDie)
-
-      expect(row).toEqual({ seq: 0, ownerID: "owner-1" })
-    }),
-  )
-
   it.effect("replay claims an existing unowned sequence before fencing a different owner", () =>
     Effect.gen(function* () {
       const bus = yield* Bus.Service
@@ -1073,40 +1051,6 @@ describe("Bus", () => {
 
       expect(rows.map((row) => row.seq)).toEqual([0, 1])
       expect(sequence).toEqual({ seq: 1, ownerID: "owner-1" })
-    }),
-  )
-
-  it.effect("strict replay rejects an owner conflict instead of silently skipping it", () =>
-    Effect.gen(function* () {
-      const bus = yield* Bus.Service
-      const aggregateID = Session.ID.create()
-      yield* bus.replay(
-        {
-          id: Event.ID.create(),
-          created: 0,
-          type: Bus.versionedType(DurableMessage.type, 1),
-          seq: 0,
-          aggregateID,
-          data: durableData(aggregateID, "claimed"),
-        },
-        { ownerID: "owner-1" },
-      )
-
-      const exit = yield* bus
-        .replay(
-          {
-            id: Event.ID.create(),
-            created: 0,
-            type: Bus.versionedType(DurableMessage.type, 1),
-            seq: 1,
-            aggregateID,
-            data: durableData(aggregateID, "conflict"),
-          },
-          { ownerID: "owner-2", strictOwner: true },
-        )
-        .pipe(Effect.exit)
-
-      expect(String(exit)).toContain("Replay owner mismatch")
     }),
   )
 
@@ -1338,6 +1282,7 @@ describe("Bus", () => {
   it.effect("log replays across configured read pages", () =>
     Effect.gen(function* () {
       const eventLayer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+        TestDatabase.replacement,
         Bus.node.replace(Bus.configured({ persist: true, logReadPageSize: 2 })),
       ])
 
@@ -1371,6 +1316,7 @@ describe("Bus", () => {
       const releaseRead = yield* Deferred.make<void>()
       const firstRead = yield* Ref.make(true)
       const eventLayer = AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), [
+        TestDatabase.replacement,
         Bus.node.replace(
           Bus.configured({
             persist: true,

@@ -59,7 +59,8 @@ function userBody(raw: string, mono: boolean): RunEntryBody {
   return textBody(`${lead}${mono ? ">" : "›"} ${body}`)
 }
 
-function reasoningBody(raw: string, mono: boolean): RunEntryBody {
+// Rendered reasoning is native Markdown, as answers are; source reasoning is highlighted Markdown source.
+function reasoningBody(raw: string, mono: boolean, rendered: boolean): RunEntryBody {
   const clean = raw.replace(/\[REDACTED\]/g, "")
   if (!clean) {
     return RUN_ENTRY_NONE
@@ -68,12 +69,13 @@ function reasoningBody(raw: string, mono: boolean): RunEntryBody {
   const lead = clean.match(/^\n+/)?.[0] ?? ""
   const body = lead ? clean.slice(lead.length) : clean
   const mark = "Thinking:"
+  const styled = (content: string) => (rendered ? markdownBody(content) : codeBody(content, "markdown"))
   if (body.startsWith(mark)) {
     if (mono) return textBody(`${lead}${mark} ${body.slice(mark.length).trimStart()}`)
-    return codeBody(`${lead}_Thinking:_ ${body.slice(mark.length).trimStart()}`, "markdown")
+    return styled(`${lead}_Thinking:_ ${body.slice(mark.length).trimStart()}`)
   }
 
-  return mono ? textBody(clean) : codeBody(clean, "markdown")
+  return mono ? textBody(clean) : styled(clean)
 }
 
 function systemBody(raw: string, phase: StreamCommit["phase"]): RunEntryBody {
@@ -233,7 +235,7 @@ export function entryBody(commit: StreamCommit, options?: ScrollbackOptions): Ru
       return commit.interrupted ? textBody("reasoning interrupted") : RUN_ENTRY_NONE
     }
 
-    return reasoningBody(raw, mono)
+    return reasoningBody(raw, mono, options?.markdown !== "source")
   }
 
   const body = systemBody(raw, commit.phase)

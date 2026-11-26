@@ -238,20 +238,7 @@ describe("GithubCopilotPlugin", () => {
     }),
   )
 
-  it.effect("registers GitHub Copilot device OAuth", () =>
-    Effect.gen(function* () {
-      yield* addPlugin()
-      const integrations = yield* Integration.Service
-      expect((yield* integrations.get(Integration.ID.make("github-copilot")))?.methods).toContainEqual({
-        id: Integration.MethodID.make("device"),
-        type: "oauth",
-        label: "Login with GitHub Copilot",
-        form: expect.any(Array),
-      })
-    }),
-  )
-
-  it.effect("removes the generic key method", () =>
+  it.effect("removes the generic key method and reads COPILOT_GITHUB_TOKEN instead of GITHUB_TOKEN", () =>
     Effect.gen(function* () {
       const integrations = yield* Integration.Service
       yield* integrations.transform((editor) => {
@@ -266,7 +253,7 @@ describe("GithubCopilotPlugin", () => {
       })
       yield* addPlugin()
       expect((yield* integrations.get(Integration.ID.make("github-copilot")))?.methods).toEqual([
-        { type: "env", names: ["GITHUB_TOKEN"] },
+        { type: "env", names: ["COPILOT_GITHUB_TOKEN"] },
         {
           id: Integration.MethodID.make("device"),
           type: "oauth",
@@ -591,14 +578,6 @@ describe("GithubCopilotPlugin", () => {
         }),
       )
       expect(event.request.headers.get("x-initiator")).toBe("agent")
-    }),
-  )
-
-  it.effect("classifies session generation requests as agent interactions", () =>
-    Effect.gen(function* () {
-      yield* addPlugin()
-      const event = yield* modelRequest((yield* sessions()).parent, "generate")
-      expect(event.headers).toEqual({ "X-Interaction-Type": "conversation-agent", "X-Interaction-Id": event.sessionID })
     }),
   )
 

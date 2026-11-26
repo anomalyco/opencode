@@ -1,5 +1,5 @@
 import { For, Show, type JSX } from "solid-js"
-import { DocsLockup, docsSectionName, type DocsVersion } from "~/component/site/docs-lockup"
+import { DocsLockup, DocsSectionLinks, docsSectionName, type DocsVersion } from "~/component/site/docs-lockup"
 import { DocsVersionNotice } from "~/component/site/docs-version-notice"
 import { GitHubLink } from "~/component/site/github-link"
 import { Chevron, NewTab, SearchIcon } from "~/component/site/icons"
@@ -86,13 +86,6 @@ export function DocsLayout(props: {
   const contents = props.headings
     .filter((heading) => heading.depth === 2 || heading.depth === 3)
     .map((heading) => ({ id: heading.slug, title: heading.text, level: heading.depth as 2 | 3 }))
-  // The lockup's versions: this page in each (the versions menu under "Docs"; V1 pages read "V1 docs").
-  const version = () =>
-    props.versions && {
-      current: props.set.id,
-      href: (id: DocsVersion) => props.versions![id],
-      onSelect: () => undefined,
-    }
   const logo = () => (
     <a
       href="/"
@@ -153,7 +146,7 @@ export function DocsLayout(props: {
           </a>
           <header data-component="topbar">
             {logo()}
-            <DocsLockup current={section.title} inline="topbar" version={version()} />
+            <DocsLockup inline="topbar" />
             <button
               type="button"
               data-slot="search-button"
@@ -165,6 +158,7 @@ export function DocsLayout(props: {
             </button>
             <GitHubLink owner="topbar" />
           </header>
+          <DocsSectionLinks current={section.title} v1={props.set.id === "v1"} v1Href={props.versions?.v1} />
 
           <div data-slot="frame">
             <aside
@@ -173,7 +167,7 @@ export function DocsLayout(props: {
               data-section="nav"
               aria-label={i18n.t("site.landmark.navigation")}
             >
-              <DocsLockup current={section.title} inline="sidebar" version={version()} />
+              <DocsLockup inline="sidebar" />
               {logo()}
               <div data-component="section-nav">
                 <button type="button" data-slot="section-toggle" aria-expanded="false" aria-controls="section-nav">
@@ -194,11 +188,6 @@ export function DocsLayout(props: {
                 </div>
               </div>
             </aside>
-            {/* V1: the notice sits in the logo row, after the sidebar's label so it can start past a long one
-                (docs.css); phones show it as a bar on the screen's bottom edge. */}
-            <Show when={props.set.id === "v1" && props.versions}>
-              {(versions) => <DocsVersionNotice latest={versions().latest} placement="header" />}
-            </Show>
             {/* Mobile layout: the Contents rail folded into a bar stuck under the
                 section row from load. It names the section being read (client.ts swaps the label as you scroll)
                 and keeps "Contents" in its accessible name. Hidden beside the rail on wide screens. */}
@@ -231,6 +220,9 @@ export function DocsLayout(props: {
                   data-pagefind-body={props.noindex ? undefined : ""}
                   data-pagefind-meta={`title:${props.title}`}
                 >
+                  <Show when={props.set.id === "v1" && props.versions}>
+                    {(versions) => <DocsVersionNotice latest={versions().latest} />}
+                  </Show>
                   <h1 data-pagefind-meta={`section:${docsSectionName(i18n, section.title)}`}>{props.title}</h1>
                   {props.children}
                   <footer data-slot="article-footer" data-pagefind-ignore>

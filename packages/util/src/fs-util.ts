@@ -1,4 +1,4 @@
-import path, { dirname, isAbsolute, join, relative, sep } from "path"
+import path, { dirname, join, type PlatformPath } from "path"
 import { realpathSync } from "fs"
 import { lookup } from "mime-types"
 import { Context, Effect, FileSystem, Layer, Schema } from "effect"
@@ -61,11 +61,12 @@ export namespace FSUtil {
       })
 
       const readFileStringSafe = Effect.fn("FileSystem.readFileStringSafe")(function* (path: string) {
-        return yield* fs
-          .readFileString(path)
-          .pipe(
-            Effect.catchIf((error) => error.reason._tag === "NotFound" || isAccessDenied(error), () => Effect.undefined),
-          )
+        return yield* fs.readFileString(path).pipe(
+          Effect.catchIf(
+            (error) => error.reason._tag === "NotFound" || isAccessDenied(error),
+            () => Effect.undefined,
+          ),
+        )
       })
 
       const isDir = Effect.fn("FileSystem.isDir")(function* (path: string) {
@@ -217,10 +218,7 @@ export namespace FSUtil {
     if (error.reason._tag === "PermissionDenied") return true
     const cause = error.reason.cause
     return (
-      error.reason._tag === "Unknown" &&
-      cause instanceof globalThis.Error &&
-      "code" in cause &&
-      cause.code === "EPERM"
+      error.reason._tag === "Unknown" && cause instanceof globalThis.Error && "code" in cause && cause.code === "EPERM"
     )
   }
 
@@ -266,8 +264,8 @@ export namespace FSUtil {
     return contains(a, b) || contains(b, a)
   }
 
-  export function contains(parent: string, child: string) {
-    const result = relative(parent, child)
-    return result === "" || (!isAbsolute(result) && result !== ".." && !result.startsWith(`..${sep}`))
+  export function contains(parent: string, child: string, platform: PlatformPath = path) {
+    const result = platform.relative(parent, child)
+    return result === "" || (!platform.isAbsolute(result) && result !== ".." && !result.startsWith(`..${platform.sep}`))
   }
 }

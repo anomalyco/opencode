@@ -43,6 +43,7 @@ export const outstanding = Effect.fnUntraced(function* (
     descends(store, parents, recovery.kind === "subagent" ? recovery.parentSessionID : recovery.sessionID, sessionID),
   )
   const items: OutstandingItem[] = owned.map((recovery) => {
+    if (recovery.kind === "codemode") return recovery
     if (recovery.kind === "shell")
       return {
         kind: "shell" as const,
@@ -52,6 +53,7 @@ export const outstanding = Effect.fnUntraced(function* (
       }
     if (recovery.kind === "image")
       return { kind: "image" as const, sessionID: recovery.sessionID, path: recovery.path, model: recovery.model }
+    if (recovery.kind === "video") return { kind: "video" as const, sessionID: recovery.sessionID, path: recovery.path }
     return {
       kind: "subagent" as const,
       sessionID: recovery.parentSessionID,

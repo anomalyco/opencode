@@ -15,7 +15,6 @@ import {
   createEffect,
   createMemo,
   createSignal,
-  For,
   on,
   onCleanup,
   onMount,
@@ -25,6 +24,7 @@ import {
   type JSX,
 } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
+import { Key } from "@solid-primitives/keyed"
 import { createMediaQuery } from "@solid-primitives/media"
 import type { createTimelineProjection } from "./projection"
 import { observeElementOffsetReconnectAware } from "./observe-element-offset"
@@ -81,6 +81,9 @@ const pointerDownEvent = { type: "pointer.down" } as const
 
 const pointerUpEvent = { type: "pointer.up" } as const
 
+/** A row on screen: its key, the row it draws and where TanStack places it. */
+type MountedRow = { key: string; row: TimelineRow.TimelineRow; item: VirtualItem }
+
 const cache = new Map<
   string,
   {
@@ -108,11 +111,14 @@ type Input = {
   follow: TimelineFollow
   scroll: Accessor<{ overflow: boolean; jump: boolean }>
   onResumeScroll: (behavior?: ScrollBehavior) => void
+  focusComposer?: () => void
   setScrollRef: (element: HTMLDivElement | undefined) => void
   /** The rows' content changed height. */
   onContentResize: () => void
   /** Height of the composer region floating over the timeline's bottom edge, where the timeline fades out. */
   bottomInset?: Accessor<number>
+  /** Room the status line needs past the 36px lane, so it keeps its gap to the activity pill. */
+  tailExtra?: Accessor<number>
   setVisibleRef?: (element: HTMLDivElement | undefined) => void
   onScheduleScrollState: (element: HTMLDivElement) => void
   onUserScroll: (target?: EventTarget | null) => void
@@ -136,6 +142,7 @@ export type TimelineRouteReveal = {
 
 type ViewProps = {
   header: JSX.Element
+  headerInset?: JSX.Element
   bottomSpacer?: JSX.Element
   deferred: (row: TimelineRow.TimelineRow) => boolean
   renderRow: (row: Accessor<TimelineRow.TimelineRow>, onSizeChange?: () => void) => JSX.Element
@@ -150,7 +157,7 @@ export function createTimelineVirtualizer(input: Input) {
   // activity pill and its 10px composer gap. Without hover the pill grows from 32px to its 44px touch size
   // (composer-lane.css), and the tail grows with it. Both come and go inside it, so neither moves the rows above.
   const touch = createMediaQuery("(hover: none)")
-  const tailSize = () => (touch() ? 104 : 92)
+  const tailSize = () => (touch() ? 104 : 92) + (input.tailExtra?.() ?? 0)
   const ownerSessionKey = input.sessionKey()
   const entry = cache.get(ownerSessionKey)
   const cached = entry?.presentationKey === input.presentationKey?.() ? entry : undefined
@@ -279,6 +286,10 @@ export function createTimelineVirtualizer(input: Input) {
   const touchDragEvent = { type: "touch.drag" as const, overflow: false }
   let reportOffset: ((offset: number, scrolling: boolean) => void) | undefined
   let reportRect: ((rect: { width: number; height: number }) => void) | undefined
+  // TanStack corrects the scroll position once for every row it resizes above the view, and each native write forces a
+  // layout. While a batch of sizes is applied, a request replaces the one before it, and the last is written once.
+  let scrollHeld = false
+  let heldScroll: (() => void) | undefined
   const [headerHeight, setHeaderHeight] = createSignal(48)
 
   const virtualizer = createVirtualizer<HTMLDivElement, HTMLDivElement>({
@@ -376,8 +387,13 @@ export function createTimelineVirtualizer(input: Input) {
       touchAdjustment = 0
       setRendering("scrollAdjustment", 0)
 
-      if (virtualContent) virtualContent.style.height = `${instance.getTotalSize()}px`
-      elementScroll(offset, options, instance)
+      const write = () => {
+        if (virtualContent) virtualContent.style.height = `${instance.getTotalSize()}px`
+        elementScroll(offset, options, instance)
+      }
+
+      if (!scrollHeld) return write()
+      heldScroll = write
     },
     get getItemKey() {
       return getItemKey()
@@ -408,6 +424,13 @@ export function createTimelineVirtualizer(input: Input) {
   const resizeItem = virtualizer.resizeItem
   const pendingSizes = new Map<number, { key: string; size: number }>()
   let resizeScheduled = false
+
+  const flushHeldScroll = () => {
+    const write = heldScroll
+    heldScroll = undefined
+    write?.()
+  }
+
   // Read the whole measurement delivery before committing reactive row sizes.
   // Otherwise each row can render and force layout before the next is measured.
   virtualizer.resizeItem = (index, size) => {
@@ -444,25 +467,36 @@ export function createTimelineVirtualizer(input: Input) {
       // not a layout-forcing scroll adjustment for every measured row.
       dispatchCold(SIZES_FLUSHING)
       batch(() => {
-        sizes.forEach(([index, value]) => {
-          const row = rows()[index]
+        scrollHeld = true
 
-          if (!row || TimelineRow.key(row) !== value.key) return
-          resizeItem(index, value.size)
+        try {
+          sizes.forEach(([index, value]) => {
+            const row = rows()[index]
 
-          // TanStack recalculates its range after each resize. Advance the
-          // logical fold before deciding whether the next row needs anchoring.
-          if (!touchAdjustment) return
-          const delta = touchAdjustment
-          touchAdjustment = 0
+            if (!row || TimelineRow.key(row) !== value.key) return
+            resizeItem(index, value.size)
 
-          // A delta deferred under momentum that has since ended is dropped rather than translating the rows.
-          if (!defersAdjustments(input.follow.peek())) return
-          setRendering("scrollAdjustment", (value) => value + delta)
-          const root = listRoot()
+            // TanStack recalculates its range after each resize. Advance the
+            // logical fold before deciding whether the next row needs anchoring.
+            if (!touchAdjustment) return
+            const delta = touchAdjustment
+            touchAdjustment = 0
 
-          if (root) reportOffset?.(root.scrollTop, virtualizer.isScrolling)
-        })
+            // A delta deferred under momentum that has since ended is dropped rather than translating the rows.
+            if (!defersAdjustments(input.follow.peek())) return
+            setRendering("scrollAdjustment", (value) => value + delta)
+            const root = listRoot()
+
+            if (!root) return
+            // The native offset is read next, so it has to include any correction still held.
+            flushHeldScroll()
+            reportOffset?.(root.scrollTop, virtualizer.isScrolling)
+          })
+        } finally {
+          scrollHeld = false
+          // Inside the batch, so what reacts to the new sizes reads the corrected offset, as it did with one write a row.
+          flushHeldScroll()
+        }
       })
       dispatchCold(SIZES_FLUSHED)
       pinAnchor()
@@ -613,11 +647,19 @@ export function createTimelineVirtualizer(input: Input) {
     })
   }
 
-  const virtualItemByKey = createMemo(
-    () => new Map(virtualizer.getVirtualItems().map((item) => [item.key, item] as const)),
-  )
+  // A row mounts with the row and the place it draws, so it never has to find either. TanStack lists the rows it last
+  // read, which one flush can replace before it reads them again; a listed key the projection dropped is not a row.
+  // One row mounts per key: a turn interrupted twice has two dividers under one key, and one measurement.
+  const mountedRows = createMemo(() => [
+    ...new Map(
+      virtualizer.getVirtualItems().flatMap((item): [string, MountedRow][] => {
+        const key = String(item.key)
+        const row = rowByKey().get(key)
 
-  const virtualRowKeys = createMemo(() => virtualizer.getVirtualItems().map((item) => String(item.key)))
+        return row ? [[key, { key, row, item }]] : []
+      }),
+    ).values(),
+  ])
 
   createEffect(() => {
     if (!active()) return
@@ -1056,13 +1098,13 @@ export function createTimelineVirtualizer(input: Input) {
   }
 
   function View(props: ViewProps) {
-    function VirtualRow(rowProps: { rowKey: string }) {
+    // `mounted` only ever holds this row's own key, up to the update that unmounts it.
+    function VirtualRow(rowProps: { mounted: Accessor<MountedRow> }) {
       let element: HTMLDivElement
-      const initialItem = virtualItemByKey().get(rowProps.rowKey)!
-      const initialRow = rowByKey().get(rowProps.rowKey)!
-      const item = createMemo(() => virtualItemByKey().get(rowProps.rowKey) ?? initialItem)
-      const row = createMemo(() => rowByKey().get(rowProps.rowKey) ?? rows()[item().index] ?? initialRow)
-      const [ready, setReady] = createSignal(initialItem.size <= fallbackItemSize || !props.deferred(initialRow))
+      const initial = rowProps.mounted()
+      const item = createMemo(() => rowProps.mounted().item)
+      const row = createMemo(() => rowProps.mounted().row)
+      const [ready, setReady] = createSignal(initial.item.size <= fallbackItemSize || !props.deferred(initial.row))
       let contentMeasureFrame: number | undefined
 
       onMount(() => virtualizer.measureElement(element))
@@ -1070,12 +1112,17 @@ export function createTimelineVirtualizer(input: Input) {
       // Its observer reads the current index and delivers any actual size change.
       onCleanup(() => {
         if (contentMeasureFrame !== undefined) cancelAnimationFrame(contentMeasureFrame)
+
+        // A row that leaves the mounted range takes its focused control with it, and Chromium then leaves focus on
+        // <body>. The focus rescue would move it to a control in another row, and focusing that scrolls the timeline
+        // to it. The viewport takes focus instead, without scrolling, so the scroll keys keep working.
+        if (element.contains(document.activeElement)) listRoot()?.focus({ preventScroll: true })
         queueMicrotask(() => virtualizer.measureElement(null))
       })
 
       return (
         <div
-          data-timeline-key={rowProps.rowKey}
+          data-timeline-key={initial.key}
           style={{
             position: "absolute",
             top: `${item().start - topOffset() - rendering.scrollAdjustment}px`,
@@ -1083,7 +1130,8 @@ export function createTimelineVirtualizer(input: Input) {
             width: "100%",
             height: `${item().size}px`,
             overflow: "clip",
-            "overflow-clip-margin": Predicate.isTagged(row(), "TurnGap") ? undefined : "0.5px",
+            // Room for paint rounding, card shadows and a focus ring (2px at a 2px offset) on a control at the row edge.
+            "overflow-clip-margin": Predicate.isTagged(row(), "TurnGap") ? undefined : "5px",
           }}
         >
           <div
@@ -1092,7 +1140,7 @@ export function createTimelineVirtualizer(input: Input) {
 
               if (
                 !Predicate.isTagged(row(), "UserMessage") ||
-                !addedKeys.has(rowProps.rowKey) ||
+                !addedKeys.has(initial.key) ||
                 !input.follow.following() ||
                 coldHidden()
               )
@@ -1110,7 +1158,7 @@ export function createTimelineVirtualizer(input: Input) {
               })
             }}
             data-index={item().index}
-            style={{ "min-height": ready() ? undefined : `${initialItem.size}px` }}
+            style={{ "min-height": ready() ? undefined : `${initial.item.size}px` }}
           >
             {props.renderRow(row, () => {
               setReady(true)
@@ -1143,12 +1191,17 @@ export function createTimelineVirtualizer(input: Input) {
           <button
             type="button"
             aria-label={language.t("session.messages.jumpToLatest")}
-            class="pointer-events-auto flex items-center justify-center w-8 h-7 px-2 py-1.5 rounded-lg border-none cursor-pointer text-v2-text-text-base backdrop-blur-[2px] outline-none hover:bg-[linear-gradient(var(--v2-overlay-simple-overlay-hover),var(--v2-overlay-simple-overlay-hover))] active:bg-[linear-gradient(var(--v2-overlay-simple-overlay-pressed),var(--v2-overlay-simple-overlay-pressed))] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-v2-border-border-focus"
+            class="pointer-events-auto flex items-center justify-center w-8 h-7 px-2 py-1.5 rounded-lg border-none cursor-pointer text-v2-text-text-base backdrop-blur-[2px] hover:bg-[linear-gradient(var(--v2-overlay-simple-overlay-hover),var(--v2-overlay-simple-overlay-hover))] active:bg-[linear-gradient(var(--v2-overlay-simple-overlay-pressed),var(--v2-overlay-simple-overlay-pressed))]"
             style={{
               "background-color": "color-mix(in srgb, var(--v2-background-bg-base) 92%, transparent)",
               "box-shadow": "var(--v2-elevation-raised), 0px 2px 8px var(--v2-background-bg-base)",
             }}
-            onClick={() => input.onResumeScroll(prefersReducedMotion() ? "auto" : "smooth")}
+            onClick={(event) => {
+              input.onResumeScroll(prefersReducedMotion() ? "auto" : "smooth")
+
+              // From the keyboard, the button hides under its own focus; the prompt is where the session continues.
+              if (event.detail === 0) input.focusComposer?.()
+            }}
           >
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path
@@ -1159,8 +1212,13 @@ export function createTimelineVirtualizer(input: Input) {
             </svg>
           </button>
         </div>
+        <Show when={input.showHeader()}>
+          {/* The scroll viewport's fade masks anything outside the chat, including the review toggle when open. */}
+          <div class="pointer-events-none absolute inset-x-0 top-0 z-30">{props.header}</div>
+        </Show>
         <ScrollView
           data-slot="session-timeline-scroll"
+          data-focus-scope
           viewportRef={bindListRoot}
           thumbContainer={visibleArea()}
           thumbHoverTarget={viewRoot()}
@@ -1178,7 +1236,7 @@ export function createTimelineVirtualizer(input: Input) {
           style={{ "--sticky-accordion-top": input.showHeader() ? "var(--session-header-height, 48px)" : "0px" }}
         >
           <Show when={input.showHeader()} fallback={<div aria-hidden="true" class="h-4 md:hidden" />}>
-            {props.header}
+            {props.headerInset}
           </Show>
           <div
             data-timeline-virtual-content
@@ -1200,7 +1258,9 @@ export function createTimelineVirtualizer(input: Input) {
                 width: "var(--panel-hold-width, 100%)",
               }}
             >
-              <For each={virtualRowKeys()}>{(rowKey) => <VirtualRow rowKey={rowKey} />}</For>
+              <Key each={mountedRows()} by={(mounted) => mounted.key}>
+                {(mounted) => <VirtualRow mounted={mounted} />}
+              </Key>
             </div>
             <div
               data-timeline-row="bottom-spacer"

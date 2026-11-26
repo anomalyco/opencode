@@ -236,6 +236,8 @@ export function createTimelineController(input: {
     createSessionHeaderTitleState(untrack(input.session.identity.sessionKey)),
   )
 
+  const [generatingTitles, setGeneratingTitles] = createSignal<ReadonlySet<string>>(new Set())
+
   let titleInput: HTMLInputElement | undefined
   let titleTimer: ReturnType<typeof setTimeout> | undefined
   let titleFrame = 0
@@ -450,6 +452,47 @@ export function createTimelineController(input: {
           editable: editable(),
           currentTitle: titleLabel(),
         }),
+      // As in the TUI, `/rename <title>` renames and a bare `/rename` asks the server to generate a new title.
+      generating: () => {
+        const sessionID = input.session.identity.sessionID()
+
+        return !!sessionID && generatingTitles().has(sessionID)
+      },
+      set: (title: string) => {
+        const sessionID = input.session.identity.sessionID()
+
+        if (!sessionID || !editable()) return
+        const next = title.trim()
+
+        // Generating takes a model call; a repeat while one is in flight would only start a second one.
+        if (!next && untrack(generatingTitles).has(sessionID)) return
+
+        if (!next) setGeneratingTitles((current) => new Set(current).add(sessionID))
+
+        return Promise.try(() => serverSDK.api.session.update({ sessionID, title: next }))
+          .then(
+            () => {
+              // A generated title arrives with the response's session event; sync in case the response beat it.
+              data.session.invalidate(sessionID)
+
+              return data.session.sync(sessionID)
+            },
+            (cause: unknown) => {
+              showToast({ title: language.t("common.requestFailed"), description: errorMessage(cause) })
+            },
+          )
+          .finally(() => {
+            if (next) return
+
+            setGeneratingTitles((current) => {
+              const remaining = new Set(current)
+
+              remaining.delete(sessionID)
+
+              return remaining
+            })
+          })
+      },
     },
     action: {
       export: (id: string) => exporter.export({ server: server.key, sessionID: id }),

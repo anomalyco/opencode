@@ -48,6 +48,8 @@ export const dict = {
   "ui.lineComment.editorLabel.prefix": "Kommenteerides ",
   "ui.lineComment.editorLabel.suffix": "",
   "ui.lineComment.placeholder": "Lisa kommentaar",
+  "ui.lineComment.add": "Lisa kommentaar",
+  "ui.lineComment.actions": "Valiku toimingud",
   "ui.lineComment.contextPlaceholder": "Lisage selle muudatuse kontekst",
   "ui.lineComment.submit": "Kommenteeri",
   "ui.lineComment.cancel": "Tühista",

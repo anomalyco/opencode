@@ -11,7 +11,7 @@ import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 export type SessionSummary = Pick<SessionInfo, "id" | "parentID" | "title" | "time">
 
 type ProviderCatalog = {
-  all: Map<string, { models: Record<string, { name: string }> }>
+  all: Map<string, { models: Record<string, { name: string; speed?: { base: string; id: string } }> }>
   default: {
     [key: string]: string
   }
@@ -72,8 +72,6 @@ export const {
     sessionID?: string
     /** Whether message meta names the agent; the app follows its Show agent setting. Defaults to true. */
     agents?: boolean
-    /** Whether the assistant copy control stays visible at rest; the app enables this on dev/local builds. */
-    copyAlwaysVisible?: boolean
     shellRunning?: (id: string) => boolean
     shellOutput?: (input: ShellOutputInput) => Promise<ShellOutputOutput>
     turnDiff?: TurnDiffSource
@@ -81,8 +79,8 @@ export const {
     peekMedia?: PeekMediaUrlFn
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
-    /** Whether `experimental.background_compaction` is on for this location; automatic compactions then show quietly. */
-    backgroundCompaction?: boolean
+    /** Resolved feature flags of the session's location, from the server's experimental flag endpoint. */
+    flags?: Readonly<Record<string, boolean>>
   }) => {
     return {
       get store() {
@@ -97,11 +95,12 @@ export const {
       get agents() {
         return props.agents ?? true
       },
-      get copyAlwaysVisible() {
-        return props.copyAlwaysVisible === true
+      get flags() {
+        return props.flags
       },
-      get backgroundCompaction() {
-        return props.backgroundCompaction === true
+      /** Whether the server reports `key` on for the session's location; off when unknown. */
+      flag(key: string) {
+        return props.flags?.[key] === true
       },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,

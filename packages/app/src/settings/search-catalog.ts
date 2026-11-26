@@ -37,6 +37,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
+    label: "settings.general.row.sharedSidePanel.title",
+    description: "settings.general.row.sharedSidePanel.description",
+    target: "settings-shared-side-panel",
+    section: "settings.general.section.general",
+    keywords: "right side panel review sidebar persist keep open sessions switch",
+  },
+  {
+    tab: "general",
     label: "settings.workspaces.default.title",
     target: "settings-workspace-destination",
     description: "settings.workspaces.default.description",
@@ -54,6 +62,12 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     label: "settings.general.row.followUpBehavior.title",
     target: "settings-follow-up-behavior",
     keywords: "queue steer follow up",
+  },
+  {
+    tab: "general",
+    label: "settings.general.row.questionSubmitKey.title",
+    target: "settings-question-submit-key",
+    keywords: "question answer enter shift submit send keyboard newline multiline custom",
   },
   {
     tab: "general",
@@ -99,6 +113,14 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
+    label: "settings.timeline.row.foldUserMessages.title",
+    description: "settings.timeline.row.foldUserMessages.description",
+    target: "settings-fold-user-messages",
+    section: "settings.timeline.title",
+    keywords: "fold collapse long messages prompts read more",
+  },
+  {
+    tab: "general",
     label: "settings.timeline.row.turnDiffs.title",
     description: "settings.timeline.row.turnDiffs.description",
     target: "settings-show-turn-diffs",
@@ -109,20 +131,6 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     label: "settings.general.row.showCustomAgents.title",
     target: "settings-show-custom-agents",
     section: "settings.general.section.general",
-  },
-  {
-    tab: "experimental",
-    label: "settings.experimental.row.newIcons.title",
-    target: "settings-new-icons",
-    description: "settings.experimental.row.newIcons.description",
-    keywords: "icons iconography glyphs redesign",
-  },
-  {
-    tab: "experimental",
-    label: "settings.experimental.row.foldUserMessages.title",
-    target: "settings-fold-user-messages",
-    description: "settings.experimental.row.foldUserMessages.description",
-    keywords: "fold collapse long messages prompts read more",
   },
   {
     tab: "experimental",
@@ -137,6 +145,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     target: "settings-new-question-ui",
     description: "settings.experimental.row.newQuestionUI.description",
     keywords: "question answers keyboard dock redesign",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.tabGroups.title",
+    target: "settings-tab-groups",
+    description: "settings.experimental.row.tabGroups.description",
+    keywords: "tab groups server project colors drag organize search sessions",
   },
   {
     tab: "experimental",

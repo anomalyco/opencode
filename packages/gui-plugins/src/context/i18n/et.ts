@@ -5,7 +5,6 @@ export default {
   "usage.usage": "Kasutamine",
   "usage.cost": "Maksumus",
   "usage.view": "Vaadake kontekstikasutust",
-  "systemPrompt.title": "Süsteemi viip",
   "rawMessages.title": "Toores sõnumid",
   "export.session": "Ekspordiseanss",
   "stats.session": "Seanss",

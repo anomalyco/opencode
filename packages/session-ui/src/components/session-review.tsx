@@ -71,6 +71,7 @@ export type SessionReviewLineComment = {
   selection: SelectedLineRange
   comment: string
   preview?: string
+  send?: boolean
 }
 
 export type SessionReviewCommentUpdate = SessionReviewLineComment & {
@@ -617,7 +618,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                 <Show when={!props.changeSummary || !diffCanRender()}>{changes()}</Show>
                                 <Show when={diffCanRender()}>
                                   <span data-slot="session-review-diff-chevron">
-                                    <Icon name="chevron-down" size="small" />
+                                    <Icon name="chevron-down" />
                                   </span>
                                 </Show>
                               </div>
@@ -703,6 +704,7 @@ export const SessionReview = (props: SessionReviewProps) => {
                                     renderGutterUtility={
                                       props.onLineComment ? commentsUi.renderGutterUtility : undefined
                                     }
+                                    onCommentSelection={props.onLineComment ? commentsUi.commentSelection() : undefined}
                                     selectedLines={commentsUi.selected()}
                                     commentedLines={commentedLines()}
                                     media={{

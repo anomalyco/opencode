@@ -2,7 +2,7 @@ import { ImagePreview } from "@opencode/ui/image-preview"
 import { useDialog } from "@opencode/ui/context/dialog"
 import type { ReferenceInfo } from "@opencode/client/promise"
 import type { Links, MountedSession } from "@opencode/plugin/gui"
-import { createComponent, createEffect, createMemo, on, onCleanup } from "solid-js"
+import { createComponent, createEffect, createMemo, createSignal, on, onCleanup } from "solid-js"
 import { Predicate } from "effect"
 import type { ComposerSuggestion } from "./types"
 import { createComposerEditor, type ComposerEditorModel } from "./editor/interaction"
@@ -10,6 +10,7 @@ import { selectionFromLines, type SelectedLineRange, useFile } from "@/workspace
 import { useComments } from "@/composer/comments"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
+import { orderedSpeeds } from "@/providers/models/speed"
 import { usePluginHost } from "@/runtime/plugin/host"
 import { usePluginAttachment } from "@/runtime/plugin/host-apis"
 import { usePlatform } from "@/runtime/platform/platform"
@@ -33,6 +34,7 @@ import type { PromptHistoryComment } from "./history/entry"
 import { createComposerHistory } from "./history/store"
 import { createComposerSubmit } from "./submit"
 import { composerSubmitView } from "./machine"
+import { isComposerPopoverOpen } from "./suggestions/machine"
 import { useAttachmentDestination } from "./attachments/destination"
 import { parseClientSlashCommand } from "./client-slash-command"
 
@@ -73,6 +75,8 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     ),
   )
   let editor: HTMLDivElement | undefined
+  // The element `prompt.stop` binds its keys to.
+  const [editorElement, setEditorElement] = createSignal<HTMLDivElement>()
   // A path attachment's image is read through the server, which can see both local and uploaded paths.
   const pathImages = new Map<string, Promise<string | undefined>>()
   const pathImageReads = new AbortController()
@@ -311,6 +315,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       return (alternate ? queue.alternate() : queue.delivery()) ?? "steer"
     },
     queueFirst: (inboxID) => options?.queue?.first(inboxID),
+    ready: (sessionID) => plugins.ready(server.key, sessionID),
     notify: {
       missingSelection: () =>
         showToast({
@@ -330,6 +335,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     comments: {
       capture: historyComments,
       clear: comments.clear,
+      remove: comments.remove,
       restore: restoreHistoryComments,
     },
     clientCommand: (text) => {
@@ -345,6 +351,9 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
   })
 
   const submitView = createMemo(() => composerSubmitView(submission.state()))
+
+  const commentSendable = () =>
+    available() && !adapter.controls().model.loading && submitView().canSubmit && !options?.queue?.undoing()
 
   const controller = createComposerEditor({
     store: prompt.store,
@@ -457,6 +466,7 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
     onEditor(element) {
       // SAFETY: the editor's only `setEditor` call passes its editable root, a `<div>` (`editor/editor.tsx`).
       editor = element as HTMLDivElement
+      setEditorElement(editor)
 
       if (adapter.kind === "active-session") adapter.setEditor(editor)
     },
@@ -524,6 +534,19 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         },
         keybind: () => command.keybindParts("model.variant.cycle"),
       },
+      speed: {
+        options: () =>
+          orderedSpeeds(adapter.controls().model.selection.speed?.list() ?? []).map((id) =>
+            id === undefined ? { id: "standard", label: language.t("composer.speed.standard") } : { id, label: id },
+          ),
+        current: () => adapter.controls().model.selection.speed?.current() ?? "standard",
+        onSelect: (value) => {
+          if (adapter.controls().model.loading) return
+
+          adapter.controls().model.selection.speed?.set(value === "standard" ? undefined : value)
+        },
+        keybind: () => command.keybindParts("model.speed.cycle"),
+      },
       submit: {
         available,
         stopping,
@@ -535,13 +558,18 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
         quote:
           adapter.kind === "active-session"
             ? {
-                available: () =>
-                  available() &&
-                  !adapter.controls().model.loading &&
-                  submitView().canSubmit &&
-                  !options?.queue?.undoing(),
+                available: commentSendable,
                 delivery: () => (adapter.working() ? (options?.queue?.alternate() ?? "steer") : undefined),
-                onSubmit: submission.submitQuote,
+                onSubmit: submission.submitComment,
+              }
+            : undefined,
+        comment:
+          adapter.kind === "active-session"
+            ? {
+                available: commentSendable,
+                delivery: () => (adapter.working() ? (options?.queue?.delivery() ?? "steer") : undefined),
+                onSubmit: (key: string, comment: string) =>
+                  submission.submitComment(key, comment, { alternate: false }),
               }
             : undefined,
         onSubmit: (submitOptions) => {
@@ -606,6 +634,20 @@ export function createComposerModel(adapter: ComposerAdapter, options?: { queue?
       category: language.t("command.category.session"),
       disabled: mode() === "normal",
       onSelect: () => void controller.dispatch({ type: "mode.normal" }),
+    },
+    {
+      id: "prompt.stop",
+      title: language.t("command.prompt.stop"),
+      category: language.t("command.category.session"),
+      keybind: "escape,ctrl+g",
+      editable: true,
+      target: editorElement,
+      disabled: !adapter.working() && !submitView().held,
+      // An open list, a queued prompt being edited and shell mode each take the key first in the editor.
+      skip: (event) =>
+        isComposerPopoverOpen(controller.state) ||
+        (event.key === "Escape" && (!!options?.queue?.editing() || mode() === "shell")),
+      onSelect: () => void submission.stop(),
     },
   ])
 
