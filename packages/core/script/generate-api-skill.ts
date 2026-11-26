@@ -54,32 +54,49 @@ type Endpoint = {
   readonly operation: Operation
 }
 
+type ShownEntry = string | { readonly group: string; readonly routes: ReadonlyArray<string> }
+
 // Endpoints the reference documents, as `METHOD /path` with `*` matching anything. Anything not listed, including new
-// routes, stays out until it's added here.
-const SHOWN = [
+// routes, stays out until it's added here. Large domains group routes into a subfolder so callers load only what they
+// need.
+const SHOWN: ReadonlyArray<ShownEntry> = [
   // Sessions: hand work to other sessions, follow it and answer what they ask.
-  "GET /api/session",
-  "POST /api/session",
-  "GET /api/session/active",
-  "GET /api/session/{sessionID}",
-  "PATCH /api/session/{sessionID}",
-  "POST /api/session/{sessionID}/fork",
-  "POST /api/session/{sessionID}/agent",
-  "POST /api/session/{sessionID}/model",
-  "POST /api/session/{sessionID}/prompt",
-  "POST /api/session/{sessionID}/command",
-  "POST /api/session/{sessionID}/synthetic",
-  "POST /api/session/{sessionID}/compact",
-  "POST /api/session/{sessionID}/interrupt",
-  "POST /api/session/{sessionID}/generate",
-  "POST /api/experimental/session/{sessionID}/wait",
-  "GET /api/session/{sessionID}/context",
-  "GET /api/session/{sessionID}/diff",
-  "* /api/session/{sessionID}/inbox*",
-  "GET /api/session/{sessionID}/message*",
-  "GET /api/session/{sessionID}/form*",
-  "POST /api/session/{sessionID}/form/{formID}/reply",
-  "GET /api/session/{sessionID}/permission*",
+  {
+    group: "session/index",
+    routes: [
+      "GET /api/session",
+      "POST /api/session",
+      "GET /api/session/active",
+      "GET /api/session/{sessionID}",
+      "PATCH /api/session/{sessionID}",
+      "POST /api/session/{sessionID}/fork",
+      "POST /api/session/{sessionID}/agent",
+      "POST /api/session/{sessionID}/model",
+      "POST /api/session/{sessionID}/interrupt",
+      "POST /api/session/{sessionID}/generate",
+      "POST /api/experimental/session/{sessionID}/wait",
+      "GET /api/session/{sessionID}/diff",
+      "GET /api/session/{sessionID}/permission*",
+    ],
+  },
+  {
+    group: "session/input",
+    routes: [
+      "POST /api/session/{sessionID}/prompt",
+      "POST /api/session/{sessionID}/command",
+      "POST /api/session/{sessionID}/synthetic",
+      "POST /api/session/{sessionID}/compact",
+      "* /api/session/{sessionID}/inbox*",
+    ],
+  },
+  {
+    group: "session/message",
+    routes: ["GET /api/session/{sessionID}/message*", "GET /api/session/{sessionID}/context"],
+  },
+  {
+    group: "session/form",
+    routes: ["GET /api/session/{sessionID}/form*", "POST /api/session/{sessionID}/form/{formID}/reply"],
+  },
   "GET /api/form",
   "GET /api/permission/request",
   // Scheduling.
@@ -101,23 +118,11 @@ const SHOWN = [
   "GET /api/experimental/blob/*",
 ]
 
-// Large domains split into a folder so callers load only the endpoints and types they need.
-const GROUP_OVERRIDES: ReadonlyArray<readonly [string, string]> = [
-  ["/api/session/{sessionID}/prompt", "session/prompt"],
-  ["/api/session/{sessionID}/command", "session/prompt"],
-  ["/api/session/{sessionID}/synthetic", "session/prompt"],
-  ["/api/session/{sessionID}/compact", "session/prompt"],
-  ["/api/experimental/session/{sessionID}/wait", "session/prompt"],
-  ["/api/session/{sessionID}/interrupt", "session/prompt"],
-  ["/api/session/{sessionID}/generate", "session/prompt"],
-  ["/api/session/{sessionID}/message*", "session/message"],
-  ["/api/session/{sessionID}/context", "session/message"],
-  ["/api/session/{sessionID}/inbox*", "session/inbox"],
-  ["/api/session/{sessionID}/form*", "session/form"],
-  ["/api/session/{sessionID}/permission*", "session/permission"],
-  ["/api/session*", "session/index"],
-  ["/api/experimental/session*", "session/index"],
-]
+const RULES = SHOWN.flatMap<{ readonly pattern: string; readonly group?: string }>((entry) =>
+  typeof entry === "string"
+    ? [{ pattern: entry }]
+    : entry.routes.map((pattern) => ({ pattern, group: entry.group })),
+)
 
 const INDEX_HEADER = [
   "# OpenCode HTTP API",
@@ -145,14 +150,15 @@ export async function render(): Promise<Record<string, string>> {
       METHODS.flatMap((method) => {
         const operation = methods[method]
         const experimental = route.startsWith("/api/experimental/")
-        if (!operation || operation.deprecated || !SHOWN.some((pattern) => matches(pattern, `${method.toUpperCase()} ${route}`))) return []
+        if (!operation || operation.deprecated) return []
+        const matched = RULES.find((rule) => matches(rule.pattern, `${method.toUpperCase()} ${route}`))
+        if (!matched) return []
         return [
           {
             method: method.toUpperCase(),
             path: route,
             group:
-              GROUP_OVERRIDES.find(([pattern]) => matches(pattern, route))?.[1] ??
-              route.slice(experimental ? "/api/experimental/".length : "/api/".length).split("/")[0]!,
+              matched.group ?? route.slice(experimental ? "/api/experimental/".length : "/api/".length).split("/")[0]!,
             experimental,
             operation,
           },
@@ -160,7 +166,8 @@ export async function render(): Promise<Record<string, string>> {
       }),
     )
   const groups = Map.groupBy(endpoints, (endpoint) => endpoint.group)
-  const names = Array.from(groups.keys()).toSorted()
+  const sortKey = (name: string) => (name.endsWith("/index") ? `${name.slice(0, -"/index".length)}/\0` : name)
+  const names = Array.from(groups.keys()).toSorted((a, b) => sortKey(a).localeCompare(sortKey(b)))
   const index = [
     ...INDEX_HEADER,
     ...names.flatMap((name) => [

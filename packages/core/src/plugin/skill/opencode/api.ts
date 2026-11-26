@@ -14,15 +14,13 @@ import file9 from "./api/model.md" with { type: "text" }
 import file10 from "./api/permission.md" with { type: "text" }
 import file11 from "./api/project.md" with { type: "text" }
 import file12 from "./api/provider.md" with { type: "text" }
-import file13 from "./api/session/form.md" with { type: "text" }
-import file14 from "./api/session/inbox.md" with { type: "text" }
-import file15 from "./api/session/index.md" with { type: "text" }
+import file13 from "./api/session/index.md" with { type: "text" }
+import file14 from "./api/session/form.md" with { type: "text" }
+import file15 from "./api/session/input.md" with { type: "text" }
 import file16 from "./api/session/message.md" with { type: "text" }
-import file17 from "./api/session/permission.md" with { type: "text" }
-import file18 from "./api/session/prompt.md" with { type: "text" }
-import file19 from "./api/skill.md" with { type: "text" }
-import file20 from "./api/vcs.md" with { type: "text" }
-import file21 from "./api/worktree.md" with { type: "text" }
+import file17 from "./api/skill.md" with { type: "text" }
+import file18 from "./api/vcs.md" with { type: "text" }
+import file19 from "./api/worktree.md" with { type: "text" }
 
 export const files: Record<string, string> = {
   "api.md": file0,
@@ -38,13 +36,11 @@ export const files: Record<string, string> = {
   "api/permission.md": file10,
   "api/project.md": file11,
   "api/provider.md": file12,
-  "api/session/form.md": file13,
-  "api/session/inbox.md": file14,
-  "api/session/index.md": file15,
+  "api/session/index.md": file13,
+  "api/session/form.md": file14,
+  "api/session/input.md": file15,
   "api/session/message.md": file16,
-  "api/session/permission.md": file17,
-  "api/session/prompt.md": file18,
-  "api/skill.md": file19,
-  "api/vcs.md": file20,
-  "api/worktree.md": file21,
+  "api/skill.md": file17,
+  "api/vcs.md": file18,
+  "api/worktree.md": file19,
 }
