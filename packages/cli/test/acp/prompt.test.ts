@@ -160,6 +160,40 @@ describe("acp prompt turns over the wire", () => {
     })
   })
 
+  test("reports cost summed across the session's subagent tree", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) => turn(sessionID, id, stepEnded(sessionID, "msg_assistant")),
+    })
+    const sessionID = acp.sessionId
+    acp.server.sessions.set(sessionID, makeSession(sessionID, { cost: 1.5 }))
+    acp.server.sessions.set("ses_child", makeSession("ses_child", { cost: 2, parentID: sessionID }))
+    acp.server.sessions.set("ses_grandchild", makeSession("ses_grandchild", { cost: 0.25, parentID: "ses_child" }))
+    acp.server.sessions.set("ses_other", makeSession("ses_other", { cost: 10 }))
+
+    await acp.prompt(sessionID, "hi")
+
+    expect(await acp.waitForUpdate((item) => item.update.sessionUpdate === "usage_update")).toMatchObject({
+      update: { sessionUpdate: "usage_update", cost: { amount: 3.75, currency: "USD" } },
+    })
+  })
+
+  test("reports the session's own cost when listing its subagents fails", async () => {
+    await using acp = await startSession({
+      onPrompt: ({ sessionID, id }) => turn(sessionID, id, stepEnded(sessionID, "msg_assistant")),
+      fetch: (request) =>
+        request.path === "/api/session" && request.query.parentID ? new Response(null, { status: 500 }) : undefined,
+    })
+    const sessionID = acp.sessionId
+    acp.server.sessions.set(sessionID, makeSession(sessionID, { cost: 1.5 }))
+    acp.server.sessions.set("ses_child", makeSession("ses_child", { cost: 2, parentID: sessionID }))
+
+    await acp.prompt(sessionID, "hi")
+
+    expect(await acp.waitForUpdate((item) => item.update.sessionUpdate === "usage_update")).toMatchObject({
+      update: { sessionUpdate: "usage_update", cost: { amount: 1.5, currency: "USD" } },
+    })
+  })
+
   test("reports full-file diffs for a completed edit and patch", async () => {
     await using dir = await tmpdir()
     const file = (name: string) => path.resolve(dir.path, name)

@@ -1,5 +1,6 @@
 import type { CancelNotification, PromptRequest, PromptResponse, RequestError } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
+import type { Session } from "@opencode/schema/session"
 import { TokenUsage } from "@opencode/schema/token-usage"
 import {
   Cause,
@@ -371,13 +372,20 @@ export const make = Effect.fnUntraced(function* (input: {
       const model = findModel(catalog.models, currentModel(catalog, yield* Ref.get(attached.selection)))
       if (!model?.limit.context) return
       const info = yield* input.client.session.get({ sessionID: attached.id }).pipe(Effect.catch(ACPClient.classify))
+      const cost = yield* treeCost(info).pipe(
+        Effect.catchCause((cause) =>
+          Cause.hasInterruptsOnly(cause)
+            ? Effect.failCause(cause)
+            : Effect.logWarning("ACP subagent cost lookup failed", cause).pipe(Effect.as(info.cost)),
+        ),
+      )
       yield* input.connection.sessionUpdate({
         sessionId: attached.id,
         update: {
           sessionUpdate: "usage_update",
           used,
           size: model.limit.context,
-          cost: { amount: info.cost, currency: "USD" },
+          cost: { amount: cost, currency: "USD" },
         },
       })
     },
@@ -385,6 +393,21 @@ export const make = Effect.fnUntraced(function* (input: {
       Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP usage update failed", cause),
     ),
   )
+
+  // Core records each subagent's spend on its own session, so the session's cumulative cost sums its whole tree.
+  const treeCost = (session: { readonly id: Session.ID; readonly cost: number }): Effect.Effect<number, ACPError.Error> =>
+    Stream.paginate(undefined, (cursor: Session.ListCursor | undefined) =>
+      input.client.session.list({ parentID: session.id, limit: 100, ...(cursor ? { cursor } : {}) }).pipe(
+        Effect.catch(ACPClient.classify),
+        Effect.map((page) => [page.data, Option.fromNullishOr(page.cursor.next)] as const),
+      ),
+    ).pipe(
+      Stream.mapEffect(treeCost, { concurrency: "unbounded" }),
+      Stream.runFold(
+        () => session.cost,
+        (total, cost) => total + cost,
+      ),
+    )
 
   // Forked uninterruptible: interruption lands only in `execute` and the last check in `settle`, so a response follows.
   const run = Effect.fn("cli.acp.turn.run")(function* (params: PromptRequest) {
