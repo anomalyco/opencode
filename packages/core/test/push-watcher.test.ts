@@ -3,6 +3,8 @@ import { createECDH, createDecipheriv, hkdfSync } from "node:crypto"
 import { DateTime, Effect, Layer } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { Bus } from "@opencode/core/bus"
+import { Job } from "@opencode/core/job"
+import type { Recovery } from "@opencode/core/job/recovery"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
@@ -27,6 +29,8 @@ import { waitUntil } from "./lib/eventually"
 
 let boxes: string[] = []
 let silent: unknown[] = []
+let active = new Set<Session.ID>()
+let background: Recovery[] = []
 
 const relay = async (input: Request | string | URL, init?: RequestInit) => {
   const text = input instanceof Request ? await input.text() : String(init?.body)
@@ -39,6 +43,7 @@ const relay = async (input: Request | string | URL, init?: RequestInit) => {
 const parentID = Session.ID.make("ses_push_parent")
 const childID = Session.ID.make("ses_push_child")
 const grandchildID = Session.ID.make("ses_push_grandchild")
+const messageID = SessionMessage.ID.create()
 
 const session = (id: Session.ID, title: string, parent?: Session.ID) =>
   Session.Info.make({
@@ -65,11 +70,32 @@ const it = testEffect(
       Session.node.replace(
         Layer.mock(Session.Service, {
           get: (id) => Effect.succeed(sessions.get(id)!),
+          active: Effect.sync(() => active),
+          messages: () =>
+            Effect.succeed([
+              SessionMessage.Assistant.make({
+                id: messageID,
+                type: "assistant",
+                agent: Agent.ID.make("build"),
+                model: Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }),
+                content: [
+                  { type: "reasoning", text: "Check the session code", time: { created: DateTime.makeUnsafe(0) } },
+                  { type: "text", text: "Fixed the login bug." },
+                ],
+                time: { created: DateTime.makeUnsafe(0) },
+              }),
+            ]),
           revert: {
             stage: () => Effect.die(new Error("unused")),
             clear: () => Effect.die(new Error("unused")),
             commit: () => Effect.die(new Error("unused")),
           },
+        }),
+      ),
+      Job.node.replace(
+        Layer.mock(Job.Service, {
+          get: () => Effect.succeed(undefined),
+          runningBackground: Effect.sync(() => background),
         }),
       ),
     ],
@@ -118,6 +144,8 @@ const step = (sessionID: Session.ID) =>
 beforeEach(() => {
   boxes = []
   silent = []
+  active = new Set()
+  background = []
 })
 
 describe("PushWatcher", () => {
@@ -133,33 +161,75 @@ describe("PushWatcher", () => {
       yield* bus.publish(SessionEvent.Execution.Interrupted, { sessionID: parentID, reason: "user" })
       yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: parentID })
       yield* step(parentID)
-      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: parentID })
+      const succeeded = yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: parentID })
       yield* waitUntil(Effect.sync(() => boxes.length === 1))
-      yield* bus.publish(SessionEvent.Execution.Failed, {
+      const failed = yield* bus.publish(SessionEvent.Execution.Failed, {
         sessionID: parentID,
-        error: { type: "unknown", message: "x" },
+        error: { type: "provider.rate-limit", message: "x", status: 429, retryAfterMs: 30_000 },
       })
       yield* waitUntil(Effect.sync(() => boxes.length === 2))
 
       expect(boxes.map((box) => open(key, box))).toEqual([
         {
           v: 1,
+          type: "turn",
           id: parentID,
-          type: "session.idle",
+          time: succeeded.created,
           sessionID: parentID,
+          directory: "/tmp/push",
           title: "Fix the login bug",
           body: "Finished",
-          data: { outcome: "succeeded" },
+          data: {
+            outcome: "succeeded",
+            messageID,
+            idleMessageID: SessionMessage.ID.fromEvent(succeeded.id),
+            text: "Fixed the login bug.",
+          },
         },
         {
           v: 1,
+          type: "turn",
           id: parentID,
-          type: "session.idle",
+          time: failed.created,
           sessionID: parentID,
+          directory: "/tmp/push",
           title: "Fix the login bug",
           body: "Failed",
-          data: { outcome: "failed" },
+          data: {
+            outcome: "failed",
+            idleMessageID: SessionMessage.ID.fromEvent(failed.id),
+            error: { type: "provider.rate-limit", message: "x", status: 429, retryAfterMs: 30_000 },
+          },
         },
+      ])
+    }),
+  )
+
+  it.live("holds a finished turn while a subagent runs, and counts the background work still running", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const key = yield* phone()
+
+      active = new Set([parentID, childID])
+      yield* step(parentID)
+      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: parentID })
+      yield* step(parentID)
+      yield* bus.publish(SessionEvent.Execution.Failed, {
+        sessionID: parentID,
+        error: { type: "unknown", message: "x" },
+      })
+      yield* waitUntil(Effect.sync(() => boxes.length === 1))
+
+      // A grandchild reports to the child, and a shell may never end, so neither holds the push.
+      active = new Set([parentID, grandchildID])
+      background = [{ kind: "shell", sessionID: parentID, shellID: "sh_1", command: "bun dev" }]
+      yield* step(parentID)
+      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: parentID })
+      yield* waitUntil(Effect.sync(() => boxes.length === 2))
+
+      expect(boxes.map((box) => open(key, box).data)).toMatchObject([
+        { outcome: "failed", background: { subagent: 1 } },
+        { outcome: "succeeded", background: { shell: 1, subagent: 1 } },
       ])
     }),
   )
@@ -172,40 +242,90 @@ describe("PushWatcher", () => {
         id: Form.ID.make(id),
         sessionID,
         title: "Questions",
-        metadata: { kind },
-        fields: [{ key: "q0", title: "Database", description: "Which database?", type: "string" }],
+        metadata: { kind, tool: { messageID: "msg_1", id: "call_1" } },
+        fields: [
+          {
+            key: "q0",
+            title: "Database",
+            description: "Which database?",
+            type: "string",
+            options: [
+              { value: "Postgres", label: "Postgres", description: "The production database" },
+              { value: "sqlite", label: "SQLite" },
+            ],
+            custom: true,
+          },
+          { key: "q1", title: "Seed", type: "boolean" },
+        ],
       })
 
       yield* bus.publish(Form.Event.Created, { form: form("frm_other", childID, "elicitation") })
       yield* bus.publish(Form.Event.Created, { form: form("frm_global", "global", "question") })
-      yield* bus.publish(Form.Event.Created, { form: form("frm_1", grandchildID, "question") })
+      const created = yield* bus.publish(Form.Event.Created, { form: form("frm_1", grandchildID, "question") })
       yield* waitUntil(Effect.sync(() => boxes.length === 1))
-      yield* bus.publish(Permission.Event.Asked, {
+      const asked = yield* bus.publish(Permission.Event.Asked, {
         id: Permission.ID.make("per_1"),
         sessionID: childID,
         action: "bash",
         resources: ["git push"],
+        save: ["git push *"],
+        source: { type: "tool", messageID: "msg_2", id: "call_2" },
+        message: "Pushes to main",
       })
       yield* waitUntil(Effect.sync(() => boxes.length === 2))
 
       expect(boxes.map((box) => open(key, box))).toEqual([
         {
           v: 1,
+          type: "form",
           id: "frm_1",
-          type: "question",
+          time: created.created,
           sessionID: parentID,
+          directory: "/tmp/push",
+          attention: true,
           title: "Fix the login bug",
           body: "Which database?",
-          data: { formID: "frm_1", sessionID: grandchildID },
+          data: {
+            formID: "frm_1",
+            replySessionID: grandchildID,
+            kind: "question",
+            fieldCount: 2,
+            source: { type: "tool", messageID: "msg_1", id: "call_1" },
+            fields: [
+              {
+                key: "q0",
+                type: "string",
+                title: "Database",
+                description: "Which database?",
+                custom: true,
+                options: [
+                  { label: "Postgres", description: "The production database" },
+                  { label: "SQLite", value: "sqlite" },
+                ],
+              },
+            ],
+          },
         },
         {
           v: 1,
-          id: "per_1",
           type: "permission",
+          id: "per_1",
+          time: asked.created,
           sessionID: parentID,
+          directory: "/tmp/push",
+          attention: true,
           title: "Fix the login bug",
           body: "Needs permission: bash",
-          data: { requestID: "per_1", sessionID: childID, action: "bash", resources: ["git push"] },
+          data: {
+            requestID: "per_1",
+            replySessionID: childID,
+            action: "bash",
+            resources: ["git push"],
+            save: ["git push *"],
+            decisions: ["once", "always", "reject"],
+            message: "Pushes to main",
+            source: { type: "tool", messageID: "msg_2", id: "call_2" },
+          },
         },
       ])
     }),
@@ -239,7 +359,9 @@ describe("PushWatcher", () => {
 
       yield* ask("per_1")
       yield* waitUntil(Effect.sync(() => boxes.length === 1))
-      yield* bus.publish(Permission.Event.Replied, {
+      // Nothing to save, so "always" isn't offered.
+      expect(open(key, boxes[0]!).data.decisions).toEqual(["once", "reject"])
+      const replied = yield* bus.publish(Permission.Event.Replied, {
         sessionID: childID,
         requestID: Permission.ID.make("per_1"),
         reply: "once",
@@ -252,24 +374,33 @@ describe("PushWatcher", () => {
           sessionID: childID,
           title: "Questions",
           metadata: { kind: "question" },
-          fields: [{ key: "q0", title: "Database", type: "string" }],
+          fields: [{ key: "q0", title: "Database", type: "string", custom: true }],
         },
       })
       yield* waitUntil(Effect.sync(() => boxes.length === 3))
-      yield* bus.publish(Form.Event.Cancelled, { id: Form.ID.make("frm_1"), sessionID: childID })
+      // A form with one field can be answered from the notification.
+      expect(open(key, boxes[2]!).data).toEqual({
+        formID: "frm_1",
+        replySessionID: childID,
+        kind: "question",
+        fieldCount: 1,
+        inlineReply: true,
+        fields: [{ key: "q0", type: "string", title: "Database", custom: true }],
+      })
+      const cancelled = yield* bus.publish(Form.Event.Cancelled, { id: Form.ID.make("frm_1"), sessionID: childID })
       yield* waitUntil(Effect.sync(() => boxes.length === 4))
 
       // An interrupted request gets no reply.
       yield* ask("per_2")
       yield* waitUntil(Effect.sync(() => boxes.length === 5))
-      yield* bus.publish(SessionEvent.Execution.Interrupted, { sessionID: childID, reason: "user" })
+      const interrupted = yield* bus.publish(SessionEvent.Execution.Interrupted, { sessionID: childID, reason: "user" })
       yield* waitUntil(Effect.sync(() => boxes.length === 6))
 
       yield* step(parentID)
       yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: parentID })
       yield* waitUntil(Effect.sync(() => boxes.length === 7))
       yield* prompt("synthetic")
-      yield* prompt("user")
+      const prompted = yield* prompt("user")
       yield* waitUntil(Effect.sync(() => boxes.length === 8))
 
       // Archiving or deleting the session removes whatever is still showing for it.
@@ -284,17 +415,17 @@ describe("PushWatcher", () => {
         expect(
           cleared()
             .slice(-2)
-            .map((item) => item.id)
+            .map((item) => item.ids[0])
             .sort(),
         ).toEqual([parentID, "per_3"].sort())
       }
 
       expect(silent.slice(0, 8)).toEqual([undefined, true, undefined, true, undefined, true, undefined, true])
       expect(cleared().slice(0, 4)).toEqual([
-        { v: 1, id: "per_1", type: "clear", sessionID: parentID },
-        { v: 1, id: "frm_1", type: "clear", sessionID: parentID },
-        { v: 1, id: "per_2", type: "clear", sessionID: parentID },
-        { v: 1, id: parentID, type: "clear", sessionID: parentID },
+        { v: 1, type: "clear", ids: ["per_1"], time: replied.created },
+        { v: 1, type: "clear", ids: ["frm_1"], time: cancelled.created },
+        { v: 1, type: "clear", ids: ["per_2"], time: interrupted.created },
+        { v: 1, type: "clear", ids: [parentID], time: prompted.created },
       ])
     }),
   )
@@ -347,7 +478,7 @@ describe("PushWatcher", () => {
         boxes
           .slice(3)
           .map((box) => open(key, box))
-          .map((item) => [item.type, item.id]),
+          .map((item) => [item.type, item.id ?? item.ids[0]]),
       ).toEqual([
         ["permission", "per_2"],
         ["clear", "per_2"],
