@@ -1,6 +1,6 @@
 export * as LocationActivity from "./location-activity.js"
 
-import { Clock, Context, Duration, Effect, Layer, Option, RcMap, Schema } from "effect"
+import { Clock, Context, Duration, Effect, Layer, Option, Schema } from "effect"
 import type { Document } from "@opencode/schema/config"
 import { Bus } from "./bus.js"
 import { Config } from "./config.js"
@@ -70,14 +70,12 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
       const unsubscribe = yield* bus.listen((event) => {
         if (!isSessionEvent(event) || !event.location) return Effect.void
         const location = LocationServiceMap.canonical(event.location)
-        return RcMap.has(locations.rcMap, location).pipe(
-          Effect.flatMap((active) => (active ? touch(location) : Effect.void)),
-        )
+        return locations.has(location).pipe(Effect.flatMap((active) => (active ? touch(location) : Effect.void)))
       })
       yield* Effect.addFinalizer(() => unsubscribe)
       yield* Effect.gen(function* () {
         yield* Effect.sleep(options.sweepInterval ?? "1 minute")
-        const refs = Array.from(yield* RcMap.keys(locations.rcMap))
+        const refs = yield* locations.keys
         const cached = new Set(refs.map(key))
         yield* Effect.forEach(refs, (ref) => (entries.has(key(ref)) ? Effect.void : touch(ref)), { discard: true })
         for (const id of entries.keys()) {
