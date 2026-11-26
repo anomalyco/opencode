@@ -6,6 +6,7 @@ import type { Context as PluginContext } from "@opencode/plugin/effect/plugin"
 import type { Entry } from "@opencode/schema/config"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Global } from "@opencode/util/global"
+import { Hash } from "@opencode/util/hash"
 import { Context, Effect, Result, Schema, Semaphore } from "effect"
 import path from "path"
 import { Agent } from "../../agent.js"
@@ -240,6 +241,24 @@ export const Plugin = {
       }
       // The file is the source of truth: an overwrite earlier in this script, or an edit by hand, runs as written.
       const item = yield* latest(registered)
+      // A tool from the repository is someone else's code until the user has seen it. Approval names this exact code,
+      // so "always" stops covering the tool once its file changes. The user's own config dir needs no approval.
+      if (item.scope !== "user") {
+        const resource = `${item.name.qualified}@${Hash.fast(item.definition.code).slice(0, 12)}`
+        yield* permission.assert({
+          action: "custom_tool",
+          resources: [resource],
+          save: [resource],
+          metadata: {
+            tool: item.name.qualified,
+            filepath: item.filepath,
+            code: item.definition.code,
+            tools: [...item.definition.tools],
+            extensions: [...item.definition.extensions],
+          },
+          ...Permission.invocation(context),
+        })
+      }
       const depth = yield* CodeModeCustomTool.Depth
       const stack = yield* CodeModeCustomTool.CallStack
       if (depth >= CodeModeCustomTool.MAX_DEPTH) {

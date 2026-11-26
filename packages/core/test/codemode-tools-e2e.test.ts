@@ -583,6 +583,23 @@ describe("CodeModeToolsPlugin", () => {
     }),
   )
 
+  e2e.live("asks for custom_tool permission before running a project tool, but not a user one", () =>
+    Effect.gen(function* () {
+      const file = CodeModeCustomTool.formatFile({ description: "Hello", code: 'return "hello"' })
+      const env = yield* harness({
+        permissions: [{ action: "custom_tool", resource: "*", effect: "deny" }],
+        projectFiles: { "tools/from_repo.js": file },
+        userFiles: { "tools/from_user.js": file },
+      })
+      const blocked = yield* env.execute(`return await tools.custom.from_repo({})`)
+      expect((blocked.output as { readonly error?: true }).error).toBe(true)
+      expect((blocked.output as { readonly output: string }).output).toContain("custom_tool")
+      const own = yield* env.execute(`return await tools.custom.from_user({})`)
+      expect((own.output as { readonly output: string; readonly error?: true }).error).toBeUndefined()
+      expect((own.output as { readonly output: string }).output).toBe("hello")
+    }),
+  )
+
   e2e.live("caps recursive custom tool calls at MAX_DEPTH", () =>
     Effect.gen(function* () {
       const env = yield* harness({
