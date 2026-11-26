@@ -6,8 +6,9 @@ type Tool = Extract<SessionMessageAssistant["content"][number], { type: "tool" }
 
 /**
  * Where each script's Output row goes. A script whose changes are drawn right after it, as the next items of its group or
- * as the row after its own, reads steps, then changes, then Output: its Output row follows its last change. Anywhere
- * else, as when its changes are hidden or grouped apart from it, its Output row stays under its steps.
+ * as the row of cards after its own, reads steps, then changes, then Output: its Output row follows its last change.
+ * Anywhere else, as when its changes are hidden or grouped into a summary row apart from it, its Output row stays under
+ * its steps.
  */
 export type ScriptOutputLayout = {
   /** Scripts, by part id, whose Output row follows their changes. */
