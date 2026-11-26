@@ -1,5 +1,6 @@
 import type { CancelNotification, PromptRequest, PromptResponse, RequestError } from "@agentclientprotocol/sdk"
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
+import { CommandExecutionError } from "@opencode/protocol/errors"
 import { TokenUsage } from "@opencode/schema/token-usage"
 import {
   Cause,
@@ -279,7 +280,19 @@ export const make = Effect.fnUntraced(function* (input: {
           files: prompt.files,
           delivery: "steer",
         })
-        .pipe(Effect.catch(ACPClient.classify))
+        .pipe(
+          Effect.catch((error) =>
+            error instanceof CommandExecutionError
+              ? input.connection.sessionUpdate({
+                  sessionId: sessionID,
+                  update: {
+                    sessionUpdate: "agent_message_chunk",
+                    content: { type: "text", text: error.message },
+                  },
+                }).pipe(Effect.mapError(() => new ACPError.ServerUnavailableError()))
+              : ACPClient.classify(error),
+          ),
+        )
       return
     }
     yield* input.client.session
