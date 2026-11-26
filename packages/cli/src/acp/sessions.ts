@@ -77,7 +77,7 @@ export const make = Effect.fnUntraced(function* (input: {
       )
     }),
     Effect.catchCause((cause) =>
-      Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP session event stream failed", cause),
+      Cause.hasInterruptsOnly(cause) ? Effect.void : Effect.logWarning("ACP selection event stream failed", cause),
     ),
     Effect.ensuring(Deferred.succeed(connected, undefined)),
     Effect.forkScoped,
