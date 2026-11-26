@@ -381,7 +381,7 @@
 
   [data-component="collapsed-tool-group"] > [data-component="collapsible"].tool-collapsible {
     --tool-content-gap: var(--timeline-gap-s);
-    gap: 0;
+    row-gap: 0;
 
     > [data-slot="collapsible-trigger"] {
       height: calc(var(--line-height-compact) + 12px);
@@ -463,7 +463,7 @@
 
   /* An open row's nested content starts the small gap below its header. */
   [data-component="collapsible"].tool-collapsible:has(> [data-slot="collapsible-content"]) {
-    gap: 0;
+    row-gap: 0;
 
     > [data-slot="collapsible-trigger"][aria-expanded="true"] {
       margin-bottom: 0;
