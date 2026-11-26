@@ -858,18 +858,13 @@ export function createData(config: CreateDataInput) {
         )
         refresh(() => result.location.vcs.sync())
         refresh(() => result.project.sync())
-        const seen = new Set<Record<string, boolean>>()
-        // Synced keys come first so an aliased ref refreshes both itself and its canonical key in one request.
-        Object.entries(store.location)
-          .sort(([a], [b]) => Number(sync.has(`location.flags:${b}`)) - Number(sync.has(`location.flags:${a}`)))
-          .forEach(([key, data]) => {
-            if (data.flags === undefined || dormantFlags.has(key) || seen.has(data.flags)) return
-            seen.add(data.flags)
-            const ref = JSON.parse(key) as [string, string | null]
-            const location = { directory: ref[0], workspaceID: ref[1] ?? undefined }
-            flags.invalidate(location)
-            refresh(() => flags.sync(location))
-          })
+        Object.entries(store.location).forEach(([key, data]) => {
+          if (data.flags === undefined || dormantFlags.has(key)) return
+          const ref = JSON.parse(key) as [string, string | null]
+          const location = { directory: ref[0], workspaceID: ref[1] ?? undefined }
+          flags.invalidate(location)
+          refresh(() => flags.sync(location))
+        })
         Object.keys(store.jobTree).forEach((sessionID) => {
           result.job.invalidate(sessionID)
           refresh(() => result.job.sync(sessionID))
@@ -1600,19 +1595,10 @@ export function createData(config: CreateDataInput) {
         break
       // Fetching here would boot the location again, so a location that was evicted for being idle never stays
       // down. Its flags keep their last value until the next sync of the location.
-      case "location.shutdown": {
-        const key = locationKey(location)
-        const current = store.location[key]?.flags
-        dormantFlags.add(key)
+      case "location.shutdown":
+        dormantFlags.add(locationKey(location))
         flags.invalidate(location)
-        if (current)
-          Object.entries(store.location).forEach(([alias, data]) => {
-            if (alias === key || data.flags !== current) return
-            dormantFlags.add(alias)
-            sync.invalidate(`location.flags:${alias}`)
-          })
         break
-      }
     }
   }
 
@@ -1669,17 +1655,19 @@ export function createData(config: CreateDataInput) {
   const usageLimits = locationResource("usageLimits", (location) => api().experimental.usage.limits({ location }))
   // Locations whose flags were invalidated by location.shutdown; reconnects skip them until something syncs them again.
   const dormantFlags = new Set<string>()
+  const canonicalDirectory = new Map<string, string>()
+  const canonicalRef = (location: LocationRef) => {
+    const directory = canonicalDirectory.get(location.directory)
+    return directory ? { directory, workspaceID: location.workspaceID } : location
+  }
   // A server older than the flag endpoint answers it with a 404 and no JSON body: every flag is off there.
-  const flagResource = locationResource(
-    "flags",
-    (location) =>
-      api()
-        .experimental.flag.get({ location })
-        .catch((error) => {
-          if (!missingEndpoint(error)) throw error
-          return { location: { directory: location.directory }, data: {} }
-        }),
-    { alias: true },
+  const flagResource = locationResource("flags", (location) =>
+    api()
+      .experimental.flag.get({ location })
+      .catch((error) => {
+        if (!missingEndpoint(error)) throw error
+        return { location: { directory: location.directory }, data: {} }
+      }),
   )
   const flags = {
     ...flagResource,
@@ -2441,6 +2429,7 @@ export function createData(config: CreateDataInput) {
           const key = locationKey(location)
           if (!store.location[key]) setStore("location", key, {})
           setStore("location", key, "info", location)
+          if (location.directory !== current.directory) canonicalDirectory.set(current.directory, location.directory)
           if (!ref) {
             setDefaultLocation({ directory: location.directory })
           }
@@ -2450,7 +2439,7 @@ export function createData(config: CreateDataInput) {
         await result.location.syncInfo(ref)
         const location = ref ?? defaultLocation()
         await Promise.all([
-          flags.sync(location),
+          flags.sync(canonicalRef(location)),
           result.location.vcs.sync(location),
           result.location.agent.sync(location),
           result.location.command.sync(location),
@@ -2479,7 +2468,7 @@ export function createData(config: CreateDataInput) {
         result.location.provider.invalidate(location)
         result.location.reference.invalidate(location)
         result.location.skill.invalidate(location)
-        flags.invalidate(location)
+        flags.invalidate(canonicalRef(location))
         result.shell.invalidate(location)
         result.session.form.invalidate("global", location)
       },

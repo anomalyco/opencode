@@ -1,12 +1,15 @@
 import { expect, test } from "bun:test"
-import { createRoot } from "solid-js"
+import { createRoot, createSignal } from "solid-js"
 import { createData, type CreateDataInput } from "../src/solid"
 import { OpenCode, type OpenCodeEvent } from "../src/promise"
 
 type Listener = Parameters<CreateDataInput["event"]["listen"]>[0]
 
 /** A data store over a fake server whose flag endpoint answers with `flag(directory)`. */
-function setup(flag: (directory: string) => Response | Promise<Response>) {
+function setup(
+  flag: (directory: string) => Response | Promise<Response>,
+  resolve: (directory: string) => string = (directory) => directory,
+) {
   const listeners = new Set<Listener>()
   const requests: string[] = []
   const api = OpenCode.make({
@@ -15,7 +18,7 @@ function setup(flag: (directory: string) => Response | Promise<Response>) {
       const request = input instanceof Request ? input : new Request(input, init)
       const url = new URL(request.url)
       const directory = url.searchParams.get("location[directory]") ?? "/project"
-      const location = { directory }
+      const location = { directory: resolve(directory) }
       requests.push(`${url.pathname} ${directory}`)
       if (url.pathname === "/api/experimental/flag") return flag(directory)
       if (url.pathname === "/api/location") return Response.json(location)
@@ -28,20 +31,25 @@ function setup(flag: (directory: string) => Response | Promise<Response>) {
       return Response.json({ location, data: [] })
     },
   })
-  const root = createRoot((dispose) => ({
-    data: createData({
-      api: () => api,
-      directory: "/project",
-      event: {
-        on: () => () => {},
-        listen(handler) {
-          listeners.add(handler)
-          return () => listeners.delete(handler)
+  const root = createRoot((dispose) => {
+    const [status, setStatus] = createSignal<"connected" | "connecting" | "reconnecting">("connected")
+    return {
+      data: createData({
+        api: () => api,
+        directory: "/project",
+        connection: { status },
+        event: {
+          on: () => () => {},
+          listen(handler) {
+            listeners.add(handler)
+            return () => listeners.delete(handler)
+          },
         },
-      },
-    }),
-    dispose,
-  }))
+      }),
+      setStatus,
+      dispose,
+    }
+  })
   const emit = (event: OpenCodeEvent) => listeners.forEach((listener) => listener({ name: event.type, details: event }))
   const count = (directory?: string) =>
     requests.filter((request) =>
@@ -198,38 +206,30 @@ test("keeps each location's flags apart", async () => {
   }
 })
 
-test("reconnect with an aliased location refreshes flags once and updates both keys", async () => {
+test("syncing via a non-canonical directory stores flags under the canonical key through config, shutdown, and reconnect", async () => {
   const state = { enabled: true }
-  const app = setup(() => Response.json({ location: { directory: "/real" }, data: { full_codemode: state.enabled } }))
+  const app = setup(
+    () => Response.json({ location: { directory: "/real" }, data: { full_codemode: state.enabled } }),
+    (directory) => (directory === "/alias" ? "/real" : directory),
+  )
   try {
-    await app.data.location.flags.sync({ directory: "/alias" })
+    await app.data.location.sync({ directory: "/alias" })
     expect(app.count()).toBe(1)
-    expect(app.data.location.flag("full_codemode", { directory: "/alias" })).toBe(true)
-    expect(app.data.location.flag("full_codemode", { directory: "/real" })).toBe(true)
+    expect(app.requests).toContain("/api/experimental/flag /real")
+    expect(app.data.location.flags.list({ directory: "/real" })).toEqual({ full_codemode: true })
+    expect(app.data.location.flags.list({ directory: "/alias" })).toBeUndefined()
 
     state.enabled = false
-    app.emit({ id: "evt_connected", created: 1, type: "server.connected", data: {} } as OpenCodeEvent)
-    await until(
-      () =>
-        !app.data.location.flag("full_codemode", { directory: "/alias" }) &&
-        !app.data.location.flag("full_codemode", { directory: "/real" }),
-    )
+    app.emit({ id: "evt_config", created: 1, type: "config.updated", location: { directory: "/real" }, data: {} })
+    await until(() => !app.data.location.flag("full_codemode", { directory: "/real" }))
     expect(app.count()).toBe(2)
-  } finally {
-    app.dispose()
-  }
-})
 
-test("location.shutdown for the canonical location keeps an aliased location dormant on reconnect", async () => {
-  const app = setup(() => Response.json({ location: { directory: "/real" }, data: { full_codemode: true } }))
-  try {
-    await app.data.location.flags.sync({ directory: "/alias" })
-    expect(app.count()).toBe(1)
-
-    app.emit({ id: "evt_shutdown", created: 1, type: "location.shutdown", location: { directory: "/real" }, data: {} })
-    app.emit({ id: "evt_connected", created: 2, type: "server.connected", data: {} } as OpenCodeEvent)
+    app.emit({ id: "evt_shutdown", created: 2, type: "location.shutdown", location: { directory: "/real" }, data: {} })
+    app.setStatus("reconnecting")
+    app.setStatus("connected")
+    app.emit({ id: "evt_connected", created: 3, type: "server.connected", data: {} } as OpenCodeEvent)
     await Bun.sleep(50)
-    expect(app.count()).toBe(1)
+    expect(app.count()).toBe(2)
   } finally {
     app.dispose()
   }
