@@ -59,8 +59,8 @@ describe("OpenAI-compatible Chat route", () => {
           Message.assistant(ids.map((id) => ToolCallPart.make({ id, name: "lookup", input: { id } }))),
           ...ids.toReversed().map((id) => Message.tool({ id, name: "lookup", result: id })),
           Message.user("Again"),
-          Message.assistant([ToolCallPart.make({ id: ids[0]!, name: "lookup", input: {} })]),
-          Message.tool({ id: ids[0]!, name: "lookup", result: "again" }),
+          Message.assistant([ToolCallPart.make({ id: ids[0], name: "lookup", input: {} })]),
+          Message.tool({ id: ids[0], name: "lookup", result: "again" }),
           Message.assistant([ToolCallPart.make({ id: "000000000", name: "lookup", input: {} })]),
           Message.tool({ id: "000000000", name: "lookup", result: "reserved" }),
         ]
@@ -72,9 +72,11 @@ describe("OpenAI-compatible Chat route", () => {
           messages,
         })
         const prepared = yield* compileRequest(input)
-        const wire = prepared.body.messages as Array<{ tool_calls?: Array<{ id: string }>; tool_call_id?: string }>
-        const calls = wire.flatMap((message) => message.tool_calls?.map((call) => call.id) ?? [])
-        const results = wire.flatMap((message) => (message.tool_call_id === undefined ? [] : [message.tool_call_id]))
+        const wire = prepared.body.messages
+        const calls = wire.flatMap((message) =>
+          message.role === "assistant" ? (message.tool_calls?.map((call) => call.id) ?? []) : [],
+        )
+        const results = wire.flatMap((message) => (message.role === "tool" ? [message.tool_call_id] : []))
         expect(new Set(calls).size).toBe(4)
         expect(calls[0]).toBe(first)
         expect(results).toEqual([calls[1], calls[0], calls[2], calls[3]])
@@ -121,9 +123,11 @@ describe("OpenAI-compatible Chat route", () => {
             ]),
           }),
         )
-        const wire = prepared.body.messages as Array<{ tool_calls?: Array<{ id: string }>; tool_call_id?: string }>
-        const calls = wire.flatMap((message) => message.tool_calls?.map((call) => call.id) ?? [])
-        const results = wire.flatMap((message) => (message.tool_call_id === undefined ? [] : [message.tool_call_id]))
+        const wire = prepared.body.messages
+        const calls = wire.flatMap((message) =>
+          message.role === "assistant" ? (message.tool_calls?.map((call) => call.id) ?? []) : [],
+        )
+        const results = wire.flatMap((message) => (message.role === "tool" ? [message.tool_call_id] : []))
         expect(calls).toEqual(
           sizes[0] === 2 ? ["read:0", "read:0", "000000000", "000000001"] : ["read:0", "read:0", "read:0", "000000000"],
         )

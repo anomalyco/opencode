@@ -33,13 +33,8 @@ it.effect("Venice keeps signatures and call order when replay IDs collide", () =
       ...["b", "a"].map((id) => Message.tool({ id, name: "lookup", result: id })),
     ])
     const prepared = yield* compileRequest(ai.request({ model, messages }))
-    const wire = prepared.body.messages as Array<{
-      thought_signature?: string
-      reasoning_content?: string
-      tool_calls?: Array<{ id: string; thought_signature?: string; extra_content?: unknown }>
-      tool_call_id?: string
-    }>
-    const assistants = wire.filter((message) => message.tool_calls !== undefined)
+    const wire = prepared.body.messages
+    const assistants = wire.filter((message) => message.role === "assistant")
     expect(assistants.map((message) => message.thought_signature)).toEqual(["message-0", "message-1"])
     expect(assistants.map((message) => message.reasoning_content)).toEqual(["encrypted-0", "encrypted-1"])
     const calls = assistants.flatMap((message) => message.tool_calls ?? [])
@@ -48,7 +43,7 @@ it.effect("Venice keeps signatures and call order when replay IDs collide", () =
       [0, 1].flatMap((group) => ["a", "b"].map((id) => ({ google: { thought_signature: `google-${group}-${id}` } }))),
     )
     expect(new Set(calls.map((call) => call.id)).size).toBe(4)
-    expect(wire.flatMap((message) => (message.tool_call_id === undefined ? [] : [message.tool_call_id]))).toEqual([
+    expect(wire.flatMap((message) => (message.role === "tool" ? [message.tool_call_id] : []))).toEqual([
       calls[1].id,
       calls[0].id,
       calls[3].id,

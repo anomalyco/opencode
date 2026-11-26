@@ -34,6 +34,7 @@ import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
 import { ToolStream } from "./utils/tool-stream.js"
 import { OpenAIFreeform } from "./openai-freeform.js"
+import { ToolCallIDReplay } from "./utils/tool-call-id-replay.js"
 
 const ADAPTER = "openai-chat"
 const RESERVED_REASONING_FIELDS = new Set(["role", "content", "refusal", "tool_calls"])
@@ -687,19 +688,7 @@ const lowerMessages = Effect.fnUntraced(function* (
     },
   }
   const requireAssistantAfterTool = request.model.compatibility?.requireAssistantAfterTool ?? mistral
-  const formatToolID = lowering.toolCallID
-  const reserved = new Set(
-    request.messages.flatMap((message) =>
-      message.role === "assistant"
-        ? message.content.filter((part) => part.type === "tool-call").map((part) => formatToolID(part.id))
-        : [],
-    ),
-  )
-  const used = new Set<string>()
-  const seen = new Set<string>()
-  const groupIDs = new Map<string, string>()
-  let nextID = 0
-  lowering.toolCallID = (id) => groupIDs.get(id) ?? formatToolID(id)
+  const replay = ToolCallIDReplay.normalizer(request, lowering.toolCallID)
   const bridgeTools = () => {
     if (requireAssistantAfterTool && messages.at(-1)?.role === "tool")
       messages.push({ role: "assistant", content: "Done." })
@@ -711,32 +700,7 @@ const lowerMessages = Effect.fnUntraced(function* (
     messages.push({ role: "user", content: pendingAttachments.splice(0) })
   }
   for (const message of request.messages) {
-    if (message.role === "user" || message.role === "assistant") groupIDs.clear()
-    if (message.role === "assistant") {
-      const calls = message.content.filter((part) => part.type === "tool-call")
-      // Preserve ambiguous IDs only within this group, without guessing a pairing.
-      const ambiguous = new Set(calls.map((call) => call.id)).size !== calls.length
-      for (const part of calls) {
-        const formatted = formatToolID(part.id)
-        if (ambiguous) {
-          used.add(formatted)
-          seen.add(part.id)
-          continue
-        }
-        let id = formatted
-        // Nine alphanumeric characters satisfy every existing family formatter.
-        // Reserve future originals too, so allocation cannot rename a unique call.
-        // Allocate only repeated original IDs; keep family formatting unchanged.
-        if (seen.has(part.id)) {
-          do {
-            id = (nextID++).toString(36).padStart(9, "0")
-          } while (used.has(id) || reserved.has(id))
-        }
-        seen.add(part.id)
-        used.add(id)
-        groupIDs.set(part.id, id)
-      }
-    }
+    lowering.toolCallID = replay(message)
     if (message.role === "user") bridgeTools()
     if (message.role === "system") {
       const part = yield* ProviderShared.wrappedSystemUpdate("OpenAI Chat", message)

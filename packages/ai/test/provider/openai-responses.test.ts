@@ -1661,7 +1661,7 @@ describe("OpenAI Responses route", () => {
   for (const custom of [false, true]) {
     it.effect(`pairs reused ${custom ? "custom" : "function"} call IDs without colliding with later IDs`, () =>
       Effect.gen(function* () {
-        const messages = ["read:0", "read:0", "call_replay_1", "read:0"].flatMap((id, index) => [
+        const messages = ["read:0", "read:0", "000000000", "read:0"].flatMap((id, index) => [
           Message.assistant([
             ToolCallPart.make({
               id,
@@ -1687,7 +1687,7 @@ describe("OpenAI Responses route", () => {
         })
         const prepared = yield* compileRequest(replay)
         expect(prepared.body.input).toMatchObject(
-          ["read:0", "call_replay_2", "call_replay_1", "call_replay_3"].flatMap((id, index) => [
+          ["read:0", "000000001", "000000000", "000000002"].flatMap((id, index) => [
             {
               type: custom ? "custom_tool_call" : "function_call",
               call_id: id,

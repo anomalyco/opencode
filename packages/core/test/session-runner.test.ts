@@ -4824,7 +4824,7 @@ describe("SessionRunnerLLM", () => {
     expect(yield* s.context).toMatchObject(expected)
   })
 
-  scenario("preserves raw tool IDs across prompts and projection replay", function* (s) {
+  scenario("preserves stored tool IDs and disambiguates both wire protocols after projection replay", function* (s) {
     yield* s.llm.push(
       TestLLM.toolCall("read:0", "echo", { text: "first" }),
       [],
@@ -4859,6 +4859,35 @@ describe("SessionRunnerLLM", () => {
       { type: "tool-result", id: "read:0" },
       { type: "tool-call", id: "read:0" },
       { type: "tool-result", id: "read:0" },
+    ])
+    const request = s.requests.at(-1)
+    if (!request) throw new Error("Expected a replay request")
+    const chat: OpenAIChat.OpenAIChatBody = (yield* compileRequest({
+      ...request,
+      model: OpenAIChat.route.model({ id: "replay-test" }),
+    })).body
+    expect(
+      chat.messages.flatMap((message) =>
+        message.role === "assistant" ? (message.tool_calls?.map((call) => call.id) ?? []) : [],
+      ),
+    ).toEqual(["read:0", "000000000"])
+    expect(chat.messages.flatMap((message) => (message.role === "tool" ? [message.tool_call_id] : []))).toEqual([
+      "read:0",
+      "000000000",
+    ])
+    const responses: OpenAIResponses.OpenAIResponsesBody = (yield* compileRequest({
+      ...request,
+      model: OpenAIResponses.route.model({ id: "replay-test" }),
+    })).body
+    expect(
+      responses.input.flatMap((item) =>
+        item.type === "function_call" || item.type === "function_call_output" ? [[item.type, item.call_id]] : [],
+      ),
+    ).toEqual([
+      ["function_call", "read:0"],
+      ["function_call_output", "read:0"],
+      ["function_call", "000000000"],
+      ["function_call_output", "000000000"],
     ])
   })
 
