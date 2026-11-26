@@ -514,6 +514,34 @@ story("keeps toolbar focus rings whole and keyboard-only", async ({ mount, page 
   await expect(variant).toHaveCSS("outline-style", "none")
 })
 
+story("fits a long agent menu above the composer and scrolls it to the current agent", async ({ mount, page }) => {
+  await page.setViewportSize({ width: 1280, height: 600 })
+  const component = await mount("opencode-composer-flow--many-agents")
+  await page.evaluate(() => document.fonts.ready.then(() => undefined))
+  const option = (name: string) => page.getByRole("menuitemradio", { name, exact: true })
+
+  await component.getByRole("button", { name: "Choose agent" }).click()
+  const menu = page.getByRole("menu")
+  // A pointer open shows the current agent, deep in the list, without highlighting it.
+  await expect(menu).toBeFocused()
+  await expect(option("agent-28")).toBeInViewport({ ratio: 1 })
+  const box = (await menu.boundingBox())!
+  expect(box.y).toBeGreaterThanOrEqual(0)
+  expect(box.y + box.height).toBeLessThanOrEqual(600)
+
+  // Keys move the highlight to either end, and the list follows it.
+  await page.keyboard.press("Home")
+  await expect(option("build")).toBeFocused()
+  await expect(option("build")).toBeInViewport({ ratio: 1 })
+  await page.keyboard.press("End")
+  await expect(option("agent-40")).toBeFocused()
+  await expect(option("agent-40")).toBeInViewport({ ratio: 1 })
+
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2)
+  await page.mouse.wheel(0, -5000)
+  await expect(option("build")).toBeInViewport({ ratio: 1 })
+})
+
 story("keeps command selection on the keyboard until the pointer moves", async ({ mount, page }) => {
   const component = await mount("opencode-composer-flow--slash-suggestions")
 
@@ -809,6 +837,8 @@ story("keeps default thinking accessible by keyboard without composer hover", as
   await expect(control).toHaveText("high")
   await expect(control).toBeFocused()
   await page.keyboard.press("Enter")
+  await expect(page.getByRole("menuitemradio", { name: "high", exact: true })).toBeFocused()
+  await page.keyboard.press("Home")
   await expect(page.getByRole("menuitemradio", { name: "default", exact: true })).toBeFocused()
   await page.keyboard.press("Enter")
   await expect(control).toHaveText("default")

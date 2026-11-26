@@ -1194,21 +1194,38 @@ function ComposerEditorSelect(props: {
             <Menu.Portal>
               <Menu.Content
                 onCloseAutoFocus={focus.onCloseAutoFocus}
-                class={props.fitMenuToOptions ? "!min-w-0" : undefined}
+                // Kobalte's menu list ignores the radio value, so a long menu can open with the current option out of view.
+                onFocusIn={(event) => {
+                  if (event.relatedTarget instanceof Node && event.currentTarget.contains(event.relatedTarget)) return
+
+                  const current = event.currentTarget.querySelector('[role="menuitemradio"][data-checked]')
+
+                  if (!(current instanceof HTMLElement)) return
+
+                  // A pointer open focuses the menu itself and highlights no option, so only bring the current one into
+                  // view. A keyboard open highlights the first or last option; start on the current one instead, and
+                  // MenuScroll scrolls it into view.
+                  if (event.target === event.currentTarget) return current.scrollIntoView({ block: "nearest" })
+
+                  current.focus({ preventScroll: true })
+                }}
+                class={`max-h-[var(--kb-popper-content-available-height,calc(100dvh_-_16px))] overflow-hidden !p-0 ${props.fitMenuToOptions ? "!min-w-0" : ""}`}
               >
-                <Menu.RadioGroup value={props.current} onChange={props.onSelect}>
-                  <For each={props.options}>
-                    {(option) => (
-                      <Menu.RadioItem
-                        value={option.id}
-                        class={props.fitMenuToOptions ? "capitalize !gap-6" : "capitalize"}
-                        closeOnSelect
-                      >
-                        {option.label}
-                      </Menu.RadioItem>
-                    )}
-                  </For>
-                </Menu.RadioGroup>
+                <MenuScroll viewportClass="p-0.5 scroll-py-0.5">
+                  <Menu.RadioGroup value={props.current} onChange={props.onSelect}>
+                    <For each={props.options}>
+                      {(option) => (
+                        <Menu.RadioItem
+                          value={option.id}
+                          class={props.fitMenuToOptions ? "capitalize !gap-6" : "capitalize"}
+                          closeOnSelect
+                        >
+                          {option.label}
+                        </Menu.RadioItem>
+                      )}
+                    </For>
+                  </Menu.RadioGroup>
+                </MenuScroll>
               </Menu.Content>
             </Menu.Portal>
           </Menu>
