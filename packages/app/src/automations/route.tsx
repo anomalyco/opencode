@@ -85,7 +85,7 @@ export function AutomationsScreen() {
             <h2 class="text-14-medium text-v2-text-text-base">
               {language.t(
                 !controller.available()
-                  ? "automations.unavailable"
+                  ? "automations.off"
                   : controller.failed()
                     ? "automations.failed"
                     : controller.loading()

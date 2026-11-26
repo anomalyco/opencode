@@ -122,12 +122,12 @@ test("inspects event and timer automations and manages the selected row", async 
 test("hides every automation entry point while the experimental setting is off", async ({ page }) => {
   await mockWorkspace(page, { name: "Off", commands: [{ name: "automation" }] })
   await page.goto("/automations")
-  await expect(page.getByText("Automations aren’t available in your open projects.")).toBeVisible()
+  await expect(page.getByText("Turn on Automations in Settings → Experimental.")).toBeVisible()
   await expect(page.getByRole("button", { name: "Automations", exact: true })).toHaveCount(0)
   await expect(page.getByRole("button", { name: "New automation" })).toHaveCount(0)
 })
 
-test("discovers an enabled empty project and withdraws the entry when the server removes its command", async ({
+test("keeps the entry for an empty server and withdraws New automation when the server removes its command", async ({
   page,
 }) => {
   let enabled = true
@@ -144,9 +144,9 @@ test("discovers an enabled empty project and withdraws the entry when the server
   await push([
     { id: "evt_automation_disabled", created: 1, type: "command.updated", location: { directory }, data: {} },
   ])
-  await expect(page.getByText("Automations aren’t available in your open projects.")).toBeVisible()
-  await expect(page.getByRole("button", { name: "Automations", exact: true })).toHaveCount(0)
   await expect(page.getByRole("button", { name: "New automation" })).toHaveCount(0)
+  await expect(page.getByRole("heading", { name: "No automations yet" })).toBeVisible()
+  await expect(page.getByRole("button", { name: "Automations", exact: true })).toBeVisible()
 })
 
 test("manages a watch outside open locations and opens the recipient instead of its last viewed child", async ({

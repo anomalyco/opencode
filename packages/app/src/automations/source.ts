@@ -71,8 +71,8 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
       }),
     )
 
-    // The server registers /automation only where the effective flag is on. The shared catalog also
-    // handles command.updated after config changes. Older servers without the command stay hidden.
+    // The server registers /automation only where the effective flag is on, so it decides where
+    // New automation can open a draft. The shared catalog also handles command.updated after config changes.
     createEffect(() => {
       for (const { ctx, directories } of connections()) {
         for (const directory of directories) void ctx.data.location.command.sync({ directory }).catch(() => undefined)
@@ -123,7 +123,8 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
     return {
       enabled,
       entries,
-      available: () => entries().length > 0 || enabled().length > 0,
+      // Only the experimental setting hides the view; an empty server just shows no automations.
+      available: () => settings.general.automations(),
       multiServer: () => connections().length > 1,
       loading: () => queries.some((query) => query.isPending),
       failed: () =>

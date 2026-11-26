@@ -43,7 +43,7 @@ export const dict = {
   "automations.empty.title": "No automations yet",
   "automations.empty.description": "Describe a trigger and what should happen in a new session.",
   "automations.example": "Summarize open pull requests every weekday at 9 AM",
-  "automations.unavailable": "Automations aren’t available in your open projects.",
+  "automations.off": "Turn on Automations in Settings → Experimental.",
   "automations.loading": "Loading automations…",
   "automations.failed": "Couldn’t load automations.",
   "automations.empty.filtered": "No automations match your search.",
