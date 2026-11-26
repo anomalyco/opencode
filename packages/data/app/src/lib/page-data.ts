@@ -23,7 +23,15 @@ const DAY_MS = 86_400_000
 const NEW_MODEL_DAYS = 30
 const NEW_MODEL_LIMIT = 8
 
-export async function loadHomePage() {
+export async function loadHomePage(): Promise<HomePageData> {
+  if (import.meta.env.DEV && !process.env.DATA_DATABASE_HOST) {
+    const { loadPublicHomePage } = await import("./page-data.public")
+    return loadPublicHomePage()
+  }
+  return loadDatabaseHomePage()
+}
+
+async function loadDatabaseHomePage() {
   const [stats, catalog] = await Promise.all([runStatsEffect(getStatsHomeData()), loadModelCatalog()])
   const link = <T extends { model: string; provider: string }>(entry: T) => ({
     ...entry,
@@ -47,7 +55,7 @@ export async function loadHomePage() {
   }
 }
 
-export type HomePageData = Awaited<ReturnType<typeof loadHomePage>>
+export type HomePageData = Awaited<ReturnType<typeof loadDatabaseHomePage>>
 
 export async function loadLabPage(labParam: string) {
   const [catalog, home] = await Promise.all([loadModelCatalog(), runStatsEffect(getStatsHomeData())])
@@ -166,11 +174,15 @@ function newModelsFromCatalog(candidates: NewModelCandidate[], catalog: ModelCat
       // Count from launch: early access under the same name shows up before the release date.
       const launch = releaseDate > item.firstSeen ? releaseDate : item.firstSeen
       const daily = item.daily.filter((day) => day.date >= launch)
+      // Adds up each week's distinct users from the launch week on, so someone active in two weeks counts twice.
+      const weekly = item.weekly.filter((week) => Date.parse(week.week) + 6 * DAY_MS >= Date.parse(launch))
       return [
         {
           ...item,
+          free: catalog.freeModels.includes(item.model),
           releaseDate,
           daysLive: Math.round((Date.parse(latest) - Date.parse(launch)) / DAY_MS) + 1,
+          users: weekly.reduce((sum, week) => sum + week.users, 0),
           tokens: daily.reduce((sum, day) => sum + day.tokens, 0),
           sessions: daily.reduce((sum, day) => sum + day.sessions, 0),
           peakUsers: Math.max(0, ...daily.map((day) => day.users)),

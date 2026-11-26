@@ -1394,6 +1394,7 @@ test("lists slash commands in their built-in order", async ({ page }) => {
   await expect(page.locator('[data-component="composer-suggestions"] [data-suggestion-id] bdi')).toHaveText([
     "/init",
     "/review",
+    "/rename",
     "/new",
     "/undo",
     "/compact",

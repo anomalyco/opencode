@@ -33,6 +33,10 @@ function fixture(
   const [connected, setConnected] = createSignal(given.connected ?? true)
   const [ipc, setIpc] = createSignal(given.ipc ?? "active")
   const answered = Promise.withResolvers<void>()
+  // The sessions the server runs, as the test starts them.
+  const [running, setRunning] = createSignal<readonly string[]>([])
+  // The sessions whose details carry a desktop's browser grant, this window's or another's.
+  const [held, setHeld] = createSignal<readonly string[]>([])
 
   if (!given.slow) answered.resolve()
 
@@ -44,7 +48,13 @@ function fixture(
     },
     local: given.local ?? true,
     builtin: true,
-    data: { on: () => () => undefined, session: { status: () => "idle" } },
+    data: {
+      on: () => () => undefined,
+      session: {
+        status: (id: string) => (running().includes(id) ? "running" : "idle"),
+        get: (id: string) => ({ permissions: held().includes(id) ? [{ action: "browser", resource: "*", effect: "allow" }] : [] }),
+      },
+    },
   }
 
   const refs = ["ses_alpha", "ses_beta"].map((id) => ({
@@ -127,7 +137,7 @@ function fixture(
   // oxlint-disable-next-line anti-slop/no-chained-type-assertions -- see SAFETY above
   const sessions = refs.map((ref) => ref as unknown as SessionRef)
 
-  return { ...owned, sessions, route: setCurrent, refs, emit, send, rejections, setConnected, setIpc, answer: answered.resolve, registered: () => Array.from(bindings.keys()) }
+  return { ...owned, sessions, route: setCurrent, refs, emit, send, rejections, setConnected, setIpc, run: (id: string) => setRunning((ids) => [...ids, id]), hold: (id: string, value: boolean) => setHeld((ids) => (value ? [...ids, id] : ids.filter((item) => item !== id))), answer: answered.resolve, registered: () => Array.from(bindings.keys()), binding: (id: string) => bindings.get(id) }
 }
 
 // Runs the promise jobs queued so far, which the fake clock does not: more turns than a registration takes.
@@ -251,6 +261,77 @@ test("a prompt waits for a pane that is still starting, and for one whose server
     restore()
     starting.dispose()
     local.dispose()
+  }
+})
+
+// After the app starts only the routed session attaches. One in another tab has nobody to open it when the server
+// resumes it, or an automation or a finished job wakes it, and its agent lists the browser tools only once attached.
+test("a session in a tab nobody opened attaches once it runs", async () => {
+  const app = fixture()
+  const session = app.sessions[1]
+
+  try {
+    await turns()
+    expect(app.registered()).not.toContain(session.id)
+
+    app.run(session.id)
+    await turns()
+    expect(app.registered()).toContain(session.id)
+  } finally {
+    app.dispose()
+  }
+})
+
+// Another window that opens the session takes its browser, and main closes this window's binding as replaced. Nothing
+// took it back: the browser left the side panel's launchers and the agent's tools for as long as the app ran, with
+// the other window long closed.
+test("a session another window took stays on offer, and comes back with the person's prompt, not with a press", async () => {
+  const app = fixture()
+  const session = app.sessions[0]
+
+  try {
+    await turns()
+    app.emit(session.id, { tabs: [tab("a")], focusedTabID: tab("a").id })
+    // The grant this window's attachment wrote, which the other window's attachment keeps.
+    app.hold(session.id, true)
+    const first = app.binding(session.id)
+    app.send(session.id, { type: "state", state: null, error: "browser.pane.replaced" })
+    await turns()
+    expect(app.model.attached(session)).toBe(false)
+    expect(app.model.openable(session)).toBe(true)
+
+    // A press here must not fail the commands an agent has in flight in the window that holds the session.
+    document.dispatchEvent(new Event("pointerdown"))
+    await turns()
+    expect(app.binding(session.id)).toBe(first)
+
+    void app.model.ready(session, new AbortController().signal)
+    await turns()
+    expect(app.binding(session.id)).not.toBe(first)
+  } finally {
+    app.dispose()
+  }
+})
+
+test("a session another window took attaches again once that window lets it go", async () => {
+  const app = fixture()
+  const session = app.sessions[0]
+
+  try {
+    await turns()
+    app.emit(session.id, { tabs: [tab("a")], focusedTabID: tab("a").id })
+    app.hold(session.id, true)
+    const first = app.binding(session.id)
+    app.send(session.id, { type: "state", state: null, error: "browser.pane.replaced" })
+    await turns()
+    expect(app.binding(session.id)).toBe(first)
+
+    // The other window closed: the server revoked the grant its attachment held.
+    app.hold(session.id, false)
+    await turns()
+    expect(app.binding(session.id)).not.toBe(first)
+  } finally {
+    app.dispose()
   }
 })
 

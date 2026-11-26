@@ -46,6 +46,7 @@ import { Worktree } from "@opencode/schema/worktree"
 import { SessionID } from "@opencode/schema/session-id"
 import { SessionMessage } from "@opencode/schema/session-message"
 import {
+  ClientError,
   isFormAlreadySettledError,
   isFormNotFoundError,
   isMessageNotFoundError,
@@ -92,6 +93,9 @@ export type CreateDataInput = {
 }
 
 const messagePageLimit = 20
+// Sizes of the older pages that a new read of the newest page may read to reach the loaded history. They grow: a
+// short gap costs one small page, and the longest gap that is closed costs three requests.
+const bridgePageLimits = [20, 40, 140]
 // Trailing window for event bursts that each ask for the same refetch.
 export const settleMs = 150
 
@@ -121,6 +125,8 @@ type LocationData = {
   // once the command exits or is deleted, so this only ever holds in-flight shells.
   shell?: Record<string, ShellWithLocation>
   skill?: SkillInfo[]
+  // Resolved feature flags the server reports for clients; a flag not listed is off.
+  flags?: Record<string, boolean>
 }
 
 type Store = {
@@ -203,6 +209,31 @@ const hasDroppedFileData = (message: SessionMessageInfo) =>
   message.content.some(
     (part) => part.type === "tool" && "content" in part.state && !!part.state.content?.some(isDroppedFile),
   )
+
+// A message that later events still change. A client that missed those events holds it as it was.
+const unsettled = (message: SessionMessageInfo) =>
+  message.type === "assistant"
+    ? !message.time.completed ||
+      message.content.some(
+        (part) => part.type === "tool" && (part.state.status === "streaming" || part.state.status === "running"),
+      )
+    : (message.type === "shell" || message.type === "compaction") && message.status === "running"
+
+// Whether messages lie between the loaded history and a newer read of the transcript, both oldest first: neither
+// starts inside the other.
+function apart(history: SessionMessageInfo[], fetched: SessionMessageInfo[]) {
+  const oldest = history[0]
+  const first = fetched[0]
+  if (!oldest || !first) return false
+  return !history.some((item) => item.id === first.id) && !fetched.some((item) => item.id === oldest.id)
+}
+
+// The loaded messages older than a newer read of the transcript, or undefined when the read does not start inside
+// the loaded history.
+function before(history: SessionMessageInfo[], fetched: SessionMessageInfo[]) {
+  const at = history.findIndex((item) => item.id === fetched[0]?.id)
+  return at < 0 ? undefined : history.slice(0, at)
+}
 
 // Returns the same message when there is nothing to drop, so the store keeps its objects.
 function omitMessageFileData(message: SessionMessageInfo): SessionMessageInfo {
@@ -383,6 +414,13 @@ export function createData(config: CreateDataInput) {
     Object.values(store.session.info).toSorted((a, b) => b.time.updated - a.time.updated),
   )
   const messageIndex = new Map<string, Map<string, number>>()
+  // Sessions whose transcript starts at a known place in the server's: a page read, or the session's creation.
+  // Only these keep their older pages when the newest page is read again. A transcript that events alone built
+  // has no cursor to the messages before it.
+  const anchored = new Set<string>()
+  // Inputs by session that an inbox read stopped listing: delivered or cancelled while the event was missed. Their
+  // rows stay where they were admitted until a transcript read places or drops them.
+  const stranded = new Map<string, Set<string>>()
   const omitFiles = () =>
     typeof config.omitToolFileData === "function" ? config.omitToolFileData() : config.omitToolFileData === true
   const stored = (message: SessionMessageInfo) => (omitFiles() ? omitMessageFileData(message) : message)
@@ -714,6 +752,8 @@ export function createData(config: CreateDataInput) {
     sync.invalidate(`session.pending:${sessionID}`)
     sync.invalidate(`session.message:${sessionID}`)
     messageLoads.delete(sessionID)
+    anchored.delete(sessionID)
+    stranded.delete(sessionID)
     // Keep unacknowledged submissions until their echo or rollback settles them.
     const pending = store.session.pending[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
     const messages = store.session.message[sessionID]?.filter((item) => outbox.has(item.id)) ?? []
@@ -767,6 +807,8 @@ export function createData(config: CreateDataInput) {
     removeJobTree(sessionID)
     store.session.pending[sessionID]?.forEach((item) => outbox.delete(item.id))
     messageIndex.delete(sessionID)
+    anchored.delete(sessionID)
+    stranded.delete(sessionID)
     sync.invalidate(`session:${sessionID}`)
     sync.invalidate(`session.family:${sessionID}`)
     sync.invalidate(`session.pending:${sessionID}`)
@@ -831,6 +873,13 @@ export function createData(config: CreateDataInput) {
         )
         refresh(() => result.location.vcs.sync())
         refresh(() => result.project.sync())
+        Object.entries(store.location).forEach(([key, data]) => {
+          if (data.flags === undefined || dormantFlags.has(key)) return
+          const ref = JSON.parse(key) as [string, string | null]
+          const location = { directory: ref[0], workspaceID: ref[1] ?? undefined }
+          flags.invalidate(location)
+          refresh(() => flags.sync(location))
+        })
         Object.keys(store.jobTree).forEach((sessionID) => {
           result.job.invalidate(sessionID)
           refresh(() => result.job.sync(sessionID))
@@ -875,6 +924,7 @@ export function createData(config: CreateDataInput) {
         // hydration can load pending and projected messages atomically.
         sync.complete(`session.pending:${event.data.sessionID}`)
         sync.complete(`session.message:${event.data.sessionID}`)
+        anchored.add(event.data.sessionID)
         return
       case "session.deleted":
         markDeleted(event.data.sessionID)
@@ -1238,8 +1288,7 @@ export function createData(config: CreateDataInput) {
             error: event.data.error,
             input: typeof tool.state.input === "string" ? {} : tool.state.input,
             metadata: event.data.metadata,
-            content:
-              omitFiles() && event.data.content ? omitFileData(event.data.content) : event.data.content,
+            content: omitFiles() && event.data.content ? omitFileData(event.data.content) : event.data.content,
           }
           tool.executed = event.data.executed || tool.executed === true
           if (event.data.native) tool.native = { ...tool.native, ...event.data.native }
@@ -1539,6 +1588,9 @@ export function createData(config: CreateDataInput) {
       }
       case "config.updated":
         refreshLocation("config", result.location.config, location)
+        // Only a running location reports config.updated, so refetching its flags boots nothing.
+        dormantFlags.delete(locationKey(location))
+        refreshLocation("flags", flags, location)
         if (hasLocation("websearch", location)) refresh(() => result.location.websearch.refresh(location))
         break
       case "websearch.updated":
@@ -1555,6 +1607,12 @@ export function createData(config: CreateDataInput) {
       }
       case "mcp.resources.changed":
         refreshLocation("mcpResource", result.location.mcp.resource, location)
+        break
+      // Fetching here would boot the location again, so a location that was evicted for being idle never stays
+      // down. Its flags keep their last value until the next sync of the location.
+      case "location.shutdown":
+        dormantFlags.add(locationKey(location))
+        flags.invalidate(location)
         break
     }
   }
@@ -1610,6 +1668,34 @@ export function createData(config: CreateDataInput) {
 
   const vcs = locationResource("vcs", (location) => api().vcs.get({ location }))
   const usageLimits = locationResource("usageLimits", (location) => api().experimental.usage.limits({ location }))
+  // Locations whose flags were invalidated by location.shutdown; reconnects skip them until something syncs them again.
+  const dormantFlags = new Set<string>()
+  const [canonicalDirectory, setCanonicalDirectory] = createStore<Record<string, string>>({})
+  const canonicalRef = (location: LocationRef) => {
+    const directory = canonicalDirectory[location.directory]
+    return directory ? { directory, workspaceID: location.workspaceID } : location
+  }
+  // A server older than the flag endpoint answers it with a 404 and no JSON body: every flag is off there.
+  const flagResource = locationResource("flags", (location) =>
+    api()
+      .experimental.flag.get({ location })
+      .catch((error) => {
+        if (!missingEndpoint(error)) throw error
+        return { location: { directory: location.directory }, data: {} }
+      }),
+  )
+  const flags = {
+    list: (ref?: LocationRef) => {
+      const location = ref ?? defaultLocation()
+      return flagResource.list(location) ?? flagResource.list(canonicalRef(location))
+    },
+    sync: (ref?: LocationRef) => {
+      const location = canonicalRef(ref ?? defaultLocation())
+      dormantFlags.delete(locationKey(location))
+      return flagResource.sync(location)
+    },
+    invalidate: (ref?: LocationRef) => flagResource.invalidate(canonicalRef(ref ?? defaultLocation())),
+  }
   const shells = locationResource("shell", async (location) => {
     const response = await api().shell.list({ location })
     const ref = { directory: response.location.directory }
@@ -1792,6 +1878,9 @@ export function createData(config: CreateDataInput) {
               // know about yet.
               const inflight = (store.session.pending[sessionID] ?? []).filter((item) => outbox.has(item.id))
               const merged = inflight.length === 0 ? pending : [...pending, ...inflight]
+              const listed = new Set(merged.map((item) => item.id))
+              const dropped = result.session.input.list(sessionID).filter((id) => !listed.has(id))
+              if (dropped.length > 0) stranded.set(sessionID, new Set([...(stranded.get(sessionID) ?? []), ...dropped]))
               batch(() => {
                 setStore("session", "pending", sessionID, reconcile(merged))
                 merged.forEach(materializeInboxMessage)
@@ -1844,6 +1933,7 @@ export function createData(config: CreateDataInput) {
           sync.complete(`session.family:${id}`)
           sync.complete(`session.pending:${id}`)
           sync.complete(`session.message:${id}`)
+          anchored.add(id)
         }
         // Wrapped so even a synchronous client failure reaches the rollback.
         const request = Promise.resolve()
@@ -2038,7 +2128,16 @@ export function createData(config: CreateDataInput) {
         sync(sessionID: string) {
           return sync.run(`session.message:${sessionID}`, async () => {
             const started = deletionEpoch
-            const response = await api()
+            // The loaded messages that are where the server has them, oldest first. An input's row sits where it was
+            // admitted until its delivery moves it, so it is not history.
+            const history = () => {
+              if (!anchored.has(sessionID)) return []
+              const inputs = new Set(result.session.input.list(sessionID))
+              return (store.session.message[sessionID] ?? []).filter(
+                (item) => !outbox.has(item.id) && !inputs.has(item.id) && !stranded.get(sessionID)?.has(item.id),
+              )
+            }
+            const newest = await api()
               .message.list({
                 sessionID,
                 limit: config.initialMessageLimit?.() ?? messagePageLimit,
@@ -2046,7 +2145,32 @@ export function createData(config: CreateDataInput) {
               })
               .catch(evictMissing)
             if ((deletedAt.get(sessionID) ?? 0) > started) return
-            const fetched = response.data.toReversed().map(stored)
+            const pages = [newest]
+            const read = () => pages.flatMap((page) => page.data).toReversed()
+            // More than one page arrived while its events were missed, so messages lie between the newest page and
+            // the loaded history. Older pages close the gap. After a longer absence only the newest messages stay,
+            // as on a first read: the transcript never skips messages.
+            for (const limit of bridgePageLimits) {
+              const next = pages.at(-1)?.cursor.next
+              if (!next || !apart(history(), read())) break
+              pages.push(await api().message.list({ sessionID, limit, cursor: next }).catch(evictMissing))
+              if ((deletedAt.get(sessionID) ?? 0) > started) return
+            }
+            const fetched = read().map(stored)
+            // A kept message that was still running may have changed while its events were missed.
+            const refreshed = new Map(
+              (
+                await Promise.all(
+                  (before(history(), fetched) ?? []).filter(unsettled).map((item) =>
+                    api()
+                      .session.message.get({ sessionID, messageID: item.id })
+                      .then(stored)
+                      .catch((error) => (isMessageNotFoundError(error) ? undefined : evictMissing(error))),
+                  ),
+                )
+              ).flatMap((item) => (item ? [[item.id, item] as const] : [])),
+            )
+            if ((deletedAt.get(sessionID) ?? 0) > started) return
             // Same protection as the pending sync: a re-fetch racing an
             // admission must not wipe its local transcript row.
             const ids = new Set(fetched.map((item) => item.id))
@@ -2058,7 +2182,10 @@ export function createData(config: CreateDataInput) {
             const local = (store.session.message[sessionID] ?? []).filter(
               (item) => !ids.has(item.id) && (outbox.has(item.id) || admitted.has(item.id)),
             )
-            const messages = local.length === 0 ? fetched : [...fetched, ...local]
+            // The pages the reader loaded stay when the fetched messages start inside them: the messages before
+            // that point cannot have been removed, since a revert removes from its boundary to the end.
+            const kept = before(history(), fetched)?.map((item) => refreshed.get(item.id) ?? item)
+            const messages = [...(kept ?? []), ...fetched, ...local]
             // The transcript only holds delivered input, so a pending row it contains missed its
             // inbox.delivered event (and maybe its enqueued echo) while the event stream was down.
             const delivered = [...admitted].filter((id) => ids.has(id))
@@ -2067,9 +2194,12 @@ export function createData(config: CreateDataInput) {
                 outbox.delete(id)
                 removePending(sessionID, id)
               })
+              anchored.add(sessionID)
+              stranded.delete(sessionID)
               messageIndex.set(sessionID, new Map(messages.map((message, index) => [message.id, index])))
               setStore("session", "message", sessionID, reconcile(messages))
-              setStore("session", "messageCursor", sessionID, response.cursor.next ?? undefined)
+              // Kept pages keep the cursor to the page before them.
+              if (!kept) setStore("session", "messageCursor", sessionID, pages.at(-1)?.cursor.next ?? undefined)
             })
           })
         },
@@ -2125,6 +2255,8 @@ export function createData(config: CreateDataInput) {
               next = response.cursor.next ?? undefined
               if (!options?.all) break
             } while (next)
+            // A newer read replaced the transcript this page continues, so the page no longer adjoins it.
+            if (store.session.messageCursor[sessionID] !== cursor) return
             // A jump through history publishes once, not once per page of offscreen messages.
             const existing = store.session.message[sessionID] ?? []
             const ids = new Set(existing.map((item) => item.id))
@@ -2333,6 +2465,7 @@ export function createData(config: CreateDataInput) {
           const key = locationKey(location)
           if (!store.location[key]) setStore("location", key, {})
           setStore("location", key, "info", location)
+          if (location.directory !== current.directory) setCanonicalDirectory(current.directory, location.directory)
           if (!ref) {
             setDefaultLocation({ directory: location.directory })
           }
@@ -2342,6 +2475,7 @@ export function createData(config: CreateDataInput) {
         await result.location.syncInfo(ref)
         const location = ref ?? defaultLocation()
         await Promise.all([
+          flags.sync(location),
           result.location.vcs.sync(location),
           result.location.agent.sync(location),
           result.location.command.sync(location),
@@ -2370,10 +2504,15 @@ export function createData(config: CreateDataInput) {
         result.location.provider.invalidate(location)
         result.location.reference.invalidate(location)
         result.location.skill.invalidate(location)
+        flags.invalidate(location)
         result.shell.invalidate(location)
         result.session.form.invalidate("global", location)
       },
       vcs: { info: vcs.list, sync: vcs.sync, invalidate: vcs.invalidate },
+      flag(key: string, ref?: LocationRef) {
+        return flags.list(ref)?.[key] === true
+      },
+      flags: { list: flags.list, sync: flags.sync, invalidate: flags.invalidate },
       usage: { limits: usageLimits.list, sync: usageLimits.sync, invalidate: usageLimits.invalidate },
       agent: locationResource("agent", (location) => api().agent.list({ location })),
       command: locationResource("command", (location) => api().command.list({ location })),
@@ -2422,3 +2561,11 @@ export function createData(config: CreateDataInput) {
 }
 
 export type Data = ReturnType<typeof createData>
+
+// 404 is a declared status, so the client parses its body as a tagged error and fails on the old server's empty,
+// non-JSON body before it can report the status. Undeclared statuses such as 500 or 502 fail as UnexpectedStatus.
+function missingEndpoint(error: unknown) {
+  if (!(error instanceof ClientError)) return false
+  if (error.reason === "UnexpectedStatus") return (error.cause as { status?: number } | undefined)?.status === 404
+  return error.reason === "UnsupportedContentType"
+}

@@ -29,6 +29,7 @@ import { containsDirectory } from "@opencode/util/path"
 import { isWorkspaceDirectory } from "@/workspaces/paths"
 import { parseCommentNote, readPromptPresentation } from "@/composer/comment-note"
 import { parseVoiceDelegation } from "./voice-delegation"
+import { inlineQuotes } from "./inline-quotes"
 import { useCommand } from "@/shell/commands/command"
 import { usePluginScoped } from "@/runtime/plugin/commands"
 import {
@@ -262,6 +263,10 @@ function MessageTimelineView(
         )
       }
 
+      // Finished thoughts one after another start closed like one thought, and open as their first does.
+      if (Predicate.isTagged(row, "AssistantPart") && row.group.type === "thought")
+        return !disclosure[row.group.refs[0]!.partID]
+
       if (!Predicate.isTagged(row, "AssistantPart") || row.group.type !== "part") return false
       const message = messageByID().get(row.group.ref.messageID)
 
@@ -296,10 +301,21 @@ function MessageTimelineView(
             id: "session.rename",
             category: language.t("command.category.session"),
             title: language.t("command.session.rename"),
+            description: language.t("command.session.rename.description"),
             keybind: "ctrl+r",
+            slash: "rename",
+            slashArguments: true,
             disabled: !sessionID() || !!parentID() || title().editing,
             skip: (event) => pluginScoped(event.target),
-            onSelect: props.title.edit,
+            onSelect: (source, input) => (source === "slash" ? props.title.set(input ?? "") : props.title.edit()),
+          },
+          {
+            id: "session.title.generate",
+            category: language.t("command.category.session"),
+            title: language.t("command.session.title.generate"),
+            description: language.t("command.session.title.generate.description"),
+            disabled: !sessionID() || !!parentID() || title().editing || props.title.generating(),
+            onSelect: () => props.title.set(""),
           },
           {
             id: "session.delete",
@@ -319,6 +335,7 @@ function MessageTimelineView(
 
   const rowInput = {
     foldUserMessages: settings.general.foldUserMessages,
+    inlineQuotes: () => inlineQuotes,
     sessionID: () => sessionID()!,
     status: sessionStatus,
     projection,
@@ -343,14 +360,16 @@ function MessageTimelineView(
     revealPart: virtualized.revealPart,
   }
 
-  const rowRenderer = props.next
-    ? createNextTimelineRowRenderer(rowInput)
-    : createSessionTimelineRowRenderer({
-        ...rowInput,
-        reasoningMode: props.data.reasoningMode,
-        shellToolDefaultOpen: props.data.shellToolPartsExpanded,
-        editToolDefaultOpen: props.data.editToolPartsExpanded,
-      })
+  const nextRenderer = props.next ? createNextTimelineRowRenderer(rowInput) : undefined
+
+  const rowRenderer =
+    nextRenderer ??
+    createSessionTimelineRowRenderer({
+      ...rowInput,
+      reasoningMode: props.data.reasoningMode,
+      shellToolDefaultOpen: props.data.shellToolPartsExpanded,
+      editToolDefaultOpen: props.data.editToolPartsExpanded,
+    })
 
   const blockingPartID = createMemo(() => {
     const blocking = new Set(props.background.blocking().map((task) => task.partID))
@@ -575,7 +594,13 @@ function MessageTimelineView(
             // row: Working hides and returns several times in one step, and each change would move that input 36px.
             const shown = createMemo((was) => was || working() || backgroundHintPresence.present(), false)
 
-            return <Show when={shown()}>{activity(() => true, true)}</Show>
+            // In the New timeline the row above holds a row's gap. A waiting message brings a turn gap for that;
+            // a queued compaction has none, so this row holds its gap, whether or not live status shows.
+            return (
+              <div data-timeline={nextRenderer && "next"} data-timeline-gap={nextRenderer?.gap(row())}>
+                <Show when={shown()}>{activity(() => true, true)}</Show>
+              </div>
+            )
           }}
         </Show>
       )}
@@ -674,7 +699,9 @@ function MessageTimelineView(
                         class="truncate hover:bg-v2-overlay-simple-overlay-hover"
                         onClick={props.title.edit}
                       >
-                        {childTitle()}
+                        <Show when={props.title.generating()} fallback={childTitle()}>
+                          <TextShimmer text={childTitle() ?? ""} active />
+                        </Show>
                       </button>
                     </h1>
                   }

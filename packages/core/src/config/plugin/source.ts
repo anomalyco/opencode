@@ -61,6 +61,7 @@ export const layer = Layer.effect(
         const updates = yield* watcher.subscribe({
           path: operation.target,
           type: (yield* fs.isDir(operation.target)) ? "directory" : "file",
+          ignore: FSUtil.ignoreGlobs,
         })
         yield* updates.pipe(
           Stream.runForEach(() => PubSub.publish(configuredChanges, undefined)),

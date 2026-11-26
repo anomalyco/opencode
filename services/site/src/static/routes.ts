@@ -16,6 +16,7 @@ export const staticPaths = [
   "/mini",
   "/legal",
   "/legal/privacy-policy",
+  "/legal/refund-policy",
   "/legal/terms-of-service",
   "/brand",
   "/press",

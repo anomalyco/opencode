@@ -1,5 +1,4 @@
 import { expect, test } from "bun:test"
-import type { WorktreeDirectory } from "@opencode/client/promise"
 import {
   createLocationMissingState,
   selectLocationMissingView,
@@ -9,11 +8,9 @@ import {
   type LocationMissingState,
 } from "./location-missing-machine"
 
-const missing = "/repo/.worktrees/gone"
+const sibling = "/repo/.worktrees/sibling"
 
-const sibling: WorktreeDirectory = { directory: "/repo/.worktrees/sibling", strategy: "git" }
-
-function replay(events: LocationMissingEvent[], from = createLocationMissingState([])) {
+function replay(events: LocationMissingEvent[], from = createLocationMissingState()) {
   return events.reduce<{ state: LocationMissingState; effects: readonly LocationMissingEffect[] }>(
     (current, event) => transitionLocationMissing(current.state, event),
     { state: from, effects: [] },
@@ -26,10 +23,9 @@ test("an open directory picker refuses a second picker or a worktree move, and i
   const picking = replay([{ type: "choose.requested" }])
 
   expect(picking.effects).toEqual([{ type: "picker.open", attempt: 1 }])
-  expect(selectLocationMissingView(picking.state, missing).disabled).toBe(true)
+  expect(selectLocationMissingView(picking.state).disabled).toBe(true)
   expect(transitionLocationMissing(picking.state, { type: "choose.requested" }).state).toBe(picking.state)
-  expect(transitionLocationMissing(picking.state, { type: "menu.toggled", open: true }).state).toBe(picking.state)
-  expect(transitionLocationMissing(picking.state, { type: "move.worktree", directory: sibling.directory }).state).toBe(
+  expect(transitionLocationMissing(picking.state, { type: "move.worktree", directory: sibling }).state).toBe(
     picking.state,
   )
 
@@ -52,7 +48,7 @@ test("a picked folder moves the session once", () => {
   ])
 
   expect(picked.effects).toEqual([{ type: "move.run", attempt: 2, directory: "/elsewhere" }])
-  expect(selectLocationMissingView(picked.state, missing).pendingDirectory).toBe(true)
+  expect(selectLocationMissingView(picked.state).pendingDirectory).toBe(true)
   expect(
     transitionLocationMissing(picked.state, {
       type: "picker.settled",
@@ -70,41 +66,15 @@ test("a move the server accepted keeps the controls busy until the notice unmoun
 
   const moved = transitionLocationMissing(moving.state, { type: "move.succeeded", attempt: 1 })
 
-  expect(moved.effects).toEqual([{ type: "timer.start", attempt: 1, phase: "moved" }])
-  expect(selectLocationMissingView(moved.state, missing)).toMatchObject({ pendingWorktree: true, disabled: true })
+  expect(moved.effects).toEqual([{ type: "timer.start", attempt: 1 }])
+  expect(selectLocationMissingView(moved.state)).toMatchObject({ pendingWorktree: true, disabled: true })
   expect(transitionLocationMissing(moved.state, { type: "move.worktree" }).state).toBe(moved.state)
   expect(transitionLocationMissing(moved.state, { type: "choose.requested" }).state).toBe(moved.state)
 
   const settled = transitionLocationMissing(moved.state, { type: "move.settle-timed-out", attempt: 1 })
 
   expect(settled.state).toMatchObject({ status: "idle" })
-  expect(selectLocationMissingView(settled.state, missing).disabled).toBe(false)
-})
-
-test("the worktree menu shows the worktrees it already has, and a stalled load ends with an error", () => {
-  const cached = replay([{ type: "menu.toggled", open: true }], createLocationMissingState([sibling]))
-
-  expect(cached.effects).toEqual([
-    { type: "worktrees.load", attempt: 1 },
-    { type: "timer.start", attempt: 1, phase: "menu-loading" },
-  ])
-  expect(selectLocationMissingView(cached.state, missing)).toMatchObject({
-    menuOpen: true,
-    menuLoading: false,
-    visibleWorktrees: [sibling],
-  })
-
-  const empty = replay([{ type: "menu.toggled", open: true }])
-
-  expect(selectLocationMissingView(empty.state, missing).menuLoading).toBe(true)
-
-  const timedOut = transitionLocationMissing(empty.state, { type: "worktrees.timed-out", attempt: 1 })
-
-  expect(timedOut.state).toMatchObject({ status: "menu-ready" })
-  expect(timedOut.effects).toEqual([{ type: "timer.cancel" }, { type: "toast.worktrees-failed" }])
-  expect(
-    transitionLocationMissing(timedOut.state, { type: "worktrees.loaded", attempt: 1, items: [sibling] }).state,
-  ).toBe(timedOut.state)
+  expect(selectLocationMissingView(settled.state).disabled).toBe(false)
 })
 
 test("a cancelled pick or failed move returns focus to Choose directory once no dialog covers it", () => {

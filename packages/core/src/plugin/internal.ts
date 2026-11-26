@@ -87,6 +87,7 @@ import { GlobTool } from "../tool/plugin/glob.js"
 import { GrepTool } from "../tool/plugin/grep.js"
 import { ImageGenerateTool } from "../tool/plugin/image-generate.js"
 import { VideoGenerateTool } from "../tool/plugin/video-generate.js"
+import { CdTool } from "../tool/plugin/cd.js"
 import { MachineTools } from "../tool/plugin/machine.js"
 import { McpEventTools } from "../tool/plugin/mcp-events.js"
 import { McpResourceTools } from "../tool/plugin/mcp-resource.js"
@@ -100,6 +101,8 @@ import { SessionSearchTools } from "../tool/plugin/session-search.js"
 import { ShellTool } from "../tool/plugin/shell.js"
 import { SkillTool } from "../tool/plugin/skill.js"
 import { SubagentTool } from "../tool/plugin/subagent.js"
+import { CodeModeAgentsPlugin } from "../tool/plugin/codemode-agents.js"
+import { CodeModeAgents } from "../codemode/agents.js"
 import { TodoTool } from "../tool/plugin/todo.js"
 import { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
@@ -109,6 +112,8 @@ import { WellKnown } from "../wellknown.js"
 import { WriteTool } from "../tool/plugin/write.js"
 import { AgentPlugin } from "./agent.js"
 import BrowserPlugin from "@opencode/plugin-browser"
+import { BrowserTunnelHost } from "@opencode/plugin-browser/experimental/tunnel-host"
+import { BrowserTunnelGateway } from "../experimental/browser-tunnel.js"
 import { CommandPlugin } from "./command.js"
 import { IdentityPlugin } from "./identity.js"
 import { ForkNoticePlugin } from "./fork-notice.js"
@@ -122,6 +127,7 @@ import { DynamicProviderPlugin } from "./provider/dynamic.js"
 import { OpencodePlugin } from "./provider/opencode.js"
 import { WebSearchPlugins } from "./websearch/index.js"
 import { SkillPlugin } from "./skill.js"
+import { McpSkillPlugin } from "./mcp-skill.js"
 import { VcsHgPlugin } from "./vcs/hg.js"
 import { ToolInputRepairPlugin } from "./tool-input-repair.js"
 import { OptimizePlugin } from "./optimize.js"
@@ -137,7 +143,9 @@ const services = [
   FetchHttpClient.Fetch,
   Artifact.Service,
   AppProcess.Service,
+  BrowserTunnelGateway.Service,
   BlobStore.Service,
+  CodeModeAgents.Service,
   Provider.Service,
   Model.Service,
   Command.Service,
@@ -201,7 +209,9 @@ export const requirements = LayerNode.group([
   App.node,
   Artifact.node,
   AppProcess.node,
+  BrowserTunnelGateway.node,
   BlobStore.node,
+  CodeModeAgents.node,
   Provider.node,
   Model.node,
   Command.node,
@@ -296,12 +306,14 @@ const pre = [
   ReadTool.Plugin,
   ArtifactTools.Plugin,
   AutomationTools.Plugin,
+  CdTool.Plugin,
   MachineTools.Plugin,
   SessionInterruptTool.Plugin,
   SessionSearchTools.Plugin,
   ShellTool.Plugin,
   SkillTool.Plugin,
   SubagentTool.Plugin,
+  CodeModeAgentsPlugin.Plugin,
   TodoTool.Plugin,
   WebFetchTool.Plugin,
   WebSearchTool.Plugin,
@@ -325,6 +337,7 @@ const post = [
   ConfigToolOutputPlugin.Plugin,
   ConfigCompatibilityPlugin.Plugin,
   ConfigSkillPlugin.Plugin,
+  McpSkillPlugin.Plugin,
   ConfigProviderPlugin.Plugin,
   // Run the dynamic npm SDK loader after SDK, instance, and external plugins register their `sdk` hooks.
   DynamicProviderPlugin,
@@ -339,12 +352,20 @@ export const guarded: ReadonlySet<string> = new Set([OpencodePlugin.id, ConfigPo
 export const list = Effect.fn("PluginInternal.list")(function* () {
   // Capture only services; activation supplies the child Scope and batching context.
   const context = Context.pick(...services)(yield* Effect.context<Requirements>())
+  const gateway = Context.get(context, BrowserTunnelGateway.Service)
+  const flags = Context.get(context, Flag.Service)
+  const browserContext = Context.add(
+    context,
+    BrowserTunnelHost.Reference,
+    gateway.hostForLocation(flags.enabled("browser_stream_tunnel")),
+  )
   const resolve = (plugins: readonly InternalPlugin[]) =>
     plugins.map(
       (plugin) =>
         ({
           id: plugin.id,
-          effect: (host) => plugin.effect(host).pipe(Effect.provide(context)),
+          effect: (host) =>
+            plugin.effect(host).pipe(Effect.provide(plugin.id === BrowserPlugin.id ? browserContext : context)),
           revision: "internal",
           source: { type: "builtin" },
         }) satisfies Generation,

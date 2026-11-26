@@ -10,6 +10,7 @@ import { ChildProcess } from "effect/process"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Base, BranchList, FileStatus, Info, Mode } from "@opencode/schema/vcs"
 import { AppProcess } from "@opencode/util/process"
+import { Environment } from "../../environment/index.js"
 import { Location } from "../../location.js"
 import type { Adapter, BranchOptions, DiffOptions, Untracked } from "../../vcs.js"
 import { DiffError } from "../../vcs.js"
@@ -27,6 +28,8 @@ import type { Patch } from "../../vcs/patch.js"
 export const Plugin = define({
   id: "opencode.vcs.git",
   effect: Effect.fn("VcsGitPlugin")(function* (ctx) {
+    const environment = yield* Environment.Service
+    if (!environment.local) return
     const location = yield* Location.Service
     // Markerless locations need this definition to initialize their first repository.
     if (location.vcs && location.vcs.type !== "git") return
@@ -258,19 +261,27 @@ function makeGit(proc: AppProcess.Interface, env?: Record<string, string>) {
   const branches = Effect.fn("VcsGit.branches")(function* (cwd: string, options?: BranchOptions) {
     const search = options?.search?.trim().toLowerCase()
     // `refname:short` collapses `refs/remotes/<remote>/HEAD` to the bare remote name, so strip the namespace
-    // instead. Search and limit apply here because ref globs cannot cross `/` and `--count` precedes the filter.
+    // and exclude symbolic refs via `%(symref)` instead of filtering `/HEAD` suffixes. Search and limit apply
+    // here because ref globs cannot cross `/` and `--count` precedes the filter.
     return (yield* lines(
       [
         "for-each-ref",
         "--sort=refname",
         "--sort=-committerdate",
-        "--format=%(refname:lstrip=2)",
+        "--format=%(refname:lstrip=2)%00%(symref)",
         "refs/heads",
         "refs/remotes",
       ],
       { cwd },
     ))
-      .filter((item) => !item.endsWith("/HEAD") && (!search || item.toLowerCase().includes(search)))
+      .flatMap((line) => {
+        const sep = line.indexOf("\0")
+        if (sep === -1) return []
+        const name = line.slice(0, sep)
+        if (!name || line.slice(sep + 1)) return []
+        if (search && !name.toLowerCase().includes(search)) return []
+        return [name]
+      })
       .slice(0, options?.limit) satisfies BranchList
   })
 

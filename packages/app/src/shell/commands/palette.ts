@@ -270,7 +270,8 @@ export function createCommandPaletteCommandEntry(option: CommandOption, category
 
 export function createServerSessionEntries(props: {
   server: ServerConnection.Key
-  archived?: boolean
+  /** Typed searches also match archived sessions, marked `archived` so their rows dim. Recent rows never list them. */
+  includeArchived?: boolean
   known?: () => SessionInfo[]
   /** Hides sessions deleted since they were loaded and adds a pending send's bump. */
   apply?: (sessions: SessionInfo[]) => SessionInfo[]
@@ -382,7 +383,7 @@ export function createServerSessionEntries(props: {
     const category = search ? props.category() : props.recentCategory()
 
     return sessions.flatMap((session) => {
-      if (!!session.time.archived !== !!props.archived) return []
+      if (session.time.archived && !(search && props.includeArchived)) return []
 
       const project = projectForSession(session, projects)
 
@@ -397,6 +398,7 @@ export function createServerSessionEntries(props: {
           sessionID: session.id,
           server: props.server,
           project,
+          archived: session.time.archived,
           updated: session.time.updated,
         },
       ]
@@ -430,7 +432,13 @@ export function createServerSessionEntries(props: {
     items(text: string) {
       const search = text.trim()
 
-      if (!search) return entries(known().slice(0, props.recentLimit ?? ENTRY_LIMIT), search)
+      if (!search)
+        return entries(
+          known()
+            .filter((session) => !session.time.archived)
+            .slice(0, props.recentLimit ?? ENTRY_LIMIT),
+          search,
+        )
 
       // The server matches titles, so narrow the loaded sessions before building entries for them. Building an entry
       // per known session on every keystroke is what made search slow once the loaded index grew.

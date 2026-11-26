@@ -57,7 +57,7 @@ import { scriptFileFact, type FileFact } from "../timeline/facts"
 import { diffOpens, placeContent } from "../timeline/place"
 import { goal as goalMessage, movedInPlace, thoughtOpens, toolRule } from "./rules"
 import { Separator } from "./separator"
-import { timelineGaps } from "./spacing"
+import { timelineGaps, type TimelineGap } from "./spacing"
 import { AssistantContent } from "./tools/assistant-content"
 import { ContextGroup, type ActivityGroupPart } from "./tools/context-group"
 import { FileGroup } from "./tools/file-group"
@@ -93,6 +93,7 @@ export function createNextTimelineRowRenderer(input: {
   actions?: SessionUserActions
   timelineDetail: Accessor<TimelineDetail>
   foldUserMessages?: Accessor<boolean>
+  inlineQuotes?: Accessor<boolean>
   disclosure: {
     value: (key: string) => boolean | undefined
     set: (key: string, open: boolean) => void
@@ -440,6 +441,39 @@ export function createNextTimelineRowRenderer(input: {
       )
     }
 
+    if (row().group.type === "thought") {
+      const parts = createMemo(() => {
+        const group = row().group
+
+        if (group.type !== "thought") return []
+        const contents = indexGroupContents(group.refs)
+
+        return group.refs.flatMap((ref) => {
+          const content = contents.get(ref.messageID)?.get(ref.partID)
+
+          return content?.type === "reasoning" ? [{ ...content, id: ref.partID }] : []
+        })
+      })
+
+      // Opening the thoughts is remembered by the first one, as it was while they were live.
+      const key = () => {
+        const group = row().group
+
+        return group.type === "thought" ? group.refs[0]!.partID : group.key
+      }
+
+      return (
+        <ThoughtRow
+          parts={parts()}
+          streaming={false}
+          defaultOpen={thoughtOpens(input.timelineDetail(), false)}
+          open={input.disclosure.value(key())}
+          onOpenChange={(open) => input.disclosure.set(key(), open)}
+          onContentRendered={onSizeChange}
+        />
+      )
+    }
+
     if (row().group.type === "events" || row().group.type === "subagent") {
       const events = createMemo(() => {
         const group = row().group
@@ -751,10 +785,10 @@ export function createNextTimelineRowRenderer(input: {
 
   const gaps = createMemo(() => timelineGaps(input.projection.rows(), input.projection.messageByID()))
 
-  // Each row's space above comes from its block, and none of its own. A message joining the user's message above
-  // already sits its run's 4 px below it.
-  const gap = (row: FramedTimelineRow) => {
-    if (Predicate.isTagged(row, "UserMessage") && runs().get(row.userMessageID)?.above) return undefined
+  // Each row's only space is the gap below it, which sets the row below apart. A message joining the user's message
+  // above sits its run's 4 px below it instead, which its turn gap springs to.
+  const gap = (row: TimelineRow.TimelineRow) => {
+    if (Predicate.isTagged(row, "TurnGap") && runs().get(row.userMessageID)?.above) return undefined
 
     return gaps().get(TimelineRow.key(row))
   }
@@ -1137,8 +1171,10 @@ export function createNextTimelineRowRenderer(input: {
     )
   }
 
-  // A run's messages sit as close as the iOS app's (4 px); the gap springs as a message joins or leaves.
-  function TurnGap(props: { messageID: string }) {
+  // Holds the gap above its turn's first row, so the gap arrives and leaves with the turn and no row beside it
+  // changes. A run's messages sit as close as the iOS app's (4 px) instead; that gap springs as a message joins or
+  // leaves.
+  function TurnGap(props: { messageID: string; gap?: TimelineGap }) {
     let element: HTMLDivElement | undefined
     const joined = run(props.messageID)
     springStyle(
@@ -1154,7 +1190,9 @@ export function createNextTimelineRowRenderer(input: {
     return (
       <div
         ref={element}
+        data-timeline="next"
         data-timeline-row="TurnGap"
+        data-timeline-gap={props.gap}
         aria-hidden="true"
         style={{ height: untrack(joined)?.above ? "4px" : "0px" }}
       />
@@ -1162,7 +1200,7 @@ export function createNextTimelineRowRenderer(input: {
   }
 
   const render = (row: Accessor<TimelineRow.TimelineRow>, onSizeChange?: () => void) => {
-    if (Predicate.isTagged(row(), "TurnGap")) return <TurnGap messageID={row().userMessageID} />
+    if (Predicate.isTagged(row(), "TurnGap")) return <TurnGap messageID={row().userMessageID} gap={gap(row())} />
 
     // The host owns live status and renders this slot itself.
     if (Predicate.isTagged(row(), "Activity")) return null
@@ -1219,6 +1257,7 @@ export function createNextTimelineRowRenderer(input: {
                         )
                       }
                       fold={input.foldUserMessages?.()}
+                      inlineQuotes={input.inlineQuotes?.()}
                       expanded={input.disclosure.value(`user-expanded:${message().id}`)}
                       onExpandedChange={(open) => input.disclosure.set(`user-expanded:${message().id}`, open)}
                     />
@@ -1318,9 +1357,7 @@ export function createNextTimelineRowRenderer(input: {
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
-            <div data-slot="session-turn-assistant-content" aria-hidden={phase(current().userMessageID).live}>
-              {content}
-            </div>
+            <div data-slot="session-turn-assistant-content">{content}</div>
           </div>
         </Frame>
       )
@@ -1335,31 +1372,36 @@ export function createNextTimelineRowRenderer(input: {
         return value
       }
 
-      const content = createMemo(() => {
-        const ref = current().ref
-        const content = resolveContent(input.projection.messageByID().get(ref.messageID), ref.partID)
+      const parts = createMemo(() => {
+        const streaming = phase(current().userMessageID).streamingReasoningRef
 
-        return content?.type === "reasoning" ? content : undefined
+        return [...(current().before ?? []), current().ref].flatMap((ref) => {
+          const content = resolveContent(input.projection.messageByID().get(ref.messageID), ref.partID)
+
+          return content?.type === "reasoning"
+            ? [{ ...content, id: ref.partID, streaming: sameRef(streaming, ref) }]
+            : []
+        })
       })
 
-      // The live thought stands in for the status line. It streams in view, and the row it settles into starts closed.
+      const disclosureKey = () => (current().before?.[0] ?? current().ref).partID
+
+      // The live thought stands in for the status line, with the thoughts it follows. It reads as Thinking until
+      // something else shows, and the row it settles into starts closed.
 
       return (
         <Frame row={current()}>
           <div data-slot="session-turn-message-container" class={`w-full ${padding()}`}>
             <div data-slot="session-turn-thinking-row" data-live-slot="">
-              <Show when={content()}>
-                {(content) => (
-                  <ThoughtRow
-                    id={current().ref.partID}
-                    content={content()}
-                    streaming
-                    defaultOpen={thoughtOpens(input.timelineDetail(), true)}
-                    open={input.disclosure.value(current().ref.partID) ?? thoughtOpens(input.timelineDetail(), true)}
-                    onOpenChange={(open) => input.disclosure.set(current().ref.partID, open)}
-                    onContentRendered={onSizeChange}
-                  />
-                )}
+              <Show when={parts().length > 0}>
+                <ThoughtRow
+                  parts={parts()}
+                  streaming
+                  defaultOpen={thoughtOpens(input.timelineDetail(), true)}
+                  open={input.disclosure.value(disclosureKey()) ?? thoughtOpens(input.timelineDetail(), true)}
+                  onOpenChange={(open) => input.disclosure.set(disclosureKey(), open)}
+                  onContentRendered={onSizeChange}
+                />
               </Show>
             </div>
           </div>
@@ -1567,7 +1609,7 @@ export function createNextTimelineRowRenderer(input: {
     )
   }
 
-  return { Row }
+  return { Row, gap }
 }
 
 function capitalizeAgent(agent: string) {

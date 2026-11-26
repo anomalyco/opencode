@@ -159,10 +159,11 @@ function parseAdd(
         }),
       }
     }
-    content.push(lines[index]!.slice(1))
+    // Every + line is a whole line of the file, as in Codex, so a final empty + line is a blank last line.
+    content.push(`${lines[index]!.slice(1)}\n`)
     index++
   }
-  return { content: content.join("\n"), next: index }
+  return { content: content.join(""), next: index }
 }
 
 function parseUpdate(

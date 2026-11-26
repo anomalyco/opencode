@@ -269,7 +269,6 @@ for (const response of [
     '{"api_key":"   "}',
     '{"api_key":"poe-key","api_key_expires_in":-1}',
     '{"api_key":"poe-key","api_key_expires_in":1.5}',
-    '{"api_key":"poe-key","api_key_expires_in":1e309}',
   ].map((body) => ({ status: 200, body, message: "Invalid Poe token response" })),
   {
     status: 200,

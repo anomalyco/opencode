@@ -2,10 +2,10 @@ import { Service, type Endpoint, type EnsureOptions } from "@opencode/client/eff
 import { ClientError, isUnauthorizedError, OpenCode } from "@opencode/client/promise"
 import { OPENCODE_VERSION } from "../version"
 import { Effect, Option, Redacted } from "effect"
-import { Server as ServerFlag, Standalone as StandaloneFlag } from "../commands/commands"
+import { Server, Standalone } from "../commands/commands"
 import { Env } from "../env"
 import { ServiceConfig } from "./service-config"
-import { Standalone } from "./standalone"
+import { start } from "./standalone"
 import { errorMessage } from "../util/error"
 
 export type Args = {
@@ -25,8 +25,8 @@ export type Resolved = {
 }
 
 export const resolve = Effect.fn("cli.server-connection.resolve")(function* (args: Args = {}) {
-  const serverFlag = yield* Effect.serviceOption(ServerFlag).pipe(Effect.map(Option.flatten))
-  const standaloneFlag = yield* Effect.serviceOption(StandaloneFlag)
+  const serverFlag = yield* Effect.serviceOption(Server).pipe(Effect.map(Option.flatten))
+  const standaloneFlag = yield* Effect.serviceOption(Standalone)
   const server = args.server ?? Option.getOrUndefined(serverFlag)
   const standalone = args.standalone ?? Option.getOrElse(standaloneFlag, () => false)
   if (server !== undefined && standalone)
@@ -49,14 +49,14 @@ export const resolve = Effect.fn("cli.server-connection.resolve")(function* (arg
     return { endpoint } satisfies Resolved
   }
   if (standalone || (yield* ServiceConfig.read()).disabled === true) {
-    return { endpoint: yield* Standalone.start(), standalone: true } satisfies Resolved
+    return { endpoint: yield* start(), standalone: true } satisfies Resolved
   }
 
   const mismatch = args.mismatch ?? "ignore"
   const options = yield* ServiceConfig.options({ checkVersion: mismatch !== "ignore" })
   if (args.autostart === false) {
     const endpoint = yield* Service.discover({ ...options, version: undefined })
-    if (!endpoint) return { endpoint: yield* Standalone.start(), standalone: true } satisfies Resolved
+    if (!endpoint) return { endpoint: yield* start(), standalone: true } satisfies Resolved
     return { endpoint, service: managedService(options) } satisfies Resolved
   }
   return {

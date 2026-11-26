@@ -22,7 +22,7 @@ import { Effect, Layer, Schedule, Stream } from "effect"
 import { advance } from "./lib/clock"
 import { testEffect } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
-import { executeTool, toolDefinitions, toolIdentity } from "./lib/tool"
+import { executeTool, toolIdentity } from "./lib/tool"
 import { makePluginTestLayer } from "./plugin/fixture"
 
 const PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
@@ -139,8 +139,8 @@ const configure = (video_generate: ConfigExperimental.Info["video_generate"]) =>
     yield* bus.publish(Event.Updated, {})
   })
 
-const registered = Tool.Service.use((registry) => toolDefinitions(registry)).pipe(
-  Effect.map((tools) => tools.some((tool) => tool.name === VideoGenerateTool.name)),
+const registered = Tool.Service.use((registry) => registry.list()).pipe(
+  Effect.map((tools) => tools.some((tool) => tool.name === VideoGenerateTool.name && tool.options?.codemode === true)),
 )
 // Catalog and config changes reach the tool through events, so wait for them instead of a fixed delay.
 const until = (expected: boolean) =>
@@ -185,9 +185,17 @@ describe("generate_video", () => {
       })
       const file = path.join(directory, "kite.mp4")
       const second = path.join(directory, "kite-1.mp4")
-      const id = result.output.id
+      const id = String(result.metadata?.jobID)
       expect(id).toStartWith("video_")
-      expect(result.output).toEqual({ id, path: file, model: "test/director" })
+      expect(result.metadata).toEqual({ jobID: id, path: file, model: "test/director" })
+      expect(result.output).toBe(
+        [
+          `Video job ${id} started in the background with test/director. It will be saved to ${file}; if the model returns more than one video, the others are saved next to it with -1, -2, … added to the name.`,
+          "You will be notified automatically when it finishes or fails. Videos usually take a few minutes.",
+          "DO NOT sleep, poll, check whether the file exists, or request the same video again while it runs.",
+          "Work on other tasks, or briefly tell the user what you started and end your response.",
+        ].join("\n"),
+      )
       expect(yield* notice(result)).toBe(
         `<background-result kind="video" id="${id}" state="completed">\nVideo request finished. Saved 2 videos: ${file}, ${second}.\n</background-result>`,
       )
