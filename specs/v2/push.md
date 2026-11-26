@@ -82,7 +82,7 @@ A request's `metadata`, such as the diff of an edit, is never in the message. An
     "formID": "frm_1",
     "replySessionID": "ses_child",
     "kind": "question",
-    "count": 1,
+    "fieldCount": 1,
     "inlineReply": true,
     "source": { "type": "tool", "messageID": "msg_1", "id": "call_1" },
     "fields": [
@@ -111,7 +111,7 @@ A field uses the same names as the form the server returns from `GET`, and carri
 | `formID`               | always                                             | The form to reply to.                                                                                              |
 | `replySessionID`       | always                                             | The session that owns the form, which may be a subagent's.                                                         |
 | `kind`                 | when the form has one                              | What the form is for. `"question"` is the question tool's.                                                         |
-| `count`                | always                                             | How many fields the form has.                                                                                      |
+| `fieldCount`           | always                                             | How many fields the form has.                                                                                      |
 | `inlineReply`          | when a reply can be built from this message alone  | `true`. See [Replying](#replying-from-a-notification).                                                             |
 | `source`               | when a tool call asked                             | The call: `type` `"tool"`, the `messageID` of its assistant message, its `id`.                                     |
 | `fields[].key`         | always                                             | The field's key, used in the reply.                                                                                |
@@ -186,7 +186,7 @@ Pushes can arrive late, out of order or not at all.
 Replies name `replySessionID`, not the top-level `sessionID`. An app offers an action only when this message gives it everything the action needs; otherwise it opens the session.
 
 - Permission: offer the `decisions` the message lists, and no others. `POST /api/session/:replySessionID/permission/:requestID/reply` with `{ "decision": "once" | "always" | "reject", "message"?: string }`. A `message` with `reject` goes back to the agent as feedback. `always` stores the `save` patterns for the project and also allows other waiting requests they now cover. `reject` also rejects the session's other waiting requests from the same assistant message. Don't approve a request whose `truncated` is `true` without fetching the full version first.
-- Form: reply only when `inlineReply` is `true`, `fields` holds all `count` fields, and the app knows the `type` of each. `POST /api/session/:replySessionID/form/:formID/reply` with `{ "answer": { "<key>": value } }`. For `string` the value is a string; for `multiselect`, a list of strings. For an option, send its `value`, or its `label` when there is no `value`. Send typed text only when `custom` is `true`. The server checks the answer and answers 400 when it doesn't accept it; the app then opens the session. To dismiss a form without answering, `DELETE /api/session/:replySessionID/form/:formID`, which needs only the ids.
+- Form: reply only when `inlineReply` is `true`, `fields` holds all `fieldCount` fields, and the app knows the `type` of each. `POST /api/session/:replySessionID/form/:formID/reply` with `{ "answer": { "<key>": value } }`. For `string` the value is a string; for `multiselect`, a list of strings. For an option, send its `value`, or its `label` when there is no `value`. Send typed text only when `custom` is `true`. The server checks the answer and answers 400 when it doesn't accept it; the app then opens the session. To dismiss a form without answering, `DELETE /api/session/:replySessionID/form/:formID`, which needs only the ids.
 
 The server sends `inlineReply` when the form has one field, a `string` or `multiselect`, and nothing in `data` was cut. A reply settles the whole form.
 
@@ -200,7 +200,7 @@ A message is at most 2,600 bytes, so its box fits the relay's limit. When it is 
 4. `resources` are kept in order while they fit; the next one is shortened, or left out if even that won't fit, and the rest are left out.
 5. Option `description`s are left out.
 6. A field's `description` is cut from its end.
-7. `data` keeps only its ids (`requestID`, `formID`, `replySessionID`, `messageID`, `idleMessageID`), `kind`, `count`, `decisions`, `outcome`, `background` and `truncated`, and `directory` is left out. This is the one step that leaves out keys the tables above call always sent.
+7. `data` keeps only its ids (`requestID`, `formID`, `replySessionID`, `messageID`, `idleMessageID`), `kind`, `fieldCount`, `decisions`, `outcome`, `background` and `truncated`, and `directory` is left out. This is the one step that leaves out keys the tables above call always sent.
 
 Anything shortened ends in "…". A value is never sent as a bare "…": it is left out instead. When anything in `data` is cut or left out, `data.truncated` is `true`; otherwise it isn't sent. The server's choice of excerpt for `text` doesn't set it. Ids, `time`, `title` and `body` are never cut.
 

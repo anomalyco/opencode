@@ -289,7 +289,7 @@ describe("PushWatcher", () => {
             formID: "frm_1",
             replySessionID: grandchildID,
             kind: "question",
-            count: 2,
+            fieldCount: 2,
             source: { type: "tool", messageID: "msg_1", id: "call_1" },
             fields: [
               {
@@ -383,7 +383,7 @@ describe("PushWatcher", () => {
         formID: "frm_1",
         replySessionID: childID,
         kind: "question",
-        count: 1,
+        fieldCount: 1,
         inlineReply: true,
         fields: [{ key: "q0", type: "string", title: "Database", custom: true }],
       })

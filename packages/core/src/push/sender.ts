@@ -41,7 +41,7 @@ export interface Data {
   readonly message?: string
   readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
   readonly kind?: string
-  readonly count?: number
+  readonly fieldCount?: number
   /** A reply can be built from the message alone. Left out as soon as the message is too big. */
   readonly inlineReply?: true
   /** The form's first field. */
@@ -196,7 +196,7 @@ export const message = (notification: Notification) => {
     formID: data.formID,
     replySessionID: data.replySessionID,
     kind: data.kind,
-    count: data.count,
+    fieldCount: data.fieldCount,
     decisions: data.decisions,
     outcome: data.outcome,
     messageID: data.messageID,

@@ -130,7 +130,7 @@ const layer = Layer.effectDiscard(
           formID: form.id,
           replySessionID: sessionID.value,
           kind,
-          count: form.fields.length,
+          fieldCount: form.fields.length,
           ...(choices && form.fields.length === 1 && { inlineReply: true }),
           ...(Option.isSome(tool) && { source: { type: "tool", ...tool.value } }),
           fields: [

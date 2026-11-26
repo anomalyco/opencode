@@ -267,7 +267,7 @@ describe("PushSender", () => {
           formID: "frm_1",
           replySessionID: sessionID,
           kind: "question",
-          count: 1,
+          fieldCount: 1,
           inlineReply: true,
           fields: [{ key: "q0", type: "string", options: paths }],
         },
@@ -281,7 +281,7 @@ describe("PushSender", () => {
         attention: true,
         title: question.title,
         body: question.body,
-        data: { formID: "frm_1", replySessionID: sessionID, kind: "question", count: 1, truncated: true },
+        data: { formID: "frm_1", replySessionID: sessionID, kind: "question", fieldCount: 1, truncated: true },
       })
       const error = { type: "provider.rate-limit", message: "e".repeat(3_000), status: 429, retryAfterMs: 30_000 }
       const failed = PushSender.message({
