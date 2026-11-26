@@ -493,15 +493,21 @@
     padding-bottom: var(--timeline-gap-m);
   }
 
-  /* A script's static title sits above its calls as far as one call sits above the next (the calls' 6px gap), so the
-     title, its calls and Output read as one evenly spaced list. */
+  /* A script's static title's text sits above its first call's text as far as one call's text sits above the next:
+     the calls' 6px gap, plus half of how much taller a call's line is than the title's. The title sits on its own line,
+     not the taller line of the row around it. */
   [data-component="collapsible"].tool-collapsible:has(
       > [data-slot="collapsible-content"] > [data-component="execute-tool-calls"][data-execute-layout="flat"]
     )
     > [data-slot="collapsible-trigger"][data-locked] {
+    --execute-title-gap: calc(6px + (var(--line-height-base) - var(--line-height-compact)) / 2);
     margin-bottom: 0;
-    padding-bottom: 6px;
-    height: calc(var(--line-height-compact) + 12px);
+    padding-bottom: var(--execute-title-gap);
+    height: calc(var(--line-height-compact) + 6px + var(--execute-title-gap));
+
+    [data-slot="basic-tool-tool-info"] {
+      line-height: var(--line-height-compact);
+    }
   }
 
   /* Answers are spaced by the row gaps and trimmed to their text, as the agent's text is. */

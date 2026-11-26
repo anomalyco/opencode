@@ -2237,4 +2237,22 @@
   [data-component="collapsible"] > [data-slot="basic-tool-action"] {
     margin-top: -4px;
   }
+
+  /* The flat layout (`full_codemode`): a script's title's text sits above its first call's text as far as one call's
+     text sits above the next, as in the New timeline. */
+  [data-component="collapsible"].tool-collapsible:has(
+      > [data-slot="collapsible-content"] > [data-component="execute-tool-calls"][data-execute-layout="flat"]
+    ) {
+    row-gap: 0;
+
+    > [data-slot="collapsible-trigger"][data-locked] {
+      --execute-title-gap: calc(6px + (var(--line-height-base) - var(--line-height-compact)) / 2);
+      padding-bottom: var(--execute-title-gap);
+      height: calc(var(--line-height-compact) + 6px + var(--execute-title-gap));
+
+      [data-slot="basic-tool-tool-info"] {
+        line-height: var(--line-height-compact);
+      }
+    }
+  }
 }
