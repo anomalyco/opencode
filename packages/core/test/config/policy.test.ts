@@ -2,6 +2,7 @@ import { describe, expect } from "bun:test"
 import { Document, Event, Info, type Entry } from "@opencode/schema/config"
 import { ConfigPolicy } from "@opencode/schema/config/policy"
 import { Permission } from "@opencode/schema/permission"
+import type { PermissionEvaluation } from "@opencode/plugin/effect/permission"
 import { Config } from "@opencode/core/config"
 import { Integration } from "@opencode/core/integration"
 import { ConfigPolicyPlugin } from "@opencode/core/config/plugin/policy"
@@ -70,15 +71,33 @@ const addPlugin = Effect.fn(function* (entries: Entry[]) {
   yield* ConfigPolicyPlugin.Plugin.effect(host).pipe(Effect.provide(Config.testLayer(entries)))
 })
 
-const evaluate = Effect.fn(function* (action: string, resources: string[], effect: Permission.Effect = "allow") {
+const approval = (
+  action: "tool.auto" | "permission.save",
+  effect: ConfigPolicy.Effect,
+  resource: string,
+): ConfigPolicy.Info => ({ action, resource, effect })
+
+const evaluate = Effect.fn(function* (
+  action: string,
+  resources: string[],
+  effect: Permission.Effect = "allow",
+  input: Pick<PermissionEvaluation, "baseEffect" | "save" | "metadata"> = {},
+) {
   const hooks = yield* PluginHooks.Service
   const event = yield* hooks.trigger("permission", "evaluate", {
     sessionID: Session.ID.make("ses_policy"),
     action,
     resources,
     effect,
+    ...input,
   })
-  return { effect: event.effect, message: event.message }
+  const result: Pick<PermissionEvaluation, "effect" | "message" | "required" | "save"> = {
+    effect: event.effect,
+    message: event.message,
+    required: event.required,
+    save: event.save,
+  }
+  return result
 })
 
 describe("ConfigPolicyPlugin.Plugin", () => {
@@ -91,6 +110,66 @@ describe("ConfigPolicyPlugin.Plugin", () => {
       expect((yield* evaluate("shell", ["git push origin main"])).effect).toBe("deny")
       expect((yield* evaluate("shell", ["ls"])).effect).toBe("deny")
       expect((yield* evaluate("edit", ["notes.md"])).effect).toBe("allow")
+    }),
+  )
+
+  it.effect("requires a fresh decision for tool.auto denies, after tool.use denies", () =>
+    Effect.gen(function* () {
+      yield* addPlugin([
+        organizationPolicy([
+          tool("deny", "shell:rm *"),
+          approval("tool.auto", "deny", "shell:git push *"),
+          approval("tool.auto", "deny", "shell:rm *"),
+        ]),
+        // A project can't lift an organization's statement.
+        document(approval("tool.auto", "allow", "shell:*")),
+      ])
+      expect(yield* evaluate("shell", ["git push origin"], "allow", { save: ["git push *"] })).toEqual({
+        effect: "ask",
+        required: true,
+      })
+      expect(yield* evaluate("shell", ["rm -rf build"])).toEqual({
+        effect: "deny",
+        message: "Blocked by your organization's policy",
+      })
+      expect(yield* evaluate("shell", ["git status"], "allow", { save: ["git status *"] })).toEqual({
+        effect: "allow",
+        save: ["git status *"],
+      })
+    }),
+  )
+
+  it.effect("requires a fresh decision for commands the scanner couldn't analyze, and matches paths without case", () =>
+    Effect.gen(function* () {
+      yield* addPlugin([
+        document(
+          approval("tool.auto", "deny", "external_directory:/secret/*"),
+          approval("tool.auto", "deny", "read:*.env"),
+        ),
+      ])
+      const opaque = "x='$(git push)'; echo ${x@P}"
+      expect((yield* evaluate("shell", [opaque], "ask", { metadata: { reason: "dynamic-execution" } })).required).toBe(
+        true,
+      )
+      expect((yield* evaluate("shell", ["git push"], "ask")).required).toBeUndefined()
+      const files = process.platform === "darwin" || process.platform === "win32"
+      expect((yield* evaluate("read", ["secrets.ENV"])).required).toBe(files ? true : undefined)
+    }),
+  )
+
+  it.effect("turns off Allow always and ignores saved approvals for permission.save denies", () =>
+    Effect.gen(function* () {
+      yield* addPlugin([document(approval("permission.save", "deny", "shell:*"))])
+      expect(yield* evaluate("shell", ["git status"], "allow", { baseEffect: "ask", save: ["git *"] })).toEqual({
+        effect: "ask",
+      })
+      expect(yield* evaluate("shell", ["git status"], "allow", { baseEffect: "allow", save: ["git *"] })).toEqual({
+        effect: "allow",
+      })
+      expect(yield* evaluate("read", ["a.ts"], "allow", { baseEffect: "ask", save: ["*"] })).toEqual({
+        effect: "allow",
+        save: ["*"],
+      })
     }),
   )
 

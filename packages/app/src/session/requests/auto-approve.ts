@@ -263,7 +263,8 @@ export function createPermissionAutoApprover(input: { sdk: ServerSDK; data: Data
   }
 
   function approve(permission: PermissionRequest, projectID = input.data.session.get(permission.sessionID)?.projectID) {
-    if (!covers(projectID)) return
+    // A required request needs a person's decision, so the dock shows it even under auto-approve.
+    if (permission.required || !covers(projectID)) return
     dispatch(permission.id, { type: "approve", sessionID: permission.sessionID, projectID, runId: uuid() })
   }
 

@@ -4,6 +4,7 @@ import {
   OpenCode,
   type EventSubscribeOutput,
   type ExperimentalJobListOutput,
+  type PermissionRequest,
   type SessionActiveOutput,
   type SessionInboxListOutput,
   type SessionMessageAssistantTool,
@@ -256,6 +257,9 @@ function successfulGrep(inboxID: string): V2Event[] {
 // live events the prompt admission triggers, keyed by the generated message ID.
 async function run(input: {
   turn: (inboxID: string) => V2Event[]
+  auto?: boolean
+  pendingPermissions?: PermissionRequest[]
+  reply?: (input: { requestID: string; decision: string; message?: string }) => void
   pendingForms?: FormInfo[]
   standalone?: boolean
   format?: "default" | "json"
@@ -291,7 +295,11 @@ async function run(input: {
     }
   })()
   spyOn(sdk.event, "subscribe").mockImplementation((() => stream) as typeof sdk.event.subscribe)
-  spyOn(sdk.permission, "list").mockImplementation(() => ok([]) as never)
+  spyOn(sdk.permission, "list").mockImplementation(() => ok(input.pendingPermissions ?? []) as never)
+  spyOn(sdk.permission, "reply").mockImplementation((request) => {
+    input.reply?.(request)
+    return ok(undefined) as never
+  })
   spyOn(sdk.session.form, "list").mockImplementation(
     (request) => ok(input.pendingForms?.filter((item) => item.sessionID === request.sessionID) ?? []) as never,
   )
@@ -338,7 +346,7 @@ async function run(input: {
     files: [],
     thinking: false,
     format: input.format ?? "default",
-    auto: false,
+    auto: input.auto ?? false,
     standalone: input.standalone ?? false,
     signal: input.signal ?? new AbortController().signal,
     renderTool: input.renderTool ?? (() => Promise.resolve()),
@@ -414,6 +422,23 @@ describe("runNonInteractivePrompt", () => {
     })
     expect(events[0].part.state.metadata.metadata).toEqual({ matches: 2 })
     expect(events[0].part.state.metadata.result).toBeUndefined()
+  })
+
+  test("--auto approves ordinary permission requests and rejects ones that need a fresh decision", async () => {
+    const replies: unknown[] = []
+    await capture({
+      auto: true,
+      turn: successfulGrep,
+      pendingPermissions: [
+        { id: "per_ordinary", sessionID: "ses_1", action: "shell", resources: ["git status"] },
+        { id: "per_required", sessionID: "ses_1", action: "shell", resources: ["git push"], required: true },
+      ],
+      reply: (request) => replies.push({ requestID: request.requestID, decision: request.decision }),
+    })
+    expect(replies).toEqual([
+      { requestID: "per_ordinary", decision: "once" },
+      { requestID: "per_required", decision: "reject" },
+    ])
   })
 
   test("uses session.wait then reconciles projected output without a terminal event", async () => {

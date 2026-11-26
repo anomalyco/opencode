@@ -674,6 +674,27 @@ describe("fetch permissions", () => {
     ])
   })
 
+  test("fetch checks the URL as requested too and sends only the supported options", async () => {
+    hits.length = 0
+    const asked: Array<ReadonlyArray<string>> = []
+    const url = `${server.url.origin}/x/../allowed`
+    const result = await Effect.runPromise(
+      createCodeMode(
+        new Map(),
+        permissionService({ assert: (input) => Effect.sync(() => void asked.push(input.resources)) }),
+      ).execute(
+        {
+          code: `return await (await fetch("${url}", { unix: "/nonexistent.sock", proxy: "http://127.0.0.1:9" })).text()`,
+        },
+        context,
+      ),
+    )
+
+    expect(result.output.output).toBe("ok")
+    expect(asked).toEqual([[url, `${server.url.origin}/allowed`]])
+    expect(hits).toEqual(["GET /allowed"])
+  })
+
   test("a redirect to a URL denied for webfetch is never requested", async () => {
     hits.length = 0
     const denied = permissionService({

@@ -297,6 +297,87 @@ describe("Permission", () => {
     }),
   )
 
+  it.effect("needs a confirmed reply for a required request and never saves it", () =>
+    Effect.gen(function* () {
+      yield* setup([])
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("permission", "evaluate", (event) =>
+        Effect.sync(() => {
+          event.required = true
+          event.save = undefined
+        }),
+      )
+      const { service, fiber, request } = yield* waitForRequest({ save: ["src/*"] })
+      expect(request.required).toBe(true)
+      expect(request.save).toBeUndefined()
+      for (const reply of ["once", "always"] as const)
+        expect(yield* service.reply({ requestID: request.id, reply }).pipe(Effect.flip)).toBeInstanceOf(
+          Permission.UnconfirmedError,
+        )
+      expect(yield* service.list()).toHaveLength(1)
+      yield* service.reply({ requestID: request.id, reply: "always", confirmed: true })
+      yield* Fiber.join(fiber)
+      const saved = yield* PermissionSaved.Service
+      expect(yield* saved.list({ projectID: Project.ID.global })).toEqual([])
+    }),
+  )
+
+  it.effect("blocks a required request where nobody is asked", () =>
+    Effect.gen(function* () {
+      yield* setup([])
+      const hooks = yield* PluginHooks.Service
+      const service = yield* Permission.Service
+      yield* hooks.register("permission", "evaluate", (event) =>
+        Effect.sync(() => {
+          event.required = true
+        }),
+      )
+      expect(yield* service.assertNotDenied(assertion()).pipe(Effect.flip)).toBeInstanceOf(Permission.BlockedError)
+      const unattended = yield* service
+        .assert(assertion())
+        .pipe(
+          Effect.provideService(Permission.Unattended, [{ action: "read", resource: "*", effect: "allow" }]),
+          Effect.flip,
+        )
+      expect(unattended).toBeInstanceOf(Permission.BlockedError)
+      // Code automations fail fast on this wording.
+      expect(unattended.message).toContain("needs approval")
+    }),
+  )
+
+  it.effect("never settles a required request through another request's Allow always", () =>
+    Effect.gen(function* () {
+      yield* setup([])
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("permission", "evaluate", (event) =>
+        Effect.sync(() => {
+          if (event.resources.includes("b.ts")) event.required = true
+        }),
+      )
+      const first = yield* waitForRequest({ id: Permission.ID.create("per_first"), resources: ["a.ts"], save: ["*"] })
+      const second = yield* waitForRequest({ id: Permission.ID.create("per_second"), resources: ["b.ts"] })
+      yield* first.service.reply({ requestID: first.request.id, reply: "always" })
+      yield* Fiber.join(first.fiber)
+      expect((yield* first.service.list()).map((request) => request.id)).toEqual([second.request.id])
+    }),
+  )
+
+  it.effect("gives evaluate hooks the effect before saved approvals and the save patterns", () =>
+    Effect.gen(function* () {
+      yield* setup([])
+      const saved = yield* PermissionSaved.Service
+      yield* saved.add({ projectID: Project.ID.global, action: "read", resources: ["src/*"] })
+      const hooks = yield* PluginHooks.Service
+      const seen: unknown[] = []
+      yield* hooks.register("permission", "evaluate", (event) =>
+        Effect.sync(() => void seen.push({ baseEffect: event.baseEffect, effect: event.effect, save: event.save })),
+      )
+      const service = yield* Permission.Service
+      yield* service.assert(assertion({ save: ["src/*"] }))
+      expect(seen).toEqual([{ baseEffect: "ask", effect: "allow", save: ["src/*"] }])
+    }),
+  )
+
   it.effect("evaluates against an explicit agent", () =>
     Effect.gen(function* () {
       yield* setup([{ action: "read", resource: "*", effect: "allow" }])

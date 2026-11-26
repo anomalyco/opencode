@@ -8,6 +8,7 @@ import { Context, Schema } from "effect"
 import { HttpApiEndpoint, HttpApiGroup, HttpApiMiddleware, HttpApiSchema, OpenApi } from "effect/http-api"
 import {
   ConflictError,
+  InvalidRequestError,
   LocationNotFoundError,
   PermissionNotFoundError,
   PermissionSavedNotFoundError,
@@ -148,9 +149,13 @@ export const makePermissionGroup = <
         payload: Schema.Struct({
           decision: Permission.Reply,
           message: Schema.String.pipe(Schema.optional),
+          confirmed: Schema.Boolean.pipe(Schema.optional).annotateKey({
+            description:
+              "The client's assertion that a person chose this decision. Required to approve a request marked `required`; clients that approve automatically omit it.",
+          }),
         }),
         success: HttpApiSchema.NoContent,
-        error: [SessionNotFoundError, PermissionNotFoundError],
+        error: [SessionNotFoundError, PermissionNotFoundError, InvalidRequestError],
       })
         .middleware(sessionLocationMiddleware)
         .annotateMerge(

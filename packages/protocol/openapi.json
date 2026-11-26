@@ -9449,6 +9449,21 @@
                         "type": "null"
                       }
                     ]
+                  },
+                  "confirmed": {
+                    "anyOf": [
+                      {
+                        "type": "boolean"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "allOf": [
+                      {
+                        "description": "The client's assertion that a person chose this decision. Required to approve a request marked `required`; clients that approve automatically omit it."
+                      }
+                    ]
                   }
                 },
                 "required": ["decision"],
@@ -18383,6 +18398,8 @@
                   "enum": [
                     "provider.use",
                     "tool.use",
+                    "tool.auto",
+                    "permission.save",
                     "integration.connect",
                     "integration.use",
                     "mcp.use",
@@ -18832,6 +18849,8 @@
                       "enum": [
                         "provider.use",
                         "tool.use",
+                        "tool.auto",
+                        "permission.save",
                         "integration.connect",
                         "integration.use",
                         "mcp.use",
@@ -23435,6 +23454,9 @@
           },
           "message": {
             "type": "string"
+          },
+          "required": {
+            "type": "boolean"
           }
         },
         "required": ["id", "sessionID", "action", "resources"],
@@ -29225,6 +29247,9 @@
               },
               "message": {
                 "type": "string"
+              },
+              "required": {
+                "type": "boolean"
               }
             },
             "required": ["id", "sessionID", "action", "resources"],

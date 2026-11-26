@@ -21,7 +21,8 @@ const fetch = (input: string | URL, given: Init = {}) =>
   Effect.gen(function* () {
     // A BunFile reaches here as a plain copy, which `globalThis.fetch` would send as "[object Object]", as it would any
     // other object, such as a response or its stream.
-    const init: Init = { ...given, body: yield* CodeModeBun.body(given.body) }
+    // Only these options reach the request, so one such as Bun's `proxy` or `unix` can't send it past the checks below.
+    const init: Init = { method: given.method, headers: given.headers, body: yield* CodeModeBun.body(given.body) }
     if (
       typeof init.body === "object" &&
       init.body !== null &&
@@ -49,7 +50,8 @@ const fetch = (input: string | URL, given: Init = {}) =>
     yield* permission
       .assert({
         action: "webfetch",
-        resources: [url],
+        // The URL as written and as requested, so rules for either apply.
+        resources: [...new Set([url, parsed?.href ?? url])],
         save: Permission.site(url),
         metadata: display([input, init]),
         sessionID: execution.sessionID,

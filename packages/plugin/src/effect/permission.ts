@@ -14,8 +14,14 @@ export interface PermissionEvaluation {
   readonly resources: ReadonlyArray<string>
   readonly metadata?: Record<string, unknown>
   readonly source?: Permission.Source
+  /** The effect of the agent's and session's rules alone, before approvals saved with "Allow always". */
+  readonly baseEffect?: Permission.Effect
   effect: Permission.Effect
   message?: string
+  /** What "Allow always" would save; clear it to offer no "Allow always". */
+  save?: ReadonlyArray<string>
+  /** Require a fresh, confirmed decision: no saved or automatic approval. */
+  required?: boolean
 }
 
 export interface PermissionHooks {

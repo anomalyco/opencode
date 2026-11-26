@@ -460,6 +460,16 @@ describe("WebFetchTool registration", () => {
     }),
   )
 
+  it.effect("checks the URL as written and as requested", () =>
+    Effect.gen(function* () {
+      reset()
+      const registry = yield* Tool.Service
+      const url = "http://EXAMPLE.com/a/../public"
+      yield* executeTool(registry, call({ url, format: "text" }))
+      expect(assertions).toMatchObject([{ action: "webfetch", resources: [url, "http://example.com/public"] }])
+    }),
+  )
+
   it.effect("accepts localhost URLs with the same requested-URL permission check", () =>
     Effect.gen(function* () {
       reset()
@@ -560,7 +570,9 @@ describe("WebFetchTool registration", () => {
       const registry = yield* Tool.Service
 
       yield* executeTool(registry, call({ url: "https://Example.com#top", format: "text" }))
-      expect(assertions.map((assertion) => assertion.resources)).toEqual([["https://Example.com"]])
+      expect(assertions.map((assertion) => assertion.resources)).toEqual([
+        ["https://Example.com", "https://example.com/"],
+      ])
 
       reset()
       expect(yield* executeTool(registry, call({ url: "https://user@example.com/", format: "text" }))).toMatchObject({

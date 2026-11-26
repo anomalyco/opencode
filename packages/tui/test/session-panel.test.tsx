@@ -451,7 +451,17 @@ test("Enter in the diff panel cannot approve a pending permission in either pres
   await setup.waitFor(() => setup.renderer.currentFocusedRenderable !== panel)
   setup.mockInput.pressEnter()
   await setup.waitFor(() => setup.requests.permission.length === 1)
-  expect(setup.requests.permission).toEqual([{ decision: "once" }])
+  expect(setup.requests.permission).toEqual([{ decision: "once", confirmed: true }])
+})
+
+test("auto-accept still prompts for a required permission and confirms the chosen reply", async () => {
+  await using state = await tmpdir()
+  await using setup = await createSessionFixture(state.path, { permission: true, required: true, autoaccept: true })
+  await setup.waitForFrame((frame) => frame.includes("Permission required"))
+  expect(setup.requests.permission).toHaveLength(0)
+  setup.mockInput.pressEnter()
+  await setup.waitFor(() => setup.requests.permission.length === 1)
+  expect(setup.requests.permission).toEqual([{ decision: "once", confirmed: true }])
 })
 
 test.each([true, false])("a form cannot capture diff keys (form already pending: %s)", async (pending) => {
@@ -556,6 +566,8 @@ async function createSessionFixture(
     diffs?: Config.Info["diffs"]
     keybinds?: Config.Info["keybinds"]
     permission?: boolean
+    required?: boolean
+    autoaccept?: boolean
     form?: boolean
   } = {},
 ) {
@@ -576,6 +588,7 @@ async function createSessionFixture(
     sessionID: session.id,
     action: "shell",
     resources: ["echo permission-fixture"],
+    required: input.required,
   } satisfies PermissionRequest
   const form = {
     id: `frm_panel_${crypto.randomUUID()}`,
@@ -608,7 +621,7 @@ async function createSessionFixture(
     config: {
       animations: false,
       tabs: input.tabs ?? { enabled: false },
-      session: { sidebar: "hide" },
+      session: { sidebar: "hide", permissions: input.autoaccept ? "autoaccept" : undefined },
       // Keep patch geometry stable while testing host presentation changes, not split/unified diff layout.
       diffs: { tree: false, view: "unified", ...input.diffs },
       keybinds: { "diff.open": "f6", ...input.keybinds },

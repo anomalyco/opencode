@@ -86,6 +86,7 @@ function permissionReply(
     sessionID,
     requestID,
     decision,
+    confirmed: true,
     ...(message && message.trim() ? { message: message.trim() } : {}),
   }
 }

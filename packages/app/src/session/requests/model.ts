@@ -151,7 +151,8 @@ export function createSessionRequestModel() {
       data.session.list(),
       data.session.permission.list,
       id,
-      (item) => needsUser(autoApprove.state(item.id), enabled) && !isPermissionReplied(replyState(item.id)),
+      (item) =>
+        needsUser(autoApprove.state(item.id), enabled && !item.required) && !isPermissionReplied(replyState(item.id)),
     )
   })
 
@@ -299,7 +300,10 @@ export function createSessionRequestModel() {
     })
     // A request another client or the TUI already answered counts as replied.
     void serverSDK.api.permission
-      .reply({ sessionID: effect.sessionID, requestID, decision: effect.decision }, { signal: controller.signal })
+      .reply(
+        { sessionID: effect.sessionID, requestID, decision: effect.decision, confirmed: true },
+        { signal: controller.signal },
+      )
       .then(
         () => dispatch(requestID, { type: "reply.succeeded", attempt: effect.attempt }),
         (error) =>

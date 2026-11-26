@@ -124,6 +124,35 @@ const it = testEffect(
 )
 
 describe("PluginSupervisor", () => {
+  it.live("keeps the built-in policy plugin over a plugin that claims its ID", () =>
+    Effect.gen(function* () {
+      const sdk = yield* SdkPlugins.Service
+      yield* sdk.register(greeter("policy-shadow", "opencode.config.policy"))
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      const state = yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
+        const commands = yield* Command.Service
+        return { inventory: yield* plugins.list(), shadow: yield* commands.get("policy-shadow") }
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+      expect(
+        state.inventory
+          .filter((plugin) => plugin.id === "opencode.config.policy")
+          .map((plugin) => [plugin.source.type, plugin.state.status]),
+      ).toEqual(
+        expect.arrayContaining([
+          ["builtin", "active"],
+          ["sdk", "failed"],
+        ]),
+      )
+      expect(state.shadow).toBeUndefined()
+    }),
+  )
+
   it.live("reports a duplicate plugin ID as a failure without dropping the generation", () =>
     Effect.gen(function* () {
       const sdk = yield* SdkPlugins.Service
@@ -415,9 +444,7 @@ describe("PluginSupervisor", () => {
 
       expect(source.activations).toBe(2)
 
-      yield* sdk
-        .register(greeter("greet-cross-location", "cross-location"))
-        .pipe(Effect.provide(locations.get(refA)))
+      yield* sdk.register(greeter("greet-cross-location", "cross-location")).pipe(Effect.provide(locations.get(refA)))
 
       yield* advance(() => source.activations === 4)
 

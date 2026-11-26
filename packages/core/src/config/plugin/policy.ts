@@ -6,9 +6,7 @@ import { Bus } from "../../bus.js"
 import { Config } from "../../config.js"
 import { Credential } from "../../credential.js"
 import { ManagedPolicy } from "../../managed-policy.js"
-import { Permission } from "../../permission.js"
 import { State } from "../../state.js"
-import { Wildcard } from "../../util/wildcard.js"
 import { WebSearch } from "../../websearch.js"
 import { ConfigIntegration } from "../integration.js"
 import { ConfigEntryObserver } from "./entry-observer.js"
@@ -99,18 +97,22 @@ export const Plugin = define({
     yield* ctx.permission.hook("evaluate", (event) =>
       Effect.sync(() => {
         const statements = policies()
-        const denied = event.resources
-          .map((resource) =>
-            statements.findLast(
-              (policy) =>
-                policy.action === "tool.use" &&
-                Wildcard.match(`${event.action}:${resource}`, policy.resource, Permission.ignoresCase(event.action)),
-            ),
-          )
-          .find((policy) => policy?.effect === "deny")
-        if (!denied) return
-        event.effect = "deny"
-        event.message = denied.message
+        const blocked = ManagedPolicy.denying(statements, "tool.use", event)
+        if (blocked) {
+          event.effect = "deny"
+          event.message = blocked.message
+          return
+        }
+        if (event.effect !== "deny" && ManagedPolicy.denying(statements, "tool.auto", event)) {
+          event.effect = "ask"
+          event.required = true
+          event.save = undefined
+        }
+        const saving = { action: event.action, resources: [...(event.save ?? []), ...event.resources] }
+        if (!ManagedPolicy.denying(statements, "permission.save", saving)) return
+        event.save = undefined
+        // Ignore approvals saved before "Allow always" was turned off.
+        if (event.baseEffect === "ask" && event.effect === "allow") event.effect = "ask"
       }),
     )
   }),

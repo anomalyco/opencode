@@ -307,4 +307,6 @@ approvals run. It turns `allow` or `ask` into `deny` and never grants access.
 ```
 
 Global and Console-managed policies override project configuration, which is how an
-organization blocks a command that a repository would allow.
+organization blocks a command that a repository would allow. Policies can also
+require a fresh approval for every matching call or turn off "Allow always"; see
+[Approvals](/policies#approvals).

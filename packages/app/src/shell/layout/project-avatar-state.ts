@@ -63,7 +63,7 @@ export function sessionRequests(ctx: ServerCtx, sessionId: string, root: boolean
 
   return {
     permission: sessionPermissionRequest(sessions, data.session.permission.list, sessionId, (item) =>
-      needsUser(ctx.autoApprove.state(item.id), autoApprove),
+      needsUser(ctx.autoApprove.state(item.id), autoApprove && !item.required),
     ),
     form: sessionFormRequest(sessions, data.session.form.list, sessionId),
   }

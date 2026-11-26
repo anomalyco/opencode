@@ -92,7 +92,10 @@ const ModelBody = Schema.Struct({
   model: Schema.Struct({ providerID: Schema.String, id: Schema.String, variant: Schema.optional(Schema.String) }),
 })
 const AgentBody = Schema.Struct({ agent: Schema.String })
-const ReplyBody = Schema.Struct({ decision: Schema.Literals(["once", "always", "reject"]) })
+const ReplyBody = Schema.Struct({
+  decision: Schema.Literals(["once", "always", "reject"]),
+  confirmed: Schema.optional(Schema.Boolean),
+})
 const FormReplyBody = Schema.Struct({ answer: Form.Answer })
 const McpBody = Schema.Struct({ config: Schema.Unknown })
 const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Unknown))
@@ -419,6 +422,8 @@ export function permissionAsked(
     readonly resources?: EventData<"permission.asked">["resources"]
     readonly metadata?: EventData<"permission.asked">["metadata"]
     readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
+    readonly save?: EventData<"permission.asked">["save"]
+    readonly required?: boolean
   } = {},
 ) {
   return ephemeralEvent("permission.asked", {
@@ -428,6 +433,8 @@ export function permissionAsked(
     resources: input.resources ?? ["*"],
     metadata: input.metadata ?? { command: "printf hello" },
     ...(input.source ? { source: input.source } : {}),
+    ...(input.save ? { save: input.save } : {}),
+    ...(input.required ? { required: input.required } : {}),
   })
 }
 
@@ -623,7 +630,12 @@ function startServer(options: WireOptions, changed: () => void) {
   const submissions: Submission[] = []
   const selections: Selection[] = []
   const interrupts: string[] = []
-  const replies: Array<{ readonly sessionID: string; readonly requestID: string; readonly decision: string }> = []
+  const replies: Array<{
+    readonly sessionID: string
+    readonly requestID: string
+    readonly decision: string
+    readonly confirmed?: boolean
+  }> = []
   const cancelledForms: Array<{ readonly sessionID: string; readonly formID: string; readonly message?: string }> = []
   const repliedForms: FormReply[] = []
   const mcp: Array<{ readonly name: string; readonly directory?: string; readonly config: unknown }> = []
@@ -863,6 +875,7 @@ function startServer(options: WireOptions, changed: () => void) {
             sessionID: req.params.sessionID,
             requestID: req.params.requestID,
             decision: input.decision,
+            confirmed: input.confirmed,
           })
           return noContent()
         }),
