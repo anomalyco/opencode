@@ -1408,6 +1408,10 @@ export const dict = {
 
   "session.markRead": "Mark as read",
   "session.markUnread": "Mark as unread",
+  "session.copy": "Copy",
+  "session.copy.id": "Session ID",
+  "session.copy.title": "Session title",
+  "session.copy.projectID": "Project ID",
 
   "session.delete.failed.title": "Failed to delete session",
   "session.delete.title": "Delete session",

@@ -59,6 +59,7 @@ import type {
 import {
   currentToolError,
   currentToolGroupedRead,
+  currentToolImages,
   currentToolInput,
   currentToolMetadata,
   currentToolOutput,
@@ -89,6 +90,7 @@ import {
   type SubagentRunState,
 } from "./run-machine"
 import { LinkedText } from "../components/linked-text"
+import { ToolResultImages, type ToolImage } from "./tool-result-images"
 
 export function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -787,6 +789,7 @@ export function CurrentContextToolGroup(props: {
           </Index>
         </div>
       </BasicTool>
+      <ToolResultImages images={tools().flatMap(currentToolImages)} onContentRendered={props.onSizeChange} />
     </div>
   )
 }
@@ -1472,6 +1475,8 @@ export function ToolDisplay(
   props: ToolProps & {
     id: string
     error?: string
+    /** Images the call returned. A group of calls shows its calls' images itself. */
+    images?: readonly ToolImage[]
   },
 ) {
   const data = useData()
@@ -1557,6 +1562,7 @@ export function ToolDisplay(
             <Dynamic component={render()} {...props} />
           </Match>
         </Switch>
+        <ToolResultImages images={props.images ?? []} onContentRendered={props.onContentRendered} />
       </div>
     </Show>
   )
