@@ -995,7 +995,7 @@ test("executions share the prepared runtime of an inventory while keeping per-ca
   await Effect.runPromise(
     createCodeMode(new Map(inventory.tools)).execute({ code: 'return await tools.echo({ value: "next" })' }, context),
   )
-  expect(conversions).toBe(2)
+  expect(conversions).toBe(1)
 })
 
 const progressCodeMode = (started: Deferred.Deferred<void>, wait: Effect.Effect<void>) =>
