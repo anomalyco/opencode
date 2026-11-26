@@ -5,12 +5,19 @@ import {
   resolveTheme,
   resolveThemeDocument,
   selectTheme,
+  themeModes,
   type HueScale,
   type Mode,
   type ResolvedTheme,
   type ThemeDefinition,
 } from "@opencode/theme/tui"
-import { getOpenCodeTheme, getOpenCodeClassicTheme, parseTheme, type ThemeDocumentSource } from "../../../src/theme"
+import {
+  allThemes,
+  getOpenCodeTheme,
+  getOpenCodeClassicTheme,
+  parseTheme,
+  type ThemeDocumentSource,
+} from "../../../src/theme"
 
 const opencodeLight = selectTheme(getOpenCodeClassicTheme(), "light")
 const opencodeDark = selectTheme(getOpenCodeClassicTheme(), "dark")
@@ -298,6 +305,43 @@ test("defaults faint text to muted unless a theme sets it", () => {
   expect(fallback.text.faint).toBe(fallback.text.muted)
   expect(fallback.surface("dialog").text.faint).toBe(fallback.surface("dialog").text.muted)
   expect(explicit.text.faint.toInts()).toEqual([18, 52, 86, 255])
+})
+
+test("defaults the text selection to the focused primary action unless a theme sets it", () => {
+  const fallback = resolveTheme(light)
+  const explicit = resolveTheme({
+    ...light,
+    text: { ...light.text, selection: "#123456" },
+    background: { ...light.background, selection: "#abcdef" },
+  })
+
+  expect(fallback.text.selection).toBe(fallback.text.action.primary.focused)
+  expect(fallback.background.selection).toBe(fallback.background.action.primary.focused)
+  expect(fallback.background.selection.equals(fallback.text.selection)).toBeFalse()
+  expect(explicit.text.selection.toInts()).toEqual([18, 52, 86, 255])
+  expect(explicit.background.selection.toInts()).toEqual([171, 205, 239, 255])
+})
+
+test("resolves an opaque text selection in every built-in theme, readable in the default ones", () => {
+  const contrast = (a: RGBA, b: RGBA) => {
+    const luminance = (color: RGBA) =>
+      [color.r, color.g, color.b]
+        .map((value) => (value <= 0.03928 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4))
+        .reduce((sum, value, index) => sum + value * [0.2126, 0.7152, 0.0722][index]!, 0)
+    const [high, low] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+    return (high! + 0.05) / (low! + 0.05)
+  }
+  const failures = Object.entries(allThemes()).flatMap(([name, source]) => {
+    const document = parseTheme(source, name)
+    return themeModes(document).flatMap((mode) => {
+      const theme = resolveThemeDocument(document, mode)
+      const ratio = contrast(theme.text.selection, theme.background.selection)
+      const readable = !["opencode", "system"].includes(name) || ratio >= 4.5
+      return theme.background.selection.a === 1 && readable ? [] : [`${name} ${mode}: ${ratio.toFixed(2)}`]
+    })
+  })
+
+  expect(failures).toEqual([])
 })
 
 test("resolves dialog surfaces from direct colors", () => {
