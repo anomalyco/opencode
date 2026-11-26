@@ -130,6 +130,37 @@ describe("script labels", () => {
       expect(contextGroupLabel([stepped([step("Bun", { method: "spawn" })])], i18n, true).text).toBe("Used 1 Execute")
     })
 
+    test("live Bun steps count as recorded, and old Bun writes as edits", () => {
+      const live = storyTool(
+        "exec_3",
+        "execute",
+        "completed",
+        { code: "x" },
+        {
+          metadata: {
+            toolCalls: [
+              step("read", { path: "/repo/a.ts" }),
+              step("write", { path: "/repo/b.ts" }),
+              step("glob", { pattern: "src/**/*.ts" }),
+            ],
+            files: [{ file: "/repo/b.ts", status: "added", additions: 1, deletions: 0 }],
+          },
+        },
+      )
+
+      const liveFiles = factsOf([live]).flatMap((fact) =>
+        fact.kind === "file" && fact.via === "script"
+          ? [{ type: "file" as const, id: fact.id, file: fact, render: () => null }]
+          : [],
+      )
+
+      expect(contextGroupLabel([live, ...liveFiles], i18n, true).text).toBe("Used 3 Read, Write, Glob")
+      expect(stepsNext([live, ...liveFiles])).toBe("Edited b.ts · 1 read, 1 search")
+      expect(
+        contextGroupLabel([stepped([step("Bun", { method: "write", path: "/repo/b.ts" })])], i18n, true).text,
+      ).toBe("Used 1 Edit")
+    })
+
     test("an edit step before its files land does not name the group as edits", () => {
       const running = storyTool(
         "exec_2",

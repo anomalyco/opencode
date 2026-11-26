@@ -112,6 +112,34 @@ describe("timeline facts", () => {
     expect(factsOf(direct, true, true)).toEqual(factsOf(direct))
   })
 
+  test("counts live Bun steps as recorded", () => {
+    const script = storyTool(
+      "x1",
+      "execute",
+      "completed",
+      {},
+      {
+        metadata: {
+          toolCalls: [
+            { tool: "read", status: "completed", input: { path: "/repo/a.ts" } },
+            { tool: "write", status: "completed", input: { path: "/repo/b.ts" } },
+            { tool: "glob", status: "completed", input: { pattern: "src/**/*.ts" } },
+          ],
+          files: [{ file: "/repo/b.ts" }],
+        },
+      },
+    )
+
+    expect(summarize(factsOf([script], true, true))).toMatchObject({
+      calls: 3,
+      reads: 1,
+      searches: 1,
+      commands: 0,
+      files: ["/repo/b.ts"],
+      modes: { explore: 2, edit: 1, run: 0, tool: 0 },
+    })
+  })
+
   test("follows a part updated in place", () => {
     const part = storyTool("s1", "shell", "running", { command: "false" })
     const before = summarize(factsOf([part]))
