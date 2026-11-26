@@ -613,8 +613,6 @@ describe("ModelsDev Service", () => {
             },
           },
         }),
-        false,
-        true,
       )
       const model = (id: string) => acme?.models.find((item) => item.id === id)
       expect(model("acme-1")?.cost).toEqual(zeroCost)
