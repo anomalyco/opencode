@@ -99,6 +99,7 @@ const setup: Plugin.Setup<typeof definition> = (ctx) => {
     get entries() {
       return [
         { id: "settings-release-notes", title: ctx.t("releaseNotes.title") },
+        { id: "settings-install-on-quit", title: ctx.t("installOnQuit.title") },
         { id: "settings-check-updates", title: ctx.t("check.title") },
       ]
     },

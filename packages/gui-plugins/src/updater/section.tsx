@@ -1,5 +1,7 @@
+import { showToast } from "@opencode/ui/toast"
 import { Show } from "solid-js"
 import { usePlugin } from "@opencode/plugin/gui"
+import { UpdaterPreferences } from "./contract"
 import type definition from "./index"
 import type en from "./i18n/en"
 
@@ -19,6 +21,7 @@ export default function UpdatesSection(props: {
   const ctx = usePlugin<typeof definition>()
   const ui = ctx.ui
   const releaseNotes = ctx.stores.releaseNotes
+  const preferences = ctx.desktop ? ctx.main(UpdaterPreferences) : undefined
 
   return (
     <ui.SettingsSection title={ctx.t("section.title")}>
@@ -38,6 +41,35 @@ export default function UpdatesSection(props: {
           }
         />
       </ui.SettingsRow>
+
+      <Show when={preferences}>
+        {(client) => (
+          <ui.SettingsRow
+            id="settings-install-on-quit"
+            title={ctx.t("installOnQuit.title")}
+            description={ctx.t("installOnQuit.description")}
+          >
+            <ui.Switch
+              label={ctx.t("installOnQuit.title")}
+              hideLabel
+              disabled={client().state() === undefined}
+              checked={client().state()?.installOnQuit ?? false}
+              onChange={(checked) =>
+                void client()
+                  .setInstallOnQuit(checked)
+                  .catch((cause: unknown) => {
+                    if (ctx.signal.aborted) return
+
+                    showToast({
+                      title: ctx.t("common.requestFailed"),
+                      description: cause instanceof Error && cause.message ? cause.message : undefined,
+                    })
+                  })
+              }
+            />
+          </ui.SettingsRow>
+        )}
+      </Show>
 
       <ui.SettingsRow
         id="settings-check-updates"

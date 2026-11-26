@@ -17,6 +17,8 @@ export default {
   "section.title": "Updates",
   "releaseNotes.title": "Release notes",
   "releaseNotes.description": "Show What's New popups after updates",
+  "installOnQuit.title": "Install updates on quit",
+  "installOnQuit.description": "Automatically install downloaded updates when you quit OpenCode",
   "check.title": "Check for updates",
   "check.description": "Manually check for updates and install if available",
   "check.unavailable": "This build is updated outside OpenCode, for example by your package manager.",

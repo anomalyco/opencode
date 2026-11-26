@@ -5,6 +5,7 @@ import { Effect, Exit, Schema, Scope } from "effect"
 import { builtinMainContext } from "@opencode/plugin/gui/builtin"
 import { MenubarItem, type Plugin } from "@opencode/plugin/gui/main"
 import { Updater } from "@opencode/plugin/gui/updater"
+import { UpdaterPreferences } from "./contract"
 import { logContext } from "./log"
 import { make } from "./machine"
 
@@ -29,15 +30,32 @@ const setup: Plugin.MainSetup = async (ctx) => {
     from: { settings: "ready", file: "opencode.updater" },
   })
 
+  // Opt-in preference: install a downloaded update automatically when the app quits.
+  const installOnQuit = ctx.storage.store("installOnQuit", {
+    schema: Schema.Boolean,
+    initial: false,
+  })
+
   // electron-updater loads only in packaged builds with a feed, after the first window is up.
   const platform = enabled
-    ? await import("./platform").then((module) => runPromise(module.make(build.channel)))
+    ? await import("./platform").then((module) =>
+        runPromise(module.make(build.channel, { installOnQuit: installOnQuit.value })),
+      )
     : undefined
 
   if (ctx.signal.aborted) return
   const scope = Scope.makeUnsafe()
   ctx.onCleanup(() => runPromise(Scope.close(scope, Exit.void)))
   const publish = { changed: () => {} }
+
+  const preferences = ctx.provide(UpdaterPreferences, {
+    state: () => ({ installOnQuit: installOnQuit.value }),
+    setInstallOnQuit: (value) => {
+      installOnQuit.set(value)
+      platform?.setInstallOnQuit(value)
+      preferences.changed()
+    },
+  })
 
   const updater = await runPromise(
     make({
