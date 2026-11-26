@@ -397,7 +397,9 @@ export const make = Effect.fnUntraced(function* (input: {
         attached,
         {
           sessionID: attached.id,
-          cwd: attached.cwd,
+          get cwd() {
+            return attached.cwd
+          },
           start: prompt.start,
           childUpdates: capabilities.childSessionUpdates,
           compaction: capabilities.compaction,

@@ -6,9 +6,11 @@ import path from "node:path"
 import { tmpdir } from "../fixture/tmpdir"
 import {
   delivered,
-  fileDiff,
+  durableEvent,
   ephemeralEvent,
+  fileDiff,
   interrupted,
+  makeSession,
   permissionAsked,
   startSession,
   startWire,
@@ -94,6 +96,51 @@ describe("acp permissions over the wire", () => {
       ["perm_cancelled", "reject"],
       ["perm_failed", "reject"],
     ])
+  })
+
+  test("uses the moved directory for permission locations during an active prompt", async () => {
+    const server = Promise.withResolvers<Wire["server"]>()
+    const moved = Promise.withResolvers<void>()
+    await using acp = await startWire({
+      permission: allowOnce,
+      onPrompt: async ({ sessionID, id }) => {
+        const fixture = await server.promise
+        fixture.send(
+          durableEvent("session.moved", {
+            sessionID,
+            location: { directory: "/moved" },
+            projectID: "global",
+          }),
+        )
+        await moved.promise
+        fixture.send(
+          permissionAsked(sessionID, "perm_moved", {
+            action: "edit",
+            resources: ["src/a.ts"],
+            metadata: { path: "src/a.ts" },
+            source: { type: "tool", messageID: "msg_moved", id: "call_moved" },
+          }),
+        )
+        return turn(sessionID, id)
+      },
+    })
+    server.resolve(acp.server)
+    await acp.initialize()
+    const session = await acp.newSession()
+    acp.server.sessions.set(session.sessionId, makeSession(session.sessionId, { cwd: "/moved" }))
+
+    const prompt = acp.prompt(session.sessionId, "hello")
+    await acp.waitForUpdate(
+      (item) =>
+        item.sessionId === session.sessionId &&
+        item.update.sessionUpdate === "session_info_update" &&
+        item.update._meta?.["opencode/directory"] === "/moved",
+      "session directory update",
+    )
+    moved.resolve()
+    await prompt
+
+    expect(acp.permissions[0]?.toolCall.locations).toEqual([{ path: "/moved/src/a.ts" }])
   })
 
   test.each<[string, string, string, (sessionID: string, id: string) => OpenCodeEventEncoded]>([
