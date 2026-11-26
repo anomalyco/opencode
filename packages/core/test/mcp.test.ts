@@ -487,6 +487,18 @@ const settled = (service: Mcp.Interface, name = "resources") =>
     return status
   }).pipe(Effect.retry({ times: 200, schedule: Schedule.spaced("10 millis") }))
 
+// Lets fixture/mcp-era-locked.ts start once its first process has outlived the version probe, and before the
+// initialize sent in place times out. With the 1.5 s startup timeout the tests give it, the probe gives up 1.5 s
+// after that process starts, and that initialize 1.5 s later.
+const releaseEraLocked = (pids: string, release: string) =>
+  Effect.gen(function* () {
+    yield* Effect.tryPromise(() => fs.readFile(pids, "utf8")).pipe(
+      Effect.retry({ times: 500, schedule: Schedule.spaced("10 millis") }),
+    )
+    yield* Effect.sleep("2100 millis")
+    yield* Effect.promise(() => Bun.write(release, ""))
+  })
+
 const mcp = Layer.mock(Mcp.Service, {
   awaitStartup: () => Effect.void,
   tools: () =>
@@ -1040,12 +1052,7 @@ test("respawns for legacy when a slow modern stdio server refuses the initialize
       }),
     ),
   )
-  // Released once the probe has timed out and before that initialize does, so the server reads the probe
-  // first, as a slow start makes it.
-  await Bun.sleep(2_100)
-  await Bun.write(release, "")
-
-  const { modern, tools } = await connected
+  const [{ modern, tools }] = await Promise.all([connected, Effect.runPromise(releaseEraLocked(pids, release))])
 
   expect(modern).toBe(false)
   expect(tools.map((tool) => tool.name)).toEqual(["echo"])
@@ -3835,14 +3842,7 @@ describe("MCP pool", () => {
         timeout: new ConfigMCP.Timeout({ startup: 1_500 }),
       })
       const pool = yield* makePool
-      // Released once the shared attempt's probe has timed out, and before the initialize sent in place does.
-      yield* Effect.gen(function* () {
-        yield* Effect.tryPromise(() => fs.readFile(pids, "utf8")).pipe(
-          Effect.retry({ times: 500, schedule: Schedule.spaced("10 millis") }),
-        )
-        yield* Effect.sleep("2100 millis")
-        yield* Effect.promise(() => Bun.write(release, ""))
-      }).pipe(Effect.forkChild({ startImmediately: true }))
+      yield* releaseEraLocked(pids, release).pipe(Effect.forkChild({ startImmediately: true }))
       const a = yield* open(config, pool, directories[0])
 
       expect(yield* status(a.mcp)).toEqual({ status: "connected" })
