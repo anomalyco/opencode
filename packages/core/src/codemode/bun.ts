@@ -542,7 +542,10 @@ export const extension = Extension.make({
 })
 
 /** What to show for a Bun call: the file tool it stands in for, or else the function and its path or pattern. */
-export const display = (name: string, args: ReadonlyArray<unknown>) => {
+export const display = (
+  name: string,
+  args: ReadonlyArray<unknown>,
+): { tool: string; input: Record<string, string> } => {
   const path = handleOf(args[0])?.name ?? String(args[0])
   const from = handleOf(args[1])?.name
   if (name === "Bun.file") return { tool: "read", input: { path } }
