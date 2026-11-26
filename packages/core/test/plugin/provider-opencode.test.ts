@@ -1251,7 +1251,8 @@ describe("OpencodePlugin", () => {
           expect((yield* credentials.get(credential.id))?.value).toMatchObject({ access: "revoked" })
 
           state.revoked = false
-          yield* TestClock.adjust("6 minutes")
+          // Signed out, the Console is asked again hourly.
+          yield* TestClock.adjust("62 minutes")
           yield* drain
           expect(yield* status()).toBeUndefined()
           expect(state.refreshes).toBe(0)
@@ -1291,6 +1292,53 @@ describe("OpencodePlugin", () => {
       yield* TestClock.adjust("30 seconds")
       yield* drain
       expect(state.requests).toBe(2)
+    }),
+  )
+
+  it.effect("polls hourly while signed out and returns to the usual interval after signing in", () =>
+    Effect.gen(function* () {
+      const credentials = yield* Credential.Service
+      const state = { requests: 0, revoked: true }
+      const server = {
+        fetch: (request: Request) => {
+          if (new URL(request.url).pathname !== "/api/v2/config") return new Response(null, { status: 404 })
+          state.requests++
+          if (state.revoked)
+            return Response.json({ _tag: "Unauthorized", message: "Invalid or expired session" }, { status: 401 })
+          return Response.json({ providers: {} })
+        },
+      }
+      yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "revoked", metadata: { server: "https://console.test" } }),
+      })
+      yield* addPlugin().pipe(inProcess(server))
+      yield* drain
+      expect(state.requests).toBe(1)
+
+      // Signed out, the usual 5-6 minute poll is skipped.
+      yield* TestClock.adjust("6 minutes")
+      yield* drain
+      expect(state.requests).toBe(1)
+
+      // It polls hourly instead (60-61 minutes).
+      yield* TestClock.adjust("56 minutes")
+      yield* drain
+      expect(state.requests).toBe(2)
+
+      // Signing in again fetches immediately and returns polling to 5-6 minutes.
+      state.revoked = false
+      const next = yield* credentials.create({
+        integrationID: Integration.ID.make("opencode"),
+        value: Credential.Key.make({ type: "key", key: "fresh", metadata: { server: "https://console.test" } }),
+      })
+      yield* credentials.activate(next.id)
+      yield* drain
+      expect(state.requests).toBe(3)
+
+      yield* TestClock.adjust("6 minutes")
+      yield* drain
+      expect(state.requests).toBe(4)
     }),
   )
 
