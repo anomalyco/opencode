@@ -6,9 +6,11 @@ import path from "node:path"
 import { tmpdir } from "../fixture/tmpdir"
 import {
   delivered,
-  fileDiff,
+  durableEvent,
   ephemeralEvent,
+  fileDiff,
   interrupted,
+  makeSession,
   permissionAsked,
   startSession,
   startWire,
@@ -94,6 +96,59 @@ describe("acp permissions over the wire", () => {
       ["perm_cancelled", "reject"],
       ["perm_failed", "reject"],
     ])
+  })
+
+  test("uses the moved directory before a delayed catalog rebind finishes", async () => {
+    const server = Promise.withResolvers<Wire["server"]>()
+    const blocked = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    await using acp = await startWire({
+      fetch: async (request) => {
+        if (request.path === "/api/model" && request.query["location[directory]"] === "/moved") {
+          blocked.resolve()
+          await release.promise
+        }
+      },
+      permission: allowOnce,
+      onPrompt: async ({ sessionID, id }) => {
+        const fixture = await server.promise
+        fixture.send(
+          durableEvent("session.moved", {
+            sessionID,
+            location: { directory: "/moved" },
+            projectID: "global",
+          }),
+        )
+        await blocked.promise
+        fixture.send(
+          permissionAsked(sessionID, "perm_moved", {
+            action: "edit",
+            resources: ["src/a.ts"],
+            metadata: { path: "src/a.ts" },
+            source: { type: "tool", messageID: "msg_moved", id: "call_moved" },
+          }),
+        )
+        return turn(sessionID, id)
+      },
+    })
+    server.resolve(acp.server)
+    await acp.initialize()
+    const session = await acp.newSession()
+    acp.server.sessions.set(session.sessionId, makeSession(session.sessionId, { cwd: "/moved" }))
+
+    const prompt = acp.prompt(session.sessionId, "hello")
+    await acp.until(() => acp.permissions.length === 1, "permission during the delayed rebind")
+    const locations = acp.permissions[0]?.toolCall.locations
+    release.resolve()
+    await prompt
+    await acp.waitForUpdate(
+      (item) =>
+        item.sessionId === session.sessionId &&
+        item.update.sessionUpdate === "session_info_update" &&
+        item.update._meta?.["opencode/directory"] === "/moved",
+      "session directory update",
+    )
+    expect(locations).toEqual([{ path: "/moved/src/a.ts" }])
   })
 
   test.each<[string, string, string, (sessionID: string, id: string) => OpenCodeEventEncoded]>([

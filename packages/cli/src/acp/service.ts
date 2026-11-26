@@ -99,7 +99,11 @@ export function make(input: {
     const sessionID = yield* ACPClient.decodeSessionID(sessionId)
     const session = yield* input.client.session.get({ sessionID }).pipe(Effect.catch(ACPClient.classify))
     if (FSUtil.resolve(cwd) !== FSUtil.resolve(session.location.directory))
-      return yield* new ACPError.SessionDirectoryMismatchError({ sessionId, cwd })
+      return yield* new ACPError.SessionDirectoryMismatchError({
+        sessionId,
+        cwd,
+        directory: session.location.directory,
+      })
     return session
   })
 

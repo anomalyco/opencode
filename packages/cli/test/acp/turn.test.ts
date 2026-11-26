@@ -7,6 +7,7 @@ import {
   delivered,
   durableEvent,
   ephemeralEvent,
+  makeSession,
   permissionAsked,
   shellNotice,
   startSession,
@@ -137,6 +138,39 @@ describe("acp turn events over the wire", () => {
       ])
     },
   )
+
+  test("uses the moved directory for background turn permissions", async () => {
+    await using acp = await startSession({
+      permission: () => ({ outcome: { outcome: "selected", optionId: "once" } }),
+      onPrompt: ({ sessionID, id }) => turn(sessionID, id, ...backgroundShell(sessionID, "shell_bg")),
+    })
+    expect((await acp.prompt(acp.sessionId, "hello")).stopReason).toBe("end_turn")
+    acp.server.sessions.set(acp.sessionId, makeSession(acp.sessionId, { cwd: "/moved" }))
+    acp.server.send(
+      durableEvent("session.moved", {
+        sessionID: acp.sessionId,
+        location: { directory: "/moved" },
+        projectID: "global",
+      }),
+    )
+    await acp.waitForUpdate(
+      (item) =>
+        item.sessionId === acp.sessionId &&
+        item.update.sessionUpdate === "session_info_update" &&
+        item.update._meta?.["opencode/directory"] === "/moved",
+      "session directory update",
+    )
+    acp.server.send(
+      permissionAsked(acp.sessionId, "perm_bg", {
+        action: "edit",
+        resources: ["src/a.ts"],
+        metadata: { path: "src/a.ts" },
+        source: { type: "tool", messageID: "msg_tools", id: "call_shell_bg" },
+      }),
+    )
+    await acp.until(() => acp.permissions.length === 1, "background permission")
+    expect(acp.permissions[0]?.toolCall.locations).toEqual([{ path: "/moved/src/a.ts" }])
+  })
 
   test("streams resumed parent turns after background children report across prompts", async () => {
     await using acp = await startSession({

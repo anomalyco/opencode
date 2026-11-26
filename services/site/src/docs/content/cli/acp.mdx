@@ -132,6 +132,20 @@ including its models, agents, commands, skills, instructions, plugins, and MCP s
 - A session runs one prompt at a time. OpenCode returns an error for a second `session/prompt` while the first is
   active.
 
+### Session moves
+
+When OpenCode moves a session to another directory, it sends the new directory to the attached ACP client.
+
+```json
+{
+  "sessionUpdate": "session_info_update",
+  "_meta": { "opencode/directory": "/work/app-worktree" }
+}
+```
+
+Use this directory for later `session/load`, `session/resume`, and `session/fork` calls. If a request uses a different
+`cwd`, the invalid-params error data includes the session's current `directory`.
+
 ### Cancellation
 
 `session/cancel` ends the active prompt with `stopReason: "cancelled"`. A `$/cancel_request` for the prompt request does

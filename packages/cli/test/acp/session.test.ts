@@ -2,7 +2,16 @@ import { describe, expect, test } from "bun:test"
 import type { McpServer } from "@agentclientprotocol/sdk"
 import { Schema } from "effect"
 import { currentValue } from "./select-options"
-import { makeSession, rpcError, secondModel, startWire, type Wire } from "./wire-fixture"
+import {
+  durableEvent,
+  ephemeralEvent,
+  makeSession,
+  reviewCommand,
+  rpcError,
+  secondModel,
+  startWire,
+  type Wire,
+} from "./wire-fixture"
 
 describe("acp session lifecycle over the wire", () => {
   test("initialize advertises capabilities, negotiates the version, and offers terminal auth only when asked", async () => {
@@ -77,13 +86,31 @@ describe("acp session lifecycle over the wire", () => {
     const resumed = await acp.request("session/resume", { cwd: "/workspace", sessionId: "ses_resume", mcpServers: [] })
     const forked = await acp.request("session/fork", { cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] })
 
-    expect(
-      await rpcError(acp.request("session/load", { cwd: "/elsewhere", sessionId: "ses_loaded", mcpServers: [] })),
-    ).toMatchObject({ code: -32602, data: { sessionId: "ses_loaded", cwd: "/elsewhere" } })
+    const mismatch = await rpcError(
+      acp.request("session/load", { cwd: "/elsewhere", sessionId: "ses_loaded", mcpServers: [] }),
+    )
+    expect(mismatch).toMatchObject({
+      code: -32602,
+      data: { sessionId: "ses_loaded", cwd: "/elsewhere", directory: "/workspace" },
+    })
+    expect(mismatch.message).toContain("session directory: /workspace")
+
+    const resumedMismatch = await rpcError(
+      acp.request("session/resume", { cwd: "/elsewhere", sessionId: "ses_resume", mcpServers: [] }),
+    )
+    expect(resumedMismatch).toMatchObject({
+      code: -32602,
+      data: { sessionId: "ses_resume", cwd: "/elsewhere", directory: "/workspace" },
+    })
+
     const sessions = new Set(acp.server.sessions.keys())
-    expect(
-      await rpcError(acp.request("session/fork", { cwd: "/elsewhere", sessionId: "ses_loaded", mcpServers: [] })),
-    ).toMatchObject({ code: -32602, data: { sessionId: "ses_loaded", cwd: "/elsewhere" } })
+    const forkedMismatch = await rpcError(
+      acp.request("session/fork", { cwd: "/elsewhere", sessionId: "ses_loaded", mcpServers: [] }),
+    )
+    expect(forkedMismatch).toMatchObject({
+      code: -32602,
+      data: { sessionId: "ses_loaded", cwd: "/elsewhere", directory: "/workspace" },
+    })
     expect(new Set(acp.server.sessions.keys())).toEqual(sessions)
     expect(
       await rpcError(acp.request("session/load", { cwd: "/workspace", sessionId: "ses_missing", mcpServers: [] })),
@@ -134,6 +161,151 @@ describe("acp session lifecycle over the wire", () => {
       "response",
       "available_commands_update",
     ])
+  })
+
+  test("rebinds an attached session when it moves and tells the client", async () => {
+    const local: McpServer = { name: "tools", command: "bun", args: ["server.ts"], env: [] }
+    await using acp = await startWire()
+    await acp.initialize()
+    const session = await acp.newSession("/workspace", [local])
+    const directory = "/moved"
+
+    acp.server.sessions.set(session.sessionId, makeSession(session.sessionId, { cwd: directory }))
+    acp.server.send(
+      durableEvent("session.moved", {
+        sessionID: session.sessionId,
+        location: { directory },
+        projectID: "global",
+      }),
+    )
+
+    const notification = await acp.waitForUpdate(
+      (item) =>
+        item.sessionId === session.sessionId &&
+        item.update.sessionUpdate === "session_info_update" &&
+        item.update._meta?.["opencode/directory"] === directory,
+      "session directory update",
+    )
+    expect(notification.update._meta).toEqual({ "opencode/directory": directory })
+
+    expect(
+      await acp.request("session/load", { cwd: directory, sessionId: session.sessionId, mcpServers: [] }),
+    ).toBeDefined()
+    await acp.until(
+      () => acp.server.mcp.some((item) => item.name === "tools" && item.directory === directory),
+      "MCP registration in the moved directory",
+    )
+    expect(
+      acp.server.requests.some(
+        (request) => request.path === "/api/model" && request.query["location[directory]"] === directory,
+      ),
+    ).toBe(true)
+    expect(acp.logs).toEqual([])
+  })
+
+  test("serializes consecutive session moves", async () => {
+    const blocked = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
+    await using acp = await startWire({
+      fetch: async (request) => {
+        if (request.path === "/api/model" && request.query["location[directory]"] === "/moved-1") {
+          blocked.resolve()
+          await release.promise
+        }
+      },
+    })
+    await acp.initialize()
+    const session = await acp.newSession()
+
+    acp.server.sessions.set(session.sessionId, makeSession(session.sessionId, { cwd: "/moved-1" }))
+    acp.server.send(
+      durableEvent("session.moved", {
+        sessionID: session.sessionId,
+        location: { directory: "/moved-1" },
+        projectID: "global",
+      }),
+    )
+    await acp.until(
+      () =>
+        acp.server.requests.some(
+          (request) => request.path === "/api/model" && request.query["location[directory]"] === "/moved-1",
+        ),
+      "first move catalog request",
+    )
+
+    acp.server.sessions.set(session.sessionId, makeSession(session.sessionId, { cwd: "/moved-2" }))
+    acp.server.send(
+      durableEvent("session.moved", {
+        sessionID: session.sessionId,
+        location: { directory: "/moved-2" },
+        projectID: "global",
+      }),
+    )
+    release.resolve()
+
+    const directories = await acp.until(() => {
+      const moved = acp.updates
+        .filter(
+          (item) =>
+            item.sessionId === session.sessionId &&
+            item.update.sessionUpdate === "session_info_update" &&
+            typeof item.update._meta?.["opencode/directory"] === "string",
+        )
+        .map((item) => item.update._meta?.["opencode/directory"])
+      return moved.length === 2 ? moved : false
+    }, "ordered move notifications")
+    expect(directories).toEqual(["/moved-1", "/moved-2"])
+    expect(
+      await acp.request("session/load", { cwd: "/moved-2", sessionId: session.sessionId, mcpServers: [] }),
+    ).toBeDefined()
+  })
+
+  test("recovers catalog updates after a transient destination load failure", async () => {
+    let fail = true
+    await using acp = await startWire({
+      fetch: async (request) => {
+        if (request.path === "/api/model" && request.query["location[directory]"] === "/moved" && fail) {
+          fail = false
+          return new Response("unavailable", { status: 503 })
+        }
+      },
+    })
+    await acp.initialize()
+    const session = await acp.newSession()
+    acp.server.sessions.set(session.sessionId, makeSession(session.sessionId, { cwd: "/moved" }))
+    acp.server.send(
+      durableEvent("session.moved", {
+        sessionID: session.sessionId,
+        location: { directory: "/moved" },
+        projectID: "global",
+      }),
+    )
+    await acp.waitForUpdate(
+      (item) =>
+        item.sessionId === session.sessionId &&
+        item.update.sessionUpdate === "session_info_update" &&
+        item.update._meta?.["opencode/directory"] === "/moved",
+      "session directory update",
+    )
+
+    await acp.prompt(session.sessionId, "hello")
+    acp.server.catalog.commands = [reviewCommand, { name: "recovered", description: "Recovered command" }]
+    acp.server.send(ephemeralEvent("command.updated", {}, { directory: "/moved" }))
+    const update = await acp.waitForUpdate(
+      (item) =>
+        item.sessionId === session.sessionId &&
+        item.update.sessionUpdate === "available_commands_update" &&
+        item.update.availableCommands.some((command) => command.name === "recovered"),
+      "recovered catalog update",
+    )
+    expect(update.update).toEqual({
+      sessionUpdate: "available_commands_update",
+      availableCommands: [
+        { name: "review", description: "Review changes" },
+        { name: "recovered", description: "Recovered command" },
+        { name: "compact", description: "Compact the session" },
+      ],
+    })
   })
 
   test("converts MCP configs and deduplicates registrations per session and config", async () => {
