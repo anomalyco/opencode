@@ -4,7 +4,7 @@ import { setPinchZoomEnabled, setZoomLevel, webviewZoom, zoomLevel } from "../wi
 import { windowFullscreen } from "../window/fullscreen"
 import { DragCancelEvent } from "../../shared/ipc-transport"
 import { createPluginBridge } from "../plugins"
-import { onDeepLinks } from "../startup/deep-links"
+import { createDeepLinks } from "../startup/deep-links"
 import { createDesktopFiles } from "./files"
 import { createDesktopMenuAction } from "./menu"
 import { createDesktopNotify } from "./notifications"
@@ -48,7 +48,7 @@ export function createDesktopPlatform(api: ElectronAPI, windowState: DesktopWind
     setPinchZoomEnabled,
     getSpellcheckEnabled: () => api.getSpellcheckEnabled(),
     setSpellcheckEnabled: (enabled) => api.setSpellcheckEnabled(enabled),
-    onDeepLinks,
+    onDeepLinks: createDeepLinks(api),
     onDragCancel: (callback) => {
       window.addEventListener(DragCancelEvent, callback)
 

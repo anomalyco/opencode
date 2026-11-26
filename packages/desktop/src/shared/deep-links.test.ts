@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { consoleReturnWindow } from "./deep-link"
+import { consoleReturnWindow } from "./deep-links"
 
 describe("Console return deep links", () => {
   test("reads the originating Desktop window", () => {

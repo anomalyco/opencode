@@ -1,11 +1,13 @@
-// `opencode://` links opened with the desktop app. Both open on the app's own server, the one on this computer:
-// - `open-project?directory=<folder>` opens the folder as a project, in a new session.
+// `opencode://` links opened with the desktop app:
+// - `open-project?directory=<folder>` opens the folder as a project on the app's own server, in a new session.
 // - `new-session?directory=<folder>&prompt=<text>` does the same with the prompt typed in, not sent.
-// A link that arrives before that server can open projects (one that started the app) waits for it.
+// - `session/<id>` opens the session from the app's own server, else the first other server that has it.
+// A link that arrives before the app can open it (one that started the app) waits until it can.
 
 export type DeepLink =
   | { readonly type: "open-project"; readonly directory: string }
   | { readonly type: "new-session"; readonly directory: string; readonly prompt: string | undefined }
+  | { readonly type: "session"; readonly sessionID: string }
 
 export type DeepLinkState =
   | { readonly type: "waiting"; readonly queued: readonly DeepLink[] }
@@ -51,6 +53,8 @@ export function parseDeepLink(value: string): DeepLink | undefined {
   const url = new URL(value)
 
   if (url.protocol !== "opencode:") return
+
+  if (url.hostname === "session") return parseSessionLink(url)
   const directory = url.searchParams.get("directory")
 
   if (!directory || /[\u0000-\u001f\u007f]/.test(directory)) return
@@ -60,6 +64,14 @@ export function parseDeepLink(value: string): DeepLink | undefined {
   if (url.hostname !== "new-session") return
 
   return { type: "new-session", directory, prompt: url.searchParams.get("prompt") || undefined }
+}
+
+function parseSessionLink(url: URL): DeepLink | undefined {
+  const sessionID = url.pathname.slice(1)
+
+  if (!sessionID.startsWith("ses") || sessionID.includes("/")) return
+
+  return { type: "session", sessionID }
 }
 
 function open(link: DeepLink): DeepLinkEffect {

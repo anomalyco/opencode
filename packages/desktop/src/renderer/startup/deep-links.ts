@@ -1,43 +1,20 @@
 import type { ElectronAPI } from "../api-types"
 
-type Listener = (urls: string[]) => void
+// Main holds links until a window takes them, so a window takes them when the app starts listening and again each
+// time main says more arrived. Only the first window to ask receives a link, and it never comes back on a reload.
+export function createDeepLinks(api: Pick<ElectronAPI, "takeDeepLinks" | "onDeepLink">) {
+  return (listener: (urls: string[]) => void) => {
+    const take = () =>
+      void api.takeDeepLinks().then(
+        (urls) => {
+          if (urls.length) listener(urls)
+        },
+        (error) => console.error("[deep-links] failed to take links", error),
+      )
 
-// Links that arrived before the app listened, and the app's listeners.
-const pending: string[] = []
+    const stop = api.onDeepLink(take)
+    take()
 
-const listeners = new Set<Listener>()
-
-// Main sends each link to one renderer at a time and forgets it once acknowledged, so a reload or a new window
-// never handles it again.
-export function startDeepLinks(api: Pick<ElectronAPI, "onDeepLink" | "acknowledgeDeepLinks" | "readyDeepLinks">) {
-  api.onDeepLink((delivery) => {
-    deliver(delivery.urls)
-    api.acknowledgeDeepLinks(delivery.attempt)
-  })
-  api.readyDeepLinks()
-}
-
-/** Follows the links opened with the app; the ones that came before the first listener reach it at once. */
-export function onDeepLinks(listener: Listener) {
-  listeners.add(listener)
-
-  const queued = pending.splice(0)
-
-  if (queued.length) listener(queued)
-
-  return () => {
-    listeners.delete(listener)
+    return stop
   }
-}
-
-function deliver(urls: string[]) {
-  if (urls.length === 0) return
-
-  if (listeners.size === 0) {
-    pending.push(...urls)
-
-    return
-  }
-
-  listeners.forEach((listener) => listener(urls))
 }

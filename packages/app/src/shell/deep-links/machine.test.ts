@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test"
-import { INITIAL_DEEP_LINK_STATE, parseDeepLink, transitionDeepLinks, type DeepLinkEvent } from "./machine"
+import {
+  INITIAL_DEEP_LINK_STATE,
+  parseDeepLink,
+  transitionDeepLinks,
+  type DeepLink,
+  type DeepLinkEvent,
+} from "./machine"
 
 const project = `opencode://open-project?directory=${encodeURIComponent("C:\\work\\api")}`
 
@@ -14,6 +20,12 @@ describe("deep links", () => {
       url: "opencode://new-session?directory=/repo",
       link: { type: "new-session", directory: "/repo", prompt: undefined },
     },
+    { url: "opencode://session/ses_abc123", link: { type: "session", sessionID: "ses_abc123" } },
+    { url: "opencode://session", link: undefined },
+    { url: "opencode://session/", link: undefined },
+    { url: "opencode://session/msg_abc", link: undefined },
+    { url: "opencode://session/ses_abc/extra", link: undefined },
+    { url: "https://session/ses_abc", link: undefined },
     { url: "opencode://open-project", link: undefined },
     { url: "opencode://open-project?directory=%2Frepo%0A", link: undefined },
     { url: "opencode://console/authorized?window=a", link: undefined },
@@ -27,7 +39,7 @@ describe("deep links", () => {
     const events: DeepLinkEvent[] = [
       { type: "links.received", urls: [project, "opencode://console/authorized?window=a"] },
       { type: "server.lost" },
-      { type: "links.received", urls: [session] },
+      { type: "links.received", urls: [session, "opencode://session/ses_abc"] },
       { type: "server.ready" },
     ]
 
@@ -35,12 +47,12 @@ describe("deep links", () => {
       (acc, event) => {
         const next = transitionDeepLinks(acc.state, event)
 
-        return { state: next.state, opened: [...acc.opened, ...next.effects.map((effect) => effect.link.directory)] }
+        return { state: next.state, opened: [...acc.opened, ...next.effects.map((effect) => opened(effect.link))] }
       },
       { state: INITIAL_DEEP_LINK_STATE, opened: new Array<string>() },
     )
 
-    expect(result.opened).toEqual(["C:\\work\\api", "/repo"])
+    expect(result.opened).toEqual(["C:\\work\\api", "/repo", "ses_abc"])
     expect(result.state).toEqual({ type: "ready" })
   })
 
@@ -65,3 +77,5 @@ describe("deep links", () => {
     expect(next.effects).toEqual([])
   })
 })
+
+const opened = (link: DeepLink) => (link.type === "session" ? link.sessionID : link.directory)

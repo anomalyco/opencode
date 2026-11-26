@@ -1,35 +1,37 @@
 import { describe, expect, test } from "bun:test"
-import type { ElectronAPI } from "../api-types"
-import { onDeepLinks, startDeepLinks } from "./deep-links"
+import { createDeepLinks } from "./deep-links"
 
-describe("renderer deep links", () => {
-  test("links that reach the window before the app listens are delivered to its first listener once", () => {
-    const acknowledged: number[] = []
-    const deliveries: Array<(delivery: { attempt: number; urls: string[] }) => void> = []
+describe("deep links", () => {
+  test("takes the waiting links when it starts listening and again each time main says more came", async () => {
+    const waiting = [
+      ["opencode://open-project?directory=/a"],
+      [],
+      ["opencode://session/ses_b", "opencode://session/ses_c"],
+    ]
 
-    const api: Pick<ElectronAPI, "onDeepLink" | "acknowledgeDeepLinks" | "readyDeepLinks"> = {
+    const notify: Array<() => void> = []
+    const received: string[][] = []
+
+    const stop = createDeepLinks({
+      takeDeepLinks: async () => waiting.shift() ?? [],
       onDeepLink: (cb) => {
-        deliveries.push(cb)
+        notify.push(cb)
 
-        return () => {}
+        return () => notify.splice(0)
       },
-      acknowledgeDeepLinks: (attempt) => acknowledged.push(attempt),
-      readyDeepLinks: () => {},
-    }
+    })((urls) => received.push(urls))
 
-    startDeepLinks(api)
-    deliveries.forEach((deliver) => deliver({ attempt: 1, urls: ["opencode://open-project?directory=/a"] }))
+    await Bun.sleep(0)
+    notify[0]?.()
+    await Bun.sleep(0)
+    notify[0]?.()
+    await Bun.sleep(0)
 
-    const first: string[][] = []
-    const second: string[][] = []
-    const stop = onDeepLinks((urls) => first.push(urls))
-    onDeepLinks((urls) => second.push(urls))
-    deliveries.forEach((deliver) => deliver({ attempt: 2, urls: ["opencode://open-project?directory=/b"] }))
+    expect(received).toEqual([
+      ["opencode://open-project?directory=/a"],
+      ["opencode://session/ses_b", "opencode://session/ses_c"],
+    ])
     stop()
-    deliveries.forEach((deliver) => deliver({ attempt: 3, urls: ["opencode://open-project?directory=/c"] }))
-
-    expect(acknowledged).toEqual([1, 2, 3])
-    expect(first).toEqual([["opencode://open-project?directory=/a"], ["opencode://open-project?directory=/b"]])
-    expect(second).toEqual([["opencode://open-project?directory=/b"], ["opencode://open-project?directory=/c"]])
+    expect(notify).toEqual([])
   })
 })
