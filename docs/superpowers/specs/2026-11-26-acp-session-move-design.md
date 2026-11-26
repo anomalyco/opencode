@@ -1,6 +1,6 @@
 # ACP session move rebinding
 
-Date: 2026-11-26  
+Date: 2026-11-26
 Issue: #66573
 
 ## Intent
