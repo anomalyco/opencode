@@ -590,6 +590,7 @@ describe("GithubCopilotPlugin", () => {
         "gpt-4.1": "@opencode/ai/providers/openai",
         "gpt-5": "@opencode/ai/providers/openai-compatible",
         "gpt-5.1-codex": "@opencode/ai/providers/openai-compatible",
+        "gpt-6-luna": "@opencode/ai/providers/openai",
         "gpt-5-mini": "@opencode/ai/providers/openai-compatible",
         "gpt-4o": "@opencode/ai/providers/openai-compatible",
         "grok-4.5": "@opencode/ai/providers/openai-compatible",
@@ -635,6 +636,12 @@ describe("GithubCopilotPlugin", () => {
         required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gemini-3.8-flash"))),
       )
       expect(resolved.route.id).toBe("openai-compatible-chat")
+
+      const luna = yield* ModelResolver.fromCatalogModel(
+        required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-6-luna"))),
+      )
+      expect(luna.route.id).toBe("openai-compatible-responses")
+      expect(luna.capabilities?.reasoning?.updates).toBe(true)
     }),
   )
 

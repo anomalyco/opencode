@@ -294,6 +294,7 @@ export const GithubCopilotPlugin = define({
           )
           model.package = route.package
           model.settings = Provider.mergeOverlay(model.settings, { baseURL: route.baseURL })
+          if (route.effortUpdates) model.compatibility = { ...model.compatibility, supportsEffortUpdates: true }
         })
       }
     })

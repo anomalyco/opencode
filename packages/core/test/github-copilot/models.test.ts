@@ -165,3 +165,12 @@ test("prices cache reads from either token price spelling", async () => {
     await server.stop(true)
   }
 })
+
+test("sends effort switches as configuration updates only for GPT-6 and later on Responses", () => {
+  const root = "https://api.githubcopilot.test"
+  expect(CopilotModels.routeFor("gpt-6.2-sol", "responses", root).effortUpdates).toBe(true)
+  expect(CopilotModels.routeFor("gpt-6-luna", undefined, root).effortUpdates).toBe(true)
+  expect(CopilotModels.routeFor("gpt-5.6-luna", "responses", root).effortUpdates).toBe(false)
+  expect(CopilotModels.routeFor("gpt-6-luna", "chat", root).effortUpdates).toBe(false)
+  expect(CopilotModels.routeFor("grok-4.6", "responses", root).effortUpdates).toBe(false)
+})

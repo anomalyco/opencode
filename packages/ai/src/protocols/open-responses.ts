@@ -30,7 +30,7 @@ import {
   withUntypedFrames,
 } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
-import { effortUpdate } from "../effort-updates.js"
+import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
 import { toolsUpdate } from "../tool-updates.js"
 import { OpenResponsesOptions } from "./utils/open-responses-options.js"
 import { Lifecycle } from "./utils/lifecycle.js"
@@ -904,9 +904,10 @@ export const fromRequestWithAdapter = Effect.fn("OpenResponses.fromRequestWithAd
   const definitions = ProviderShared.flattenTools(request.tools)
   const options = OpenResponsesOptions.resolve(request)
   const custom = OpenAIFreeform.tools(request)
+  const updates = resolveEffortUpdates(request, options.reasoningEffort)
   return {
-    ...(yield* lowerConversation(request, adapter)),
-    ...lowerGeneration(request, options),
+    ...(yield* lowerConversation(updates.request, adapter)),
+    ...lowerGeneration(request, { ...options, reasoningEffort: updates.effort }),
     tools: definitions.length === 0 ? undefined : yield* lowerTools(definitions, adapter, custom),
     tool_choice:
       allowedToolChoice(options, custom) ??
@@ -1639,6 +1640,8 @@ export const protocol = Protocol.make({
     step: (state: ParserState, event: Event) => step(state, normalize(state, event)),
     terminal,
   },
+  // Not every Open Responses server accepts `configuration_update`, so only models that opt in get it.
+  supportsEffortUpdates: (request) => request.model.capabilities?.reasoning?.updates === true,
 })
 
 export const httpTransport = HttpTransport.sseJson.with<OpenResponsesBody>()
