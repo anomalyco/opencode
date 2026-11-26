@@ -293,6 +293,9 @@ export function resolve(
   options: { terminalSuspend: boolean; environment?: Readonly<Record<string, string | undefined>> },
 ): Resolved {
   const tabsMode = input.tabs?.mode ?? (input.tabs?.enabled === undefined ? "auto" : input.tabs.enabled ? "on" : "off")
+  const environment = options.environment ?? process.env
+  // The herdr TUI sets HERDR_ENV; Herdr.app panes run on herdr-core, which sets HC_TERMINAL_ID instead.
+  const herdr = environment.HERDR_ENV === "1" || !!environment.HC_TERMINAL_ID
   const keybinds: TuiKeybind.KeybindOverrides = { ...input.keybinds }
   if (!options.terminalSuspend) {
     keybinds["terminal.suspend"] = "none"
@@ -331,7 +334,7 @@ export function resolve(
     tabs: {
       ...input.tabs,
       mode: tabsMode,
-      enabled: tabsMode === "on" || (tabsMode === "auto" && (options.environment ?? process.env).HERDR_ENV !== "1"),
+      enabled: tabsMode === "on" || (tabsMode === "auto" && !herdr),
       scope: input.tabs?.scope ?? "cwd",
       layout: input.tabs?.layout ?? "horizontal",
       indicators: input.tabs?.indicators ?? "status",

@@ -623,7 +623,7 @@ pub struct Resolved {
     pub permissions: Permissions,
     pub tps: bool,
     pub tabs: ResolvedTabs,
-    /// `HERDR_ENV=1` when resolved, so [`Resolved::with_info`] resolves a reload the same way.
+    /// Running inside herdr when resolved, so [`Resolved::with_info`] resolves a reload the same way.
     herdr: bool,
 }
 
@@ -658,7 +658,9 @@ impl Resolved {
             Some(true) => TabsMode::On,
             Some(false) => TabsMode::Off,
         });
-        let herdr = environment("HERDR_ENV").as_deref() == Some("1");
+        // The herdr TUI sets HERDR_ENV; Herdr.app panes run on herdr-core, which sets HC_TERMINAL_ID instead.
+        let herdr = environment("HERDR_ENV").as_deref() == Some("1")
+            || environment("HC_TERMINAL_ID").is_some_and(|id| !id.is_empty());
         Self {
             attention: ResolvedAttention {
                 notifications: attention.notifications.unwrap_or(false),
@@ -706,6 +708,11 @@ mod tests {
         let resolved = Resolved::new(Info::default(), |_| None);
         let herdr = Resolved::new(Info::default(), |name| (name == "HERDR_ENV").then(|| "1".to_string()));
         assert!(!herdr.tabs.enabled);
+        // Herdr.app panes (herdr-core) set HC_TERMINAL_ID and no HERDR_ENV.
+        let herdr_core =
+            Resolved::new(Info::default(), |name| (name == "HC_TERMINAL_ID").then(|| "term-1".to_string()));
+        assert!(!herdr_core.tabs.enabled);
+        assert!(!herdr_core.with_info(Info::default()).tabs.enabled);
         // A reload keeps the environment of the first resolve.
         assert!(!herdr.with_info(Info::default()).tabs.enabled);
         assert!(resolved.with_info(Info::default()).tabs.enabled);
