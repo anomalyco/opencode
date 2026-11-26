@@ -7,7 +7,8 @@ clamps, unknown node types dropped).
 
 ## Where it is produced and read
 
-- **psychoscript-mobile writes it, in Rust, from the VM's value.** It needs no prelude change.
+- **widget-mobile's widget encoder (`packages/widgets-rs`, on psychoscript-mobile) writes it, in Rust, from the VM's
+  value.** It needs no prelude change.
   - **Steps and draws.** The host runs `<program>\nreturn __widget_native_step(__input())` (`widgets.md`, Native
     hosts). The prelude hands the view, or a draw's commands, to the host global `__widget_emit` as a `HostValue`,
     which is cheaper than the result path's VM → JSON → `Data`; the rest of an `init` or `event` step's output
@@ -168,8 +169,8 @@ arg = 00 null | 01 false | 02 true | 03 f64 | 04 str | 05 varint n arg×n (list)
 
 `bytes` are the batch's `ArrayBuffer` (or typed array) bytes. The host borrows them in place
 (`TypedArray::with_bytes`) and copies them once, into the message. Ops address them by `[byteOffset, byteLength]` as
-in the spec. On mobile the batch is replayed inside psychoscript-mobile, so it never needs to reach the app. The
-encoding above is for a host whose app does the replay.
+in the spec. On mobile the batch is replayed inside the app's native library (`widget-mobile`, on psychoscript-mobile
+and psychoscript-gpu), so it never needs to reach the app. The encoding above is for a host whose app does the replay.
 
 ## Errors
 

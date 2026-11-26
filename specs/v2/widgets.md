@@ -236,7 +236,7 @@ error inline. The first `init` step failing shows an error card with the message
 
 Building the tree clients get costs a JavaScript pass over every node of every view, which is slow on the Rust
 interpreter. Every host is a **native host**: it does it natively, while it converts or encodes the output (Rust hosts:
-psychoscript-mobile's encoder, Rune's reader, the web host) and the TypeScript runtime (`@opencode/widget`'s
+the widget encoder of `widget-mobile`, Rune's reader, the web host) and the TypeScript runtime (`@opencode/widget`'s
 `step`, `WidgetSession` and `LiveWidget`).
 
 - **Entries.** Steps (`init`, `event`, `draw`): `return __widget_native_step(__input())`. Live:
@@ -580,10 +580,10 @@ struct Widget { resolution: vec2f, time: f32, scale: f32, pointer: vec4f, values
 seconds since the canvas appeared. Colors are sRGB-encoded: clients write them to the surface without a linear-to-sRGB
 conversion. With `fps: 0` it renders once, and again when its `values` change.
 `widget.pointer` is `(x, y, down, 0)`; `widget.values` carries the node's `values` (up to 16 floats, row-major, zero
-padded), which the widget template sets from state in `view`. Rune passes WGSL to wgpu as is; iOS gets MSL and Android GLSL
-ES 3.00 translated with naga (`psychoscript-mobile`). Source is capped at 16 KB. A shader that fails to compile shows
-`poster` (an image src) or `alt` with the error inline. A host never submits a new shader frame while the previous one
-is still drawing. A shader whose frame is still unfinished more than 50 ms after its submit, three frames in a row,
+padded), which the widget template sets from state in `view`. Rune passes WGSL to wgpu as is, and so do iOS and
+Android (`widget-mobile`'s `ShaderCanvas`, on wgpu: Metal, Vulkan). Source is capped at 16 KB. A shader that fails to
+compile shows `poster` (an image src) or `alt` with the error inline. A host never submits a new shader frame while the
+previous one is still drawing. A shader whose frame is still unfinished more than 50 ms after its submit, three frames in a row,
 stops and keeps showing its last frame: a client error (Failures) with exactly this text:
 `the shader took over 50 ms a frame, three frames in a row`. A frame still unfinished 250 ms after its submit stops the
 canvas before that, whatever this rule has counted (`widgets-gpu.md`, GPU hang). The TUI shows `alt` and `poster` for
@@ -886,7 +886,8 @@ nothing.
 ## Client behaviour
 
 - Step outputs and live posts reach iOS and Android in the binary format of `widgets-binary.md`, written by
-  psychoscript-mobile from the VM's value; Rune reads the VM's value directly; the TUI and the web host keep JSON.
+  `widget-mobile`'s widget encoder (`packages/widgets-rs`, on psychoscript-mobile) from the VM's value; Rune reads the
+  VM's value directly; the TUI and the web host keep JSON.
 - Render each `widget` tool call inline in the timeline at its position, from its tool input plus its state.
 - `failure` (any status `open`): show the error on the widget. With `failure.sent: false`, add an **"Ask agent to fix
   it"** action that calls `report` with that error and `ask: true`; with `sent: true`, say the agent was told.
