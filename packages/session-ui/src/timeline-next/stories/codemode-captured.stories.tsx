@@ -190,7 +190,7 @@ export const Captured = {
             <NextSessionTimeline document={view.document} timelineDetail={detail()} />
           </Show>
         </CurrentSessionProviders>
-        <SessionStatusLane document={view.document} timelineDetail={detail()} next={next} />
+        <SessionStatusLane document={view.document} timelineDetail={detail()} next={next} flat={state.flat} />
       </div>
     )
 
@@ -488,10 +488,16 @@ function sessionTimelineSettings(detail: TimelineDetail) {
  * it and the offer to move a blocking call to the background. A story session has no permissions, questions, queued
  * input or background tasks, so those cases are left out.
  */
-function SessionStatusLane(props: { document: SessionDocument; timelineDetail: TimelineDetail; next: boolean }) {
+function SessionStatusLane(props: {
+  document: SessionDocument
+  timelineDetail: TimelineDetail
+  next: boolean
+  flat: boolean
+}) {
   const input = {
     sessionMessages: () => props.document.messages,
     status: () => props.document.status,
+    scriptDiffs: () => props.flat,
     timelineDetail: () => props.timelineDetail,
     turnDiffs: () => false,
   }
