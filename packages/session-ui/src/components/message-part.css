@@ -2229,6 +2229,11 @@
     padding-bottom: 16px;
   }
 
+  /* Nested sticky file headers stop below that taller header. */
+  [data-component="collapsed-tool-group"] > [data-component="collapsible"] > [data-slot="collapsible-content"] {
+    --sticky-accordion-top: calc(var(--context-group-sticky-top) + var(--line-height-compact) + 22px);
+  }
+
   [data-component="context-tool-group-list"] [data-slot="context-tool-group-item"] {
     min-height: var(--line-height-compact);
   }

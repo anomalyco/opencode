@@ -1765,7 +1765,7 @@ story(
 
     expect(result).toEqual({
       // Alphabetical among the app's themes, not appended after them.
-      neighbors: ["Mercury", "Midnight", "Monokai"],
+      neighbors: ["Mercury", "Midnight", "Modus"],
       withdrawn: { listed: false, selected: "oc-2", stored: "acme:midnight" },
       restored: "acme:midnight",
     })
