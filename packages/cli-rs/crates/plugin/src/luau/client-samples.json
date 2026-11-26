@@ -129,6 +129,7 @@
 "experimental.persistentPty.connectToken":{"ptyID":"s0","x-opencode-ticket":"s1"},
 "experimental.media.get":{"hash":"s0"},
 "experimental.blob.get":{"id":"s0"},
+"experimental.browser.tunnel":{},
 "experimental.automation.create":{"sessionID":"s0","directory":"s0","name":"s0","trigger":{"type":"at","at":"s2","tz":"s2"},"action":{"type":"prompt","prompt":"s2","to":{"session":"s4"}},"expires":"s0"},
 "experimental.automation.list":{"sessionID":"s1","directory":"s1"},
 "experimental.automation.get":{"automationID":"s0"},
@@ -179,6 +180,7 @@
 "websearch.providers":{"location":{"directory":"s3"}},
 "websearch.query":{"location":{"directory":"s3"},"query":"s0","providerID":"s0"},
 "experimental.usage.limits":{"location":{"directory":"s3"}},
+"experimental.flag.get":{"location":{"directory":"s3"}},
 "config.get":{"location":{"directory":"s3"}},
 "config.shells":{},
 "experimental.config.update":{"shell":"s1"}

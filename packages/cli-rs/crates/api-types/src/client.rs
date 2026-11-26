@@ -1567,6 +1567,11 @@ pub fn experimental_blob_get(input: &ExperimentalBlobGetInput) -> Call<bytes::By
     call
 }
 
+/// `GET /api/experimental/browser/tunnel` (`browser.tunnel`)
+pub fn experimental_browser_tunnel() -> Call<ExperimentalBrowserTunnelOutput> {
+    Call::new("GET", "/api/experimental/browser/tunnel".to_owned(), Reply::Json, 200, &[400, 401, 403])
+}
+
 /// `POST /api/experimental/automation` (`automation.create`)
 pub fn experimental_automation_create(
     input: &ExperimentalAutomationCreateInput,
@@ -2150,6 +2155,15 @@ pub fn websearch_query(input: &WebsearchQueryInput) -> Call<WebsearchQueryOutput
 pub fn experimental_usage_limits(input: &ExperimentalUsageLimitsInput) -> Call<ExperimentalUsageLimitsOutput> {
     let mut call =
         Call::new("GET", "/api/experimental/usage/limits".to_owned(), Reply::Json, 200, &[400, 401, 404, 503]);
+    if let Some(value) = &input.location {
+        call.query("location", value);
+    }
+    call
+}
+
+/// `GET /api/experimental/flag` (`get`)
+pub fn experimental_flag_get(input: &ExperimentalFlagGetInput) -> Call<ExperimentalFlagGetOutput> {
+    let mut call = Call::new("GET", "/api/experimental/flag".to_owned(), Reply::Json, 200, &[400, 401, 404]);
     if let Some(value) = &input.location {
         call.query("location", value);
     }
@@ -2985,6 +2999,7 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
         "experimental.blob.get" => {
             Some((|| Ok(experimental_blob_get(&ExperimentalBlobGetInput { id: field(input, "id")? }).cast()))())
         }
+        "experimental.browser.tunnel" => Some((|| Ok(experimental_browser_tunnel().cast()))()),
         "experimental.automation.create" => Some((|| {
             Ok(experimental_automation_create(&ExperimentalAutomationCreateInput {
                 session_id: field(input, "sessionID")?,
@@ -3275,6 +3290,9 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
         })()),
         "experimental.usage.limits" => Some((|| {
             Ok(experimental_usage_limits(&ExperimentalUsageLimitsInput { location: field(input, "location")? }).cast())
+        })()),
+        "experimental.flag.get" => Some((|| {
+            Ok(experimental_flag_get(&ExperimentalFlagGetInput { location: field(input, "location")? }).cast())
         })()),
         "config.get" => Some((|| Ok(config_get(&ConfigGetInput { location: field(input, "location")? }).cast()))()),
         "config.shells" => Some((|| Ok(config_shells().cast()))()),

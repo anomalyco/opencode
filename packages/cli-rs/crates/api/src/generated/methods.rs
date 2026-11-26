@@ -168,6 +168,13 @@ impl Client {
     endpoint!(" `POST /api/experimental/persistent-pty/:ptyID/connect-token` (`persistentPty.connectToken`)", experimental_persistent_pty_connect_token, experimental_persistent_pty_connect_token_call, data, ExperimentalPersistentPtyConnectTokenOutput, input: ExperimentalPersistentPtyConnectTokenInput);
     endpoint!(" `GET /api/experimental/media/:hash` (`media.get`)", experimental_media_get, experimental_media_get_call, binary, bytes::Bytes, input: ExperimentalMediaGetInput);
     endpoint!(" `GET /api/experimental/blob/:id` (`blob.get`)", experimental_blob_get, experimental_blob_get_call, binary, bytes::Bytes, input: ExperimentalBlobGetInput);
+    endpoint!(
+        " `GET /api/experimental/browser/tunnel` (`browser.tunnel`)",
+        experimental_browser_tunnel,
+        experimental_browser_tunnel_call,
+        json,
+        ExperimentalBrowserTunnelOutput
+    );
     endpoint!(" `POST /api/experimental/automation` (`automation.create`)", experimental_automation_create, experimental_automation_create_call, data, ExperimentalAutomationCreateOutput, input: ExperimentalAutomationCreateInput);
     endpoint!(" `GET /api/experimental/automation` (`automation.list`)", experimental_automation_list, experimental_automation_list_call, data, ExperimentalAutomationListOutput, input: ExperimentalAutomationListInput);
     endpoint!(" `GET /api/experimental/automation/:automationID` (`automation.get`)", experimental_automation_get, experimental_automation_get_call, data, ExperimentalAutomationGetOutput, input: ExperimentalAutomationGetInput);
@@ -242,6 +249,7 @@ impl Client {
     endpoint!(" `GET /api/websearch/provider` (`providers`)", websearch_providers, websearch_providers_call, json, WebsearchProvidersOutput, input: WebsearchProvidersInput);
     endpoint!(" `POST /api/websearch` (`query`)", websearch_query, websearch_query_call, json, WebsearchQueryOutput, input: WebsearchQueryInput);
     endpoint!(" `GET /api/experimental/usage/limits` (`limits`)", experimental_usage_limits, experimental_usage_limits_call, json, ExperimentalUsageLimitsOutput, input: ExperimentalUsageLimitsInput);
+    endpoint!(" `GET /api/experimental/flag` (`get`)", experimental_flag_get, experimental_flag_get_call, json, ExperimentalFlagGetOutput, input: ExperimentalFlagGetInput);
     endpoint!(" `GET /api/config` (`get`)", config_get, config_get_call, json, ConfigGetOutput, input: ConfigGetInput);
     endpoint!(" `GET /api/config/shell` (`shells`)", config_shells, config_shells_call, json, ConfigShellsOutput);
     endpoint!(" `PATCH /api/experimental/config` (`update`)", experimental_config_update, experimental_config_update_call, empty, (), input: ExperimentalConfigUpdateInput);

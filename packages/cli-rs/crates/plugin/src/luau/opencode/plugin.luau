@@ -1994,6 +1994,7 @@ export type ConfigInfoEncoded = {
         console_watches: boolean?,
         recommended_api: boolean?,
         full_codemode: boolean?,
+        codemode_agents: boolean?,
         machines: boolean?,
         home_memory: boolean?,
         project_overlay: boolean?,
@@ -2001,6 +2002,7 @@ export type ConfigInfoEncoded = {
         mcp_skills: boolean?,
         compaction_jobs: boolean?,
         sqlite_fts: boolean?,
+        browser_stream_tunnel: boolean?,
         video_generate: (boolean | {
             model: (string | {
                 providerID: string,
@@ -5144,6 +5146,9 @@ export type Client = {
                 id: string,
             }) -> (string?, string?),
         },
+        browser: {
+            tunnel: (input: {}?) -> (boolean?, string?),
+        },
         config: {
             update: (input: {
                 shell: string?,
@@ -5165,6 +5170,14 @@ export type Client = {
             }) -> ({
                 location: LocationPublicRef,
                 data: FileSystemWrite,
+            }?, string?),
+        },
+        flag: {
+            get: (input: {
+                location: { directory: string? }?,
+            }?) -> ({
+                location: LocationPublicRef,
+                data: { [string]: boolean },
             }?, string?),
         },
         generate: {

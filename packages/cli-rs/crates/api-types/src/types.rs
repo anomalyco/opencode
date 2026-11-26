@@ -10678,6 +10678,9 @@ pub struct ExperimentalBlobGetInput {
     pub id: BlobID,
 }
 
+/// Output of `Client::experimental_browser_tunnel`.
+pub type ExperimentalBrowserTunnelOutput = bool;
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
 pub struct AutomationTriggerAt {
     pub r#type: tag::At,
@@ -12064,6 +12067,18 @@ pub struct ExperimentalUsageLimitsOutput {
     pub data: Option<UsageLimitsInfo>,
 }
 
+/// Input of `Client::experimental_flag_get`.
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct ExperimentalFlagGetInput {
+    pub location: Option<LocationQueryInput>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Default)]
+pub struct ExperimentalFlagGetOutput {
+    pub location: LocationPublicRef,
+    pub data: IndexMap<String, bool>,
+}
+
 /// Input of `Client::config_get`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct ConfigGetInput {
@@ -12849,6 +12864,8 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub full_codemode: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub codemode_agents: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub machines: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub home_memory: Option<bool>,
@@ -12862,6 +12879,8 @@ pub struct ConfigEntryDocumentInfoExperimental {
     pub compaction_jobs: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sqlite_fts: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub browser_stream_tunnel: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub video_generate: Option<ConfigEntryDocumentInfoExperimentalVideoGenerate>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

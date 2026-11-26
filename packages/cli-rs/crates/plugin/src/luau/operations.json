@@ -129,6 +129,7 @@
 "experimental.persistentPty.connectToken":{"method":"POST","path":"/api/experimental/persistent-pty/:ptyID/connect-token","fields":[["ptyID","params",false,"string"],["x-opencode-ticket","headers",true,"string?"]],"body":null,"reply":"data"},
 "experimental.media.get":{"method":"GET","path":"/api/experimental/media/:hash","fields":[["hash","params",false,"string"]],"body":null,"reply":"binary"},
 "experimental.blob.get":{"method":"GET","path":"/api/experimental/blob/:id","fields":[["id","params",false,"string"]],"body":null,"reply":"binary"},
+"experimental.browser.tunnel":{"method":"GET","path":"/api/experimental/browser/tunnel","fields":[],"body":null,"reply":"json"},
 "experimental.automation.create":{"method":"POST","path":"/api/experimental/automation","fields":[["sessionID","payload",true,null],["directory","payload",true,null],["name","payload",false,null],["trigger","payload",false,null],["action","payload",false,null],["expires","payload",true,null]],"body":"object","reply":"data"},
 "experimental.automation.list":{"method":"GET","path":"/api/experimental/automation","fields":[["sessionID","query",true,"string?"],["directory","query",true,"string?"]],"body":null,"reply":"data"},
 "experimental.automation.get":{"method":"GET","path":"/api/experimental/automation/:automationID","fields":[["automationID","params",false,"string"]],"body":null,"reply":"data"},
@@ -179,6 +180,7 @@
 "websearch.providers":{"method":"GET","path":"/api/websearch/provider","fields":[["location","query",true,"{ directory: string? }?"]],"body":null,"reply":"json"},
 "websearch.query":{"method":"POST","path":"/api/websearch","fields":[["location","query",true,"{ directory: string? }?"],["query","payload",false,null],["providerID","payload",true,null]],"body":"object","reply":"json"},
 "experimental.usage.limits":{"method":"GET","path":"/api/experimental/usage/limits","fields":[["location","query",true,"{ directory: string? }?"]],"body":null,"reply":"json"},
+"experimental.flag.get":{"method":"GET","path":"/api/experimental/flag","fields":[["location","query",true,"{ directory: string? }?"]],"body":null,"reply":"json"},
 "config.get":{"method":"GET","path":"/api/config","fields":[["location","query",true,"{ directory: string? }?"]],"body":null,"reply":"json"},
 "config.shells":{"method":"GET","path":"/api/config/shell","fields":[],"body":null,"reply":"json"},
 "experimental.config.update":{"method":"PATCH","path":"/api/experimental/config","fields":[["shell","payload",false,null]],"body":"object","reply":"empty"}
