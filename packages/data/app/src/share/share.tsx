@@ -1594,10 +1594,10 @@ function TypeGlyph(props: { format: "video" | "image" | "embed" }) {
   return (
     <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true">
       <Show when={props.format === "video"}>
-        <g fill="none" stroke="currentColor" stroke-width="1.5">
-          <rect x="1.75" y="4.25" width="8.5" height="7.5" />
-          <path d="m10.25 7 4-2.25v6.5l-4-2.25" />
-        </g>
+        {/* On the 20px grid it shows at, every edge on a pixel's centre, the lens a closed shape against the body. */}
+        <svg viewBox="0 0 20 20" width="16" height="16" overflow="visible">
+          <path d="M2.5 5.5h10v9h-10zM12.5 8.5l5-2.5v8l-5-2.5z" fill="none" stroke="currentColor" stroke-width="1.5" />
+        </svg>
       </Show>
       <Show when={props.format === "image"}>
         <g fill="none" stroke="currentColor" stroke-width="1.5">
