@@ -33,13 +33,10 @@ const pages = fileRoutes as {
   [handler: string]: unknown
 }[]
 
-/** Whether an API route or a server function (SolidStart's /_server) answers a request, not a page. A HEAD
- * request is answered by the route's GET handler. */
+/** Whether an API route answers a request, not a page. A HEAD request is answered by the route's GET handler. */
 const answered = (path: string, method: string) =>
-  path.startsWith("/_server") ||
   pages.some(
-    (route) =>
-      !route.page && (route[`$${method}`] || (method === "HEAD" && route.$GET)) && matches(route.path, path),
+    (route) => !route.page && (route[`$${method}`] || (method === "HEAD" && route.$GET)) && matches(route.path, path),
   )
 
 /** The methods an address takes: an API route's handlers (HEAD with GET), else a page's GET and HEAD. */
@@ -64,6 +61,11 @@ export const staticPages: Middleware = async (_event, next) => {
   if (import.meta.env.DEV || !event) return next()
   const url = new URL(event.request.url)
   const path = strip(url.pathname)
+  // Production hydrates no page and ships no app JavaScript, so nothing calls SolidStart's /_server
+  // endpoint anymore. Answer stale tabs and probes with 410 instead of letting SolidStart throw 500
+  // on retired function ids (matching the Cloudflare WAF rule for legacy 64-hex ids).
+  if (path === "/_server" || path.startsWith("/_server/"))
+    return new Response(null, { status: 410, headers: { "Cache-Control": "private, no-store" } })
   // Pages only answer GET and HEAD. A method nothing handles gets a 405 listing the methods the address takes,
   // not the app's document, whose scripts production no longer ships.
   if (event.request.method !== "GET" && event.request.method !== "HEAD")
