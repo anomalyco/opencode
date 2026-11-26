@@ -244,24 +244,11 @@ describe("PushSender", () => {
       const many = PushSender.message({
         ...question,
         type: "permission",
-        data: { ...data, resources: Array.from({ length: 3000 }, (_, i) => "cmd" + i) },
+        data: { ...data, resources: Array.from({ length: 300 }, (_, i) => "mkdir -p src/dir" + i) },
       })
       expect(Buffer.byteLength(many, "utf8")).toBeLessThanOrEqual(2600)
       expect(JSON.parse(many).data.resources).not.toContain("…")
-      expect(JSON.parse(many).data.resourceCount).toBe(3000)
-      const save = { ...data, resources: ["ls"], save: ["s".repeat(5_000)] }
-      expect(JSON.parse(PushSender.message({ ...question, type: "permission", data: save })).data).toEqual({
-        ...data,
-        resources: ["ls"],
-        save: undefined,
-        truncated: true,
-      })
-      const note = { ...data, resources: ["ls"], message: "m".repeat(5_000) }
-      expect(JSON.parse(PushSender.message({ ...question, type: "permission", data: note })).data).toEqual({
-        ...note,
-        message: expect.stringMatching(/^m+…$/),
-        truncated: true,
-      })
+      expect(JSON.parse(many).data.resourceCount).toBe(300)
       const options = [{ label: "A" }, { label: "abcd", value: "b" }, { label: "Z".repeat(100) }]
       const described = options.map((option) => ({ ...option, description: "An option" }))
       const field = { key: "q0", type: "string", description: "b".repeat(3_000), options: described }
@@ -272,36 +259,20 @@ describe("PushSender", () => {
         fields: [{ key: "q0", type: "string", description: expect.stringMatching(/^b+…$/), options }],
         truncated: true,
       })
-      const labels = Array.from({ length: 1000 }, (_, i) => ({ label: "option " + i }))
-      const dropped = JSON.parse(
-        PushSender.message({
-          ...question,
-          data: { formID: "frm_1", fields: [{ key: "q0", type: "string", options: labels }] },
-        }),
-      )
-      expect(dropped.data.fields[0].options).toEqual(labels.slice(0, dropped.data.fields[0].options.length))
-      expect(dropped.data.fields[0].optionCount).toBe(1000)
-      expect(dropped.data.truncated).toBe(true)
-      const titled = PushSender.message({
-        ...question,
-        data: { formID: "frm_1", fields: [{ key: "q0", type: "string", title: "t".repeat(4_000) }] },
-      })
-      expect(Buffer.byteLength(titled, "utf8")).toBeLessThanOrEqual(2600)
-      expect(JSON.parse(titled).data).toEqual({
-        formID: "frm_1",
-        fields: [{ key: "q0", type: "string" }],
-        truncated: true,
-      })
-      const keyed = PushSender.message({
+      // More options than fit: only the ids and small facts go out, and the app fetches the form.
+      const paths = Array.from({ length: 100 }, (_, i) => ({ label: "src/components/feature-" + i + "/index.tsx" }))
+      const most = PushSender.message({
         ...question,
         data: {
           formID: "frm_1",
           replySessionID: sessionID,
           kind: "question",
-          fields: [{ key: "k".repeat(4_000), type: "string", options }],
+          count: 1,
+          inlineReply: true,
+          fields: [{ key: "q0", type: "string", options: paths }],
         },
       })
-      expect(JSON.parse(keyed)).toEqual({
+      expect(JSON.parse(most)).toEqual({
         v: 1,
         type: "form",
         id: question.id,
@@ -310,44 +281,20 @@ describe("PushSender", () => {
         attention: true,
         title: question.title,
         body: question.body,
-        data: { formID: "frm_1", replySessionID: sessionID, kind: "question", truncated: true },
+        data: { formID: "frm_1", replySessionID: sessionID, kind: "question", count: 1, truncated: true },
       })
-      // A message a byte too big loses only inlineReply, which is not a cut.
-      const edge = (description: string) =>
-        PushSender.message({
-          ...question,
-          data: { formID: "frm_1", inlineReply: true, fields: [{ key: "q0", type: "string", description, options }] },
-        })
-      const room = 2601 - Buffer.byteLength(edge(""), "utf8")
-      expect(JSON.parse(edge("d".repeat(room))).data).toEqual({
-        formID: "frm_1",
-        fields: [{ key: "q0", type: "string", description: "d".repeat(room), options }],
-      })
-      const answer = PushSender.message({ ...finished, data: { outcome: "succeeded", text: "\u0000".repeat(500) } })
-      expect(Buffer.byteLength(answer, "utf8")).toBeLessThanOrEqual(2600)
-      expect(JSON.parse(answer).data).toEqual({ outcome: "succeeded", truncated: true })
-      const error = { type: "provider.rate-limit", message: "Slow down", status: 429, retryAfterMs: 30_000 }
+      const error = { type: "provider.rate-limit", message: "e".repeat(3_000), status: 429, retryAfterMs: 30_000 }
       const failed = PushSender.message({
         ...finished,
         body: "Failed",
-        data: { outcome: "failed", text: "\u0000".repeat(500), error },
+        data: { outcome: "failed", text: "a".repeat(500), error },
       })
-      expect(JSON.parse(failed).data).toEqual({ outcome: "failed", error, truncated: true })
-      const long = PushSender.message({
-        ...finished,
-        data: { outcome: "failed", error: { ...error, message: "e".repeat(5_000) } },
-      })
-      expect(Buffer.byteLength(long, "utf8")).toBeLessThanOrEqual(2600)
-      expect(JSON.parse(long).data).toEqual({
+      expect(Buffer.byteLength(failed, "utf8")).toBeLessThanOrEqual(2600)
+      expect(JSON.parse(failed).data).toEqual({
         outcome: "failed",
         error: { ...error, message: expect.stringMatching(/^e+…$/) },
         truncated: true,
       })
-      const typed = PushSender.message({
-        ...finished,
-        data: { outcome: "failed", idleMessageID: "msg_9", error: { type: "t".repeat(4_000) } },
-      })
-      expect(JSON.parse(typed).data).toEqual({ outcome: "failed", idleMessageID: "msg_9", truncated: true })
       expect(PushSender.message(question)).toBe(
         JSON.stringify({
           v: 1,

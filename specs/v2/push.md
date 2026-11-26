@@ -106,23 +106,21 @@ A form is something the session asks the person to fill in. Today only forms who
 
 A field uses the same names as the form the server returns from `GET`, and carries only these keys:
 
-| Key                    | Sent                                               | Meaning                                                                                               |
-| ---------------------- | -------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `formID`               | always                                             | The form to reply to.                                                                                 |
-| `replySessionID`       | always                                             | The session that owns the form, which may be a subagent's.                                            |
-| `kind`                 | when the form has one                              | What the form is for. `"question"` is the question tool's.                                            |
-| `count`                | always                                             | How many fields the form has.                                                                         |
-| `inlineReply`          | when a reply can be built from this message alone  | `true`. See [Replying](#replying-from-a-notification).                                                |
-| `source`               | when a tool call asked                             | The call: `type` `"tool"`, the `messageID` of its assistant message, its `id`.                        |
-| `fields[].key`         | always                                             | The field's key, used in the reply.                                                                   |
-| `fields[].type`        | always                                             | `string`, `multiselect`, `number`, `integer`, `boolean` or `external`.                                |
-| `fields[].title`       | when it has one                                    | Its short header.                                                                                     |
-| `fields[].description` | when it has one                                    | The question itself.                                                                                  |
-| `fields[].custom`      | when a typed answer is accepted                    | `true`, also for a `string` field without options. Without it, only the listed options are accepted.  |
-| `fields[].options`     | for `string` and `multiselect` fields with options | In order. `label` always; `value` only when it differs from the label; `description` when it has one. |
-| `fields[].optionCount` | when options were left out                         | How many options the field has.                                                                       |
-| `fields[].url`         | for `external` fields                              | The page to open.                                                                                     |
-| `truncated`            | when something in `data` was cut                   | `true`. See [Size](#size).                                                                            |
+| Key                    | Sent                                               | Meaning                                                                                                            |
+| ---------------------- | -------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `formID`               | always                                             | The form to reply to.                                                                                              |
+| `replySessionID`       | always                                             | The session that owns the form, which may be a subagent's.                                                         |
+| `kind`                 | when the form has one                              | What the form is for. `"question"` is the question tool's.                                                         |
+| `count`                | always                                             | How many fields the form has.                                                                                      |
+| `inlineReply`          | when a reply can be built from this message alone  | `true`. See [Replying](#replying-from-a-notification).                                                             |
+| `source`               | when a tool call asked                             | The call: `type` `"tool"`, the `messageID` of its assistant message, its `id`.                                     |
+| `fields[].key`         | always                                             | The field's key, used in the reply.                                                                                |
+| `fields[].type`        | always                                             | `string`, `multiselect`, `number`, `integer`, `boolean` or `external`.                                             |
+| `fields[].title`       | when it has one                                    | Its short header.                                                                                                  |
+| `fields[].description` | when it has one                                    | The question itself.                                                                                               |
+| `fields[].custom`      | when a typed answer is accepted                    | `true`. Without it, only the listed options are accepted.                                                          |
+| `fields[].options`     | for `string` and `multiselect` fields with options | All of them, in order. `label` always; `value` only when it differs from the label; `description` when it has one. |
+| `truncated`            | when something in `data` was cut                   | `true`. See [Size](#size).                                                                                         |
 
 ## Finished and Failed
 
@@ -185,9 +183,9 @@ Pushes can arrive late, out of order or not at all.
 Replies name `replySessionID`, not the top-level `sessionID`. An app offers an action only when this message gives it everything the action needs; otherwise it opens the session.
 
 - Permission: offer the `decisions` the message lists, and no others. `POST /api/session/:replySessionID/permission/:requestID/reply` with `{ "decision": "once" | "always" | "reject", "message"?: string }`. A `message` with `reject` goes back to the agent as feedback. `always` stores the `save` patterns for the project and also allows other waiting requests they now cover. `reject` also rejects the session's other waiting requests from the same assistant message. Don't approve a request whose `truncated` is `true` without fetching the full version first.
-- Form: reply only when `inlineReply` is `true`, `fields` holds all `count` fields, and the app knows the `type` of each. `POST /api/session/:replySessionID/form/:formID/reply` with `{ "answer": { "<key>": value } }`. For `string` the value is a string; for `multiselect`, a list of strings. For an option, send its `value`, or its `label` when there is no `value`. Send typed text only when `custom` is `true`. To dismiss a form without answering, `DELETE /api/session/:replySessionID/form/:formID`, which needs only the ids.
+- Form: reply only when `inlineReply` is `true`, `fields` holds all `count` fields, and the app knows the `type` of each. `POST /api/session/:replySessionID/form/:formID/reply` with `{ "answer": { "<key>": value } }`. For `string` the value is a string; for `multiselect`, a list of strings. For an option, send its `value`, or its `label` when there is no `value`. Send typed text only when `custom` is `true`. The server checks the answer and answers 400 when it doesn't accept it; the app then opens the session. To dismiss a form without answering, `DELETE /api/session/:replySessionID/form/:formID`, which needs only the ids.
 
-The server sends `inlineReply` when the form has one field, which today must be a `string` or `multiselect` that takes an option or typed text, the message holds all of that field's options, the form puts no rule on the answer that the message doesn't carry, and nothing in `data` was cut. A reply settles the whole form.
+The server sends `inlineReply` when the form has one field, a `string` or `multiselect`, and nothing in `data` was cut. A reply settles the whole form.
 
 ## Size
 
@@ -196,15 +194,12 @@ A message is at most 2,600 bytes, so its box fits the relay's limit. When it is 
 1. `inlineReply` is left out.
 2. `text` is left out.
 3. `error.message` is cut from its end.
-4. A permission's `message` is cut from its end.
-5. `resources` are kept in order while they fit; the next one is shortened, or left out if even that won't fit, and the rest are left out. If that isn't enough, `save` is left out and `resources` are cut again from the full list.
-6. Option `description`s are left out.
-7. A field's `description` is cut from its end.
-8. `options` are kept in order while they fit; the rest are left out. An option's `label` and `value` are never shortened, because a reply sends them exactly.
-9. A field's `title` is left out.
-10. `data` keeps only its ids (`requestID`, `formID`, `replySessionID`, `messageID`, `idleMessageID`), `kind`, `count`, `decisions`, `outcome` and `truncated`, and `directory` is left out. This is the one step that leaves out keys the tables above call always sent.
+4. `resources` are kept in order while they fit; the next one is shortened, or left out if even that won't fit, and the rest are left out.
+5. Option `description`s are left out.
+6. A field's `description` is cut from its end.
+7. `data` keeps only its ids (`requestID`, `formID`, `replySessionID`, `messageID`, `idleMessageID`), `kind`, `count`, `decisions`, `outcome` and `truncated`, and `directory` is left out. This is the one step that leaves out keys the tables above call always sent.
 
-Anything shortened ends in "…". A value is never sent as a bare "…": it is left out instead, and so is a list of `resources` or `options` when none of them fit. When anything in `data` is cut or left out, `data.truncated` is `true`; otherwise it isn't sent. Leaving out only `inlineReply` doesn't set it, and neither does an empty list or the server's choice of excerpt for `text`. Ids, `time`, `title` and `body` are never cut.
+Anything shortened ends in "…". A value is never sent as a bare "…": it is left out instead. When anything in `data` is cut or left out, `data.truncated` is `true`; otherwise it isn't sent. The server's choice of excerpt for `text` doesn't set it. Ids, `time`, `title` and `body` are never cut.
 
 The full version can be fetched by id:
 

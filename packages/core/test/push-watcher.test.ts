@@ -286,26 +286,6 @@ describe("PushWatcher", () => {
           },
         },
       ])
-
-      // A rule the phone can't check, or nothing to answer with, leaves the reply to the app.
-      const fields: Form.Field[] = [
-        { key: "q0", type: "string", maxLength: 0 },
-        { key: "q0", type: "string", required: true },
-        { key: "q0", type: "string", options: [] },
-      ]
-      for (const [index, field] of fields.entries()) {
-        yield* bus.publish(Form.Event.Created, {
-          form: {
-            id: Form.ID.make("frm_rule" + index),
-            sessionID: childID,
-            title: "Questions",
-            metadata: { kind: "question" },
-            fields: [field],
-          },
-        })
-        yield* waitUntil(Effect.sync(() => boxes.length === 3 + index))
-      }
-      expect(boxes.slice(2).map((box) => open(key, box).data.inlineReply)).toEqual([undefined, undefined, undefined])
     }),
   )
   it.live("clears a notification once it is answered, interrupted or followed by a new prompt", () =>
@@ -352,11 +332,11 @@ describe("PushWatcher", () => {
           sessionID: childID,
           title: "Questions",
           metadata: { kind: "question" },
-          fields: [{ key: "q0", title: "Database", type: "string" }],
+          fields: [{ key: "q0", title: "Database", type: "string", custom: true }],
         },
       })
       yield* waitUntil(Effect.sync(() => boxes.length === 3))
-      // One field with no rules on its answer can be answered from the notification.
+      // A form with one field can be answered from the notification.
       expect(open(key, boxes[2]!).data).toEqual({
         formID: "frm_1",
         replySessionID: childID,

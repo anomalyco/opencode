@@ -53,11 +53,7 @@ const layer = Layer.effectDiscard(
       const session = yield* sessions.get(sessionID)
       if (session.parentID) return
       // The newest assistant message is the turn's last step, so only read it when this turn ran one.
-      const [last] = ran
-        ? yield* sessions
-            .messages({ sessionID, type: "assistant", order: "desc", limit: 1 })
-            .pipe(Effect.orElseSucceed(() => []))
-        : []
+      const [last] = ran ? yield* sessions.messages({ sessionID, type: "assistant", order: "desc", limit: 1 }) : []
       const text = Array.from(
         (last?.type === "assistant" ? last.content : [])
           .flatMap((part) => (part.type === "text" ? [part.text] : []))
@@ -82,7 +78,7 @@ const layer = Layer.effectDiscard(
           ...(error && {
             error: {
               type: error.type,
-              ...(error.message && { message: error.message }),
+              message: error.message || undefined,
               status: error.status,
               retryAfterMs: error.retryAfterMs,
             },
@@ -102,18 +98,6 @@ const layer = Layer.effectDiscard(
       const field = form.fields[0]
       const choices = field.type === "string" || field.type === "multiselect" ? field : undefined
       const options = choices?.options ?? []
-      // A string field without options takes typed text too.
-      const custom = choices?.custom || (field.type === "string" && !field.options)
-      // Rules on the answer that the message doesn't carry, so the phone can't check them.
-      const rules =
-        choices?.type === "string"
-          ? [choices.required, choices.format, choices.minLength, choices.maxLength, choices.pattern]
-          : [choices?.required, choices?.minItems, choices?.maxItems]
-      const inlineReply =
-        choices &&
-        form.fields.length === 1 &&
-        (custom || options.length > 0) &&
-        rules.every((rule) => rule === undefined || rule === false)
       const tool = Schema.decodeUnknownOption(Tool)(form.metadata?.tool)
       yield* sender.send({
         id: form.id,
@@ -122,14 +106,14 @@ const layer = Layer.effectDiscard(
         directory: session.location.directory,
         time,
         title: session.title || "OpenCode",
-        body: field.description || field.title || form.title || "Question",
+        body: field.description || field.title || form.title,
         // The top-level session is the one to open and the one bells apply to; the form belongs to this one.
         data: {
           formID: form.id,
           replySessionID: sessionID.value,
           kind,
           count: form.fields.length,
-          ...(inlineReply && { inlineReply: true }),
+          ...(choices && form.fields.length === 1 && { inlineReply: true }),
           ...(Option.isSome(tool) && { source: { type: "tool", ...tool.value } }),
           fields: [
             {
@@ -137,7 +121,7 @@ const layer = Layer.effectDiscard(
               type: field.type,
               ...(field.title && { title: field.title }),
               ...(field.description && { description: field.description }),
-              ...(custom && { custom: true }),
+              ...(choices?.custom && { custom: true }),
               ...(options.length > 0 && {
                 options: options.map((option) => ({
                   label: option.label,
@@ -145,7 +129,6 @@ const layer = Layer.effectDiscard(
                   ...(option.description && { description: option.description }),
                 })),
               }),
-              ...(field.type === "external" && { url: field.url }),
             },
           ],
         },
@@ -173,7 +156,7 @@ const layer = Layer.effectDiscard(
           resources: request.resources,
           ...(request.save?.length && { save: request.save }),
           decisions: request.save?.length ? ["once", "always", "reject"] : ["once", "reject"],
-          ...(request.message && { message: request.message }),
+          message: request.message,
           source: request.source,
         },
         attention: true,

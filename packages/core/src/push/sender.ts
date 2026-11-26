@@ -25,9 +25,6 @@ export interface Field {
   /** True when a typed answer is accepted. */
   readonly custom?: true
   readonly options?: ReadonlyArray<Choice>
-  /** How many options the field has, when some were left out. */
-  readonly optionCount?: number
-  readonly url?: string
 }
 
 export interface Data {
@@ -113,44 +110,30 @@ const shorten = (text: string, bytes: number) => {
   return chars.join("") + "…"
 }
 
-/** Keeps `items` in order while they fit. The first that doesn't is shortened if that fits, and the rest are dropped. */
-const cutList = <T, R>(
-  items: ReadonlyArray<T>,
-  cut: (kept: ReadonlyArray<T>) => R,
-  over: (result: R) => number,
-  shortenItem: (item: T, bytes: number) => T | undefined,
-) => {
-  const kept: T[] = []
-  for (const item of items) {
-    const next = cut([...kept, item])
-    if (over(next) > 0) {
-      const short = shortenItem(item, over(next))
-      if (short === undefined || over(cut([...kept, short])) > 0) return cut(kept)
-      return cut([...kept, short])
-    }
-    kept.push(item)
-  }
-  return cut(kept)
-}
-
 type Over = (data: Data) => number
 /** One cut, applied while the message is still too big. */
 type Step = (data: Data, over: Over) => Data
 
+/** Keeps resources in order while they fit. The first that doesn't is shortened if that fits, and the rest are dropped. */
 const cutResources: Step = (data, over) => {
   const all = data.resources
-  if (!all?.length) return data
-  return cutList(
-    all,
-    (kept): Data => ({
-      ...data,
-      resources: kept.length > 0 ? kept : undefined,
-      ...(kept.length < all.length && { resourceCount: all.length }),
-      truncated: true,
-    }),
-    over,
-    shorten,
-  )
+  if (!all) return data
+  const cut = (kept: ReadonlyArray<string>): Data => ({
+    ...data,
+    resources: kept,
+    ...(kept.length < all.length && { resourceCount: all.length }),
+    truncated: true,
+  })
+  const kept: string[] = []
+  for (const item of all) {
+    const bytes = over(cut([...kept, item]))
+    if (bytes > 0) {
+      const short = shorten(item, bytes)
+      return cut(short === undefined ? kept : [...kept, short])
+    }
+    kept.push(item)
+  }
+  return cut(kept)
 }
 
 /** A cut to the form's field. `change` returns undefined when it has nothing to cut. */
@@ -165,23 +148,14 @@ const cutField =
 
 // In the order of specs/v2/push.md: bulk goes before small facts.
 const steps: ReadonlyArray<Step> = [
-  (data) => (data.inlineReply ? { ...data, inlineReply: undefined } : data),
+  (data) => (data.inlineReply ? { ...data, inlineReply: undefined, truncated: true } : data),
   (data) => (data.text === undefined ? data : { ...data, text: undefined, truncated: true }),
   (data, over) => {
     if (data.error?.message === undefined) return data
     const marked: Data = { ...data, truncated: true }
     return { ...marked, error: { ...data.error, message: shorten(data.error.message, over(marked)) } }
   },
-  (data, over) => {
-    if (data.message === undefined) return data
-    const marked: Data = { ...data, truncated: true }
-    return { ...marked, message: shorten(data.message, over(marked)) }
-  },
-  (data, over) => {
-    const cut = cutResources(data, over)
-    if (data.save === undefined || over(cut) <= 0) return cut
-    return cutResources({ ...data, save: undefined, truncated: true }, over)
-  },
+  cutResources,
   cutField((field) =>
     field.options?.some((option) => option.description !== undefined)
       ? { ...field, options: field.options.map((option) => ({ label: option.label, value: option.value })) }
@@ -190,18 +164,6 @@ const steps: ReadonlyArray<Step> = [
   cutField((field, over) =>
     field.description === undefined ? undefined : { ...field, description: shorten(field.description, over(field)) },
   ),
-  // An option is never shortened, since a reply sends it as it is.
-  cutField((field, over) => {
-    const all = field.options
-    if (!all?.length) return undefined
-    return cutList(
-      all,
-      (kept): Field => ({ ...field, options: kept.length > 0 ? kept : undefined, optionCount: all.length }),
-      over,
-      () => undefined,
-    )
-  }),
-  cutField((field) => (field.title === undefined ? undefined : { ...field, title: undefined })),
 ]
 
 /**
