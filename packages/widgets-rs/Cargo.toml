@@ -10,7 +10,7 @@ license = "MIT"
 [workspace.dependencies]
 # PsychoScript's crates from crates.io; `psychoscript` itself is "0.1" in the crates that need it.
 psychoscript-gpu = "0.1"
-psychoscript-mobile = { version = "0.1", default-features = false }
+psychoscript-mobile = { version = "0.2", default-features = false }
 
 [profile.release]
 lto = "thin"

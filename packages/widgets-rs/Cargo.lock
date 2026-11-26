@@ -1484,9 +1484,9 @@ checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 
 [[package]]
 name = "psychoscript"
-version = "0.1.1"
+version = "0.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a51c3983159fc04f0f78e13f92ff44f6aa6c1e2b45b5b129f74eda2448bae3f7"
+checksum = "214d978331273bcb2b9fece7fac0ef8e0339040a4164d55a29f550da8df548bb"
 dependencies = [
  "fixed_decimal",
  "icu_calendar",
@@ -1530,9 +1530,9 @@ dependencies = [
 
 [[package]]
 name = "psychoscript-mobile"
-version = "0.1.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "55495cdfdfd730a870d4dd6dd63cd0bb5e04edd9df11ad0bf7dc45b916cbb497"
+checksum = "aa733d134824dfd39267b502efa21fdff76ede4012bde65d73c0a8c0e4a5d0ac"
 dependencies = [
  "libc",
  "psychoscript",

@@ -779,7 +779,7 @@ const widget = (() => {
       try {
         return response(await __host.fetch(request))
       } catch (error) {
-        throw { kind: error?.kind ?? "Network", message: error?.message ?? String(error) }
+        throw error?.kind ? error : { kind: "Network", message: error?.message ?? String(error) }
       }
     },
     send: (value, options) => post({ type: "send", value: value ?? null, wake: options?.wake !== false }),

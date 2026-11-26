@@ -19,11 +19,13 @@ const STEP: RunOptions = RunOptions {
     timeout_ms: Some(250),
     max_output_bytes: None,
     max_heap_bytes: None,
+    program_lines: None,
 };
 const DRAW: RunOptions = RunOptions {
     timeout_ms: Some(8),
     max_output_bytes: None,
     max_heap_bytes: None,
+    program_lines: None,
 };
 
 fn main() -> Result<(), Box<dyn Error>> {

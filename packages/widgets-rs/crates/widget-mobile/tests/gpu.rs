@@ -113,16 +113,11 @@ async function main() {
         Event::Gpu(k, s @ GpuCanvasState::Stopped { .. }) => Some((k.clone(), s.clone())),
         _ => None,
     });
-    assert_eq!(
-        stopped,
-        (
-            None,
-            GpuCanvasState::Stopped {
-                kind: GpuErrorKind::Program,
-                message: "a batch's bytes must be an ArrayBuffer".into(),
-                report: true
-            }
-        )
+    // At the post that carried it.
+    assert!(
+        matches!(&stopped, (None, GpuCanvasState::Stopped { kind: GpuErrorKind::Program, message, report: true, line: Some(_), column: Some(_) })
+            if message == "a batch's bytes must be an ArrayBuffer"),
+        "{stopped:?}"
     );
     r.run.deliver(frame(0)).unwrap();
     r.wait(|e| match e {
@@ -353,12 +348,11 @@ fn a_snapshot_keeps_the_stops_and_drops_handles_from_before() {
     }
     r.frames(3);
     r.frame_request();
-    let stop = GpuCanvasState::Stopped {
-        kind: GpuErrorKind::Program,
-        message: "gpu op 1: no handle 999".into(),
-        report: true,
-    };
-    r.wait(|e| matches!(e, Event::Gpu(Some(k), s) if k == "b" && *s == stop).then_some(()));
+    r.wait(|e| {
+        matches!(e, Event::Gpu(Some(k), GpuCanvasState::Stopped { kind: GpuErrorKind::Program, message, report: true, .. })
+            if k == "b" && message == "gpu op 1: no handle 999")
+        .then_some(())
+    });
     r.live("a");
     r.run.pause().unwrap();
     let snapshot = r.run.snapshot().unwrap();
@@ -370,6 +364,8 @@ fn a_snapshot_keeps_the_stops_and_drops_handles_from_before() {
         kind: GpuErrorKind::Program,
         message: "gpu op 1: no handle 999".into(),
         report: false,
+        line: None,
+        column: None,
     };
     r.wait(|e| matches!(e, Event::Gpu(Some(k), s) if k == "b" && *s == stopped).then_some(()));
     let lost = r.wait(|e| match e {
