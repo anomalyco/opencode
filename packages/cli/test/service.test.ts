@@ -45,6 +45,44 @@ test("managed service ports on Windows stay below the ranges Windows and WSL res
   expect(ports.filter((port) => port.linux < 0x8000 && port.windows !== port.linux)).toEqual([])
 })
 
+test("managed service ports on WSL stay below the Windows reservations and apart from a Windows service", () => {
+  expect(ServiceConfig.defaultPort("latest", "wsl")).toBe(0x60de)
+  expect(ServiceConfig.defaultPort("dev", "wsl")).toBe(0x60de)
+  expect(ServiceConfig.defaultPort("local", "wsl")).toBe(0x60df)
+  const ports = Array.from({ length: 200 }, (_, index) => ({
+    wsl: ServiceConfig.defaultPort(`preview-${index}`, "wsl"),
+    windows: ServiceConfig.defaultPort(`preview-${index}`, "win32"),
+    linux: ServiceConfig.defaultPort(`preview-${index}`, "linux"),
+  }))
+  expect(ports.every((port) => port.wsl >= 10_000 && port.wsl < 0x8000)).toBe(true)
+  expect(ports.filter((port) => port.linux >= 0x8000 && port.wsl === port.windows)).toEqual([])
+  expect(ports.filter((port) => port.linux < 0x8000 && port.wsl !== port.linux)).toEqual([])
+})
+
+test("WSL services set up before the WSL default keep the old port", () => {
+  expect(ServiceConfig.servicePort({}, "latest", "wsl")).toBe(0x60de)
+  expect(ServiceConfig.servicePort({ password: "p" }, "latest", "wsl")).toBe(0xc0de)
+  expect(ServiceConfig.servicePort({ password: "p" }, "local", "wsl")).toBe(0xc0df)
+  expect(ServiceConfig.servicePort({}, "latest", "linux")).toBe(0xc0de)
+  expect(ServiceConfig.servicePort({ password: "p" }, "latest", "win32")).toBe(0x70de)
+})
+
+test("only WSL records the port the service first listened on", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-record-port-"))
+  const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
+  const run = <A, E>(effect: Effect.Effect<A, E, Global.Service | FileSystem.FileSystem>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer)))
+  try {
+    await run(ServiceConfig.password("p"))
+    await run(ServiceConfig.recordPort(0xc0de, "linux"))
+    expect(await run(ServiceConfig.read())).toEqual({ password: "p" })
+    await run(ServiceConfig.recordPort(0xc0de, "wsl"))
+    expect(await run(ServiceConfig.read())).toEqual({ password: "p", port: 0xc0de })
+  } finally {
+    await fs.rm(root, { recursive: true, force: true })
+  }
+})
+
 test("service disabled accepts only booleans without changing configuration on invalid input", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-disabled-config-"))
   const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })

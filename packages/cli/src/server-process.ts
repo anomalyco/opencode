@@ -70,7 +70,8 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
       const serviceOptions = options.mode === "service" ? yield* ServiceConfig.options() : undefined
       const config = options.mode === "service" ? yield* ServiceConfig.read() : {}
       const hostname = options.hostname ?? config.hostname ?? "127.0.0.1"
-      const port = options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.defaultPort() : undefined)
+      const port =
+        options.port ?? config.port ?? (options.mode === "service" ? ServiceConfig.servicePort(config) : undefined)
       const findIncumbent =
         serviceOptions !== undefined && port !== undefined
           ? Service.incumbent({ ...serviceOptions, url: serviceURL(hostname, port) })
@@ -155,6 +156,8 @@ const processEffect = Effect.fnUntraced(function* (options: Options) {
               onListen: (address, shutdown) =>
                 Effect.gen(function* () {
                   if (!config.password) yield* ServiceConfig.password(password)
+                  if (options.port === undefined && config.port === undefined && port !== undefined)
+                    yield* ServiceConfig.recordPort(port)
                   return yield* ServiceRegistration.register({
                     address,
                     password,
