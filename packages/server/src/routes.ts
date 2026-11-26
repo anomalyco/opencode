@@ -55,6 +55,7 @@ import { Context, Effect, Layer, Option } from "effect"
 import { Base64 } from "effect/encoding"
 import { Api } from "./api"
 import { ServerAuth } from "./auth"
+import { SpaceStore } from "./space-store"
 import { CorsConfig } from "./cors"
 import { handlers } from "./handlers"
 import { authorizationLayer } from "./middleware/authorization"
@@ -98,6 +99,7 @@ const applicationServiceNodes = [
   Credential.node,
   WellKnown.node,
   ServerPairing.node,
+  SpaceStore.node,
   LocationServiceMap.node,
   LocationActivity.node,
   SessionRestart.node,
