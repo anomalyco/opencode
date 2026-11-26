@@ -77,13 +77,31 @@ describe("acp session lifecycle over the wire", () => {
     const resumed = await acp.request("session/resume", { cwd: "/workspace", sessionId: "ses_resume", mcpServers: [] })
     const forked = await acp.request("session/fork", { cwd: "/workspace", sessionId: "ses_loaded", mcpServers: [] })
 
-    expect(
-      await rpcError(acp.request("session/load", { cwd: "/elsewhere", sessionId: "ses_loaded", mcpServers: [] })),
-    ).toMatchObject({ code: -32602, data: { sessionId: "ses_loaded", cwd: "/elsewhere" } })
+    const mismatch = await rpcError(
+      acp.request("session/load", { cwd: "/elsewhere", sessionId: "ses_loaded", mcpServers: [] }),
+    )
+    expect(mismatch).toMatchObject({
+      code: -32602,
+      data: { sessionId: "ses_loaded", cwd: "/elsewhere", directory: "/workspace" },
+    })
+    expect(mismatch.message).toContain("session directory: /workspace")
+
+    const resumedMismatch = await rpcError(
+      acp.request("session/resume", { cwd: "/elsewhere", sessionId: "ses_resume", mcpServers: [] }),
+    )
+    expect(resumedMismatch).toMatchObject({
+      code: -32602,
+      data: { sessionId: "ses_resume", cwd: "/elsewhere", directory: "/workspace" },
+    })
+
     const sessions = new Set(acp.server.sessions.keys())
-    expect(
-      await rpcError(acp.request("session/fork", { cwd: "/elsewhere", sessionId: "ses_loaded", mcpServers: [] })),
-    ).toMatchObject({ code: -32602, data: { sessionId: "ses_loaded", cwd: "/elsewhere" } })
+    const forkedMismatch = await rpcError(
+      acp.request("session/fork", { cwd: "/elsewhere", sessionId: "ses_loaded", mcpServers: [] }),
+    )
+    expect(forkedMismatch).toMatchObject({
+      code: -32602,
+      data: { sessionId: "ses_loaded", cwd: "/elsewhere", directory: "/workspace" },
+    })
     expect(new Set(acp.server.sessions.keys())).toEqual(sessions)
     expect(
       await rpcError(acp.request("session/load", { cwd: "/workspace", sessionId: "ses_missing", mcpServers: [] })),
