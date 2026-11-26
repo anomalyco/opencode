@@ -7,6 +7,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  createContext,
   createUniqueId,
   For,
   Match,
@@ -17,6 +18,7 @@ import {
   Index,
   on,
   untrack,
+  useContext,
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -613,7 +615,14 @@ export function CurrentContextToolGroup(props: {
                             </Show>
                           }
                         >
-                          {(part) => <div data-slot="context-tool-group-item">{part.render()}</div>}
+                          {(part) => (
+                            <div
+                              data-slot="context-tool-group-item"
+                              data-script-change={part.file.via === "script" ? "" : undefined}
+                            >
+                              {part.render()}
+                            </div>
+                          )}
                         </Show>
                       }
                     >
@@ -1042,6 +1051,31 @@ export function CurrentFileToolGroup(props: {
   )
 }
 
+/**
+ * Where a script's Output row goes, from the timeline's rows (`scriptOutputLayout`): after its last change when its
+ * changes are drawn right after it, else under its steps.
+ */
+export type ScriptOutputPlacement = {
+  afterChanges: (partID: string) => boolean
+  outputAfter: (fileID: string) => SessionMessageAssistantTool | undefined
+}
+
+const ScriptOutputContext = createContext<ScriptOutputPlacement>({
+  afterChanges: () => false,
+  outputAfter: () => undefined,
+})
+
+export const ScriptOutputProvider = ScriptOutputContext.Provider
+
+// What a script returned, shown as its Output row. A failure shows on its failing row instead.
+function scriptOutputText(status: string | undefined, output: string | undefined, metadata: ToolProps["metadata"]) {
+  if (status === "error" || metadata.error === true) return ""
+
+  return stripAnsi(output ?? "")
+    .replace(/\r\n?/g, "\n")
+    .trim()
+}
+
 /** A file group holding a script's changes: each run in order, direct calls drawn as their own group. */
 export function FileChangeRuns(props: {
   runs: readonly FileRun[]
@@ -1109,6 +1143,16 @@ export function ScriptChanges(props: {
   onSizeChange?: () => void
 }) {
   const i18n = useI18n()
+  const placement = useContext(ScriptOutputContext)
+
+  // The Output row of a script whose last change this is, when its changes are drawn right after it.
+  const outputAfter = (file: FileFact) => {
+    const script = placement.outputAfter(file.id)
+
+    return script
+      ? scriptOutputText(script.state.status, currentToolOutput(script), currentToolMetadata(script))
+      : undefined
+  }
 
   // One wrapper, as a direct patch's files share one, so the turn's gap falls around the list and not between changes.
   return (
@@ -1203,6 +1247,13 @@ export function ScriptChanges(props: {
           )
         }}
       </Index>
+      <Show when={props.files.at(-1) && outputAfter(props.files.at(-1)!)}>
+        {(value) => (
+          <div data-component="execute-tool-calls" data-execute-layout="flat" data-script-output="">
+            <ExecuteOutputRow output={value()} flat />
+          </div>
+        )}
+      </Show>
     </div>
   )
 }
@@ -1266,6 +1317,8 @@ function currentContextToolTrigger(tool: SessionMessageAssistantTool, i18n: Retu
 // SAFETY: tool input and metadata are open per-tool records. GenericTool shows arbitrary input keys, and
 // renderers decode the fields they read with `toolInput` and `toolMetadata`.
 export interface ToolProps {
+  /** The call's part id, where the timeline passes it. */
+  id?: string
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- see SAFETY above
   input: Record<string, unknown>
   error?: string
@@ -2049,10 +2102,13 @@ ToolRegistry.register({
   name: "execute",
   render(props) {
     const i18n = useI18n()
+    const data = useData()
     const dialog = useDialog()
     const pending = () => props.status === "streaming" || props.status === "running"
     const count = createMemo(() => executeToolCallCount(props.metadata))
     const subtitle = createMemo(() => executeToolSubtitle(props.metadata))
+    // `full_codemode` draws the flat layout: a static title over steps that always show, Output after its changes.
+    const flat = () => data.flag("full_codemode")
     const code = createMemo(() => (toolInput(props.input).code ?? "").trimEnd())
 
     // A runtime failure shows its output on the failing row; a successful script shows its result below the calls.
@@ -2064,13 +2120,10 @@ ToolRegistry.register({
       return text.replace(/^Error:\s*/, "").trim() || fallback
     })
 
-    const output = createMemo(() =>
-      error()
-        ? ""
-        : stripAnsi(props.output ?? "")
-            .replace(/\r\n?/g, "\n")
-            .trim(),
-    )
+    const output = createMemo(() => scriptOutputText(props.status, props.output, props.metadata))
+    // When its changes are drawn right after it, its Output row follows them: steps, changes, then Output.
+    const placement = useContext(ScriptOutputContext)
+    const outputHere = () => !!output() && !(flat() && props.id && placement.afterChanges(props.id))
 
     // A runtime failure belongs to the call that raised it; scripts can also fail outside any call.
     const owner = createMemo(() => executeToolErrorIndex(props.metadata))
@@ -2099,23 +2152,28 @@ ToolRegistry.register({
     const openDetails = () =>
       dialog.show(() => <ExecuteDetails code={code()} output={output()} error={error()} status={props.status} />)
 
+    // Flat, the title is static and the calls always show under it: the block never collapses, whatever the timeline asks.
     return (
       <BasicTool
         {...props}
         icon="terminal"
         rail={false}
-        hasContent={count() > 0 || !!error() || !!output()}
+        hasContent={count() > 0 || !!error() || outputHere()}
         compact
         allowOpenWhilePending
+        locked={flat() || props.locked}
+        open={flat() ? true : props.open}
+        forceOpen={flat() || props.forceOpen}
+        onOpenChange={flat() ? undefined : props.onOpenChange}
         trigger={(open) => (
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
-              <span data-slot="basic-tool-tool-title">
+              <span data-slot="basic-tool-tool-title" data-execute-title={flat() ? "" : undefined}>
                 <Show when={shimmered()} fallback={i18n.t("ui.tool.execute")}>
                   <TextShimmer text={i18n.t("ui.tool.execute")} active={pending()} />
                 </Show>
               </span>
-              <Show when={!open() && subtitle()}>
+              <Show when={!flat() && !open() && subtitle()}>
                 {(text) => <ShellSubmessage text={text()} animate={sawPending} />}
               </Show>
             </div>
@@ -2136,7 +2194,7 @@ ToolRegistry.register({
           ) : undefined
         }
       >
-        <div data-component="execute-tool-calls">
+        <div data-component="execute-tool-calls" data-execute-layout={flat() ? "flat" : undefined}>
           <Show when={hidden()}>
             {(count) => (
               <button type="button" data-slot="execute-tool-call-more" onClick={reveal}>
@@ -2145,11 +2203,13 @@ ToolRegistry.register({
             )}
           </Show>
           <Index each={visible()}>
-            {(item) => <ExecuteCallRow call={item().call} error={item().index === owner() ? error() : undefined} />}
+            {(item) => (
+              <ExecuteCallRow call={item().call} error={item().index === owner() ? error() : undefined} flat={flat()} />
+            )}
           </Index>
           {/* A failure with no call, or one that belongs to a call still hidden above, shows on its own. */}
-          <Show when={owner() < hidden() && error()}>{(text) => <ExecuteCallRow error={text()} />}</Show>
-          <Show when={output()}>{(value) => <ExecuteOutputRow output={value()} />}</Show>
+          <Show when={owner() < hidden() && error()}>{(text) => <ExecuteCallRow error={text()} flat={flat()} />}</Show>
+          <Show when={outputHere() && output()}>{(value) => <ExecuteOutputRow output={value()} flat={flat()} />}</Show>
         </div>
       </BasicTool>
     )
@@ -2298,7 +2358,7 @@ function selectsRowText(row: HTMLElement) {
   return row.contains(selection.anchorNode) || row.contains(selection.focusNode)
 }
 
-function ExecuteOutputRow(props: { output: string }) {
+function ExecuteOutputRow(props: { output: string; flat?: boolean }) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
   const text = createMemo(() => formatExecuteOutput(props.output).text)
@@ -2323,9 +2383,11 @@ function ExecuteOutputRow(props: { output: string }) {
           toggle(event)
         }}
       >
-        <span data-slot="execute-tool-call-marker">
-          <span data-slot="execute-tool-call-arrow">›</span>
-        </span>
+        <Show when={!props.flat}>
+          <span data-slot="execute-tool-call-marker">
+            <span data-slot="execute-tool-call-arrow">›</span>
+          </span>
+        </Show>
         <span data-slot="execute-tool-call-name">{i18n.t("ui.tool.execute.output")}</span>
         <span data-slot="execute-tool-call-args">
           {i18n.plural("ui.tool.execute.lines", text().split("\n").length)}
@@ -2340,7 +2402,7 @@ function ExecuteOutputRow(props: { output: string }) {
   )
 }
 
-function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
+function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string; flat?: boolean }) {
   const [open, setOpen] = createSignal(false)
   const args = createMemo(() => (props.call ? executeToolCallArgs(props.call) : []))
   const input = createMemo(() => Object.entries(props.call?.input ?? {}))
@@ -2372,10 +2434,12 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
           toggle(event)
         }}
       >
-        <Show when={failed()} fallback={<span data-slot="execute-tool-call-marker">›</span>}>
-          <span data-slot="execute-tool-call-marker">
-            <Icon name="outline-hexagonal-warning" size="small" />
-          </span>
+        <Show when={!props.flat}>
+          <Show when={failed()} fallback={<span data-slot="execute-tool-call-marker">›</span>}>
+            <span data-slot="execute-tool-call-marker">
+              <Icon name="outline-hexagonal-warning" size="small" />
+            </span>
+          </Show>
         </Show>
         <Show when={props.call}>
           {(call) => (
@@ -2385,6 +2449,12 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
               </Show>
             </span>
           )}
+        </Show>
+        {/* Flat, after the name, so every call's name lines up with the title; a failure without a call leads with it. */}
+        <Show when={props.flat && failed()}>
+          <span data-slot="execute-tool-call-marker">
+            <Icon name="outline-hexagonal-warning" size="small" />
+          </span>
         </Show>
         <Show when={!open() && summary()}>
           {(text) => (

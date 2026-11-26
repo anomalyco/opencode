@@ -1065,6 +1065,11 @@
   margin-top: 12px;
 }
 
+/* A script's Output row, after its last change when its changes are drawn right after it, keeps the block's tight gap. */
+[data-script-changes] > [data-script-output] {
+  margin-top: 8px;
+}
+
 [data-component="execute-tool-calls"] {
   display: flex;
   flex-direction: column;
@@ -1203,6 +1208,32 @@
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
+}
+
+/* The flat layout (`full_codemode`): steps line up with the title, with no markers before them, and read as steps in
+   the face of the timeline's titles while what they ran on stays code. Output is muted, as the title is. */
+[data-component="execute-tool-calls"][data-execute-layout="flat"] {
+  [data-slot="execute-tool-call-name"] {
+    font-family: var(--v2-font-family-sans);
+    font-weight: 440;
+    letter-spacing: -0.04px;
+  }
+
+  [data-slot="execute-tool-call"][data-kind="output"] [data-slot="execute-tool-call-name"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="execute-tool-call-more"],
+  [data-slot="execute-tool-output"],
+  [data-slot="execute-tool-error"] {
+    margin-inline-start: 0;
+    padding-inline-start: 0;
+  }
+}
+
+/* A script's title labels the steps under it, so it is muted as the timeline's other labels are. */
+[data-component="collapsible"] [data-slot="basic-tool-tool-title"][data-execute-title] {
+  color: var(--v2-text-text-muted);
 }
 
 [data-slot="execute-tool-call-marker"] [data-slot="icon-svg"] {
@@ -1454,6 +1485,11 @@
   display: flex;
   flex-direction: column;
   gap: 8px;
+
+  /* An opened group spaces its items as the timeline spaces blocks; a script's changes stay by the script. */
+  > [data-slot="context-tool-group-item"] + [data-slot="context-tool-group-item"]:not([data-script-change]) {
+    margin-top: 8px;
+  }
 
   [data-slot="context-tool-group-item"] {
     min-width: 0;
@@ -2168,4 +2204,60 @@
 :root body [data-component="user-message"][data-pending] [data-slot="user-message-quote"] {
   border-color: var(--v2-border-border-base);
   color: var(--v2-text-text-faint);
+}
+
+/* In the current timeline, as in the New timeline, a block is as tall as its text, so the gaps between blocks are the
+   gaps that show and every pair of blocks stands the same 16px apart. A row's 28px click area stays: 6px of padding
+   above and below, taken back by margins of the same size. An open row keeps its header's room above its content. */
+[data-timeline-row="AssistantPart"]:not([data-timeline="next"]) {
+  [data-component="collapsible"] > [data-slot="collapsible-trigger"] {
+    box-sizing: border-box;
+    height: calc(var(--line-height-compact) + 12px);
+    padding-block: 6px;
+    margin-block: -6px;
+  }
+
+  [data-component="collapsible"] > [data-slot="collapsible-trigger"]:is([aria-expanded="true"], [data-locked]) {
+    margin-bottom: 0;
+  }
+
+  /* An open group's header stands as far above its first item as blocks stand apart. */
+  [data-component="collapsed-tool-group"]
+    > [data-component="collapsible"]
+    > [data-slot="collapsible-trigger"][aria-expanded="true"] {
+    height: calc(var(--line-height-compact) + 22px);
+    padding-bottom: 16px;
+  }
+
+  [data-component="context-tool-group-list"] [data-slot="context-tool-group-item"] {
+    min-height: var(--line-height-compact);
+  }
+
+  /* A row's action stays centred on its click area, which reaches 6px above the row, without making the row taller. */
+  [data-component="collapsible"] > [data-slot="basic-tool-action"] {
+    margin-top: -4px;
+  }
+
+  /* The flat layout (`full_codemode`): a script's title's text sits above its first call's text as far as one call's
+     text sits above the next, as in the New timeline. */
+  [data-component="collapsible"].tool-collapsible:has(
+      > [data-slot="collapsible-content"] > [data-component="execute-tool-calls"][data-execute-layout="flat"]
+    ) {
+    row-gap: 0;
+
+    > [data-slot="collapsible-trigger"][data-locked] {
+      --execute-title-gap: calc(6px + (var(--line-height-base) - var(--line-height-compact)) / 2);
+      padding-bottom: var(--execute-title-gap);
+      height: calc(var(--line-height-compact) + 6px + var(--execute-title-gap));
+
+      [data-slot="basic-tool-tool-info"] {
+        line-height: var(--line-height-compact);
+      }
+    }
+
+    /* The title's row holds the gap below its text, so the View code button sits at its top, centred on the text. */
+    > [data-slot="basic-tool-action"] {
+      align-self: flex-start;
+    }
+  }
 }

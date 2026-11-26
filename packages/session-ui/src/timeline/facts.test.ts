@@ -1,7 +1,7 @@
 import type { JsonValue } from "@opencode/client/promise"
 import { describe, expect, test } from "bun:test"
 import { storyTool } from "../storybook/current-session-scenarios"
-import { factsOf, sameFileFact, summarize, type FileFact } from "./facts"
+import { factsOf, placeFactOf, sameFileFact, summarize, type FileFact } from "./facts"
 import { categoryOf } from "./place"
 
 describe("timeline facts", () => {
@@ -112,5 +112,19 @@ describe("timeline facts", () => {
     expect(before).not.toBe(after)
     expect(sameFileFact(before!, after!)).toBe(true)
     expect(sameFileFact(before!, scriptFiles("completed", { files: liveFiles })[0]!)).toBe(false)
+  })
+
+  test("a script's changes show and count only with full_codemode, and a direct edit's always do", () => {
+    const script = storyTool("s1", "execute", "completed", { code: "…" }, { metadata: { files: liveFiles } })
+    const edit = storyTool("e1", "edit", "completed", { path: "/repo/b.ts" })
+    const kinds = (facts: ReturnType<typeof factsOf>) => facts.map((fact) => fact.kind)
+
+    expect(kinds(factsOf([script, edit], true))).toEqual(["call", "file", "call", "file"])
+    expect(summarize(factsOf([script, edit], true)).files).toEqual(["/repo/a.ts", "/repo/b.ts"])
+    expect(placeFactOf(script, script.id, true).changes).toBe(1)
+
+    expect(kinds(factsOf([script, edit], false))).toEqual(["call", "call", "file"])
+    expect(summarize(factsOf([script, edit], false)).files).toEqual(["/repo/b.ts"])
+    expect(placeFactOf(script, script.id, false).changes).toBe(0)
   })
 })

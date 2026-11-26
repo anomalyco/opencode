@@ -1,4 +1,5 @@
 import { Data, Match, Predicate } from "effect"
+import { isScriptFilePartID } from "./facts"
 
 export type PartRef = {
   messageID: string
@@ -185,6 +186,14 @@ export namespace TimelineRow {
     Worked: () => (other: TimelineRow) => Predicate.isTagged(other, "Worked"),
     Activity: () => (other: TimelineRow) => Predicate.isTagged(other, "Activity"),
   })
+
+  /** A row of the changes a script made, which belongs to the script's block above it. */
+  export function scriptChanges(row: TimelineRow) {
+    if (!Predicate.isTagged(row, "AssistantPart")) return false
+    const refs = row.group.type === "part" ? [row.group.ref] : row.group.refs
+
+    return refs.length > 0 && refs.every((ref) => isScriptFilePartID(ref.partID))
+  }
 
   export function equals(a: TimelineRow, b: TimelineRow) {
     return a === b || (a.userMessageID === b.userMessageID && sameFields(a)(b))

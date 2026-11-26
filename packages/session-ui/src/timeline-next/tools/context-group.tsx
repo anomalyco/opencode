@@ -288,7 +288,14 @@ export function ContextGroup(props: {
                                     </Show>
                                   }
                                 >
-                                  {(part) => <div data-slot="context-tool-group-item">{part.render()}</div>}
+                                  {(part) => (
+                                    <div
+                                      data-slot="context-tool-group-item"
+                                      data-script-change={part.file.via === "script" ? "" : undefined}
+                                    >
+                                      {part.render()}
+                                    </div>
+                                  )}
                                 </Show>
                               }
                             >

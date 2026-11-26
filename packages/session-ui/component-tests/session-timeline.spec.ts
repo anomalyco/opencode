@@ -8,8 +8,11 @@ story("spaces an error between a shell result and expanded updates", async ({ mo
   const shellBox = (await shell.boundingBox())!
   const errorBox = (await error.boundingBox())!
   const updatesBox = (await updates.boundingBox())!
+  // The row's line of text: its 28px click area reaches 6px above and below it.
+  const updatesLine = (await updates.locator('[data-component="tool-trigger"]').first().boundingBox())!
   expect(errorBox.y - (shellBox.y + shellBox.height)).toBe(24)
-  expect(updatesBox.y - (errorBox.y + errorBox.height)).toBe(8)
+  // Blocks stand 16px apart, measured from one block's text to the next; a script's own changes keep 8px under it.
+  expect(updatesLine.y - (errorBox.y + errorBox.height)).toBe(16)
   expect(updatesBox.x).toBe(errorBox.x)
   await updates.click()
   const notice = timeline.locator('[data-slot="session-timeline-notice"]')
@@ -17,7 +20,8 @@ story("spaces an error between a shell result and expanded updates", async ({ mo
   const expandedBox = (await updates.boundingBox())!
   expect((await notice.boundingBox())!.y - (expandedBox.y + expandedBox.height)).toBe(0)
   expect((await notice.boundingBox())!.x - expandedBox.x).toBe(24)
-  expect(expandedBox.height).toBe(28)
+  // The open header's click area: 6px above its line, the line, then the 16px gap to its first item.
+  expect(expandedBox.height).toBe(38)
 })
 
 for (const streaming of [false, true]) {
