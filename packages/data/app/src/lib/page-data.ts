@@ -174,15 +174,13 @@ function newModelsFromCatalog(candidates: NewModelCandidate[], catalog: ModelCat
       // Count from launch: early access under the same name shows up before the release date.
       const launch = releaseDate > item.firstSeen ? releaseDate : item.firstSeen
       const daily = item.daily.filter((day) => day.date >= launch)
-      // Adds up each week's distinct users from the launch week on, so someone active in two weeks counts twice.
-      const weekly = item.weekly.filter((week) => Date.parse(week.week) + 6 * DAY_MS >= Date.parse(launch))
       return [
         {
           ...item,
           free: catalog.freeModels.includes(item.model),
           releaseDate,
           daysLive: Math.round((Date.parse(latest) - Date.parse(launch)) / DAY_MS) + 1,
-          users: weekly.reduce((sum, week) => sum + week.users, 0),
+          users: usersSinceLaunch(item, launch),
           tokens: daily.reduce((sum, day) => sum + day.tokens, 0),
           sessions: daily.reduce((sum, day) => sum + day.sessions, 0),
           peakUsers: Math.max(0, ...daily.map((day) => day.users)),
@@ -193,6 +191,17 @@ function newModelsFromCatalog(candidates: NewModelCandidate[], catalog: ModelCat
     .filter((item) => item.tokens > 0)
     .toSorted((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model))
     .slice(0, NEW_MODEL_LIMIT)
+}
+
+// Each user counts once, on their last active day, so the days from launch on hold everyone who used it since. Until
+// the daily sync covers the launch day (before its first run, or a launch today), weekly distinct users are added
+// up instead, which counts someone active in two weeks twice.
+export function usersSinceLaunch(item: Pick<NewModelCandidate, "recency" | "weekly">, launch: string) {
+  if (item.recency && launch >= item.recency.start && launch < item.recency.end)
+    return item.recency.days.filter((day) => day.date >= launch).reduce((sum, day) => sum + day.users, 0)
+  return item.weekly
+    .filter((week) => Date.parse(week.week) + 6 * DAY_MS >= Date.parse(launch))
+    .reduce((sum, week) => sum + week.users, 0)
 }
 
 function authorLabPaths(catalog: ModelCatalog, market: MarketDay[]) {

@@ -268,3 +268,46 @@ function cohorts(model: string, provider: string, count: number, eligibleUsers: 
     retainedUsers,
   })) satisfies RetentionMetricRow[]
 }
+
+test("new models carry their users by last active day and the window those days cover", () => {
+  const day = {
+    periodKey: "2026-11-25",
+    updatedAt: new Date(Date.UTC(2026, 10, 25)),
+    tier: "Go",
+    provider: "test",
+    model: "launch",
+    sessions: 1,
+    uniqueUsers: 1,
+    inputTokens: 1,
+    outputTokens: 0,
+    reasoningTokens: 0,
+    cacheReadTokens: 0,
+    totalTokens: 1,
+    inputCostMicrocents: 0,
+    outputCostMicrocents: 0,
+    totalCostMicrocents: 0,
+  } satisfies ModelStatMetric
+  const window = { windowStart: "2026-10-27", windowEnd: "2026-11-25" }
+  const recency = [
+    { ...window, model: "launch", lastActiveDate: "2026-11-20", users: 30 },
+    { ...window, model: "launch", lastActiveDate: "2026-11-24", users: 70 },
+    { ...window, model: "other", lastActiveDate: "2026-11-24", users: 5 },
+  ]
+
+  const models = buildStatsHomeData([day, { ...day, model: "quiet" }], [], [], [], recency).newModels
+
+  expect(models.find((item) => item.model === "launch")?.recency).toEqual({
+    start: "2026-10-27",
+    end: "2026-11-25",
+    days: [
+      { date: "2026-11-20", users: 30 },
+      { date: "2026-11-24", users: 70 },
+    ],
+  })
+  expect(models.find((item) => item.model === "quiet")?.recency).toEqual({
+    start: "2026-10-27",
+    end: "2026-11-25",
+    days: [],
+  })
+  expect(buildStatsHomeData([day], [], [], []).newModels[0]?.recency).toBeNull()
+})

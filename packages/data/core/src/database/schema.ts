@@ -143,6 +143,25 @@ export const modelRetention = mysqlTable(
   ],
 )
 
+// Distinct users per model by the last day they used it, over one rolling window that each sync replaces.
+export const modelUserRecency = mysqlTable(
+  "model_user_recency",
+  {
+    id: bigint({ mode: "number" }).autoincrement().primaryKey(),
+    dataset: varchar({ length: 64 }).notNull().default("all"),
+    model: varchar({ length: 256 }).notNull(),
+    last_active_date: char({ length: 10 }).notNull(),
+    users: bigint({ mode: "number" }).notNull().default(0),
+    window_start: char({ length: 10 }).notNull(),
+    window_end: char({ length: 10 }).notNull(),
+    ...timestampColumns(),
+  },
+  (table) => [
+    uniqueIndex("uniq_model_user_recency").on(table.dataset, table.model, table.last_active_date),
+    index("idx_model_user_recency_model").on(table.model, table.last_active_date),
+  ],
+)
+
 function periodColumns() {
   return {
     id: bigint({ mode: "number" }).autoincrement().primaryKey(),

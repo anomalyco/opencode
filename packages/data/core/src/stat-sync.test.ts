@@ -10,9 +10,16 @@ const { GeoStatRepo } = await import("./domain/geo")
 const { ModelStatRepo } = await import("./domain/model")
 const { ProviderStatRepo } = await import("./domain/provider")
 const { RetentionStatRepo } = await import("./domain/retention")
+const { UserRecencyRepo } = await import("./domain/user-recency")
 const { R2Sql, R2SqlQueryError } = await import("./r2-sql")
-const { CatalogUnavailableError, deterministicFailureAsResult, planDataSync, syncRetentionCohort, syncStatPeriod } =
-  await import("./stat-sync")
+const {
+  CatalogUnavailableError,
+  deterministicFailureAsResult,
+  planDataSync,
+  syncRetentionCohort,
+  syncStatPeriod,
+  syncUserRecency,
+} = await import("./stat-sync")
 const { DatabaseError } = await import("./database")
 
 const catalog: CatalogSnapshot = { offerings: [["opencode/model-a", "lab"]], models: [["model-a", "lab"]] }
@@ -102,6 +109,18 @@ describe("data sync plan", () => {
       "2026-09-21",
       "2026-09-28",
     ])
+    expect(hourly.userRecency).toBeNull()
+    expect(history.userRecency).toEqual({ start: "2026-09-24T00:00:00.000Z", end: "2026-10-23T00:00:00.000Z" })
+  })
+
+  test("skips user recency until its table exists", async () => {
+    const plan = await Effect.runPromise(
+      planDataSync(new Date("2026-10-23T19:05:00.000Z"), { history: true, loadCatalog }).pipe(
+        Effect.provide(services({ events: [], recencyAvailable: false })),
+      ),
+    )
+
+    expect(plan.userRecency).toBeNull()
   })
 })
 
@@ -165,6 +184,48 @@ describe("data sync steps", () => {
   })
 })
 
+describe("user recency step", () => {
+  const window = { start: "2026-09-24T00:00:00.000Z", end: "2026-10-23T00:00:00.000Z" }
+
+  test("replaces the window only after its query returns", async () => {
+    const events: string[] = []
+    const row = { dataset: "zen", model: "model-a", users: "4" }
+
+    const result = await Effect.runPromise(
+      syncUserRecency(window).pipe(
+        Effect.provide(
+          services({
+            events,
+            rows: [
+              { ...row, last_active_date: "2026-10-20" },
+              { ...row, last_active_date: "2026-10-22", users: "6" },
+              { ...row, model: "model-a-free", last_active_date: "2026-10-22", users: "1" },
+            ],
+          }),
+        ),
+      ),
+    )
+
+    expect(result).toEqual({ ...window, rows: 2 })
+    expect(events).toEqual([
+      "query",
+      "replace recency zen model-a:2026-10-20:4:2026-09-24:2026-10-23,model-a:2026-10-22:7:2026-09-24:2026-10-23",
+    ])
+  })
+
+  test("keeps the existing window when its query fails", async () => {
+    const events: string[] = []
+    const failure = new R2SqlQueryError({ message: "unavailable", status: 400 })
+
+    const error = await Effect.runPromise(
+      syncUserRecency(window).pipe(Effect.flip, Effect.provide(services({ events, failure }))),
+    )
+
+    expect(error).toBe(failure)
+    expect(events).toEqual(["query"])
+  })
+})
+
 describe("data sync failures", () => {
   test("returns a deterministic R2 SQL failure as the result", async () => {
     const result = await Effect.runPromise(
@@ -208,7 +269,12 @@ const retentionPeriod = {
   returnEnd: "2026-10-19T00:00:00.000Z",
 }
 
-function services(input: { events: string[]; rows?: R2SqlData[]; failure?: InstanceType<typeof R2SqlQueryError> }) {
+function services(input: {
+  events: string[]
+  rows?: R2SqlData[]
+  failure?: InstanceType<typeof R2SqlQueryError>
+  recencyAvailable?: boolean
+}) {
   const unused = () => Effect.die("unused")
   const deleteModels = (table: string) => (dataset: string, models: readonly string[]) =>
     Effect.sync(() => {
@@ -268,6 +334,20 @@ function services(input: { events: string[]; rows?: R2SqlData[]; failure?: Insta
             input.events.push(
               `replace ${JSON.stringify(scope.cohortDates)} ${scope.dataset} ${scope.tier} ${rows
                 .map((row) => `${row.model}:${row.eligible_users}:${row.retained_users}`)
+                .join(",")}`,
+            )
+          }),
+      }),
+    ),
+    Layer.succeed(
+      UserRecencyRepo,
+      UserRecencyRepo.of({
+        available: () => Effect.succeed(input.recencyAvailable ?? true),
+        replace: (rows, scope) =>
+          Effect.sync(() => {
+            input.events.push(
+              `replace recency ${scope.dataset} ${rows
+                .map((row) => `${row.model}:${row.last_active_date}:${row.users}:${row.window_start}:${row.window_end}`)
                 .join(",")}`,
             )
           }),

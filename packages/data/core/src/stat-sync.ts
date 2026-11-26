@@ -11,6 +11,7 @@ import { GeoStatRepo, rowsFromAggregates as geoRowsFromAggregates } from "./doma
 import {
   buildPeriodRetentionQuery,
   buildPeriodStatsQueries,
+  buildUserRecencyQuery,
   hiddenStatModels,
   retentionPeriods,
   statPeriods,
@@ -18,18 +19,21 @@ import {
   toModelAggregate,
   toProviderAggregate,
   toRetentionAggregate,
+  toUserRecencyAggregate,
 } from "./domain/inference"
 import { ModelStatRepo, rowsFromAggregates as modelRowsFromAggregates } from "./domain/model"
 import { statProvider } from "./domain/model-normalization"
 import { ProviderStatRepo, rowsFromAggregates as providerRowsFromAggregates } from "./domain/provider"
 import { RetentionStatRepo, rowsFromAggregates as retentionRowsFromAggregates } from "./domain/retention"
 import type { StatGrain } from "./domain/stat"
+import { rowsFromAggregates as userRecencyRowsFromAggregates, UserRecencyRepo } from "./domain/user-recency"
 import { isDeterministicR2SqlError, R2Sql, R2SqlQueryError } from "./r2-sql"
-import { syncRange } from "./sync-range"
+import { syncRange, userRecencyWindow } from "./sync-range"
 
 // Plans cross a Workflow step boundary, so every value is plain JSON.
 export type DataSyncPeriod = { grain: StatGrain; key: string; start: string; end: string }
 export type DataSyncRetentionPeriod = { start: string; end: string; returnStart: string; returnEnd: string }
+export type DataSyncUserRecencyWindow = { start: string; end: string }
 export type DataSyncPlan = {
   startedAt: string
   history: boolean
@@ -38,6 +42,8 @@ export type DataSyncPlan = {
   catalog: CatalogSnapshot
   periods: DataSyncPeriod[]
   retentionPeriods: DataSyncRetentionPeriod[]
+  // Only history runs recompute it: its query scans the whole new-model window.
+  userRecency: DataSyncUserRecencyWindow | null
 }
 export type DataSyncResult = { ok: true; rows: number; startedAt: string; periodStart: string; periodEnd: string }
 export type DataSyncError = R2SqlQueryError | DatabaseError | CatalogUnavailableError
@@ -52,6 +58,7 @@ export class CatalogUnavailableError extends Error {
 }
 
 const STATS_CURSOR = ["dimension", "tier", "provider", "model", "country"]
+const USER_RECENCY_CURSOR = ["model", "last_active_date"]
 
 // Each stat period and retention cohort is independent: ranks, upserts and
 // deletes stay inside one (grain, period_key) or one cohort. A run is one plan
@@ -64,6 +71,7 @@ export const syncData = Effect.fn("StatSync.sync")(function* (options?: { histor
   const cohorts = yield* Effect.forEach(plan.retentionPeriods, (period) => syncRetentionCohort(period, plan.catalog), {
     concurrency: 4,
   })
+  if (plan.userRecency) yield* syncUserRecency(plan.userRecency)
   yield* Effect.logInfo(
     `data sync complete ${JSON.stringify({
       history: plan.history,
@@ -91,6 +99,7 @@ export const planDataSync = Effect.fn("StatSync.plan")(function* (
   options: { history: boolean; loadCatalog?: typeof loadCatalogIdentity },
 ) {
   const retentionStats = yield* RetentionStatRepo
+  const userRecency = yield* UserRecencyRepo
   const modelStats = yield* ModelStatRepo
   const geoStats = yield* GeoStatRepo
   const range = syncRange(startedAt, options.history)
@@ -100,6 +109,8 @@ export const planDataSync = Effect.fn("StatSync.plan")(function* (
   if (!identity.catalog) return yield* Effect.fail(new CatalogUnavailableError())
   if (identity.stale) yield* Effect.logWarning("model catalog unavailable; using cached identity")
   const retentionAvailable = yield* retentionStats.available()
+  const userRecencyAvailable = options.history && (yield* userRecency.available())
+  const recencyWindow = userRecencyWindow(startedAt)
   // Period steps only clean the periods they sync, and the site shows weeks older than any run recomputes.
   yield* Effect.all(
     [
@@ -130,6 +141,9 @@ export const planDataSync = Effect.fn("StatSync.plan")(function* (
           returnEnd: period.returnEnd.toISOString(),
         }))
       : [],
+    userRecency: userRecencyAvailable
+      ? { start: recencyWindow.start.toISOString(), end: recencyWindow.end.toISOString() }
+      : null,
   }
   yield* Effect.logInfo(
     `data sync planned ${JSON.stringify({
@@ -139,6 +153,7 @@ export const planDataSync = Effect.fn("StatSync.plan")(function* (
       periods: plan.periods.length,
       retentionPeriods: plan.retentionPeriods.length,
       retentionAvailable,
+      userRecency: plan.userRecency,
     })}`,
   )
   return plan
@@ -269,6 +284,28 @@ export const syncRetentionCohort = Effect.fn("StatSync.retentionCohort")(functio
 
   const result = { cohortDate: item.cohortDates[0]!, rows: rows.length }
   yield* Effect.logInfo(`retention cohort synced ${JSON.stringify(result)}`)
+  return result
+})
+
+export const syncUserRecency = Effect.fn("StatSync.userRecency")(function* (window: DataSyncUserRecencyWindow) {
+  const r2Sql = yield* R2Sql
+  const userRecency = yield* UserRecencyRepo
+  const range = { start: new Date(window.start), end: new Date(window.end) }
+  const rows = userRecencyRowsFromAggregates(
+    (yield* r2Sql
+      .query(buildUserRecencyQuery(range), USER_RECENCY_CURSOR)
+      .pipe(
+        Effect.tapError((error) =>
+          Effect.logError(`user recency query failed ${JSON.stringify({ ...window, error: error.message })}`),
+        ),
+      )).flatMap(toUserRecencyAggregate),
+    range,
+  )
+  // Replace only after the query succeeds, so a failed query keeps the last window.
+  yield* userRecency.replace(rows, { dataset: Resource.DataSyncConfig.dataset })
+
+  const result = { ...window, rows: rows.length }
+  yield* Effect.logInfo(`user recency synced ${JSON.stringify(result)}`)
   return result
 })
 

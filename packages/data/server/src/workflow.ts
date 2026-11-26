@@ -6,6 +6,7 @@ import {
   planDataSync,
   syncRetentionCohort,
   syncStatPeriod,
+  syncUserRecency,
   type DataSyncError,
 } from "@opencode/data-core/stat-sync"
 import { Effect, Layer } from "effect"
@@ -64,8 +65,20 @@ export class DataSyncWorkflow extends WorkflowEntrypoint<unknown, DataSyncParams
         step.do(name, STEP, () => run(deterministicFailureAsResult(syncRetentionCohort(period, plan.catalog)))),
       )
     }
+    if (plan.userRecency) {
+      const window = plan.userRecency
+      const name = `user recency ${window.end.slice(0, 10)}`
+      await settle(
+        name,
+        step.do(name, STEP, () => run(deterministicFailureAsResult(syncUserRecency(window)))),
+      )
+    }
     if (failed.length > 0) throw new Error(`data sync failed for ${failed.join(", ")}`)
-    return { periods: plan.periods.length, retentionPeriods: plan.retentionPeriods.length }
+    return {
+      periods: plan.periods.length,
+      retentionPeriods: plan.retentionPeriods.length,
+      userRecency: plan.userRecency !== null,
+    }
   }
 }
 

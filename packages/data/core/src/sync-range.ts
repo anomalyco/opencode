@@ -2,7 +2,9 @@ import { startOfIsoWeek, startOfUtcDay } from "./domain/stat"
 
 const DATALAKE_INGESTION_LAG_MS = 5 * 60_000
 const STATS_DATA_START_MS = new Date("2026-05-28T00:00:00.000Z").getTime()
-const WEEK_MS = 7 * 86_400_000
+const DAY_MS = 86_400_000
+const WEEK_MS = 7 * DAY_MS
+const NEW_MODEL_WINDOW_DAYS = 30
 const DISPLAY_WINDOW_MS = 56 * 86_400_000
 // A retention result needs one complete activity week plus its complete return
 // week. Keep another partial week of slack around the ISO-week boundary.
@@ -33,6 +35,16 @@ export function syncRange(startedAt: Date, history = false) {
     // A cohort is computed only once its return week ends by this bound, so history
     // stops one cohort before the first one the incremental pass recomputes.
     retentionEnd: new Date(startOfIsoWeek(retentionStart).getTime() + WEEK_MS),
+  }
+}
+
+// The site's new-model window is the last 30 days, today included. Recency covers its complete days, so a launch on
+// any of them is counted from its first day.
+export function userRecencyWindow(startedAt: Date) {
+  const end = startOfUtcDay(new Date(startedAt.getTime() - DATALAKE_INGESTION_LAG_MS))
+  return {
+    start: new Date(Math.max(end.getTime() - (NEW_MODEL_WINDOW_DAYS - 1) * DAY_MS, STATS_DATA_START_MS)),
+    end,
   }
 }
 

@@ -5,6 +5,7 @@ import type { ModelStatMetric } from "./model"
 import { RETIRED_STAT_PROVIDERS, statProvider } from "./model-normalization"
 import { isMissingRetentionTable } from "./retention"
 import { DATA_SITE_TIERS, normalizeTier, startOfIsoWeek, type StatGrain } from "./stat"
+import { isMissingUserRecencyTable } from "./user-recency"
 
 export type UsageProduct = "All Users" | "Zen" | "Go" | "Enterprise"
 export type TokenProduct = "Zen" | "Go" | "Enterprise"
@@ -59,6 +60,16 @@ export type NewModelCandidate = {
   daily: NewModelDay[]
   // Distinct users per ISO week, keyed by the week's Monday. Weeks are the widest grain with distinct counts.
   weekly: { week: string; users: number }[]
+  // Distinct users by the last day they used the model, over the recency window's complete days (end exclusive).
+  // Summing from a launch day on counts each user since launch once.
+  recency: { start: string; end: string; days: { date: string; users: number }[] } | null
+}
+export type UserRecencyMetricRow = {
+  model: string
+  lastActiveDate: string
+  users: number
+  windowStart: string
+  windowEnd: string
 }
 export type ModelUsagePoint = {
   date: string
@@ -242,14 +253,15 @@ const queryCache = new Map<string, CachedQuery>()
 export function getStatsHomeData(): Effect.Effect<StatsHomeData, StatsDataError> {
   return Effect.tryPromise({
     try: async () => {
-      const [modelRows, weekRows, retentionRows] = await Promise.all([
+      const [modelRows, weekRows, retentionRows, recencyRows] = await Promise.all([
         listModelStats("day"),
         listModelStats("week"),
         listRetentionWeekly(),
+        listUserRecency(),
       ])
       const window = modelRowsWindow(modelRows, "2M")
       const geoRows = window ? await listCountryTotals(window) : []
-      return buildStatsHomeData(modelRows, weekRows, geoRows, retentionRows)
+      return buildStatsHomeData(modelRows, weekRows, geoRows, retentionRows, recencyRows)
     },
     catch: (cause) => new StatsDataError(cause),
   })
@@ -416,6 +428,26 @@ async function listRetentionWeekly(): Promise<RetentionMetricRow[]> {
   }
 }
 
+async function listUserRecency(): Promise<UserRecencyMetricRow[]> {
+  try {
+    return (
+      await queryRows(
+        `select model, last_active_date, users, window_start, window_end
+      from model_user_recency where dataset = 'zen' order by model, last_active_date`,
+      )
+    ).map((row) => ({
+      model: stringValue(row.model),
+      lastActiveDate: stringValue(row.last_active_date),
+      users: numberValue(row.users),
+      windowStart: stringValue(row.window_start),
+      windowEnd: stringValue(row.window_end),
+    }))
+  } catch (cause) {
+    if (isMissingUserRecencyTable(cause)) return []
+    throw cause
+  }
+}
+
 // Only resolved rows are cached: a Worker request cannot await I/O started by another request that has ended.
 async function queryRows(query: string, params: string[] = []) {
   const key = JSON.stringify([query, params])
@@ -487,6 +519,7 @@ export function buildStatsHomeData(
   weekRows: ModelStatMetric[],
   countryRows: CountryTotalRow[],
   retentionRows: RetentionMetricRow[],
+  recencyRows: UserRecencyMetricRow[] = [],
 ): StatsHomeData {
   const normalized = normalizeStatRows(modelRows)
   if (normalized.length === 0) return emptyStatsHomeData()
@@ -567,13 +600,14 @@ export function buildStatsHomeData(
       .filter((item) => item.rank !== null)
       .slice(0, RETENTION_MODEL_LIMIT),
     country: buildCountryStats(countryRows),
-    newModels: buildNewModelCandidates(normalized, weekly, latest),
+    newModels: buildNewModelCandidates(normalized, weekly, recencyRows, latest),
   }
 }
 
 function buildNewModelCandidates(
   rows: StatMetricRow[],
   weekRows: StatMetricRow[],
+  recencyRows: UserRecencyMetricRow[],
   latest: number,
 ): NewModelCandidate[] {
   const productRows = rowsForProduct(rows, SITE_PRODUCT, -Infinity, latest + DAY_MS).filter(
@@ -634,9 +668,20 @@ function buildNewModelCandidates(
             ).uniqueUsers,
           }))
           .filter((week) => week.users > 0),
+        recency: recencyFor(item.model, recencyRows),
       }
     })
     .toSorted((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model))
+}
+
+function recencyFor(model: string, rows: UserRecencyMetricRow[]): NewModelCandidate["recency"] {
+  const window = rows[0]
+  if (!window) return null
+  return {
+    start: window.windowStart,
+    end: window.windowEnd,
+    days: rows.filter((row) => row.model === model).map((row) => ({ date: row.lastActiveDate, users: row.users })),
+  }
 }
 
 function buildStatsModelData(

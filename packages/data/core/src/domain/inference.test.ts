@@ -2,10 +2,12 @@ import { describe, expect, test } from "bun:test"
 import {
   buildRetentionQueries,
   buildStatsQueries,
+  buildUserRecencyQuery,
   toGeoAggregate,
   toModelAggregate,
   toProviderAggregate,
   toRetentionAggregate,
+  toUserRecencyAggregate,
 } from "./inference"
 import {
   modelAuthor,
@@ -106,7 +108,13 @@ describe("inference stat normalization", () => {
     expect(toRetentionAggregate({ ...row, cohort_date: "2026-08-10", eligible_users: "12" })).toMatchObject([
       { model: "omen-alpha", provider: "unknown", eligibleUsers: 12 },
     ])
-    ;["hungerg", "hungerg-free", "opencode/hungerg-free", "opencode-go/hungerg-free", "OPENCODE-GO/HungerG-free:global"].forEach((model) => {
+    ;[
+      "hungerg",
+      "hungerg-free",
+      "opencode/hungerg-free",
+      "opencode-go/hungerg-free",
+      "OPENCODE-GO/HungerG-free:global",
+    ].forEach((model) => {
       expect(statModel(model, "")).toBe("hungerg")
       expect(statProvider(model, "hidden-route-model", "hidden-provider")).toBe("unknown")
 
@@ -485,6 +493,41 @@ describe("inference stat normalization", () => {
         retainedUsers: 74,
       },
     ])
+  })
+})
+
+describe("user recency query", () => {
+  const source = { namespace: "inference", table: "generation", dataset: "zen", hiddenModels: ["hidden-model"] }
+  const window = { start: new Date("2026-10-28T00:00:00.000Z"), end: new Date("2026-11-26T00:00:00.000Z") }
+
+  test("buckets each user's last active day across the whole window", () => {
+    const query = buildUserRecencyQuery(window, source)
+
+    expect(query).toContain("AND started_at >= '2026-10-28T00:00:00.000Z'")
+    expect(query).toContain("AND started_at < '2026-11-26T00:00:00.000Z'")
+    expect(query).toContain("MAX(started_at) AS last_active_at")
+    expect(query).toContain("GROUP BY model, user_key")
+    expect(query.match(/WHEN last_active_at < /g)).toHaveLength(29)
+    expect(query).toContain("WHEN last_active_at < '2026-10-29T00:00:00.000Z' THEN '2026-10-28'")
+    expect(query).toContain("WHEN last_active_at < '2026-11-26T00:00:00.000Z' THEN '2026-11-25'")
+    expect(query).not.toContain("AS tier")
+  })
+
+  test("counts the same requests as the usage stats", () => {
+    const query = buildUserRecencyQuery(window, source)
+
+    expect(query).toContain("lower(model) NOT IN ('alpha-gpt-next', 'hidden-model')")
+    expect(query).toContain("AND attempts > 0")
+    expect(query).toContain("COALESCE(product, '') <> 'custom'")
+  })
+
+  test("maps recency results", () => {
+    expect(
+      toUserRecencyAggregate({ dataset: "zen", model: "Hy4-Flash-free", last_active_date: "2026-11-20", users: "12" }),
+    ).toEqual([
+      { dataset: "zen", model: statModel("Hy4-Flash-free", undefined), lastActiveDate: "2026-11-20", users: 12 },
+    ])
+    expect(toUserRecencyAggregate({ dataset: "zen", model: "hy4-flash", users: "1" })).toEqual([])
   })
 })
 

@@ -5,12 +5,14 @@ import { GeoStatRepo } from "./domain/geo"
 import { ModelStatRepo } from "./domain/model"
 import { ProviderStatRepo } from "./domain/provider"
 import { RetentionStatRepo } from "./domain/retention"
+import { UserRecencyRepo } from "./domain/user-recency"
 
 const repoLayer = Layer.mergeAll(
   ModelStatRepo.layer,
   ProviderStatRepo.layer,
   GeoStatRepo.layer,
   RetentionStatRepo.layer,
+  UserRecencyRepo.layer,
 ).pipe(Layer.provide(databaseLayer))
 
 export const layer = Layer.mergeAll(AppConfig.layer, databaseLayer, repoLayer)

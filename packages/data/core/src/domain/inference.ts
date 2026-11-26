@@ -16,6 +16,7 @@ import {
 } from "./model-normalization"
 import type { ProviderStatAggregate } from "./provider"
 import type { RetentionStatAggregate } from "./retention"
+import type { UserRecencyAggregate, UserRecencyWindow } from "./user-recency"
 import {
   normalizeCountry,
   normalizeTier,
@@ -88,6 +89,79 @@ export function buildPeriodRetentionQuery(
     cohortDates: [period.start.toISOString().slice(0, 10)],
     query: buildRetentionQuery([period], input ?? defaultSource(), catalog),
   }
+}
+
+// Counts each user once per model, on the last day they used it in the window. The site sums the days from a
+// model's launch on, which gives its distinct users since launch for any launch in the window. Go and Free are
+// counted together, so a user of both tiers counts once.
+export function buildUserRecencyQuery(window: UserRecencyWindow, input?: StatsQuerySource) {
+  const source = input ?? defaultSource()
+  const startValue = sqlString(window.start.toISOString())
+  const endValue = sqlString(window.end.toISOString())
+  const days = Array.from(
+    { length: Math.round((window.end.getTime() - window.start.getTime()) / DAY_MS) },
+    (_, index) => new Date(window.start.getTime() + index * DAY_MS),
+  )
+  return `
+WITH normalized AS (
+  SELECT
+    ${statModelSql("model_requested", "route_model")} AS model,
+    COALESCE(NULLIF(user_id, ''), NULLIF(workspace_id, ''), NULLIF(service_api_key_id, '')) AS user_key,
+    started_at
+  FROM ${[source.namespace, source.table].map(sqlIdentifier).join(".")}
+  WHERE event_type = 'generation.completed'
+    AND source IN ('inference', 'inference-legacy')
+    AND (
+      (source = 'inference-legacy' AND started_at < ${sqlString(LIVE_SOURCE_START)})
+      OR (source = 'inference' AND started_at >= ${sqlString(LIVE_SOURCE_START)})
+    )
+    AND (product IN (${GO_PRODUCTS.map(sqlString).join(", ")}) OR (COALESCE(product, '') <> 'custom' AND (${freeTierSql("model_tier", "model_requested")})))
+    AND ${ROUTED_ONLY}
+    AND model_requested IS NOT NULL
+    AND model_requested <> ''
+    AND __ingest_ts >= ${startValue}
+    AND __ingest_ts < ${sqlString(new Date(window.end.getTime() + DAY_MS).toISOString())}
+    AND started_at >= ${startValue}
+    AND started_at < ${endValue}
+), last_active AS (
+  SELECT model, user_key, MAX(started_at) AS last_active_at
+  FROM normalized
+  WHERE user_key <> ''
+    AND lower(model) NOT IN (${excludedModels(source).map(sqlString).join(", ")})
+  GROUP BY model, user_key
+), bucketed AS (
+  SELECT
+    model,
+    CASE
+${days
+  .map(
+    (day) =>
+      `      WHEN last_active_at < ${sqlString(new Date(day.getTime() + DAY_MS).toISOString())} THEN ${sqlString(day.toISOString().slice(0, 10))}`,
+  )
+  .join("\n")}
+    END AS last_active_date
+  FROM last_active
+)
+SELECT
+  ${sqlString(source.dataset)} AS dataset,
+  model,
+  last_active_date,
+  COUNT(*) AS users
+FROM bucketed
+GROUP BY model, last_active_date
+`
+}
+
+export function toUserRecencyAggregate(data: R2SqlData): UserRecencyAggregate[] {
+  if (!data.model || !data.last_active_date) return []
+  return [
+    {
+      dataset: data.dataset || Resource.DataSyncConfig.dataset,
+      model: statModel(data.model, undefined),
+      lastActiveDate: data.last_active_date,
+      users: integer(data, "users"),
+    },
+  ]
 }
 
 function defaultSource(): StatsQuerySource {

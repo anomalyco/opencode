@@ -95,7 +95,7 @@ export function isMissingRetentionTable(cause: unknown): boolean {
   return text.includes("model_retention") && text.includes("exist")
 }
 
-function errorText(cause: unknown): string {
+export function errorText(cause: unknown): string {
   if (cause instanceof Error) return `${cause.message} ${errorText((cause as { cause?: unknown }).cause)}`
   if (typeof cause === "object" && cause)
     return Object.values(cause as Record<string, unknown>)
