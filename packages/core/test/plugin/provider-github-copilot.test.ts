@@ -603,6 +603,7 @@ describe("GithubCopilotPlugin", () => {
         for (const [id, pkg] of Object.entries(fallback))
           editor.models.update(Provider.ID.githubCopilot, Model.ID.make(id), (model) => {
             model.package = pkg
+            model.capabilities = { ...model.capabilities, input: ["text", "image", "pdf"] }
           })
         editor.models.update(Provider.ID.githubCopilot, Model.ID.make("small"), (model) => {
           model.modelID = Model.ID.make("gpt-5-mini")
@@ -635,6 +636,15 @@ describe("GithubCopilotPlugin", () => {
         required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gemini-3.8-flash"))),
       )
       expect(resolved.route.id).toBe("openai-compatible-chat")
+      expect(
+        required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("claude-sonnet-4.5"))).capabilities.input,
+      ).toEqual(["text", "image", "pdf"])
+      expect(required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gpt-5"))).capabilities.input).toEqual(
+        ["text", "image", "pdf"],
+      )
+      expect(
+        required(yield* models.get(Provider.ID.githubCopilot, Model.ID.make("gemini-3.8-flash"))).capabilities.input,
+      ).toEqual(["text", "image"])
     }),
   )
 
