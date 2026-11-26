@@ -184,6 +184,16 @@ describe("SessionModelRequest.boundImages", () => {
     expect(boundImages(messages)).toBe(messages)
   })
 
+  test("treats malformed media assets without inline payload data as 0 bytes without throwing", () => {
+    const malformedBase64 = Media.base64(undefined as unknown as string, "image/png")
+    const malformedBytes = Media.bytes(undefined as unknown as Uint8Array, "image/png")
+    const messages = [
+      Message.user({ type: "media", media: malformedBase64 }),
+      Message.user({ type: "media", media: malformedBytes }),
+    ]
+    expect(boundImages(messages)).toBe(messages)
+  })
+
   test("replaces oldest images until the retained payload reaches the target", () => {
     const image = "a".repeat(9 * 1024 * 1024)
     const text = Message.user("plain")

@@ -52,6 +52,11 @@ describe("Media.make", () => {
     expect(() => Media.make("./photo.png", "image/png")).toThrow("Media.file")
   })
 
+  test("rejects undefined or null media input even when mediaType is provided", () => {
+    expect(() => Media.make(undefined as unknown as Media.Input, "image/png")).toThrow(AIError)
+    expect(() => Media.make(null as unknown as Media.Input, "image/png")).toThrow(AIError)
+  })
+
   test("matches the data URL scheme in any case", () => {
     expect(Media.make(`DATA:image/png;base64,${PNG_BASE64}`).mediaType).toBe("image/png")
   })

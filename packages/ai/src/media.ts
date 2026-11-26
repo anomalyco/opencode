@@ -371,6 +371,8 @@ export const make = (input: Input, mediaType?: string): Asset => {
   if (input instanceof ArrayBuffer) return make(new Uint8Array(input), mediaType)
   if (input instanceof Uint8Array) return bytes(input, mediaType ?? requireMediaType(detectMediaType(input)))
   const value = input instanceof URL ? input.href : input
+  if (typeof value !== "string")
+    throw invalid("Media strings must be base64, a data URL or an http(s) URL; read files with Media.file")
   if (/^data:/i.test(value)) {
     const match = DATA_URL.exec(value)
     if (match === null) throw invalid("Media data URLs must contain a MIME type and base64 data")

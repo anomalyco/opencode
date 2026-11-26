@@ -166,8 +166,9 @@ const unsupportedMedia = (
 // The inline budget counts base64 characters, which are ASCII, so a string's length is its size without scanning it.
 // Remote and provider-referenced media carry no local payload and never count toward the inline budget.
 const mediaBytes = (media: Media.Asset) => {
-  if (media.source.type === "base64") return media.source.data.length
-  if (media.source.type === "bytes") return Math.ceil(media.source.data.byteLength / 3) * 4
+  if (media.source.type === "base64") return typeof media.source.data === "string" ? media.source.data.length : 0
+  if (media.source.type === "bytes")
+    return media.source.data instanceof Uint8Array ? Math.ceil(media.source.data.byteLength / 3) * 4 : 0
   return 0
 }
 
