@@ -1,14 +1,19 @@
 // @refresh reload
 
-import { ensureContrast, hexToOklch, hueDistance, oklchToHex, shift, withAlpha } from "../color"
+import { ensureContrast, hexToOklch, hueDistance, oklchToHexExact, shift, withAlpha } from "../color"
 import { mapV2Foreground } from "./foreground"
 import { mapV2Semantics, mergeV2Tokens } from "./mapping"
-import type { DesktopTheme, HexColor, ResolvedV2Theme, ThemeVariant, V2ColorValue } from "../types"
+import type { DesktopTheme, HexColor, ResolvedV2Theme, ThemeVariant } from "../types"
 import { V2_PRIMITIVES_DEFAULT } from "./default-primitives"
 
 const V2_GREY_STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200] as const
 
 const V2_STEPS = [100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200] as const
+
+export interface ResolvedV2ThemeModes {
+  light: ResolvedV2Theme
+  dark: ResolvedV2Theme
+}
 
 interface PaletteInput {
   neutral: HexColor
@@ -31,6 +36,17 @@ interface HueScaleAnchors {
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
+}
+
+function readHex(tokens: ResolvedV2Theme, key: string): HexColor {
+  const value = tokens[key]
+
+  if (value && value.startsWith("#")) {
+    // SAFETY: startsWith("#") verifies the HexColor template-literal prefix.
+    return value as HexColor
+  }
+
+  throw new Error(`Expected hex token for ${key}, got ${value}`)
 }
 
 /**
@@ -76,7 +92,8 @@ function generateV2NeutralScale(neutral: HexColor, ink: HexColor, isDark: boolea
 
     return lightSteps.map((l, idx) => {
       const chromaScale = idx === 0 ? 0.12 : idx <= 2 ? 0.25 : idx <= 6 ? 0.55 : idx === 12 ? 0.88 : 1
-      return oklchToHex({ l, c: baseC * chromaScale, h: hue })
+
+      return oklchToHexExact({ l, c: baseC * chromaScale, h: hue })
     })
   }
 
@@ -111,7 +128,8 @@ function generateV2NeutralScale(neutral: HexColor, ink: HexColor, isDark: boolea
 
   return lightSteps.map((l, idx) => {
     const chromaScale = idx === 0 ? 1 : idx <= 4 ? 0.95 : idx <= 7 ? 0.65 : 0.5
-    return oklchToHex({ l, c: baseC * chromaScale, h: hue })
+
+    return oklchToHexExact({ l, c: baseC * chromaScale, h: hue })
   })
 }
 
@@ -126,41 +144,45 @@ function generateV2HueScale(seed: HexColor, isDark: boolean, anchors: HueScaleAn
   const chroma = clamp(base.c, 0.075, 0.22)
   const h = base.h
 
-  const step100 = oklchToHex({
+  const step100 = oklchToHexExact({
     l: isDark ? 0.965 : clamp(bgBaseL - 0.006, 0.935, 0.972),
     c: Math.min(chroma * 0.18, 0.028),
     h,
   })
-  const step200 = oklchToHex({
+
+  const step200 = oklchToHexExact({
     l: isDark ? 0.925 : clamp(bgBaseL - 0.032, 0.9, 0.945),
     c: Math.min(chroma * 0.34, 0.052),
     h,
   })
-  const step300 = oklchToHex({ l: 0.855, c: Math.min(chroma * 0.56, 0.09), h })
 
-  const raw400 = oklchToHex({ l: clamp(base.l, 0.73, 0.82), c: Math.min(chroma * 0.88, 0.185), h })
+  const step300 = oklchToHexExact({ l: 0.855, c: Math.min(chroma * 0.56, 0.09), h })
+
+  const raw400 = oklchToHexExact({ l: clamp(base.l, 0.73, 0.82), c: Math.min(chroma * 0.88, 0.185), h })
   const step400 = isDark ? ensureContrast(raw400, anchors.bgBase, 6.2, "lighter") : raw400
 
-  const raw1200 = oklchToHex({
+  const raw1200 = oklchToHexExact({
     l: isDark ? clamp(bgBaseL + 0.035, 0.2, 0.31) : 0.23,
     c: clamp(chroma * 0.42, 0.035, 0.072),
     h,
   })
 
-  const raw500 = oklchToHex({ l: 0.67, c: Math.min(chroma * 1.02, 0.2), h })
+  const raw500 = oklchToHexExact({ l: 0.67, c: Math.min(chroma * 1.02, 0.2), h })
+
   const step500 = isDark
     ? ensureContrast(ensureContrast(raw500, raw1200, 5.2, "lighter"), anchors.bgBase, 5.0, "lighter")
     : ensureContrast(raw500, anchors.bgBase, 3.1, "darker")
 
-  const raw600 = oklchToHex({ l: clamp(base.l, 0.48, 0.55), c: Math.min(chroma * 1.12, 0.235), h })
+  const raw600 = oklchToHexExact({ l: clamp(base.l, 0.48, 0.55), c: Math.min(chroma * 1.12, 0.235), h })
   const contrastChecked600 = ensureContrast(raw600, anchors.textContrast, 4.6, "darker")
   const step600 = isDark ? contrastChecked600 : ensureContrast(contrastChecked600, anchors.bgBase, 4.6, "darker")
   const l600 = hexToOklch(step600).l
 
-  const raw700 = oklchToHex({ l: Math.max(0.36, l600 - 0.055), c: Math.min(chroma * 1.14, 0.24), h })
+  const raw700 = oklchToHexExact({ l: Math.max(0.36, l600 - 0.055), c: Math.min(chroma * 1.14, 0.24), h })
   const step700 = isDark ? raw700 : ensureContrast(raw700, anchors.bgBase, 5.5, "darker")
 
-  const raw800 = oklchToHex({ l: Math.min(0.49, l600 - 0.03), c: Math.min(chroma * 1.06, 0.21), h })
+  const raw800 = oklchToHexExact({ l: Math.min(0.49, l600 - 0.03), c: Math.min(chroma * 1.06, 0.21), h })
+
   const step800 = isDark
     ? raw800
     : ensureContrast(
@@ -170,15 +192,20 @@ function generateV2HueScale(seed: HexColor, isDark: boolean, anchors: HueScaleAn
         "darker",
       )
 
-  const step900 = oklchToHex({ l: clamp(hexToOklch(step800).l - 0.05, 0.36, 0.45), c: Math.min(chroma * 0.94, 0.19), h })
-  const step1000 = oklchToHex({ l: 0.35, c: Math.min(chroma * 0.82, 0.16), h })
-  const step1100 = oklchToHex({ l: 0.28, c: Math.min(chroma * 0.68, 0.13), h })
+  const step900 = oklchToHexExact({
+    l: clamp(hexToOklch(step800).l - 0.05, 0.36, 0.45),
+    c: Math.min(chroma * 0.94, 0.19),
+    h,
+  })
+
+  const step1000 = oklchToHexExact({ l: 0.35, c: Math.min(chroma * 0.82, 0.16), h })
+  const step1100 = oklchToHexExact({ l: 0.28, c: Math.min(chroma * 0.68, 0.13), h })
 
   return [step100, step200, step300, step400, step500, step600, step700, step800, step900, step1000, step1100, raw1200]
 }
 
-function assignSteps(prefix: string, steps: readonly number[], scale: HexColor[]): Record<string, V2ColorValue> {
-  const tokens: Record<string, V2ColorValue> = {}
+function assignSteps(prefix: string, steps: readonly number[], scale: HexColor[]): ResolvedV2Theme {
+  const tokens: ResolvedV2Theme = {}
 
   for (let i = 0; i < steps.length; i++) {
     tokens[`v2-${prefix}-${steps[i]}`] = scale[i]!
@@ -189,7 +216,9 @@ function assignSteps(prefix: string, steps: readonly number[], scale: HexColor[]
 
 function distinctPlanSeed(info: HexColor, accent: HexColor, interactive: HexColor): HexColor {
   const interactiveHue = hexToOklch(interactive).h
+
   if (hueDistance(hexToOklch(info).h, interactiveHue) >= 28) return info
+
   if (hueDistance(hexToOklch(accent).h, interactiveHue) >= 28) return accent
 
   return shift(info, { h: 48 })
@@ -236,9 +265,10 @@ function readPalette(variant: ThemeVariant): PaletteInput {
 }
 
 /** Build v2 primitive ramps (50/100 = lightest, 1200 = darkest). Alpha ramps are static in `v2/styles/colors.css`. */
-export function generateV2Primitives(variant: ThemeVariant, isDark: boolean): Record<string, V2ColorValue> {
+export function generateV2Primitives(variant: ThemeVariant, isDark: boolean): ResolvedV2Theme {
   const colors = readPalette(variant)
   const grey = generateV2NeutralScale(colors.neutral, colors.ink, isDark)
+
   const anchors: HueScaleAnchors = {
     bgBase: isDark ? grey[11]! : grey[0]!,
     textContrast: grey[0]!,
@@ -267,11 +297,8 @@ export function generateV2Primitives(variant: ThemeVariant, isDark: boolean): Re
   }
 }
 
-function themeDynamicSemantics(
-  primitives: Record<string, V2ColorValue>,
-  isDark: boolean,
-): Record<string, V2ColorValue> {
-  const hex = (key: string) => primitives[key] as HexColor
+function themeDynamicSemantics(primitives: ResolvedV2Theme, isDark: boolean): ResolvedV2Theme {
+  const hex = (key: string) => readHex(primitives, key)
   const transparent = (key: string) => `${hex(key).slice(0, 7)}00`
 
   return {
@@ -287,16 +314,78 @@ function themeDynamicSemantics(
   }
 }
 
+/**
+ * Aligns legacy v1 tokens consumed by code blocks (`--background-stronger`), diffs (`--diffs-bg`,
+ * `--surface-diff-hidden-*`, `--text-diff-*`), and syntax highlights with the theme's v2 surfaces.
+ * Skipped when a theme supplies explicit v2 surface overrides (such as `oc-2`).
+ */
+function v1CodeAndDiffBridge(variant: ThemeVariant, primitives: ResolvedV2Theme, isDark: boolean): ResolvedV2Theme {
+  if (variant.v2Overrides?.["v2-background-bg-base"]) return {}
+
+  const overrides = variant.overrides ?? {}
+  const colors = readPalette(variant)
+  const codeBg = readHex(primitives, isDark ? "v2-grey-1000" : "v2-grey-100")
+  const dir = isDark ? "lighter" : "darker"
+  const syntaxColor = (seed: HexColor) => ensureContrast(seed, codeBg, 4.55, dir)
+
+  const tokens: ResolvedV2Theme = {
+    "background-base": "var(--v2-background-bg-base)",
+    "background-weak": "var(--v2-background-bg-layer-01)",
+    "background-strong": "var(--v2-background-bg-base)",
+    "background-stronger": "var(--v2-background-bg-layer-01)",
+    "surface-base": "var(--v2-background-bg-layer-01)",
+    "surface-raised-base": "var(--v2-background-bg-layer-01)",
+    "surface-raised-stronger-non-alpha": "var(--v2-background-bg-layer-02)",
+    "surface-diff-hidden-base": "var(--v2-background-bg-layer-02)",
+    "surface-diff-hidden-strong": "var(--v2-background-bg-layer-03)",
+    "icon-weak": "var(--v2-icon-icon-muted)",
+    "icon-weaker": "var(--v2-icon-icon-faint)",
+  }
+
+  const defaults: ResolvedV2Theme = {
+    "text-base": "var(--v2-text-text-base)",
+    "text-strong": "var(--v2-text-text-base)",
+    "text-weak": "var(--v2-text-text-muted)",
+    "text-weaker": "var(--v2-text-text-faint)",
+    "icon-base": "var(--v2-icon-icon-muted)",
+    "icon-strong-base": "var(--v2-icon-icon-base)",
+    "icon-weak-base": "var(--v2-icon-icon-faint)",
+    "text-diff-add-base": "var(--v2-state-fg-success)",
+    "text-diff-delete-base": "var(--v2-state-fg-danger)",
+    "syntax-diff-add": "var(--v2-state-fg-success)",
+    "syntax-diff-delete": "var(--v2-state-fg-danger)",
+    "syntax-comment": "var(--v2-text-text-muted)",
+    "syntax-variable": "var(--v2-text-text-base)",
+    "syntax-object": "var(--v2-text-text-base)",
+    "syntax-operator": "var(--v2-text-text-muted)",
+    "syntax-punctuation": "var(--v2-text-text-muted)",
+    "syntax-string": syntaxColor(colors.success),
+    "syntax-keyword": syntaxColor(colors.accent),
+    "syntax-primitive": syntaxColor(colors.primary),
+    "syntax-property": syntaxColor(colors.info),
+    "syntax-type": syntaxColor(colors.warning),
+    "syntax-constant": syntaxColor(colors.accent),
+    "syntax-info": syntaxColor(colors.info),
+  }
+
+  for (const [key, value] of Object.entries(defaults)) {
+    if (!(key in overrides)) tokens[key] = value
+  }
+
+  return tokens
+}
+
 export function resolveThemeVariantV2(variant: ThemeVariant, isDark: boolean): ResolvedV2Theme {
   const primitives = generateV2Primitives(variant, isDark)
   const semantics = mapV2Semantics(isDark)
   const dynamic = themeDynamicSemantics(primitives, isDark)
   const foreground = mapV2Foreground(readPalette(variant).ink, isDark, primitives, variant.overrides)
+  const bridge = v1CodeAndDiffBridge(variant, primitives, isDark)
 
-  return mergeV2Tokens(primitives, semantics, dynamic, foreground, variant.v2Overrides ?? {})
+  return mergeV2Tokens(primitives, semantics, dynamic, foreground, bridge, variant.v2Overrides ?? {})
 }
 
-export function resolveThemeV2(theme: DesktopTheme): { light: ResolvedV2Theme; dark: ResolvedV2Theme } {
+export function resolveThemeV2(theme: DesktopTheme): ResolvedV2ThemeModes {
   return {
     light: resolveThemeVariantV2(theme.light, false),
     dark: resolveThemeVariantV2(theme.dark, true),

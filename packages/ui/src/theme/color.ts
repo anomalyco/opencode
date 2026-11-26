@@ -1,5 +1,11 @@
 import type { HexColor, OklchColor } from "./types"
 
+export interface RgbColor {
+  r: number
+  g: number
+  b: number
+}
+
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
 }
@@ -8,7 +14,7 @@ function hue(v: number) {
   return ((v % 360) + 360) % 360
 }
 
-export function hexToRgb(hex: HexColor): { r: number; g: number; b: number } {
+export function hexToRgb(hex: HexColor): RgbColor {
   const h = hex.replace("#", "")
 
   const full =
@@ -78,7 +84,7 @@ export function rgbToOklch(r: number, g: number, b: number): OklchColor {
   return { l: L, c: C, h: H }
 }
 
-export function oklchToRgb(oklch: OklchColor): { r: number; g: number; b: number } {
+export function oklchToRgb(oklch: OklchColor): RgbColor {
   const { l: L, c: C, h: H } = oklch
 
   const a = C * Math.cos((H * Math.PI) / 180)
@@ -109,11 +115,32 @@ export function hexToOklch(hex: HexColor): OklchColor {
   return rgbToOklch(r, g, b)
 }
 
-function inSrgbGamut(rgb: { r: number; g: number; b: number }) {
+function inSrgbGamut(rgb: RgbColor) {
   return rgb.r >= 0 && rgb.r <= 1 && rgb.g >= 0 && rgb.g <= 1 && rgb.b >= 0 && rgb.b <= 1
 }
 
 export function fitOklch(oklch: OklchColor): OklchColor {
+  const base = {
+    l: clamp(oklch.l, 0, 1),
+    c: Math.max(0, oklch.c),
+    h: hue(oklch.h),
+  }
+
+  if (inSrgbGamut(oklchToRgb(base))) return base
+
+  let c = base.c
+
+  for (let i = 0; i < 24; i++) {
+    c *= 0.9
+    const next = { ...base, c }
+
+    if (inSrgbGamut(oklchToRgb(next))) return next
+  }
+
+  return { ...base, c: 0 }
+}
+
+export function fitOklchExact(oklch: OklchColor): OklchColor {
   const base = {
     l: clamp(oklch.l, 0, 1),
     c: Math.max(0, oklch.c),
@@ -127,18 +154,34 @@ export function fitOklch(oklch: OklchColor): OklchColor {
 
   for (let i = 0; i < 18; i++) {
     const mid = (lo + hi) / 2
+
     if (inSrgbGamut(oklchToRgb({ ...base, c: mid }))) {
       lo = mid
+
       continue
     }
+
     hi = mid
   }
 
   return { ...base, c: lo }
 }
 
+export function oklchToHex(oklch: OklchColor): HexColor {
+  const { r, g, b } = oklchToRgb(fitOklch(oklch))
+
+  return rgbToHex(r, g, b)
+}
+
+export function oklchToHexExact(oklch: OklchColor): HexColor {
+  const { r, g, b } = oklchToRgb(fitOklchExact(oklch))
+
+  return rgbToHex(r, g, b)
+}
+
 export function hueDistance(a: number, b: number) {
   const diff = Math.abs(hue(a) - hue(b))
+
   return diff > 180 ? 360 - diff : diff
 }
 
@@ -154,7 +197,8 @@ export function ensureContrast(
   const bgL = hexToOklch(background).l
   const goLighter = direction === "lighter" ? true : direction === "darker" ? false : bgL < 0.55
 
-  const extreme = oklchToHex({ l: goLighter ? 1 : 0, c: 0, h: base.h })
+  const extreme = oklchToHexExact({ l: goLighter ? 1 : 0, c: 0, h: base.h })
+
   if (contrastRatio(extreme, background) < minContrast) return extreme
 
   let lo = goLighter ? base.l : 0
@@ -162,11 +206,12 @@ export function ensureContrast(
 
   for (let i = 0; i < 18; i++) {
     const mid = (lo + hi) / 2
-    const passes = contrastRatio(oklchToHex({ l: mid, c: base.c, h: base.h }), background) >= minContrast
+    const passes = contrastRatio(oklchToHexExact({ l: mid, c: base.c, h: base.h }), background) >= minContrast
 
     if (goLighter) {
       hi = passes ? mid : hi
       lo = passes ? lo : mid
+
       continue
     }
 
@@ -174,13 +219,7 @@ export function ensureContrast(
     hi = passes ? hi : mid
   }
 
-  return oklchToHex({ l: goLighter ? hi : lo, c: base.c, h: base.h })
-}
-
-export function oklchToHex(oklch: OklchColor): HexColor {
-  const { r, g, b } = oklchToRgb(fitOklch(oklch))
-
-  return rgbToHex(r, g, b)
+  return oklchToHexExact({ l: goLighter ? hi : lo, c: base.c, h: base.h })
 }
 
 export function generateScale(seed: HexColor, isDark: boolean): HexColor[] {
@@ -296,7 +335,7 @@ export function shift(color: HexColor, value: { l?: number; c?: number; h?: numb
 }
 
 export function contrastRatio(foreground: HexColor, background: HexColor) {
-  const linear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
+  const linear = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
 
   const luminance = (hex: HexColor) => {
     const { r, g, b } = hexToRgb(hex)

@@ -1,6 +1,6 @@
-import { contrastRatio, ensureContrast, hexToOklch, oklchToHex } from "../color"
+import { contrastRatio, ensureContrast, hexToOklch, oklchToHexExact } from "../color"
 import { mapV2Semantics } from "./mapping"
-import type { ColorValue, HexColor, V2ColorValue } from "../types"
+import type { ColorValue, HexColor, ResolvedV2Theme, V2ColorValue } from "../types"
 
 const GREY_STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 1100, 1200] as const
 
@@ -10,22 +10,29 @@ function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v))
 }
 
+function isHexColor(value: string): value is HexColor {
+  return value.startsWith("#")
+}
+
 function opaqueHex(value: ColorValue | undefined): HexColor | undefined {
-  if (typeof value !== "string") return
-  if (/^#[0-9a-fA-F]{6}$/.test(value)) return value as HexColor
+  if (!value) return
+
+  if (/^#[0-9a-fA-F]{6}$/.test(value) && isHexColor(value)) return value
+
   if (/^#[0-9a-fA-F]{3}$/.test(value)) {
     const h = value.slice(1)
-    return `#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}` as HexColor
+
+    return `#${h[0]}${h[0]}${h[1]}${h[1]}${h[2]}${h[2]}`
   }
 }
 
-function greyHex(primitives: Record<string, V2ColorValue>, step: number) {
+function greyHex(primitives: ResolvedV2Theme, step: number): HexColor | undefined {
   const hex = primitives[`v2-grey-${step}`]
 
-  if (typeof hex === "string" && hex.startsWith("#")) return hex as HexColor
+  if (hex && isHexColor(hex)) return hex
 }
 
-function resolveGreyRef(value: V2ColorValue, primitives: Record<string, V2ColorValue>) {
+function resolveGreyRef(value: V2ColorValue, primitives: ResolvedV2Theme) {
   const step = value.match(/^var\(--v2-grey-(\d+)\)$/)?.[1]
 
   if (!step) throw new Error(`Expected grey primitive ref, got ${value}`)
@@ -37,7 +44,7 @@ function resolveGreyRef(value: V2ColorValue, primitives: Record<string, V2ColorV
 }
 
 function pickGrey(
-  primitives: Record<string, V2ColorValue>,
+  primitives: ResolvedV2Theme,
   background: HexColor,
   minContrast: number,
   target: number,
@@ -45,6 +52,7 @@ function pickGrey(
 ) {
   const matches = GREY_STEPS.filter((step) => {
     const hex = greyHex(primitives, step)
+
     if (!hex) return false
     const ratio = contrastRatio(hex, background)
 
@@ -65,9 +73,9 @@ function resolveMutedText(
   const baseL = hexToOklch(textBase).l
   const bgL = hexToOklch(bgBase).l
   const direction = isDark ? "lighter" : "darker"
-
   const source = hexToOklch(overrideWeak ?? textBase)
   const chroma = Math.min(source.c, 0.055)
+
   const targetL = overrideWeak
     ? isDark
       ? clamp(source.l, bgL + 0.28, baseL - 0.14)
@@ -76,7 +84,7 @@ function resolveMutedText(
       ? clamp(baseL - 0.2, bgL + 0.34, 0.77)
       : clamp(baseL + 0.26, 0.4, bgL - 0.32)
 
-  return ensureContrast(oklchToHex({ l: targetL, c: chroma, h: source.h }), bgBase, 4.6, direction)
+  return ensureContrast(oklchToHexExact({ l: targetL, c: chroma, h: source.h }), bgBase, 4.6, direction)
 }
 
 function resolveFaintText(textMuted: HexColor, bgBase: HexColor, isDark: boolean): HexColor {
@@ -85,9 +93,12 @@ function resolveFaintText(textMuted: HexColor, bgBase: HexColor, isDark: boolean
   const direction = isDark ? "lighter" : "darker"
   const mutedContrast = contrastRatio(textMuted, bgBase)
 
-  const targetL = isDark ? clamp(muted.l - 0.12, bgL + 0.22, muted.l - 0.08) : clamp(muted.l + 0.12, muted.l + 0.08, bgL - 0.2)
+  const targetL = isDark
+    ? clamp(muted.l - 0.12, bgL + 0.22, muted.l - 0.08)
+    : clamp(muted.l + 0.12, muted.l + 0.08, bgL - 0.2)
+
   const candidate = ensureContrast(
-    oklchToHex({ l: targetL, c: muted.c * 0.8, h: muted.h }),
+    oklchToHexExact({ l: targetL, c: muted.c * 0.8, h: muted.h }),
     bgBase,
     3.1,
     direction,
@@ -98,15 +109,15 @@ function resolveFaintText(textMuted: HexColor, bgBase: HexColor, isDark: boolean
   // Keep faint visually subordinate to muted even on low-headroom themes.
   const fallbackL = isDark ? Math.max(bgL + 0.16, muted.l - 0.09) : Math.min(bgL - 0.16, muted.l + 0.09)
 
-  return oklchToHex({ l: fallbackL, c: muted.c * 0.75, h: muted.h })
+  return oklchToHexExact({ l: fallbackL, c: muted.c * 0.75, h: muted.h })
 }
 
 export function mapV2Foreground(
   ink: HexColor,
   isDark: boolean,
-  primitives: Record<string, V2ColorValue>,
+  primitives: ResolvedV2Theme,
   overrides: Record<string, ColorValue> = {},
-): Record<string, V2ColorValue> {
+): ResolvedV2Theme {
   const semantics = mapV2Semantics(isDark)
   const bgBase = resolveGreyRef(semantics["v2-background-bg-base"], primitives)
   const bgLayer02 = resolveGreyRef(semantics["v2-background-bg-layer-02"], primitives)
@@ -115,7 +126,7 @@ export function mapV2Foreground(
   const direction = isDark ? "lighter" : "darker"
 
   const rawInk = hexToOklch(ink)
-  const proseInk = oklchToHex({ l: rawInk.l, c: Math.min(rawInk.c, 0.085), h: rawInk.h })
+  const proseInk = oklchToHexExact({ l: rawInk.l, c: Math.min(rawInk.c, 0.085), h: rawInk.h })
   const textBase = ensureContrast(ensureContrast(proseInk, bgBase, 7.0, direction), bgLayer02, 4.5, direction)
   const textMuted = resolveMutedText(textBase, bgBase, isDark, opaqueHex(overrides["text-weak"]))
   const textFaint = resolveFaintText(textMuted, bgBase, isDark)

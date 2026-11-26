@@ -5,6 +5,12 @@ import { resolveThemeV2, resolveThemeVariantV2, themeV2ToCss } from "./resolve"
 
 const theme: DesktopTheme = await Bun.file(new URL("../themes/oc-2.json", import.meta.url)).json()
 
+const themesDir = new URL("../themes/", import.meta.url)
+
+const bundledThemeFiles = Array.from(new Bun.Glob("*.json").scanSync({ cwd: Bun.fileURLToPath(themesDir) }))
+  .filter((name) => name !== "oc-2.json")
+  .sort()
+
 describe("icon emphasis", () => {
   test.each(["light", "dark"] as const)("OC-2 %s icons increase in contrast from faint to base", (mode) => {
     expectIconEmphasis(resolveThemeV2(theme)[mode])
@@ -109,55 +115,85 @@ describe("input elevation", () => {
 })
 
 describe("bundled non-default themes accessibility and hierarchy", () => {
-  test("every bundled theme meets WCAG 2.2 contrast and elevation hierarchy in light and dark modes", async () => {
-    const dir = new URL("../themes/", import.meta.url)
-    const files: string[] = []
-    for await (const name of new Bun.Glob("*.json").scan({ cwd: Bun.fileURLToPath(dir) })) {
-      if (name !== "oc-2.json") files.push(name)
-    }
+  test("OC-2 default theme keeps its own v1 surface tokens untouched", () => {
+    const resolved = resolveThemeV2(theme)
 
-    expect(files.length).toBeGreaterThan(0)
+    expect(resolved.light["background-stronger"]).toBeUndefined()
+    expect(resolved.dark["background-stronger"]).toBeUndefined()
+  })
 
-    for (const file of files.sort()) {
-      const bundled: DesktopTheme = await Bun.file(new URL(file, dir)).json()
-      const resolved = resolveThemeV2(bundled)
+  test.each(bundledThemeFiles)("%s meets WCAG 2.2 contrast, code surface, and emphasis contracts", async (file) => {
+    const bundled: DesktopTheme = await Bun.file(new URL(file, themesDir)).json()
+    const resolved = resolveThemeV2(bundled)
 
-      for (const mode of ["light", "dark"] as const) {
-        const tokens = resolved[mode]
-        const color = (key: string) => resolveHex(tokens, key)
-        const bgBase = color("v2-background-bg-base")
-        const bgAccent = color("v2-background-bg-accent")
-        const bgContrast = color("v2-background-bg-contrast")
-        const bgIconContrast = color("v2-background-bg-icon-button-contrast")
-        const bgInverse = color("v2-background-bg-inverse")
+    for (const mode of ["light", "dark"] as const) {
+      const tokens = resolved[mode]
+      const color = (key: string) => resolveHex(tokens, key)
+      const bgBase = color("v2-background-bg-base")
+      const bgAccent = color("v2-background-bg-accent")
+      const bgContrast = color("v2-background-bg-contrast")
+      const bgIconContrast = color("v2-background-bg-icon-button-contrast")
+      const bgInverse = color("v2-background-bg-inverse")
 
-        expectIconEmphasis(tokens)
-        expect(contrastRatio(color("v2-text-text-base"), bgBase)).toBeGreaterThanOrEqual(7)
-        expect(contrastRatio(color("v2-text-text-muted"), bgBase)).toBeGreaterThanOrEqual(4.5)
-        expect(contrastRatio(color("v2-text-text-faint"), bgBase)).toBeGreaterThanOrEqual(3)
-        expect(contrastRatio(color("v2-text-text-faint"), bgBase)).toBeLessThan(
-          contrastRatio(color("v2-text-text-muted"), bgBase),
-        )
-        expect(contrastRatio(color("v2-text-text-accent"), bgBase)).toBeGreaterThanOrEqual(4.5)
-        expect(contrastRatio(color("v2-text-text-contrast"), bgAccent)).toBeGreaterThanOrEqual(4.5)
-        expect(contrastRatio(color("v2-text-text-contrast"), bgContrast)).toBeGreaterThanOrEqual(4.5)
-        expect(contrastRatio(color("v2-text-text-inverse"), bgInverse)).toBeGreaterThanOrEqual(4.5)
-        expect(contrastRatio(color("v2-icon-icon-inverse"), bgIconContrast)).toBeGreaterThanOrEqual(4.5)
-        expect(contrastRatio(color("v2-border-border-focus"), bgBase)).toBeGreaterThanOrEqual(3)
+      expectIconEmphasis(tokens)
+      expect(tokens["background-stronger"], `${file} (${mode}) background-stronger`).toBe(
+        "var(--v2-background-bg-layer-01)",
+      )
+      expect(contrastRatio(color("v2-text-text-base"), bgBase), `${file} (${mode}) text-base`).toBeGreaterThanOrEqual(7)
+      expect(
+        contrastRatio(color("v2-text-text-muted"), bgBase),
+        `${file} (${mode}) text-muted`,
+      ).toBeGreaterThanOrEqual(4.5)
+      expect(
+        contrastRatio(color("v2-text-text-faint"), bgBase),
+        `${file} (${mode}) text-faint`,
+      ).toBeGreaterThanOrEqual(3)
+      expect(
+        contrastRatio(color("v2-text-text-faint"), bgBase),
+        `${file} (${mode}) faint < muted`,
+      ).toBeLessThan(contrastRatio(color("v2-text-text-muted"), bgBase))
+      expect(
+        contrastRatio(color("v2-text-text-accent"), bgBase),
+        `${file} (${mode}) text-accent`,
+      ).toBeGreaterThanOrEqual(4.5)
+      expect(
+        contrastRatio(color("v2-text-text-contrast"), bgAccent),
+        `${file} (${mode}) text-on-accent`,
+      ).toBeGreaterThanOrEqual(4.5)
+      expect(
+        contrastRatio(color("v2-text-text-contrast"), bgContrast),
+        `${file} (${mode}) text-on-contrast`,
+      ).toBeGreaterThanOrEqual(4.5)
+      expect(
+        contrastRatio(color("v2-text-text-inverse"), bgInverse),
+        `${file} (${mode}) text-inverse`,
+      ).toBeGreaterThanOrEqual(4.5)
+      expect(
+        contrastRatio(color("v2-icon-icon-inverse"), bgIconContrast),
+        `${file} (${mode}) icon-on-contrast-btn`,
+      ).toBeGreaterThanOrEqual(4.5)
+      expect(
+        contrastRatio(color("v2-border-border-focus"), bgBase),
+        `${file} (${mode}) border-focus`,
+      ).toBeGreaterThanOrEqual(3)
 
-        for (const state of ["success", "warning", "danger", "info"] as const) {
-          expect(
-            contrastRatio(color(`v2-state-fg-${state}`), color(`v2-state-bg-${state}`)),
-          ).toBeGreaterThanOrEqual(4.5)
-        }
+      for (const state of ["success", "warning", "danger", "info"] as const) {
+        expect(
+          contrastRatio(color(`v2-state-fg-${state}`), color(`v2-state-bg-${state}`)),
+          `${file} (${mode}) state-${state}`,
+        ).toBeGreaterThanOrEqual(4.5)
       }
     }
   })
 })
 
 function resolveHex(tokens: ResolvedV2Theme, key: string): HexColor {
-  const resolve = (value: string): HexColor =>
-    value.startsWith("var(--") ? resolve(tokens[value.slice(6, -1)]) : (value as HexColor)
+  const resolve = (value: string): HexColor => {
+    if (value.startsWith("var(--")) return resolve(tokens[value.slice(6, -1)])
+
+    // SAFETY: every non-reference token passed to resolveHex in these tests is a hex color.
+    return value as HexColor
+  }
 
   return resolve(tokens[key])
 }

@@ -1,5 +1,5 @@
 import type { ColorValue, HexColor, ResolvedTheme, ThemeVariant } from "./types"
-import { blend, ensureContrast, generateNeutralScale, generateScale, hexToOklch, hexToRgb, oklchToHex, shift, withAlpha } from "./color"
+import { blend, generateNeutralScale, generateScale, hexToOklch, hexToRgb, shift, withAlpha } from "./color"
 
 export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): ResolvedTheme {
   const colors = getColors(variant)
@@ -34,27 +34,22 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   const ink = colors.ink ?? colors.neutral
   const tint = colors.compact ? hexToOklch(ink) : undefined
 
+  const body = tint
+    ? shift(ink, {
+        l: isDark ? Math.max(0, 0.88 - tint.l) * 0.4 : -Math.max(0, tint.l - 0.18) * 0.24,
+        c: isDark ? 1.04 : 1.02,
+      })
+    : undefined
+
   const backgroundOverride = overrides["background-base"]
   const backgroundHex = getHex(backgroundOverride)
   const overlay = Boolean(backgroundOverride) && !backgroundHex
-  const background = backgroundHex ?? neutral[0]
-  const textDirection = isDark ? "lighter" : "darker"
-
-  const body = tint
-    ? ensureContrast(
-        oklchToHex({ l: tint.l, c: Math.min(tint.c, 0.085), h: tint.h }),
-        background,
-        7.0,
-        textDirection,
-      )
-    : undefined
 
   const content = (seed: HexColor, scale: HexColor[]) => {
     const base = hexToOklch(seed)
     const value = isDark ? (base.l > 0.84 ? shift(seed, { c: 1.18 }) : scale[10]) : scale[10]
-    const shifted = shift(value, { l: isDark ? 0.034 : -0.024, c: isDark ? 1.3 : 1.18 })
 
-    return ensureContrast(shifted, background, 4.5, textDirection)
+    return shift(value, { l: isDark ? 0.034 : -0.024, c: isDark ? 1.3 : 1.18 })
   }
 
   const modified = () => {
@@ -82,6 +77,8 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
       stronger: alphaTone(seed, alpha.stronger),
     }
   }
+
+  const background = backgroundHex ?? neutral[0]
 
   const alphaTone = (color: HexColor, alpha: number) =>
     overlay ? (withAlpha(color, alpha) as ColorValue) : blend(color, background, alpha)
@@ -219,16 +216,14 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["input-disabled"] = neutral[3]
 
   tokens["text-base"] = colors.compact ? (body as HexColor) : neutral[10]
-  tokens["text-weak"] = colors.compact
-    ? ensureContrast(shift(body as HexColor, { l: isDark ? -0.18 : 0.22, c: 0.85 }), background, 4.6, textDirection)
-    : neutral[8]
+  tokens["text-weak"] = colors.compact ? shift(body as HexColor, { l: isDark ? -0.11 : 0.11, c: 0.9 }) : neutral[8]
   tokens["text-weaker"] = colors.compact
-    ? ensureContrast(shift(body as HexColor, { l: isDark ? -0.28 : 0.32, c: 0.72 }), background, 3.1, textDirection)
+    ? shift(body as HexColor, { l: isDark ? -0.2 : 0.21, c: isDark ? 0.78 : 0.72 })
     : neutral[7]
   tokens["text-strong"] = colors.compact
     ? isDark
-      ? shift(body as HexColor, { l: 0.04, c: 0.92 })
-      : shift(body as HexColor, { l: -0.05, c: 1.04 })
+      ? blend("#ffffff", body as HexColor, 0.9)
+      : shift(body as HexColor, { l: -0.07, c: 1.04 })
     : neutral[11]
   tokens["text-invert-base"] = isDark ? neutral[10] : neutral[1]
   tokens["text-invert-weak"] = isDark ? neutral[8] : neutral[2]
@@ -244,8 +239,8 @@ export function resolveThemeVariant(variant: ThemeVariant, isDark: boolean): Res
   tokens["text-on-critical-strong"] = on(crits)
   tokens["text-on-warning-base"] = on(warnb)
   tokens["text-on-info-base"] = on(infob)
-  tokens["text-diff-add-base"] = ensureContrast(diffAdd[10], diffAdd[2], 4.5, textDirection)
-  tokens["text-diff-delete-base"] = ensureContrast(diffDelete[9], diffDelete[2], 4.5, textDirection)
+  tokens["text-diff-add-base"] = diffAdd[10]
+  tokens["text-diff-delete-base"] = diffDelete[9]
   tokens["text-diff-delete-strong"] = diffDelete[11]
   tokens["text-diff-add-strong"] = diffAdd[isDark ? 7 : 11]
   tokens["text-on-info-weak"] = on(infob)
