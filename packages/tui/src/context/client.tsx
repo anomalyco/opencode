@@ -1,7 +1,7 @@
 import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client"
 import { createClientConnection, createPersistentPtyClient } from "@opencode/client/solid"
 import { createGlobalEmitter } from "@solid-primitives/event-bus"
-import { onCleanup } from "solid-js"
+import { createSignal, onCleanup } from "solid-js"
 import { createSimpleContext } from "./helper"
 import { createMediaCache } from "../util/media"
 import { useLog } from "./log"
@@ -28,6 +28,7 @@ export const {
     let headers = props.headers
     let persistentPty = url ? createPersistentPtyClient(api, { url }) : undefined
     const media = createMediaCache(() => api)
+    const [stream, setStream] = createSignal<string>()
 
     const connection = createClientConnection(api, {
       reconnect: service
@@ -41,6 +42,7 @@ export const {
           }
         : undefined,
       onEvent(event) {
+        if (event.type === "server.connected") setStream(event.data.stream)
         events.emit(event.type, event)
       },
       log,
@@ -69,6 +71,8 @@ export const {
         listen: events.listen,
       },
       connection,
+      /** The open event stream's ID from its server.connected event, e.g. for experimental.space.subscribe. */
+      stream,
       media,
       restart: service?.restart,
     }

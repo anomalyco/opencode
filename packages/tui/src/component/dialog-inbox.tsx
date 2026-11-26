@@ -132,6 +132,11 @@ export function DialogInbox() {
     if (!row) return
     void client.api.session.update({ sessionID: row.id, archived: !archived() }).catch(toast.error)
   }
+  function pin() {
+    const row = selected()?.row
+    if (!row || archived()) return
+    void inbox.pins.toggle(row.id).catch(toast.error)
+  }
   function move(delta: number) {
     const index = entries().findIndex((item) => item.key === selected()?.key)
     setKey(entries()[moveSelection(index, { count: entries().length, delta, policy: "wrap" })]?.key)
@@ -178,6 +183,7 @@ export function DialogInbox() {
       },
       { id: "dialog.select.submit", run: () => open() },
       { id: "inbox.session.archive", run: () => archive() },
+      { id: "inbox.session.pin", run: () => pin() },
       { id: "inbox.view.archived", run: toggleArchived },
       { bind: "alt+up", run: () => section(-1) },
       { bind: "alt+down", run: () => section(1) },

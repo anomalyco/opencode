@@ -1,7 +1,7 @@
 import type { SessionInfo } from "@opencode/client"
 import { displayLabel } from "@opencode/util/session-title-fallback"
 import { batch, createEffect, createMemo, createSignal, onCleanup } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createStore, reconcile } from "solid-js/store"
 import { useClient } from "../context/client"
 import { useData } from "../context/data"
 import { useLog } from "../context/log"
@@ -14,7 +14,7 @@ export type InboxRow = {
   detail: "Review permission" | "Answer question" | "Working" | "Failed" | ""
 }
 export type InboxSection = { title: string; rows: InboxRow[] }
-type Group = "Needs attention" | "Working" | "Unread" | "Recent"
+type Group = "Needs attention" | "Pinned" | "Working" | "Unread" | "Recent"
 type Request = { id: string; sessionID: string; kind: "Approval" | "Question" }
 
 function start(session: SessionInfo) {
@@ -31,6 +31,7 @@ export function useInbox() {
   const [snapshot, setSnapshot] = createSignal<Request[]>([])
   const cold = createMemo(() => Map.groupBy(snapshot(), (request) => request.sessionID))
   const [asked, setAsked] = createStore<Record<string, number | undefined>>({})
+  const pins = usePins()
   onCleanup(client.event.on("permission.asked", (event) => setAsked(event.data.id, event.created)))
   onCleanup(client.event.on("permission.replied", (event) => setAsked(event.data.requestID, undefined)))
   onCleanup(client.event.on("form.created", (event) => setAsked(event.data.form.id, event.created)))
@@ -135,6 +136,7 @@ export function useInbox() {
   const sections = createMemo((): InboxSection[] => {
     const rows: Record<Group, { row: InboxRow; since: number }[]> = {
       "Needs attention": [],
+      Pinned: [],
       Working: [],
       Unread: [],
       Recent: [],
@@ -155,7 +157,15 @@ export function useInbox() {
       const unread =
         info.time.idle !== undefined && (info.time.viewed === undefined || info.time.idle > info.time.viewed)
       const request = approval ?? question
-      const group = request ? "Needs attention" : busy ? "Working" : unread ? "Unread" : "Recent"
+      const group = request
+        ? "Needs attention"
+        : pins.has(info.id)
+          ? "Pinned"
+          : busy
+            ? "Working"
+            : unread
+              ? "Unread"
+              : "Recent"
       const since = request
         ? (asked[request.id] ?? start(info) ?? info.time.updated)
         : busy
@@ -189,5 +199,67 @@ export function useInbox() {
     return Object.entries(rows).map(([title, items]) => ({ title, rows: items.map((item) => item.row) }))
   })
 
-  return { sections, loading: () => !indexed() && !sections().some((section) => section.rows.length > 0) }
+  return { sections, pins, loading: () => !indexed() && !sections().some((section) => section.rows.length > 0) }
+}
+
+// Pinned sessions live in the server's experimental `pins` space, so every client on the server sees the same pins.
+// Live space events carry a revision but no cursor, so every (re)subscribe syncs from the last page cursor first and
+// subscribes with the cursor that sync returns: on open, on each server.connected (new stream) and on resync.
+function usePins() {
+  const client = useClient()
+  const log = useLog({ component: "inbox-pins" })
+  const [pinned, setPinned] = createStore<Record<string, true | undefined>>({})
+  const [resynced, setResynced] = createSignal(0)
+  let cursor: string | undefined
+  onCleanup(
+    client.event.on("experimental.space.updated", (event) => {
+      if (event.data.space === "pins") setPinned(event.data.key, true)
+    }),
+  )
+  onCleanup(
+    client.event.on("experimental.space.deleted", (event) => {
+      if (event.data.space === "pins") setPinned(event.data.key, undefined)
+    }),
+  )
+  onCleanup(
+    client.event.on("experimental.space.resync", (event) => {
+      if (event.data.space === "pins") setResynced((count) => count + 1)
+    }),
+  )
+  createEffect(() => {
+    const stream = client.stream()
+    resynced()
+    if (!stream) return
+    let active = true
+    onCleanup(() => (active = false))
+    void (async () => {
+      for (let next = cursor; active; ) {
+        const page = await client.api.experimental.space.sync({ space: "pins", cursor: next })
+        if (!active) return
+        batch(() => {
+          if (page.type === "snapshot")
+            setPinned(reconcile(Object.fromEntries(page.entries.map((entry) => [entry.key, true as const]))))
+          else {
+            page.entries.forEach((entry) => setPinned(entry.key, true))
+            page.deleted.forEach((key) => setPinned(key, undefined))
+          }
+        })
+        cursor = page.cursor
+        if (!page.next)
+          return client.api.experimental.space.subscribe({ stream, spaces: [{ space: "pins", cursor: page.cursor }] })
+        next = page.next
+      }
+    })().catch((error) => {
+      if (active) log.warn("Pins sync failed", { error })
+    })
+  })
+  return {
+    has: (sessionID: string) => pinned[sessionID] === true,
+    toggle(sessionID: string) {
+      const input = { space: "pins", key: sessionID }
+      return pinned[sessionID]
+        ? client.api.experimental.space.delete(input)
+        : client.api.experimental.space.set({ ...input, value: "1" })
+    },
+  }
 }
