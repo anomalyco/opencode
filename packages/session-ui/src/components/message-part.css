@@ -1104,17 +1104,9 @@
     }
   }
 
-  /* A call's name reads as a step, in the face of the timeline's titles; what it ran on stays code. */
   [data-slot="execute-tool-call-name"] {
     flex-shrink: 0;
-    font-family: var(--v2-font-family-sans);
-    font-weight: 440;
-    letter-spacing: -0.04px;
     color: var(--v2-text-text-base);
-  }
-
-  [data-slot="execute-tool-call"][data-kind="output"] [data-slot="execute-tool-call-name"] {
-    color: var(--v2-text-text-muted);
   }
 
   [data-slot="execute-tool-call-args"] {
@@ -1138,10 +1130,11 @@
     }
   }
 
-  /* Lines up with the calls' names, which line up with the title. */
+  /* Lines up with the calls' names, past their markers. */
   [data-slot="execute-tool-call-more"] {
     all: unset;
     width: fit-content;
+    margin-inline-start: 20px;
     cursor: pointer;
     color: var(--v2-text-text-faint);
     user-select: none;
@@ -1204,14 +1197,37 @@
 
   [data-slot="execute-tool-output"] {
     margin-top: 4px;
+    padding-inline-start: 20px;
   }
 
   [data-slot="execute-tool-error"] {
     margin-top: 4px;
     max-height: 240px;
     overflow-y: auto;
+    padding-inline-start: 20px;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+  }
+}
+
+/* The flat layout (`full_codemode`): steps line up with the title, with no markers before them, and read as steps in
+   the face of the timeline's titles while what they ran on stays code. Output is muted, as the title is. */
+[data-component="execute-tool-calls"][data-execute-layout="flat"] {
+  [data-slot="execute-tool-call-name"] {
+    font-family: var(--v2-font-family-sans);
+    font-weight: 440;
+    letter-spacing: -0.04px;
+  }
+
+  [data-slot="execute-tool-call"][data-kind="output"] [data-slot="execute-tool-call-name"] {
+    color: var(--v2-text-text-muted);
+  }
+
+  [data-slot="execute-tool-call-more"],
+  [data-slot="execute-tool-output"],
+  [data-slot="execute-tool-error"] {
+    margin-inline-start: 0;
+    padding-inline-start: 0;
   }
 }
 

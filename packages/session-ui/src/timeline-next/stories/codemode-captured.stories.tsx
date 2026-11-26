@@ -96,6 +96,8 @@ export const Captured = {
       step: query.has("step") ? Number(query.get("step")) : Number.MAX_SAFE_INTEGER,
       timeline: timelines.find((item) => item.id === query.get("timeline"))?.id ?? timelines[2].id,
       preset: timelinePresets.find((item) => item.id === query.get("preset"))?.id ?? timelinePresets[1].id,
+      // The server's `full_codemode` flag, which draws the flat execute layout.
+      flat: query.get("flag") !== "off",
       playing: false,
       metadata: query.get("metadata") === "open",
     })
@@ -123,6 +125,9 @@ export const Captured = {
       address.set("step", String(index()))
       address.set("timeline", state.timeline)
       address.set("preset", state.preset)
+
+      if (state.flat) address.delete("flag")
+      else address.set("flag", "off")
 
       if (state.metadata) address.set("metadata", "open")
       else address.delete("metadata")
@@ -166,7 +171,11 @@ export const Captured = {
     // As MessageTimeline lays out a session: rows the width of the session column, then the status lane below them.
     const pane = (next: boolean) => (
       <div class="w-full py-6 md:mx-auto md:max-w-session">
-        <CurrentSessionProviders document={view.document} directory={session().directory}>
+        <CurrentSessionProviders
+          document={view.document}
+          directory={session().directory}
+          flags={{ full_codemode: state.flat }}
+        >
           <Show
             when={next}
             fallback={
@@ -250,6 +259,21 @@ export const Captured = {
                     </SegmentedControlItem>
                   )}
                 </For>
+              </SegmentedControl>
+            </Labeled>
+            <Labeled label="full_codemode">
+              <SegmentedControl
+                aria-label="full_codemode"
+                style={segments}
+                value={state.flat ? "on" : "off"}
+                onChange={(value) => value && setState("flat", value === "on")}
+              >
+                <SegmentedControlItem value="on" style={segment}>
+                  On
+                </SegmentedControlItem>
+                <SegmentedControlItem value="off" style={segment}>
+                  Off
+                </SegmentedControlItem>
               </SegmentedControl>
             </Labeled>
           </div>

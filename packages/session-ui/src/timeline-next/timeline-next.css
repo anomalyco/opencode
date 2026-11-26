@@ -495,7 +495,7 @@
 
   /* A script's static title starts the same gap above its calls, which always show. */
   [data-component="collapsible"].tool-collapsible:has(
-      > [data-slot="collapsible-content"] > [data-component="execute-tool-calls"]
+      > [data-slot="collapsible-content"] > [data-component="execute-tool-calls"][data-execute-layout="flat"]
     )
     > [data-slot="collapsible-trigger"][data-locked] {
     margin-bottom: 0;

@@ -1558,7 +1558,9 @@ export function createSessionTimelineRowRenderer(input: {
   }
 
   // Where each script's Output row goes, from the rows: after its changes when they are drawn right after it.
-  const scriptOutput = createMemo(() => scriptOutputLayout(input.projection.rows(), input.projection.messageByID()))
+  const scriptOutput = createMemo(() =>
+    scriptOutputLayout(input.projection.rows(), input.projection.messageByID(), data.flag("full_codemode")),
+  )
 
   const scriptPlacement: ScriptOutputPlacement = {
     afterChanges: (partID) => scriptOutput().afterChanges.has(partID),

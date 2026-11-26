@@ -19,9 +19,13 @@ export type ScriptOutputLayout = {
 export function scriptOutputLayout(
   rows: readonly TimelineRow.TimelineRow[],
   messageByID: ReadonlyMap<string, SessionMessageInfo>,
+  /** The flat execute layout (`full_codemode`); without it every Output row stays under its steps. */
+  flat: boolean,
 ): ScriptOutputLayout {
   const afterChanges = new Set<string>()
   const outputAfter = new Map<string, Tool>()
+
+  if (!flat) return { afterChanges, outputAfter }
 
   const script = (messageID: string, partID: string) => {
     const message = messageByID.get(messageID)

@@ -13,6 +13,8 @@ export function CurrentSessionProviders(props: {
   document: SessionDocument
   /** The session's directory, which paths in the timeline are shown relative to. */
   directory?: string
+  /** The location's resolved feature flags, as the app passes them. */
+  flags?: Readonly<Record<string, boolean>>
   readMedia?: ReadMediaUrlFn
   turnDiff?: TurnDiffSource
   children: JSX.Element
@@ -21,6 +23,7 @@ export function CurrentSessionProviders(props: {
     <DataProvider
       directory={props.directory ?? "C:/workspaces/opencode"}
       sessionID={props.document.sessionID}
+      flags={props.flags}
       readMedia={props.readMedia}
       data={{
         agent: [
