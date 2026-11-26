@@ -27,6 +27,7 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
         const selected = layout.home.selection()
         const last = tabs.lastTarget()
         const route = layout.route()
+        const open = route.type === "automations"
 
         const draft =
           route.type === "draft"
@@ -46,14 +47,20 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
               active,
               selected.server === server ? selected.directory : undefined,
               last?.server === server ? last.directory : undefined,
-              ...tabs.store.flatMap((tab) =>
-                tab.server !== server
-                  ? []
-                  : tab.type === "draft"
-                    ? [tab.directory]
-                    : [ctx.data.session.get(tab.routeSessionId ?? tab.sessionId)?.location.directory],
-              ),
-              ...ctx.projects.used().map((p) => p.worktree),
+              // Each folder asked about is a location the server sets up. Outside the view, ask only
+              // about the ones already open; the view itself also checks every tab and used project.
+              ...(open
+                ? [
+                    ...tabs.store.flatMap((tab) =>
+                      tab.server !== server
+                        ? []
+                        : tab.type === "draft"
+                          ? [tab.directory]
+                          : [ctx.data.session.get(tab.routeSessionId ?? tab.sessionId)?.location.directory],
+                    ),
+                    ...ctx.projects.used().map((p) => p.worktree),
+                  ]
+                : []),
             ].filter((directory): directory is string => !!directory),
           ),
         ]
@@ -83,11 +90,13 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
     )
 
     // The server filters this list using each row's saved directory. Fetch it once per server,
-    // not once per project, and never use an empty list as a capability signal.
+    // not once per project, and never use an empty list as a capability signal. Servers that don't
+    // offer /automation in any open folder aren't asked until the view opens.
     const queries = useQueries(() => ({
       queries: connections().map((item) => {
+        const open = layout.route().type === "automations"
         const offered = enabled().some((target) => target.server === item.server)
-        const interval = layout.route().type === "automations" ? 5_000 : 30_000
+        const interval = open ? 5_000 : 30_000
 
         return {
           queryKey: [item.ctx.sdk.scope, "automations"] as const,
@@ -95,8 +104,8 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
             item.ctx.sdk.api.experimental.automation.list(undefined, { signal }),
           select: (rows: AutomationInfo[]) => () => rows,
           retry: false,
-          refetchInterval: (query: { state: { data?: AutomationInfo[] } }) =>
-            query.state.data?.length || offered ? interval : false,
+          enabled: offered || open,
+          refetchInterval: interval,
         }
       }),
     }))

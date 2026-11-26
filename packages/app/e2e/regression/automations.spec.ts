@@ -157,7 +157,7 @@ test("manages a watch outside open locations and opens the recipient instead of 
   await mockWorkspace(page, {
     name: "Repo",
     directory,
-    commands: (dir) => (dir === docs ? [{ name: "automation" }] : []),
+    commands: [{ name: "automation" }],
     automations: [
       {
         id: "aut_docs",
