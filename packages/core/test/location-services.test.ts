@@ -260,4 +260,59 @@ describe("location services", () => {
       expect(yield* privates.has(optOutRef, "no-timeout")).toBe(true)
     }),
   )
+
+  it.effect("isolates a dying sibling build so it neither kills the idle sweep nor hides a healthy sibling", () =>
+    Effect.gen(function* () {
+      const [sharedRef, idleRef] = [yield* locationAt(), yield* locationAt()]
+      const started = yield* Deferred.make<void>()
+      const fail = yield* Deferred.make<void>()
+      const replacements = [
+        Global.node.replace(tempGlobalLayer),
+        Watcher.node.replace(Watcher.configured({ enabled: false })),
+        offlineModels,
+        LocationActivity.node.replace(
+          makeGlobalNode({
+            service: LocationActivity.Service,
+            layer: LocationActivity.layer({ sweepInterval: "1 minute", timeToLive: "5 minutes" }),
+            deps: [Bus.node, Job.node, LocationServiceMap.node, SessionExecution.node, SessionStore.node],
+          }),
+        ),
+      ]
+      const context = yield* Layer.build(
+        AppNodeBuilder.build(LayerNode.group([LocationServiceMap.node, LocationActivity.node]), replacements),
+      )
+      const locations = Context.get(context, LocationServiceMap.Service)
+      const privates = yield* register(locations, (ref, key, resolved) =>
+        key === "broken"
+          ? Layer.unwrap(
+              Effect.gen(function* () {
+                yield* Deferred.succeed(started, undefined)
+                yield* Deferred.await(fail)
+                return yield* Effect.die(new Error("configure crashed"))
+              }),
+            )
+          : Instance.layer(ref, { host: resolved }),
+      )
+
+      const hold = yield* Scope.make()
+      const retainedCtx = yield* boot(privates.get(sharedRef, "healthy"))
+      yield* Context.get(retainedCtx, LocationLifecycle.Service).retain.pipe(Scope.provide(hold))
+      yield* boot(locations.get(idleRef))
+
+      // Kick off a broken sibling at the same Location; let it die during the sweep.
+      const broken = yield* boot(privates.get(sharedRef, "broken")).pipe(Effect.exit, Effect.forkChild)
+      yield* Deferred.await(started)
+      const sweep = yield* TestClock.adjust("1 minute").pipe(Effect.forkChild)
+      yield* Deferred.succeed(fail, undefined)
+      const brokenExit = yield* Fiber.join(broken)
+      expect(Exit.isFailure(brokenExit)).toBe(true)
+      yield* Fiber.join(sweep)
+
+      // Sweep fiber must still be alive: advance past TTL and verify idleRef evicts while healthy retained sibling stays.
+      yield* TestClock.adjust("10 minutes")
+      expect(yield* locations.has(idleRef)).toBe(false)
+      expect(yield* privates.has(sharedRef, "healthy")).toBe(true)
+      yield* Scope.close(hold, Exit.void)
+    }),
+  )
 })

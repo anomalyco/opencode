@@ -225,8 +225,11 @@ export function buildLocationServiceMap(
               : Effect.flatMap(cached, (keys) =>
                   Effect.forEach(
                     keys.filter((key) => Equal.equals(key.ref, target)),
-                    (key) => inner.contextEffectOption(key),
-                  ).pipe(Effect.map((items) => items.flatMap((item) => (Option.isSome(item) ? [item.value] : [])))),
+                    // Isolate failures/defects per key so one broken sibling never kills a sweep or hides a healthy one.
+                    (key) =>
+                      inner.contextEffectOption(key).pipe(Effect.catchCause(() => Effect.succeed(Option.none()))),
+                    { concurrency: "unbounded" },
+                  ).pipe(Effect.map((items) => items.flatMap(Option.toArray))),
                 ),
           )
         },

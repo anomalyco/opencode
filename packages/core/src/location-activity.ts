@@ -41,15 +41,17 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
         Effect.gen(function* () {
           const contexts = yield* locations.cachedContexts(ref)
           if (contexts.length === 0) return timeToLive
-          const timeouts = yield* Effect.forEach(contexts, (context) =>
-            Effect.map(Context.get(context, Config.Service).entries(), (entries) => {
+          const timeouts = yield* Effect.forEach(contexts, (context) => {
+            const config = Context.getOption(context, Config.Service)
+            if (Option.isNone(config)) return Effect.succeed(timeToLive)
+            return Effect.map(config.value.entries(), (entries) => {
               const configured = entries.findLast(
                 (entry): entry is Document =>
                   entry.type === "document" && entry.info.experimental?.location_idle_timeout !== undefined,
               )
               return configured?.info.experimental?.location_idle_timeout ?? timeToLive
-            }),
-          )
+            })
+          })
           return timeouts.reduce<false | Duration.Duration>(
             (longest, timeout) =>
               longest === false || timeout === false
@@ -61,7 +63,7 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
           )
         }).pipe(
           Effect.scoped,
-          Effect.orElseSucceed(() => timeToLive),
+          Effect.catchCause(() => Effect.succeed(timeToLive)),
         )
 
       // An open terminal or client MCP socket on any cached instance keeps its Location loaded: eviction would end
