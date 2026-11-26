@@ -130,43 +130,47 @@ export function modelPagePath(catalog: ModelCatalog, lab: string, model: string)
   return `/data/${catalogSlug(lab)}/${catalogSlug(model)}`
 }
 
+const knownCatalogLabNames = new Map<string, string>([
+  ["ai21", "AI21"],
+  ["aisingapore", "AI Singapore"],
+  ["alibaba", "Alibaba"],
+  ["anthropic", "Anthropic"],
+  ["arcee-ai", "Arcee AI"],
+  ["bytedance-seed", "ByteDance Seed"],
+  ["cohere", "Cohere"],
+  ["deepreinforce", "DeepReinforce"],
+  ["deepseek", "DeepSeek"],
+  ["google", "Google"],
+  ["ibm", "IBM"],
+  ["inclusionai", "inclusionAI"],
+  ["meta", "Meta"],
+  ["minimax", "MiniMax"],
+  ["mistral", "Mistral"],
+  ["moonshotai", "Moonshot"],
+  ["nex-agi", "Nex AGI"],
+  ["nvidia", "NVIDIA"],
+  ["openai", "OpenAI"],
+  ["openbmb", "OpenBMB"],
+  ["perplexity", "Perplexity"],
+  ["quiverai", "QuiverAI"],
+  ["sdaia", "SDAIA"],
+  ["stepfun", "StepFun"],
+  ["swiss-ai", "Swiss AI"],
+  ["tencent", "Tencent"],
+  ["thinkingmachines", "Thinking Machines"],
+  ["xai", "xAI"],
+  ["xiaomi", "Xiaomi"],
+  ["zai", "Z.ai"],
+  ["qwen", "Qwen"],
+  ["zhipu", "Zhipu"],
+  ["zhipuai", "Zhipu"],
+])
+
 export function formatCatalogLabName(lab: string) {
-  const known: Record<string, string> = {
-    ai21: "AI21",
-    aisingapore: "AI Singapore",
-    alibaba: "Alibaba",
-    anthropic: "Anthropic",
-    "arcee-ai": "Arcee AI",
-    "bytedance-seed": "ByteDance Seed",
-    cohere: "Cohere",
-    deepreinforce: "DeepReinforce",
-    deepseek: "DeepSeek",
-    google: "Google",
-    ibm: "IBM",
-    inclusionai: "inclusionAI",
-    meta: "Meta",
-    minimax: "MiniMax",
-    mistral: "Mistral",
-    moonshotai: "Moonshot",
-    "nex-agi": "Nex AGI",
-    nvidia: "NVIDIA",
-    openai: "OpenAI",
-    openbmb: "OpenBMB",
-    perplexity: "Perplexity",
-    quiverai: "QuiverAI",
-    sdaia: "SDAIA",
-    stepfun: "StepFun",
-    "swiss-ai": "Swiss AI",
-    tencent: "Tencent",
-    thinkingmachines: "Thinking Machines",
-    xai: "xAI",
-    xiaomi: "Xiaomi",
-    zai: "Z.ai",
-    qwen: "Qwen",
-    zhipu: "Zhipu",
-    zhipuai: "Zhipu",
-  }
-  return known[catalogSlug(lab)] ?? lab.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+  return (
+    knownCatalogLabNames.get(catalogSlug(lab)) ??
+    lab.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+  )
 }
 
 export function isProviderlessLab(lab: string | undefined) {
@@ -477,15 +481,16 @@ function catalogIdKey(value: string) {
   return value.split("/").map(catalogSlug).join("/")
 }
 
+const catalogLabSlugAliases = new Map<string, string>([
+  ["moonshot", "moonshotai"],
+  ["qwen", "alibaba"],
+  ["zhipu", "zhipuai"],
+  ["zai", "zhipuai"],
+])
+
 function catalogLabSlug(value: string) {
   const slug = catalogSlug(value)
-  const aliases: Record<string, string> = {
-    moonshot: "moonshotai",
-    qwen: "alibaba",
-    zhipu: "zhipuai",
-    zai: "zhipuai",
-  }
-  return aliases[slug] ?? slug
+  return catalogLabSlugAliases.get(slug) ?? slug
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

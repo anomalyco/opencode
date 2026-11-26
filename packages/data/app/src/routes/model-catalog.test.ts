@@ -1,5 +1,15 @@
 import { describe, expect, test } from "bun:test"
-import { buildModelCatalog, findModelCatalogEntry, isKnownCatalogLab, modelPagePath } from "./model-catalog"
+import {
+  buildModelCatalog,
+  catalogLabPath,
+  findModelCatalogEntry,
+  findModelCatalogLab,
+  formatCatalogLabName,
+  isKnownCatalogLab,
+  modelPagePath,
+} from "./model-catalog"
+import { formerModelName } from "../lib/model-name"
+import { providerIconId } from "../lib/provider-icon"
 
 describe("model catalog pricing", () => {
   test("prefers OpenCode Go pricing over a zero-cost coding plan with the same model id", () => {
@@ -75,5 +85,24 @@ describe("revealed model pages", () => {
 
     expect(findModelCatalogEntry(catalog, "crouton-alpha", "unknown")?.id).toBe("meta/muse-ember-1.0")
     expect(modelPagePath(catalog, "unknown", "crouton-alpha")).toBe("/data/meta/muse-ember-1-0")
+  })
+
+  test("handles Object.prototype property names in lab and model lookups without throwing", () => {
+    const catalog = buildModelCatalog({
+      models: { "alibaba/qwen-3": { id: "alibaba/qwen-3", name: "Qwen 3" } },
+    })
+
+    ;["__proto__", "constructor", "toString", "valueOf", "hasOwnProperty"].forEach((key) => {
+      expect(findModelCatalogEntry(catalog, key, "alibaba")).toBeUndefined()
+      expect(findModelCatalogEntry(catalog, key, key)).toBeUndefined()
+      expect(findModelCatalogLab(catalog, key)).toBeUndefined()
+      expect(typeof formatCatalogLabName(key)).toBe("string")
+      expect(typeof catalogLabPath(key)).toBe("string")
+      expect(formerModelName(key)).toBeUndefined()
+      expect(typeof providerIconId(key)).toBe("string")
+    })
+    expect(formatCatalogLabName("constructor")).toBe("Constructor")
+    expect(catalogLabPath("constructor")).toBe("/data/constructor")
+    expect(providerIconId("constructor")).toBe("constructor")
   })
 })

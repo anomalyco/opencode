@@ -1328,28 +1328,31 @@ function formatDay(value: number) {
   return `${months[date.getUTCMonth()]} ${date.getUTCDate()}`
 }
 
+const knownProviders = new Map<string, string>([
+  ["anthropic", "Anthropic"],
+  ["deepseek", "DeepSeek"],
+  ["google", "Google"],
+  ["minimax", "MiniMax"],
+  ["meta", "Meta"],
+  ["moonshot", "Moonshot"],
+  ["moonshotai", "Moonshot"],
+  ["nvidia", "NVIDIA"],
+  ["opencode", "opencode"],
+  ["openai", "OpenAI"],
+  ["qwen", "Qwen"],
+  ["tencent", "Tencent"],
+  ["thinkingmachines", "Thinking Machines"],
+  ["xai", "xAI"],
+  ["xiaomi", "Xiaomi"],
+  ["zhipu", "Zhipu"],
+  ["zhipuai", "Zhipu"],
+])
+
 function formatProvider(provider: string) {
-  const known: Record<string, string> = {
-    anthropic: "Anthropic",
-    deepseek: "DeepSeek",
-    google: "Google",
-    minimax: "MiniMax",
-    meta: "Meta",
-    moonshot: "Moonshot",
-    moonshotai: "Moonshot",
-    nvidia: "NVIDIA",
-    opencode: "opencode",
-    openai: "OpenAI",
-    qwen: "Qwen",
-    tencent: "Tencent",
-    thinkingmachines: "Thinking Machines",
-    xai: "xAI",
-    xiaomi: "Xiaomi",
-    zhipu: "Zhipu",
-    zhipuai: "Zhipu",
-  }
   const normalized = provider.toLowerCase().replace(/[^a-z0-9]/g, "")
-  return known[normalized] ?? provider.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+  return (
+    knownProviders.get(normalized) ?? provider.replace(/[-_]/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase())
+  )
 }
 
 function resolveModelName(modelParam: string, rows: StatMetricRow[], providerParam?: string) {
@@ -1396,15 +1399,16 @@ function modelKey(provider: string, model: string) {
   return `${provider}\u0000${model}`
 }
 
+const providerSlugAliases = new Map<string, string>([
+  ["alibaba", "qwen"],
+  ["moonshotai", "moonshot"],
+  ["qwen", "qwen"],
+  ["zhipuai", "zhipu"],
+])
+
 function providerSlug(value: string) {
   const slug = modelSlug(value)
-  const aliases: Record<string, string> = {
-    alibaba: "qwen",
-    moonshotai: "moonshot",
-    qwen: "qwen",
-    zhipuai: "zhipu",
-  }
-  return aliases[slug] ?? slug
+  return providerSlugAliases.get(slug) ?? slug
 }
 
 function costPerMillion(costMicrocents: number, tokens: number) {

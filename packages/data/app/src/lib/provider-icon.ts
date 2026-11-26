@@ -4,15 +4,15 @@ import { iconNames, type IconName } from "@opencode/ui/icons/provider"
 // "synthetic" icon for ids without one.
 export function providerIconId(lab: string) {
   const id = lab.toLowerCase().replace(/[^a-z0-9]+/g, "")
-  return aliases[id] ?? id
+  return aliases.get(id) ?? id
 }
 
 export function hasProviderIcon(lab: string) {
   return iconNames.includes(providerIconId(lab) as IconName)
 }
 
-const aliases: Record<string, string> = {
-  moonshot: "moonshotai",
-  qwen: "alibaba",
-  zhipu: "zhipuai",
-}
+const aliases = new Map<string, string>([
+  ["moonshot", "moonshotai"],
+  ["qwen", "alibaba"],
+  ["zhipu", "zhipuai"],
+])
