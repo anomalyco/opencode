@@ -1,33 +1,25 @@
-## Usage
+# OpenCode web app
 
-Dependencies for these templates are managed with [pnpm](https://pnpm.io) using `pnpm up -Lri`.
+## Development
 
-This is the reason you see a `pnpm-lock.yaml`. That said, any package manager will work. This file can safely be removed once you clone a template.
+From the repository root, install the workspace dependencies and start the API server:
 
 ```bash
-$ npm install # or pnpm install or yarn install
+bun install
+bun dev serve --port 4096
 ```
 
-### Learn more on the [Solid Website](https://solidjs.com) and come chat with us on our [Discord](https://discord.com/invite/solidjs)
+In a second terminal, start the web app from the repository root:
 
-## Available Scripts
+```bash
+bun run dev:web
+```
 
-In the project directory, you can run:
+Open [http://localhost:3000](http://localhost:3000). The development app connects to the API at `http://localhost:4096` by default.
 
-### `npm run dev` or `npm start`
+## Production build
 
-Runs the app in the development mode.<br>
-Open [http://localhost:3000](http://localhost:3000) to view it in the browser.
-
-The page will reload if you make edits.<br>
-
-### `npm run build`
-
-Builds the app for production to the `dist` folder.<br>
-It correctly bundles Solid in production mode and optimizes the build for the best performance.
-
-The build is minified and the filenames include the hashes.<br>
-Your app is ready to be deployed!
+From `packages/app`, run `bun run build`. Vite writes the production files to `packages/app/dist`.
 
 ## E2E Testing
 
