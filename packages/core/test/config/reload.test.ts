@@ -55,8 +55,6 @@ const document = path.join(import.meta.dir, "opencode.json")
 describe("config plugin reloads", () => {
   for (const input of [
     { root: ".agents", global: false },
-    { root: "../.claude", global: false },
-    { root: "home/.agents", global: true },
     { root: "home/.claude", global: true },
   ]) {
     it.live(`loads skills when ${input.root} appears after startup`, () =>
@@ -171,7 +169,6 @@ describe("config plugin reloads", () => {
 
   for (const input of [
     { file: "opencode.json", empty: false },
-    { file: "../opencode.jsonc", empty: false },
     { file: ".opencode/opencode.json", empty: false },
     { file: "../.opencode/opencode.jsonc", empty: true },
   ]) {

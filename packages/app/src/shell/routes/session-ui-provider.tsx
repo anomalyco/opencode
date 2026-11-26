@@ -238,6 +238,7 @@ export function SessionUIProvider(
         directory={directory()}
         sessionID={params.id}
         agents={settings.visibility.customAgents()}
+        flags={data.location.flags.list({ directory: directory() })}
         shellRunning={(id) => !!data.shell.get(id)}
         shellOutput={(input) => serverSDK.api.shell.output(input)}
         readMedia={(uri, mime, signal) => serverSDK.media.load(uri, mime, signal)}

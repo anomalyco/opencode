@@ -12,6 +12,7 @@ import { FileSystemSearch } from "@opencode/core/filesystem/search"
 import { Credential } from "@opencode/core/credential"
 import { Config } from "@opencode/core/config"
 import { PermissionSaved } from "@opencode/core/permission/saved"
+import { BrowserTunnelGateway } from "@opencode/core/experimental/browser-tunnel"
 import { PtyTicket } from "@opencode/core/pty/ticket"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Project } from "@opencode/core/project"
@@ -45,6 +46,7 @@ import { PushList } from "@opencode/core/push/list"
 import { PushSender } from "@opencode/core/push/sender"
 import { PushWatcher } from "@opencode/core/push/watcher"
 import { Workspace } from "@opencode/core/workspace"
+import { WorkspaceConnector } from "@opencode/core/environment/workspace-connector"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { FileWatch } from "@opencode/core/filesystem/file-watch"
 import { HttpEffect, HttpRouter } from "effect/http"
@@ -92,6 +94,7 @@ const applicationServiceNodes = [
   PluginUpdate.node,
   PermissionSaved.node,
   PtyTicket.node,
+  BrowserTunnelGateway.node,
   Credential.node,
   WellKnown.node,
   ServerPairing.node,
@@ -168,6 +171,7 @@ function makeRoutes(
       ),
     ),
     Database.node.replace(Database.configured(options.database)),
+    WorkspaceConnector.node.replace(Workspace.connectorNode),
     PersistentPty.node.replace(PersistentPty.configured(options.pty)),
     Bus.node.replace(Bus.configured({ persist: options.events?.persist })),
     App.node.replace(App.configured(options.app)),

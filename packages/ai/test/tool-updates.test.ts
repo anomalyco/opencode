@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test"
 import { Effect, Schema, Stream } from "effect"
 import {
   ai,
+  LanguageModel,
   LLMEvent,
   Message,
   tool,
@@ -786,9 +787,10 @@ describe("OpenAI Responses tool updates", () => {
         inputSchema: { type: "object", properties: { code: { type: "string" } }, required: ["code"] },
         freeform: { type: "text" },
       })
+      const model = LanguageModel.update(astra, { capabilities: { tools: { updates: ALL, freeform: ["text"] } } })
       const prepared = yield* compileRequest(
         ai.request({
-          model: astra,
+          model,
           tools: [read],
           messages: [
             Message.user("Run it."),
@@ -798,7 +800,13 @@ describe("OpenAI Responses tool updates", () => {
           ],
         }),
       )
-      const plain = yield* compileRequest(ai.request({ model: openai("gpt-6-astra"), tools: [read, run], prompt: "x" }))
+      const plain = yield* compileRequest(
+        ai.request({
+          model: LanguageModel.update(openai("gpt-6-astra"), { capabilities: { tools: { freeform: ["text"] } } }),
+          tools: [read, run],
+          prompt: "x",
+        }),
+      )
 
       expect(prepared.body.input[3]).toEqual({
         type: "additional_tools",

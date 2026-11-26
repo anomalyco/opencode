@@ -751,6 +751,8 @@ export function createStoryFetch(overrides: IntegrationInfo[] = []): typeof fetc
 
     if (pathname.startsWith("/api/experimental/media/")) return new Response(null, { status: 404 })
 
+    if (pathname === "/api/experimental/flag") return jsonResponse({ location, data: {} })
+
     return jsonResponse({ location, data: [] })
   }
 

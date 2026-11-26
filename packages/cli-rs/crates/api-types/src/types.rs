@@ -12847,8 +12847,6 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub recommended_api: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub model_speeds: Option<bool>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub full_codemode: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub machines: Option<bool>,
@@ -12860,6 +12858,8 @@ pub struct ConfigEntryDocumentInfoExperimental {
     pub opencode_api: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp_skills: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compaction_jobs: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sqlite_fts: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]

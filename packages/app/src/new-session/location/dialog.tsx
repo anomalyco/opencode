@@ -345,17 +345,6 @@ function NewSessionLocationDialog(props: {
 
   const back = () => dispatch({ type: "back" })
 
-  // Tab reaches the rows, so typing on a focused row goes back to the search field before the key lands.
-  const sendTypingToSearch = (event: KeyboardEvent) => {
-    if (event.isComposing || event.ctrlKey || event.metaKey || event.altKey) return
-
-    if (event.key.length !== 1 && event.key !== "Backspace") return
-
-    // Space chooses a focused row until there is a query to add it to.
-    if (event.key === " " && !step().query) return
-    inputRef?.focus({ preventScroll: true })
-  }
-
   const handleKeyDown = (event: KeyboardEvent) => {
     // SAFETY: this handler is only attached to the search TextInput's <input>, so currentTarget is that element.
     const target = event.currentTarget as HTMLInputElement
@@ -421,7 +410,7 @@ function NewSessionLocationDialog(props: {
           viewportClass="command-palette-scroll"
           viewportRef={(el) => (resultsRef = el)}
         >
-          <div id={typeahead.listID} class="command-palette-results" role="listbox" onKeyDown={sendTypingToSearch}>
+          <div id={typeahead.listID} class="command-palette-results" role="listbox">
             <div
               class="command-palette-group"
               role={title() ? "group" : undefined}
@@ -480,8 +469,9 @@ function NewSessionLocationDialog(props: {
                           if (event.movementX === 0 && event.movementY === 0) return
                           typeahead.setActive(entry.id)
                         }}
+                        // The search field keeps focus and names the active row, so rows are not Tab stops.
+                        tabIndex={-1}
                         onMouseDown={(event) => event.preventDefault()}
-                        onFocus={() => typeahead.setActive(entry.id)}
                         onClick={() => choose(entry)}
                       >
                         <Switch>

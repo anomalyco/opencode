@@ -15,7 +15,6 @@ import {
   UnauthorizedError,
   UnsupportedProtocolVersionError,
   type CallToolRequestOptions,
-  type CallToolResult as SdkCallToolResult,
   type ElicitRequestFormParams,
   type ElicitRequestParams,
   type ElicitRequestURLParams,
@@ -29,12 +28,9 @@ import {
   type Transport,
   type VersionNegotiationOptions,
 } from "@modelcontextprotocol/client"
-import {
-  SKILLS_EXTENSION_ID,
-  SkillsClient,
-  type Skill as SdkSkill,
-  type SkillFile as SdkSkillFile,
-} from "@modelcontextprotocol/client/ext/skills"
+import type { CallToolResult as SdkCallToolResult } from "@modelcontextprotocol/client"
+import { SKILLS_EXTENSION_ID, SkillsClient } from "@modelcontextprotocol/client/ext/skills"
+import type { Skill as SdkSkill, SkillFile as SdkSkillFile } from "@modelcontextprotocol/client/ext/skills"
 import {
   Cause,
   Clock,
@@ -589,12 +585,17 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     })
     // Every attempt opens a fresh transport; no retry starts once the startup timeout has passed.
     const deadline = (yield* Clock.currentTimeMillis) + (timeout?.startup ?? DEFAULT_STARTUP_TIMEOUT)
-    // Over HTTP the SDK treats an unanswered auto probe as an outage, but slow legacy servers may still initialize
-    // within what is left of the startup timeout.
+    // Over HTTP the SDK treats an unanswered auto probe as an outage and a 5xx answer as a failed connect, but slow
+    // legacy servers may still initialize within what is left of the startup timeout, and many (Spring AI among
+    // them) answer the unknown server/discover with a 500.
     const negotiate = (url: URL) =>
       open(url, protocol).pipe(
         Effect.catchIf(
-          (error) => protocol === "auto" && error instanceof SdkError && error.code === SdkErrorCode.RequestTimeout,
+          (error) =>
+            protocol === "auto" &&
+            error instanceof SdkError &&
+            (error.code === SdkErrorCode.RequestTimeout ||
+              (error instanceof SdkHttpError && error.code === SdkErrorCode.EraNegotiationFailed)),
           (error) =>
             Clock.currentTimeMillis.pipe(
               Effect.flatMap((now) => (now < deadline ? open(url, "legacy", deadline - now) : Effect.fail(error))),

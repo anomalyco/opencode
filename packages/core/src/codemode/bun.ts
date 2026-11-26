@@ -39,7 +39,9 @@ const handles = new WeakMap<Function, Handle & { readonly type: string }>()
 // A run gets `Bun` only with the session's file services (see `CodeModeTool.create`).
 const service = <I, S>(key: Context.Key<I, S>) =>
   Effect.flatMap(Effect.serviceOption(key), (found) =>
-    Option.isSome(found) ? Effect.succeed(found.value) : Effect.die("Code Mode Bun needs the session's file services."),
+    Option.isSome(found)
+      ? Effect.succeed(found.value)
+      : Effect.die(new Error("Code Mode Bun needs the session's file services.")),
   )
 
 // One file operation, acting for the execute call as a tool does. A permission error reaches the program as core

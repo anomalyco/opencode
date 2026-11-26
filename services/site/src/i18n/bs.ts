@@ -35,6 +35,7 @@ export const dict = {
   "site.action.copied": "Kopirano",
   "site.nav.product": "Proizvod",
   "site.contents": "Sadržaj",
+  "docs.section.overview": "Pregled",
   "docs.section.build": "Izrada",
   "docs.lockup.sectionDocs": "{{section}} dokumentacija",
   "docs.lockup.switchLabel": "{{name}}, promijeni dokumentaciju",

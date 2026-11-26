@@ -213,11 +213,7 @@ const BUILDS_OWN_URL = new Set([
   "aisdk:watsonx-ai-provider",
 ])
 
-const normalize = Effect.fnUntraced(function* (
-  catalog: Record<string, unknown>,
-  recommended: boolean,
-  speeds: boolean,
-) {
+const normalize = Effect.fnUntraced(function* (catalog: Record<string, unknown>, recommended: boolean) {
   const failed: { readonly model: string; readonly issue: unknown }[] = []
   const unknown = new Set<string>()
   const source = isV1(catalog) ? toV2(catalog) : catalog
@@ -278,14 +274,13 @@ const normalize = Effect.fnUntraced(function* (
       const modes = entries(source.model.experimental?.modes, decodeMode)
       // Each service tier is a model of its own ("gpt-5.5-fast"), marked as a speed of this one. Only the request
       // code of an @opencode/ai package knows where a tier goes in the request.
-      const tiers =
-        speeds && !Provider.isAISDK(source.route.package)
-          ? [...(source.model.capabilities.service_tier ?? [])].sort((a, b) => tierRank(a) - tierRank(b))
-          : []
+      const tiers = Provider.isAISDK(source.route.package)
+        ? []
+        : [...(source.model.capabilities.service_tier ?? [])].sort((a, b) => tierRank(a) - tierRank(b))
       const speed = (name: string, tier: string) => ({
         name: `${source.model.name} ${name.charAt(0).toUpperCase()}${name.slice(1)}`,
         variants,
-        ...(speeds ? { speed: { base: id, id: name, faster: !SLOWER.has(tier) } } : {}),
+        speed: { base: id, id: name, faster: !SLOWER.has(tier) },
       })
       return [
         { ...base, variants },
@@ -648,8 +643,7 @@ function modelInfo(
 export { Event } from "@opencode/schema/models-dev"
 
 export interface Interface {
-  /** `speeds` also lists each of a model's service tiers as a model of its own, marked as a speed of it. */
-  readonly get: (recommended?: boolean, speeds?: boolean) => Effect.Effect<readonly Snapshot[]>
+  readonly get: (recommended?: boolean) => Effect.Effect<readonly Snapshot[]>
   readonly refresh: (force?: boolean) => Effect.Effect<void>
 }
 
@@ -682,8 +676,8 @@ const defaultSource = "https://models.opencode.ai"
 // The experimental v2 API, limited to the model types opencode keeps, with the hidden OpenAI subscription lists included.
 export const catalogPath = `/experimental/v2.0/api.json?type=${TYPES.join(",")}&include=${OPENAI_SUBSCRIPTIONS.join(",")}`
 
-export const decodeSnapshot = (text: string, recommended = false, speeds = false) =>
-  decodeCatalog(text).pipe(Effect.flatMap((catalog) => normalize(catalog, recommended, speeds)))
+export const decodeSnapshot = (text: string, recommended = false) =>
+  decodeCatalog(text).pipe(Effect.flatMap((catalog) => normalize(catalog, recommended)))
 
 // Bundled snapshot of the catalog at `catalogPath`, committed at
 // packages/core/src/models-dev/snapshot.txt and refreshed via
@@ -692,15 +686,14 @@ export const decodeSnapshot = (text: string, recommended = false, speeds = false
 // flag value per isolate: the snapshot is a multi-MB module-level constant and one isolate can
 // host many runtimes (Cloudflare colocates Durable Object instances), so
 // per-runtime decoding would multiply the cost.
-const bundledCache = new Map<string, readonly Snapshot[]>()
-const bundledSnapshot = (recommended: boolean, speeds: boolean) =>
+const bundledCache = new Map<boolean, readonly Snapshot[]>()
+const bundledSnapshot = (recommended: boolean) =>
   Effect.suspend(() => {
-    const key = `${recommended}:${speeds}`
-    const cached = bundledCache.get(key)
+    const cached = bundledCache.get(recommended)
     return cached
       ? Effect.succeed(cached)
-      : decodeSnapshot(snapshotText, recommended, speeds).pipe(
-          Effect.tap((snapshot) => Effect.sync(() => bundledCache.set(key, snapshot))),
+      : decodeSnapshot(snapshotText, recommended).pipe(
+          Effect.tap((snapshot) => Effect.sync(() => bundledCache.set(recommended, snapshot))),
         )
   })
 
@@ -821,13 +814,13 @@ export const layer = (options?: Options) =>
         return catalog
       })
 
-      const populate = Effect.fn("ModelsDev.populate")(function* (recommended: boolean, speeds: boolean) {
+      const populate = Effect.fn("ModelsDev.populate")(function* (recommended: boolean) {
         const fromFile = yield* loadFromFile
-        if (fromFile) return yield* normalize(fromFile, recommended, speeds)
+        if (fromFile) return yield* normalize(fromFile, recommended)
         const cached = options?.file ? undefined : yield* loadFromCache()
-        if (cached) return yield* normalize(cached.catalog, recommended, speeds)
+        if (cached) return yield* normalize(cached.catalog, recommended)
         // The bundled snapshot is the boot-time floor until the periodic fetch refreshes it.
-        const bundled = options?.snapshot === false ? undefined : yield* bundledSnapshot(recommended, speeds)
+        const bundled = options?.snapshot === false ? undefined : yield* bundledSnapshot(recommended)
         if (bundled) return bundled
         if (!fetch) return []
         const catalog = yield* lock.withPermit(
@@ -837,15 +830,13 @@ export const layer = (options?: Options) =>
             return yield* fetchAndWrite()
           }),
         )
-        return yield* normalize(catalog, recommended, speeds)
+        return yield* normalize(catalog, recommended)
       }, Effect.orDie)
 
-      // One per combination of the two flags, each normalized on first use.
-      const caches = yield* Effect.forEach(
-        [false, true].flatMap((recommended) => [false, true].map((speeds) => [recommended, speeds] as const)),
-        ([recommended, speeds]) => Effect.cachedInvalidateWithTTL(populate(recommended, speeds), Duration.infinity),
+      const caches = yield* Effect.forEach([false, true], (recommended) =>
+        Effect.cachedInvalidateWithTTL(populate(recommended), Duration.infinity),
       )
-      const get = (recommended = false, speeds = false) => caches[Number(recommended) * 2 + Number(speeds)][0]
+      const get = (recommended = false) => caches[Number(recommended)][0]
 
       const refresh = Effect.fn("ModelsDev.refresh")(function* (force = false) {
         yield* lock

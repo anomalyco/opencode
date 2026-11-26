@@ -511,12 +511,33 @@ describe("RequestExecutor", () => {
     }).pipe(Effect.provide(fixedResponse("x".repeat(5000), { status: 400 }))),
   )
 
+  it.effect("shows the request method and URL without its query for empty error bodies", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor
+        .execute(HttpClientRequest.post("https://host.test/path?key=secret#fragment"))
+        .pipe(Effect.flip)
+
+      expect(error.message).toBe("Provider request failed with HTTP 404 (POST https://host.test/path)")
+      expect(error.message).not.toContain("secret")
+    }).pipe(Effect.provide(fixedResponse("", { status: 404 }))),
+  )
+
+  it.effect("keeps provider error bodies without the request URL", () =>
+    Effect.gen(function* () {
+      const executor = yield* RequestExecutor.Service
+      const error = yield* executor.execute(request).pipe(Effect.flip)
+
+      expect(error.message).toBe('Provider request failed with HTTP 404: {"code":"not_found"}')
+    }).pipe(Effect.provide(fixedResponse('{"code":"not_found"}', { status: 404 }))),
+  )
+
   it.effect("does not show HTML error pages", () =>
     Effect.gen(function* () {
       const executor = yield* RequestExecutor.Service
       const error = yield* executor.execute(request).pipe(Effect.flip)
 
-      expect(error.message).toBe("Provider request failed with HTTP 502")
+      expect(error.message).toBe("Provider request failed with HTTP 502 (POST https://provider.test/v1/chat)")
       expect(error.reason.body).toContain("Bad Gateway")
     }).pipe(Effect.provide(fixedResponse("<!DOCTYPE html><html><body>Bad Gateway</body></html>", { status: 502 }))),
   )

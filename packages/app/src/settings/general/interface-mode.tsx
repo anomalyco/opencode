@@ -39,6 +39,17 @@ export function InterfaceModeSetting() {
             gutter={6}
           />
         </SettingsRow>
+        <SettingsRow title={language.t("settings.general.row.tabGrouping.title")} description="">
+          <Select
+            data-action="settings-tab-grouping"
+            options={["none", "project", "server"] as const}
+            current={settings.appearance.tabGrouping()}
+            label={(value) => language.t(`settings.general.row.tabGrouping.${value}`)}
+            onSelect={(value) => value && settings.appearance.setTabGrouping(value)}
+            placement="bottom-end"
+            gutter={6}
+          />
+        </SettingsRow>
       </Show>
     </Show>
   )

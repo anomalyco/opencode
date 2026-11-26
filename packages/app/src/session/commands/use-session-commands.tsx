@@ -344,6 +344,34 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     return !!info && !info.parentID && info.time.archived === undefined
   }
 
+  const unarchivable = () => {
+    const info = actions.session.data.info()
+
+    return !!info && !info.parentID && info.time.archived !== undefined
+  }
+
+  const invalidateSessionLists = () => {
+    for (const queryKey of ["home-sessions", "inbox-sessions", "inbox-archived-sessions"]) {
+      void queryClient.invalidateQueries({ queryKey: [queryKey, server.conn], exact: true })
+    }
+  }
+
+  const unarchiveSession = async () => {
+    const info = actions.session.data.info()
+
+    if (!info || !unarchivable()) return
+
+    try {
+      await serverSDK.api.session.update({ sessionID: info.id, archived: false })
+    } catch (cause) {
+      showToast({ title: formatServerError(cause, language.t, language.t("common.requestFailed")) })
+
+      return
+    }
+
+    invalidateSessionLists()
+  }
+
   const archiveSession = async () => {
     const info = actions.session.data.info()
 
@@ -357,9 +385,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       return
     }
 
-    for (const queryKey of ["home-sessions", "inbox-sessions", "inbox-archived-sessions"]) {
-      void queryClient.invalidateQueries({ queryKey: [queryKey, server.conn], exact: true })
-    }
+    invalidateSessionLists()
 
     notifySessionTabsRemoved({ server: server.key, directory: info.location.directory, sessionIDs: [info.id] })
   }
@@ -583,8 +609,15 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       id: "session.archive",
       title: language.t("command.session.archive"),
       keybind: "mod+shift+s",
-      disabled: !archivable(),
-      onSelect: archiveSession,
+      // Toggles, so one shortcut archives a session and brings an archived one back.
+      disabled: !archivable() && !unarchivable(),
+      onSelect: () => (unarchivable() ? unarchiveSession() : archiveSession()),
+    }),
+    sessionCommand({
+      id: "session.unarchive",
+      title: language.t("command.session.unarchive"),
+      disabled: !unarchivable(),
+      onSelect: unarchiveSession,
     }),
   ]
 

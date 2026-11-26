@@ -23,18 +23,18 @@ import { unzip } from "./zip"
 // The OpenTUI releases the client can pin: the commit the tag names, the FNV-1a 64 of its `opentui.h`, and the sha256
 // of `opentui-native-<tag>-<platform>.zip` for each platform.
 const releases: Record<string, { commit: string; header: string; zips: Record<string, string> }> = {
-  "v0.9.8": {
-    commit: "07037a67fca5f50509c80feebf39d4f26847be1f",
-    header: "0x99dd2d0018a6caa3",
+  "v0.9.9": {
+    commit: "c93d6f5a57c6d206399d2506aa7e05153b88ffd5",
+    header: "0x95c14bf82763459a",
     zips: {
-      "darwin-arm64": "e810525073a1bc13d9dc3fd6f604250bbfb58664e3518cc51ea017c35c5b7e36",
-      "darwin-x64": "712a32ea5d978b2be36604e2a9e05925017f9d4981347fa0b5fa6a3f0b3f61e0",
-      "linux-arm64": "87950df52555712bbf88fd043be201ec5e5bfbd983e7c930cd987b7bffb38e44",
-      "linux-arm64-musl": "74a303c90c30cd7bb38b967d946c87f39f7a074470b73d6ad22154cbec482105",
-      "linux-x64": "cd20540a20cc55f2bb7ff15abcc58bc9972959818bbd968f0a0d58a785219fbd",
-      "linux-x64-musl": "4f6221bc24621a4897076bc4bfee3ff271c91a9c529efe8705bc6b6b76145d5a",
-      "windows-arm64": "bc3159fee6132330dc5068baf6b32822968b5d38ddd91aaff440dd958dbbeb46",
-      "windows-x64": "e538cfc8414c759a873577f31ba1900ebf4b0670cd6c9dec867fef00d5f0e9e0",
+      "darwin-arm64": "c576d7ac40dfa0d9a50343c338da0936e5f89cf4c3f1132f6a830a5873c382b5",
+      "darwin-x64": "f25ef248dad776a85f5fdc497c904e35f2e299a67fed6d724141b0ae24d5399b",
+      "linux-arm64": "629e3c5777578da3cc743de5bdbd22f594163b56a326b03e43d6ed8c831d46ad",
+      "linux-arm64-musl": "f969c8b101d13e5e990e1546ae024de3da2f724bac19177c41133380fc28551d",
+      "linux-x64": "abd03e0d1fd8ad79948f133cae9cc97421a9116802b81929465deb7bc0365660",
+      "linux-x64-musl": "054458b635cce0b6275895d6afbb8e831ac9f032631a0199328248ddb596145a",
+      "windows-arm64": "8dc973b223756b5a2bbdb08bd6c52caff469a3c02b03b033481d8b2f8adf205a",
+      "windows-x64": "0fe8e5eacb66baceb9f8114c4bad37e640693a13f42387c98ac71a7b75e71502",
     },
   },
 }

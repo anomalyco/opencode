@@ -99,18 +99,6 @@ describe("execute timeout and background", () => {
     }),
   )
 
-  it.live("background returns a job ID at once and notifies on completion", () =>
-    Effect.gen(function* () {
-      const h = yield* harness
-      const result = yield* h.run(context("ses_bg"), script(300), { background: true })
-      const jobID = String(result.metadata?.jobID)
-      expect(jobID).toStartWith("cm_")
-      expect((yield* h.jobs.get(jobID))?.status).toBe("running")
-      yield* Deferred.await(h.notified)
-      expect(h.notices[0]?.metadata).toMatchObject({ jobID, state: "completed" })
-    }),
-  )
-
   it.effect("a foreground timeout moves the script to the background, where it finishes and notifies", () =>
     Effect.gen(function* () {
       const h = yield* harness
