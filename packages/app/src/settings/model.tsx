@@ -128,6 +128,7 @@ const generalSchema = Persistence.struct({
     commentary: placementOnlySchema,
   }),
   showCustomAgents: Schema.Boolean,
+  taskbarProgress: Schema.Boolean,
   showTurnDiffs: Schema.Boolean,
   backgroundActivity: Schema.Literals(["off", "left", "center", "right"]),
   timelineWidth: Schema.Literals(["focused", "comfortable", "wide"]),
@@ -317,6 +318,7 @@ export const defaultSettings: Settings = {
   general: {
     timelineDetail: { ...timelinePresets[2].value },
     showCustomAgents: true,
+    taskbarProgress: true,
     showTurnDiffs: false,
     backgroundActivity: "left",
     timelineWidth: "comfortable",
@@ -437,6 +439,13 @@ export const { use: useSettings, provider: SettingsProvider } = createSimpleCont
         showCustomAgents,
         setShowCustomAgents(value: boolean) {
           setStore("general", "showCustomAgents", value)
+        },
+        taskbarProgress: withFallback(
+          () => store.general?.taskbarProgress,
+          defaultSettings.general.taskbarProgress,
+        ),
+        setTaskbarProgress(value: boolean) {
+          setStore("general", "taskbarProgress", value)
         },
         showTurnDiffs: withFallback(() => store.general?.showTurnDiffs, defaultSettings.general.showTurnDiffs),
         setShowTurnDiffs(value: boolean) {

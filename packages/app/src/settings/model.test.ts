@@ -39,6 +39,13 @@ describe("settings timeline detail migration", () => {
 })
 
 describe("settings schema", () => {
+  test("keeps the taskbar progress preference", () => {
+    const settings = decode({ general: { taskbarProgress: false } })
+
+    expect(settings.general.taskbarProgress).toBe(false)
+    expect(decode(encode(settings)).general.taskbarProgress).toBe(false)
+  })
+
   test("keeps the values plugins copy out once and discards retired preferences", () => {
     const settings = decode({
       general: {
@@ -96,6 +103,7 @@ describe("settings schema", () => {
       general: {
         timelineDetail: timelinePresets[2].value,
         showCustomAgents: true,
+        taskbarProgress: true,
         showTurnDiffs: false,
         backgroundActivity: "left",
         timelineWidth: "comfortable",

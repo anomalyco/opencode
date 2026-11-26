@@ -14,6 +14,8 @@ export { useGlobal } from "./runtime/server/runtime"
 
 export { useTabs } from "./shell/tabs/tabs"
 
+export { useSettings } from "./settings/model"
+
 export { useWindowTabActivity, type WindowTabActivity } from "./shell/layout/project-avatar-state"
 
 export { createDraftStore } from "./runtime/persistence/drafts"

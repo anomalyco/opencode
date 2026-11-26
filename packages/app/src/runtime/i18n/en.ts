@@ -1251,6 +1251,9 @@ export const dict = {
   "settings.general.row.pinchZoom.description": "Allow trackpad pinch and Ctrl-scroll gestures to zoom",
   "settings.general.row.spellcheck.title": "Spellcheck",
   "settings.general.row.spellcheck.description": "Underline misspelled words while typing",
+  "settings.general.row.taskbarProgress.title": "Taskbar progress",
+  "settings.general.row.taskbarProgress.description":
+    "Show session progress on the Windows taskbar button",
 
   "sound.option.none": "None",
   "sound.option.alert01": "Alert 01",

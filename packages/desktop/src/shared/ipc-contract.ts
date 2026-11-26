@@ -17,7 +17,12 @@ export type TaskbarProgressSummary = {
 }
 
 /** Maps a window's open-tab summary to the Windows taskbar progress bar mode. */
-export function selectTaskbarProgressMode(summary: TaskbarProgressSummary): TaskbarProgressMode {
+export function selectTaskbarProgressMode(
+  summary: TaskbarProgressSummary,
+  enabled = true,
+): TaskbarProgressMode {
+  if (!enabled) return "none"
+
   if (summary.waiting > 0) return "paused"
 
   if (summary.failed) return "error"
