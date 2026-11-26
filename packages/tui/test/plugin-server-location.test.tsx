@@ -24,53 +24,43 @@ import { createApi, createEventStream, createFetch, directory, json } from "./fi
 import { TestTuiContexts } from "./fixture/tui-environment"
 import { createTuiResolvedConfig } from "./fixture/tui-runtime"
 
-async function wait(fn: () => boolean, timeout = 5_000, label = "condition") {
+// The plugin an `at` project configures in its own opencode.json (anomalyco/opencode#65729).
+const projectPlugin = (at: string) => ({
+  id: "fixture.project-plugin",
+  source: { type: "local", path: path.join(at, ".opencode/plugins/example.ts") },
+  features: { server: true, tui: true },
+  state: { status: "active" },
+})
+
+async function waitFor<T>(fn: () => T | undefined, timeout: number, label: string) {
   const start = Date.now()
-  while (!fn()) {
+  for (;;) {
+    const value = fn()
+    if (value !== undefined) return value
     if (Date.now() - start > timeout) throw new Error(`timed out waiting for ${label}`)
     await Bun.sleep(10)
   }
 }
 
-// A plugin configured in a project's opencode.json only reaches the TUI when the plugin
-// inventory is asked about the location the TUI is routed to, not the directory the TUI
-// was started in (anomalyco/opencode#65729).
-async function renderPluginHost(other: string) {
+// The stack a plugin host reads: the route, the keymap, the theme, the dialog and toast
+// services, the args the permission provider needs, storage and the session tabs.
+async function renderPluginHost(answer: (location: string) => unknown[]) {
   const temporary = await tmpdir()
-  const finalizers = new Set<() => Promise<void>>()
-  const asked: string[] = []
   const events = createEventStream()
   const calls = createFetch((url) => {
     if (url.pathname !== "/api/plugin") return undefined
     const location = url.searchParams.get("location[directory]") ?? directory
-    asked.push(location)
-    return json({
-      location: { directory: location },
-      // The plugin is only configured in `other`, the way a project's opencode.json holds it.
-      data:
-        location === other
-          ? [
-              {
-                id: "fixture.project-plugin",
-                source: { type: "local", path: path.join(other, ".opencode/plugins/example.ts") },
-                features: { server: true, tui: true },
-                state: { status: "active" },
-              },
-            ]
-          : [],
-    })
+    return json({ location: { directory: location }, data: answer(location) })
   }, events)
 
   let location!: ReturnType<typeof useLocation>
   let client!: ReturnType<typeof useClient>
-  let probed = false
   let plugins!: ReturnType<typeof usePlugin>
 
   function Probe() {
     location = useLocation()
     client = useClient()
     plugins = usePlugin()
-    probed = true
     return <box />
   }
 
@@ -79,52 +69,44 @@ async function renderPluginHost(other: string) {
       <TestTuiContexts paths={{ state: temporary.path }}>
         <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
           <StorageProvider>
-            <TuiLifecycleProvider
-              value={{
-                add(finalizer) {
-                  finalizers.add(finalizer)
-                  return () => finalizers.delete(finalizer)
-                },
-              }}
-            >
-            <ArgsProvider>
-            <ConfigProvider
-              config={createTuiResolvedConfig({})}
-              service={{ get: async () => ({}), update: async () => ({}) }}
-            >
-              <Keymap.Provider>
-                <ThemeProvider mode="dark" source={{ discover: async () => ({}) }}>
-                  <ToastProvider>
-                    <RouteProvider initialRoute={{ type: "home" }}>
-                      <ClientProvider api={createApi(calls.fetch)}>
-                        <DataProvider directory={directory}>
-                          <LocationProvider>
+            <TuiLifecycleProvider value={{ add: () => () => {} }}>
+              <ArgsProvider>
+                <ConfigProvider
+                  config={createTuiResolvedConfig({})}
+                  service={{ get: async () => ({}), update: async () => ({}) }}
+                >
+                  <Keymap.Provider>
+                    <ThemeProvider mode="dark" source={{ discover: async () => ({}) }}>
+                      <ToastProvider>
+                        <RouteProvider initialRoute={{ type: "home" }}>
+                          <ClientProvider api={createApi(calls.fetch)}>
                             <PermissionProvider>
-                              <LocalProvider>
-                                <DialogProvider>
-                                  <AttentionProvider>
-                                    <SessionTabsProvider>
-                                      <PluginProvider
-                                        packages={{ prepare: async () => ({ directory: "" }) }}
-                                        directories={[]}
-                                      >
-                                        <box />
-                                        <Probe />
-                                      </PluginProvider>
-                                    </SessionTabsProvider>
-                                  </AttentionProvider>
-                                </DialogProvider>
-                              </LocalProvider>
+                              <DataProvider directory={directory}>
+                                <LocationProvider>
+                                  <LocalProvider>
+                                    <DialogProvider>
+                                      <AttentionProvider>
+                                        <SessionTabsProvider>
+                                          <PluginProvider
+                                            packages={{ prepare: async () => ({ directory: "" }) }}
+                                            directories={[]}
+                                          >
+                                            <Probe />
+                                          </PluginProvider>
+                                        </SessionTabsProvider>
+                                      </AttentionProvider>
+                                    </DialogProvider>
+                                  </LocalProvider>
+                                </LocationProvider>
+                              </DataProvider>
                             </PermissionProvider>
-                          </LocationProvider>
-                        </DataProvider>
-                      </ClientProvider>
-                    </RouteProvider>
-                  </ToastProvider>
-                </ThemeProvider>
-              </Keymap.Provider>
-            </ConfigProvider>
-            </ArgsProvider>
+                          </ClientProvider>
+                        </RouteProvider>
+                      </ToastProvider>
+                    </ThemeProvider>
+                  </Keymap.Provider>
+                </ConfigProvider>
+              </ArgsProvider>
             </TuiLifecycleProvider>
           </StorageProvider>
         </TuiAppProvider>
@@ -133,10 +115,8 @@ async function renderPluginHost(other: string) {
     { width: 100, height: 30, kittyKeyboard: true },
   )
 
-  await wait(() => probed && client.connection.status() === "connected", 5_000, "the plugin host to render")
+  await waitFor(() => (client?.connection.status() === "connected" ? client : undefined), 5_000, "the TUI to connect")
   return {
-    setup,
-    asked,
     plugins,
     setLocation: (target: string) => location.set({ directory: target }),
     async [Symbol.asyncDispose]() {
@@ -146,13 +126,16 @@ async function renderPluginHost(other: string) {
   }
 }
 
-test("asks the plugin inventory about the routed location, not the startup directory", async () => {
+test("lists a plugin only the routed project configures", async () => {
   const other = path.join(directory, "other-project")
-  await using host = await renderPluginHost(other)
-
-  await wait(() => host.asked.includes(directory), 5_000, "the startup location to be asked")
-  expect(host.plugins.ready()).toBe(true)
+  await using host = await renderPluginHost((location) => (location === other ? [projectPlugin(other)] : []))
 
   host.setLocation(other)
-  await wait(() => host.asked.includes(other), 5_000, "the routed location to be asked")
+
+  const listed = await waitFor(
+    () => host.plugins.server().find((plugin) => plugin.id === "fixture.project-plugin"),
+    5_000,
+    "the routed project's plugin to be listed",
+  )
+  expect(listed.id).toBe("fixture.project-plugin")
 })
