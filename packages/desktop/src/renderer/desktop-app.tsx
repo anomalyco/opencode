@@ -10,13 +10,16 @@ import {
   ServerConnection,
   useCommand,
   useCurrentRoute,
+  useGlobal,
   useLanguage,
   usePluginServers,
+  useServers,
   useTabs,
   useWindowTabActivity,
   type LayoutRoute,
   type Platform,
 } from "@opencode/app/desktop"
+import { displayName } from "@opencode/ui/project-avatar"
 import { useTheme } from "@opencode/ui/theme/context"
 import type { BaseRouterProps } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, lazy, onCleanup, Show, Suspense, untrack } from "solid-js"
@@ -280,6 +283,8 @@ function DesktopEffects(props: { api: ElectronAPI; os: "macos" | "windows" | "li
   const theme = useTheme()
   const language = useLanguage()
   const activity = useWindowTabActivity()
+  const servers = useServers()
+  const global = useGlobal()
 
   createEffect(() => {
     theme.themeId()
@@ -299,6 +304,17 @@ function DesktopEffects(props: { api: ElectronAPI; os: "macos" | "windows" | "li
     if (props.os !== "windows") return
     const count = activity().needsYou
     void props.api.setTaskbarBadge(count, count > 0 ? language.plural("notification.taskbar.badge", count) : "")
+  })
+
+  // The jump list's recent projects: the ones used last on this computer's server, which `opencode://open-project`
+  // links open.
+  createEffect(() => {
+    if (props.os !== "windows") return
+    const local = servers.list.find(servers.current)
+    const projects = local ? (global.serverCtx(ServerConnection.key(local))?.projects.used() ?? []) : []
+    void props.api.setRecentProjects(
+      projects.slice(0, 5).map((project) => ({ name: displayName(project), directory: project.worktree })),
+    )
   })
 
   onCleanup(() => {

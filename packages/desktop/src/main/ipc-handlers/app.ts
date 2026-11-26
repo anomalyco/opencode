@@ -4,6 +4,7 @@ import { Effect } from "effect"
 import { AppRpcs } from "../../shared/ipc-rpc"
 import { checkAppExists, resolveAppPath } from "../files/apps"
 import { setForceFocus } from "../native/debug"
+import { setRecentProjects } from "../native/jump-list"
 import { DesktopLogging, scoped } from "../native/logging"
 import { getSpellcheckEnabled, setSpellcheckEnabled } from "../native/spellcheck"
 import { setNativeTranslations } from "../native/translations"
@@ -46,6 +47,7 @@ export const appHandlers = AppRpcs.toLayer(
       AppSetSpellcheckEnabled: ({ enabled }) => Effect.sync(() => setSpellcheckEnabled(enabled)),
       AppExportDebugLogs: () => logging.exportDebug,
       AppSetForceFocus: ({ enabled }, context) => promise(() => setForceFocus(sender(handoff, context), enabled)),
+      AppSetRecentProjects: ({ projects }) => Effect.sync(() => setRecentProjects(projects)),
       AppRecordFatalRendererError: ({ error }) =>
         scoped("renderer", Effect.logError("fatal renderer error", { ...error })),
       AppSetNativeTranslations: ({ value }, context) =>
