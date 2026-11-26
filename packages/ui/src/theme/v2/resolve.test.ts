@@ -108,13 +108,63 @@ describe("input elevation", () => {
   )
 })
 
-function expectIconEmphasis(tokens: ResolvedV2Theme) {
-  // SAFETY: these resolved background/icon color tokens are hex colors or references to other hex color tokens.
+describe("bundled non-default themes accessibility and hierarchy", () => {
+  test("every bundled theme meets WCAG 2.2 contrast and elevation hierarchy in light and dark modes", async () => {
+    const dir = new URL("../themes/", import.meta.url)
+    const files: string[] = []
+    for await (const name of new Bun.Glob("*.json").scan({ cwd: Bun.fileURLToPath(dir) })) {
+      if (name !== "oc-2.json") files.push(name)
+    }
+
+    expect(files.length).toBeGreaterThan(0)
+
+    for (const file of files.sort()) {
+      const bundled: DesktopTheme = await Bun.file(new URL(file, dir)).json()
+      const resolved = resolveThemeV2(bundled)
+
+      for (const mode of ["light", "dark"] as const) {
+        const tokens = resolved[mode]
+        const color = (key: string) => resolveHex(tokens, key)
+        const bgBase = color("v2-background-bg-base")
+        const bgAccent = color("v2-background-bg-accent")
+        const bgContrast = color("v2-background-bg-contrast")
+        const bgIconContrast = color("v2-background-bg-icon-button-contrast")
+        const bgInverse = color("v2-background-bg-inverse")
+
+        expectIconEmphasis(tokens)
+        expect(contrastRatio(color("v2-text-text-base"), bgBase)).toBeGreaterThanOrEqual(7)
+        expect(contrastRatio(color("v2-text-text-muted"), bgBase)).toBeGreaterThanOrEqual(4.5)
+        expect(contrastRatio(color("v2-text-text-faint"), bgBase)).toBeGreaterThanOrEqual(3)
+        expect(contrastRatio(color("v2-text-text-faint"), bgBase)).toBeLessThan(
+          contrastRatio(color("v2-text-text-muted"), bgBase),
+        )
+        expect(contrastRatio(color("v2-text-text-accent"), bgBase)).toBeGreaterThanOrEqual(4.5)
+        expect(contrastRatio(color("v2-text-text-contrast"), bgAccent)).toBeGreaterThanOrEqual(4.5)
+        expect(contrastRatio(color("v2-text-text-contrast"), bgContrast)).toBeGreaterThanOrEqual(4.5)
+        expect(contrastRatio(color("v2-text-text-inverse"), bgInverse)).toBeGreaterThanOrEqual(4.5)
+        expect(contrastRatio(color("v2-icon-icon-inverse"), bgIconContrast)).toBeGreaterThanOrEqual(4.5)
+        expect(contrastRatio(color("v2-border-border-focus"), bgBase)).toBeGreaterThanOrEqual(3)
+
+        for (const state of ["success", "warning", "danger", "info"] as const) {
+          expect(
+            contrastRatio(color(`v2-state-fg-${state}`), color(`v2-state-bg-${state}`)),
+          ).toBeGreaterThanOrEqual(4.5)
+        }
+      }
+    }
+  })
+})
+
+function resolveHex(tokens: ResolvedV2Theme, key: string): HexColor {
   const resolve = (value: string): HexColor =>
     value.startsWith("var(--") ? resolve(tokens[value.slice(6, -1)]) : (value as HexColor)
 
-  const background = resolve(tokens["v2-background-bg-base"])
-  const contrast = (role: string) => contrastRatio(resolve(tokens[`v2-icon-icon-${role}`]), background)
+  return resolve(tokens[key])
+}
+
+function expectIconEmphasis(tokens: ResolvedV2Theme) {
+  const background = resolveHex(tokens, "v2-background-bg-base")
+  const contrast = (role: string) => contrastRatio(resolveHex(tokens, `v2-icon-icon-${role}`), background)
   expect(contrast("faint")).toBeLessThan(contrast("muted"))
   expect(contrast("muted")).toBeLessThan(contrast("base"))
 }

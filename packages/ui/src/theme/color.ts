@@ -109,6 +109,10 @@ export function hexToOklch(hex: HexColor): OklchColor {
   return rgbToOklch(r, g, b)
 }
 
+function inSrgbGamut(rgb: { r: number; g: number; b: number }) {
+  return rgb.r >= 0 && rgb.r <= 1 && rgb.g >= 0 && rgb.g <= 1 && rgb.b >= 0 && rgb.b <= 1
+}
+
 export function fitOklch(oklch: OklchColor): OklchColor {
   const base = {
     l: clamp(oklch.l, 0, 1),
@@ -116,25 +120,61 @@ export function fitOklch(oklch: OklchColor): OklchColor {
     h: hue(oklch.h),
   }
 
-  const rgb = oklchToRgb(base)
+  if (inSrgbGamut(oklchToRgb(base))) return base
 
-  if (rgb.r >= 0 && rgb.r <= 1 && rgb.g >= 0 && rgb.g <= 1 && rgb.b >= 0 && rgb.b <= 1) {
-    return base
-  }
+  let lo = 0
+  let hi = base.c
 
-  let c = base.c
-
-  for (let i = 0; i < 24; i++) {
-    c *= 0.9
-    const next = { ...base, c }
-    const out = oklchToRgb(next)
-
-    if (out.r >= 0 && out.r <= 1 && out.g >= 0 && out.g <= 1 && out.b >= 0 && out.b <= 1) {
-      return next
+  for (let i = 0; i < 18; i++) {
+    const mid = (lo + hi) / 2
+    if (inSrgbGamut(oklchToRgb({ ...base, c: mid }))) {
+      lo = mid
+      continue
     }
+    hi = mid
   }
 
-  return { ...base, c: 0 }
+  return { ...base, c: lo }
+}
+
+export function hueDistance(a: number, b: number) {
+  const diff = Math.abs(hue(a) - hue(b))
+  return diff > 180 ? 360 - diff : diff
+}
+
+export function ensureContrast(
+  color: HexColor,
+  background: HexColor,
+  minContrast: number,
+  direction: "lighter" | "darker" | "auto" = "auto",
+): HexColor {
+  if (contrastRatio(color, background) >= minContrast) return color
+
+  const base = hexToOklch(color)
+  const bgL = hexToOklch(background).l
+  const goLighter = direction === "lighter" ? true : direction === "darker" ? false : bgL < 0.55
+
+  const extreme = oklchToHex({ l: goLighter ? 1 : 0, c: 0, h: base.h })
+  if (contrastRatio(extreme, background) < minContrast) return extreme
+
+  let lo = goLighter ? base.l : 0
+  let hi = goLighter ? 1 : base.l
+
+  for (let i = 0; i < 18; i++) {
+    const mid = (lo + hi) / 2
+    const passes = contrastRatio(oklchToHex({ l: mid, c: base.c, h: base.h }), background) >= minContrast
+
+    if (goLighter) {
+      hi = passes ? mid : hi
+      lo = passes ? lo : mid
+      continue
+    }
+
+    lo = passes ? mid : lo
+    hi = passes ? hi : mid
+  }
+
+  return oklchToHex({ l: goLighter ? hi : lo, c: base.c, h: base.h })
 }
 
 export function oklchToHex(oklch: OklchColor): HexColor {
@@ -256,7 +296,7 @@ export function shift(color: HexColor, value: { l?: number; c?: number; h?: numb
 }
 
 export function contrastRatio(foreground: HexColor, background: HexColor) {
-  const linear = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
+  const linear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
 
   const luminance = (hex: HexColor) => {
     const { r, g, b } = hexToRgb(hex)
