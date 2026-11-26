@@ -18552,6 +18552,9 @@
               "full_codemode": {
                 "type": "boolean"
               },
+              "codemode_agents": {
+                "type": "boolean"
+              },
               "machines": {
                 "type": "boolean"
               },

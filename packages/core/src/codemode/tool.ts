@@ -22,6 +22,7 @@ import { FileWrite } from "../file-write.js"
 import { Location } from "../location.js"
 import { Permission } from "../permission.js"
 import { PositiveInt } from "../schema.js"
+import { CodeModeAgents } from "./agents.js"
 import { CodeModeApi } from "./api.js"
 import { CodeModeBun } from "./bun.js"
 import { CodeModeCatalog } from "./catalog.js"
@@ -101,21 +102,33 @@ export type Inventory = {
   readonly definitions?: ReadonlyMap<string, ToolDefinition>
 }
 
-const extensions = [CodeModeFetch.extension, CodeModePath.extension, CodeModeBun.extension] as const
-const fetchOnly = [CodeModeFetch.extension] as const
-const runExtensions = (full: boolean) => (full ? extensions : fetchOnly)
+/** With the `codemode_agents` flag, the session's agent() and llm(): see `CodeModeAgents`. */
+export type Agents = CodeModeAgents.Service
+
+const extensions = [
+  CodeModeFetch.extension,
+  CodeModePath.extension,
+  CodeModeBun.extension,
+  CodeModeAgents.extension,
+] as const
+const runExtensions = (full: boolean, agents: boolean) => [
+  CodeModeFetch.extension,
+  ...(full ? [CodeModePath.extension, CodeModeBun.extension] : []),
+  ...(agents ? [CodeModeAgents.extension] : []),
+]
 
 const executionServices = (
   context: ToolContext,
   permission: Permission.Interface,
   services?: Context.Context<Services>,
   api?: Context.Context<Api>,
+  agents?: Context.Context<Agents>,
 ) =>
   Effect.map(Effect.abortSignal, (signal) =>
-    Context.merge(services ?? Context.empty(), api ?? Context.empty()).pipe(
-      Context.add(CodeModeExecution.Service, { ...context, signal }),
-      Context.add(Permission.Service, permission),
-    ),
+    Context.merge(
+      Context.merge(services ?? Context.empty(), api ?? Context.empty()),
+      agents ?? Context.make(CodeModeAgents.Service, CodeModeAgents.unavailable),
+    ).pipe(Context.add(CodeModeExecution.Service, { ...context, signal }), Context.add(Permission.Service, permission)),
   )
 
 // Invariant model-facing guidance; the changing tool catalog is delivered through Instructions. With `full_codemode`,
@@ -161,6 +174,8 @@ export const create = (
   services?: Context.Context<Services>,
   /** What `opencode://` fetch sends requests through. Without it, `opencode://` fails as unavailable. */
   api?: Context.Context<Api>,
+  /** With `codemode_agents`, what runs agent() and llm(). Without it, programs don't get them. */
+  agents?: Context.Context<Agents>,
 ) => {
   return {
     name: "execute",
@@ -205,7 +220,7 @@ export const create = (
         const diffs = CodeModeDiffs.make(record(() => {}))
         const result = yield* runtime(inventory)
           .execute(code, undefined, {
-            extensions: runExtensions(services !== undefined),
+            extensions: runExtensions(services !== undefined, agents !== undefined),
           })
           .pipe(
             Effect.provideService(Run, {
@@ -244,7 +259,7 @@ export const create = (
               lock.withPermit(Ref.get(trailing).pipe(Effect.flatMap((pending) => (pending ? publish : Effect.void)))),
             ),
             // Readers outlive the fetch call that returned them, up to the end of this program's scope.
-            Effect.provide(yield* executionServices(context, permission, services, api)),
+            Effect.provide(yield* executionServices(context, permission, services, api, agents)),
             Effect.provideService(CodeModeDiffs.Service, diffs),
           )
         const toolCalls = calls.slice()
@@ -308,6 +323,13 @@ function progressHooks(record: (update: (items: Array<ExecuteCall>) => void) => 
       switch (call.name) {
         case "fetch":
           return start(call, { tool: call.name, status: "running", input: CodeModeFetch.display(call.args) })
+        case "agent":
+        case "llm":
+          return start(call, {
+            tool: call.name,
+            status: "running",
+            input: CodeModeAgents.display(call.name, call.args),
+          })
         default:
           if (call.extension === "bun")
             return start(call, { tool: "Bun", status: "running", input: CodeModeBun.display(call.name, call.args) })
@@ -368,7 +390,10 @@ function renderCatalog(root: CatalogNode): ReadonlyArray<CodeModeCatalog.Tool | 
 
 // Inventories are immutable snapshots, so tool definitions, schemas, and the search index are built
 // once per inventory and shared by its catalog and every execution.
-const runtimes = new WeakMap<Inventory, CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service>>()
+const runtimes = new WeakMap<
+  Inventory,
+  CodeMode.Runtime<Run | CodeModeExecution.Service | Permission.Service | CodeModeAgents.Service>
+>()
 
 function runtime(inventory: Inventory) {
   const cached = runtimes.get(inventory)
@@ -399,7 +424,7 @@ export const check = (
     hooks: runHooks,
     limits: input.limits,
   })
-    .execute(input.code, input.bindings, { extensions: runExtensions(input.services !== undefined) })
+    .execute(input.code, input.bindings, { extensions: runExtensions(input.services !== undefined, false) })
     .pipe(
       Effect.provideService(Run, {
         executeTool: (name, tool, input) => executeTool(name, tool, input).pipe(Effect.map(resultValue)),
