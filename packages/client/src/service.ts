@@ -1,3 +1,9 @@
+/** Registration basename for a CLI release channel. */
+export function registrationFilename(channel: string) {
+  if (channel === "latest" || channel === "dev" || channel === "beta" || channel === "next") return "service.json"
+  return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
+}
+
 /** Connection details for a local OpenCode service. */
 export type Endpoint = {
   /** Base URL of the service. */

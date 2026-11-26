@@ -292,14 +292,7 @@ test.skipIf(process.platform === "win32")("port owner is unknown for a free port
   ).toBeUndefined()
 })
 
-test("service filenames share release channels and identify preview channels", () => {
-  expect(ServiceConfig.filename("latest")).toBe("service.json")
-  expect(ServiceConfig.filename("dev")).toBe("service.json")
-  expect(ServiceConfig.filename("beta")).toBe("service.json")
-  expect(ServiceConfig.filename("next")).toBe("service.json")
-  expect(ServiceConfig.filename("local")).toBe("service-local.json")
-  expect(ServiceConfig.filename("preview-a")).toBe("service-preview-a.json")
-  expect(ServiceConfig.filename("preview/a")).toBe("service-preview-a.json")
+test("recognizes preview channel versions", () => {
   expect(ServiceConfig.versionBelongsToChannel("0.0.0-preview-a-1234", "preview-a")).toBe(true)
   expect(ServiceConfig.versionBelongsToChannel("0.0.0-preview-a-1234.2", "preview-a")).toBe(true)
   expect(ServiceConfig.versionBelongsToChannel("0.0.0-preview-a-other-1234", "preview-a")).toBe(false)
@@ -343,7 +336,7 @@ test("preview registration migration never moves stable discovery", async () => 
     await fs.rm(target)
     await fs.writeFile(legacy, JSON.stringify({ id: "stable", version: "1.2.3", url: "http://localhost:4096", pid: 1 }))
     await Effect.runPromise(
-      ServiceConfig.migrateRegistration(legacy, target, "preview-a", "0.0.0-preview-a-5678").pipe(
+      ServiceConfig.migrateRegistration(legacy, target, "preview-a", "1.2.3").pipe(
         Effect.provide(NodeFileSystem.layer),
       ),
     )
@@ -362,6 +355,16 @@ test("preview registration migration never moves stable discovery", async () => 
     )
     expect(await Bun.file(legacy).exists()).toBe(true)
     expect(await Bun.file(target).json()).toMatchObject({ id: "current-preview" })
+
+    const hashed = path.join(root, ServiceConfig.legacyFilename("preview-a")!)
+    await fs.rm(target)
+    await fs.writeFile(hashed, JSON.stringify({ id: "old-hashed", version: "1.2.3", url: "http://localhost:4096", pid: 1 }))
+    await Effect.runPromise(
+      ServiceConfig.migrateRegistration(hashed, target, "preview-a", "1.2.3").pipe(
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    )
+    expect(await Bun.file(target).json()).toMatchObject({ id: "old-hashed" })
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }

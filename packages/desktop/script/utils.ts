@@ -19,6 +19,15 @@ export function resolveChannel(): Channel {
   return "dev"
 }
 
+export function resolveCliChannel(built: boolean) {
+  if (!built) return resolveChannel()
+
+  const channel = process.env.OPENCODE_CHANNEL
+  if (!channel) throw new Error("Set OPENCODE_CHANNEL to the channel used to build the prebuilt CLI")
+
+  return channel
+}
+
 export const CLI_BINARIES: Array<{ target: string; package: string; os: string; cpu: string }> = [
   {
     target: "darwin-arm64",

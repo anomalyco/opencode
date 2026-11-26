@@ -1,7 +1,7 @@
 import { Global } from "@opencode/util/global"
 import { OPENCODE_CHANNEL, OPENCODE_VERSION } from "../version"
 import { Hash } from "@opencode/util/hash"
-import { Service } from "@opencode/client/effect/service"
+import { Service, registrationFilename } from "@opencode/client/effect/service"
 import { Effect, FileSystem, Option, Schedule, Schema } from "effect"
 import { randomBytes } from "crypto"
 import path from "path"
@@ -39,8 +39,7 @@ const decodeLegacy = Schema.decodeUnknownOption(
 const decodeRegistration = Schema.decodeUnknownEffect(Schema.fromJsonString(Service.Info))
 
 export function filename(channel = OPENCODE_CHANNEL) {
-  if (channel === "latest" || channel === "dev" || channel === "beta" || channel === "next") return "service.json"
-  return `service-${channel.replace(/[^a-zA-Z0-9._-]/g, "-")}.json`
+  return registrationFilename(channel)
 }
 
 export function defaultPort(channel = OPENCODE_CHANNEL, platform = process.platform) {
@@ -64,13 +63,8 @@ export function legacyFilename(channel = OPENCODE_CHANNEL) {
   return `service-${Hash.fast(channel)}.json`
 }
 
-export function versionBelongsToChannel(
-  version: string | undefined,
-  channel = OPENCODE_CHANNEL,
-  installedVersion = OPENCODE_VERSION,
-) {
+export function versionBelongsToChannel(version: string | undefined, channel = OPENCODE_CHANNEL) {
   if (version === undefined) return false
-  if (version === installedVersion) return true
   const prefix = `0.0.0-${channel}-`
   if (!version.startsWith(prefix)) return false
   return /^\d+(?:\.\d+)?$/.test(version.slice(prefix.length))
@@ -87,7 +81,10 @@ export const migrateRegistration = Effect.fnUntraced(function* (
   if (Option.isNone(text)) return
   const registration = yield* decodeRegistration(text.value).pipe(Effect.option)
   if (Option.isNone(registration)) return
-  if (!versionBelongsToChannel(registration.value.version, channel, installedVersion)) return
+  // Only the hashed filename proves the channel when a version has no channel tag.
+  const fromChannelFile = path.basename(legacy) === legacyFilename(channel)
+  const version = registration.value.version
+  if (!(fromChannelFile && version === installedVersion) && !versionBelongsToChannel(version, channel)) return
   yield* fs.writeFileString(file, text.value, { flag: "wx", mode: 0o600 }).pipe(Effect.ignore)
 })
 
