@@ -81,8 +81,12 @@ export type HomeProjectsViewProps = {
   onHideProject: (server: ServerConnection.Any, project: LocalProject) => void
   onOpenSettings: () => void
   onOpenHelp: () => void
+  /** Opens Automations; the entry shows only while it is available. */
+  automations?: HomeAutomationsEntry
   /** With `dropdown`, opens the panel from a compact picker at the end of Home's search field. */
   scope?: boolean
+  /** With several servers and no project chosen, names the focused server instead of "All projects". */
+  serverScope?: boolean
 }
 
 export function HomeProjectsView(props: HomeProjectsViewProps) {
@@ -97,6 +101,17 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
   const server = createMemo(() =>
     props.servers.find((server) => ServerConnection.key(server) === props.selection.server),
   )
+
+  const scopedServer = () => (props.serverScope && props.servers.length > 1 && !selected() ? server() : undefined)
+
+  const label = () => {
+    const project = selected()
+
+    if (project) return displayName(project)
+    const item = scopedServer()
+
+    return item ? props.serverLabel(item) : props.language.t("home.projects.all")
+  }
 
   return (
     <Show when={props.dropdown} fallback={<HomeProjectsPanel {...props} />}>
@@ -119,16 +134,12 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
               aria-label={props.language.t("home.projects")}
               class="flex h-10 w-full min-w-0 items-center gap-2 rounded-[6px] bg-v2-background-bg-base px-1.5 text-start text-v2-text-text-base hover:bg-v2-background-bg-layer-01 focus-visible:-outline-offset-2"
             >
-              <Show when={selected()} fallback={<Icon name="folder" />}>
+              <Show when={selected()} fallback={<Icon name={scopedServer() ? "server" : "folder"} />}>
                 {(project) => <HomeProjectAvatar project={project()} />}
               </Show>
               <span class="flex min-w-0 flex-1 flex-col leading-[var(--line-height-compact)]">
-                <bdi class="truncate">
-                  <Show when={selected()} fallback={props.language.t("home.projects.all")}>
-                    {(project) => displayName(project())}
-                  </Show>
-                </bdi>
-                <Show when={props.servers.length > 1 && server()}>
+                <bdi class="truncate">{label()}</bdi>
+                <Show when={props.servers.length > 1 && !scopedServer() && server()}>
                   {(server) => (
                     <bdi class="truncate text-v2-text-text-muted opacity-70">
                       {props.serverLabel(server())}
@@ -147,12 +158,17 @@ export function HomeProjectsView(props: HomeProjectsViewProps) {
             class="relative z-20 -me-1 flex h-7 min-w-0 max-w-[220px] shrink-0 items-center gap-1.5 rounded-[4px] ps-2 pe-1.5 text-[13px] leading-[var(--line-height-compact)] [font-weight:440] text-v2-text-text-muted hover:bg-v2-overlay-simple-overlay-hover hover:text-v2-text-text-base data-[expanded]:bg-v2-overlay-simple-overlay-pressed data-[expanded]:text-v2-text-text-base"
             onMouseDown={(event: MouseEvent) => event.preventDefault()}
           >
-            <Show when={selected()}>{(project) => <HomeProjectAvatar project={project()} />}</Show>
-            <bdi class="min-w-0 truncate">
-              <Show when={selected()} fallback={props.language.t("home.projects.all")}>
-                {(project) => displayName(project())}
-              </Show>
-            </bdi>
+            <Show
+              when={selected()}
+              fallback={
+                <Show when={scopedServer()}>
+                  <Icon name="server" class="shrink-0 text-v2-icon-icon-muted" />
+                </Show>
+              }
+            >
+              {(project) => <HomeProjectAvatar project={project()} />}
+            </Show>
+            <bdi class="min-w-0 truncate">{label()}</bdi>
             <Icon name="chevron-down" class="shrink-0 text-v2-icon-icon-muted" />
           </Popover.Trigger>
         </Show>
@@ -366,17 +382,21 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
         classList={{ "!hidden": !!props.dropdown }}
         onOpenSettings={props.onOpenSettings}
         onOpenHelp={props.onOpenHelp}
+        automations={props.automations}
         language={props.language}
       />
     </aside>
   )
 }
 
+export type HomeAutomationsEntry = { available: () => boolean; open: () => void }
+
 export function HomeUtilityNav(props: {
   class?: string
   classList?: Record<string, boolean>
   onOpenSettings: () => void
   onOpenHelp: () => void
+  automations?: HomeAutomationsEntry
   language: ReturnType<typeof useLanguage>
 }) {
   return (
@@ -384,6 +404,17 @@ export function HomeUtilityNav(props: {
       class={`${props.class ?? ""} min-w-0 flex-row justify-between gap-1 lg:flex-col lg:justify-start lg:pr-3 [&>button]:w-auto lg:[&>button]:w-full`}
       classList={props.classList}
     >
+      <Show when={props.automations?.available()}>
+        <HomeProjectNavButton
+          type="button"
+          data-action="home-automations"
+          class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
+          onClick={() => props.automations?.open()}
+        >
+          <Icon name="clock" size="small" />
+          <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("automations.title")}</span>
+        </HomeProjectNavButton>
+      </Show>
       <HomeProjectNavButton
         type="button"
         class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"

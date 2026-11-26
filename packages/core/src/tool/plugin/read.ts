@@ -14,7 +14,6 @@ import { Permission } from "../../permission.js"
 import { SessionInstructions } from "../../session/instructions.js"
 import { AbsolutePath } from "../../schema.js"
 import { Skill } from "../../skill.js"
-import { SkillDiscovery } from "../../skill/discovery.js"
 import { ReadToolFileSystem } from "../read-filesystem.js"
 import { Environment } from "../../environment/index.js"
 
@@ -74,13 +73,13 @@ export const Plugin = {
               const workingDirectory = yield* currentWorkingDirectory
               if (input.limit === 0) return yield* new ToolFailure({ message: "Limit must be a positive integer" })
               if (Skill.isUri(input.path)) {
-                const parsed = parseSkillUri(input.path)
+                const parsed = Skill.parseAddress(input.path)
                 if (!parsed) return yield* new ToolFailure({ message: `File not found: ${input.path}` })
-                const id = Skill.ID.make(parsed.id)
+                const id = parsed.id
                 const skill = yield* skills.get(id)
-                if (!skill || !Skill.isUri(skill.path))
+                if (!skill || Skill.locate(skill)._tag !== "virtual")
                   return yield* new ToolFailure({ message: `File not found: ${input.path}` })
-                const extra = yield* skills.files(id)
+                const files = [Skill.manifest, ...((yield* skills.files(id)) ?? [])]
                 yield* permission.assert({
                   action: "skill",
                   resources: [skill.id],
@@ -94,17 +93,33 @@ export const Plugin = {
                   ...Permission.invocation(context),
                 })
                 const virtualFs = Environment.makeFiles(Environment.makeMemoryDriver())
-                const encoder = new TextEncoder()
-                yield* virtualFs.write(AbsolutePath.make("/SKILL.md"), encoder.encode(skill.content))
+                // Only the requested file is loaded. The rest stay empty, which is enough for directory listings.
                 yield* Effect.forEach(
-                  extra ? Array.from(extra) : [],
-                  ([rel, text]) => virtualFs.write(AbsolutePath.make(`/${rel}`), encoder.encode(text)),
+                  files,
+                  (file) =>
+                    (file === parsed.file ? skills.read(id, file) : Effect.succeed(new Uint8Array())).pipe(
+                      Effect.mapError(
+                        (error) =>
+                          new ToolFailure({
+                            message:
+                              error._tag === "Skill.LoadError"
+                                ? `Unable to read ${input.path}: ${error.message}`
+                                : `File not found: ${input.path}`,
+                          }),
+                      ),
+                      Effect.flatMap((bytes) => virtualFs.write(AbsolutePath.make(`/${file}`), bytes)),
+                    ),
                   { discard: true },
                 )
-                const output = yield* ReadToolFileSystem.read(virtualFs, AbsolutePath.make(parsed.target), input.path, {
-                  offset: input.offset,
-                  limit: input.limit,
-                }).pipe(
+                const output = yield* ReadToolFileSystem.read(
+                  virtualFs,
+                  AbsolutePath.make(`/${parsed.file ?? ""}`),
+                  input.path,
+                  {
+                    offset: input.offset,
+                    limit: input.limit,
+                  },
+                ).pipe(
                   Effect.catchIf(
                     (error) => error instanceof Environment.NotFound,
                     () => Effect.fail(new ToolFailure({ message: `File not found: ${input.path}` })),
@@ -335,17 +350,6 @@ const editDistance = (a: string, b: string) => {
     previous = current
   }
   return previous[b.length]
-}
-
-function parseSkillUri(value: string) {
-  const trimmed = value.slice("skill://".length).replace(/\/+$/, "")
-  const slash = trimmed.indexOf("/")
-  const id = slash === -1 ? trimmed : trimmed.slice(0, slash)
-  const rest = slash === -1 ? "" : trimmed.slice(slash + 1)
-  if (!SkillDiscovery.isSafeSegment(id)) return undefined
-  if (rest !== "" && !rest.split("/").every(SkillDiscovery.isSafeSegment)) return undefined
-  // Permission checks use the canonical URI, so `skill://id/file/` can't slip past a rule for `skill://id/file`.
-  return { id, target: rest === "" ? "/" : `/${rest}`, uri: Skill.uri(id, rest || undefined) }
 }
 
 const toOutput = (

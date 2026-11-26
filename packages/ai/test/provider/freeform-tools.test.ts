@@ -40,8 +40,17 @@ const body = (model: LanguageModel, freeform = lark) =>
     Effect.map((prepared) => prepared.body),
   )
 
-const responses = OpenAI.model("gpt-5.4", { apiKey: "test" })
-const chat = OpenAI.chatModel("gpt-5.4", { apiKey: "test" })
+// A model only takes freeform tools in the formats its capabilities list.
+const withFreeform = <Model extends LanguageModel>(model: Model) =>
+  LanguageModel.update(model, {
+    capabilities: {
+      ...model.capabilities,
+      tools: { ...model.capabilities?.tools, freeform: ["text", "lark", "regex"] },
+    },
+  })
+
+const responses = withFreeform(OpenAI.model("gpt-5.4", { apiKey: "test" }))
+const chat = withFreeform(OpenAI.chatModel("gpt-5.4", { apiKey: "test" }))
 
 const RESPONSES_LARK = {
   type: "custom",
@@ -110,14 +119,14 @@ describe("freeform tools", () => {
         OpenRouter.responsesModel("openai/gpt-5.4", settings),
         DigitalOcean.responsesModel("openai-gpt-5.4", settings),
         Venice.responsesModel("openai-gpt-54", settings),
-      ]
+      ].map(withFreeform)
       const chatModels = [
         Azure.chatModel("gpt-5.4", { ...settings, resourceName: "fixture" }),
         AmazonBedrockMantle.chatModel("openai.gpt-5.4", { ...settings, region: "us-east-1" }),
         VercelAIGateway.chatModel("openai/gpt-5.4", settings),
         OpenRouter.model("openai/gpt-5.4", settings),
         OpenAICompatible.model("gpt-5.4", { ...settings, baseURL: "https://chat.test/v1" }),
-      ]
+      ].map(withFreeform)
       for (const model of responsesModels) {
         const prepared = yield* body(model)
         expect(prepared.tools).toEqual([RESPONSES_LARK])

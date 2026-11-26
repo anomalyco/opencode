@@ -35,6 +35,7 @@
  {"text":"a\n  b","width":4,"height":2,"baseline":1,"styled":[],"source":"\\begin{matrix}a&&\\\\&b&\\end{matrix}"},
  {"error":true,"source":"\\begin{matrix}\\\\\\end{matrix}"},
  {"text":" 1\n───\n 2  +z\n y","width":6,"height":4,"baseline":2,"styled":[],"source":"\\displaylines{\\frac{1}{2}\\\\{y}}+z"},
+ {"text":"∀ε > 0 ∃K ∈ ℕ","width":13,"height":1,"baseline":0,"styled":[],"source":"\\forall \\varepsilon>0\\ \\exists K\\in\\mathbb{N}"},
  {"text":"a    │ wide\nlong │    b","width":11,"height":2,"baseline":1,"styled":[],"source":"\\begin{array}{l|r}a&wide\\\\long&b\\end{array}"},
  {"text":"a  = b + c\n   = d","width":10,"height":2,"baseline":1,"styled":[],"source":"\\begin{aligned}a&=b+c\\\\&=d\\end{aligned}"},
  {"text":"     ╭───\n       1\nx = √ ───\n       2","width":9,"height":4,"baseline":2,"styled":[],"source":"x=\\sqrt{\\frac{1}{2}}"},

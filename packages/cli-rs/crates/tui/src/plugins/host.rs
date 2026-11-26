@@ -903,8 +903,8 @@ impl abi::Read for Reader<'_> {
         self.tui.local.usage().flatten()
     }
 
-    fn providers(&self) -> Option<Arc<[ProviderInfo]>> {
-        self.catalog(None, Catalog::Provider, |data| data.provider.clone())
+    fn providers(&self, location: Option<&abi::LocationRef>) -> Option<Arc<[ProviderInfo]>> {
+        self.catalog(location, Catalog::Provider, |data| data.provider.clone())
     }
 
     fn info(&self) -> abi::Info {

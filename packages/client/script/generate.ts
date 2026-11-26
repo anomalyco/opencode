@@ -37,6 +37,7 @@ import { AgentAttachment, FileAttachment, Prompt, PromptMention } from "@opencod
 import { PromptInput } from "@opencode/schema/prompt-input"
 import { Provider } from "@opencode/schema/provider"
 import { Pty } from "@opencode/schema/pty"
+import { Push } from "@opencode/schema/push"
 import { PtyTicket } from "@opencode/schema/pty-ticket"
 import { Question } from "@opencode/schema/question"
 import { Reference } from "@opencode/schema/reference"
@@ -96,6 +97,7 @@ const effectTypeReferences = [
   ...namespaceTypes("PromptInput", "@opencode/schema/prompt-input", PromptInput),
   ...namespaceTypes("Provider", "@opencode/schema/provider", Provider),
   ...namespaceTypes("Pty", "@opencode/schema/pty", Pty),
+  ...namespaceTypes("Push", "@opencode/schema/push", Push),
   ...namespaceTypes("PtyTicket", "@opencode/schema/pty-ticket", PtyTicket),
   ...namespaceTypes("Question", "@opencode/schema/question", Question),
   ...namespaceTypes("Reference", "@opencode/schema/reference", Reference),

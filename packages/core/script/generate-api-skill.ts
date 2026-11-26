@@ -33,6 +33,7 @@ type Parameter = {
 type Operation = {
   readonly summary?: string
   readonly description?: string
+  readonly deprecated?: boolean
   readonly parameters?: ReadonlyArray<Parameter>
   readonly requestBody?: { readonly content?: Readonly<Record<string, { readonly schema?: Schema }>> }
   readonly responses?: Readonly<
@@ -48,7 +49,7 @@ type Document = {
 type Endpoint = {
   readonly method: string
   readonly path: string
-  readonly group: string
+  readonly segments: ReadonlyArray<string>
   readonly experimental: boolean
   readonly operation: Operation
 }
@@ -114,6 +115,8 @@ const INDEX_HEADER = [
 const METHODS = ["get", "post", "put", "patch", "delete"]
 // Types written out longer than this list only their field names.
 const COMPACT = 240
+// Groups larger than this split into a folder by their next literal path segment.
+const SPLIT_BYTES = 8192
 
 export const directory = path.join(import.meta.dir, "../src/plugin/skill/opencode")
 
@@ -126,33 +129,70 @@ export async function render(): Promise<Record<string, string>> {
       METHODS.flatMap((method) => {
         const operation = methods[method]
         const experimental = route.startsWith("/api/experimental/")
-        if (!operation || !SHOWN.some((pattern) => matches(pattern, `${method.toUpperCase()} ${route}`))) return []
+        if (
+          !operation ||
+          operation.deprecated ||
+          !SHOWN.some((pattern) => matches(pattern, `${method.toUpperCase()} ${route}`))
+        )
+          return []
         return [
           {
             method: method.toUpperCase(),
             path: route,
-            group: route.slice(experimental ? "/api/experimental/".length : "/api/".length).split("/")[0]!,
+            segments: segments(route, experimental),
             experimental,
             operation,
           },
         ]
       }),
     )
-  const groups = Map.groupBy(endpoints, (endpoint) => endpoint.group)
-  const names = Array.from(groups.keys()).toSorted()
+  const top = Map.groupBy(endpoints, (endpoint) => endpoint.segments[0]!)
+  const rendered = Array.from(top.keys())
+    .toSorted()
+    .flatMap((name) => partition(name, top.get(name)!, 1, schemas))
   const index = [
     ...INDEX_HEADER,
-    ...names.flatMap((name) => [
+    ...rendered.flatMap(([name, items]) => [
       `## api/${name}.md`,
       "",
-      ...groups.get(name)!.map((endpoint) => `- ${heading(endpoint)}: ${endpoint.operation.summary ?? ""}`.trimEnd()),
+      ...items.map((endpoint) => `- ${heading(endpoint)}: ${endpoint.operation.summary ?? ""}`.trimEnd()),
       "",
     ]),
   ]
   return {
     "api.md": `${index.join("\n").trimEnd()}\n`,
-    ...Object.fromEntries(names.map((name) => [`api/${name}.md`, renderGroup(name, groups.get(name)!, schemas)])),
+    ...Object.fromEntries(rendered.map(([name, , content]) => [`api/${name}.md`, content])),
   }
+}
+
+// Literal path segments after /api/ (or /api/experimental/), dropping {param} segments.
+function segments(route: string, experimental: boolean) {
+  return route
+    .slice(experimental ? "/api/experimental/".length : "/api/".length)
+    .split("/")
+    .filter((segment) => segment.length > 0 && !segment.startsWith("{"))
+}
+
+// Splits a group into a subfolder by its next literal path segment whenever its rendered file exceeds SPLIT_BYTES.
+function partition(
+  prefix: string,
+  endpoints: ReadonlyArray<Endpoint>,
+  depth: number,
+  schemas: Readonly<Record<string, Schema>>,
+): ReadonlyArray<readonly [string, ReadonlyArray<Endpoint>, string]> {
+  const content = renderGroup(prefix, endpoints, schemas)
+  if (Buffer.byteLength(content) <= SPLIT_BYTES) return [[prefix, endpoints, content]]
+  const buckets = Map.groupBy(endpoints, (endpoint) => endpoint.segments[depth] ?? "index")
+  if (buckets.size <= 1) return [[prefix, endpoints, content]]
+  const keys = Array.from(buckets.keys()).toSorted((a, b) =>
+    a === "index" ? -1 : b === "index" ? 1 : a.localeCompare(b),
+  )
+  return keys.flatMap((key) => {
+    const items = buckets.get(key)!
+    const child = `${prefix}/${key}`
+    if (key === "index") return [[child, items, renderGroup(child, items, schemas)] as const]
+    return partition(child, items, depth + 1, schemas)
+  })
 }
 
 function renderGroup(name: string, endpoints: ReadonlyArray<Endpoint>, schemas: Readonly<Record<string, Schema>>) {

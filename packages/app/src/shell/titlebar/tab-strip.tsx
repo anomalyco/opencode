@@ -4,6 +4,7 @@ import {
   createMemo,
   createSignal,
   For,
+  mapArray,
   type JSX,
   onCleanup,
   onMount,
@@ -185,7 +186,6 @@ function SessionTabSlot(
 function SessionTabEntry(
   props: TabCloseActions & {
     tab: SessionTab
-    currentTab?: Tab
     id: string
     index: number
     group?: string
@@ -197,6 +197,7 @@ function SessionTabEntry(
     orientation: "horizontal" | "vertical"
     serverCtx: ServerCtx | undefined
     view: SessionTabView
+    status: SessionTabStatus | undefined
     shortcut?: number
     muted?: boolean
     menuItems?: () => JSX.Element
@@ -207,25 +208,14 @@ function SessionTabEntry(
     combineColor?: string
     combineOrder?: "before" | "after"
     contextMenuExtra?: () => JSX.Element
-    onUnreadChange: (unread: boolean) => void
     onNavigate: (element: HTMLDivElement) => void
   },
 ) {
   const tabs = useTabs()
   const language = useLanguage()
   const dialog = useDialog()
-  const sdk = createMemo(() => props.serverCtx?.sdk ?? null)
   const persisted = createMemo(() => tabs.info[props.id])
   const session = () => props.view.session
-
-  const status = useSessionTabAvatarState(
-    () => props.tab.server,
-    () => props.tab.sessionId,
-    () => true,
-  )
-
-  // A busy session shows its progress indicator instead of the unread dot; a muted one shows neither.
-  const unread = createMemo(() => status.unread() && !status.loading() && !props.muted)
 
   function DeleteDialog() {
     const confirm = async () => {
@@ -270,62 +260,6 @@ function SessionTabEntry(
     )
   }
 
-  createEffect(() => props.onUnreadChange(unread()))
-
-  onCleanup(() => props.onUnreadChange(false))
-
-  createEffect(() => {
-    const ctx = props.serverCtx
-    const id = props.tab.sessionId
-
-    if (
-      props.view.phase === "preparing" ||
-      props.view.phase === "missing" ||
-      !ctx ||
-      props.active ||
-      (!session() && !persisted()?.title) ||
-      ctx.sdk.connection.status() !== "connected"
-    )
-      return
-
-    const current = props.currentTab
-
-    if (current?.type === "session" && current.server === props.tab.server && current.sessionId !== id) {
-      const active = ctx.data.session.get(current.sessionId)
-
-      if (
-        !active ||
-        ctx.data.location.agent.list(active.location) === undefined ||
-        ctx.data.location.provider.list(active.location) === undefined ||
-        ctx.data.location.model.list(active.location) === undefined ||
-        ctx.data.location.skill.list(active.location) === undefined
-      )
-        return
-    }
-
-    const timer = window.setTimeout(() => syncInactiveSession(ctx, id), 300 + props.index * 50)
-
-    onCleanup(() => window.clearTimeout(timer))
-  })
-
-  createEffect(() => {
-    const value = session()
-
-    if (!value) return
-    tabs.rememberSessionInfo(
-      props.tab,
-      value,
-      props.serverCtx?.data.session.message.list(value.id).some((message) => message.type === "user") ?? false,
-    )
-    const current = sdk()
-
-    if (!current) return
-    createTabComposerState(tabs, props.tab, current.scope, {
-      dir: base64Encode(value.location.directory),
-      id: value.id,
-    })
-  })
-
   return (
     <Show when={props.view.visible}>
       <SessionTabSlot
@@ -340,9 +274,9 @@ function SessionTabEntry(
         orientation={props.orientation}
         session={session()}
         preparing={props.view.phase === "preparing"}
-        unread={unread()}
-        attention={status.attention()}
-        loading={status.loading()}
+        unread={props.status?.unread() ?? false}
+        attention={props.status?.attention() ?? false}
+        loading={props.status?.loading() ?? false}
         shortcut={props.shortcut}
         fallbackTitle={
           {
@@ -370,6 +304,93 @@ function SessionTabEntry(
       />
     </Show>
   )
+}
+
+type SessionTabStatus = ReturnType<typeof createSessionTabTracker>
+
+/**
+ * What an open session tab tracks whether or not its row shows (a collapsed group hides it): its status, the
+ * background load that keeps that status current, and the info and composer state the tab keeps.
+ */
+function createSessionTabTracker(input: {
+  tab: SessionTab
+  key: string
+  index: () => number
+  active: () => boolean
+  muted: () => boolean
+  currentTab: () => Tab | undefined
+  view: () => SessionTabView
+}) {
+  const global = useGlobal()
+  const tabs = useTabs()
+  const ctx = () => global.serverCtx(input.tab.server)
+  const session = () => input.view().session
+
+  const status = useSessionTabAvatarState(
+    () => input.tab.server,
+    () => input.tab.sessionId,
+    () => true,
+  )
+
+  createEffect(() => {
+    const server = ctx()
+    const id = input.tab.sessionId
+    const phase = input.view().phase
+
+    if (
+      phase === "preparing" ||
+      phase === "missing" ||
+      !server ||
+      input.active() ||
+      (!session() && !tabs.info[input.key]?.title) ||
+      server.sdk.connection.status() !== "connected"
+    )
+      return
+
+    const current = input.currentTab()
+
+    if (current?.type === "session" && current.server === input.tab.server && current.sessionId !== id) {
+      const active = server.data.session.get(current.sessionId)
+
+      if (
+        !active ||
+        server.data.location.agent.list(active.location) === undefined ||
+        server.data.location.provider.list(active.location) === undefined ||
+        server.data.location.model.list(active.location) === undefined ||
+        server.data.location.skill.list(active.location) === undefined
+      )
+        return
+    }
+
+    const timer = window.setTimeout(() => syncInactiveSession(server, id), 300 + input.index() * 50)
+
+    onCleanup(() => window.clearTimeout(timer))
+  })
+
+  createEffect(() => {
+    const value = session()
+
+    if (!value) return
+    const server = ctx()
+    tabs.rememberSessionInfo(
+      input.tab,
+      value,
+      server?.data.session.message.list(value.id).some((message) => message.type === "user") ?? false,
+    )
+
+    if (!server) return
+    createTabComposerState(tabs, input.tab, server.sdk.scope, {
+      dir: base64Encode(value.location.directory),
+      id: value.id,
+    })
+  })
+
+  return {
+    // A busy session shows its progress indicator instead of the unread dot; a muted one shows neither.
+    unread: createMemo(() => status.unread() && !status.loading() && !input.muted()),
+    attention: status.attention,
+    loading: status.loading,
+  }
 }
 
 /**
@@ -626,6 +647,8 @@ export type TabStripSection = {
   footer?: JSX.Element
   /** The header already names the project, so session tabs leave out their project avatar. */
   hideAvatars?: boolean
+  /** A divider before the section, setting it apart from the one before. */
+  separator?: boolean
   /** Optional browser-style tab group chrome for vertical and horizontal strips. */
   groupMeta?: {
     color: string
@@ -660,7 +683,7 @@ export function TitlebarTabStrip(props: {
   orientation?: "horizontal" | "vertical"
   highlightActive?: boolean
   tabs: Tab[]
-  /** Groups the rendered tabs under headers. Tabs in no section stay open but are not shown. */
+  /** Groups the rendered tabs. Tabs in no section stay open but are not shown. Top tabs show no headers or footers. */
   sections?: TabStripSection[]
   customVerticalDrag?: CustomVerticalDragBinding
   tabContextMenu?: (tab: Tab) => JSX.Element | undefined
@@ -686,7 +709,7 @@ export function TitlebarTabStrip(props: {
   const language = useLanguage()
   const appTabs = useTabs()
   const vertical = () => props.orientation === "vertical"
-  const sections = () => (vertical() ? props.sections : undefined)
+  const sections = () => props.sections
   const customDrag = () => (vertical() ? props.customVerticalDrag : undefined)
 
   const displayTabs = createMemo(
@@ -716,7 +739,6 @@ export function TitlebarTabStrip(props: {
   onMount(() => {
     if (vertical()) createResizeObserver([scrollRef, listRef], measureFade)
   })
-  const [unread, setUnread] = createStore<Record<string, boolean>>({})
   const [tabLoads, setTabLoads] = createSignal(INITIAL_SESSION_TAB_LOADS_STATE)
   const loadTimers = new Map<number, ReturnType<typeof setTimeout>>()
 
@@ -830,6 +852,48 @@ export function TitlebarTabStrip(props: {
 
   const visibleTabIds = () => visibleTabs().map(tabKey)
 
+  // A section's divider shows only when a row renders on each side of it, not beside tabs still loading.
+  const dividedSections = createMemo(() => {
+    const visible = new Set(visibleTabIds())
+
+    const rendered = (section: TabStripSection) =>
+      (vertical() && !!section.header) || section.tabs.some((tab) => visible.has(tabKey(tab)))
+
+    return new Set(
+      (sections() ?? []).flatMap((section, index, list) =>
+        section.separator && rendered(section) && list.slice(0, index).some(rendered) ? [section.key] : [],
+      ),
+    )
+  })
+
+  // Every session tab this strip owns, shown or hidden in a collapsed group, keeps its status and background load.
+  const ownedSessionTabs = createMemo(() =>
+    props.tabs.filter((tab): tab is SessionTab => tab.type === "session" && !props.hidden?.(tab)),
+  )
+
+  const trackers = createMemo(
+    mapArray(ownedSessionTabs, (tab, index) => {
+      const key = tabKey(tab)
+
+      return [
+        key,
+        createSessionTabTracker({
+          tab,
+          key,
+          index,
+          active: () => props.currentTab === tab,
+          muted: () => (vertical() ? !!props.tabMuted?.(tab) : false),
+          currentTab: () => props.currentTab,
+          view: () => views().get(key) ?? hiddenTabView,
+        }),
+      ] as const
+    }),
+  )
+
+  const trackerByKey = createMemo(() => new Map(trackers()))
+
+  const unread = (key: string) => !!trackerByKey().get(key)?.unread()
+
   const leading = () => props.leading
 
   const leadingKeys = () => leading()?.keys ?? []
@@ -840,7 +904,7 @@ export function TitlebarTabStrip(props: {
     const current = props.currentTab ? tabKey(props.currentTab) : undefined
 
     setSidebarUnread(
-      props.tabs.some((tab) => tab !== props.currentTab && !!unread[tabKey(tab)]) ||
+      props.tabs.some((tab) => tab !== props.currentTab && unread(tabKey(tab))) ||
         leadingKeys().some((key) => key !== current && !!leading()?.unread(key)),
     )
     onCleanup(() => setSidebarUnread(false))
@@ -852,7 +916,7 @@ export function TitlebarTabStrip(props: {
   const hints = createSessionRowNavigation({
     keys: () => [...leadingKeys(), ...visibleTabIds()],
     current: () => (props.currentTab ? tabKey(props.currentTab) : undefined),
-    unread: (key) => !!unread[key] || (leadingKeys().includes(key) && !!leading()?.unread(key)),
+    unread: (key) => unread(key) || (leadingKeys().includes(key) && !!leading()?.unread(key)),
     navigate: (key, reveal) => {
       if (leadingKeys().includes(key)) {
         leading()?.navigate(key, reveal)
@@ -909,7 +973,6 @@ export function TitlebarTabStrip(props: {
       return (
         <SessionTabEntry
           tab={tab}
-          currentTab={props.currentTab}
           id={id}
           index={visibleIndex()}
           group={group}
@@ -921,6 +984,7 @@ export function TitlebarTabStrip(props: {
           orientation={vertical() ? "vertical" : "horizontal"}
           serverCtx={serverCtx()}
           view={views().get(id) ?? hiddenTabView}
+          status={trackerByKey().get(id)}
           shortcut={shortcut(visibleIndex())}
           muted={vertical() ? props.tabMuted?.(tab) : undefined}
           menuItems={vertical() && props.tabMenu ? () => props.tabMenu?.(tab) : undefined}
@@ -931,7 +995,6 @@ export function TitlebarTabStrip(props: {
           combineColor={customDrag()?.combineOfTab(id)?.color}
           combineOrder={customDrag()?.combineOfTab(id)?.sourceOrder}
           contextMenuExtra={menuExtra}
-          onUnreadChange={(value) => setUnread(id, value)}
           onNavigate={(element) => {
             ref = element
             props.onNavigate(tab, element)
@@ -994,9 +1057,18 @@ export function TitlebarTabStrip(props: {
                 when={section().groupMeta && !section().groupMeta?.ungrouped ? section().groupMeta : undefined}
                 fallback={
                   <>
-                    {section().header}
+                    <Show when={dividedSections().has(section().key)}>
+                      <div
+                        role="separator"
+                        aria-hidden="true"
+                        data-tab-group-separator
+                        class="shrink-0 bg-v2-border-border-muted"
+                        classList={{ "h-4 w-px": !vertical(), "mx-2 my-2 h-px": vertical() }}
+                      />
+                    </Show>
+                    {vertical() ? section().header : undefined}
                     <For each={section().tabs}>{(tab) => renderTab(tab, section())}</For>
-                    {section().footer}
+                    {vertical() ? section().footer : undefined}
                   </>
                 }
               >

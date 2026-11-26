@@ -44,7 +44,7 @@ opencode-util = { path = "crates/util" }
 
 # OpenTUI's Rust crates (`packages/rust` of anomalyco/opentui), pinned exactly to a release on crates.io. The crate
 # has no native library: script/opentui-native.ts installs the release's, checked against its table; see README.md.
-opentui = { version = "=0.9.8", features = ["static", "tokio", "tree-sitter"] }
+opentui = { version = "=0.9.9", features = ["static", "tokio", "tree-sitter"] }
 
 # Expected third-party crates, declared once so steps rarely edit manifests. A crate takes one with
 # `name.workspace = true` and adds features with `features = [...]`.

@@ -2,7 +2,16 @@ import { describe, expect, test } from "bun:test"
 import type { McpServer } from "@agentclientprotocol/sdk"
 import { Schema } from "effect"
 import { currentValue } from "./select-options"
-import { makeSession, rpcError, secondModel, startWire, type Wire } from "./wire-fixture"
+import {
+  durableEvent,
+  ephemeralEvent,
+  makeSession,
+  rpcError,
+  secondModel,
+  startSession,
+  startWire,
+  type Wire,
+} from "./wire-fixture"
 
 describe("acp session lifecycle over the wire", () => {
   test("initialize advertises capabilities, negotiates the version, and offers terminal auth only when asked", async () => {
@@ -219,6 +228,69 @@ describe("acp session lifecycle over the wire", () => {
     expect(new Set(acp.server.sessions.keys())).toEqual(existing)
     expect(acp.server.requests.filter((request) => request.path.includes("ses_saved"))).toEqual([])
     expect(acp.logs).toEqual([])
+  })
+
+  test("pushes a session's new title to the client (#56894)", async () => {
+    await using acp = await startSession()
+    acp.server.send(durableEvent("session.renamed", { sessionID: acp.sessionId, title: "Fix the build" }))
+
+    expect(
+      await acp.waitForUpdate((item) => item.update.sessionUpdate === "session_info_update", "title update"),
+    ).toEqual({ sessionId: acp.sessionId, update: { sessionUpdate: "session_info_update", title: "Fix the build" } })
+  })
+
+  test("links subagent sessions to their parent in session/list (#59406)", async () => {
+    await using acp = await startWire()
+    acp.server.sessions.set("ses_root", makeSession("ses_root", { time: { created: 0, updated: 2 } }))
+    acp.server.sessions.set(
+      "ses_child",
+      makeSession("ses_child", { parentID: "ses_root", time: { created: 0, updated: 1 } }),
+    )
+    await acp.initialize()
+
+    const listed = await acp.request("session/list", { cwd: "/workspace" })
+
+    expect(listed.sessions.map((session) => [session.sessionId, session._meta])).toEqual([
+      ["ses_root", undefined],
+      [
+        "ses_child",
+        { "opencode/child-session": { id: "ses_child", parentID: "ses_root", title: "Session ses_child" } },
+      ],
+    ])
+  })
+
+  test("loads a session moved into a worktree of the cwd's project and names the directory otherwise (#66573)", async () => {
+    await using acp = await startWire()
+    acp.server.sessions.set("ses_moved", makeSession("ses_moved", { cwd: "/worktrees/fix", projectID: "prj_app" }))
+    await acp.initialize()
+    const load = () => acp.request("session/load", { cwd: "/workspace", sessionId: "ses_moved", mcpServers: [] })
+
+    expect(await rpcError(load())).toEqual({
+      code: -32602,
+      message: "Invalid params: session ses_moved does not belong to cwd: /workspace",
+      data: { sessionId: "ses_moved", cwd: "/workspace", directory: "/worktrees/fix" },
+    })
+    acp.server.catalog.projectID = "prj_app"
+    expect(currentValue(await load(), "model")).toBe("test/test-model")
+  })
+
+  test("adds a session's MCP servers again after its Location shuts down (#57902)", async () => {
+    const server: McpServer = { name: "tools", command: "bun", args: ["server.ts"], env: [] }
+    await using acp = await startWire()
+    await acp.initialize()
+    const session = await acp.newSession("/workspace", [server])
+    const other = await acp.newSession("/elsewhere", [server])
+    await acp.prompt(session.sessionId, "before")
+    expect(acp.server.mcp.map((item) => item.directory)).toEqual(["/workspace", "/elsewhere"])
+
+    acp.server.send(ephemeralEvent("location.shutdown", {}, { directory: "/workspace" }))
+    // Selection and title events share one stream, so the title arriving means the shutdown was seen.
+    acp.server.send(durableEvent("session.renamed", { sessionID: session.sessionId, title: "after" }))
+    await acp.waitForUpdate((item) => item.update.sessionUpdate === "session_info_update")
+    await acp.prompt(session.sessionId, "after")
+    await acp.prompt(other.sessionId, "elsewhere")
+
+    expect(acp.server.mcp.map((item) => item.directory)).toEqual(["/workspace", "/elsewhere", "/workspace"])
   })
 
   test("close removes a new session that was never prompted and keeps every other session", async () => {

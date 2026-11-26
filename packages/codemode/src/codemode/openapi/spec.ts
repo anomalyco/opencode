@@ -273,8 +273,8 @@ export const componentDefinitions = (
 
 const withDefinitions = (schema: JsonSchema, definitions: Readonly<Record<string, JsonSchema>>): JsonSchema => {
   if (Object.keys(definitions).length === 0) return schema
-  const local = isRecord(schema.$defs) ? schema.$defs : {}
-  return { ...schema, $defs: { ...definitions, ...local } }
+  if (!isRecord(schema.$defs)) return { ...schema, $defs: definitions }
+  return { ...schema, $defs: { ...definitions, ...schema.$defs } }
 }
 
 const isJsonMediaType = (mediaType: string): boolean => {

@@ -2140,9 +2140,19 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "SkillLoadError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillLoadErrorEncoded"
+                }
+              }
+            }
           }
         },
-        "description": "Send a user message and start the agent unless resume is false. Returns once the message is queued, not when the agent finishes: wait with experimental.session.wait or the session.execution.* events, then read the reply with session.message.list.",
+        "description": "Send a user message and start the agent unless resume is false. Returns once the message is queued, not when the agent finishes: wait with POST /api/experimental/session/:sessionID/wait or the session.execution.* events, then read the reply with GET /api/session/:sessionID/message. An archived session is unarchived.",
         "summary": "Send message",
         "requestBody": {
           "content": {
@@ -2287,7 +2297,7 @@
             }
           }
         },
-        "description": "Run a named command in the session. Most commands send a prompt, so like session.prompt this returns before the agent finishes.",
+        "description": "Run a named command in the session. Most commands send a prompt, so like session.prompt this returns before the agent finishes. An archived session is unarchived.",
         "summary": "Run command",
         "requestBody": {
           "content": {
@@ -2398,9 +2408,19 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "SkillLoadError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillLoadErrorEncoded"
+                }
+              }
+            }
           }
         },
-        "description": "Activate a skill for a session by appending a skill message and resuming execution.",
+        "description": "Activate a skill for a session by appending a skill message and resuming execution. An archived session is unarchived.",
         "summary": "Activate skill",
         "requestBody": {
           "content": {
@@ -2630,7 +2650,7 @@
             }
           }
         },
-        "description": "Execute one shell command in the session's working directory. Emits a shell.started event before execution and a shell.ended event with the merged output after.",
+        "description": "Execute one shell command in the session's working directory. Emits a shell.started event before execution and a shell.ended event with the merged output after. An archived session is unarchived.",
         "summary": "Run shell command",
         "requestBody": {
           "content": {
@@ -10236,6 +10256,111 @@
         "summary": "List skills"
       }
     },
+    "/api/experimental/skill/{skillID}/file/*": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.skill.file",
+        "parameters": [
+          {
+            "name": "skillID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Skill.ID"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Absolute path of the directory."
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SkillNotFoundError | FileNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FileNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "SkillLoadError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillLoadErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read one file of a skill, loading it when the skill serves it on demand. SKILL.md returns the body without frontmatter. Experimental: may change without compatibility guarantees.",
+        "summary": "Read skill file"
+      }
+    },
     "/api/rpc/{rpcID}/{method}": {
       "post": {
         "tags": ["rpc"],
@@ -10456,6 +10581,7 @@
                     "form.replied",
                     "form.cancelled",
                     "websearch.updated",
+                    "experimental.push.updated",
                     "artifact.updated",
                     "session.status",
                     "session.idle",
@@ -10568,6 +10694,7 @@
                           "form.replied",
                           "form.cancelled",
                           "websearch.updated",
+                          "experimental.push.updated",
                           "artifact.updated",
                           "session.status",
                           "session.idle",
@@ -12460,6 +12587,59 @@
         "summary": "Read a blob"
       }
     },
+    "/api/experimental/browser/tunnel": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.browser.tunnel",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Upgrade to a binary WebSocket carrying multiplexed TCP streams for one live desktop browser attachment. Requires a short-lived, single-use attachment-bound ticket in the x-opencode-browser-ticket header minted through authenticated browser RPC. Never accepts a session ID or browser cookie alone. Experimental: may change without compatibility guarantees.",
+        "summary": "Open a browser attachment binary stream tunnel",
+        "x-websocket": true
+      }
+    },
     "/api/experimental/automation": {
       "post": {
         "tags": ["experimental"],
@@ -14181,6 +14361,902 @@
         },
         "description": "Forget a machine by name, closing any live link and revoking its key. Behind the machines flag. Experimental: may change without compatibility guarantees.",
         "summary": "Remove a machine"
+      }
+    },
+    "/api/experimental/push": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.get",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Push.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List the registered phones with their choices, bells and pauses, the server-wide pause and the shared session bells. Never returns callback URLs or keys. Experimental: may change without compatibility guarantees.",
+        "summary": "Get push settings"
+      }
+    },
+    "/api/experimental/push/device/{deviceID}": {
+      "put": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.register",
+        "parameters": [
+          {
+            "name": "deviceID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Push.Registered"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Register or renew a phone's relay callback URL and public key, and answer with the server's public key for it. Keeps the phone's pause, session bells and, unless given, its level. Experimental: may change without compatibility guarantees.",
+        "summary": "Register a phone",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.Register"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.remove",
+        "parameters": [
+          {
+            "name": "deviceID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Stop sending notifications to a phone. Experimental: may change without compatibility guarantees.",
+        "summary": "Remove a phone"
+      },
+      "patch": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.update",
+        "parameters": [
+          {
+            "name": "deviceID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Push.Device"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PushDeviceNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushDeviceNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Pause or resume notifications to one phone, or change the level it gets by default. Experimental: may change without compatibility guarantees.",
+        "summary": "Update a phone",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.DevicePatch"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/push/device/{deviceID}/session/{sessionID}": {
+      "put": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.session.set",
+        "parameters": [
+          {
+            "name": "deviceID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Push.Bell"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PushDeviceNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushDeviceNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Choose what one phone gets for one session. Experimental: may change without compatibility guarantees.",
+        "summary": "Set a phone's session bell",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.Bell"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.session.remove",
+        "parameters": [
+          {
+            "name": "deviceID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PushDeviceNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushDeviceNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Let one phone follow the shared bell or its default for one session again. Experimental: may change without compatibility guarantees.",
+        "summary": "Clear a phone's session bell"
+      }
+    },
+    "/api/experimental/push/session/{sessionID}": {
+      "put": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.session.set",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Push.Bell"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Choose what every phone gets for one session. Experimental: may change without compatibility guarantees.",
+        "summary": "Set a session bell",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.Bell"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.session.remove",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Let every phone follow its default for one session again. Experimental: may change without compatibility guarantees.",
+        "summary": "Clear a session bell"
+      }
+    },
+    "/api/experimental/push/settings": {
+      "put": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.settings.set",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Push.Settings"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Pause or resume notifications to every phone. Experimental: may change without compatibility guarantees.",
+        "summary": "Pause all notifications",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.Settings"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/space/{space}/{key}": {
+      "put": {
+        "tags": ["experimental"],
+        "operationId": "experimental.space.set",
+        "parameters": [
+          {
+            "name": "space",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Space.Name"
+            },
+            "required": true
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Space.Key"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Store a client-defined string of at most 1 MiB of UTF-8, replacing any previous value, and send it to the space's subscribers unchanged. The server does not interpret it; its format, such as JSON text, is up to the client. To follow a space, a client opens /api/event and reads its stream ID from server.connected, syncs with experimental.space.sync until no `next` remains, then subscribes the stream with the saved cursor through experimental.space.subscribe and applies the stream's events in order. On experimental.space.resync it syncs and subscribes that space again; after a reconnect it subscribes again with its latest cursor. Experimental: may change without compatibility guarantees.",
+        "summary": "Set value",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "value": {
+                    "$ref": "#/components/schemas/Space.Value"
+                  }
+                },
+                "required": ["value"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.space.delete",
+        "parameters": [
+          {
+            "name": "space",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Space.Name"
+            },
+            "required": true
+          },
+          {
+            "name": "key",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Space.Key"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Remove a stored value and tell the space's subscribers. Removing an unset key succeeds. To follow a space, a client opens /api/event and reads its stream ID from server.connected, syncs with experimental.space.sync until no `next` remains, then subscribes the stream with the saved cursor through experimental.space.subscribe and applies the stream's events in order. On experimental.space.resync it syncs and subscribes that space again; after a reconnect it subscribes again with its latest cursor. Experimental: may change without compatibility guarantees.",
+        "summary": "Delete value"
+      }
+    },
+    "/api/experimental/space/{space}": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.space.sync",
+        "parameters": [
+          {
+            "name": "space",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Space.Name"
+            },
+            "required": true
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/Space.Cursor"
+                }
+              ]
+            },
+            "required": false,
+            "description": "A page's `next`, or a saved `cursor`. Without one, or with one this database cannot use, sync starts from a snapshot."
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Space.Page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Space.Page"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read one page of at most 500 keys: a snapshot that replaces what the client holds, or a delta of the keys changed and deleted since the cursor. A delta whose deletions were purged comes back as a snapshot. To follow a space, a client opens /api/event and reads its stream ID from server.connected, syncs with experimental.space.sync until no `next` remains, then subscribes the stream with the saved cursor through experimental.space.subscribe and applies the stream's events in order. On experimental.space.resync it syncs and subscribes that space again; after a reconnect it subscribes again with its latest cursor. Experimental: may change without compatibility guarantees.",
+        "summary": "Sync space"
+      }
+    },
+    "/api/experimental/space/subscribe": {
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.space.subscribe",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Send a space's changes to an open event stream, replacing any earlier subscription of that space on it: first the changes since the cursor as experimental.space.updated and experimental.space.deleted events in revision order, or experimental.space.resync when they do not fit one page or the cursor is unusable, then every later change the same way, none missed or repeated. To follow a space, a client opens /api/event and reads its stream ID from server.connected, syncs with experimental.space.sync until no `next` remains, then subscribes the stream with the saved cursor through experimental.space.subscribe and applies the stream's events in order. On experimental.space.resync it syncs and subscribes that space again; after a reconnect it subscribes again with its latest cursor. Experimental: may change without compatibility guarantees.",
+        "summary": "Subscribe stream",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "stream": {
+                    "type": "string",
+                    "description": "The stream ID from the stream's server.connected event."
+                  },
+                  "spaces": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "properties": {
+                        "space": {
+                          "$ref": "#/components/schemas/Space.Name"
+                        },
+                        "cursor": {
+                          "$ref": "#/components/schemas/Space.Cursor"
+                        }
+                      },
+                      "required": ["space", "cursor"],
+                      "additionalProperties": false
+                    }
+                  }
+                },
+                "required": ["stream", "spaces"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/space/unsubscribe": {
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.space.unsubscribe",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Stop sending these spaces' changes to an open event stream, including a catch-up still going out. Spaces it does not follow are ignored. To follow a space, a client opens /api/event and reads its stream ID from server.connected, syncs with experimental.space.sync until no `next` remains, then subscribes the stream with the saved cursor through experimental.space.subscribe and applies the stream's events in order. On experimental.space.resync it syncs and subscribes that space again; after a reconnect it subscribes again with its latest cursor. Experimental: may change without compatibility guarantees.",
+        "summary": "Unsubscribe stream",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "stream": {
+                    "type": "string",
+                    "description": "The stream ID from the stream's server.connected event."
+                  },
+                  "spaces": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Space.Name"
+                    }
+                  }
+                },
+                "required": ["stream", "spaces"],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/space/reset": {
+      "post": {
+        "tags": ["experimental"],
+        "operationId": "experimental.space.reset",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Replace the epoch, so every client's saved cursor becomes unusable and its next sync starts from a snapshot. A restored backup brings back its old epoch, and cursors issued after the backup would then get wrong deltas: after restoring one, call this before clients reconnect, and do not serve writes or subscribers until it has run. To follow a space, a client opens /api/event and reads its stream ID from server.connected, syncs with experimental.space.sync until no `next` remains, then subscribes the stream with the saved cursor through experimental.space.subscribe and applies the stream's events in order. On experimental.space.resync it syncs and subscribes that space again; after a reconnect it subscribes again with its latest cursor. Experimental: may change without compatibility guarantees.",
+        "summary": "Reset revisions"
       }
     },
     "/api/shell": {
@@ -16372,6 +17448,97 @@
         "summary": "Get usage limits"
       }
     },
+    "/api/experimental/flag": {
+      "get": {
+        "tags": ["flag"],
+        "operationId": "experimental.flag.get",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Absolute path of the directory."
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.PublicRef"
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Experimental. Return the resolved feature flags the location's clients may act on, keyed by flag name. Flags not listed are off.",
+        "summary": "Get feature flags"
+      }
+    },
     "/api/config": {
       "get": {
         "tags": ["config"],
@@ -17869,10 +19036,10 @@
               "recommended_api": {
                 "type": "boolean"
               },
-              "model_speeds": {
+              "full_codemode": {
                 "type": "boolean"
               },
-              "full_codemode": {
+              "codemode_agents": {
                 "type": "boolean"
               },
               "machines": {
@@ -17887,7 +19054,16 @@
               "opencode_api": {
                 "type": "boolean"
               },
+              "mcp_skills": {
+                "type": "boolean"
+              },
+              "compaction_jobs": {
+                "type": "boolean"
+              },
               "sqlite_fts": {
+                "type": "boolean"
+              },
+              "browser_stream_tunnel": {
                 "type": "boolean"
               },
               "video_generate": {
@@ -22461,7 +23637,7 @@
         "anyOf": [
           {
             "type": "string",
-            "enum": ["chat", "decision", "image", "video"]
+            "enum": ["chat", "decision", "image", "video", "realtime", "embedding", "transcription"]
           },
           {
             "type": "string"
@@ -23863,6 +25039,202 @@
           }
         },
         "required": ["ticket", "expires_in"],
+        "additionalProperties": false
+      },
+      "Push.Bell": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "$ref": "#/components/schemas/Push.Level"
+          },
+          "until": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch"
+          }
+        },
+        "required": ["level"],
+        "additionalProperties": false
+      },
+      "Push.Device": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Push.DeviceID"
+          },
+          "name": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Push.Platform"
+          },
+          "expiresAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Push.DeviceSettings"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "sessions": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Push.Bell"
+            }
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Milliseconds since the Unix epoch"
+              },
+              "updated": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Milliseconds since the Unix epoch"
+              }
+            },
+            "required": ["created", "updated"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "name", "platform", "expiresAt", "settings", "paused", "sessions", "time"],
+        "additionalProperties": false
+      },
+      "Push.DeviceID": {
+        "type": "string",
+        "description": "A lowercase canonical UUID chosen by the phone"
+      },
+      "Push.DevicePatch": {
+        "type": "object",
+        "properties": {
+          "paused": {
+            "type": "boolean"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Push.DeviceSettings"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Push.DeviceSettings": {
+        "type": "object",
+        "properties": {
+          "default": {
+            "$ref": "#/components/schemas/Push.Level"
+          }
+        },
+        "required": ["default"],
+        "additionalProperties": false
+      },
+      "Push.Info": {
+        "type": "object",
+        "properties": {
+          "settings": {
+            "$ref": "#/components/schemas/Push.Settings"
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Push.Device"
+            }
+          },
+          "sessions": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Push.Bell"
+            }
+          }
+        },
+        "required": ["settings", "devices", "sessions"],
+        "additionalProperties": false
+      },
+      "Push.Level": {
+        "type": "string",
+        "enum": ["all", "attention", "none"]
+      },
+      "Push.Platform": {
+        "type": "string",
+        "enum": ["android", "ios"]
+      },
+      "Push.Register": {
+        "type": "object",
+        "properties": {
+          "callbackURL": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch"
+          },
+          "publicKey": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Push.Platform"
+          },
+          "name": {
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Push.DeviceSettings"
+          }
+        },
+        "required": ["callbackURL", "expiresAt", "publicKey", "platform", "name"],
+        "additionalProperties": false
+      },
+      "Push.Registered": {
+        "type": "object",
+        "properties": {
+          "publicKey": {
+            "type": "string"
+          }
+        },
+        "required": ["publicKey"],
+        "additionalProperties": false
+      },
+      "Push.Settings": {
+        "type": "object",
+        "properties": {
+          "paused": {
+            "type": "boolean"
+          },
+          "until": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch"
+          }
+        },
+        "required": ["paused"],
+        "additionalProperties": false
+      },
+      "PushDeviceNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["PushDeviceNotFoundError"]
+          },
+          "deviceID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "deviceID", "message"],
         "additionalProperties": false
       },
       "Reference.GitSource": {
@@ -26249,7 +27621,8 @@
             "$ref": "#/components/schemas/AbsolutePath"
           },
           "content": {
-            "type": "string"
+            "type": "string",
+            "description": "The SKILL.md body. Empty for a skill whose body loads on demand, such as an MCP skill."
           }
         },
         "required": ["id", "name", "path", "content"],
@@ -26257,6 +27630,23 @@
       },
       "Skill.Name": {
         "type": "string"
+      },
+      "SkillLoadErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["SkillLoadError"]
+          },
+          "skill": {
+            "$ref": "#/components/schemas/Skill.ID"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "skill", "message"],
+        "additionalProperties": false
       },
       "SkillNotFoundErrorEncoded": {
         "type": "object",
@@ -26276,6 +27666,127 @@
         "additionalProperties": false
       },
       "Snapshot.ID": {
+        "type": "string"
+      },
+      "Space.Cursor": {
+        "type": "string"
+      },
+      "Space.Cursor_1": {
+        "type": "string",
+        "description": "Covers every change up to this page; save it to subscribe or sync from."
+      },
+      "Space.Delta": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["delta"]
+          },
+          "space": {
+            "$ref": "#/components/schemas/Space.Name"
+          },
+          "epoch": {
+            "$ref": "#/components/schemas/Space.Epoch"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/Space.Revision"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Space.Entry"
+            }
+          },
+          "cursor": {
+            "$ref": "#/components/schemas/Space.Cursor_1"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Space.Cursor"
+          },
+          "deleted": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Space.Key"
+            }
+          }
+        },
+        "required": ["type", "space", "epoch", "revision", "entries", "cursor", "deleted"],
+        "additionalProperties": false
+      },
+      "Space.Entry": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/Space.Key"
+          },
+          "value": {
+            "$ref": "#/components/schemas/Space.Value"
+          }
+        },
+        "required": ["key", "value"],
+        "additionalProperties": false
+      },
+      "Space.Epoch": {
+        "type": "string"
+      },
+      "Space.Key": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 1024
+      },
+      "Space.Name": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9._-]{1,128}$",
+        "description": "Client-chosen namespace: 1-128 letters, digits, '.', '_' or '-'."
+      },
+      "Space.Page": {
+        "anyOf": [
+          {
+            "$ref": "#/components/schemas/Space.Snapshot"
+          },
+          {
+            "$ref": "#/components/schemas/Space.Delta"
+          }
+        ]
+      },
+      "Space.Revision": {
+        "type": "integer",
+        "minimum": 0,
+        "maximum": 9007199254740991
+      },
+      "Space.Snapshot": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": ["snapshot"]
+          },
+          "space": {
+            "$ref": "#/components/schemas/Space.Name"
+          },
+          "epoch": {
+            "$ref": "#/components/schemas/Space.Epoch"
+          },
+          "revision": {
+            "$ref": "#/components/schemas/Space.Revision"
+          },
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Space.Entry"
+            }
+          },
+          "cursor": {
+            "$ref": "#/components/schemas/Space.Cursor_1"
+          },
+          "next": {
+            "$ref": "#/components/schemas/Space.Cursor"
+          }
+        },
+        "required": ["type", "space", "epoch", "revision", "entries", "cursor"],
+        "additionalProperties": false
+      },
+      "Space.Value": {
         "type": "string"
       },
       "TokenUsage.Info": {
@@ -26835,6 +28346,9 @@
             "$ref": "#/components/schemas/websearch.updated"
           },
           {
+            "$ref": "#/components/schemas/experimental.push.updated"
+          },
+          {
             "$ref": "#/components/schemas/artifact.updated"
           },
           {
@@ -26872,6 +28386,15 @@
           },
           {
             "$ref": "#/components/schemas/experimental.mcp.event"
+          },
+          {
+            "$ref": "#/components/schemas/experimental.space.resync"
+          },
+          {
+            "$ref": "#/components/schemas/experimental.space.updated"
+          },
+          {
+            "$ref": "#/components/schemas/experimental.space.deleted"
           },
           {
             "$ref": "#/components/schemas/V2Event.rpc"
@@ -26945,9 +28468,21 @@
             "enum": ["server.connected"]
           },
           "data": {
-            "not": {
-              "type": "null"
-            }
+            "type": "object",
+            "properties": {
+              "stream": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "This stream's random ID, which addresses it, e.g. in experimental.space.subscribe."
+              }
+            },
+            "additionalProperties": false
           }
         },
         "required": ["id", "type", "data"],
@@ -27701,6 +29236,148 @@
               }
             },
             "required": ["id", "server", "name", "eventId", "timestamp", "data", "cursor"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.push.updated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.push.updated"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "not": {
+              "type": "null"
+            }
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.space.deleted": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.space.deleted"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "space": {
+                "$ref": "#/components/schemas/Space.Name"
+              },
+              "key": {
+                "$ref": "#/components/schemas/Space.Key"
+              },
+              "revision": {
+                "$ref": "#/components/schemas/Space.Revision"
+              }
+            },
+            "required": ["space", "key", "revision"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.space.resync": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.space.resync"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "space": {
+                "$ref": "#/components/schemas/Space.Name"
+              }
+            },
+            "required": ["space"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.space.updated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.space.updated"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "space": {
+                "$ref": "#/components/schemas/Space.Name"
+              },
+              "key": {
+                "$ref": "#/components/schemas/Space.Key"
+              },
+              "value": {
+                "$ref": "#/components/schemas/Space.Value"
+              },
+              "revision": {
+                "$ref": "#/components/schemas/Space.Revision"
+              }
+            },
+            "required": ["space", "key", "value", "revision"],
             "additionalProperties": false
           }
         },
@@ -32285,6 +33962,10 @@
     {
       "name": "usage",
       "description": "Experimental usage limit routes."
+    },
+    {
+      "name": "flag",
+      "description": "Experimental feature flag routes."
     },
     {
       "name": "config",

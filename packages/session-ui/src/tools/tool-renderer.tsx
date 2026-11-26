@@ -7,6 +7,7 @@ import {
   createEffect,
   createMemo,
   createSignal,
+  createContext,
   createUniqueId,
   For,
   Match,
@@ -17,6 +18,7 @@ import {
   Index,
   on,
   untrack,
+  useContext,
   type JSX,
 } from "solid-js"
 import { createStore } from "solid-js/store"
@@ -40,6 +42,7 @@ import { useMarkdown } from "../context/markdown"
 import { getDirectory, getFilename } from "@opencode/util/path"
 import { checksum } from "@opencode/util/encode"
 import { formatExecuteOutput } from "@opencode/util/execute-output"
+import { Badge } from "@opencode/ui/badge"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogBody, DialogHeader, DialogTitle } from "@opencode/ui/dialog"
@@ -58,6 +61,7 @@ import type {
 import {
   currentToolError,
   currentToolGroupedRead,
+  currentToolImages,
   currentToolInput,
   currentToolMetadata,
   currentToolOutput,
@@ -88,6 +92,7 @@ import {
   type SubagentRunState,
 } from "./run-machine"
 import { LinkedText } from "../components/linked-text"
+import { ToolResultImages, type ToolImage } from "./tool-result-images"
 
 export function ShellSubmessage(props: { text: string; animate?: boolean }) {
   let widthRef: HTMLSpanElement | undefined
@@ -498,7 +503,14 @@ export function CurrentContextToolGroup(props: {
     // Collapsing from the stuck header would leave the viewport far below the group, so keep the header in place.
     // Scroll before collapsing because the shorter content would clamp the scroll position first.
     const trigger = root?.querySelector(':scope > [data-component="collapsible"] > [data-slot="collapsible-trigger"]')
-    const stuck = !open && root && trigger ? trigger.getBoundingClientRect().top - root.getBoundingClientRect().top : 0
+
+    // The header rests its top margin away from the group's top, above it here. Anything past that is how far it is stuck.
+    const stuck =
+      !open && root && trigger
+        ? trigger.getBoundingClientRect().top -
+          root.getBoundingClientRect().top -
+          parseFloat(getComputedStyle(trigger).marginTop)
+        : 0
 
     if (stuck > 0 && root) scrollParent(root)?.scrollBy({ top: -stuck, behavior: "instant" })
     props.onOpenChange(open)
@@ -610,7 +622,14 @@ export function CurrentContextToolGroup(props: {
                             </Show>
                           }
                         >
-                          {(part) => <div data-slot="context-tool-group-item">{part.render()}</div>}
+                          {(part) => (
+                            <div
+                              data-slot="context-tool-group-item"
+                              data-script-change={part.file.via === "script" ? "" : undefined}
+                            >
+                              {part.render()}
+                            </div>
+                          )}
                         </Show>
                       }
                     >
@@ -786,6 +805,7 @@ export function CurrentContextToolGroup(props: {
           </Index>
         </div>
       </BasicTool>
+      <ToolResultImages images={tools().flatMap(currentToolImages)} onContentRendered={props.onSizeChange} />
     </div>
   )
 }
@@ -1038,6 +1058,31 @@ export function CurrentFileToolGroup(props: {
   )
 }
 
+/**
+ * Where a script's Output row goes, from the timeline's rows (`scriptOutputLayout`): after its last change when its
+ * changes are drawn right after it, else under its steps.
+ */
+export type ScriptOutputPlacement = {
+  afterChanges: (partID: string) => boolean
+  outputAfter: (fileID: string) => SessionMessageAssistantTool | undefined
+}
+
+const ScriptOutputContext = createContext<ScriptOutputPlacement>({
+  afterChanges: () => false,
+  outputAfter: () => undefined,
+})
+
+export const ScriptOutputProvider = ScriptOutputContext.Provider
+
+// What a script returned, shown as its Output row. A failure shows on its failing row instead.
+function scriptOutputText(status: string | undefined, output: string | undefined, metadata: ToolProps["metadata"]) {
+  if (status === "error" || metadata.error === true) return ""
+
+  return stripAnsi(output ?? "")
+    .replace(/\r\n?/g, "\n")
+    .trim()
+}
+
 /** A file group holding a script's changes: each run in order, direct calls drawn as their own group. */
 export function FileChangeRuns(props: {
   runs: readonly FileRun[]
@@ -1105,6 +1150,16 @@ export function ScriptChanges(props: {
   onSizeChange?: () => void
 }) {
   const i18n = useI18n()
+  const placement = useContext(ScriptOutputContext)
+
+  // The Output row of a script whose last change this is, when its changes are drawn right after it.
+  const outputAfter = (file: FileFact) => {
+    const script = placement.outputAfter(file.id)
+
+    return script
+      ? scriptOutputText(script.state.status, currentToolOutput(script), currentToolMetadata(script))
+      : undefined
+  }
 
   // One wrapper, as a direct patch's files share one, so the turn's gap falls around the list and not between changes.
   return (
@@ -1199,6 +1254,13 @@ export function ScriptChanges(props: {
           )
         }}
       </Index>
+      <Show when={props.files.at(-1) && outputAfter(props.files.at(-1)!)}>
+        {(value) => (
+          <div data-component="execute-tool-calls" data-execute-layout="flat" data-script-output="">
+            <ExecuteOutputRow output={value()} flat />
+          </div>
+        )}
+      </Show>
     </div>
   )
 }
@@ -1262,6 +1324,8 @@ function currentContextToolTrigger(tool: SessionMessageAssistantTool, i18n: Retu
 // SAFETY: tool input and metadata are open per-tool records. GenericTool shows arbitrary input keys, and
 // renderers decode the fields they read with `toolInput` and `toolMetadata`.
 export interface ToolProps {
+  /** The call's part id, where the timeline passes it. */
+  id?: string
   // oxlint-disable-next-line anti-slop/no-unsafe-dictionary-type -- see SAFETY above
   input: Record<string, unknown>
   error?: string
@@ -1471,6 +1535,8 @@ export function ToolDisplay(
   props: ToolProps & {
     id: string
     error?: string
+    /** Images the call returned. A group of calls shows its calls' images itself. */
+    images?: readonly ToolImage[]
   },
 ) {
   const data = useData()
@@ -1556,6 +1622,7 @@ export function ToolDisplay(
             <Dynamic component={render()} {...props} />
           </Match>
         </Switch>
+        <ToolResultImages images={props.images ?? []} onContentRendered={props.onContentRendered} />
       </div>
     </Show>
   )
@@ -2042,10 +2109,13 @@ ToolRegistry.register({
   name: "execute",
   render(props) {
     const i18n = useI18n()
+    const data = useData()
     const dialog = useDialog()
     const pending = () => props.status === "streaming" || props.status === "running"
     const count = createMemo(() => executeToolCallCount(props.metadata))
     const subtitle = createMemo(() => executeToolSubtitle(props.metadata))
+    // `full_codemode` draws the flat layout: a static title over steps that always show, Output after its changes.
+    const flat = () => data.flag("full_codemode")
     const code = createMemo(() => (toolInput(props.input).code ?? "").trimEnd())
 
     // A runtime failure shows its output on the failing row; a successful script shows its result below the calls.
@@ -2057,13 +2127,10 @@ ToolRegistry.register({
       return text.replace(/^Error:\s*/, "").trim() || fallback
     })
 
-    const output = createMemo(() =>
-      error()
-        ? ""
-        : stripAnsi(props.output ?? "")
-            .replace(/\r\n?/g, "\n")
-            .trim(),
-    )
+    const output = createMemo(() => scriptOutputText(props.status, props.output, props.metadata))
+    // When its changes are drawn right after it, its Output row follows them: steps, changes, then Output.
+    const placement = useContext(ScriptOutputContext)
+    const outputHere = () => !!output() && !(flat() && props.id && placement.afterChanges(props.id))
 
     // A runtime failure belongs to the call that raised it; scripts can also fail outside any call.
     const owner = createMemo(() => executeToolErrorIndex(props.metadata))
@@ -2090,27 +2157,30 @@ ToolRegistry.register({
     const viewable = () => props.status !== "streaming" && !!code()
 
     const openDetails = () =>
-      dialog.show(() => (
-        <ExecuteDetails code={code()} output={output()} error={error()} calls={count()} status={props.status} />
-      ))
+      dialog.show(() => <ExecuteDetails code={code()} output={output()} error={error()} status={props.status} />)
 
+    // Flat, the title is static and the calls always show under it: the block never collapses, whatever the timeline asks.
     return (
       <BasicTool
         {...props}
         icon="terminal"
         rail={false}
-        hasContent={count() > 0 || !!error() || !!output()}
+        hasContent={count() > 0 || !!error() || outputHere()}
         compact
         allowOpenWhilePending
+        locked={flat() || props.locked}
+        open={flat() ? true : props.open}
+        forceOpen={flat() || props.forceOpen}
+        onOpenChange={flat() ? undefined : props.onOpenChange}
         trigger={(open) => (
           <div data-slot="basic-tool-tool-info-structured">
             <div data-slot="basic-tool-tool-info-main">
-              <span data-slot="basic-tool-tool-title">
+              <span data-slot="basic-tool-tool-title" data-execute-title={flat() ? "" : undefined}>
                 <Show when={shimmered()} fallback={i18n.t("ui.tool.execute")}>
                   <TextShimmer text={i18n.t("ui.tool.execute")} active={pending()} />
                 </Show>
               </span>
-              <Show when={!open() && subtitle()}>
+              <Show when={!flat() && !open() && subtitle()}>
                 {(text) => <ShellSubmessage text={text()} animate={sawPending} />}
               </Show>
             </div>
@@ -2131,7 +2201,7 @@ ToolRegistry.register({
           ) : undefined
         }
       >
-        <div data-component="execute-tool-calls">
+        <div data-component="execute-tool-calls" data-execute-layout={flat() ? "flat" : undefined}>
           <Show when={hidden()}>
             {(count) => (
               <button type="button" data-slot="execute-tool-call-more" onClick={reveal}>
@@ -2140,11 +2210,13 @@ ToolRegistry.register({
             )}
           </Show>
           <Index each={visible()}>
-            {(item) => <ExecuteCallRow call={item().call} error={item().index === owner() ? error() : undefined} />}
+            {(item) => (
+              <ExecuteCallRow call={item().call} error={item().index === owner() ? error() : undefined} flat={flat()} />
+            )}
           </Index>
           {/* A failure with no call, or one that belongs to a call still hidden above, shows on its own. */}
-          <Show when={owner() < hidden() && error()}>{(text) => <ExecuteCallRow error={text()} />}</Show>
-          <Show when={output()}>{(value) => <ExecuteOutputRow output={value()} />}</Show>
+          <Show when={owner() < hidden() && error()}>{(text) => <ExecuteCallRow error={text()} flat={flat()} />}</Show>
+          <Show when={outputHere() && output()}>{(value) => <ExecuteOutputRow output={value()} flat={flat()} />}</Show>
         </div>
       </BasicTool>
     )
@@ -2155,39 +2227,42 @@ const executeCallsShown = 10
 
 const executeCallsRevealed = 50
 
-function ExecuteDetails(props: { code: string; output: string; error?: string; calls: number; status?: string }) {
+function ExecuteDetails(props: { code: string; output: string; error?: string; status?: string }) {
   const i18n = useI18n()
   const fileComponent = useFileComponent()
   const lineCount = (text: string) => text.split("\n").length
-  const lines = (text: string) => i18n.plural("ui.tool.execute.lines", lineCount(text))
 
   // Code Mode returns structured results as compact JSON; show those indented, and highlight a bare JSON result.
   const output = createMemo(() => formatExecuteOutput(props.output))
 
-  // Code and output share one number gutter, sized to the longer block, so their content starts on the same column.
+  // Code and output/error share one number gutter, sized to the longer block, so their content starts on the same column.
   const numberDigits = () =>
-    String(Math.max(lineCount(props.code), props.output && !props.error ? lineCount(output().text) : 0)).length
+    String(
+      Math.max(
+        lineCount(props.code),
+        props.error ? lineCount(props.error) : props.output ? lineCount(output().text) : 0,
+      ),
+    ).length
+
+  const statusLabel = () =>
+    props.error
+      ? i18n.t("ui.toolErrorCard.failed")
+      : props.status === "running"
+        ? i18n.t("ui.tool.execute.running")
+        : i18n.t("ui.tool.execute.completed")
 
   return (
     <Dialog size="large" fit>
       <DialogHeader>
         <div data-slot="execute-details-title">
           <DialogTitle>{i18n.t("ui.tool.execute")}</DialogTitle>
-          <span data-slot="execute-details-status" data-status={props.error ? "error" : props.status}>
-            {props.error
-              ? i18n.t("ui.toolErrorCard.failed")
-              : props.status === "running"
-                ? i18n.t("ui.tool.execute.running")
-                : i18n.t("ui.tool.execute.completed")}
-          </span>
-          <span data-slot="execute-details-meta">{i18n.plural("ui.tool.execute.calls", props.calls)}</span>
+          <Badge variant={props.error ? "danger" : "neutral"}>{statusLabel()}</Badge>
         </div>
       </DialogHeader>
       <DialogBody class="min-h-0">
         <div data-component="execute-details" style={{ "--execute-details-number-width": `${numberDigits()}ch` }}>
           <ExecuteDetailsSection
             label={i18n.t("ui.tool.execute.code")}
-            meta={lines(props.code)}
             copy={props.code}
             copyLabel={i18n.t("ui.tool.execute.copyCode")}
           >
@@ -2196,6 +2271,7 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
               mode="text"
               file={{ name: "execute.js", contents: props.code, cacheKey: checksum(props.code) }}
               overflow="wrap"
+              lineHoverHighlight="disabled"
             />
           </ExecuteDetailsSection>
           <Show
@@ -2204,7 +2280,6 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
               <Show when={props.output}>
                 <ExecuteDetailsSection
                   label={i18n.t("ui.tool.execute.output")}
-                  meta={lines(output().text)}
                   copy={output().text}
                   copyLabel={i18n.t("ui.tool.execute.copyOutput")}
                 >
@@ -2217,6 +2292,7 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
                       cacheKey: checksum(output().text),
                     }}
                     overflow="wrap"
+                    lineHoverHighlight="disabled"
                   />
                 </ExecuteDetailsSection>
               </Show>
@@ -2228,7 +2304,15 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
                 copy={error()}
                 copyLabel={i18n.t("ui.toolErrorCard.copyError")}
               >
-                <pre data-slot="execute-details-error">{error()}</pre>
+                <div data-tone="danger">
+                  <Dynamic
+                    component={fileComponent}
+                    mode="text"
+                    file={{ name: "error.txt", contents: error(), cacheKey: checksum(error()) }}
+                    overflow="wrap"
+                    lineHoverHighlight="disabled"
+                  />
+                </div>
               </ExecuteDetailsSection>
             )}
           </Show>
@@ -2240,7 +2324,6 @@ function ExecuteDetails(props: { code: string; output: string; error?: string; c
 
 function ExecuteDetailsSection(props: {
   label: string
-  meta?: string
   copy: string
   copyLabel: string
   children: JSX.Element
@@ -2252,7 +2335,6 @@ function ExecuteDetailsSection(props: {
     <section data-slot="execute-details-section">
       <header data-slot="execute-details-section-header">
         <span data-slot="execute-details-section-label">{props.label}</span>
-        <Show when={props.meta}>{(meta) => <span data-slot="execute-details-section-meta">{meta()}</span>}</Show>
         <Tooltip
           value={copy.copied() ? i18n.t("ui.message.copied") : props.copyLabel}
           placement="top"
@@ -2283,7 +2365,7 @@ function selectsRowText(row: HTMLElement) {
   return row.contains(selection.anchorNode) || row.contains(selection.focusNode)
 }
 
-function ExecuteOutputRow(props: { output: string }) {
+function ExecuteOutputRow(props: { output: string; flat?: boolean }) {
   const i18n = useI18n()
   const [open, setOpen] = createSignal(false)
   const text = createMemo(() => formatExecuteOutput(props.output).text)
@@ -2308,9 +2390,11 @@ function ExecuteOutputRow(props: { output: string }) {
           toggle(event)
         }}
       >
-        <span data-slot="execute-tool-call-marker">
-          <span data-slot="execute-tool-call-arrow">›</span>
-        </span>
+        <Show when={!props.flat}>
+          <span data-slot="execute-tool-call-marker">
+            <span data-slot="execute-tool-call-arrow">›</span>
+          </span>
+        </Show>
         <span data-slot="execute-tool-call-name">{i18n.t("ui.tool.execute.output")}</span>
         <span data-slot="execute-tool-call-args">
           {i18n.plural("ui.tool.execute.lines", text().split("\n").length)}
@@ -2325,7 +2409,7 @@ function ExecuteOutputRow(props: { output: string }) {
   )
 }
 
-function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
+function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string; flat?: boolean }) {
   const [open, setOpen] = createSignal(false)
   const args = createMemo(() => (props.call ? executeToolCallArgs(props.call) : []))
   const input = createMemo(() => Object.entries(props.call?.input ?? {}))
@@ -2357,10 +2441,12 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
           toggle(event)
         }}
       >
-        <Show when={failed()} fallback={<span data-slot="execute-tool-call-marker">›</span>}>
-          <span data-slot="execute-tool-call-marker">
-            <Icon name="outline-hexagonal-warning" size="small" />
-          </span>
+        <Show when={!props.flat}>
+          <Show when={failed()} fallback={<span data-slot="execute-tool-call-marker">›</span>}>
+            <span data-slot="execute-tool-call-marker">
+              <Icon name="outline-hexagonal-warning" size="small" />
+            </span>
+          </Show>
         </Show>
         <Show when={props.call}>
           {(call) => (
@@ -2370,6 +2456,12 @@ function ExecuteCallRow(props: { call?: ExecuteToolCall; error?: string }) {
               </Show>
             </span>
           )}
+        </Show>
+        {/* Flat, after the name, so every call's name lines up with the title; a failure without a call leads with it. */}
+        <Show when={props.flat && failed()}>
+          <span data-slot="execute-tool-call-marker">
+            <Icon name="outline-hexagonal-warning" size="small" />
+          </span>
         </Show>
         <Show when={!open() && summary()}>
           {(text) => (

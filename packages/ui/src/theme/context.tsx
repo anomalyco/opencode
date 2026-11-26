@@ -66,6 +66,7 @@ function knownThemes() {
 const names = new Map(
   Object.entries({
     "oc-2": "OpenCode",
+    alabaster: "Alabaster",
     amoled: "AMOLED",
     aura: "Aura",
     ayu: "Ayu",
@@ -75,6 +76,7 @@ const names = new Map(
     "catppuccin-macchiato": "Catppuccin Macchiato",
     cobalt2: "Cobalt2",
     cursor: "Cursor",
+    cyberdream: "Cyberdream",
     dracula: "Dracula",
     everforest: "Everforest",
     flexoki: "Flexoki",
@@ -85,6 +87,7 @@ const names = new Map(
     material: "Material",
     matrix: "Matrix",
     mercury: "Mercury",
+    modus: "Modus",
     monokai: "Monokai",
     nightowl: "Night Owl",
     nord: "Nord",
@@ -92,7 +95,9 @@ const names = new Map(
     onedarkpro: "One Dark Pro",
     orng: "Orng",
     "osaka-jade": "Osaka Jade",
+    oxocarbon: "Oxocarbon",
     palenight: "Palenight",
+    poimandres: "Poimandres",
     rosepine: "Rose Pine",
     shadesofpurple: "Shades of Purple",
     solarized: "Solarized",
@@ -100,6 +105,7 @@ const names = new Map(
     tokyonight: "Tokyonight",
     vercel: "Vercel",
     vesper: "Vesper",
+    vscode: "VS Code",
     zenburn: "Zenburn",
   }),
 )
@@ -149,12 +155,26 @@ function getSystemMode(): "light" | "dark" {
   return globalThis.matchMedia?.("(prefers-color-scheme: dark)").matches ? "dark" : "light"
 }
 
+function resolveRootHex(tokens: Record<string, string>, key: string, fallback: string): string {
+  let current = tokens[key]
+
+  for (let i = 0; i < 6 && current?.startsWith("var(--"); i++) {
+    current = tokens[current.slice(6, -1)]
+  }
+
+  if (current && /^#[0-9a-fA-F]{6,8}$/.test(current)) return current.slice(0, 7)
+
+  return fallback
+}
+
 function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "dark") {
   const isDark = mode === "dark"
   const variant = isDark ? theme.dark : theme.light
   const tokens = resolveThemeVariant(variant, isDark)
+  const v2Tokens = resolveThemeVariantV2(variant, isDark)
   const css = themeToCss(tokens)
-  const v2 = themeV2ToCss(resolveThemeVariantV2(variant, isDark))
+  const v2 = themeV2ToCss(v2Tokens)
+  const rootBg = resolveRootHex(v2Tokens, "v2-background-bg-deep", isDark ? "#080808" : "#fafafa")
 
   const fullCss = `:root {
   color-scheme: ${mode};
@@ -167,12 +187,12 @@ function applyThemeCss(theme: DesktopTheme, themeId: string, mode: "light" | "da
   ensureThemeStyleElement().textContent = fullCss
   document.documentElement.dataset.theme = themeId
   document.documentElement.dataset.colorScheme = mode
-  document.documentElement.style.backgroundColor = isDark ? "#080808" : "#fafafa"
+  document.documentElement.style.backgroundColor = rootBg
 
-  // Update theme-color meta tag to match light/dark mode
+  // Update theme-color meta tag to match active theme background
   const meta = document.querySelector('meta[name="theme-color"]')
 
-  if (meta) meta.setAttribute("content", isDark ? "#080808" : "#fafafa")
+  if (meta) meta.setAttribute("content", rootBg)
 }
 
 function cacheThemeVariants(theme: DesktopTheme) {

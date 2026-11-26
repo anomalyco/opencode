@@ -76,7 +76,7 @@ export type AttachmentOutcome = "closed" | "replaced" | "missing" | "unavailable
 /** A browser control event from the server's stream, as this binding reads it. */
 export type ControlFrame =
   | { readonly kind: "foreign" }
-  | { readonly kind: "attached" }
+  | { readonly kind: "attached"; readonly capabilities: readonly string[] }
   | { readonly kind: "command"; readonly requestID: string }
   | { readonly kind: "cancel"; readonly requestID: string }
   /** An `attached` handshake this desktop cannot decode: the server speaks another protocol version. */
@@ -209,7 +209,7 @@ export function resolveControlFrame(
       ? { kind: "incompatible" }
       : { kind: "unrecognized", controlType: header.value.type }
 
-  if (control.value.type === "attached") return { kind: "attached" }
+  if (control.value.type === "attached") return { kind: "attached", capabilities: control.value.capabilities ?? [] }
 
   return { kind: control.value.type, requestID: control.value.requestID }
 }

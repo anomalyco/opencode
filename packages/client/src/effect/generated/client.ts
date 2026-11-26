@@ -247,6 +247,7 @@ import type {
   ExperimentalPersistentPtyRemoveOutput,
   ExperimentalPersistentPtyConnectTokenInput,
   ExperimentalPersistentPtyConnectTokenOutput,
+  ExperimentalBrowserTunnelOutput,
   ExperimentalAutomationCreateInput,
   ExperimentalAutomationCreateOutput,
   ExperimentalAutomationListInput,
@@ -280,6 +281,34 @@ import type {
   ExperimentalMachineAddOutput,
   ExperimentalMachineRemoveInput,
   ExperimentalMachineRemoveOutput,
+  ExperimentalPushGetOutput,
+  ExperimentalPushDeviceRegisterInput,
+  ExperimentalPushDeviceRegisterOutput,
+  ExperimentalPushDeviceRemoveInput,
+  ExperimentalPushDeviceRemoveOutput,
+  ExperimentalPushDeviceUpdateInput,
+  ExperimentalPushDeviceUpdateOutput,
+  ExperimentalPushDeviceSessionSetInput,
+  ExperimentalPushDeviceSessionSetOutput,
+  ExperimentalPushDeviceSessionRemoveInput,
+  ExperimentalPushDeviceSessionRemoveOutput,
+  ExperimentalPushSessionSetInput,
+  ExperimentalPushSessionSetOutput,
+  ExperimentalPushSessionRemoveInput,
+  ExperimentalPushSessionRemoveOutput,
+  ExperimentalPushSettingsSetInput,
+  ExperimentalPushSettingsSetOutput,
+  ExperimentalSpaceSetInput,
+  ExperimentalSpaceSetOutput,
+  ExperimentalSpaceDeleteInput,
+  ExperimentalSpaceDeleteOutput,
+  ExperimentalSpaceSyncInput,
+  ExperimentalSpaceSyncOutput,
+  ExperimentalSpaceSubscribeInput,
+  ExperimentalSpaceSubscribeOutput,
+  ExperimentalSpaceUnsubscribeInput,
+  ExperimentalSpaceUnsubscribeOutput,
+  ExperimentalSpaceResetOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -324,6 +353,8 @@ import type {
   WebsearchQueryOutput,
   ExperimentalUsageLimitsInput,
   ExperimentalUsageLimitsOutput,
+  ExperimentalFlagGetInput,
+  ExperimentalFlagGetOutput,
   ConfigGetInput,
   ConfigGetOutput,
   ConfigShellsOutput,
@@ -1624,6 +1655,9 @@ const EndpointExperimentalPersistentPtyConnectToken =
       ),
     )
 
+const EndpointExperimentalBrowserTunnel = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalBrowserTunnelOutput>()(raw["browser.tunnel"]({}).pipe(Effect.mapError(mapClientError)))
+
 const EndpointExperimentalAutomationCreate =
   (raw: RawClient["server.experimental"]) => (input: ExperimentalAutomationCreateInput) =>
     preserveEffect<ExperimentalAutomationCreateOutput>()(
@@ -1786,6 +1820,139 @@ const EndpointExperimentalMachineRemove =
       raw["machine.remove"]({ params: { name: input["name"] } }).pipe(Effect.mapError(mapClientError)),
     )
 
+const EndpointExperimentalPushGet = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalPushGetOutput>()(
+    raw["push.get"]({}).pipe(
+      Effect.mapError(mapClientError),
+      Effect.map((value) => value.data),
+    ),
+  )
+
+const EndpointExperimentalPushDeviceRegister =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceRegisterInput) =>
+    preserveEffect<ExperimentalPushDeviceRegisterOutput>()(
+      raw["push.device.register"]({
+        params: { deviceID: input["deviceID"] },
+        payload: {
+          callbackURL: input["callbackURL"],
+          expiresAt: input["expiresAt"],
+          publicKey: input["publicKey"],
+          platform: input["platform"],
+          name: input["name"],
+          settings: input["settings"],
+        },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalPushDeviceRemove =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceRemoveInput) =>
+    preserveEffect<ExperimentalPushDeviceRemoveOutput>()(
+      raw["push.device.remove"]({ params: { deviceID: input["deviceID"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalPushDeviceUpdate =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceUpdateInput) =>
+    preserveEffect<ExperimentalPushDeviceUpdateOutput>()(
+      raw["push.device.update"]({
+        params: { deviceID: input["deviceID"] },
+        payload: { paused: input["paused"], settings: input["settings"] },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalPushDeviceSessionSet =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceSessionSetInput) =>
+    preserveEffect<ExperimentalPushDeviceSessionSetOutput>()(
+      raw["push.device.session.set"]({
+        params: { deviceID: input["deviceID"], sessionID: input["sessionID"] },
+        payload: { level: input["level"], until: input["until"] },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalPushDeviceSessionRemove =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushDeviceSessionRemoveInput) =>
+    preserveEffect<ExperimentalPushDeviceSessionRemoveOutput>()(
+      raw["push.device.session.remove"]({
+        params: { deviceID: input["deviceID"], sessionID: input["sessionID"] },
+      }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalPushSessionSet =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushSessionSetInput) =>
+    preserveEffect<ExperimentalPushSessionSetOutput>()(
+      raw["push.session.set"]({
+        params: { sessionID: input["sessionID"] },
+        payload: { level: input["level"], until: input["until"] },
+      }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalPushSessionRemove =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushSessionRemoveInput) =>
+    preserveEffect<ExperimentalPushSessionRemoveOutput>()(
+      raw["push.session.remove"]({ params: { sessionID: input["sessionID"] } }).pipe(Effect.mapError(mapClientError)),
+    )
+
+const EndpointExperimentalPushSettingsSet =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalPushSettingsSetInput) =>
+    preserveEffect<ExperimentalPushSettingsSetOutput>()(
+      raw["push.settings.set"]({ payload: { paused: input["paused"], until: input["until"] } }).pipe(
+        Effect.mapError(mapClientError),
+        Effect.map((value) => value.data),
+      ),
+    )
+
+const EndpointExperimentalSpaceSet = (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceSetInput) =>
+  preserveEffect<ExperimentalSpaceSetOutput>()(
+    raw["space.set"]({ params: { space: input["space"], key: input["key"] }, payload: { value: input["value"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const EndpointExperimentalSpaceDelete =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceDeleteInput) =>
+    preserveEffect<ExperimentalSpaceDeleteOutput>()(
+      raw["space.delete"]({ params: { space: input["space"], key: input["key"] } }).pipe(
+        Effect.mapError(mapClientError),
+      ),
+    )
+
+const EndpointExperimentalSpaceSync = (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceSyncInput) =>
+  preserveEffect<ExperimentalSpaceSyncOutput>()(
+    raw["space.sync"]({ params: { space: input["space"] }, query: { cursor: input["cursor"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const EndpointExperimentalSpaceSubscribe =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceSubscribeInput) =>
+    preserveEffect<ExperimentalSpaceSubscribeOutput>()(
+      raw["space.subscribe"]({ payload: { stream: input["stream"], spaces: input["spaces"] } }).pipe(
+        Effect.mapError(mapClientError),
+      ),
+    )
+
+const EndpointExperimentalSpaceUnsubscribe =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceUnsubscribeInput) =>
+    preserveEffect<ExperimentalSpaceUnsubscribeOutput>()(
+      raw["space.unsubscribe"]({ payload: { stream: input["stream"], spaces: input["spaces"] } }).pipe(
+        Effect.mapError(mapClientError),
+      ),
+    )
+
+const EndpointExperimentalSpaceReset = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalSpaceResetOutput>()(raw["space.reset"]({}).pipe(Effect.mapError(mapClientError)))
+
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   persistentPty: {
     read: EndpointExperimentalPersistentPtyRead(raw),
@@ -1799,6 +1966,7 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     remove: EndpointExperimentalPersistentPtyRemove(raw),
     connectToken: EndpointExperimentalPersistentPtyConnectToken(raw),
   },
+  browser: { tunnel: EndpointExperimentalBrowserTunnel(raw) },
   automation: {
     create: EndpointExperimentalAutomationCreate(raw),
     list: EndpointExperimentalAutomationList(raw),
@@ -1820,6 +1988,28 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     list: EndpointExperimentalMachineList(raw),
     add: EndpointExperimentalMachineAdd(raw),
     remove: EndpointExperimentalMachineRemove(raw),
+  },
+  push: {
+    get: EndpointExperimentalPushGet(raw),
+    device: {
+      register: EndpointExperimentalPushDeviceRegister(raw),
+      remove: EndpointExperimentalPushDeviceRemove(raw),
+      update: EndpointExperimentalPushDeviceUpdate(raw),
+      session: {
+        set: EndpointExperimentalPushDeviceSessionSet(raw),
+        remove: EndpointExperimentalPushDeviceSessionRemove(raw),
+      },
+    },
+    session: { set: EndpointExperimentalPushSessionSet(raw), remove: EndpointExperimentalPushSessionRemove(raw) },
+    settings: { set: EndpointExperimentalPushSettingsSet(raw) },
+  },
+  space: {
+    set: EndpointExperimentalSpaceSet(raw),
+    delete: EndpointExperimentalSpaceDelete(raw),
+    sync: EndpointExperimentalSpaceSync(raw),
+    subscribe: EndpointExperimentalSpaceSubscribe(raw),
+    unsubscribe: EndpointExperimentalSpaceUnsubscribe(raw),
+    reset: EndpointExperimentalSpaceReset(raw),
   },
 })
 
@@ -2015,6 +2205,13 @@ const adaptGroupExperimentalUsage = (raw: RawClient["server.usage"]) => ({
   limits: EndpointExperimentalUsageLimits(raw),
 })
 
+const EndpointExperimentalFlagGet = (raw: RawClient["server.flag"]) => (input?: ExperimentalFlagGetInput) =>
+  preserveEffect<ExperimentalFlagGetOutput>()(
+    raw["experimental.flag.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroupExperimentalFlag = (raw: RawClient["server.flag"]) => ({ get: EndpointExperimentalFlagGet(raw) })
+
 const EndpointConfigGet = (raw: RawClient["server.config"]) => (input?: ConfigGetInput) =>
   preserveEffect<ConfigGetOutput>()(
     raw["config.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
@@ -2054,6 +2251,7 @@ const adaptClient = (raw: RawClient) => {
       file: adaptGroupExperimentalFile(raw["server.fs"]),
       migration: adaptGroupExperimentalMigration(raw["server.migration"]),
       usage: adaptGroupExperimentalUsage(raw["server.usage"]),
+      flag: adaptGroupExperimentalFlag(raw["server.flag"]),
       config: adaptGroupExperimentalConfig(raw["server.config"]),
     },
     message: adaptGroupMessage(raw["server.message"]),

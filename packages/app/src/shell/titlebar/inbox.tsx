@@ -7,6 +7,7 @@ import {
   createUniqueId,
   For,
   on,
+  onCleanup,
   Show,
   useContext,
   type Accessor,
@@ -23,7 +24,8 @@ import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { Tooltip } from "@opencode/ui/tooltip"
 import { Loader } from "@opencode/ui/loader"
 import { displayName } from "@opencode/ui/project-avatar"
-import { useServers } from "@/runtime/server/registry"
+import type { SessionInfo } from "@opencode/client/promise"
+import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useLanguage } from "@/runtime/i18n/language"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
@@ -31,9 +33,10 @@ import type { LocalProject } from "@/shell/state/layout"
 import { sessionTabTitle } from "./tab-title"
 import { sessionLabel, sessionTitle } from "@/session/title"
 import { createSessionExporter } from "@/session/commands/export-session"
+import { SessionCopyMenu } from "@/session/session-copy-menu"
 import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { RenameDialog } from "./project-session-row"
-import { createSessionInbox, inboxArchived, type InboxEntry, type InboxStatus } from "./inbox-model"
+import { createSessionInbox, inboxArchived, inboxWaiting, type InboxEntry, type InboxStatus } from "./inbox-model"
 import { compareWorking, workingSince } from "./inbox-working"
 import { useGlobal } from "@/runtime/server/runtime"
 import { useLayout } from "@/shell/state/layout"
@@ -41,6 +44,7 @@ import { tabKey, useTabs, type DraftTab } from "@/shell/tabs/tabs"
 import { createDraftComposerState } from "@/composer/state"
 import { pinnedRefs, pinKey } from "@/shell/tabs/pins"
 import { usePins } from "./pinned-area"
+import { createSessionRowNavigation } from "./tab-strip"
 import { isAttachment } from "@/composer/prompt-parts"
 
 const RECENT_LIMIT = 10
@@ -64,8 +68,6 @@ export function SidebarInbox() {
   const layout = useLayout()
   const global = useGlobal()
   const pins = usePins()
-
-  const exporter = createSessionExporter()
 
   const [state, setState, , ready] = persisted(Persist.global("sidebar.inbox"), InboxState, {
     workingExpanded: true,
@@ -136,11 +138,10 @@ export function SidebarInbox() {
 
     const rest = list.filter((entry) => !order.has(entry.key))
 
-    const active = rest.filter((entry) => !inboxArchived(entry))
+    // An archived session that asks for something joins Needs attention until it's answered, then goes back to Archived.
+    const needs = rest.filter(inboxWaiting).toSorted((a, b) => (a.since ?? Infinity) - (b.since ?? Infinity))
 
-    const needs = active
-      .filter((entry) => entry.status === "approval" || entry.status === "input")
-      .toSorted((a, b) => (a.since ?? Infinity) - (b.since ?? Infinity))
+    const active = rest.filter((entry) => !inboxArchived(entry))
 
     // Unread results stay in Recent at their own place, so reading one doesn't move it.
     const settled = active
@@ -153,7 +154,7 @@ export function SidebarInbox() {
     const working = active.filter((entry) => entry.status === "working").toSorted(compareWorking)
 
     const archived = rest
-      .filter(inboxArchived)
+      .filter((entry) => inboxArchived(entry) && !inboxWaiting(entry))
       .toSorted((a, b) => (b.session.time.archived ?? 0) - (a.session.time.archived ?? 0))
 
     const shown = [...needs, ...recent, ...working, ...(state.archivedExpanded ? archived : [])]
@@ -169,6 +170,42 @@ export function SidebarInbox() {
       working,
       shown,
     }
+  })
+
+  // The vertical tab strip's shortcuts, over the session rows in the order they show: ⌘1-9, ⌥↑/⌥↓ and ⇧⌥↑/⇧⌥↓.
+  const rowRefs = new Map<string, HTMLElement>()
+
+  const navigationKeys = () => {
+    const visible = sections()
+
+    const working = state.workingExpanded ? visible.working : []
+
+    return [
+      ...visible.current,
+      ...visible.needs,
+      ...visible.recent,
+      ...(shelf() ? [] : working),
+      ...(state.archivedExpanded ? visible.archived : []),
+      ...(shelf() ? working : []),
+    ].map((entry) => entry.key)
+  }
+
+  createSessionRowNavigation({
+    keys: navigationKeys,
+    current: () => inbox.entries().find((entry) => inbox.selected(entry))?.key,
+    unread: (key) => {
+      const status = inbox.byKey().get(key)?.status
+
+      return status === "done" || status === "failed"
+    },
+    navigate: (key, reveal) => {
+      const entry = inbox.byKey().get(key)
+
+      if (!entry) return
+      inbox.open(entry)
+
+      if (reveal) rowRefs.get(key)?.scrollIntoView({ behavior: "instant", block: "nearest" })
+    },
   })
 
   // The inbox lists sessions, not tabs, so drafts get their own group: the open one and every other still holding
@@ -240,6 +277,10 @@ export function SidebarInbox() {
         <Show when={inbox.byKey().get(key)}>
           {(entry) => (
             <InboxSessionCard
+              ref={(element) => {
+                rowRefs.set(key, element)
+                onCleanup(() => rowRefs.get(key) === element && rowRefs.delete(key))
+              }}
               project={entry().ctx.projects.forSession(entry().session)}
               directory={entry().session.location.directory}
               title={entry().session.title}
@@ -253,35 +294,22 @@ export function SidebarInbox() {
               archived={inboxArchived(entry())}
               pinned={pinned(entry())}
               actions={
-                <>
-                  <Menu.Item
-                    onSelect={() => (pinned(entry()) ? pins.unpin(pinRef(entry())) : pins.pin(pinRef(entry())))}
-                  >
-                    {language.t(pinned(entry()) ? "sidebar.recent.unpin" : "sidebar.recent.pin")}
-                  </Menu.Item>
-                  <Menu.Item
-                    onSelect={() => {
-                      const current = entry()
+                <InboxSessionMenuItems
+                  server={entry().server}
+                  session={entry().session}
+                  pinned={pinned(entry())}
+                  onRename={() => {
+                    const current = entry()
 
-                      void dialog.show(() => (
-                        <RenameDialog
-                          title={sessionLabel(current.session)}
-                          onRename={(title) => inbox.rename(current, title)}
-                        />
-                      ))
-                    }}
-                  >
-                    {language.t("common.rename")}
-                  </Menu.Item>
-                  <Menu.Item
-                    disabled={exporter.exporting({ server: entry().server, sessionID: entry().session.id })}
-                    onSelect={() => exporter.export({ server: entry().server, sessionID: entry().session.id })}
-                  >
-                    {language.t("common.export")}…
-                  </Menu.Item>
-                  <SessionReadMenuItem server={entry().server} session={entry().session} />
-                  <Menu.Separator />
-                </>
+                    void dialog.show(() => (
+                      <RenameDialog
+                        title={sessionLabel(current.session)}
+                        onRename={(title) => inbox.rename(current, title)}
+                      />
+                    ))
+                  }}
+                  onTogglePin={() => (pinned(entry()) ? pins.unpin(pinRef(entry())) : pins.pin(pinRef(entry())))}
+                />
               }
               onOpen={() => inbox.open(entry())}
               onArchive={() => void inbox.archive(entry())}
@@ -787,7 +815,38 @@ export function InboxDraftCard(props: {
   )
 }
 
+export function InboxSessionMenuItems(props: {
+  server: ServerConnection.Key
+  session: SessionInfo
+  pinned: boolean
+  onRename: () => void
+  onTogglePin: () => void
+}) {
+  const language = useLanguage()
+
+  const exporter = createSessionExporter()
+
+  return (
+    <>
+      <Menu.Item onSelect={props.onRename}>{language.t("common.rename")}</Menu.Item>
+      <Menu.Item onSelect={props.onTogglePin}>
+        {language.t(props.pinned ? "sidebar.recent.unpin" : "sidebar.recent.pin")}
+      </Menu.Item>
+      <SessionReadMenuItem server={props.server} session={props.session} />
+      <Menu.Separator />
+      <SessionCopyMenu server={props.server} session={props.session} />
+      <Menu.Item
+        disabled={exporter.exporting({ server: props.server, sessionID: props.session.id })}
+        onSelect={() => exporter.export({ server: props.server, sessionID: props.session.id })}
+      >
+        {language.t("common.export")}…
+      </Menu.Item>
+    </>
+  )
+}
+
 export function InboxSessionCard(props: {
+  ref?: (element: HTMLButtonElement) => void
   project?: LocalProject
   directory: string
   title?: string
@@ -836,6 +895,7 @@ export function InboxSessionCard(props: {
   return (
     <Menu.Context modal={false}>
       <Menu.Context.Trigger
+        ref={props.ref}
         as="button"
         type="button"
         id={id}
@@ -849,7 +909,7 @@ export function InboxSessionCard(props: {
         class="group flex h-[54px] w-full shrink-0 flex-col gap-1.5 rounded-[6px] p-2 text-start hover:bg-v2-overlay-simple-overlay-hover focus-visible:-outline-offset-2 data-[state=active]:bg-v2-overlay-simple-overlay-pressed"
         classList={{
           "transition-opacity hover:opacity-100 focus-visible:opacity-100": !props.selected,
-          "opacity-50": props.archived && !props.selected,
+          "opacity-50": props.archived && !props.selected && !inboxWaiting(props),
         }}
         onClick={props.onOpen}
       >
@@ -927,13 +987,13 @@ export function InboxSessionCard(props: {
       <Menu.Context.Portal>
         <Menu.Context.Content>
           {props.actions}
+          <Menu.Separator />
           <Show
             when={props.archived}
             fallback={<Menu.Item onSelect={props.onArchive}>{language.t("common.archive")}</Menu.Item>}
           >
             <Menu.Item onSelect={props.onUnarchive}>{language.t("sidebar.inbox.unarchive")}</Menu.Item>
           </Show>
-          <Menu.Separator />
           <Menu.Item onSelect={props.onDelete}>{language.t("common.delete")}…</Menu.Item>
         </Menu.Context.Content>
       </Menu.Context.Portal>

@@ -698,6 +698,78 @@ describe("OpencodePlugin", () => {
     ),
   )
 
+  it.live("offers only the voice and transcription models Console's config leaves on, at the URLs it gives them", () =>
+    Effect.acquireUseRelease(
+      Effect.sync(() =>
+        Bun.serve({
+          port: 0,
+          fetch: (request) => {
+            const origin = new URL(request.url).origin
+            return Response.json({
+              providers: {
+                opencode: {
+                  models: {
+                    "gpt-live-1": { disabled: true },
+                    "gpt-live-1.1": {
+                      type: "realtime",
+                      name: "GPT-Live 1.1",
+                      settings: { baseURL: `${origin}/inference/openai/v1` },
+                    },
+                    "gpt-transcribe": {
+                      type: "transcription",
+                      name: "GPT-Transcribe",
+                      package: "@opencode/ai/protocols/openai-transcription",
+                      settings: { baseURL: `${origin}/inference/openai/v1` },
+                    },
+                  },
+                },
+              },
+            })
+          },
+        }),
+      ),
+      (server) =>
+        Effect.gen(function* () {
+          const credentials = yield* Credential.Service
+          const providers = yield* Provider.Service
+          const models = yield* Model.Service
+          // The models.dev catalog lists both voice models, at production's inference.
+          yield* providers.transform((editor) => {
+            editor.update(Provider.ID.opencode, (provider) => {
+              provider.package = "@opencode/ai/providers/openai-compatible"
+            })
+            for (const id of ["gpt-live-1", "gpt-live-1.1"])
+              editor.models.update(Provider.ID.opencode, Model.ID.make(id), (model) => {
+                model.type = "realtime"
+                model.settings = { baseURL: "https://opencode.ai/inference/openai/v1" }
+              })
+          })
+          yield* credentials.create({
+            integrationID: Integration.ID.make("opencode"),
+            value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: server.url.origin } }),
+          })
+
+          yield* addPlugin()
+
+          const offered = (type: Model.Type) =>
+            models
+              .available([type])
+              .pipe(
+                Effect.map((list) =>
+                  list
+                    .filter((model) => model.providerID === "opencode")
+                    .map((model) => [model.id, model.settings?.baseURL]),
+                ),
+              )
+          expect(yield* offered("realtime")).toEqual([["gpt-live-1.1", `${server.url.origin}/inference/openai/v1`]])
+          expect(yield* offered("transcription")).toEqual([
+            ["gpt-transcribe", `${server.url.origin}/inference/openai/v1`],
+          ])
+        }),
+      (server) => Effect.promise(() => server.stop(true)),
+    ),
+  )
+
   it.effect("refreshes hosted search with Console config, retains it on failure, and skips unchanged snapshots", () =>
     Effect.acquireUseRelease(
       Effect.sync(() => {

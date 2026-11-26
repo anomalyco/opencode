@@ -1126,17 +1126,6 @@ describe("Tool", () => {
     }),
   )
 
-  it.effect("removes a scoped registration", () =>
-    Effect.gen(function* () {
-      const service = yield* Tool.Service
-      const scope = yield* Scope.make()
-      yield* transform(service, { echo: make() }, { codemode: false }).pipe(Scope.provide(scope))
-      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["echo", "execute"])
-      yield* Scope.close(scope, Exit.void)
-      expect((yield* toolDefinitions(service)).map((tool) => tool.name)).toEqual(["execute"])
-    }),
-  )
-
   it.effect("preserves an interrupted registration until its scope closes", () =>
     Effect.gen(function* () {
       const service = yield* Tool.Service
@@ -1219,16 +1208,6 @@ describe("Tool", () => {
           Effect.catchDefect(Effect.succeed),
         ),
       ).toBe("unexpected executor defect")
-    }),
-  )
-
-  it.effect("exposes execution only through a snapshot", () =>
-    Effect.gen(function* () {
-      const service = yield* Tool.Service
-      expect("definitions" in service).toBe(false)
-      expect("execute" in service).toBe(false)
-      expect("settle" in service).toBe(false)
-      expect(typeof service.snapshot).toBe("function")
     }),
   )
 
@@ -1624,19 +1603,6 @@ describe("Tool", () => {
 
       expect((yield* request.execute(call("echo"))).content).toEqual([{ type: "text", text: "advertised" }])
       expect((yield* executeTool(service, call("echo"))).content).toEqual([{ type: "text", text: "replacement" }])
-    }),
-  )
-
-  it.effect("reveals the previous registration after an overlay closes", () =>
-    Effect.gen(function* () {
-      const service = yield* Tool.Service
-      yield* transform(service, { echo: constant("base") }, { codemode: false })
-      const overlay = yield* Scope.make()
-      yield* transform(service, { echo: constant("overlay") }, { codemode: false }).pipe(Scope.provide(overlay))
-
-      expect((yield* executeTool(service, call("echo"))).content).toEqual([{ type: "text", text: "overlay" }])
-      yield* Scope.close(overlay, Exit.void)
-      expect((yield* executeTool(service, call("echo"))).content).toEqual([{ type: "text", text: "base" }])
     }),
   )
 

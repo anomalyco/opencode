@@ -119,7 +119,7 @@ Use configuration for other process options such as a working directory:
 | `disabled` | No | Prevents connection when `true`. Defaults to `false`. |
 | `codemode` | No | Set to `false` to expose tools directly instead of through Code Mode. Defaults to `true`. |
 | `timeout` | No | Per-server timeout overrides. |
-| `protocol` | No | `legacy` (default), `auto`, or `2026-07-28`. See [Protocol version](#protocol-version). |
+| `protocol` | No | `auto` (default), `legacy`, or `2026-07-28`. See [Protocol version](#protocol-version). |
 | `pool` | No | Share one connection across directories. Defaults to `false`. See [Shared connections](#shared-connections). |
 
 Use `{env:NAME}` for environment substitution. Shell expressions such as `$NAME` are not expanded in JSON strings:
@@ -175,7 +175,7 @@ Use configuration for other options. Store secrets in environment variables rath
 | `disabled` | No | Prevents connection when `true`. Defaults to `false`. |
 | `codemode` | No | Set to `false` to expose tools directly instead of through Code Mode. Defaults to `true`. |
 | `timeout` | No | Per-server timeout overrides. |
-| `protocol` | No | `legacy` (default), `auto`, or `2026-07-28`. See [Protocol version](#protocol-version). |
+| `protocol` | No | `auto` (default), `legacy`, or `2026-07-28`. See [Protocol version](#protocol-version). |
 | `pool` | No | Share one connection across directories. Defaults to `false`. See [Shared connections](#shared-connections). |
 
 Use `oauth: false` only when the server exclusively uses an API key or another header credential:
@@ -335,17 +335,17 @@ Timeouts are positive integer milliseconds. Set defaults under `mcp.timeout`; a 
 
 ## Protocol version
 
-OpenCode opens every server with the classic MCP `initialize` handshake by default. Set a server's `protocol` to talk to one built on the 2026-07-28 revision:
+OpenCode probes every server for the 2026-07-28 revision by default and falls back to the classic MCP `initialize` handshake when the server does not support it. Set a server's `protocol` to `legacy` to skip the probe:
 
 ```jsonc title="opencode.jsonc"
 {
   "$schema": "https://opencode.ai/config.json",
   "mcp": {
     "servers": {
-      "modern": {
+      "older": {
         "type": "remote",
         "url": "https://mcp.example.com/mcp",
-        "protocol": "auto",
+        "protocol": "legacy",
       },
     },
   },
@@ -354,11 +354,11 @@ OpenCode opens every server with the classic MCP `initialize` handshake by defau
 
 | Value | Behavior |
 | --- | --- |
-| `legacy` | Default. Sends `initialize` and speaks protocol revisions up to 2025-11-25. |
-| `auto` | Probes with `server/discover` for the 2026-07-28 revision and falls back to `legacy` when the server does not support it. |
+| `auto` | Default. Probes with `server/discover` for the 2026-07-28 revision and falls back to `legacy` when the server does not support it, including when a remote server answers the probe with an HTTP 5xx error. |
+| `legacy` | Sends `initialize` and speaks protocol revisions up to 2025-11-25. |
 | `2026-07-28` | Requires the 2026-07-28 revision. The connection fails against older servers. |
 
-Probing a local `legacy` server adds a short-lived extra process and can wait up to the startup timeout when the server ignores unknown requests, so keep `auto` scoped to servers that need it.
+Probing an older local server adds a short-lived extra process and can wait up to the startup timeout when the server ignores unknown requests, so set `legacy` on servers you know predate the 2026-07-28 revision.
 
 ## Shared connections
 
@@ -379,7 +379,7 @@ One OpenCode server can have many directories open, and each one connects to eve
 }
 ```
 
-- Only connections on the 2026-07-28 revision are shared. With `pool` set, an unset `protocol` means `auto`. A server that answers with an older revision, or one set to `legacy`, keeps one connection per directory.
+- Only connections on the 2026-07-28 revision are shared. A server that answers with an older revision, or one set to `legacy`, keeps one connection per directory.
 - Directories share a connection only when everything that changes it matches: the URL, headers, OAuth settings and signed-in account for a remote server, and the command, working directory and environment for a local one. Timeouts and `protocol` must match too. The server's name doesn't need to, but sign-ins are stored per name, so an OAuth server is shared only under the same name.
 - A local server is shared only between directories on this machine, not ones in a workspace. Sharing it across projects needs a fixed `cwd`, such as `"~"`. Without one it runs in each project's folder, so each project gets its own and OpenCode logs a warning.
 - A shared connection has no roots. When a tool asks for input, the request appears in the directory that called it.

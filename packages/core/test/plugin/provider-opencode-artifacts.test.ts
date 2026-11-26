@@ -181,6 +181,21 @@ describe("OpencodePlugin artifacts", () => {
       ),
   )
 
+  it.effect(
+    "publishes a subagent's artifact with its root session, so comments wake the session a person talks to",
+    () =>
+      withConsole((console) =>
+        Effect.gen(function* () {
+          const artifacts = yield* Artifact.Service
+          const host = yield* start(console)
+          const root = yield* host.session.create({})
+          const subagent = yield* host.session.create({ parentID: root.id })
+          yield* artifacts.create({ title: "Screens", files, sessionID: subagent.id })
+          expect(console.state.published[0]?.body).toMatchObject({ sessionID: root.id })
+        }),
+      ),
+  )
+
   it.effect("reads the files back, downloading the ones Console doesn't inline from the listed revision", () =>
     withConsole((console) =>
       Effect.gen(function* () {

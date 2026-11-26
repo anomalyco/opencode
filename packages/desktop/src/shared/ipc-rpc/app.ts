@@ -63,6 +63,12 @@ export const AppSetSpellcheckEnabled = Rpc.make("AppSetSpellcheckEnabled", {
   payload: { enabled: Schema.Boolean },
 })
 
+export const AppGetSmoothScrollingEnabled = Rpc.make("AppGetSmoothScrollingEnabled", { success: Schema.Boolean })
+
+export const AppSetSmoothScrollingEnabled = Rpc.make("AppSetSmoothScrollingEnabled", {
+  payload: { enabled: Schema.Boolean },
+})
+
 export const AppSetNativeTranslations = Rpc.make("AppSetNativeTranslations", {
   payload: { value: Schema.Unknown },
 })
@@ -83,6 +89,8 @@ export const AppRpcs = RpcGroup.make(
   AppSetForceFocus,
   AppGetSpellcheckEnabled,
   AppSetSpellcheckEnabled,
+  AppGetSmoothScrollingEnabled,
+  AppSetSmoothScrollingEnabled,
   AppRecordFatalRendererError,
   AppSetNativeTranslations,
   AppRelaunch,

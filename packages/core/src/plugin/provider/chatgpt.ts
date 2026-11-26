@@ -2,7 +2,7 @@ import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { define } from "@opencode/plugin/effect/plugin"
 // import { Deferred, Duration, Effect, Option, Schema, Semaphore, Stream } from "effect"
-import { Deferred, Effect, Equal, Option, Schema, Semaphore } from "effect"
+import { Deferred, Effect, Equal, Exit, Option, Schema, Semaphore } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import type { Server, ServerResponse } from "node:http"
 import { App } from "../../app.js"
@@ -132,7 +132,7 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
           const error = url.searchParams.get("error_description") ?? url.searchParams.get("error")
           const authorizationCode = url.searchParams.get("code")
           if (error) {
-            Effect.runFork(Deferred.fail(received, new Error(error)))
+            Deferred.doneUnsafe(received, Exit.fail(new Error(error)))
             response
               .writeHead(400, { "Content-Type": "text/html" })
               .end(OauthCallbackPage.error(error, { provider: "ChatGPT" }))
@@ -140,15 +140,16 @@ const signIn = (app: App.Info, savedClientID: () => string | undefined, storage:
           }
           if (!authorizationCode || url.searchParams.get("state") !== state) {
             const message = authorizationCode ? "Invalid OAuth state" : "Missing authorization code"
-            Effect.runFork(Deferred.fail(received, new Error(message)))
+            Deferred.doneUnsafe(received, Exit.fail(new Error(message)))
             response
               .writeHead(400, { "Content-Type": "text/html" })
               .end(OauthCallbackPage.error(message, { provider: "ChatGPT" }))
             return
           }
           if (
-            !Effect.runSync(
-              Deferred.succeed(received, {
+            !Deferred.doneUnsafe(
+              received,
+              Exit.succeed({
                 code: authorizationCode,
                 clientID: url.searchParams.get("client_id") ?? undefined,
                 response,

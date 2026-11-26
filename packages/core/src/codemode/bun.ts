@@ -39,7 +39,9 @@ const handles = new WeakMap<Function, Handle & { readonly type: string }>()
 // A run gets `Bun` only with the session's file services (see `CodeModeTool.create`).
 const service = <I, S>(key: Context.Key<I, S>) =>
   Effect.flatMap(Effect.serviceOption(key), (found) =>
-    Option.isSome(found) ? Effect.succeed(found.value) : Effect.die("Code Mode Bun needs the session's file services."),
+    Option.isSome(found)
+      ? Effect.succeed(found.value)
+      : Effect.die(new Error("Code Mode Bun needs the session's file services.")),
   )
 
 // One file operation, acting for the execute call as a tool does. A permission error reaches the program as core
@@ -262,8 +264,14 @@ const text = (bytes: Uint8Array) =>
 export const body = <A>(value: A) => {
   const from = handleOf(value)
   if (!from) return Effect.succeed(value)
-  return Effect.map(read(from), (bytes) => new Blob([new Uint8Array(bytes)], { type: from.type }))
+  return Effect.map(read(from), (bytes) => new Blob([owned(bytes)], { type: from.type }))
 }
+
+// A Blob part can't be backed by a SharedArrayBuffer, which a workspace provider's driver may return. Other bytes go in as they are: Blob copies them itself.
+const owned = (bytes: Uint8Array) =>
+  bytes.buffer instanceof ArrayBuffer
+    ? new Uint8Array(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    : new Uint8Array(bytes)
 
 const handleOf = (value: unknown) => {
   const bytes = method(value, "bytes")
@@ -290,7 +298,8 @@ const unwritable = () =>
 
 // A value from a program is a plain copy, so its functions are among its own entries.
 const method = (value: unknown, key: string) => {
-  if (typeof value !== "object" || value === null) return undefined
+  if (typeof value !== "object" || value === null || ArrayBuffer.isView(value) || value instanceof ArrayBuffer)
+    return undefined
   const found: unknown = Object.entries(value).find(([name]) => name === key)?.[1]
   return typeof found === "function" ? found : undefined
 }
@@ -403,12 +412,13 @@ const glob = (host: Host, given: string, cwd: string, dot: boolean) =>
         () => Effect.succeed([]),
       ),
     )
+    const matches = Glob.matcher(pattern, { dot })
     return entries
       .map((entry) => ({
         path: path.isAbsolute(pattern) ? path.join(base, entry.path) : path.join(path.relative(cwd, base), entry.path),
         type: entry.type,
       }))
-      .filter((entry) => Glob.match(pattern, entry.path, { dot }))
+      .filter((entry) => matches(entry.path))
   })
 
 type Entry = { readonly path: string; readonly type: Environment.FileType }
@@ -519,23 +529,27 @@ export const extension = Extension.make({
       write: Extension.async(writeTo),
       Glob: Extension.constructible((pattern: string) => {
         if (typeof pattern !== "string") throw new TypeError("Bun.Glob expects a pattern string.")
+        const matches = Glob.matcher(pattern)
         return {
           scan: (options?: string | ScanOptions) => scan(pattern, options),
           scanSync: (options?: string | ScanOptions) => scan(pattern, options),
           // As in Bun, `match` takes a dot file that a scan without `dot` leaves out.
-          match: (name: string) => Glob.match(pattern, name),
+          match: (name: string) => matches(name),
         }
       }),
     },
   },
 })
 
-/** What to show for a Bun call: the function, its path or pattern, and the file a write copies. */
-export const display = (name: string, args: ReadonlyArray<unknown>) => {
-  const from = name === "Bun.write" ? handleOf(args[1])?.name : undefined
-  return {
-    method: name.slice(name.lastIndexOf(".") + 1),
-    path: handleOf(args[0])?.name ?? String(args[0]),
-    ...(from === undefined ? {} : { from }),
-  }
+/** What to show for a Bun call: the file tool it stands in for, or else the function and its path or pattern. */
+export const display = (
+  name: string,
+  args: ReadonlyArray<unknown>,
+): { tool: string; input: Record<string, string> } => {
+  const path = handleOf(args[0])?.name ?? String(args[0])
+  const from = handleOf(args[1])?.name
+  if (name === "Bun.file") return { tool: "read", input: { path } }
+  if (name === "Bun.Glob") return { tool: "glob", input: { pattern: path } }
+  if (name === "Bun.write") return { tool: "write", input: from === undefined ? { path } : { path, from } }
+  return { tool: "Bun", input: { method: name.slice(name.lastIndexOf(".") + 1), path } }
 }

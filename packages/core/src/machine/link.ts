@@ -32,6 +32,15 @@ import { FromWorker, Hello, ToWorker } from "./wire.js"
 
 const text = (value: string) => new TextEncoder().encode(value)
 const PROTOCOL = Hello.fields.protocol.literal
+// Matches Rust opencode-worker's `is_valid_machine_name`: `Machines.Name` (^[a-z][a-z0-9-]{1,62}$ and != "local").
+const isWelcomeName = Schema.is(Machines.Name)
+const isValidWelcomeName = (name: string): boolean => isWelcomeName(name)
+const toWelcomeName = (machine: string) => {
+  if (isValidWelcomeName(machine)) return machine
+  const slug = machine.toLowerCase().replace(/[^a-z0-9-]/g, "-")
+  const candidate = (/^[a-z]/.test(slug) ? slug : `w-${slug}`).slice(0, 63)
+  return isValidWelcomeName(candidate) ? candidate : "workspace"
+}
 const PROLOGUE = text("opencode-link-v1")
 const HOME = text("opencode-link-v1/home:")
 const MACHINE = text("opencode-link-v1/machine:")
@@ -211,7 +220,7 @@ const handshake = Effect.fnUntraced(function* (carrier: Carrier, authenticate: A
   if (flag > 1 || (flag === 0 && !same(secret, NO_SECRET))) return yield* new Refused()
   const machine = yield* authenticate({ key, hasSecret: flag === 1, secret })
   const ciphers = Frames.rekeying(yield* Effect.fromResult(noise.split()), fixed.rekeyInterval ?? REKEY_INTERVAL)
-  yield* carrier.send(yield* Effect.fromResult(ciphers.send.encrypt(text(machine))))
+  yield* carrier.send(yield* Effect.fromResult(ciphers.send.encrypt(text(toWelcomeName(machine)))))
   return { machine, send: ciphers.send, receive: ciphers.receive }
 })
 
@@ -246,8 +255,9 @@ export const dial = Effect.fn("Link.dial")(
       yield* Effect.fromResult(noise.write(concat(options.identity.publicKey, signature, flag, secret))),
     )
     const ciphers = Frames.rekeying(yield* Effect.fromResult(noise.split()), options.rekeyInterval ?? REKEY_INTERVAL)
-    const welcome = yield* Effect.fromResult(ciphers.receive.decrypt(yield* carrier.receive))
-    return { machine: utf8.decode(welcome), send: ciphers.send, receive: ciphers.receive }
+    const welcome = utf8.decode(yield* Effect.fromResult(ciphers.receive.decrypt(yield* carrier.receive)))
+    if (!isValidWelcomeName(welcome)) return yield* new Refused()
+    return { machine: welcome, send: ciphers.send, receive: ciphers.receive }
   },
   Effect.catchCause(() => Effect.fail(new Refused())),
 )

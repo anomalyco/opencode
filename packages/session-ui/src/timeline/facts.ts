@@ -120,13 +120,14 @@ const modes = new Map<string, FactMode>(
 
 /**
  * The facts in a list of parts, in order. Not cached: stores update a part in place as it streams, so its identity
- * says nothing about whether its facts changed. Callers read it inside a memo.
+ * says nothing about whether its facts changed. Callers read it inside a memo. Without `scriptDiffs` (the server's
+ * `full_codemode` flag off), a script's changes are not facts: they neither show nor count.
  */
-export function factsOf(parts: readonly FactPart[]): Fact[] {
-  return parts.flatMap(partFacts)
+export function factsOf(parts: readonly FactPart[], scriptDiffs = true): Fact[] {
+  return parts.flatMap((part) => partFacts(part, scriptDiffs))
 }
 
-function partFacts(part: FactPart): Fact[] {
+function partFacts(part: FactPart, scriptDiffs: boolean): Fact[] {
   const id = part.messageID ? `${part.messageID}:${part.id ?? ""}` : (part.id ?? "")
 
   if (part.type === "text") return [{ kind: "text", id }]
@@ -155,7 +156,7 @@ function partFacts(part: FactPart): Fact[] {
       },
     ]
 
-  return toolFacts(part, id)
+  return toolFacts(part, id, scriptDiffs)
 }
 
 const decodeFile = Schema.decodeUnknownOption(
@@ -190,12 +191,15 @@ function reads(tool: Tool): Reads {
   }
 }
 
-/** What placing a call reads of it. Reads input and metadata only where they can move the call or open it. */
-export function placeFactOf(tool: Tool, id = tool.id): PlaceFact {
-  return placeFact(tool, id, reads(tool))
+/**
+ * What placing a call reads of it. Reads input and metadata only where they can move the call or open it. Without
+ * `scriptDiffs`, a script places no changes.
+ */
+export function placeFactOf(tool: Tool, id = tool.id, scriptDiffs = true): PlaceFact {
+  return placeFact(tool, id, reads(tool), scriptDiffs)
 }
 
-function placeFact(tool: Tool, id: string, read: Reads): PlaceFact {
+function placeFact(tool: Tool, id: string, read: Reads, scriptDiffs = true): PlaceFact {
   const name = toolName(tool.name)
   const state = tool.state
   const stopped = toolStopped(tool)
@@ -216,7 +220,7 @@ function placeFact(tool: Tool, id: string, read: Reads): PlaceFact {
       !readImagePath(read.input()) &&
       !currentToolHasLoadedFiles(tool),
     background: name === "subagent" || (name === "shell" && read.input().background === true),
-    changes: name === "execute" ? scriptChanges(tool, read).length : 0,
+    changes: name === "execute" && scriptDiffs ? scriptChanges(tool, read).length : 0,
   }
 }
 
@@ -253,9 +257,9 @@ export function launchOf(tool: Tool) {
   return placeFact(tool, tool.id, read).background ? launch(tool, toolName(tool.name), read) : undefined
 }
 
-function toolFacts(tool: Tool, id: string): Fact[] {
+function toolFacts(tool: Tool, id: string, scriptDiffs: boolean): Fact[] {
   const read = reads(tool)
-  const fact = placeFact(tool, id, read)
+  const fact = placeFact(tool, id, read, scriptDiffs)
   const raw = read.input().path
   const path = Predicate.isString(raw) && raw ? raw : undefined
   const metadata = read.metadata()
@@ -275,6 +279,8 @@ function toolFacts(tool: Tool, id: string): Fact[] {
   if (Array.isArray(metadata.toolCalls)) call.toolCalls = metadata.toolCalls.length
 
   if (Predicate.isNumber(metadata.matches)) call.matches = metadata.matches
+
+  if (fact.name === "execute" && !scriptDiffs) return [call]
 
   if (fact.name === "execute")
     return [
@@ -477,6 +483,11 @@ export function sameFileFact(previous: FileFact, next: FileFact) {
 }
 
 const scriptFilePart = /^(.*?):file:(\d+):/
+
+/** Whether a part id names a change a script made, which draws as part of the script's block. */
+export function isScriptFilePartID(partID: string) {
+  return scriptFilePart.test(partID)
+}
 
 /** The change a script made that a part id names, read from that one entry of the script's part in the message. */
 export function scriptFileFact(content: readonly Content[], messageID: string, partID: string) {

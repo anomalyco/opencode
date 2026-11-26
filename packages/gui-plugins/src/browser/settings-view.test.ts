@@ -16,8 +16,8 @@ test("Advanced is closed until the person opens it, and a search hit inside it s
 
 test.each([
   ["supported", "Works here"],
-  ["partial", "May not fully work here"],
-  ["unsupported", "Probably won't work here"],
+  ["partial", "Partly supported"],
+  ["unsupported", "Not supported"],
 ] as const)("an extension that is %s reads %p", (level, line) => {
   expect(en[verdict(level)]).toBe(line)
 })
