@@ -184,7 +184,7 @@
     "@opencode/schema": "workspace:*",
     "aws4fetch": "1.0.20",
     "effect": "catalog:",
-    "google-auth-library": "10.5.0"
+    "google-auth-library": "10.6.1"
   },
   "repository": {
     "type": "git",
