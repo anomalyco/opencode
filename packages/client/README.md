@@ -13,15 +13,20 @@ The Effect entrypoint uses canonical decoded values such as `Session.ID`, `Locat
 
 The Promise root remains structural and has no Core or Effect runtime dependency. `/effect` depends only on Effect, Schema, and Protocol and is browser-bundle safe. Bundle-boundary tests enforce both import graphs.
 
-Effect consumers construct canonical decoded inputs:
+With a local OpenCode server running on port 4096, replace `/workspace` with the absolute path to your project on the server:
 
 ```ts
-import { AbsolutePath, Location, OpenCode, Prompt } from "@opencode/client/effect"
+import { Effect } from "effect"
+import { FetchHttpClient } from "effect/http"
+import { AbsolutePath, Location, OpenCode } from "@opencode/client/effect"
 
-const client = yield * OpenCode.make({ baseUrl: "https://opencode.example" })
-yield *
-  client.sessions.create({
+const program = Effect.gen(function* () {
+  const client = yield* OpenCode.make({ baseUrl: "http://localhost:4096" })
+  const session = yield* client.session.create({
     location: Location.Ref.make({ directory: AbsolutePath.make("/workspace") }),
   })
-yield * client.sessions.prompt({ sessionID, prompt: Prompt.make({ text: "Hello" }) })
+  return yield* client.session.prompt({ sessionID: session.id, text: "Hello" })
+})
+
+await Effect.runPromise(program.pipe(Effect.provide(FetchHttpClient.layer)))
 ```
