@@ -57,8 +57,9 @@ export function installFocusRescue() {
   }
 }
 
-// A rescued control shows its ring only while the keyboard is moving focus. Typing, shortcuts and a key pressed on a
-// control the pointer focused are not that.
+// A rescued control shows its ring, and scrolls into view, only while the keyboard is moving focus. Typing, shortcuts
+// and a key pressed on a control the pointer focused are not that: a pointer user never sees the rescue, so it must not
+// move their list.
 const NAVIGATION = new Set(["Tab", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End"])
 
 const useKeyboard = (event: KeyboardEvent) => {
@@ -149,14 +150,14 @@ function rescue() {
     if (!entry.spot) return
     const target = pick(entry.spot)
 
-    if (target) return target.focus({ focusVisible: ring })
+    if (target) return target.focus({ focusVisible: ring, preventScroll: !ring })
 
     if (target === undefined) continue
 
     // A scope left with nothing to focus, such as the last toast, hands focus back to what had it before.
     const previous = entries.slice(index + 1).find((item) => !item.spot && usable(item.element))
 
-    if (previous) previous.element.focus({ focusVisible: ring })
+    if (previous) previous.element.focus({ focusVisible: ring, preventScroll: !ring })
 
     return
   }
