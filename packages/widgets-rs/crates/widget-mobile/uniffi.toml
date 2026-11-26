@@ -1,7 +1,8 @@
 [bindings.swift]
-# One Swift module with psychoscript-mobile's bindings (`import PsychoScript`); the C declarations live in the
-# xcframework's `PsychoScriptFFI` module, this crate's in a header of its own.
-module_name = "PsychoScript"
+# Compiled into one Swift module with psychoscript-mobile's bindings (`import PsychoScript`): the build script puts
+# each crate's file in the package's `PsychoScript` target. `module_name` names this crate's file (`WidgetMobile.swift`,
+# beside `PsychoScript.swift`), and its C declarations are a header of their own in the xcframework's `PsychoScriptFFI`.
+module_name = "WidgetMobile"
 ffi_module_name = "PsychoScriptFFI"
 ffi_module_filename = "WidgetMobileFFI"
 
