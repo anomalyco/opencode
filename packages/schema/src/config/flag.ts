@@ -32,6 +32,8 @@ export const registry = {
     "List a session's subagents, with their session IDs, and its running background jobs in its compaction checkpoints, so the agent can still continue or account for them after compacting.",
   sqlite_fts:
     "Build an SQLite full-text index of session titles and message text in the background, and enable the opencode.session.search and opencode.session.read tools. The index covers every session in the database and starts while any loaded location enables it; SQLite keeps it current from then on, also after this is turned off.",
+  browser_stream_tunnel:
+    "Stream remote desktop browser TCP traffic over one prewarmed, ticket-authenticated binary WebSocket per live browser attachment instead of per-chunk RPC.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 

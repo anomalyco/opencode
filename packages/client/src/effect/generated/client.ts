@@ -247,6 +247,7 @@ import type {
   ExperimentalPersistentPtyRemoveOutput,
   ExperimentalPersistentPtyConnectTokenInput,
   ExperimentalPersistentPtyConnectTokenOutput,
+  ExperimentalBrowserTunnelOutput,
   ExperimentalAutomationCreateInput,
   ExperimentalAutomationCreateOutput,
   ExperimentalAutomationListInput,
@@ -1641,6 +1642,9 @@ const EndpointExperimentalPersistentPtyConnectToken =
       ),
     )
 
+const EndpointExperimentalBrowserTunnel = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalBrowserTunnelOutput>()(raw["browser.tunnel"]({}).pipe(Effect.mapError(mapClientError)))
+
 const EndpointExperimentalAutomationCreate =
   (raw: RawClient["server.experimental"]) => (input: ExperimentalAutomationCreateInput) =>
     preserveEffect<ExperimentalAutomationCreateOutput>()(
@@ -1908,6 +1912,7 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     remove: EndpointExperimentalPersistentPtyRemove(raw),
     connectToken: EndpointExperimentalPersistentPtyConnectToken(raw),
   },
+  browser: { tunnel: EndpointExperimentalBrowserTunnel(raw) },
   automation: {
     create: EndpointExperimentalAutomationCreate(raw),
     list: EndpointExperimentalAutomationList(raw),

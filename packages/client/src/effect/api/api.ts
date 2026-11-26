@@ -2434,6 +2434,9 @@ export type ExperimentalPersistentPtyConnectTokenOperation<E = never> = (
   input: ExperimentalPersistentPtyConnectTokenInput,
 ) => Effect.Effect<ExperimentalPersistentPtyConnectTokenOutput, E>
 
+export type ExperimentalBrowserTunnelOutput = boolean
+export type ExperimentalBrowserTunnelOperation<E = never> = () => Effect.Effect<ExperimentalBrowserTunnelOutput, E>
+
 export type ExperimentalAutomationCreateInput = {
   readonly sessionID?: Session.ID | undefined
   readonly directory?: string | undefined
@@ -2688,6 +2691,7 @@ export interface ExperimentalApi<E = never> {
     readonly remove: ExperimentalPersistentPtyRemoveOperation<E>
     readonly connectToken: ExperimentalPersistentPtyConnectTokenOperation<E>
   }
+  readonly browser: { readonly tunnel: ExperimentalBrowserTunnelOperation<E> }
   readonly automation: {
     readonly create: ExperimentalAutomationCreateOperation<E>
     readonly list: ExperimentalAutomationListOperation<E>

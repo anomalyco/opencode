@@ -12,6 +12,7 @@ import { FileSystemSearch } from "@opencode/core/filesystem/search"
 import { Credential } from "@opencode/core/credential"
 import { Config } from "@opencode/core/config"
 import { PermissionSaved } from "@opencode/core/permission/saved"
+import { BrowserTunnelGateway } from "@opencode/core/experimental/browser-tunnel"
 import { PtyTicket } from "@opencode/core/pty/ticket"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { Project } from "@opencode/core/project"
@@ -93,6 +94,7 @@ const applicationServiceNodes = [
   PluginUpdate.node,
   PermissionSaved.node,
   PtyTicket.node,
+  BrowserTunnelGateway.node,
   Credential.node,
   WellKnown.node,
   ServerPairing.node,
