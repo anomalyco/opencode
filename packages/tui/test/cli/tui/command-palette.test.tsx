@@ -84,3 +84,97 @@ test("searches settings globally and opens the matching setting", async () => {
     app.renderer.destroy()
   }
 })
+
+test("includes active-mode palette commands while excluding disabled and inactive modes", async () => {
+  const calls: string[] = []
+  let keymap!: Keymap
+  let dialog!: ReturnType<typeof useDialog>
+
+  function Fixture() {
+    keymap = Keymap.use()
+    dialog = useDialog()
+    Keymap.createLayer(() => ({
+      commands: [
+        {
+          id: "plugin.report",
+          title: "Plugin report",
+          group: "Plugin",
+          bind: "r",
+          palette: true,
+          run: () => void calls.push("plugin.report"),
+        },
+      ],
+    }))
+    Keymap.createLayer(() => ({
+      enabled: false,
+      commands: [
+        {
+          id: "plugin.disabled",
+          title: "Disabled plugin command",
+          palette: true,
+          run: () => void calls.push("plugin.disabled"),
+        },
+      ],
+    }))
+    Keymap.createLayer(() => ({
+      mode: "custom",
+      commands: [
+        {
+          id: "plugin.custom",
+          title: "Custom mode command",
+          palette: true,
+          run: () => void calls.push("plugin.custom"),
+        },
+      ],
+    }))
+    return null
+  }
+
+  const app = await testRender(
+    () => (
+      <TestTuiContexts>
+        <ConfigProvider config={resolve({}, { terminalSuspend: true })}>
+          <Keymap.Provider>
+            <ThemeProvider mode="dark" source={emptyThemeSource}>
+              <ToastProvider>
+                <DialogProvider>
+                  <Fixture />
+                </DialogProvider>
+              </ToastProvider>
+            </ThemeProvider>
+          </Keymap.Provider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 80, height: 24, kittyKeyboard: true },
+  )
+  app.renderer.start()
+
+  try {
+    await app.waitFor(() => Boolean(dialog))
+    dialog.replace(() => <CommandPaletteDialog />)
+    await app.waitForFrame((frame) => frame.includes("Plugin report"))
+    expect(app.captureCharFrame()).not.toContain("Disabled plugin command")
+    expect(app.captureCharFrame()).not.toContain("Custom mode command")
+    await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
+
+    await app.mockInput.typeText("report")
+    expect(calls).toEqual([])
+    app.mockInput.pressEnter()
+    await app.waitFor(() => calls.length === 1)
+    expect(calls).toEqual(["plugin.report"])
+
+    const popCustom = keymap.mode.push("custom")
+    dialog.replace(() => <CommandPaletteDialog />)
+    await app.waitForFrame((frame) => frame.includes("Custom mode command"))
+    expect(app.captureCharFrame()).not.toContain("Plugin report")
+    await app.waitFor(() => app.renderer.currentFocusedEditor instanceof InputRenderable)
+    await app.mockInput.typeText("custom")
+    app.mockInput.pressEnter()
+    await app.waitFor(() => calls.length === 2)
+    expect(calls).toEqual(["plugin.report", "plugin.custom"])
+    popCustom()
+  } finally {
+    app.renderer.destroy()
+  }
+})

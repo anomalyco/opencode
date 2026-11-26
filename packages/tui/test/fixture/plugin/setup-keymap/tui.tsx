@@ -58,9 +58,25 @@ export default Plugin.define({
         },
       ],
     }))
+    context.ui.slot({ append: "app", render: () => <SlotCommands context={context} /> })
     context.ui.toast.show({ message: `Fixture ready ${generation}` })
   },
 })
+
+function SlotCommands(props: { context: Plugin.Context }) {
+  let runs = 0
+  props.context.keymap.layer(() => ({
+    commands: [
+      {
+        id: "fixture.slot",
+        title: "Slot palette check",
+        palette: true,
+        run: () => props.context.ui.toast.show({ message: `Slot palette ran ${++runs}` }),
+      },
+    ],
+  }))
+  return null
+}
 
 function FixtureDialog(props: { context: Plugin.Context }) {
   let presses = 0

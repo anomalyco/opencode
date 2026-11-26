@@ -126,6 +126,27 @@ test("failed setup reports batched layer errors and disposes earlier and later s
   expect(setup.captureCharFrame()).not.toContain("Late keymap ran")
 })
 
+test("slot palette layers without explicit mode appear in command palette and respect plugin disable", async () => {
+  await using plugin = await copyPlugin("setup-keymap")
+  await using setup = await createAppFixture({ config: { animations: false, plugins: [plugin.directory] } })
+  await setup.ready
+  await setup.waitForFrame((frame) => frame.includes("Fixture ready generation 1"))
+
+  await search(setup, "Slot palette")
+  await setup.waitForFrame((frame) => frame.includes("Slot palette check"))
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => frame.includes("Slot palette ran 1"))
+
+  await openPlugin(setup)
+  await setup.waitForFrame((frame) => frame.includes("disable"))
+  setup.mockInput.pressEnter()
+  await setup.waitForFrame((frame) => frame.includes("inactive"))
+  setup.mockInput.pressEscape()
+
+  await search(setup, "Slot palette")
+  await setup.waitForFrame((frame) => frame.includes("No results found"))
+})
+
 async function search(setup: Fixture, query: string) {
   setup.mockInput.pressKey("p", { ctrl: true })
   await setup.waitForFrame((frame) => frame.includes("Commands"))
