@@ -8,6 +8,8 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 /** How long a result stays fresh, and how often callers refresh, unless a caller passes its own. */
 export const interval = Duration.minutes(10)
 
+const MAX_BACKOFF = Duration.toMillis(Duration.minutes(30))
+const MAX_RETRY_AFTER = Duration.toMillis(Duration.minutes(15))
 const retrySchedule = Schedule.exponential("1 second").pipe(Schedule.jittered)
 
 export interface Input<A, E> {
@@ -23,10 +25,11 @@ export interface Input<A, E> {
 export interface Interface {
   /**
    * Returns the last result for `key` while it is fresh, otherwise joins the running load or starts one, so loads
-   * never overlap per key. A cold load retries `transient` failures twice with jittered backoff; a refresh with a
-   * cached value does not retry in-flight. A failure keeps the last good value, or without one is returned, until
-   * the next interval. Interrupts and defects are never kept. Entries nobody asked for in 24 hours, or in two of
-   * their intervals if longer, are dropped.
+   * never overlap per key. A cold load retries `transient` failures twice with jittered backoff unless the server
+   * sends `Retry-After`; a refresh with a cached value does not retry in-flight. A failure keeps the last good
+   * value, or without one is returned, backing off across consecutive transient failures and honoring `Retry-After`.
+   * Interrupts and defects are never kept. Entries nobody asked for in 24 hours, or in two of their intervals if
+   * longer, are dropped.
    */
   readonly get: <A, E>(input: Input<A, E>) => Effect.Effect<A, E>
 }
@@ -47,6 +50,8 @@ export const transient = (error: unknown) =>
 interface Entry {
   last?: { readonly exit: Exit.Exit<unknown, unknown>; readonly time: number }
   loading?: Fiber.Fiber<unknown, unknown>
+  failures: number
+  retryAfter: number
   read: number
   unread: number
 }
@@ -60,20 +65,36 @@ const layer = Layer.effect(
     const entries = new Map<string, Entry>()
 
     const start = Effect.fnUntraced(function* (key: string, entry: Entry, load: Effect.Effect<unknown, unknown>) {
-      const time = yield* Clock.currentTimeMillis
+      const started = yield* Clock.currentTimeMillis
       const previous = entry.last?.exit
       const hasValue = previous !== undefined && Exit.isSuccess(previous)
-      // Only retry cold loads: warm refreshes keep the last good value, and retrying inside a refresh multiplies
-      // load on a stalled upstream.
-      const attempt = !hasValue
-        ? Effect.retry(load, { schedule: retrySchedule, times: 2, while: transient })
-        : load
+      // Only retry a cold load that has not already failed transiently: warm refreshes keep the last good value,
+      // and retrying inside a refresh multiplies load on a stalled upstream.
+      const attempt =
+        !hasValue && entry.failures === 0
+          ? Effect.retry(load, {
+              schedule: retrySchedule,
+              times: 2,
+              while: (error) => transient(error) && (retryAfterMs(error, started) ?? 0) === 0,
+            })
+          : load
       const exit = yield* Effect.exit(attempt)
-      entry.read = yield* Clock.currentTimeMillis
+      const completed = yield* Clock.currentTimeMillis
+      entry.read = completed
       if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) return yield* exit
       if (Exit.isFailure(exit)) yield* Effect.logWarning("failed to load shared value", { key, cause: exit.cause })
       if (Exit.isFailure(exit) && Cause.hasDies(exit.cause)) return yield* exit
-      entry.last = { exit: Exit.isFailure(exit) && hasValue ? previous : exit, time }
+      if (Exit.isSuccess(exit)) {
+        entry.failures = 0
+        entry.retryAfter = 0
+        entry.last = { exit, time: started }
+        return exit.value
+      }
+      const error = Cause.squash(exit.cause)
+      const delay = retryAfterMs(error, completed)
+      entry.retryAfter = delay === undefined ? 0 : completed + delay
+      entry.failures = transient(error) ? entry.failures + 1 : 0
+      entry.last = { exit: hasValue ? previous : exit, time: completed }
       return yield* entry.last.exit
     })
 
@@ -81,14 +102,15 @@ const layer = Layer.effect(
       const now = yield* Clock.currentTimeMillis
       const age = Duration.toMillis(input.interval ?? interval)
       for (const [key, item] of entries) if (!item.loading && now - item.read > item.unread) entries.delete(key)
-      const entry = entries.get(input.key) ?? { read: now, unread }
+      const entry = entries.get(input.key) ?? { failures: 0, retryAfter: 0, read: now, unread }
       entries.set(input.key, entry)
       entry.read = now
       // A caller refreshing less often than daily must never find its entry dropped between two of its refreshes.
       if (Number.isFinite(age)) entry.unread = Math.max(entry.unread, 2 * age)
       const last = entry.last
       // The key decides the value's type, so a stored or joined result under the same key has this caller's types.
-      if (!input.force && last && now - last.time < age) return yield* last.exit as Exit.Exit<A, E>
+      if (!input.force && last && (now < entry.retryAfter || now - last.time < cooldown(age, entry.failures)))
+        return yield* last.exit as Exit.Exit<A, E>
       // Yield first so `entry.loading` is set before a synchronous load can finish and clear it.
       entry.loading ??= run(
         Effect.yieldNow.pipe(
@@ -106,5 +128,21 @@ const layer = Layer.effect(
     return Service.of({ get })
   }),
 )
+
+function cooldown(age: number, failures: number) {
+  if (failures <= 1 || !Number.isFinite(age) || age <= 0) return age
+  return Math.min(age * 2 ** (failures - 1), Math.max(age, MAX_BACKOFF))
+}
+
+function retryAfterMs(error: unknown, now: number) {
+  if (!HttpClientError.isHttpClientError(error) || error.reason._tag !== "StatusCodeError") return undefined
+  const value = error.reason.response.headers["retry-after"]?.trim()
+  if (!value) return undefined
+  const seconds = Number(value)
+  if (Number.isFinite(seconds)) return Math.min(MAX_RETRY_AFTER, Math.max(0, Math.ceil(seconds * 1000)))
+  const date = Date.parse(value)
+  if (!Number.isNaN(date)) return Math.min(MAX_RETRY_AFTER, Math.max(0, Math.ceil(date - now)))
+  return undefined
+}
 
 export const node = makeGlobalNode({ service: Service, layer, deps: [] })

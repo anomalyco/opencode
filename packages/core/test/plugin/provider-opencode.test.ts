@@ -1292,7 +1292,7 @@ describe("OpencodePlugin", () => {
     }),
   )
 
-  it.effect("does not amplify requests during a Console stall after startup", () =>
+  it.effect("does not amplify requests during a Console stall after startup and backs off sustained outages", () =>
     Effect.gen(function* () {
       const credentials = yield* Credential.Service
       const config = yield* Config.Service
@@ -1310,7 +1310,11 @@ describe("OpencodePlugin", () => {
         integrationID: Integration.ID.make("opencode"),
         value: Credential.Key.make({ type: "key", key: "secret", metadata: { server: "https://console.test" } }),
       })
-      yield* addPlugin().pipe(inProcess(server))
+      // Pin the poll jitter to 30 seconds so wake-ups land every 5m30s.
+      yield* addPlugin().pipe(
+        inProcess(server),
+        Effect.provideService(Random.Random, { nextIntUnsafe: () => 0, nextDoubleUnsafe: () => 0.5 }),
+      )
       yield* drain
       expect(state.requests).toBe(1)
       expect(yield* consolePolicies(config)).toEqual([sudo])
@@ -1321,6 +1325,24 @@ describe("OpencodePlugin", () => {
       yield* TestClock.adjust("10 seconds")
       yield* drain
       expect(state.requests).toBe(2)
+      expect(yield* consolePolicies(config)).toEqual([sudo])
+
+      // A second consecutive stall sends one probe, then SharedCache backs off to 10 minutes (twice the 5-minute interval).
+      yield* TestClock.adjust("6 minutes")
+      yield* TestClock.adjust("10 seconds")
+      yield* drain
+      expect(state.requests).toBe(3)
+
+      // Inside the 10-minute backoff window, the next tick reuses the cached config with no network request.
+      yield* TestClock.adjust("6 minutes")
+      yield* drain
+      expect(state.requests).toBe(3)
+
+      // Once the stall clears and backoff elapses, polling recovers.
+      state.stalled = false
+      yield* TestClock.adjust("6 minutes")
+      yield* drain
+      expect(state.requests).toBe(4)
       expect(yield* consolePolicies(config)).toEqual([sudo])
     }),
   )
