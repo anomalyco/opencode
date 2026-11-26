@@ -653,6 +653,32 @@ const lowerToolResultOutput = Effect.fnUntraced(function* (
 
 const DEFAULT_EFFORT = "medium"
 
+// Copilot binds replayed item ids and encrypted reasoning to the connection that produced them and answers a
+// changed account with `401 input item does not belong to this connection`. Without `store` none of it is
+// needed, so drop it (reasoning included, as the v1 fix did). shortcut: matches the provider id only, so a
+// renamed Copilot provider keeps replaying; upgrade if Copilot gets a dedicated route.
+const withoutItemIDs = (request: LLMRequest, key: string): LLMRequest["messages"] => {
+  if (request.model.provider !== "github-copilot" || OpenResponsesOptions.resolve(request).store === true)
+    return request.messages
+  const strip = (providerMetadata: ProviderMetadata | undefined) => {
+    const { itemId: _, ...rest } = providerMetadata?.[key] ?? {}
+    return providerMetadata?.[key] ? { ...providerMetadata, [key]: rest } : providerMetadata
+  }
+  return request.messages.map((message) =>
+    message.role === "user" || message.role === "assistant"
+      ? ({
+          ...message,
+          providerMetadata: strip(message.providerMetadata),
+          content: message.content
+            .filter((part) => part.type !== "reasoning")
+            .map((part) =>
+              part.type === "compaction" ? part : { ...part, providerMetadata: strip(part.providerMetadata) },
+            ),
+        } as typeof message)
+      : message,
+  )
+}
+
 export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
   const input: OpenResponsesInputItem[] = []
   const providerMetadataKey = metadataKey(request.model)
@@ -660,7 +686,7 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
   const customTool = (part: ToolCallPart | ToolResultPart) =>
     part.namespace === undefined ? custom.get(part.name) : undefined
 
-  for (const message of request.messages) {
+  for (const message of withoutItemIDs(request, providerMetadataKey)) {
     const rawMetadata =
       message.role === "user" || message.role === "assistant"
         ? message.providerMetadata?.[providerMetadataKey]
