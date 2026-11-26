@@ -10,6 +10,7 @@ import { Agent } from "../../agent.js"
 import { CodeModeAgents } from "../../codemode/agents.js"
 import { Config } from "../../config.js"
 import { Flag } from "../../flag.js"
+import { Job } from "../../job.js"
 import { Model } from "../../model.js"
 import { Permission } from "../../permission.js"
 import { AbsolutePath } from "../../schema.js"
@@ -43,6 +44,7 @@ export const Plugin = {
     const models = yield* Model.Service
     const registry = yield* CodeModeAgents.Service
     const skills = yield* Skill.Service
+    const jobs = yield* Job.Service
 
     const expectedOutput = (sessionID: SessionSchema.ID) =>
       sessions.get(sessionID).pipe(
@@ -113,6 +115,18 @@ export const Plugin = {
         return last
       })
 
+    // The script has the child's result, or has stopped waiting for it, so nothing the child left running has anyone
+    // to report to: its background commands and its own subagents stop with the call. Jobs are cancelled before the
+    // interrupt so none finishes in between and wakes the child, and after it for any the last step started.
+    const stop = (sessionID: SessionSchema.ID): Effect.Effect<void> =>
+      Effect.gen(function* () {
+        yield* jobs.cancelSession(sessionID)
+        yield* sessions.interrupt(sessionID)
+        yield* jobs.cancelSession(sessionID)
+        const children = yield* sessions.list({ parentID: sessionID, limit: 1000 }).pipe(Effect.orDie)
+        yield* Effect.forEach(children.data, (child) => stop(child.id), { discard: true })
+      })
+
     const recordedOutput = (childID: SessionSchema.ID, output: CodeModeAgents.Output) =>
       sessions.messages({ sessionID: childID, order: "desc", type: "assistant" }).pipe(
         Effect.map((messages) => {
@@ -169,21 +183,23 @@ export const Plugin = {
           ? {}
           : { permissions: [...(parent.permissions ?? []), { action: OUTPUT_TOOL, resource: "*", effect: "allow" }] }),
       })
-      if (output === undefined) return SubagentCompletion.text(yield* drain(child.id, frame(input.prompt, false)))
-      yield* drain(child.id, frame(input.prompt, true))
-      const first = yield* recordedOutput(child.id, output)
-      if (first !== undefined) return first.value
-      // One reminder: a model that answered in text usually calls the tool when told.
-      yield* drain(
-        child.id,
-        `You ended without calling ${OUTPUT_TOOL}. Call it now with your result, and do nothing else.`,
-      )
-      const second = yield* recordedOutput(child.id, output)
-      if (second === undefined)
-        return yield* fail(
-          `The agent finished without returning a result that matches the schema (session ${child.id}).`,
+      return yield* Effect.gen(function* () {
+        if (output === undefined) return SubagentCompletion.text(yield* drain(child.id, frame(input.prompt, false)))
+        yield* drain(child.id, frame(input.prompt, true))
+        const first = yield* recordedOutput(child.id, output)
+        if (first !== undefined) return first.value
+        // One reminder: a model that answered in text usually calls the tool when told.
+        yield* drain(
+          child.id,
+          `You ended without calling ${OUTPUT_TOOL}. Call it now with your result, and do nothing else.`,
         )
-      return second.value
+        const second = yield* recordedOutput(child.id, output)
+        if (second === undefined)
+          return yield* fail(
+            `The agent finished without returning a result that matches the schema (session ${child.id}).`,
+          )
+        return second.value
+      }).pipe(Effect.ensuring(stop(child.id)))
     })
 
     const llm = Effect.fn("CodeModeAgents.llm")(function* (
@@ -295,6 +311,7 @@ const frame = (prompt: string, structured: boolean) =>
   [
     "You are a subagent started by a Code Mode script. The script reads your result as data; no person reads it.",
     "- Do the task below, and only that task.",
+    "- Wait for every command you start: anything still running in the background when you finish is stopped.",
     structured
       ? `- When you are done, call the \`${OUTPUT_TOOL}\` tool once with your result. Its input schema is the shape the script needs; your turn ends as soon as it is accepted. Do not put the result in a text reply.`
       : "- End with the result itself as your final message: no greetings, confirmations or summary of what you did. If asked for JSON, reply with only the JSON, with no code fence.",

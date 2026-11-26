@@ -2,6 +2,7 @@ export * as SessionCompactionSubagents from "./compaction-subagents.js"
 
 import { Automation } from "@opencode/schema/automation"
 import { DateTime, Effect, Option, Schema } from "effect"
+import { CodeModeAgents } from "../codemode/agents.js"
 import type { Job } from "../job.js"
 import { SessionBackground } from "./background.js"
 import type { SessionMessage } from "./message.js"
@@ -44,10 +45,15 @@ export const collect = Effect.fnUntraced(function* (
       directChild(store, item.kind === "subagent" ? item.childSessionID : item.sessionID, sessionID),
     ),
   )
-  // An automation run's child reports to no one, so it is listed only while the parent continues it as a subagent.
+  // An automation run's child and an agent() child report to no one, so each is listed only while the parent continues
+  // it as a subagent.
   const delegated = new Set(outstanding.flatMap((item) => (item.kind === "subagent" ? [item.childSessionID] : [])))
   const entries = children
-    .filter((child) => !Automation.isRunSession(child.id) || delegated.has(child.id))
+    .filter(
+      (child) =>
+        delegated.has(child.id) ||
+        (!Automation.isRunSession(child.id) && CodeModeAgents.sessionMarker(child.id, child.metadata) === undefined),
+    )
     .map((child): Entry => {
       const title = child.title ? SubagentCompletion.truncate(SubagentCompletion.clean(child.title), MAX_TITLE_CHARS) : ""
       return {

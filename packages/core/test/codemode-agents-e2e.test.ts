@@ -37,7 +37,7 @@ import { CodeModeAgentsPlugin } from "@opencode/core/tool/plugin/codemode-agents
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
-import { Context, Effect, Layer } from "effect"
+import { Context, Deferred, Effect, Layer, Stream } from "effect"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
 import { tmpdirScoped } from "./fixture/tmpdir"
@@ -185,7 +185,8 @@ const harness = Effect.fnUntraced(function* () {
     })
   const store = Context.get(context, SessionStore.Service)
   const restart = Context.get(context, SessionRestart.Service)
-  return { sessions, parent, llm, run, store, restart }
+  const jobs = Context.get(context, Job.Service)
+  return { sessions, parent, llm, run, store, restart, jobs }
 })
 
 const toolNames = (request: LLMRequest) => request.tools.map((tool) => tool.name)
@@ -278,6 +279,37 @@ describe("agent()", () => {
         },
       )
       expect(JSON.parse(result)).toEqual(["hi", "hi"])
+      // The script has both answers, so neither child also reports to the parent session.
+      expect((yield* h.sessions.context(h.parent.id)).filter((message) => message.type === "synthetic")).toEqual([])
+    }),
+  )
+
+  e2e.live("stops a background command its child left running, so nothing wakes the child or the parent later", () =>
+    Effect.gen(function* () {
+      const h = yield* harness()
+      const stopped = yield* Deferred.make<void>()
+      // The child answers while a command it started is still running in the background.
+      const answerWithCommandRunning = Stream.unwrap(
+        Effect.gen(function* () {
+          const [child] = (yield* h.sessions.list({ parentID: h.parent.id })).data
+          if (!child) throw new Error("agent() created no child session")
+          const job = yield* h.jobs.start({
+            id: "job_left_running",
+            type: "shell",
+            recovery: { kind: "shell", sessionID: child.id, shellID: "job_left_running", command: "git log" },
+            run: Effect.never.pipe(Effect.ensuring(Deferred.succeed(stopped, undefined))),
+          })
+          yield* h.jobs.background(job.id)
+          return Stream.fromIterable(TestLLM.text("hi", "child-1"))
+        }).pipe(Effect.orDie),
+      )
+      const result = yield* h.run(`return await agent("Say hi", { agent: "reviewer" })`, {
+        reviewer: [answerWithCommandRunning],
+      })
+      expect(result).toBe("hi")
+      yield* Deferred.await(stopped).pipe(Effect.timeout("5 seconds"))
+      expect(yield* h.jobs.runningBackground).toEqual([])
+      expect((yield* h.sessions.context(h.parent.id)).filter((message) => message.type === "synthetic")).toEqual([])
     }),
   )
 })

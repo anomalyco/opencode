@@ -4,6 +4,7 @@ import { AIError, TransportError } from "@opencode/ai/effect"
 import { Agent } from "@opencode/core/agent"
 import { Automation } from "@opencode/schema/automation"
 import { Bus } from "@opencode/core/bus"
+import { CodeModeAgents } from "@opencode/core/codemode/agents"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Instance } from "@opencode/core/instance/service"
@@ -116,6 +117,33 @@ describe("SubagentReport settlement", () => {
       const reports = yield* SessionInbox.list(database.db, parent)
       expect(reports).toHaveLength(1)
       expect(text(reports[0])).toContain("Follow-up done")
+    }),
+  )
+
+  it.effect("keeps a Code Mode agent() child quiet, since its script reads the result", () =>
+    Effect.gen(function* () {
+      const database = yield* Database.Service
+      const parent = sessionID("ses_script_parent")
+      const child = sessionID("ses_script_child")
+      yield* seedSessions(database, [parent])
+      yield* seedSessions(database, [child], {
+        parent_id: parent,
+        agent: "explore",
+        title: "verify one item",
+        metadata: { [CodeModeAgents.METADATA_KEY]: { childID: child, structured: false } },
+      })
+      yield* seedAssistant(database, child, 100, "Verified")
+
+      const scope = yield* Scope.make()
+      yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+      const context = yield* buildExecution(scope, () => Effect.void)
+      const execution = Context.get(context, SessionExecution.Service)
+
+      yield* execution.wake(child)
+      yield* execution.awaitIdle(child)
+      yield* execution.awaitIdle(parent)
+      expect(yield* claims(database)).toEqual({ [parent]: false, [child]: false })
+      expect(yield* SessionInbox.list(database.db, parent)).toEqual([])
     }),
   )
 
@@ -750,7 +778,7 @@ function buildExecution(scope: Scope.Scope, drain: Drain) {
 }
 
 type SeedValues = Partial<
-  Pick<typeof SessionTable.$inferInsert, "time_suspended" | "resume_attempts" | "parent_id" | "title" | "revert">
+  Pick<typeof SessionTable.$inferInsert, "time_suspended" | "resume_attempts" | "parent_id" | "title" | "revert" | "metadata">
 > & { readonly agent?: string }
 
 function seedSessions(

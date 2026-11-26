@@ -27,7 +27,7 @@ Options (anything else is an error):
 
 The child starts with no context: put everything it needs in the prompt (paths, what to look for, what to return). It gets the project's instructions files itself. Its result goes to your script, not to a person, so ask for data, not prose.
 
-Each child is a normal session the user can open. agent() rejects when the child fails, and stopping the script stops its children.
+Each child is a normal session the user can open. agent() rejects when the child fails, and stopping the script stops its children. When agent() returns, anything its child left running in the background is stopped, and the child reports only to your script.
 
 ## llm()
 
