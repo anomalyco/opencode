@@ -71,23 +71,36 @@ describe("timeline facts", () => {
             step("shell", { command: "ls" }),
             step("edit", { path: "/repo/c.ts" }),
             step("Bun", { method: "write", path: "/repo/c.ts" }),
+            step("Bun", { method: "file", path: "/repo/a.ts" }),
+            step("Bun", { method: "other", path: "/repo/d.ts" }),
           ],
           files: [{ file: "/repo/c.ts", additions: 1 }],
         },
       },
     )
 
-    expect(summarize(factsOf([script], true, true))).toMatchObject({
-      calls: 3,
+    const facts = factsOf([script], true, true)
+
+    expect(facts.flatMap((fact) => (fact.kind === "call" ? [[fact.tool, fact.mode]] : []))).toEqual([
+      ["read", "explore"],
+      ["read", "explore"],
+      ["shell", "run"],
+      ["edit", "edit"],
+      ["edit", "edit"],
+      ["read", "explore"],
+    ])
+    expect(summarize(facts)).toMatchObject({
+      calls: 6,
       reads: 2,
       commands: 1,
       files: ["/repo/c.ts"],
-      modes: { explore: 2, edit: 0, run: 1, tool: 0 },
+      modes: { explore: 3, edit: 2, run: 1, tool: 0 },
     })
     expect(summarize(factsOf([script], true, false))).toMatchObject({
       calls: 1,
       reads: 0,
       commands: 1,
+      files: ["/repo/c.ts"],
       toolNames: [{ tool: "execute" }],
     })
 

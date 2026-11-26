@@ -302,22 +302,28 @@ function toolFacts(tool: Tool, id: string, scriptDiffs: boolean, scriptSteps = f
   return [call, ...files.map((file) => fileFact(file, id, state.status, "direct"))]
 }
 
-// A script's steps, each counted as a direct call of its tool. Edits count by the files the script changed instead, and
-// `Bun` file calls are not tools, so neither adds a call.
+// The tool a script's `Bun` file call counts as: `Bun.write` edits a file and `Bun.file` reads one.
+const bunTools = new Map([
+  ["write", "edit"],
+  ["file", "read"],
+])
+
+// A script's steps, each counted as a direct call of its tool. Other `Bun` calls count nothing.
 function stepFacts(tool: Tool, id: string): CallFact[] {
   return executeToolCalls(currentToolMetadata(tool)).flatMap(({ index, call }) => {
-    const name = toolName(call.tool)
-    const mode = modes.get(name) ?? "tool"
-
-    if (mode === "edit" || call.tool === "Bun") return []
-
     const input = call.input ?? {}
+    const bun = call.tool === "Bun" ? bunTools.get(String(input.method)) : undefined
+
+    if (call.tool === "Bun" && !bun) return []
+
+    const name = bun ?? toolName(call.tool)
+    const mode = modes.get(name) ?? "tool"
 
     const fact: CallFact = {
       kind: "call",
       id: `${id}:step:${index}`,
       name,
-      tool: call.tool,
+      tool: bun ?? call.tool,
       mode,
       status: call.status,
       failed: call.status === "error",

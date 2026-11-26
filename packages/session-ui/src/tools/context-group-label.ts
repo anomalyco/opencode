@@ -81,8 +81,11 @@ export function contextGroupLabel(parts: readonly ContextGroupPart[], i18n: UiI1
   const shown = (by: string) => calls.has(by) || calls.has(by.slice(by.indexOf(":") + 1))
 
   // A hidden script's changes read as the patch a direct edit shows as, one call per script, in the order they came.
+  // Counting a script's steps counts its edits, so its changes add no patch.
   const scripts = new Set(
-    facts.flatMap((fact) => (fact.kind === "file" && fact.via === "script" && !shown(fact.by) ? [fact.by] : [])),
+    scriptSteps
+      ? []
+      : facts.flatMap((fact) => (fact.kind === "file" && fact.via === "script" && !shown(fact.by) ? [fact.by] : [])),
   )
 
   const names = i18n.list([
