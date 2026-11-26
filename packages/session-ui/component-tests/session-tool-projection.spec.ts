@@ -228,6 +228,7 @@ story("keeps the View code action on an open execution's title line", async ({ m
   const timeline = await mount("timeline-playground--playground", { args: { preset: "everything" } })
   const tool = timeline.locator('[data-component="collapsible"].tool-collapsible[data-has-action="true"]').first()
   const trigger = tool.locator('> [data-slot="collapsible-trigger"]')
+
   if ((await trigger.getAttribute("aria-expanded")) !== "true") await trigger.click()
   await expect(trigger).toHaveAttribute("aria-expanded", "true")
 
@@ -235,8 +236,10 @@ story("keeps the View code action on an open execution's title line", async ({ m
   const middle = (locator: Locator) =>
     locator.evaluate((element) => {
       const box = element.getBoundingClientRect()
+
       return box.top + box.height / 2
     })
+
   const title = await middle(tool.locator('[data-slot="basic-tool-tool-title"]').first())
   const action = await middle(tool.getByRole("button", { name: "View code" }))
   expect(Math.abs(action - title)).toBeLessThan(2)
