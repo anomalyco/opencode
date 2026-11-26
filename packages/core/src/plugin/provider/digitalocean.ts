@@ -1,6 +1,6 @@
 import type { IntegrationOAuthMethodRegistration } from "@opencode/plugin/effect/integration"
 import { define } from "@opencode/plugin/effect/plugin"
-import { Clock, Deferred, Effect, Option, Schema } from "effect"
+import { Clock, Deferred, Effect, Exit, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import type { Server } from "node:http"
 import { App } from "../../app.js"
@@ -71,13 +71,14 @@ const oauth = {
             const access = body?.access_token
             if (error || !access || body?.state !== state) {
               const message = error || (access ? "Invalid OAuth state" : "Missing access token")
-              Effect.runFork(Deferred.fail(token, new Error(message)))
+              Deferred.doneUnsafe(token, Exit.fail(new Error(message)))
               response.writeHead(400, { "Content-Type": "application/json" }).end(JSON.stringify({ error: message }))
               return
             }
             const expires = Number.parseInt(body.expires_in ?? "0", 10)
-            Effect.runFork(
-              Deferred.succeed(token, {
+            Deferred.doneUnsafe(
+              token,
+              Exit.succeed({
                 access,
                 expiresIn: Number.isFinite(expires) && expires > 0 ? expires : 60 * 60 * 24 * 30,
               }),
