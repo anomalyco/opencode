@@ -220,6 +220,21 @@ test("reconnect with an aliased location refreshes flags once and updates both k
   }
 })
 
+test("location.shutdown for the canonical location keeps an aliased location dormant on reconnect", async () => {
+  const app = setup(() => Response.json({ location: { directory: "/real" }, data: { full_codemode: true } }))
+  try {
+    await app.data.location.flags.sync({ directory: "/alias" })
+    expect(app.count()).toBe(1)
+
+    app.emit({ id: "evt_shutdown", created: 1, type: "location.shutdown", location: { directory: "/real" }, data: {} })
+    app.emit({ id: "evt_connected", created: 2, type: "server.connected", data: {} } as OpenCodeEvent)
+    await Bun.sleep(50)
+    expect(app.count()).toBe(1)
+  } finally {
+    app.dispose()
+  }
+})
+
 test("location.sync does not wait on flags before starting the other location reads", async () => {
   const pending = Promise.withResolvers<Response>()
   const app = setup(() => pending.promise)

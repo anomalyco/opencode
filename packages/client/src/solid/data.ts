@@ -1600,10 +1600,19 @@ export function createData(config: CreateDataInput) {
         break
       // Fetching here would boot the location again, so a location that was evicted for being idle never stays
       // down. Its flags keep their last value until the next sync of the location.
-      case "location.shutdown":
-        dormantFlags.add(locationKey(location))
+      case "location.shutdown": {
+        const key = locationKey(location)
+        const current = store.location[key]?.flags
+        dormantFlags.add(key)
         flags.invalidate(location)
+        if (current)
+          Object.entries(store.location).forEach(([alias, data]) => {
+            if (alias === key || data.flags !== current) return
+            dormantFlags.add(alias)
+            sync.invalidate(`location.flags:${alias}`)
+          })
         break
+      }
     }
   }
 
