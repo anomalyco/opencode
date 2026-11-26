@@ -86,12 +86,16 @@ const Disabled = Schema.Struct({ status: Schema.Literal("disabled") }).annotate(
 const Failed = Schema.Struct({ status: Schema.Literal("failed"), error: Schema.String }).annotate({
   identifier: "Mcp.Status.Failed",
 })
+// Dropped on its own: its last tools stay listed, and the next call that needs it reconnects.
+const Disconnected = Schema.Struct({ status: Schema.Literal("disconnected"), error: Schema.String }).annotate({
+  identifier: "Mcp.Status.Disconnected",
+})
 const NeedsAuth = Schema.Struct({ status: Schema.Literal("needs_auth"), error: Schema.String }).annotate({
   identifier: "Mcp.Status.NeedsAuth",
 })
 
 export type Status = typeof Status.Type
-export const Status = Schema.Union([Connected, Pending, Disabled, Failed, NeedsAuth]).pipe(
+export const Status = Schema.Union([Connected, Pending, Disabled, Failed, Disconnected, NeedsAuth]).pipe(
   Schema.toTaggedUnion("status"),
 )
 

@@ -86,7 +86,7 @@ fn color(theme: &Theme, status: &McpServerStatus) -> Color {
     match status {
         McpServerStatus::Connected(_) => theme.text.feedback.success.base,
         McpServerStatus::Failed(_) => theme.text.feedback.error.base,
-        McpServerStatus::NeedsAuth(_) => theme.text.feedback.warning.base,
+        McpServerStatus::NeedsAuth(_) | McpServerStatus::Disconnected(_) => theme.text.feedback.warning.base,
         _ => theme.text.muted,
     }
 }
@@ -96,6 +96,7 @@ fn describe(status: &McpServerStatus) -> String {
     match status {
         McpServerStatus::Connected(_) => "Connected".to_owned(),
         McpServerStatus::Failed(failed) => failed.error.clone(),
+        McpServerStatus::Disconnected(disconnected) => format!("Disconnected: {}", disconnected.error),
         McpServerStatus::Disabled(_) => "Disabled in configuration".to_owned(),
         McpServerStatus::NeedsAuth(auth) => format!("Needs authentication: {}", auth.error),
         McpServerStatus::Pending(_) => "pending".to_owned(),

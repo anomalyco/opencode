@@ -65,13 +65,14 @@ fn row(item: &McpServer) -> Node {
     let dot = match status {
         "connected" => "text.feedback.success.base",
         "failed" => "text.feedback.error.base",
-        "needs_auth" => "text.feedback.warning.base",
+        "needs_auth" | "disconnected" => "text.feedback.warning.base",
         _ => "text.muted",
     };
     let label = match status {
         "connected" => "Connected",
         "pending" => "Connecting",
         "failed" => "Error",
+        "disconnected" => "Disconnected",
         "disabled" => "Disabled",
         "needs_auth" => "Sign in",
         other => other,

@@ -11,7 +11,7 @@ export function DialogStatus() {
   const color = (status: string) => {
     if (status === "connected") return theme.text.feedback.success.base
     if (status === "failed") return theme.text.feedback.error.base
-    if (status === "needs_auth") return theme.text.feedback.warning.base
+    if (status === "needs_auth" || status === "disconnected") return theme.text.feedback.warning.base
     return theme.text.muted
   }
   return (
@@ -33,6 +33,9 @@ export function DialogStatus() {
                     <Switch fallback={item.status.status}>
                       <Match when={item.status.status === "connected"}>Connected</Match>
                       <Match when={item.status.status === "failed" && item.status}>{(val) => val().error}</Match>
+                      <Match when={item.status.status === "disconnected" && item.status}>
+                        {(val) => `Disconnected: ${val().error}`}
+                      </Match>
                       <Match when={item.status.status === "disabled"}>Disabled in configuration</Match>
                       <Match when={item.status.status === "needs_auth" && item.status}>
                         {(val) => `Needs authentication: ${val().error}`}

@@ -414,6 +414,7 @@ button.session-service-row:focus-visible,
 .session-service-dot[data-status="failed"] {
   color: var(--icon-critical-base);
 }
+.session-service-dot[data-status="disconnected"],
 .session-service-dot[data-status="needs_auth"] {
   color: var(--icon-warning-base);
 }

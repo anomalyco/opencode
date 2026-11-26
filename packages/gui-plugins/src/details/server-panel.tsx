@@ -53,6 +53,7 @@ import {
 import {
   initialMcpState,
   mcpDialogView,
+  mcpError,
   mcpRowView,
   transitionMcp,
   type McpEffect,
@@ -600,11 +601,7 @@ function useMcp(props: ServiceProps, controllers: McpControllers, close: () => v
             const pending = () => view().pending
             const busy = () => view().busy
 
-            const failure = () => {
-              const status = server().status
-
-              return status.status === "failed" ? status.error : undefined
-            }
+            const failure = () => mcpError(server().status)
 
             const signIn = () => server().status.status === "needs_auth" && !!server().integrationID
 
@@ -617,6 +614,8 @@ function useMcp(props: ServiceProps, controllers: McpControllers, close: () => v
               if (status === "needs_auth") return ctx.t("needsAuth")
 
               if (status === "failed") return ctx.t("failed")
+
+              if (status === "disconnected") return ctx.t("disconnected")
 
               return ctx.t(status === "connected" ? "mcp.connected" : "mcp.disabled")
             }
@@ -1427,7 +1426,9 @@ function createMcpController(server: ServerRef, directory: string, release: () =
     // A successful HTTP response can still leave the MCP connection in a failed state.
     const status = current?.status
 
-    if (status?.status === "failed") return { type: "toggle.failed", name, attempt, error: status.error, server: true }
+    const error = mcpError(status)
+
+    if (error !== undefined) return { type: "toggle.failed", name, attempt, error, server: true }
 
     return { type: "toggle.succeeded", name, attempt }
   }
@@ -1524,7 +1525,9 @@ function McpErrorDialog(props: {
 }
 
 function statusError(status: McpServerStatus | undefined) {
-  return status?.status === "failed" || status?.status === "needs_auth" ? status.error : undefined
+  return status?.status === "failed" || status?.status === "disconnected" || status?.status === "needs_auth"
+    ? status.error
+    : undefined
 }
 
 // Waits for an MCP sign-in that also accepts the redirect URL pasted from the browser, for when the browser cannot

@@ -3,7 +3,6 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import { describe, expect, spyOn, test } from "bun:test"
 import {
-  Client,
   InMemoryTransport,
   StreamableHTTPClientTransport,
   deserializeMessage,
@@ -76,8 +75,6 @@ import { TestClock } from "effect/testing"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { ExitCode, makeHandle, ProcessId } from "effect/process/ChildProcessSpawner"
 import { Global } from "@opencode/util/global"
-import { App } from "@opencode/core/app"
-import { Flag } from "@opencode/core/flag"
 import { FSUtil } from "@opencode/util/fs-util"
 import { isRecord } from "@opencode/util/record"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
@@ -4335,6 +4332,8 @@ function fakeStdio() {
     environment: Layer.succeed(
       Environment.Service,
       Environment.Service.of({
+        id: Environment.localID,
+        local: true,
         files: Environment.makeFiles(Environment.makeMemoryDriver()),
         spawner: ChildProcessSpawner.make(spawn),
       }),
@@ -4373,10 +4372,10 @@ describe("MCP reconnect", () => {
         expect(tools.map((tool) => tool.name)).toEqual(["echo"])
 
         fake.state.exit(1, "database is locked")
-        const status = yield* eventually(server(service), (status) => status?.status === "failed")
-        const error = status?.status === "failed" ? status.error : ""
-        expect(error).toContain("MCP server process exited with code 1: database is locked")
-        expect(error).toContain("reconnects when next used")
+        const status = yield* eventually(server(service), (status) => status?.status === "disconnected")
+        expect(status?.status === "disconnected" ? status.error : "").toContain(
+          "MCP server process exited with code 1: database is locked",
+        )
         // The very same tool objects, so the registry and Code Mode see no change.
         expect((yield* service.tools())[0]).toBe(tools[0]!)
         // Nothing reconnects in the background.
@@ -4411,12 +4410,12 @@ describe("MCP reconnect", () => {
         yield* eventually(server(service), (status) => status?.status === "connected")
         const tools = yield* service.tools()
         fake.state.exit(1)
-        yield* eventually(server(service), (status) => status?.status === "failed")
+        yield* eventually(server(service), (status) => status?.status === "disconnected")
 
         fake.state.broken = "missing API key"
         expect((yield* echo(service).pipe(Effect.flip)).message).toContain("missing API key")
         expect(fake.state.spawns).toBe(2)
-        expect((yield* server(service))?.status).toBe("failed")
+        expect((yield* server(service))?.status).toBe("disconnected")
         expect(yield* service.tools()).toEqual(tools)
 
         // Within the 1 s backoff a call fails with the same error and nothing is spawned. The model is told the
@@ -4454,7 +4453,7 @@ describe("MCP reconnect", () => {
         const service = yield* Mcp.Service
         yield* eventually(server(service), (status) => status?.status === "connected")
         fake.state.exit(1)
-        yield* eventually(server(service), (status) => status?.status === "failed")
+        yield* eventually(server(service), (status) => status?.status === "disconnected")
 
         yield* service.disconnect("resources")
         expect(yield* service.tools()).toEqual([])
@@ -4484,7 +4483,7 @@ describe("MCP reconnect", () => {
     }),
   )
 
-  reconnecting.effect("drops the tools of a server whose reconnect needs authorization", () =>
+  reconnecting.effect("keeps the tools of a server whose reconnect needs authorization and waits for a sign-in", () =>
     Effect.gen(function* () {
       const denied = { value: false }
       const remote = yield* resourceServer({
@@ -4499,18 +4498,20 @@ describe("MCP reconnect", () => {
         const service = yield* Mcp.Service
         yield* eventually(server(service), (status) => status?.status === "connected")
         yield* echo(service)
+        const tools = yield* service.tools()
 
         // The restarted server no longer knows the session and refuses a new one without a login.
         denied.value = true
         yield* Effect.promise(remote.restart)
-        const initializations = remote.state.initializations
         yield* echo(service).pipe(Effect.flip)
         expect((yield* server(service))?.status).toBe("needs_auth")
-        expect(yield* service.tools()).toEqual([])
+        expect(yield* service.tools()).toEqual(tools)
 
+        // Only a sign-in brings it back, so later calls say so instead of reconnecting.
+        const initializations = remote.state.initializations
         yield* TestClock.adjust("1 minute")
-        yield* echo(service).pipe(Effect.flip)
-        expect(remote.state.initializations).toBe(initializations + 1)
+        expect((yield* echo(service).pipe(Effect.flip)).message).toContain("needs authentication")
+        expect(remote.state.initializations).toBe(initializations)
       }).pipe(
         Effect.provide(
           resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url: remote.url }), undefined, undefined, {
@@ -4537,14 +4538,16 @@ describe("MCP reconnect", () => {
       const listed = yield* Effect.gen(function* () {
         const service = yield* Mcp.Service
         yield* eventually(server(service), (status) => status?.status === "connected")
-        yield* eventually(files, (names) => names.length === 1)
+        // One file for this directory and one any directory can start from.
+        yield* eventually(files, (names) => names.length === 2)
         return yield* service.tools()
       }).pipe(Effect.provide(open(secret)))
-      const [file] = yield* files
-      expect(file).not.toContain("do-not-store")
-      expect(
-        yield* Effect.promise(() => fs.readFile(path.join(cache.path, "mcp", "tools", file!), "utf8")),
-      ).not.toContain("do-not-store")
+      for (const file of yield* files) {
+        expect(file).not.toContain("do-not-store")
+        expect(
+          yield* Effect.promise(() => fs.readFile(path.join(cache.path, "mcp", "tools", file), "utf8")),
+        ).not.toContain("do-not-store")
+      }
 
       // The same config offers the cached tools before its server answers.
       const gate = yield* Deferred.make<void>()
@@ -4573,7 +4576,98 @@ describe("MCP reconnect", () => {
         yield* Deferred.succeed(changed, undefined)
         yield* eventually(server(service), (status) => status?.status === "connected")
       }).pipe(Effect.provide(open(new ConfigMCP.Local({ ...config, environment: { TOKEN: "rotated" } }))))
-      expect(yield* files).toHaveLength(2)
+      expect(yield* files).toHaveLength(4)
+    }),
+  )
+
+  reconnecting.effect("offers a local server's cached tools in a directory it has not run in yet", () =>
+    Effect.gen(function* () {
+      const fake = fakeStdio()
+      const cache = yield* tmpdirScoped()
+      const other = yield* tmpdirScoped()
+      const open = (directory?: string) =>
+        resourceMcpLayer(config, undefined, undefined, {
+          environment: fake.environment,
+          flags: "mcp_resilience",
+          cache: cache.path,
+          directory,
+        })
+      const files = Effect.promise(() => fs.readdir(path.join(cache.path, "mcp", "tools")).catch((): string[] => []))
+      const listed = yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* eventually(server(service), (status) => status?.status === "connected")
+        yield* eventually(files, (names) => names.length === 2)
+        return yield* service.tools()
+      }).pipe(Effect.provide(open()))
+
+      const gate = yield* Deferred.make<void>()
+      fake.state.gate = gate
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        expect(yield* eventually(service.tools(), (tools) => tools.length > 0)).toEqual(listed)
+        yield* Deferred.succeed(gate, undefined)
+        yield* eventually(server(service), (status) => status?.status === "connected")
+        expect(yield* service.tools()).toEqual(listed)
+      }).pipe(Effect.provide(open(other.path)))
+      // Its own directory now has a file of its own.
+      expect(yield* files).toHaveLength(3)
+    }),
+  )
+
+  reconnecting.effect("keeps cached tools when a server fails to start and reconnects on the next call", () =>
+    Effect.gen(function* () {
+      const fake = fakeStdio()
+      const cache = yield* tmpdirScoped()
+      const open = () =>
+        resourceMcpLayer(config, undefined, undefined, {
+          environment: fake.environment,
+          flags: "mcp_resilience",
+          cache: cache.path,
+        })
+      const files = Effect.promise(() => fs.readdir(path.join(cache.path, "mcp", "tools")).catch((): string[] => []))
+      const listed = yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* eventually(server(service), (status) => status?.status === "connected")
+        yield* eventually(files, (names) => names.length === 2)
+        return yield* service.tools()
+      }).pipe(Effect.provide(open()))
+
+      fake.state.broken = "missing API key"
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        const status = yield* eventually(server(service), (status) => status?.status === "disconnected")
+        expect(status?.status === "disconnected" ? status.error : "").toContain("missing API key")
+        expect(yield* service.tools()).toEqual(listed)
+
+        fake.state.broken = undefined
+        yield* TestClock.adjust("1 second")
+        expect((yield* echo(service)).isError).toBe(false)
+        expect(yield* server(service)).toEqual({ status: "connected" })
+      }).pipe(Effect.provide(open()))
+    }),
+  )
+
+  reconnecting.effect("keeps the same tools while the user reconnects a server", () =>
+    Effect.gen(function* () {
+      const fake = fakeStdio()
+      yield* Effect.gen(function* () {
+        const service = yield* Mcp.Service
+        yield* eventually(server(service), (status) => status?.status === "connected")
+        const tools = yield* service.tools()
+
+        const gate = yield* Deferred.make<void>()
+        fake.state.gate = gate
+        const reconnect = yield* service.connect("resources").pipe(Effect.forkChild)
+        yield* eventually(
+          Effect.sync(() => fake.state.spawns),
+          (spawns) => spawns === 2,
+        )
+        expect((yield* service.tools())[0]).toBe(tools[0]!)
+        yield* Deferred.succeed(gate, undefined)
+        yield* Fiber.join(reconnect)
+        expect(yield* server(service)).toEqual({ status: "connected" })
+        expect(yield* service.tools()).toEqual(tools)
+      }).pipe(Effect.provide(resilient(fake)))
     }),
   )
 })

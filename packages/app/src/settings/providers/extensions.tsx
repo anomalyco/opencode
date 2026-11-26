@@ -24,7 +24,7 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { formatServerError } from "@/runtime/server/errors"
 import { showToast } from "@/shell/notifications/toast"
 import { useMcpController } from "@/providers/connect/mcp"
-import { mcpRowView } from "@/providers/connect/mcp-machine"
+import { mcpError, mcpRowView } from "@/providers/connect/mcp-machine"
 import { DialogMcp } from "@/providers/connect/mcp-dialog"
 import { ExtensionPlugins } from "@/runtime/plugin/extension-plugins"
 import { ExternalLink } from "@/runtime/platform/external-link"
@@ -47,6 +47,7 @@ import "@/shell/search-list.css"
 const statusLabels = {
   connected: "mcp.status.connected",
   failed: "mcp.status.failed",
+  disconnected: "mcp.status.disconnected",
   needs_auth: "mcp.status.needs_auth",
   disabled: "mcp.status.disabled",
 } as const
@@ -266,7 +267,7 @@ export const SettingsExtensions: Component<{
                           </Show>
                         </div>
                         <div class="settings-extension-trailing">
-                          <Show when={item.status.status === "failed"}>
+                          <Show when={mcpError(item.status) !== undefined}>
                             <Button
                               size="small"
                               variant="ghost-muted"

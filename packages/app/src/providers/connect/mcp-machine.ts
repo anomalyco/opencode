@@ -4,7 +4,7 @@ export const MCP_TOGGLE_TIMEOUT_MS = 60_000
 /** An MCP server's status, as the server lists it. */
 export type McpServerStatus =
   | { readonly status: "connected" | "pending" | "disabled" }
-  | { readonly status: "failed" | "needs_auth"; readonly error: string }
+  | { readonly status: "failed" | "disconnected" | "needs_auth"; readonly error: string }
 
 /** A sign-in that also accepts the redirect URL pasted from the browser. */
 export type McpSignIn = {
@@ -18,7 +18,7 @@ export type McpSignIn = {
 /** One server's connect, disconnect or sign-in in flight. */
 export type McpToggle = { readonly name: string; readonly attempt: number }
 
-/** The MCPs dialog's inline error view of one failed server. */
+/** The MCPs dialog's inline error view of one failed or disconnected server. */
 export type McpDetailState =
   | { readonly status: "closed" }
   /** Opened on a server before the server list loaded. */
@@ -168,6 +168,11 @@ export function mcpDetailAttempt(state: McpState) {
   return { attempt: state.detail.attempt, name: state.detail.name }
 }
 
+/** The error a failed or disconnected server shows; a sign-in prompt is not one. */
+export function mcpError(status: McpServerStatus | undefined) {
+  return status?.status === "failed" || status?.status === "disconnected" ? status.error : undefined
+}
+
 export function isMcpToggling(state: McpState) {
   return state.status === "active" && state.toggles.length > 0
 }
@@ -223,12 +228,14 @@ function step(state: Live, event: Exclude<McpEvent, { type: "disposed" }>): McpT
   const status = event.status
 
   if (detail.status === "opening") {
-    if (status?.status !== "failed") return { state: { ...state, detail: { status: "closed" } }, effects: NONE }
+    const error = mcpError(status)
+
+    if (error === undefined) return { state: { ...state, detail: { status: "closed" } }, effects: NONE }
 
     return {
       state: {
         ...state,
-        detail: { status: "open", attempt: detail.attempt, name: detail.name, error: status.error, copied: undefined },
+        detail: { status: "open", attempt: detail.attempt, name: detail.name, error, copied: undefined },
       },
       effects: NONE,
     }
@@ -242,9 +249,11 @@ function step(state: Live, event: Exclude<McpEvent, { type: "disposed" }>): McpT
     }
 
   // A retry stays open while it connects or asks to sign in, and a new failure replaces the error in place.
-  if (status.status !== "failed" || status.error === detail.error) return { state, effects: NONE }
+  const error = mcpError(status)
 
-  return { state: { ...state, detail: { ...detail, error: status.error } }, effects: NONE }
+  if (error === undefined || error === detail.error) return { state, effects: NONE }
+
+  return { state: { ...state, detail: { ...detail, error } }, effects: NONE }
 }
 
 function opened(state: Live, event: Extract<McpEvent, { type: "detail.opened" }>): McpTransition {
@@ -256,14 +265,16 @@ function opened(state: Live, event: Extract<McpEvent, { type: "detail.opened" }>
       effects: NONE,
     }
 
-  // Only a failed server has an error to show.
-  if (event.status?.status !== "failed") return { state: { ...state, detail: { status: "closed" } }, effects: NONE }
+  const error = mcpError(event.status)
+
+  // Only a failed or disconnected server has an error to show.
+  if (error === undefined) return { state: { ...state, detail: { status: "closed" } }, effects: NONE }
 
   return {
     state: {
       ...state,
       issued: attempt,
-      detail: { status: "open", attempt, name: event.name, error: event.status.error, copied: undefined },
+      detail: { status: "open", attempt, name: event.name, error, copied: undefined },
     },
     effects: event.focus ? [{ type: "focus-detail", attempt }] : NONE,
   }

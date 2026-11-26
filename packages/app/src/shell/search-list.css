@@ -176,6 +176,7 @@
   color: var(--icon-critical-base);
 }
 
+.mcp-status-dot[data-status="disconnected"],
 .mcp-status-dot[data-status="needs_auth"] {
   color: var(--icon-warning-base);
 }

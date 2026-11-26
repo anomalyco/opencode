@@ -21,6 +21,7 @@ export default {
   skills: "Skills",
   "skills.empty": "No skills configured",
   failed: "Failed",
+  disconnected: "Disconnected",
   retry: "Retry",
   connecting: "Connecting…",
   needsAuth: "Sign in required",

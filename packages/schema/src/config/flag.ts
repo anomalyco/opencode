@@ -33,7 +33,7 @@ export const registry = {
   browser_stream_tunnel:
     "Stream remote desktop browser TCP traffic over one prewarmed, ticket-authenticated binary WebSocket per live browser attachment instead of per-chunk RPC.",
   mcp_resilience:
-    "Keep an MCP server's tools when its connection drops on its own and reconnect it on the next call that needs it, and offer each server's last listed tools from a disk cache while it starts.",
+    "Keep an MCP server's tools when its connection drops, a reconnect fails or it needs a new sign-in, and reconnect it on the next call that needs it. Offer each server's last listed tools from a disk cache while it starts.",
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 

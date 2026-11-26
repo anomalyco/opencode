@@ -8,6 +8,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { uuid } from "@opencode/util/uuid"
 import {
   createMcpState,
+  mcpError,
   type McpEffect,
   type McpEvent,
   type McpServerStatus,
@@ -263,7 +264,9 @@ function createMcpController(
     // A successful HTTP response can still leave the MCP connection in a failed state.
     const status = current?.status
 
-    if (status?.status === "failed") return { type: "toggle.failed", name, attempt, error: status.error, server: true }
+    const error = mcpError(status)
+
+    if (error !== undefined) return { type: "toggle.failed", name, attempt, error, server: true }
 
     return { type: "toggle.succeeded", name, attempt }
   }

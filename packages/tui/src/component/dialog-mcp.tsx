@@ -13,7 +13,8 @@ import { DialogIntegration } from "./dialog-integration"
 import { useLocation } from "../context/location"
 
 function statusError(status: McpServer["status"]) {
-  if (status.status === "failed" || status.status === "needs_auth") return status.error
+  if (status.status === "failed" || status.status === "disconnected" || status.status === "needs_auth")
+    return status.error
   return undefined
 }
 
@@ -26,6 +27,9 @@ function Status(props: { status: McpServer["status"]; loading: boolean }) {
   }
   if (props.status.status === "failed") {
     return <>Failed !</>
+  }
+  if (props.status.status === "disconnected") {
+    return <>Disconnected ↻</>
   }
   if (props.status.status === "needs_auth") {
     return <>Sign in required →</>
@@ -50,14 +54,16 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
   const initial = props.initialServer ? servers().find((server) => server.name === props.initialServer) : undefined
   const [focused, setFocused] = createSignal<string | undefined>(props.initialServer)
   const [detail, setDetail] = createSignal<McpServer | undefined>(
-    props.details && initial?.status.status === "failed" ? initial : undefined,
+    props.details && (initial?.status.status === "failed" || initial?.status.status === "disconnected")
+      ? initial
+      : undefined,
   )
   const [loading, setLoading] = createSignal<ReadonlySet<string>>(new Set())
 
   const statusColor = (status: McpServer["status"]) => {
     if (status.status === "connected") return theme.text.feedback.success.base
     if (status.status === "failed") return theme.text.feedback.error.base
-    if (status.status === "needs_auth") return theme.text.feedback.warning.base
+    if (status.status === "needs_auth" || status.status === "disconnected") return theme.text.feedback.warning.base
     return theme.text.muted
   }
 
@@ -86,6 +92,7 @@ export function DialogMcp(props: { initialServer?: string; details?: boolean } =
     const status = focusedServer()?.status.status
     if (status === "connected") return "disconnect"
     if (status === "failed") return "retry"
+    if (status === "disconnected") return "reconnect"
     if (status === "needs_auth") return "sign in"
     return "connect"
   })
