@@ -967,6 +967,9 @@ function mockHandlers(
           Effect.sync(() => ({ location: location(config), data: resolve(config.websearchProviders ?? []) })),
         // No scenario signs in to an OpenCode Console workspace, so none has usage limits.
         usageLimits: () => Effect.succeed({ location: location(config), data: null }),
+        // No scenario turns on a client feature flag; a flag the server does not list is off.
+        flagList: (ctx) =>
+          Effect.sync(() => ({ location: location(config, requestDirectory(config, ctx.request)), data: {} })),
         // No scenario runs background jobs (Code Mode scripts or subagent work), so none is running.
         jobList: () => Effect.succeed({ data: [] }),
         worktreeList: () =>
