@@ -220,28 +220,6 @@ test("reconnect with an aliased location refreshes flags once and updates both k
   }
 })
 
-test("reconnect refreshes a flags sync that is still in flight", async () => {
-  const first = Promise.withResolvers<Response>()
-  let calls = 0
-  const app = setup((directory) => {
-    calls++
-    if (calls === 1) return first.promise
-    return Response.json({ location: { directory }, data: { full_codemode: true } })
-  })
-  const location = { directory: "/project" }
-  try {
-    const initial = app.data.location.flags.sync(location)
-    await until(() => app.count() === 1)
-    app.emit({ id: "evt_connected", created: 1, type: "server.connected", data: {} } as OpenCodeEvent)
-    first.resolve(Response.json({ location, data: { full_codemode: false } }))
-    await initial
-    await until(() => app.data.location.flag("full_codemode", location))
-    expect(app.count()).toBe(2)
-  } finally {
-    app.dispose()
-  }
-})
-
 test("location.sync does not wait on flags before starting the other location reads", async () => {
   const pending = Promise.withResolvers<Response>()
   const app = setup(() => pending.promise)

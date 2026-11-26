@@ -858,16 +858,18 @@ export function createData(config: CreateDataInput) {
         )
         refresh(() => result.location.vcs.sync())
         refresh(() => result.project.sync())
-        const flagTargets = new Map<string, LocationRef>()
-        syncedFlags.forEach((location, key) => {
-          const canonical = flagCanonical.get(location.directory) ?? key
-          if (dormantFlags.has(key) || dormantFlags.has(canonical)) return
-          if (!flagTargets.has(canonical) || key !== canonical) flagTargets.set(canonical, location)
-        })
-        flagTargets.forEach((location) => {
-          flags.invalidate(location)
-          refresh(() => flags.sync(location))
-        })
+        const seen = new Set<Record<string, boolean>>()
+        // Synced keys come first so an aliased ref refreshes both itself and its canonical key in one request.
+        Object.entries(store.location)
+          .sort(([a], [b]) => Number(sync.has(`location.flags:${b}`)) - Number(sync.has(`location.flags:${a}`)))
+          .forEach(([key, data]) => {
+            if (data.flags === undefined || dormantFlags.has(key) || seen.has(data.flags)) return
+            seen.add(data.flags)
+            const ref = JSON.parse(key) as [string, string | null]
+            const location = { directory: ref[0], workspaceID: ref[1] ?? undefined }
+            flags.invalidate(location)
+            refresh(() => flags.sync(location))
+          })
         Object.keys(store.jobTree).forEach((sessionID) => {
           result.job.invalidate(sessionID)
           refresh(() => result.job.sync(sessionID))
@@ -1658,19 +1660,12 @@ export function createData(config: CreateDataInput) {
   const usageLimits = locationResource("usageLimits", (location) => api().experimental.usage.limits({ location }))
   // Locations whose flags were invalidated by location.shutdown; reconnects skip them until something syncs them again.
   const dormantFlags = new Set<string>()
-  // Locations whose flags have synced or started syncing, and each requested directory's canonical key once resolved.
-  const syncedFlags = new Map<string, LocationRef>()
-  const flagCanonical = new Map<string, string>()
   // A server older than the flag endpoint answers it with a 404 and no JSON body: every flag is off there.
   const flagResource = locationResource(
     "flags",
     (location) =>
       api()
         .experimental.flag.get({ location })
-        .then((response) => {
-          flagCanonical.set(location.directory, locationKey(response.location))
-          return response
-        })
         .catch((error) => {
           if (!missingEndpoint(error)) throw error
           return { location: { directory: location.directory }, data: {} }
@@ -1680,16 +1675,8 @@ export function createData(config: CreateDataInput) {
   const flags = {
     ...flagResource,
     sync: (ref?: LocationRef) => {
-      const location = ref ?? defaultLocation()
-      const key = locationKey(location)
-      dormantFlags.delete(key)
-      const canonical = flagCanonical.get(location.directory)
-      if (canonical) dormantFlags.delete(canonical)
-      syncedFlags.set(key, location)
-      return flagResource.sync(location).catch((error) => {
-        if (!hasLocation("flags", location)) syncedFlags.delete(key)
-        throw error
-      })
+      dormantFlags.delete(locationKey(ref ?? defaultLocation()))
+      return flagResource.sync(ref)
     },
   }
   const shells = locationResource("shell", async (location) => {
