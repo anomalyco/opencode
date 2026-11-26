@@ -4,33 +4,36 @@
   "id": "espresso",
   "light": {
     "palette": {
-      "neutral": "#f7f1e8",
-      "ink": "#261b14",
-      "primary": "#994f1c",
-      "accent": "#7d3c56",
-      "success": "#35733c",
-      "warning": "#8f5c0c",
-      "error": "#ad2e24",
-      "info": "#2e6978",
-      "interactive": "#994f1c",
-      "diffAdd": "#35733c",
-      "diffDelete": "#ad2e24"
+      "neutral": "#f1e4d3",
+      "ink": "#291a10",
+      "primary": "#964b18",
+      "accent": "#7a354e",
+      "success": "#2e6b35",
+      "warning": "#855206",
+      "error": "#a6281e",
+      "info": "#266170",
+      "interactive": "#964b18",
+      "diffAdd": "#2e6b35",
+      "diffDelete": "#a6281e"
     },
     "overrides": {
-      "text-weak": "#665448",
-      "syntax-comment": "#705d50",
-      "syntax-keyword": "#994f1c",
-      "syntax-string": "#35733c",
-      "syntax-primitive": "#2e6978",
-      "syntax-property": "#7d3c56",
-      "syntax-type": "#87580d",
-      "syntax-constant": "#a33b2a"
+      "text-weak": "#634b3b",
+      "syntax-comment": "#6b5343",
+      "syntax-keyword": "#8f4614",
+      "syntax-string": "#2b6632",
+      "syntax-primitive": "#235c6b",
+      "syntax-property": "#75324a",
+      "syntax-type": "#7d4d06",
+      "syntax-constant": "#9c3221"
+    },
+    "v2Overrides": {
+      "v2-background-bg-contrast": "#4d2810"
     }
   },
   "dark": {
     "palette": {
-      "neutral": "#1c1613",
-      "ink": "#ede0d4",
+      "neutral": "#1e1612",
+      "ink": "#efe1d4",
       "primary": "#e09052",
       "accent": "#d98ca3",
       "success": "#8ec479",
@@ -42,14 +45,18 @@
       "diffDelete": "#e86f61"
     },
     "overrides": {
-      "text-weak": "#a89587",
-      "syntax-comment": "#948072",
+      "text-weak": "#ad9786",
+      "syntax-comment": "#968070",
       "syntax-keyword": "#e59a5e",
       "syntax-string": "#98cc82",
       "syntax-primitive": "#86cad6",
       "syntax-property": "#e09ab0",
       "syntax-type": "#ecc57c",
       "syntax-constant": "#eb8475"
+    },
+    "v2Overrides": {
+      "v2-background-bg-icon-button-contrast": "#e6c3a5",
+      "v2-icon-icon-inverse": "var(--v2-grey-1100)"
     }
   }
 }

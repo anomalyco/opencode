@@ -4,35 +4,35 @@
   "id": "eink",
   "light": {
     "palette": {
-      "neutral": "#f3f2ee",
-      "ink": "#171717",
-      "primary": "#3f3f42",
-      "accent": "#525257",
-      "success": "#2d593e",
-      "warning": "#6b5322",
-      "error": "#7a2e2e",
-      "info": "#3f3f42",
-      "interactive": "#3f3f42",
-      "diffAdd": "#2d593e",
-      "diffDelete": "#7a2e2e"
+      "neutral": "#ebe9e2",
+      "ink": "#141413",
+      "primary": "#3b3b3e",
+      "accent": "#4d4d52",
+      "success": "#285238",
+      "warning": "#634c1e",
+      "error": "#732929",
+      "info": "#3b3b3e",
+      "interactive": "#3b3b3e",
+      "diffAdd": "#285238",
+      "diffDelete": "#732929"
     },
     "overrides": {
-      "text-weak": "#575754",
-      "syntax-comment": "#63635f",
-      "syntax-keyword": "#171717",
-      "syntax-string": "#383836",
-      "syntax-primitive": "#262625",
-      "syntax-property": "#454542",
-      "syntax-type": "#2e2e2c",
-      "syntax-constant": "#383836",
-      "syntax-operator": "#52524f",
-      "syntax-punctuation": "#575754"
+      "text-weak": "#4f4f4b",
+      "syntax-comment": "#595955",
+      "syntax-keyword": "#141413",
+      "syntax-string": "#333331",
+      "syntax-primitive": "#212120",
+      "syntax-property": "#40403d",
+      "syntax-type": "#292927",
+      "syntax-constant": "#333331",
+      "syntax-operator": "#4a4a47",
+      "syntax-punctuation": "#52524e"
     }
   },
   "dark": {
     "palette": {
-      "neutral": "#171717",
-      "ink": "#e6e5e1",
+      "neutral": "#171716",
+      "ink": "#e6e5e0",
       "primary": "#a8a8ad",
       "accent": "#c2c2c7",
       "success": "#8ab89a",
@@ -54,6 +54,10 @@
       "syntax-constant": "#c7c6c0",
       "syntax-operator": "#9e9d98",
       "syntax-punctuation": "#969590"
+    },
+    "v2Overrides": {
+      "v2-background-bg-icon-button-contrast": "#d4d3ce",
+      "v2-icon-icon-inverse": "var(--v2-grey-1100)"
     }
   }
 }

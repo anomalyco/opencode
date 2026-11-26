@@ -4,33 +4,36 @@
   "id": "dune",
   "light": {
     "palette": {
-      "neutral": "#faf6ec",
-      "ink": "#241f12",
-      "primary": "#8a5d00",
-      "accent": "#9e3f1f",
-      "success": "#386e34",
-      "warning": "#945800",
-      "error": "#b52b24",
-      "info": "#1f6a73",
-      "interactive": "#8a5d00",
-      "diffAdd": "#386e34",
-      "diffDelete": "#b52b24"
+      "neutral": "#f6ebd2",
+      "ink": "#261e0c",
+      "primary": "#825600",
+      "accent": "#963919",
+      "success": "#32662e",
+      "warning": "#8c5200",
+      "error": "#ad261f",
+      "info": "#1a626b",
+      "interactive": "#825600",
+      "diffAdd": "#32662e",
+      "diffDelete": "#ad261f"
     },
     "overrides": {
-      "text-weak": "#635a44",
-      "syntax-comment": "#6e644d",
-      "syntax-keyword": "#8a5d00",
-      "syntax-string": "#386e34",
-      "syntax-primitive": "#1f6a73",
-      "syntax-property": "#9e3f1f",
-      "syntax-type": "#735200",
-      "syntax-constant": "#a83327"
+      "text-weak": "#5e5135",
+      "syntax-comment": "#695b3d",
+      "syntax-keyword": "#7d5200",
+      "syntax-string": "#2f612b",
+      "syntax-primitive": "#185d66",
+      "syntax-property": "#913617",
+      "syntax-type": "#6b4b00",
+      "syntax-constant": "#a12d21"
+    },
+    "v2Overrides": {
+      "v2-background-bg-contrast": "#523805"
     }
   },
   "dark": {
     "palette": {
-      "neutral": "#191712",
-      "ink": "#efe9d8",
+      "neutral": "#1b1811",
+      "ink": "#f0e9d6",
       "primary": "#e6b450",
       "accent": "#e8835c",
       "success": "#95c76f",
@@ -42,14 +45,18 @@
       "diffDelete": "#eb6b5e"
     },
     "overrides": {
-      "text-weak": "#a69e8a",
-      "syntax-comment": "#8f8774",
+      "text-weak": "#ab9f84",
+      "syntax-comment": "#94886e",
       "syntax-keyword": "#edc062",
       "syntax-string": "#9fd179",
       "syntax-primitive": "#7ecdd1",
       "syntax-property": "#ed916d",
       "syntax-type": "#f5cf73",
       "syntax-constant": "#f08073"
+    },
+    "v2Overrides": {
+      "v2-background-bg-icon-button-contrast": "#ebd08d",
+      "v2-icon-icon-inverse": "var(--v2-grey-1100)"
     }
   }
 }

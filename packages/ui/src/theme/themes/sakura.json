@@ -4,33 +4,36 @@
   "id": "sakura",
   "light": {
     "palette": {
-      "neutral": "#fff5f8",
-      "ink": "#2b1422",
+      "neutral": "#fde8f0",
+      "ink": "#301122",
       "primary": "#c22575",
       "accent": "#8f2d8c",
-      "success": "#237d52",
-      "warning": "#9c6200",
-      "error": "#c9224b",
-      "info": "#a63288",
+      "success": "#1e754c",
+      "warning": "#945a00",
+      "error": "#c41d46",
+      "info": "#9e2b82",
       "interactive": "#c22575",
-      "diffAdd": "#237d52",
-      "diffDelete": "#c9224b"
+      "diffAdd": "#1e754c",
+      "diffDelete": "#c41d46"
     },
     "overrides": {
-      "text-weak": "#6e4b5e",
-      "syntax-comment": "#7a586b",
-      "syntax-keyword": "#b51f6d",
-      "syntax-string": "#237a50",
-      "syntax-primitive": "#852b82",
-      "syntax-property": "#6e327a",
-      "syntax-type": "#8f5900",
-      "syntax-constant": "#c22575"
+      "text-weak": "#6e3d57",
+      "syntax-comment": "#784862",
+      "syntax-keyword": "#ad1a66",
+      "syntax-string": "#1d7048",
+      "syntax-primitive": "#7d247a",
+      "syntax-property": "#662873",
+      "syntax-type": "#855100",
+      "syntax-constant": "#b81f6d"
+    },
+    "v2Overrides": {
+      "v2-background-bg-contrast": "#61173d"
     }
   },
   "dark": {
     "palette": {
-      "neutral": "#21151d",
-      "ink": "#f7e6ef",
+      "neutral": "#24141f",
+      "ink": "#f9e8f1",
       "primary": "#f26cb2",
       "accent": "#d58cff",
       "success": "#7ddba6",
@@ -42,14 +45,18 @@
       "diffDelete": "#ff6b8b"
     },
     "overrides": {
-      "text-weak": "#b896a9",
-      "syntax-comment": "#9e7c90",
+      "text-weak": "#bf97ad",
+      "syntax-comment": "#a37b92",
       "syntax-keyword": "#ff85c2",
       "syntax-string": "#8be3b0",
       "syntax-primitive": "#d99cff",
       "syntax-property": "#ffb5df",
       "syntax-type": "#f7cf8b",
       "syntax-constant": "#ff94b2"
+    },
+    "v2Overrides": {
+      "v2-background-bg-icon-button-contrast": "#f5bad7",
+      "v2-icon-icon-inverse": "var(--v2-grey-1100)"
     }
   }
 }
