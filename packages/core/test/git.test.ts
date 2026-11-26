@@ -149,6 +149,8 @@ describe("Git trees", () => {
         yield* Effect.promise(async () => {
           await fs.mkdir(path.join(project, "scope"), { recursive: true })
           await initRepo(project)
+          // `before` is written from the seeded index, which a global `core.autocrlf` would skip.
+          await $`git config core.autocrlf false`.cwd(project).quiet()
           await Promise.all(paths.map((file) => Bun.write(path.join(project, file), "one\n")))
           await $`git add .`.cwd(project).quiet()
           await $`git commit -m initial`.cwd(project).quiet()
