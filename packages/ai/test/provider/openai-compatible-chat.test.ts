@@ -52,6 +52,7 @@ describe("OpenAI-compatible Chat route", () => {
       for (const [family, ids, first, valid] of [
         ["ordinary-model", ["read:0", "write:0"], "read:0", /^.+$/],
         ["mistral-small", ["read:0", "write:0"], "read00000", /^[a-zA-Z0-9]{9}$/],
+        ["mistral-small", ["functions.read:0", "functions.read:1"], "functions", /^[a-zA-Z0-9]{9}$/],
         ["claude-sonnet", ["read:0", "write:0"], "read_0", /^[a-zA-Z0-9_-]+$/],
         ["openai/gpt-4o", ["a".repeat(41), "b".repeat(41)], "a".repeat(40), /^.{1,40}$/],
       ] as const) {

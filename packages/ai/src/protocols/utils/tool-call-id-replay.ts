@@ -30,7 +30,7 @@ export const normalizer = (request: LLMRequest, format = (id: string) => id) => 
         continue
       }
       let id = formatted
-      if (seen.has(part.id)) {
+      if (seen.has(part.id) || used.has(formatted)) {
         // Nine alphanumeric characters also fit Mistral's existing wire format.
         do {
           id = (next++).toString(36).padStart(9, "0")
