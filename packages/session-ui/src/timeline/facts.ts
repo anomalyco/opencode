@@ -6,7 +6,6 @@ import {
   currentToolHasLoadedFiles,
   currentToolInput,
   currentToolMetadata,
-  executeToolCalls,
   readImagePath,
 } from "../message/current-tool-state"
 import { isInterruptedError } from "./turn-phase-machine"
@@ -284,9 +283,12 @@ function toolFacts(tool: Tool, id: string, scriptDiffs: boolean, scriptSteps = f
 
   if (fact.name === "execute" && !scriptDiffs) return [call]
 
+  const steps = fact.name === "execute" && scriptSteps ? stepFacts(metadata, id) : []
+
   if (fact.name === "execute")
     return [
-      ...(scriptSteps ? stepFacts(tool, id) : [call]),
+      // A script with no steps to count yet, or none at all, counts as itself.
+      ...(steps.length ? steps : [call]),
       // One fact per change, in order: a script can change the same file more than once.
       ...scriptChanges(tool, read).map((file, index) => scriptFileFactOf(file, index, id, state.status)),
     ]
@@ -308,29 +310,38 @@ const bunTools = new Map([
   ["file", "read"],
 ])
 
-// A script's steps, each counted as a direct call of its tool. Other `Bun` calls count nothing.
-function stepFacts(tool: Tool, id: string): CallFact[] {
-  return executeToolCalls(currentToolMetadata(tool)).flatMap(({ index, call }) => {
-    const input = call.input ?? {}
-    const bun = call.tool === "Bun" ? bunTools.get(String(input.method)) : undefined
+// A script's steps, each counted as a direct call of its tool. Other `Bun` calls count nothing. A script can make
+// thousands of calls, so they are read as they are rather than decoded.
+function stepFacts(metadata: Schema.JsonObject, id: string): CallFact[] {
+  const calls = Array.isArray(metadata.toolCalls) ? metadata.toolCalls : []
+
+  return calls.flatMap((call, index) => {
+    if (!Predicate.isObject(call) || !Predicate.isString(call.tool)) return []
+
+    const status = call.status
+
+    if (status !== "running" && status !== "completed" && status !== "error") return []
+
+    const input = Predicate.isObject(call.input) ? call.input : {}
+    const bun = call.tool === "Bun" && Predicate.isString(input.method) ? bunTools.get(input.method) : undefined
 
     if (call.tool === "Bun" && !bun) return []
 
     const name = bun ?? toolName(call.tool)
-    const mode = modes.get(name) ?? "tool"
 
     const fact: CallFact = {
       kind: "call",
       id: `${id}:step:${index}`,
       name,
       tool: bun ?? call.tool,
-      mode,
-      status: call.status,
-      failed: call.status === "error",
+      mode: modes.get(name) ?? "tool",
+      status,
+      failed: status === "error",
       stopped: false,
       called: true,
       groupedRead: name === "read",
-      background: name === "shell" && input.background === true,
+      // Code Mode's shell has no background.
+      background: false,
       changes: 0,
     }
 

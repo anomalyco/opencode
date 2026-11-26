@@ -1,3 +1,4 @@
+import type { JsonValue } from "@opencode/client/promise"
 import { describe, expect, test } from "bun:test"
 import { useI18n } from "@opencode/ui/context/i18n"
 import { storyTool } from "../../storybook/current-session-scenarios"
@@ -92,5 +93,58 @@ describe("script labels", () => {
   test("the New timeline counts a script's files only where they are placed", () => {
     expect(next([script, ...files])).toBe("Edited 3 files · 1 command")
     expect(next([script])).toBe("Ran 1 command")
+  })
+
+  describe("counting a script's steps", () => {
+    const step = (tool: string, input: Record<string, string>, status = "completed") => ({ tool, status, input })
+
+    const changes = script.state.status === "completed" ? (script.state.metadata?.files ?? []) : []
+
+    const stepped = (toolCalls: JsonValue[], status: "running" | "completed" = "completed") =>
+      storyTool("exec_1", "execute", status, { code: "x" }, { metadata: { files: changes, toolCalls } })
+
+    const steps = stepped([
+      step("read", { path: "/repo/a.ts" }),
+      step("shell", { command: "ls" }),
+      step("edit", { path: "/repo/a.ts" }),
+      step("write", { path: "/repo/b.ts" }),
+      step("patch", { patchText: "x" }),
+      step("Bun", { method: "write", path: "/repo/c.bin" }),
+    ])
+
+    const stepsNext = (parts: ActivityGroupPart[]) =>
+      (activityText(activityLabel(parts, i18n, true)) ?? usedLabel(parts, i18n)).text
+
+    test("Compact: a script beside its files counts its steps, with no patch", () => {
+      expect(contextGroupLabel([steps, ...files], i18n, true).text).toBe("Used 6 Read, Shell, Edit, Write, Patch")
+      expect(stepsNext([steps, ...files])).toBe("Edited 3 files · 1 command, 1 read")
+    })
+
+    test("Quiet: a hidden script's files still read as a patch", () => {
+      expect(contextGroupLabel(files, i18n, true).text).toBe("Used 1 Patch")
+      expect(stepsNext(files)).toBe("Edited 3 files")
+    })
+
+    test("a script with no steps to count counts as itself", () => {
+      expect(contextGroupLabel([stepped([], "running")], i18n, true).text).toBe("Used 1 Execute")
+      expect(contextGroupLabel([stepped([step("Bun", { method: "spawn" })])], i18n, true).text).toBe("Used 1 Execute")
+    })
+
+    test("an edit step before its files land does not name the group as edits", () => {
+      const running = storyTool(
+        "exec_2",
+        "execute",
+        "running",
+        { code: "x" },
+        {
+          metadata: {
+            files: [],
+            toolCalls: [step("read", { path: "/repo/a.ts" }), step("edit", { path: "/repo/a.ts" }, "running")],
+          },
+        },
+      )
+
+      expect(stepsNext([running])).not.toContain("Edited")
+    })
   })
 })

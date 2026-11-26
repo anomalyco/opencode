@@ -77,15 +77,12 @@ export function contextGroupLabel(parts: readonly ContextGroupPart[], i18n: UiI1
   const summary = summarize(facts)
   const thoughts = summary.thoughts
   // Rows pass calls by their part id and a script's changes by message and part id, so a change names its script by either.
-  const calls = new Set(facts.flatMap((fact) => (fact.kind === "call" ? [fact.id] : [])))
+  const calls = new Set(parts.flatMap((part) => (part.type === "tool" ? [part.id] : [])))
   const shown = (by: string) => calls.has(by) || calls.has(by.slice(by.indexOf(":") + 1))
 
   // A hidden script's changes read as the patch a direct edit shows as, one call per script, in the order they came.
-  // Counting a script's steps counts its edits, so its changes add no patch.
   const scripts = new Set(
-    scriptSteps
-      ? []
-      : facts.flatMap((fact) => (fact.kind === "file" && fact.via === "script" && !shown(fact.by) ? [fact.by] : [])),
+    facts.flatMap((fact) => (fact.kind === "file" && fact.via === "script" && !shown(fact.by) ? [fact.by] : [])),
   )
 
   const names = i18n.list([

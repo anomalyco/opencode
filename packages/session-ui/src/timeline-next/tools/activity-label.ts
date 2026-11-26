@@ -49,8 +49,14 @@ export function activityLabel(parts: readonly ActivityGroupPart[], i18n: UiI18n,
   const summary = summarize(activityFacts(parts, scriptSteps))
   const launches = summary.background.verbs
   const launched = launches.map((bucket) => i18n.plural(launchKeys[bucket.verb], bucket.count))
+
   // Files a script changed name the group as edits do, where they are placed in it.
-  const mode = modePriority.find((item) => summary.modes[item] > 0 || (item === "edit" && summary.files.length > 0))
+  // Counting a script's steps, an edit step leads only once its files have landed.
+  const mode = modePriority.find((item) =>
+    item === "edit" && scriptSteps
+      ? summary.files.length > 0
+      : summary.modes[item] > 0 || (item === "edit" && summary.files.length > 0),
+  )
 
   if (!mode) {
     const [first, ...rest] = launches
