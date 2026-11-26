@@ -66,6 +66,7 @@ export class UnavailableError extends Schema.TaggedError<UnavailableError>()("Pe
 /** The daemon rejected the request, or its reply was lost after it was sent, so it may have run. */
 export class RequestError extends Schema.TaggedError<RequestError>()("PersistentPty.RequestError", {
   message: Schema.String,
+  replyLost: Schema.optional(Schema.Boolean),
 }) {}
 
 export class NotFoundError extends Schema.TaggedError<NotFoundError>()("PersistentPty.NotFoundError", {
@@ -577,7 +578,7 @@ const unavailable = (error: unknown) =>
 // Only a failure before the request was sent is safe to retry somewhere else.
 const pipeError = (error: DaemonError) =>
   error.kind === "request" || error.kind === "response"
-    ? new RequestError({ message: error.message })
+    ? new RequestError({ message: error.message, replyLost: error.kind === "response" || undefined })
     : new UnavailableError({ message: error.message })
 
 const unexpectedPipe = (response: WireResponse) =>

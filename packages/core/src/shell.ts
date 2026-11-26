@@ -1032,7 +1032,16 @@ const layer = () =>
                   }).pipe(Effect.as(Option.none<Info>())),
                 // The daemon may have run it: never run it again here.
                 "PersistentPty.RequestError": (cause) =>
-                  Effect.fail(new AppProcess.AppProcessError({ command: invocation.command, cause })),
+                  Effect.fail(
+                    new AppProcess.AppProcessError({
+                      command: invocation.command,
+                      cause: cause.replyLost
+                        ? new PersistentPty.RequestError({
+                            message: `${cause.message}. The command may have run; its output, if any, is at ${file}`,
+                          })
+                        : cause,
+                    }),
+                  ),
               }),
             )
           if (Option.isSome(created)) return created.value
