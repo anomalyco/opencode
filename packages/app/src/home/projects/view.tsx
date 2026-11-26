@@ -1,6 +1,4 @@
 import { createMemo, For, type JSX, onCleanup, Show, splitProps } from "solid-js"
-import { useAutomationSource } from "@/automations/source"
-import { useNavigate } from "@solidjs/router"
 import { createStore } from "solid-js/store"
 import { createResizeObserver } from "@solid-primitives/resize-observer"
 import { Popover } from "@kobalte/core/popover"
@@ -83,6 +81,8 @@ export type HomeProjectsViewProps = {
   onHideProject: (server: ServerConnection.Any, project: LocalProject) => void
   onOpenSettings: () => void
   onOpenHelp: () => void
+  /** Opens Automations; the entry shows only while it is available. */
+  automations?: HomeAutomationsEntry
   /** With `dropdown`, opens the panel from a compact picker at the end of Home's search field. */
   scope?: boolean
   /** With several servers and no project chosen, names the focused server instead of "All projects". */
@@ -382,33 +382,34 @@ function HomeProjectsPanel(props: HomeProjectsViewProps) {
         classList={{ "!hidden": !!props.dropdown }}
         onOpenSettings={props.onOpenSettings}
         onOpenHelp={props.onOpenHelp}
+        automations={props.automations}
         language={props.language}
       />
     </aside>
   )
 }
 
+export type HomeAutomationsEntry = { available: () => boolean; open: () => void }
+
 export function HomeUtilityNav(props: {
   class?: string
   classList?: Record<string, boolean>
   onOpenSettings: () => void
   onOpenHelp: () => void
+  automations?: HomeAutomationsEntry
   language: ReturnType<typeof useLanguage>
 }) {
-  const navigate = useNavigate()
-  const automations = useAutomationSource()
-
   return (
     <div
       class={`${props.class ?? ""} min-w-0 flex-row justify-between gap-1 lg:flex-col lg:justify-start lg:pr-3 [&>button]:w-auto lg:[&>button]:w-full`}
       classList={props.classList}
     >
-      <Show when={automations.available()}>
+      <Show when={props.automations?.available()}>
         <HomeProjectNavButton
           type="button"
           data-action="home-automations"
           class="text-v2-text-text-faint [&>[data-slot=icon-svg]]:text-v2-icon-icon-muted"
-          onClick={() => navigate("/automations")}
+          onClick={() => props.automations?.open()}
         >
           <Icon name="clock" size="small" />
           <span class={HOME_PROJECT_NAV_LABEL}>{props.language.t("automations.title")}</span>

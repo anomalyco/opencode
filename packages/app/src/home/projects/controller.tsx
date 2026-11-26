@@ -12,12 +12,14 @@ import { Schema } from "effect"
 import { Persistence } from "@/runtime/persistence/schema"
 import type { HomeController } from "../model"
 import { createProjectActions } from "./actions"
+import type { HomeAutomationsEntry } from "./view"
 
 export const HomeServersSchema = Schema.Struct({
   collapsed: Persistence.record(Persistence.fallback(Schema.Boolean, () => false)),
 })
 
-export function createHomeProjectsController(home: HomeController) {
+// Automations come from the shell's AutomationSource; surfaces mounted without it (stories) leave the entry out.
+export function createHomeProjectsController(home: HomeController, options?: { automations?: HomeAutomationsEntry }) {
   const platform = usePlatform()
 
   const pickDirectory = useDirectoryPicker()
@@ -102,7 +104,8 @@ export function createHomeProjectsController(home: HomeController) {
     utility: {
       settings: openSettings,
       help: () => platform.openExternal("https://opencode.ai/desktop-feedback"),
-    },
+      ...(options?.automations ? { automations: options.automations } : {}),
+    } as { settings: () => void; help: () => void; automations?: HomeAutomationsEntry },
   }
 }
 
