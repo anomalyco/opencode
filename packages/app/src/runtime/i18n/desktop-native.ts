@@ -232,7 +232,8 @@ function locale(value: string) {
 const normalizeScript = (script?: string) => (script === "Aran" ? "Arab" : script)
 
 export const DESKTOP_NATIVE_ENGLISH = {
-  "desktop.microphoneUsage": "OpenCode uses your microphone for voice calls and lets websites you allow in the browser pane use it.",
+  "desktop.microphoneUsage":
+    "OpenCode uses your microphone for voice calls and lets websites you allow in the browser pane use it.",
   "desktop.cameraUsage": "OpenCode lets websites you allow in the browser pane use your camera.",
   "desktop.documentsFolderUsage":
     "OpenCode uses files in your Documents folder for projects you open and commands you run there.",
@@ -317,6 +318,13 @@ export const DESKTOP_NATIVE_ENGLISH = {
 
   "desktop.contextMenu.spellcheck": "Spellcheck",
   "desktop.contextMenu.spellcheckLanguages": "Spellcheck Languages",
+
+  "desktop.backgroundNotice.message": "OpenCode keeps running in the background",
+  "desktop.backgroundNotice.detail":
+    "Your sessions, terminals and MCP servers keep going after you quit, and OpenCode opens faster next time. You can change this anytime in Settings > General.",
+  "desktop.backgroundNotice.stopOnQuit": "Stop OpenCode when I quit",
+  "desktop.backgroundNotice.quit": "Quit",
+  "desktop.backgroundNotice.openSettings": "Open Settings",
 } as const
 
 export type DesktopNativeKey = keyof typeof DESKTOP_NATIVE_ENGLISH

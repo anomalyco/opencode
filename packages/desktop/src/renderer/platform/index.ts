@@ -48,6 +48,8 @@ export function createDesktopPlatform(api: ElectronAPI, windowState: DesktopWind
     setPinchZoomEnabled,
     getSpellcheckEnabled: () => api.getSpellcheckEnabled(),
     setSpellcheckEnabled: (enabled) => api.setSpellcheckEnabled(enabled),
+    getKeepServiceRunning: () => api.getKeepServiceRunning(),
+    setKeepServiceRunning: (enabled) => api.setKeepServiceRunning(enabled),
     onDeepLinks,
     onDragCancel: (callback) => {
       window.addEventListener(DragCancelEvent, callback)

@@ -140,6 +140,12 @@ type PlatformBase = {
   /** Turn the native spellchecker on or off (desktop only) */
   setSpellcheckEnabled?(enabled: boolean): Promise<void>
 
+  /** Get whether the background service keeps running after the app quits (desktop only) */
+  getKeepServiceRunning?(): Promise<boolean>
+
+  /** Keep the background service running after the app quits, or stop it on quit (desktop only) */
+  setKeepServiceRunning?(enabled: boolean): Promise<void>
+
   /** Run a desktop-only menu action from the app chrome */
   runDesktopMenuAction?(action: DesktopMenuAction): Promise<void> | void
 

@@ -84,6 +84,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
+    label: "settings.general.row.keepServiceRunning.title",
+    target: "settings-keep-service-running",
+    keywords: "background service server quit exit close tray stop",
+    available: "desktop",
+  },
+  {
+    tab: "general",
     label: "settings.general.row.mobileTitlebarBottom.title",
     target: "settings-mobile-titlebar-bottom",
     available: "mobile",

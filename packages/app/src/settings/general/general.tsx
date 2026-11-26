@@ -280,6 +280,14 @@ export const SettingsGeneral: Component = () => {
     write: (checked) => platform.setSpellcheckEnabled?.(checked),
   })
 
+  const keepServiceRunning = createOptimisticSetting({
+    source: () => (desktop() && "getKeepServiceRunning" in platform) || undefined,
+    initial: true,
+    initialMeta: undefined,
+    load: async () => ({ value: (await platform.getKeepServiceRunning?.()) ?? true, meta: undefined }),
+    write: (checked) => platform.setKeepServiceRunning?.(checked),
+  })
+
   const GeneralSection = () => (
     <div class="settings-section">
       <h3 class="settings-section-title">{language.t("settings.general.section.general")}</h3>
@@ -332,6 +340,14 @@ export const SettingsGeneral: Component = () => {
           >
             <div data-action="settings-spellcheck">
               <Switch checked={spellcheck.value()} onChange={spellcheck.select} />
+            </div>
+          </SettingsRow>
+          <SettingsRow
+            title={language.t("settings.general.row.keepServiceRunning.title")}
+            description={language.t("settings.general.row.keepServiceRunning.description")}
+          >
+            <div data-action="settings-keep-service-running">
+              <Switch checked={keepServiceRunning.value()} onChange={keepServiceRunning.select} />
             </div>
           </SettingsRow>
         </Show>
