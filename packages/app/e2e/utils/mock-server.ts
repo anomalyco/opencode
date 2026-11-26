@@ -967,6 +967,9 @@ function mockHandlers(
           Effect.sync(() => ({ location: location(config), data: resolve(config.websearchProviders ?? []) })),
         // No scenario signs in to an OpenCode Console workspace, so none has usage limits.
         usageLimits: () => Effect.succeed({ location: location(config), data: null }),
+        // No scenario turns on a feature flag, so every flag is off.
+        flagList: (ctx) =>
+          Effect.sync(() => ({ location: location(config, requestDirectory(config, ctx.request)), data: {} })),
         // No scenario runs background jobs (Code Mode scripts or subagent work), so none is running.
         jobList: () => Effect.succeed({ data: [] }),
         worktreeList: () =>
@@ -1444,8 +1447,11 @@ function mockHandlers(
             Effect.andThen(noContent),
           )
         },
-        // Like the server for an idle session: nothing was running to interrupt.
-        sessionInterrupt: () => Effect.succeed({ interrupted: false }),
+        // Like the server: an idle session has nothing running to interrupt.
+        sessionInterrupt: (ctx) =>
+          Effect.succeed({
+            interrupted: resolve(config.sessionStatus ?? {})[ctx.params.sessionID]?.type === "running",
+          }),
         // The mock runs no agent loop, so every session is already idle.
         sessionWait: () => noContent,
         sessionRevertStage: (ctx) => {

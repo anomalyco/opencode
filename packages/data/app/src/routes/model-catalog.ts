@@ -60,6 +60,7 @@ export type ModelCatalog = {
   labs: ModelCatalogLab[]
   // Stealth models stay out of the lab catalog, but their OpenCode listings publish limits and modalities.
   stealthSpecs: Record<string, ModelCatalogSpecs>
+  freeModels: string[]
 }
 
 const catalogTtlMs = 5 * 60 * 1000
@@ -236,7 +237,21 @@ export function buildModelCatalog(payload: unknown, pricingPayload?: unknown, la
       }, {}),
     ).toSorted((a, b) => a.name.localeCompare(b.name)),
     stealthSpecs: readStealthModelSpecs(pricingPayload),
+    freeModels: readFreeModels(pricingPayload),
   }
+}
+
+// A free window that ended stays listed at $0 and is marked deprecated.
+function readFreeModels(payload: unknown) {
+  if (!isRecord(payload)) return []
+  return ["opencode", "opencode-go"]
+    .map((provider) => payload[provider])
+    .flatMap((provider) => (isRecord(provider) && isRecord(provider.models) ? Object.entries(provider.models) : []))
+    .flatMap(([id, value]) => {
+      if (!isRecord(value) || value.status === "deprecated") return []
+      const cost = readCatalogCost(value.cost)
+      return cost?.input === 0 && cost.output === 0 ? [statModel(id, undefined)] : []
+    })
 }
 
 function readStealthModelSpecs(payload: unknown): Record<string, ModelCatalogSpecs> {

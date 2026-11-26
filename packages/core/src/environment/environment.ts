@@ -11,7 +11,8 @@ import { makeLocalDriver } from "./local.js"
 import { EnvironmentUnavailable } from "./unavailable.js"
 import { Location } from "../location.js"
 import { AbsolutePath } from "../schema.js"
-import { Workspace } from "../workspace.js"
+import type { Workspace } from "@opencode/schema/workspace"
+import { WorkspaceConnector } from "./workspace-connector.js"
 
 // An environment's name: what a path will later use to say where it lives.
 export const ID = Schema.String.pipe(Schema.brand("Environment.ID"))
@@ -111,42 +112,30 @@ export const CurrentWorkingDirectory = Context.Reference<
   { readonly absolute: AbsolutePath; readonly environment: Interface } | undefined
 >("@opencode/Environment/CurrentWorkingDirectory", { defaultValue: () => undefined })
 
-/** The place of a path or a command that names no directory: the Location's directory, in its environment. */
-export const workingDirectory = Effect.gen(function* () {
+/** Build once inside a Location layer; resolves CurrentWorkingDirectory per call, falling back to the Location's default. */
+export const workingDirectoryResolver = Effect.gen(function* () {
   const location = yield* Location.Service
   const environment = yield* Service
-  return { absolute: location.directory, environment }
+  const fallback = { absolute: location.directory, environment }
+  return Effect.map(CurrentWorkingDirectory, (cwd) => cwd ?? fallback)
 })
-
-/** Build once inside a Location layer; resolves CurrentWorkingDirectory per call, falling back to the Location's default. */
-export const workingDirectoryResolver = Effect.map(workingDirectory, (fallback) =>
-  Effect.gen(function* () {
-    return (yield* CurrentWorkingDirectory) ?? fallback
-  }),
-)
 
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
     const location = yield* Location.Service
-    const workspaces = yield* Workspace.Service
+    const connector = yield* WorkspaceConnector.Service
     if (!location.workspaceID) return Service.of(local(spawner))
-    const driver = yield* workspaces.connect(location.workspaceID).pipe(
-      // Environment has no error channel; an unknown or destroyed placement is a configuration defect by design.
-      Effect.mapError(
-        (cause) => new Error(`Failed to bind Environment to workspace ${location.workspaceID}`, { cause }),
-      ),
-      Effect.orDie,
-    )
-    return Service.of(workspace(location.workspaceID, driver))
+    // An unknown or destroyed placement surfaces on each operation, not here.
+    return Service.of(workspace(location.workspaceID, yield* connector.connect(location.workspaceID)))
   }),
 )
 
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [CrossSpawnSpawner.node, Location.node, Workspace.node],
+  deps: [CrossSpawnSpawner.node, Location.node, WorkspaceConnector.node],
 })
 
 export * as EnvironmentService from "./environment.js"

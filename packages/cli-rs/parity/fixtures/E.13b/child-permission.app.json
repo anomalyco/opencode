@@ -22,7 +22,7 @@
   {"method":"POST","path":"/api/rpc/opencode.goal/get","json":{"output":null}}
  ],
  "steps": [
-  {"checkpoint":"prompted","until":"Permission required","fixture":"E.13b/child-permission/prompted"},
+  {"checkpoint":"prompted","until":"! Plan the release","fixture":"E.13b/child-permission/prompted"},
   {"keys":["enter"]},
   {"checkpoint":"composer","until":"Subagents","fixture":"E.13b/child-permission/composer"}
  ],

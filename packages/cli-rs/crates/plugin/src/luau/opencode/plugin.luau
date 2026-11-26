@@ -439,6 +439,7 @@ export type HostRequest = ({
 } | {
     type: "limits",
 } | {
+    location: LocationRef?,
     type: "providers",
 } | {
     type: "info",
@@ -1034,6 +1035,7 @@ export type Panel = {
     bare: boolean?,
     close: string?,
     height: number?,
+    fit_screen: boolean?,
 }
 
 --- A footer action of a panel.
@@ -1998,6 +2000,7 @@ export type ConfigInfoEncoded = {
         project_overlay: boolean?,
         opencode_api: boolean?,
         mcp_skills: boolean?,
+        compaction_jobs: boolean?,
         sqlite_fts: boolean?,
         video_generate: (boolean | {
             model: (string | {
@@ -4711,8 +4714,8 @@ export type Read = {
     pending: (self: Read, id: string) -> { SessionInboxInfo },
     --- The models of `location`, or where the TUI works; `nil` while they are not loaded.
     models: (self: Read, location: LocationRef?) -> { ModelInfo }?,
-    --- The providers where the TUI works; `nil` while they are not loaded.
-    providers: (self: Read) -> { ProviderInfo }?,
+    --- The providers of `location`, or where the TUI works; `nil` while they are not loaded.
+    providers: (self: Read, location: LocationRef?) -> { ProviderInfo }?,
     --- The OpenCode Console workspace's usage limits; `nil` while they are not loaded.
     limits: (self: Read) -> UsageLimitsInfo?,
     model: (self: Read) -> ModelRef?,
@@ -4764,8 +4767,8 @@ export type Host = {
     pending: (self: Read, id: string) -> { SessionInboxInfo },
     --- The models of `location`, or where the TUI works; `nil` while they are not loaded.
     models: (self: Read, location: LocationRef?) -> { ModelInfo }?,
-    --- The providers where the TUI works; `nil` while they are not loaded.
-    providers: (self: Read) -> { ProviderInfo }?,
+    --- The providers of `location`, or where the TUI works; `nil` while they are not loaded.
+    providers: (self: Read, location: LocationRef?) -> { ProviderInfo }?,
     --- The OpenCode Console workspace's usage limits; `nil` while they are not loaded.
     limits: (self: Read) -> UsageLimitsInfo?,
     model: (self: Read) -> ModelRef?,

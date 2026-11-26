@@ -744,7 +744,7 @@ function printHref(href: string | undefined, children: LegalNode[]) {
 
 /** The groups of the "grouped" legal list, by document path. */
 const legalGroups = [
-  { title: "Policies", paths: ["/legal/privacy-policy"] },
+  { title: "Policies", paths: ["/legal/privacy-policy", "/legal/refund-policy"] },
   { title: "Agreements", paths: ["/legal/terms-of-service"] },
 ]
 

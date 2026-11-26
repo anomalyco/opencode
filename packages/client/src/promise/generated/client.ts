@@ -251,6 +251,7 @@ import type {
   ExperimentalMediaGetOutput,
   ExperimentalBlobGetInput,
   ExperimentalBlobGetOutput,
+  ExperimentalBrowserTunnelOutput,
   ExperimentalAutomationCreateInput,
   ExperimentalAutomationCreateOutput,
   ExperimentalAutomationListInput,
@@ -347,6 +348,8 @@ import type {
   WebsearchQueryOutput,
   ExperimentalUsageLimitsInput,
   ExperimentalUsageLimitsOutput,
+  ExperimentalFlagGetInput,
+  ExperimentalFlagGetOutput,
   ConfigGetInput,
   ConfigGetOutput,
   ConfigShellsOutput,
@@ -1601,6 +1604,19 @@ export function make(options: ClientOptions) {
             requestOptions,
           ),
       },
+      browser: {
+        tunnel: (requestOptions?: RequestOptions) =>
+          request<ExperimentalBrowserTunnelOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/browser/tunnel`,
+              successStatus: 200,
+              declaredStatuses: [400, 401, 403],
+              empty: false,
+            },
+            requestOptions,
+          ),
+      },
       automation: {
         create: (input: ExperimentalAutomationCreateInput, requestOptions?: RequestOptions) =>
           request<{ readonly data: ExperimentalAutomationCreateOutput }>(
@@ -1989,6 +2005,20 @@ export function make(options: ClientOptions) {
               query: { location: input?.["location"] },
               successStatus: 200,
               declaredStatuses: [400, 401, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+      },
+      flag: {
+        get: (input?: ExperimentalFlagGetInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalFlagGetOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/flag`,
+              query: { location: input?.["location"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
               empty: false,
             },
             requestOptions,

@@ -3,7 +3,10 @@ import { Context, Effect, Layer } from "effect"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
 
-class A extends Context.Service<A, {}>()("test/LayerNodeA") {}
+class A extends Context.Service<
+  A,
+  { readonly read: () => Effect.Effect<string>; readonly write: () => Effect.Effect<void> }
+>()("test/LayerNodeA") {}
 class B extends Context.Service<B, {}>()("test/LayerNodeB") {}
 class C extends Context.Service<C, {}>()("test/LayerNodeC") {}
 class LayerError {
@@ -17,7 +20,7 @@ class OtherError {
 const contracts = (tag: LayerNode.Tag<"app"> | LayerNode.Tag<"other">, flag: boolean) => {
   const tags = LayerNode.tags({ app: [] })
   const make = tags.make("app")
-  const aLayer = Layer.succeed(A, A.of({}))
+  const aLayer = Layer.succeed(A, A.of({ read: () => Effect.succeed("a"), write: () => Effect.void }))
   const bLayer = Layer.effect(B, Effect.as(A, B.of({})))
   const cLayer = Layer.effect(
     C,
@@ -100,6 +103,29 @@ const contracts = (tag: LayerNode.Tag<"app"> | LayerNode.Tag<"other">, flag: boo
   LayerNode.compile(a, { replacements: [[a, aLayer]] })
   // @ts-expect-error Replacements are not structurally forgeable
   const forged: LayerNode.Replacement = { source: a, target: a }
+  const mockedA: LayerNode.Replacement = a.mock({ read: () => Effect.succeed("mock") })
+  const mockedUnbound: LayerNode.Replacement = inputA.mock({ read: () => Effect.succeed("mock") })
+  LayerNode.compile(a, { replacements: [mockedA, mockedUnbound] })
+  // @ts-expect-error Mock implementation must match the service shape
+  a.mock({ read: () => Effect.succeed(123) })
+  // @ts-expect-error Multi-service nodes cannot be mocked as a single service
+  ab.mock({})
+  const detachedMock = a.mock
+  // @ts-expect-error Mock authority requires its checked receiver
+  detachedMock({})
+  const namedA = make({ name: "named-a", layer: aLayer, deps: [] })
+  namedA.replace(aLayer)
+  a.replace(namedA)
+  a.mapLayer((layer) => layer).mock({ read: () => Effect.succeed("mock") })
+  // @ts-expect-error Named nodes without an explicit service key cannot be mocked
+  namedA.mock({ read: () => Effect.succeed("mock") })
+  // @ts-expect-error Mapping a named node preserves non-mockability
+  namedA.mapLayer((layer) => layer).mock({ read: () => Effect.succeed("mock") })
+  // @ts-expect-error Service key must match a service provided by the layer
+  make({ service: A, layer: bLayer, deps: [a] })
+  const effectOnly = make({ name: "effect-only", layer: Layer.empty, deps: [] })
+  // @ts-expect-error Side-effect nodes without a service output cannot be mocked
+  effectOnly.mock({})
   // @ts-expect-error Groups are not replaceable nodes
   group.replace(a)
   // @ts-expect-error Groups cannot be replacement targets

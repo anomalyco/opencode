@@ -542,6 +542,28 @@ const layer = Layer.effect(
   }),
 )
 
+const unsupported = (what: string, pkg: string) =>
+  Effect.fail(
+    new InstallFailedError({
+      add: [pkg],
+      dir: "",
+      cause: new Error(`${what} is not supported in this runtime`),
+    }),
+  )
+
+export const unsupportedLayer = Layer.succeed(
+  Service,
+  Service.of({
+    add: (pkg) => unsupported("Npm.add", pkg),
+    resolve: (name) => Effect.succeed({ directory: "", name }),
+    check: () => Effect.succeed(false),
+    update: (pkg) => unsupported("Npm.update", pkg),
+    follows: () => Effect.succeed(false),
+    reject: () => Effect.succeed(false),
+    which: () => Effect.undefined,
+  }),
+)
+
 export const node = makeGlobalNode({
   service: Service,
   layer: layer,

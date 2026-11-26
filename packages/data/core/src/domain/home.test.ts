@@ -47,6 +47,73 @@ test("daily rankings use yesterday while weekly rankings retain seven days and t
   expect(rankings["2M"]).toEqual(rankings["1W"])
 })
 
+test("new model days rank individual models and take their share of all tokens", () => {
+  const rows = [
+    { model: "leader", totalTokens: 50 },
+    { model: "launch", totalTokens: 30 },
+    { model: "small-a", totalTokens: 10 },
+    { model: "small-b", totalTokens: 10 },
+  ].map(
+    (item) =>
+      ({
+        periodKey: "2026-11-22",
+        updatedAt: new Date(Date.UTC(2026, 10, 22)),
+        tier: "Go",
+        provider: "test",
+        model: item.model,
+        sessions: 1,
+        uniqueUsers: 1,
+        inputTokens: item.totalTokens,
+        outputTokens: 0,
+        reasoningTokens: 0,
+        cacheReadTokens: 0,
+        totalTokens: item.totalTokens,
+        inputCostMicrocents: 0,
+        outputCostMicrocents: 0,
+        totalCostMicrocents: 0,
+      }) satisfies ModelStatMetric,
+  )
+
+  const launch = buildStatsHomeData(rows, [], [], []).newModels.find((item) => item.model === "launch")
+
+  expect(launch?.daily.at(-1)).toMatchObject({ share: 0.3, rank: 2 })
+})
+
+test("new models carry their distinct users for each week in the window", () => {
+  const row = (periodKey: string, tier: string, uniqueUsers: number) =>
+    ({
+      periodKey,
+      updatedAt: new Date(Date.UTC(2026, 10, 25)),
+      tier,
+      provider: "test",
+      model: "launch",
+      sessions: 1,
+      uniqueUsers,
+      inputTokens: 1,
+      outputTokens: 0,
+      reasoningTokens: 0,
+      cacheReadTokens: 0,
+      totalTokens: 1,
+      inputCostMicrocents: 0,
+      outputCostMicrocents: 0,
+      totalCostMicrocents: 0,
+    }) satisfies ModelStatMetric
+  const days = [row("2026-11-18", "Go", 5), row("2026-11-25", "Go", 5)]
+  const weeks = [
+    row("2026-W40", "Go", 99),
+    row("2026-W47", "Go", 70),
+    row("2026-W47", "Free", 30),
+    row("2026-W48", "Go", 40),
+  ]
+
+  const launch = buildStatsHomeData(days, weeks, [], []).newModels.find((item) => item.model === "launch")
+
+  expect(launch?.weekly).toEqual([
+    { week: "2026-11-16", users: 100 },
+    { week: "2026-11-23", users: 40 },
+  ])
+})
+
 describe("weekly series", () => {
   const days = Array.from({ length: 18 }, (_, index) => `2026-11-${String(index + 1).padStart(2, "0")}`).flatMap(
     (key) => [metric(key, "model-a", 1_000_000_000_000, 4), metric(key, "model-b", 2_000_000_000_000, 4)],
@@ -91,7 +158,11 @@ describe("weekly series", () => {
       { model: "model-c", value: 50 },
       { model: "Other", value: 0 },
     ])
-    expect(past.usage.Go["2M"].at(-1)?.segments.map((segment) => segment.model)).toEqual(["model-b", "model-a", "Other"])
+    expect(past.usage.Go["2M"].at(-1)?.segments.map((segment) => segment.model)).toEqual([
+      "model-b",
+      "model-a",
+      "Other",
+    ])
   })
 
   test("parses ISO week keys across year boundaries", () => {

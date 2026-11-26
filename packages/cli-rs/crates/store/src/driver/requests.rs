@@ -1,5 +1,6 @@
 //! The store's requests: how each is fetched, what each effect starts, and the public methods that begin them.
 
+use std::collections::HashMap;
 use std::future::Future;
 use std::sync::Arc;
 
@@ -17,7 +18,7 @@ use crate::core::{
 use crate::forms::{Form, GLOBAL, form_read};
 use crate::inbox::Admission;
 use crate::location::{Catalog, Loaded, Location, SETTLE};
-use crate::messages::Page;
+use crate::messages::{BRIDGE_PAGE_LIMITS, HeadPages, Page};
 use crate::reads::{Read, ReadKey, SessionRead};
 use crate::sessions::{CreateSession, Creation};
 use crate::state::{Error, MESSAGE_PAGE, SessionStatus, State, is_tag};
@@ -89,14 +90,71 @@ impl Fetch for Info {
 
 impl Fetch for Head {
     async fn fetch(self, remote: &Remote) -> Completion {
+        let result = fetch_head(&self, remote).await;
+        Completion::Messages(self, result)
+    }
+}
+
+async fn fetch_head(head: &Head, remote: &Remote) -> Result<HeadPages, Error> {
+    let input = MessageListInput {
+        session_id: head.session.clone(),
+        limit: Some(remote.head()),
+        order: Some(MessageListInputOrder::Desc),
+        ..Default::default()
+    };
+    let newest = remote.client().message_list(&input).await.map_err(Error::new)?;
+    let mut data = newest.data;
+    let mut next = newest.cursor.next.flatten();
+    // More than one page arrived while its events were missed, so messages lie between the newest page and the
+    // loaded history. Older pages close the gap; after a longer absence only the newest messages stay.
+    for limit in BRIDGE_PAGE_LIMITS {
+        let (Some(cursor), Some(first)) = (next.clone(), data.last().map(|item| item.id().to_owned())) else {
+            break;
+        };
+        let check = head.clone();
+        let gap = remote.call(move |store| store.read(|state| state.head_gap(&check, &first))).await?;
+        let Some(oldest) = gap else { break };
+        if data.iter().any(|item| item.id() == oldest) {
+            break;
+        }
         let input = MessageListInput {
-            session_id: self.session.clone(),
-            limit: Some(remote.head()),
-            order: Some(MessageListInputOrder::Desc),
+            session_id: head.session.clone(),
+            limit: Some(limit),
+            cursor: Some(cursor),
             ..Default::default()
         };
-        Completion::Messages(self, remote.client().message_list(&input).await.map_err(Error::new))
+        let page = remote.client().message_list(&input).await.map_err(Error::new)?;
+        data.extend(page.data);
+        next = page.cursor.next.flatten();
     }
+    // A kept message that was still running may have changed while its events were missed.
+    let unsettled = match data.last().map(|item| item.id().to_owned()) {
+        Some(first) => {
+            let check = head.clone();
+            remote.call(move |store| store.read(|state| state.head_unsettled(&check, &first))).await?
+        }
+        None => Vec::new(),
+    };
+    let refreshed: HashMap<String, SessionMessageInfo> = try_join_all(unsettled.into_iter().map(|message_id| {
+        let client = remote.client().clone();
+        let session_id = head.session.clone();
+        async move {
+            let input = SessionMessageGetInput { session_id, message_id };
+            match client.session_message_get(&input).await {
+                Ok(item) => Ok(Some(item)),
+                Err(error) if error.declared().is_some_and(|declared| declared.is::<MessageNotFoundError>()) => {
+                    Ok(None)
+                }
+                Err(error) => Err(Error::new(error)),
+            }
+        }
+    }))
+    .await?
+    .into_iter()
+    .flatten()
+    .map(|item| (item.id().to_owned(), item))
+    .collect();
+    Ok(HeadPages { data, next, refreshed })
 }
 
 impl Fetch for MessageRead {

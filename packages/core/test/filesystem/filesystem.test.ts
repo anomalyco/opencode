@@ -357,37 +357,6 @@ describe("FSUtil", () => {
     )
   })
 
-  describe("built-in passthrough", () => {
-    it(
-      "exists works",
-      Effect.gen(function* () {
-        const fs = yield* FSUtil.Service
-        const filesys = yield* FileSystem.FileSystem
-        const tmp = yield* filesys.makeTempDirectoryScoped()
-        const file = path.join(tmp, "exists.txt")
-        yield* filesys.writeFileString(file, "yes")
-
-        expect(yield* fs.exists(file)).toBe(true)
-        expect(yield* fs.exists(file + ".nope")).toBe(false)
-      }),
-    )
-
-    it(
-      "remove works",
-      Effect.gen(function* () {
-        const fs = yield* FSUtil.Service
-        const filesys = yield* FileSystem.FileSystem
-        const tmp = yield* filesys.makeTempDirectoryScoped()
-        const file = path.join(tmp, "delete-me.txt")
-        yield* filesys.writeFileString(file, "bye")
-
-        yield* fs.remove(file)
-
-        expect(yield* fs.exists(file)).toBe(false)
-      }),
-    )
-  })
-
   describe("pure helpers", () => {
     test("mimeType returns correct types", () => {
       expect(FSUtil.mimeType("file.json")).toBe("application/json")

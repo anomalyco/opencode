@@ -1742,11 +1742,12 @@ export interface UiButtonProps {
    * How the button looks. Defaults to `neutral`.
    * - `neutral`: a bordered button for most actions.
    * - `contrast`: the main action of a dialog or form.
+   * - `submit`: styled like the composer's send button.
    * - `ghost`: no border or background until hovered, for toolbars.
    * - `ghost-muted`: like `ghost`, with muted text, for secondary toolbar actions.
    * - `danger`: an action that deletes or discards.
    */
-  readonly variant?: "neutral" | "contrast" | "ghost" | "ghost-muted" | "danger"
+  readonly variant?: "neutral" | "contrast" | "submit" | "ghost" | "ghost-muted" | "danger"
   /**
    * The button's height. Defaults to `normal`.
    * - `small`: for dense rows.

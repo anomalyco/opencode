@@ -63,6 +63,7 @@ test("exposes every standard HTTP API group", () => {
     "persistentPty",
     "media",
     "blob",
+    "browser",
     "automation",
     "artifacts",
     "job",
@@ -70,6 +71,7 @@ test("exposes every standard HTTP API group", () => {
     "push",
     "migration",
     "usage",
+    "flag",
     "config",
   ])
   expect(Object.keys(client.experimental.job)).toEqual(["list", "cancel"])
@@ -89,6 +91,7 @@ test("exposes every standard HTTP API group", () => {
   expect(Object.keys(client.experimental.integration.wellknown)).toEqual(["add"])
   expect(Object.keys(client.experimental.file)).toEqual(["write", "watch", "unwatch"])
   expect(Object.keys(client.experimental.media)).toEqual(["get"])
+  expect(Object.keys(client.experimental.browser)).toEqual(["tunnel"])
   expect(Object.keys(client.experimental.automation)).toEqual(["create", "list", "get", "pause", "resume", "delete"])
   expect(client.experimental.persistentPty.read).toBeFunction()
 })

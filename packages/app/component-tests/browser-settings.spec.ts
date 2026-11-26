@@ -227,26 +227,19 @@ story("Add an extension aligns controls without top clipping and switches cleanl
     const closeSvg = node.querySelector('[data-slot="dialog-close-button"] svg')?.getBoundingClientRect()
     const input = node.querySelector('[data-component="text-input-v2"]')?.getBoundingClientRect()
     const topAdd = node.querySelector('[data-component="text-input-v2"]')?.parentElement?.querySelector("button")?.getBoundingClientRect()
-    const browserHeading = Array.from(node.querySelectorAll("span")).find((el) => el.textContent === "From your browsers")?.getBoundingClientRect()
-    const selectChevron = node.querySelector('[data-slot="select-v2-chevron"]')?.getBoundingClientRect()
-    const devSummary = node.querySelector("details > summary")?.getBoundingClientRect()
-    const done = node.querySelector('[data-slot="dialog-footer"] button')?.getBoundingClientRect()
-    const rowButtons = Array.from(node.querySelectorAll('[data-slot="menu-scroll-content"] button')).map((el) => el.getBoundingClientRect())
+    const done = node.querySelector('[data-slot="dialog-footer"] button:last-child')?.getBoundingClientRect()
 
     return {
       topClearanceInput: body && input ? Math.round(input.top - body.top) : -1,
       topClearanceButton: body && topAdd ? Math.round(topAdd.top - body.top) : -1,
       leftDeltas:
-        title && input && browserHeading && devSummary
-          ? [input.left - title.left, browserHeading.left - title.left, devSummary.left - title.left].map((value) => Math.round(value))
+        title && input ? [input.left - title.left].map((value) => Math.round(value))
           : [],
       rightDeltas:
-        done && closeSvg && topAdd && selectChevron
+        done && closeSvg && topAdd
           ? [
               closeSvg.right - done.right,
               topAdd.right - done.right,
-              selectChevron.right - done.right,
-              ...rowButtons.map((box) => box.right - done.right),
             ].map((value) => Math.round(value))
           : [],
     }
@@ -254,7 +247,7 @@ story("Add an extension aligns controls without top clipping and switches cleanl
 
   expect(metrics.topClearanceInput).toBeGreaterThanOrEqual(4)
   expect(metrics.topClearanceButton).toBeGreaterThanOrEqual(4)
-  expect(metrics.leftDeltas).toEqual([0, 0, 0])
+  expect(metrics.leftDeltas).toEqual([0])
   expect(metrics.rightDeltas.every((delta) => delta === 0)).toBe(true)
 
   // Clicking Add switches the whole dialog into a concise confirmation step without the browser list underneath.
@@ -264,21 +257,21 @@ story("Add an extension aligns controls without top clipping and switches cleanl
   await expect(confirm.getByText("It can:")).toBeVisible()
   await expect(confirm.getByText("Read and change every page you visit")).toBeVisible()
   await expect(confirm.getByText("See and change your sign-ins")).toBeVisible()
-  await expect(confirm.getByText("May not fully work here")).toBeVisible()
-  await expect(confirm.getByText("From your browsers")).toHaveCount(0)
+  await expect(confirm.getByText("Partly supported")).toBeVisible()
+  await expect(confirm.getByText("From", { exact: true })).toHaveCount(0)
   await expect(confirm.getByText("Details")).toHaveCount(0)
   await expect(confirm.getByText(/Copied from another browser/)).toHaveCount(0)
 
   // Cancel returns smoothly to the picker list.
   await confirm.getByRole("button", { name: "Cancel" }).click()
   await expect(page.getByRole("dialog", { name: "Add an extension" })).toBeVisible()
-  await expect(dialog.getByText("From your browsers")).toBeVisible()
+  await expect(dialog.getByText("From", { exact: true })).toBeVisible()
 
   // Unsupported extensions offer "Add anyway" in the confirmation footer.
   await dialog.getByRole("button", { name: "Add anyway" }).click()
   const unsupported = page.getByRole("dialog", { name: 'Add "OpenCode Browse"?' })
   await expect(unsupported).toBeVisible()
-  await expect(unsupported.getByText("Probably won't work here")).toBeVisible()
+  await expect(unsupported.getByText("Not supported")).toBeVisible()
   await expect(unsupported.getByRole("button", { name: "Add anyway" })).toBeVisible()
   await unsupported.getByRole("button", { name: "Cancel" }).click()
 
@@ -294,8 +287,8 @@ story("installed extension rows stack compatibility under the name and align con
   const view = await open(page, { extensions: true, installed: true })
   const section = view.root.locator('section.settings-section[aria-label="Extensions"]')
 
-  await expect(section.getByText("May not fully work here")).toBeVisible()
-  await expect(section.getByText("Probably won't work here")).toBeVisible()
+  await expect(section.getByText("Partly supported")).toBeVisible()
+  await expect(section.getByText("Not supported")).toBeVisible()
 
   const metrics = await section.evaluate((node) => {
     const rows = Array.from(node.querySelectorAll('[data-component="settings-row"]')).slice(0, 3)

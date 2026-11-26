@@ -8,12 +8,13 @@ import { httpFetch } from "@opencode/util/effect/app-node-platform"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, FiberSet, Layer, Scope, Semaphore } from "effect"
 import { FetchHttpClient } from "effect/http"
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner"
+import { KeyedMutex } from "../effect/keyed-mutex.js"
 import { Environment } from "../environment/index.js"
 import { SharedCache } from "../shared-cache.js"
 import type { McpClient } from "./client.js"
 import { McpConnection } from "./connection.js"
 
-export interface Input extends McpConnection.Input {
+export interface Input extends Omit<McpConnection.Input, "endpointLoads"> {
   /**
    * Run once per start: what tells this connection apart from every other one to the same server (see `key`),
    * and the OAuth provider to open it with. Both come from one credential selection, so a slot's key and the
@@ -36,6 +37,8 @@ export interface Interface {
    * and every later start for that key skips straight to that.
    */
   readonly connection: (input: Input) => McpConnection.Connection
+  /** Serializes unshared remote endpoint handshakes across Locations on the same host. */
+  readonly endpointLoads: KeyedMutex.KeyedMutex<string>
 }
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/McpPool") {}
@@ -114,6 +117,7 @@ export const layer = Layer.effect(
     const host = Environment.local(yield* ChildProcessSpawner)
     const fetch = yield* FetchHttpClient.Fetch
     const slots = new Map<string, Slot>()
+    const endpointLoads = KeyedMutex.makeUnsafe<string>()
     // Keys whose server negotiated legacy or refused the pooled handshake. Kept for the life of the process.
     const unpoolable = new Set<string>()
     // The subset that negotiated legacy. Their private connections skip the 2026-07-28 probe; a refusal
@@ -132,6 +136,7 @@ export const layer = Layer.effect(
         connection: McpConnection.make({
           name: input.name,
           config: input.config,
+          endpointLoads,
           directory: input.directory,
           shared: true,
           clientInfo: input.clientInfo,
@@ -271,6 +276,7 @@ export const layer = Layer.effect(
         McpConnection.make({
           ...input,
           config,
+          endpointLoads,
           authProvider: Effect.suspend(() => state.selected?.authProvider ?? input.authProvider),
         })
       const configured = privately(input.config)
@@ -379,7 +385,7 @@ export const layer = Layer.effect(
       }
     }
 
-    return Service.of({ connection })
+    return Service.of({ connection, endpointLoads })
   }),
 )
 

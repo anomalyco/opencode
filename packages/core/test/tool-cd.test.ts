@@ -6,6 +6,7 @@ import { Agent } from "@opencode/core/agent"
 import { Database } from "@opencode/core/database/database"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Environments } from "@opencode/core/environment/environments"
+import { WorkspaceConnector } from "@opencode/core/environment/workspace-connector"
 import { Environment, makeMemoryDriver } from "@opencode/core/environment/index"
 import { FileAccess } from "@opencode/core/file-access"
 import { Flag } from "@opencode/core/flag"
@@ -86,6 +87,7 @@ const buildLayer = (options: {
       Workspace.node,
     ]),
     [
+      WorkspaceConnector.node.replace(Workspace.connectorNode),
       Location.node.replace(
         Layer.succeed(
           Location.Service,
