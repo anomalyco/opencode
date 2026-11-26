@@ -405,8 +405,6 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
             const homeLabel = () =>
               language.t(settings.appearance.navigationPrototype() ? "sidebar.sessions" : "home.title")
 
-            const homeIcon = () => (settings.appearance.navigationPrototype() ? "sessions-stack" : "grid-plus")
-
             const homeButton = (vertical = false) => (
               <Show
                 when={vertical}
@@ -426,7 +424,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                       variant="ghost-muted"
                       size="large"
                       class="!w-9 shrink-0"
-                      icon={<Icon name={homeIcon()} />}
+                      icon={<Icon name="sessions-stack" />}
                       state={layout.route().type === "home" ? "pressed" : undefined}
                       onClick={toggleHome}
                       aria-label={homeLabel()}
@@ -437,7 +435,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
               >
                 <SidebarAction
                   action="vertical-tabs-home"
-                  icon={homeIcon()}
+                  icon="sessions-stack"
                   label={homeLabel()}
                   keybind={command.keybindParts("home.toggle")}
                   pressed={layout.route().type === "home"}
@@ -795,7 +793,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                               class="flex h-7 min-w-0 flex-1 items-center gap-2 rounded-[6px] px-2 text-[13px] leading-4 text-v2-text-text-base focus-visible:-outline-offset-2 [app-region:no-drag]"
                               aria-label={language.t("titlebar.tabs")}
                             >
-                              <Show when={currentTab()} fallback={<Icon name="grid-plus" class="shrink-0" />}>
+                              <Show when={currentTab()} fallback={<Icon name="sessions-stack" class="shrink-0" />}>
                                 {(tab) => (
                                   <span
                                     data-slot="project-avatar-slot"
@@ -878,7 +876,7 @@ export function Titlebar(props: { verticalTabs?: { mount?: HTMLElement } }) {
                                       closeMobileTabs()
                                     }}
                                   >
-                                    <Icon name="grid-plus" />
+                                    <Icon name="sessions-stack" />
                                     {language.t("home.title")}
                                   </button>
                                   <div class="flex items-center gap-1">
