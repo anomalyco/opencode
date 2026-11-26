@@ -89,9 +89,9 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
       }),
     )
 
-    // The server filters this list using each row's saved directory. Fetch it once per server,
-    // not once per project, and never use an empty list as a capability signal. Servers that don't
-    // offer /automation in any open folder aren't asked until the view opens.
+    // Automations are global per server; the server only drops rows whose folder turned them off.
+    // Fetch it once per server, not once per project, and never use an empty list as a capability
+    // signal: an empty server keeps polling only while an open folder offers /automation.
     const queries = useQueries(() => ({
       queries: connections().map((item) => {
         const open = layout.route().type === "automations"
@@ -104,8 +104,8 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
             item.ctx.sdk.api.experimental.automation.list(undefined, { signal }),
           select: (rows: AutomationInfo[]) => () => rows,
           retry: false,
-          enabled: offered || open,
-          refetchInterval: interval,
+          refetchInterval: (query: { state: { data?: AutomationInfo[] } }) =>
+            query.state.data?.length || offered ? interval : false,
         }
       }),
     }))
