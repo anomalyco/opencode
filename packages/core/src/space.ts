@@ -1,6 +1,6 @@
 export * as SpaceRows from "./space.js"
 
-import { and, asc, count, eq, gt, isNotNull, isNull, lte, max, sql } from "drizzle-orm"
+import { and, asc, count, eq, isNotNull, isNull, lte, max, sql, type SQL } from "drizzle-orm"
 import { Effect } from "effect"
 import type { Space } from "@opencode/schema/space"
 import type { Database } from "./database/database.js"
@@ -49,23 +49,32 @@ export const remove = (db: Db | Transaction, space: Space.Name, key: Space.Key) 
     )
 
 /**
- * Applies the changes in order in one transaction, as if written one after another: each that changes a row takes the
- * next revision, so a key changed twice gets both and keeps the last. Returns those changes, and the head after them.
+ * Applies the changes in order in one transaction, as if written one after another: each that changes a row takes its
+ * space's next revision, so a key changed twice gets both and keeps the last. Returns those changes, and each space's
+ * head after them, in the order the spaces first appear.
  */
-export const write = (db: Db, space: Space.Name, changes: ReadonlyArray<Space.Change>) =>
+export const write = (db: Db, changes: ReadonlyArray<Space.Change>) =>
   db
     .transaction((tx) =>
       Effect.gen(function* () {
         const written = yield* Effect.forEach(changes, (change) =>
           change.value === null
-            ? remove(tx, space, change.key).pipe(
-                Effect.map((revision) => (revision === undefined ? [] : [{ key: change.key, value: null, revision }])),
+            ? remove(tx, change.space, change.key).pipe(
+                Effect.map((revision) =>
+                  revision === undefined ? [] : [{ space: change.space, key: change.key, value: null, revision }],
+                ),
               )
-            : set(tx, space, change.key, change.value).pipe(
-                Effect.map((revision) => [{ key: change.key, value: change.value, revision }]),
+            : set(tx, change.space, change.key, change.value).pipe(
+                Effect.map((revision) => [{ space: change.space, key: change.key, value: change.value, revision }]),
               ),
         ).pipe(Effect.map((rows) => rows.flat()))
-        return { written, head: written.at(-1)?.revision ?? (yield* head(tx, space)) }
+        const last = new Map(written.map((row) => [row.space, row.revision]))
+        const heads = yield* Effect.forEach(new Set(changes.map((change) => change.space)), (space) => {
+          const revision = last.get(space)
+          if (revision !== undefined) return Effect.succeed({ space, revision })
+          return head(tx, space).pipe(Effect.map((revision) => ({ space, revision })))
+        })
+        return { written, heads }
       }),
     )
     .pipe(Effect.orDie)
@@ -128,34 +137,75 @@ export const head = (db: Db | Transaction, space: Space.Name) =>
       Effect.map((row) => row?.revision ?? 0),
     )
 
-/** Rows, tombstones included, written after `since`, in revision order: one range of the revision index. */
-export const changes = (db: Db, space: Space.Name, since: Space.Revision, limit?: number) =>
-  db
-    .select({ key: SpaceTable.key, value: SpaceTable.value, revision: SpaceTable.revision })
-    .from(SpaceTable)
-    .where(and(eq(SpaceTable.space, space), gt(SpaceTable.revision, since)))
-    .orderBy(asc(SpaceTable.revision))
-    .limit(limit ?? -1)
-    .all()
-    .pipe(Effect.orDie)
+/**
+ * Where a read starts. A delta is every row after `since`, tombstones included; with `snapshot`, a space that never
+ * reached `since` or no longer holds every deletion after it gives a snapshot instead. A snapshot is the live rows after
+ * `since` up to `until`, or from 0 up to the head without `until` or when the head is below it.
+ */
+export type From =
+  | { readonly type: "delta"; readonly since: Space.Revision; readonly snapshot: boolean }
+  | { readonly type: "snapshot"; readonly since: Space.Revision; readonly until?: Space.Revision }
 
-/** Rows holding a value, written after `since` and up to `until`, in revision order: one range of the live index. */
-export const live = (db: Db, space: Space.Name, since: Space.Revision, until: Space.Revision, limit: number) =>
-  db
-    .select({ key: SpaceTable.key, value: SpaceTable.value, revision: SpaceTable.revision })
-    .from(SpaceTable)
-    .where(
-      and(
-        eq(SpaceTable.space, space),
-        isNotNull(SpaceTable.value),
-        gt(SpaceTable.revision, since),
-        lte(SpaceTable.revision, until),
-      ),
+/**
+ * The space's head and up to `limit` rows from `from` in revision order, read by one statement and so from one snapshot
+ * of the database. `continued` is false when the rows are a snapshot from 0 to the head instead, or none for a delta
+ * without `snapshot`. Deltas read one range of the revision index, snapshots one of the live index.
+ */
+export const read = (db: Db, space: Space.Name, from: From, limit: number) => {
+  const continued =
+    from.type === "delta"
+      ? sql`head >= ${from.since} AND coalesce((
+          SELECT CAST("value" AS INTEGER) FROM "space" WHERE "space" = ${Meta} AND "key" = ${floorKey(space)}
+        ), 0) <= ${from.since}`
+      : from.until === undefined
+        ? sql`0`
+        : sql`head >= ${from.until}`
+  // A branch that does not apply gets an empty range rather than a condition, which SQLite would check on every row.
+  const live = (since: SQL, until: SQL) => sql`
+    SELECT "key", "value", "revision" FROM "space"
+    WHERE "space" = ${space} AND "value" IS NOT NULL AND "revision" > ${since} AND "revision" <= ${until}
+    ORDER BY "revision" LIMIT ${limit}`
+  const delta = sql`
+    SELECT "key", "value", "revision" FROM "space"
+    WHERE "space" = ${space} AND "revision" > (SELECT CASE WHEN continued THEN ${from.since} ELSE head END FROM meta)
+    ORDER BY "revision" LIMIT ${limit}`
+  const rows =
+    from.type === "snapshot"
+      ? live(
+          sql`(SELECT CASE WHEN continued THEN ${from.since} ELSE 0 END FROM meta)`,
+          sql`(SELECT CASE WHEN continued THEN ${from.until ?? 0} ELSE head END FROM meta)`,
+        )
+      : from.snapshot
+        ? sql`SELECT * FROM (${delta}) UNION ALL SELECT * FROM (${live(sql`0`, sql`(SELECT CASE WHEN continued THEN 0 ELSE head END FROM meta)`)})`
+        : delta
+  return db
+    .all<{
+      head: Space.Revision
+      continued: number
+      key: Space.Key | null
+      value: Space.Value | null
+      revision: Space.Revision | null
+    }>(
+      sql`
+        WITH meta AS MATERIALIZED (
+          SELECT head, ${continued} AS continued
+          FROM (SELECT coalesce((SELECT max("revision") FROM "space" WHERE "space" = ${space}), 0) AS head)
+        )
+        SELECT meta.head, meta.continued, page."key", page."value", page."revision"
+        FROM meta LEFT JOIN (${rows}) AS page
+        ORDER BY page."revision"`,
     )
-    .orderBy(asc(SpaceTable.revision))
-    .limit(limit)
-    .all()
-    .pipe(Effect.orDie)
+    .pipe(
+      Effect.orDie,
+      Effect.map((result) => ({
+        head: result[0]?.head ?? 0,
+        continued: result[0]?.continued === 1,
+        rows: result.flatMap((row) =>
+          row.key === null || row.revision === null ? [] : [{ key: row.key, value: row.value, revision: row.revision }],
+        ),
+      })),
+    )
+}
 
 /** This database's epoch: created once in the empty space, which no client can name, then kept. */
 export const epoch = (db: Db) =>

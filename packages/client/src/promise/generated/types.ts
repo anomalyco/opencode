@@ -5076,15 +5076,18 @@ export type ExperimentalPushSettingsSetInput = { readonly paused: boolean; reado
 export type ExperimentalPushSettingsSetOutput = { data: PushSettings }["data"]
 
 export type ExperimentalSpaceWriteInput = {
-  readonly space: string
-  readonly changes: ReadonlyArray<{ readonly key: string; readonly value: string | null }>
+  readonly changes: ReadonlyArray<{ readonly space: string; readonly key: string; readonly value: string | null }>
 }
 
-export type ExperimentalSpaceWriteOutput = { revision: SpaceRevision; cursor: SpaceCursor }
+export type ExperimentalSpaceWriteOutput = {
+  spaces: Array<{ space: SpaceName; revision: SpaceRevision; cursor: SpaceCursor }>
+}
 
-export type ExperimentalSpaceSyncInput = { readonly space: string; readonly cursor?: string | undefined }
+export type ExperimentalSpaceSyncInput = {
+  readonly spaces: ReadonlyArray<{ readonly space: string; readonly cursor?: string }>
+}
 
-export type ExperimentalSpaceSyncOutput = SpacePage
+export type ExperimentalSpaceSyncOutput = { pages: Array<SpacePage> }
 
 export type ExperimentalSpaceSubscribeInput = {
   readonly stream: string

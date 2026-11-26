@@ -1913,16 +1913,12 @@ const EndpointExperimentalPushSettingsSet =
 const EndpointExperimentalSpaceWrite =
   (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceWriteInput) =>
     preserveEffect<ExperimentalSpaceWriteOutput>()(
-      raw["space.write"]({ params: { space: input["space"] }, payload: { changes: input["changes"] } }).pipe(
-        Effect.mapError(mapClientError),
-      ),
+      raw["space.write"]({ payload: { changes: input["changes"] } }).pipe(Effect.mapError(mapClientError)),
     )
 
 const EndpointExperimentalSpaceSync = (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceSyncInput) =>
   preserveEffect<ExperimentalSpaceSyncOutput>()(
-    raw["space.sync"]({ params: { space: input["space"] }, query: { cursor: input["cursor"] } }).pipe(
-      Effect.mapError(mapClientError),
-    ),
+    raw["space.sync"]({ payload: { spaces: input["spaces"] } }).pipe(Effect.mapError(mapClientError)),
   )
 
 const EndpointExperimentalSpaceSubscribe =
