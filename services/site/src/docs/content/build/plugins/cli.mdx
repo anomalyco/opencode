@@ -62,8 +62,12 @@ const plugins = response.data
 
 Use `data.on` for one typed event or `data.listen` for every server event; both return an unsubscribe function.
 
+Events come from the connected server across every open location. Location-scoped events include `event.location`, so a handler that should only run for the current TUI directory can compare it against `context.location ?? context.data.location.default()`.
+
 ```ts
 const stopPermission = context.data.on("permission.asked", (event) => {
+  const here = (context.location ?? context.data.location.default()).directory
+  if (event.location?.directory !== here) return
   context.ui.toast.show({ message: `Permission ${event.data.id}` })
 })
 const stopAll = context.data.listen(({ details }) => console.log(details.type))
