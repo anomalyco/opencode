@@ -276,6 +276,36 @@ describe("acp prompt turns over the wire", () => {
     })
   })
 
+  test("attaches embedded blobs when their optional MIME type is omitted", async () => {
+    await using acp = await startSession()
+
+    const response = await acp.prompt(acp.sessionId, [
+      { type: "text", text: "Summarize these files" },
+      { type: "resource", resource: { uri: "mcp://context/report.pdf", blob: "JVBERi0xLjQK" } },
+      {
+        type: "resource",
+        resource: { uri: "data:application/pdf;base64,JVBERi0xLjQK", blob: "JVBERi0xLjQK" },
+      },
+      {
+        type: "resource",
+        resource: { uri: "mcp://context/typed.pdf", blob: "JVBERi0xLjQK", mimeType: "application/pdf" },
+      },
+    ])
+
+    expect(response.stopReason).toBe("end_turn")
+    expect(acp.server.submissions).toEqual([
+      expect.objectContaining({
+        kind: "prompt",
+        text: "Summarize these files",
+        files: [
+          { uri: "data:application/octet-stream;base64,JVBERi0xLjQK", name: "report.pdf" },
+          { uri: "data:application/pdf;base64,JVBERi0xLjQK", name: "file" },
+          { uri: "data:application/pdf;base64,JVBERi0xLjQK", name: "typed.pdf" },
+        ],
+      }),
+    ])
+  })
+
   test("attaches readable file links and references unreadable ones in place", async () => {
     await using dir = await tmpdir()
     const file = pathToFileURL(path.join(dir.path, "notes.md")).href
