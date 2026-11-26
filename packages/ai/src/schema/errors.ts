@@ -206,7 +206,8 @@ export class AIError extends Schema.TaggedError<AIError>()("AI.Error", {
       // Read failures can still recover; the caller chooses retry versus continuation from durable output.
       case "Transport":
         return (
-          this.reason.delivery !== "rejected" && (this.reason.delivery !== "accepted" || this.reason.operation === "read")
+          this.reason.delivery !== "rejected" &&
+          (this.reason.delivery !== "accepted" || this.reason.operation === "read")
         )
       case "InvalidProviderOutput":
         return this.reason.classification === "incomplete-stream"

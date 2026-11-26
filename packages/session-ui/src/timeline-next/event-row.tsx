@@ -4,11 +4,11 @@ import { For, Show, createMemo } from "solid-js"
 import { BasicTool } from "../components/basic-tool"
 import { useData } from "../context/data"
 import { taskAgentName } from "../tools/tool-renderer"
-import { kindKeys, summarizeEvents, verbKeys, type TimelineEvent } from "./events"
+import { factsOf, summarize } from "../timeline/facts"
+import { verbKeys, type TimelineEvent } from "./events"
 
 /**
- * A run of subagent and background shell events, read like a group label: "Started 2 subagents · Finished 1 shell".
- * Opening it lists each one; a subagent opens its session, and a shell jumps to the call that ran it.
+ * A run of background shells. Opening its summary lists each command and links back to its call.
  */
 export function TimelineEventRow(props: {
   events: readonly TimelineEvent[]
@@ -17,7 +17,20 @@ export function TimelineEventRow(props: {
   onRevealShell?: (shellID: string) => void
 }) {
   const i18n = useI18n()
-  const summary = createMemo(() => summarizeEvents(props.events))
+
+  const summary = createMemo(
+    () =>
+      summarize(
+        factsOf(
+          props.events.map(({ kind, verb, failed }, index) => ({
+            type: "outcome" as const,
+            id: String(index),
+            outcome: { kind, verb, failed },
+          })),
+        ),
+      ).background,
+  )
+
   const items = createMemo(() => props.events.filter((event) => event.title))
 
   return (
@@ -40,7 +53,7 @@ export function TimelineEventRow(props: {
                       </Show>
                       <span data-slot="context-tool-group-verb">{i18n.t(verbKeys[bucket.verb])}</span>
                       <span data-slot="context-tool-group-detail">
-                        {bucket.kinds.map((item) => i18n.plural(kindKeys[item.kind], item.count)).join(", ")}
+                        {i18n.plural("ui.timeline.event.shells", bucket.count)}
                       </span>
                     </>
                   )}
@@ -70,14 +83,27 @@ export function TimelineEventRow(props: {
   )
 }
 
-function TimelineEventItem(props: { event: TimelineEvent; onRevealShell?: (shellID: string) => void }) {
+type SubagentState = "started" | "updated" | "completed" | "failed" | "stopped"
+
+const statusKeys = {
+  started: verbKeys.started,
+  updated: "ui.timeline.subagent.updated",
+  completed: "ui.timeline.subagent.completed",
+  failed: "ui.toolErrorCard.failed",
+  stopped: verbKeys.stopped,
+} as const
+
+/** One subagent or shell an events row or an opened activity group lists: who did it and what it was. */
+export function TimelineEventItem(props: { event: TimelineEvent; onRevealShell?: (shellID: string) => void }) {
   const i18n = useI18n()
   const data = useData()
 
-  const name = () =>
-    props.event.kind === "shell"
-      ? i18n.t("ui.tool.shell")
-      : (taskAgentName(props.event.agent, data.store.agent) ?? i18n.t("ui.tool.agent.default"))
+  const name = () => {
+    if (props.event.kind === "shell") return i18n.t("ui.tool.shell")
+    const agent = taskAgentName(props.event.agent, data.store.agent)
+
+    return agent ? i18n.t("ui.timeline.subagent.name", { name: agent }) : i18n.t("ui.tool.agent.default")
+  }
 
   const href = () => (props.event.sessionID ? data.sessionHref?.(props.event.sessionID) : undefined)
 
@@ -91,16 +117,26 @@ function TimelineEventItem(props: { event: TimelineEvent; onRevealShell?: (shell
 
   const clickable = () => !!((props.event.sessionID && (data.navigateToSession || href())) || props.event.shellID)
 
+  const state = (): SubagentState => {
+    if (props.event.failed) return "failed"
+
+    if (props.event.verb === "ran" || props.event.verb === "finished") return "completed"
+
+    return props.event.verb
+  }
+
   return (
     <a
       data-slot="timeline-event-item"
       data-kind={props.event.kind}
       href={href()}
-      role={clickable() && !href() ? "button" : undefined}
+      role={clickable() && !href() ? (props.event.kind === "subagent" ? "link" : "button") : undefined}
       tabIndex={clickable() ? 0 : undefined}
       aria-disabled={clickable() ? undefined : "true"}
       onClick={(event) => {
         if (event.button !== 0 || event.altKey || event.ctrlKey || event.metaKey || event.shiftKey) return
+
+        if (href() && !data.navigateToSession) return
 
         if (!clickable()) return
         event.preventDefault()
@@ -112,9 +148,19 @@ function TimelineEventItem(props: { event: TimelineEvent; onRevealShell?: (shell
         open()
       }}
     >
+      {/* A subagent leads with its status. */}
+      <Show when={props.event.kind === "subagent"}>
+        <span data-slot="timeline-event-item-status" data-state={state()}>
+          {i18n.t(statusKeys[state()])}
+        </span>
+      </Show>
       <span data-slot="timeline-event-item-name">{name()}</span>
-      <span data-slot="timeline-event-item-title">{props.event.title}</span>
-      <Show when={props.event.failed}>
+      <Show when={props.event.title}>
+        <bdi dir="auto" data-slot="timeline-event-item-title">
+          {props.event.title}
+        </bdi>
+      </Show>
+      <Show when={props.event.failed && props.event.kind === "shell"}>
         <Badge variant="danger">{i18n.t("ui.toolErrorCard.failed")}</Badge>
       </Show>
     </a>

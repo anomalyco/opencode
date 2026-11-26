@@ -1,4 +1,4 @@
-import { createMemo, createSignal, Show } from "solid-js"
+import { createEffect, createMemo, createSignal, Show } from "solid-js"
 import { createStore } from "solid-js/store"
 import { createTwoFilesPatch } from "diff"
 import { CurrentSessionProviders } from "../storybook/current-session-story"
@@ -12,8 +12,10 @@ export default {
 }
 
 export const MixedTools = {
-  render: () => {
-    const [open, setOpen] = createSignal(true)
+  args: { open: true },
+  render: (args: { open: boolean }) => {
+    const [open, setOpen] = createSignal(args.open)
+    createEffect(() => setOpen(args.open))
 
     const tools = [
       storyTool(
@@ -67,10 +69,11 @@ export const NoticesOnly = {
 }
 
 export const MixedReasoning = {
-  args: { reasoningDefaultOpen: false },
-  render: (args: { reasoningDefaultOpen: boolean }) => {
+  args: { reasoningDefaultOpen: false, appended: false },
+  render: (args: { reasoningDefaultOpen: boolean; appended: boolean }) => {
     const [open, setOpen] = createSignal(true)
-    const [appended, setAppended] = createSignal(false)
+    const [appended, setAppended] = createSignal(args.appended)
+    createEffect(() => setAppended(args.appended))
 
     const parts = createMemo<ContextGroupPart[]>(() => [
       storyTool("reasoning_read", "read", "completed", { path: "src/group.ts" }),
@@ -110,8 +113,12 @@ export const MixedReasoning = {
 }
 
 export const CountRollover = {
-  render: () => {
-    const [state, setState] = createStore({ open: false, count: 9, attached: true })
+  args: { count: 9, attached: true },
+  argTypes: { count: { control: { type: "range", min: 1, max: 101, step: 1 } } },
+  render: (args: { count: number; attached: boolean }) => {
+    const [state, setState] = createStore({ open: false, count: args.count, attached: args.attached })
+    createEffect(() => setState("count", args.count))
+    createEffect(() => setState("attached", args.attached))
 
     const parts = createMemo(() =>
       Array.from({ length: state.count }, (_, index) =>
@@ -243,10 +250,14 @@ export const StickyHeader = {
 }
 
 export const PatchFollowUps = {
-  args: { separator: "none" },
-  argTypes: { separator: { control: "select", options: ["none", "shell", "error", "reasoning"] } },
-  render: (args: { separator: string }) => {
-    const [state, setState] = createStore({ phase: "initial", open: true, reasoning: true })
+  args: { separator: "none", phase: "initial" },
+  argTypes: {
+    separator: { control: "select", options: ["none", "shell", "error", "reasoning"] },
+    phase: { options: ["initial", "running", "completed"] },
+  },
+  render: (args: { separator: string; phase: "initial" | "running" | "completed" }) => {
+    const [state, setState] = createStore({ phase: args.phase, open: true, reasoning: true })
+    createEffect(() => setState("phase", args.phase))
 
     const file = (path: string, before: number, after: number) => ({
       file: path,

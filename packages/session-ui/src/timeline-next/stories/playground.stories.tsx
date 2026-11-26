@@ -1,4 +1,4 @@
-import { For, Show, createEffect, createMemo, onCleanup } from "solid-js"
+import { For, Show, createEffect, createMemo, on, onCleanup } from "solid-js"
 import { createStore } from "solid-js/store"
 import { TextShimmer } from "@opencode/ui/text-shimmer"
 import { CurrentSessionProviders } from "../../storybook/current-session-story"
@@ -47,22 +47,54 @@ type PlaygroundMessage = {
 }
 
 export const Playground = {
-  args: { embedded: false },
-  render: (args: { embedded: boolean }) => {
+  args: {
+    embedded: false,
+    scenario: defaultScenario,
+    preset: defaultPreset,
+    activity: true,
+    width: 720,
+    turnDiffs: false,
+    progress: 100,
+  },
+  argTypes: {
+    scenario: { options: scenarioNames },
+    preset: { options: timelinePresets.map((preset) => preset.id) },
+    width: { control: { type: "range", min: 480, max: 960, step: 240 } },
+    progress: { control: { type: "range", min: 0, max: 100, step: 1 } },
+  },
+  render: (args: {
+    embedded: boolean
+    scenario: ScenarioName
+    preset: PresetID
+    activity: boolean
+    width: number
+    turnDiffs: boolean
+    progress: number
+  }) => {
     const [state, setState] = createStore({
-      scenario: defaultScenario,
-      preset: defaultPreset,
-      activity: true,
+      scenario: args.scenario,
+      preset: args.preset,
+      activity: args.activity,
       tick: Number.MAX_SAFE_INTEGER,
       playing: false,
-      width: 720,
-      turnDiffs: false,
+      width: args.width,
+      turnDiffs: args.turnDiffs,
     })
 
     const script = createMemo(() => scenarios[state.scenario])
     const detail = createMemo(() => timelinePresets.find((preset) => preset.id === state.preset)!.value)
     const total = createMemo(() => script().reduce((sum, beat) => sum + ticks(beat), 0))
     const tick = createMemo(() => Math.min(state.tick, total()))
+    createEffect(() => setState("scenario", args.scenario))
+    createEffect(() => setState("preset", args.preset))
+    createEffect(() => setState("activity", args.activity))
+    createEffect(() => setState("width", args.width))
+    createEffect(() => setState("turnDiffs", args.turnDiffs))
+    createEffect(
+      on([() => args.progress, () => args.scenario], () =>
+        setState({ tick: Math.round((total() * args.progress) / 100), playing: false }),
+      ),
+    )
     // The playhead is now, so live durations read like a session happening as you watch.
     const replay = createMemo(() => replayScript(script(), tick(), Date.now() - tick() * 1_500))
 

@@ -76,7 +76,7 @@
     [data-component="products"]:not([data-layout="grid"])
       [data-component="product-card"]
       [data-component="site-button"]:not([aria-disabled="true"]):active {
-      background: hsl(0, 0%, 84%);
+      background: var(--fixed-light-press);
     }
   }
 
@@ -247,8 +247,8 @@
       line-height: 1.5;
       text-transform: uppercase;
       letter-spacing: 0.06em;
-      background: #fff;
-      color: hsl(0, 0%, 8%);
+      background: var(--fixed-white);
+      color: var(--fixed-ink);
     }
 
     [data-product="terminal"],
@@ -274,7 +274,7 @@
       font-size: calc((100cqw - 3rem) / 32 / 0.6);
       line-height: 1.55;
       white-space: pre;
-      color: #eeeeee;
+      color: var(--fixed-dark-text);
     }
 
     h3 {
@@ -427,7 +427,8 @@
     }
   }
 
-  /* OpenCode dark theme syntax colors for the SDK snippet, in the card and on its page. */
+  /* OpenCode dark theme syntax colors for the SDK snippet, in the card and on its page.
+     grey-ok: the OpenCode theme's own syntax colours */
   [data-product="sdk"] [data-slot="code"] {
     [data-c] {
       color: #808080;
@@ -457,13 +458,14 @@
       color: #eeeeee;
     }
   }
+  /* grey-ok-end */
 }
 
 /* A store that is coming soon (the status flag in product-data.ts), in a menu or a sheet: grey and
    inert like a disabled button, and still focusable, so keyboard focus keeps its tint. */
 [data-site] [data-component="site-menu"] [data-slot="menu"] > [data-slot="store"][aria-disabled="true"],
 [data-component="sheet"][data-sheet="product"] [data-slot="row"][aria-disabled="true"] {
-  color: light-dark(hsl(0, 0%, 60%), hsl(0, 0%, 36%));
+  color: var(--text-disabled);
   cursor: not-allowed;
 
   &:not(:focus-visible) {
@@ -609,7 +611,7 @@
       /* The covers' own flat backdrop (#161616 as browsers decode it) once the resting frame has
          painted, so the space the moved cover leaves blends in; the tone stays until then. */
       &:has(img[data-poster][data-loaded]) {
-        background: #161616;
+        background: var(--card-media-bg);
       }
 
       /* The resting cover's subject (wordmark and prompt, orb, terminal, code) is centred in its
@@ -622,7 +624,7 @@
         transform: translateY(round(-10cqw, 1px));
         /* The backdrop below the moved frame, part of the layer, so it covers the hover video's
            poster underneath and fades out with the cover when the hover cut plays. */
-        box-shadow: 0 0 0 200cqw #161616;
+        box-shadow: 0 0 0 200cqw var(--card-media-bg);
       }
 
       /* The sizzle reel (the hover video, which plays by itself on phones) moves up too, by what
@@ -631,7 +633,7 @@
          below, under the darkest part of the gradient. */
       > video:not([data-slot]) {
         transform: translateY(round(var(--reel-shift), 1px));
-        box-shadow: 0 0 0 200cqw #161616;
+        box-shadow: 0 0 0 200cqw var(--card-media-bg);
       }
 
       &[data-product="desktop"] {

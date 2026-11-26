@@ -210,6 +210,16 @@ describe("branch picker", () => {
     expect(selectBranchPopoverOpen(outside.state)).toBe(false)
   })
 
+  test("selecting the main checkout closes the picker and ignores a repeated selection", () => {
+    const opened = replay([target("/repo"), loaded(1), open])
+    const select = { type: "checkout.selected" } as const
+
+    const chosen = transitionBranchPicker(opened.state, select)
+    expect(chosen.effects).toEqual([{ type: "checkout.use" }, focus])
+    expect(selectBranchPopoverOpen(chosen.state)).toBe(false)
+    expect(transitionBranchPicker(chosen.state, select).effects).toEqual([])
+  })
+
   test("leaving worktree creation drops the request and stays inactive", () => {
     const pending = replay([target("/repo-a"), open])
     const inactive = transitionBranchPicker(pending.state, target(undefined))

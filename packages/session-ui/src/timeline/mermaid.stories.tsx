@@ -1,4 +1,4 @@
-import { createMemo, createSignal } from "solid-js"
+import { createEffect, createMemo, createSignal } from "solid-js"
 import type { SessionDocument } from "../document"
 import { CURRENT_SESSION_ID, STORY_MODEL, STORY_TIME } from "../storybook/current-session-fixtures"
 import { CurrentSessionProviders } from "../storybook/current-session-story"
@@ -79,6 +79,7 @@ function StateGraphTimeline() {
 
 function MermaidTimeline(props: { streaming: boolean }) {
   const [completed, setCompleted] = createSignal(!props.streaming)
+  createEffect(() => setCompleted(!props.streaming))
 
   const document = createMemo(
     (): SessionDocument => ({

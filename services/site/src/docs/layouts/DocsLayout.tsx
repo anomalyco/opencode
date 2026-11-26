@@ -9,10 +9,12 @@ import { Bracket } from "~/component/site/site-controls"
 import { monoFontLatin } from "~/component/site/mono-fonts"
 import { OnThisPage } from "~/component/site/on-this-page"
 import { defaultRootAttributes, themeScript } from "~/component/site/preload-settings"
+import { shareTags } from "~/component/share-meta"
 import { config } from "~/config"
 import { useI18n } from "~/context/i18n"
 import type { I18n } from "~/context/i18n-context"
 import { parseLocale } from "~/lib/language"
+import { ogImage } from "~/lib/og"
 import { latestDocs, type DocsSet } from "../config"
 import { DocsFooter } from "../components/DocsFooter"
 import { DocsSearchDialog } from "../components/DocsSearchDialog"
@@ -79,6 +81,7 @@ export function DocsLayout(props: {
   const next = at >= 0 ? pages[at + 1] : undefined
   const current = pages[at]
   const description = props.description ?? `${props.title} documentation for OpenCode.`
+  const title = `${props.title} | OpenCode${props.set.id === "v1" ? " V1" : ""}`
   const canonical = new URL(docsHref(props.currentSlug, props.set), "https://opencode.ai").href
   const contents = props.headings
     .filter((heading) => heading.depth === 2 || heading.depth === 3)
@@ -124,7 +127,11 @@ export function DocsLayout(props: {
         <link rel="canonical" href={canonical} />
         <link rel="icon" type="image/svg+xml" href={`${latestDocs.base}favicon.svg`} />
         <Show when={props.markdown}>{(href) => <link rel="alternate" type="text/markdown" href={href()} />}</Show>
-        <title>{`${props.title} | OpenCode${props.set.id === "v1" ? " V1" : ""}`}</title>
+        <title>{title}</title>
+        {/* The link preview: OG Studio's /docs card (image and video) in English, with the page's title and description. */}
+        <For each={shareTags({ title, description, image: ogImage("/docs"), locale: "en", englishOnly: true })}>
+          {(tag) => <meta {...tag} />}
+        </For>
         <link rel="preload" href={interLatin} as="font" type="font/woff2" crossorigin="anonymous" />
         <link rel="preload" href={monoFontLatin} as="font" type="font/woff2" crossorigin="anonymous" />
         <link rel="stylesheet" href={props.assets.stylesheet} />

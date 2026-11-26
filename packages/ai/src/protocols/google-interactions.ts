@@ -1,9 +1,14 @@
-import { Effect, Option, Schema, SchemaGetter } from "effect"
+import { Effect, Option, Schema, SchemaGetter, Stream } from "effect"
 import { Route } from "../route/client.js"
 import { Auth } from "../route/auth.js"
 import { Endpoint } from "../route/endpoint.js"
-import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
+import {
+  HttpTransport,
+  type Transport,
+  type TransportExecution,
+  type TransportPrepareInput,
+} from "../route/transport/index.js"
 import {
   AIError,
   ContentPolicyError,
@@ -25,6 +30,9 @@ import { GeminiGenerateContent } from "./utils/gemini-generate-content.js"
 import { ToolStream } from "./utils/tool-stream.js"
 
 const ADAPTER = "google-interactions"
+const CONTINUATION = "requires_continuation"
+// Matches Google's GenAI SDKs (Python, JS, and Go).
+const MAX_STREAM_RECONNECTS_WITHOUT_PROGRESS = 3
 const SKIP_THOUGHT_SIGNATURE_VALIDATOR = "skip_thought_signature_validator"
 export const DEFAULT_BASE_URL = "https://generativelanguage.googleapis.com/v1beta"
 
@@ -38,6 +46,7 @@ const Options = Schema.Struct({
   thinkingLevel: lenient(ThinkingLevel),
   thinkingSummaries: lenient(knownString<"auto" | "none">()),
   serviceTier: lenient(knownString<"standard" | "flex" | "priority" | "deferred">()),
+  safetySettings: lenient(Schema.Array(GeminiGenerateContent.SafetySetting)),
 })
 export type OptionsInput = typeof Options.Encoded
 export type ProviderOptionsInput = OptionsInput
@@ -83,12 +92,14 @@ const ToolChoice = Schema.Union([
 ])
 const Body = Schema.Struct({
   model: Schema.String,
-  input: Schema.Array(InputStep),
+  input: Schema.optional(Schema.Array(InputStep)),
   stream: Schema.Literal(true),
   store: Schema.Boolean,
   previous_interaction_id: Schema.optional(Schema.String),
+  continuation_token: Schema.optional(Schema.String),
   system_instruction: Schema.optional(Schema.String),
   service_tier: Schema.optional(Schema.String),
+  safety_settings: Schema.optional(Schema.Array(Schema.Struct({ type: Schema.String, threshold: Schema.String }))),
   tools: Schema.optional(
     Schema.Array(
       Schema.Struct({
@@ -157,6 +168,7 @@ const Interaction = Schema.StructWithRest(
   Schema.Struct({
     id: Schema.optional(Schema.String),
     status: Schema.String,
+    continuation_token: optionalNull(Schema.String),
     usage: Schema.optional(RawUsage),
     errors: Schema.optional(
       Schema.Array(Schema.Struct({ code: Schema.optional(Schema.String), message: Schema.optional(Schema.String) })),
@@ -202,6 +214,8 @@ const Event = Schema.Union([
     event_type: Schema.Literal("interaction.status_update"),
     interaction_id: Schema.optional(Schema.String),
     status: Schema.String,
+    continuation_token: optionalNull(Schema.String),
+    usage: Schema.optional(RawUsage),
   }),
   Schema.Struct({ event_type: Schema.Literal("interaction.completed"), interaction: Interaction }),
   Schema.Struct({ event_type: Schema.Literal("error"), error: Schema.optionalKey(Schema.Unknown) }),
@@ -216,6 +230,10 @@ interface ParserState {
   readonly route: string
   readonly metadataKey: string
   readonly lifecycle: Lifecycle.State
+  readonly hop: number
+  readonly hasToolCalls: boolean
+  readonly usage?: RawUsage
+  readonly continuedUsage: ReadonlyArray<RawUsage | undefined>
   readonly steps: Partial<Record<number, OutputStep>>
   readonly tools: ToolStream.State<number>
 }
@@ -224,13 +242,28 @@ type StepResult = readonly [ParserState, ReadonlyArray<LLMEvent>]
 // =============================================================================
 // Request Body Construction
 // =============================================================================
-const mediaContent = Effect.fnUntraced(function* (asset: Media.Asset) {
+// https://aistudio.google.com/docs/document-processing#office-documents
+const OFFICE_DOCUMENT_MIME_TYPES = new Set([
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.template",
+  "application/vnd.oasis.opendocument.text",
+  "application/vnd.ms-powerpoint",
+  "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+  "application/vnd.oasis.opendocument.presentation",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  "application/vnd.oasis.opendocument.spreadsheet",
+])
+
+export const mediaContent = Effect.fnUntraced(function* (asset: Media.Asset) {
   if (
     asset.kind !== "image" &&
     asset.kind !== "audio" &&
     asset.kind !== "video" &&
     asset.mediaType !== "application/pdf" &&
-    asset.mediaType !== "text/csv"
+    asset.mediaType !== "text/csv" &&
+    !OFFICE_DOCUMENT_MIME_TYPES.has(asset.mediaType)
   )
     return yield* ProviderShared.invalidRequest(
       `Google Interactions does not support ${asset.mediaType} document input`,
@@ -335,8 +368,8 @@ const lowerToolResult = Effect.fnUntraced(function* (part: ToolResultPart) {
 
 const fromRequest = Effect.fn("GoogleInteractions.fromRequest")(function* (request: LLMRequest) {
   const options = yield* decodeOptions(request.providerOptions ?? {})
-  const flattened = ProviderShared.flattenToolRequest(request)
-  if (flattened.tools.some((tool) => tool.native !== undefined))
+  const definitions = ProviderShared.flattenTools(request.tools)
+  if (definitions.some((tool) => tool.native !== undefined))
     return yield* ProviderShared.invalidRequest("Google Interactions hosted tools are not supported")
   if (request.topK !== undefined || request.frequencyPenalty !== undefined || request.presencePenalty !== undefined)
     return yield* ProviderShared.invalidRequest(
@@ -353,15 +386,19 @@ const fromRequest = Effect.fn("GoogleInteractions.fromRequest")(function* (reque
         })
   return {
     model: request.model.id,
-    input: yield* lowerMessages(flattened.request),
+    input: yield* lowerMessages(request),
     stream: true as const,
     // Full-history replay need not create retained provider resources. Continuation callers opt in to storage.
     store: options.store ?? false,
     previous_interaction_id: options.previousInteractionId,
     system_instruction: request.system.length ? ProviderShared.joinText(request.system) : undefined,
     service_tier: options.serviceTier,
-    tools: flattened.tools.length
-      ? flattened.tools.map((tool) => ({
+    safety_settings: options.safetySettings?.map((setting) => ({
+      type: setting.category.replace(/^HARM_CATEGORY_/, "").toLowerCase(),
+      threshold: setting.threshold.toLowerCase(),
+    })),
+    tools: definitions.length
+      ? definitions.map((tool) => ({
           type: "function" as const,
           name: tool.name,
           description: tool.description,
@@ -387,32 +424,54 @@ const fromRequest = Effect.fn("GoogleInteractions.fromRequest")(function* (reque
 const metadata = (state: ParserState, step: OutputStep): ProviderMetadata => ({
   [state.metadataKey]: { interactionSignature: step.signature },
 })
-const mapUsage = (usage: RawUsage | undefined, key: string) => {
-  if (!usage) return undefined
-  const input = usage.total_input_tokens ?? undefined
-  const cached = usage.total_cached_tokens ?? undefined
-  const reasoning = usage.total_thought_tokens ?? undefined
-  const output =
-    usage.total_output_tokens === undefined || usage.total_output_tokens === null
+const mapUsage = (usage: RawUsage | undefined, key: string, continued: ParserState["continuedUsage"]) => {
+  if (!usage && continued.every((hop) => !hop)) return undefined
+  const first = continued.length ? continued[0] : usage
+  const hops = [...continued, usage]
+  const sum = (field: (hop: RawUsage) => number | null | undefined) =>
+    ProviderShared.sumTokens(...hops.map((hop) => (hop ? (field(hop) ?? undefined) : undefined)))
+  const input = first?.total_input_tokens ?? undefined
+  const cached = first?.total_cached_tokens ?? undefined
+  const reasoning = sum((hop) => hop.total_thought_tokens)
+  const text = sum((hop) => hop.total_output_tokens)
+  const output = continued.length
+    ? ProviderShared.sumTokens(text, reasoning)
+    : text === undefined
       ? undefined
-      : usage.total_output_tokens + (reasoning ?? 0)
+      : text + (reasoning ?? 0)
   return new Usage({
-    contextTokens: usage.raw_prompt_token ?? input,
+    contextTokens: first?.raw_prompt_token ?? input,
     inputTokens: input,
     outputTokens: output,
     nonCachedInputTokens: ProviderShared.subtractTokens(input, cached),
     cacheReadInputTokens: cached,
     reasoningTokens: reasoning,
-    totalTokens: usage.total_tokens ?? undefined,
-    providerMetadata: { [key]: usage },
+    totalTokens: continued.length
+      ? ProviderShared.totalTokens(input, output, undefined)
+      : (usage?.total_tokens ?? undefined),
+    // Keep re-billed input in provider metadata, separate from the logical call's input.
+    providerMetadata: {
+      [key]: continued.length
+        ? {
+            total_input_tokens: sum((hop) => hop.total_input_tokens),
+            total_cached_tokens: sum((hop) => hop.total_cached_tokens),
+            total_output_tokens: text,
+            total_thought_tokens: reasoning,
+            total_tokens: sum((hop) => hop.total_tokens),
+            requests: hops.length,
+          }
+        : (usage ?? {}),
+    },
   })
 }
+
+const blockID = (state: ParserState, index: number) => (state.hop === 0 ? String(index) : `${state.hop}:${index}`)
 
 const onStart = Effect.fnUntraced(function* (state: ParserState, index: number, step: OutputStep) {
   const events: LLMEvent[] = []
   let lifecycle = Lifecycle.stepStart(state.lifecycle, events)
   let tools = state.tools
-  const id = String(index)
+  const id = blockID(state, index)
   if (step.type === "thought") {
     lifecycle = Lifecycle.reasoningStart(lifecycle, events, id, metadata(state, step))
     for (const part of step.summary ?? []) lifecycle = Lifecycle.reasoningDelta(lifecycle, events, id, part.text)
@@ -439,7 +498,16 @@ const onStart = Effect.fnUntraced(function* (state: ParserState, index: number, 
     events.push(LLMEvent.toolInputStart({ id: step.id, name: step.name, providerMetadata: metadata(state, step) }))
   } else
     return yield* ProviderShared.eventError(ADAPTER, `Unsupported Interactions step: ${step.type}`, encodeJson(step))
-  return [{ ...state, lifecycle, tools, steps: { ...state.steps, [index]: step } }, events] satisfies StepResult
+  return [
+    {
+      ...state,
+      lifecycle,
+      tools,
+      hasToolCalls: state.hasToolCalls || step.type === "function_call",
+      steps: { ...state.steps, [index]: step },
+    },
+    events,
+  ] satisfies StepResult
 })
 
 const onDelta = Effect.fnUntraced(function* (state: ParserState, index: number, delta: typeof Delta.Type) {
@@ -449,12 +517,15 @@ const onDelta = Effect.fnUntraced(function* (state: ParserState, index: number, 
   const events: LLMEvent[] = []
   if (delta.type === "text" && step.type === "model_output")
     return [
-      { ...state, lifecycle: Lifecycle.textDelta(state.lifecycle, events, String(index), delta.text) },
+      { ...state, lifecycle: Lifecycle.textDelta(state.lifecycle, events, blockID(state, index), delta.text) },
       events,
     ] satisfies StepResult
   if (delta.type === "thought_summary" && step.type === "thought")
     return [
-      { ...state, lifecycle: Lifecycle.reasoningDelta(state.lifecycle, events, String(index), delta.content.text) },
+      {
+        ...state,
+        lifecycle: Lifecycle.reasoningDelta(state.lifecycle, events, blockID(state, index), delta.content.text),
+      },
       events,
     ] satisfies StepResult
   if (delta.type === "thought_signature") {
@@ -493,12 +564,15 @@ const onStop = Effect.fnUntraced(function* (state: ParserState, index: number) {
   const events: LLMEvent[] = []
   if (step.type === "thought")
     return [
-      { ...state, lifecycle: Lifecycle.reasoningEnd(state.lifecycle, events, String(index), metadata(state, step)) },
+      {
+        ...state,
+        lifecycle: Lifecycle.reasoningEnd(state.lifecycle, events, blockID(state, index), metadata(state, step)),
+      },
       events,
     ] satisfies StepResult
   if (step.type === "model_output")
     return [
-      { ...state, lifecycle: Lifecycle.textEnd(state.lifecycle, events, String(index)) },
+      { ...state, lifecycle: Lifecycle.textEnd(state.lifecycle, events, blockID(state, index)) },
       events,
     ] satisfies StepResult
   const result = yield* ToolStream.finish(ADAPTER, state.tools, index)
@@ -524,7 +598,32 @@ const failureReason = (route: string, code: string | undefined, message: string,
   return classifyProviderFailure({ message, data, rawBody })
 }
 
-const step = Effect.fnUntraced(function* (state: ParserState, event: Event) {
+// Marks a request boundary without adding another logical LLM step or finish.
+class NextRequest {}
+
+const step = Effect.fnUntraced(function* (state: ParserState, event: Event | NextRequest) {
+  if (event instanceof NextRequest) {
+    const pending = yield* ToolStream.finishAll(ADAPTER, state.tools)
+    const events = [...pending.events]
+    let lifecycle = state.lifecycle
+    for (const [index, step] of Object.entries(state.steps)) {
+      const id = blockID(state, Number(index))
+      if (step?.type === "thought") lifecycle = Lifecycle.reasoningEnd(lifecycle, events, id, metadata(state, step))
+      if (step?.type === "model_output") lifecycle = Lifecycle.textEnd(lifecycle, events, id)
+    }
+    return [
+      {
+        ...state,
+        hop: state.hop + 1,
+        lifecycle,
+        steps: {},
+        tools: ToolStream.empty<number>(),
+        usage: undefined,
+        continuedUsage: [...state.continuedUsage, state.usage],
+      },
+      events,
+    ] satisfies StepResult
+  }
   switch (event.event_type) {
     case "step.start":
       return yield* onStart(state, event.index, event.step)
@@ -532,8 +631,9 @@ const step = Effect.fnUntraced(function* (state: ParserState, event: Event) {
       return yield* onDelta(state, event.index, event.delta)
     case "step.stop":
       return yield* onStop(state, event.index)
-    case "interaction.created":
     case "interaction.status_update":
+      return [{ ...state, usage: event.usage ?? state.usage }, []] satisfies StepResult
+    case "interaction.created":
     case "unknown":
       return [state, []] satisfies StepResult
     case "error": {
@@ -551,6 +651,8 @@ const step = Effect.fnUntraced(function* (state: ParserState, event: Event) {
     }
     case "interaction.completed": {
       const interaction = event.interaction
+      if (interaction.status === CONTINUATION)
+        return [{ ...state, usage: interaction.usage ?? state.usage }, []] satisfies StepResult
       if (interaction.status === "failed" || interaction.status === "cancelled") {
         const messages = (interaction.errors ?? []).flatMap((error) => (error.message?.trim() ? [error.message] : []))
         const coded = interaction.errors?.find((error) => error.code)
@@ -573,24 +675,194 @@ const step = Effect.fnUntraced(function* (state: ParserState, event: Event) {
         )
       const pending = yield* ToolStream.finishAll(ADAPTER, state.tools)
       const events = [...pending.events]
-      const hasToolCalls = Object.values(state.steps).some((item) => item?.type === "function_call")
       const lifecycle = Lifecycle.finish(state.lifecycle, events, {
         reason: {
           normalized:
-            interaction.status === "requires_action" || (interaction.status === "completed" && hasToolCalls)
+            interaction.status === "requires_action" || (interaction.status === "completed" && state.hasToolCalls)
               ? "tool-calls"
               : interaction.status === "incomplete"
                 ? "length"
                 : "stop",
           raw: interaction.status,
         },
-        usage: mapUsage(interaction.usage, state.metadataKey),
+        usage: mapUsage(interaction.usage ?? state.usage, state.metadataKey, state.continuedUsage),
         providerMetadata: { [state.metadataKey]: { interactionId: interaction.id } },
       })
       return [{ ...state, lifecycle, tools: pending.tools }, events] satisfies StepResult
     }
   }
 })
+
+// =============================================================================
+// Transport
+// =============================================================================
+type Body = typeof Body.Type
+export interface Prepared {
+  readonly http: HttpTransport.HttpPrepared<string>
+  readonly input: TransportPrepareInput<Body>
+}
+
+interface Resume {
+  readonly token: string
+  readonly owner?: string
+  readonly reconnectsWithoutProgress: number
+  readonly lastError?: AIError
+}
+
+const sse = HttpTransport.sseJson.with<Body>()
+const WireEvent = Protocol.jsonEvent(Event)
+const decodeEvent = Schema.decodeUnknownEffect(WireEvent)
+
+export const transport: Transport<Body, Prepared, Event | NextRequest> = {
+  id: sse.id,
+  prepare: (input) => sse.prepare(input).pipe(Effect.map((http) => ({ http, input }))),
+  execute: (prepared, request, runtime) =>
+    Effect.gen(function* () {
+      const label = `${request.model.provider}/${request.model.route.id}`
+      const raw = new WeakMap<object, string>()
+      const respond = (
+        execution: TransportExecution<string>,
+        resume?: Resume,
+      ): Stream.Stream<Event | NextRequest, AIError> =>
+        Stream.suspend(() => {
+          let token = resume?.token
+          let owner: string | undefined
+          let status: string | undefined
+          let contentSinceToken = false
+          let terminal = false
+          let dropped: AIError | undefined
+          const pendingTools = new Set<number>()
+          return execution.frames.pipe(
+            Stream.mapEffect((frame) =>
+              decodeEvent(frame).pipe(
+                Effect.mapError((cause) =>
+                  ProviderShared.eventError(ADAPTER, `Invalid ${label} stream event`, frame, cause),
+                ),
+                Effect.map((event) => {
+                  raw.set(event, frame)
+                  switch (event.event_type) {
+                    case "interaction.created":
+                      owner = event.interaction.id
+                      break
+                    case "interaction.status_update":
+                      status = event.status
+                      owner = event.interaction_id ?? owner
+                      if (event.continuation_token && event.continuation_token !== token) {
+                        token = event.continuation_token
+                        contentSinceToken = false
+                      }
+                      break
+                    case "interaction.completed":
+                      terminal = true
+                      status = event.interaction.status
+                      owner = event.interaction.id ?? owner
+                      if (event.interaction.continuation_token) {
+                        token = event.interaction.continuation_token
+                        contentSinceToken = false
+                      }
+                      break
+                    case "step.start":
+                      if (event.step.type === "function_call") pendingTools.add(event.index)
+                      if (
+                        pendingTools.has(event.index) ||
+                        event.step.content?.length ||
+                        event.step.summary?.length ||
+                        event.step.signature
+                      )
+                        contentSinceToken = true
+                      break
+                    case "step.delta":
+                      contentSinceToken = true
+                      break
+                    case "step.stop":
+                      if (pendingTools.delete(event.index)) contentSinceToken = true
+                      break
+                  }
+                  return event
+                }),
+              ),
+            ),
+            Stream.takeUntil((event) => event.event_type === "interaction.completed"),
+            Stream.catchIf(
+              (error) => error.reason._tag === "Transport" && error.reason.code !== "Timeout",
+              (error) => {
+                dropped = error
+                return Stream.empty
+              },
+            ),
+            Stream.concat(
+              Stream.suspend(() => {
+                const needsContinuation = status === CONTINUATION
+                const resumable = needsContinuation || (!terminal && (status === undefined || status === "in_progress"))
+                const newToken = token !== resume?.token
+                // An interrupted tool call may carry arguments across the checkpoint. Don't finalize it on EOF.
+                if (
+                  token &&
+                  resumable &&
+                  !contentSinceToken &&
+                  (terminal || pendingTools.size === 0) &&
+                  (!needsContinuation || newToken)
+                ) {
+                  const reconnectsWithoutProgress = newToken ? 0 : (resume?.reconnectsWithoutProgress ?? 0) + 1
+                  const lastError = dropped ?? (newToken ? undefined : resume?.lastError)
+                  if (reconnectsWithoutProgress > MAX_STREAM_RECONNECTS_WITHOUT_PROGRESS) {
+                    if (!lastError) return Stream.empty
+                    return Stream.fail(
+                      new AIError({
+                        reason: new InvalidProviderOutputError({
+                          route: label,
+                          message: lastError.reason.message,
+                          classification: "incomplete-stream",
+                          cause: lastError,
+                          http: lastError.reason.http,
+                        }),
+                      }),
+                    )
+                  }
+                  return Stream.concat(
+                    Stream.succeed(new NextRequest()),
+                    next({ token, owner: newToken ? owner : resume?.owner, reconnectsWithoutProgress, lastError }),
+                  )
+                }
+                if (dropped) return Stream.fail(dropped)
+                if (terminal && needsContinuation && !token)
+                  return Stream.fail(ProviderShared.eventError(label, "Google Interactions continued without a token"))
+                // No safe checkpoint. Leave EOF for the route's incomplete-stream check.
+                return Stream.empty
+              }),
+            ),
+          )
+        })
+      const next = (resume: Resume) => {
+        const body = prepared.input.body
+        return Stream.unwrap(
+          sse
+            .prepare({
+              ...prepared.input,
+              body: {
+                ...body,
+                continuation_token: resume.token,
+                ...(body.store && resume.owner ? { input: undefined, previous_interaction_id: resume.owner } : {}),
+              },
+            })
+            .pipe(
+              Effect.flatMap((continued) => sse.execute(continued, request, runtime)),
+              Effect.map((execution) => respond(execution, resume)),
+            ),
+        )
+      }
+      const first = yield* sse.execute(prepared.http, request, runtime)
+      return {
+        frames: respond(first),
+        http: first.http,
+        body: (frame) => raw.get(frame),
+        raw: (frame) => {
+          const body = raw.get(frame)
+          return body === undefined ? undefined : ProviderShared.decodeJson(body)
+        },
+      }
+    }),
+}
 
 // =============================================================================
 // Protocol And Route
@@ -600,16 +872,22 @@ export const protocol = Protocol.make({
   sanitizer: "gemini",
   body: { schema: Body, from: fromRequest },
   stream: {
-    event: Protocol.jsonEvent(Event),
+    event: Schema.Union([Schema.instanceOf(NextRequest), Schema.toType(Event), WireEvent]),
     initial: (request): ParserState => ({
       route: `${request.model.provider}/${request.model.route.id}`,
       metadataKey: request.model.route.providerMetadataKey ?? request.model.provider,
       lifecycle: Lifecycle.initial(),
+      hop: 0,
+      hasToolCalls: false,
+      continuedUsage: [],
       steps: {},
       tools: ToolStream.empty<number>(),
     }),
     step,
-    terminal: (event) => event.event_type === "interaction.completed",
+    terminal: (event) =>
+      !(event instanceof NextRequest) &&
+      event.event_type === "interaction.completed" &&
+      event.interaction.status !== CONTINUATION,
   },
 })
 
@@ -620,7 +898,7 @@ export const route = Route.make({
   protocol,
   endpoint: Endpoint.path("/interactions", { baseURL: DEFAULT_BASE_URL }),
   auth: Auth.none,
-  framing: Framing.sse,
+  transport,
 })
 
 export * as GoogleInteractions from "./google-interactions.js"

@@ -182,6 +182,8 @@ export const Definitions = {
   "agent.cycle.reverse": keybind("none", "Previous agent"),
   "variant.cycle": keybind("ctrl+t", "Cycle model variants"),
   "variant.list": keybind("none", "List model variants"),
+  "speed.cycle": keybind("none", "Cycle model speeds"),
+  "speed.list": keybind("none", "List model speeds"),
 
   "session.page.up": keybind("pageup,ctrl+alt+b,kppageup", "Scroll messages up by one page"),
   "session.page.down": keybind("pagedown,ctrl+alt+f,kppagedown", "Scroll messages down by one page"),
@@ -259,6 +261,9 @@ export const Definitions = {
   "composer.shell.down": keybind("down", "Next shell"),
   "composer.shell.select": keybind("return", "View shell output"),
   "composer.shell.kill": keybind("ctrl+d", "Kill shell command"),
+  "composer.script.up": keybind("up", "Previous script"),
+  "composer.script.down": keybind("down", "Next script"),
+  "composer.script.cancel": keybind("ctrl+d", "Cancel script"),
   "composer.terminal.up": keybind("up,k", "Previous terminal"),
   "composer.terminal.down": keybind("down,j", "Next terminal"),
   "composer.terminal.select": keybind("return", "Select terminal"),

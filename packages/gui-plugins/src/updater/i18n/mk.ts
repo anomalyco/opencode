@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "Следно",
   "releaseNotes.action.hideFuture": "Не ги прикажувајте овие во иднина",
   "releaseNotes.media.alt": "Преглед на издавање",
+  "action.reload": "Превчитај за ажурирање",
+  "action.reloading": "Се превчитува…",
+  "web.ready.title": "Ажурирањето е подготвено",
+  "web.ready.message":
+    "Нова верзија на OpenCode е подготвена. Превчитајте за да ја користите во секој отворен прозорец.",
+  "web.reload": "Превчитај",
+  "web.reset.title": "Превчитај од серверот",
+  "web.reset.description": "Избриши ја зачуваната копија на апликацијата и вчитај ја тековната верзија од серверот",
+  "web.reset.action": "Превчитај од серверот",
 }

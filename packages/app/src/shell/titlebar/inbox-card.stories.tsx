@@ -1,10 +1,14 @@
 import { Button } from "@opencode/ui/button"
+import { Menu } from "@opencode/ui/menu"
 import { createEffect, For, on, Show } from "solid-js"
 import { createStore } from "solid-js/store"
+import { useLanguage } from "@/runtime/i18n/language"
 import { InboxSessionCard } from "./inbox"
 import type { InboxStatus } from "./inbox-model"
 
 const now = Date.UTC(2026, 10, 3, 12)
+
+const statuses = ["done", "ready", "working", "approval", "input", "failed"] as const satisfies readonly InboxStatus[]
 
 function SessionCardStory(props: {
   status: InboxStatus
@@ -17,9 +21,21 @@ function SessionCardStory(props: {
   project: string
   projectKnown: boolean
   ageMinutes: number
+  ageSeconds: number
+  timestampKnown: boolean
+  readAction: boolean
   width: number
 }) {
-  const [state, setState] = createStore({ selected: props.selected, archived: props.archived, removed: false })
+  const language = useLanguage()
+
+  const initial = () => ({ selected: props.selected, archived: props.archived, removed: false, status: props.status })
+
+  const [state, setState] = createStore(initial())
+
+  const toggleRead = () => {
+    if (state.status !== "ready") return setState("status", "ready")
+    setState("status", props.status === "failed" ? "failed" : "done")
+  }
 
   createEffect(
     on(
@@ -30,8 +46,9 @@ function SessionCardStory(props: {
         () => props.projectKnown,
         () => props.selected,
         () => props.archived,
+        () => props.readAction,
       ],
-      () => setState({ selected: props.selected, archived: props.archived, removed: false }),
+      () => setState(initial()),
     ),
   )
 
@@ -50,27 +67,34 @@ function SessionCardStory(props: {
             }
             directory={props.worktree ? "/workspace/opencode/worktrees/tooltip-status" : "/workspace/opencode"}
             title={props.title}
-            status={props.status}
+            status={state.status}
             selected={state.selected}
             archived={state.archived}
             server={props.remote ? "Build server · build.example.internal" : undefined}
             branch={props.branch || undefined}
             worktree={props.worktree}
             now={now}
-            since={now - props.ageMinutes * 60_000}
+            since={props.timestampKnown ? now - props.ageMinutes * 60_000 - props.ageSeconds * 1000 : undefined}
             onOpen={() => setState("selected", true)}
+            actions={
+              <Show
+                when={
+                  props.readAction && (state.status === "ready" || state.status === "done" || state.status === "failed")
+                }
+              >
+                <Menu.Item onSelect={toggleRead}>
+                  {language.t(state.status === "ready" ? "session.markUnread" : "session.markRead")}
+                </Menu.Item>
+                <Menu.Separator />
+              </Show>
+            }
             onArchive={() => setState("archived", true)}
             onUnarchive={() => setState("archived", false)}
             onDelete={() => setState("removed", true)}
           />
         </Show>
       </div>
-      <Button
-        variant="ghost-muted"
-        size="small"
-        class="self-start"
-        onClick={() => setState({ selected: props.selected, archived: props.archived, removed: false })}
-      >
+      <Button variant="ghost-muted" size="small" class="self-start" onClick={() => setState(initial())}>
         Reset session
       </Button>
       <span class="text-[12px] leading-4 text-v2-text-text-muted">
@@ -95,12 +119,16 @@ export default {
     project: "opencode",
     projectKnown: true,
     ageMinutes: 41,
+    ageSeconds: 0,
+    timestampKnown: true,
+    readAction: false,
     width: 280,
   },
   argTypes: {
-    status: { control: "select", options: ["done", "ready", "working", "approval", "input", "failed"] },
+    status: { control: "select", options: statuses },
     width: { control: { type: "range", min: 136, max: 640, step: 8 } },
     ageMinutes: { control: { type: "range", min: 0, max: 10_080, step: 1 } },
+    ageSeconds: { control: { type: "range", min: 0, max: 59, step: 1 } },
   },
   parameters: {
     docs: {
@@ -150,7 +178,7 @@ export const Narrow = { args: { width: 136, remote: true } }
 export const AllStates = {
   render: (args: Parameters<typeof SessionCardStory>[0]) => (
     <div class="flex flex-wrap items-start gap-6">
-      <For each={["done", "ready", "working", "approval", "input", "failed"] satisfies InboxStatus[]}>
+      <For each={[args.status, ...statuses.filter((status) => status !== args.status)]}>
         {(status) => (
           <div class="flex flex-col gap-2">
             <span class="text-[13px] leading-4 text-v2-text-text-muted">{status}</span>
@@ -161,3 +189,9 @@ export const AllStates = {
     </div>
   ),
 }
+
+export const JustStarted = { args: { status: "working", ageMinutes: 0, ageSeconds: 12 } }
+
+export const UnknownAge = { args: { status: "working", timestampKnown: false } }
+
+export const MarkAsRead = { args: { readAction: true } }

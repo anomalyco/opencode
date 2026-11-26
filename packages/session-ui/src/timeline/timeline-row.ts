@@ -18,8 +18,8 @@ export type PartGroup =
     }
   | {
       key: string
-      /** `events`: subagents and background shells counted in one row, in the New timeline. */
-      type: "file" | "read" | "events"
+      /** A subagent row holds one call or report; events count background shells; thought holds thoughts one after another. */
+      type: "file" | "read" | "events" | "subagent" | "thought"
       refs: PartRef[]
     }
 
@@ -53,9 +53,11 @@ export namespace TimelineRow {
     spacing?: "tool" | "content"
   }> {}
 
+  /** The thought the model is writing, after the finished thoughts (`before`) it follows with nothing between. */
   export class Thinking extends Data.TaggedClass("Thinking")<{
     userMessageID: string
     ref: PartRef
+    before?: readonly PartRef[]
   }> {}
 
   /**
@@ -157,7 +159,11 @@ export namespace TimelineRow {
       other.previousAssistantPart === row.previousAssistantPart &&
       other.spacing === row.spacing &&
       sameGroup(other.group, row.group),
-    Thinking: (row) => (other: TimelineRow) => Predicate.isTagged(other, "Thinking") && sameRef(other.ref, row.ref),
+    Thinking: (row) => (other: TimelineRow) =>
+      Predicate.isTagged(other, "Thinking") &&
+      sameRef(other.ref, row.ref) &&
+      (other.before?.length ?? 0) === (row.before?.length ?? 0) &&
+      (row.before ?? []).every((ref, index) => sameRef(ref, other.before![index]!)),
     Error: (row) => (other: TimelineRow) =>
       Predicate.isTagged(other, "Error") &&
       other.text === row.text &&
@@ -217,7 +223,7 @@ export type TimelineRowMap = {
     previousAssistantPart: boolean
     spacing?: "tool" | "content"
   }
-  Thinking: { userMessageID: string; ref: PartRef }
+  Thinking: { userMessageID: string; ref: PartRef; before?: readonly PartRef[] }
   Retry: { userMessageID: string; attempt: number; message: string; next: number }
   Error: {
     userMessageID: string

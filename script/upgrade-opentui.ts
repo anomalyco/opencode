@@ -42,24 +42,24 @@ const files = (await Array.fromAsync(new Bun.Glob("**/package.json").scan({ cwd:
   (file) => !file.split("/").some((part) => skip.has(part)),
 )
 
-const setVersion = (cur: string, kind: "dep" | "peer") => {
+const setVersion = (cur: string) => {
   if (cur === "catalog:" || cur.startsWith("workspace:")) return cur
   if (snapshot) return ver
-  if (kind === "peer") return `>=${ver}`
   if (cur.startsWith(">=")) return `>=${ver}`
   if (cur.startsWith("^")) return `^${ver}`
   if (cur.startsWith("~")) return `~${ver}`
   return ver
 }
 
-const editDeps = (obj: unknown, kind: "dep" | "peer") => {
+// Peer ranges are left alone: @opencode/plugin's @opentui peers are public API, raised only when a type it exports changes.
+const editDeps = (obj: unknown) => {
   if (!obj || typeof obj !== "object") return false
   const map = obj as Record<string, unknown>
   return keys
     .map((key) => {
       const cur = map[key]
       if (typeof cur !== "string") return false
-      const next = setVersion(cur, kind)
+      const next = setVersion(cur)
       if (next === cur) return false
       map[key] = next
       return true
@@ -104,9 +104,8 @@ const out = (
       const hit = [
         editCatalog(json.workspaces?.catalog),
         editOverrides(json.overrides),
-        editDeps(json.dependencies, "dep"),
-        editDeps(json.devDependencies, "dep"),
-        editDeps(json.peerDependencies, "peer"),
+        editDeps(json.dependencies),
+        editDeps(json.devDependencies),
       ].some(Boolean)
       if (!hit) return null
       await Bun.write(file, `${JSON.stringify(json, null, 2)}\n`)

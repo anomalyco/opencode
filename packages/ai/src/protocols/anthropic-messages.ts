@@ -23,11 +23,13 @@ import {
   type ProviderOptions,
   type ToolCallPart,
   type ToolDefinition,
+  type ToolChanges,
   type ToolResultPart,
 } from "../schema/index.js"
 import { JsonObject, knownString, optionalArray, optionalNull, ProviderShared, withUntypedFrames } from "./shared.js"
 import { classifyProviderFailure } from "../provider-error.js"
 import { effortUpdate, resolveEffortUpdates } from "../effort-updates.js"
+import { addsTools, toolsUpdate, type ToolUpdateEncoding } from "../tool-updates.js"
 import * as Cache from "./utils/cache.js"
 import { claudeVersion, supportsThinkingBlockBinding, THINKING_BINDING_BETA } from "./utils/claude-model.js"
 import { Lifecycle } from "./utils/lifecycle.js"
@@ -253,17 +255,6 @@ const AnthropicAssistantBlock = Schema.Union([
 type AnthropicAssistantBlock = Schema.Schema.Type<typeof AnthropicAssistantBlock>
 type AnthropicToolResultBlock = Schema.Schema.Type<typeof AnthropicToolResultBlock>
 
-const AnthropicMessage = Schema.Union([
-  Schema.Struct({ role: Schema.Literal("user"), content: Schema.Array(AnthropicUserBlock) }),
-  Schema.Struct({ role: Schema.Literal("assistant"), content: Schema.Array(AnthropicAssistantBlock) }),
-  Schema.Struct({
-    role: Schema.Literal("system"),
-    content: Schema.Array(AnthropicTextBlock),
-    output_config: Schema.optional(Schema.Struct({ effort: Schema.String })),
-  }),
-]).pipe(Schema.toTaggedUnion("role"))
-type AnthropicMessage = Schema.Schema.Type<typeof AnthropicMessage>
-
 const AnthropicTool = Schema.Struct({
   name: Schema.String,
   description: Schema.String,
@@ -271,6 +262,26 @@ const AnthropicTool = Schema.Struct({
   cache_control: Schema.optional(AnthropicCacheControl),
 })
 type AnthropicTool = Schema.Schema.Type<typeof AnthropicTool>
+
+const AnthropicToolAdditionBlock = Schema.Struct({
+  type: Schema.tag("tool_addition"),
+  tool: Schema.Struct({ type: Schema.tag("tool_definition"), definition: AnthropicTool }),
+})
+const AnthropicToolRemovalBlock = Schema.Struct({
+  type: Schema.tag("tool_removal"),
+  tool: Schema.Struct({ type: Schema.tag("tool_reference"), name: Schema.String }),
+})
+
+const AnthropicMessage = Schema.Union([
+  Schema.Struct({ role: Schema.Literal("user"), content: Schema.Array(AnthropicUserBlock) }),
+  Schema.Struct({ role: Schema.Literal("assistant"), content: Schema.Array(AnthropicAssistantBlock) }),
+  Schema.Struct({
+    role: Schema.Literal("system"),
+    content: Schema.Array(Schema.Union([AnthropicTextBlock, AnthropicToolAdditionBlock, AnthropicToolRemovalBlock])),
+    output_config: Schema.optional(Schema.Struct({ effort: Schema.String })),
+  }),
+]).pipe(Schema.toTaggedUnion("role"))
+type AnthropicMessage = Schema.Schema.Type<typeof AnthropicMessage>
 
 const AnthropicToolChoice = Schema.Union([
   Schema.Struct({
@@ -792,6 +803,28 @@ const lowerWrappedSystemUpdate = Effect.fnUntraced(function* (
   return { type: "text" as const, text: part.text, cache_control: cacheControl(breakpoints, part.cache) }
 })
 
+const lowerToolsUpdate = Effect.fnUntraced(function* (
+  message: LLMRequest["messages"][number],
+  update: ToolChanges,
+  breakpoints: Cache.Breakpoints,
+) {
+  const text = message.content.length === 0 ? [] : (yield* lowerNativeSystemUpdate(message, breakpoints)).content
+  return {
+    role: "system" as const,
+    content: [
+      ...ProviderShared.flattenTools(update.add).map((tool) => ({
+        type: "tool_addition" as const,
+        tool: { type: "tool_definition" as const, definition: lowerTool(breakpoints, tool) },
+      })),
+      ...update.remove.map((name) => ({
+        type: "tool_removal" as const,
+        tool: { type: "tool_reference" as const, name },
+      })),
+      ...text,
+    ],
+  }
+})
+
 const appendToUserTurn = (messages: AnthropicMessage[], block: AnthropicUserBlock) => {
   const last = messages.at(-1)
   if (last?.role === "user") messages[messages.length - 1] = { role: "user", content: [...last.content, block] }
@@ -808,6 +841,13 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
   const releaseHeld = Effect.fnUntraced(function* () {
     const native = acceptsNativeSystemAfter(messages.findLast((message) => message.role !== "system"))
     for (const update of held.splice(0)) {
+      const tools = toolsUpdate(update)
+      if (tools !== undefined) {
+        if (!native) return yield* invalid("Anthropic Messages tool updates must follow a user message or tool result")
+        const lowered = yield* lowerToolsUpdate(update, tools, breakpoints)
+        if (lowered.content.length > 0) messages.push(lowered)
+        continue
+      }
       if (native) messages.push(yield* lowerNativeSystemUpdate(update, breakpoints))
       else appendToUserTurn(messages, yield* lowerWrappedSystemUpdate(update, breakpoints))
     }
@@ -819,6 +859,12 @@ const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, breakpoi
       if (update) {
         // Accepted at any position, so the text-update placement rules do not apply.
         messages.push({ role: "system", content: [], output_config: { effort: update.effort ?? DEFAULT_EFFORT } })
+        continue
+      }
+      // Held like text updates, so one between a tool call and its result lands after the result. Planning keeps a
+      // marker in place only on models that take native system messages.
+      if (toolsUpdate(message) !== undefined) {
+        held.push(message)
         continue
       }
       if (splitsLocalToolResults(request.messages, index))
@@ -930,6 +976,21 @@ const supportsEffortUpdates = (request: LLMRequest) => {
   return version.major > 5 || (version.major === 5 && version.minor >= 1)
 }
 
+// `tool_addition` adds a tool, or redefines one with the same name; `tool_removal` removes one. A held marker is
+// released just before the next assistant message, where Anthropic only accepts a native system message after a
+// user message or tool result; a marker that would land elsewhere folds.
+const toolUpdates = {
+  kinds: ["add", "remove", "replace"],
+  placeable: (request, index) => {
+    if (!supportsNativeSystemUpdates(request)) return false
+    const end = request.messages.findIndex((next, at) => at > index && next.role === "assistant")
+    const role = request.messages
+      .slice(0, end === -1 ? undefined : end)
+      .findLast((next) => next.role !== "system")?.role
+    return role === "user" || role === "tool"
+  },
+} satisfies ToolUpdateEncoding
+
 const applyThinkingBindingDefault = (model: LLMRequest["model"], thinking: AnthropicThinking | undefined) => {
   if (isThinkingOff(thinking)) return thinking
   if (!supportsThinkingBlockBinding(model)) return thinking
@@ -961,10 +1022,11 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
   // messages. Tools live highest in the cache hierarchy, so when callers
   // over-mark we keep their tool hints and shed the message-tail ones first.
   const breakpoints = Cache.newBreakpoints(ANTHROPIC_BREAKPOINT_CAP)
-  const flattened = ProviderShared.flattenToolRequest(updates.request)
-  const tools = flattened.tools.length === 0 ? undefined : flattened.tools.map((tool) => lowerTool(breakpoints, tool))
-  // Anthropic rejects tool_choice when tools are absent; "none" is only meaningful with tools present.
-  const toolChoice = tools === undefined || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
+  const definitions = ProviderShared.flattenTools(updates.request.tools)
+  const tools = definitions.length === 0 ? undefined : definitions.map((tool) => lowerTool(breakpoints, tool))
+  // Anthropic rejects tool_choice when no tool is declared; "none" is only meaningful with tools present.
+  const declared = tools !== undefined || addsTools(request)
+  const toolChoice = !declared || !request.toolChoice ? undefined : yield* lowerToolChoice(request.toolChoice)
   const systemParts = request.system.filter((part) => part.text.length > 0)
   const system =
     systemParts.length === 0
@@ -974,7 +1036,7 @@ const fromRequest = Effect.fn("AnthropicMessages.fromRequest")(function* (reques
           text: part.text,
           cache_control: cacheControl(breakpoints, part.cache),
         }))
-  const messages = yield* lowerMessages(flattened.request, breakpoints)
+  const messages = yield* lowerMessages(updates.request, breakpoints)
   yield* Cache.warnDropped(breakpoints, "Anthropic Messages", ANTHROPIC_BREAKPOINT_CAP)
   const output_config =
     updates.effort === undefined && format === undefined ? undefined : { effort: updates.effort, format }
@@ -1528,6 +1590,7 @@ export const protocol = Protocol.make({
     step,
   },
   supportsEffortUpdates,
+  toolUpdates,
 })
 
 export const transport = <
@@ -1568,6 +1631,14 @@ function requiredBetaHeaders(
 
   if (body.messages.some((message) => message.role === "system" && message.output_config !== undefined))
     betas.push("mid-conversation-output-config-2026-07-01")
+  if (
+    body.messages.some(
+      (message) =>
+        message.role === "system" &&
+        message.content.some((block) => block.type === "tool_addition" || block.type === "tool_removal"),
+    )
+  )
+    betas.push("inline-tools-2026-09-15")
 
   // Opus 5.5 accepts `speed` without this header; earlier fast-mode models reject `speed` without it.
   if (body.speed !== undefined) betas.push("fast-mode-2026-02-01")

@@ -129,31 +129,37 @@ export function DialogUsage(props: {
       when={ready()}
       fallback={
         <UsageFrame>
-          <div class="flex min-h-[120px] items-center justify-center px-4 pb-4">
-            <Switch>
-              <Match when={view().status === "loading"}>
-                <Loader />
-              </Match>
-              <Match when={view().status === "failed"}>
-                <div class="flex flex-col items-center gap-3">
-                  <span class="text-[13px] leading-text-compact font-[440] tracking-[-0.04px] text-v2-text-text-muted">
-                    {language.t("usage.error")}
-                  </span>
-                  <Button variant="neutral" onClick={() => dispatch({ type: "retry" })}>
-                    {language.t("usage.retry")}
-                  </Button>
-                </div>
-              </Match>
-              <Match when={view().status === "signed-out"}>
+          <Switch>
+            <Match when={view().status === "signed-out"}>
+              <div class="flex flex-col px-3 pb-3">
                 <Panel gap={8}>
-                  <Item>
-                    <Line class="font-[530] text-v2-text-text-base">{language.t("usage.signedOut.title")}</Line>
-                    <Line class="text-v2-text-text-muted">{language.t("usage.signedOut.body")}</Line>
-                  </Item>
+                  <Message
+                    title={language.t("usage.signedOut.title")}
+                    body={language.t("usage.signedOut.body")}
+                  />
                 </Panel>
-              </Match>
-            </Switch>
-          </div>
+              </div>
+            </Match>
+            <Match when={true}>
+              <div class="flex min-h-[120px] items-center justify-center px-4 pb-4">
+                <Switch>
+                  <Match when={view().status === "loading"}>
+                    <Loader />
+                  </Match>
+                  <Match when={view().status === "failed"}>
+                    <div class="flex flex-col items-center gap-3">
+                      <span class="text-[13px] leading-text-compact font-[440] tracking-[-0.04px] text-v2-text-text-muted">
+                        {language.t("usage.error")}
+                      </span>
+                      <Button variant="neutral" onClick={() => dispatch({ type: "retry" })}>
+                        {language.t("usage.retry")}
+                      </Button>
+                    </div>
+                  </Match>
+                </Switch>
+              </div>
+            </Match>
+          </Switch>
         </UsageFrame>
       }
     >
@@ -375,12 +381,10 @@ export function UsageDialogContent(props: {
           when={view().budgets.length > 0}
           fallback={
             <Panel gap={8}>
-              <Item>
-                <Line class="font-[530] text-v2-text-text-base">{language.t("usage.empty.title")}</Line>
-                <Line class="text-v2-text-text-muted">
-                  {language.t("usage.empty.body", { workspace: workspace() })}
-                </Line>
-              </Item>
+              <Message
+                title={language.t("usage.empty.title")}
+                body={language.t("usage.empty.body", { workspace: workspace() })}
+              />
             </Panel>
           }
         >
@@ -446,7 +450,7 @@ function UsageFrame(props: { children: JSX.Element; footer?: JSX.Element }) {
   const language = useLanguage()
 
   return (
-    <Dialog fit containerClass="w-[min(calc(100vw-32px),512px)]!">
+    <Dialog fit>
       <div data-component="usage-dialog" class="flex flex-col self-stretch">
         <DialogHeader>
           <DialogTitleGroup title={language.t("usage.title")} />
@@ -493,6 +497,17 @@ function Panel(props: { gap?: 8 | 16; children: JSX.Element }) {
 
 function Item(props: { children: JSX.Element }) {
   return <div class="flex flex-col gap-4 self-stretch px-4">{props.children}</div>
+}
+
+function Message(props: { title: string; body: string }) {
+  return (
+    <div class="flex flex-col gap-1 self-stretch px-4">
+      <Line class="font-[530] text-v2-text-text-base">{props.title}</Line>
+      <p class="m-0 text-[13px] leading-text-base font-[440] tracking-[-0.04px] text-v2-text-text-muted">
+        {props.body}
+      </p>
+    </div>
+  )
 }
 
 function Divider() {

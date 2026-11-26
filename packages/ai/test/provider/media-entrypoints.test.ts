@@ -8,6 +8,8 @@ import {
   type EmbeddingModel,
   ImageClient,
   type ImageModel,
+  VideoClient,
+  type VideoModel,
 } from "../../src/effect.js"
 import { it } from "../lib/effect.js"
 import { dynamicResponse, observe, type Call } from "../lib/http.js"
@@ -24,6 +26,15 @@ const sentImage = (model: ImageModel) =>
     yield* ai.image
       .generate({ model, prompt: "A red circle" })
       .pipe(Effect.exit, Effect.provide(ImageClient.layer.pipe(Layer.provide(record(calls)))))
+    return calls
+  })
+
+const sentVideo = (model: VideoModel) =>
+  Effect.gen(function* () {
+    const calls: Array<Call> = []
+    yield* ai.video
+      .start({ model, prompt: "A red circle" })
+      .pipe(Effect.exit, Effect.provide(VideoClient.layer.pipe(Layer.provide(record(calls)))))
     return calls
   })
 
@@ -64,7 +75,7 @@ interface Case<Model> {
 
 const expectRequest = (
   calls: ReadonlyArray<Call>,
-  model: ImageModel | DecisionModel | EmbeddingModel,
+  model: ImageModel | VideoModel | DecisionModel | EmbeddingModel,
   entry: Case<unknown>,
 ) => {
   expect(calls).toHaveLength(1)
@@ -487,6 +498,101 @@ describe("image entrypoints", () => {
       Effect.gen(function* () {
         const model = yield* Effect.promise(entry.load)
         expectRequest(yield* sentImage(model), model, entry)
+      }),
+    )
+})
+
+const videos: ReadonlyArray<Case<VideoModel>> = [
+  {
+    name: "openrouter",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/openrouter/videos")
+      return model("x-ai/grok-imagine-video-1.5-lite", { ...shared, apiKey: "openrouter-key" })
+    },
+    url: "https://openrouter.ai/api/v1/videos",
+    auth: ["authorization", "Bearer openrouter-key"],
+    provider: "openrouter",
+  },
+  {
+    name: "byteplus",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/byteplus/videos")
+      return model("dreamina-seedance-2-0-260128", { ...shared, apiKey: "byteplus-key" })
+    },
+    url: "https://ark.ap-southeast.bytepluses.com/api/v3/contents/generations/tasks",
+    auth: ["authorization", "Bearer byteplus-key"],
+    provider: "byteplus",
+  },
+  {
+    name: "volcengine",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/volcengine/videos")
+      return model("doubao-seedance-2-0-260128", { ...shared, apiKey: "ark-key" })
+    },
+    url: "https://ark.cn-beijing.volces.com/api/v3/contents/generations/tasks",
+    auth: ["authorization", "Bearer ark-key"],
+    provider: "volcengine",
+  },
+  {
+    name: "minimax",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/minimax/videos")
+      return model("MiniMax-H3-Lite", { ...shared, apiKey: "minimax-key" })
+    },
+    url: "https://api.minimax.io/v2/video_generation",
+    auth: ["authorization", "Bearer minimax-key"],
+  },
+  {
+    name: "minimax (minimax-cn, Hailuo)",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/minimax/videos")
+      return model("MiniMax-Hailuo-2.3", { ...shared, apiKey: "minimax-key", baseURL: "https://api.minimax.cn" })
+    },
+    url: "https://api.minimax.cn/v1/video_generation",
+    auth: ["authorization", "Bearer minimax-key"],
+  },
+  {
+    name: "google",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/google/videos")
+      return model("gemini-omni-1.2-flash", { ...shared, apiKey: "google-key" })
+    },
+    url: "https://generativelanguage.googleapis.com/v1beta/interactions",
+    auth: ["x-goog-api-key", "google-key"],
+    provider: "google",
+  },
+  {
+    name: "xai",
+    load: async () => {
+      const { model } = await import("@opencode/ai/providers/xai/videos")
+      return model("grok-imagine-video-1.5", { ...shared, apiKey: "xai-key" })
+    },
+    url: "https://api.x.ai/v1/videos/generations",
+    auth: ["authorization", "Bearer xai-key"],
+  },
+]
+
+describe("video entrypoints", () => {
+  for (const entry of videos)
+    it.effect(`providers/${entry.name}/videos sends a configured request`, () =>
+      Effect.gen(function* () {
+        const model = yield* Effect.promise(entry.load)
+        expectRequest(yield* sentVideo(model), model, entry)
+      }),
+    )
+})
+
+describe("video entrypoint model options", () => {
+  // Model-level options from settings (as models.dev or config set them) become defaults on every request.
+  for (const entry of [
+    { name: "xai", modelID: "grok-imagine-video-1.5", load: () => import("@opencode/ai/providers/xai/videos") },
+    { name: "google", modelID: "gemini-omni-1.2-flash", load: () => import("@opencode/ai/providers/google/videos") },
+  ])
+    it.effect(`providers/${entry.name}/videos keeps provider options from settings`, () =>
+      Effect.gen(function* () {
+        const { model } = yield* Effect.promise(entry.load)
+        const calls = yield* sentVideo(model(entry.modelID, { apiKey: "key", future_option: true }))
+        expect(JSON.parse(calls[0].body).future_option).toBe(true)
       }),
     )
 })

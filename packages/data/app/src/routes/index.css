@@ -1,136 +1,244 @@
-/* OpenTUI Mono, Anomaly's font (SIL OFL 1.1, ../asset/fonts/OpenTUIMono-OFL.txt), copied from
-   services/site/src/asset/fonts. "latin" covers Latin, punctuation, arrows and box drawing; "rest" loads only
-   when a page uses one of the font's other characters. Regular serves weights up to 599 and bold the rest, so
-   500 and 600 never get a synthesized face. */
+/* OpenMono, Anomaly's font (SIL OFL 1.1, ../asset/fonts/OpenMono-OFL.txt), copied from services/site/src/asset/fonts,
+   with its faces as in services/site style/fonts.css. "latin" covers Latin, punctuation, arrows and box drawing;
+   "cyrillic" and "rest" load only when a page uses one of their characters. Regular serves weights up to 599 and bold
+   the rest, so 500 and 600 never get a synthesized face. The Menlo, Consolas and Courier faces stand in while it loads:
+   the system font scaled to OpenMono's 0.6 em advance and line metrics, so the swap changes letter shapes only. */
 @font-face {
-  font-family: "OpenTUI Mono";
-  font-style: normal;
+  font-family: "OpenMono";
+  src: url("../asset/fonts/openmono-regular-latin.woff2") format("woff2");
   font-weight: 100 599;
+  font-style: normal;
   font-display: swap;
-  src: url("../asset/fonts/opentui-mono-regular-latin.woff2") format("woff2");
   unicode-range:
-    U+0020-007E, U+00A0-017F, U+2000-200D, U+2010-2029, U+202F-2064, U+20AC, U+2190-21E6, U+21E8-21FF, U+2212,
-    U+2500-25FF;
+    U+0020-007E, U+00A0-017F, U+03A3, U+03C3, U+2000-200D, U+2010-2029, U+202F-2064, U+2070, U+2074-2079, U+2080-2081,
+    U+20AC, U+2122, U+2190-21FF, U+2211-2212, U+2219-221A, U+221E, U+2248, U+2260, U+2264-2265, U+22C5, U+22EF, U+2303,
+    U+2318, U+2325, U+232B, U+238B, U+23CE, U+2500-25FF, U+26A0, U+2713, U+2715-2717, U+FFFD;
 }
 
 @font-face {
-  font-family: "OpenTUI Mono";
-  font-style: normal;
+  font-family: "OpenMono";
+  src: url("../asset/fonts/openmono-regular-rest.woff2") format("woff2");
   font-weight: 100 599;
-  font-display: swap;
-  src: url("../asset/fonts/opentui-mono-regular-rest.woff2") format("woff2");
-  unicode-range:
-    U+01AB, U+01AE, U+0218-021B, U+0237, U+024B, U+0256, U+026B, U+026D, U+0273, U+0279, U+027B, U+027D-027E, U+0282,
-    U+0285, U+0288, U+0290, U+02AF, U+02B5, U+0300-036F, U+1D6C-1D76, U+1D80-1D9A, U+1DA9-1DAA, U+1DAF, U+1DB3, U+1DB5,
-    U+1DBC, U+1E03, U+1E0B, U+1E23, U+2070, U+2074-2079, U+2080-2089, U+20A1, U+20A3-20AB, U+20AD-20AF, U+20B1-20B5,
-    U+20B8-20BA, U+20BC-20BF, U+20D2, U+20D8, U+20EB, U+2200-2211, U+2213-22FF, U+2948, U+2ADC, U+2AEE, U+2B30, U+2C62,
-    U+2C64, U+A78E, U+A794-A795, U+A7BA-A7BF, U+A7C4-A7C6, U+AB39, U+AB5E, U+AB66-AB68, U+E0B8, U+E0BA, U+E0BC, U+E0BE,
-    U+F882-F883, U+F891-F892, U+10788, U+1078B, U+1078D, U+1079D, U+1079F, U+107A7-107A8, U+107AD, U+107AF, U+107B9,
-    U+1DF05, U+1DF08-1DF0A, U+1DF12-1DF1D;
-}
-
-@font-face {
-  font-family: "OpenTUI Mono";
   font-style: normal;
-  font-weight: 600 900;
   font-display: swap;
-  src: url("../asset/fonts/opentui-mono-bold-latin.woff2") format("woff2");
   unicode-range:
-    U+0020-007E, U+00A0-017F, U+2000-200D, U+2010-2029, U+202F-2064, U+20AC, U+2190-21E6, U+21E8-21FF, U+2212,
-    U+2500-25FF;
+    U+0180-03A1, U+03A4-03C2, U+03C4-03FF, U+0531-058F, U+0E3F, U+1D00-1DBF, U+1E00-1FFE, U+2071, U+207A-207F,
+    U+2082-209C, U+20A1-20AB, U+20AD-20C0, U+20D2, U+20D8, U+20EB, U+2100-2121, U+2124-218B, U+2200-2210, U+2213-2218,
+    U+221B-221D, U+221F-2247, U+2249-225F, U+2261-2263, U+2266-22C4, U+22C6-22EE, U+22F0-2302, U+2304-2317, U+2319-2324,
+    U+2326-232A, U+232D-238A, U+238D-23CC, U+23CF-2429, U+266D, U+266F, U+2687, U+2699, U+2731, U+2736, U+274C, U+2794,
+    U+279C-279E, U+27DC, U+27E6-27EB, U+27F3, U+2916, U+2948, U+294A, U+2987-2988, U+29BF, U+2A00, U+2A05-2A06, U+2ADC,
+    U+2AEE, U+2B0E-2B13, U+2B16, U+2B1D, U+2B25, U+2B29-2B2A, U+2B30, U+2C60-2C7F, U+A720-A7FF, U+AB30-AB6B, U+E0B8,
+    U+E0BA, U+E0BC, U+E0BE, U+F882-F892, U+FB01-FB02, U+10788-107B9, U+1CD06-1CEAB, U+1D538-1D56B, U+1DF05-1DF1D,
+    U+1FB82-1FBE7;
 }
 
 @font-face {
-  font-family: "OpenTUI Mono";
+  font-family: "OpenMono";
+  src: url("../asset/fonts/openmono-regular-cyrillic.woff2") format("woff2");
+  font-weight: 100 599;
   font-style: normal;
-  font-weight: 600 900;
   font-display: swap;
-  src: url("../asset/fonts/opentui-mono-bold-rest.woff2") format("woff2");
-  unicode-range:
-    U+01AB, U+01AE, U+0218-021B, U+0237, U+024B, U+0256, U+026B, U+026D, U+0273, U+0279, U+027B, U+027D-027E, U+0282,
-    U+0285, U+0288, U+0290, U+02AF, U+02B5, U+0300-036F, U+1D6C-1D76, U+1D80-1D9A, U+1DA9-1DAA, U+1DAF, U+1DB3, U+1DB5,
-    U+1DBC, U+1E03, U+1E0B, U+1E23, U+2070, U+2074-2079, U+2080-2089, U+20A1, U+20A3-20AB, U+20AD-20AF, U+20B1-20B5,
-    U+20B8-20BA, U+20BC-20BF, U+20D2, U+20D8, U+20EB, U+2200-2211, U+2213-22FF, U+2948, U+2ADC, U+2AEE, U+2B30, U+2C62,
-    U+2C64, U+A78E, U+A794-A795, U+A7BA-A7BF, U+A7C4-A7C6, U+AB39, U+AB5E, U+AB66-AB68, U+E0B8, U+E0BA, U+E0BC, U+E0BE,
-    U+F882-F883, U+F891-F892, U+10788, U+1078B, U+1078D, U+1079D, U+1079F, U+107A7-107A8, U+107AD, U+107AF, U+107B9,
-    U+1DF05, U+1DF08-1DF0A, U+1DF12-1DF1D;
+  unicode-range: U+0300-0301, U+0400-052F, U+A64C-A64D;
 }
 
-/* Stand-ins while OpenTUI Mono loads (as in services/site mono-fonts.ts): the system monospace font scaled to
-   OpenTUI Mono's 0.6 em advance with its line metrics, so the swap changes letter shapes only, not layout. */
 @font-face {
-  font-family: "OpenTUI Mono Menlo";
+  font-family: "OpenMono";
+  src: url("../asset/fonts/openmono-bold-latin.woff2") format("woff2");
+  font-weight: 600 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0020-007E, U+00A0-017F, U+03A3, U+03C3, U+2000-200D, U+2010-2029, U+202F-2064, U+2070, U+2074-2079, U+2080-2081,
+    U+20AC, U+2122, U+2190-21FF, U+2211-2212, U+2219-221A, U+221E, U+2248, U+2260, U+2264-2265, U+22C5, U+22EF, U+2303,
+    U+2318, U+2325, U+232B, U+238B, U+23CE, U+2500-25FF, U+26A0, U+2713, U+2715-2717, U+FFFD;
+}
+
+@font-face {
+  font-family: "OpenMono";
+  src: url("../asset/fonts/openmono-bold-rest.woff2") format("woff2");
+  font-weight: 600 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range:
+    U+0180-03A1, U+03A4-03C2, U+03C4-03FF, U+0531-058F, U+0E3F, U+1D00-1DBF, U+1E00-1FFE, U+2071, U+207A-207F,
+    U+2082-209C, U+20A1-20AB, U+20AD-20C0, U+20D2, U+20D8, U+20EB, U+2100-2121, U+2124-218B, U+2200-2210, U+2213-2218,
+    U+221B-221D, U+221F-2247, U+2249-225F, U+2261-2263, U+2266-22C4, U+22C6-22EE, U+22F0-2302, U+2304-2317, U+2319-2324,
+    U+2326-232A, U+232D-238A, U+238D-23CC, U+23CF-2429, U+266D, U+266F, U+2687, U+2699, U+2731, U+2736, U+274C, U+2794,
+    U+279C-279E, U+27DC, U+27E6-27EB, U+27F3, U+2916, U+2948, U+294A, U+2987-2988, U+29BF, U+2A00, U+2A05-2A06, U+2ADC,
+    U+2AEE, U+2B0E-2B13, U+2B16, U+2B1D, U+2B25, U+2B29-2B2A, U+2B30, U+2C60-2C7F, U+A720-A7FF, U+AB30-AB6B, U+E0B8,
+    U+E0BA, U+E0BC, U+E0BE, U+F882-F892, U+FB01-FB02, U+10788-107B9, U+1CD06-1CEAB, U+1D538-1D56B, U+1DF05-1DF1D,
+    U+1FB82-1FBE7;
+}
+
+@font-face {
+  font-family: "OpenMono";
+  src: url("../asset/fonts/openmono-bold-cyrillic.woff2") format("woff2");
+  font-weight: 600 900;
+  font-style: normal;
+  font-display: swap;
+  unicode-range: U+0300-0301, U+0400-052F, U+A64C-A64D;
+}
+
+@font-face {
+  font-family: "OpenMono";
+  src: url("../asset/fonts/openmono-italic-latin.woff2") format("woff2");
+  font-weight: 100 599;
+  font-style: italic;
+  font-display: swap;
+  unicode-range:
+    U+0020-007E, U+00A0-017F, U+03A3, U+03C3, U+2000-200D, U+2010-2029, U+202F-2064, U+2070, U+2074-2079, U+2080-2081,
+    U+20AC, U+2122, U+2190-21FF, U+2211-2212, U+2219-221A, U+221E, U+2248, U+2260, U+2264-2265, U+22C5, U+22EF, U+2303,
+    U+2318, U+2325, U+232B, U+238B, U+23CE, U+2500-25FF, U+26A0, U+2713, U+2715-2717, U+FFFD;
+}
+
+@font-face {
+  font-family: "OpenMono";
+  src: url("../asset/fonts/openmono-italic-rest.woff2") format("woff2");
+  font-weight: 100 599;
+  font-style: italic;
+  font-display: swap;
+  unicode-range:
+    U+0180-03A1, U+03A4-03C2, U+03C4-03FF, U+0531-058F, U+0E3F, U+1D00-1DBF, U+1E00-1FFE, U+2071, U+207A-207F,
+    U+2082-209C, U+20A1-20AB, U+20AD-20C0, U+20D2, U+20D8, U+20EB, U+2100-2121, U+2124-218B, U+2200-2210, U+2213-2218,
+    U+221B-221D, U+221F-2247, U+2249-225F, U+2261-2263, U+2266-22C4, U+22C6-22EE, U+22F0-2302, U+2304-2317, U+2319-2324,
+    U+2326-232A, U+232D-238A, U+238D-23CC, U+23CF-2429, U+266D, U+266F, U+2687, U+2699, U+2731, U+2736, U+274C, U+2794,
+    U+279C-279E, U+27DC, U+27E6-27EB, U+27F3, U+2916, U+2948, U+294A, U+2987-2988, U+29BF, U+2A00, U+2A05-2A06, U+2ADC,
+    U+2AEE, U+2B0E-2B13, U+2B16, U+2B1D, U+2B25, U+2B29-2B2A, U+2B30, U+2C60-2C7F, U+A720-A7FF, U+AB30-AB6B, U+E0B8,
+    U+E0BA, U+E0BC, U+E0BE, U+F882-F892, U+FB01-FB02, U+10788-107B9, U+1CD06-1CEAB, U+1D538-1D56B, U+1DF05-1DF1D,
+    U+1FB82-1FBE7;
+}
+
+@font-face {
+  font-family: "OpenMono";
+  src: url("../asset/fonts/openmono-italic-cyrillic.woff2") format("woff2");
+  font-weight: 100 599;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0300-0301, U+0400-052F, U+A64C-A64D;
+}
+
+@font-face {
+  font-family: "OpenMono";
+  src: url("../asset/fonts/openmono-bold-italic-latin.woff2") format("woff2");
+  font-weight: 600 900;
+  font-style: italic;
+  font-display: swap;
+  unicode-range:
+    U+0020-007E, U+00A0-017F, U+03A3, U+03C3, U+2000-200D, U+2010-2029, U+202F-2064, U+2070, U+2074-2079, U+2080-2081,
+    U+20AC, U+2122, U+2190-21FF, U+2211-2212, U+2219-221A, U+221E, U+2248, U+2260, U+2264-2265, U+22C5, U+22EF, U+2303,
+    U+2318, U+2325, U+232B, U+238B, U+23CE, U+2500-25FF, U+26A0, U+2713, U+2715-2717, U+FFFD;
+}
+
+@font-face {
+  font-family: "OpenMono";
+  src: url("../asset/fonts/openmono-bold-italic-rest.woff2") format("woff2");
+  font-weight: 600 900;
+  font-style: italic;
+  font-display: swap;
+  unicode-range:
+    U+0180-03A1, U+03A4-03C2, U+03C4-03FF, U+0531-058F, U+0E3F, U+1D00-1DBF, U+1E00-1FFE, U+2071, U+207A-207F,
+    U+2082-209C, U+20A1-20AB, U+20AD-20C0, U+20D2, U+20D8, U+20EB, U+2100-2121, U+2124-218B, U+2200-2210, U+2213-2218,
+    U+221B-221D, U+221F-2247, U+2249-225F, U+2261-2263, U+2266-22C4, U+22C6-22EE, U+22F0-2302, U+2304-2317, U+2319-2324,
+    U+2326-232A, U+232D-238A, U+238D-23CC, U+23CF-2429, U+266D, U+266F, U+2687, U+2699, U+2731, U+2736, U+274C, U+2794,
+    U+279C-279E, U+27DC, U+27E6-27EB, U+27F3, U+2916, U+2948, U+294A, U+2987-2988, U+29BF, U+2A00, U+2A05-2A06, U+2ADC,
+    U+2AEE, U+2B0E-2B13, U+2B16, U+2B1D, U+2B25, U+2B29-2B2A, U+2B30, U+2C60-2C7F, U+A720-A7FF, U+AB30-AB6B, U+E0B8,
+    U+E0BA, U+E0BC, U+E0BE, U+F882-F892, U+FB01-FB02, U+10788-107B9, U+1CD06-1CEAB, U+1D538-1D56B, U+1DF05-1DF1D,
+    U+1FB82-1FBE7;
+}
+
+@font-face {
+  font-family: "OpenMono";
+  src: url("../asset/fonts/openmono-bold-italic-cyrillic.woff2") format("woff2");
+  font-weight: 600 900;
+  font-style: italic;
+  font-display: swap;
+  unicode-range: U+0300-0301, U+0400-052F, U+A64C-A64D;
+}
+
+/* The metric fallbacks cover what OpenMono does (Latin, Greek, Cyrillic, punctuation and symbols) and no more:
+   Courier New also has monospace Arabic, which would otherwise win over a proper Arabic face. */
+@font-face {
+  font-family: "OpenMono Menlo";
   src: local("Menlo Regular"), local("Menlo-Regular"), local("DejaVu Sans Mono");
   font-weight: 100 599;
   size-adjust: 99.66%;
   ascent-override: 96.83%;
   descent-override: 22.08%;
   line-gap-override: 6.52%;
+  unicode-range: U+0000-052F, U+1E00-1FFF, U+2000-2BFF;
 }
 
 @font-face {
-  font-family: "OpenTUI Mono Menlo";
+  font-family: "OpenMono Menlo";
   src: local("Menlo Bold"), local("DejaVu Sans Mono Bold");
   font-weight: 600 900;
   size-adjust: 99.66%;
   ascent-override: 96.83%;
   descent-override: 22.08%;
   line-gap-override: 6.52%;
+  unicode-range: U+0000-052F, U+1E00-1FFF, U+2000-2BFF;
 }
 
 @font-face {
-  font-family: "OpenTUI Mono Consolas";
+  font-family: "OpenMono Consolas";
   src: local("Consolas");
   font-weight: 100 599;
   size-adjust: 109.13%;
   ascent-override: 88.43%;
   descent-override: 26.12%;
   line-gap-override: 0%;
+  unicode-range: U+0000-052F, U+1E00-1FFF, U+2000-2BFF;
 }
 
 @font-face {
-  font-family: "OpenTUI Mono Consolas";
+  font-family: "OpenMono Consolas";
   src: local("Consolas Bold");
   font-weight: 600 900;
   size-adjust: 109.13%;
   ascent-override: 88.43%;
   descent-override: 26.12%;
   line-gap-override: 0%;
+  unicode-range: U+0000-052F, U+1E00-1FFF, U+2000-2BFF;
 }
 
 @font-face {
-  font-family: "OpenTUI Mono Courier";
+  font-family: "OpenMono Courier";
   src: local("Courier New");
   font-weight: 100 599;
   size-adjust: 99.98%;
   ascent-override: 96.52%;
   descent-override: 28.5%;
   line-gap-override: 0%;
+  unicode-range: U+0000-052F, U+1E00-1FFF, U+2000-2BFF;
 }
 
 @font-face {
-  font-family: "OpenTUI Mono Courier";
+  font-family: "OpenMono Courier";
   src: local("Courier New Bold");
   font-weight: 600 900;
   size-adjust: 99.98%;
   ascent-override: 96.52%;
   descent-override: 28.5%;
   line-gap-override: 0%;
+  unicode-range: U+0000-052F, U+1E00-1FFF, U+2000-2BFF;
 }
 
+/* The page behind the app, in the page step of the shared grey scale (--stats-bg), written out because the tokens
+   live on [data-page], inside this element. grey-ok: outside the tokens' scope */
 :root {
-  background: #ffffff;
+  background: #fbfbfb;
 }
 
 :root[data-stats-theme="dark"] {
-  background: #161616;
+  background: #0c0c0c;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not([data-stats-theme="light"]) {
-    background: #161616;
+    background: #0c0c0c;
   }
 }
+/* grey-ok-end */
 
 body {
   min-width: 320px;
@@ -139,34 +247,28 @@ body {
 
 [data-page="stats"] {
   color-scheme: light;
-  --color-background: #ffffff;
-  --color-background-weak: #fafafa;
-  --color-background-weak-hover: #eeeeee;
-  --color-background-strong: #161616;
-  --color-background-strong-hover: #242424;
-  --color-text: #5c5c5c;
-  --color-text-weak: #707070;
-  --color-text-strong: #161616;
-  --color-text-inverted: #ffffff;
-  --color-border-weak: #0000001a;
-  --stats-bg: #ffffff;
-  --stats-layer: #fafafa;
+  --stats-bg: #fbfbfb;
+  --stats-layer: #ffffff;
   --stats-layer-2: #eeeeee;
   --stats-line: #0000001a;
   --stats-line-strong: #00000033;
   --stats-text: #161616;
   --stats-muted: #5c5c5c;
-  --stats-faint: #707070;
+  --stats-faint: #6b6b6b;
   --stats-theme-icon-active: #3a3a3a;
   --stats-accent: #3b5cf6;
   --stats-accent-text: #3b5cf6;
-  --stats-bar-idle: #d4d4d4;
-  --stats-dot: #d4d4d4;
+  --stats-bar-idle: #d2d2d2;
+  --stats-dot: #d2d2d2;
   --stats-hero-muted: #5c5c5c;
   --stats-hero-pattern: #eeeeee;
-  --stats-logo-bg: #161616;
-  --stats-logo-fill: #454545;
-  --stats-logo-stroke: #e2e2e2;
+  --stats-logo-bg: #0c0c0c;
+  --stats-logo-fill: #4b4b4b;
+  --stats-logo-stroke: #eeeeee;
+  --stats-popover: #ffffff;
+  --stats-layer-hover: #ffffff;
+  --stats-on-accent: #ffffff;
+  --stats-knob: #fafafa;
   --stats-page-padding: 5rem;
   --stats-section-padding: 6rem;
   min-height: 100vh;
@@ -208,7 +310,7 @@ body {
 [data-page="stats"] [data-component="content"] {
   color: var(--stats-text);
   font-family:
-    "OpenTUI Mono", "OpenTUI Mono Menlo", "OpenTUI Mono Consolas", "OpenTUI Mono Courier",
+    "OpenMono", "OpenMono Menlo", "OpenMono Consolas", "OpenMono Courier", "Geeza Pro", "Noto Sans Arabic",
     var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
 }
 
@@ -228,7 +330,7 @@ body {
   color: var(--stats-text);
   background: var(--stats-bg);
   font-family:
-    "OpenTUI Mono", "OpenTUI Mono Menlo", "OpenTUI Mono Consolas", "OpenTUI Mono Courier",
+    "OpenMono", "OpenMono Menlo", "OpenMono Consolas", "OpenMono Courier", "Geeza Pro", "Noto Sans Arabic",
     var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
 }
 
@@ -404,11 +506,11 @@ body {
 
 [data-page="stats"] [data-slot="header-button"][data-variant="contrast"] {
   gap: 8px;
-  color: #ffffff;
-  background: #242424;
+  color: var(--stats-bg);
+  background: var(--stats-text);
   box-shadow:
     0 0 0 0 #00000000,
-    0 0 0 0.5px #3a3a3a,
+    0 0 0 0.5px var(--stats-text),
     0 1px 1.5px 0 #00000033,
     inset 0 -1px 2px 0 #0000000f,
     inset 0 1px 2px 0 #ffffff24;
@@ -573,7 +675,7 @@ body {
   padding: 112px clamp(32px, 4vw, 48px) 24px;
   color: var(--stats-text);
   font-family:
-    "OpenTUI Mono", "OpenTUI Mono Menlo", "OpenTUI Mono Consolas", "OpenTUI Mono Courier",
+    "OpenMono", "OpenMono Menlo", "OpenMono Consolas", "OpenMono Courier", "Geeza Pro", "Noto Sans Arabic",
     var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace);
   font-size: 11px;
 }
@@ -1064,6 +1166,7 @@ body {
 [data-page="stats"] [data-slot="top-models-title"] {
   max-width: 1200px;
   margin-bottom: 40px;
+  text-wrap: pretty;
   color: var(--stats-muted);
   font-size: 28px;
   font-weight: 400;
@@ -1145,7 +1248,7 @@ body {
   grid-template-rows: 40px minmax(0, 1fr);
 }
 
-[data-page="stats"] [data-component="top-models-chart"][data-range="2M"] {
+[data-page="stats"] [data-component="top-models-chart"][data-period="daily"] {
   --top-models-bar-gap: 6px;
 }
 
@@ -1154,12 +1257,12 @@ body {
   grid-template-rows: 40px minmax(0, 1fr);
 }
 
-[data-page="stats"] [data-component="market-share"][data-range="2M"] {
+[data-page="stats"] [data-component="market-share"][data-period="daily"] {
   --market-gap: 6px;
 }
 
-[data-page="stats"] [data-component="market-share"][data-range="2M"] [data-slot="market-labels"],
-[data-page="stats"] [data-component="market-share"][data-range="2M"] [data-slot="market-bars"] {
+[data-page="stats"] [data-component="market-share"][data-period="daily"] [data-slot="market-labels"],
+[data-page="stats"] [data-component="market-share"][data-period="daily"] [data-slot="market-bars"] {
   gap: var(--market-gap);
 }
 
@@ -1393,7 +1496,7 @@ body {
 }
 
 [data-page="stats"] [data-component="content"] button[data-active="true"] {
-  color: #fff;
+  color: var(--stats-bg);
   background: var(--stats-text);
 }
 
@@ -1505,8 +1608,15 @@ body {
   gap: 24px;
 }
 
+/* The range choices in one frame, as the leaderboard's cards and the Share button beside them: a hairline over the
+   layer, 28px tall; the chosen one on grey inside it. */
 [data-page="stats"] [data-component="usage-filter"][data-variant="range"] {
-  gap: 6px;
+  box-sizing: border-box;
+  gap: 2px;
+  height: 28px;
+  padding: 2px;
+  background: linear-gradient(180deg, #ffffff0a 0%, #ffffff00 100%), var(--stats-layer);
+  border: 1px solid var(--stats-line);
 }
 
 [data-page="stats"] [data-component="usage-filter"] button {
@@ -1544,12 +1654,12 @@ body {
 }
 
 [data-page="stats"] [data-component="usage-filter"][data-variant="range"] button {
-  height: 24px;
-  width: 36px;
-  padding: 0;
+  height: 22px;
+  padding: 0 8px;
 }
 
 [data-page="stats"] [data-component="usage-filter"][data-variant="range"] button[data-active="true"] {
+  color: var(--stats-text);
   background: var(--stats-layer-2);
 }
 
@@ -1572,6 +1682,37 @@ body {
   margin-top: 12px;
 }
 
+[data-page="stats"] [data-slot="section-heading-row"] {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+}
+
+/* Centered on the heading's first line. */
+[data-page="stats"] [data-slot="section-heading-row"] > [data-component="usage-filter"] {
+  flex: none;
+  margin-top: 9px;
+}
+
+/* The last bucket is still filling in. */
+[data-page="stats"] [data-slot="top-models-bar"]:last-child:not([data-active="true"]) [data-slot="top-models-stack"],
+[data-page="stats"]
+  [data-slot="lab-usage-column"]:last-child:not([data-active="true"])
+  [data-slot="lab-usage-token-bar"],
+[data-page="stats"]
+  [data-slot="model-trend-column"]:last-child:not([data-active="true"])
+  [data-slot="model-trend-token-band"],
+[data-page="stats"] [data-slot="compare-detail-bars"] i:last-child {
+  opacity: 0.5;
+}
+
+[data-page="stats"] [data-component="top-models-chart"] [data-component="chart-tooltip"] strong,
+[data-page="stats"] [data-component="market-share"] > [data-component="chart-tooltip"] strong,
+[data-page="stats"] [data-slot="market-footer"] strong {
+  text-transform: uppercase;
+}
+
 [data-page="stats"] [data-component="chart-tooltip"] {
   position: absolute;
   right: auto;
@@ -1580,7 +1721,7 @@ body {
   gap: 8px;
   min-width: 220px;
   padding: 16px;
-  background: #ffffff;
+  background: var(--stats-popover);
   border: 1px solid var(--stats-line-strong);
   box-shadow:
     0 8px 16px #0000000a,
@@ -1648,7 +1789,7 @@ body {
   width: 192px;
   min-width: 192px;
   padding: 0;
-  background: #ffffff;
+  background: var(--stats-popover);
   border: 0;
   box-shadow:
     0 0 0 0.5px #00000024,
@@ -1996,6 +2137,7 @@ body {
 [data-page="stats"] [data-slot="section-title"] {
   max-width: 1200px;
   margin-bottom: 40px;
+  text-wrap: pretty;
   color: var(--stats-muted);
   font-size: 28px;
   font-weight: 400;
@@ -2029,10 +2171,13 @@ body {
 }
 
 [data-page="stats"] [data-slot="heading-anchor"] {
+  /* On the title's baseline, a short space before it. */
   position: absolute;
-  top: -0.08em;
+  top: 0;
   right: 100%;
-  margin-right: 0.48em;
+  margin-right: 0.24em;
+  /* No leading above the glyph, as the title's own glyphs have none; the line height would push it down. */
+  line-height: normal;
   color: var(--stats-accent);
   opacity: 0;
 }
@@ -2226,7 +2371,7 @@ body {
 
 [data-page="stats"] [data-component="leader-card"][data-active="true"] {
   border-color: var(--stats-line-strong);
-  background: #ffffff;
+  background: var(--stats-layer-hover);
   box-shadow:
     0 0 0 0.5px #00000024,
     0 6px 16px #0000000d,
@@ -2248,7 +2393,7 @@ body {
   [data-page="stats"] [data-component="leader-card"]:hover,
   [data-page="stats"] [data-component="leader-card"]:focus-visible {
     border-color: var(--stats-line-strong);
-    background: #ffffff;
+    background: var(--stats-layer-hover);
     box-shadow:
       0 0 0 0.5px #00000024,
       0 6px 16px #0000000d,
@@ -2447,7 +2592,7 @@ body {
   min-width: 228px;
   padding: 0;
   border: 0;
-  background: #ffffff;
+  background: var(--stats-popover);
   box-shadow:
     0 0 0 0.5px #00000024,
     0 8px 16px #0000000f,
@@ -3163,7 +3308,7 @@ body {
   height: 64px;
   background: var(--stats-accent-text);
   box-shadow: inset 0 0 0 1px #0000001a;
-  color: #ffffff;
+  color: var(--stats-on-accent);
 }
 
 [data-page="stats"] [data-slot="lab-hero-avatar"][data-empty="true"] {
@@ -3442,7 +3587,7 @@ body {
   height: 40px;
   background: var(--stats-accent-text);
   box-shadow: inset 0 0 0 1px #0000001a;
-  color: #ffffff;
+  color: var(--stats-on-accent);
 }
 
 [data-page="stats"] [data-slot="model-hero-avatar"] svg {
@@ -3600,14 +3745,13 @@ body {
 
 [data-page="stats"] [data-component="model-spec"] strong {
   min-width: 0;
-  overflow: hidden;
   color: var(--stats-text);
   font-size: 28px;
   font-weight: 500;
-  line-height: 1.5;
+  line-height: 1.25;
   letter-spacing: 0;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
 }
 
 [data-page="stats"] [data-section="model-momentum"] {
@@ -4411,7 +4555,7 @@ body {
   flex: 0 0 auto;
   width: 20px;
   height: 20px;
-  color: #ffffff;
+  color: var(--stats-on-accent);
   background: var(--stats-accent-text);
   box-shadow: inset 0 0 0 1px #0000001a;
 }
@@ -4488,7 +4632,7 @@ body {
   flex: 0 0 auto;
   width: 16px;
   height: 16px;
-  color: #ffffff;
+  color: var(--stats-on-accent);
   background: var(--stats-accent-text);
   box-shadow: inset 0 0 0 1px #0000001a;
 }
@@ -4634,7 +4778,7 @@ body {
   flex: 0 0 auto;
   width: 28px;
   height: 28px;
-  color: #ffffff;
+  color: var(--stats-on-accent);
   background: var(--stats-accent-text);
   box-shadow: inset 0 0 0 1px #0000001a;
 }
@@ -4971,10 +5115,10 @@ body {
   --lab-usage-column-gutter: calc(var(--lab-usage-gap) / 2);
   --lab-usage-bar-height: 76px;
   --lab-usage-line-bottom: 124px;
-  --lab-usage-bar: #dbdbdb;
-  --lab-usage-line: #808080;
+  --lab-usage-bar: #d2d2d2;
+  --lab-usage-line: #6b6b6b;
   --lab-usage-active: #3b5cf6;
-  --lab-usage-band: #f2f2f2;
+  --lab-usage-band: #eeeeee;
   grid-template-rows: minmax(0, 450px) 14px;
   gap: 40px;
   height: 504px;
@@ -5161,10 +5305,10 @@ body {
   --model-trend-column-gutter: calc(var(--model-trend-gap) / 2);
   --model-trend-bar-height: 76px;
   --model-trend-line-bottom: 124px;
-  --model-trend-bar: #dbdbdb;
-  --model-trend-line: #808080;
+  --model-trend-bar: #d2d2d2;
+  --model-trend-line: #6b6b6b;
   --model-trend-active: #3b5cf6;
-  --model-trend-band: #f2f2f2;
+  --model-trend-band: #eeeeee;
   grid-template-rows: minmax(0, 450px) 14px;
   gap: 40px;
   height: 504px;
@@ -5838,11 +5982,12 @@ body {
   display: grid;
   place-items: center;
   flex: 0 0 auto;
-  color: #ffffff;
+  color: var(--stats-on-accent);
   background: var(--stats-accent-text);
   box-shadow: inset 0 0 0 1px #0000001a;
 }
 
+/* grey-ok: the labs' own brand colours */
 [data-page="stats"] [data-slot="compare-home-avatar"][data-lab="deepseek"] {
   background: #5d6ff4;
 }
@@ -5854,6 +5999,7 @@ body {
 [data-page="stats"] [data-slot="compare-home-avatar"][data-lab="anthropic"] {
   background: #c99b75;
 }
+/* grey-ok-end */
 
 [data-page="stats"] [data-slot="compare-home-avatar"][data-size="large"] {
   width: 40px;
@@ -6289,7 +6435,7 @@ body {
   [data-slot="compare-detail-action"][aria-pressed="true"]
   [data-slot="compare-detail-highlight-icon"]
   i:last-child {
-  background: #fafafa;
+  background: var(--stats-knob);
   box-shadow:
     0 0 0 0.5px rgb(0 0 0 / 12%),
     0 1px 2px -1px rgb(0 0 0 / 8%),
@@ -6832,6 +6978,7 @@ body {
 [data-page="stats"] [data-slot="compare-detail-value"][data-chart="true"] {
   display: grid;
   align-content: center;
+  justify-content: stretch;
   gap: 12px;
   min-height: 102px;
 }
@@ -6847,7 +6994,6 @@ body {
 [data-page="stats"] [data-slot="compare-detail-bars"] i {
   flex: 1 1 0;
   min-width: 2px;
-  max-width: 6px;
   background: color-mix(in srgb, var(--stats-text) 18%, transparent);
 }
 
@@ -7377,42 +7523,34 @@ body {
 [data-page="stats"][data-theme="dark"],
 :root[data-stats-theme="dark"] [data-page="stats"]:not([data-theme="light"]) {
   color-scheme: dark;
-  --color-background: #161616;
-  --color-background-weak: #242424;
-  --color-background-weak-hover: #303030;
-  --color-background-strong: #ffffff;
-  --color-background-strong-hover: #eeeeee;
-  --color-text: #d4d4d4;
-  --color-text-weak: #a3a3a3;
-  --color-text-strong: #ffffff;
-  --color-text-inverted: #161616;
-  --color-border-weak: #ffffff1a;
-  --stats-bg: #161616;
-  --stats-layer: #242424;
-  --stats-layer-2: #303030;
+  --stats-bg: #0c0c0c;
+  --stats-layer: #161616;
+  --stats-layer-2: #242424;
   --stats-line: #ffffff1a;
   --stats-line-strong: #ffffff33;
-  --stats-text: #ffffff;
-  --stats-muted: #d4d4d4;
-  --stats-faint: #a3a3a3;
+  --stats-text: #fafafa;
+  --stats-muted: #aeaeae;
+  --stats-faint: #8f8f8f;
   --stats-accent: #6b8fff;
   --stats-accent-text: #6b8fff;
   --stats-theme-icon-active: #fafafa;
-  --stats-bar-idle: #303030;
-  --stats-dot: #303030;
-  --stats-hero-muted: #a3a3a3;
-  --stats-hero-pattern: #303030;
-  --stats-logo-bg: #f1ecec;
-  --stats-logo-fill: #b7b1b1;
-  --stats-logo-stroke: #211e1e;
+  --stats-bar-idle: #2e2e2e;
+  --stats-dot: #2e2e2e;
+  --stats-hero-muted: #aeaeae;
+  --stats-hero-pattern: #242424;
+  --stats-logo-bg: #f5f5f5;
+  --stats-logo-fill: #d2d2d2;
+  --stats-logo-stroke: #1f1f1f;
+  --stats-popover: #242424;
+  --stats-layer-hover: #242424;
 }
 
 [data-page="stats"][data-theme="dark"] [data-component="model-usage-chart"][data-variant="lab-usage"],
 :root[data-stats-theme="dark"]
   [data-page="stats"]:not([data-theme="light"])
   [data-component="model-usage-chart"][data-variant="lab-usage"] {
-  --lab-usage-bar: #3a3a3a;
-  --lab-usage-line: #a3a3a3;
+  --lab-usage-bar: #4b4b4b;
+  --lab-usage-line: #8f8f8f;
   --lab-usage-band: #242424;
   --lab-usage-active: #6b8fff;
 }
@@ -7421,15 +7559,15 @@ body {
 :root[data-stats-theme="dark"]
   [data-page="stats"]:not([data-theme="light"])
   [data-component="model-usage-chart"][data-variant="model-trend"] {
-  --model-trend-bar: #3a3a3a;
-  --model-trend-line: #a3a3a3;
+  --model-trend-bar: #4b4b4b;
+  --model-trend-line: #8f8f8f;
   --model-trend-band: #242424;
   --model-trend-active: #6b8fff;
 }
 
 [data-page="stats"][data-theme="dark"] [data-component="chart-tooltip"],
 :root[data-stats-theme="dark"] [data-page="stats"]:not([data-theme="light"]) [data-component="chart-tooltip"] {
-  background: #242424;
+  background: var(--stats-popover);
 }
 
 [data-page="stats"][data-theme="dark"]
@@ -7444,7 +7582,7 @@ body {
   [data-page="stats"]:not([data-theme="light"])
   :is([data-section="top-models"], [data-section="unique-users"])
   [data-component="chart-tooltip"] {
-  background: #242424;
+  background: var(--stats-popover);
   box-shadow:
     0 0 0 0.5px #ffffff24,
     0 8px 16px #0000003d,
@@ -7483,7 +7621,7 @@ body {
 :root[data-stats-theme="dark"]
   [data-page="stats"]:not([data-theme="light"])
   [data-component="leader-card"]:focus-visible {
-  background: #303030;
+  background: var(--stats-layer-hover);
   box-shadow:
     0 0 0 0.5px #ffffff24,
     0 6px 16px #0000003d,
@@ -7528,8 +7666,8 @@ body {
 :root[data-stats-theme="dark"]
   [data-page="stats"]:not([data-theme="light"])
   [data-slot="header-button"][data-variant="contrast"] {
-  color: #ffffff;
-  background: #5c5c5c;
+  color: var(--stats-bg);
+  background: var(--stats-text);
   box-shadow:
     0 -0.5px 0 0 #ffffff4d,
     0 0 0 0.5px #ffffff66,
@@ -7539,41 +7677,33 @@ body {
 @media (prefers-color-scheme: dark) {
   :root:not([data-stats-theme="light"]) [data-page="stats"]:not([data-theme="light"]) {
     color-scheme: dark;
-    --color-background: #161616;
-    --color-background-weak: #242424;
-    --color-background-weak-hover: #303030;
-    --color-background-strong: #ffffff;
-    --color-background-strong-hover: #eeeeee;
-    --color-text: #d4d4d4;
-    --color-text-weak: #a3a3a3;
-    --color-text-strong: #ffffff;
-    --color-text-inverted: #161616;
-    --color-border-weak: #ffffff1a;
-    --stats-bg: #161616;
-    --stats-layer: #242424;
-    --stats-layer-2: #303030;
+    --stats-bg: #0c0c0c;
+    --stats-layer: #161616;
+    --stats-layer-2: #242424;
     --stats-line: #ffffff1a;
     --stats-line-strong: #ffffff33;
-    --stats-text: #ffffff;
-    --stats-muted: #d4d4d4;
-    --stats-faint: #a3a3a3;
+    --stats-text: #fafafa;
+    --stats-muted: #aeaeae;
+    --stats-faint: #8f8f8f;
     --stats-accent: #6b8fff;
     --stats-accent-text: #6b8fff;
     --stats-theme-icon-active: #fafafa;
-    --stats-bar-idle: #303030;
-    --stats-dot: #303030;
-    --stats-hero-muted: #a3a3a3;
-    --stats-hero-pattern: #303030;
-    --stats-logo-bg: #f1ecec;
-    --stats-logo-fill: #b7b1b1;
-    --stats-logo-stroke: #211e1e;
+    --stats-bar-idle: #2e2e2e;
+    --stats-dot: #2e2e2e;
+    --stats-hero-muted: #aeaeae;
+    --stats-hero-pattern: #242424;
+    --stats-logo-bg: #f5f5f5;
+    --stats-logo-fill: #d2d2d2;
+    --stats-logo-stroke: #1f1f1f;
+    --stats-popover: #242424;
+    --stats-layer-hover: #242424;
   }
 
   :root:not([data-stats-theme="light"])
     [data-page="stats"]:not([data-theme="light"])
     [data-component="model-usage-chart"][data-variant="lab-usage"] {
-    --lab-usage-bar: #3a3a3a;
-    --lab-usage-line: #a3a3a3;
+    --lab-usage-bar: #4b4b4b;
+    --lab-usage-line: #8f8f8f;
     --lab-usage-band: #242424;
     --lab-usage-active: #6b8fff;
   }
@@ -7581,21 +7711,21 @@ body {
   :root:not([data-stats-theme="light"])
     [data-page="stats"]:not([data-theme="light"])
     [data-component="model-usage-chart"][data-variant="model-trend"] {
-    --model-trend-bar: #3a3a3a;
-    --model-trend-line: #a3a3a3;
+    --model-trend-bar: #4b4b4b;
+    --model-trend-line: #8f8f8f;
     --model-trend-band: #242424;
     --model-trend-active: #6b8fff;
   }
 
   :root:not([data-stats-theme="light"]) [data-page="stats"]:not([data-theme="light"]) [data-component="chart-tooltip"] {
-    background: #242424;
+    background: var(--stats-popover);
   }
 
   :root:not([data-stats-theme="light"])
     [data-page="stats"]:not([data-theme="light"])
     [data-section="top-models"]
     [data-component="chart-tooltip"] {
-    background: #242424;
+    background: var(--stats-popover);
     box-shadow:
       0 0 0 0.5px #ffffff24,
       0 8px 16px #0000003d,
@@ -7628,7 +7758,7 @@ body {
   :root:not([data-stats-theme="light"])
     [data-page="stats"]:not([data-theme="light"])
     [data-component="leader-card"]:focus-visible {
-    background: #303030;
+    background: var(--stats-layer-hover);
     box-shadow:
       0 0 0 0.5px #ffffff24,
       0 6px 16px #0000003d,
@@ -7654,8 +7784,8 @@ body {
   :root:not([data-stats-theme="light"])
     [data-page="stats"]:not([data-theme="light"])
     [data-slot="header-button"][data-variant="contrast"] {
-    color: #ffffff;
-    background: #5c5c5c;
+    color: var(--stats-bg);
+    background: var(--stats-text);
     box-shadow:
       0 -0.5px 0 0 #ffffff4d,
       0 0 0 0.5px #ffffff66,
@@ -8140,6 +8270,24 @@ body {
     font-size: 16px;
   }
 
+  [data-page="stats"] [data-slot="section-heading-row"] {
+    flex-direction: column;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+
+  [data-page="stats"] [data-slot="section-heading-row"] > h2 {
+    margin-bottom: 0;
+  }
+
+  [data-page="stats"] [data-slot="section-heading-row"] > [data-component="usage-filter"] {
+    margin-top: 0;
+  }
+
+  [data-page="stats"] [data-slot="section-heading-row"] [data-component="usage-filter"] button {
+    height: 32px;
+  }
+
   [data-page="stats"] [data-slot="cache-ratio-heading"],
   [data-page="stats"] button[data-component="cache-ratio-row"] {
     grid-template-columns: 44px minmax(72px, 1fr) minmax(86px, 1.2fr);
@@ -8467,6 +8615,11 @@ body {
     display: none;
   }
 
+  /* Weekly bars fit the screen, so the chart keeps its bleed but not the extra track. */
+  [data-page="stats"] [data-component="model-usage-chart"][data-period="weekly"] {
+    box-sizing: border-box;
+  }
+
   [data-page="stats"] [data-slot="model-usage-axis"],
   [data-page="stats"] [data-slot="model-usage-bars"] {
     direction: ltr;
@@ -8512,11 +8665,21 @@ body {
   [data-page="stats"] [data-component="model-usage-chart"][data-variant="lab-usage"] [data-slot="lab-usage-plot"],
   [data-page="stats"] [data-component="model-usage-chart"][data-variant="lab-usage"] [data-slot="lab-usage-months"] {
     direction: ltr;
+  }
+
+  [data-page="stats"]
+    [data-component="model-usage-chart"][data-variant="lab-usage"][data-period="daily"]
+    [data-slot="lab-usage-plot"],
+  [data-page="stats"]
+    [data-component="model-usage-chart"][data-variant="lab-usage"][data-period="daily"]
+    [data-slot="lab-usage-months"] {
     width: var(--model-usage-mobile-track-width);
     min-width: var(--model-usage-mobile-track-width);
   }
 
-  [data-page="stats"] [data-component="model-usage-chart"][data-variant="lab-usage"] [data-slot="lab-usage-column"] {
+  [data-page="stats"]
+    [data-component="model-usage-chart"][data-variant="lab-usage"][data-period="daily"]
+    [data-slot="lab-usage-column"] {
     flex: 0 0 var(--model-usage-mobile-bar-width);
   }
 
@@ -8544,12 +8707,20 @@ body {
     [data-component="model-usage-chart"][data-variant="model-trend"]
     [data-slot="model-trend-months"] {
     direction: ltr;
+  }
+
+  [data-page="stats"]
+    [data-component="model-usage-chart"][data-variant="model-trend"][data-period="daily"]
+    [data-slot="model-trend-plot"],
+  [data-page="stats"]
+    [data-component="model-usage-chart"][data-variant="model-trend"][data-period="daily"]
+    [data-slot="model-trend-months"] {
     width: var(--model-usage-mobile-track-width);
     min-width: var(--model-usage-mobile-track-width);
   }
 
   [data-page="stats"]
-    [data-component="model-usage-chart"][data-variant="model-trend"]
+    [data-component="model-usage-chart"][data-variant="model-trend"][data-period="daily"]
     [data-slot="model-trend-column"] {
     flex: 0 0 var(--model-usage-mobile-bar-width);
   }
@@ -8661,16 +8832,16 @@ body {
     display: none;
   }
 
-  [data-page="stats"] [data-component="top-models-chart"][data-dense-labels="true"],
-  [data-page="stats"] [data-component="market-share"][data-dense-labels="true"] {
+  [data-page="stats"] [data-component="top-models-chart"][data-period="daily"],
+  [data-page="stats"] [data-component="market-share"][data-period="daily"] {
     overflow-x: auto;
     overflow-y: visible;
     overscroll-behavior-x: contain;
     scrollbar-width: none;
   }
 
-  [data-page="stats"] [data-component="top-models-chart"][data-dense-labels="true"]::-webkit-scrollbar,
-  [data-page="stats"] [data-component="market-share"][data-dense-labels="true"]::-webkit-scrollbar {
+  [data-page="stats"] [data-component="top-models-chart"][data-period="daily"]::-webkit-scrollbar,
+  [data-page="stats"] [data-component="market-share"][data-period="daily"]::-webkit-scrollbar {
     display: none;
   }
 
@@ -8678,8 +8849,8 @@ body {
     --top-models-mobile-bar-width: 18px;
   }
 
-  [data-page="stats"] [data-component="top-models-chart"][data-dense-labels="true"] [data-slot="top-models-axis"],
-  [data-page="stats"] [data-component="top-models-chart"][data-dense-labels="true"] [data-slot="top-models-bars"] {
+  [data-page="stats"] [data-component="top-models-chart"][data-period="daily"] [data-slot="top-models-axis"],
+  [data-page="stats"] [data-component="top-models-chart"][data-period="daily"] [data-slot="top-models-bars"] {
     min-width: calc(var(--top-models-count) * (var(--top-models-mobile-bar-width) + var(--top-models-bar-gap)));
   }
 
@@ -8687,9 +8858,19 @@ body {
     --market-mobile-bar-width: 18px;
   }
 
-  [data-page="stats"] [data-component="market-share"][data-dense-labels="true"] [data-slot="market-labels"],
-  [data-page="stats"] [data-component="market-share"][data-dense-labels="true"] [data-slot="market-bars"] {
+  [data-page="stats"] [data-component="market-share"][data-period="daily"] [data-slot="market-labels"],
+  [data-page="stats"] [data-component="market-share"][data-period="daily"] [data-slot="market-bars"] {
     min-width: calc(var(--market-count) * (var(--market-mobile-bar-width) + var(--market-gap)));
+  }
+
+  /* 20 weekly bars fit the screen without scrolling. */
+  [data-page="stats"] [data-component="top-models-chart"][data-period="weekly"] {
+    --top-models-bar-gap: 4px;
+  }
+
+  [data-page="stats"] [data-component="market-share"][data-period="weekly"] [data-slot="market-labels"],
+  [data-page="stats"] [data-component="market-share"][data-period="weekly"] [data-slot="market-bars"] {
+    gap: 4px;
   }
 
   [data-page="stats"] [data-slot="top-models-axis"] > div {

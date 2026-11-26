@@ -85,6 +85,7 @@ export const registerIntegrationPolicy = Effect.fn(function* (input: {
     Effect.provideService(
       WebSearch.Service,
       WebSearch.Service.of({
+        available: () => Effect.die("unused WebSearch.available"),
         providers: () => Effect.die("unused WebSearch.providers"),
         default: () => Effect.die("unused WebSearch.default"),
         select: () => Effect.die("unused WebSearch.select"),

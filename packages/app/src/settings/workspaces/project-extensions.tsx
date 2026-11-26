@@ -140,7 +140,6 @@ const SharedSection: Component<{
           <span class="settings-models-group-chevron">
             <Icon
               name="fill-triangle-down"
-              size="small"
               classList={{ "project-settings-shared-chevron": true, open: open() }}
             />
           </span>

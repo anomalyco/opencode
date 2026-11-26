@@ -420,7 +420,7 @@ describe("config plugin reloads", () => {
           () =>
             reloads.agent === 1 &&
             reloads.command === 1 &&
-            reloads.skill === 2 &&
+            reloads.skill === 1 &&
             reloads.reference === 1 &&
             reloads.websearch === 1 &&
             reloads.integration === 1,
@@ -447,7 +447,7 @@ describe("config plugin reloads", () => {
           () =>
             reloads.agent === 2 &&
             reloads.command === 2 &&
-            reloads.skill === 4 &&
+            reloads.skill === 2 &&
             reloads.reference === 2 &&
             reloads.websearch === 2 &&
             reloads.integration === 2,
@@ -464,7 +464,7 @@ describe("config plugin reloads", () => {
           () =>
             reloads.agent === 3 &&
             reloads.command === 3 &&
-            reloads.skill === 6 &&
+            reloads.skill === 4 &&
             reloads.reference === 3 &&
             reloads.websearch === 4 &&
             reloads.integration === 3,

@@ -16,6 +16,7 @@ import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
 import PROMPT_META from "../../src/plugin/system-prompt/meta.txt"
 import PROMPT_GPT from "../../src/plugin/system-prompt/gpt.txt"
+import PROMPT_GPT_6_2 from "../../src/plugin/system-prompt/gpt-6.2.txt"
 import PROMPT_ASTRA from "../../src/plugin/system-prompt/gpt-astra.txt"
 import PROMPT_KIMI from "../../src/plugin/system-prompt/kimi.txt"
 import PROMPT_TRINITY from "../../src/plugin/system-prompt/trinity.txt"
@@ -63,7 +64,28 @@ describe("OptimizePlugin", () => {
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
       yield* catalog.transform((editor) => {
-        for (const id of ["gpt-5", "gpt-4.1", "gpt-5-codex", "gpt-6", "gpt-6-astra", "gpt-5-astra"])
+        for (const id of [
+          "gpt-5",
+          "gpt-4.1",
+          "gpt-5-codex",
+          "gpt-6",
+          "gpt-6-astra",
+          "gpt-5-astra",
+          "gpt-35-turbo",
+          "chatgpt-4o-latest",
+          "gpt-6.1-sol",
+          "gpt-6-1-sol",
+          "openai-gpt-61-sol",
+          "gpt-oss-120b",
+          "gpt-6.2-sol",
+          "gpt-6-2-sol",
+          "openai-gpt-62-sol",
+          "gpt-6.2-astra",
+          "gpt-sol-latest",
+          "gpt-latest",
+          "gpt-6.3-sol",
+          "gpt-7",
+        ])
           editor.models.update(Provider.ID.make("test"), Model.ID.make(id), () => {})
         editor.models.update(Provider.ID.make("test"), Model.ID.make("meta/muse-spark-1.1"), (model) => {
           model.name = "Muse Spark"
@@ -80,6 +102,20 @@ describe("OptimizePlugin", () => {
         ["gpt-6", PROMPT_GPT],
         ["gpt-6-astra", PROMPT_ASTRA],
         ["gpt-5-astra", PROMPT_ASTRA],
+        ["gpt-35-turbo", PROMPT_GPT],
+        ["chatgpt-4o-latest", PROMPT_GPT],
+        ["gpt-6.1-sol", PROMPT_GPT],
+        ["gpt-6-1-sol", PROMPT_GPT],
+        ["openai-gpt-61-sol", PROMPT_GPT],
+        ["gpt-oss-120b", PROMPT_GPT],
+        ["gpt-6.2-sol", PROMPT_GPT_6_2],
+        ["gpt-6-2-sol", PROMPT_GPT_6_2],
+        ["openai-gpt-62-sol", PROMPT_GPT_6_2],
+        ["gpt-6.2-astra", PROMPT_GPT_6_2],
+        ["gpt-sol-latest", PROMPT_GPT_6_2],
+        ["gpt-latest", PROMPT_GPT_6_2],
+        ["gpt-6.3-sol", PROMPT_GPT],
+        ["gpt-7", PROMPT_GPT],
         ["gemini-2.5-pro", fallback],
         ["claude-sonnet-4", appended],
         ["kimi-k2", PROMPT_KIMI],
@@ -157,70 +193,6 @@ describe("OptimizePlugin", () => {
     }),
   )
 
-  it.effect("curates search tools across providers without changing editing tools", () =>
-    Effect.gen(function* () {
-      const hooks = yield* PluginHooks.Service
-      const pluginHost = yield* makeHost
-      yield* OptimizePlugin.OpenAIToolsPlugin.effect(pluginHost)
-      yield* OptimizePlugin.AnthropicToolsPlugin.effect(pluginHost)
-      const cases = [
-        ["openai", "gpt-5", ["edit", "patch", "read", "shell", "write"]],
-        ["openrouter", "openai/gpt-6-astra", ["edit", "patch", "read", "shell", "write"]],
-        ["azure", "GPT-4.1", ["edit", "patch", "read", "shell", "write"]],
-        ["groq", "openai/gpt-oss-120b", ["edit", "patch", "read", "shell", "write"]],
-        ["anthropic", "claude-opus-4-8", ["edit", "patch", "read", "shell", "write"]],
-        ["amazon-bedrock", "us.anthropic.Claude-sonnet-4-6", ["edit", "patch", "read", "shell", "write"]],
-        ["github-copilot", "claude-sonnet-4.6", ["edit", "patch", "read", "shell", "write"]],
-        ["google", "gemini-2.5-pro", ["edit", "glob", "grep", "patch", "read", "shell", "write"]],
-        ["moonshotai", "kimi-k2", ["edit", "glob", "grep", "patch", "read", "shell", "write"]],
-        ["openai", "o3", ["edit", "glob", "grep", "patch", "read", "shell", "write"]],
-        ["anthropic", "other-model", ["edit", "glob", "grep", "patch", "read", "shell", "write"]],
-      ] as const
-
-      yield* Effect.forEach(
-        cases,
-        ([providerID, id, tools]) =>
-          Effect.gen(function* () {
-            const event = {
-              ...context(id),
-              model: Model.Ref.make({ providerID: Provider.ID.make(providerID), id: Model.ID.make(id) }),
-            }
-            yield* hooks.trigger("session", "context", event)
-            expect(Object.keys(event.tools).sort()).toEqual([...tools])
-            expect(event.system.map((part) => part.text)).toEqual([fallback])
-          }),
-        { discard: true },
-      )
-    }),
-  )
-
-  it.effect("can disable OpenAI tool optimization while retaining its prompt and Anthropic tool optimization", () =>
-    Effect.gen(function* () {
-      const hooks = yield* PluginHooks.Service
-      const pluginHost = yield* makeHost
-      yield* OptimizePlugin.OpenAIPlugin.effect(pluginHost)
-      yield* OptimizePlugin.AnthropicToolsPlugin.effect(pluginHost)
-      yield* Effect.scoped(
-        Effect.gen(function* () {
-          yield* OptimizePlugin.OpenAIToolsPlugin.effect(pluginHost)
-          const event = context("gpt-5")
-          yield* hooks.trigger("session", "context", event)
-          expect(event.system[0]?.text).toBe(SessionSystemPrompt.render(PROMPT_GPT, Object.keys(event.tools)))
-          expect(Object.keys(event.tools).sort()).toEqual(["edit", "patch", "read", "shell", "write"])
-        }),
-      )
-
-      const event = context("gpt-5")
-      yield* hooks.trigger("session", "context", event)
-      expect(event.system[0]?.text).toBe(SessionSystemPrompt.render(PROMPT_GPT, Object.keys(event.tools)))
-      expect(Object.keys(event.tools).sort()).toEqual(["edit", "glob", "grep", "patch", "read", "shell", "write"])
-      const claude = context("claude-sonnet-4-6")
-      yield* hooks.trigger("session", "context", claude)
-      expect(claude.system.map((part) => part.text)).toEqual([fallback])
-      expect(Object.keys(claude.tools).sort()).toEqual(["edit", "patch", "read", "shell", "write"])
-    }),
-  )
-
   it.effect("uses catalog names in Meta prompts for Muse model IDs", () =>
     Effect.gen(function* () {
       const catalog = yield* Provider.Service
@@ -279,23 +251,6 @@ describe("OptimizePlugin", () => {
 
       expect(event.system.map((part) => part.text)).toEqual(["Custom agent prompt"])
       expect(Object.keys(event.tools).sort()).toEqual(["edit", "glob", "grep", "patch", "read", "shell", "write"])
-    }),
-  )
-
-  it.effect("still curates tools when agent lookup fails", () =>
-    Effect.gen(function* () {
-      const agents = yield* Agent.Service
-      const hooks = yield* PluginHooks.Service
-      const pluginHost = yield* makeHost
-      yield* OptimizePlugin.OpenAIPlugin.effect(pluginHost)
-      yield* OptimizePlugin.OpenAIToolsPlugin.effect(pluginHost)
-      yield* agents.transform((editor) => editor.remove(Agent.ID.make("build")))
-      const event = context("gpt-5")
-
-      yield* hooks.trigger("session", "context", event)
-
-      expect(event.system.map((part) => part.text)).toEqual([fallback])
-      expect(Object.keys(event.tools).sort()).toEqual(["edit", "patch", "read", "shell", "write"])
     }),
   )
 

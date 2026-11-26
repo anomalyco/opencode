@@ -357,16 +357,20 @@ export function ConfigProvider(props: {
   const [config, setConfig] = createStore(props.config)
   const host = props.service
   const apply = (info: Info) => setConfig(reconcile(resolve(info, props.options ?? { terminalSuspend: true })))
-  const update = async (update: (draft: any) => void) => {
+  let pending: Promise<unknown> = Promise.resolve()
+  const update: Interface["update"] = async (update) => {
     if (!host) throw new Error("Config updates are not available")
-    const info = await host.update(update)
-    apply(info)
-    return info
+    const save = pending.then(async () => {
+      const info = await host.update(update)
+      apply(info)
+      return info
+    })
+    pending = save.catch(() => {})
+    return save
   }
-  let reload = Promise.resolve()
   const watcher = host?.path
     ? safeWatch(path.dirname(host.path), () => {
-        reload = reload
+        pending = pending
           .then(() => host.get())
           .then(apply)
           .catch(() => {})
@@ -393,10 +397,10 @@ export function useCursorStyle() {
   return createMemo(() => ({ style: config.data.cursor.style, blinking: config.data.cursor.blinking }))
 }
 
-/** Reactive accessor for the temporary "new-designs" experiment. */
+/** Reactive accessor for the temporary "new-designs" experiment. On unless the config turns it off. */
 export function useNewDesigns() {
   const config = useConfig()
-  return () => config.data.experimental?.["new-designs"] === true
+  return () => config.data.experimental?.["new-designs"] !== false
 }
 
 /** Reactive accessor for the temporary "client-mcp" experiment. */

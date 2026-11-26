@@ -1,6 +1,16 @@
 import { expect, test } from "bun:test"
 import { Schema } from "effect"
-import { createRefs, RefsStore } from "./refs"
+import { createRefs, documentRefs, RefsStore } from "./refs"
+
+test("a long-lived document evicts its oldest refs from both lookups", () => {
+  const refs = documentRefs()
+  refs.add("first", undefined, new Map([["e1", 10]]))
+  refs.add("second", "session", new Map(Array.from({length:10_000}, (_, i) => [`e${i+2}`, i+1])))
+  expect(refs.get("e1")).toBeUndefined()
+  expect(refs.previous("first").size).toBe(0)
+  expect(refs.previous("second", "session").size).toBe(10_000)
+  expect(refs.get("e2")?.backendID).toBe(1)
+})
 
 /** Main storage's row for the store, as its schema encodes it. */
 type Disk = { stored?: number }

@@ -25,4 +25,6 @@ export default {
   "quote.addWithoutComment": "Quote without comment",
   "quote.tooLong": "Selection too long",
   "quote.label": "Terminal",
+  "link.confirm": "Open this terminal link?",
+  "link.open": "Open link",
 }

@@ -33,4 +33,5 @@ export default {
   "form.namePlaceholder": "מארח מקומי",
   "form.add": "הוסף שרת",
   "menu.delete": "מחק",
+  "error.unavailable": "SSH אינו זמין",
 }

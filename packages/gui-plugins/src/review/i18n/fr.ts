@@ -15,4 +15,13 @@ export default {
   "settings.wrapLines.title": "Renvoyer les lignes à la ligne",
   "settings.wrapLines.description":
     "Renvoyer à la ligne les longues lignes des diffs mobiles au lieu de les faire défiler horizontalement",
+  "menu.count.one": "{{count}} fichier modifié",
+  "menu.count.many": "{{count}} fichiers modifiés",
+  "menu.count.other": "{{count}} fichiers modifiés",
+  "folder.more": "{{count}} · d’autres non affichés",
+  "folder.failed": "Impossible de charger les modifications",
+  "command.open": "Ouvrir la revue",
+  "load.failed": "Impossible de charger les modifications",
+  "load.timeout": "Le serveur a mis trop de temps à répondre",
+  offline: "Impossible de joindre ce serveur",
 }

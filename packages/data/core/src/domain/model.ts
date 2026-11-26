@@ -51,6 +51,7 @@ export declare namespace ModelStatRepo {
       hiddenModels: readonly string[],
     ) => Effect.Effect<void, DatabaseError>
     readonly deleteUnknownDimensions: (rows: ModelStatRow[]) => Effect.Effect<void, DatabaseError>
+    readonly deleteModels: (dataset: string, models: readonly string[]) => Effect.Effect<void, DatabaseError>
   }
 }
 
@@ -189,6 +190,27 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
         })
       })
 
+      // Every grain and period. An empty list deletes nothing (inArray renders it as 1 = 0).
+      const deleteModels = Effect.fn("ModelStatRepo.deleteModels")(function* (
+        dataset: string,
+        models: readonly string[],
+      ) {
+        yield* Effect.tryPromise({
+          try: () =>
+            db
+              .delete(modelStat)
+              .where(
+                and(
+                  eq(modelStat.dataset, dataset),
+                  eq(modelStat.client, "all"),
+                  eq(modelStat.source, "all"),
+                  inArray(modelStat.model, [...models]),
+                ),
+              ),
+          catch: (cause) => DatabaseError.make({ cause }),
+        })
+      })
+
       const deleteUnknownDimensions = Effect.fn("ModelStatRepo.deleteUnknownDimensions")(function* (
         rows: ModelStatRow[],
       ) {
@@ -237,7 +259,7 @@ export class ModelStatRepo extends Context.Service<ModelStatRepo, ModelStatRepo.
         )
       })
 
-      return ModelStatRepo.of({ listDaily, upsert, deleteRetiredDimensions, deleteUnknownDimensions })
+      return ModelStatRepo.of({ listDaily, upsert, deleteRetiredDimensions, deleteUnknownDimensions, deleteModels })
     }),
   )
 }

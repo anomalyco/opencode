@@ -51,6 +51,8 @@ export function SideRegion(props: {
    */
   contentWidth: Accessor<string>
   drag: PaneDrag
+  /** The session's review toggle, at the end of the first pane's strip. */
+  toggle?: JSX.Element
 }) {
   const layout = useLayout()
   const language = useLanguage()
@@ -102,6 +104,7 @@ export function SideRegion(props: {
       <aside
         ref={setRoot}
         id="review-panel"
+        data-focus-scope
         tabIndex={-1}
         aria-label={language.t("session.panel.reviewAndFiles")}
         aria-hidden={!tabsOpen()}
@@ -163,6 +166,7 @@ export function SideRegion(props: {
                       animate={() => !props.size.active()}
                       placeholder={index() === 0}
                       actions={index() === 0}
+                      toggle={index() === 0 ? props.toggle : undefined}
                       drag={props.drag}
                     />
                   </div>
@@ -195,6 +199,7 @@ export function PaneTabs(props: {
   actions?: boolean
   /** Controls after the strip, e.g. the bottom pane's hide button. */
   end?: JSX.Element
+  toggle?: JSX.Element
 }) {
   const language = useLanguage()
   const { tabs } = useSessionLayout()
@@ -267,6 +272,10 @@ export function PaneTabs(props: {
             createEventListener(el, ["pointerdown", "click", "keydown"], (event) => (selectionEvent = event), {
               capture: true,
             })
+            // Kobalte moves Tab to the strip's last tabbable, which skips "+"; the browser's own order is right.
+            createEventListener(el, "keydown", (event) => event.key === "Tab" && event.stopPropagation(), {
+              capture: true,
+            })
             onCleanup(createTabStripScroll({ el, lead: props.pane.lead }))
           }}
           onContextMenu={(event: MouseEvent) => {
@@ -320,7 +329,7 @@ export function PaneTabs(props: {
                       event.stopPropagation()
                       props.region.dismissNewTab(id)
                     }}
-                    icon={<Icon name="xmark-small" />}
+                    icon={<Icon name="close" />}
                     aria-label={language.t("common.closeTab")}
                   />
                 }
@@ -422,7 +431,7 @@ export function PaneTabs(props: {
           </Show>
           {props.end}
           <Show when={props.actions && props.present()}>
-            <div class="size-7 shrink-0" aria-hidden />
+            <div class="size-7 shrink-0">{props.toggle}</div>
           </Show>
         </div>
       </div>
@@ -554,7 +563,7 @@ function AddMenu(props: { items: readonly SessionPanelMenuEntry[]; onChoose: (ke
                         }
                       >
                         <div class="flex items-center gap-2">
-                          <Show when={item().icon}>{(icon) => <Icon name={icon()} size="small" />}</Show>
+                          <Show when={item().icon}>{(icon) => <Icon name={icon()} />}</Show>
                           <span>{item().title}</span>
                         </div>
                       </Menu.Item>
@@ -611,7 +620,7 @@ function LauncherRow(props: { item: SessionPanelMenuItem; onChoose: () => void }
     >
       <span class="flex min-w-0 items-center gap-2 text-[13px] font-[440] leading-[var(--line-height-compact)] tracking-[-0.04px]">
         <Show when={props.item.icon}>
-          {(icon) => <Icon name={icon()} size="small" class="text-v2-icon-icon-muted" />}
+          {(icon) => <Icon name={icon()} class="text-v2-icon-icon-muted" />}
         </Show>
         <span class="shrink-0 text-v2-text-text-base">{props.item.title}</span>
         <Show when={props.item.description}>

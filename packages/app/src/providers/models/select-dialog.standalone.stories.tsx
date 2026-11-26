@@ -99,17 +99,39 @@ const models: StoryModel[] = [
   }),
 ]
 
+// Enough rows under one provider that the list scrolls, below the favorite's own group.
+const manyModels: StoryModel[] = [
+  ...models,
+  ...Array.from({ length: 24 }, (_, index) =>
+    makeModel({
+      id: `zz-model-${index + 1}`,
+      name: `Zeta Model ${index + 1}`,
+      providerID: "zeta",
+      providerName: "Zeta",
+      family: "zeta",
+      inputCost: 1,
+      outputCost: 2,
+    }),
+  ),
+]
+
 const keyOf = (model: StoryModel) => `${model.provider.id}:${model.id}`
 
-function SelectorStory(props: { favorite?: boolean }) {
+function SelectorStory(props: { favorite?: boolean; provider?: string; empty?: boolean; many?: boolean }) {
+  const all = props.many ? manyModels : models
+
   const dialog = useDialog()
 
   const [store, setStore] = createStore<{ current: string; favorite: string[]; variant?: string }>({
-    current: "opencode:claude-opus-5-5",
-    favorite: props.favorite ? ["anthropic:claude-sonnet-5"] : [],
+    current: props.empty ? "" : "opencode:claude-opus-5-5",
+    favorite: props.many
+      ? ["anthropic:claude-sonnet-5", "zeta:zz-model-24"]
+      : props.favorite
+        ? ["anthropic:claude-sonnet-5"]
+        : [],
   })
 
-  const find = (key: string) => models.find((model) => keyOf(model) === key)
+  const find = (key: string) => all.find((model) => keyOf(model) === key)
 
   const selection = {
     ready: Object.assign(() => true, { promise: undefined }),
@@ -128,7 +150,7 @@ function SelectorStory(props: { favorite?: boolean }) {
         setStore("favorite", (ids) => (ids.includes(id) ? ids.filter((entry) => entry !== id) : [id, ...ids]))
       },
     },
-    list: () => models,
+    list: () => (props.empty ? [] : all),
     cycle() {},
     set: (key: { providerID: string; modelID: string } | undefined) => {
       if (key) setStore("current", `${key.providerID}:${key.modelID}`)
@@ -144,14 +166,14 @@ function SelectorStory(props: { favorite?: boolean }) {
     },
   } satisfies ModelSelection
 
-  const open = () => void dialog.show(() => <DialogSelectModel model={selection} />)
+  const open = () => void dialog.show(() => <DialogSelectModel model={selection} provider={props.provider} />)
 
   onMount(open)
 
   return (
     <div class="flex min-h-[280px] items-end justify-center">
       <Button variant="ghost-muted" onClick={open}>
-        {find(store.current)?.name}
+        {find(store.current)?.name ?? "Select model"}
       </Button>
     </div>
   )
@@ -174,6 +196,30 @@ export const Favorites = {
   render: () => (
     <DialogStoryRuntime>
       <SelectorStory favorite />
+    </DialogStoryRuntime>
+  ),
+}
+
+export const LongList = {
+  render: () => (
+    <DialogStoryRuntime>
+      <SelectorStory many />
+    </DialogStoryRuntime>
+  ),
+}
+
+export const ProviderOnly = {
+  render: () => (
+    <DialogStoryRuntime>
+      <SelectorStory provider="opencode" />
+    </DialogStoryRuntime>
+  ),
+}
+
+export const NoModels = {
+  render: () => (
+    <DialogStoryRuntime>
+      <SelectorStory empty />
     </DialogStoryRuntime>
   ),
 }

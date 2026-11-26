@@ -14,7 +14,13 @@ Dialog content wrapper built on Kobalte's dialog primitive with v2 styling.
 Compose with \`DialogHeader\`, \`DialogTitle\`, \`DialogTitleGroup\`, \`DialogBody\`, and \`DialogFooter\`.
 
 ### API
-- \`Dialog\`: \`size\` (normal | large | x-large), \`variant\`, \`fit\`.
+- \`Dialog\`: \`size\`, \`variant\`, \`fit\`.
+  - \`normal\`: 480px wide, for confirmations, sign-ins and small forms.
+  - \`tall\`: 480×600, for a short form that reveals a list under a choice.
+  - \`large\`: 720×600, for palettes, pickers and lists.
+  - \`x-large\`: 880×680, for long documents and settings-like panels.
+  - Sizes clamp to the window. \`fit\` makes the height follow the content up to the size's height; tall and larger sizes keep their top edge, so only the bottom edge moves.
+  - Dialogs don't set their own container width or height: pick the size that fits.
 - \`DialogHeader\`: row container with optional \`closeLabel\` and \`hideClose\`.
 - \`DialogTitle\`: accessible single-line header title.
 - \`DialogTitleGroup\`: column with \`title\` and required \`description\`.
@@ -118,6 +124,21 @@ export const Sizes = {
         </Portal>
       </Root>
     </div>
+  ),
+}
+
+export const Settings = {
+  render: () => (
+    <OpenStoryDialog
+      render={() => (
+        <Dialog variant="settings" size="large">
+          <DialogHeader hideClose>
+            <DialogTitle>Settings</DialogTitle>
+          </DialogHeader>
+          <DialogBody>Project settings.</DialogBody>
+        </Dialog>
+      )}
+    />
   ),
 }
 

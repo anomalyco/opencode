@@ -22,6 +22,8 @@ const BREATH_SPEED = 0.0008
 const PHASE_OFFSET = 0.29
 // The frame shown when animations are off.
 const STILL = PERIOD * 0.5
+// The art ticks at 30 fps; every cell changes each tick.
+const FPS = 30
 const LOGO_LEFT_WIDTH = go.left[0]?.length ?? 0
 const LOGO_LINES = go.left.map((line, index) => line + " " + go.right[index])
 const LOGO_WIDTH = LOGO_LINES[0]?.length ?? 0
@@ -94,8 +96,8 @@ const put = (plane: Uint16Array, offset: number, color: RGBA) => {
 
 /**
  * Draws into its own frame buffer (`buffered`) through `withBuffers`, so a frame is plain typed-array
- * writes plus one blit instead of a recorded draw call per cell. Live (and so the renderer's frame loop)
- * only while animating and visible; a still frame is drawn once and reused until something changes.
+ * writes plus one blit instead of a recorded draw call per cell. Ticks on the renderer's shared animation clock
+ * only while animating and drawn; a still frame is drawn once and reused until something changes.
  */
 export class GoUpsellArtRenderable extends Renderable {
   private elapsed: number
@@ -124,7 +126,7 @@ export class GoUpsellArtRenderable extends Renderable {
 
   constructor(ctx: RenderContext, options: Options = {}) {
     const animate = options.animate ?? true
-    super(ctx, { ...options, live: animate, buffered: true })
+    super(ctx, { ...options, animationFps: animate ? FPS : undefined, buffered: true })
     this._animate = animate
     this.elapsed = animate ? 0 : STILL
     if (options.background) this._background = options.background
@@ -136,7 +138,7 @@ export class GoUpsellArtRenderable extends Renderable {
   set animate(value: boolean) {
     if (value === this._animate) return
     this._animate = value
-    this.live = value
+    this.animationFps = value ? FPS : undefined
     if (!value) this.elapsed = STILL
     this.redraw()
   }
@@ -166,12 +168,12 @@ export class GoUpsellArtRenderable extends Renderable {
     this.requestRender()
   }
 
-  protected override onUpdate(deltaTime: number) {
-    if (this._animate) this.elapsed = (this.elapsed + deltaTime) % PERIOD
+  protected override onAnimationTick(deltaTime: number) {
+    this.elapsed = (this.elapsed + deltaTime) % PERIOD
+    this.requestRender()
   }
 
   protected override destroySelf() {
-    this.live = false
     this.anchor = undefined
     this.dist = new Float64Array(0)
     this.falloff = new Float64Array(0)

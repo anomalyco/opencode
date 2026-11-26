@@ -6,6 +6,7 @@ import { Bus } from "@opencode/core/bus"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Location } from "@opencode/core/location"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { Plugin } from "@opencode/core/plugin"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
 import { SessionEvent } from "@opencode/core/session/event"
@@ -69,7 +70,12 @@ const setup = Effect.gen(function* () {
   const session = yield* Session.Service
   const created = yield* session.create({ location: Location.Ref.make({ directory: AbsolutePath.make(tmp.path) }) })
   const locations = yield* LocationServiceMap.Service
-  const shell = yield* Shell.Service.pipe(Effect.provide(locations.get(created.location)))
+  // Session.shell waits for plugin activation before spawning. Settle the cold activation here, under the test
+  // timeout, so the 5-second waits below cover only the shell itself.
+  const shell = yield* Plugin.awaitActivation.pipe(
+    Effect.andThen(Shell.Service),
+    Effect.provide(locations.get(created.location)),
+  )
   const control = yield* ExecutionControl
   const execution = yield* SessionExecution.Service
   return { tmp, session, created, shell, control, execution }
@@ -284,7 +290,7 @@ describe("Session.shell", () => {
         expect(completion.payload.text).toContain("user output")
         expect(completion.payload.text).toContain("user error")
         if (exit === 0) expect(completion.payload.text).not.toContain("Exit code")
-        if (exit !== 0) expect(completion.payload.text).toContain(`\n\nExit code: ${exit}\n</shell>`)
+        if (exit !== 0) expect(completion.payload.text).toContain(`\n\nExit code: ${exit}\n</background-result>`)
         expect(fixture.control.wakes).toEqual([])
       }),
     )

@@ -26,6 +26,8 @@ const setupRequestHeadersTimeoutMs = 10 * 60_000
 
 export function createRequestQueue(input: {
   fetch: typeof globalThis.fetch
+  /** The server URL's path, such as `/opencode`, when the server sits under a prefix. */
+  prefix?: () => string
   limit?: number
   slowLimit?: number
   stallMs?: number
@@ -106,7 +108,7 @@ export function createRequestQueue(input: {
   const fetch: typeof globalThis.fetch = Object.assign(
     async (resource: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(resource, init)
-      const kind = classifyRequest(request.method, new URL(request.url))
+      const kind = classifyRequest(request.method, new URL(request.url), input.prefix?.())
 
       if (kind.bypass) return base(request)
 
