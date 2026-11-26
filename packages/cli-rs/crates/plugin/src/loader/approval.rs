@@ -31,7 +31,8 @@ impl Artifact {
     /// it holds. Each file's path and bytes count, in name order, hidden ones and its dependencies in `node_modules`
     /// too: whatever the JS host may import from it. The JS host reads the files itself, so a change after the hash is
     /// what the next reconcile sees: the watcher's, which holds the new files back. A file outside the directory that
-    /// the plugin imports is not part of it.
+    /// the plugin imports is not part of it. A hash drawn while a file's time is too recent to vouch for it is not
+    /// kept, so a save in the same tick as the last one is read again ([RACY]).
     pub fn tree(target: &Path) -> Result<Self, String> {
         let error = |error: std::io::Error| format!("{}: {error}", target.display());
         let path = std::fs::canonicalize(target).map_err(error)?;
@@ -39,16 +40,19 @@ impl Artifact {
             return Err(format!("{}: not a directory", path.display()));
         }
         // A tree whose entries did not change since its last hash is not read again: every reconcile asks for it, and
-        // the JS host's answers each start one. What runs is still what was approved: [`Artifact::stage`] hashes the
-        // bytes it copies.
-        let print = fingerprint(&path)?;
-        let known =
-            TREES.with(|trees| trees.borrow().get(&path).filter(|(at, _)| *at == print).map(|(_, sha)| sha.clone()));
+        // the JS host's answers each start one. A hash drawn while an entry is racy is not kept: the next call must
+        // read the bytes. What runs is still what was approved: [`Artifact::stage`] hashes the bytes it copies.
+        let (print, racy) = fingerprint(&path)?;
+        let known = TREES.with(|trees| {
+            trees.borrow().get(&path).filter(|(at, _)| !racy && *at == print).map(|(_, sha)| sha.clone())
+        });
         let sha256 = match known {
             Some(sha256) => sha256,
             None => {
                 let sha256 = tree_sha256(&path, None)?;
-                TREES.with(|trees| trees.borrow_mut().insert(path.clone(), (print, sha256.clone())));
+                if !racy {
+                    TREES.with(|trees| trees.borrow_mut().insert(path.clone(), (print, sha256.clone())));
+                }
                 sha256
             }
         };
@@ -100,10 +104,16 @@ impl Artifact {
 }
 
 thread_local! {
-    /// The last hash of each plugin tree, with the fingerprint of its entries then.
+    /// The last hash of each plugin tree, with the fingerprint of its entries then; kept only when no entry was racy.
     static TREES: RefCell<std::collections::HashMap<PathBuf, (u64, String)>> = RefCell::default();
     /// The bytes of plugin files this thread read to hash them, for the rows that count the work.
     static HASHED: std::cell::Cell<u64> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+thread_local! {
+    /// What a save runs once it has found the store's lock held, before it waits again ([on_wait]).
+    static WAITING: RefCell<Option<Box<dyn Fn()>>> = RefCell::default();
 }
 
 /// Forgets this thread's last hash of the tree `target`: the next [`Artifact::tree`] of it reads every file, however
@@ -121,11 +131,75 @@ pub fn hashed() -> u64 {
     HASHED.with(std::cell::Cell::get)
 }
 
+/// Runs `waiting` on this thread when a save next finds the store's lock held, before it retries: a test holds the
+/// lock until the save is waiting for it. Dropping the guard takes a handshake that did not run away.
+#[cfg(test)]
+pub(crate) fn on_wait(waiting: impl Fn() + 'static) -> WaitGuard {
+    WAITING.with(|slot| *slot.borrow_mut() = Some(Box::new(waiting)));
+    WaitGuard(())
+}
+
+/// A handshake a save runs when it finds the store's lock held ([on_wait]).
+#[cfg(test)]
+pub(crate) struct WaitGuard(());
+
+#[cfg(test)]
+impl Drop for WaitGuard {
+    fn drop(&mut self) {
+        WAITING.with(|slot| *slot.borrow_mut() = None);
+    }
+}
+
+#[cfg(test)]
+thread_local! {
+    /// The time a test measures the racy windows from, while it holds one ([at]).
+    static CLOCK: std::cell::Cell<Option<std::time::SystemTime>> = const { std::cell::Cell::new(None) };
+}
+
+/// Measures [`RACY`] from `now` on this thread until the guard drops: a test fixes an entry's age exactly, so its
+/// result does not depend on how long the test takes.
+#[cfg(test)]
+pub(crate) fn at(now: std::time::SystemTime) -> ClockGuard {
+    let before = CLOCK.with(|clock| clock.replace(Some(now)));
+    ClockGuard(before)
+}
+
+/// The clock a test measured the racy windows from before [`at`] set one, put back as the guard drops.
+#[cfg(test)]
+pub(crate) struct ClockGuard(Option<std::time::SystemTime>);
+
+#[cfg(test)]
+impl Drop for ClockGuard {
+    fn drop(&mut self) {
+        CLOCK.with(|clock| clock.set(self.0));
+    }
+}
+
+/// The time the racy windows are measured from: this thread's test clock when it holds one ([`at`]), else the clock.
+pub(crate) fn now() -> std::time::SystemTime {
+    #[cfg(test)]
+    if let Some(now) = CLOCK.with(std::cell::Cell::get) {
+        return now;
+    }
+    std::time::SystemTime::now()
+}
+
+/// How recent a change leaves an entry's time unable to vouch for a tree's last hash: on a coarse clock two saves in
+/// one tick keep the size and the time, as git's racy-clean entries.
+pub(crate) const RACY: Duration = Duration::from_secs(2);
+
 /// What [`Artifact::tree`] reads, by the metadata of each entry alone: its path, kind, size, modification time and
-/// file, as [`walk`] visits them. A save changes it; a reconcile that changed nothing finds it the same.
-fn fingerprint(path: &Path) -> Result<u64, String> {
+/// file, as [`walk`] visits them. A save changes it; a reconcile that changed nothing finds it the same. And whether
+/// an entry changed within [`RACY`], whose time cannot vouch for the last hash.
+fn fingerprint(path: &Path) -> Result<(u64, bool), String> {
     use std::hash::{Hash, Hasher};
-    fn visit(dir: &Path, hasher: &mut std::collections::hash_map::DefaultHasher, depth: usize) -> Result<(), String> {
+    fn visit(
+        dir: &Path,
+        hasher: &mut std::collections::hash_map::DefaultHasher,
+        racy: &mut bool,
+        recent: std::time::SystemTime,
+        depth: usize,
+    ) -> Result<(), String> {
         if depth > 32 {
             return Err(format!("{}: nested too deep", dir.display()));
         }
@@ -136,18 +210,21 @@ fn fingerprint(path: &Path) -> Result<u64, String> {
             let metadata = std::fs::metadata(entry.path()).map_err(error)?;
             entry.file_name().hash(hasher);
             (metadata.is_dir(), metadata.len()).hash(hasher);
-            metadata.modified().ok().hash(hasher);
+            let modified = metadata.modified().ok();
+            modified.hash(hasher);
+            *racy |= modified.is_none_or(|modified| modified >= recent);
             #[cfg(unix)]
             std::os::unix::fs::MetadataExt::ino(&metadata).hash(hasher);
             if metadata.is_dir() {
-                visit(&entry.path(), hasher, depth + 1)?;
+                visit(&entry.path(), hasher, racy, recent, depth + 1)?;
             }
         }
         Ok(())
     }
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    visit(path, &mut hasher, 0)?;
-    Ok(hasher.finish())
+    let mut racy = false;
+    visit(path, &mut hasher, &mut racy, now() - RACY, 0)?;
+    Ok((hasher.finish(), racy))
 }
 
 /// Names each copy [`Artifact::stage`] starts apart.
@@ -518,7 +595,13 @@ fn lock(file: &Path) -> Result<File, String> {
     for _ in 0..300 {
         match handle.try_lock() {
             Ok(()) => return Ok(handle),
-            Err(std::fs::TryLockError::WouldBlock) => std::thread::sleep(Duration::from_millis(10)),
+            Err(std::fs::TryLockError::WouldBlock) => {
+                #[cfg(test)]
+                if let Some(waiting) = WAITING.with(|slot| slot.borrow_mut().take()) {
+                    waiting();
+                }
+                std::thread::sleep(Duration::from_millis(10));
+            }
             Err(std::fs::TryLockError::Error(error)) => return Err(format!("{}: {error}", path.display())),
         }
     }

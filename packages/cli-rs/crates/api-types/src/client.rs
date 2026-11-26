@@ -1567,6 +1567,11 @@ pub fn experimental_blob_get(input: &ExperimentalBlobGetInput) -> Call<bytes::By
     call
 }
 
+/// `GET /api/experimental/browser/tunnel` (`browser.tunnel`)
+pub fn experimental_browser_tunnel() -> Call<ExperimentalBrowserTunnelOutput> {
+    Call::new("GET", "/api/experimental/browser/tunnel".to_owned(), Reply::Json, 200, &[400, 401, 403])
+}
+
 /// `POST /api/experimental/automation` (`automation.create`)
 pub fn experimental_automation_create(
     input: &ExperimentalAutomationCreateInput,
@@ -1903,6 +1908,48 @@ pub fn experimental_push_settings_set(
     call
 }
 
+/// `POST /api/experimental/space/:space/write` (`space.write`)
+pub fn experimental_space_write(input: &ExperimentalSpaceWriteInput) -> Call<ExperimentalSpaceWriteOutput> {
+    let mut call = Call::new("POST", String::new(), Reply::Json, 200, &[400, 401]);
+    call.path = format!("/api/experimental/space/{}/write", call.param(&input.space));
+    call.object();
+    call.field("changes", &input.changes);
+    call
+}
+
+/// `GET /api/experimental/space/:space` (`space.sync`)
+pub fn experimental_space_sync(input: &ExperimentalSpaceSyncInput) -> Call<ExperimentalSpaceSyncOutput> {
+    let mut call = Call::new("GET", String::new(), Reply::Json, 200, &[400, 401]);
+    call.path = format!("/api/experimental/space/{}", call.param(&input.space));
+    if let Some(value) = &input.cursor {
+        call.query("cursor", value);
+    }
+    call
+}
+
+/// `POST /api/experimental/space/subscribe` (`space.subscribe`)
+pub fn experimental_space_subscribe(input: &ExperimentalSpaceSubscribeInput) -> Call<()> {
+    let mut call = Call::new("POST", "/api/experimental/space/subscribe".to_owned(), Reply::Empty, 204, &[400, 401]);
+    call.object();
+    call.field("stream", &input.stream);
+    call.field("spaces", &input.spaces);
+    call
+}
+
+/// `POST /api/experimental/space/unsubscribe` (`space.unsubscribe`)
+pub fn experimental_space_unsubscribe(input: &ExperimentalSpaceUnsubscribeInput) -> Call<()> {
+    let mut call = Call::new("POST", "/api/experimental/space/unsubscribe".to_owned(), Reply::Empty, 204, &[400, 401]);
+    call.object();
+    call.field("stream", &input.stream);
+    call.field("spaces", &input.spaces);
+    call
+}
+
+/// `POST /api/experimental/space/reset` (`space.reset`)
+pub fn experimental_space_reset() -> Call<()> {
+    Call::new("POST", "/api/experimental/space/reset".to_owned(), Reply::Empty, 204, &[400, 401])
+}
+
 /// `GET /api/shell` (`list`)
 pub fn shell_list(input: &ShellListInput) -> Call<ShellListOutput> {
     let mut call = Call::new("GET", "/api/shell".to_owned(), Reply::Json, 200, &[400, 401, 404]);
@@ -2150,6 +2197,15 @@ pub fn websearch_query(input: &WebsearchQueryInput) -> Call<WebsearchQueryOutput
 pub fn experimental_usage_limits(input: &ExperimentalUsageLimitsInput) -> Call<ExperimentalUsageLimitsOutput> {
     let mut call =
         Call::new("GET", "/api/experimental/usage/limits".to_owned(), Reply::Json, 200, &[400, 401, 404, 503]);
+    if let Some(value) = &input.location {
+        call.query("location", value);
+    }
+    call
+}
+
+/// `GET /api/experimental/flag` (`get`)
+pub fn experimental_flag_get(input: &ExperimentalFlagGetInput) -> Call<ExperimentalFlagGetOutput> {
+    let mut call = Call::new("GET", "/api/experimental/flag".to_owned(), Reply::Json, 200, &[400, 401, 404]);
     if let Some(value) = &input.location {
         call.query("location", value);
     }
@@ -2985,6 +3041,7 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
         "experimental.blob.get" => {
             Some((|| Ok(experimental_blob_get(&ExperimentalBlobGetInput { id: field(input, "id")? }).cast()))())
         }
+        "experimental.browser.tunnel" => Some((|| Ok(experimental_browser_tunnel().cast()))()),
         "experimental.automation.create" => Some((|| {
             Ok(experimental_automation_create(&ExperimentalAutomationCreateInput {
                 session_id: field(input, "sessionID")?,
@@ -3173,6 +3230,35 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
             })
             .cast())
         })()),
+        "experimental.space.write" => Some((|| {
+            Ok(experimental_space_write(&ExperimentalSpaceWriteInput {
+                space: field(input, "space")?,
+                changes: field(input, "changes")?,
+            })
+            .cast())
+        })()),
+        "experimental.space.sync" => Some((|| {
+            Ok(experimental_space_sync(&ExperimentalSpaceSyncInput {
+                space: field(input, "space")?,
+                cursor: field(input, "cursor")?,
+            })
+            .cast())
+        })()),
+        "experimental.space.subscribe" => Some((|| {
+            Ok(experimental_space_subscribe(&ExperimentalSpaceSubscribeInput {
+                stream: field(input, "stream")?,
+                spaces: field(input, "spaces")?,
+            })
+            .cast())
+        })()),
+        "experimental.space.unsubscribe" => Some((|| {
+            Ok(experimental_space_unsubscribe(&ExperimentalSpaceUnsubscribeInput {
+                stream: field(input, "stream")?,
+                spaces: field(input, "spaces")?,
+            })
+            .cast())
+        })()),
+        "experimental.space.reset" => Some((|| Ok(experimental_space_reset().cast()))()),
         "shell.list" => Some((|| Ok(shell_list(&ShellListInput { location: field(input, "location")? }).cast()))()),
         "shell.create" => Some((|| {
             Ok(shell_create(&ShellCreateInput {
@@ -3275,6 +3361,9 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
         })()),
         "experimental.usage.limits" => Some((|| {
             Ok(experimental_usage_limits(&ExperimentalUsageLimitsInput { location: field(input, "location")? }).cast())
+        })()),
+        "experimental.flag.get" => Some((|| {
+            Ok(experimental_flag_get(&ExperimentalFlagGetInput { location: field(input, "location")? }).cast())
         })()),
         "config.get" => Some((|| Ok(config_get(&ConfigGetInput { location: field(input, "location")? }).cast()))()),
         "config.shells" => Some((|| Ok(config_shells().cast()))()),
