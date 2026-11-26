@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/widget-wire", "crates/widget-mobile"]
+members = ["crates/widget-wire", "crates/widget-mobile", "crates/widget-web"]
 
 [workspace.package]
 edition = "2024"
