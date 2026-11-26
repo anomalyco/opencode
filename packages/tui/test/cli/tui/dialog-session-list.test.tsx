@@ -128,3 +128,114 @@ test("scopes sessions to the active session location", async () => {
     await temporary[Symbol.asyncDispose]()
   }
 })
+
+test("selection follows a session after pinning it", async () => {
+  const active = "/tmp/opencode/project-b"
+  const events = createEventStream()
+  const session = (id: string, title: string, updated: number) => ({
+    id,
+    projectID: "proj_b",
+    cost: 0,
+    tokens: { input: 0, output: 0, reasoning: 0, cache: { read: 0, write: 0 } },
+    time: { created: 1, updated },
+    title,
+    location: { directory: active },
+  })
+  const calls = createFetch((url) => {
+    if (url.pathname === "/api/location") {
+      const directory = url.searchParams.get("location[directory]") ?? process.cwd()
+      return json({ directory, project: { id: "proj_b", directory, canonical: directory } })
+    }
+    if (url.pathname !== "/api/session") return undefined
+    const parentID = url.searchParams.get("parentID")
+    if (parentID && parentID !== "null") return json({ data: [], cursor: {} })
+    return json({
+      data: [
+        session("ses_one", "First session", 30),
+        session("ses_two", "Second session", 20),
+        session("ses_three", "Third session", 10),
+      ],
+      cursor: {},
+    })
+  }, events)
+  const temporary = await tmpdir()
+  let storage!: ReturnType<typeof useStorage>
+  let route!: ReturnType<typeof useRoute>
+
+  function Probe() {
+    const data = useData()
+    const dialog = useDialog()
+    route = useRoute()
+    storage = useStorage()
+    onMount(() => {
+      data.session.remember(session("ses_active", "Active session", 40))
+      route.navigate({ type: "session", sessionID: "ses_active" })
+      dialog.replace(() => <DialogSessionList />)
+    })
+    return null
+  }
+
+  const app = await testRender(
+    () => (
+      <TestTuiContexts paths={{ state: temporary.path }}>
+        <TuiAppProvider value={{ name: "test", version: "test", channel: "test" }}>
+          <StorageProvider>
+            <ArgsProvider>
+              <ConfigProvider config={createTuiResolvedConfig({ tabs: { mode: "off" } })}>
+                <Keymap.Provider>
+                  <ToastProvider>
+                    <RouteProvider>
+                      <ClientProvider api={createApi(calls.fetch)}>
+                        <PermissionProvider>
+                          <DataProvider directory={process.cwd()}>
+                            <LocationProvider>
+                              <SessionTabsProvider>
+                                <ThemeProvider mode="dark" source={emptyThemeSource}>
+                                  <LocalProvider>
+                                    <DialogProvider>
+                                      <Probe />
+                                    </DialogProvider>
+                                  </LocalProvider>
+                                </ThemeProvider>
+                              </SessionTabsProvider>
+                            </LocationProvider>
+                          </DataProvider>
+                        </PermissionProvider>
+                      </ClientProvider>
+                    </RouteProvider>
+                  </ToastProvider>
+                </Keymap.Provider>
+              </ConfigProvider>
+            </ArgsProvider>
+          </StorageProvider>
+        </TuiAppProvider>
+      </TestTuiContexts>
+    ),
+    { width: 100, height: 30, kittyKeyboard: true },
+  )
+  app.renderer.start()
+
+  try {
+    await app.waitForFrame((value) => value.includes("Third session"))
+    const rows = ["First session", "Second session", "Third session"]
+    const frame = app.captureCharFrame()
+    const order = rows.map((title) => frame.indexOf(title))
+    expect(order.every((index, i) => index >= 0 && (i === 0 || index > order[i - 1]))).toBe(true)
+
+    // Move to "Third session" and pin it: it moves to the Pinned group at the top.
+    app.mockInput.pressArrow("down")
+    app.mockInput.pressArrow("down")
+    await app.renderOnce()
+    app.mockInput.pressKey("f", { ctrl: true })
+    await app.waitForFrame((value) => value.includes("Pinned"))
+
+    // The selection must stay on the pinned session, not on the row index it left.
+    app.mockInput.pressEnter()
+    await app.waitFor(() => route.data.type === "session" && route.data.sessionID !== "ses_active")
+    expect(route.data.type === "session" ? route.data.sessionID : undefined).toBe("ses_three")
+  } finally {
+    app.renderer.destroy()
+    await storage.flush()
+    await temporary[Symbol.asyncDispose]()
+  }
+})
