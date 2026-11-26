@@ -84,7 +84,7 @@ Your client should:
 [Decision](#decision-models) and [embedding](#embedding-models) requests don't need `x-opencode-session`, so any
 client, such as a RAG library, a memory provider or a script, can call them with your Go key.
 
-See [Harnesses](/console/harnesses) to set up Go in Claude Code, Codex, Hermes, Pi, and Raycast.
+See [Harnesses](/console/harnesses) to set up Go in Claude Code, Codex, Hermes, OpenClaw, Pi, and Raycast.
 
 ### Validated clients
 
@@ -99,6 +99,7 @@ with OpenCode Go, although we do not guarantee that they will continue to work i
 | **ZCode**         | Go recognizes its native session header. Our [request for `x-opencode-session`](https://github.com/zai-org/feedback/issues/492) remains open, but it is no longer necessary to send that specific header.                                   |
 | **Pi**            | Current builds send session information for OpenCode. Update older installations.                                                                                                                                                           |
 | **jcode**         | Update to **v0.81.6 or later**, which includes the [session-header fix](https://github.com/1jehuang/jcode/issues/1167).                                                                                                                     |
+| **OpenClaw**      | Current builds send `x-opencode-session` on Go requests. Browser sign-in needs **2026.11.7 or later**.                                                                                                                                      |
 | **Kilo Code CLI** | Builds containing [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) restore OpenCode session headers. This fix covers the CLI, not the VS Code extension. See [issue #13723](https://github.com/Kilo-Org/kilocode/issues/13723). |
 
 ### Known problematic clients

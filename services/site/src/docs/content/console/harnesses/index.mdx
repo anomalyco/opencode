@@ -11,6 +11,7 @@ paid or Go model, and usage is billed to your workspace like any other request.
 | [Claude Code](/console/harnesses/claude-code) | Yes           | Yes       | Yes |
 | [Codex](/console/harnesses/codex)             | Yes           | Yes       | Yes |
 | [Hermes](/console/harnesses/hermes)           | Built in      | Built in  | Yes |
+| [OpenClaw](/console/harnesses/openclaw)       | Plugin        | Built in  | Yes |
 | [Pi](/console/harnesses/pi)                   | Built in      | Built in  | Yes |
 | [Raycast](/console/harnesses/raycast)         | Extension     | Extension | Yes |
 
@@ -27,6 +28,7 @@ command. It needs Node.js 22 or later.
 | Claude Code      | `npx @opencode/console setup claude-code`      |
 | Codex            | `npx @opencode/console setup codex`            |
 | Hermes           | `npx @opencode/console setup hermes`           |
+| OpenClaw         | `npx @opencode/console setup openclaw`         |
 | Pi               | `npx @opencode/console setup pi`               |
 | DeepSeek Harness | `npx @opencode/console setup deepseek-harness` |
 
@@ -39,7 +41,7 @@ Your browser opens Console, where you approve the sign-in and pick the workspace
 The CLI keeps the harness in sync with the workspace and updates itself.
 
 To keep a harness's own sign-in and models, such as a Claude or ChatGPT subscription, add `--keep-provider`. The harness
-still gets the workspace's policies, MCP servers, skills and instructions. It works with Claude Code, Codex and Hermes.
+still gets the workspace's policies, MCP servers, skills and instructions. It works with Claude Code, Codex, Hermes and OpenClaw.
 
 ```bash
 npx @opencode/console setup codex --keep-provider
@@ -99,8 +101,8 @@ cache. Go [requires it](/console/go#where-can-i-use-it).
 x-opencode-session: ses_...
 ```
 
-Console also recognizes the native session headers sent by Claude Code, Codex, Hermes, and Pi, so they need no extra
-configuration.
+Console also recognizes the native session headers sent by Claude Code, Codex, Hermes, and Pi, and OpenClaw sends
+`x-opencode-session` itself, so none of them need extra configuration.
 
 ## Console MCP
 
