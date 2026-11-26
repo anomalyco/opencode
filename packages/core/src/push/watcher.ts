@@ -5,6 +5,7 @@ import { Form } from "@opencode/schema/form"
 import { Permission } from "@opencode/schema/permission"
 import { SessionError } from "@opencode/schema/session-error"
 import { SessionEvent } from "@opencode/schema/session-event"
+import { SessionMessage } from "@opencode/schema/session-message"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "../bus.js"
 import { Session } from "../session.js"
@@ -19,6 +20,9 @@ const bodies = {
   succeeded: "Finished",
   failed: "Failed",
 }
+
+// The tool call a question form was asked from, as the question tool records it.
+const Tool = Schema.Struct({ messageID: Schema.String, id: Schema.String })
 
 const layer = Layer.effectDiscard(
   Effect.gen(function* () {
@@ -42,6 +46,7 @@ const layer = Layer.effectDiscard(
       outcome: keyof typeof bodies,
       ran: boolean,
       time: number,
+      idleMessageID: SessionMessage.ID,
       error?: SessionError.Error,
     ) {
       if (!(yield* list.hasDevices())) return
@@ -65,20 +70,31 @@ const layer = Layer.effectDiscard(
         id: sessionID,
         type: "session.idle",
         sessionID,
+        directory: session.location.directory,
         time,
         title: session.title || "OpenCode",
         body: bodies[outcome],
         data: {
           outcome,
+          ...(last && { messageID: last.id }),
+          idleMessageID,
           ...(text && { text }),
-          ...(error && { error: { type: error.type, ...(error.message && { message: error.message }) } }),
+          ...(error && {
+            error: {
+              type: error.type,
+              ...(error.message && { message: error.message }),
+              status: error.status,
+              retryAfterMs: error.retryAfterMs,
+            },
+          }),
         },
         attention: false,
       })
     })
 
     const question = Effect.fn("PushWatcher.question")(function* (form: Form.Info, time: number) {
-      if (form.metadata?.kind !== "question") return
+      const kind = form.metadata?.kind
+      if (kind !== "question") return
       const sessionID = Schema.decodeUnknownOption(Session.ID)(form.sessionID)
       if (Option.isNone(sessionID)) return
       if (!(yield* list.hasDevices())) return
@@ -86,30 +102,52 @@ const layer = Layer.effectDiscard(
       const field = form.fields[0]
       const choices = field.type === "string" || field.type === "multiselect" ? field : undefined
       const options = choices?.options ?? []
+      // A string field without options takes typed text too.
+      const custom = choices?.custom || (field.type === "string" && !field.options)
+      // Rules on the answer that the message doesn't carry, so the phone can't check them.
+      const rules =
+        choices?.type === "string"
+          ? [choices.required, choices.format, choices.minLength, choices.maxLength, choices.pattern]
+          : [choices?.required, choices?.minItems, choices?.maxItems]
+      const inlineReply =
+        choices &&
+        form.fields.length === 1 &&
+        (custom || options.length > 0) &&
+        rules.every((rule) => rule === undefined || rule === false)
+      const tool = Schema.decodeUnknownOption(Tool)(form.metadata?.tool)
       yield* sender.send({
         id: form.id,
-        type: "question",
+        type: "form",
         sessionID: session.id,
+        directory: session.location.directory,
         time,
         title: session.title || "OpenCode",
-        body: field.description || field.title || form.title,
+        body: field.description || field.title || form.title || "Question",
         // The top-level session is the one to open and the one bells apply to; the form belongs to this one.
         data: {
           formID: form.id,
           replySessionID: sessionID.value,
+          kind,
           count: form.fields.length,
-          question: {
-            key: field.key,
-            type: field.type,
-            ...(field.title && { title: field.title }),
-            ...(field.description && { text: field.description }),
-            ...(choices?.custom && { custom: true }),
-            ...(options.length > 0 && {
-              options: options.map((option) =>
-                option.value === option.label ? { label: option.label } : { label: option.label, value: option.value },
-              ),
-            }),
-          },
+          ...(inlineReply && { inlineReply: true }),
+          ...(Option.isSome(tool) && { source: { type: "tool", ...tool.value } }),
+          fields: [
+            {
+              key: field.key,
+              type: field.type,
+              ...(field.title && { title: field.title }),
+              ...(field.description && { description: field.description }),
+              ...(custom && { custom: true }),
+              ...(options.length > 0 && {
+                options: options.map((option) => ({
+                  label: option.label,
+                  ...(option.value !== option.label && { value: option.value }),
+                  ...(option.description && { description: option.description }),
+                })),
+              }),
+              ...(field.type === "external" && { url: field.url }),
+            },
+          ],
         },
         attention: true,
       })
@@ -123,6 +161,7 @@ const layer = Layer.effectDiscard(
         id: request.id,
         type: "permission",
         sessionID: session.id,
+        directory: session.location.directory,
         time,
         title: session.title || "OpenCode",
         body: `Needs permission: ${request.action}`,
@@ -133,6 +172,9 @@ const layer = Layer.effectDiscard(
           action: request.action,
           resources: request.resources,
           ...(request.save?.length && { save: request.save }),
+          decisions: request.save?.length ? ["once", "always", "reject"] : ["once", "reject"],
+          ...(request.message && { message: request.message }),
+          source: request.source,
         },
         attention: true,
       })
@@ -209,7 +251,9 @@ const layer = Layer.effectDiscard(
           return sender
             .clear(unanswered, event.created)
             .pipe(
-              Effect.andThen(finished(sessionID, outcome, ran, event.created, error)),
+              Effect.andThen(
+                finished(sessionID, outcome, ran, event.created, SessionMessage.ID.fromEvent(event.id), error),
+              ),
               Effect.ignoreCause({ log: "Warn", message: "Failed to notify phones" }),
             )
         }),

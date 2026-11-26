@@ -39,6 +39,7 @@ const relay = async (input: Request | string | URL, init?: RequestInit) => {
 const parentID = Session.ID.make("ses_push_parent")
 const childID = Session.ID.make("ses_push_child")
 const grandchildID = Session.ID.make("ses_push_grandchild")
+const messageID = SessionMessage.ID.create()
 
 const session = (id: Session.ID, title: string, parent?: Session.ID) =>
   Session.Info.make({
@@ -68,7 +69,7 @@ const it = testEffect(
           messages: () =>
             Effect.succeed([
               SessionMessage.Assistant.make({
-                id: SessionMessage.ID.create(),
+                id: messageID,
                 type: "assistant",
                 agent: Agent.ID.make("build"),
                 model: Model.Ref.make({ id: Model.ID.make("model"), providerID: Provider.ID.make("provider") }),
@@ -151,30 +152,41 @@ describe("PushWatcher", () => {
       yield* waitUntil(Effect.sync(() => boxes.length === 1))
       const failed = yield* bus.publish(SessionEvent.Execution.Failed, {
         sessionID: parentID,
-        error: { type: "unknown", message: "x" },
+        error: { type: "provider.rate-limit", message: "x", status: 429, retryAfterMs: 30_000 },
       })
       yield* waitUntil(Effect.sync(() => boxes.length === 2))
 
       expect(boxes.map((box) => open(key, box))).toEqual([
         {
           v: 1,
-          id: parentID,
           type: "session.idle",
-          sessionID: parentID,
+          id: parentID,
           time: succeeded.created,
+          sessionID: parentID,
+          directory: "/tmp/push",
           title: "Fix the login bug",
           body: "Finished",
-          data: { outcome: "succeeded", text: "Fixed the login bug." },
+          data: {
+            outcome: "succeeded",
+            messageID,
+            idleMessageID: SessionMessage.ID.fromEvent(succeeded.id),
+            text: "Fixed the login bug.",
+          },
         },
         {
           v: 1,
-          id: parentID,
           type: "session.idle",
-          sessionID: parentID,
+          id: parentID,
           time: failed.created,
+          sessionID: parentID,
+          directory: "/tmp/push",
           title: "Fix the login bug",
           body: "Failed",
-          data: { outcome: "failed", error: { type: "unknown", message: "x" } },
+          data: {
+            outcome: "failed",
+            idleMessageID: SessionMessage.ID.fromEvent(failed.id),
+            error: { type: "provider.rate-limit", message: "x", status: 429, retryAfterMs: 30_000 },
+          },
         },
       ])
     }),
@@ -188,7 +200,7 @@ describe("PushWatcher", () => {
         id: Form.ID.make(id),
         sessionID,
         title: "Questions",
-        metadata: { kind },
+        metadata: { kind, tool: { messageID: "msg_1", id: "call_1" } },
         fields: [
           {
             key: "q0",
@@ -215,38 +227,51 @@ describe("PushWatcher", () => {
         action: "bash",
         resources: ["git push"],
         save: ["git push *"],
+        source: { type: "tool", messageID: "msg_2", id: "call_2" },
+        message: "Pushes to main",
       })
       yield* waitUntil(Effect.sync(() => boxes.length === 2))
 
       expect(boxes.map((box) => open(key, box))).toEqual([
         {
           v: 1,
+          type: "form",
           id: "frm_1",
-          type: "question",
-          sessionID: parentID,
           time: created.created,
+          sessionID: parentID,
+          directory: "/tmp/push",
+          attention: true,
           title: "Fix the login bug",
           body: "Which database?",
           data: {
             formID: "frm_1",
             replySessionID: grandchildID,
+            kind: "question",
             count: 2,
-            question: {
-              key: "q0",
-              type: "string",
-              title: "Database",
-              text: "Which database?",
-              custom: true,
-              options: [{ label: "Postgres" }, { label: "SQLite", value: "sqlite" }],
-            },
+            source: { type: "tool", messageID: "msg_1", id: "call_1" },
+            fields: [
+              {
+                key: "q0",
+                type: "string",
+                title: "Database",
+                description: "Which database?",
+                custom: true,
+                options: [
+                  { label: "Postgres", description: "The production database" },
+                  { label: "SQLite", value: "sqlite" },
+                ],
+              },
+            ],
           },
         },
         {
           v: 1,
-          id: "per_1",
           type: "permission",
-          sessionID: parentID,
+          id: "per_1",
           time: asked.created,
+          sessionID: parentID,
+          directory: "/tmp/push",
+          attention: true,
           title: "Fix the login bug",
           body: "Needs permission: bash",
           data: {
@@ -255,9 +280,32 @@ describe("PushWatcher", () => {
             action: "bash",
             resources: ["git push"],
             save: ["git push *"],
+            decisions: ["once", "always", "reject"],
+            message: "Pushes to main",
+            source: { type: "tool", messageID: "msg_2", id: "call_2" },
           },
         },
       ])
+
+      // A rule the phone can't check, or nothing to answer with, leaves the reply to the app.
+      const fields: Form.Field[] = [
+        { key: "q0", type: "string", maxLength: 0 },
+        { key: "q0", type: "string", required: true },
+        { key: "q0", type: "string", options: [] },
+      ]
+      for (const [index, field] of fields.entries()) {
+        yield* bus.publish(Form.Event.Created, {
+          form: {
+            id: Form.ID.make("frm_rule" + index),
+            sessionID: childID,
+            title: "Questions",
+            metadata: { kind: "question" },
+            fields: [field],
+          },
+        })
+        yield* waitUntil(Effect.sync(() => boxes.length === 3 + index))
+      }
+      expect(boxes.slice(2).map((box) => open(key, box).data.inlineReply)).toEqual([undefined, undefined, undefined])
     }),
   )
   it.live("clears a notification once it is answered, interrupted or followed by a new prompt", () =>
@@ -289,6 +337,8 @@ describe("PushWatcher", () => {
 
       yield* ask("per_1")
       yield* waitUntil(Effect.sync(() => boxes.length === 1))
+      // Nothing to save, so "always" isn't offered.
+      expect(open(key, boxes[0]!).data.decisions).toEqual(["once", "reject"])
       const replied = yield* bus.publish(Permission.Event.Replied, {
         sessionID: childID,
         requestID: Permission.ID.make("per_1"),
@@ -306,6 +356,15 @@ describe("PushWatcher", () => {
         },
       })
       yield* waitUntil(Effect.sync(() => boxes.length === 3))
+      // One field with no rules on its answer can be answered from the notification.
+      expect(open(key, boxes[2]!).data).toEqual({
+        formID: "frm_1",
+        replySessionID: childID,
+        kind: "question",
+        count: 1,
+        inlineReply: true,
+        fields: [{ key: "q0", type: "string", title: "Database", custom: true }],
+      })
       const cancelled = yield* bus.publish(Form.Event.Cancelled, { id: Form.ID.make("frm_1"), sessionID: childID })
       yield* waitUntil(Effect.sync(() => boxes.length === 4))
 
@@ -334,17 +393,17 @@ describe("PushWatcher", () => {
         expect(
           cleared()
             .slice(-2)
-            .map((item) => item.id)
+            .map((item) => item.ids[0])
             .sort(),
         ).toEqual([parentID, "per_3"].sort())
       }
 
       expect(silent.slice(0, 8)).toEqual([undefined, true, undefined, true, undefined, true, undefined, true])
       expect(cleared().slice(0, 4)).toEqual([
-        { v: 1, id: "per_1", type: "clear", sessionID: parentID, time: replied.created },
-        { v: 1, id: "frm_1", type: "clear", sessionID: parentID, time: cancelled.created },
-        { v: 1, id: "per_2", type: "clear", sessionID: parentID, time: interrupted.created },
-        { v: 1, id: parentID, type: "clear", sessionID: parentID, time: prompted.created },
+        { v: 1, type: "clear", ids: ["per_1"], time: replied.created },
+        { v: 1, type: "clear", ids: ["frm_1"], time: cancelled.created },
+        { v: 1, type: "clear", ids: ["per_2"], time: interrupted.created },
+        { v: 1, type: "clear", ids: [parentID], time: prompted.created },
       ])
     }),
   )
@@ -397,7 +456,7 @@ describe("PushWatcher", () => {
         boxes
           .slice(3)
           .map((box) => open(key, box))
-          .map((item) => [item.type, item.id]),
+          .map((item) => [item.type, item.id ?? item.ids[0]]),
       ).toEqual([
         ["permission", "per_2"],
         ["clear", "per_2"],

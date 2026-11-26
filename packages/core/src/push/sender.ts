@@ -13,17 +13,21 @@ import { PushList } from "./list.js"
 export interface Choice {
   readonly label: string
   readonly value?: string
+  readonly description?: string
 }
 
-/** The first question of a form. */
-export interface Question {
+/** One field of a form, under the form's own key names. */
+export interface Field {
   readonly key: string
   readonly type: string
   readonly title?: string
-  readonly text?: string
-  /** True when a typed answer is accepted besides the options. */
+  readonly description?: string
+  /** True when a typed answer is accepted. */
   readonly custom?: true
   readonly options?: ReadonlyArray<Choice>
+  /** How many options the field has, when some were left out. */
+  readonly optionCount?: number
+  readonly url?: string
 }
 
 export interface Data {
@@ -33,12 +37,28 @@ export interface Data {
   readonly replySessionID?: string
   readonly action?: string
   readonly resources?: ReadonlyArray<string>
+  /** How many resources the request has, when some were left out. */
+  readonly resourceCount?: number
   readonly save?: ReadonlyArray<string>
+  readonly decisions?: ReadonlyArray<string>
+  readonly message?: string
+  readonly source?: { readonly type: "tool"; readonly messageID: string; readonly id: string }
+  readonly kind?: string
   readonly count?: number
-  readonly question?: Question
+  /** A reply can be built from the message alone. Left out as soon as the message is too big. */
+  readonly inlineReply?: true
+  /** The form's first field. */
+  readonly fields?: ReadonlyArray<Field>
   readonly outcome?: "succeeded" | "failed"
+  readonly messageID?: string
+  readonly idleMessageID?: string
   readonly text?: string
-  readonly error?: { readonly type: string; readonly message?: string }
+  readonly error?: {
+    readonly type: string
+    readonly message?: string
+    readonly status?: number
+    readonly retryAfterMs?: number
+  }
   /** Something in `data` was cut or left out; the full version can be read by id. */
   readonly truncated?: true
 }
@@ -46,14 +66,16 @@ export interface Data {
 export interface Notification {
   /** What a later `clear` names: the permission request, the form, or the session for a finished turn. */
   readonly id: string
-  readonly type: "session.idle" | "question" | "permission"
+  readonly type: "session.idle" | "form" | "permission"
+  /** The top-level session, and the folder it works in. */
   readonly sessionID: string
+  readonly directory: string
   /** When the event happened, in ms since the epoch. */
   readonly time: number
   readonly title: string
   readonly body: string
   readonly data: Data
-  /** True when the notification needs the person, so phones at level `attention` get it. */
+  /** True when the session waits on the person, so phones at level `attention` get it. */
   readonly attention: boolean
 }
 
@@ -69,6 +91,7 @@ export interface Interface {
 export class Service extends Context.Service<Service, Interface>()("@opencode/PushSender") {}
 
 const maxMessageBytes = 2600
+const maxBodyChars = 200
 const attempts = 3
 // Which phones were sent a notification, so a clear goes only to them.
 const Sent = Schema.Struct({ sessionID: Schema.String, devices: Schema.Array(Schema.String) })
@@ -90,13 +113,11 @@ const shorten = (text: string, bytes: number) => {
   return chars.join("") + "…"
 }
 
-type Over = (data: Data) => number
-
 /** Keeps `items` in order while they fit. The first that doesn't is shortened if that fits, and the rest are dropped. */
-const cutList = <T>(
+const cutList = <T, R>(
   items: ReadonlyArray<T>,
-  cut: (kept: ReadonlyArray<T>) => Data,
-  over: Over,
+  cut: (kept: ReadonlyArray<T>) => R,
+  over: (result: R) => number,
   shortenItem: (item: T, bytes: number) => T | undefined,
 ) => {
   const kept: T[] = []
@@ -112,72 +133,112 @@ const cutList = <T>(
   return cut(kept)
 }
 
-const shortenError = (data: Data, over: Over): Data => {
-  if (data.error?.message === undefined || over(data) <= 0) return data
-  const marked = { ...data, truncated: true as const }
-  return { ...marked, error: { ...data.error, message: shorten(data.error.message, over(marked)) } }
+type Over = (data: Data) => number
+/** One cut, applied while the message is still too big. */
+type Step = (data: Data, over: Over) => Data
+
+const cutResources: Step = (data, over) => {
+  const all = data.resources
+  if (!all?.length) return data
+  return cutList(
+    all,
+    (kept): Data => ({
+      ...data,
+      resources: kept.length > 0 ? kept : undefined,
+      ...(kept.length < all.length && { resourceCount: all.length }),
+      truncated: true,
+    }),
+    over,
+    shorten,
+  )
 }
 
-const shortenResources = (data: Data, over: Over) => {
-  if (!data.resources?.length || over(data) <= 0) return data
-  return cutList(data.resources, (kept) => ({ ...data, resources: kept, truncated: true }), over, shorten)
-}
+/** A cut to the form's field. `change` returns undefined when it has nothing to cut. */
+const cutField =
+  (change: (field: Field, over: (field: Field) => number) => Field | undefined): Step =>
+  (data, over) => {
+    const [field] = data.fields ?? []
+    const cut = (field: Field): Data => ({ ...data, fields: [field], truncated: true })
+    const next = field && change(field, (field) => over(cut(field)))
+    return next ? cut(next) : data
+  }
 
-const shortenQuestion = (data: Data, over: Over): Data => {
-  const question = data.question
-  if (question?.text === undefined || over(data) <= 0) return data
-  const marked = { ...data, truncated: true as const }
-  return { ...marked, question: { ...question, text: shorten(question.text, over(marked)) } }
-}
-
-// A choice is never shortened, since a reply sends it as it is.
-const shortenOptions = (data: Data, over: Over) => {
-  const question = data.question
-  if (!question?.options?.length || over(data) <= 0) return data
-  const cut = (kept: ReadonlyArray<Choice>): Data => ({
-    ...data,
-    question: { ...question, options: kept },
-    truncated: true,
-  })
-  return cutList(question.options, cut, over, () => undefined)
-}
+// In the order of specs/v2/push.md: bulk goes before small facts.
+const steps: ReadonlyArray<Step> = [
+  (data) => (data.inlineReply ? { ...data, inlineReply: undefined } : data),
+  (data) => (data.text === undefined ? data : { ...data, text: undefined, truncated: true }),
+  (data, over) => {
+    if (data.error?.message === undefined) return data
+    const marked: Data = { ...data, truncated: true }
+    return { ...marked, error: { ...data.error, message: shorten(data.error.message, over(marked)) } }
+  },
+  (data, over) => {
+    if (data.message === undefined) return data
+    const marked: Data = { ...data, truncated: true }
+    return { ...marked, message: shorten(data.message, over(marked)) }
+  },
+  (data, over) => {
+    const cut = cutResources(data, over)
+    if (data.save === undefined || over(cut) <= 0) return cut
+    return cutResources({ ...data, save: undefined, truncated: true }, over)
+  },
+  cutField((field) =>
+    field.options?.some((option) => option.description !== undefined)
+      ? { ...field, options: field.options.map((option) => ({ label: option.label, value: option.value })) }
+      : undefined,
+  ),
+  cutField((field, over) =>
+    field.description === undefined ? undefined : { ...field, description: shorten(field.description, over(field)) },
+  ),
+  // An option is never shortened, since a reply sends it as it is.
+  cutField((field, over) => {
+    const all = field.options
+    if (!all?.length) return undefined
+    return cutList(
+      all,
+      (kept): Field => ({ ...field, options: kept.length > 0 ? kept : undefined, optionCount: all.length }),
+      over,
+      () => undefined,
+    )
+  }),
+  cutField((field) => (field.title === undefined ? undefined : { ...field, title: undefined })),
+]
 
 /**
- * The JSON the phone decrypts, shortened so the box stays within the relay's limit. Bulk goes before small facts: a
- * turn's text is dropped, then a failed turn's error message is cut, then a permission's resources (its `save` is
- * dropped only when that isn't enough), then the body, a question's text, its options and its title. Anything cut or
- * left out of `data` sets `truncated: true`. Ids are never cut. The format is described in specs/v2/push.md.
+ * The JSON the phone decrypts, cut so the box stays within the relay's limit. Anything cut or left out of `data` sets
+ * `truncated: true`. Ids, the title and the body are never cut. The format is described in specs/v2/push.md.
  */
 export const message = (notification: Notification) => {
-  const make = (data: Data, body: string) =>
+  const chars = Array.from(notification.body)
+  const body = chars.length > maxBodyChars ? chars.slice(0, maxBodyChars - 1).join("") + "…" : notification.body
+  const make = (data: Data, directory?: string) =>
     JSON.stringify({
       v: 1,
-      id: notification.id,
       type: notification.type,
-      sessionID: notification.sessionID,
+      id: notification.id,
       time: notification.time,
+      sessionID: notification.sessionID,
+      directory,
+      ...(notification.attention && { attention: true }),
       title: notification.title,
       body,
       data,
     })
-  const overWith = (body: string) => (data: Data) => Buffer.byteLength(make(data, body), "utf8") - maxMessageBytes
-  const over = overWith(notification.body)
-  const start = notification.data
-  const text =
-    start.text === undefined || over(start) <= 0 ? start : { ...start, text: undefined, truncated: true as const }
-  const error = shortenError(text, over)
-  const resources = shortenResources(error, over)
-  const save =
-    resources.save === undefined || over(resources) <= 0
-      ? resources
-      : shortenResources({ ...error, save: undefined, truncated: true }, over)
-  const body = over(save) <= 0 ? notification.body : (shorten(notification.body, over(save)) ?? "")
-  const options = shortenOptions(shortenQuestion(save, overWith(body)), overWith(body))
-  const data =
-    options.question?.title === undefined || overWith(body)(options) <= 0
-      ? options
-      : { ...options, question: { ...options.question, title: undefined }, truncated: true as const }
-  return make(data, body)
+  const over: Over = (data) => Buffer.byteLength(make(data, notification.directory), "utf8") - maxMessageBytes
+  const data = steps.reduce((data, step) => (over(data) > 0 ? step(data, over) : data), notification.data)
+  if (over(data) <= 0) return make(data, notification.directory)
+  return make({
+    requestID: data.requestID,
+    formID: data.formID,
+    replySessionID: data.replySessionID,
+    kind: data.kind,
+    count: data.count,
+    decisions: data.decisions,
+    outcome: data.outcome,
+    messageID: data.messageID,
+    idleMessageID: data.idleMessageID,
+    truncated: true,
+  })
 }
 
 export const level = (device: PushList.Stored, sessions: Record<string, Push.Bell>, sessionID: string) =>
@@ -260,9 +321,7 @@ const layer = Layer.effect(
         cleared.flatMap((item) =>
           targets.devices
             .filter((device) => item.devices.includes(device.id))
-            .map((device) =>
-              push(device, JSON.stringify({ v: 1, id: item.id, type: "clear", sessionID: item.sessionID, time }), true),
-            ),
+            .map((device) => push(device, JSON.stringify({ v: 1, type: "clear", ids: [item.id], time }), true)),
         ),
         Effect.ignoreCause({ log: "Warn", message: "Failed to clear a push notification" }),
         { concurrency: "unbounded", discard: true },
