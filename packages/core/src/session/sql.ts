@@ -74,8 +74,8 @@ export const SessionTable = sqliteTable(
     resume_attempts: integer().notNull().default(0),
   },
   (table) => [
-    index("session_v2_project_idx").on(table.project_id),
-    index("session_v2_workspace_idx").on(table.workspace_id),
+    index("session_v2_project_updated_idx").on(table.project_id, table.time_updated, table.id),
+    index("session_v2_workspace_updated_idx").on(table.workspace_id, table.time_updated, table.id),
     index("session_v2_parent_updated_idx").on(table.parent_id, table.time_updated, table.id),
     index("session_v2_directory_updated_idx").on(table.directory, table.time_updated, table.id),
     index("session_v2_time_suspended_idx")

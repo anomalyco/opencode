@@ -1,7 +1,7 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "ca58e905-c782-4f55-a786-1cd9dc2ec048",
+  "id": "f07f4f1b-0f4b-4926-aed7-37888fc365ae",
   "prevIds": ["ea7fb45e-fef3-40b6-8e09-42b781c5bf23"],
   "ddl": [
     {
@@ -2758,12 +2758,20 @@
         {
           "value": "project_id",
           "isExpression": false
+        },
+        {
+          "value": "time_updated",
+          "isExpression": false
+        },
+        {
+          "value": "id",
+          "isExpression": false
         }
       ],
       "isUnique": false,
       "where": null,
       "origin": "manual",
-      "name": "session_v2_project_idx",
+      "name": "session_v2_project_updated_idx",
       "entityType": "indexes",
       "table": "session_v2"
     },
@@ -2772,12 +2780,20 @@
         {
           "value": "workspace_id",
           "isExpression": false
+        },
+        {
+          "value": "time_updated",
+          "isExpression": false
+        },
+        {
+          "value": "id",
+          "isExpression": false
         }
       ],
       "isUnique": false,
       "where": null,
       "origin": "manual",
-      "name": "session_v2_workspace_idx",
+      "name": "session_v2_workspace_updated_idx",
       "entityType": "indexes",
       "table": "session_v2"
     },
