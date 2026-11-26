@@ -1,4 +1,4 @@
-import { DataProvider, type TurnDiffInput } from "@opencode/session-ui/context"
+import { DataProvider, type ToolFileSource, type TurnDiffInput } from "@opencode/session-ui/context"
 import { MarkdownProvider, type ReadMarkdownImage } from "@opencode/session-ui/context/markdown"
 import { useNavigate, useParams } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type ParentProps } from "solid-js"
@@ -53,6 +53,25 @@ export function SessionUIProvider(
   })
 
   const href = (sessionID: string) => sessionHref(props.server, sessionID)
+
+  // The store keeps tool-result files without their bytes (`omitToolFileData`), so a tile reads its file again from
+  // the message its call is in.
+  const toolFile: ToolFileSource = {
+    peek: (input) => serverSDK.toolFiles.peek(input.callID, input.index),
+    read(input, signal) {
+      const messageID = data.session.message
+        .list(input.sessionID)
+        .findLast(
+          (message) =>
+            message.type === "assistant" &&
+            message.content.some((part) => part.type === "tool" && part.id === input.callID),
+        )?.id
+
+      if (!messageID) return Promise.resolve(undefined)
+
+      return serverSDK.toolFiles.load({ ...input, messageID }, signal)
+    },
+  }
 
   const origin = (): SessionNavigateOrigin => ({ server: props.server, sessionID: params.id })
   const [navigation, setNavigation] = createSignal(INITIAL_SESSION_UI_NAVIGATE_STATE)
@@ -177,7 +196,13 @@ export function SessionUIProvider(
       )
   }
 
-  createEffect(on(() => props.server, () => dispatchReferenceLookup({ type: "server.changed" }), { defer: true }))
+  createEffect(
+    on(
+      () => props.server,
+      () => dispatchReferenceLookup({ type: "server.changed" }),
+      { defer: true },
+    ),
+  )
   onCleanup(() => dispatchReferenceLookup({ type: "disposed" }))
 
   const sessionTitle = (id: string) => {
@@ -243,6 +268,7 @@ export function SessionUIProvider(
         shellOutput={(input) => serverSDK.api.shell.output(input)}
         readMedia={(uri, mime, signal) => serverSDK.media.load(uri, mime, signal)}
         peekMedia={(uri, mime) => serverSDK.media.peek(uri, mime)}
+        toolFile={toolFile}
         turnDiff={turnDiff()}
         onNavigateToSession={navigateToSession}
         onSessionHref={href}
