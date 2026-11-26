@@ -8,7 +8,9 @@ import { SessionEvent } from "@opencode/schema/session-event"
 import { SessionMessage } from "@opencode/schema/session-message"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Bus } from "../bus.js"
+import { Job } from "../job.js"
 import { Session } from "../session.js"
+import { SessionBackground } from "../session/background.js"
 import { PushList } from "./list.js"
 import { PushSender } from "./sender.js"
 
@@ -28,6 +30,7 @@ const layer = Layer.effectDiscard(
   Effect.gen(function* () {
     const bus = yield* Bus.Service
     const sessions = yield* Session.Service
+    const jobs = yield* Job.Service
     const list = yield* PushList.Service
     const sender = yield* PushSender.Service
     const stepped = new Set<Session.ID>()
@@ -52,6 +55,20 @@ const layer = Layer.effectDiscard(
       if (!(yield* list.hasDevices())) return
       const session = yield* sessions.get(sessionID)
       if (session.parentID) return
+      // A running subagent's report starts another turn, so this one isn't the last. Running shells don't hold the
+      // push, or a session with a dev server running would never send one.
+      const running = yield* SessionBackground.outstanding(
+        jobs,
+        { get: (id) => sessions.get(id).pipe(Effect.option, Effect.map(Option.getOrUndefined)) },
+        sessionID,
+        yield* sessions.active,
+      )
+      if (outcome === "succeeded" && running.some((job) => job.kind === "subagent" && job.sessionID === sessionID))
+        return
+      const background = running.reduce<Record<string, number>>(
+        (counts, job) => ({ ...counts, [job.kind]: (counts[job.kind] ?? 0) + 1 }),
+        {},
+      )
       // The newest assistant message is the turn's last step, so only read it when this turn ran one.
       const [last] = ran ? yield* sessions.messages({ sessionID, type: "assistant", order: "desc", limit: 1 }) : []
       const text = Array.from(
@@ -83,6 +100,7 @@ const layer = Layer.effectDiscard(
               retryAfterMs: error.retryAfterMs,
             },
           }),
+          ...(running.length > 0 && { background }),
         },
         attention: false,
       })
@@ -248,5 +266,5 @@ const layer = Layer.effectDiscard(
 export const node = makeGlobalNode({
   name: "push-watcher",
   layer,
-  deps: [Bus.node, PushList.node, PushSender.node, Session.node],
+  deps: [Bus.node, Job.node, PushList.node, PushSender.node, Session.node],
 })

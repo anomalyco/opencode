@@ -146,17 +146,20 @@ A field uses the same names as the form the server returns from `GET`, and carri
 
 Sent for top-level sessions only: when a turn that ran a model step succeeds (`body` "Finished"), and when a turn fails (`body` "Failed").
 
-| Key                  | Sent                             | Meaning                                                                                                                                                                   |
-| -------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `outcome`            | always                           | `succeeded` or `failed`.                                                                                                                                                  |
-| `messageID`          | when the turn ran a model step   | The turn's final assistant message, where its answer is.                                                                                                                  |
-| `idleMessageID`      | always                           | The message that records how the turn ended. A failed turn's full error is on it.                                                                                         |
-| `text`               | when the turn wrote any          | An excerpt of that message's text that the server picks, in Markdown. For display only: it can start mid-word or inside a Markdown block. Never reasoning or tool output. |
-| `error.type`         | on failure                       | The error's kind, such as `provider.rate-limit`, `provider.auth`, `tool.execution` or `aborted`.                                                                          |
-| `error.message`      | on failure, when not empty       | The error's message.                                                                                                                                                      |
-| `error.status`       | on failure, when there is one    | The HTTP status the provider answered with.                                                                                                                               |
-| `error.retryAfterMs` | on failure, when there is one    | How long the provider asked to wait before trying again, in ms, counted from when it answered, shortly before `time`.                                                     |
-| `truncated`          | when something in `data` was cut | `true`. See [Size](#size).                                                                                                                                                |
+A finished turn sends nothing while one of the session's own subagents is still running, because the subagent's report starts another turn. Other background work doesn't hold the message, since a command such as a dev server may never end; `background` says what is still running. A failed turn is always sent.
+
+| Key                  | Sent                                  | Meaning                                                                                                                                                                                  |
+| -------------------- | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `outcome`            | always                                | `succeeded` or `failed`.                                                                                                                                                                 |
+| `messageID`          | when the turn ran a model step        | The turn's final assistant message, where its answer is.                                                                                                                                 |
+| `idleMessageID`      | always                                | The message that records how the turn ended. A failed turn's full error is on it.                                                                                                        |
+| `text`               | when the turn wrote any               | An excerpt of that message's text that the server picks, in Markdown. For display only: it can start mid-word or inside a Markdown block. Never reasoning or tool output.                |
+| `error.type`         | on failure                            | The error's kind, such as `provider.rate-limit`, `provider.auth`, `tool.execution` or `aborted`.                                                                                         |
+| `error.message`      | on failure, when not empty            | The error's message.                                                                                                                                                                     |
+| `error.status`       | on failure, when there is one         | The HTTP status the provider answered with.                                                                                                                                              |
+| `error.retryAfterMs` | on failure, when there is one         | How long the provider asked to wait before trying again, in ms, counted from when it answered, shortly before `time`.                                                                    |
+| `background`         | when background work is still running | How many background jobs are still running under the session and its subagents, by kind: `shell`, `subagent`, `codemode`, `image` or `video`. Each one starts another turn when it ends. |
+| `truncated`          | when something in `data` was cut      | `true`. See [Size](#size).                                                                                                                                                               |
 
 ## Clear
 
@@ -197,7 +200,7 @@ A message is at most 2,600 bytes, so its box fits the relay's limit. When it is 
 4. `resources` are kept in order while they fit; the next one is shortened, or left out if even that won't fit, and the rest are left out.
 5. Option `description`s are left out.
 6. A field's `description` is cut from its end.
-7. `data` keeps only its ids (`requestID`, `formID`, `replySessionID`, `messageID`, `idleMessageID`), `kind`, `count`, `decisions`, `outcome` and `truncated`, and `directory` is left out. This is the one step that leaves out keys the tables above call always sent.
+7. `data` keeps only its ids (`requestID`, `formID`, `replySessionID`, `messageID`, `idleMessageID`), `kind`, `count`, `decisions`, `outcome`, `background` and `truncated`, and `directory` is left out. This is the one step that leaves out keys the tables above call always sent.
 
 Anything shortened ends in "…". A value is never sent as a bare "…": it is left out instead. When anything in `data` is cut or left out, `data.truncated` is `true`; otherwise it isn't sent. The server's choice of excerpt for `text` doesn't set it. Ids, `time`, `title` and `body` are never cut.
 

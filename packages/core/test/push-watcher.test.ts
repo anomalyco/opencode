@@ -3,6 +3,8 @@ import { createECDH, createDecipheriv, hkdfSync } from "node:crypto"
 import { DateTime, Effect, Layer } from "effect"
 import { Agent } from "@opencode/core/agent"
 import { Bus } from "@opencode/core/bus"
+import { Job } from "@opencode/core/job"
+import type { Recovery } from "@opencode/core/job/recovery"
 import { KV } from "@opencode/core/kv"
 import { Location } from "@opencode/core/location"
 import { Model } from "@opencode/core/model"
@@ -27,6 +29,8 @@ import { waitUntil } from "./lib/eventually"
 
 let boxes: string[] = []
 let silent: unknown[] = []
+let active = new Set<Session.ID>()
+let background: Recovery[] = []
 
 const relay = async (input: Request | string | URL, init?: RequestInit) => {
   const text = input instanceof Request ? await input.text() : String(init?.body)
@@ -66,6 +70,7 @@ const it = testEffect(
       Session.node.replace(
         Layer.mock(Session.Service, {
           get: (id) => Effect.succeed(sessions.get(id)!),
+          active: Effect.sync(() => active),
           messages: () =>
             Effect.succeed([
               SessionMessage.Assistant.make({
@@ -85,6 +90,12 @@ const it = testEffect(
             clear: () => Effect.die(new Error("unused")),
             commit: () => Effect.die(new Error("unused")),
           },
+        }),
+      ),
+      Job.node.replace(
+        Layer.mock(Job.Service, {
+          get: () => Effect.succeed(undefined),
+          runningBackground: Effect.sync(() => background),
         }),
       ),
     ],
@@ -133,6 +144,8 @@ const step = (sessionID: Session.ID) =>
 beforeEach(() => {
   boxes = []
   silent = []
+  active = new Set()
+  background = []
 })
 
 describe("PushWatcher", () => {
@@ -188,6 +201,35 @@ describe("PushWatcher", () => {
             error: { type: "provider.rate-limit", message: "x", status: 429, retryAfterMs: 30_000 },
           },
         },
+      ])
+    }),
+  )
+
+  it.live("holds a finished turn while a subagent runs, and counts the background work still running", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const key = yield* phone()
+
+      active = new Set([parentID, childID])
+      yield* step(parentID)
+      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: parentID })
+      yield* step(parentID)
+      yield* bus.publish(SessionEvent.Execution.Failed, {
+        sessionID: parentID,
+        error: { type: "unknown", message: "x" },
+      })
+      yield* waitUntil(Effect.sync(() => boxes.length === 1))
+
+      // A grandchild reports to the child, and a shell may never end, so neither holds the push.
+      active = new Set([parentID, grandchildID])
+      background = [{ kind: "shell", sessionID: parentID, shellID: "sh_1", command: "bun dev" }]
+      yield* step(parentID)
+      yield* bus.publish(SessionEvent.Execution.Succeeded, { sessionID: parentID })
+      yield* waitUntil(Effect.sync(() => boxes.length === 2))
+
+      expect(boxes.map((box) => open(key, box).data)).toMatchObject([
+        { outcome: "failed", background: { subagent: 1 } },
+        { outcome: "succeeded", background: { shell: 1, subagent: 1 } },
       ])
     }),
   )

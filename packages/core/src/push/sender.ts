@@ -56,6 +56,8 @@ export interface Data {
     readonly status?: number
     readonly retryAfterMs?: number
   }
+  /** How many background jobs are still running under the session, by kind. */
+  readonly background?: Readonly<Record<string, number>>
   /** Something in `data` was cut or left out; the full version can be read by id. */
   readonly truncated?: true
 }
@@ -199,6 +201,7 @@ export const message = (notification: Notification) => {
     outcome: data.outcome,
     messageID: data.messageID,
     idleMessageID: data.idleMessageID,
+    background: data.background,
     truncated: true,
   })
 }
