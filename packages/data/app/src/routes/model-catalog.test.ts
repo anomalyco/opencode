@@ -1,5 +1,15 @@
 import { describe, expect, test } from "bun:test"
-import { buildModelCatalog, findModelCatalogEntry, isKnownCatalogLab, modelPagePath } from "./model-catalog"
+import {
+  buildModelCatalog,
+  catalogLabPath,
+  findModelCatalogEntry,
+  findModelCatalogLab,
+  formatCatalogLabName,
+  isKnownCatalogLab,
+  modelPagePath,
+} from "./model-catalog"
+import { formerModelName } from "../lib/model-name"
+import { providerIconId } from "../lib/provider-icon"
 
 describe("model catalog pricing", () => {
   test("prefers OpenCode Go pricing over a zero-cost coding plan with the same model id", () => {
@@ -75,5 +85,29 @@ describe("revealed model pages", () => {
 
     expect(findModelCatalogEntry(catalog, "crouton-alpha", "unknown")?.id).toBe("meta/muse-ember-1.0")
     expect(modelPagePath(catalog, "unknown", "crouton-alpha")).toBe("/data/meta/muse-ember-1-0")
+  })
+
+  test("handles Object.prototype property names in lab and model lookups without throwing", () => {
+    const catalog = buildModelCatalog({
+      models: { "alibaba/qwen-3": { id: "alibaba/qwen-3", name: "Qwen 3" } },
+    })
+
+    const cases = [
+      { key: "__proto__", name: "  Proto  ", path: "/data/proto", icon: "proto" },
+      { key: "constructor", name: "Constructor", path: "/data/constructor", icon: "constructor" },
+      { key: "toString", name: "ToString", path: "/data/tostring", icon: "tostring" },
+      { key: "valueOf", name: "ValueOf", path: "/data/valueof", icon: "valueof" },
+      { key: "hasOwnProperty", name: "HasOwnProperty", path: "/data/hasownproperty", icon: "hasownproperty" },
+    ] as const
+
+    cases.forEach((entry) => {
+      expect(findModelCatalogEntry(catalog, entry.key, "alibaba")).toBeUndefined()
+      expect(findModelCatalogEntry(catalog, entry.key, entry.key)).toBeUndefined()
+      expect(findModelCatalogLab(catalog, entry.key)).toBeUndefined()
+      expect(formatCatalogLabName(entry.key)).toBe(entry.name)
+      expect(catalogLabPath(entry.key)).toBe(entry.path)
+      expect(formerModelName(entry.key)).toBeUndefined()
+      expect(providerIconId(entry.key)).toBe(entry.icon)
+    })
   })
 })
