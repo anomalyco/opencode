@@ -112,15 +112,15 @@ const getBase = (appId: string): Configuration => {
         filter: ["opencode-cli", "opencode-cli.exe", "opencode-cli.version"],
       },
     ],
-    // Electron stores cookies in plain text by default. The browser pane keeps sign-ins, so encrypt them with the OS
-    // key store (Keychain, DPAPI, libsecret or kwallet). This is one-way: turning it off again loses every cookie.
+    // Cookie encryption stays off: on macOS it makes Chromium read the app's "Safe Storage" key from the login Keychain,
+    // and an app whose signature changed since the user allowed it, as every update, asks for the Keychain password.
+    // The app must never ask for that. Builds that had it on lose the browser pane's encrypted sign-ins once.
     // https://www.electronjs.org/docs/latest/tutorial/fuses#cookieencryption
     // Flipping a fuse breaks the macOS signature. A build without a signing identity is not signed again, so re-sign it
     // ad hoc or Apple Silicon refuses to launch it. A signed build is signed again after the fuses anyway.
     electronFuses: {
-      enableCookieEncryption: true,
       // Started as plain Node (ELECTRON_RUN_AS_NODE) or with an inspector, the signed binary would run any code under
-      // the app's identity, which macOS lets read the app's Keychain key and so every cookie. Nothing runs the app as
+      // the app's identity, with every permission the user granted the app. Nothing runs the app as
       // Node: the CLI is its own executable. Beta keeps --inspect, as it keeps its on-request debugging port, for the
       // startup benchmark's Node timings (perf/startup.bench.ts).
       runAsNode: false,

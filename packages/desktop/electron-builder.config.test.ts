@@ -88,7 +88,6 @@ test.each([
 ])("Electron fuses for $channel", ({ channel, inspect }) => {
   // Absent keys keep Electron's defaults: NODE_OPTIONS stays on, the asar and file: fuses stay as they are.
   expect(load(channel).electronFuses).toEqual({
-    enableCookieEncryption: true,
     runAsNode: false,
     enableNodeCliInspectArguments: inspect,
     resetAdHocDarwinSignature: true,
