@@ -8272,8 +8272,23 @@ body {
 
   [data-page="stats"] [data-slot="section-heading-row"] {
     flex-direction: column;
-    gap: 12px;
+    gap: 36px;
     margin-bottom: 32px;
+  }
+
+  /* A section whose heading has controls starts them as far below its top line as they are from its right edge. */
+  [data-page="stats"] [data-section]:has(> [data-slot="section-heading-row"]) {
+    padding-top: 24px;
+  }
+
+  /* Each description on its own line under its title, the title's full stop dropped. */
+  [data-page="stats"] h2:has(> strong > [data-slot="heading-link"]) > span {
+    display: block;
+    margin-top: 4px;
+  }
+
+  [data-page="stats"] [data-slot="heading-stop"] {
+    display: none;
   }
 
   [data-page="stats"] [data-slot="section-heading-row"] > h2 {
@@ -8284,6 +8299,7 @@ body {
   [data-page="stats"] [data-slot="section-heading-row"] > :not(h2) {
     order: -1;
     align-self: flex-end;
+    margin-top: 0;
   }
 
   [data-page="stats"] [data-slot="section-heading-row"] > [data-component="usage-filter"] {
