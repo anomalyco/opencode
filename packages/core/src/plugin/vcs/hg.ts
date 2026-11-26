@@ -8,6 +8,7 @@ import { FileDiff } from "@opencode/schema/file-diff"
 import { FileStatus, Info, Mode } from "@opencode/schema/vcs"
 import { FSUtil } from "@opencode/util/fs-util"
 import { AppProcess } from "@opencode/util/process"
+import { Environment } from "../../environment/index.js"
 import { Location } from "../../location.js"
 import type { Adapter, DiffOptions } from "../../vcs.js"
 import { DiffError } from "../../vcs.js"
@@ -25,6 +26,8 @@ import {
 export const Plugin = define({
   id: "opencode.vcs.hg",
   effect: Effect.fn("VcsHgPlugin")(function* (ctx) {
+    const environment = yield* Environment.Service
+    if (!environment.local) return
     const location = yield* Location.Service
     // Markerless locations need this definition to initialize their first repository.
     if (location.vcs && location.vcs.type !== "hg") return

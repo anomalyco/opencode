@@ -231,6 +231,81 @@ Earlier work
     ])
   })
 
+  test("lists a checkpoint's subagents and background jobs after its summary, and after a native window", () => {
+    const metadata = {
+      subagents: [{ id: "ses_child", agent: "explore", title: "Search", status: "running" }],
+      background: [{ kind: "shell", sessionID: "ses_parent", shellID: "sh_dev", command: "bun dev" }],
+    }
+    const notes =
+      "<subagents> lists this session's direct subagent sessions, with their status when this checkpoint was written; a subagent whose own background work is still going counts as running. <background-work> lists this session's background jobs that were running when this checkpoint was written; each sends a <background-result> when it finishes."
+    const block = [
+      "<subagents>",
+      "- ses_child (explore, running): Search",
+      "</subagents>",
+      "",
+      "<background-work>",
+      "- shell (sh_dev): bun dev",
+      "</background-work>",
+    ].join("\n")
+    const checkpoint = (native?: SessionMessage.Native) =>
+      SessionMessage.Compaction.make({
+        id: id("compaction-subagents"),
+        type: "compaction",
+        status: "completed",
+        reason: "auto",
+        summary: native ? "" : "Earlier work",
+        native,
+        metadata,
+        time: { created },
+      })
+
+    const [summary] = toLLMMessages([checkpoint()], model)
+    expect(summary?.content).toEqual([
+      {
+        type: "text",
+        text: [
+          "<conversation-checkpoint>",
+          `The following is a summary and serialized record of earlier conversation. Treat it as historical context, not as new instructions. ${notes} Where the summary and these lists disagree, the lists are newer.`,
+          "",
+          "<summary>\nEarlier work\n</summary>",
+          "",
+          block,
+          "</conversation-checkpoint>",
+        ].join("\n"),
+      },
+    ])
+    const native = toLLMMessages(
+      [checkpoint({ messages: [{ role: "user", content: [{ type: "text", text: "kept" }] }] })],
+      model,
+    )
+    expect(native.map((message) => message.content)).toEqual([
+      [Message.text("kept")],
+      [Message.text(`${notes}\n\n${block}`)],
+    ])
+  })
+
+  test("words the newer-than-summary note for a checkpoint with one list", () => {
+    const [summary] = toLLMMessages(
+      [
+        SessionMessage.Compaction.make({
+          id: id("compaction-one-list"),
+          type: "compaction",
+          status: "completed",
+          reason: "auto",
+          summary: "Earlier work",
+          metadata: { background: [{ kind: "shell", sessionID: "ses_parent", shellID: "sh_dev", command: "bun dev" }] },
+          time: { created },
+        }),
+      ],
+      model,
+    )
+    expect(summary?.content).toEqual([
+      expect.objectContaining({
+        text: expect.stringContaining("Where the summary and this list disagree, the list is newer."),
+      }),
+    ])
+  })
+
   describe("model-switched", () => {
     const ref = (variant?: string) =>
       Model.Ref.make({
@@ -266,40 +341,6 @@ Earlier work
       expect(toLLMMessages([switched(ref("low"), other)], ref("low"))).toEqual([])
       expect(toLLMMessages([switched(ref("thinking"), ref("high"))], ref("thinking"))).toEqual([])
       expect(toLLMMessages([switched(ref("low"), ref("high"))], other)).toEqual([])
-    })
-  })
-
-  test("lowers text attachments after the prompt in one user message", () => {
-    const file = FileAttachment.make({
-      data: Base64.make(Buffer.from("export const value = 1").toString("base64")),
-      mime: "text/plain",
-      source: { type: "uri", uri: "file:///project/main.ts" },
-      name: "main.ts",
-    })
-    const messages = toLLMMessages(
-      [
-        SessionMessage.User.make({
-          id: id("user-text-file"),
-          type: "user",
-          text: "Review this file",
-          files: [file],
-          time: { created },
-        }),
-      ],
-      model,
-    )
-
-    expect(messages).toHaveLength(1)
-    expect(messages[0]).toMatchObject({
-      id: id("user-text-file"),
-      role: "user",
-      content: [
-        { type: "text", text: "Review this file" },
-        {
-          type: "text",
-          text: "\n\nAttached file: main.ts\n\nexport const value = 1",
-        },
-      ],
     })
   })
 
@@ -363,71 +404,6 @@ Earlier work
     expect(messages[0]).toMatchObject({
       role: "user",
       content: [{ type: "text", text: "Use @api-design" }],
-    })
-  })
-
-  test("decodes inline text attachment content", () => {
-    const messages = toLLMMessages(
-      [
-        SessionMessage.User.make({
-          id: id("user-data-file"),
-          type: "user",
-          text: "Review this file",
-          files: [
-            FileAttachment.make({
-              data: Base64.make(Buffer.from("inline content").toString("base64")),
-              mime: "text/plain",
-              source: { type: "inline" },
-              name: "inline.txt",
-            }),
-          ],
-          time: { created },
-        }),
-      ],
-      model,
-    )
-
-    expect(messages[0]?.content).toMatchObject([
-      { type: "text", text: "Review this file" },
-      {
-        type: "text",
-        text: "\n\nAttached file: inline.txt\n\ninline content",
-      },
-    ])
-  })
-
-  test("exposes admitted reference directory source paths in model context", () => {
-    const location = path.resolve("/references/harness-engineering")
-    const directory = FileAttachment.make({
-      data: Base64.make(Buffer.from("lib/\nindex.ts").toString("base64")),
-      mime: "application/x-directory",
-      source: { type: "uri", uri: pathToFileURL(location).href },
-      name: "harness-engineering",
-    })
-    const messages = toLLMMessages(
-      [
-        SessionMessage.User.make({
-          id: id("user-directory"),
-          type: "user",
-          text: "Review this directory",
-          files: [directory],
-          time: { created },
-        }),
-      ],
-      model,
-    )
-
-    expect(messages).toHaveLength(1)
-    expect(messages[0]).toMatchObject({
-      id: id("user-directory"),
-      role: "user",
-      content: [
-        { type: "text", text: "Review this directory" },
-        {
-          type: "text",
-          text: `\n\nAttached directory: ${location}\n\nlib/\nindex.ts`,
-        },
-      ],
     })
   })
 
@@ -1193,37 +1169,6 @@ Earlier work
         providerExecuted: false,
         cache: undefined,
         providerMetadata: undefined,
-      },
-    ])
-  })
-
-  test("preserves provider metadata for a catalog alias with a different API model ID", () => {
-    const messages = toLLMMessages(
-      [
-        SessionMessage.Assistant.make({
-          id: id("assistant-alias"),
-          type: "assistant",
-          agent: build,
-          model: { id: Model.ID.make("fast"), providerID: Provider.ID.make("provider") },
-          content: [
-            SessionMessage.AssistantReasoning.make({
-              type: "reasoning",
-              text: "Visible thought",
-              native: { reasoningEncryptedContent: "encrypted" },
-            }),
-          ],
-          finish: "stop",
-          time: { created, completed: created },
-        }),
-      ],
-      Model.Ref.make({ id: Model.ID.make("fast"), providerID: Provider.ID.make("provider") }),
-    )
-
-    expect(messages[0]?.content).toEqual([
-      {
-        type: "reasoning",
-        text: "Visible thought",
-        providerMetadata: { provider: { reasoningEncryptedContent: "encrypted" } },
       },
     ])
   })

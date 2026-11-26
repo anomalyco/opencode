@@ -7,7 +7,7 @@ use opencode_api::generated::*;
 
 use crate::forms::{Form, FormRead};
 use crate::location::{Catalog, Loaded, Location};
-use crate::messages::Page;
+use crate::messages::{HeadPages, Page};
 use crate::reads::ReadKey;
 use crate::sessions::{Outcome, SessionKey};
 use crate::state::{Error, State};
@@ -41,7 +41,7 @@ pub(crate) enum Completion {
     Active(u64, Result<SessionActiveOutput, Error>),
     /// A follow-up read found the session missing.
     Missing(SessionID),
-    Messages(Head, Result<SessionMessagesResponse, Error>),
+    Messages(Head, Result<HeadPages, Error>),
     Message {
         session: SessionID,
         incarnation: u64,
@@ -122,6 +122,7 @@ pub(crate) struct Info {
 }
 
 /// A read of the newest transcript page, in the transcript window `incarnation`.
+#[derive(Clone)]
 pub(crate) struct Head {
     pub(crate) ticket: Ticket,
     pub(crate) session: SessionID,
@@ -392,6 +393,9 @@ impl State {
                 // coalesced (`resync`, a queue-full drop): what the old stream left cached is
                 // stale, and every view must look again.
                 if self.connected {
+                    for session in self.sessions.iter_mut() {
+                        session.seal_anchor();
+                    }
                     self.invalidate_all();
                 } else {
                     // The first stream opens after the route reads, and the server does not replay what it sent

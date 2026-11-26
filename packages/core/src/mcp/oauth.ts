@@ -21,7 +21,7 @@ import {
   type StoredOAuthTokens,
 } from "@modelcontextprotocol/client"
 import { OAuthMetadataSchema, OpenIdProviderDiscoveryMetadataSchema } from "@modelcontextprotocol/core"
-import { Cause, Clock, Data, Deferred, Duration, Effect, Option, Schema } from "effect"
+import { Cause, Clock, Data, Deferred, Duration, Effect, Exit, Option, Schema } from "effect"
 import { FetchHttpClient } from "effect/http"
 import type { ServerResponse } from "node:http"
 import type { AddressInfo } from "node:net"
@@ -201,10 +201,16 @@ const selectResource = (config: typeof ConfigMCP.Remote.Type, resource: string |
   if (!checkResourceAllowed({ requestedResource: identity, configuredResource: resource }))
     throw new Error(`Protected resource ${resource} does not cover ${identity}`)
   const canonical = new URL(resource)
-  // The transport dials the configured URL with extra query parameters and some servers echo
-  // that back as the resource. Query is transport detail, not identity: the token stays bound
-  // to the configured URL so a later refresh names the same resource the login did.
-  if (canonical.origin === identity.origin && canonical.pathname === identity.pathname) return identity
+  // The transport adds ?codemode=false when dialing and some servers echo that query back as
+  // the protected resource. Strip only that transport parameter so refresh names the same
+  // resource login did, without overwriting a queryless canonical resource with config.url.
+  if (
+    canonical.origin === identity.origin &&
+    canonical.pathname === identity.pathname &&
+    canonical.searchParams.has("codemode") &&
+    !identity.searchParams.has("codemode")
+  )
+    canonical.searchParams.delete("codemode")
   return canonical
 }
 
@@ -456,7 +462,7 @@ export const authorize = (input: {
       }
       const fail = (reason: string, failure: string) => {
         runFork(Effect.logWarning("mcp oauth callback rejected", { ...fields, reason: failure }))
-        Effect.runSync(Deferred.fail(code, new Error(reason)))
+        Deferred.doneUnsafe(code, Exit.fail(new Error(reason)))
         response
           .writeHead(400, { "Content-Type": "text/html" })
           .end(OauthCallbackPage.error(reason, { provider: input.name }))
@@ -477,8 +483,9 @@ export const authorize = (input: {
       if (!value) return fail("Missing authorization code", "missing_code")
       // The page waits for the token exchange so the browser never reports success for a rejected code.
       if (
-        !Effect.runSync(
-          Deferred.succeed(code, {
+        !Deferred.doneUnsafe(
+          code,
+          Exit.succeed({
             code: value,
             iss: url.searchParams.get("iss") ?? undefined,
             host: request.headers.host,

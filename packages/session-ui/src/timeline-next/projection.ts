@@ -496,6 +496,11 @@ function turnRows(
   const lastStep = turn.entries.findLast((entry) => entry.type === "assistant" || entry.type === "idle")
   const view = viewTurnPhase(phase)
   const thinking = view.separateThinkingRef
+  const lastAssistantEntry = turn.entries.findLastIndex((entry) => entry.type === "assistant")
+
+  const quietTail = turn.entries
+    .slice(lastAssistantEntry + 1)
+    .every((entry) => entry.type === "notice" && placeNotice(entry.message, detail, "next") === "hidden")
 
   if (previousTurn) rows.push(new TimelineRow.TurnGap({ userMessageID: turn.id }))
 
@@ -507,7 +512,7 @@ function turnRows(
   // An assistant message can produce several rows because its content parts are rendered separately. Notices end a
   // segment so none of those rows cross it.
   const appendAssistantSegment = (messages: SessionMessageAssistant[]) => {
-    const refs = messages.flatMap((message, messageIndex) =>
+    const visibleRefs = messages.flatMap((message, messageIndex) =>
       contentEntries(message).flatMap((entry) => [
         ...(isVisible(entry.content) && !(thinking?.messageID === message.id && thinking.partID === entry.id)
           ? [{ messageID: message.id, messageIndex, partID: entry.id, content: entry.content, script: false }]
@@ -516,6 +521,13 @@ function turnRows(
         ...scriptChangeItems(message.id, messageIndex, entry.content, detail, factOf),
       ]),
     )
+
+    // While the turn runs, the thoughts it ends on read as Thinking until something else shows, since the model may
+    // think again in its next step. A notice after them ends the run.
+    const tail = messages.at(-1) === lastAssistant && view.live ? trailingThoughts(visibleRefs) : []
+    const live = thinking ?? (quietTail ? tail.at(-1) : undefined)
+    const settled = !live ? [] : thinking ? tail : tail.slice(0, -1)
+    const refs = live ? visibleRefs.slice(0, visibleRefs.length - tail.length) : visibleRefs
 
     const interruptedAt = messages.findIndex((message) => isInterruptedError(message.error))
     const before = interruptedAt < 0 ? refs : refs.filter((ref) => ref.messageIndex <= interruptedAt)
@@ -553,7 +565,14 @@ function turnRows(
     if (messages.at(-1) !== lastAssistant) return
 
     // The live thought closes its own step, so notices that arrive meanwhile follow it.
-    if (thinking) rows.push(new TimelineRow.Thinking({ userMessageID: turn.id, ref: thinking }))
+    if (live)
+      rows.push(
+        new TimelineRow.Thinking({
+          userMessageID: turn.id,
+          ref: live,
+          before: settled.map((ref) => ({ messageID: ref.messageID, partID: ref.partID })),
+        }),
+      )
 
     if (lastStep?.type !== "assistant") return
 
@@ -608,6 +627,13 @@ function turnRows(
   appendAssistantSegment(assistantSegment)
 
   return rows
+}
+
+// The thoughts a list of parts ends on, oldest first.
+function trailingThoughts<T extends { content: Content; script: boolean }>(refs: T[]) {
+  const start = refs.findLastIndex((ref) => ref.script || ref.content.type !== "reasoning") + 1
+
+  return refs.slice(start)
 }
 
 // Each step replaces the phase the steps before it left, so the turn ends in the phase of its last step.
@@ -927,13 +953,21 @@ function groupContent(
   detail: TimelineDetail,
 ): PartGroup[] {
   const groups: PartGroup[] = []
-  let adjacent: { type: "context" | "file" | "read" | "events"; refs: PartRef[] } | undefined
+  let adjacent: { type: "context" | "file" | "read" | "events" | "thought"; refs: PartRef[] } | undefined
 
   const flush = () => {
     const current = adjacent
     const first = current?.refs[0]
 
     if (!first) return
+    adjacent = undefined
+
+    // A thought alone keeps its own row; thoughts one after another read as one.
+    if (current.type === "thought" && current.refs.length === 1) {
+      groups.push({ type: "part", key: `part:${first.messageID}:${first.partID}`, ref: first })
+
+      return
+    }
 
     groups.push({
       type: current.type,
@@ -943,7 +977,6 @@ function groupContent(
           : `context:${first.messageID}:${first.partID}`,
       refs: current.refs,
     })
-    adjacent = undefined
   }
 
   const placed = items.map((item) =>
@@ -952,7 +985,7 @@ function groupContent(
 
   items.forEach((item, index) => {
     const group = placed[index]!.group
-    const type = group === "part" ? undefined : group
+    const type = group !== "part" ? group : item.content.type === "reasoning" && !item.script ? "thought" : undefined
 
     if (type === "subagent") {
       flush()

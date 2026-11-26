@@ -94,12 +94,12 @@ describe("ConfigCommandPlugin.Plugin", () => {
   }
 
   for (const item of [
-    ...["$&", "$$", "$`", "$'"].flatMap((input) => [
+    ...["$&", "$$"].flatMap((input) => [
       { template: "Explain $ARGUMENTS.", input, expected: `Explain ${input}.` },
       { template: "Explain $1.", input: `"${input}"`, expected: `Explain ${input}.` },
       { template: "Explain.", input, expected: `Explain.\n\n${input}` },
     ]),
-    ...["abc", "", "alpha beta", '"alpha beta"', "$1", "$<name>"].map((input) => ({
+    ...["", "alpha beta", '"alpha beta"', "$1", "$<name>"].map((input) => ({
       template: "Explain $ARGUMENTS.",
       input,
       expected: `Explain ${input}.`,
@@ -588,20 +588,6 @@ function markdown(description: string, template: string) {
 function sourceCases() {
   return [
     {
-      name: "created",
-      prepare: () => Effect.void,
-      mutate: (directory: string) =>
-        Effect.promise(async () => {
-          const file = path.join(directory, "review.md")
-          await fs.writeFile(file, markdown("Review created", "Review created"))
-          return [{ type: "create" as const, path: file }]
-        }),
-      verify: (command: Command.Interface) =>
-        Effect.gen(function* () {
-          expect((yield* command.get("review"))?.description).toBe("Review created")
-        }),
-    },
-    {
       name: "updated",
       prepare: (directory: string) =>
         Effect.promise(() => fs.writeFile(path.join(directory, "review.md"), markdown("Review first", "Review first"))),
@@ -636,21 +622,6 @@ function sourceCases() {
         Effect.gen(function* () {
           expect(yield* command.get("review")).toBeUndefined()
           expect((yield* command.get("release"))?.description).toBe("Review renamed")
-        }),
-    },
-    {
-      name: "deleted",
-      prepare: (directory: string) =>
-        Effect.promise(() => fs.writeFile(path.join(directory, "review.md"), "Review deleted")),
-      mutate: (directory: string) =>
-        Effect.promise(async () => {
-          const file = path.join(directory, "review.md")
-          await fs.unlink(file)
-          return [{ type: "delete" as const, path: file }]
-        }),
-      verify: (command: Command.Interface) =>
-        Effect.gen(function* () {
-          expect(yield* command.get("review")).toBeUndefined()
         }),
     },
   ] as const

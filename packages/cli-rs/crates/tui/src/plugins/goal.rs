@@ -242,7 +242,8 @@ pub fn status(session: &str, goal: &Goal) -> abi::v2::Node {
         .on_click(Click::command(SHOW).input(session))
 }
 
-/// `GoalDialog`: the objective, the status and its reason, and pause, resume, and clear.
+/// `GoalDialog`: the objective, the status and its reason, and pause, resume, and clear. Its body scrolls within the
+/// screen (`fit_screen`).
 fn panel(session: &str, goal: &Goal) -> Panel {
     let run = |name: &str| Action::command(name).input(session);
     let mut keys = Vec::new();
@@ -283,4 +284,5 @@ fn panel(session: &str, goal: &Goal) -> Panel {
     .size(PanelSize::Medium)
     .actions(actions)
     .binds(binds)
+    .fit_screen()
 }

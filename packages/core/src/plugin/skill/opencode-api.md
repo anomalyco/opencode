@@ -2,10 +2,9 @@
 
 OpenCode exposes an HTTP API from its server.
 
-In Code Mode, use the built-in `opencode` tool namespace first, called inside
-`execute` as `tools.opencode.*`; find its tools with Code Mode's `search`, for
-example `search({ namespace: "opencode" })`. For anything they do not cover, call
-the API with `fetch("opencode:///api/...")`. It reaches this OpenCode server,
+Use your built-in tools first (including `tools.opencode.*` and other Code Mode
+namespaces in `search(...)`). Only fall back to `fetch("opencode:///api/...")`
+for things they do not cover. It reaches this OpenCode server,
 already signed in, and uses the session's directory. `current` in place of a
 session ID names the calling session:
 

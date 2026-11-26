@@ -247,7 +247,7 @@ export interface Capabilities {
     readonly strict?: boolean
     readonly choice?: ReadonlyArray<"auto" | "none" | "required" | "tool">
     readonly search?: boolean
-    /** Input formats accepted by custom (free-form) tools. */
+    /** Input formats accepted by custom (free-form) tools. Unset or empty: freeform tools go out as JSON tools. */
     readonly freeform?: ReadonlyArray<"text" | "lark" | "regex">
     /**
      * Tool changes the model takes mid-conversation without changing the leading tool declaration, so the prompt

@@ -1,0 +1,70 @@
+name: backfill-blockmaps
+
+# Uploads the .blockmap files electron-updater needs for a differential update next to desktop releases that
+# shipped without them (2.2.0 through 2.4.1). Like release.yml's publish jobs, it runs in the release environment,
+# checks out only .github/release/ and treats the published files as data; releasers only.
+on:
+  workflow_dispatch:
+    inputs:
+      versions:
+        description: "Space-separated stable versions, such as 2.4.0 2.4.1"
+        required: true
+        type: string
+      dry_run:
+        description: "Build the blockmaps without uploading them"
+        required: false
+        type: boolean
+        default: true
+
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  backfill:
+    if: github.repository == 'anomalyco/opencode' && github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      OPENCODE_DRY_RUN: ${{ inputs.dry_run }}
+    steps:
+      - name: Check out release scripts
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          ref: ${{ github.sha }}
+          sparse-checkout: /.github/release/
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
+      - id: aws
+        name: Configure AWS credentials
+        if: inputs.dry_run != true
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          output-env-credentials: false
+          output-credentials: true
+          role-to-assume: arn:aws:iam::604439173067:role/github/opencode-release
+          role-session-name: opencode-${{ github.run_id }}
+          aws-region: us-east-1
+      - name: Cloudflare token
+        id: cloudflare-token
+        if: inputs.dry_run != true
+        run: bash .github/release/cloudflare-token.sh
+        env:
+          AWS_ACCESS_KEY_ID: ${{ steps.aws.outputs.aws-access-key-id }}
+          AWS_SECRET_ACCESS_KEY: ${{ steps.aws.outputs.aws-secret-access-key }}
+          AWS_SESSION_TOKEN: ${{ steps.aws.outputs.aws-session-token }}
+          CLOUDFLARE_TOKEN_URL: ${{ vars.CLOUDFLARE_TOKEN_URL }}
+      - name: Backfill
+        run: |
+          read -ra versions <<< "$VERSIONS"
+          bash .github/release/backfill-blockmaps.sh "${versions[@]}"
+        env:
+          VERSIONS: ${{ inputs.versions }}
+          CLOUDFLARE_ACCOUNT_ID: 15d29c8639fd3733b1b5486a2acfd968
+          CLOUDFLARE_API_TOKEN: ${{ steps.cloudflare-token.outputs.token }}

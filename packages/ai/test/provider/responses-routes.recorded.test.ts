@@ -1,6 +1,6 @@
 import { expect } from "bun:test"
 import { Effect, Schema } from "effect"
-import { ai, LLMEvent, toDefinitions } from "../../src/effect.js"
+import { ai, LanguageModel, LLMEvent, toDefinitions } from "../../src/effect.js"
 import { DigitalOcean, OpenRouter, Venice } from "../../src/providers.js"
 import { LLMClient } from "../../src/route.js"
 import { tool } from "../../src/tool.js"
@@ -76,7 +76,7 @@ for (const item of [
     Effect.gen(function* () {
       const response = yield* LLMClient.generate(
         ai.request({
-          model: item.model,
+          model: LanguageModel.update(item.model, { capabilities: { tools: { freeform: ["text"] } } }),
           prompt: "Use the run tool to execute exactly this code: print(1)",
           tools: run,
           toolChoice: "required",

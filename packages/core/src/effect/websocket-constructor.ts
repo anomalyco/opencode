@@ -1,5 +1,5 @@
 // The platform barrel also exposes Redis and its optional native hash loader, which workerd cannot resolve.
-import { WebSocket as NodeWebSocket } from "@effect/platform-node/NodeWS"
+import { WebSocket } from "@effect/platform-node/NodeWS"
 import { HttpProxyAgent } from "http-proxy-agent"
 import { HttpsProxyAgent } from "https-proxy-agent"
 import { Layer } from "effect"
@@ -61,8 +61,8 @@ const layer = Layer.succeed(Socket.WebSocketConstructor, (url, input) => {
   // Keep trust on the runtime store so NODE_EXTRA_CA_CERTS remains additive.
   if (typeof Bun !== "undefined") {
     // oxlint-disable-next-line typescript-eslint/no-unsafe-type-assertion -- Bun extends the browser constructor with handshake and network options.
-    const WebSocket = globalThis.WebSocket as unknown as BunWebSocketConstructor
-    return new WebSocket(url, {
+    const BunWebSocket = globalThis.WebSocket as unknown as BunWebSocketConstructor
+    return new BunWebSocket(url, {
       headers: config.headers,
       protocols: config.protocols,
       ...(selectedProxy ? { proxy: selectedProxy } : {}),
@@ -75,7 +75,7 @@ const layer = Layer.succeed(Socket.WebSocketConstructor, (url, input) => {
     // Reject redirects before headers can cross an origin boundary; the caller safely falls back to HTTP.
     followRedirects: false,
   }
-  return config.protocols ? new NodeWebSocket(url, config.protocols, native) : new NodeWebSocket(url, native)
+  return config.protocols ? new WebSocket(url, config.protocols, native) : new WebSocket(url, native)
 })
 
 export const WebSocketConstructor = { layer, proxy } as const

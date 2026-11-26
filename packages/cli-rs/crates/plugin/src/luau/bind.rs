@@ -653,7 +653,7 @@ fn binding(lua: &Lua, current: &Rc<Slot>, name: &str, host: bool) -> mlua::Resul
         };
         "pending" => |r, _lua, id: String| r.pending(&id);
         "models" => |r, lua, location: Value| r.models(optional::<abi::LocationRef>(lua, location)?.as_ref()).as_deref().map(<[_]>::to_vec);
-        "providers" => |r, _lua| r.providers().as_deref().map(<[_]>::to_vec);
+        "providers" => |r, lua, location: Value| r.providers(optional::<abi::LocationRef>(lua, location)?.as_ref()).as_deref().map(<[_]>::to_vec);
         "limits" => |r, _lua| r.limits();
         "model" => |r, _lua| r.model();
         "info" => |r, _lua| r.info();

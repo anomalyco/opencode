@@ -86,7 +86,7 @@ Returns: nothing
 
 ## POST /api/session/{sessionID}/prompt
 
-Send a user message and start the agent unless resume is false. Returns once the message is queued, not when the agent finishes: wait with POST /api/experimental/session/:sessionID/wait or the session.execution.* events, then read the reply with GET /api/session/:sessionID/message.
+Send a user message and start the agent unless resume is false. Returns once the message is queued, not when the agent finishes: wait with POST /api/experimental/session/:sessionID/wait or the session.execution.* events, then read the reply with GET /api/session/:sessionID/message. An archived session is unarchived.
 
 Body:
 - `id?: string` Sending the same ID again returns the original item instead of adding a second one, so retries are safe. Reusing it in another session or for another kind of item fails with 409.
@@ -102,7 +102,7 @@ Returns: `{ data: Session.Inbox.User }`
 
 ## POST /api/session/{sessionID}/command
 
-Run a named command in the session. Most commands send a prompt, so like session.prompt this returns before the agent finishes.
+Run a named command in the session. Most commands send a prompt, so like session.prompt this returns before the agent finishes. An archived session is unarchived.
 
 Body:
 - `name: string`

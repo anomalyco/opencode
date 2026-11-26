@@ -496,6 +496,73 @@ test("⌘⇧S archives the open session and moves to the next tab", async ({ pag
   await expect(page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"])`)).toBeVisible()
 })
 
+test("⌘⇧S toggles archive on the open session, and Unarchive session has its own command", async ({ page }) => {
+  const archived = { ...a, time: { created: Date.now(), archived: Date.now() } }
+
+  const workspace = await mockWorkspace(page, {
+    name: "UnarchiveShortcut",
+    sessions: [archived, b],
+    seed: { tabs: [a.id, b.id] },
+  })
+
+  await page.goto(sessionHref(a.id))
+  await expectSessionTitle(page, a.title)
+
+  const update = () =>
+    page.waitForRequest(
+      (request) => request.method() === "PATCH" && new URL(request.url()).pathname === `/api/session/${a.id}`,
+    )
+
+  // The mock doesn't announce updates, so send the server's event once the request lands.
+  const unarchived = () =>
+    workspace.push([
+      {
+        id: "evt_unarchived",
+        type: "session.unarchived",
+        created: Date.now(),
+        location: { directory: workspace.directory },
+        durable: { aggregateID: a.id, seq: 1, version: 1 },
+        data: { sessionID: a.id },
+      } satisfies Extract<OpenCodeEvent, { type: "session.unarchived" }>,
+    ])
+
+  const prompt = page.getByRole("textbox", { name: "Prompt", exact: true })
+
+  // ⌘⇧S on an archived session unarchives it and keeps it open.
+  const shortcut = update()
+  await prompt.click()
+  await page.keyboard.press("ControlOrMeta+Shift+s")
+  expect((await shortcut).postDataJSON()).toMatchObject({ archived: false })
+  await expectPath(page, sessionHref(a.id))
+  unarchived()
+
+  // Unarchived now, so the same shortcut archives it, and Unarchive session is no longer offered.
+  await prompt.click()
+  await page.keyboard.press("ControlOrMeta+Shift+p")
+  const dialog = page.getByRole("dialog")
+  await dialog.getByRole("combobox").fill("archive session")
+  await expect(dialog.getByRole("option", { name: /^Archive session/ })).toBeVisible()
+  await expect(dialog.getByRole("option", { name: /^Unarchive session/ })).toHaveCount(0)
+  await page.keyboard.press("Escape")
+
+  const archive = update()
+  await prompt.click()
+  await page.keyboard.press("ControlOrMeta+Shift+s")
+  expect((await archive).postDataJSON()).toMatchObject({ archived: true })
+  await expectPath(page, sessionHref(b.id))
+
+  // From the palette on an archived session.
+  await page.goto(sessionHref(a.id))
+  await expectSessionTitle(page, a.title)
+  await prompt.click()
+  await page.keyboard.press("ControlOrMeta+Shift+p")
+  await dialog.getByRole("combobox").fill("unarchive session")
+  const command = update()
+  await dialog.getByRole("option", { name: /^Unarchive session/ }).click()
+  expect((await command).postDataJSON()).toMatchObject({ archived: false })
+  await expectPath(page, sessionHref(a.id))
+})
+
 test("option arrows move to the previous or next tab, and with shift to the next unread one", async ({ page }) => {
   await mockWorkspace(page, {
     name: "Tabs",
@@ -2424,6 +2491,142 @@ test("the inbox lists archived sessions in a collapsed section and pins sessions
   await page.getByRole("menuitem", { name: "Unpin", exact: true }).click()
   await expect(pin).toHaveCount(0)
   await expect(recent).toHaveText([/Active inbox session/, /Older inbox session/])
+})
+
+test("an archived session that asks a question joins Needs attention and goes back to Archived once answered", async ({
+  page,
+}) => {
+  await page.clock.install({ time: T0 + 10 * 60_000 })
+
+  const workspace = await mockWorkspace(page, {
+    name: "ArchivedQuestion",
+    sessions: [
+      { id: "ses_asking_read", title: "Read inbox session", time: { created: T0, updated: T0, idle: T0, viewed: T0 } },
+      {
+        id: "ses_asking_archived",
+        title: "Clean email inbox",
+        time: { created: T0, updated: T0 + 1, busy: T0 + 60_000, archived: T0 + 10 },
+      },
+    ],
+    sessionStatus: { ses_asking_archived: { type: "running" } },
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: [],
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true } },
+    },
+  })
+
+  await page.goto("/")
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+
+  const list = inbox.locator('[data-slot="sidebar-inbox-scroll"]')
+
+  const needs = inbox
+    .getByRole("group", { name: "Needs attention", exact: true })
+    .locator('[data-slot="sidebar-inbox-item"]')
+
+  const archived = inbox.getByRole("button", { name: "Archived", exact: true })
+
+  await expect(list.locator('[data-slot="sidebar-inbox-item"]')).toHaveText([/Read inbox session/])
+  await expect(archived).toBeVisible()
+
+  workspace.push([
+    {
+      id: "evt_archived_question",
+      type: "form.created",
+      created: T0 + 9 * 60_000,
+      location: { directory: workspace.directory },
+      data: {
+        form: {
+          id: "form_archived_question",
+          sessionID: "ses_asking_archived",
+          title: "Unsubscribe from these?",
+          metadata: { kind: "question" },
+          fields: [{ key: "answer", type: "string", title: "Answer" }],
+        },
+      },
+    } satisfies Extract<OpenCodeEvent, { type: "form.created" }>,
+  ])
+
+  await expect(needs).toHaveText([/Clean email inbox/])
+  await expect(needs.first()).not.toHaveClass(/opacity-50/)
+  // It was the only archived session, so Archived has nothing left to show.
+  await expect(archived).toHaveCount(0)
+
+  // Still archived: the menu offers to unarchive it.
+  await needs.first().click({ button: "right" })
+  await expect(page.getByRole("menuitem", { name: "Unarchive", exact: true })).toBeVisible()
+  await page.keyboard.press("Escape")
+
+  workspace.push([
+    {
+      id: "evt_archived_question_replied",
+      type: "form.replied",
+      created: T0 + 10 * 60_000,
+      location: { directory: workspace.directory },
+      data: { sessionID: "ses_asking_archived", id: "form_archived_question", answer: { answer: "yes" } },
+    } satisfies Extract<OpenCodeEvent, { type: "form.replied" }>,
+  ])
+
+  await expect(needs).toHaveCount(0)
+  await expect(archived).toBeVisible()
+  await archived.click()
+  await expect(list.locator('[data-slot="sidebar-inbox-item"]').filter({ hasText: "Clean email inbox" })).toHaveClass(
+    /opacity-50/,
+  )
+})
+
+test("in the inbox, ⌘1-9 and option arrows move through sessions in the order the list shows", async ({ page }) => {
+  await mockWorkspace(page, {
+    name: "InboxShortcuts",
+    sessions: [
+      {
+        id: "ses_keys_first",
+        title: "First read session",
+        time: { created: T0, updated: T0 + 3, idle: T0 + 3, viewed: T0 + 3 },
+      },
+      { id: "ses_keys_unread", title: "Unread session", time: { created: T0, updated: T0 + 2, idle: T0 + 2 } },
+      {
+        id: "ses_keys_second",
+        title: "Second read session",
+        time: { created: T0, updated: T0 + 1, idle: T0 + 1, viewed: T0 + 1 },
+      },
+      {
+        id: "ses_keys_archived",
+        title: "Archived session",
+        time: { created: T0, updated: T0 + 4, idle: T0 + 4, viewed: T0 + 4, archived: T0 + 10 },
+      },
+    ],
+    seed: { settings: { appearance: { tabLayout: "inbox" } }, tabs: [] },
+  })
+  await page.goto("/")
+
+  const rows = page.locator('[data-slot="sidebar-inbox"] [data-slot="sidebar-inbox-item"]')
+
+  await expect(rows).toHaveText([/First read session/, /Unread session/, /Second read session/])
+
+  await page.keyboard.press("ControlOrMeta+1")
+  await expectPath(page, sessionHref("ses_keys_first"))
+
+  await page.keyboard.press("Alt+ArrowDown")
+  await expectPath(page, sessionHref("ses_keys_unread"))
+
+  await page.keyboard.press("Alt+ArrowDown")
+  await expectPath(page, sessionHref("ses_keys_second"))
+
+  // Past the last row it wraps to the first, skipping the collapsed Archived section.
+  await page.keyboard.press("Alt+ArrowDown")
+  await expectPath(page, sessionHref("ses_keys_first"))
+
+  await page.keyboard.press("Shift+Alt+ArrowDown")
+  await expectPath(page, sessionHref("ses_keys_unread"))
+
+  await page.keyboard.press("ControlOrMeta+3")
+  await expectPath(page, sessionHref("ses_keys_second"))
+
+  await page.keyboard.press("Alt+ArrowUp")
+  await expectPath(page, sessionHref("ses_keys_unread"))
 })
 
 test("the inbox list's own menu moves Working between the bottom shelf and above Archived", async ({ page }) => {
