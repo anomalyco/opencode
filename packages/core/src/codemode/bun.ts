@@ -541,20 +541,12 @@ export const extension = Extension.make({
   },
 })
 
-type Row = { tool: string; input: Record<string, string> }
-
-// Bun calls shown as the file tool they stand in for. Any other Bun call names its function and path or pattern.
-const rows: Record<string, (path: string, args: ReadonlyArray<unknown>) => Row> = {
-  "Bun.file": (path) => ({ tool: "read", input: { path } }),
-  "Bun.Glob": (pattern) => ({ tool: "glob", input: { pattern } }),
-  "Bun.write": (path, args) => {
-    const from = handleOf(args[1])?.name
-    return { tool: "write", input: { path, ...(from === undefined ? {} : { from }) } }
-  },
-}
-
-/** The row Code Mode records for a Bun call. */
-export const display = (name: string, args: ReadonlyArray<unknown>): Row => {
+/** What to show for a Bun call: the file tool it stands in for, or else the function and its path or pattern. */
+export const display = (name: string, args: ReadonlyArray<unknown>) => {
   const path = handleOf(args[0])?.name ?? String(args[0])
-  return rows[name]?.(path, args) ?? { tool: "Bun", input: { method: name.slice(name.lastIndexOf(".") + 1), path } }
+  const from = handleOf(args[1])?.name
+  if (name === "Bun.file") return { tool: "read", input: { path } }
+  if (name === "Bun.Glob") return { tool: "glob", input: { pattern: path } }
+  if (name === "Bun.write") return { tool: "write", input: from === undefined ? { path } : { path, from } }
+  return { tool: "Bun", input: { method: name.slice(name.lastIndexOf(".") + 1), path } }
 }
