@@ -63,7 +63,7 @@ export interface Data {
 export interface Notification {
   /** What a later `clear` names: the permission request, the form, or the session for a finished turn. */
   readonly id: string
-  readonly type: "session.idle" | "form" | "permission"
+  readonly type: "turn" | "form" | "permission"
   /** The top-level session, and the folder it works in. */
   readonly sessionID: string
   readonly directory: string

@@ -11,7 +11,7 @@ Every message has `v` and `type`. A message that shows a notification has this e
 | Key         | Sent                                  | Meaning                                                                                                                         |
 | ----------- | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
 | `v`         | always                                | Format version, `1`.                                                                                                            |
-| `type`      | always                                | `permission`, `form` or `session.idle`. A `clear` has [its own shape](#clear).                                                  |
+| `type`      | always                                | `permission`, `form` or `turn`. A `clear` has [its own shape](#clear).                                                          |
 | `id`        | always                                | The notification's name. A later message with the same `id` replaces it, and a `clear` removes it.                              |
 | `time`      | always                                | When the event happened, in ms since the epoch.                                                                                 |
 | `sessionID` | when it is about a session            | The top-level session: the one to open on tap, and the one bells apply to.                                                      |
@@ -127,7 +127,7 @@ A field uses the same names as the form the server returns from `GET`, and carri
 ```json
 {
   "v": 1,
-  "type": "session.idle",
+  "type": "turn",
   "id": "ses_parent",
   "time": 1795644290720,
   "sessionID": "ses_parent",

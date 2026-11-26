@@ -64,7 +64,7 @@ const layer = Layer.effectDiscard(
         .join("")
       yield* sender.send({
         id: sessionID,
-        type: "session.idle",
+        type: "turn",
         sessionID,
         directory: session.location.directory,
         time,

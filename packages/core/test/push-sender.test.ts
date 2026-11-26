@@ -45,7 +45,7 @@ const sessionID = Session.ID.make("ses_push_sender")
 
 const finished: PushSender.Notification = {
   id: sessionID,
-  type: "session.idle",
+  type: "turn",
   sessionID,
   directory: "/home/me/shop",
   time: 1_000,
@@ -153,7 +153,7 @@ describe("PushSender", () => {
       expect(delivered!.silent).toBeUndefined()
       expect(open(ok, delivered!.box)).toEqual({
         v: 1,
-        type: "session.idle",
+        type: "turn",
         id: sessionID,
         time: 1_000,
         sessionID,

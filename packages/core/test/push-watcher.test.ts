@@ -159,7 +159,7 @@ describe("PushWatcher", () => {
       expect(boxes.map((box) => open(key, box))).toEqual([
         {
           v: 1,
-          type: "session.idle",
+          type: "turn",
           id: parentID,
           time: succeeded.created,
           sessionID: parentID,
@@ -175,7 +175,7 @@ describe("PushWatcher", () => {
         },
         {
           v: 1,
-          type: "session.idle",
+          type: "turn",
           id: parentID,
           time: failed.created,
           sessionID: parentID,
