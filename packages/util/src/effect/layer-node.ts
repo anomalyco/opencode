@@ -350,17 +350,77 @@ type Resolved = {
   readonly implementation: RuntimeLayer
   readonly dependencies: readonly Resolved[]
   readonly shared: boolean
+  readonly borrowed?: boolean
+}
+
+export interface Host<T extends Tag = Tag> {
+  readonly tag: T
+  /** What the host built for the `tag` nodes its children reach (see `tagged`). */
+  readonly context: Context.Context<never>
+  /** The host's replacements: its `tag` ones are already built into `context`, the rest apply to children too. */
+  readonly replacements?: Replacements
+}
+
+export interface ChildOptions {
+  readonly host: Host
+  /** This child's own replacements, applied after `host.replacements`. They cannot target `host.tag` nodes. */
+  readonly replacements?: Replacements
+}
+
+/** Every `tag` node `root` reaches, after `replacements`, including transitive `tag` dependencies. */
+export function tagged(root: Graph<never, unknown>, tag: Tag, replacements: Replacements = []) {
+  const targets = replacementTargets(replacements)
+  const seen = new Set<AnyGraph>()
+  const found: Graph<never, unknown>[] = []
+  const visit = (graph: AnyGraph): void => {
+    if (seen.has(graph)) return
+    seen.add(graph)
+    const replacement = targets.get(graph)
+    if (replacement && replacement !== graph) return visit(replacement)
+    if (graph instanceof NodeValue && graph.tag === tag) found.push(graph)
+    const definition = graph[GraphTypeId]
+    if (definition.kind !== "unbound") definition.dependencies.forEach(visit)
+  }
+  visit(root)
+  return found
 }
 
 /** Resolve the final overrides before validating or acquiring anything. Effect owns acquisition and finalization. */
 export function compile<A, E>(root: Graph<A, E>, options: CompileOptions = {}): Layer.Layer<A, E> {
-  const shared = options.shared
-  const replacements = new Map<AnyGraph, AnyNode>(
-    options.replacements?.map((item) => {
+  return compileGraph(root, options.replacements ?? [], options.shared)
+}
+
+/**
+ * Compile a graph that stands on a host: every `host.tag` node reads its service from `host.context` instead of
+ * being built, so children never acquire, retain, or release the host's services. The rest is fresh for each build.
+ */
+export function compileChild<A, E>(root: Graph<A, E>, options: ChildOptions): Layer.Layer<A, E> {
+  const own = options.replacements ?? []
+  const rejected = own.find((item) => item[ReplacementTypeId].source.tag === options.host.tag)
+  if (rejected) {
+    throw new Error(
+      `Cannot replace ${rejected[ReplacementTypeId].source.name} in a child graph: its host builds ${options.host.tag} nodes`,
+    )
+  }
+  return compileGraph(root, [...(options.host.replacements ?? []), ...own], undefined, options.host)
+}
+
+function replacementTargets(replacements: Replacements) {
+  return new Map<AnyGraph, AnyNode>(
+    replacements.map((item) => {
       const replacement = item[ReplacementTypeId]
       return [replacement.source, replacement.target] as const
     }),
   )
+}
+
+function compileGraph<A, E>(
+  root: Graph<A, E>,
+  list: Replacements,
+  shared: Tag | undefined,
+  host?: Host,
+): Layer.Layer<A, E> {
+  const replacements = replacementTargets(list)
   const makeDomain = (isShared: boolean) => ({
     shared: isShared,
     cache: new Map<AnyGraph, readonly Resolved[]>(),
@@ -370,6 +430,8 @@ export function compile<A, E>(root: Graph<A, E>, options: CompileOptions = {}): 
   const stack: AnyGraph[] = []
 
   const resolveDefinition = (graph: AnyGraph, domain: ReturnType<typeof makeDomain>): readonly Resolved[] => {
+    // Host nodes keep their tag through any replacement, so the host's choice is already in its context.
+    if (host && graph instanceof NodeValue && graph.tag === host.tag) return [borrow(graph, host.context)]
     const replacement = replacements.get(graph)
     if (replacement && replacement !== graph) return resolve(replacement, domain)
     const definition = graph[GraphTypeId]
@@ -421,10 +483,11 @@ export function compile<A, E>(root: Graph<A, E>, options: CompileOptions = {}): 
 
   const roots = resolve(root)
   return Layer.fromBuild((memoMap, scope) => {
-    const local = shared === undefined ? memoMap : Layer.makeMemoMapUnsafe()
+    const local = shared === undefined && host === undefined ? memoMap : Layer.makeMemoMapUnsafe()
     const ambient = Layer.succeed(Layer.CurrentMemoMap, memoMap)
     const layers = new Map<Resolved, RuntimeLayer>()
     const build = (node: Resolved): RuntimeLayer => {
+      if (node.borrowed) return node.implementation
       const cached = layers.get(node)
       if (cached) return cached
       const dependencies = node.dependencies.map(build)
@@ -442,6 +505,22 @@ export function compile<A, E>(root: Graph<A, E>, options: CompileOptions = {}): 
       scope,
     )
   }) as Layer.Layer<A, E>
+}
+
+function borrow(node: AnyNode, context: Context.Context<never>): Resolved {
+  const service = node[GraphTypeId].service
+  const value = service && Context.getOrUndefined(context, service)
+  if (service && value === undefined) {
+    throw new Error(`Host context is missing ${node.name}; build it on the host before its children`)
+  }
+  return {
+    name: node.name,
+    // Side-effect-only host nodes (`service === undefined`) already ran on the host and expose no service output.
+    implementation: service ? Layer.succeedContext(Context.make(service, value)) : Layer.empty,
+    dependencies: [],
+    shared: false,
+    borrowed: true,
+  }
 }
 
 // The node's scope releases sequentially in reverse order, so a finalizer added before the build runs last and one

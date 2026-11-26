@@ -129,9 +129,7 @@ export function createRoutes(
   return makeRoutes(options.password ? Option.some(options.password) : Option.none(), options, serviceURLs, overrides)
 }
 
-type InstanceNode = (
-  replacements: () => LayerNode.Replacements,
-) => LayerNode.Provider<Instance.Service, never, typeof Node.tags.values.global>
+type InstanceNode = LayerNode.Provider<Instance.Service, never, typeof Node.tags.values.global>
 
 export function createEmbeddedRoutes(
   options: ServerOptions = {},
@@ -207,15 +205,12 @@ function makeRoutes(
       }),
     ),
   ]
-  const build = (overrides: LayerNode.Replacements) => {
-    const replacements: LayerNode.Replacements = [
+  const build = (overrides: LayerNode.Replacements) =>
+    AppNodeBuilder.build(applicationServices, [
       ...standard,
-      // Private instances resolve this list lazily so they inherit the complete host graph, including the selector.
-      ...(instances ? [Instance.node.replace(instances(() => replacements))] : []),
+      ...(instances ? [Instance.node.replace(instances)] : []),
       ...overrides,
-    ]
-    return AppNodeBuilder.build(applicationServices, replacements)
-  }
+    ])
   const serviceLayer = options.simulation
     ? Layer.unwrap(
         Effect.gen(function* () {

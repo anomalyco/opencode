@@ -1,4 +1,4 @@
-import { Context, Effect, Exit, Layer, LayerMap, RcMap } from "effect"
+import { Context, Effect, Exit, Layer, LayerMap, RcMap, Scope } from "effect"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Node } from "@opencode/util/effect/app-node"
 import { AbsolutePath } from "@opencode/schema/schema"
@@ -6,10 +6,14 @@ import path from "path"
 import { Location } from "./location.js"
 import type { Instance } from "./instance.js"
 
-export class Service extends Context.Service<
-  Service,
-  LayerMap.LayerMap<Location.Ref, Instance.Services, Instance.Error>
->()("@opencode/example/LocationServiceMap") {
+export interface Interface extends LayerMap.LayerMap<Location.Ref, Instance.Services, Instance.Error> {
+  /** The global services and replacements the host built for its instances; absent on hand-built maps. */
+  readonly host?: Effect.Effect<LayerNode.Host>
+  /** Closes before the host's Stage-1 globals, so secondary instance containers (e.g. SDK instances) release first. */
+  readonly instanceScope?: Scope.Closeable
+}
+
+export class Service extends Context.Service<Service, Interface>()("@opencode/example/LocationServiceMap") {
   static get(ref: Location.Ref) {
     return Layer.unwrap(Effect.map(Service, (locations) => locations.get(ref)))
   }
