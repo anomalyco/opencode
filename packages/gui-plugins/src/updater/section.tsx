@@ -14,6 +14,8 @@ export type UpdatesAction = {
 
 export default function UpdatesSection(props: {
   action: () => UpdatesAction
+  /** Desktop only: true when this build cannot self-update (for example, managed by a package manager). */
+  updaterDisabled?: () => boolean
   run: () => void
   /** Web only: drop the saved copy of the app and load the server's build. */
   reset?: () => void
@@ -47,13 +49,19 @@ export default function UpdatesSection(props: {
           <ui.SettingsRow
             id="settings-install-on-quit"
             title={ctx.t("installOnQuit.title")}
-            description={ctx.t("installOnQuit.description")}
+            description={ctx.t(
+              !props.updaterDisabled?.() &&
+                !client().state()?.installOnQuit &&
+                client().state()?.pendingQuitInstall
+                ? "installOnQuit.pendingMac"
+                : "installOnQuit.description",
+            )}
           >
             <ui.Switch
               label={ctx.t("installOnQuit.title")}
               hideLabel
-              disabled={client().state() === undefined}
-              checked={client().state()?.installOnQuit ?? false}
+              disabled={client().state() === undefined || Boolean(props.updaterDisabled?.())}
+              checked={props.updaterDisabled?.() ? false : (client().state()?.installOnQuit ?? false)}
               onChange={(checked) =>
                 void client()
                   .setInstallOnQuit(checked)

@@ -36,10 +36,17 @@ const setup: Plugin.MainSetup = async (ctx) => {
     initial: false,
   })
 
+  const publishPreferences = { changed: () => {} }
+
   // electron-updater loads only in packaged builds with a feed, after the first window is up.
   const platform = enabled
     ? await import("./platform").then((module) =>
-        runPromise(module.make(build.channel, { installOnQuit: installOnQuit.value })),
+        runPromise(
+          module.make(build.channel, {
+            installOnQuit: installOnQuit.value,
+            onQuitPendingChanged: () => publishPreferences.changed(),
+          }),
+        ),
       )
     : undefined
 
@@ -49,13 +56,18 @@ const setup: Plugin.MainSetup = async (ctx) => {
   const publish = { changed: () => {} }
 
   const preferences = ctx.provide(UpdaterPreferences, {
-    state: () => ({ installOnQuit: installOnQuit.value }),
+    state: () => ({
+      installOnQuit: installOnQuit.value,
+      pendingQuitInstall: platform?.isPendingQuitInstall() ?? false,
+    }),
     setInstallOnQuit: (value) => {
       installOnQuit.set(value)
       platform?.setInstallOnQuit(value)
       preferences.changed()
     },
   })
+
+  publishPreferences.changed = () => preferences.changed()
 
   const updater = await runPromise(
     make({

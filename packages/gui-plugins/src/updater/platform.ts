@@ -16,11 +16,16 @@ const unpackTimeout = 120_000
 export type DesktopPlatform = Platform & {
   /** Updates whether a downloaded update installs automatically when the app quits. */
   readonly setInstallOnQuit: (enabled: boolean) => void
+  /** macOS only: true once Squirrel.Mac has staged an update for the next quit. */
+  readonly isPendingQuitInstall: () => boolean
 }
 
 export const make = Effect.fn("Updater.platform")(function* (
   channel: string,
-  options: { readonly installOnQuit: boolean },
+  options: {
+    readonly installOnQuit: boolean
+    readonly onQuitPendingChanged?: () => void
+  },
 ) {
   const userAgent = `opencode/${channel === "prod" ? "latest" : channel}/${app.getVersion()}/desktop`
   const runFork = Effect.runForkWith(yield* Effect.context())
@@ -56,6 +61,12 @@ export const make = Effect.fn("Updater.platform")(function* (
     currentVersion: app.getVersion(),
   })
 
+  const setSquirrelStaged = (staged: boolean) => {
+    if (quitState.squirrelStaged === staged) return
+    quitState.squirrelStaged = staged
+    options.onQuitPendingChanged?.()
+  }
+
   const stageMacWithSquirrel = () => {
     if (
       process.platform !== "darwin" ||
@@ -78,7 +89,7 @@ export const make = Effect.fn("Updater.platform")(function* (
 
       if (id !== quitState.macDownloadId) return
       quitState.squirrelStaging = false
-      quitState.squirrelStaged = true
+      setSquirrelStaged(true)
     }
 
     const fail = (error: Error) => {
@@ -130,8 +141,8 @@ export const make = Effect.fn("Updater.platform")(function* (
 
     const downloadId = ++quitState.macDownloadId
     quitState.macDownloaded = false
-    quitState.squirrelStaged = false
     quitState.squirrelStaging = false
+    setSquirrelStaged(false)
 
     if (!quitState.installOnQuit)
       return Effect.tryPromise({
@@ -167,7 +178,7 @@ export const make = Effect.fn("Updater.platform")(function* (
 
         if (downloadId === quitState.macDownloadId) {
           quitState.macDownloaded = true
-          quitState.squirrelStaged = true
+          setSquirrelStaged(true)
         }
 
         resume(Effect.void)
@@ -212,10 +223,20 @@ export const make = Effect.fn("Updater.platform")(function* (
       autoUpdater.once("before-quit-for-update", started)
       updateClient.once("error", fail)
 
+      // If Squirrel has neither staged nor started staging (e.g. setting off, or an earlier stageMacWithSquirrel()
+      // failed while autoInstallOnAppQuit stayed true), MacUpdater.quitAndInstall() only calls
+      // nativeUpdater.checkForUpdates() when autoInstallOnAppQuit is false.
+      const forceSquirrelCheck =
+        process.platform === "darwin" && !quitState.squirrelStaged && !quitState.squirrelStaging
+
+      if (forceSquirrelCheck) updateClient.autoInstallOnAppQuit = false
+
       try {
         updateClient.quitAndInstall()
       } catch (error) {
         fail(error instanceof Error ? error : new Error(String(error)))
+      } finally {
+        if (forceSquirrelCheck) updateClient.autoInstallOnAppQuit = quitState.installOnQuit
       }
 
       return Effect.sync(cleanup)
@@ -256,6 +277,7 @@ export const make = Effect.fn("Updater.platform")(function* (
     stageUpdate,
     installAndRestart,
     setInstallOnQuit,
+    isPendingQuitInstall: () => quitState.squirrelStaged,
   } satisfies DesktopPlatform
 })
 
@@ -267,8 +289,8 @@ function unpackInstaller(files: string[]) {
 
   if (process.platform !== "win32" || !app.isPackaged || !installer) return Effect.void
 
-  return Effect.tryPromise(() =>
-    execFileAsync(installer, ["--stage"], { windowsHide: true, timeout: unpackTimeout }),
+  return Effect.tryPromise((signal) =>
+    execFileAsync(installer, ["--stage"], { windowsHide: true, timeout: unpackTimeout, signal }),
   ).pipe(
     Effect.andThen(Effect.logInfo("update unpacked before restart", { installer })),
     Effect.catch((error) =>
