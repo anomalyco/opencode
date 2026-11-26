@@ -20,10 +20,12 @@ import PROMPT_GPT_6_2 from "../../src/plugin/system-prompt/gpt-6.2.txt"
 import PROMPT_ASTRA from "../../src/plugin/system-prompt/gpt-astra.txt"
 import PROMPT_TRINITY from "../../src/plugin/system-prompt/trinity.txt"
 import PROMPT_ANTHROPIC from "../../src/plugin/system-prompt/anthropic.txt"
+import PROMPT_GEMINI from "../../src/plugin/system-prompt/gemini.txt"
 
 const it = testEffect(PluginTestLayer)
 const fallback = SessionSystemPrompt.make([])
 const appended = `${fallback}\n\n${SessionSystemPrompt.render(PROMPT_ANTHROPIC, [])}`
+const gemini = `${fallback}\n\n${SessionSystemPrompt.render(PROMPT_GEMINI, [])}`
 const makeHost = Effect.gen(function* () {
   const agents = yield* Agent.Service
   const plugins = yield* Plugin.Service
@@ -105,7 +107,7 @@ describe("OptimizePlugin", () => {
         ["gpt-latest", PROMPT_GPT_6_2],
         ["gpt-6.3-sol", PROMPT_GPT],
         ["gpt-7", PROMPT_GPT],
-        ["gemini-2.5-pro", fallback],
+        ["gemini-2.5-pro", gemini],
         ["claude-sonnet-4", appended],
         ["kimi-k2", fallback],
         ["trinity", PROMPT_TRINITY],

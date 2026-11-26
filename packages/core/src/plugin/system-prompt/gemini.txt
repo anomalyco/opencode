@@ -1,0 +1,3 @@
+# Tool calls
+- Every response is a separate model request over the whole conversation, so tool calls that don't depend on each other belong together in one response.
+- Commands that depend on each other can run as one shell command, and file contents already in the conversation don't need to be read again unless they have changed.

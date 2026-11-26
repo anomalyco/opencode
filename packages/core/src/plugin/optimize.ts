@@ -12,6 +12,7 @@ import PROMPT_ASTRA from "./system-prompt/gpt-astra.txt"
 import PROMPT_META from "./system-prompt/meta.txt"
 import PROMPT_TRINITY from "./system-prompt/trinity.txt"
 import PROMPT_ANTHROPIC from "./system-prompt/anthropic.txt"
+import PROMPT_GEMINI from "./system-prompt/gemini.txt"
 
 const GPT_6_2 = [
   "gpt-6.2",
@@ -41,6 +42,12 @@ export const AnthropicPlugin = make(
   "append",
 )
 
+export const GeminiPlugin = make(
+  "opencode.prompt.gemini",
+  (model) => (model.id.toLowerCase().includes("gemini") ? PROMPT_GEMINI : undefined),
+  "append",
+)
+
 export const ArceePlugin = make("opencode.prompt.arcee", (model) =>
   model.id.toLowerCase().includes("trinity") ? PROMPT_TRINITY : undefined,
 )
@@ -49,7 +56,7 @@ export const MetaPlugin = make("opencode.prompt.meta", (model) => {
   return PROMPT_META.replaceAll("{{MODEL_NAME}}", model.name)
 })
 
-export const Plugins = [OpenAIPlugin, AnthropicPlugin, ArceePlugin, MetaPlugin] as const
+export const Plugins = [OpenAIPlugin, AnthropicPlugin, GeminiPlugin, ArceePlugin, MetaPlugin] as const
 
 const models = new WeakMap<SessionHooks["context"], Model.Info>()
 
