@@ -117,7 +117,7 @@ export function scanProgram(
     if (loaded !== undefined) {
       const name = loaded === null ? undefined : moduleName(loaded)
       if (name === undefined || name === "tools")
-        return fail(node, "Automation code must call tools directly as tools.<name>(...), not import or require them.")
+        return fail(node, "Code Mode scripts must call tools directly as tools.<name>(...), not import or require them.")
       modules.add(name)
     }
 
@@ -237,7 +237,7 @@ function readStaticToolCall(
         ok: false,
         node: parent.property,
         reason:
-          "Automation code must reference tools statically (e.g. tools.slack.read_thread), not with dynamic bracket expressions.",
+          "Code Mode scripts must reference tools statically (e.g. tools.slack.read_thread), not with dynamic bracket expressions.",
       }
     }
     segments.push(member)
@@ -250,7 +250,7 @@ function readStaticToolCall(
     return {
       ok: false,
       node: current,
-      reason: "Automation code must call tools directly as tools.<name>(...), not alias or pass the tools object.",
+      reason: "Code Mode scripts must call tools directly as tools.<name>(...), not alias or pass the tools object.",
     }
   }
   return { ok: true, path: segments.join(".") }

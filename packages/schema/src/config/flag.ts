@@ -19,6 +19,8 @@ export const registry = {
   full_codemode: "Enable the full Code Mode work in progress.",
   codemode_agents:
     "Let Code Mode scripts start subagents with agent() and make single model calls with llm(), each optionally returning a value checked against a schema, so one script can fan work out, verify it and combine the results.",
+  codemode_tools:
+    "Save reusable Code Mode scripts as lazy-loaded custom tools under .opencode/tools/ and ~/.config/opencode/tools/, with typed JSON Schema inputs.",
   machines: "Let a tool path name a machine, as in gpu:/work/train.py, and act on that machine's files and processes.",
   home_memory:
     "Give sessions in the home folder a persistent memory/, docs/ and scripts/ workspace the agent can use freely, tidied by a daily maintenance session that reads the day's home-folder conversations.",

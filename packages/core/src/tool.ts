@@ -4,9 +4,10 @@ export type { Context, Info, Metadata, Namespace, Options, Result } from "@openc
 
 import { ToolDefinition, type ToolCall } from "@opencode/ai/effect"
 import type { CodeMode } from "@opencode/codemode"
+import { Identifier } from "@opencode/schema/identifier"
 import { Tool } from "@opencode/schema/tool"
 import { isRecord } from "@opencode/util/record"
-import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Types } from "effect"
+import { Context, Effect, Layer, Ref, Result, Schema, SchemaIssue, Scope, Types } from "effect"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import type { Agent } from "./agent.js"
 import { CodeModeCatalog } from "./codemode/catalog.js"
@@ -96,7 +97,10 @@ export interface CheckInput {
   readonly policy: PermissionPolicy.Policy
   readonly limits: CodeMode.ExecutionLimits
   readonly services?: Context.Context<CodeModeTool.Services>
-  readonly context: Omit<Tool.Context, "id">
+  readonly api?: Context.Context<CodeModeTool.Api>
+  readonly agents?: Context.Context<CodeModeTool.Agents>
+  readonly extensions?: ReadonlyArray<CodeModeTool.ExtensionName>
+  readonly context: Omit<Tool.Context, "id"> & { readonly id?: Tool.CallID }
 }
 
 /** A local execution result after hooks and content normalization. */
@@ -442,25 +446,42 @@ const layer = Layer.effect(
         )
         const callSeq = yield* Ref.make(0)
         const full = input.services !== undefined && (yield* flags.enabled("full_codemode"))
-        return yield* CodeModeTool.check(
-          { tools, namespaces: data.namespaces, definitions: data.definitions },
-          {
-            ...input,
-            context: { ...input.context, id: Tool.CallID.make(`call_${input.context.messageID}_execute`) },
-            permission,
-            services: full ? input.services : undefined,
-          },
-          (name, tool, toolInput) =>
-            Effect.gen(function* () {
-              const index = yield* Ref.getAndUpdate(callSeq, (value) => value + 1)
-              const context: Tool.Context = {
-                ...input.context,
-                id: Tool.CallID.make(`call_${input.context.messageID}_${index}`),
-                codemode: true,
-              }
-              return yield* run(tools, tool, name, toolInput, context)
-            }),
-        )
+        const agents = input.agents !== undefined && (yield* flags.enabled("codemode_agents"))
+        const parentID = (yield* CodeModeTool.Parent) ?? input.context.id
+        const callID = input.context.id ?? Tool.CallID.make(`call_${input.context.messageID}_execute`)
+        return yield* Effect.gen(function* () {
+          const scope = yield* Effect.scope
+          return yield* CodeModeTool.check(
+            { tools, namespaces: data.namespaces, definitions: data.definitions },
+            {
+              ...input,
+              context: { ...input.context, id: callID },
+              permission,
+              services: full ? input.services : undefined,
+              agents: agents ? input.agents : undefined,
+            },
+            (name, tool, toolInput) =>
+              Effect.gen(function* () {
+                const index = yield* Ref.getAndUpdate(callSeq, (value) => value + 1)
+                const id =
+                  parentID === undefined
+                    ? Tool.CallID.make(`call_${input.context.messageID}_${index}`)
+                    : Tool.CallID.make(`call_${Identifier.ascending()}`)
+                if (parentID !== undefined) yield* permission.nested(id, parentID).pipe(Scope.provide(scope))
+                const context: Tool.Context = {
+                  ...input.context,
+                  id,
+                  codemode: true,
+                  progress: () => Effect.void,
+                  cancel: undefined,
+                }
+                const executed = run(tools, tool, name, toolInput, context)
+                return yield* parentID === undefined
+                  ? executed
+                  : executed.pipe(Effect.provideService(CodeModeTool.Parent, parentID))
+              }),
+          )
+        }).pipe(Effect.scoped)
       }),
     })
   }),

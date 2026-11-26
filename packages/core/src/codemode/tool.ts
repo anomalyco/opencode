@@ -105,6 +105,8 @@ export type Inventory = {
 /** With the `codemode_agents` flag, the session's agent() and llm(): see `CodeModeAgents`. */
 export type Agents = CodeModeAgents.Service
 
+export type ExtensionName = "fetch" | "path" | "bun" | "agents"
+
 const extensions = [
   CodeModeFetch.extension,
   CodeModePath.extension,
@@ -116,6 +118,15 @@ const runExtensions = (full: boolean, agents: boolean) => [
   ...(full ? [CodeModePath.extension, CodeModeBun.extension] : []),
   ...(agents ? [CodeModeAgents.extension] : []),
 ]
+const selectExtensions = (names: ReadonlyArray<ExtensionName>, full: boolean, agents: boolean) => {
+  const allowed = new Set(names)
+  return [
+    ...(allowed.has("fetch") ? [CodeModeFetch.extension] : []),
+    ...(full && allowed.has("path") ? [CodeModePath.extension] : []),
+    ...(full && allowed.has("bun") ? [CodeModeBun.extension] : []),
+    ...(agents && allowed.has("agents") ? [CodeModeAgents.extension] : []),
+  ]
+}
 
 const executionServices = (
   context: ToolContext,
@@ -415,6 +426,9 @@ export const check = (
     readonly context: ToolContext
     readonly permission: Permission.Interface
     readonly services?: Context.Context<Services>
+    readonly api?: Context.Context<Api>
+    readonly agents?: Context.Context<Agents>
+    readonly extensions?: ReadonlyArray<ExtensionName>
   },
   executeTool: (name: string, tool: Info, input: unknown) => Effect.Effect<Result, Error>,
 ) =>
@@ -424,15 +438,25 @@ export const check = (
     hooks: runHooks,
     limits: input.limits,
   })
-    .execute(input.code, input.bindings, { extensions: runExtensions(input.services !== undefined, false) })
+    .execute(input.code, input.bindings, {
+      extensions:
+        input.extensions === undefined
+          ? runExtensions(input.services !== undefined, input.agents !== undefined)
+          : selectExtensions(input.extensions, input.services !== undefined, input.agents !== undefined),
+    })
     .pipe(
       Effect.provideService(Run, {
-        executeTool: (name, tool, input) => executeTool(name, tool, input).pipe(Effect.map(resultValue)),
+        executeTool: (name, tool, input) =>
+          executeTool(name, tool, input).pipe(
+            Effect.map(resultValue),
+            Effect.mapError((error) => new ToolFailure({ message: toSessionError(error).message, error })),
+          ),
         hooks: {},
       }),
       (program) =>
-        Effect.flatMap(executionServices(input.context, input.permission, input.services), (services) =>
-          Effect.provide(program, services),
+        Effect.flatMap(
+          executionServices(input.context, input.permission, input.services, input.api, input.agents),
+          (services) => Effect.provide(program, services),
         ),
       Effect.scoped,
     )
