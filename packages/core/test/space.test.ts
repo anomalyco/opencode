@@ -79,6 +79,30 @@ describe.each([
     }),
   )
 
+  it.effect("writes changes in order in one transaction, returning those that changed a row and the head", () =>
+    Effect.gen(function* () {
+      const db = (yield* Database.Service).db
+      expect(
+        yield* SpaceRows.write(db, "batch", [
+          { key: "a", value: "1" },
+          { key: "b", value: null },
+          { key: "a", value: null },
+          { key: "a", value: null },
+          { key: "b", value: "2" },
+        ]),
+      ).toEqual({
+        written: [
+          { key: "a", value: "1", revision: 1 },
+          { key: "a", value: null, revision: 2 },
+          { key: "b", value: "2", revision: 3 },
+        ],
+        head: 3,
+      })
+      expect(yield* SpaceRows.write(db, "batch", [{ key: "c", value: null }])).toEqual({ written: [], head: 3 })
+      expect(yield* SpaceRows.write(db, "unwritten", [])).toEqual({ written: [], head: 0 })
+    }),
+  )
+
   it.effect("keeps a space's newest tombstones and raises its floor to the highest purged one", () =>
     Effect.gen(function* () {
       const db = (yield* Database.Service).db

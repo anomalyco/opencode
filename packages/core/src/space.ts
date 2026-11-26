@@ -7,6 +7,7 @@ import type { Database } from "./database/database.js"
 import { SpaceTable } from "./space/sql.js"
 
 type Db = Database.Interface["db"]
+type Transaction = Parameters<Parameters<Db["transaction"]>[0]>[0]
 
 // Client space names need at least one character, so the empty space can hold the server's own rows: the epoch and
 // each space's floor, a revision as decimal text.
@@ -19,7 +20,7 @@ const next = (space: Space.Name) =>
   sql<Space.Revision>`(SELECT coalesce(max(${SpaceTable.revision}), 0) + 1 FROM ${SpaceTable} WHERE ${SpaceTable.space} = ${space})`
 
 /** Stores the value and returns the revision it was given. */
-export const set = (db: Db, space: Space.Name, key: Space.Key, value: Space.Value) =>
+export const set = (db: Db | Transaction, space: Space.Name, key: Space.Key, value: Space.Value) =>
   db
     .insert(SpaceTable)
     .values({ space, key, value, revision: next(space) })
@@ -35,7 +36,7 @@ export const set = (db: Db, space: Space.Name, key: Space.Key, value: Space.Valu
     )
 
 /** Turns a stored value into a tombstone; returns its revision, or undefined when no value was stored. */
-export const remove = (db: Db, space: Space.Name, key: Space.Key) =>
+export const remove = (db: Db | Transaction, space: Space.Name, key: Space.Key) =>
   db
     .update(SpaceTable)
     .set({ value: null, revision: next(space) })
@@ -46,6 +47,28 @@ export const remove = (db: Db, space: Space.Name, key: Space.Key) =>
       Effect.orDie,
       Effect.map((row) => row?.revision),
     )
+
+/**
+ * Applies the changes in order in one transaction, as if written one after another: each that changes a row takes the
+ * next revision, so a key changed twice gets both and keeps the last. Returns those changes, and the head after them.
+ */
+export const write = (db: Db, space: Space.Name, changes: ReadonlyArray<Space.Change>) =>
+  db
+    .transaction((tx) =>
+      Effect.gen(function* () {
+        const written = yield* Effect.forEach(changes, (change) =>
+          change.value === null
+            ? remove(tx, space, change.key).pipe(
+                Effect.map((revision) => (revision === undefined ? [] : [{ key: change.key, value: null, revision }])),
+              )
+            : set(tx, space, change.key, change.value).pipe(
+                Effect.map((revision) => [{ key: change.key, value: change.value, revision }]),
+              ),
+        ).pipe(Effect.map((rows) => rows.flat()))
+        return { written, head: written.at(-1)?.revision ?? (yield* head(tx, space)) }
+      }),
+    )
+    .pipe(Effect.orDie)
 
 /** Tombstones a space keeps once `purge` runs. */
 export const TombstoneLimit = 10_000
@@ -94,7 +117,7 @@ export const floor = (db: Db, space: Space.Name) =>
     )
 
 /** The space's highest revision, 0 before its first write. */
-export const head = (db: Db, space: Space.Name) =>
+export const head = (db: Db | Transaction, space: Space.Name) =>
   db
     .select({ revision: max(SpaceTable.revision) })
     .from(SpaceTable)

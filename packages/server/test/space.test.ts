@@ -78,8 +78,11 @@ it.live("syncs a space through the API and follows it on the event stream, acros
           await writer.session.create({ location: { directory: dir } })
           expect((await plain.next()).type).toBe("session.created")
 
-          await writer.experimental.space.set({ space: "app", key: "draft/1", value: '{"text":"hi","n":[1,null]}' })
-          await writer.experimental.space.set({ space: "other", key: "draft/1", value: "elsewhere" })
+          await writer.experimental.space.write({
+            space: "app",
+            changes: [{ key: "draft/1", value: '{"text":"hi","n":[1,null]}' }],
+          })
+          await writer.experimental.space.write({ space: "other", changes: [{ key: "draft/1", value: "elsewhere" }] })
           const reader = await subscribe(handler, "types=session.created")
           const readerStream = ((await reader.next()).data as { stream: string }).stream
           expect(readerStream).not.toBe(stream)
@@ -94,7 +97,7 @@ it.live("syncs a space through the API and follows it on the event stream, acros
             cursor: `${epoch}.1`,
           })
           // Between the sync and the subscription.
-          await writer.experimental.space.set({ space: "app", key: "draft/2", value: "2" })
+          await writer.experimental.space.write({ space: "app", changes: [{ key: "draft/2", value: "2" }] })
           await writer.experimental.space.subscribe({
             stream: readerStream,
             spaces: [{ space: "app", cursor: page.cursor }],
@@ -103,8 +106,8 @@ it.live("syncs a space through the API and follows it on the event stream, acros
             type: "experimental.space.updated",
             data: { space: "app", key: "draft/2", value: "2", revision: 2 },
           })
-          await writer.experimental.space.set({ space: "other", key: "draft/1", value: "unseen" })
-          await writer.experimental.space.delete({ space: "app", key: "draft/1" })
+          await writer.experimental.space.write({ space: "other", changes: [{ key: "draft/1", value: "unseen" }] })
+          await writer.experimental.space.write({ space: "app", changes: [{ key: "draft/1", value: null }] })
           await writer.session.create({ location: { directory: dir } })
           expect(await reader.next()).toEqual({
             type: "experimental.space.deleted",
@@ -130,13 +133,21 @@ it.live("syncs a space through the API and follows it on the event stream, acros
             writer.experimental.space.unsubscribe({ stream: "not-a-stream", spaces: ["app"] }),
           ).rejects.toMatchObject({ _tag: "InvalidRequestError", kind: "stream_not_found", field: "stream" })
 
-          // Offline: repeated updates, a key created and deleted, and deletes of already deleted keys.
-          await writer.experimental.space.set({ space: "app", key: "draft/2", value: "3" })
-          await writer.experimental.space.set({ space: "app", key: "draft/2", value: "4" })
-          await writer.experimental.space.set({ space: "app", key: "draft/3", value: "x" })
-          await writer.experimental.space.delete({ space: "app", key: "draft/3" })
-          await writer.experimental.space.delete({ space: "app", key: "draft/3" })
-          await writer.experimental.space.delete({ space: "app", key: "draft/1" })
+          // Offline, in one write: repeated updates, a key created and deleted, and deletes of already deleted keys.
+          // It reports the head after its last change that changed a key.
+          expect(
+            await writer.experimental.space.write({
+              space: "app",
+              changes: [
+                { key: "draft/2", value: "3" },
+                { key: "draft/2", value: "4" },
+                { key: "draft/3", value: "x" },
+                { key: "draft/3", value: null },
+                { key: "draft/3", value: null },
+                { key: "draft/1", value: null },
+              ],
+            }),
+          ).toEqual({ revision: 7, cursor: `${epoch}.7` })
           expect(await writer.experimental.space.sync({ space: "app", cursor })).toEqual({
             type: "delta",
             space: "app",
@@ -150,33 +161,61 @@ it.live("syncs a space through the API and follows it on the event stream, acros
 
           const anonymous = client(handler)
           for (const call of [
-            () => anonymous.experimental.space.set({ space: "app", key: "x", value: "1" }),
+            () => anonymous.experimental.space.write({ space: "app", changes: [{ key: "x", value: "1" }] }),
             () => anonymous.experimental.space.sync({ space: "app" }),
             () => anonymous.experimental.space.subscribe({ stream, spaces: [] }),
             () => anonymous.experimental.space.unsubscribe({ stream, spaces: [] }),
           ])
             await expect(call()).rejects.toMatchObject({ _tag: "UnauthorizedError" })
           expect((await subscribe(handler, "", {})).status).toBe(401)
-          const empty = await handler(
-            new Request("http://opencode.local/api/experimental/space/app/c", {
-              method: "PUT",
-              headers: { authorization, "content-type": "application/json" },
-              body: JSON.stringify({ value: null }),
-            }),
-          )
-          expect(empty.status).toBe(400)
-          // The cap is the value's UTF-8 length: exactly 1 MiB is stored, one byte more is not. In its own space, so
-          // the revisions above are unchanged.
-          const put = (space: string, value: string) =>
+          // In its own space, so the revisions above are unchanged.
+          const write = (changes: unknown) =>
             handler(
-              new Request(`http://opencode.local/api/experimental/space/${space}/c`, {
-                method: "PUT",
+              new Request("http://opencode.local/api/experimental/space/limit/write", {
+                method: "POST",
                 headers: { authorization, "content-type": "application/json" },
-                body: JSON.stringify({ value }),
+                body: JSON.stringify({ changes }),
               }),
             )
-          expect((await put("limit", "x".repeat(1024 * 1024))).status).toBe(204)
-          expect((await put("limit", "x".repeat(1024 * 1024 + 1))).status).toBe(400)
+          const values = (count: number) =>
+            Array.from({ length: count }, (_, index) => ({ key: "c", value: `${index}` }))
+          // A write has 1 to 1024 changes, each value a string or null.
+          for (const changes of [[], values(1025), [{ key: "c", value: 1 }], [{ key: "c" }]])
+            expect((await write(changes)).status).toBe(400)
+          expect(await (await write(values(1024))).json()).toEqual({ revision: 1024, cursor: `${epoch}.1024` })
+          // The cap is the UTF-8 length of a write's values together, keys aren't counted: exactly 1 MiB is stored, one
+          // byte more is not.
+          expect((await write([{ key: "c", value: "x".repeat(1024 * 1024) }])).status).toBe(200)
+          expect(
+            (
+              await write([
+                { key: "c", value: "x".repeat(1024 * 1024 - 2) },
+                { key: "d", value: "é" },
+              ])
+            ).status,
+          ).toBe(200)
+          expect(
+            (
+              await write([
+                { key: "c", value: "x".repeat(1024 * 1024 - 1) },
+                { key: "d", value: "é" },
+              ])
+            ).status,
+          ).toBe(400)
+          // A rejected write commits none of its changes, though each value would fit, and one that changes nothing
+          // reports the head.
+          expect(
+            (
+              await write([
+                { key: "e", value: "x".repeat(512 * 1024) },
+                { key: "c", value: "x".repeat(512 * 1024 + 1) },
+              ])
+            ).status,
+          ).toBe(400)
+          expect(await (await write([{ key: "e", value: null }])).json()).toEqual({
+            revision: 1027,
+            cursor: `${epoch}.1027`,
+          })
         })
       }),
     )
@@ -186,14 +225,14 @@ it.live("syncs a space through the API and follows it on the event stream, acros
       const writer = client(handler, { authorization })
       const reader = await subscribe(handler, "types=session.created")
       const stream = ((await reader.next()).data as { stream: string }).stream
-      await writer.experimental.space.set({ space: "app", key: "draft/4", value: "true" })
+      await writer.experimental.space.write({ space: "app", changes: [{ key: "draft/4", value: "true" }] })
       // A new stream after the restart subscribes with the cursor saved before it.
       await writer.experimental.space.subscribe({ stream, spaces: [{ space: "app", cursor }] })
       expect(await reader.next()).toEqual({
         type: "experimental.space.updated",
         data: { space: "app", key: "draft/4", value: "true", revision: 8 },
       })
-      await writer.experimental.space.delete({ space: "app", key: "draft/4" })
+      await writer.experimental.space.write({ space: "app", changes: [{ key: "draft/4", value: null }] })
       expect(await reader.next()).toEqual({
         type: "experimental.space.deleted",
         data: { space: "app", key: "draft/4", revision: 9 },
@@ -250,16 +289,16 @@ it.live("two clients follow one space on their own streams, through unsubscribe 
       for (const page of [a.page, b.page])
         expect(page).toEqual({ type: "snapshot", space: "pins", epoch, revision: 0, entries: [], cursor: `${epoch}.0` })
 
-      await api.experimental.space.set({ space: "pins", key: "x", value: "1" })
+      await api.experimental.space.write({ space: "pins", changes: [{ key: "x", value: "1" }] })
       expect([await a.events.next(), await b.events.next()]).toEqual([updated("x", "1", 1), updated("x", "1", 1)])
-      await api.experimental.space.delete({ space: "pins", key: "x" })
+      await api.experimental.space.write({ space: "pins", changes: [{ key: "x", value: null }] })
       expect([await a.events.next(), await b.events.next()]).toEqual([deleted("x", 2), deleted("x", 2)])
-      await api.experimental.space.set({ space: "pins", key: "y", value: "2" })
+      await api.experimental.space.write({ space: "pins", changes: [{ key: "y", value: "2" }] })
       expect([await a.events.next(), await b.events.next()]).toEqual([updated("y", "2", 3), updated("y", "2", 3)])
 
       // B stops following pins: A still gets z, and B's next event is the session created after it.
       await api.experimental.space.unsubscribe({ stream: b.stream, spaces: ["pins"] })
-      await api.experimental.space.set({ space: "pins", key: "z", value: "3" })
+      await api.experimental.space.write({ space: "pins", changes: [{ key: "z", value: "3" }] })
       await api.session.create({ location: { directory: dir } })
       expect(await a.events.next()).toEqual(updated("z", "3", 4))
       expect((await a.events.next()).type).toBe("session.created")
@@ -267,12 +306,17 @@ it.live("two clients follow one space on their own streams, through unsubscribe 
 
       // B goes away; A changes more; B comes back on a new stream with the cursor of the last change it applied.
       await b.events.close()
-      await api.experimental.space.set({ space: "pins", key: "a", value: "4" })
-      await api.experimental.space.set({ space: "pins", key: "b", value: "5" })
-      await api.experimental.space.delete({ space: "pins", key: "a" })
+      await api.experimental.space.write({
+        space: "pins",
+        changes: [
+          { key: "a", value: "4" },
+          { key: "b", value: "5" },
+          { key: "a", value: null },
+        ],
+      })
       const back = await follow(`${epoch}.3`)
       expect(back.stream).not.toBe(b.stream)
-      await api.experimental.space.set({ space: "pins", key: "c", value: "6" })
+      await api.experimental.space.write({ space: "pins", changes: [{ key: "c", value: "6" }] })
       // What it missed, one event per key in revision order, then the live change.
       expect([
         await back.events.next(),

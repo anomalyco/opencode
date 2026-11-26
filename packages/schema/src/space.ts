@@ -19,11 +19,20 @@ export type Key = typeof Key.Type
 export const Value = Schema.String.annotate({ identifier: "Space.Value" })
 export type Value = typeof Value.Type
 
-/** A value always goes out as one event, so a write is capped at 1 MiB of UTF-8. */
+/** A value always goes out as one event, so a write's values are capped at 1 MiB of UTF-8 in total. */
 export const MaxValueBytes = 1024 * 1024
 
 export interface Entry extends Schema.Schema.Type<typeof Entry> {}
 export const Entry = Schema.Struct({ key: Key, value: Value }).annotate({ identifier: "Space.Entry" })
+
+/** One change of a write: a value sets the key, `null` deletes it. */
+export interface Change extends Schema.Schema.Type<typeof Change> {}
+export const Change = Schema.Struct({ key: Key, value: Schema.NullOr(Value) }).annotate({
+  identifier: "Space.Change",
+})
+
+/** Changes one write commits at most. */
+export const MaxChanges = 1024
 
 /** Server-issued, per space: every write in a space gets the next revision, and revisions are never reused. */
 export const Revision = NonNegativeInt.annotate({ identifier: "Space.Revision" })

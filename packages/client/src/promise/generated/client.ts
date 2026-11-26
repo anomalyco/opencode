@@ -304,10 +304,8 @@ import type {
   ExperimentalPushSessionRemoveOutput,
   ExperimentalPushSettingsSetInput,
   ExperimentalPushSettingsSetOutput,
-  ExperimentalSpaceSetInput,
-  ExperimentalSpaceSetOutput,
-  ExperimentalSpaceDeleteInput,
-  ExperimentalSpaceDeleteOutput,
+  ExperimentalSpaceWriteInput,
+  ExperimentalSpaceWriteOutput,
   ExperimentalSpaceSyncInput,
   ExperimentalSpaceSyncOutput,
   ExperimentalSpaceSubscribeInput,
@@ -1993,26 +1991,15 @@ export function make(options: ClientOptions) {
         },
       },
       space: {
-        set: (input: ExperimentalSpaceSetInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalSpaceSetOutput>(
+        write: (input: ExperimentalSpaceWriteInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalSpaceWriteOutput>(
             {
-              method: "PUT",
-              path: `/api/experimental/space/${encodeURIComponent(input.space)}/${encodeURIComponent(input.key)}`,
-              body: { value: input["value"] },
-              successStatus: 204,
+              method: "POST",
+              path: `/api/experimental/space/${encodeURIComponent(input.space)}/write`,
+              body: { changes: input["changes"] },
+              successStatus: 200,
               declaredStatuses: [400, 401],
-              empty: true,
-            },
-            requestOptions,
-          ),
-        delete: (input: ExperimentalSpaceDeleteInput, requestOptions?: RequestOptions) =>
-          request<ExperimentalSpaceDeleteOutput>(
-            {
-              method: "DELETE",
-              path: `/api/experimental/space/${encodeURIComponent(input.space)}/${encodeURIComponent(input.key)}`,
-              successStatus: 204,
-              declaredStatuses: [400, 401],
-              empty: true,
+              empty: false,
             },
             requestOptions,
           ),
