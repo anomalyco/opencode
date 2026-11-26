@@ -145,7 +145,7 @@ const TOOL_CHOICE = { auto: undefined, none: "NONE", required: "REQUIRED", tool:
 
 const fromRequest = Effect.fn("CohereChat.fromRequest")(function* (request: LLMRequest) {
   const options = yield* ProviderShared.validateWith(Schema.decodeUnknownEffect(Options))(request.providerOptions ?? {})
-  const flattened = ProviderShared.flattenToolRequest(request)
+  const definitions = ProviderShared.flattenTools(request.tools)
   const messages: (typeof Message.Type)[] = request.system.length
     ? [
         {
@@ -157,7 +157,7 @@ const fromRequest = Effect.fn("CohereChat.fromRequest")(function* (request: LLMR
         },
       ]
     : []
-  for (const message of flattened.request.messages) {
+  for (const message of request.messages) {
     if (message.role === "system") {
       messages.push({ role: "user", content: (yield* ProviderShared.wrappedSystemUpdate("Cohere Chat", message)).text })
       continue
@@ -211,7 +211,7 @@ const fromRequest = Effect.fn("CohereChat.fromRequest")(function* (request: LLMR
     })
   }
   const selected = request.toolChoice?.type === "tool" ? request.toolChoice.name : undefined
-  const tools = selected === undefined ? flattened.tools : flattened.tools.filter((tool) => tool.name === selected)
+  const tools = selected === undefined ? definitions : definitions.filter((tool) => tool.name === selected)
   if (selected !== undefined && tools.length === 0)
     return yield* ProviderShared.invalidRequest("Cohere Chat tool choice must name an available tool")
   if (tools.some((tool) => tool.native !== undefined))
@@ -233,16 +233,16 @@ const fromRequest = Effect.fn("CohereChat.fromRequest")(function* (request: LLMR
       token_budget:
         options.thinking.tokenBudget === undefined
           ? undefined
-          : ProviderShared.fitThinkingBudget(options.thinking.tokenBudget, request.generation?.maxTokens),
+          : ProviderShared.fitThinkingBudget(options.thinking.tokenBudget, request.maxTokens),
     },
-    max_tokens: request.generation?.maxTokens,
-    temperature: request.generation?.temperature,
-    p: request.generation?.topP,
-    k: request.generation?.topK,
-    seed: request.generation?.seed,
-    stop_sequences: request.generation?.stop,
-    frequency_penalty: request.generation?.frequencyPenalty,
-    presence_penalty: request.generation?.presencePenalty,
+    max_tokens: request.maxTokens,
+    temperature: request.temperature,
+    p: request.topP,
+    k: request.topK,
+    seed: request.seed,
+    stop_sequences: request.stop,
+    frequency_penalty: request.frequencyPenalty,
+    presence_penalty: request.presencePenalty,
   }
 })
 

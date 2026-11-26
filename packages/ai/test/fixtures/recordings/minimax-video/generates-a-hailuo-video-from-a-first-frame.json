@@ -1,0 +1,176 @@
+{
+  "version": 1,
+  "metadata": {
+    "tags": [
+      "prefix:minimax-video",
+      "provider:minimax",
+      "protocol:minimax-video"
+    ],
+    "name": "minimax-video/generates-a-hailuo-video-from-a-first-frame",
+    "recordedAt": "2026-11-13T05:22:58.775Z"
+  },
+  "interactions": [
+    {
+      "transport": "http",
+      "request": {
+        "method": "POST",
+        "url": "https://api.minimax.io/v1/video_generation",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": "{\"model\":\"MiniMax-Hailuo-02\",\"prompt\":\"The woman slowly turns her head and smiles.\",\"first_frame_image\":\"https://cdn.hailuoai.com/prod/2025-08-12-17/video_cover/1754990600020238321-411603868533342214-cover.jpg\",\"duration\":6,\"resolution\":\"512P\"}"
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": "{\"task_id\":\"462825178886412\",\"base_resp\":{\"status_code\":0,\"status_msg\":\"success\"}}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.minimax.io/v1/query/video_generation?task_id=462825178886412",
+        "headers": {},
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": "{\"task_id\":\"462825178886412\",\"status\":\"Preparing\",\"file_id\":\"\",\"video_width\":0,\"video_height\":0,\"base_resp\":{\"status_code\":0,\"status_msg\":\"success\"}}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.minimax.io/v1/query/video_generation?task_id=462825178886412",
+        "headers": {},
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": "{\"task_id\":\"462825178886412\",\"status\":\"Preparing\",\"file_id\":\"\",\"video_width\":0,\"video_height\":0,\"base_resp\":{\"status_code\":0,\"status_msg\":\"success\"}}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.minimax.io/v1/query/video_generation?task_id=462825178886412",
+        "headers": {},
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": "{\"task_id\":\"462825178886412\",\"status\":\"Processing\",\"file_id\":\"\",\"video_width\":0,\"video_height\":0,\"base_resp\":{\"status_code\":0,\"status_msg\":\"success\"}}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.minimax.io/v1/query/video_generation?task_id=462825178886412",
+        "headers": {},
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": "{\"task_id\":\"462825178886412\",\"status\":\"Processing\",\"file_id\":\"\",\"video_width\":0,\"video_height\":0,\"base_resp\":{\"status_code\":0,\"status_msg\":\"success\"}}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.minimax.io/v1/query/video_generation?task_id=462825178886412",
+        "headers": {},
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": "{\"task_id\":\"462825178886412\",\"status\":\"Processing\",\"file_id\":\"\",\"video_width\":0,\"video_height\":0,\"base_resp\":{\"status_code\":0,\"status_msg\":\"success\"}}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.minimax.io/v1/query/video_generation?task_id=462825178886412",
+        "headers": {},
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": "{\"task_id\":\"462825178886412\",\"status\":\"Processing\",\"file_id\":\"\",\"video_width\":0,\"video_height\":0,\"base_resp\":{\"status_code\":0,\"status_msg\":\"success\"}}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.minimax.io/v1/query/video_generation?task_id=462825178886412",
+        "headers": {},
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": "{\"task_id\":\"462825178886412\",\"status\":\"Success\",\"file_id\":\"462824926277972\",\"video_width\":512,\"video_height\":868,\"base_resp\":{\"status_code\":0,\"status_msg\":\"success\"}}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.minimax.io/v1/query/video_generation?task_id=462825178886412",
+        "headers": {},
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": "{\"task_id\":\"462825178886412\",\"status\":\"Success\",\"file_id\":\"462824926277972\",\"video_width\":512,\"video_height\":868,\"base_resp\":{\"status_code\":0,\"status_msg\":\"success\"}}"
+      }
+    },
+    {
+      "transport": "http",
+      "request": {
+        "method": "GET",
+        "url": "https://api.minimax.io/v1/files/retrieve?file_id=462824926277972",
+        "headers": {},
+        "body": ""
+      },
+      "response": {
+        "status": 200,
+        "headers": {
+          "content-type": "application/json; charset=utf-8"
+        },
+        "body": "{\"file\":{\"file_id\":462824926277972,\"bytes\":0,\"created_at\":1794547367,\"filename\":\"output_aigc.mp4\",\"purpose\":\"video_generation\",\"download_url\":\"https://video-product.cdn.minimax.io/inference_output/video/2026-11-13/ca590eb9-b71a-4cfc-bc15-4ed164e3346c/output_aigc.mp4\"},\"base_resp\":{\"status_code\":0,\"status_msg\":\"success\"}}\n"
+      }
+    }
+  ]
+}

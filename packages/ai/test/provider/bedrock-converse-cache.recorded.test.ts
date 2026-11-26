@@ -25,7 +25,8 @@ const cacheRequest = ai.request({
   // Manual hint on the system part is the only marker we want here — skip the
   // auto-policy's latest-user-message breakpoint so the cassette body matches.
   cache: "none",
-  generation: { maxTokens: 16, temperature: 0 },
+  maxTokens: 16,
+  temperature: 0,
 })
 
 const recorded = recordedTests({

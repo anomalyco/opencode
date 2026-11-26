@@ -5,6 +5,7 @@ import path from "path"
 import { Clock, Context, Effect, Fiber, Layer, Schema, Scope } from "effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { FSUtil } from "@opencode/util/fs-util"
+import { Environment } from "./environment/index.js"
 import { Git } from "./git.js"
 import { Global } from "@opencode/util/global"
 import { Location } from "./location.js"
@@ -69,9 +70,20 @@ export interface Interface extends State.Transformable<Editor> {
 
 export class Service extends Context.Service<Service, Interface>()("@opencode/Snapshot") {}
 
+const noop: Interface = {
+  transform: () => Effect.succeed({ dispose: Effect.void }),
+  reload: () => Effect.void,
+  capture: () => Effect.undefined,
+  files: () => Effect.succeed([]),
+  diff: () => Effect.succeed([]),
+  restore: () => Effect.void,
+}
+
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
+    const environment = yield* Environment.Service
+    if (!environment.local) return Service.of(noop)
     const fs = yield* FSUtil.Service
     const git = yield* Git.Service
     const global = yield* Global.Service
@@ -105,10 +117,15 @@ const layer = Layer.effect(
     )
     const repository = repositoryFiber.pipe(Effect.uninterruptible, Effect.flatMap(Fiber.join))
 
+    // The worktree is a real path, so the Location must be one too: a symlinked or junctioned path would fall outside
+    // it, and a path in another letter case would become a pathspec that matches nothing.
     const scope = Effect.fnUntraced(function* (worktree: AbsolutePath) {
-      if (!FSUtil.contains(worktree, location.directory))
+      const directory = yield* fs
+        .realPath(location.directory)
+        .pipe(Effect.mapError((cause) => failure("capture", cause)))
+      if (!FSUtil.contains(worktree, directory))
         return yield* new Error({ operation: "capture", message: "Location is outside the project" })
-      return RelativePath.make(path.relative(worktree, location.directory).replaceAll("\\", "/") || ".")
+      return RelativePath.make(path.relative(worktree, directory).replaceAll("\\", "/") || ".")
     })
 
     const enabled = () => location.vcs?.type === "git" && state.get().enabled
@@ -218,20 +235,10 @@ const layer = Layer.effect(
 export const node = makeLocationNode({
   service: Service,
   layer,
-  deps: [FSUtil.node, Git.node, Global.node, Location.node],
+  deps: [Environment.node, FSUtil.node, Git.node, Global.node, Location.node],
 })
 
-export const noopLayer = Layer.succeed(
-  Service,
-  Service.of({
-    transform: () => Effect.succeed({ dispose: Effect.void }),
-    reload: () => Effect.void,
-    capture: () => Effect.undefined,
-    files: () => Effect.succeed([]),
-    diff: () => Effect.succeed([]),
-    restore: () => Effect.void,
-  }),
-)
+export const noopLayer = Layer.succeed(Service, Service.of(noop))
 
 function failure(operation: Error["operation"], cause: unknown) {
   if (cause instanceof Error && cause.operation === operation) return cause

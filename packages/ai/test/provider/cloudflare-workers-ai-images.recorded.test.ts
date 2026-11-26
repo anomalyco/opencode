@@ -34,8 +34,8 @@ describe("Cloudflare Workers AI Images recorded", () => {
       })
 
       // The Run API labels this response image/png, but the bytes are JPEG.
-      expect(response.image.mediaType).toBe("image/jpeg")
-      expect(dimensions(yield* response.image.bytes())).toEqual({ width: 256, height: 256 })
+      expect(response.images[0].mediaType).toBe("image/jpeg")
+      expect(dimensions(yield* response.images[0].bytes())).toEqual({ width: 256, height: 256 })
     }),
   )
 
@@ -49,8 +49,8 @@ describe("Cloudflare Workers AI Images recorded", () => {
           providerOptions: { width: 64, height: 64, seed: 3, steps: 1 },
         })
 
-        expect(response.image.mediaType).toBe("image/jpeg")
-        expect(dimensions(yield* response.image.bytes())).toEqual({ width: 64, height: 64 })
+        expect(response.images[0].mediaType).toBe("image/jpeg")
+        expect(dimensions(yield* response.images[0].bytes())).toEqual({ width: 64, height: 64 })
       }),
     { timeout: 60_000 },
   )

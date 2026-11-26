@@ -15,6 +15,7 @@ import type { FormAnswer, FormField, FormValue } from "@opencode/client"
 import { useData, type FormWithLocation } from "../../context/data"
 import { useClipboard } from "../../context/clipboard"
 import { SplitBorder } from "../../ui/border"
+import { useDialog } from "../../ui/dialog"
 import { useToast } from "../../ui/toast"
 import { Keymap } from "../../context/keymap"
 import { useInteractivity } from "../../context/interactivity"
@@ -61,9 +62,10 @@ export function FormPrompt(props: { form: FormWithLocation }) {
   const theme = useTheme()
   const renderer = useRenderer()
   const dimensions = useTerminalDimensions()
+  const dialog = useDialog()
   const keymap = Keymap.use()
   const enabled = useInteractivity()
-  const active = () => enabled() && keymap.mode.current() === FORM_MODE
+  const active = () => enabled() && dialog.stack.length === 0 && keymap.mode.current() === FORM_MODE
   const cursorStyle = useCursorStyle()
   const clipboard = useClipboard()
   const toast = useToast()
@@ -533,7 +535,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
     )
   }
 
-  onMount(() => onCleanup(keymap.mode.push(FORM_MODE)))
+  onMount(() => onCleanup(keymap.mode.push(FORM_MODE, () => dialog.stack.length === 0)))
 
   Keymap.createLayer(() => ({
     mode: FORM_MODE,

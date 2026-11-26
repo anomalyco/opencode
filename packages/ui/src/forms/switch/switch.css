@@ -34,8 +34,7 @@
     box-shadow: var(--v2-elevation-switch-off);
     transition:
       background 90ms ease-out,
-      opacity 90ms ease-out,
-      outline-color 90ms ease-out;
+      opacity 90ms ease-out;
   }
 
   [data-slot="switch-thumb"] {
@@ -100,7 +99,7 @@
 
   &:not([data-readonly]) [data-slot="switch-input"]:focus-visible ~ [data-slot="switch-control"] {
     outline: 2px solid var(--v2-border-border-focus);
-    outline-offset: 1px;
+    outline-offset: 2px;
   }
 
   &[data-checked] [data-slot="switch-control"] {
@@ -226,9 +225,8 @@
   }
 
   &:not([data-readonly]) [data-slot="switch-input"]:focus-visible ~ [data-slot="switch-control"] {
-    border-color: var(--v2-border-border-focus);
-    outline: none;
-    box-shadow: var(--shadow-xs-border-focus);
+    outline: 2px solid var(--v2-border-border-focus);
+    outline-offset: 2px;
   }
 
   &[data-checked] [data-slot="switch-control"] {
@@ -268,5 +266,16 @@
 
   &[data-invalid] [data-slot="switch-control"] {
     border-color: var(--v2-state-border-danger);
+  }
+}
+
+@media (forced-colors: active) {
+  [data-component="switch"]:not([data-appearance="standard"]) [data-slot="switch-control"] {
+    border: 1px solid ButtonText;
+    padding: 1px;
+  }
+
+  [data-component="switch"]:not([data-appearance="standard"]) [data-slot="switch-thumb"] {
+    border: 1px solid ButtonText;
   }
 }

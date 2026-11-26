@@ -29,4 +29,13 @@ export default {
   "releaseNotes.action.next": "Keyingi",
   "releaseNotes.action.hideFuture": "Kelajakda bularni ko'rsatmang",
   "releaseNotes.media.alt": "Chiqarishni oldindan ko'rish",
+  "action.reload": "Yangilash uchun qayta yuklash",
+  "action.reloading": "Qayta yuklanmoqda…",
+  "web.ready.title": "Yangilanish tayyor",
+  "web.ready.message":
+    "OpenCode’ning yangi versiyasi tayyor. Uni barcha ochiq oynalarda ishlatish uchun qayta yuklang.",
+  "web.reload": "Qayta yuklash",
+  "web.reset.title": "Serverdan qayta yuklash",
+  "web.reset.description": "Ilovaning saqlangan nusxasini tozalash va serverning joriy versiyasini yuklash",
+  "web.reset.action": "Serverdan qayta yuklash",
 }

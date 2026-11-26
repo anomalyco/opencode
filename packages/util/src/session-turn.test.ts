@@ -4,7 +4,7 @@ import { SessionTurn } from "./session-turn.js"
 type Message = {
   id: string
   type: string
-  time: { created: number; streamed?: number; completed?: number }
+  time: { created: number; firstToken?: number; streamed?: number; completed?: number }
   tokens?: { output: number; reasoning: number }
 }
 
@@ -13,6 +13,24 @@ test("measures turn duration from the user prompt across assistant steps", () =>
   const messages = [input("user-1", 1_000), step("assistant-1", { created: 8_000, completed: 11_000 }), final]
 
   expect(SessionTurn.duration(messages, final)).toBe(29_000)
+})
+
+test("measures decode throughput from the first streamed token", () => {
+  const first = step("assistant-1", { created: 6_000, firstToken: 8_000, streamed: 10_000, completed: 20_000 }, 20, 5)
+  const final = step("assistant-2", { created: 24_000, firstToken: 25_000, streamed: 28_000, completed: 31_000 }, 30, 10)
+  const messages = [input("user-1", 1_000), first, final]
+
+  // 65 tokens over the 5s the provider spent streaming them, not the 10s that include waiting for the first.
+  expect(SessionTurn.tokensPerSecond(messages, final)).toBe(13)
+})
+
+test("falls back to the request window for steps recorded without a first token", () => {
+  const first = step("assistant-1", { created: 6_000, streamed: 10_000, completed: 20_000 }, 20, 5)
+  const final = step("assistant-2", { created: 24_000, firstToken: 25_000, streamed: 28_000, completed: 31_000 }, 30, 10)
+  const messages = [input("user-1", 1_000), first, final]
+
+  // The old step counts its 4s request window, the new one its 3s decode window.
+  expect(SessionTurn.tokensPerSecond(messages, final)).toBe(65 / 7)
 })
 
 test("measures request throughput including reasoning without tool time", () => {

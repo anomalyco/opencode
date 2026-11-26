@@ -1,0 +1,323 @@
+/* The OpenCode nav logo menu (index.ts) and shared header lockup: cards with blue hover, as on opencode.ai.
+   No panel; each item is a card on the see-through pop-up surface, its thumbnail, a divider, then its label. The menu
+   sits in the page's body (or the top layer), so only these rules style it. A host recolours it by setting these on an
+   ancestor of its triggers (the menu copies them when it opens):
+     --nav-menu-ink       strong text
+     --nav-menu-weak      the labels' resting grey
+     --nav-menu-popover   the pop-up surface
+     --nav-menu-link      the link blue: hover and focus
+     --nav-menu-bar       the active bar
+     --nav-menu-icon      the Brand, ZIP and Press drawings
+     --nav-menu-mono      OpenTUI Mono (the host loads it) */
+[data-nav-menu] {
+  --ink: var(--nav-menu-ink, light-dark(#161616, #fafafa));
+  --weak: var(--nav-menu-weak, light-dark(#5c5c5c, #aeaeae));
+  --popover: var(--nav-menu-popover, light-dark(#ffffff, #161616));
+  --link: var(--nav-menu-link, light-dark(#3b5cf6, #6b8fff));
+  --bar: var(--nav-menu-bar, light-dark(#5c5c5c, #aeaeae));
+  --icon: var(--nav-menu-icon, light-dark(#6b6b6b, #8f8f8f));
+  /* The fixed backgrounds behind the Brand files' light and dark previews. */
+  --tile-light: #f5f5f5;
+  --tile-dark: #0c0c0c;
+  --tint: color-mix(in srgb, var(--link) 10%, var(--popover));
+  /* The divider between a card's thumbnail and its label, and the card's ring. */
+  --divider: light-dark(rgb(0 0 0 / 0.08), rgb(255 255 255 / 0.1));
+  --shadow:
+    0 0 0 1px var(--divider), 0 1px 2px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.4)),
+    0 2px 5px -2px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.4));
+  --shadow-hover:
+    0 0 0 1px var(--link), 0 1px 2px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.4)),
+    0 2px 5px -2px light-dark(rgb(0 0 0 / 0.1), rgb(0 0 0 / 0.4));
+  position: fixed;
+  z-index: 1000;
+  inset: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  box-sizing: border-box;
+  width: max-content;
+  max-width: none;
+  margin: 0;
+  /* Room for the cards' shadows; index.ts places the menu 8px out so the cards land where they should. */
+  padding: 8px 8px 16px;
+  overflow: visible;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: 400 12px/16px var(--nav-menu-mono, "OpenTUI Mono", ui-monospace, monospace);
+  letter-spacing: 0;
+  text-align: start;
+  -webkit-font-smoothing: antialiased;
+
+  &[data-scroll] {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: none;
+    /* The last visible card fades out, so the list reads as continuing. */
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 2.5rem), transparent);
+  }
+
+  &[data-closing] {
+    pointer-events: none;
+  }
+
+  [role="menuitem"] {
+    position: relative;
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 10px;
+    box-sizing: border-box;
+    width: max-content;
+    height: 28px;
+    margin: 0;
+    padding: 0;
+    padding-inline-end: 12px;
+    background: color-mix(in srgb, var(--popover) 85%, transparent);
+    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(8px);
+    box-shadow: var(--shadow);
+    color: var(--weak);
+    font: inherit;
+    text-decoration: none;
+    text-transform: none;
+    white-space: nowrap;
+    -webkit-text-stroke: 0;
+    outline: none;
+    transform-origin: 19px 50%;
+    transition:
+      background-color 150ms ease,
+      box-shadow 320ms cubic-bezier(0.23, 1, 0.32, 1),
+      color 150ms ease;
+
+    /* Hovered, focused or pressed: the blue card, its ring and the divider in the link blue. */
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--tint);
+        box-shadow: var(--shadow-hover);
+        color: var(--ink);
+
+        [data-slot="thumb"] {
+          --divider: var(--link);
+        }
+      }
+    }
+
+    &:is(:focus-visible, :active) {
+      background: var(--tint);
+      box-shadow: var(--shadow-hover);
+      color: var(--ink);
+
+      [data-slot="thumb"] {
+        --divider: var(--link);
+      }
+    }
+
+    &:active {
+      scale: 0.98;
+    }
+  }
+
+  /* The thumbnail: 38 × 28; its inline-end edge is the divider. */
+  [data-slot="thumb"] {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    box-sizing: border-box;
+    width: 38px;
+    height: 28px;
+    overflow: hidden;
+    background: color-mix(in srgb, var(--popover) 94%, var(--ink));
+    box-shadow: inset -1px 0 0 var(--divider);
+    color: var(--icon);
+    transition: box-shadow 320ms cubic-bezier(0.23, 1, 0.32, 1);
+
+    &:dir(rtl) {
+      box-shadow: inset 1px 0 0 var(--divider);
+    }
+
+    svg {
+      display: block;
+    }
+
+    /* Each file on the background it is made for: light marks on light, dark on dark. */
+    &[data-tone="light"] {
+      background: var(--tile-light);
+    }
+
+    /* A dark preview's ring is its own colour, so it reads at full size (blue while hovered). */
+    &[data-tone="dark"],
+    &[data-tone="dark"]:dir(rtl) {
+      background: var(--tile-dark);
+      box-shadow: 0 0 0 1px var(--tile-dark);
+    }
+
+    &[data-kind="logo"] svg {
+      width: auto;
+      height: 18px;
+    }
+
+    &[data-kind="wordmark"] svg {
+      width: 30px;
+      height: auto;
+    }
+  }
+
+  @media (hover: hover) and (pointer: fine) {
+    [role="menuitem"]:hover [data-slot="thumb"][data-tone="dark"] {
+      box-shadow: 0 0 0 1px var(--link);
+    }
+  }
+
+  [role="menuitem"]:is(:focus-visible, :active) [data-slot="thumb"][data-tone="dark"] {
+    box-shadow: 0 0 0 1px var(--link);
+  }
+
+  [data-slot="meta"] {
+    color: var(--weak);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    [role="menuitem"],
+    [data-slot="thumb"] {
+      transition: none !important;
+    }
+
+    [role="menuitem"]:active {
+      scale: none;
+    }
+  }
+}
+
+/* The OpenCode bar's metrics, opencode.ai's (site.css: the logo 25px from the top and the start edge, in the box of
+   "[1]" at 15px; the 56px phone top bar with its 24 × 30 logo box), so a product's bar puts everything where
+   opencode.ai does and moving between them never jumps:
+     --nav-bar-height     the bar, its 1px rule included (75 + 1; 56 on phones, the rule drawn inside)
+     --nav-edge           the start edge of the logo's box
+     --nav-end            the end edge of the bar's last item (opencode.ai's GitHub mark; the phone menu button)
+     --nav-rule           the bar's rule colour (opencode.ai's --border) */
+:root {
+  --nav-bar-height: 76px;
+  --nav-edge: 24px;
+  --nav-end: 17.5px;
+  --nav-rule: light-dark(hsl(0 0% 88%), hsl(0 0% 18%));
+  /* The product name's hover fill, opencode.ai's lockup hover: the hover step of the shared grey scale. Fixed, so it
+     is the same on every page background. */
+  --nav-name-hover: light-dark(#eeeeee, #242424);
+  /* The product name after the mark (and the docs' DOCS): its size, and the padding under it that puts OpenTUI Mono's
+     caps (0.69 of the size) where they belong in the 25px row. */
+  --nav-name-size: 15px;
+  --nav-name-pad: 0.65px;
+
+  /* Phones: the name grows to 20px, its caps centred in the 25px row (5.5px above and below), within half a pixel of
+     the mark's inner rectangle. */
+  @media (max-width: 60rem) {
+    --nav-name-size: 20px;
+    --nav-name-pad: 1px;
+  }
+  --nav-logo-box-w: calc(15px * 1.492);
+  --nav-logo-box-h: 25px;
+
+  @media (max-width: 60rem) {
+    --nav-bar-height: 56px;
+    --nav-end: 12px;
+    --nav-logo-box-w: 24px;
+    --nav-logo-box-h: 30px;
+  }
+}
+
+/* The lockup: the logo (`data-nav-logo`, a 20 × 25 mark at whole pixels in its box, as on opencode.ai), then the
+   product's name (`data-nav-name`) 12px after the box: OpenTUI Mono Bold 15px caps whose 6px padding is the
+   highlight, --nav-name-hover while hovered or pressed. Placed at --nav-edge, centred in the bar. */
+[data-nav-lockup] {
+  --nav-lockup-ink: light-dark(#161616, #fafafa);
+  --nav-logo-inner: light-dark(#d2d2d2, #4b4b4b);
+  --nav-logo-code: light-dark(#1f1f1f, #eeeeee);
+  --nav-lockup-inset: round(calc((var(--nav-logo-box-h) - 25px) / 2), 1px);
+  position: relative;
+  display: flex;
+  flex: 0 0 auto;
+  align-items: flex-start;
+  box-sizing: border-box;
+  height: var(--nav-logo-box-h);
+  color: var(--nav-lockup-ink);
+  -webkit-font-smoothing: antialiased;
+
+  [data-nav-logo] {
+    display: block;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    width: var(--nav-logo-box-w);
+    height: var(--nav-logo-box-h);
+    padding-top: var(--nav-lockup-inset);
+    padding-inline-start: round(calc((var(--nav-logo-box-w) - 20px) / 2), 1px);
+    color: inherit;
+
+    svg {
+      display: block;
+      width: 20px;
+      height: 25px;
+    }
+
+    [data-part="inner"] {
+      fill: var(--nav-logo-inner);
+    }
+
+    [data-part="code"] {
+      fill: var(--nav-logo-code);
+    }
+  }
+
+  :is([data-nav-name], [data-nav-product]):is([data-nav-name], [data-nav-product]) {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    flex-shrink: 0;
+    box-sizing: border-box;
+    height: 25px;
+    margin: var(--nav-lockup-inset) 0 0;
+    margin-inline-start: 6px;
+    padding: 0 6px var(--nav-name-pad);
+    background: none;
+    color: var(--nav-lockup-ink);
+    font: 700 var(--nav-name-size) / 1 var(--nav-menu-mono, "OpenTUI Mono", ui-monospace, monospace);
+    letter-spacing: 0;
+    text-decoration: none;
+    text-transform: uppercase;
+    white-space: nowrap;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background-color 120ms ease;
+
+    /* A 32px hit area beside a desktop bar, 44px for touch. */
+    &::before {
+      content: "";
+      position: absolute;
+      inset: calc(50% - 16px) 0;
+    }
+
+    @media (max-width: 60rem), (pointer: coarse) {
+      &::before {
+        inset: calc(50% - 22px) 0;
+      }
+    }
+
+    @media (hover: hover) and (pointer: fine) {
+      &:hover {
+        background: var(--nav-name-hover);
+        color: var(--nav-lockup-ink);
+        text-decoration: none;
+      }
+    }
+
+    &:active {
+      background: var(--nav-name-hover);
+    }
+  }
+
+  :is([data-nav-logo], [data-nav-name], [data-nav-product]):focus-visible {
+    outline: 2px solid var(--nav-menu-link, light-dark(#3b5cf6, #6b8fff));
+    outline-offset: 2px;
+  }
+}

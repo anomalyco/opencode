@@ -24,9 +24,9 @@ describe("Z.ai Images recorded", () => {
       })
 
       expect(response.images).toHaveLength(1)
-      expect(response.image.mediaType).toBe("application/octet-stream")
-      expect(response.image.source.type).toBe("url")
-      expect(response.image.source.type === "url" && response.image.source.url).toStartWith("https://")
+      expect(response.images[0].mediaType).toBe("application/octet-stream")
+      expect(response.images[0].source.type).toBe("url")
+      expect(response.images[0].source.type === "url" && response.images[0].source.url).toStartWith("https://")
       expect(response.providerMetadata?.zai).toBeDefined()
     }),
   )

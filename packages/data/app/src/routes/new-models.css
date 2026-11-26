@@ -1,0 +1,277 @@
+[data-page="stats"] [data-section="new-models"] {
+  position: relative;
+  box-sizing: border-box;
+  box-shadow:
+    inset 0 -1px var(--stats-line),
+    inset 1px 0 var(--stats-line),
+    inset -1px 0 var(--stats-line);
+  padding: 80px 40px;
+  color: var(--stats-text);
+}
+
+[data-page="stats"] [data-slot="breakout-card"] {
+  --breakout-bg: var(--stats-layer);
+  --breakout-bar: color-mix(in srgb, var(--stats-faint) 75%, var(--breakout-bg));
+  --breakout-peak: var(--stats-muted);
+  display: grid;
+  grid-template-columns: 360px minmax(0, 1fr);
+  border: 1px solid var(--stats-line-strong);
+  background: var(--breakout-bg);
+  color: var(--stats-text);
+  text-decoration: none;
+  transition: background-color 140ms ease;
+}
+
+[data-page="stats"] [data-slot="breakout-card"]:focus-visible {
+  --breakout-bar: color-mix(in srgb, var(--breakout-color) 45%, var(--breakout-bg));
+  --breakout-peak: var(--breakout-color);
+}
+
+@media (hover: hover) {
+  [data-page="stats"] [data-slot="breakout-card"]:hover {
+    --breakout-bg: var(--stats-layer-2);
+    --breakout-bar: color-mix(in srgb, var(--breakout-color) 45%, var(--breakout-bg));
+    --breakout-peak: var(--breakout-color);
+  }
+}
+
+[data-page="stats"] [data-slot="breakout-card"]:focus-visible,
+[data-page="stats"] [data-slot="breakout-also"] button:focus-visible {
+  outline: 2px solid var(--stats-accent);
+  outline-offset: 2px;
+}
+
+[data-page="stats"] [data-slot="breakout-summary"] {
+  display: flex;
+  flex-direction: column;
+  padding: 32px 16px 16px 32px;
+}
+
+/* Tall enough for the free line, so the number stays put with or without it. */
+[data-page="stats"] [data-slot="breakout-model"] {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  min-height: 62px;
+}
+
+[data-page="stats"] [data-slot="breakout-model"] svg {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin-top: 6px;
+}
+
+[data-page="stats"] [data-slot="breakout-model"] > span {
+  display: grid;
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="breakout-model"] strong {
+  font-size: 20px;
+  font-weight: 500;
+  line-height: 26px;
+}
+
+[data-page="stats"] [data-slot="breakout-model"] em {
+  color: var(--stats-muted);
+  font-size: 12px;
+  font-style: normal;
+  line-height: 18px;
+}
+
+[data-page="stats"] [data-slot="breakout-tokens"],
+[data-page="stats"] [data-slot="breakout-users"] {
+  margin-left: -0.07em;
+  font-weight: 500;
+  line-height: 1.05;
+  letter-spacing: -0.04em;
+}
+
+[data-page="stats"] [data-slot="breakout-tokens"] {
+  margin-top: 24px;
+  font-size: 92px;
+}
+
+[data-page="stats"] [data-slot="breakout-users"] {
+  margin-top: 28px;
+  font-size: 48px;
+}
+
+[data-page="stats"] [data-slot="breakout-caption"] {
+  margin-top: 6px;
+  color: var(--stats-muted);
+  font-size: 14px;
+  text-wrap: pretty;
+}
+
+[data-page="stats"] [data-slot="breakout-chart"] {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+  min-height: 380px;
+  padding: 32px 32px 16px 16px;
+}
+
+/* Snaps each day to whole dot columns, so no dot is cut at its edge. Very narrow days keep their width. */
+[data-page="stats"] [data-slot="breakout-day"] {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr) 24px;
+  justify-self: center;
+  width: max(calc(round(down, 100% - 2px, 6px) + 2px), min(100%, 8px));
+  min-width: 0;
+}
+
+[data-page="stats"] [data-slot="breakout-plot"] {
+  position: relative;
+  display: flex;
+  align-items: flex-end;
+  padding-top: 24px;
+}
+
+[data-page="stats"] [data-slot="breakout-plot"]::before {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  width: calc(round(down, 100% - 2px, 6px) + 2px);
+  height: calc(round(down, 100% - 2px, 6px) + 2px);
+  margin-inline: auto;
+  content: "";
+  background: var(--stats-dot);
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='2' height='2'/%3E%3C/svg%3E");
+  mask-size: 6px 6px;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='2' height='2'/%3E%3C/svg%3E");
+  -webkit-mask-size: 6px 6px;
+}
+
+[data-page="stats"] [data-slot="breakout-plot"] i {
+  position: relative;
+  display: block;
+  width: 100%;
+  min-height: 2px;
+  background: var(--breakout-bar);
+  transition: background-color 140ms ease;
+}
+
+[data-page="stats"] [data-peak="true"] [data-slot="breakout-plot"] i {
+  background: var(--breakout-peak);
+}
+
+[data-page="stats"] [data-slot="breakout-plot"] b {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 2px;
+  background: var(--breakout-bg);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: background-color 140ms ease;
+}
+
+[data-page="stats"] [data-slot="breakout-day"] small {
+  padding-top: 7px;
+  color: var(--stats-faint);
+  font-size: 11px;
+  line-height: 17px;
+  white-space: nowrap;
+}
+
+[data-page="stats"] [data-slot="breakout-day"] small[data-end="true"] {
+  justify-self: end;
+}
+
+[data-page="stats"] [data-slot="breakout-also"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 20px;
+  margin: 18px 0 0;
+  color: var(--stats-muted);
+  font-size: 13px;
+}
+
+[data-page="stats"] [data-slot="breakout-also"] span {
+  color: var(--stats-faint);
+}
+
+[data-page="stats"] [data-slot="breakout-also"] button {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  cursor: pointer;
+  color: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--stats-line-strong);
+  text-underline-offset: 3px;
+}
+
+[data-page="stats"] [data-slot="breakout-also"] button:hover {
+  color: var(--stats-text);
+  text-decoration-color: currentColor;
+}
+
+@media (max-width: 74rem) {
+  [data-page="stats"] [data-section="new-models"] {
+    padding: 64px 32px;
+  }
+
+  [data-page="stats"] [data-slot="breakout-card"] {
+    grid-template-columns: 320px minmax(0, 1fr);
+  }
+
+  [data-page="stats"] [data-slot="breakout-summary"] {
+    padding: 24px 12px 12px 24px;
+  }
+
+  [data-page="stats"] [data-slot="breakout-chart"] {
+    gap: 6px;
+    padding: 24px 24px 12px 12px;
+  }
+}
+
+@media (max-width: 47.999rem) {
+  [data-page="stats"] [data-section="new-models"] {
+    padding: 48px 24px;
+  }
+
+  [data-page="stats"] [data-slot="breakout-card"] {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  [data-page="stats"] [data-slot="breakout-summary"] {
+    padding: 22px 22px 0;
+  }
+
+  [data-page="stats"] [data-slot="breakout-tokens"] {
+    font-size: 72px;
+  }
+
+  [data-page="stats"] [data-slot="breakout-users"] {
+    margin-top: 20px;
+    font-size: 40px;
+  }
+
+  [data-page="stats"] [data-slot="breakout-chart"] {
+    gap: 4px;
+    min-height: 240px;
+    padding: 22px 22px 10px;
+  }
+
+  [data-page="stats"] [data-slot="breakout-plot"] b,
+  [data-page="stats"] [data-slot="breakout-day"] small {
+    font-size: 10px;
+  }
+
+  [data-page="stats"] [data-slot="breakout-also"] {
+    gap: 6px 12px;
+    font-size: 12px;
+  }
+
+  [data-page="stats"] [data-slot="breakout-also"] span {
+    flex-basis: 100%;
+  }
+}

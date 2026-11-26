@@ -11,7 +11,7 @@ export class Info extends Schema.Class<Info>("Config.Warming")({
     .pipe(optional)
     .annotate({
       description:
-        'Idle time between keep-alive requests (default: "4 minutes"). "auto" uses 90% of the model\'s cache.ttl and skips models without one.',
+        'Idle time between keep-alive requests (default: "auto"). "auto" uses 90% of the model\'s cache.ttl, or 4 minutes when it has none.',
     }),
   duration: Schema.DurationFromString.pipe(optional).annotate({
     description: 'Time after the last active request to keep a session warm (default: "30 minutes")',

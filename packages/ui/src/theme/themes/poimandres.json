@@ -1,0 +1,55 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Poimandres",
+  "id": "poimandres",
+  "light": {
+    "palette": {
+      "neutral": "#f4f7fb",
+      "ink": "#1b1e28",
+      "primary": "#1a6fb5",
+      "accent": "#a83b72",
+      "success": "#137a65",
+      "warning": "#946b00",
+      "error": "#b5386c",
+      "info": "#1f7296",
+      "interactive": "#1a6fb5",
+      "diffAdd": "#137a65",
+      "diffDelete": "#b5386c"
+    },
+    "overrides": {
+      "text-weak": "#525d73",
+      "syntax-comment": "#5a667d",
+      "syntax-keyword": "#1a6fb5",
+      "syntax-string": "#10735e",
+      "syntax-primitive": "#1f6a8c",
+      "syntax-property": "#3f5875",
+      "syntax-type": "#734696",
+      "syntax-constant": "#a83b72"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#1b1e28",
+      "ink": "#e4f0fb",
+      "primary": "#5de4c7",
+      "accent": "#add7ff",
+      "success": "#5de4c7",
+      "warning": "#fffac2",
+      "error": "#d0679d",
+      "info": "#89ddff",
+      "interactive": "#5de4c7",
+      "diffAdd": "#5de4c7",
+      "diffDelete": "#d0679d"
+    },
+    "overrides": {
+      "text-weak": "#8e96b8",
+      "syntax-comment": "#7f87a8",
+      "syntax-keyword": "#add7ff",
+      "syntax-string": "#5de4c7",
+      "syntax-primitive": "#89ddff",
+      "syntax-property": "#a6accd",
+      "syntax-type": "#fffac2",
+      "syntax-constant": "#f087bd"
+    }
+  }
+}

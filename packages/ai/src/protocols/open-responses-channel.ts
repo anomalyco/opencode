@@ -85,11 +85,7 @@ const observer = (options: Options) => {
     if (event.type === "response.created") {
       const created = event.response?.id
       if (responseID)
-        return yield* ProviderShared.eventError(
-          options.id,
-          `${options.name} emitted duplicate response.created`,
-          frame,
-        )
+        return yield* ProviderShared.eventError(options.id, `${options.name} emitted duplicate response.created`, frame)
       if (!created)
         return yield* ProviderShared.eventError(
           options.id,
@@ -108,11 +104,7 @@ const observer = (options: Options) => {
         frame,
       )
     if (event.response?.id && event.response.id !== responseID)
-      return yield* ProviderShared.eventError(
-        options.id,
-        `${options.name} response ID changed during execution`,
-        frame,
-      )
+      return yield* ProviderShared.eventError(options.id, `${options.name} response ID changed during execution`, frame)
     if (event.type === "response.completed") {
       terminal = true
       return { type: "completed", frame }

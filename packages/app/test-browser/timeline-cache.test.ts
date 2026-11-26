@@ -28,6 +28,7 @@ function setup() {
       visible: boolean
       deferred: boolean
       turnDiff: string
+      flags: Partial<Record<string, Record<string, boolean>>>
       messages: Partial<Record<string, SessionMessageInfo[]>>
       parents: Partial<Record<string, string>>
     }>({
@@ -36,6 +37,7 @@ function setup() {
       visible: true,
       deferred: false,
       turnDiff: "a1",
+      flags: { "/repo": { full_codemode: true }, "/other": { full_codemode: false } },
       messages: {
         ses_a: [{ id: "msg_a", type: "user", text: "First session", time: { created: 1 } }],
         ses_b: [{ id: "msg_b", type: "user", text: "Second session", time: { created: 2 } }],
@@ -61,13 +63,14 @@ function setup() {
     const turnDiffSources = new Map<string, TurnDiffSource>()
 
     const turnDiffSource = (label: string) => {
-      const source = turnDiffSources.get(label) ?? { get: () => undefined, load: () => {} }
+      const source = turnDiffSources.get(label) ?? { state: () => ({ status: "loading" }) as const, load: () => {} }
       turnDiffSources.set(label, source)
 
       return source
     }
 
     const turnDiffs: Record<string, string[]> = {}
+    const flags: Record<string, boolean[]> = {}
     // Views whose effects saw their transcript empty, as a subagent's view reloads its evicted parent.
     const reloads: string[] = []
     // The sessions each view's message actions read, and whether they were a child's.
@@ -110,9 +113,10 @@ function setup() {
           },
           sessionID: undefined,
           agents: true,
-          get backgroundCompaction() {
-            return state.directory === "/other"
+          get flags() {
+            return state.flags[state.directory]
           },
+          flag: (key) => state.flags[state.directory]?.[key] === true,
           navigateToSession: undefined,
           sessionHref: undefined,
           shellRunning: undefined,
@@ -148,6 +152,7 @@ function setup() {
       deferredReads,
       shells,
       turnDiffs,
+      flags,
       reloads,
       actions,
       directoryReads: () => directoryReads,
@@ -215,7 +220,6 @@ function setup() {
               workspace().directory,
               data.directory,
               (readImage && imageReaders.get(readImage)) ?? "",
-              data.backgroundCompaction ? "/other" : "/repo",
             ]
           })
           createComputed(() => {
@@ -225,6 +229,9 @@ function setup() {
           })
           createComputed(() => {
             shells[view] = [...(shells[view] ?? []), data.shellOutput === shellOutput]
+          })
+          createComputed(() => {
+            flags[view] = [...(flags[view] ?? []), data.flag("full_codemode")]
           })
           createEffect(
             on(
@@ -313,6 +320,21 @@ test("disposes a detached view once its transcript is evicted, but never the sel
 
     input.setState("id", "ses_a")
     expect(input.cache()).not.toBe(first)
+  } finally {
+    input.dispose()
+  }
+})
+
+test("a view whose transcript was evicted while selected goes once another session is selected", () => {
+  const input = setup()
+
+  try {
+    input.cache()
+    input.setState("messages", "ses_a", [])
+    expect(input.disposed).toEqual([])
+    input.setState("id", "ses_b")
+    input.cache()
+    expect(input.disposed).toEqual(["ses_a"])
   } finally {
     input.dispose()
   }
@@ -462,8 +484,8 @@ test("a view first reading its providers while another Location is selected read
     input.cache()
     input.setState("deferred", true)
     expect(input.deferredReads).toEqual({
-      "ses_a in /repo": ["/repo", "/repo", "/repo", "/repo"],
-      "ses_b in /other": ["/other", "/other", "/other", "/other"],
+      "ses_a in /repo": ["/repo", "/repo", "/repo"],
+      "ses_b in /other": ["/other", "/other", "/other"],
     })
   } finally {
     input.dispose()
@@ -519,6 +541,21 @@ test("a view follows its routed tab's turn diffs while selected and keeps them o
     input.cache()
     expect(input.turnDiffs["ses_a in /repo"]!.at(-1)).toBe("a2")
     expect(input.turnDiffs["ses_b in /repo"]!.at(-1)).toBe("b1")
+  } finally {
+    input.dispose()
+  }
+})
+
+test("a detached view keeps its own location's flags when another location is selected", () => {
+  const input = setup()
+
+  try {
+    input.cache()
+    expect(input.flags["ses_a in /repo"]!.at(-1)).toBe(true)
+    input.setState({ id: "ses_b", directory: "/other" })
+    input.cache()
+    expect(input.flags["ses_a in /repo"]!.at(-1)).toBe(true)
+    expect(input.flags["ses_b in /other"]!.at(-1)).toBe(false)
   } finally {
     input.dispose()
   }

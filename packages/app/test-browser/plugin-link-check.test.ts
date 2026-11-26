@@ -66,6 +66,23 @@ test("asks again when a check comes back negative after the timeline was hidden"
   }
 })
 
+// Before, a check waiting on a hidden timeline never settled once the timeline was disposed, and a negative answer
+// arriving after it queued yet another wait.
+test("answers false to every check still waiting or running when the timeline is disposed", async () => {
+  const answer = Promise.withResolvers<boolean>()
+  const input = setup((href) => (href === "running.ts" ? answer.promise : true))
+  const running = input.exists("running.ts")
+
+  input.setActive(false)
+  const waiting = input.exists("waiting.ts")
+  input.dispose()
+  answer.resolve(false)
+
+  expect(await Promise.all([running, waiting])).toEqual([false, false])
+  expect(input.exists("late.ts")).toBe(false)
+  expect(input.asked).toEqual(["running.ts"])
+})
+
 test("asks again when a check comes back negative after the timeline was hidden and shown again", async () => {
   const answers = [Promise.withResolvers<boolean>(), Promise.withResolvers<boolean>()]
   const input = setup(() => answers[input.asked.length - 1]!.promise)

@@ -1,8 +1,6 @@
 import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { normalizeProviderList } from "@/runtime/server/global-sync/utils"
-import { isServiceUnavailableError } from "@opencode/client/promise"
-import { retry } from "@opencode/util/retry"
 import { Iterable, pipe } from "effect"
 import { createEffect, createMemo, type Accessor } from "solid-js"
 import type { ProviderListResponse } from "@/runtime/server/types"
@@ -14,10 +12,6 @@ export { popularProviders } from "./order"
 const emptyProviderCatalog: ProviderListResponse = { all: new Map(), connected: [], default: {} }
 
 const popularProviderSet = new Set(popularProviders)
-
-// A cold Location lists its catalogs once its plugins activate, which can take longer than the server's 5 s wait.
-export const syncWhileBooting = <A>(load: () => Promise<A>) =>
-  retry(load, { attempts: 12, delay: 1000, maxDelay: 5000, retryIf: isServiceUnavailableError })
 
 export function useProviders(directory: Accessor<string | undefined>) {
   const data = useData()
@@ -35,9 +29,7 @@ export function useProviders(directory: Accessor<string | undefined>) {
     void (async () => {
       if (!ref) await data.location.syncInfo()
       const resolved = ref ?? data.location.default()
-      await syncWhileBooting(() =>
-        Promise.all([data.location.provider.sync(resolved), data.location.model.sync(resolved)]),
-      )
+      await Promise.all([data.location.provider.sync(resolved), data.location.model.sync(resolved)])
     })().catch(() => undefined)
   })
   const integrations = useIntegrations(directory)

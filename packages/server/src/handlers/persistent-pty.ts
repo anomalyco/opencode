@@ -3,7 +3,6 @@ import { PtyTicket } from "@opencode/core/pty/ticket"
 import {
   ForbiddenError,
   InvalidRequestError,
-  PtyFeatureUnsupportedError,
   PtyNotFoundError,
   ServiceUnavailableError,
 } from "@opencode/protocol/errors"
@@ -19,9 +18,14 @@ import { Socket } from "effect/socket"
 import { Api } from "../api"
 import { CorsConfig, isAllowedRequestOrigin } from "../cors"
 import { makeArtifact } from "./artifact"
+import { makeBlobGet } from "./blob"
+import { makeBrowserTunnel } from "./experimental/browser-tunnel"
+import { makeAutomation } from "./automation"
+import { makeJob } from "./job"
+import { makeMachine, makeMachineLink } from "./machine"
 import { makeMediaGet } from "./media"
+import { makePush } from "./push"
 import { type Outbound, runPtySocket } from "./pty-socket"
-import { makeSchedule } from "./schedule"
 
 export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experimental", (handlers) =>
   Effect.gen(function* () {
@@ -29,11 +33,34 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
     const cors = yield* CorsConfig
     const pty = yield* PersistentPty.Service
     const artifact = yield* makeArtifact
+    const job = yield* makeJob
     const mediaGet = yield* makeMediaGet
-    const schedule = yield* makeSchedule
+    const blobGet = yield* makeBlobGet
+    const automation = yield* makeAutomation
+    const machine = yield* makeMachine
+    const machineLink = yield* makeMachineLink
+    const browserTunnel = yield* makeBrowserTunnel
+    const push = yield* makePush
 
     return handlers
       .handleRaw("media.get", (ctx) => mediaGet(ctx.params.hash, ctx.request))
+      .handleRaw("blob.get", (ctx) => blobGet(ctx.params.id, ctx.request))
+      .handleRaw("browser.tunnel", (ctx) => browserTunnel(ctx.request))
+      .handle("job.list", (ctx) => job.list(ctx.query))
+      .handle("job.cancel", (ctx) => job.cancel(ctx.params.id))
+      .handleRaw("machine.link", (ctx) => machineLink(ctx.request))
+      .handle("machine.list", () => machine.list())
+      .handle("machine.add", (ctx) => machine.add(ctx.payload))
+      .handle("machine.remove", (ctx) => machine.remove(ctx.params.name))
+      .handle("push.get", () => push.get())
+      .handle("push.device.register", (ctx) => push.register(ctx.params.deviceID, ctx.payload))
+      .handle("push.device.remove", (ctx) => push.remove(ctx.params.deviceID))
+      .handle("push.device.update", (ctx) => push.update(ctx.params.deviceID, ctx.payload))
+      .handle("push.device.session.set", (ctx) => push.setDeviceBell(ctx.params.deviceID, ctx.params.sessionID, ctx.payload))
+      .handle("push.device.session.remove", (ctx) => push.removeDeviceBell(ctx.params.deviceID, ctx.params.sessionID))
+      .handle("push.session.set", (ctx) => push.setSessionBell(ctx.params.sessionID, ctx.payload))
+      .handle("push.session.remove", (ctx) => push.removeSessionBell(ctx.params.sessionID))
+      .handle("push.settings.set", (ctx) => push.setSettings(ctx.payload))
       .handle("artifacts.providers", (ctx) => artifact.providers(ctx.query, ctx.request))
       .handle("artifacts.list", (ctx) => artifact.list(ctx.query, ctx.request))
       .handle("artifacts.create", (ctx) => artifact.create(ctx.query, ctx.payload, ctx.request))
@@ -41,12 +68,12 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
       .handle("artifacts.update", (ctx) => artifact.update(ctx.params.artifactID, ctx.query, ctx.payload, ctx.request))
       .handle("artifacts.delete", (ctx) => artifact.remove(ctx.params.artifactID, ctx.query, ctx.request))
       .handleRaw("artifacts.view", (ctx) => artifact.view(ctx.params.artifactID, ctx.query, ctx.request))
-      .handle("schedule.create", (ctx) => schedule.create(ctx.payload))
-      .handle("schedule.list", (ctx) => schedule.list(ctx.query.sessionID))
-      .handle("schedule.get", (ctx) => schedule.get(ctx.params.scheduleID))
-      .handle("schedule.pause", (ctx) => schedule.pause(ctx.params.scheduleID))
-      .handle("schedule.resume", (ctx) => schedule.resume(ctx.params.scheduleID))
-      .handle("schedule.delete", (ctx) => schedule.remove(ctx.params.scheduleID))
+      .handle("automation.create", (ctx) => automation.create(ctx.payload))
+      .handle("automation.list", (ctx) => automation.list(ctx.query))
+      .handle("automation.get", (ctx) => automation.get(ctx.params.automationID))
+      .handle("automation.pause", (ctx) => automation.pause(ctx.params.automationID))
+      .handle("automation.resume", (ctx) => automation.resume(ctx.params.automationID))
+      .handle("automation.delete", (ctx) => automation.remove(ctx.params.automationID))
       .handle(
         "persistentPty.read",
         Effect.fn(function* (ctx) {
@@ -110,19 +137,7 @@ export const PersistentPtyHandler = HttpApiBuilder.group(Api, "server.experiment
               .resize(ctx.params.ptyID, ctx.payload.size.cols, ctx.payload.size.rows, ctx.payload.attachmentID)
               .pipe(mapTerminalError)
           if (ctx.payload.title === undefined) return { data: yield* pty.get(ctx.params.ptyID).pipe(mapTerminalError) }
-          return {
-            data: yield* pty.rename(ctx.params.ptyID, ctx.payload.title).pipe(
-              Effect.catchTags({
-                "PersistentPty.NotFoundError": notFound,
-                "PersistentPty.UnsupportedError": (error) =>
-                  new PtyFeatureUnsupportedError({
-                    feature: error.feature,
-                    message: "Terminal renaming will be available after OpenCode's terminal service restarts",
-                  }),
-                "PersistentPty.UnavailableError": unavailable,
-              }),
-            ),
-          }
+          return { data: yield* pty.rename(ctx.params.ptyID, ctx.payload.title).pipe(mapTerminalError) }
         }),
       )
       .handle(

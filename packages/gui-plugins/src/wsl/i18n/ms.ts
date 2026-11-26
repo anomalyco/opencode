@@ -53,4 +53,5 @@ export default {
   "error.commandTimeout": "{{command}} {{args}} tamat masa selepas {{timeout}}ms",
   "error.failedPort": "Gagal mendapatkan port",
   "menu.remove": "Alih keluar",
+  "error.busy": "{{distro}} sedang sibuk dengan tugas lain. Cuba lagi apabila ia selesai.",
 }

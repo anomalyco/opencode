@@ -12,4 +12,12 @@ export default {
   noChanges: "ምንም ለውጦች የሉም",
   "settings.wrapLines.title": "መስመሮችን አጠፍ",
   "settings.wrapLines.description": "በአግድም ከማሸብለል ይልቅ በሞባይል diff ውስጥ ረጅም መስመሮችን አጠፍ",
+  "menu.count.one": "{{count}} ፋይል ተቀይሯል",
+  "menu.count.other": "{{count}} ፋይሎች ተቀይረዋል",
+  "folder.more": "{{count}} · ተጨማሪዎች አልታዩም",
+  "folder.failed": "ለውጦችን መጫን አልተቻለም",
+  "command.open": "ግምገማን ክፈት",
+  "load.failed": "ለውጦችን መጫን አልተቻለም",
+  "load.timeout": "አገልጋዩ ምላሽ ለመስጠት በጣም ዘገየ",
+  offline: "ይህን አገልጋይ መድረስ አልተቻለም",
 }

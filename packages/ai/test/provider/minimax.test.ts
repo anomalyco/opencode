@@ -85,7 +85,7 @@ describe("MiniMax provider", () => {
         ai.request({
           model: minimax.chat("MiniMax-M3"),
           prompt: "Hello",
-          generation: { maxTokens: 128 },
+          maxTokens: 128,
           providerOptions: { thinking: { type: "disabled" }, reasoningSplit: false },
         }),
       )

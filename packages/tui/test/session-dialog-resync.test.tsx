@@ -4,8 +4,9 @@ import { createAppFixture } from "./fixture/app"
 import { directory, json } from "./fixture/tui-client"
 
 // Regression: a dialog opened from a transcript row outlives that row. A reconnect
-// resync keeps only the newest page, dropping the row's message before the rows
-// rebuild. The dialog must not read the row's narrowed props.
+// resync that finds the transcript too far ahead of the loaded history keeps only the
+// newest pages, dropping the row's message before the rows rebuild. The dialog must not
+// read the row's narrowed props.
 
 const session = {
   id: "ses_dialog_resync",
@@ -45,6 +46,27 @@ const messages = Array.from({ length: 30 }, (_, i) => {
 })
   .flat()
   .toReversed() as SessionMessageInfo[]
+// More turns than a resync reads back to reach the loaded history: the newest page and three older ones.
+const ahead = [
+  ...(Array.from({ length: 125 }, (_, i) => {
+    const turn = String(i).padStart(3, "0")
+    return [
+      { type: "user", id: `msg_later_${turn}_a`, text: `Later ${turn} prompt`, time: { created: 1000 + i * 10 } },
+      {
+        type: "assistant",
+        id: `msg_later_${turn}_b`,
+        agent: "build",
+        model: { providerID: "fixture", id: "fixture" },
+        finish: "stop",
+        time: { created: 1000 + i * 10 + 1, completed: 1000 + i * 10 + 2 },
+        content: [{ type: "text", text: `Later ${turn} answer` }],
+      },
+    ]
+  })
+    .flat()
+    .toReversed() as SessionMessageInfo[]),
+  ...messages,
+]
 
 async function openDialogThenResync(target: string, dialog: string) {
   let firstPages = 0
@@ -52,7 +74,7 @@ async function openDialogThenResync(target: string, dialog: string) {
   await using setup = await createAppFixture({
     width: 112,
     height: 34,
-    config: { animations: false, tabs: { enabled: false } },
+    config: { animations: false, session: { verbosity: "medium" }, tabs: { enabled: false } },
     args: { sessionID: session.id },
     fetch: (url) => {
       if (url.pathname === "/api/session") return json({ data: [session], cursor: {} })
@@ -61,8 +83,11 @@ async function openDialogThenResync(target: string, dialog: string) {
       if (url.pathname !== `/api/session/${session.id}/message`) return
       const start = Number(url.searchParams.get("cursor") ?? 0)
       const end = start + Number(url.searchParams.get("limit"))
-      if (start === 0 && ++firstPages === 2) resync.resolve()
-      return json({ data: messages.slice(start, end), cursor: end < messages.length ? { next: String(end) } : {} })
+      if (start === 0) firstPages++
+      // The session moved on while the stream was down. The resync has read all it reads once it asks for this page.
+      const source = firstPages < 2 ? messages : ahead
+      if (firstPages === 2 && start === 80) resync.resolve()
+      return json({ data: source.slice(start, end), cursor: end < source.length ? { next: String(end) } : {} })
     },
   })
   await setup.waitForFrame((frame) => frame.includes("Turn 29 prompt"))
@@ -77,7 +102,7 @@ async function openDialogThenResync(target: string, dialog: string) {
 
   setup.events.disconnect()
   await resync.promise
-  // Older rows leave once the newest page is published, or the app crashes.
+  // Older rows leave once the newest pages are published, or the app crashes.
   await setup.waitForFrame((frame) => !frame.includes("Turn 00"))
   await setup.waitForVisualIdle({ quietFrames: 3 })
   return setup.captureCharFrame()

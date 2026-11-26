@@ -11,7 +11,7 @@ import { PreloadMultiFileDiffResult } from "@pierre/diffs/ssr"
 export type SessionSummary = Pick<SessionInfo, "id" | "parentID" | "title" | "time">
 
 type ProviderCatalog = {
-  all: Map<string, { models: Record<string, { name: string }> }>
+  all: Map<string, { models: Record<string, { name: string; speed?: { base: string; id: string } }> }>
   default: {
     [key: string]: string
   }
@@ -39,11 +39,16 @@ type Data = {
 /** Names a finished turn by its Session and the user message that opened it. */
 export type TurnDiffInput = { sessionID: string; from: string }
 
+/** A turn's diff load as the host reports it; a turn not loaded yet reads as `loading`. */
+export type TurnDiffState =
+  | { readonly status: "loading" }
+  | { readonly status: "ready"; readonly diffs: readonly FileDiffInfo[] }
+  | { readonly status: "failed" }
+
 /** The host's cache of the files each finished turn changed. */
 export type TurnDiffSource = {
-  /** The turn's diffs, or undefined until they load. */
-  get: (input: TurnDiffInput) => readonly FileDiffInfo[] | undefined
-  /** Starts loading the turn's diffs unless they are cached or already loading. */
+  state: (input: TurnDiffInput) => TurnDiffState
+  /** Starts loading the turn's diffs, or retries a failed load; does nothing while loading or once loaded. */
   load: (input: TurnDiffInput) => void
 }
 
@@ -74,8 +79,8 @@ export const {
     peekMedia?: PeekMediaUrlFn
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
-    /** Whether `experimental.background_compaction` is on for this location; automatic compactions then show quietly. */
-    backgroundCompaction?: boolean
+    /** Resolved feature flags of the session's location, from the server's experimental flag endpoint. */
+    flags?: Readonly<Record<string, boolean>>
   }) => {
     return {
       get store() {
@@ -90,8 +95,12 @@ export const {
       get agents() {
         return props.agents ?? true
       },
-      get backgroundCompaction() {
-        return props.backgroundCompaction === true
+      get flags() {
+        return props.flags
+      },
+      /** Whether the server reports `key` on for the session's location; off when unknown. */
+      flag(key: string) {
+        return props.flags?.[key] === true
       },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,

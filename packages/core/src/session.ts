@@ -13,6 +13,8 @@ import { SessionMessage } from "./session/message.js"
 import { PromptInput } from "@opencode/schema/prompt-input"
 import { Bus } from "./bus.js"
 import { Instance } from "./instance/service.js"
+import { Plugin } from "./plugin/service.js"
+import { PluginHooks } from "./plugin/hooks.js"
 import { Database } from "./database/database.js"
 import { SessionProjector } from "./session/projector.js"
 import { SessionMessageTable } from "./session/sql.js"
@@ -65,6 +67,8 @@ import type { EventLog } from "@opencode/schema/event-log"
 import type { FileDiff } from "@opencode/schema/file-diff"
 import { Job } from "./job.js"
 import type { Command } from "./command.js"
+import type { Environment } from "./environment/index.js"
+import { SessionCwd } from "./session/cwd.js"
 import { SessionEnvironment } from "./session/environment.js"
 import { InstructionEntry } from "./session/instruction-entry.js"
 
@@ -91,6 +95,8 @@ type CreateBaseInput = {
   model?: Model.Ref
   metadata?: SessionSchema.Metadata
   permissions?: Permission.Ruleset
+  /** Experimental: a working directory for bare paths and commands; a child inherits its parent's when omitted. */
+  cwd?: Environment.Place
 }
 type CreateInput = CreateBaseInput &
   ({ location: Location.Ref; parentID?: never } | { parentID: SessionSchema.ID; location?: never })
@@ -206,15 +212,23 @@ export interface Interface {
     sessionID: SessionSchema.ID
     permissions: Permission.Ruleset
   }) => Effect.Effect<void, NotFoundError>
+  /** Experimental: the Session's working directory, if one was set. */
+  readonly cwd: (sessionID: SessionSchema.ID) => Effect.Effect<Environment.Place | undefined, NotFoundError>
+  /** Experimental: set or clear the Session's working directory; undefined clears it. */
+  readonly setCwd: (input: {
+    sessionID: SessionSchema.ID
+    cwd: Environment.Place | undefined
+  }) => Effect.Effect<void, NotFoundError>
   readonly move: SessionMove.Interface["move"]
   readonly prompt: (
     input: Parameters<Session.Handle["prompt"]>[0] & { sessionID: SessionSchema.ID },
+    /** A bounded durability step after successful admission and wake, in the same interruption mask. */
+    onAccepted?: Effect.Effect<void>,
   ) => ReturnType<Session.Handle["prompt"]>
-  /** Generates text from current Session context without admitting input or mutating history. */
-  readonly generate: (input: {
-    sessionID: SessionSchema.ID
-    prompt: string
-  }) => Effect.Effect<string, NotFoundError | SessionGenerate.Error>
+  /** Generates text from current Session context without admitting input or mutating history. Its usage counts toward the Session's totals. */
+  readonly generate: (
+    input: Omit<SessionGenerate.Input, "session"> & { sessionID: SessionSchema.ID },
+  ) => Effect.Effect<SessionGenerate.Result, NotFoundError | SessionGenerate.Error>
   readonly command: (input: {
     sessionID: SessionSchema.ID
     command: string
@@ -265,7 +279,7 @@ export class Service extends Context.Service<Service, Interface>()("@opencode/Se
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
-    const app = yield* App.Metadata
+    const app = yield* App.Service
     const database = yield* Database.Service
     const db = database.db
     const bus = yield* Bus.Service
@@ -333,6 +347,10 @@ const layer = Layer.effect(
             }),
           )
         if (projected.type === "existing") return projected.session
+        const inherited =
+          input.cwd === undefined && input.parentID ? yield* SessionCwd.read(db, input.parentID) : undefined
+        const cwd = input.cwd ?? inherited
+        if (cwd) yield* SessionCwd.write(db, sessionID, cwd)
         // TODO: Restore recorded sessions onto replacement synchronized workspaces in a future API slice.
         return yield* result.get(sessionID).pipe(Effect.orDie)
       }),
@@ -379,7 +397,16 @@ const layer = Layer.effect(
             ...inherited,
           })
           .pipe(Effect.provideService(SessionBlob.ForkMedia, media))
-        return yield* result.get(sessionID).pipe(Effect.orDie)
+        const forked = yield* result.get(sessionID).pipe(Effect.orDie)
+        yield* Effect.gen(function* () {
+          yield* Plugin.awaitActivation
+          const hooks = yield* PluginHooks.Service
+          yield* hooks.trigger("session", "fork", { sessionID })
+        }).pipe(
+          instances.provide(forked),
+          Effect.catchCause((cause) => Effect.logWarning("fork hook failed", { sessionID, cause })),
+        )
+        return forked
       }),
       get: (sessionID) => sessions.forSession(sessionID).get(),
       environment: Effect.fn("Session.environment")(function* (input) {
@@ -395,10 +422,13 @@ const layer = Layer.effect(
         yield* jobs.cancelSession(sessionID)
         yield* transport.close(sessionID)
         const children = yield* store.list({ parentID: sessionID })
-        yield* Effect.forEach(children, (child) => result.remove(child.id), { concurrency: 1, discard: true })
+        // Delete the parent before its children: an interrupted child settles through the report
+        // path, and a report admitted just before the parent's deletion wakes an execution whose
+        // lifecycle write then fails on the deleted row.
         yield* environments.clear(sessionID)
         yield* bus.publish(SessionEvent.Deleted, { sessionID })
         yield* bus.remove(sessionID)
+        yield* Effect.forEach(children, (child) => result.remove(child.id), { concurrency: 1, discard: true })
       }),
       list: Effect.fn("Session.list")(function* (input = {}) {
         const filter =
@@ -478,13 +508,15 @@ const layer = Layer.effect(
               Bus.isSynced(item) || isDurableSessionEvent(item),
           ),
         ),
-      prompt: (input) => sessions.forSession(input.sessionID).prompt(input),
+      prompt: (input, onAccepted) => sessions.forSession(input.sessionID).prompt(input, onAccepted),
       generate: Effect.fn("Session.generate")(function* (input) {
         const session = yield* result.get(input.sessionID)
-        return yield* SessionGenerate.generate({ session, prompt: input.prompt }).pipe(
+        const { sessionID: _, ...rest } = input
+        return yield* SessionGenerate.generate({ ...rest, session }).pipe(
           Effect.provideService(Instance.Service, instances),
           Effect.provideService(Database.Service, database),
           Effect.provideService(LLMClient.Service, llm),
+          Effect.provideService(Bus.Service, bus),
         )
       }),
       command: Effect.fn("Session.command")(function* (input) {
@@ -502,6 +534,14 @@ const layer = Layer.effect(
       unarchive: (sessionID) => sessions.forSession(sessionID).unarchive(),
       setMetadata: (input) => sessions.forSession(input.sessionID).setMetadata(input),
       setPermissions: (input) => sessions.forSession(input.sessionID).setPermissions(input),
+      cwd: Effect.fn("Session.cwd")(function* (sessionID) {
+        yield* result.get(sessionID)
+        return yield* SessionCwd.read(db, sessionID)
+      }),
+      setCwd: Effect.fn("Session.setCwd")(function* (input) {
+        yield* result.get(input.sessionID)
+        yield* SessionCwd.write(db, input.sessionID, input.cwd)
+      }),
       move: moves.move,
       compact: (input) => sessions.forSession(input.sessionID).compact(input),
       wait: (sessionID) => sessions.forSession(sessionID).wait(),

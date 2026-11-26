@@ -16,6 +16,9 @@ for (const { width, direction } of [
 
     const editor = page.getByRole("textbox", { name: "Prompt", exact: true })
     await expect(editor).toBeEditable()
+    // A narrow window with a mouse is not a phone: it keeps the desktop toolbar and Enter to send.
+    await expect(page.locator('[data-action="composer-attach"]')).toBeVisible()
+    await expect(page.locator('[data-slot="composer-touch-bar"]')).toHaveCount(0)
     await editor.fill("Please check focus after sending.")
     await expect(editor).toBeFocused()
 
@@ -48,6 +51,12 @@ test.describe("touch submission", () => {
     await expect(editor).toBeEditable()
     await editor.fill("Please dismiss the keyboard after sending.")
     await expect(editor).toBeFocused()
+
+    // With the titlebar at the bottom, the touch bar still sits on the bottom edge, where the keyboard opens.
+    const titlebar = (await page.locator('[data-slot="titlebar-v2"]').boundingBox())!
+    const bar = (await page.locator('[data-slot="composer-touch-bar"]').boundingBox())!
+
+    expect(bar.y).toBeGreaterThanOrEqual(titlebar.y + titlebar.height)
 
     const admitted = page.waitForResponse(
       (response) =>

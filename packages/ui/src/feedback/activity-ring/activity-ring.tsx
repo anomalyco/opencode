@@ -2,7 +2,7 @@ import { type ComponentProps } from "solid-js"
 import { Spinner } from "../../components/spinner"
 import "./activity-ring.css"
 
-export function ActivityRing(props: ComponentProps<"svg">) {
+export function ActivityRing(props: ComponentProps<typeof Spinner>) {
   return (
     <Spinner
       {...props}

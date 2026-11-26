@@ -5,11 +5,11 @@ import { OpenAIChat } from "../protocols/openai-chat.js"
 import { OpenResponses } from "../protocols/open-responses.js"
 import { ProviderShared } from "../protocols/shared.js"
 import type { ProviderAuthOption } from "../route/auth-options.js"
-import { Route, type RouteDefaultsInput } from "../route/client.js"
+import { Route } from "../route/client.js"
 import { Endpoint } from "../route/endpoint.js"
 import { Framing } from "../route/framing.js"
 import { Protocol } from "../route/protocol.js"
-import { ProviderID, type LLMRequest, type ModelID } from "../schema/index.js"
+import { ProviderID, type LLMRequest, type ModelID, type RequestOptions } from "../schema/index.js"
 import { bearerRouteDefaults, toConfig } from "./settings.js"
 
 export const id = ProviderID.make("moonshotai")
@@ -36,7 +36,7 @@ export type ResponsesOptionsInput = {
   readonly safetyIdentifier?: string
 }
 
-export type Config = Omit<RouteDefaultsInput, "providerOptions"> &
+export type Config = Omit<RequestOptions, "providerOptions"> &
   ProviderAuthOption<"optional"> & {
     /** Overrides the selected API's base URL, including its version prefix. */
     readonly baseURL?: string
@@ -106,11 +106,10 @@ export const configure = (input: Config = {}) => {
       id: modelID,
       compatibility: {
         maxTokensField: "max_tokens",
-        supportsStrictMode: false,
-        supportsPromptCacheKey: true,
         sanitizer: "moonshot",
         reasoningField: "reasoning_content",
       },
+      capabilities: { tools: { strict: false }, promptCacheKey: true },
     })
   const messages = (modelID: string | ModelID) =>
     messagesRoute.with(defaults).model<MessagesOptionsInput>({

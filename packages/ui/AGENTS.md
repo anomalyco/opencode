@@ -12,6 +12,14 @@
 - Record the corpora used and flag uncertain or regional terminology in review notes.
 - Also use the relevant language authority or official dictionary for the locale (for example RAE/Fundéu, FranceTerme, Duden, TDK, Kotus/Kielitoimiston sanakirja, Språkrådet/Bokmålsordboka, Rada Języka Polskiego/PWN, the Russian and Arabic language academies, the Ukrainian Orthography, Taiwan MOE dictionaries, or the Royal Society of Thailand). Treat the English dictionary as the semantic source of truth and preserve placeholders, code identifiers, product names, and keyboard labels.
 
+## State
+
+- Lifecycles in shared components follow the State Machines section of `packages/app/AGENTS.md`. A component that accepts a controlled value keeps one source of truth with an explicit `controlled | uncontrolled` mode in its machine, and keeps its public props API compatible. Precedent: `src/hooks/list-machine.ts`.
+
+## Timeline stability
+
+- Shared components and styles render inside the session timeline. Follow the Timeline stability section of `packages/app/AGENTS.md`: a `:has()` selector on anything that can contain a list ends at the `:has()` element, `:has()` never selects on `style`, and code that moves focus inside a scroll container passes `preventScroll: true` unless the reader must see that control next.
+
 ## Typography
 
 - Use the shared typography metrics instead of copying solid line heights from design exports: `--line-height-tight` is `12px`, `--line-height-compact` is `16px`, and `--line-height-base` is `20px`.

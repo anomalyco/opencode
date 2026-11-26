@@ -7,7 +7,7 @@ import type definition from "./index"
 
 const CHANGELOG_URL = "https://opencode.ai/changelog.json"
 
-type Highlight = {
+export type Highlight = {
   title: string
   description: string
   media?: { type: "image" | "video"; src: string; alt?: string }
@@ -49,42 +49,27 @@ const Changelog = Schema.Union([Releases, Schema.Struct({ releases: Releases })]
 const decodeChangelog = Schema.decodeUnknownOption(Changelog)
 
 /**
- * Shows the desktop highlights of the releases since `previous` once the changelog loads, and remembers the current
- * version as seen. A changelog without highlights only remembers the version; a failed request leaves it for the next
- * start.
+ * The desktop highlights of the releases since `previous`, from the changelog; none when it holds none. Rejects when the
+ * request fails, so the release stays unseen for the next start.
  */
-export function showWhatsNew(
-  ctx: SetupContext<typeof definition>,
-  input: { readonly previous: string; readonly current: string; readonly markSeen: () => void },
-) {
-  const timers = new Set<ReturnType<typeof setTimeout>>()
+export async function loadWhatsNewHighlights(input: {
+  readonly previous: string
+  readonly current: string
+  readonly signal: AbortSignal
+}): Promise<readonly Highlight[]> {
+  const response = await fetch(CHANGELOG_URL, { signal: input.signal, headers: { Accept: "application/json" } })
 
-  ctx.signal.addEventListener("abort", () => timers.forEach(clearTimeout))
+  if (!response.ok) throw new Error(`The changelog request failed with ${response.status}`)
 
-  fetch(CHANGELOG_URL, { signal: ctx.signal, headers: { Accept: "application/json" } })
-    .then((response) => (response.ok ? response.json() : undefined))
-    .then((json) => {
-      if (!json) return
+  return Option.match(decodeChangelog(await response.json()), {
+    onNone: () => [],
+    onSome: (changelog) => sliceHighlights(releases(changelog), input.current, input.previous),
+  })
+}
 
-      const highlights = Option.match(decodeChangelog(json), {
-        onNone: () => [],
-        onSome: (changelog) => sliceHighlights(releases(changelog), input.current, input.previous),
-      })
-
-      if (ctx.signal.aborted) return
-
-      if (highlights.length === 0) return input.markSeen()
-
-      timers.add(
-        setTimeout(() => {
-          input.markSeen()
-          ctx.dialogs.open((dialog) => <DialogReleaseNotes highlights={highlights} dialog={dialog} />, {
-            replace: true,
-          })
-        }, 500),
-      )
-    })
-    .catch(() => undefined)
+/** Opens What's New above any open dialog. */
+export function openWhatsNew(ctx: SetupContext<typeof definition>, highlights: readonly Highlight[]) {
+  ctx.dialogs.open((dialog) => <DialogReleaseNotes highlights={highlights} dialog={dialog} />)
 }
 
 function releases(changelog: typeof Changelog.Type) {
@@ -182,7 +167,7 @@ function sliceHighlights(list: { tag?: string; highlights: Highlight[] }[], curr
     .slice(0, 5)
 }
 
-function DialogReleaseNotes(props: { highlights: Highlight[]; dialog: DialogHandle }) {
+export function DialogReleaseNotes(props: { highlights: readonly Highlight[]; dialog: DialogHandle }) {
   const ctx = usePlugin<typeof definition>()
   const [index, setIndex] = createSignal(0)
 
@@ -232,12 +217,9 @@ function DialogReleaseNotes(props: { highlights: Highlight[]; dialog: DialogHand
   }
 
   return (
-    <Dialog
-      size="large"
-      fit
-      class="w-[min(calc(100vw-40px),720px)] h-[min(calc(100vh-40px),400px)] -mt-20 min-h-0 overflow-hidden"
-    >
-      <div class="flex flex-1 min-w-0 min-h-0" tabIndex={0} autofocus onKeyDown={handleKeyDown}>
+    <Dialog size="large" class="min-h-0 overflow-hidden">
+      {/* Keys reach this handler from the buttons inside, which take focus, so the wrapper itself is not a Tab stop. */}
+      <div class="flex flex-1 min-w-0 min-h-0" onKeyDown={handleKeyDown}>
         {/* Left side - Text content */}
         <div class="flex flex-col flex-1 min-w-0 p-8">
           {/* Top section - feature content (fixed position from top) */}
@@ -254,18 +236,15 @@ function DialogReleaseNotes(props: { highlights: Highlight[]; dialog: DialogHand
           {/* Bottom section - buttons and indicators (fixed position) */}
           <div class="flex flex-col gap-12">
             <div class="flex flex-col items-start gap-3">
-              <Show
-                when={isLast()}
-                fallback={
-                  <Button variant="neutral" size="large" onClick={handleNext}>
-                    {ctx.t("releaseNotes.action.next")}
-                  </Button>
-                }
+              {/* One button that becomes Get started on the last page, so focus stays on it. */}
+              <Button
+                variant={isLast() ? "contrast" : "neutral"}
+                size="large"
+                autofocus
+                onClick={() => (isLast() ? handleClose() : handleNext())}
               >
-                <Button variant="contrast" size="large" onClick={handleClose}>
-                  {ctx.t("releaseNotes.action.getStarted")}
-                </Button>
-              </Show>
+                {isLast() ? ctx.t("releaseNotes.action.getStarted") : ctx.t("releaseNotes.action.next")}
+              </Button>
 
               <Button variant="ghost" size="small" onClick={handleDisable}>
                 {ctx.t("releaseNotes.action.hideFuture")}

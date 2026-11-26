@@ -352,14 +352,14 @@ export function terminalPalette(theme: ResolvedThemeTokens, mode: "light" | "dar
 function terminalHue(theme: ResolvedThemeTokens, target: number) {
   const nearest = Object.values(theme.hue)
     .map((scale) => {
-      const color = scale[200]
+      const color = scale[400]
       const [red, green, blue, alpha] = color.toInts()
       const converted = rgbToOklch(red / 255, green / 255, blue / 255)
       return { color, alpha, chroma: converted.c, distance: hueDistance(converted.h, target) }
     })
     .filter((item) => item.alpha > 0 && item.chroma >= 0.03)
     .sort((first, second) => first.distance - second.distance)[0]
-  if (!nearest || nearest.distance > 30) return theme.hue.accent[200]
+  if (!nearest || nearest.distance > 30) return theme.hue.accent[400]
   return nearest.color
 }
 

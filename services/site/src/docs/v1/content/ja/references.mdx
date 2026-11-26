@@ -1,0 +1,157 @@
+---
+title: 参照
+description: ローカルディレクトリと Git リポジトリをプロジェクトの参照として追加します。
+---
+
+参照を使用すると、OpenCode は現在のプロジェクト外のディレクトリにアクセスできます。作業中にドキュメント、共有ライブラリ、サンプル、別のリポジトリを利用できるようにするために使用します。
+
+参照は `opencode.json` または `opencode.jsonc` でエイリアスごとに設定します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "references": {
+    "docs": {
+      "path": "../product-docs",
+      "description": "Use for product behavior and documentation conventions",
+    },
+    "sdk": {
+      "repository": "anomalyco/opencode-sdk-js",
+      "branch": "main",
+      "description": "Use for JavaScript SDK implementation details",
+    },
+  },
+}
+```
+
+---
+
+## ローカルディレクトリ
+
+ローカルディレクトリを参照するには `path` を使用します。
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": {
+      "path": "../docs",
+    },
+  },
+}
+```
+
+パスには次のものを指定できます。
+
+- 参照を定義する設定ファイルからの相対パス
+- 絶対パス (`/home/user/docs` など)
+- ホームディレクトリからの相対パス (`~/docs` など)
+
+文字列の省略形を使用することもできます。
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "docs": "../docs",
+  },
+}
+```
+
+---
+
+## Git リポジトリ
+
+Git リポジトリを参照するには `repository` を使用します。OpenCode はリポジトリをローカルのリポジトリキャッシュに展開し、チェックアウトしたソースを参照ディレクトリとして利用できるようにします。
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": {
+      "repository": "Effect-TS/effect",
+      "branch": "main",
+    },
+  },
+}
+```
+
+`repository` には、Git URL、ホスト/パス形式の参照、GitHub の `owner/repo` 省略形を指定できます。オプションの `branch` フィールドでブランチまたは ref を選択します。`branch` を指定しない場合、OpenCode はリポジトリのデフォルトブランチを使用します。
+
+ブランチ、説明、その他のオプションが不要な場合は、文字列の省略形を使用できます。
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "effect": "Effect-TS/effect",
+  },
+}
+```
+
+:::note
+Git 参照は非同期で更新されます。新しく設定したリポジトリは、クローンや更新の完了に少し時間がかかる場合があります。
+:::
+
+---
+
+## 用途の説明
+
+エージェントが参照を使用するタイミングを説明するには、`description` を追加します。
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "design-system": {
+      "path": "../design-system",
+      "description": "Use when implementing UI components or design tokens",
+    },
+  },
+}
+```
+
+OpenCode は、説明のある参照をエージェントのコンテキストに含めます。説明は短く、内容が似た参照を区別できる程度に具体的にしてください。説明のない参照はオートコンプリートや直接指定で引き続き利用できますが、エージェントには提示されません。
+
+---
+
+## オートコンプリートの項目を非表示にする
+
+TUI の `@` オートコンプリートから参照を除外するには、`hidden` を `true` に設定します。
+
+```jsonc title="opencode.jsonc"
+{
+  "references": {
+    "internal": {
+      "path": "../internal",
+      "description": "Use for internal implementation details",
+      "hidden": true,
+    },
+  },
+}
+```
+
+`hidden` が影響するのはオートコンプリートのみです。説明のある非表示の参照は、引き続きエージェントのコンテキストに含まれます。
+
+---
+
+## 参照を使用する
+
+設定した参照は TUI の `@` オートコンプリートに表示されます。`@alias` と入力すると参照のルートを添付でき、`@alias/` と入力するとその中のファイルを検索できます。
+
+```text
+Compare this implementation with @sdk/src/client.ts
+```
+
+説明のある設定済みの参照については、解決済みのパスと説明がエージェントのシステムコンテキストにも渡されます。そのため、手動で添付しなくても、エージェントは関連する場合に参照を調べることができます。
+
+OpenCode は、外部ディレクトリの権限境界において参照ディレクトリを自動的に許可します。通常のツール権限は引き続き適用されます。たとえば、ファイルを編集できないエージェントは、ディレクトリが参照として設定されていても編集権限を得ることはありません。
+
+---
+
+## 設定フィールド
+
+| フィールド    | ローカル | Git    | 説明                                                     |
+| ------------- | -------- | ------ | -------------------------------------------------------- |
+| `path`        | はい     | いいえ | ローカルの参照ディレクトリ                               |
+| `repository`  | いいえ   | はい   | Git URL、ホスト/パス、または GitHub の `owner/repo` の値 |
+| `branch`      | いいえ   | はい   | オプションの Git ブランチまたは ref                      |
+| `description` | はい     | はい   | 参照を使用するタイミングを説明するガイダンス             |
+| `hidden`      | はい     | はい   | TUI の `@` オートコンプリートから参照を非表示にする      |
+
+参照のエイリアスは空にできず、`/`、空白文字、バッククォート、カンマを含めることはできません。

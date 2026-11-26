@@ -2,7 +2,7 @@ import { afterAll, afterEach, beforeAll, expect, test } from "bun:test"
 import { mkdir } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
-import { CodeRenderable, MarkdownRenderable, RGBA, SyntaxStyle, TreeSitterClient } from "@opentui/core"
+import { CodeRenderable, MarkdownRenderable, RGBA, SyntaxStyle, TextRenderable, TreeSitterClient } from "@opentui/core"
 import { createTestRenderer } from "@opentui/core/testing"
 import { createMermaidMarkdownRenderer } from "../markdown.js"
 
@@ -70,7 +70,7 @@ flowchart LR
 \`\`\``,
     syntaxStyle,
     treeSitterClient,
-    renderNode: createMermaidMarkdownRenderer(renderer),
+    renderBlock: createMermaidMarkdownRenderer(renderer),
   })
 
   renderer.root.add(markdown)
@@ -96,7 +96,7 @@ flowchart TD
   opencode --> modal[Modal workspaces]
 \`\`\``,
     syntaxStyle,
-    renderNode: createMermaidMarkdownRenderer(renderer),
+    renderBlock: createMermaidMarkdownRenderer(renderer),
   })
 
   renderer.root.add(markdown)
@@ -116,7 +116,7 @@ flowchart LR
 \`\`\``,
     syntaxStyle,
     treeSitterClient,
-    renderNode: createMermaidMarkdownRenderer(renderer),
+    renderBlock: createMermaidMarkdownRenderer(renderer),
   })
 
   renderer.root.add(markdown)
@@ -142,7 +142,7 @@ flowchart LR
 After`,
     syntaxStyle,
     treeSitterClient,
-    renderNode: createMermaidMarkdownRenderer(renderer),
+    renderBlock: createMermaidMarkdownRenderer(renderer),
   })
 
   renderer.root.add(markdown)
@@ -166,7 +166,7 @@ flowchart LR
 \`\`\``,
     syntaxStyle,
     treeSitterClient,
-    renderNode: createMermaidMarkdownRenderer(renderer),
+    renderBlock: createMermaidMarkdownRenderer(renderer),
   })
 
   renderer.root.add(markdown)
@@ -185,8 +185,7 @@ flowchart LR
 \`\`\``,
     syntaxStyle,
     streaming: true,
-    internalBlockMode: "top-level",
-    renderNode: createMermaidMarkdownRenderer(renderer),
+    renderBlock: createMermaidMarkdownRenderer(renderer),
   })
 
   renderer.root.add(markdown)
@@ -223,8 +222,7 @@ flowchart TD
   C --> E[No marker found]
   E --> G[Project root is`,
     syntaxStyle,
-    internalBlockMode: "top-level",
-    renderNode: createMermaidMarkdownRenderer(renderer),
+    renderBlock: createMermaidMarkdownRenderer(renderer),
   })
 
   renderer.root.add(markdown)
@@ -247,7 +245,7 @@ sequenceDiagram
 \`\`\``,
     syntaxStyle,
     treeSitterClient,
-    renderNode: createMermaidMarkdownRenderer(renderer),
+    renderBlock: createMermaidMarkdownRenderer(renderer),
   })
 
   renderer.root.add(markdown)
@@ -272,7 +270,7 @@ sequenceDiagram
   B->>C: second
 \`\`\``,
     syntaxStyle,
-    renderNode: createMermaidMarkdownRenderer(renderer, {
+    renderBlock: createMermaidMarkdownRenderer(renderer, {
       compact: true,
       colors: { primary: "#ff0000" },
     }),
@@ -319,7 +317,7 @@ flowchart TB
 \`\`\``,
     syntaxStyle,
     treeSitterClient,
-    renderNode: createMermaidMarkdownRenderer(renderer),
+    renderBlock: createMermaidMarkdownRenderer(renderer),
   })
 
   renderer.root.add(markdown)
@@ -327,9 +325,10 @@ flowchart TB
 
   const frame = testRenderer.captureCharFrame()
   const heading = frame.split("\n").find((line) => line.includes("Architecture"))
-  const diagram = markdown.getChildren().find((child) => child instanceof CodeRenderable) as CodeRenderable
+  // The wide diagram does not scroll the heading beside it.
+  const title = markdown.getChildren().find((child) => child instanceof TextRenderable) as TextRenderable
   expect(heading?.trimStart()).toStartWith("Architecture")
-  expect(diagram.scrollX).toBe(0)
+  expect(title.scrollX).toBe(0)
   expect(frame).toContain("Durable Object")
   expect(frame).not.toMatch(/<\/?i>|<br|events persist|mcp stdio/)
 })
@@ -343,7 +342,7 @@ flowchart LR
   A["per TURN<br/>fresh sandbox each turn"] --- B["per SESSION/thread<br/>one sandbox per Slack thread"] --- C["per REPO<br/>threads share a sandbox"] --- D["GLOBAL registry<br/>(upstream today: hardwired at boot)"]
 \`\`\``,
     syntaxStyle,
-    renderNode: createMermaidMarkdownRenderer(renderer),
+    renderBlock: createMermaidMarkdownRenderer(renderer),
   })
 
   renderer.root.add(markdown)
@@ -369,7 +368,7 @@ stateDiagram-v2
   D --> [*]
 \`\`\``,
     syntaxStyle,
-    renderNode: createMermaidMarkdownRenderer(renderer),
+    renderBlock: createMermaidMarkdownRenderer(renderer),
   })
 
   renderer.root.add(markdown)
@@ -392,7 +391,7 @@ stateDiagram-v2
 \`\`\``,
     syntaxStyle,
     treeSitterClient,
-    renderNode: createMermaidMarkdownRenderer(renderer),
+    renderBlock: createMermaidMarkdownRenderer(renderer),
   })
 
   renderer.root.add(markdown)
@@ -413,7 +412,7 @@ stateDiagram-v2
   state Decision <<choice>>
 \`\`\``,
     syntaxStyle,
-    renderNode: createMermaidMarkdownRenderer(renderer),
+    renderBlock: createMermaidMarkdownRenderer(renderer),
   })
 
   renderer.root.add(markdown)
@@ -437,7 +436,7 @@ timeline
 \`\`\``,
     syntaxStyle,
     treeSitterClient,
-    renderNode: createMermaidMarkdownRenderer(renderer),
+    renderBlock: createMermaidMarkdownRenderer(renderer),
   })
 
   renderer.root.add(markdown)
@@ -462,7 +461,7 @@ gitGraph
 \`\`\``,
     syntaxStyle,
     treeSitterClient,
-    renderNode: createMermaidMarkdownRenderer(renderer),
+    renderBlock: createMermaidMarkdownRenderer(renderer),
   })
 
   renderer.root.add(markdown)

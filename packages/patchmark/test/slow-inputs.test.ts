@@ -34,23 +34,25 @@ describe("slow-input linear-time bounds", () => {
     expect(elapsed).toBeLessThan(250)
   })
 
-  test("deeply nested blockquotes and lists stay linear (<200ms)", () => {
-    const t0 = performance.now()
+  test("renders deeply nested blockquotes and scans only the active line as a list grows", () => {
     const md = "> ".repeat(200) + "deep quote\n\n" + "- ".repeat(200) + "deep list\n"
     const frame = createMarkdownStream({ renderHtml: true }).update(md, { streaming: false })
     expect(frame.blocks).toHaveLength(2)
 
     const listStream = createMarkdownStream({ renderHtml: false })
 
+    let scanned = 0
+    let length = 0
     for (let i = 0; i < 1_000; i++) {
-      listStream.append(`- item ${i} with **bold** and \`code\`\n`)
+      const line = `- item ${i} with **bold** and \`code\`\n`
+      length += line.length
+      scanned += listStream.append(line).charsScanned
     }
 
     const done = listStream.finalize()
     expect(done.blocks).toHaveLength(1)
 
-    const elapsed = performance.now() - t0
-    expect(elapsed).toBeLessThan(200)
+    expect(scanned).toBeLessThanOrEqual(length * 2)
   })
 
   test("huge GFM table streamed row-by-row stays linear (<250ms for 1,000 rows)", () => {

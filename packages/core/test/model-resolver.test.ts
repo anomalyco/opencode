@@ -16,7 +16,7 @@ import { Npm } from "@opencode/util/npm"
 import { withEnv } from "./fixture/env"
 import { it } from "./lib/effect"
 
-interface ModelOptions {
+interface RequestOptions {
   readonly providerID?: Provider.ID
   readonly canonical?: Provider.ID
   readonly modelID?: string
@@ -26,9 +26,10 @@ interface ModelOptions {
   readonly body?: Info["body"]
   readonly variants?: Info["variants"]
   readonly limit?: Info["limit"]
+  readonly freeform?: Info["capabilities"]["freeform"]
 }
 
-function model(packageName: string | undefined, options: ModelOptions = {}) {
+function model(packageName: string | undefined, options: RequestOptions = {}) {
   const info: Model.MutableInfo = {
     id: ID.make("test-model"),
     modelID: ID.make(options.modelID ?? "api-test-model"),
@@ -40,7 +41,7 @@ function model(packageName: string | undefined, options: ModelOptions = {}) {
     settings: options.settings ?? {},
     headers: options.headers ?? { "x-test": "header" },
     body: options.body ?? { custom_extension: { enabled: true } },
-    capabilities: { tools: true, input: ["text"], output: ["text"] },
+    capabilities: { tools: true, input: ["text"], output: ["text"], freeform: options.freeform?.slice() },
     variants: structuredClone(options.variants ?? []) as Model.MutableInfo["variants"],
     time: { released: 0 },
     cost: [],
@@ -49,6 +50,7 @@ function model(packageName: string | undefined, options: ModelOptions = {}) {
     limit: options.limit ?? { context: 100, output: 20 },
   }
   AISDKNative.rewrite(info, {
+    builtins: Provider.builtinPackages,
     specifier: packageName,
     providerID: info.providerID,
     canonical: info.canonical,
@@ -62,6 +64,17 @@ function withConfigEnv<A, E, R>(env: Record<string, string>, effect: () => Effec
 }
 
 describe("ModelResolver", () => {
+  it.effect("gives the AI model the catalog's freeform formats, and none when the catalog lists none", () =>
+    Effect.gen(function* () {
+      const formats = (freeform?: Info["capabilities"]["freeform"]) =>
+        ModelResolver.fromCatalogModel(model(Provider.aisdk("@ai-sdk/openai"), { freeform })).pipe(
+          Effect.map((resolved) => resolved.capabilities?.tools?.freeform),
+        )
+      expect(yield* formats(["text", "lark"])).toEqual(["text", "lark"])
+      expect(yield* formats()).toEqual([])
+    }),
+  )
+
   it.effect("constructs native Azure requests with deployment IDs and projected resource URLs", () =>
     Effect.gen(function* () {
       const responses = yield* ModelResolver.fromCatalogModel(
@@ -275,10 +288,10 @@ describe("ModelResolver", () => {
         id: "openai-responses",
         providerMetadataKey: "openai",
         endpoint: { baseURL: "https://openai.example/v1" },
-        defaults: {
-          headers: { "x-test": "header" },
-          http: { body: { custom_extension: { enabled: true } } },
-        },
+      })
+      expect(resolved.options).toMatchObject({
+        headers: { "x-test": "header" },
+        http: { body: { custom_extension: { enabled: true } } },
       })
       const prepared = yield* compileRequest(ai.request({ model: resolved, prompt: "Hello" }))
       expect(prepared.body.max_output_tokens).toBeUndefined()
@@ -412,7 +425,7 @@ describe("ModelResolver", () => {
               method: "POST",
               url: resolved.model.route.endpoint.baseURL ?? "",
               body: "{}",
-              headers: Headers.fromInput(resolved.model.route.defaults.headers),
+              headers: Headers.fromInput(resolved.model.options?.headers),
             })
 
             expect(resolved.limit).toEqual(selection.limit)
@@ -471,7 +484,7 @@ describe("ModelResolver", () => {
           body: {},
         }),
       )
-      const request = ai.request({ model: resolved, prompt: "Hello", generation: { maxTokens: 10 } })
+      const request = ai.request({ model: resolved, prompt: "Hello", maxTokens: 10 })
       const prepared = yield* compileRequest(request)
       const headers = yield* resolved.route.auth.apply({
         request,
@@ -493,7 +506,7 @@ describe("ModelResolver", () => {
       expect(prepared.body).toMatchObject({ max_completion_tokens: 10 })
       expect(prepared.body).not.toHaveProperty("max_tokens")
       expect(resolved.route.endpoint.baseURL).toBe("https://compatible.example/v1")
-      expect(resolved.route.defaults.http?.body).toEqual({})
+      expect(resolved.options?.http?.body).toBeUndefined()
     }),
   )
 
@@ -560,14 +573,14 @@ describe("ModelResolver", () => {
         Credential.Key.make({ type: "key", key: "secret" }),
       )
 
-      expect(resolved.route.defaults.headers).toMatchObject({ "x-test": "header", "x-variant": "high" })
-      expect(resolved.route.defaults.http?.body).toEqual({
+      expect(resolved.options?.headers).toMatchObject({ "x-test": "header", "x-variant": "high" })
+      expect(resolved.options?.http?.body).toEqual({
         custom_extension: { enabled: true },
         store: false,
         service_tier: "priority",
         temperature: 0.2,
       })
-      expect(resolved.route.defaults.providerOptions).toEqual({
+      expect(resolved.options?.providerOptions).toEqual({
         store: false,
         reasoningEffort: "xhigh",
         reasoningSummary: "auto",
@@ -619,7 +632,7 @@ describe("ModelResolver", () => {
       })
       const resolved = yield* ModelResolver.resolveModel(catalog, VariantID.make("high"))
 
-      expect(resolved.route.defaults.http?.body).toEqual({
+      expect(resolved.options?.http?.body).toEqual({
         custom_extension: { enabled: true },
         store: false,
         reasoning_effort: "high",
@@ -659,10 +672,10 @@ describe("ModelResolver", () => {
       })
       const resolved = yield* ModelResolver.resolveModel(catalog, VariantID.make("high"))
 
-      expect(resolved.route.defaults.http?.body).toEqual({
+      expect(resolved.options?.http?.body).toEqual({
         custom_extension: { enabled: true },
       })
-      expect(resolved.route.defaults.providerOptions).toEqual({
+      expect(resolved.options?.providerOptions).toEqual({
         thinking: { type: "enabled", budgetTokens: 12000 },
       })
     }),
@@ -681,29 +694,6 @@ describe("ModelResolver", () => {
         providerMetadataKey: "anthropic",
         endpoint: { baseURL: "https://anthropic.example/v1" },
       })
-    }),
-  )
-
-  it.effect("uses resolved credentials for bearer auth", () =>
-    Effect.gen(function* () {
-      const resolved = yield* ModelResolver.fromCatalogModel(
-        model(Provider.aisdk("@ai-sdk/openai"), {
-          settings: { baseURL: "https://openai.example/v1" },
-          headers: {},
-          body: {},
-        }),
-        Credential.Key.make({ type: "key", key: "secret" }),
-      )
-      const request = ai.request({ model: resolved, prompt: "Hello" })
-      const headers = yield* resolved.route.auth.apply({
-        request,
-        method: "POST",
-        url: "https://openai.example/v1/responses",
-        body: "{}",
-        headers: Headers.empty,
-      })
-
-      expect(headers.authorization).toBe("Bearer secret")
     }),
   )
 
@@ -799,7 +789,7 @@ describe("ModelResolver", () => {
 
       expect(failure).toBeInstanceOf(ModelResolver.ModelConfigurationError)
       expect(resolved.route.endpoint.baseURL).toBe("https://configured-resource.openai.azure.com/openai/v1")
-      expect(resolved.route.defaults.http?.body).toEqual({})
+      expect(resolved.options?.http?.body).toBeUndefined()
     }),
   )
 
@@ -821,7 +811,7 @@ describe("ModelResolver", () => {
         }),
       )
 
-      expect(resolved.route.defaults.http?.body).toEqual({})
+      expect(resolved.options?.http?.body).toBeUndefined()
     }),
   )
 
@@ -863,11 +853,12 @@ describe("ModelResolver", () => {
         id: "openai-responses",
         endpoint: { baseURL: "https://chatgpt.com/backend-api/codex" },
       })
-      expect(resolved.route.defaults.headers).toMatchObject({ "chatgpt-account-id": "acct_123" })
+      expect(resolved.options?.headers).toMatchObject({ "chatgpt-account-id": "acct_123" })
       expect(headers.authorization).toBe("Bearer chatgpt-token")
+      expect(prepared.body).not.toHaveProperty("instructions")
       expect(prepared.body).toMatchObject({
-        instructions: "Base instructions.\nProject instructions.",
         input: [
+          { role: "developer", content: "Base instructions.\nProject instructions." },
           { role: "user", content: [{ type: "input_text", text: "Hello" }] },
           { role: "developer", content: "Updated instructions." },
         ],
@@ -904,7 +895,7 @@ describe("ModelResolver", () => {
         }),
       )
 
-      expect(resolved.route.defaults.headers).toMatchObject({
+      expect(resolved.options?.headers).toMatchObject({
         "OpenAI-Organization": "org_123",
         "OpenAI-Project": "proj_123",
       })
@@ -1357,41 +1348,41 @@ describe("ModelResolver", () => {
       )
 
       expect(google.route.id).toBe("gemini")
-      expect(google.route.defaults.providerOptions).toEqual({ thinkingConfig: { thinkingBudget: 1_024 } })
+      expect(google.options?.providerOptions).toEqual({ thinkingConfig: { thinkingBudget: 1_024 } })
       expect(openrouter.route.id).toBe("openrouter")
-      expect(openrouter.route.defaults.providerOptions).toEqual({ reasoning: { effort: "high" } })
+      expect(openrouter.options?.providerOptions).toEqual({ reasoning: { effort: "high" } })
       expect(cerebras.route.id).toBe("cerebras-chat")
-      expect(cerebras.route.defaults.providerOptions).toEqual({ reasoningEffort: "high" })
+      expect(cerebras.options?.providerOptions).toEqual({ reasoningEffort: "high" })
       expect(String(cerebras.provider)).toBe("test-provider")
       expect(deepinfra.route.id).toBe("deepinfra-chat")
       expect(deepinfra.route.endpoint.baseURL).toBe("https://deepinfra.example/provider-root/openai")
-      expect(deepinfra.route.defaults.providerOptions).toEqual({ reasoningEffort: "none" })
+      expect(deepinfra.options?.providerOptions).toEqual({ reasoningEffort: "none" })
       expect(String(deepinfra.provider)).toBe("test-provider")
       expect(togetherai.route.id).toBe("togetherai-chat")
-      expect(togetherai.route.defaults.providerOptions).toEqual({ reasoningEffort: "high" })
+      expect(togetherai.options?.providerOptions).toEqual({ reasoningEffort: "high" })
       expect(String(togetherai.provider)).toBe("test-provider")
       expect(groq.route.id).toBe("groq-chat")
       expect(groq.route.protocol).toBe("groq-chat")
-      expect(groq.route.defaults.providerOptions).toEqual({ reasoningEffort: "high", parallelToolCalls: false })
+      expect(groq.options?.providerOptions).toEqual({ reasoningEffort: "high", parallelToolCalls: false })
       expect(String(groq.provider)).toBe("test-provider")
       expect(mistral.route.id).toBe("mistral-chat")
-      expect(mistral.route.defaults.providerOptions).toEqual({
+      expect(mistral.options?.providerOptions).toEqual({
         safePrompt: true,
         promptCacheKey: "session-123",
         reasoningEffort: "high",
       })
       expect(String(mistral.provider)).toBe("test-provider")
       expect(xai.route.id).toBe("xai-responses")
-      expect(xai.route.defaults.providerOptions).toEqual({
+      expect(xai.options?.providerOptions).toEqual({
         reasoningEffort: "high",
         store: false,
         include: ["reasoning.encrypted_content"],
       })
       expect(bedrock.route.id).toBe("bedrock-converse")
-      expect(bedrock.route.defaults.generation).toEqual({ topP: 0.8 })
-      expect(bedrock.route.defaults.http?.body).toEqual({ serviceTier: { type: "priority" } })
+      expect(bedrock.options?.topP).toBe(0.8)
+      expect(bedrock.options?.http?.body).toEqual({ serviceTier: { type: "priority" } })
       expect(mantle.route.id).toBe("bedrock-mantle-chat")
-      expect(mantle.route.defaults.generation).toEqual({ topP: 0.6 })
+      expect(mantle.options?.topP).toBe(0.6)
       expect(workers.route.endpoint.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/account/ai/v1")
     }),
   )
@@ -1611,6 +1602,86 @@ describe("ModelResolver", () => {
             }),
         },
       )
+    }),
+  )
+
+  it.effect("applies provider timeouts to resolved image, video, and decision models", () =>
+    Effect.gen(function* () {
+      const settings = { apiKey: "secret", timeout: 12_000, headerTimeout: 3_000, chunkTimeout: 4_000 }
+      const providerID = Provider.ID.make("timed")
+      const entries = [
+        model("@opencode/ai/providers/openai/images", { providerID, modelID: "gpt-image-2", settings }),
+        model("@opencode/ai/providers/xai/videos", { providerID, modelID: "grok-imagine-video-1.5", settings }),
+        model("@opencode/ai/providers/google/decisions", { providerID, modelID: "gemini-2.5-flash", settings }),
+      ].map((entry, index) =>
+        Info.make({
+          ...entry,
+          id: ID.make(["img", "vid", "dec"][index]!),
+          type: (["image", "video", "decision"] as const)[index],
+        }),
+      )
+      const provider = Provider.Info.make({
+        ...Provider.Info.empty(providerID),
+        activation: "enabled",
+        settings,
+      })
+      const resolverLayer = ModelResolver.layer.pipe(
+        Layer.provide(Layer.mock(Provider.Service, { get: () => Effect.succeed(provider) })),
+        Layer.provide(
+          Layer.mock(Model.Service, {
+            available: (types) =>
+              Effect.succeed(entries.filter((entry) => !types || types.includes(entry.type ?? "chat"))),
+          }),
+        ),
+        Layer.provide(
+          Layer.mock(Integration.Service, {
+            revision: () => 0,
+            connection: {
+              active: () => Effect.undefined,
+              resolve: () => Effect.die("unused"),
+              key: () => Effect.die("unused"),
+              external: () => Effect.die("unused"),
+              activate: () => Effect.die("unused"),
+              update: () => Effect.die("unused"),
+              remove: () => Effect.die("unused"),
+              status: () => Effect.die("unused"),
+            },
+            oauth: {
+              connect: () => Effect.die("unused"),
+              status: () => Effect.die("unused"),
+              complete: () => Effect.die("unused"),
+              cancel: () => Effect.die("unused"),
+            },
+            command: {
+              connect: () => Effect.die("unused"),
+              status: () => Effect.die("unused"),
+              cancel: () => Effect.die("unused"),
+            },
+          }),
+        ),
+        Layer.provide(
+          Layer.mock(AISDK.Service, {
+            hook: {
+              sdk: () => Effect.die("unused"),
+              language: () => Effect.die("unused"),
+            },
+            model: () => Effect.die("unused"),
+          }),
+        ),
+        Layer.provide(Layer.mock(Npm.Service, {})),
+      )
+
+      const resolver = yield* ModelResolver.Service.pipe(Effect.provide(resolverLayer))
+      const [image, video, decision] = yield* Effect.all([
+        resolver.resolveImage({ providerID, id: ID.make("img") }),
+        resolver.resolveVideo({ providerID, id: ID.make("vid") }),
+        resolver.resolveDecision({ providerID, id: ID.make("dec") }),
+      ])
+
+      const expected = { total: 12_000, headers: 3_000, chunk: 4_000 }
+      expect(image?.transport?.timeout).toEqual(expected)
+      expect(video?.transport?.timeout).toEqual(expected)
+      expect(decision?.transport?.timeout).toEqual(expected)
     }),
   )
 

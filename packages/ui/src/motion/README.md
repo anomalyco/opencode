@@ -110,4 +110,4 @@ Call Solid helpers inside an owner; they release jobs and observers on cleanup. 
 
 - `bun test src/motion` from `packages/ui`
 - `bun test --conditions=browser --isolate --preload ./happydom.ts ./test-browser/motion-dom.test.ts` from `packages/app`
-- `bun run bench:motion` from `packages/ui`: retargets 1,000 springs every frame and reports per-frame integration time
+- `strobe bench packages/ui/perf/motion.bench.ts --base origin/dev --head .`: retargets and steps 1,000 springs for 60 frames, and compares the CPU it costs with an interval

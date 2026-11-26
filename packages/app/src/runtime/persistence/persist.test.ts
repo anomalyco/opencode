@@ -3,6 +3,7 @@ import type { PersistenceSyncAPI, PersistenceSyncCallback, SyncStorage } from "@
 import { createRoot } from "solid-js"
 import { createStore } from "solid-js/store"
 import { flushPersisted, persistStore } from "./persist"
+import { isPersistReady } from "./persist-machine"
 
 const wait = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 
@@ -134,6 +135,96 @@ describe("persistStore", () => {
     expect(value.store).toEqual({ count: 1, label: "" })
     expect(value.writes).toEqual([JSON.stringify({ count: 1, label: "" })])
     value.dispose()
+  })
+
+  test("a broadcast during an async load is not overwritten when the older load resolves", async () => {
+    const load = Promise.withResolvers<string | null>()
+    const listeners: PersistenceSyncCallback[] = []
+
+    const root = createRoot((dispose) => {
+      const [store, setStore] = createStore<State>({ count: 0, label: "" })
+
+      const persist = persistStore({
+        store,
+        setStore,
+        name: "state",
+        storage: { getItem: () => load.promise, setItem: async () => undefined, removeItem: async () => undefined },
+        serialize: JSON.stringify,
+        deserialize: JSON.parse,
+        sync: [(subscriber) => listeners.push(subscriber), () => {}],
+      })
+
+      return { store, persist, dispose }
+    })
+
+    listeners[0]!({ key: "state", newValue: JSON.stringify({ count: 2, label: "remote" }), timeStamp: 0 })
+    expect(isPersistReady(root.persist.state())).toBe(true)
+    load.resolve(JSON.stringify({ count: 1, label: "stale" }))
+    await load.promise
+    await Promise.resolve()
+    expect(root.store).toEqual({ count: 2, label: "remote" })
+    root.dispose()
+  })
+
+  test("a rejected load settles ready", async () => {
+    const root = createRoot((dispose) => {
+      const [store, setStore] = createStore<State>({ count: 0, label: "" })
+
+      const persist = persistStore({
+        store,
+        setStore,
+        name: "state",
+        storage: {
+          getItem: () => Promise.reject(new Error("unavailable")),
+          setItem: async () => undefined,
+          removeItem: async () => undefined,
+        },
+        serialize: JSON.stringify,
+        deserialize: JSON.parse,
+      })
+
+      return { persist, dispose }
+    })
+
+    await Promise.resolve(root.persist.init).catch(() => undefined)
+    expect(isPersistReady(root.persist.state())).toBe(true)
+    root.dispose()
+  })
+
+  test("a write the storage refused is retried by the next save of the same value", () => {
+    const results = [false, true]
+    const writes: string[] = []
+
+    const root = createRoot((dispose) => {
+      const [store, setStore] = createStore<State>({ count: 0, label: "" })
+
+      const persist = persistStore({
+        store,
+        setStore,
+        name: "state",
+        storage: {
+          getItem: () => null,
+          setItem: (_key: string, value: string) => {
+            writes.push(value)
+
+            return results.shift()
+          },
+          removeItem: () => {},
+        },
+        serialize: JSON.stringify,
+        deserialize: JSON.parse,
+        delay: 10_000,
+      })
+
+      return { set: persist.setStore, persist, dispose }
+    })
+
+    root.set("count", 1)
+    root.persist.flush()
+    root.set("count", 1)
+    root.persist.flush()
+    expect(writes).toEqual([JSON.stringify({ count: 1, label: "" }), JSON.stringify({ count: 1, label: "" })])
+    root.dispose()
   })
 
   test("disposing the owner and flushPersisted both save pending changes", () => {

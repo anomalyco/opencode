@@ -1,11 +1,12 @@
 import { define } from "@opencode/plugin/effect/plugin"
 import { Form } from "@opencode/schema/form"
-import { Clock, Deferred, Effect, Option, Schema } from "effect"
+import { Clock, Deferred, Effect, Exit, Option, Schema } from "effect"
 import { HttpClient, HttpClientRequest, HttpClientResponse } from "effect/http"
 import { App } from "../../app.js"
 import { Credential } from "../../credential.js"
 import { Integration } from "../../integration.js"
 import { OauthCallbackPage } from "../../oauth/page.js"
+import { OauthRedirect } from "../../oauth/redirect.js"
 import { Provider } from "../../provider.js"
 import { configuredSettings } from "./configured.js"
 import { ProviderRefresh } from "./refresh.js"
@@ -125,7 +126,7 @@ export const SnowflakeCortexPlugin = define({
                   : url.searchParams.get("error_description") ||
                     url.searchParams.get("error") ||
                     (!value ? "Missing authorization code" : undefined)
-              Effect.runFork(error ? Deferred.fail(code, new Error(error)) : Deferred.succeed(code, value ?? ""))
+              Deferred.doneUnsafe(code, error ? Exit.fail(new Error(error)) : Exit.succeed(value ?? ""))
               response
                 .writeHead(error ? 400 : 200, { "Content-Type": "text/html" })
                 .end(
@@ -164,6 +165,7 @@ export const SnowflakeCortexPlugin = define({
                   code_verifier: verifier,
                 })
               }),
+              submit: OauthRedirect.submit({ state, callback: code, received: (value) => value }),
             }
           }),
       })

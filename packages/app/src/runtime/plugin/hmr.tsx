@@ -12,7 +12,7 @@ export default function PluginHotReload() {
     next.forEach((definition) => {
       const current = host.definitions().find((item) => item.id === definition.id)
 
-      if (!current || host.state.status[definition.id] === "disabled") return
+      if (!current || host.status(definition.id) === "disabled") return
       void changed(current, definition).then((value) => {
         if (value) host.reload(definition.id, definition)
       })

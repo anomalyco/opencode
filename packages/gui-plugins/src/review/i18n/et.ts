@@ -12,4 +12,12 @@ export default {
   noChanges: "Muudatusi pole",
   "settings.wrapLines.title": "Ridade murdmine",
   "settings.wrapLines.description": "Horisontaalselt kerimise asemel mähkige pikad jooned mobiilidiffidesse",
+  "menu.count.one": "{{count}} fail muudetud",
+  "menu.count.other": "{{count}} faili muudetud",
+  "folder.more": "{{count}} · rohkem pole näidatud",
+  "folder.failed": "Muudatusi ei õnnestunud laadida",
+  "command.open": "Ava ülevaatus",
+  "load.failed": "Muudatusi ei õnnestunud laadida",
+  "load.timeout": "Server ei vastanud piisavalt kiiresti",
+  offline: "Serverini ei pääse",
 }

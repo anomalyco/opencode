@@ -35,20 +35,26 @@ export default {
   },
 }
 
-export const Basic = {
-  render: () => (
-    <SegmentedControl defaultValue="a" aria-label="Demo segment control">
+function Segments(props: { initial?: string; disabled?: boolean }) {
+  return (
+    <SegmentedControl defaultValue={props.initial} disabled={props.disabled} aria-label="Demo segment control">
       <SegmentedControlItem value="a">Label</SegmentedControlItem>
       <SegmentedControlItem value="b">Label</SegmentedControlItem>
       <SegmentedControlItem value="c">Label</SegmentedControlItem>
       <SegmentedControlItem value="d">Label</SegmentedControlItem>
     </SegmentedControl>
-  ),
+  )
 }
+
+export const Basic = { render: () => <Segments initial="a" /> }
+
+export const Unselected = { render: () => <Segments /> }
+
+export const Disabled = { render: () => <Segments initial="a" disabled /> }
 
 export const Controlled = {
   render: () => {
-    const [value, setValue] = createSignal("b")
+    const [value, setValue] = createSignal<string | null>("b")
 
     return (
       <div style={{ display: "grid", gap: "12px", "justify-items": "start" }}>

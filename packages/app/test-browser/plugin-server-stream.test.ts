@@ -40,20 +40,18 @@ test("a plugin server's event stream follows the endpoint the plugin reports", a
 
   const { createServerSdkContext } = await import("@/runtime/server/client")
 
-  // A server restored from the plugin's last inventory: a placeholder endpoint and no `reconnect`.
-  const [http, setHttp] = createSignal<ServerConnection.HttpBase>({ url: "http://127.0.0.1:0" })
+  // A server restored from the plugin's last inventory: not ready yet, and no `reconnect`.
+  const [status, setStatus] = createSignal<ServerConnection.Plugin["status"]>({ type: "starting" })
 
   const server = {
     type: "plugin",
     key: "remote:box",
     plugin: "remote",
-    state: "ready",
-    connecting: false,
-    authenticationRequired: false,
-    managed: false,
-    get http() {
-      return http()
+    get status() {
+      return status()
     },
+    authenticate: () => false,
+    managed: false,
   } satisfies ServerConnection.Plugin
 
   const ctx = createRoot((dispose) => ({
@@ -63,12 +61,12 @@ test("a plugin server's event stream follows the endpoint the plugin reports", a
   }))
 
   try {
-    setHttp({ url: "http://127.0.0.1:4101", password: "first" })
+    setStatus({ type: "ready", http: { url: "http://127.0.0.1:4101", password: "first" } })
     await until(() => ctx.sdk.connection.status() === "connected")
     expect(streams.map((stream) => stream.url)).toEqual(["http://127.0.0.1:4101/api/event"])
 
     // A connected stream moves as soon as the plugin reports another endpoint.
-    setHttp({ url: "http://127.0.0.1:4102", password: "second" })
+    setStatus({ type: "ready", http: { url: "http://127.0.0.1:4102", password: "second" } })
     await until(() => streams.length === 2 && ctx.sdk.connection.status() === "connected")
     expect(streams.map((stream) => [stream.url, stream.aborted])).toEqual([
       ["http://127.0.0.1:4101/api/event", true],

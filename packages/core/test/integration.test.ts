@@ -20,7 +20,7 @@ const failingCredentialNode = makeGlobalNode({
   layer: Layer.succeed(
     Credential.Service,
     Credential.Service.of({
-      lock: () => Effect.die("unused Credential.lock"),
+      refresh: () => Effect.die("unused Credential.refresh"),
       all: () => Effect.succeed([]),
       list: () => Effect.succeed([]),
       get: () => Effect.undefined,
@@ -179,7 +179,7 @@ describe("Integration", () => {
         }),
       ])
       expect((yield* Fiber.join(created)).map((event) => ({ type: event.type, data: event.data }))).toEqual([
-        { type: Credential.Event.Updated.type, data: {} },
+        { type: Credential.Event.Updated.type, data: { integrationID, credentialID: stored[0]?.id } },
         { type: Credential.Event.Switched.type, data: { credentialID: stored[0]?.id, integrationID } },
       ])
     }),
@@ -309,6 +309,45 @@ describe("Integration", () => {
           }),
         }),
       )
+    }),
+  )
+
+  it.effect("revokes an OAuth credential before removing it, even when revocation fails", () =>
+    Effect.gen(function* () {
+      const integrations = yield* Integration.Service
+      const credentials = yield* Credential.Service
+      const integrationID = Integration.ID.make("openai")
+      const methodID = Integration.MethodID.make("chatgpt")
+      const revoked = new Array<string>()
+      yield* integrations.transform((editor) =>
+        editor.method.update({
+          integrationID,
+          method: { id: methodID, type: "oauth", label: "ChatGPT" },
+          authorize: () => Effect.die("unused authorize"),
+          revoke: (credential) =>
+            Effect.sync(() => revoked.push(credential.refresh)).pipe(
+              Effect.andThen(credential.refresh === "broken" ? Effect.fail(new Error("offline")) : Effect.void),
+            ),
+        }),
+      )
+      const create = (refresh: string) =>
+        credentials.create({
+          integrationID,
+          value: Credential.OAuth.make({ type: "oauth", methodID, access: "access", refresh, expires: 1 }),
+        })
+      const working = yield* create("working")
+      const broken = yield* create("broken")
+      const key = yield* credentials.create({
+        integrationID,
+        value: Credential.Key.make({ type: "key", key: "sk-test" }),
+      })
+
+      yield* integrations.connection.remove(working.id)
+      yield* integrations.connection.remove(broken.id)
+      yield* integrations.connection.remove(key.id)
+
+      expect(revoked).toEqual(["working", "broken"])
+      expect(yield* credentials.list(integrationID)).toEqual([])
     }),
   )
 
@@ -635,7 +674,7 @@ describe("Integration", () => {
         yield* integrations.connection.remove(archived.id)
         expect(events).toEqual([
           { type: Credential.Event.Switched.type, data: { credentialID: work.id, integrationID } },
-          { type: Credential.Event.Updated.type, data: {} },
+          { type: Credential.Event.Updated.type, data: { integrationID, credentialID: archived.id } },
         ])
 
         yield* integrations.connection.remove(work.id)
@@ -652,10 +691,10 @@ describe("Integration", () => {
         })
         expect(events).toEqual([
           { type: Credential.Event.Switched.type, data: { credentialID: work.id, integrationID } },
-          { type: Credential.Event.Updated.type, data: {} },
-          { type: Credential.Event.Updated.type, data: {} },
+          { type: Credential.Event.Updated.type, data: { integrationID, credentialID: archived.id } },
+          { type: Credential.Event.Updated.type, data: { integrationID, credentialID: work.id } },
           { type: Credential.Event.Switched.type, data: { credentialID: personal.id, integrationID } },
-          { type: Credential.Event.Updated.type, data: {} },
+          { type: Credential.Event.Updated.type, data: { integrationID, credentialID: personal.id } },
           { type: Credential.Event.Switched.type, data: { credentialID: null, integrationID } },
         ])
       }),

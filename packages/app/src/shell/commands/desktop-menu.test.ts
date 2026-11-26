@@ -37,10 +37,12 @@ test.each([
   // A pinch leaves the factor between levels, or outside them.
   { factor: 1.3, direction: "in", level: 1.5 },
   { factor: 1.3, direction: "out", level: 1.25 },
-  { factor: 0.5, direction: "out", level: 1 },
+  { factor: 0.3, direction: "out", level: 0.5 },
   { factor: 3, direction: "in", level: 2 },
   { factor: 2, direction: "in", level: 2 },
-  { factor: 1, direction: "out", level: 1 },
+  { factor: 1, direction: "out", level: 0.9 },
+  { factor: 0.5, direction: "out", level: 0.5 },
+  { factor: 0.5, direction: "in", level: 0.67 },
 ] as const)("zooming $direction from $factor lands on $level", ({ factor, direction, level }) => {
   expect(nextDesktopZoomLevel(factor, direction)).toBe(level)
 })

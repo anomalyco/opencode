@@ -20,7 +20,7 @@ export type Protocol = typeof Protocol.Type
 export const Protocol = Schema.Literals(["legacy", "auto", "2026-07-28"]).annotate({
   identifier: "Mcp.Protocol",
   description:
-    'MCP protocol negotiation. "legacy" (default) opens with the initialize handshake and speaks protocol revisions up to 2025-11-25. "auto" probes for the 2026-07-28 revision and falls back to legacy when the server does not support it. "2026-07-28" requires that revision and fails otherwise.',
+    'MCP protocol negotiation. "auto" (default) probes for the 2026-07-28 revision and falls back to legacy when the server does not support it. "legacy" opens with the initialize handshake and speaks protocol revisions up to 2025-11-25. "2026-07-28" requires that revision and fails otherwise.',
 })
 
 export class LocalConfig extends Schema.Class<LocalConfig>("Mcp.LocalConfig")({
@@ -36,6 +36,10 @@ export class LocalConfig extends Schema.Class<LocalConfig>("Mcp.LocalConfig")({
   }),
   timeout: TimeoutConfig.pipe(optional),
   protocol: Protocol.pipe(optional),
+  pool: Schema.Boolean.pipe(optional).annotate({
+    description:
+      'Share one connection to this server across every directory that configures it identically, instead of one per directory. Only connections that negotiate the 2026-07-28 revision are shared; an unset "protocol" becomes "auto", and "legacy" never shares. Defaults to false.',
+  }),
 }) {}
 
 export class OAuthConfig extends Schema.Class<OAuthConfig>("Mcp.OAuthConfig")({
@@ -61,6 +65,10 @@ export class RemoteConfig extends Schema.Class<RemoteConfig>("Mcp.RemoteConfig")
   }),
   timeout: TimeoutConfig.pipe(optional),
   protocol: Protocol.pipe(optional),
+  pool: Schema.Boolean.pipe(optional).annotate({
+    description:
+      'Share one connection to this server across every directory that configures it identically, instead of one per directory. Only connections that negotiate the 2026-07-28 revision are shared; an unset "protocol" becomes "auto", and "legacy" never shares. Defaults to false.',
+  }),
 }) {}
 
 export const ServerConfig = Schema.Union([LocalConfig, RemoteConfig]).pipe(Schema.toTaggedUnion("type"))
@@ -86,6 +94,23 @@ export type Status = typeof Status.Type
 export const Status = Schema.Union([Connected, Pending, Disabled, Failed, NeedsAuth]).pipe(
   Schema.toTaggedUnion("status"),
 )
+
+/**
+ * An MCP Events subscription: `pending` until its server confirms the stream, `active` while it does, and `ended` when
+ * the server terminated or rejected it, or no longer offers events. Pending covers a server that is not connected.
+ * Experimental: MCP Events is a draft extension; may change without compatibility guarantees.
+ */
+export const SubscriptionStatus = Schema.Union([
+  Schema.Struct({ status: Schema.Literal("pending") }),
+  Schema.Struct({ status: Schema.Literal("active") }),
+  Schema.Struct({ status: Schema.Literal("ended"), reason: Schema.Literal("unavailable") }),
+  Schema.Struct({
+    status: Schema.Literal("ended"),
+    reason: Schema.Literals(["terminated", "rejected"]),
+    error: Schema.Struct({ code: Schema.Number, message: Schema.String }),
+  }),
+]).annotate({ identifier: "Mcp.SubscriptionStatus" })
+export type SubscriptionStatus = typeof SubscriptionStatus.Type
 
 export interface Server extends Schema.Schema.Type<typeof Server> {}
 export const Server = Schema.Struct({

@@ -14,9 +14,8 @@ export const Input = Schema.Struct({
 })
 
 export const Output = Schema.Struct({
-  name: Skill.Name,
   directory: Schema.String,
-  output: Schema.String,
+  content: Schema.String,
 })
 export const description = [
   "Load a specialized skill's instructions and resources into the current conversation when the task at hand matches its description.",
@@ -45,7 +44,9 @@ export const Plugin = {
           output: Output,
           execute: (input, context) =>
             Effect.gen(function* () {
-              const skill = yield* skills.get(input.id)
+              const skill = yield* skills
+                .resolve(input.id)
+                .pipe(Effect.mapError((error) => unableToLoad(input.id, error)))
               if (!skill) return yield* unableToLoad(input.id)
               return yield* Effect.gen(function* () {
                 yield* permission.assert({
@@ -54,16 +55,18 @@ export const Plugin = {
                   save: [skill.id],
                   ...Permission.invocation(context),
                 })
-                const files = yield* skills.files(skill.id)
-                return { name: skill.name, ...(yield* Skill.prepare(fs, skill, files)) }
+                const { directory, output: content } = yield* Skill.prepare(
+                  fs,
+                  { ...skill, content: yield* skills.instructions(skill.id) },
+                  yield* skills.files(skill.id),
+                )
+                return {
+                  output: { directory, content },
+                  content,
+                  metadata: { name: skill.name, directory },
+                }
               }).pipe(Effect.mapError((error) => unableToLoad(input.id, error)))
-            }).pipe(
-              Effect.map((output) => ({
-                output,
-                content: output.output,
-                metadata: { name: output.name, directory: output.directory },
-              })),
-            ),
+            }),
         }),
       )
       .pipe(Effect.orDie)

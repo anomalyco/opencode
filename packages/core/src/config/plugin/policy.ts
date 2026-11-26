@@ -6,6 +6,7 @@ import { Bus } from "../../bus.js"
 import { Config } from "../../config.js"
 import { Credential } from "../../credential.js"
 import { ManagedPolicy } from "../../managed-policy.js"
+import { Permission } from "../../permission.js"
 import { State } from "../../state.js"
 import { Wildcard } from "../../util/wildcard.js"
 import { WebSearch } from "../../websearch.js"
@@ -76,7 +77,11 @@ export const Plugin = define({
     yield* websearch.transform((editor) => {
       const statements = policies()
       for (const provider of editor.list()) {
-        if (integrationDenied(statements, provider.id)) editor.remove(provider.id)
+        if (
+          ManagedPolicy.decision(statements, "websearch.use", provider.id) === "deny" ||
+          integrationDenied(statements, provider.id)
+        )
+          editor.remove(provider.id)
       }
     })
     yield* ctx.mcp.transform((servers) => {
@@ -98,7 +103,8 @@ export const Plugin = define({
           .map((resource) =>
             statements.findLast(
               (policy) =>
-                policy.action === "tool.use" && Wildcard.match(`${event.action}:${resource}`, policy.resource),
+                policy.action === "tool.use" &&
+                Wildcard.match(`${event.action}:${resource}`, policy.resource, Permission.ignoresCase(event.action)),
             ),
           )
           .find((policy) => policy?.effect === "deny")

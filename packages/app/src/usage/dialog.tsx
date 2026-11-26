@@ -3,8 +3,20 @@ import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogBody, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
 import { Loader } from "@opencode/ui/loader"
-import { createStore } from "solid-js/store"
-import { For, type JSX, Match, onMount, Show, Switch } from "solid-js"
+import {
+  createEffect,
+  createMemo,
+  createSignal,
+  For,
+  type JSX,
+  Match,
+  on,
+  onCleanup,
+  onMount,
+  Show,
+  Switch,
+  untrack,
+} from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
 import { usePlatform } from "@/runtime/platform/platform"
 import { useData } from "@/runtime/server/current"
@@ -19,6 +31,13 @@ import {
   type LimitAction,
   usageView,
 } from "./limits"
+import {
+  selectUsageDialogView,
+  startUsageDialog,
+  transitionUsageDialog,
+  type UsageDialogEffect,
+  type UsageDialogEvent,
+} from "./machine"
 import "./dialog.css"
 
 /** The Usage dialog: the location's OpenCode Go allowance and Console budgets, refreshed when it opens. */
@@ -32,60 +51,127 @@ export function DialogUsage(props: {
 }) {
   const data = useData()
   const language = useLanguage()
-  const [state, setState] = createStore({ loading: true, failed: false })
-  const load = () => {
-    setState({ loading: true, failed: false })
-    data.location.usage.invalidate(props.location)
-    data.location.usage
-      .sync(props.location)
-      .then(() => setState({ loading: false, failed: false }))
-      .catch(() => setState({ loading: false, failed: true }))
+  const key = (location: LocationRef) => JSON.stringify([location.directory, location.workspaceID ?? null])
+
+  const start = startUsageDialog({
+    key: key(props.location),
+    cached: untrack(() => data.location.usage.limits(props.location)),
+  })
+
+  const [usageState, setUsageState] = createSignal(start.state)
+  const view = createMemo(() => selectUsageDialogView(usageState()))
+
+  const ready = createMemo(() => {
+    const current = view()
+
+    return current.status === "ready" ? current.info : undefined
+  })
+
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  const dispatch = (event: UsageDialogEvent) => {
+    const previous = untrack(usageState)
+    const next = transitionUsageDialog(previous, event)
+
+    if (next.state !== previous) setUsageState(next.state)
+    next.effects.forEach(run)
   }
-  onMount(load)
-  const info = () => data.location.usage.limits(props.location)
+
+  const run = (effect: UsageDialogEffect) => {
+    if (effect.type === "timer.stop") return clearTimeout(timer)
+
+    const attempt = effect.attempt
+
+    if (effect.type === "timer.start") {
+      timer = setTimeout(() => dispatch({ type: "load.timed-out", attempt }), effect.timeoutMs)
+
+      return
+    }
+
+    const location = untrack(() => props.location)
+    data.location.usage.invalidate(location)
+    data.location.usage
+      .sync(location)
+      .then(() => {
+        const limits = data.location.usage.limits(location)
+
+        // The server answers null when signed out; a load that leaves nothing cached found nothing to show.
+        if (limits === undefined) return dispatch({ type: "load.failed", attempt })
+        dispatch({
+          type: "load.succeeded",
+          attempt,
+          outcome: limits === null ? { kind: "signed-out" } : { kind: "limits", info: limits },
+        })
+      })
+      .catch(() => dispatch({ type: "load.failed", attempt }))
+  }
+
+  onMount(() => start.effects.forEach(run))
+  createEffect(
+    on(
+      () => props.location,
+      (location) =>
+        dispatch({ type: "location.changed", key: key(location), cached: data.location.usage.limits(location) }),
+      { defer: true },
+    ),
+  )
+  createEffect(
+    on(
+      () => data.location.usage.limits(props.location),
+      (limits) => dispatch({ type: "cache.synced", key: key(untrack(() => props.location)), limits }),
+      { defer: true },
+    ),
+  )
+  onCleanup(() => dispatch({ type: "disposed" }))
 
   return (
-    <Switch>
-      <Match when={info()}>
-        {(value) => (
-          <UsageDialogContent
-            info={value()}
-            model={props.model}
-            credits={props.credits}
-            onSwitchModel={props.onSwitchModel}
-          />
-        )}
-      </Match>
-      <Match when={true}>
+    <Show
+      when={ready()}
+      fallback={
         <UsageFrame>
-          <div class="flex min-h-[120px] items-center justify-center px-4 pb-4">
-            <Switch>
-              <Match when={state.loading}>
-                <Loader />
-              </Match>
-              <Match when={state.failed}>
-                <div class="flex flex-col items-center gap-3">
-                  <span class="text-[13px] leading-text-compact font-[440] tracking-[-0.04px] text-v2-text-text-muted">
-                    {language.t("usage.error")}
-                  </span>
-                  <Button variant="neutral" onClick={load}>
-                    {language.t("usage.retry")}
-                  </Button>
-                </div>
-              </Match>
-              <Match when={true}>
+          <Switch>
+            <Match when={view().status === "signed-out"}>
+              <div class="flex flex-col px-3 pb-3">
                 <Panel gap={8}>
-                  <Item>
-                    <Line class="font-[530] text-v2-text-text-base">{language.t("usage.signedOut.title")}</Line>
-                    <Line class="text-v2-text-text-muted">{language.t("usage.signedOut.body")}</Line>
-                  </Item>
+                  <Message
+                    title={language.t("usage.signedOut.title")}
+                    body={language.t("usage.signedOut.body")}
+                  />
                 </Panel>
-              </Match>
-            </Switch>
-          </div>
+              </div>
+            </Match>
+            <Match when={true}>
+              <div class="flex min-h-[120px] items-center justify-center px-4 pb-4">
+                <Switch>
+                  <Match when={view().status === "loading"}>
+                    <Loader />
+                  </Match>
+                  <Match when={view().status === "failed"}>
+                    <div class="flex flex-col items-center gap-3">
+                      <span class="text-[13px] leading-text-compact font-[440] tracking-[-0.04px] text-v2-text-text-muted">
+                        {language.t("usage.error")}
+                      </span>
+                      <Button variant="neutral" onClick={() => dispatch({ type: "retry" })}>
+                        {language.t("usage.retry")}
+                      </Button>
+                    </div>
+                  </Match>
+                </Switch>
+              </div>
+            </Match>
+          </Switch>
         </UsageFrame>
-      </Match>
-    </Switch>
+      }
+    >
+      {(info) => (
+        <UsageDialogContent
+          info={info()}
+          model={props.model}
+          credits={props.credits}
+          onSwitchModel={props.onSwitchModel}
+        />
+      )}
+    </Show>
   )
 }
 
@@ -102,35 +188,47 @@ export function UsageDialogContent(props: {
   const format = useUsageFormat()
   const view = () => usageView(props.info, { model: props.model, credits: props.credits })
   const workspace = () => view().workspace ?? language.t("usage.workspace.fallback")
+
   const vendors = (list: readonly string[]) =>
     new Intl.ListFormat(language.intl(), { style: "long", type: "conjunction" }).format(list)
+
   const duration = (until: number) => {
     const minutes = Math.max(1, Math.floor((until - Date.now()) / 60_000))
+
     if (minutes >= 1_440)
       return language.t("usage.duration.days", {
         days: Math.floor(minutes / 1_440),
         hours: Math.floor((minutes % 1_440) / 60),
       })
+
     if (minutes >= 60)
       return language.t("usage.duration.hours", { hours: Math.floor(minutes / 60), minutes: minutes % 60 })
+
     return language.t("usage.duration.minutes", { minutes })
   }
+
   const label = (value: BudgetLabel): string => {
     if (value.kind === "all") return language.t("usage.budget.all")
+
     if (value.kind === "each") return language.t("usage.budget.each")
+
     if (value.kind === "vendors") {
       const params = {
         vendors: vendors(value.vendors),
         price: value.price === undefined ? "" : format.money(value.price, "auto"),
       }
+
       if (value.price !== undefined)
         return language.t(value.each ? "usage.budget.vendorsPriceEach" : "usage.budget.vendorsPrice", params)
+
       return language.t(value.each ? "usage.budget.vendorsEach" : "usage.budget.vendors", params)
     }
+
     if (value.kind === "price")
       return language.t(value.each ? "usage.budget.priceEach" : "usage.budget.price", {
         price: format.money(value.price, "auto"),
       })
+
     const models =
       value.names.length > 2
         ? language.plural("usage.budget.modelsMore", value.names.length - 2, {
@@ -138,32 +236,45 @@ export function UsageDialogContent(props: {
             second: value.names[1],
           })
         : vendors(value.names)
+
     return value.each ? language.t("usage.budget.modelsEach", { models }) : models
   }
+
   const scope = (row: BudgetRow) => {
     const params = { limit: format.money(row.limit, "auto"), workspace: workspace() }
+
     const amount = {
       you: row.perModel ? "usage.budget.youEach" : "usage.budget.you",
       everyone: row.perModel ? "usage.budget.everyoneEach" : "usage.budget.everyone",
       group: row.perModel ? "usage.budget.groupEach" : "usage.budget.group",
     } as const
+
     return [language.t(amount[row.sharing], params), ...row.notes.map((value) => note(value, row))].join(" · ")
   }
+
   const note = (value: BudgetNote, row: BudgetRow) => {
     if (value.kind === "runs-out-first") return language.t("usage.note.runsOutFirst")
+
     if (value.kind === "paused") return language.t("usage.note.paused", { label: label(row.label) })
+
     if (value.kind === "includes-web-search") return language.t("usage.note.webSearch")
+
     if (value.kind === "paused-by")
       return language.t(value.shared ? "usage.note.pausedByWorkspace" : "usage.note.pausedByBudget")
+
     return language.t("usage.note.currentModel", { model: value.name })
   }
+
   const footer = () => {
     const value = view().footer
+
     if (value.kind === "credits-only") return language.t("usage.footer.creditsOnly", { workspace: workspace() })
+
     return language.t(value.kind === "budgets-reset" ? "usage.footer.budgetsReset" : "usage.footer.resets", {
       time: format.time(value.resetsAt),
     })
   }
+
   const callout = (value: Callout) => {
     if (value.kind === "credits")
       return {
@@ -171,16 +282,19 @@ export function UsageDialogContent(props: {
         body: language.t("usage.callout.credits.body"),
       }
     const params = { workspace: workspace(), time: format.time(value.resetsAt) }
+
     if (value.kind === "workspace")
       return {
         title: language.t("usage.callout.workspace.title"),
         body: language.t("usage.callout.workspace.body", params),
       }
+
     return {
       title: language.t("usage.callout.personal.title"),
       body: language.t("usage.callout.personal.body", params),
     }
   }
+
   const action = (value: LimitAction) => {
     if (value.kind === "other-models")
       return {
@@ -191,6 +305,7 @@ export function UsageDialogContent(props: {
             : language.t("usage.action.otherModels.body"),
       }
     const limit = format.money(value.limit, "auto")
+
     return {
       title:
         value.vendors.length > 0
@@ -205,6 +320,7 @@ export function UsageDialogContent(props: {
         : language.t("usage.action.each.body", { limit }),
     }
   }
+
   const switchModel = () => {
     dialog.close()
     props.onSwitchModel?.()
@@ -265,12 +381,10 @@ export function UsageDialogContent(props: {
           when={view().budgets.length > 0}
           fallback={
             <Panel gap={8}>
-              <Item>
-                <Line class="font-[530] text-v2-text-text-base">{language.t("usage.empty.title")}</Line>
-                <Line class="text-v2-text-text-muted">
-                  {language.t("usage.empty.body", { workspace: workspace() })}
-                </Line>
-              </Item>
+              <Message
+                title={language.t("usage.empty.title")}
+                body={language.t("usage.empty.body", { workspace: workspace() })}
+              />
             </Panel>
           }
         >
@@ -334,8 +448,9 @@ export function UsageDialogContent(props: {
 
 function UsageFrame(props: { children: JSX.Element; footer?: JSX.Element }) {
   const language = useLanguage()
+
   return (
-    <Dialog fit containerClass="w-[min(calc(100vw-32px),512px)]!">
+    <Dialog fit>
       <div data-component="usage-dialog" class="flex flex-col self-stretch">
         <DialogHeader>
           <DialogTitleGroup title={language.t("usage.title")} />
@@ -384,6 +499,17 @@ function Item(props: { children: JSX.Element }) {
   return <div class="flex flex-col gap-4 self-stretch px-4">{props.children}</div>
 }
 
+function Message(props: { title: string; body: string }) {
+  return (
+    <div class="flex flex-col gap-1 self-stretch px-4">
+      <Line class="font-[530] text-v2-text-text-base">{props.title}</Line>
+      <p class="m-0 text-[13px] leading-text-base font-[440] tracking-[-0.04px] text-v2-text-text-muted">
+        {props.body}
+      </p>
+    </div>
+  )
+}
+
 function Divider() {
   return <div class="h-[0.5px] shrink-0 self-stretch bg-v2-border-border-base" />
 }
@@ -401,6 +527,7 @@ function Line(props: { class?: string; children: JSX.Element }) {
 
 function GoItem(props: { row: GoRow; used: string; children: JSX.Element }) {
   const language = useLanguage()
+
   return (
     <Item>
       <div class="flex items-center justify-between self-stretch">

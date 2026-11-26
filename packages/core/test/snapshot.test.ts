@@ -4,6 +4,8 @@ import fs from "fs/promises"
 import path from "path"
 import { Deferred, Effect, Fiber, Layer, Logger } from "effect"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
+import { Environment } from "@opencode/core/environment/index"
+import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { Git } from "@opencode/core/git"
 import { Global } from "@opencode/util/global"
 import { Location } from "@opencode/core/location"
@@ -216,6 +218,58 @@ describe("Snapshot", () => {
     ),
   )
 
+  testEffect(Layer.empty).live("captures and restores a Location opened through a symlinked path", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const project = path.join(tmp.path, "project")
+        const link = path.join(tmp.path, "link")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(path.join(project, "scope"), { recursive: true })
+          await fs.writeFile(path.join(project, "scope", "tracked.txt"), "one\n")
+          await initGit(project)
+          // A junction needs no privilege on Windows; other platforms ignore the type.
+          await fs.symlink(project, link, "junction")
+        })
+        yield* Effect.gen(function* () {
+          const snapshot = yield* Snapshot.Service
+          const before = yield* snapshot.capture()
+          yield* Effect.promise(() => fs.writeFile(path.join(link, "scope", "tracked.txt"), "two\n"))
+          const after = yield* snapshot.capture()
+          expect(before).toBeDefined()
+          expect(after).toBeDefined()
+          if (!before || !after) return
+          expect(yield* snapshot.files({ from: before, to: after })).toEqual([RelativePath.make("scope/tracked.txt")])
+          yield* snapshot.restore({ files: new Map([[RelativePath.make("scope/tracked.txt"), before]]) })
+          expect(yield* read(path.join(project, "scope", "tracked.txt"))).toBe("one\n")
+        }).pipe(Effect.provide(snapshotLayer(tmp.path, path.join(link, "scope"))))
+      }),
+    ),
+  )
+  ;(process.platform === "win32" ? testEffect(Layer.empty).live : testEffect(Layer.empty).live.skip)(
+    "captures a Location opened with different letter case",
+    () =>
+      withTempDir((tmp) =>
+        Effect.gen(function* () {
+          const project = path.join(tmp.path, "project")
+          yield* Effect.promise(async () => {
+            await fs.mkdir(path.join(project, "scope"), { recursive: true })
+            await fs.writeFile(path.join(project, "scope", "tracked.txt"), "one\n")
+            await initGit(project)
+          })
+          yield* Effect.gen(function* () {
+            const snapshot = yield* Snapshot.Service
+            const before = yield* snapshot.capture()
+            yield* Effect.promise(() => fs.writeFile(path.join(project, "scope", "tracked.txt"), "two\n"))
+            const after = yield* snapshot.capture()
+            expect(before).toBeDefined()
+            expect(after).toBeDefined()
+            if (!before || !after) return
+            expect(yield* snapshot.files({ from: before, to: after })).toEqual([RelativePath.make("scope/tracked.txt")])
+          }).pipe(Effect.provide(snapshotLayer(tmp.path, path.join(project, "SCOPE"))))
+        }),
+      ),
+  )
+
   testEffect(Layer.empty).live("restores many files from several trees and removes paths absent from them", () =>
     withTempDir((tmp) =>
       Effect.gen(function* () {
@@ -397,6 +451,43 @@ describe("Snapshot", () => {
         }),
       ),
     { timeout: 15_000 },
+  )
+
+  testEffect(Layer.empty).live("returns no-op results without touching disk when Environment.local is false", () =>
+    withTempDir((tmp) =>
+      Effect.gen(function* () {
+        const project = path.join(tmp.path, "project")
+        yield* Effect.promise(async () => {
+          await fs.mkdir(project)
+          await fs.writeFile(path.join(project, "tracked.txt"), "one\n")
+          await initGit(project, true)
+        })
+
+        const location = yield* Location.Service.pipe(
+          Effect.provide(
+            AppNodeBuilder.build(Location.boundNode(Location.Ref.make({ directory: AbsolutePath.make(project) }))),
+          ),
+        )
+        const layer = AppNodeBuilder.build(Snapshot.node, [
+          Location.node.replace(Layer.succeed(Location.Service, location)),
+          Global.node.replace(Global.layerWith({ data: tmp.path, config: path.join(tmp.path, "config") })),
+          Environment.node.replace(
+            Layer.succeed(Environment.Service, Environment.local(EnvironmentUnavailable.spawner)),
+          ),
+        ])
+
+        yield* Effect.gen(function* () {
+          const snapshot = yield* Snapshot.Service
+          const tree = Snapshot.ID.make("0".repeat(40))
+          expect(yield* snapshot.capture()).toBeUndefined()
+          expect(yield* snapshot.files({ from: tree, to: tree })).toEqual([])
+          expect(yield* snapshot.diff({ from: tree, to: tree })).toEqual([])
+          yield* snapshot.restore({ files: new Map([[RelativePath.make("tracked.txt"), tree]]) })
+        }).pipe(Effect.provide(layer))
+
+        expect(yield* exists(path.join(tmp.path, "snapshot"))).toBe(false)
+      }),
+    ),
   )
 })
 

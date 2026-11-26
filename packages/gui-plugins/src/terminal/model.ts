@@ -1,22 +1,37 @@
-import { createRoot, getOwner, runWithOwner, type Owner } from "solid-js"
-import { createStore } from "solid-js/store"
+import { createSignal, getOwner, runWithOwner, untrack } from "solid-js"
+import { unwrap } from "solid-js/store"
 import { Predicate, Schema } from "effect"
 import {
   ClientError,
   isPtyFeatureUnsupportedError,
+  isPtyNotFoundError,
   isServiceUnavailableError,
-  type PersistentPtyInfo,
 } from "@opencode/client"
-import {
-  createKeyed,
-  type Layout,
-  type Persisted,
-  type ServerRef,
-  type SessionRef,
-  type Storage,
-  type Toasts,
-} from "@opencode/plugin/gui"
+import type { Layout, Persisted, ServerRef, SessionRef, Storage, Toasts } from "@opencode/plugin/gui"
+import { createDispatch } from "./dispatch"
 import { defaultTitle, titleNumber } from "./title"
+import {
+  initialState,
+  serverAvailable,
+  sessionConnection,
+  sessionCreating,
+  sessionView,
+  TERMINAL_REQUEST_TIMEOUT_MS,
+  transition,
+  viewItems,
+  viewTabs,
+  type Command,
+  type Event,
+  type State,
+} from "./machine"
+import {
+  focusRequestToken,
+  hasFocusRequest,
+  initialFocusState,
+  isFocusRequested,
+  transitionFocus,
+  type FocusRequestEvent,
+} from "./focus-machine"
 
 // The keys terminals were stored under before they lived on the server. Their PTY ids no longer exist anywhere.
 const LEGACY = { key: "terminals", from: "workspace:terminal" }
@@ -27,7 +42,12 @@ export type TerminalModel = ReturnType<typeof createTerminalModel>
 
 export type TerminalSession = ReturnType<TerminalModel["load"]>
 
-type FocusRequest = { key: string; request: number; id?: string; pending: boolean }
+const PANELS = "#terminal-panel, #review-panel"
+
+const OVERLAYS = '[role="dialog"], [role="menu"]'
+
+// How often a new terminal checks whether the server finished creating its session.
+const SESSION_POLL_MS = 250
 
 const importGhostty = () => import("ghostty-web").then(async (mod) => ({ mod, ghostty: await mod.Ghostty.load() }))
 
@@ -37,7 +57,7 @@ type Ghostty = { shared?: ReturnType<typeof importGhostty> }
 /**
  * Mirrors each session's terminals from its server, like the TUI: the server's list is the only record of which
  * terminals exist, refreshed on its terminal events and on every reconnect. Only the selected terminal per session is
- * stored.
+ * stored. Each server's support and lists follow the machine in `./machine`; this runs its requests.
  */
 export function createTerminalModel(input: {
   storage: Storage
@@ -48,90 +68,346 @@ export function createTerminalModel(input: {
   tab: (ptyID: string) => string
 }) {
   const owner = getOwner()
+  const lifetime = new AbortController()
 
-  const [lists, setLists] = input.storage.memory<{ sessions: Record<string, readonly PersistentPtyInfo[]> }>("lists", {
-    initial: { sessions: {} },
+  // Survives plugin reloads, so restored terminals show at once; the first watch checks every server again.
+  const [machine, setMachine] = input.storage.memory<{ servers: Record<string, State> }>("servers", {
+    initial: { servers: {} },
   })
 
-  const [state, setState] = createStore<{ capabilities: Record<string, boolean>; focus?: FocusRequest }>({
-    capabilities: {},
-  })
+  const [focus, setFocus] = createSignal(initialFocusState)
 
   const sessions = new Map<string, SessionRef>()
   const handles = new Map<string, ReturnType<typeof handle>>()
   const selected = new Map<string, Persisted<typeof Selected.Type>>()
-  const sequence = new Map<string, number>()
   const watched = new Map<string, { data: ServerRef["data"]; stop: VoidFunction }>()
   const cleared = new Set<string>()
   const cleanups: VoidFunction[] = []
   const ghostty: Ghostty = {}
-  const focus = { request: 0 }
 
-  const available = (server: ServerRef) => {
-    watch(server)
+  const serverState = (id: string) => machine.servers[id] ?? initialState
 
-    return state.capabilities[server.id] !== false
+  // The live ref and driver loop of each server, and the requests in flight by attempt.
+  const servers = new Map<string, { ref: ServerRef; dispatch: (event: Event) => void }>()
+  const requests = new Map<string, Map<number, AbortController>>()
+  // The new-terminal requests a session's create answers, and the focus request it resolves.
+
+  const creates = new Map<
+    string,
+    { request: number; done: { promise: Promise<string | undefined>; resolve: (id: string | undefined) => void } }
+  >()
+
+  const dispatch = (server: ServerRef, event: Event) => {
+    if (lifetime.signal.aborted) return
+    const existing = servers.get(server.id)
+
+    if (existing) {
+      existing.ref = server
+      existing.dispatch(event)
+
+      return
+    }
+
+    const created = {
+      ref: server,
+      dispatch: createDispatch<State, Event, Command>({
+        // Reads from reactive computations, such as `load`, must not subscribe them to every state change.
+        read: () => untrack(() => unwrap(machine.servers[server.id])) ?? initialState,
+        write: (state) => setMachine((draft) => void (draft.servers[server.id] = state)),
+        transition: (state, next) => {
+          const result = transition(state, next)
+
+          return { state: result.state, effects: result.commands }
+        },
+        run: (command) => run(created.ref, command),
+      }),
+    }
+
+    servers.set(server.id, created)
+    created.dispatch(event)
   }
 
-  const refresh = async (session: SessionRef) => {
-    const next = (sequence.get(session.key) ?? 0) + 1
+  /**
+   * Runs one attempt's request under the request budget. A request the machine stopped waiting for answers nothing; one
+   * that runs out of time fails, even when the server never ends it.
+   */
+  const request = <A>(
+    server: ServerRef,
+    attempt: number,
+    call: (signal: AbortSignal) => Promise<A>,
+    settle: { ok: (value: A) => Event; failed: (error: Error) => Event },
+  ) => {
+    const controller = new AbortController()
+    const signal = AbortSignal.any([controller.signal, lifetime.signal])
+    const timedOut = new Error(input.t("request.timedOut"))
+    const timer = setTimeout(() => controller.abort(timedOut), TERMINAL_REQUEST_TIMEOUT_MS)
+    const inflight = requests.get(server.id) ?? new Map<number, AbortController>()
 
-    sequence.set(session.key, next)
-    const list = await session.server.client.experimental.persistentPty.list({ sessionID: session.id })
+    const ended = new Promise<never>((_, reject) =>
+      signal.addEventListener("abort", () => reject(signal.reason), { once: true }),
+    )
 
-    // A newer refresh started meanwhile; its answer wins.
-    if (sequence.get(session.key) !== next) return
-    setLists((draft) => void (draft.sessions[session.key] = list))
+    requests.set(server.id, inflight)
+    inflight.set(attempt, controller)
+
+    return Promise.race([call(signal), ended])
+      .then(
+        (value) => dispatch(server, settle.ok(value)),
+        (cause: unknown) => {
+          if (signal.aborted && signal.reason !== timedOut) return
+          dispatch(server, settle.failed(cause instanceof Error ? cause : new Error(String(cause))))
+        },
+      )
+      .finally(() => {
+        clearTimeout(timer)
+        inflight.delete(attempt)
+      })
+  }
+
+  const run = (server: ServerRef, command: Command): Promise<void> | void => {
+    if (command.type === "check-capability")
+      return request(server, command.attempt, (signal) => server.client.server.info({ signal }), {
+        // Servers that predate the field omit it; they still offer terminals.
+        ok: (info) => ({
+          type: "capability.checked",
+          attempt: command.attempt,
+          supported: info.capabilities?.persistentPty !== false,
+        }),
+        failed: (error) => {
+          console.error("Failed to read server terminal support", error)
+
+          return { type: "capability.failed", attempt: command.attempt, error: error.message }
+        },
+      })
+
+    if (command.type === "load-list")
+      return request(
+        server,
+        command.attempt,
+        (signal) => server.client.experimental.persistentPty.list({ sessionID: command.sessionID }, { signal }),
+        {
+          ok: (items) => ({ type: "list.loaded", sessionID: command.sessionID, attempt: command.attempt, items }),
+          failed: (error) => {
+            if (isServiceUnavailableError(error))
+              return { type: "list.unavailable", sessionID: command.sessionID, attempt: command.attempt }
+            console.error("Failed to list terminals", error)
+
+            return { type: "list.failed", sessionID: command.sessionID, attempt: command.attempt, error: error.message }
+          },
+        },
+      )
+
+    if (command.type === "create-terminal")
+      return request(server, command.attempt, (signal) => createTerminal(server, command, signal), {
+        ok: (terminal) => ({
+          type: "create.succeeded",
+          sessionID: command.sessionID,
+          attempt: command.attempt,
+          terminal,
+        }),
+        failed: (error) => ({
+          type: "create.failed",
+          sessionID: command.sessionID,
+          attempt: command.attempt,
+          kind: outdated(error) ? "unsupported" : "failed",
+          error: error.message,
+        }),
+      })
+
+    if (command.type === "close-terminal")
+      return request(
+        server,
+        command.attempt,
+        (signal) => server.client.experimental.persistentPty.remove({ ptyID: command.ptyID }, { signal }),
+        {
+          ok: () => ({
+            type: "close.succeeded",
+            sessionID: command.sessionID,
+            ptyID: command.ptyID,
+            attempt: command.attempt,
+          }),
+          // A terminal that already exited is closed.
+          failed: (error) =>
+            isPtyNotFoundError(error)
+              ? {
+                  type: "close.succeeded",
+                  sessionID: command.sessionID,
+                  ptyID: command.ptyID,
+                  attempt: command.attempt,
+                }
+              : {
+                  type: "close.failed",
+                  sessionID: command.sessionID,
+                  ptyID: command.ptyID,
+                  attempt: command.attempt,
+                  error: error.message,
+                },
+        },
+      )
+
+    if (command.type === "rename-terminal")
+      return request(
+        server,
+        command.attempt,
+        (signal) =>
+          server.client.experimental.persistentPty.update({ ptyID: command.ptyID, title: command.title }, { signal }),
+        {
+          ok: (terminal) => ({
+            type: "rename.succeeded",
+            sessionID: command.sessionID,
+            ptyID: command.ptyID,
+            attempt: command.attempt,
+            terminal,
+          }),
+          failed: (error) => ({
+            type: "rename.failed",
+            sessionID: command.sessionID,
+            ptyID: command.ptyID,
+            attempt: command.attempt,
+            kind: isPtyFeatureUnsupportedError(error) ? "unsupported" : "failed",
+            error: error.message,
+          }),
+        },
+      )
+
+    if (command.type === "abort") {
+      command.attempts.forEach((attempt) => requests.get(server.id)?.get(attempt)?.abort())
+
+      return
+    }
+
+    if (command.type === "settle-create") return settleCreate(server, command)
+
+    if (command.type === "toast-close-failed") {
+      input.toast.show({ variant: "error", title: input.t("close.failed"), description: command.error })
+
+      return
+    }
+
+    if (command.type === "toast-rename-failed") {
+      input.toast.show(
+        command.kind === "unsupported"
+          ? { variant: "error", title: input.t("rename.unsupported") }
+          : { variant: "error", title: input.t("rename.failed"), description: command.error },
+      )
+
+      return
+    }
+
+    const session = sessions.get(`${server.id}\n${command.sessionID}`)
+
+    if (!session) return
     dropLegacy(session)
     // The strip shows only stored tabs, so terminals another client created join it at the end.
     const stored = new Set(input.layout.stored(session))
 
-    list.forEach((info) => {
+    command.items.forEach((info) => {
       if (!stored.has(info.id)) input.layout.open(input.tab(info.id), session, { tab: "append" })
     })
   }
 
-  // Replaces a listed terminal's info; a terminal the list doesn't have yet arrives with the next refresh.
-  const replace = (key: string, terminal: PersistentPtyInfo) =>
-    setLists((draft) => {
-      const list = draft.sessions[key]
-      const index = list?.findIndex((info) => info.id === terminal.id) ?? -1
+  const createTerminal = async (
+    server: ServerRef,
+    command: Extract<Command, { type: "create-terminal" }>,
+    signal: AbortSignal,
+  ) => {
+    const target = sessions.get(`${server.id}\n${command.sessionID}`)
 
-      if (list && index !== -1) draft.sessions[key] = list.with(index, terminal)
+    if (!target) throw new Error(input.t("create.failed"))
+    await settled(target, signal)
+
+    // The next default title counts the terminals the server already has.
+    const known =
+      command.known ??
+      (await server.client.experimental.persistentPty.list({ sessionID: target.id }, { signal }).catch(() => []))
+
+    const used = new Set(known.flatMap((info) => titleNumber(info.title) ?? []))
+    const number = Array.from({ length: used.size + 1 }, (_, index) => index + 1).find((n) => !used.has(n)) ?? 1
+
+    return server.client.experimental.persistentPty.create(
+      {
+        sessionID: target.id,
+        args: [],
+        // A session that moved keeps its object; the server's record has the directory it runs in now.
+        cwd: server.data.session.get(target.id)?.location.directory ?? target.location?.directory,
+        title: defaultTitle(number),
+        env: {},
+      },
+      { signal },
+    )
+  }
+
+  /**
+   * Resolves once the server has created the session: on its `session.created` event, or once `pending` clears. No
+   * signal tracks `pending`, so it is checked again on an interval.
+   */
+  const settled = (session: SessionRef, signal: AbortSignal) => {
+    if (!session.pending) return Promise.resolve()
+
+    return new Promise<void>((resolve, reject) => {
+      const end = () => {
+        clearInterval(poll)
+        stop()
+        signal.removeEventListener("abort", abort)
+      }
+
+      const done = () => {
+        end()
+        resolve()
+      }
+
+      const abort = () => {
+        end()
+        reject(signal.reason)
+      }
+
+      const stop = runWithOwner(owner, () =>
+        session.server.data.on("session.created", (event) => {
+          if (event.data.sessionID === session.id) done()
+        }),
+      )!
+
+      const poll = setInterval(() => {
+        if (!session.pending) done()
+      }, SESSION_POLL_MS)
+
+      signal.addEventListener("abort", abort, { once: true })
     })
+  }
 
-  // A server whose terminal daemon can't run answers 503; like a server reporting no support, it offers no terminals
-  // until the next connection checks again.
-  const listed = (session: SessionRef) =>
-    refresh(session).catch((error) => {
-      if (!isServiceUnavailableError(error)) return console.error("Failed to list terminals", error)
-      setState("capabilities", session.server.id, false)
-      setLists((draft) => void (draft.sessions[session.key] = []))
-    })
+  const settleCreate = (server: ServerRef, command: Extract<Command, { type: "settle-create" }>) => {
+    const key = `${server.id}\n${command.sessionID}`
+    const waiting = creates.get(key)
+    creates.delete(key)
 
-  const refreshQuietly = (session: SessionRef) => void listed(session)
+    if (command.outcome.ok) {
+      const id = command.outcome.terminal.id
+      const target = sessions.get(key)
 
-  const refreshServer = (server: ServerRef) =>
-    sessions.forEach((session) => {
-      if (session.server.id === server.id) refreshQuietly(session)
-    })
+      if (target) selection(target).set({ id })
 
-  const sync = (server: ServerRef) =>
-    void server.client.server
-      .info()
-      .then((info) => {
-        // Servers that predate the field omit it; they still offer terminals.
-        const supported = info.capabilities?.persistentPty !== false
+      if (waiting) dispatchFocus({ type: "pending.resolved", request: waiting.request, id })
+      waiting?.done.resolve(id)
 
-        setState("capabilities", server.id, supported)
+      return
+    }
 
-        if (supported) refreshServer(server)
-      })
-      .catch((error) => {
-        // Like the TUI: unknown support offers no terminals until the next connection checks again.
-        setState("capabilities", server.id, false)
-        console.error("Failed to read server terminal support", error)
-      })
+    if (waiting) dispatchFocus({ type: "pending.failed", request: waiting.request })
+
+    if (command.outcome.kind === "unsupported")
+      input.toast.show({ variant: "error", title: input.t("create.unsupported") })
+
+    if (command.outcome.kind === "failed")
+      input.toast.show({ variant: "error", title: input.t("create.failed"), description: command.outcome.error })
+
+    waiting?.done.resolve(undefined)
+  }
+
+  const available = (server: ServerRef) => {
+    watch(server)
+
+    return serverAvailable(serverState(server.id))
+  }
 
   // A restarted server replaces its data under the same ref, so reads that track `server.data` subscribe again.
   const watch = (server: ServerRef) => {
@@ -141,31 +417,30 @@ export function createTerminalModel(input: {
     if (current?.data === data) return
     current?.stop()
 
-    const refreshSession = (sessionID: string) => {
-      const session = sessions.get(`${server.id}\n${sessionID}`)
-
-      if (session && state.capabilities[server.id]) refreshQuietly(session)
-    }
-
     // Subscriptions end with the owner they start under, and this runs from whichever computation first read the
     // server, so they belong to the model.
     const stops = runWithOwner(owner, () => [
       // The event stream opens with server.connected, so this runs for the first connection and every reconnect.
-      data.on("server.connected", () => sync(server)),
-      data.on("persistent-pty.added", (event) => refreshSession(event.data.sessionID)),
-      data.on("persistent-pty.removed", (event) => refreshSession(event.data.sessionID)),
-      data.on("persistent-pty.updated", (event) => {
-        const key = `${server.id}\n${event.data.sessionID}`
-
-        if (!lists.sessions[key]?.some((info) => info.id === event.data.terminal.id))
-          return refreshSession(event.data.sessionID)
-
-        replace(key, event.data.terminal)
-      }),
+      data.on("server.connected", () => dispatch(server, { type: "server.connected" })),
+      data.on("persistent-pty.added", (event) =>
+        dispatch(server, { type: "session.refresh", sessionID: event.data.sessionID }),
+      ),
+      data.on("persistent-pty.removed", (event) =>
+        dispatch(server, { type: "session.refresh", sessionID: event.data.sessionID }),
+      ),
+      data.on("persistent-pty.updated", (event) =>
+        dispatch(server, {
+          type: "terminal.updated",
+          sessionID: event.data.sessionID,
+          terminal: event.data.terminal,
+        }),
+      ),
     ])!
 
     watched.set(server.id, { data, stop: () => stops.forEach((stop) => stop()) })
-    sync(server)
+    // Checks now rather than waiting for the stream: it may have connected already, and an answer a previous
+    // instance was waiting for never arrives here.
+    dispatch(server, { type: "server.connected" })
   }
 
   const selection = (session: SessionRef) => {
@@ -183,58 +458,69 @@ export function createTerminalModel(input: {
     return created
   }
 
-  const requestFocus = (key: string, id?: string, pending = false) => {
-    focus.request += 1
-    setState("focus", { key, request: focus.request, id, pending })
+  const dispatchFocus = (event: FocusRequestEvent) => {
+    const previous = untrack(focus)
+    const next = transitionFocus(previous, event)
 
-    return focus.request
+    if (next !== previous) setFocus(next)
+
+    return next
   }
 
-  const cancelFocus = (request?: number) => {
-    if (request !== undefined && state.focus?.request !== request) return
-
-    setState("focus", undefined)
-  }
+  // A request from a palette or menu pick starts while the overlay still holds focus.
+  const overlay = () => typeof document !== "undefined" && inOverlay(document.activeElement)
 
   if (typeof document !== "undefined") {
-    const cancelOnOutsideFocus = (event: FocusEvent) => {
-      if (!state.focus) return
+    const moved = (event: FocusEvent) => {
+      if (!hasFocusRequest(untrack(focus)) || !(event.target instanceof Element)) return
+      const panel = event.target.closest(PANELS) !== null
 
-      if (!(event.target instanceof Element)) return
+      dispatchFocus({
+        type: "focus.moved",
+        into: !panel ? "outside" : event.target instanceof HTMLInputElement ? "field" : "panel",
+        leavingOverlay: event.relatedTarget === null || inOverlay(event.relatedTarget),
+      })
+    }
 
-      // The side region focuses its selected tab trigger or root while switching tabs; only focus leaving it, or
-      // entering a field in it such as a tab's rename field, cancels.
-      if (event.target.closest("#terminal-panel, #review-panel") && !(event.target instanceof HTMLInputElement)) return
+    // A press where focus already is moves no focus, and still means the user moved on.
+    const pressed = (event: PointerEvent) => {
+      if (!hasFocusRequest(untrack(focus)) || !(event.target instanceof Element)) return
 
-      cancelFocus()
+      if (event.target.closest(PANELS) || inOverlay(event.target)) return
+      dispatchFocus({ type: "pointer.outside" })
     }
 
     // Capture phase: a tab's rename field stops its focusin from bubbling.
-    document.addEventListener("focusin", cancelOnOutsideFocus, true)
-    cleanups.push(() => document.removeEventListener("focusin", cancelOnOutsideFocus, true))
+    document.addEventListener("focusin", moved, true)
+    document.addEventListener("pointerdown", pressed, true)
+    cleanups.push(() => {
+      document.removeEventListener("focusin", moved, true)
+      document.removeEventListener("pointerdown", pressed, true)
+    })
   }
 
   const handle = (initial: SessionRef) => {
     const key = initial.key
     // A removed workspace forgets its session, while a component may still hold the handle.
     const session = () => sessions.get(key) ?? initial
-    const all = () => lists.sessions[key] ?? []
+    const view = () => sessionView(serverState(initial.server.id), initial.id)
+    const all = () => viewItems(view())
     const get = (id: string) => all().find((info) => info.id === id)
-
-    const focusRequested = (id?: string) => {
-      if (!id || !state.focus || state.focus.pending || state.focus.key !== key) return false
-
-      return !state.focus.id || state.focus.id === id
-    }
 
     return {
       key,
       server: () => session().server,
-      /** The server answered this session's first terminal list. */
-      ready: () => lists.sessions[key] !== undefined,
+      /** What the session's terminal panel shows: loading, failed, unsupported or the server's list. */
+      view,
+      /** The server connection whose answer the session's list is; a restarted server lists under a newer one. */
+      connection: () => sessionConnection(serverState(initial.server.id), initial.id),
       /** The session's terminals, in the server's order. */
       all,
       get,
+      /** The strip's tab ids for the stored `open` ones. */
+      tabs: (open: readonly string[]) => viewTabs(view(), open),
+      /** Loads the session's terminals again after a failure. */
+      retry: () => dispatch(session().server, { type: "session.retry", sessionID: initial.id }),
       /** The selected terminal, else the first one. */
       active() {
         const id = selection(session()).value?.id
@@ -244,109 +530,46 @@ export function createTerminalModel(input: {
       select(id: string) {
         selection(session()).set({ id })
       },
-      refresh: () => refresh(session()),
-      /** Creates a terminal and selects it; resolves its id, or undefined when the server refuses. */
-      async new() {
+      /** A new terminal is being created; another request joins it. */
+      creating: () => sessionCreating(serverState(initial.server.id), initial.id),
+      /**
+       * Creates a terminal and selects it; resolves its id, or undefined when the server refuses. A request while one
+       * is being created joins it and resolves the same id.
+       */
+      new() {
         const target = session()
-        const request = requestFocus(key, undefined, true)
+        const request = dispatchFocus({ type: "request.pending", session: key, overlay: overlay() }).request
+        const done = creates.get(key)?.done ?? Promise.withResolvers<string | undefined>()
 
-        await settled(target, owner)
+        // The create can answer before dispatch returns, so its waiter is registered first.
+        creates.set(key, { request, done })
+        dispatch(target.server, { type: "create.requested", sessionID: target.id })
 
-        // The next default title counts the terminals the server already has.
-        if (lists.sessions[key] === undefined) await refresh(target).catch(() => undefined)
-
-        const used = new Set(all().flatMap((info) => titleNumber(info.title) ?? []))
-        const number = Array.from({ length: used.size + 1 }, (_, index) => index + 1).find((n) => !used.has(n)) ?? 1
-
-        const info = await target.server.client.experimental.persistentPty
-          .create({
-            sessionID: target.id,
-            args: [],
-            // A session that moved keeps its object; the server's record has the directory it runs in now.
-            cwd: target.server.data.session.get(target.id)?.location.directory ?? target.location?.directory,
-            title: defaultTitle(number),
-            env: {},
-          })
-          .catch((error) => {
-            cancelFocus(request)
-
-            // A server without the persistent terminal routes answers with a status its API never declares for them.
-            const outdated =
-              error instanceof ClientError &&
-              error.reason === "UnexpectedStatus" &&
-              Predicate.hasProperty(error.cause, "status") &&
-              (error.cause.status === 404 || error.cause.status === 405)
-
-            input.toast.show(
-              outdated
-                ? { variant: "error", title: input.t("create.unsupported") }
-                : {
-                    variant: "error",
-                    title: input.t("create.failed"),
-                    description: error instanceof Error ? error.message : String(error),
-                  },
-            )
-
-            return undefined
-          })
-
-        if (!info) return undefined
-
-        await listed(target)
-        selection(target).set({ id: info.id })
-
-        if (state.focus?.request === request) setState("focus", { key, request, id: info.id, pending: false })
-
-        return info.id
+        return done.promise
       },
       /** Removes the terminal on the server; its tab leaves once the server lists it no longer. */
-      async close(id: string) {
-        const target = session()
-
-        await target.server.client.experimental.persistentPty
-          .remove({ ptyID: id })
-          .then(() => refresh(target))
-          .catch((error) => console.error("Failed to close terminal", error))
+      close(id: string) {
+        dispatch(session().server, { type: "close.requested", sessionID: initial.id, ptyID: id })
       },
       /**
        * Sets the terminal's title on the server; `null` clears it, so the shell's or the default title shows again.
-       * The current title, or clearing a terminal never renamed, sends nothing.
+       * The title already shown, or clearing a terminal never renamed, sends nothing.
        */
-      async rename(id: string, title: string | null) {
-        const target = session()
-        const previous = get(id)
-
-        if (!previous || title === previous.title || (title === null && previous.userTitle === null)) return
-
-        // Only a new title is known before the server answers; a cleared one shows whatever the server falls back to.
-        if (title !== null) replace(key, { ...previous, title, userTitle: title })
-
-        await target.server.client.experimental.persistentPty
-          .update({ ptyID: id, title })
-          .then((info) => replace(key, info))
-          .catch((error) => {
-            // A newer title from the server stays.
-            if (title !== null && get(id)?.userTitle === title) replace(key, previous)
-            input.toast.show(
-              isPtyFeatureUnsupportedError(error)
-                ? { variant: "error", title: input.t("rename.unsupported") }
-                : {
-                    variant: "error",
-                    title: input.t("rename.failed"),
-                    description: error instanceof Error ? error.message : String(error),
-                  },
-            )
-          })
+      rename(id: string, title: string | null) {
+        dispatch(session().server, { type: "rename.requested", sessionID: initial.id, ptyID: id, title })
       },
-      requestFocus(id?: string) {
-        requestFocus(key, id)
+      requestFocus(id: string) {
+        dispatchFocus({ type: "request.target", session: key, id, overlay: overlay() })
       },
-      focusRequested,
+      /** The terminal should take focus once it shows. */
+      focusRequested: (id: string) => isFocusRequested(focus(), key, id),
+      /** The request asking the terminal to take focus, so each focus attempt runs once per request. */
+      focusRequest: (id: string) => focusRequestToken(focus(), key, id),
       consumeFocus(id: string) {
-        if (focusRequested(id)) setState("focus", undefined)
+        dispatchFocus({ type: "consumed", session: key, id })
       },
       cancelFocus() {
-        if (state.focus?.key === key) cancelFocus()
+        dispatchFocus({ type: "cancelled", session: key })
       },
     }
   }
@@ -358,6 +581,7 @@ export function createTerminalModel(input: {
     load(session: SessionRef) {
       sessions.set(session.key, session)
       watch(session.server)
+      dispatch(session.server, { type: "session.loaded", sessionID: session.id })
 
       const existing = handles.get(session.key)
 
@@ -366,9 +590,6 @@ export function createTerminalModel(input: {
       const created = handle(session)
 
       handles.set(session.key, created)
-
-      // Until the server's support is known, the check that reads it lists every loaded session.
-      if (state.capabilities[session.server.id]) refreshQuietly(session)
 
       return created
     },
@@ -385,17 +606,26 @@ export function createTerminalModel(input: {
     /** Forgets the terminal lists of a removed workspace's sessions. */
     remove(value: { readonly server: string; readonly directory: string }) {
       input.storage.remove(LEGACY.key, { scope: value, from: LEGACY.from })
-      sessions.forEach((session, key) => {
-        if (session.server.id !== value.server || session.location?.directory !== value.directory) return
 
-        setLists((draft) => void delete draft.sessions[key])
-        sessions.delete(key)
-        handles.delete(key)
-        selected.delete(key)
-        sequence.delete(key)
+      const removed = [...sessions.values()].filter(
+        (session) => session.server.id === value.server && session.location?.directory === value.directory,
+      )
+
+      removed.forEach((session) => {
+        sessions.delete(session.key)
+        handles.delete(session.key)
+        selected.delete(session.key)
+        dispatchFocus({ type: "cancelled", session: session.key })
       })
+
+      const server = removed[0]?.server
+
+      if (server) dispatch(server, { type: "sessions.removed", sessionIDs: removed.map((session) => session.id) })
     },
     dispose() {
+      // Ends the changes in flight first, so a pending new-terminal request resolves and gives up its focus request.
+      servers.forEach((entry) => dispatch(entry.ref, { type: "instance.stopped" }))
+      lifetime.abort()
       watched.forEach((entry) => entry.stop())
       watched.clear()
       cleanups.forEach((cleanup) => cleanup())
@@ -416,21 +646,16 @@ export function createTerminalModel(input: {
   }
 }
 
-/** Resolves once the server has created the session. */
-function settled(session: SessionRef, owner: Owner | null) {
-  if (!session.pending) return Promise.resolve()
+function inOverlay(node: EventTarget | null) {
+  return node instanceof Element && node.closest(OVERLAYS) !== null
+}
 
-  return new Promise<void>((resolve) =>
-    createRoot(
-      (dispose) =>
-        createKeyed(
-          () => !session.pending,
-          () => {
-            dispose()
-            resolve()
-          },
-        ),
-      owner,
-    ),
+/** A server without the persistent terminal routes answers with a status its API never declares for them. */
+function outdated(error: Error) {
+  return (
+    error instanceof ClientError &&
+    error.reason === "UnexpectedStatus" &&
+    Predicate.hasProperty(error.cause, "status") &&
+    (error.cause.status === 404 || error.cause.status === 405)
   )
 }

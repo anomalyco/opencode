@@ -5,6 +5,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { isScrollKeyTarget, scrollKey, scrollKeyOwner } from "@opencode/ui/scroll-view"
 import { makeEventListener } from "@solid-primitives/event-listener"
 import { useNavigate } from "@solidjs/router"
+import { Match } from "effect"
 import { createEffect, createMemo, on, onCleanup, onMount, Show, type Accessor } from "solid-js"
 import { Composer } from "@/composer/composer"
 import { VoiceComposer } from "@/voice/composer"
@@ -14,7 +15,7 @@ import { setCursorPosition } from "@/composer/editor/dom"
 import { promptLength } from "@/composer/prompt-parts"
 import { useCommand } from "@/shell/commands/command"
 import { useLanguage } from "@/runtime/i18n/language"
-import { useData } from "@/runtime/server/current"
+import { useData, useServer } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { showToast } from "@/shell/notifications/toast"
 import { errorMessage } from "@/shell/layout/helpers"
@@ -23,7 +24,7 @@ import { usePlatform } from "@/runtime/platform/platform"
 import { uuid } from "@opencode/util/uuid"
 import { contextItemKey } from "@/composer/schema"
 import type { QuoteSource } from "@/composer/quote-source"
-import type { ComposerQuoteAnchor } from "@opencode/plugin/gui"
+import type { ComposerDelivery, ComposerQuoteAnchor } from "@opencode/plugin/gui"
 import { useWorkspaceLocation } from "@/workspaces/location"
 import { requireServerKey, sessionHref } from "@/shell/routes/session"
 import { useComposerCommands } from "@/composer/commands"
@@ -38,7 +39,8 @@ import { SessionComposerRegion } from "./session-composer-region"
 import { createSessionComposerController, type SessionComposerController } from "./controller"
 import { SessionQueuePanel } from "./queue-panel"
 import { SessionGoLimitTray } from "./go-limit-tray"
-import { SessionActivityChips, type SessionActivityItem } from "./activity-chips"
+import { SessionFreeLimitPanel, useFreeLimit } from "./free-limit-panel"
+import { reuseActivityItems, SessionActivityChips, type SessionActivityItem } from "./activity-chips"
 import { SessionComposerLane, useComposerLaneAlignment } from "./composer-lane"
 import { SessionTodoPill } from "./todo-pill"
 import { sessionTodos, todoFinished } from "./todos"
@@ -141,10 +143,6 @@ export function createActiveSessionRegion(input: {
     }, download)
   }
 
-  const focus = () => {
-    if (!input.session.data.isChild()) promptRef?.focus()
-  }
-
   const openParent = () => {
     const id = input.session.data.parentID()
 
@@ -243,7 +241,9 @@ export function createActiveSessionRegion(input: {
     setActiveMessage: input.timeline.actions.setActiveMessage,
   })
 
-  const revertMessage: NonNullable<SessionUserActions["revert"]> = ({ messageID }) => revert.to(messageID)
+  const revertMessage: NonNullable<SessionUserActions["revert"]> = (target) =>
+    revert.to(target.messageID, target.sessionID)
+
   const fork = useSessionFork()
   const forkMessage: NonNullable<SessionUserActions["fork"]> = (target) => fork(target).then(() => undefined)
 
@@ -291,8 +291,12 @@ export function createActiveSessionRegion(input: {
     showToast({ title: language.t("common.requestFailed") })
   }
 
+  const handoffs = useServer().ctx.handoff
+
   const pendingSteer: TimelinePendingActions = {
-    status: (sessionID, messageID) => data.session.pending.status(sessionID, messageID),
+    // A prompt held for its Location's agents and models shows as sending until it has a server row.
+    status: (sessionID, messageID) =>
+      handoffs.held(sessionID, messageID) ? "sending" : data.session.pending.status(sessionID, messageID),
     queue: ({ sessionID, messageID }) =>
       server.api.session.inbox
         .update({ sessionID, inboxID: messageID, delivery: "queue" })
@@ -310,8 +314,11 @@ export function createActiveSessionRegion(input: {
       move: state.background.move,
     },
     navigateMessageByOffset: input.timeline.actions.navigateMessage,
+    jumpToMessage: input.timeline.actions.jumpToMessage,
     revert,
-    focusInput: focus,
+    focusInput: () => {
+      if (promptRef && !input.session.data.isChild()) promptRef.focus()
+    },
     model: () => {
       const selection = controls().model.selection
       const model = selection.current()
@@ -332,7 +339,12 @@ export function createActiveSessionRegion(input: {
     state,
     parentID: input.session.data.parentID,
     centered: input.screen.centered,
-    onResponseSubmit: input.timeline.actions.resume,
+    // A reader far enough up to see the jump-to-latest button stays put; anyone closer is taken to the new prompt.
+    onResponseSubmit: () => {
+      const scroll = input.timeline.scroll
+
+      if (input.timeline.follow.following() || !(scroll.overflow && scroll.jump)) input.timeline.actions.resume()
+    },
     openParent,
     focusPrompt: () => focusPrompt(),
     setPromptRef: (element: HTMLDivElement) => {
@@ -351,6 +363,7 @@ export function createActiveSessionRegion(input: {
               sessionKey: input.session.identity.sessionKey,
               controls,
               dock,
+              takeBack: () => revert.takeBack(sessionID),
             })
           : undefined,
     ),
@@ -379,15 +392,23 @@ export function createActiveSessionRegion(input: {
 
         if (source.length) prompt.capture().quoteSource.add(contextItemKey(item), source)
 
-        if (anchor) {
-          prompt.capture().quoteSource.pend(contextItemKey(item))
-
-          return prompt.capture().quoteComment.set(contextItemKey(item), anchor)
-        }
+        if (anchor) return prompt.capture().quoteComment.set(contextItemKey(item), anchor)
 
         focusPrompt()
       },
       focus: focusPrompt,
+      delivery: (): ComposerDelivery | undefined => {
+        const send = active()?.composer.view.submit.comment
+
+        if (!send?.available()) return
+
+        return send.delivery() ?? "send"
+      },
+      send: (key: string, comment: string) => {
+        const send = active()?.composer.view.submit.comment
+
+        if (send?.available()) void send.onSubmit(key, comment)
+      },
     },
     actions: {
       // Each timeline passes its own session and child flag, which a kept timeline holds while another is routed.
@@ -413,7 +434,6 @@ export function ActiveSessionComposerRegion(props: {
   screen: SessionScreen
   model: SessionComposerController
   suggestionBoundary: () => HTMLElement | undefined
-  onReveal: (target: string) => void
 }) {
   const location = useWorkspaceLocation()
   const data = useData()
@@ -422,37 +442,57 @@ export function ActiveSessionComposerRegion(props: {
   const openRoute = useOpenSessionRoute()
 
   // Only the server's LocationNotFoundError for the session's own Location replaces the composer.
-  const missing = createMemo(() => {
-    const ref = location().missing
-    const info = props.session.data.info()
+  // A refetched session info (on reconnect) must not remount the keyed view and close its open menu.
+  const missing = createMemo(
+    () => {
+      const ref = location().missing
+      const info = props.session.data.info()
 
-    if (!ref || !info || !sameDirectory(info.location.directory, ref.directory)) return
+      if (!ref || !info || !sameDirectory(info.location.directory, ref.directory)) return
 
-    return { directory: info.location.directory, sessionID: info.id, projectID: info.projectID }
-  })
-
-  // Subagents count while their session runs, or while their blocking call waits for its child session.
-  const subagents = createMemo<SessionActivityItem[]>(() =>
-    props.model.region.state.background.subagents().map((task) => ({
-      ...task,
-      agent: task.agent ?? (task.sessionID ? data.session.get(task.sessionID)?.agent : undefined),
-      key: task.id,
-      target: task.partID ?? task.id,
-    })),
+      return { directory: info.location.directory, sessionID: info.id, projectID: info.projectID }
+    },
+    undefined,
+    {
+      equals: (previous, next) =>
+        previous?.directory === next?.directory &&
+        previous?.sessionID === next?.sessionID &&
+        previous?.projectID === next?.projectID,
+    },
   )
 
-  const shells = createMemo<SessionActivityItem[]>(() =>
-    props.model.region.state.background
-      .tasks()
-      .flatMap((task) => (task.type === "shell" ? [{ ...task, key: task.id, target: task.id }] : [])),
+  const subagents = createMemo<SessionActivityItem[]>((previous = []) =>
+    reuseActivityItems(
+      previous,
+      props.model.region.state.background
+        .tasks()
+        .filter((task) => task.type === "subagent")
+        .map((task) => ({
+          ...task,
+          agent: task.agent ?? data.session.get(task.sessionID)?.agent,
+          key: task.id,
+          target: task.id,
+        })),
+    ),
+  )
+
+  const shells = createMemo<SessionActivityItem[]>((previous = []) =>
+    reuseActivityItems(
+      previous,
+      props.model.region.state.background
+        .tasks()
+        .flatMap((task) => (task.type === "shell" ? [{ ...task, key: task.id, target: task.id }] : [])),
+    ),
+  )
+
+  const scripts = createMemo<SessionActivityItem[]>((previous = []) =>
+    reuseActivityItems(
+      previous,
+      props.model.region.state.background.scripts().map((task) => ({ ...task, key: task.id, target: task.id })),
+    ),
   )
 
   const alignment = useComposerLaneAlignment()
-  const todos = createMemo(() => sessionTodos(props.session.history.messages(), props.session.data.revertMessageID()))
-  // Like the old dock: the plan shows while the turn runs and still has work left, so stale todos never linger.
-
-  const todosVisible = () =>
-    todoEnabled() && props.session.data.working() && todos().length > 0 && !todos().every(todoFinished)
   // Matches the server: the highest-priority document that sets `experimental` decides. Migrated V1 sessions keep their
   // old `todowrite` calls, so without this check their last plan would come back.
 
@@ -462,24 +502,37 @@ export function ActiveSessionComposerRegion(props: {
       ?.flatMap((entry) => (entry.type === "document" && entry.info.experimental ? [entry.info.experimental] : []))
       .at(-1)?.todo === true
 
-  const open = (item: SessionActivityItem) => {
-    const current = props.session.identity.params.id
+  // Like the old dock: the plan shows while the turn runs and still has work left, so stale todos never linger. The
+  // transcript is read only then, so its changes cost nothing while no plan can show.
+  const todos = createMemo(() =>
+    todoEnabled() && props.session.data.working()
+      ? sessionTodos(props.session.history.messages(), props.session.data.revertMessageID())
+      : [],
+  )
 
-    if (!current) return
-
-    if (item.sessionID) return openRoute(current, item.sessionID)
-
-    // A starting subagent call has no session yet, so it lives in this timeline.
-    props.onReveal(item.target)
-  }
+  const todosVisible = () => todos().length > 0 && !todos().every(todoFinished)
 
   const stop = (item: SessionActivityItem) => {
-    const request = item.sessionID
-      ? server.api.session.interrupt({ sessionID: item.sessionID })
-      : server.api.shell.remove({
-          id: item.target,
-          location: { directory: data.shell.get(item.target)?.location.directory ?? location().directory },
-        })
+    const background = props.model.region.state.background
+
+    // A subagent stops with everything its tree still runs.
+    const request: Promise<unknown> = Match.value(item).pipe(
+      Match.when({ type: "subagent" }, (subagent) =>
+        Promise.all([
+          ...(data.session.status(subagent.sessionID) === "running"
+            ? [server.api.session.interrupt({ sessionID: subagent.sessionID })]
+            : []),
+          ...(subagent.jobs ?? []).map(background.cancelJob),
+        ]),
+      ),
+      Match.when({ type: "script" }, (script) => background.cancelJob(script.target)),
+      Match.orElse((shell) =>
+        server.api.shell.remove({
+          id: shell.target,
+          location: { directory: data.shell.get(shell.target)?.location.directory ?? location().directory },
+        }),
+      ),
+    )
 
     return request.then(
       () => true,
@@ -546,6 +599,8 @@ export function ActiveSessionComposerRegion(props: {
     return props.session.data.info()?.outcome
   }
 
+  const freeLimit = useFreeLimit(() => props.model.composer.model.paid)
+
   return (
     <SessionComposerRegion
       controller={props.model.region}
@@ -569,8 +624,13 @@ export function ActiveSessionComposerRegion(props: {
             <SessionActivityChips
               subagents={subagents()}
               shells={shells()}
+              scripts={scripts()}
               shell={shell}
-              onOpen={open}
+              onOpen={(item) => {
+                const current = props.session.identity.params.id
+
+                if (current) openRoute(current, item.sessionID)
+              }}
               onStop={stop}
               onEmpty={props.model.region.focusPrompt}
             />
@@ -594,14 +654,24 @@ export function ActiveSessionComposerRegion(props: {
             // The container for the composer's `cqw` caps: only the composer re-evaluates as a panel beside it
             // animates the chat's width.
             <div class="@container">
-              <VoiceComposer session={props.session.data.info()}>
-                <Composer
-                  model={props.model.composer}
-                  borderUnderlay
-                  readOnly={props.model.queue.undoing()}
-                  suggestionBoundary={props.suggestionBoundary}
-                />
-              </VoiceComposer>
+              <Show
+                when={!freeLimit.active()}
+                fallback={
+                  <SessionFreeLimitPanel
+                    resetAt={freeLimit.resetAt()}
+                    selection={() => props.model.composer.model.selection}
+                  />
+                }
+              >
+                <VoiceComposer session={props.session.data.info()}>
+                  <Composer
+                    model={props.model.composer}
+                    borderUnderlay
+                    readOnly={props.model.queue.undoing()}
+                    suggestionBoundary={props.suggestionBoundary}
+                  />
+                </VoiceComposer>
+              </Show>
             </div>
           }
         >

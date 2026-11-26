@@ -31,7 +31,10 @@ export type Interface = Omit<OpenCodeClient, "plugin"> & {
   readonly [Symbol.asyncDispose]: () => Promise<void>
 }
 
-export async function create(options: CreateOptions = {}, embed: EmbeddedHost.EmbedOptions = {}): Promise<Interface> {
+export async function createWithHost(
+  options: CreateOptions = {},
+  embed: EmbeddedHost.EmbedOptions = {},
+): Promise<{ readonly sdk: Interface; readonly host: EmbeddedHost.Interface }> {
   const { plugins, instances, ...hostOptions } = options
   const host = await Effect.runPromise(
     EmbeddedHost.create(
@@ -59,13 +62,20 @@ export async function create(options: CreateOptions = {}, embed: EmbeddedHost.Em
     return host.runtime.runPromise(host.plugins.register(PluginPromise.fromPromise(plugin)))
   }
   return {
-    ...client,
-    sessions: client.session,
-    events: client.event,
-    plugin: Object.assign(register, client.plugin),
-    close: host.close,
-    [Symbol.asyncDispose]: host.close,
+    host,
+    sdk: {
+      ...client,
+      sessions: client.session,
+      events: client.event,
+      plugin: Object.assign(register, client.plugin),
+      close: host.close,
+      [Symbol.asyncDispose]: host.close,
+    },
   }
+}
+
+export async function create(options: CreateOptions = {}): Promise<Interface> {
+  return (await createWithHost(options)).sdk
 }
 
 async function adaptPlugins(plugins: ReadonlyArray<Plugin.Plugin> | undefined) {

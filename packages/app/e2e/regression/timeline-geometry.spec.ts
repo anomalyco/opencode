@@ -227,7 +227,7 @@ test("keeps a file diff anchored while it expands and collapses", async ({ page 
   const wrapper = page.locator(`[data-timeline-part-id="${id}"]`)
   const diff = wrapper.locator('[data-component="apply-patch-file-diff"]')
   const row = page.locator("[data-timeline-key]", { has: wrapper })
-  const trigger = wrapper.getByRole("button")
+  const trigger = wrapper.locator('[data-slot="accordion-trigger"]')
 
   const bottom = () =>
     scroller.evaluate((element) => Math.abs(element.scrollHeight - element.clientHeight - element.scrollTop))
@@ -340,7 +340,7 @@ for (const outline of [
             },
           )
 
-    // A second turn adds the fixed turn gap, which must not get the paint-rounding margin.
+    // A second turn adds the fixed turn gap, which must not get the paint margin the other rows keep.
     await setupTimeline(page, {
       messages: [
         userMessage(undefined, {
@@ -376,7 +376,7 @@ for (const outline of [
       })),
     )
 
-    expect(rows.filter((row) => row.tag !== "TurnGap").every((row) => row.clipMargin === "0.5px")).toBe(true)
+    expect(rows.filter((row) => row.tag !== "TurnGap").every((row) => row.clipMargin === "5px")).toBe(true)
     expect(rows.filter((row) => row.tag === "TurnGap")).toEqual([{ tag: "TurnGap", clipMargin: "0px" }])
 
     const part = page.locator(`[data-timeline-part-id="${partID}"]`)
@@ -560,6 +560,107 @@ for (const failed of [false, true]) {
   })
 }
 
+test("keeps a reader scrolled up in place when they submit a prompt", async ({ page }) => {
+  await setupTimeline(page, {
+    reducedMotion: true,
+    sessionMessages: [
+      ...validateTimelineMessages([...historyMessages(18), userMessage()]),
+      { id: "msg_1002_timeline_idle", type: "idle", outcome: "succeeded", time: { created: 1700000003000 } },
+    ],
+  })
+  const scroller = page.locator('[data-slot="session-timeline-scroll"] > [data-scrollable]')
+  const top = () => scroller.evaluate((element) => element.scrollTop)
+  const fromEnd = () => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)
+  const jump = page.getByRole("button", { name: "Jump to latest" })
+  const text = "Sent while reading above."
+  const editor = page.locator('[data-component="composer"]').getByRole("textbox")
+  await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+  await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+
+  await scroller.hover()
+  await page.mouse.wheel(0, -1200)
+  await expect.poll(fromEnd).toBeGreaterThan(600)
+  await expect(jump).toBeInViewport()
+  await editor.fill(text)
+  const resting = await top()
+  const below = await fromEnd()
+
+  const requested = page.waitForRequest(
+    (request) => request.method() === "POST" && new URL(request.url()).pathname === `/api/session/${sessionID}/prompt`,
+  )
+
+  // Records the scroll position in every frame from submission until the sent prompt has grown the timeline.
+  const observation = await scroller.evaluateHandle((element) => {
+    const tops: number[] = []
+    let frame = 0
+
+    const sample = () => {
+      tops.push(element.scrollTop)
+      frame = requestAnimationFrame(sample)
+    }
+
+    frame = requestAnimationFrame(sample)
+
+    return {
+      stop: () => {
+        cancelAnimationFrame(frame)
+
+        return tops
+      },
+    }
+  })
+
+  try {
+    await editor.press("Enter")
+    expect((await requested).postDataJSON()).toMatchObject({ text })
+    await expect(editor).toHaveText("")
+    // The sent prompt lands below the reader, so the distance to the end grows while the reader stays put.
+    await expect.poll(fromEnd).toBeGreaterThan(below)
+    const tops = await observation.evaluate((value) => value.stop())
+    expect(tops.length).toBeGreaterThan(0)
+    expect(tops.every((value) => Math.abs(value - resting) <= 1)).toBe(true)
+    expect(Math.abs((await top()) - resting)).toBeLessThanOrEqual(1)
+    await expect(jump).toBeInViewport()
+  } finally {
+    await observation.dispose()
+  }
+
+  await jump.click()
+  await expect(page.locator('[data-timeline-row="UserMessage"]').filter({ hasText: text })).toBeInViewport()
+  await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+})
+
+test("takes a reader scrolled up short of the jump button to their submitted prompt", async ({ page }) => {
+  await setupTimeline(page, {
+    reducedMotion: true,
+    sessionMessages: [
+      ...validateTimelineMessages([...historyMessages(18), userMessage()]),
+      { id: "msg_1002_timeline_idle", type: "idle", outcome: "succeeded", time: { created: 1700000003000 } },
+    ],
+  })
+  const scroller = page.locator('[data-slot="session-timeline-scroll"] > [data-scrollable]')
+  const fromEnd = () => scroller.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)
+  const jump = page.getByRole("button", { name: "Jump to latest" })
+  const editor = page.locator('[data-component="composer"]').getByRole("textbox")
+  await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+  await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+
+  await scroller.hover()
+
+  // Back-to-back prompts, each sent after a small scroll up, bring the reader down to the one just sent.
+  for (const text of ["First prompt sent just above the end.", "Second prompt sent right after."]) {
+    await page.mouse.wheel(0, -150)
+    await expect.poll(fromEnd).toBeGreaterThan(100)
+    // The hidden button only fades out, so its inert wrapper is what says it is not offered.
+    await expect(jump.locator("xpath=..")).toHaveAttribute("inert")
+    await editor.fill(text)
+    await editor.press("Enter")
+    await expect(editor).toHaveText("")
+    await expect(page.locator('[data-timeline-row="UserMessage"]').filter({ hasText: text })).toBeInViewport()
+    await expect.poll(fromEnd).toBeLessThanOrEqual(1)
+  }
+})
+
 async function captureCardEdges(page: Page, card: Locator) {
   const box = await card.boundingBox()
 
@@ -633,10 +734,28 @@ async function captureCardEdges(page: Page, card: Locator) {
   )
 }
 
-test("scrolls the timeline behind the composer region, fading at the card, and keeps its end above the region", async ({
-  page,
-}) => {
+// Without hover the activity pill grows to its 44px touch size, and the tail it floats in grows with it.
+for (const input of [
+  { name: "a pointer", touch: false, viewport: { width: 1400, height: 900 }, pill: 32 },
+  { name: "touch", touch: true, viewport: { width: 390, height: 844 }, pill: 44 },
+]) {
+  test.describe(`with ${input.name}`, () => {
+    test.use({ hasTouch: input.touch, isMobile: input.touch })
+
+    test("scrolls the timeline behind the composer region, fading at the card, and keeps its end above the region", async ({
+      page,
+    }) => {
+      await scrollsBehindComposerRegion(page, input)
+    })
+  })
+}
+
+async function scrollsBehindComposerRegion(
+  page: Page,
+  input: { viewport: { width: number; height: number }; pill: number },
+) {
   await setupTimeline(page, {
+    viewport: input.viewport,
     sessionMessages: [
       ...validateTimelineMessages(historyMessages(18)),
       { id: "msg_9000_user", type: "user", text: "Split the work.", time: { created: 1 } },
@@ -648,16 +767,16 @@ test("scrolls the timeline behind the composer region, fading at the card, and k
         content: [
           {
             type: "tool",
-            id: "call_running_subagent",
-            name: "subagent",
+            id: "call_blocking_shell",
+            name: "shell",
             state: {
               status: "running",
-              input: { description: "Trace frame budget", agent: "explore" },
-              metadata: { sessionID: "ses_running_subagent" },
+              input: { command: "bun test" },
+              metadata: {},
             },
             time: { created: 2 },
           },
-          { type: "text", id: "prt_timeline_end", text: "The last answer ends above the composer region." },
+          { type: "text", text: "The last answer ends above the composer region." },
         ],
         time: { created: 2 },
       },
@@ -681,7 +800,10 @@ test("scrolls the timeline behind the composer region, fading at the card, and k
       const dock = region.getBoundingClientRect()
       const card = region.querySelector('[data-component="composer"]')!.getBoundingClientRect()
       const pill = region.querySelector('[data-slot="session-activity-chip"]')!.getBoundingClientRect()
-      const hint = viewport.querySelector('[data-component="session-background-hint-row"]')!.getBoundingClientRect()
+      const row = viewport.querySelector('[data-component="session-background-hint-row"]')!
+      const hint = row.getBoundingClientRect()
+      // The live status lane that holds Working and the background hint.
+      const lane = row.parentElement!.getBoundingClientRect()
       const parts = [...viewport.querySelectorAll("[data-timeline-part-id]")]
       const last = parts.find((element) => element.textContent?.includes("The last answer ends"))!
 
@@ -695,13 +817,25 @@ test("scrolls the timeline behind the composer region, fading at the card, and k
         ),
         // The pill floats above the region out of flow, so it never changes the inset the timeline scrolls above.
         floats: pill.bottom <= dock.top,
-        // It floats in the timeline's reserved tail, below the background hint and the last answer.
-        reserved: hint.bottom <= pill.top && last.getBoundingClientRect().bottom <= hint.top,
+        pill: Math.round(pill.height),
+        // It floats in the timeline's reserved tail, a clear gap below the live status lane and the last answer.
+        clearance: Math.round(pill.top - lane.bottom),
+        reserved: lane.top <= hint.top && last.getBoundingClientRect().bottom <= hint.top,
         atEnd: viewport.scrollHeight - viewport.clientHeight - viewport.scrollTop <= 1,
       }
     })
 
-  const expected = { behind: 0, inset: 0, fade: 0, floats: true, reserved: true, atEnd: true }
+  const expected = {
+    behind: 0,
+    inset: 0,
+    fade: 0,
+    floats: true,
+    pill: input.pill,
+    clearance: 14,
+    reserved: true,
+    atEnd: true,
+  }
+
   await expect.poll(geometry).toEqual(expected)
   const before = (await dock.boundingBox())!.height
 
@@ -715,7 +849,7 @@ test("scrolls the timeline behind the composer region, fading at the card, and k
 
   await expect.poll(async () => (await dock.boundingBox())!.height).toBeGreaterThan(before + 40)
   await expect.poll(geometry).toEqual(expected)
-})
+}
 
 test("groups consecutive sent prompts under the last one's meta line, with each bubble's actions beside it", async ({
   page,
@@ -750,10 +884,45 @@ test("groups consecutive sent prompts under the last one's meta line, with each 
   await expect(first.locator('[data-slot="user-message-copy-wrapper"]')).toBeHidden()
   await expect(last.locator('[data-slot="user-message-copy-wrapper"]')).toBeVisible()
 
-  // The first message keeps its own actions, shown beside its bubble on hover.
+  // The first message keeps its own actions, in a chevron its bubble shows on hover.
   await bubble(first).hover()
-  await expect(first.locator('[data-slot="user-message-run-actions"]')).toHaveCSS("opacity", "1")
+  await expect(first.locator('[data-slot="user-message-menu"]')).toHaveCSS("opacity", "1")
   await expect(first.getByRole("button", { name: "More actions" })).toHaveCount(1)
+})
+
+test("keeps the meta lines under messages reachable in the New timeline", async ({ page }) => {
+  await setupTimeline(page, {
+    settings: { newTimeline: true },
+    messages: [
+      userMessage([userText("Add the footer check.", { id: "prt_msg_0001_footer_text" })], {
+        id: "msg_0001_footer",
+        created: 1700000000000,
+      }),
+      assistantMessage([{ id: "prt_msg_0002_footer_text", type: "text", text: "Added the footer check." }], {
+        id: "msg_0002_footer",
+        parentID: "msg_0001_footer",
+        created: 1700000001000,
+      }),
+    ],
+  })
+
+  const content = page.locator("[data-timeline-virtual-content]")
+  const userRow = '[data-timeline-row="UserMessage"][data-message-id="msg_0001_footer"]'
+  const user = content.locator(userRow)
+  const reply = content.locator('[data-component="text-part"]', { hasText: "Added the footer check." })
+  await expect(reply).toBeVisible()
+
+  // Each virtual row clips to its measured height, so a meta line drawn below its row is cut off.
+  await user.locator('[data-slot="user-message-text"]').hover()
+  const meta = user.locator('[data-slot="user-message-copy-wrapper"]')
+  await expect(meta).toHaveCSS("opacity", "1")
+  const virtualRow = content.locator("[data-timeline-key]", { has: page.locator(userRow) })
+  const metaBox = (await meta.boundingBox())!
+  const rowBox = (await virtualRow.boundingBox())!
+  expect(metaBox.y + metaBox.height).toBeLessThanOrEqual(rowBox.y + rowBox.height)
+
+  // Hover only lands on what paints on top, so a clipped or covered Copy response never receives the pointer.
+  await reply.getByRole("button", { name: "Copy response" }).hover()
 })
 
 test("leaves a long prompt unfolded while Fold long messages is off", async ({ page }) => {
@@ -920,3 +1089,116 @@ test("folds a prompt past 12 lines to its first 8 and keeps it open after scroll
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
   await expect.poll(highlights).toBe(1)
 })
+
+// The thumb used to be written before the timeline's own scroll handler ran. The handler's first read of the scroll
+// position then recalculated style in every scroll event, and laid out again whenever the thumb changed size.
+for (const timeline of [
+  { name: "old", newTimeline: false },
+  { name: "new", newTimeline: true },
+]) {
+  test(`handles a scroll event without a forced style or layout pass in the ${timeline.name} timeline`, async ({
+    page,
+    browser,
+  }) => {
+    // One reply taller than two viewports: scrolling inside it mounts no row, so only the scroll handlers run.
+    await setupTimeline(page, {
+      settings: { newTimeline: timeline.newTimeline },
+      messages: [
+        userMessage([userText("Write a long reply.", { id: "prt_msg_0001_tall_text" })], {
+          id: "msg_0001_tall",
+          created: 1700000000000,
+        }),
+        assistantMessage(
+          [
+            {
+              id: "prt_msg_0002_tall_text",
+              type: "text",
+              text: Array.from({ length: 160 }, (_, line) => `Line ${line} of a long reply.`).join("\n\n"),
+            },
+          ],
+          { id: "msg_0002_tall", parentID: "msg_0001_tall", created: 1700000001000 },
+        ),
+        userMessage([userText("Thanks.", { id: "prt_msg_0003_tall_text" })], {
+          id: "msg_0003_tall",
+          created: 1700000002000,
+        }),
+        assistantMessage([{ id: "prt_msg_0004_tall_text", type: "text", text: "The end of the transcript." }], {
+          id: "msg_0004_tall",
+          parentID: "msg_0003_tall",
+          created: 1700000003000,
+        }),
+      ],
+    })
+
+    const scroller = page.locator(".scroll-view__viewport", { has: page.locator("[data-timeline-row]") })
+    const end = scroller.getByText("The end of the transcript.", { exact: true })
+    await expect(end).toBeInViewport()
+    // A cold timeline scrolls itself to the end while it mounts, which undoes a scroll made before it is done.
+    await expect(page.locator("[data-timeline-virtual-content]")).toHaveCSS("visibility", "visible")
+    await waitForVisualSettle(page, ["[data-timeline-virtual-content]"])
+    // Leave the end as a reader does, with a page key from the composer, which holds the focus: a scripted scroll is no
+    // reader input, so the timeline may go back to the end it follows. The pointer stays off the timeline: rows that
+    // pass under it change hover state, which dirties style by itself.
+    const editor = page.locator('[data-component="composer-editor"]')
+    await editor.press("PageUp")
+    await editor.press("PageUp")
+    await expect(end).not.toBeInViewport()
+    await waitForVisualSettle(page, ["[data-timeline-virtual-content]"])
+
+    const scrolls = await scroller.evaluateHandle((element) => {
+      const seen = { count: 0 }
+      element.addEventListener("scroll", () => seen.count++)
+
+      return seen
+    })
+
+    await browser.startTracing(page, {
+      categories: ["devtools.timeline", "disabled-by-default-devtools.timeline.stack"],
+    })
+
+    // Scroll events alone, as dragging the scrollbar or autoscroll sends them. A wheel event runs handlers of its own.
+    for (const step of Array.from({ length: 15 }, (_, index) => index + 1)) {
+      await scroller.evaluate((element) => (element.scrollTop -= 30))
+      await expect.poll(() => scrolls.evaluate((seen) => seen.count)).toBeGreaterThanOrEqual(step)
+    }
+
+    const trace: { traceEvents: TraceEvent[] } = JSON.parse((await browser.stopTracing()).toString())
+    const passes = forcedInScroll(trace.traceEvents)
+    expect(passes.scrolls).toBeGreaterThanOrEqual(15)
+    // Before, every scroll event forced one.
+    expect(passes.forced).toBeLessThanOrEqual(3)
+  })
+}
+
+type TraceEvent = {
+  name: string
+  ph: string
+  ts: number
+  dur?: number
+  pid: number
+  tid: number
+  args?: { data?: { type?: string; stackTrace?: unknown[] }; beginData?: { stackTrace?: unknown[] } }
+}
+
+// Style and layout passes that script forced while a scroll event was handled. Chrome records the script's stack on
+// such a pass; a pass of the rendering update has none.
+function forcedInScroll(events: TraceEvent[]) {
+  const scrolls = events.filter(
+    (event) => event.name === "EventDispatch" && event.ph === "X" && event.args?.data?.type === "scroll",
+  )
+
+  const forced = events.filter(
+    (event) =>
+      (event.name === "UpdateLayoutTree" || event.name === "Layout") &&
+      !!(event.args?.beginData?.stackTrace ?? event.args?.data?.stackTrace)?.length &&
+      scrolls.some(
+        (scroll) =>
+          scroll.pid === event.pid &&
+          scroll.tid === event.tid &&
+          event.ts >= scroll.ts &&
+          event.ts <= scroll.ts + (scroll.dur ?? 0),
+      ),
+  )
+
+  return { scrolls: scrolls.length, forced: forced.length }
+}

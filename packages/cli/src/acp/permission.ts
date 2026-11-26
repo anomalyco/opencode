@@ -86,6 +86,9 @@ export const withCompletedDiffs = Effect.fnUntraced(function* (
   cwd: string,
 ) {
   if (!source || update.sessionUpdate !== "tool_call_update") return update
+  // A script lists each change it made, some without a diff, and the same file more than once; rebuilding them from the
+  // file on disk would show its final text for every change.
+  if (canonicalName(source.toolName) === "execute") return update
   const hunks = canonicalName(source.toolName) === "patch" ? patchHunks(source.input) : []
   const diffs = yield* Effect.forEach(
     Option.getOrElse(decodeFiles(source.metadata?.files), () => []),
@@ -148,10 +151,7 @@ function patchPreviews(input: ToolInput, cwd: string) {
     (hunk) =>
       Effect.gen(function* () {
         const path = absolutePath(hunk.path, cwd)
-        if (hunk.type === "add") {
-          const newText = hunk.contents.endsWith("\n") || hunk.contents === "" ? hunk.contents : `${hunk.contents}\n`
-          return diff(path, null, newText)
-        }
+        if (hunk.type === "add") return diff(path, null, hunk.contents)
         const oldText = yield* Effect.tryPromise(() => Bun.file(path).text())
         if (hunk.type === "delete") return diff(path, oldText, "")
         const derived = yield* Effect.try(() => Patch.derive(hunk.path, hunk.chunks, oldText))

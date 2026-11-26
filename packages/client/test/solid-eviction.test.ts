@@ -81,7 +81,7 @@ test.each([
   ["keep", ["msg_old", "msg_page"], false, 1],
   ["evict", [], false, 0],
   ["delete", [], false, 0],
-  ["resync", ["msg_new"], true, 0],
+  ["resync", ["msg_new"], false, 0],
   ["recreate", ["msg_page"], true, 0],
   ["evict-all", [], false, 0],
 ] as const)("settles a pending history page after %s", async (mode, messages, more, published) => {
@@ -95,7 +95,7 @@ test.each([
       return refreshed
         ? Response.json({
             data: [{ id: "msg_new", type: "user", text: "new", time: { created: 2 } }],
-            cursor: { next: "fresh" },
+            cursor: {},
           })
         : undefined
     if (++pages > 1) throw new Error("requested another obsolete history page")
@@ -103,13 +103,13 @@ test.each([
     await release.promise
     return Response.json({
       data: [{ id: "msg_old", type: "user", text: "old", time: { created: 0 } }],
-      cursor: mode === "evict-all" ? { next: "more" } : {},
+      cursor: mode === "evict-all" || mode === "resync" ? { next: "more" } : {},
     })
   })
   try {
     await setup.data.session.message.sync("ses_child")
     const pending = setup.data.session.message.loadMore("ses_child", {
-      all: mode === "evict-all",
+      all: mode === "evict-all" || mode === "resync",
       beforePublish: () => publications++,
     })
     await requested.promise
