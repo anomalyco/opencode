@@ -952,6 +952,8 @@ const mapFinishReason = Effect.fnUntraced(function* (event: OpenAIChatEvent, rea
     case "length":
       return "length" as const
     case "content_filter":
+    // Z.AI ends a response its safety review blocked with "sensitive".
+    case "sensitive":
       return "content-filter" as const
     case "function_call":
     case "tool_calls":
