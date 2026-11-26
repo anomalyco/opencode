@@ -170,6 +170,10 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
   }
   /* grey-ok-end */
 
+  &:focus-visible {
+    outline: none;
+  }
+
   button {
     font: inherit;
     color: inherit;
@@ -712,7 +716,7 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
     display: contents;
   }
 
-  :is([data-slot="sheet-open"], [data-slot="sheet-head"], [data-slot="sheet-label"], [data-slot="sheet-backdrop"]) {
+  :is([data-slot="sheet-head"], [data-slot="sheet-label"], [data-slot="sheet-backdrop"]) {
     display: none;
   }
 
@@ -1250,29 +1254,24 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
       padding: 16px 16px 8px;
     }
 
-    /* On a phone the bar wraps onto as many rows as it needs, over the card. */
-    /* On a phone the bar holds Close, Settings, and Mute, Shuffle and Export, always to hand; the settings slide up in
-       a sheet from the bottom, every one a full row with its name, and slide back down when it's dismissed. */
+    /* On a phone the bar holds Close, then Mute, Shuffle, Customize and Save, as on wider screens; Customize slides
+       the settings up in a sheet from the bottom, every one a full row with its name. */
     [data-slot="editor-bar"] {
       flex-wrap: nowrap;
       padding: calc(8px + env(safe-area-inset-top, 0px)) 8px 8px;
-    }
 
-    [data-slot="sheet-open"] {
-      display: flex;
-      gap: 6px;
-      align-items: center;
-      height: 36px;
-      padding: 0 10px;
-      font-size: 13px;
-      color: var(--stats-text);
-      background: var(--stats-bg);
-      border: 1px solid var(--stats-line-strong);
-      border-radius: 0;
-
-      &[aria-expanded="true"] {
+      [data-variant="customize"][aria-expanded="true"] {
         background: var(--stats-layer-2);
       }
+
+      [data-slot="bar-end"] [data-variant="primary"] {
+        min-width: 72px;
+      }
+    }
+
+    /* No tooltips on a touch screen: they'd only show on focus, and at the top of the screen they'd be cut off. */
+    [data-tooltip]::after {
+      display: none;
     }
 
     /* Below the bar, so Mute, Shuffle and Export stay in reach with the sheet open. */
@@ -1378,7 +1377,18 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
         color: var(--stats-faint);
       }
 
-      /* Lists and the calendar open upwards in the sheet, over the rows above, as wide as their control. */
+      /* More room between each icon and its label, in the controls and their lists alike, so they line up. */
+      :is([data-slot="dropdown-trigger"], [data-slot="dropdown-item"]),
+      [data-component="dropdown"][data-id="music"] [data-slot="dropdown-item"] {
+        gap: 12px;
+      }
+
+      [data-component="dropdown"][data-id="size"] [data-slot="dropdown-item"] {
+        padding-inline-start: 9px;
+      }
+
+      /* Lists and the calendar open upwards in the sheet, over the rows above, as wide as their control: past the
+         row's name (72px and the 12px gap) where the name is inside the dropdown, the music's being outside it. */
       [data-slot="dropdown-menu"] {
         top: auto;
         inset-inline-end: 0;
@@ -1392,12 +1402,19 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
         }
       }
 
+      > [data-component="dropdown"] [data-slot="dropdown-menu"] {
+        width: calc(100% - 84px);
+        min-width: 0;
+      }
+
       [data-component="share-calendar"] {
         top: auto;
         right: auto;
         bottom: calc(100% + 6px);
         left: auto;
         inset-inline-end: 0;
+        box-sizing: border-box;
+        width: calc(100% - 84px);
         translate: none;
         animation-name: share-fade-in;
       }
@@ -1598,12 +1615,6 @@ html:has([data-page="stats"] dialog[data-component="share-editor"][open]) {
         animation: none;
       }
     }
-  }
-}
-
-@media (max-width: 760px) {
-  [data-page="stats"] dialog[data-component="share-editor"] [data-variant="customize"] {
-    display: none;
   }
 }
 
