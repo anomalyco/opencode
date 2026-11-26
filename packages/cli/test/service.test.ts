@@ -1,6 +1,6 @@
 import { NodeFileSystem } from "@effect/platform-node"
 import { validateRoutes } from "@opentunnel/client/effect"
-import { Service, type Info } from "@opencode/client/effect/service"
+import { localServiceDirectories, Service, type Info } from "@opencode/client/effect/service"
 import { Global } from "@opencode/util/global"
 import { OPENCODE_VERSION } from "../src/version"
 import { expect, test } from "bun:test"
@@ -587,6 +587,7 @@ test("the original managed service contender binds when the occupied port is rel
       url: "http://127.0.0.1:1",
       pid: 2_147_483_647,
       password: "stale",
+      directories: localServiceDirectories(isolatedEnv(root)),
     }),
   )
   const contender = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"], {
@@ -657,6 +658,7 @@ test("unresponsive managed port occupancy reports a bounded conflict", async () 
     url: "http://127.0.0.1:1",
     pid: process.pid,
     password: "stale",
+    directories: localServiceDirectories(serviceEnv(root)),
   }
   await fs.writeFile(registration, JSON.stringify(stale))
   // The port lookup is a child of the service, so it shows the state directory tools would inherit.
@@ -722,6 +724,7 @@ test("port contender recognizes an incumbent registered during the bind race", a
       url: "http://127.0.0.1:1",
       pid: 2_147_483_647,
       password: "stale",
+      directories: localServiceDirectories(serviceEnv(root)),
     }),
   )
   const contender = Bun.spawn([process.execPath, path.join(import.meta.dir, "../src/index.ts"), "serve", "--service"], {
@@ -739,6 +742,7 @@ test("port contender recognizes an incumbent registered during the bind race", a
       url: `http://127.0.0.1:${listener.port}`,
       pid: process.pid,
       password: "incumbent",
+      directories: localServiceDirectories(serviceEnv(root)),
     }
     await fs.writeFile(registration, JSON.stringify(info))
 
@@ -754,6 +758,7 @@ test("port contender recognizes an incumbent registered during the bind race", a
 test("service registration replaces a stale owner with the bound address", async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-stale-"))
   const registration = path.join(root, "state", "opencode", "service-local.json")
+  const directories = localServiceDirectories(serviceEnv(root))
   await fs.mkdir(path.dirname(registration), { recursive: true })
   await fs.writeFile(
     registration,
@@ -766,6 +771,7 @@ test("service registration replaces a stale owner with the bound address", async
         password: "secret",
         id: "owner",
         file: registration,
+        directories,
         shutdown: Effect.never,
       }).pipe(Effect.scoped, Effect.provide(NodeFileSystem.layer)),
     )
@@ -775,6 +781,7 @@ test("service registration replaces a stale owner with the bound address", async
       url: "http://127.0.0.1:4321",
       pid: process.pid,
       password: "secret",
+      directories,
     })
     await Effect.runPromise(cleanup.pipe(Effect.provide(NodeFileSystem.layer)))
     expect(await Bun.file(registration).exists()).toBe(false)
@@ -854,13 +861,15 @@ async function availablePort() {
 /** A registration watched in-process. `stops` advances the test clock until the watch shuts the server down. */
 const registered = Effect.fnUntraced(function* () {
   const fileSystem = yield* FileSystem.FileSystem
-  const file = path.join(yield* fileSystem.makeTempDirectoryScoped(), "service-local.json")
+  const root = yield* fileSystem.makeTempDirectoryScoped()
+  const file = path.join(root, "service-local.json")
   const stopped = yield* Deferred.make<void>()
   const cleanup = yield* ServiceRegistration.register({
     address: NetAddress.inetAddressFromIpStringUnsafe("127.0.0.1", 4321),
     password: "secret",
     id: "owner",
     file,
+    directories: localServiceDirectories(serviceEnv(root)),
     shutdown: Deferred.succeed(stopped, undefined).pipe(Effect.asVoid),
   })
   // Let the watch's immediate first check read the intact file, so the damage is found by a scheduled check.

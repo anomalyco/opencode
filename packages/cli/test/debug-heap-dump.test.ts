@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test"
 import fs from "node:fs/promises"
 import path from "node:path"
+import { localServiceDirectories } from "@opencode/client/effect/service"
 import { ServiceConfig } from "../src/services/service-config"
 import { OPENCODE_VERSION } from "../src/version"
 import { isolatedEnv } from "./fixture/environment"
@@ -100,7 +101,13 @@ function fake(handle: (request: Request) => Response) {
 
 async function register(root: string, url: string) {
   const file = path.join(root, "state", "opencode", ServiceConfig.filename())
-  const info = { version: OPENCODE_VERSION, url, pid: process.pid, password: "secret" }
+  const info = {
+    version: OPENCODE_VERSION,
+    url,
+    pid: process.pid,
+    password: "secret",
+    directories: localServiceDirectories(isolatedEnv(root)),
+  }
   await fs.mkdir(path.dirname(file), { recursive: true })
   await fs.writeFile(file, JSON.stringify(info))
   return { file, info }

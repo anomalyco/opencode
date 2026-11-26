@@ -46,12 +46,20 @@ export const layer = Layer.effect(
 // A compatible service the entry module already found is adopted at once; the machine still verifies it with
 // `ensure("initial")` (which also completes a terminal handoff), off the renderer's path.
 const probe = Effect.fn("BackgroundService.probe")(function* () {
-  const service = yield* Effect.promise(takeSidecarProbe)
+  const found = yield* Effect.promise(takeSidecarProbe)
 
-  if (!service) return undefined
+  if (!found) return undefined
   const setup = yield* prepare("initial")
 
-  return (yield* adopt(setup, service, true)).credentials
+  // Desktop initialization loads the shell environment after the startup probe may have run.
+  if (
+    setup.file !== found.file ||
+    setup.directories?.config !== found.directories.config ||
+    setup.directories?.data !== found.directories.data
+  )
+    return undefined
+
+  return (yield* adopt(setup, found.endpoint, true)).credentials
 })
 
 const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: BackgroundServiceMachine.ConnectMode) {
@@ -61,6 +69,7 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
   const run = (version = setup.version) =>
     setup.client.Service.ensure({
       file: setup.file,
+      directories: setup.directories,
       version,
       // A fixed port makes a second contender fail to bind and back off; port 0 never collides, so two
       // services could boot against the same database.
@@ -74,13 +83,15 @@ const ensure = Effect.fn("BackgroundService.ensure")(function* (mode: Background
         runFork(Effect.logInfo("v2 CLI background service starting", { reason, previousVersion })),
     })
 
-  const service = yield* Effect.tryPromise(() =>
-    run().catch((error) => {
-      if (!shouldRetryEnsure(setup.version, error instanceof Error ? error.message : String(error))) throw error
+  const service = yield* Effect.tryPromise({
+    try: () =>
+      run().catch((error) => {
+        if (!shouldRetryEnsure(setup.version, error instanceof Error ? error.message : String(error))) throw error
 
-      return run(setup.cli.version)
-    }),
-  )
+        return run(setup.cli.version)
+      }),
+    catch: (error) => error,
+  })
 
   const ready = yield* adopt(setup, service, false)
 
@@ -109,19 +120,17 @@ const prepare = Effect.fn("BackgroundService.prepare")(function* (mode: Backgrou
   if (isolated) process.env.XDG_STATE_HOME = app.getPath("userData")
   const client = yield* Effect.promise(() => import("@opencode/client/service"))
 
-  const reuseFile = reuse ? process.env.OPENCODE_DESKTOP_REUSE_SERVICE_FILE || undefined : undefined
+  const fallbackFile = client.fallback()
 
   const file = reuse
-    ? reuseFile
+    ? process.env.OPENCODE_DESKTOP_REUSE_SERVICE_FILE || fallbackFile
     : process.env.OPENCODE_DESKTOP_SERVER_CHANNEL === "local"
-      ? path.join(
-          process.env.XDG_STATE_HOME ?? path.join(app.getPath("home"), ".local", "state"),
-          "opencode",
-          "service-local.json",
-        )
-      : undefined
+      ? path.join(path.dirname(fallbackFile), "service-local.json")
+      : fallbackFile
 
-  return { cli, client, file, isolated, version }
+  const directories = reuse ? undefined : client.localServiceDirectories()
+
+  return { cli, client, file, directories, isolated, version }
 })
 
 const adopt = Effect.fn("BackgroundService.adopt")(function* (
@@ -136,7 +145,7 @@ const adopt = Effect.fn("BackgroundService.adopt")(function* (
 
   if (url.hostname === "0.0.0.0") url.hostname = "127.0.0.1"
 
-  const runningVersion = yield* fs.readFileString(setup.file ?? setup.client.fallback()).pipe(
+  const runningVersion = yield* fs.readFileString(setup.file).pipe(
     Effect.map(
       (text) =>
         Option.getOrUndefined(Schema.decodeUnknownOption(Schema.fromJsonString(RegisteredService))(text))?.version,

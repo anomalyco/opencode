@@ -1,6 +1,6 @@
 export * as ServiceRegistration from "./service-registration"
 
-import { Service, type Info } from "@opencode/client/effect/service"
+import { Service, type Info, type ServiceDirectories } from "@opencode/client/effect/service"
 import path from "node:path"
 import { Effect, FileSystem, Schedule, Schema } from "effect"
 import { HttpServer } from "effect/http"
@@ -16,6 +16,7 @@ export const register = Effect.fnUntraced(function* (options: {
   readonly password: string
   readonly id: string
   readonly file: string
+  readonly directories: ServiceDirectories
   readonly shutdown: Effect.Effect<void>
 }) {
   const fs = yield* FileSystem.FileSystem
@@ -27,6 +28,7 @@ export const register = Effect.fnUntraced(function* (options: {
     url: HttpServer.formatAddress(options.address),
     pid: process.pid,
     password: options.password,
+    directories: options.directories,
   }
   const encoded = yield* encodeInfo(info)
   const current = fs.readFileString(options.file).pipe(Effect.flatMap(decodeInfo))
@@ -35,15 +37,15 @@ export const register = Effect.fnUntraced(function* (options: {
     found.version === info.version &&
     found.url === info.url &&
     found.pid === info.pid &&
-    found.password === info.password
-  yield* fs
-    .writeFileString(temp, encoded, { mode: 0o600 })
-    .pipe(
-      // Windows rename can fail with EPERM while a contender or test polls the registration file.
-      Effect.andThen(
-        fs.rename(temp, options.file).pipe(Effect.retry({ times: 20, schedule: Schedule.spaced("10 millis") })),
-      ),
-    )
+    found.password === info.password &&
+    found.directories?.config === info.directories.config &&
+    found.directories.data === info.directories.data
+  yield* fs.writeFileString(temp, encoded, { mode: 0o600 }).pipe(
+    // Windows rename can fail with EPERM while a contender or test polls the registration file.
+    Effect.andThen(
+      fs.rename(temp, options.file).pipe(Effect.retry({ times: 20, schedule: Schedule.spaced("10 millis") })),
+    ),
+  )
   yield* current.pipe(
     Effect.catchCause((cause) =>
       Effect.logWarning("managed service registration check failed; shutting down", {

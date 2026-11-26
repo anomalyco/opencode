@@ -13,12 +13,20 @@ export type Endpoint = {
   }
 }
 
+/** Absolute paths that identify a local service's configuration and data. */
+export type ServiceDirectories = {
+  readonly config: string
+  readonly data: string
+}
+
 /** Options used to discover the local OpenCode service. */
 export type DiscoverOptions = {
   /** Absolute registration file path. Defaults to the XDG state directory. */
   readonly file?: string
   /** Required exact service version or compatibility predicate. */
   readonly version?: string | ((version: string) => boolean)
+  /** Required configuration and data directories, when discovery is limited to the local environment. */
+  readonly directories?: ServiceDirectories
 }
 
 /** Reason ensuring the service requires a new process. */
@@ -40,6 +48,8 @@ export type StopOptions = {
   readonly file?: string
   /** How to handle persistent terminals before stopping the service. */
   readonly pty?: "clear" | "handoff"
+  /** Refuse to stop a process registered for different configuration or data directories. */
+  readonly directories?: ServiceDirectories
 }
 
 /** Contents of the local service registration file. */
@@ -54,4 +64,6 @@ export type Info = {
   readonly pid: number
   /** Private service password, when authentication is enabled. */
   readonly password?: string
+  /** The configuration and data directories used by this process. */
+  readonly directories?: ServiceDirectories
 }
