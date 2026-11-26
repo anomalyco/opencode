@@ -839,3 +839,20 @@ it.effect("lets a transfer finish when the sender's answer is lost, without revo
     ).pipe(Effect.provide(tempLayers(tmp.path), { local: true }))
   }),
 )
+
+it.effect("lists the worker version its hello reports", () =>
+  Effect.gen(function* () {
+    const tmp = yield* tmpdirScoped()
+    yield* Effect.scoped(
+      Effect.gen(function* () {
+        const machines = yield* Machines.Service
+        const id = yield* machines.add("gpu")
+        const base = yield* connection("linux", "x64")
+        yield* Effect.forkChild(machines.connect(id, { ...base, hello: { ...base.hello, version: "0.2.0" } }), {
+          startImmediately: true,
+        })
+        expect((yield* machines.list())[0]).toMatchObject({ id, online: true, version: "0.2.0" })
+      }),
+    ).pipe(Effect.provide(tempLayers(tmp.path), { local: true }))
+  }),
+)

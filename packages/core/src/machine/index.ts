@@ -11,4 +11,16 @@ export {
   ProcessLost,
   Unknown,
 } from "./driver.js"
-export { FileCall, FromWorker, Hello, Instance, PeerCall, PeerLink, ProcessID, Signal, ToWorker } from "./wire.js"
+export {
+  FileCall,
+  FromWorker,
+  Hello,
+  Instance,
+  PeerCall,
+  PeerLink,
+  ProcessID,
+  Signal,
+  ToWorker,
+  Update,
+  WORKER_VERSION,
+} from "./wire.js"

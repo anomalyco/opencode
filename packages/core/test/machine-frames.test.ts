@@ -165,6 +165,8 @@ const raw = (carrier: Wires, options: Link.DialOptions) =>
       Effect.flatMap(Effect.fromResult(dialed.send.encrypt(plaintext)), carrier.worker.send)
     return {
       frame,
+      /** The next message from the home, decrypted. */
+      read: Frames.read(carrier.worker, dialed.receive),
       message: (message: Machine.FromWorker) =>
         frame(concat(Uint8Array.of(0), text(JSON.stringify(Schema.encodeSync(Machine.FromWorker)(message))))),
       /** `bytes` as `more` pieces and a final one, whatever its length. */
@@ -758,6 +760,12 @@ for (const protocol of [2, 4]) {
         )
         const worker = yield* raw(carrier, { home: paired.home, identity: paired.worker })
         yield* worker.frame(concat(Uint8Array.of(0), text(JSON.stringify({ ...HELLO, protocol }))))
+        // An older worker is asked to update first; a newer one only refused.
+        if (protocol < 3)
+          expect(JSON.parse(new TextDecoder().decode(yield* worker.read))).toEqual({
+            type: "update",
+            version: Machine.WORKER_VERSION,
+          })
         expect(yield* Fiber.join(serving).pipe(Effect.flip)).toEqual(new Link.Refused())
         expect(JSON.stringify(logs)).toContain(`uses protocol ${protocol}`)
         expect(JSON.stringify(logs)).toContain("requires protocol 3")

@@ -92,6 +92,8 @@ export interface Interface {
   readonly describe: () => typeof ConnectionInfo.Type | undefined
   /** Sends one peer request on the current connection and waits for its answer. */
   readonly peer: (request: PeerRequest) => Effect.Effect<void, PeerFailed | NotSent | Unknown>
+  /** Asks the worker to update itself to `version`. Sent on the current connection; nothing answers it. */
+  readonly update: (version: string) => Effect.Effect<void, NotSent>
   /** The peer links that are up, as the current connection's hello and messages since report them. */
   readonly links: () => ReadonlySet<PeerLink>
 }
@@ -515,6 +517,12 @@ export const make = (id: Environment.ID): Interface => {
     connect,
     close,
     peer,
+    update: (version) =>
+      Effect.suspend(() => {
+        if (!link) return Effect.fail(new NotSent({ machine: id }))
+        link.send({ type: "update", version })
+        return Effect.void
+      }),
     links: () => link?.links ?? new Set(),
     hello: () => link?.hello,
     describe: () => link?.describe?.(),

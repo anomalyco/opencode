@@ -24,6 +24,18 @@ const exit = { type: Schema.Literal("exit"), id: ProcessID, bytes: Schema.Number
 /** A file call and its reply carry the same `req`. */
 const fs = { type: Schema.Literal("fs"), req: Schema.Number }
 
+/** The worker version this home is built and tested with, which it asks an outdated worker to update to. */
+export const WORKER_VERSION = "0.2.0"
+
+/**
+ * Asks the worker to update itself to `version`, fetched from the source the worker was set up with. Its shape never
+ * changes, so a worker of any protocol understands it. There is no answer: the next hello says which version runs.
+ */
+export const Update = Schema.Struct({
+  type: Schema.Literal("update"),
+  version: Schema.String.check(Schema.isPattern(/^\d+\.\d+\.\d+$/)),
+})
+
 /** A peer link between two workers, named by the home. */
 export const PeerLink = Schema.String.pipe(Schema.brand("Machine.PeerLink"))
 export type PeerLink = typeof PeerLink.Type
@@ -54,6 +66,8 @@ export const Hello = Schema.Struct({
   ),
   /** The peer links that are up: they outlive the worker's connection to the home. */
   links: Schema.optionalKey(Schema.Array(PeerLink)),
+  /** The worker program's version, such as `0.2.0`. */
+  version: Schema.optionalKey(Schema.String),
 })
 export type Hello = typeof Hello.Type
 
@@ -174,6 +188,7 @@ export const ToWorker = Schema.Union([
   Schema.Struct({ type: Schema.Literal("release"), id: ProcessID }),
   FileCall,
   PeerCall,
+  Update,
 ])
 export type ToWorker = typeof ToWorker.Type
 
