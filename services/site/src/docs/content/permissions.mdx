@@ -24,6 +24,11 @@ inspection, and always block pushes. Add these ordered rules to `opencode.jsonc`
 
 The last matching rule wins, so the specific exceptions follow the broad rule.
 
+<Callout type="note">
+  To block Git pushes across agents, use a [tool policy](/policies#tools). A policy denial also takes precedence over
+  a saved “Allow always” approval.
+</Callout>
+
 <Callout type="warning">
   V1 uses different field and action names. In V2, use `permissions`, `shell`, and `subagent` instead of `permission`,
   `bash`, and `task`.
