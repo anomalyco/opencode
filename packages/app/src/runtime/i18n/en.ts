@@ -1095,7 +1095,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode, the open source coding agent",
   "settings.about.trademark": "OpenCode is a registered trademark of Anomaly Innovations, Inc.",
-  "settings.about.typeset": "Typeset in Inter and IBM Plex Mono",
+  "settings.about.typeset": "Typeset in Inter and OpenMono",
   "settings.about.notices.title": "Third-party notices",
   "settings.about.notices.description": "OpenCode includes the following open source software.",
   "settings.about.notices.license": "License text",
@@ -1103,6 +1103,8 @@ export const dict = {
   "settings.about.notices.fonts.description":
     "Each family is distributed under the SIL Open Font License 1.1, with the copyright lines below.",
   "settings.about.notices.eigenpal": "Portions of BetterOffice derive from it.",
+  "settings.about.notices.openMono": "The code and terminal font. It is built on Iosevka.",
+  "settings.about.notices.nerdFonts": "The terminal icons in OpenMono.",
   "settings.about.notices.loadFailed": "Could not load the third-party notices",
   "settings.about.notices.crates.title": "Rust crates in the Office engines",
   "settings.about.notices.crates.description":

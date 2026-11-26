@@ -660,7 +660,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode፣ ክፍት ምንጭ የኮድ ወኪል",
   "settings.about.trademark": "OpenCode የAnomaly Innovations, Inc. የተመዘገበ የንግድ ምልክት ነው።",
-  "settings.about.typeset": "በInter እና IBM Plex Mono ተሰድሯል",
+  "settings.about.typeset": "በInter እና OpenMono ተሰድሯል",
   "settings.about.tagline": "ያለ እርስዎ AI ምርጥ ሶፍትዌር መገንባት አይችልም",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "ፕሮጀክት አርትዕ",

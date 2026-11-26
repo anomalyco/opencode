@@ -687,7 +687,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "オープンソースのコーディングエージェントであるOpenCode",
   "settings.about.trademark": "OpenCodeはAnomaly Innovations, Inc.の登録商標です。",
-  "settings.about.typeset": "InterおよびIBM Plex Monoのタイプセット",
+  "settings.about.typeset": "InterおよびOpenMonoのタイプセット",
   "settings.about.tagline": "AIはあなたなしで素晴らしいソフトウェアを構築することはできません",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "プロジェクトを編集",

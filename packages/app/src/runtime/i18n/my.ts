@@ -683,7 +683,7 @@ export const dict = {
   "settings.about.website": "www.opencode.ai",
   "settings.about.description": "OpenCode၊ ပွင့်လင်းရင်းမြစ် ကုဒ်နံပါတ် အေးဂျင့်",
   "settings.about.trademark": "OpenCode သည် Anomaly Innovations, Inc ၏ မှတ်ပုံတင်ထားသော ကုန်အမှတ်တံဆိပ်တစ်ခုဖြစ်သည်။",
-  "settings.about.typeset": "Inter နှင့် IBM Plex Mono တွင် အမျိုးအစားအစုံ",
+  "settings.about.typeset": "Inter နှင့် OpenMono တွင် အမျိုးအစားအစုံ",
   "settings.about.tagline": "AI သည် သင်မပါဘဲ ကောင်းမွန်သော ဆော့ဖ်ဝဲလ်ကို မတည်ဆောက်နိုင်ပါ။",
   "settings.about.copyright": "© Anomaly Innovations, Inc.",
   "project.settings.title": "ပရောဂျက်ကို တည်းဖြတ်ပါ။",

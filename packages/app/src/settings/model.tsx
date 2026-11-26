@@ -38,25 +38,22 @@ export function projectSettingsKey(scope: ServerScope, projectID: string | undef
   return projectID ? ScopedKey.from(scope, projectID) : undefined
 }
 
-export const monoDefault = "IBM Plex Mono"
+export const monoDefault = "OpenMono"
 
 export const sansDefault = "Inter"
 
-export const terminalDefault = "JetBrainsMono Nerd Font Mono"
+export const terminalDefault = "OpenMono"
 
 const monoFallback =
-  '"IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
+  '"OpenMono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 
 const sansFallback = '"Inter", ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif'
-
-const terminalFallback =
-  '"JetBrainsMono Nerd Font Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace'
 
 const monoBase = monoFallback
 
 const sansBase = sansFallback
 
-const terminalBase = terminalFallback
+const terminalBase = monoFallback
 
 function input(font: string | undefined) {
   return font ?? ""
