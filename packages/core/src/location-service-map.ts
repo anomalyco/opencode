@@ -15,6 +15,10 @@ export interface Interface {
   readonly contextEffectOption: (
     ref: Location.Ref,
   ) => Effect.Effect<Option.Option<Context.Context<Instance.Services>>, Instance.Error, Scope.Scope>
+  /** Retains every instance currently cached at the Location, default and private alike. */
+  readonly cachedContexts: (
+    ref: Location.Ref,
+  ) => Effect.Effect<readonly Context.Context<Instance.Services>[], Instance.Error, Scope.Scope>
   /** Shuts down every instance cached at the Location, its private instances included. */
   readonly invalidate: (ref: Location.Ref) => Effect.Effect<void>
   /** Rebuilds every cached instance, letting all builds settle even if one fails. */
@@ -58,6 +62,8 @@ export const make = <R>(
       get: (ref) => map.get(canonical(ref)),
       contextEffect: (ref) => map.contextEffect(canonical(ref)),
       contextEffectOption: (ref) => map.contextEffectOption(canonical(ref)),
+      cachedContexts: (ref) =>
+        Effect.map(map.contextEffectOption(canonical(ref)), (item) => (Option.isSome(item) ? [item.value] : [])),
       invalidate: (ref) => map.invalidate(canonical(ref)),
       keys,
       has: (ref) => RcMap.has(map.rcMap, canonical(ref)),

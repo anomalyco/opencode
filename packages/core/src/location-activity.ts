@@ -35,37 +35,48 @@ export function layer(options: { readonly timeToLive?: Duration.Input; readonly 
           entries.set(key(ref), { ref, touchedAt: clock.currentTimeMillisUnsafe() })
         })
 
-      // Read per location so project config can override the global value.
+      // Read across every instance cached at the Location (default and private): any opt-out disables eviction,
+      // otherwise keep the longest configured timeout so no instance is swept before its own deadline.
       const idleTimeout = (ref: Location.Ref) =>
         Effect.gen(function* () {
-          const context = yield* locations.contextEffectOption(ref)
-          if (Option.isNone(context)) return timeToLive
-          const entries = yield* Context.get(context.value, Config.Service).entries()
-          const configured = entries.findLast(
-            (entry): entry is Document =>
-              entry.type === "document" && entry.info.experimental?.location_idle_timeout !== undefined,
+          const contexts = yield* locations.cachedContexts(ref)
+          if (contexts.length === 0) return timeToLive
+          const timeouts = yield* Effect.forEach(contexts, (context) =>
+            Effect.map(Context.get(context, Config.Service).entries(), (entries) => {
+              const configured = entries.findLast(
+                (entry): entry is Document =>
+                  entry.type === "document" && entry.info.experimental?.location_idle_timeout !== undefined,
+              )
+              return configured?.info.experimental?.location_idle_timeout ?? timeToLive
+            }),
           )
-          return configured?.info.experimental?.location_idle_timeout ?? timeToLive
+          return timeouts.reduce<false | Duration.Duration>(
+            (longest, timeout) =>
+              longest === false || timeout === false
+                ? false
+                : Duration.toMillis(timeout) > Duration.toMillis(longest)
+                  ? timeout
+                  : longest,
+            Duration.zero,
+          )
         }).pipe(
           Effect.scoped,
           Effect.orElseSucceed(() => timeToLive),
         )
 
-      // An open terminal or client MCP socket keeps its Location loaded: eviction would end the shell under the user,
-      // and the client would reconnect and boot a fresh Location right away.
+      // An open terminal or client MCP socket on any cached instance keeps its Location loaded: eviction would end
+      // the shell under the user, and the client would reconnect and boot a fresh Location right away.
       const retained = (ref: Location.Ref) =>
-        locations
-          .contextEffectOption(ref)
-          .pipe(
-            Effect.map(
-              Option.exists((context) =>
-                Option.exists(Context.getOption(context, LocationLifecycle.Service), (lifecycle) =>
-                  lifecycle.isRetained(),
-                ),
+        locations.cachedContexts(ref).pipe(
+          Effect.map((contexts) =>
+            contexts.some((context) =>
+              Option.exists(Context.getOption(context, LocationLifecycle.Service), (lifecycle) =>
+                lifecycle.isRetained(),
               ),
             ),
-            Effect.scoped,
-          )
+          ),
+          Effect.scoped,
+        )
 
       const unsubscribe = yield* bus.listen((event) => {
         if (!isSessionEvent(event) || !event.location) return Effect.void

@@ -217,6 +217,19 @@ export function buildLocationServiceMap(
         contextEffect: (ref) => contextEffect(at(ref)),
         contextEffectOption: (ref) =>
           Effect.suspend(() => (reentrant() ? Effect.die(reentrantError()) : inner.contextEffectOption(at(ref)))),
+        cachedContexts: (ref) => {
+          const target = LocationServiceMap.canonical(ref)
+          return Effect.suspend(() =>
+            reentrant()
+              ? Effect.die(reentrantError())
+              : Effect.flatMap(cached, (keys) =>
+                  Effect.forEach(
+                    keys.filter((key) => Equal.equals(key.ref, target)),
+                    (key) => inner.contextEffectOption(key),
+                  ).pipe(Effect.map((items) => items.flatMap((item) => (Option.isSome(item) ? [item.value] : [])))),
+                ),
+          )
+        },
         invalidate: (ref) => {
           const target = LocationServiceMap.canonical(ref)
           return Effect.flatMap(cached, (keys) => evictAll(keys.filter((key) => Equal.equals(key.ref, target))))

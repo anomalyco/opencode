@@ -1,12 +1,24 @@
 import { describe, expect } from "bun:test"
 import { Cause, Context, Deferred, Effect, Exit, Fiber, Layer, Option, Scope } from "effect"
+import { TestClock } from "effect/testing"
+import { makeGlobalNode } from "@opencode/util/effect/app-node"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
+import { Bus } from "@opencode/core/bus"
+
+import { Document, Info } from "@opencode/schema/config"
+import { ConfigExperimental } from "@opencode/schema/config/experimental"
+import { Config } from "@opencode/core/config"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { Instance } from "@opencode/core/instance"
+import { Job } from "@opencode/core/job"
 import { Location } from "@opencode/core/location"
+import { LocationActivity } from "@opencode/core/location-activity"
 import { LocationLifecycle } from "@opencode/core/location-lifecycle"
 import { LocationServiceMap } from "@opencode/core/location-service-map"
+import { SessionExecution } from "@opencode/core/session/execution"
+import { SessionStore } from "@opencode/core/session/store"
 import { AbsolutePath } from "@opencode/core/schema"
 import { tempGlobalLayer } from "./fixture/global"
 import { offlineModels } from "./fixture/models"
@@ -188,6 +200,64 @@ describe("location services", () => {
       expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
       expect(finalized).toBe(true)
       yield* Scope.close(borrower, Exit.void)
+    }),
+  )
+
+  it.effect("honors retention and idle-timeout opt-out on private-only Locations during idle sweeps", () =>
+    Effect.gen(function* () {
+      const [retainedRef, optOutRef] = [yield* locationAt(), yield* locationAt()]
+      const replacements = [
+        Global.node.replace(tempGlobalLayer),
+        Watcher.node.replace(Watcher.configured({ enabled: false })),
+        offlineModels,
+        LocationActivity.node.replace(
+          makeGlobalNode({
+            service: LocationActivity.Service,
+            layer: LocationActivity.layer({ sweepInterval: "1 minute", timeToLive: "5 minutes" }),
+            deps: [Bus.node, Job.node, LocationServiceMap.node, SessionExecution.node, SessionStore.node],
+          }),
+        ),
+      ]
+      const context = yield* Layer.build(
+        AppNodeBuilder.build(LayerNode.group([LocationServiceMap.node, LocationActivity.node]), replacements),
+      )
+      const locations = Context.get(context, LocationServiceMap.Service)
+      const privates = yield* register(locations, (ref, key, resolved) =>
+        Instance.layer(ref, {
+          host: resolved,
+          replacements:
+            key === "no-timeout"
+              ? [
+                  Config.node.replace(
+                    Config.testLayer([
+                      new Document({
+                        type: "document",
+                        info: new Info({
+                          experimental: new ConfigExperimental.Info({ location_idle_timeout: false }),
+                        }),
+                      }),
+                    ]),
+                  ),
+                ]
+              : [],
+        }),
+      )
+
+      const hold = yield* Scope.make()
+      const retainedCtx = yield* boot(privates.get(retainedRef, "retained"))
+      yield* Context.get(retainedCtx, LocationLifecycle.Service).retain.pipe(Scope.provide(hold))
+      yield* boot(privates.get(optOutRef, "no-timeout"))
+
+      // Advance well past the 5m TTL: neither private-only Location should be evicted.
+      yield* TestClock.adjust("10 minutes")
+      expect(yield* privates.has(retainedRef, "retained")).toBe(true)
+      expect(yield* privates.has(optOutRef, "no-timeout")).toBe(true)
+
+      // Once retention drops, the retained Location sweeps cleanly while the opt-out Location stays cached.
+      yield* Scope.close(hold, Exit.void)
+      yield* TestClock.adjust("10 minutes")
+      expect(yield* privates.has(retainedRef, "retained")).toBe(false)
+      expect(yield* privates.has(optOutRef, "no-timeout")).toBe(true)
     }),
   )
 })
