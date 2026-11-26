@@ -23637,7 +23637,7 @@
         "anyOf": [
           {
             "type": "string",
-            "enum": ["chat", "decision", "image", "video"]
+            "enum": ["chat", "decision", "image", "video", "realtime", "embedding", "transcription"]
           },
           {
             "type": "string"
