@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test"
 import type { McpServer } from "@agentclientprotocol/sdk"
 import { Schema } from "effect"
 import { currentValue } from "./select-options"
-import { makeSession, rpcError, secondModel, startWire, type Wire } from "./wire-fixture"
+import { durableEvent, makeSession, rpcError, secondModel, startWire, type Wire } from "./wire-fixture"
 
 describe("acp session lifecycle over the wire", () => {
   test("initialize advertises capabilities, negotiates the version, and offers terminal auth only when asked", async () => {
@@ -152,6 +152,75 @@ describe("acp session lifecycle over the wire", () => {
       "response",
       "available_commands_update",
     ])
+  })
+
+  test("rebinds an attached session when it moves and tells the client", async () => {
+    const local: McpServer = { name: "tools", command: "bun", args: ["server.ts"], env: [] }
+    await using acp = await startWire()
+    await acp.initialize()
+    const session = await acp.newSession("/workspace", [local])
+    const directory = "/moved"
+
+    acp.server.sessions.set(session.sessionId, makeSession(session.sessionId, { cwd: directory }))
+    acp.server.send(
+      durableEvent("session.moved", {
+        sessionID: session.sessionId,
+        location: { directory },
+        projectID: "global",
+      }),
+    )
+
+    const notification = await acp.waitForUpdate(
+      (item) =>
+        item.sessionId === session.sessionId &&
+        item.update.sessionUpdate === "session_info_update" &&
+        item.update._meta?.["opencode/directory"] === directory,
+      "session directory update",
+    )
+    expect(notification.update._meta).toEqual({ "opencode/directory": directory })
+
+    await acp.until(
+      () => acp.server.mcp.some((item) => item.name === "tools" && item.directory === directory),
+      "MCP registration in the moved directory",
+    )
+    expect(
+      acp.server.requests.some(
+        (request) => request.path === "/api/model" && request.query["location[directory]"] === directory,
+      ),
+    ).toBe(true)
+
+    expect(
+      await acp.request("session/load", { cwd: directory, sessionId: session.sessionId, mcpServers: [] }),
+    ).toBeDefined()
+    expect(acp.logs).toEqual([])
+  })
+
+  test("serializes consecutive session moves", async () => {
+    await using acp = await startWire()
+    await acp.initialize()
+    const session = await acp.newSession()
+
+    for (const directory of ["/moved-1", "/moved-2"]) {
+      acp.server.sessions.set(session.sessionId, makeSession(session.sessionId, { cwd: directory }))
+      acp.server.send(
+        durableEvent("session.moved", {
+          sessionID: session.sessionId,
+          location: { directory },
+          projectID: "global",
+        }),
+      )
+      await acp.waitForUpdate(
+        (item) =>
+          item.sessionId === session.sessionId &&
+          item.update.sessionUpdate === "session_info_update" &&
+          item.update._meta?.["opencode/directory"] === directory,
+        `session directory update ${directory}`,
+      )
+    }
+
+    expect(
+      await acp.request("session/load", { cwd: "/moved-2", sessionId: session.sessionId, mcpServers: [] }),
+    ).toBeDefined()
   })
 
   test("converts MCP configs and deduplicates registrations per session and config", async () => {
