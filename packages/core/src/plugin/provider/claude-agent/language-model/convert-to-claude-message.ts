@@ -2,23 +2,30 @@ export * as ConvertToClaudeMessage from "./convert-to-claude-message.js"
 
 import type { LanguageModelV3FilePart, LanguageModelV3Prompt } from "@ai-sdk/provider"
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk"
+import { Fingerprint } from "../sync/fingerprint.js"
 
 export type ContentBlock = Exclude<SDKUserMessage["message"]["content"], string>[number]
 
-// Claude can't be given earlier turns, so their roles become text tags. Attachments stay real content blocks.
+// Claude can't be given earlier turns, so their roles become text tags. Attachments stay real content blocks,
+// except media from earlier tool results: Claude Code shows every image block as attached to the new prompt.
 export function content(prompt: LanguageModelV3Prompt): ContentBlock[] {
   const blocks: ContentBlock[] = []
   const history = prompt.some((message) => message.role === "assistant" || message.role === "tool")
   for (const message of prompt) {
     if (message.role === "system") continue
     if (history) blocks.push({ type: "text", text: `<${message.role}>` })
+    const toolMedia = history && Fingerprint.isToolMedia(message)
     for (const part of message.content) {
       if (part.type === "text") {
         blocks.push({ type: "text", text: part.text })
         continue
       }
       if (part.type === "file") {
-        blocks.push(file(part))
+        blocks.push(
+          toolMedia
+            ? { type: "text", text: `[${part.mediaType} from the tool result above, not included in this replay]` }
+            : file(part),
+        )
         continue
       }
       if (part.type === "tool-call") {
