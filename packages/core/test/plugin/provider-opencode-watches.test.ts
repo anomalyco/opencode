@@ -15,6 +15,7 @@ import { SyntheticConflictError } from "@opencode/core/session/error"
 import { SessionMessage } from "@opencode/core/session/message"
 import { Tool } from "@opencode/core/tool"
 import { Agent } from "@opencode/core/agent"
+import { advance } from "../lib/clock"
 import { eventually, waitUntil } from "../lib/eventually"
 import { testEffect } from "../lib/effect"
 import { PluginTestLayer } from "./fixture"
@@ -1196,13 +1197,13 @@ describe("OpencodePlugin event watches", () => {
         expect(yield* watchTools).toEqual([])
 
         console.state.watches = true
-        yield* TestClock.adjust("1 minute")
-        yield* waitUntil(Effect.sync(() => console.state.opens === 1))
+        yield* TestClock.adjust("5 minutes")
+        yield* advance(() => console.state.opens === 1)
         expect(yield* eventually(watchTools, (tools) => tools.length === 4)).toHaveLength(4)
 
         console.state.watches = false
-        yield* TestClock.adjust("1 minute")
-        yield* waitUntil(Effect.sync(() => console.state.sockets.size === 0))
+        yield* TestClock.adjust("5 minutes")
+        yield* advance(() => console.state.sockets.size === 0)
         expect(yield* eventually(watchTools, (tools) => tools.length === 0)).toEqual([])
       }),
     ),
