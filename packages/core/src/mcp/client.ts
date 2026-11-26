@@ -1036,10 +1036,12 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   const error = Cause.squash(exit.cause)
   if (error instanceof UnauthorizedError || error instanceof InsufficientScopeError)
     return yield* new NeedsAuthError({ server, message: error.message })
+  // The server answered, so a pooled server still gets a try on the Location's own connection.
   if (error instanceof UnsupportedProtocolVersionError)
     return yield* new ConnectError({
       server,
       message: `${error.message}; the server supports ${error.supported.join(", ")}. Set "protocol" for this server to one of those or to "legacy".`,
+      answered: true,
     })
   return yield* new ConnectError({ server, message: explain(error), answered: !repeats(error) })
 })

@@ -3820,6 +3820,38 @@ describe("MCP pool", () => {
     }),
   )
 
+  live("connects a slow modern stdio server on its own after the shared connection is refused", () =>
+    Effect.gen(function* () {
+      const tmp = yield* tmpdirScoped()
+      const release = path.join(tmp.path, "release")
+      const pids = path.join(tmp.path, "pids")
+      const config = new ConfigMCP.Local({
+        type: "local",
+        command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-era-locked.ts")],
+        cwd: directories[0],
+        environment: { MCP_PID_FILE: pids, MCP_RELEASE_FILE: release },
+        pool: true,
+        // The probe gives up at the 1.5 s startup timeout; the initialize sent in place gets another 1.5 s.
+        timeout: new ConfigMCP.Timeout({ startup: 1_500 }),
+      })
+      const pool = yield* makePool
+      // Released once the shared attempt's probe has timed out, and before the initialize sent in place does.
+      yield* Effect.gen(function* () {
+        yield* Effect.tryPromise(() => fs.readFile(pids, "utf8")).pipe(
+          Effect.retry({ times: 500, schedule: Schedule.spaced("10 millis") }),
+        )
+        yield* Effect.sleep("2100 millis")
+        yield* Effect.promise(() => Bun.write(release, ""))
+      }).pipe(Effect.forkChild({ startImmediately: true }))
+      const a = yield* open(config, pool, directories[0])
+
+      expect(yield* status(a.mcp)).toEqual({ status: "connected" })
+      expect((yield* a.mcp.tools()).map((tool) => tool.name)).toEqual(["echo"])
+      // The shared attempt, then this Location's own connection, which answers the probe now that the server is up.
+      expect((yield* Effect.promise(() => fs.readFile(pids, "utf8"))).trim().split("\n")).toHaveLength(2)
+    }),
+  )
+
   live("connects each Location on its own without pool", () =>
     Effect.gen(function* () {
       const server = yield* resourceServer({ modern: true, resources: false })
