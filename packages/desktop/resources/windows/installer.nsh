@@ -134,6 +134,9 @@
         System::Call "kernel32::GetTickCount() i .R8"
       ${EndIf}
       DetailPrint "$(appClosing)"
+      !ifmacrodef setInstallStatus
+        !insertmacro setInstallStatus "$(appClosing)"
+      !endif
     ${ElseIf} $1 >= 2000
       ${If} ${Cmd} `MessageBox MB_RETRYCANCEL|MB_ICONEXCLAMATION "$(appCannotBeClosed)" /SD IDCANCEL IDCANCEL`
         Quit
@@ -141,6 +144,9 @@
       System::Call "kernel32::GetTickCount() i .R8"
     ${EndIf}
 
+    !ifmacrodef advanceInstallProgress
+      !insertmacro advanceInstallProgress 300 5400
+    !endif
     Sleep 100
   ${Loop}
 !macroend
@@ -226,6 +232,9 @@
     StrCpy $R0 ""
     StrCpy $R1 "${STAGED_PACKAGE_HASH}" 16
     ${If} ${FileExists} "$INSTDIR.update-$R1\${APP_EXECUTABLE_FILENAME}"
+      !ifmacrodef setInstallStatus
+        !insertmacro setInstallStatus "Applying staged update..."
+      !endif
       SetOutPath $PLUGINSDIR
       ; Removes the directory only while it is empty, so the rename never mixes two versions.
       RMDir $INSTDIR
@@ -233,6 +242,9 @@
       Rename "$INSTDIR.update-$R1" $INSTDIR
       ${IfNot} ${Errors}
         StrCpy $R0 "installed"
+        !ifmacrodef setInstallProgress
+          !insertmacro setInstallProgress 22500
+        !endif
       ${EndIf}
       SetOutPath $INSTDIR
     ${EndIf}
