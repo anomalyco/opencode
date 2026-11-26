@@ -11,8 +11,6 @@ const payloadHash = "0123456789ABCDEF0123456789ABCDEF"
 // The installer clears the uninstall entry of an install it moves; the tests point it at their own key.
 const uninstallKey = "Software\\OpenCodeInstallerTest"
 
-const progressKey = "Software\\OpenCodeInstallerProgressTest"
-
 async function harness() {
   const { getMakeNsisPath, getNsisPluginsPath } = await import("app-builder-lib/out/toolsets/windows")
   const { nsisTemplatesDir } = await import("app-builder-lib/out/targets/nsis/nsisUtil")
