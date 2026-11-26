@@ -1029,9 +1029,11 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     }
     // The SDK's stream exists only when it opened: a refused open at connect leaves `autoOpenedSubscription` undefined
     // and reports it to `onerror` alone. Fall back to the filter the SDK would have used, so that connection still gets
-    // a stream instead of none for its whole life.
+    // a stream instead of none for its whole life. Only a modern connection can: on a legacy one `listen` always
+    // throws `MethodNotSupportedByProtocolVersion`, which is not a refusal, so the retry schedule would run for the
+    // connection's whole life and the warning would never fire.
     const filter = autoOpened?.honoredFilter ?? wanted
-    if (autoOpened || Object.keys(wanted).length > 0) {
+    if (autoOpened || (connection.modern && Object.keys(wanted).length > 0)) {
       // Reopens only. The first stream is the SDK's, and nothing can have been missed while it was open, so a refresh
       // there would only relist what the connection just listed.
       const attempt = Effect.acquireRelease(

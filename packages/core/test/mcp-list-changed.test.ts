@@ -1,5 +1,5 @@
-import { describe, expect } from "bun:test"
-import { InMemoryTransport, type JSONRPCMessage } from "@modelcontextprotocol/client"
+import { describe, expect, spyOn } from "bun:test"
+import { Client, InMemoryTransport, type JSONRPCMessage } from "@modelcontextprotocol/client"
 import { McpClient } from "@opencode/core/mcp/client"
 import { Effect } from "effect"
 import { hostEnvironmentLayer } from "./fixture/environment"
@@ -204,6 +204,41 @@ describe("MCP list changes", () => {
       yield* until(() => server.state.listens.length === 2)
       yield* Effect.sleep("1200 millis")
       expect(server.state.listens.length).toBe(2)
+    }),
+  )
+
+  it.live("does not follow list changes over a legacy connection", () =>
+    Effect.gen(function* () {
+      // A legacy server advertises listChanged too, and the SDK delivers those notifications over the initialize
+      // connection. `listen` is not part of that era, so it throws instantly instead of reaching the server.
+      const server = yield* catalogServer()
+      const calls: unknown[] = []
+      const listen = Client.prototype.listen
+      const spy = spyOn(Client.prototype, "listen").mockImplementation(function (
+        this: Client,
+        ...args: Parameters<Client["listen"]>
+      ) {
+        calls.push(args[0])
+        return listen.apply(this, args)
+      })
+      try {
+        const connection = yield* McpClient.connect({
+          server: "catalog",
+          config: { type: "attached", transport: server.transport, protocol: "legacy" },
+          directory: import.meta.dir,
+        })
+        yield* connection.tools()
+        expect(connection.modern).toBe(false)
+
+        // The fallback used to run here: its first open threw at once, the error was not a `ProtocolError`, and the
+        // backoff retried it for the connection's whole life with nothing logged. One step of that backoff is well
+        // under a second, so an attempt inside this window would be one of them.
+        yield* Effect.sleep("1200 millis")
+        expect(calls).toEqual([])
+        expect(server.state.listens).toEqual([])
+      } finally {
+        spy.mockRestore()
+      }
     }),
   )
 })
