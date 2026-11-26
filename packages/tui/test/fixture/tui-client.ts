@@ -165,6 +165,11 @@ export function createFetch(override?: FetchHandler, events?: ReturnType<typeof 
         location: { directory, project: { id: "proj_test", directory, canonical: directory } },
         data: null,
       })
+    if (url.pathname === "/api/experimental/flag")
+      return json({
+        location: { directory, project: { id: "proj_test", directory: worktree, canonical: worktree } },
+        data: {},
+      })
     if (url.pathname === "/api/websearch/provider") {
       return json({ location: { directory, project: { id: "proj_test", directory, canonical: directory } }, data: [] })
     }

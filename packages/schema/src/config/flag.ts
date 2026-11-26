@@ -37,6 +37,9 @@ export const registry = {
 } as const satisfies Record<string, string>
 export type Key = keyof typeof registry
 
+/** Flags the server reports to clients at `GET /api/experimental/flag`, so they can adapt their UI. */
+export const ui: readonly Key[] = ["full_codemode"]
+
 export const optInOnly: ReadonlySet<Key> = new Set(["todo", "opencode_api"])
 
 /** Flags that stay off outside local and dev builds, whatever `OPENCODE_FLAGS` or config say. */

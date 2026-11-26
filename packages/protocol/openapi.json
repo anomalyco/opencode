@@ -17102,6 +17102,97 @@
         "summary": "Get usage limits"
       }
     },
+    "/api/experimental/flag": {
+      "get": {
+        "tags": ["flag"],
+        "operationId": "experimental.flag.get",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Absolute path of the directory."
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.PublicRef"
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Experimental. Return the resolved feature flags the location's clients may act on, keyed by flag name. Flags not listed are off.",
+        "summary": "Get feature flags"
+      }
+    },
     "/api/config": {
       "get": {
         "tags": ["config"],
@@ -33272,6 +33363,10 @@
     {
       "name": "usage",
       "description": "Experimental usage limit routes."
+    },
+    {
+      "name": "flag",
+      "description": "Experimental feature flag routes."
     },
     {
       "name": "config",

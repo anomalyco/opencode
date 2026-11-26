@@ -2963,6 +2963,19 @@ export interface ExperimentalUsageApi<E = never> {
   readonly limits: ExperimentalUsageLimitsOperation<E>
 }
 
+export type ExperimentalFlagGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+export type ExperimentalFlagGetOutput = {
+  readonly location: Location.PublicRef
+  readonly data: { readonly [x: string]: boolean }
+}
+export type ExperimentalFlagGetOperation<E = never> = (
+  input?: ExperimentalFlagGetInput,
+) => Effect.Effect<ExperimentalFlagGetOutput, E>
+
+export interface ExperimentalFlagApi<E = never> {
+  readonly get: ExperimentalFlagGetOperation<E>
+}
+
 export type ConfigGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 export type ConfigGetOutput = ReadonlyArray<Config.Entry>
 export type ConfigGetOperation<E = never> = (input?: ConfigGetInput) => Effect.Effect<ConfigGetOutput, E>
@@ -3238,6 +3251,7 @@ export interface AppApi<E = never> {
     readonly file: ExperimentalFileApi<E>
     readonly migration: ExperimentalMigrationApi<E>
     readonly usage: ExperimentalUsageApi<E>
+    readonly flag: ExperimentalFlagApi<E>
     readonly config: ExperimentalConfigApi<E>
   }
   readonly message: MessageApi<E>

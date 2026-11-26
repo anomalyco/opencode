@@ -348,6 +348,8 @@ import type {
   WebsearchQueryOutput,
   ExperimentalUsageLimitsInput,
   ExperimentalUsageLimitsOutput,
+  ExperimentalFlagGetInput,
+  ExperimentalFlagGetOutput,
   ConfigGetInput,
   ConfigGetOutput,
   ConfigShellsOutput,
@@ -2003,6 +2005,20 @@ export function make(options: ClientOptions) {
               query: { location: input?.["location"] },
               successStatus: 200,
               declaredStatuses: [400, 401, 404, 503],
+              empty: false,
+            },
+            requestOptions,
+          ),
+      },
+      flag: {
+        get: (input?: ExperimentalFlagGetInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalFlagGetOutput>(
+            {
+              method: "GET",
+              path: `/api/experimental/flag`,
+              query: { location: input?.["location"] },
+              successStatus: 200,
+              declaredStatuses: [400, 401, 404],
               empty: false,
             },
             requestOptions,

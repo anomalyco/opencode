@@ -5140,6 +5140,10 @@ export type ExperimentalUsageLimitsInput = {
 
 export type ExperimentalUsageLimitsOutput = { location: LocationPublicRef; data: UsageLimitsInfo | null }
 
+export type ExperimentalFlagGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+
+export type ExperimentalFlagGetOutput = { location: LocationPublicRef; data: { [x: string]: boolean } }
+
 export type ConfigGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
 
 export type ConfigGetOutput = Array<ConfigEntry>
