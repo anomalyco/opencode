@@ -317,22 +317,15 @@ describe("Bun", () => {
     )
   })
 
-  test("a Bun file's reads and writes show as read and write calls, and opening one shows nothing", async () => {
+  test("Bun.file, Bun.write and Bun.Glob show as read, write and glob calls", async () => {
     await using tmp = await tmpdir()
     await Bun.write(path.join(tmp.path, "notes.txt"), "hello")
-    await Bun.write(path.join(tmp.path, "data.json"), "{}")
     const result = await Effect.runPromise(
       createCodeMode(new Map(), allowAll, codeModeServices(tmp.path)).execute(
         {
-          code: `const notes = Bun.file("notes.txt")
-          await notes.exists()
-          await notes.text()
-          await Bun.file("data.json").json()
-          await Bun.write("copy.txt", notes)
-          await Bun.write(Bun.file("new.txt"), "text")
-          await Bun.file("out.txt").write("out")
-          await Bun.file("new.txt").delete()
-          try { await Bun.file("missing.txt").bytes() } catch {}
+          code: `await Bun.file("notes.txt").text()
+          await Bun.write("copy.txt", Bun.file("notes.txt"))
+          await Bun.write("new.txt", "text")
           new Bun.Glob("*.txt")`,
         },
         context,
@@ -340,11 +333,9 @@ describe("Bun", () => {
     )
     expect(result.output.toolCalls).toEqual([
       { tool: "read", status: "completed", input: { path: "notes.txt" } },
-      { tool: "read", status: "completed", input: { path: "data.json" } },
+      { tool: "read", status: "completed", input: { path: "notes.txt" } },
       { tool: "write", status: "completed", input: { path: "copy.txt", from: "notes.txt" } },
       { tool: "write", status: "completed", input: { path: "new.txt" } },
-      { tool: "write", status: "completed", input: { path: "out.txt" } },
-      { tool: "read", status: "error", input: { path: "missing.txt" } },
       { tool: "glob", status: "completed", input: { pattern: "*.txt" } },
     ])
   })

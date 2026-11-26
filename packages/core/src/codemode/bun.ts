@@ -36,20 +36,6 @@ type Handle = { readonly name: string; readonly target: FileAccess.Target; reado
 // `bytes` function says which file a value passed to `Bun.write` or `fetch` is, and its type.
 const handles = new WeakMap<Function, Handle & { readonly type: string }>()
 
-type Row = { tool: string; input: Record<string, string> }
-
-/** Shows an effect as a row of the execute call while it runs, as a call the program made. */
-export class Rows extends Context.Service<
-  Rows,
-  <A, E, R>(row: Row, effect: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
->()("@opencode/CodeModeBun/Rows") {}
-
-// A handle's own read or write, shown as the read or write tool's row when the run lists its calls.
-const shown = <A, E, R>(handle: Handle, tool: "read" | "write", effect: Effect.Effect<A, E, R>) =>
-  Effect.flatMap(Effect.serviceOption(Rows), (rows) =>
-    Option.isSome(rows) ? rows.value({ tool, input: { path: handle.name } }, effect) : effect,
-  )
-
 // A run gets `Bun` only with the session's file services (see `CodeModeTool.create`).
 const service = <I, S>(key: Context.Key<I, S>) =>
   Effect.flatMap(Effect.serviceOption(key), (found) =>
@@ -103,7 +89,7 @@ const later =
 
 // The part of Bun's BunFile that is implemented.
 const file = (handle: Handle, type: string, size: number, lastModified: number) => {
-  const bytes = later(() => shown(handle, "read", read(handle)))
+  const bytes = later(() => read(handle))
   handles.set(bytes, { ...handle, type })
   const unlink = later(() => remove(handle))
   // As Blob.slice: a negative index counts from the end, and a string in any position is the new type.
@@ -116,10 +102,10 @@ const file = (handle: Handle, type: string, size: number, lastModified: number) 
     type,
     size,
     lastModified,
-    text: later(() => shown(handle, "read", read(handle).pipe(Effect.map(decode)))),
+    text: later(() => read(handle).pipe(Effect.map(decode))),
     // The program catches the SyntaxError JSON.parse throws, as it would from Bun.
     json: later(() =>
-      shown(handle, "read", read(handle)).pipe(
+      read(handle).pipe(
         Effect.flatMap((bytes) =>
           Effect.try({ try: (): unknown => JSON.parse(decode(bytes)), catch: (error) => error }),
         ),
@@ -127,7 +113,7 @@ const file = (handle: Handle, type: string, size: number, lastModified: number) 
     ),
     bytes,
     // The runtime has no ArrayBuffer: one crosses to a program as a Uint8Array.
-    arrayBuffer: later(() => shown(handle, "read", read(handle))),
+    arrayBuffer: later(() => read(handle)),
     exists: later(() => exists(handle)),
     stat: later(() => stat(handle)),
     slice: (...args: ReadonlyArray<number | string | undefined>): unknown => {
@@ -140,7 +126,7 @@ const file = (handle: Handle, type: string, size: number, lastModified: number) 
         lastModified,
       )
     },
-    write: later((data: unknown) => shown(handle, "write", write(handle, data))),
+    write: later((data: unknown) => write(handle, data)),
     delete: unlink,
     unlink,
     writer: (options?: { readonly highWaterMark?: number }) => writer(handle, options),
@@ -555,10 +541,11 @@ export const extension = Extension.make({
   },
 })
 
+type Row = { tool: string; input: Record<string, string> }
+
 // Bun calls shown as the file tool they stand in for. Any other Bun call names its function and path or pattern.
-// `Bun.file` only opens a file, so it shows nothing: a handle's reads and writes show as they happen (see `shown`).
-const rows: Record<string, (path: string, args: ReadonlyArray<unknown>) => Row | undefined> = {
-  "Bun.file": () => undefined,
+const rows: Record<string, (path: string, args: ReadonlyArray<unknown>) => Row> = {
+  "Bun.file": (path) => ({ tool: "read", input: { path } }),
   "Bun.Glob": (pattern) => ({ tool: "glob", input: { pattern } }),
   "Bun.write": (path, args) => {
     const from = handleOf(args[1])?.name
@@ -567,8 +554,7 @@ const rows: Record<string, (path: string, args: ReadonlyArray<unknown>) => Row |
 }
 
 /** The row Code Mode records for a Bun call. */
-export const display = (name: string, args: ReadonlyArray<unknown>): Row | undefined => {
+export const display = (name: string, args: ReadonlyArray<unknown>): Row => {
   const path = handleOf(args[0])?.name ?? String(args[0])
-  if (name in rows) return rows[name](path, args)
-  return { tool: "Bun", input: { method: name.slice(name.lastIndexOf(".") + 1), path } }
+  return rows[name]?.(path, args) ?? { tool: "Bun", input: { method: name.slice(name.lastIndexOf(".") + 1), path } }
 }

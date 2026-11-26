@@ -13,7 +13,7 @@ import type {
 } from "@opencode/schema/tool"
 import { Identifier } from "@opencode/schema/identifier"
 import { CallID } from "@opencode/schema/tool"
-import { Clock, Context, Effect, Exit, Ref, Schema, Scope, Semaphore } from "effect"
+import { Clock, Context, Effect, Ref, Schema, Scope, Semaphore } from "effect"
 import { toSessionError } from "../session/to-session-error.js"
 import { definition, normalizedName } from "../tool/runtime.js"
 import { FileAccess } from "../file-access.js"
@@ -218,7 +218,6 @@ export const create = (
         // The files the program changes, shown under the call as it runs and when it ends in the foreground. A failed
         // or stopped one keeps them too, since they really changed.
         const diffs = CodeModeDiffs.make(record(() => {}))
-        const rows = progressRows(record)
         const result = yield* runtime(inventory)
           .execute(code, undefined, {
             extensions: runExtensions(services !== undefined, agents !== undefined),
@@ -253,7 +252,7 @@ export const create = (
                     yield* Ref.update(files, (items) => [...items, { index, files: outputFileParts }])
                   return resultValue(executed)
                 }),
-              hooks: progressHooks(rows),
+              hooks: progressHooks(record),
             }),
             // A failed or interrupted call keeps its last progress, so send pending rows before it settles.
             Effect.onError(() =>
@@ -262,20 +261,6 @@ export const create = (
             // Readers outlive the fetch call that returned them, up to the end of this program's scope.
             Effect.provide(yield* executionServices(context, permission, services, api, agents)),
             Effect.provideService(CodeModeDiffs.Service, diffs),
-            Effect.provideService(CodeModeBun.Rows, (row, effect) => {
-              const key = {}
-              return rows.start(key, { status: "running", ...row }).pipe(
-                Effect.andThen(effect),
-                Effect.onExit((exit) =>
-                  rows.settle(
-                    key,
-                    Exit.isSuccess(exit)
-                      ? { status: "success", value: exit.value }
-                      : { status: "failure", error: exit.cause },
-                  ),
-                ),
-              )
-            }),
           )
         const toolCalls = calls.slice()
         const collected = (yield* Ref.get(files))
@@ -313,7 +298,7 @@ export const create = (
 }
 
 // Rows appear in start order; the same call object arrives at both hooks, so a call finds its row again.
-function progressRows(record: (update: (items: Array<ExecuteCall>) => void) => Effect.Effect<unknown>) {
+function progressHooks(record: (update: (items: Array<ExecuteCall>) => void) => Effect.Effect<unknown>) {
   const rows = new WeakMap<object, number>()
   const start = (call: object, entry: ExecuteCall) =>
     record((items) => {
@@ -327,12 +312,6 @@ function progressRows(record: (update: (items: Array<ExecuteCall>) => void) => E
       items[index] = { ...items[index], status: result.status === "success" ? "completed" : "error" }
     })
   }
-  return { start, settle }
-}
-
-function progressHooks(rows: ReturnType<typeof progressRows>) {
-  const start = rows.start
-  const settle = rows.settle
   return {
     "tool.before": (call) => {
       const shown = displayInput(call.input)
@@ -352,9 +331,9 @@ function progressHooks(rows: ReturnType<typeof progressRows>) {
             input: CodeModeAgents.display(call.name, call.args),
           })
         default:
-          if (call.extension !== "bun") return Effect.void
-          const row = CodeModeBun.display(call.name, call.args)
-          return row ? start(call, { status: "running", ...row }) : Effect.void
+          if (call.extension === "bun")
+            return start(call, { status: "running", ...CodeModeBun.display(call.name, call.args) })
+          return Effect.void
       }
     },
     "extension.after": settle,
