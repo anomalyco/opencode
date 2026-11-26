@@ -57,6 +57,8 @@ export type NewModelCandidate = {
   sessions: number
   peakUsers: number
   daily: NewModelDay[]
+  // Distinct users per ISO week, keyed by the week's Monday. Weeks are the widest grain with distinct counts.
+  weekly: { week: string; users: number }[]
 }
 export type ModelUsagePoint = {
   date: string
@@ -565,11 +567,15 @@ export function buildStatsHomeData(
       .filter((item) => item.rank !== null)
       .slice(0, RETENTION_MODEL_LIMIT),
     country: buildCountryStats(countryRows),
-    newModels: buildNewModelCandidates(normalized, latest),
+    newModels: buildNewModelCandidates(normalized, weekly, latest),
   }
 }
 
-function buildNewModelCandidates(rows: StatMetricRow[], latest: number): NewModelCandidate[] {
+function buildNewModelCandidates(
+  rows: StatMetricRow[],
+  weekRows: StatMetricRow[],
+  latest: number,
+): NewModelCandidate[] {
   const productRows = rowsForProduct(rows, SITE_PRODUCT, -Infinity, latest + DAY_MS).filter(
     (row) => row.totalTokens > 0,
   )
@@ -580,6 +586,7 @@ function buildNewModelCandidates(rows: StatMetricRow[], latest: number): NewMode
   const start = latest - (NEW_MODEL_WINDOW_DAYS - 1) * DAY_MS
   const days = Array.from({ length: NEW_MODEL_WINDOW_DAYS }, (_, index) => start + index * DAY_MS)
   const recentRows = productRows.filter((row) => row.periodStart >= start)
+  const recentWeekRows = rowsForProduct(weekRows, SITE_PRODUCT, start - 6 * DAY_MS, latest + DAY_MS)
   const tokensByDay = new Map(
     days.map((day) => [
       day,
@@ -617,6 +624,16 @@ function buildNewModelCandidates(rows: StatMetricRow[], latest: number): NewMode
         sessions: item.sessions,
         peakUsers: Math.max(0, ...daily.map((day) => day.users)),
         daily,
+        weekly: [...new Set(recentWeekRows.map((row) => row.periodStart))]
+          .toSorted((a, b) => a - b)
+          .map((week) => ({
+            week: periodKey(week),
+            users: combineRowsForModel(
+              item.model,
+              recentWeekRows.filter((row) => row.model === item.model && row.periodStart === week),
+            ).uniqueUsers,
+          }))
+          .filter((week) => week.users > 0),
       }
     })
     .toSorted((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model))
