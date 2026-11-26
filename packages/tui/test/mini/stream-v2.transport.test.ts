@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, mock, spyOn, test } from "bun:test"
+import { afterEach, describe, expect, jest, mock, spyOn, test } from "bun:test"
 import fs from "fs/promises"
 import path from "path"
 import { pathToFileURL } from "node:url"
@@ -231,6 +231,33 @@ afterEach(() => {
 })
 
 describe("V2 mini transport", () => {
+  test("a connection that never sends server.connected fails instead of reconnecting forever", async () => {
+    // A proxy answers the subscribe request and holds the body open, so the stream never yields.
+    const client = sdk({ streams: [feed()] })
+    const ui = footer()
+    const realSetTimeout = globalThis.setTimeout
+    jest.useFakeTimers()
+    try {
+      const pending = createSessionTransport({
+        sdk: client,
+        sessionID: "ses_1",
+        thinking: false,
+        replay: true,
+        footer: ui.api,
+        onCommit: () => {},
+      })
+      const outcome = pending.then(
+        () => "resolved",
+        (error: Error) => error.message,
+      )
+      jest.advanceTimersByTime(10_000)
+      const guard = new Promise<string>((resolve) => realSetTimeout(() => resolve("still connecting"), 2_000))
+      expect(await Promise.race([outcome, guard])).toContain("sent nothing within 10s")
+    } finally {
+      jest.useRealTimers()
+    }
+  })
+
   test.each(["steer", "queue"] as const)("cancels the first local %s after attaching while busy", async (delivery) => {
     const events = feed()
     events.push(connected())
@@ -1992,6 +2019,53 @@ describe("V2 mini transport", () => {
     expect(prompt).toHaveBeenCalled()
     expect(client.event.subscribe).toHaveBeenCalledTimes(2)
     await transport.close()
+  })
+
+  test("reconnects when a running session's stream stalls instead of dropping the session", async () => {
+    const first = feed()
+    const stalled = feed()
+    const third = feed()
+    first.push(connected("evt_connected_1"))
+    third.push(connected("evt_connected_3"))
+    const client = sdk({ streams: [first, stalled, third] })
+    const ui = footer()
+    const transport = await createSessionTransport({
+      sdk: client,
+      sessionID: "ses_1",
+      thinking: false,
+      footer: ui.api,
+    })
+    jest.useFakeTimers()
+    try {
+      const drain = async (steps = 50) => {
+        for (let index = 0; index < steps; index++) await Promise.resolve()
+      }
+      first.close()
+      await drain()
+      // The second stream answers the subscribe and then sends nothing, which only the deadline ends.
+      jest.advanceTimersByTime(250)
+      await drain()
+      jest.advanceTimersByTime(10_000)
+      await drain()
+      jest.advanceTimersByTime(250)
+      await drain(200)
+      const prompt = spyOn(client.session, "prompt").mockImplementation(
+        (request) => ok({ data: promptAdmission(request) }) as never,
+      )
+      await transport.runPromptTurn({
+        agent: undefined,
+        model: undefined,
+        variant: undefined,
+        prompt: { messageID: "msg_after_stall", text: "hello", parts: [] },
+        files: [],
+        includeFiles: true,
+      })
+      expect(prompt).toHaveBeenCalled()
+      expect(client.event.subscribe).toHaveBeenCalledTimes(3)
+    } finally {
+      jest.useRealTimers()
+      await transport.close()
+    }
   })
 
   test("reconnects even when catalog refresh hangs", async () => {
