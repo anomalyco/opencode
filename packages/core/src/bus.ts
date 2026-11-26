@@ -112,17 +112,19 @@ export interface PublishOptions<E = never> {
   readonly commit?: (seq: number) => Effect.Effect<void, E>
 }
 
-export type PublishInput<D extends Event.DurableDefinition = Event.DurableDefinition, E = unknown> = readonly [
+export type PublishInput<D extends Event.DurableDefinition = Event.DurableDefinition, E = never> = readonly [
   definition: D,
   data: Event.Data<D>,
   options?: PublishOptions<E>,
 ]
 
-export type PublishResult<I extends readonly PublishInput[]> = {
-  readonly [K in keyof I]: I[K] extends PublishInput<infer D> ? Event.Payload<D> : never
+type AnyPublishInput = PublishInput<Event.DurableDefinition, unknown>
+
+export type PublishResult<I extends readonly AnyPublishInput[]> = {
+  readonly [K in keyof I]: I[K] extends PublishInput<infer D, unknown> ? Event.Payload<D> : never
 }
 
-export type PublishError<I extends readonly PublishInput[]> = I[number][2] extends infer O
+export type PublishError<I extends readonly AnyPublishInput[]> = I[number][2] extends infer O
   ? O extends { readonly commit?: infer C }
     ? C extends (seq: number) => Effect.Effect<void, infer E>
       ? E
@@ -165,7 +167,7 @@ export interface Interface {
     data: Event.Data<D>,
     options?: PublishOptions<E>,
   ) => Effect.Effect<Event.Payload<D>, E>
-  readonly publishAll: <const I extends readonly [PublishInput, ...PublishInput[]]>(
+  readonly publishAll: <const I extends readonly [AnyPublishInput, ...AnyPublishInput[]]>(
     events: I,
   ) => Effect.Effect<PublishResult<I>, PublishError<I>>
   readonly subscribe: Subscribe
@@ -553,7 +555,7 @@ export function configured(options?: Options) {
           })
         }
 
-        function publishAll<const I extends readonly [PublishInput, ...PublishInput[]]>(events: I) {
+        function publishAll<const I extends readonly [AnyPublishInput, ...AnyPublishInput[]]>(events: I) {
           return Effect.gen(function* () {
             const payloads = yield* Effect.forEach(events, ([definition, data, options]) =>
               Effect.gen(function* () {
