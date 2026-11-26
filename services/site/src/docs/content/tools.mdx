@@ -225,6 +225,23 @@ subagent-mode agents can be used, and the default nesting depth is one.
 
 Permission: `subagent` with the selected agent ID as its resource.
 
+### Todo
+
+`todowrite` keeps a task list for the current session. It is experimental and only available when `experimental.todo` is enabled in config or with `OPENCODE_FLAGS=todo`.
+
+```json
+{
+  "todos": [
+    { "content": "Inspect the failing test", "status": "in_progress" },
+    { "content": "Patch the parser", "status": "pending" }
+  ]
+}
+```
+
+Send the full list on every call. Each item has `content` and a `status` of `pending`, `in_progress`, `completed`, or `cancelled`; the list replaces the previous one. Send an empty list to clear it, and only call the tool when the list changes.
+
+Permission: `todowrite` with `*` as its resource.
+
 ### Execute
 
 `execute` runs JavaScript in Code Mode so the agent can call and combine tools
