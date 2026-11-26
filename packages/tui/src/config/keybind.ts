@@ -97,7 +97,7 @@ export const Definitions = {
   "pane.focus.left": keybind("<leader>left", "Focus session pane"),
   "pane.focus.right": keybind("<leader>right", "Focus right pane"),
   "terminal.select": keybind("<leader>down", "Select terminal"),
-  "terminal.toggle": keybind("<leader>t,ctrl+j", "Toggle terminal pane"),
+  "terminal.toggle": keybind("<leader>t", "Toggle terminal pane"),
   "terminal.close": keybind("<leader>up", "Close terminal pane"),
   "session.toggle.scrollbar": keybind("none", "Toggle session scrollbar"),
   "opencode.status": keybind("<leader>s", "View status"),

@@ -77,6 +77,17 @@ Use an object for event behavior:
 }
 ```
 
+A key should belong to one command. To give a command a key that another default already uses, remove it from that command too. For example, `ctrl+j` inserts a newline by default, so to open the terminal pane with it instead:
+
+```json
+{
+  "keybinds": {
+    "terminal.toggle": "<leader>t,ctrl+j",
+    "input.newline": "shift+return,ctrl+return,alt+return"
+  }
+}
+```
+
 Unknown command IDs are ignored.
 
 ## Application
