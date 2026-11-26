@@ -22,6 +22,7 @@ Release notes for OpenCode V2, newest first.
 #### Improvements
 
 - Added a system prompt for GPT-6.2. ([#66297](https://github.com/anomalyco/opencode/pull/66297))
+- `generate_image` and `generate_video` run inside Code Mode instead of as top-level tools, so their definitions no longer add about 700 tokens to every request. ([#66465](https://github.com/anomalyco/opencode/pull/66465))
 - Moving a session also moves its subagents. ([#66215](https://github.com/anomalyco/opencode/pull/66215))
 - The `report` skill checks the docs, searches for duplicate issues and includes the relevant log lines. ([#66290](https://github.com/anomalyco/opencode/pull/66290))
 - Cost estimates for service tiers that list their own prices use those prices, including their long-context rates. ([#65861](https://github.com/anomalyco/opencode/pull/65861), [#65984](https://github.com/anomalyco/opencode/pull/65984))
