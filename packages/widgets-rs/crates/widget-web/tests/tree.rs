@@ -505,7 +505,9 @@ fn a_draw_step_emits_its_commands_as_json_reads_them() {
     assert_eq!(
         draw("function draw() {\n  return [[\"text\", 1, NaN, \"t\"]]\n}"),
         Err(Error::Draw {
-            reason: "draw command 0: \"text\" argument 2 must be a finite number".into()
+            reason: "draw command 0: \"text\" argument 2 must be a finite number".into(),
+            line: None,
+            column: None,
         })
     );
     assert_eq!(draw("function draw() {}").unwrap(), "[]");

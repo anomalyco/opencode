@@ -13,7 +13,7 @@ class Program {
   runStep(inputJson: string, timeoutMs?: number, maxOutputBytes?: number): string // a native widget step (below)
   runDraw(inputJson: string, timeoutMs?: number, maxOutputBytes?: number): string // a native draw step's commands
   startLive(inputJson: string, options?: { sliceBudgetMs?: number; maxPostsPerSecond?: number; httpsHosts?: string[];
-            allowLocalNetwork?: boolean; native?: boolean }): LiveRun
+            allowLocalNetwork?: boolean; native?: boolean; programLines?: [first: number, last: number] }): LiveRun
 }
 class LiveRun {
   pump(maxMs: number): number      // -3 ended (see exit()), -2 still computing: pump again soon,
@@ -45,8 +45,10 @@ its canvas's id; its `render` and `draw` posts go out under the post rate (a buc
 stopped); GPU batches (`{ type: "frame", gpu }`, `{ type: "gpu", ops, bytes }`, widgets-gpu.md) take no token but
 never overtake a waiting post, and go as they are for the client's host checks: their ops as JSON reads them, with
 their non-finite numbers (which JSON writes as `null`) listed by path in `nonFinite` for the client to put back, an
-`ArrayBuffer`'s bytes (read in place) in the byte outbox (`takeBytes`), other bytes `null`; a render carries its GPU canvases' ids by
-key (`gpu`). Every run has typed arrays (the language's). A
+`ArrayBuffer`'s bytes (read in place) in the byte outbox (`takeBytes`), other bytes `null`, and the post's line and
+column in `at` (`[line, column]`) for the client's errors in them; a render carries its GPU canvases' ids by
+key (`gpu`). `programLines` declares the source's lines that are the widget template's (`Runtime::program_lines`): an
+error raised in the preludes, a batch's `at` and an invalid draw are then at the template's nearest line. Every run has typed arrays (the language's). A
 `draw` without a string `key`, over 2,000 commands or with an invalid command (type `draw`), ends the run. Draws, live posts and
 `runDraw` alike, are checked and normalised by the spec's draw command checks (`src/draw.rs`; `tests/draw.rs` runs the
 89 shared cases of `packages/widget/test/fixtures/draw.json`). A key that isn't a string, number or boolean, or a view over 100 levels, fails with type `view` (a step
@@ -65,7 +67,9 @@ and holds deliveries and fetch answers; `resume` queues `{ type: "resumed", paus
 `fetch` rules are checked here (`src/fetch.rs`): https only, the declared hosts (an entry may name a port), no URL
 credentials, no local names or non-public literal addresses (unless `allowLocalNetwork`, dev mode: then those too,
 over `http:` as well, when an entry other than `*` declares them), the six methods, no cookie headers, 256 KB out / 2 MB in, 4 in flight and 10 a
-second; the browser carries the request and the final URL after redirects is checked again. Snapshots
+second; the browser carries the request and the final URL after redirects is checked again. A rejection is an error
+with `kind` (`CapabilityDenied`, `RateLimited`, `Network`, `Timeout`, `TooLarge`) located at the call; uncaught, the
+run's error has that `kind`. Snapshots
 (`suspend`/`toBytes`) aren't offered: `Suspender::suspend` blocks on a condition variable, which a single-threaded
 host can't do while it is the thread that must reach the safe point.
 

@@ -56,6 +56,10 @@ pub struct LiveOptions {
     /// ends the run at once with [`Error::View`]. A function anywhere else in a host call's argument fails the call.
     /// `render` and `draw` posts go out under the post rate ([`Rate`]); a `draw` without a string `key` ends the run.
     pub native: bool,
+    /// The source's lines that are the program's own, `(first, last)` (`Runtime::program_lines`): an error raised in
+    /// the preludes, or by a host function called from there, is located at the program's nearest line, as are GPU
+    /// batches' posts (`at`) and an invalid draw. `None`: every line is the program's.
+    pub program_lines: Option<(u32, u32)>,
 }
 
 impl Default for LiveOptions {
@@ -66,6 +70,7 @@ impl Default for LiveOptions {
             https_hosts: None,
             allow_local_network: false,
             native: false,
+            program_lines: None,
         }
     }
 }
@@ -178,6 +183,8 @@ struct Shared {
     stopping: bool,
     /// Why a native post ended the run.
     failed: Option<Error>,
+    /// The last fetch rejection's kind and message: uncaught, it is the run's error, of that kind ([`named`]).
+    rejected: Option<(&'static str, String)>,
 }
 
 /// A native run's post rate (widgets-live.md, "Post rate"): a token bucket of [`BURST`] tokens refilled at `per_second`
@@ -259,8 +266,9 @@ impl Shared {
 
     /// Takes a posted message; a native `render` returns whether its view has handlers, a native `draw` with an unknown
     /// or GPU canvas's key throws. A function where none may go throws; a render that breaks a rule of views, or a draw
-    /// without a string key, ends the run. All of it is checked now, whether the post goes out now or waits.
-    fn post(&mut self, message: &HostValue) -> HostResult {
+    /// without a string key, ends the run. All of it is checked now, whether the post goes out now or waits. `at`, the
+    /// post's line and column: a GPU batch's post carries it (`at`), an invalid draw fails there.
+    fn post(&mut self, message: &HostValue, at: Option<(u32, u32)>) -> HostResult {
         let mut reply = HostValue::Undefined;
         let mut native = None;
         // Native `render` and `draw` posts: counted, with what they coalesce by; or a GPU batch's post.
@@ -371,7 +379,13 @@ impl Shared {
                     json::unmarked(std::slice::from_ref(commands), POST, 0)?;
                     let written = match draw::check(commands) {
                         Ok(written) => written,
-                        Err(reason) => return Err(self.fail(Error::Draw { reason })),
+                        Err(reason) => {
+                            return Err(self.fail(Error::Draw {
+                                reason,
+                                line: at.map(|(l, _)| l),
+                                column: at.map(|(_, c)| c),
+                            }));
+                        }
                     };
                     let out = format!(
                         r#"{{"type":"draw","id":{},"commands":{written}}}"#,
@@ -380,20 +394,27 @@ impl Shared {
                     native = Some(out);
                     counted = Some(Slot::Draw(key.to_owned()));
                 }
-                // GPU batches (widgets-gpu.md, Transport): in a frame request, or on their own; never counted.
+                // GPU batches (widgets-gpu.md, Transport): in a frame request, or on their own; never counted. Their
+                // post's line and column go with them (`at`), for the client's errors in them.
                 Some("frame") => {
                     if let Some(gpu) = message
                         .get("gpu")
                         .filter(|b| !matches!(b, HostValue::Undefined))
                     {
-                        let head = r#"{"type":"post","message":{"type":"frame","gpu":"#;
-                        batch = Some(self.batch_post(gpu, head)?);
+                        let head = format!(
+                            r#"{{"type":"post","message":{{"type":"frame",{}"gpu":"#,
+                            at_json(at)
+                        );
+                        batch = Some(self.batch_post(gpu, &head)?);
                     }
                 }
                 // `{ type: "gpu", ops, bytes }`: the message is the batch (only its `ops` and `bytes` are read).
                 Some("gpu") => {
-                    let head = r#"{"type":"post","message":{"type":"gpu","batch":"#;
-                    batch = Some(self.batch_post(message, head)?);
+                    let head = format!(
+                        r#"{{"type":"post","message":{{"type":"gpu",{}"batch":"#,
+                        at_json(at)
+                    );
+                    batch = Some(self.batch_post(message, &head)?);
                 }
                 // An answer goes out after what waits for the rate.
                 Some("submit" | "dismiss") => self.release(),
@@ -547,6 +568,11 @@ impl Shared {
 }
 
 /// An object's fields; none for anything else.
+/// A GPU batch post's `"at":[line,column],`, or nothing when its place isn't known.
+fn at_json(at: Option<(u32, u32)>) -> String {
+    at.map_or_else(String::new, |(l, c)| format!(r#""at":[{l},{c}],"#))
+}
+
 fn fields(v: &HostValue) -> &[(HostString, HostValue)] {
     match v {
         HostValue::Object(fields) => fields,
@@ -560,6 +586,24 @@ const POST: &str = "__host.post";
 /// An error the program can catch, thrown from a host call, located at the call.
 fn error(name: &str, message: &str) -> HostValue {
     HostError::located(name, message)
+}
+
+/// What the program gets for a fetch rejection ([`Rejection::value`]), kept to name the run's error if it is uncaught.
+fn rejected(s: &mut Shared, r: Rejection) -> HostValue {
+    s.rejected = Some((r.kind, r.message.clone()));
+    r.value()
+}
+
+/// The run's error, of the last fetch rejection's kind when it is that rejection uncaught: the language ends the run
+/// with an `ExecutionFailure` for an error a host function threw.
+fn named(mut error: Error, rejected: Option<(&'static str, String)>) -> Error {
+    if let (Error::Runtime { kind, reason, .. }, Some((named, message))) = (&mut error, rejected)
+        && kind == "ExecutionFailure"
+        && reason.contains(&message)
+    {
+        *kind = named.to_owned();
+    }
+    error
 }
 
 fn lock(m: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
@@ -585,11 +629,10 @@ impl Future for Fetching {
         let paused = s.paused.is_some();
         let id = self.id;
         let Some(slot) = s.fetches.get_mut(&id) else {
+            let lost = rejected(&mut s, Rejection::new("Network", "the request was lost"));
             drop(s);
             self.done = true;
-            return Poll::Ready(Err(
-                Rejection::new("Network", "the request was lost").value()
-            ));
+            return Poll::Ready(Err(lost));
         };
         match slot.result.take() {
             Some(result) if !paused => {
@@ -660,8 +703,12 @@ impl LiveRun {
             slice: None,
             stopping: false,
             failed: None,
+            rejected: None,
         }));
         let mut runtime = runtime(&shared, input_name);
+        if let Some((first, last)) = options.program_lines {
+            runtime = runtime.program_lines(first, last);
+        }
         if options.native {
             // A native (widget) run posts views as built: handler functions cross as markers, 100 levels of view deep.
             runtime = runtime.translate(MARK).limits(Limits {
@@ -709,7 +756,10 @@ impl LiveRun {
             self.woken.0.store(false, Ordering::SeqCst);
             match future.as_mut().poll(&mut cx) {
                 Poll::Ready(result) => {
-                    let failed = lock(&self.shared).failed.take();
+                    let (failed, rejected) = {
+                        let mut s = lock(&self.shared);
+                        (s.failed.take(), s.rejected.take())
+                    };
                     let exit = match (failed, result) {
                         (Some(error), _) => LiveExit::Failed { error },
                         (None, Ok(RunOutcome::Done(outcome))) => match outcome.result {
@@ -717,7 +767,7 @@ impl LiveRun {
                                 result_json: data.to_json_string(),
                             },
                             Err(d) => LiveExit::Failed {
-                                error: Error::from_diagnostic(d, None),
+                                error: named(Error::from_diagnostic(d, None), rejected),
                             },
                         },
                         (None, Ok(RunOutcome::Suspended(_)) | Err(_)) => LiveExit::Stopped,
@@ -801,16 +851,17 @@ impl LiveRun {
     /// Answers fetch `id` with the browser's response: `meta_json` is `{ status, url, headers }` (the final URL after
     /// redirects), `body` the body's bytes. Pump afterwards.
     pub fn fetch_done(&mut self, id: u64, meta_json: &str, body: Vec<u8>) {
-        let s = lock(&self.shared);
+        let mut s = lock(&self.shared);
         let policy = s.policy.clone().unwrap_or_default();
-        let result = fetch::response(meta_json, body, &policy).map_err(Rejection::value);
+        let result = fetch::response(meta_json, body, &policy).map_err(|r| rejected(&mut s, r));
         answer(s, id, result);
     }
 
     /// Fails fetch `id`: `kind` is `Network`, `Timeout` or `TooLarge`. Pump afterwards.
     pub fn fetch_failed(&mut self, id: u64, kind: &str, message: &str) {
-        let s = lock(&self.shared);
-        answer(s, id, Err(Rejection::transport(kind, message).value()));
+        let mut s = lock(&self.shared);
+        let error = rejected(&mut s, Rejection::transport(kind, message));
+        answer(s, id, Err(error));
     }
 
     /// Pauses the run: `sleep` timers freeze with their remaining time, `now()` stops, delivered messages and fetch
@@ -976,13 +1027,16 @@ fn runtime(shared: &Arc<Mutex<Shared>>, input_name: String) -> Runtime {
             Ok(Input::parse(&text).unwrap_or_default())
         });
         let s = shared.clone();
-        let post = HostFunction::new(move |args: Vec<HostValue>, _call| -> HostResult {
+        let post = HostFunction::new(move |args: Vec<HostValue>, call| -> HostResult {
             let mut s = lock(&s);
             if s.stopping {
                 return Err(HostValue::Interrupt);
             }
             json::unmarked(&args, POST, 1)?;
-            s.post(args.first().unwrap_or(&HostValue::Undefined))
+            s.post(
+                args.first().unwrap_or(&HostValue::Undefined),
+                call.location(),
+            )
         });
         let s = shared.clone();
         let now = HostFunction::new(move |args: Vec<HostValue>, _call| -> HostResult {
@@ -1056,16 +1110,10 @@ fn runtime(shared: &Arc<Mutex<Shared>>, input_name: String) -> Runtime {
         .idempotent();
         let s = shared.clone();
         let fetch = HostFunction::new_async(move |args: Vec<HostValue>, _call| {
-            let started = json::unmarked(&args, "__host.fetch", 0)
-                .map_err(Err)
-                .and_then(|()| start_fetch(&s, args.first()).map_err(Ok));
-            async move {
-                match started {
-                    Ok(fetching) => fetching.await,
-                    Err(Ok(rejection)) => Err(rejection.value()),
-                    Err(Err(thrown)) => Err(thrown),
-                }
-            }
+            let started = json::unmarked(&args, "__host.fetch", 0).and_then(|()| {
+                start_fetch(&s, args.first()).map_err(|r| rejected(&mut lock(&s), r))
+            });
+            async move { started?.await }
         });
         let host = HostValue::object([
             ("post", HostValue::Function(post.named("post").length(1))),

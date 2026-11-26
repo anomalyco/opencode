@@ -98,7 +98,8 @@ impl JsProgram {
 
     /// Starts the program as a live run with `inputJson` behind its input function and `__host`. `options`:
     /// `{ sliceBudgetMs = 50, maxPostsPerSecond = 240, httpsHosts?: string[], allowLocalNetwork = false,
-    /// native = false }` (`native`: a `__widget_live(__input(), true)` run, widgets.md "Native hosts").
+    /// native = false, programLines?: [first, last] }` (`native`: a `__widget_live(__input(), true)` run, widgets.md
+    /// "Native hosts"; `programLines`: the source's lines that are the program's own, see `LiveOptions`).
     #[wasm_bindgen(js_name = startLive)]
     pub fn start_live(&self, input_json: &str, options: JsValue) -> Result<JsLiveRun, JsValue> {
         let mut o = LiveOptions::default();
@@ -113,6 +114,12 @@ impl JsProgram {
             o.allow_local_network =
                 get("allowLocalNetwork").is_some_and(|v| v.as_bool() == Some(true));
             o.native = get("native").is_some_and(|v| v.as_bool() == Some(true));
+            if let Some(lines) = get("programLines").filter(js_sys::Array::is_array) {
+                let lines = js_sys::Array::from(&lines);
+                if let (Some(first), Some(last)) = (lines.get(0).as_f64(), lines.get(1).as_f64()) {
+                    o.program_lines = Some((first as u32, last as u32));
+                }
+            }
             if let Some(hosts) = get("httpsHosts").filter(js_sys::Array::is_array) {
                 o.https_hosts = Some(
                     js_sys::Array::from(&hosts)

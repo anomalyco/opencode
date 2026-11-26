@@ -633,7 +633,7 @@ fn gpu_batches_carry_their_ops_and_bytes() {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         let pump = run.pump(8.0);
-        out.extend(posts(&parse(&run.take_outbox())));
+        out.extend(placeless(posts(&parse(&run.take_outbox()))));
         bytes.extend(run.take_bytes());
         if pump == Pump::Ended || Instant::now() > deadline {
             break;
@@ -690,7 +690,7 @@ fn gpu_batch_ops_keep_non_finite_numbers_by_path() {
 }"#,
         240,
     );
-    let out = run_for(&mut run, 200);
+    let out = placeless(run_for(&mut run, 200));
     assert_eq!(
         out[1],
         json!({ "type": "gpu", "batch": {
@@ -759,6 +759,14 @@ fn gpu_batches_wait_in_order_behind_waiting_posts() {
     assert_eq!(out[10]["batch"]["bytes"], json!([0, 2]));
     assert_eq!(out[11]["gpu"]["bytes"], json!([2, 1]));
     assert_eq!(bytes, [9, 8, 7]);
+}
+
+/// Posts without their GPU batches' `at` (a_gpu_batch_carries_the_line_of_its_frame_request).
+fn placeless(mut out: Vec<Value>) -> Vec<Value> {
+    for m in &mut out {
+        m.as_object_mut().unwrap().remove("at");
+    }
+    out
 }
 
 /// A live program on the live prelude, run natively.
@@ -906,4 +914,119 @@ fn a_render_that_breaks_a_rule_of_views_ends_the_run_in_phase_view() {
         }
         other => panic!("{other:?}"),
     }
+}
+
+/// A live program on the live prelude with its own lines declared (`program_lines`), as the web host runs it: its
+/// posts and how it ended, and the program's line of the template's first line.
+fn located(source: &str, https_hosts: Option<Vec<String>>) -> (Vec<Value>, Option<LiveExit>, u32) {
+    let first = prelude_lines() + 2;
+    let program = format!(
+        "{}\n{source}\nreturn await __widget_live(__input(), true)",
+        live_prelude()
+    );
+    let mut run = Program::new(&program, None)
+        .unwrap()
+        .start_live(
+            r#"{"data":null,"gpu":{"available":true,"format":"bgra8unorm"}}"#,
+            LiveOptions {
+                native: true,
+                https_hosts,
+                program_lines: Some((first, first + source.lines().count() as u32 - 1)),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let out = posts(&settle(&mut run));
+    (out, run.exit().cloned(), first)
+}
+
+/// How a located run failed: its kind, phase, and line in the template (`first` its first line) with a column.
+fn failure(exit: Option<LiveExit>, first: u32) -> (Option<String>, Option<&'static str>, u32) {
+    let Some(LiveExit::Failed { error }) = exit else {
+        panic!("{exit:?}")
+    };
+    let (line, column) = error.location().expect("a location");
+    assert!(column > 0);
+    (
+        error.kind().map(str::to_owned),
+        error.phase(),
+        line + 1 - first,
+    )
+}
+
+/// An uncaught `__host.fetch` rejection ends the run with its kind, at the call.
+#[test]
+fn an_uncaught_fetch_rejection_keeps_its_kind() {
+    let (_, exit, first) = located(
+        "async function main() {\n  await __host.fetch({ url: \"https://example.org\", method: \"GET\", headers: {} })\n}\n",
+        None,
+    );
+    assert_eq!(
+        failure(exit, first),
+        (Some("CapabilityDenied".into()), None, 2)
+    );
+}
+
+/// An uncaught `widget.fetch` denial (the prelude rethrows the rejection) is a fetch error at the template's call.
+#[test]
+fn an_uncaught_widget_fetch_denial_is_a_fetch_error_at_its_line() {
+    let (_, exit, first) = located(
+        "async function main() {\n  widget.render(ui.text(\"x\"))\n  await widget.fetch(\"https://example.org/a\")\n}\n",
+        Some(vec!["api.example.com".into()]),
+    );
+    assert_eq!(
+        failure(exit, first),
+        (Some("CapabilityDenied".into()), None, 3)
+    );
+}
+
+/// A GPU batch's post carries its line and column (`at`): the template's frame request that posted it.
+#[test]
+fn a_gpu_batch_carries_the_line_of_its_frame_request() {
+    let (out, _, first) = located(
+        r#"async function main() {
+  widget.render(ui.canvas({ key: "scene", gpu: true, height: 100 }))
+  const device = await widget.gpu.requestDevice()
+  widget.gpu.getContext("scene").configure({ device, format: widget.gpu.getPreferredCanvasFormat() })
+  device.createBuffer({ size: 64 * 1024 * 1024 + 4, usage: GPUBufferUsage.VERTEX })
+  for (let i = 0; i < 20; i++) await widget.frame()
+}
+"#,
+        None,
+    );
+    let frame = out
+        .iter()
+        .find(|m| m["type"] == "frame" && m["gpu"].is_object())
+        .expect("a frame request with a batch");
+    assert_eq!(frame["at"][0], first + 5);
+    assert!(frame["at"][1].as_u64().unwrap() > 0);
+}
+
+/// A check of the GPU recording API (the prelude's) fails at the template's call.
+#[test]
+fn a_recording_api_error_is_at_its_line() {
+    let (_, exit, first) = located(
+        r#"async function main() {
+  widget.render(ui.canvas({ key: "scene", gpu: true, height: 100 }))
+  const device = await widget.gpu.requestDevice()
+  device.createBuffer()
+  await widget.frame()
+}
+"#,
+        None,
+    );
+    assert_eq!(
+        failure(exit, first),
+        (Some("ExecutionFailure".into()), None, 4)
+    );
+}
+
+/// An invalid draw fails in phase `draw` at the template's `widget.draw`.
+#[test]
+fn an_invalid_draw_is_at_its_line() {
+    let (_, exit, first) = located(
+        "async function main() {\n  widget.render(ui.canvas({ key: \"c\", height: 10 }))\n  widget.draw(\"c\", [[\"bogus\"]])\n  await widget.frame()\n}\n",
+        None,
+    );
+    assert_eq!(failure(exit, first), (None, Some("draw"), 3));
 }

@@ -184,7 +184,13 @@ impl Emitted {
         if self.draw {
             match draw::check_read(args.first().unwrap_or(&HostValue::Undefined)) {
                 Ok(commands) => self.view = Some(commands),
-                Err(reason) => self.failure = Some(Error::Draw { reason }),
+                Err(reason) => {
+                    self.failure = Some(Error::Draw {
+                        reason,
+                        line: None,
+                        column: None,
+                    })
+                }
             }
             return Ok(HostValue::Undefined);
         }

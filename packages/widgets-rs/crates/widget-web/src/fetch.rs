@@ -116,8 +116,9 @@ impl Rejection {
         Rejection::new(kind, message)
     }
 
+    /// What the program gets: an error with `kind` and `message`, located at the `fetch` call.
     pub fn value(self) -> HostValue {
-        HostValue::Error(Box::new(
+        HostValue::Located(Box::new(
             HostError::named(self.kind, self.message.as_str())
                 .with_field("kind", HostValue::String(self.kind.into())),
         ))

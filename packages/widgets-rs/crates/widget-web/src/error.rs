@@ -37,8 +37,13 @@ pub enum Error {
     InvalidState { reason: String },
     /// A widget's view breaks a rule of views (widgets.md, "Keys and depth"): a program error in phase `view`.
     View { reason: String },
-    /// A live widget's draw post is invalid (more than 2,000 commands): a program error in phase `draw`.
-    Draw { reason: String },
+    /// A live widget's draw post is invalid (more than 2,000 commands): a program error in phase `draw`, at the post
+    /// when known.
+    Draw {
+        reason: String,
+        line: Option<u32>,
+        column: Option<u32>,
+    },
 }
 
 impl Error {
@@ -83,7 +88,7 @@ impl Error {
             | Error::SliceBudget { reason, .. }
             | Error::InvalidState { reason }
             | Error::View { reason }
-            | Error::Draw { reason } => reason,
+            | Error::Draw { reason, .. } => reason,
         }
     }
 
@@ -129,6 +134,11 @@ impl Error {
                 ..
             }
             | Error::Runtime {
+                line: Some(l),
+                column: Some(c),
+                ..
+            }
+            | Error::Draw {
                 line: Some(l),
                 column: Some(c),
                 ..
