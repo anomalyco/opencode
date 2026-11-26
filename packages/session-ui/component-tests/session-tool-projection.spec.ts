@@ -1,3 +1,4 @@
+import type { Locator } from "@playwright/test"
 import { expect, story } from "../../stories/playwright/story"
 
 // Moved from packages/app/e2e/regression/session-timeline-projection.spec.ts
@@ -221,6 +222,24 @@ story("reveals the View code action while hovering anywhere over the execution",
 
   await timeline.page().mouse.move(0, 0)
   await expect(action).toHaveCSS("opacity", "0")
+})
+
+story("keeps the View code action on an open execution's title line", async ({ mount }) => {
+  const timeline = await mount("timeline-playground--playground", { args: { preset: "everything" } })
+  const tool = timeline.locator('[data-component="collapsible"].tool-collapsible[data-has-action="true"]').first()
+  const trigger = tool.locator('> [data-slot="collapsible-trigger"]')
+  if ((await trigger.getAttribute("aria-expanded")) !== "true") await trigger.click()
+  await expect(trigger).toHaveAttribute("aria-expanded", "true")
+
+  // An open header is taller than its line of text, so the action must not center on the header.
+  const middle = (locator: Locator) =>
+    locator.evaluate((element) => {
+      const box = element.getBoundingClientRect()
+      return box.top + box.height / 2
+    })
+  const title = await middle(tool.locator('[data-slot="basic-tool-tool-title"]').first())
+  const action = await middle(tool.getByRole("button", { name: "View code" }))
+  expect(Math.abs(action - title)).toBeLessThan(2)
 })
 
 story("keeps long execute calls inside the tool and shows the script output", async ({ mount }) => {
