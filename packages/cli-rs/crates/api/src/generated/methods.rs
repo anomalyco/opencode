@@ -214,6 +214,18 @@ impl Client {
     endpoint!(" `PUT /api/experimental/push/session/:sessionID` (`push.session.set`)", experimental_push_session_set, experimental_push_session_set_call, data, ExperimentalPushSessionSetOutput, input: ExperimentalPushSessionSetInput);
     endpoint!(" `DELETE /api/experimental/push/session/:sessionID` (`push.session.remove`)", experimental_push_session_remove, experimental_push_session_remove_call, empty, (), input: ExperimentalPushSessionRemoveInput);
     endpoint!(" `PUT /api/experimental/push/settings` (`push.settings.set`)", experimental_push_settings_set, experimental_push_settings_set_call, data, ExperimentalPushSettingsSetOutput, input: ExperimentalPushSettingsSetInput);
+    endpoint!(" `PUT /api/experimental/space/:space/:key` (`space.set`)", experimental_space_set, experimental_space_set_call, empty, (), input: ExperimentalSpaceSetInput);
+    endpoint!(" `DELETE /api/experimental/space/:space/:key` (`space.delete`)", experimental_space_delete, experimental_space_delete_call, empty, (), input: ExperimentalSpaceDeleteInput);
+    endpoint!(" `GET /api/experimental/space/:space` (`space.sync`)", experimental_space_sync, experimental_space_sync_call, json, ExperimentalSpaceSyncOutput, input: ExperimentalSpaceSyncInput);
+    endpoint!(" `POST /api/experimental/space/subscribe` (`space.subscribe`)", experimental_space_subscribe, experimental_space_subscribe_call, empty, (), input: ExperimentalSpaceSubscribeInput);
+    endpoint!(" `POST /api/experimental/space/unsubscribe` (`space.unsubscribe`)", experimental_space_unsubscribe, experimental_space_unsubscribe_call, empty, (), input: ExperimentalSpaceUnsubscribeInput);
+    endpoint!(
+        " `POST /api/experimental/space/reset` (`space.reset`)",
+        experimental_space_reset,
+        experimental_space_reset_call,
+        empty,
+        ()
+    );
     endpoint!(" `GET /api/shell` (`list`)", shell_list, shell_list_call, json, ShellListOutput, input: ShellListInput);
     endpoint!(" `POST /api/shell` (`create`)", shell_create, shell_create_call, json, ShellCreateOutput, input: ShellCreateInput);
     endpoint!(" `GET /api/shell/:id` (`get`)", shell_get, shell_get_call, json, ShellGetOutput, input: ShellGetInput);

@@ -2245,6 +2245,23 @@ export type ExperimentalMcpEvent = _Event1<"experimental.mcp.event", {
 
 export type ExperimentalPushUpdated = _Event1<"experimental.push.updated", any>
 
+export type ExperimentalSpaceDeleted = _Event1<"experimental.space.deleted", {
+    space: SpaceName,
+    key: SpaceKey,
+    revision: SpaceRevision,
+}>
+
+export type ExperimentalSpaceResync = _Event1<"experimental.space.resync", {
+    space: SpaceName,
+}>
+
+export type ExperimentalSpaceUpdated = _Event1<"experimental.space.updated", {
+    space: SpaceName,
+    key: SpaceKey,
+    value: SpaceValue,
+    revision: SpaceRevision,
+}>
+
 export type FileDiffInfo = {
     file: string,
     patch: string,
@@ -4485,6 +4502,50 @@ export type SkillUpdated = _Event1<"skill.updated", any>
 
 export type SnapshotID = string
 
+export type SpaceCursor = string
+
+--- Covers every change up to this page; save it to subscribe or sync from.
+export type SpaceCursor1 = string
+
+export type SpaceDelta = {
+    type: "delta",
+    space: SpaceName,
+    epoch: SpaceEpoch,
+    revision: SpaceRevision,
+    entries: { SpaceEntry },
+    cursor: SpaceCursor1,
+    next: SpaceCursor?,
+    deleted: { SpaceKey },
+}
+
+export type SpaceEntry = {
+    key: SpaceKey,
+    value: SpaceValue,
+}
+
+export type SpaceEpoch = string
+
+export type SpaceKey = string
+
+--- Client-chosen namespace: 1-128 letters, digits, '.', '_' or '-'.
+export type SpaceName = string
+
+export type SpacePage = (SpaceSnapshot | SpaceDelta)
+
+export type SpaceRevision = number
+
+export type SpaceSnapshot = {
+    type: "snapshot",
+    space: SpaceName,
+    epoch: SpaceEpoch,
+    revision: SpaceRevision,
+    entries: { SpaceEntry },
+    cursor: SpaceCursor1,
+    next: SpaceCursor?,
+}
+
+export type SpaceValue = string
+
 export type TokenUsageInfo = {
     input: number,
     output: number,
@@ -4574,7 +4635,7 @@ export type UsageLimitsMeter = {
     resetsAt: number,
 }
 
-export type V2Event = (LocationShutdown | ModelsDevRefreshed | CredentialUpdated | CredentialSwitched | IntegrationUpdated | ProviderUpdated | ModelUpdated | AgentUpdated | SessionCreated | SessionAgentSelected | SessionModelSelected | SessionMoved | SessionRenamed | SessionMetadataUpdated | SessionPermissions | SessionViewed | SessionArchived | SessionUnarchived | SessionUsageUpdated | SessionDeleted | SessionForked | SessionInboxDelivered | SessionInboxEnqueued | SessionInboxCancelled | SessionInboxDeliveryChanged | SessionExecutionStarted | SessionExecutionSucceeded | SessionExecutionFailed | SessionExecutionInterrupted | SessionInstructionsUpdated | SessionSynthetic | SessionSkillActivated | SessionShellStarted | SessionShellEnded | SessionStepStarted | SessionStepFirstToken | SessionStepStreamed | SessionStepEnded | SessionStepFailed | SessionTextStarted | SessionTextDelta | SessionTextEnded | SessionReasoningStarted | SessionReasoningDelta | SessionReasoningEnded | SessionToolInputStarted | SessionToolInputDelta | SessionToolInputEnded | SessionToolCalled | SessionToolProgress | SessionToolSuccess | SessionToolFailed | SessionRetryScheduled | SessionCompactionStarted | SessionCompactionDelta | SessionCompactionEnded | SessionCompactionFailed | SessionRevertStaged | SessionRevertCleared | SessionRevertCommitted | FilesystemChanged | ReferenceUpdated | PermissionAsked | PermissionReplied | PluginUpdated | ProjectUpdated | WorktreeUpdated | WorktreeResolved | CommandUpdated | ConfigUpdated | SkillUpdated | PtyCreated | PtyUpdated | PtyExited | PtyDeleted | PersistentPtyAdded | PersistentPtyRemoved | PersistentPtyUpdated | ShellCreated | ShellExited | ShellDeleted | ExperimentalJobUpdated | FormCreated | FormReplied | FormCancelled | WebsearchUpdated | ExperimentalPushUpdated | ArtifactUpdated | SessionStatusUpdated | SessionIdle | TuiPromptAppend | TuiCommandExecute | TuiToastShow | TuiSessionSelect | InstallationUpdated | InstallationUpdateAvailable | VcsBranchUpdated | McpStatusChanged | McpResourcesChanged | ExperimentalMcpEvent | V2EventRpc | V2EventServerConnected)
+export type V2Event = (LocationShutdown | ModelsDevRefreshed | CredentialUpdated | CredentialSwitched | IntegrationUpdated | ProviderUpdated | ModelUpdated | AgentUpdated | SessionCreated | SessionAgentSelected | SessionModelSelected | SessionMoved | SessionRenamed | SessionMetadataUpdated | SessionPermissions | SessionViewed | SessionArchived | SessionUnarchived | SessionUsageUpdated | SessionDeleted | SessionForked | SessionInboxDelivered | SessionInboxEnqueued | SessionInboxCancelled | SessionInboxDeliveryChanged | SessionExecutionStarted | SessionExecutionSucceeded | SessionExecutionFailed | SessionExecutionInterrupted | SessionInstructionsUpdated | SessionSynthetic | SessionSkillActivated | SessionShellStarted | SessionShellEnded | SessionStepStarted | SessionStepFirstToken | SessionStepStreamed | SessionStepEnded | SessionStepFailed | SessionTextStarted | SessionTextDelta | SessionTextEnded | SessionReasoningStarted | SessionReasoningDelta | SessionReasoningEnded | SessionToolInputStarted | SessionToolInputDelta | SessionToolInputEnded | SessionToolCalled | SessionToolProgress | SessionToolSuccess | SessionToolFailed | SessionRetryScheduled | SessionCompactionStarted | SessionCompactionDelta | SessionCompactionEnded | SessionCompactionFailed | SessionRevertStaged | SessionRevertCleared | SessionRevertCommitted | FilesystemChanged | ReferenceUpdated | PermissionAsked | PermissionReplied | PluginUpdated | ProjectUpdated | WorktreeUpdated | WorktreeResolved | CommandUpdated | ConfigUpdated | SkillUpdated | PtyCreated | PtyUpdated | PtyExited | PtyDeleted | PersistentPtyAdded | PersistentPtyRemoved | PersistentPtyUpdated | ShellCreated | ShellExited | ShellDeleted | ExperimentalJobUpdated | FormCreated | FormReplied | FormCancelled | WebsearchUpdated | ExperimentalPushUpdated | ArtifactUpdated | SessionStatusUpdated | SessionIdle | TuiPromptAppend | TuiCommandExecute | TuiToastShow | TuiSessionSelect | InstallationUpdated | InstallationUpdateAvailable | VcsBranchUpdated | McpStatusChanged | McpResourcesChanged | ExperimentalMcpEvent | ExperimentalSpaceResync | ExperimentalSpaceUpdated | ExperimentalSpaceDeleted | V2EventRpc | V2EventServerConnected)
 
 export type V2EventRpc = {
     id: EventID,
@@ -4585,7 +4646,9 @@ export type V2EventRpc = {
     data: { [string]: any },
 }
 
-export type V2EventServerConnected = _Event4<"server.connected", any>
+export type V2EventServerConnected = _Event4<"server.connected", {
+    stream: string?,
+}>
 
 export type VcsBase = {
     name: string,
@@ -5448,6 +5511,33 @@ export type Client = {
                 location: { directory: string? }?,
                 path: string,
             }) -> (string?, string?),
+        },
+        space: {
+            delete: (input: {
+                space: string,
+                key: string,
+            }) -> (nil, string?),
+            reset: (input: {}?) -> (nil, string?),
+            set: (input: {
+                space: string,
+                key: string,
+                value: SpaceValue,
+            }) -> (nil, string?),
+            subscribe: (input: {
+                stream: string,
+                spaces: { {
+                    space: SpaceName,
+                    cursor: SpaceCursor,
+                } },
+            }) -> (nil, string?),
+            sync: (input: {
+                space: string,
+                cursor: string?,
+            }) -> (SpacePage?, string?),
+            unsubscribe: (input: {
+                stream: string,
+                spaces: { SpaceName },
+            }) -> (nil, string?),
         },
         usage: {
             limits: (input: {

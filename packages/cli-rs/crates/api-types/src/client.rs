@@ -1908,6 +1908,55 @@ pub fn experimental_push_settings_set(
     call
 }
 
+/// `PUT /api/experimental/space/:space/:key` (`space.set`)
+pub fn experimental_space_set(input: &ExperimentalSpaceSetInput) -> Call<()> {
+    let mut call = Call::new("PUT", String::new(), Reply::Empty, 204, &[400, 401]);
+    call.path = format!("/api/experimental/space/{}/{}", call.param(&input.space), call.param(&input.key));
+    call.object();
+    call.field("value", &input.value);
+    call
+}
+
+/// `DELETE /api/experimental/space/:space/:key` (`space.delete`)
+pub fn experimental_space_delete(input: &ExperimentalSpaceDeleteInput) -> Call<()> {
+    let mut call = Call::new("DELETE", String::new(), Reply::Empty, 204, &[400, 401]);
+    call.path = format!("/api/experimental/space/{}/{}", call.param(&input.space), call.param(&input.key));
+    call
+}
+
+/// `GET /api/experimental/space/:space` (`space.sync`)
+pub fn experimental_space_sync(input: &ExperimentalSpaceSyncInput) -> Call<ExperimentalSpaceSyncOutput> {
+    let mut call = Call::new("GET", String::new(), Reply::Json, 200, &[400, 401]);
+    call.path = format!("/api/experimental/space/{}", call.param(&input.space));
+    if let Some(value) = &input.cursor {
+        call.query("cursor", value);
+    }
+    call
+}
+
+/// `POST /api/experimental/space/subscribe` (`space.subscribe`)
+pub fn experimental_space_subscribe(input: &ExperimentalSpaceSubscribeInput) -> Call<()> {
+    let mut call = Call::new("POST", "/api/experimental/space/subscribe".to_owned(), Reply::Empty, 204, &[400, 401]);
+    call.object();
+    call.field("stream", &input.stream);
+    call.field("spaces", &input.spaces);
+    call
+}
+
+/// `POST /api/experimental/space/unsubscribe` (`space.unsubscribe`)
+pub fn experimental_space_unsubscribe(input: &ExperimentalSpaceUnsubscribeInput) -> Call<()> {
+    let mut call = Call::new("POST", "/api/experimental/space/unsubscribe".to_owned(), Reply::Empty, 204, &[400, 401]);
+    call.object();
+    call.field("stream", &input.stream);
+    call.field("spaces", &input.spaces);
+    call
+}
+
+/// `POST /api/experimental/space/reset` (`space.reset`)
+pub fn experimental_space_reset() -> Call<()> {
+    Call::new("POST", "/api/experimental/space/reset".to_owned(), Reply::Empty, 204, &[400, 401])
+}
+
 /// `GET /api/shell` (`list`)
 pub fn shell_list(input: &ShellListInput) -> Call<ShellListOutput> {
     let mut call = Call::new("GET", "/api/shell".to_owned(), Reply::Json, 200, &[400, 401, 404]);
@@ -3188,6 +3237,43 @@ pub fn probe(name: &str, input: &serde_json::Value) -> Option<Result<Call<serde_
             })
             .cast())
         })()),
+        "experimental.space.set" => Some((|| {
+            Ok(experimental_space_set(&ExperimentalSpaceSetInput {
+                space: field(input, "space")?,
+                key: field(input, "key")?,
+                value: field(input, "value")?,
+            })
+            .cast())
+        })()),
+        "experimental.space.delete" => Some((|| {
+            Ok(experimental_space_delete(&ExperimentalSpaceDeleteInput {
+                space: field(input, "space")?,
+                key: field(input, "key")?,
+            })
+            .cast())
+        })()),
+        "experimental.space.sync" => Some((|| {
+            Ok(experimental_space_sync(&ExperimentalSpaceSyncInput {
+                space: field(input, "space")?,
+                cursor: field(input, "cursor")?,
+            })
+            .cast())
+        })()),
+        "experimental.space.subscribe" => Some((|| {
+            Ok(experimental_space_subscribe(&ExperimentalSpaceSubscribeInput {
+                stream: field(input, "stream")?,
+                spaces: field(input, "spaces")?,
+            })
+            .cast())
+        })()),
+        "experimental.space.unsubscribe" => Some((|| {
+            Ok(experimental_space_unsubscribe(&ExperimentalSpaceUnsubscribeInput {
+                stream: field(input, "stream")?,
+                spaces: field(input, "spaces")?,
+            })
+            .cast())
+        })()),
+        "experimental.space.reset" => Some((|| Ok(experimental_space_reset().cast()))()),
         "shell.list" => Some((|| Ok(shell_list(&ShellListInput { location: field(input, "location")? }).cast()))()),
         "shell.create" => Some((|| {
             Ok(shell_create(&ShellCreateInput {
