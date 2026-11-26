@@ -7,6 +7,7 @@ import { LayerNode } from "@opencode/util/effect/layer-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import { AppProcess } from "@opencode/util/process"
 import { Bus } from "@opencode/core/bus"
+import { Environment } from "@opencode/core/environment/index"
 import { Location } from "@opencode/core/location"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Vcs } from "@opencode/core/vcs"
@@ -22,21 +23,24 @@ const describeHg = Bun.which("hg") ? describe : describe.skip
 
 const provide = (directory: string) =>
   Effect.provide(
-    LayerNode.compile(LayerNode.group([Vcs.node, Bus.node, Location.node, AppProcess.node, FSUtil.node]), {
-      replacements: [
-        Location.node.replace(
-          Layer.succeed(
-            Location.Service,
-            Location.Service.of(
-              location(
-                { directory: AbsolutePath.make(directory) },
-                { vcs: { type: "hg", store: AbsolutePath.make(path.join(directory, ".hg")) } },
+    LayerNode.compile(
+      LayerNode.group([Vcs.node, Bus.node, Environment.node, Location.node, AppProcess.node, FSUtil.node]),
+      {
+        replacements: [
+          Location.node.replace(
+            Layer.succeed(
+              Location.Service,
+              Location.Service.of(
+                location(
+                  { directory: AbsolutePath.make(directory) },
+                  { vcs: { type: "hg", store: AbsolutePath.make(path.join(directory, ".hg")) } },
+                ),
               ),
             ),
           ),
-        ),
-      ],
-    }),
+        ],
+      },
+    ),
   )
 
 const withTmp = <A, E, R>(f: (directory: string) => Effect.Effect<A, E, R>) =>

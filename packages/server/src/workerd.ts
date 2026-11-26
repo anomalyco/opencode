@@ -10,8 +10,6 @@ import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
 import { WorkspaceConnector } from "@opencode/core/environment/workspace-connector"
 import { Identity } from "@opencode/core/machine/identity"
 import { Pty } from "@opencode/core/pty"
-import { Snapshot } from "@opencode/core/snapshot"
-import { Vcs } from "@opencode/core/vcs"
 import { VideoGeneration } from "@opencode/core/video-generation"
 import { Workspace } from "@opencode/core/workspace"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
@@ -34,11 +32,11 @@ import { withoutParentSpan } from "./request-tracing"
  * - Watcher and fff are disabled through their existing option flags; pty, fff,
  *   and photon native modules resolve to inert stubs under the `workerd` bundle
  *   condition.
- * - Bare locations use a typed no-execution-plane process spawner; FileSystem
- *   and FileSystemSearch route through Environment (working on attached remote
- *   workspaces and failing cleanly on bare locations). Pty fails with a clear
- *   defect; Npm fails package installs with a typed workerd error; Snapshot and
- *   Vcs degrade to no-op results.
+ * - Bare locations use a typed no-execution-plane process spawner; FileSystem,
+ *   FileSystemSearch, Snapshot, Vcs, and Worktree route or gate through
+ *   Environment (working on attached remote workspaces where supported and
+ *   degrading or failing cleanly on bare locations). Pty fails with a clear
+ *   defect; Npm fails package installs with a typed unsupported error.
  * - Blob storage and video generation report themselves unsupported: blobs are files on a local disk.
  * - Config is injected as a string (no filesystem); plugin discovery is
  *   precompiled-only, and stdio MCP reports the same no-plane failure as Shell.
@@ -119,10 +117,8 @@ export function replacements(options: Options): LayerNode.Replacements {
     ),
     WorkspaceConnector.node.replace(Workspace.connectorNode),
     CrossSpawnSpawner.node.replace(EnvironmentUnavailable.layer),
-    Snapshot.node.replace(Snapshot.noopLayer),
-    Vcs.node.replace(vcsLayer),
     Pty.node.replace(ptyLayer),
-    Npm.node.replace(npmLayer),
+    Npm.node.replace(Npm.unsupportedLayer),
     // Blobs need a local `blobs/` folder, which a Durable Object doesn't have.
     BlobStore.node.replace(BlobStore.unsupportedLayer),
     VideoGeneration.node.replace(VideoGeneration.unsupportedLayer),
@@ -132,52 +128,12 @@ export function replacements(options: Options): LayerNode.Replacements {
   ]
 }
 
-const unavailable = (what: string) => Effect.die(new Error(`${what} is unavailable in the workerd profile`))
-
-const npmUnavailable = (what: string, pkg: string) =>
-  Effect.fail(
-    new Npm.InstallFailedError({
-      add: [pkg],
-      dir: "",
-      cause: new Error(`${what} is unavailable in the workerd profile`),
-    }),
-  )
-
-const npmLayer = Layer.succeed(
-  Npm.Service,
-  Npm.Service.of({
-    add: (pkg) => npmUnavailable("Npm.add", pkg),
-    resolve: (name) => Effect.succeed({ directory: "", name }),
-    check: () => Effect.succeed(false),
-    update: (pkg) => npmUnavailable("Npm.update", pkg),
-    follows: () => Effect.succeed(false),
-    reject: () => Effect.succeed(false),
-    which: () => Effect.undefined,
-  }),
-)
-
-// Vcs degrades to empty results, matching its behavior for locations without a
-// supported VCS, so read-only clients never need to special-case this runtime.
-const vcsLayer = Layer.succeed(
-  Vcs.Service,
-  Vcs.Service.of({
-    base: () => Effect.succeed(null),
-    initialize: () => Effect.fail(new Vcs.InitializeError({ kind: "unsupported" })),
-    transform: () => Effect.succeed({ dispose: Effect.void }),
-    reload: () => Effect.void,
-    info: () => Effect.succeed({ branch: {} }),
-    branches: () => Effect.succeed([]),
-    status: () => Effect.succeed([]),
-    diff: () => Effect.succeed([]),
-  }),
-)
-
 const ptyLayer = Layer.succeed(
   Pty.Service,
   Pty.Service.of({
     list: () => Effect.succeed([]),
     get: (ptyID) => Effect.fail(new Pty.NotFoundError({ ptyID })),
-    create: () => unavailable("Pty.create"),
+    create: () => Effect.die(new Error("Pty.create is unavailable in the workerd profile")),
     update: (ptyID) => Effect.fail(new Pty.NotFoundError({ ptyID })),
     remove: (ptyID) => Effect.fail(new Pty.NotFoundError({ ptyID })),
     write: (ptyID) => Effect.fail(new Pty.NotFoundError({ ptyID })),
