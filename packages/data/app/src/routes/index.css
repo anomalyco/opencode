@@ -1,8 +1,9 @@
-/* OpenMono, Anomaly's font (SIL OFL 1.1, ../asset/fonts/OpenMono-OFL.txt), copied from services/site/src/asset/fonts,
-   with its faces as in services/site style/fonts.css. "latin" covers Latin, punctuation, arrows and box drawing;
-   "cyrillic" and "rest" load only when a page uses one of their characters. Regular serves weights up to 599 and bold
-   the rest, so 500 and 600 never get a synthesized face. The Menlo, Consolas and Courier faces stand in while it loads:
-   the system font scaled to OpenMono's 0.6 em advance and line metrics, so the swap changes letter shapes only. */
+/* OpenMono, Anomaly's font (SIL OFL 1.1, ../asset/fonts/OpenMono-OFL.txt), copied from services/site/src/asset/fonts
+   by script/openmono.ts, with its faces as in services/site style/fonts.css. "latin" covers Latin, punctuation, arrows
+   and box drawing; "cyrillic" and "rest" load only when a page uses one of their characters. Regular serves weights up
+   to 599 and bold the rest, so 500 and 600 never get a synthesized face. The Menlo, Consolas and Courier faces stand in
+   while it loads: the system font scaled to OpenMono's 0.6 em advance and line metrics, so the swap changes letter
+   shapes only. */
 @font-face {
   font-family: "OpenMono";
   src: url("../asset/fonts/openmono-regular-latin.woff2") format("woff2");
