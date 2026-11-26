@@ -67,17 +67,33 @@ test("WSL services set up before the WSL default keep the old port", () => {
   expect(ServiceConfig.servicePort({ password: "p" }, "latest", "win32")).toBe(0x70de)
 })
 
-test("only WSL records the port the service first listened on", async () => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-record-port-"))
-  const layer = Global.layerWith({ config: path.join(root, "config"), state: path.join(root, "state") })
-  const run = <A, E>(effect: Effect.Effect<A, E, Global.Service | FileSystem.FileSystem>) =>
-    Effect.runPromise(effect.pipe(Effect.provide(layer), Effect.provide(NodeFileSystem.layer)))
+test("a new WSL setup records its port with its first password", async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), "opencode-service-first-password-"))
+  const run = <A, E>(name: string, effect: Effect.Effect<A, E, Global.Service | FileSystem.FileSystem>) =>
+    Effect.runPromise(
+      effect.pipe(
+        Effect.provide(
+          Global.layerWith({ config: path.join(root, name, "config"), state: path.join(root, name, "state") }),
+        ),
+        Effect.provide(NodeFileSystem.layer),
+      ),
+    )
+  const port = ServiceConfig.defaultPort(undefined, "wsl")
   try {
-    await run(ServiceConfig.password("p"))
-    await run(ServiceConfig.recordPort(0xc0de, "linux"))
-    expect(await run(ServiceConfig.read())).toEqual({ password: "p" })
-    await run(ServiceConfig.recordPort(0xc0de, "wsl"))
-    expect(await run(ServiceConfig.read())).toEqual({ password: "p", port: 0xc0de })
+    const generated = await run("new", ServiceConfig.password(undefined, "wsl"))
+    expect(await run("new", ServiceConfig.read())).toEqual({ password: generated, port })
+
+    await run("set", ServiceConfig.password("p", "wsl"))
+    expect(await run("set", ServiceConfig.read())).toEqual({ password: "p", port })
+
+    await run("linux", ServiceConfig.password("p", "linux"))
+    expect(await run("linux", ServiceConfig.read())).toEqual({ password: "p" })
+
+    // A config from an older build already has a password; reading or replacing it leaves the port alone.
+    await run("old", ServiceConfig.password("p", "linux"))
+    expect(await run("old", ServiceConfig.password(undefined, "wsl"))).toBe("p")
+    await run("old", ServiceConfig.password("q", "wsl"))
+    expect(await run("old", ServiceConfig.read())).toEqual({ password: "q" })
   } finally {
     await fs.rm(root, { recursive: true, force: true })
   }

@@ -59,21 +59,12 @@ export function defaultPort(channel = OPENCODE_CHANNEL, platform = hostPlatform(
   return port
 }
 
-// WSL services set up before WSL got its own default have a password but no recorded port. They keep 0xC0DE, the port
-// their pairings, tunnels and saved links use.
+// On WSL the first password is written with the port, so a config with a password and no port comes from a build before
+// WSL got its own default. It keeps 0xC0DE, the port its pairings, tunnels and saved links use.
 export function servicePort(config: Info, channel = OPENCODE_CHANNEL, platform = hostPlatform()) {
   if (platform === "wsl" && config.password !== undefined) return defaultPort(channel, "linux")
   return defaultPort(channel, platform)
 }
-
-// A WSL service records the default port it first listened on, so a later default change cannot move it.
-export const recordPort = Effect.fn("cli.service-config.record-port")(function* (
-  port: number,
-  platform = hostPlatform(),
-) {
-  if (platform !== "wsl") return
-  yield* write({ ...(yield* read()), port })
-})
 
 // WSL shows only in the kernel release: 6.6.87.2-microsoft-standard-WSL2, or 4.4.0-19041-Microsoft on WSL 1.
 function hostPlatform(): Platform {
@@ -208,14 +199,19 @@ const write = Effect.fn("cli.service-config.write")(function* (value: Info) {
   yield* fs.rename(temp, configFile).pipe(Effect.retry({ times: 20, schedule: Schedule.spaced("10 millis") }))
 })
 
-export const password = Effect.fn("cli.service-config.password")(function* (value?: string) {
+export const password = Effect.fn("cli.service-config.password")(function* (value?: string, platform = hostPlatform()) {
   const existing = yield* read()
   if (value === undefined && existing.password) return existing.password
   const next = value ?? randomBytes(32).toString("base64url")
+  // A new WSL setup keeps the default it started with, so a later default change cannot move it.
+  const port =
+    platform === "wsl" && existing.password === undefined && existing.port === undefined
+      ? defaultPort(OPENCODE_CHANNEL, platform)
+      : existing.port
 
   // Keep one private credential across server restarts so discovered clients
   // can reconnect without exposing a password flag or environment variable.
-  yield* write({ ...existing, password: next })
+  yield* write({ ...existing, password: next, ...(port === undefined ? {} : { port }) })
   return next
 })
 
