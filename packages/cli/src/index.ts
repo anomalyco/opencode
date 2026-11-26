@@ -95,6 +95,8 @@ const Handlers = Runtime.handlers(Commands, {
   reload: () => import("./commands/handlers/reload"),
   session: {
     list: () => import("./commands/handlers/session/list"),
+    archive: async () => ({ default: (await import("./commands/handlers/session/archive")).archive }),
+    unarchive: async () => ({ default: (await import("./commands/handlers/session/archive")).unarchive }),
     delete: () => import("./commands/handlers/session/delete"),
     export: () => import("./commands/handlers/session/export"),
     import: () => import("./commands/handlers/session/import"),

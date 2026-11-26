@@ -132,6 +132,20 @@ Limit the list and print JSON.
 $ opencode session list --max-count 20 --format json
 ```
 
+Show only archived sessions or exclude them. With neither flag, the list includes both.
+
+```bash
+$ opencode session list --archived
+$ opencode session list --no-archived
+```
+
+Archive an existing session or restore it.
+
+```bash
+$ opencode session archive ses_9c1b08
+$ opencode session unarchive ses_9c1b08
+```
+
 Delete a session and its child sessions.
 
 ```bash
