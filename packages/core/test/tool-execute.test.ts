@@ -317,7 +317,7 @@ describe("Bun", () => {
     )
   })
 
-  test("Bun.file and Bun.write show as read and write calls", async () => {
+  test("Bun.file, Bun.write and Bun.Glob show as read, write and glob calls", async () => {
     await using tmp = await tmpdir()
     await Bun.write(path.join(tmp.path, "notes.txt"), "hello")
     const result = await Effect.runPromise(
@@ -336,7 +336,7 @@ describe("Bun", () => {
       { tool: "read", status: "completed", input: { path: "notes.txt" } },
       { tool: "write", status: "completed", input: { path: "copy.txt", from: "notes.txt" } },
       { tool: "write", status: "completed", input: { path: "new.txt" } },
-      { tool: "Bun", status: "completed", input: { method: "Glob", path: "*.txt" } },
+      { tool: "glob", status: "completed", input: { pattern: "*.txt" } },
     ])
   })
 

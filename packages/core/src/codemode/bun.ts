@@ -542,8 +542,8 @@ export const extension = Extension.make({
 })
 
 /**
- * The row a Bun call shows as: `Bun.file` as a read and `Bun.write` as a write of its path, with the file a write
- * copies, so they look like the file tools they stand in for. Anything else names its function and path or pattern.
+ * The row a Bun call shows as, so it looks like the file tool it stands in for: `Bun.file` as a read, `Bun.Glob` as a
+ * glob of its pattern, and `Bun.write` as a write of its path, with the file a write copies.
  */
 export const display = (
   name: string,
@@ -551,7 +551,7 @@ export const display = (
 ): { tool: string; input: Record<string, string> } => {
   const path = handleOf(args[0])?.name ?? String(args[0])
   if (name === "Bun.file") return { tool: "read", input: { path } }
-  if (name !== "Bun.write") return { tool: "Bun", input: { method: name.slice(name.lastIndexOf(".") + 1), path } }
+  if (name === "Bun.Glob") return { tool: "glob", input: { pattern: path } }
   const from = handleOf(args[1])?.name
   return { tool: "write", input: { path, ...(from === undefined ? {} : { from }) } }
 }
