@@ -22,6 +22,7 @@ export function currentModel(catalog: Catalog, selection: Selection) {
 export function configOptions(catalog: Catalog, selection: Selection): SessionConfigOption[] {
   const model = currentModel(catalog, selection)
   const variants = findModel(catalog.models, model)?.variants.map((variant) => variant.id) ?? []
+  const providerNames = new Map(catalog.providers.map((provider) => [provider.id, provider.name]))
   return [
     {
       id: "model",
@@ -31,7 +32,10 @@ export function configOptions(catalog: Catalog, selection: Selection): SessionCo
       currentValue: advertisedModel(model),
       options: catalog.models
         .toSorted((a, b) => Order.String(a.providerID, b.providerID) || a.name.localeCompare(b.name))
-        .map((item) => ({ value: advertisedModel(item), name: `${item.providerID}/${item.name}` })),
+        .map((item) => ({
+          value: advertisedModel(item),
+          name: `${providerNames.get(item.providerID) ?? item.providerID} / ${item.name}`,
+        })),
     },
     ...(variants.length > 0
       ? [

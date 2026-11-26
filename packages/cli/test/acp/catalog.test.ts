@@ -61,8 +61,8 @@ describe("acp catalog and config options over the wire", () => {
       expect.objectContaining({
         id: "model",
         options: [
-          { value: "test/second-model", name: "test/Second Model" },
-          { value: "test/test-model", name: "test/Test Model" },
+          { value: "test/second-model", name: "Test Provider / Second Model" },
+          { value: "test/test-model", name: "Test Provider / Test Model" },
         ],
       }),
     )
