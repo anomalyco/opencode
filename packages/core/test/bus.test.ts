@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, Deferred, Effect, Exit, Fiber, Layer, Ref, Schema, Stream } from "effect"
+import { Cause, Data, Deferred, Effect, Exit, Fiber, Layer, Ref, Schema, Stream } from "effect"
 import { Bus } from "@opencode/core/bus"
 import { Event } from "@opencode/schema/event"
 import { Session } from "@opencode/schema/session"
@@ -28,6 +28,8 @@ const Message = Bus.ephemeral({
     text: Schema.String,
   },
 })
+
+class CommitRejected extends Data.TaggedError("Test.CommitRejected") {}
 
 const SyncMessage = Bus.durable({
   type: "test.sync",
@@ -275,6 +277,40 @@ describe("Bus", () => {
         .pipe(Effect.exit)
 
       expect(String(exit)).toContain("commit failed")
+      expect(yield* db.all("SELECT value FROM event_commit_probe")).toEqual([])
+      expect(yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).all()).toEqual([])
+      expect(
+        yield* db.select().from(EventSequenceTable).where(eq(EventSequenceTable.aggregate_id, aggregateID)).all(),
+      ).toEqual([])
+    }),
+  )
+
+  it.effect("rolls back and surfaces a typed failure from the local commit", () =>
+    Effect.gen(function* () {
+      const bus = yield* Bus.Service
+      const { db } = yield* Database.Service
+      const aggregateID = Event.ID.create()
+      const received = new Array<Event.Payload>()
+      yield* db.run("CREATE TABLE IF NOT EXISTS event_commit_probe (value text NOT NULL)")
+      yield* db.run("DELETE FROM event_commit_probe")
+      yield* bus.project(SyncMessage, () =>
+        db.run("INSERT INTO event_commit_probe (value) VALUES ('projected')").pipe(Effect.orDie, Effect.asVoid),
+      )
+      yield* bus.listen((event) => Effect.sync(() => received.push(event)))
+
+      const single = yield* bus
+        .publish(SyncMessage, { id: aggregateID, text: "hello" }, { commit: () => Effect.fail(new CommitRejected()) })
+        .pipe(Effect.flip)
+      const batch = yield* bus
+        .publishAll([
+          [SyncMessage, { id: aggregateID, text: "first" }],
+          [SyncMessage, { id: aggregateID, text: "second" }, { commit: () => Effect.fail(new CommitRejected()) }],
+        ])
+        .pipe(Effect.flip)
+
+      expect(single).toBeInstanceOf(CommitRejected)
+      expect(batch).toBeInstanceOf(CommitRejected)
+      expect(received).toEqual([])
       expect(yield* db.all("SELECT value FROM event_commit_probe")).toEqual([])
       expect(yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, aggregateID)).all()).toEqual([])
       expect(
