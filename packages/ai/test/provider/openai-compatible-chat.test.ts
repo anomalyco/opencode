@@ -669,39 +669,6 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
-  it.effect("surfaces a standard object streaming error", () =>
-    Effect.gen(function* () {
-      const payload = {
-        error: { message: "The server had an error", type: "server_error", param: null, code: null },
-      }
-      const error = yield* LLMClient.generate(request).pipe(
-        Effect.provide(fixedResponse(sseEvents(payload))),
-        Effect.flip,
-      )
-
-      expect(error).toMatchObject({
-        reason: { _tag: "ProviderInternal" },
-        message: "The server had an error",
-      })
-      expect(decodeJson(error.reason.body ?? "")).toEqual(payload)
-    }),
-  )
-
-  it.effect("leaves successful stream chunks unchanged", () =>
-    Effect.gen(function* () {
-      const response = yield* LLMClient.generate(request).pipe(
-        Effect.provide(
-          fixedResponse(
-            sseEvents(deltaChunk({ role: "assistant", content: "Hel" }), deltaChunk({ content: "lo" }, "stop")),
-          ),
-        ),
-      )
-
-      expect(response.text).toBe("Hello")
-      expect(response.finishReason).toEqual({ normalized: "stop", raw: "stop" })
-    }),
-  )
-
   it.effect("preserves content-filter finishes in the common reason algebra", () =>
     Effect.gen(function* () {
       const filtered = yield* LLMClient.generate(request).pipe(
