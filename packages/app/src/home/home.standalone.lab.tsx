@@ -1,7 +1,7 @@
 import type { SessionInfo } from "@opencode/client/promise"
 import { createEffect, createMemo, on, onCleanup, Show } from "solid-js"
 import { createStore } from "solid-js/store"
-import { DialogStoryRuntime, STORY_PROJECTS, STORY_SERVER } from "@/components-lab/dialog-story-runtime"
+import { DialogStoryRuntime, STORY_PROJECTS, STORY_SERVER } from "@/lab/dialog-story-runtime"
 import { normalizeProjectInfo } from "@/runtime/server/global-sync/utils"
 import { useServer } from "@/runtime/server/current"
 import { useLanguage } from "@/runtime/i18n/language"

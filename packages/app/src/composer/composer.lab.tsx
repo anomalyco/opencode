@@ -305,7 +305,7 @@ function ComposerStory(props: {
     if (props.suggestions === "command" || props.suggestions === "context") suggest(props.suggestions)
   })
 
-  // The components lab keeps this story mounted across states that differ only in args, so the composer follows them
+  // The Lab keeps this story mounted across states that differ only in args, so the composer follows them
   // in place and its own transitions play. The prompt is compared by value: the lab updates its args store in place.
   // One effect, so the prompt lands before the suggestions open on it: an empty draft opens them inline, typing the
   // trigger, so a change of either starts over from the state's prompt.

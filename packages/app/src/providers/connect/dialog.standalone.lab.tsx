@@ -3,7 +3,7 @@ import { useDialog } from "@opencode/ui/context/dialog"
 import { onMount } from "solid-js"
 import type { IntegrationInfo } from "@opencode/client/promise"
 import type { ServerConnection } from "@/runtime/server/registry"
-import { DialogStoryRuntime, STORY_DIRECTORY, STORY_LOCKED_SERVER } from "@/components-lab/dialog-story-runtime"
+import { DialogStoryRuntime, STORY_DIRECTORY, STORY_LOCKED_SERVER } from "@/lab/dialog-story-runtime"
 import { DialogConnectProvider, useProviderConnectController } from "./dialog"
 
 function ConnectProviderDialogStory() {

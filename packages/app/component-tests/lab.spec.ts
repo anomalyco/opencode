@@ -1,11 +1,11 @@
 import { expect, story } from "../../stories/playwright/story"
 
-story("opens a component from the standalone catalog and previews its states", async ({ page }) => {
+story("opens a page from the standalone Lab and previews its states", async ({ page }) => {
   await page.goto("/")
   await expect(page.getByRole("tree")).toBeVisible({ timeout: 30_000 })
-  await page.getByRole("button", { name: /Search components/ }).click()
+  await page.getByRole("button", { name: /Search pages/ }).click()
 
-  const search = page.getByPlaceholder("Search components")
+  const search = page.getByPlaceholder("Search pages")
 
   await search.fill("Composer docks")
   await search.press("Enter")
@@ -13,10 +13,10 @@ story("opens a component from the standalone catalog and previews its states", a
   await expect(page.getByText("Rename the Alpha export", { exact: true })).toBeVisible()
 })
 
-story("edits a story's state argument from the inspector", async ({ page }) => {
-  await page.goto("/?story=../../app/src/composer/composer-touch.stories.tsx")
+story("edits a page's state argument from the inspector", async ({ page }) => {
+  await page.goto("/?page=../../app/src/composer/composer-touch.lab.tsx")
   await page
-    .getByRole("region", { name: "components-lab controls" })
+    .getByRole("region", { name: "lab controls" })
     .getByRole("button", { name: "state", exact: true })
     .click()
   await page.getByRole("menuitemradio", { name: "shell", exact: true }).click()

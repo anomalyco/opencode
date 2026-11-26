@@ -1,5 +1,5 @@
 import { createMemoryHistory, MemoryRouter, Route } from "@solidjs/router"
-import { DialogStoryRuntime, STORY_LOCKED_SERVER, STORY_SERVER } from "@/components-lab/dialog-story-runtime"
+import { DialogStoryRuntime, STORY_LOCKED_SERVER, STORY_SERVER } from "@/lab/dialog-story-runtime"
 import { ServerConnection } from "@/runtime/server/registry"
 import { SettingsScreen } from "@/settings/shell"
 import { SettingsSurfaceProvider, type SettingsRootTab } from "@/settings/surface"

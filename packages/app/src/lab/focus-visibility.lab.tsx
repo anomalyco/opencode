@@ -623,7 +623,7 @@ const surfaces: Surface[] = [
               <span>Recent sessions</span>
               <span>Review focus states</span>
               <span>Check mobile layout</span>
-              <span>Update the component lab</span>
+              <span>Update the Lab</span>
             </div>
           </ScrollView>
         ),

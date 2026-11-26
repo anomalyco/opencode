@@ -7,7 +7,7 @@ import {
   DialogStoryRuntime,
   STORY_DIRECTORY,
   STORY_PROJECTS,
-} from "@/components-lab/dialog-story-runtime"
+} from "@/lab/dialog-story-runtime"
 import type { Platform } from "@/runtime/platform/platform"
 import { useData } from "@/runtime/server/current"
 import { ToastRegion } from "@/shell/notifications/toast"

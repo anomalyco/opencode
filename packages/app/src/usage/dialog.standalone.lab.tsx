@@ -2,7 +2,7 @@ import type { UsageLimitsBudget, UsageLimitsInfo } from "@opencode/client/promis
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { onMount } from "solid-js"
-import { DialogStoryRuntime, STORY_DIRECTORY, STORY_LOCKED_SERVER } from "@/components-lab/dialog-story-runtime"
+import { DialogStoryRuntime, STORY_DIRECTORY, STORY_LOCKED_SERVER } from "@/lab/dialog-story-runtime"
 import { DialogUsage, UsageDialogContent } from "./dialog"
 import type { CurrentModel } from "./limits"
 

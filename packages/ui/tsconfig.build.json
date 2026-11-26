@@ -10,5 +10,5 @@
     "emitDeclarationOnly": true
   },
   "include": ["src"],
-  "exclude": ["**/*.stories.*", "**/*.test.*", "**/*.mdx"]
+  "exclude": ["**/*.lab.tsx", "**/*.test.*", "**/*.mdx"]
 }

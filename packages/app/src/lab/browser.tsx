@@ -53,7 +53,7 @@ const gridIcon = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" str
 
 type Row = { id: string; label: string; detail?: string; children?: Row[] }
 
-type LabParams = { story?: string; view?: string }
+type LabParams = { page?: string; view?: string }
 
 type LabPlugin = ParentComponent<{ file: string }>
 
@@ -79,16 +79,17 @@ export function LabBrowser(props: {
   const dispatchBrowse = (event: LabBrowseEvent) => {
     const next = transitionLabBrowse(browse, event)
     browse = next.state
-    next.effects.forEach(() => focusTree?.(props.params.story))
+    next.effects.forEach(() => focusTree?.(page()))
   }
 
+  const page = () => props.params.page
   const entries = () => catalog()?.entries ?? []
   const grid = () => props.params.view === "grid"
-  const selected = createMemo(() => (grid() ? undefined : entries().find((entry) => entry.file === props.params.story)))
+  const selected = createMemo(() => (grid() ? undefined : entries().find((entry) => entry.file === page())))
 
   const open = (file: string) => {
-    dispatchBrowse({ type: "story.opened", fromTree: stories.contains(document.activeElement) })
-    props.setParams({ story: file, view: undefined })
+    dispatchBrowse({ type: "story.opened", fromTree: pages.contains(document.activeElement) })
+    props.setParams({ page: file, view: undefined })
   }
 
   const rows = createMemo(() => folder(entries(), []))
@@ -138,7 +139,7 @@ export function LabBrowser(props: {
     { capture: true },
   )
 
-  // A story's modal overlay (a menu or dialog open by default) sets `pointer-events: none` on the body, which would
+  // A page's modal overlay (a menu or dialog open by default) sets `pointer-events: none` on the body, which would
   // freeze the lab around it. The lab stays usable while it's open.
   const unblock = document.createElement("style")
 
@@ -158,22 +159,26 @@ export function LabBrowser(props: {
     if (failed) toast(language.plural("lab.failed", failed))
   })
 
-  // The story's knobs panel mounts in the inspector pane.
+  // The page's knobs panel mounts in the inspector pane.
   const inspector = pane(() => null)
 
-  const stories = pane(() => (
+  const pages = pane(() => (
     <Show when={catalog()}>
       <Tree
         items={rows()}
         detail={(row) => row.detail}
-        label={language.t("lab.components")}
+        label={language.t("lab.pages")}
         expanded={rows().map((row) => row.id)}
-        selection={props.params.story ? [props.params.story] : []}
-        // Digits pick the story's states.
+        selection={page() ? [page()!] : []}
+        // Digits pick the page's states.
         typeahead={(key) => !/^[0-9]$/.test(key)}
         onReady={(tree) => {
-          // Opens the folders down to the story in the address, and later ones picked from the palette.
-          createEffect(() => props.params.story && tree.reveal(props.params.story))
+          // Opens the folders down to the page in the address, and later ones picked from the palette.
+          createEffect(() => {
+            const file = page()
+
+            if (file) tree.reveal(file)
+          })
           toggle = (id) => tree.expand(id, !tree.isExpanded(id))
           focusTree = (id) => tree.focus(id)
         }}
@@ -224,7 +229,7 @@ export function LabBrowser(props: {
     </Show>
   ))
 
-  const inTree = (event: Event) => event.target instanceof Node && stories.contains(event.target)
+  const inTree = (event: Event) => event.target instanceof Node && pages.contains(event.target)
 
   makeEventListener(window, "pointerdown", (event) => dispatchBrowse({ type: "pointer.down", inTree: inTree(event) }), {
     capture: true,
@@ -250,13 +255,13 @@ export function LabBrowser(props: {
       storage: null,
       panes: [
         {
-          id: "stories",
+          id: "pages",
           size: 260,
           min: 200,
           max: 420,
           collapsible: true,
-          title: language.t("lab.components"),
-          element: stories,
+          title: language.t("lab.pages"),
+          element: pages,
           actions: [
             { label: language.t("lab.search"), icon: searchIcon, shortcut: "Mod+K", run: search },
             {
@@ -276,7 +281,7 @@ export function LabBrowser(props: {
       ],
     })
 
-    createEffect(() => layout.pane("stories").title(language.t("lab.components"), entries().length))
+    createEffect(() => layout.pane("pages").title(language.t("lab.pages"), entries().length))
     createEffect(() => layout.pane("inspector").title(selected()?.title.split("/").join(" / ") ?? ""))
     createEffect(on(scheme, (next) => restyle(layout.element, { theme: next }), { defer: true }))
     onCleanup(() => layout.dispose())
@@ -284,12 +289,12 @@ export function LabBrowser(props: {
 
   return (
     <SessionRouteFrame padded>
-      <div ref={element} data-component="components-lab" class="min-h-0 flex-1" />
+      <div ref={element} data-component="lab" class="min-h-0 flex-1" />
     </SessionRouteFrame>
   )
 }
 
-/** One story on the app's background, with its args and states as a knobs panel in the inspector. */
+/** One page on the app's background, with its args and states as a knobs panel in the inspector. */
 function Stage(props: {
   entry: LabEntry
   inspector: HTMLElement
@@ -351,7 +356,7 @@ function Stage(props: {
       return
     }
 
-    // Coalesced: a story registers its replay buttons one by one.
+    // Coalesced: a page registers its replay buttons one by one.
     if (effect.type === "motion.queue") return queueMicrotask(() => dispatch({ type: "motion.flushed" }))
     const next = storyMotion(entry.motion)
 
@@ -388,8 +393,8 @@ function Stage(props: {
           ),
         }
 
-  // The story's Knobs join its args here, so the inspector is the one place for its controls. Registering a knob or a
-  // replay button (as the story mounts) rebuilds it where it was.
+  // The page's Knobs join its args here, so the inspector is the one place for its controls. Registering a knob or a
+  // replay button (as the page mounts) rebuilds it where it was.
   let motion = storyMotion(entry.motion)
   const [shown, setShown] = createSignal(motion, { equals: sameMotion })
 
@@ -397,7 +402,7 @@ function Stage(props: {
     const scopes = motionScopes(motion)
 
     return defineControls(
-      "components-lab",
+      "lab",
       { ...states, ...fields, ...motionFields(motion) },
       {
         storage: null,
@@ -408,7 +413,7 @@ function Stage(props: {
         presets: Object.fromEntries(
           entry.states.slice(1).map((state, offset) => [state.name, knobArgs(fields, stateArgs(entry, offset + 1))]),
         ),
-        // A state leaves the Knobs where they are: they're the story's tuning, not part of a state.
+        // A state leaves the Knobs where they are: they're the page's tuning, not part of a state.
         inPresets: scopes.inPresets,
         scopedPresets: scopes.scopedPresets,
         onChange: (patch, values, meta) => {
@@ -461,8 +466,8 @@ function Stage(props: {
   }
 
   return (
-    // Contained layout makes the canvas hold its stories' dialogs, which the provider below portals into it.
-    // A press inside the story (its own replay buttons, a dock) stops Play rather than being undone by it.
+    // Contained layout makes the canvas hold its pages' dialogs, which the provider below portals into it.
+    // A press inside the page (its own replay buttons, a dock) stops Play rather than being undone by it.
     <div
       ref={setCanvas}
       class="flex size-full overflow-auto bg-v2-background-bg-base [contain:layout]"
@@ -497,7 +502,7 @@ function Stage(props: {
   )
 }
 
-/** The tree under `path`: a folder for each further title segment and a row for each story, by name. */
+/** The tree under `path`: a folder for each further title segment and a row for each page, by name. */
 function folder(entries: LabEntry[], path: string[]): Row[] {
   const depth = path.length
   const inside = entries.filter((entry) => path.every((segment, index) => entry.title.split("/")[index] === segment))
@@ -526,7 +531,7 @@ function folder(entries: LabEntry[], path: string[]): Row[] {
 }
 
 // knobs' split takes each pane's content as a node; Solid keeps it reactive where it sits.
-/** The library's stories on a canvas that pans and zooms, each in its first state; clicking one opens it on its own. */
+/** The library's pages on a canvas that pans and zooms, each in its first state; clicking one opens it on its own. */
 function Grid(props: {
   entries: LabEntry[]
   scheme: "dark" | "light"
@@ -562,7 +567,7 @@ function Grid(props: {
             render: (card: HTMLElement) =>
               createRoot((dispose) => {
                 // The shell keeps its size and hit target as previews enter and leave the viewport.
-                card.dataset.labStory = entry.file
+                card.dataset.labPage = entry.file
                 const [visible, setVisible] = createSignal(false)
                 visibility.set(card, setVisible)
                 observer.observe(card)
@@ -583,13 +588,13 @@ function Grid(props: {
     })
 
     // The canvas captures the pointer to pan, so a card never sees its click: a press that ends where it began opens
-    // the story it began on.
+    // the page it began on.
     let press: { file: string; x: number; y: number } | undefined
 
     const down = (event: PointerEvent) => {
-      const file = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-lab-story]") : null
+      const file = event.target instanceof Element ? event.target.closest<HTMLElement>("[data-lab-page]") : null
 
-      press = file?.dataset.labStory ? { file: file.dataset.labStory, x: event.clientX, y: event.clientY } : undefined
+      press = file?.dataset.labPage ? { file: file.dataset.labPage, x: event.clientX, y: event.clientY } : undefined
     }
 
     const up = (event: PointerEvent) => {
@@ -610,7 +615,7 @@ function Grid(props: {
   return <div ref={element} class="size-full" />
 }
 
-// A story's first state at its natural size, holding its own dialogs as the stage does.
+// A page's first state at its natural size, holding its own dialogs as the stage does.
 function Tile(props: { entry: LabEntry; plugin: LabPlugin }) {
   const [canvas, setCanvas] = createSignal<HTMLDivElement>()
   const component = props.entry.component
@@ -626,7 +631,7 @@ function Tile(props: { entry: LabEntry; plugin: LabPlugin }) {
         "flex-col": props.entry.fullscreen,
       }}
     >
-      {/* The provider waits for the card, so a story that opens a dialog at once opens it inside. */}
+      {/* The provider waits for the card, so a page that opens a dialog at once opens it inside. */}
       <Show when={canvas()}>
         {(container) => (
           <div class="pointer-events-none contents">
@@ -649,7 +654,7 @@ function Tile(props: { entry: LabEntry; plugin: LabPlugin }) {
 }
 
 function isDialogEntry(entry: LabEntry) {
-  return entry.title.startsWith("App/Dialogs/") || entry.file.endsWith("/overlays/dialog/dialog.stories.tsx")
+  return entry.title.startsWith("App/Dialogs/") || entry.file.endsWith("/overlays/dialog/dialog.lab.tsx")
 }
 
 function tileSize(entry: LabEntry) {
@@ -705,7 +710,7 @@ function bindPresetNumbers(inspector: HTMLElement, count: number, select: (numbe
 
     if (number * 10 > count) return select(number)
 
-    // A prefix can be a preset on its own. Wait for the next digit before mounting a story that might take focus.
+    // A prefix can be a preset on its own. Wait for the next digit before mounting a page that might take focus.
     pending = {
       number,
       timer: setTimeout(() => {

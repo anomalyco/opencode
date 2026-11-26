@@ -11,7 +11,7 @@ const roots = ["app", "desktop", "gui-plugins", "session-ui", "ui"].map((name) =
 const sourceFiles = new Bun.Glob("**/*.{ts,tsx}")
 
 const excluded =
-  /(?:^|\/)(?:components-lab|fixtures|i18n|locales|stories|storybook)\/|(?:[.-](?:test|spec|fixture|fixtures|stories|story|bench|generated))\.tsx?$/
+  /(?:^|\/)(?:lab|fixtures|i18n|locales|stories|storybook)\/|(?:[.-](?:test|spec|fixture|fixtures|lab|stories|story|bench|generated))\.tsx?$/
 
 const iconProperty =
   /^(?:icon|activeIcon|clearIcon|closeIcon|emptyIcon|errorIcon|leadingIcon|secondaryIcon|successIcon|targetIcon|titleIcon|trailingIcon|triggerIcon)$/

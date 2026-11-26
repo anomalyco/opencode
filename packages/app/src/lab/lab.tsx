@@ -14,30 +14,30 @@ import { LocationProvider } from "@/workspaces/location"
 import { LabBrowser } from "./browser"
 import { loadLabCatalog, type StoryModule } from "./catalog"
 
-// Standalone stories mount fixture runtimes that must not access the live app's storage.
+// Standalone pages mount fixture runtimes that must not access the live app's storage.
 // Vite needs the patterns as literals in each call.
 const modules = import.meta.glob<StoryModule>([
-  "../**/*.stories.tsx",
-  "../../../ui/src/**/*.stories.tsx",
-  "../../../session-ui/src/**/*.stories.tsx",
-  "../../../gui-plugins/src/**/*.stories.tsx",
-  "!../**/*.standalone.stories.tsx",
+  "../**/*.lab.tsx",
+  "../../../ui/src/**/*.lab.tsx",
+  "../../../session-ui/src/**/*.lab.tsx",
+  "../../../gui-plugins/src/**/*.lab.tsx",
+  "!../**/*.standalone.lab.tsx",
 ])
 
 // Each file's text, for the order its states were written in.
 const sources = import.meta.glob<string>(
   [
-    "../**/*.stories.tsx",
-    "../../../ui/src/**/*.stories.tsx",
-    "../../../session-ui/src/**/*.stories.tsx",
-    "../../../gui-plugins/src/**/*.stories.tsx",
-    "!../**/*.standalone.stories.tsx",
+    "../**/*.lab.tsx",
+    "../../../ui/src/**/*.lab.tsx",
+    "../../../session-ui/src/**/*.lab.tsx",
+    "../../../gui-plugins/src/**/*.lab.tsx",
+    "!../**/*.standalone.lab.tsx",
   ],
   { query: "?raw", import: "default" },
 )
 
-export default function ComponentsLab() {
-  const [params, setParams] = useSearchParams<{ story?: string; view?: string }>()
+export default function Lab() {
+  const [params, setParams] = useSearchParams<{ page?: string; view?: string }>()
 
   return (
     <LabBrowser
@@ -51,8 +51,8 @@ export default function ComponentsLab() {
 }
 
 /**
- * The provider stack of a draft session in the first project of the first healthy server, so a story that reads the
- * server, models, location or composer state renders as it does in the app. Without a server, stories render bare.
+ * The provider stack of a draft session in the first project of the first healthy server, so a page that reads the
+ * server, models, location or composer state renders as it does in the app. Without a server, pages render bare.
  */
 function Workspace(props: ParentProps) {
   const servers = useServers()

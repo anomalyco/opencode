@@ -1,5 +1,5 @@
 import { Show } from "solid-js"
-import { DialogStoryRuntime } from "@/components-lab/dialog-story-runtime"
+import { DialogStoryRuntime } from "@/lab/dialog-story-runtime"
 import { SessionFreeLimitPanel } from "./free-limit-panel"
 import { RecoverySession, RestoredComposer } from "./recovery-story"
 

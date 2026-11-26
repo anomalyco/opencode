@@ -6,7 +6,7 @@ import {
   STORY_DIRECTORY,
   STORY_PROJECTS,
   STORY_SERVER,
-} from "@/components-lab/dialog-story-runtime"
+} from "@/lab/dialog-story-runtime"
 import { useLanguage } from "@/runtime/i18n/language"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useTabs } from "@/shell/tabs/tabs"

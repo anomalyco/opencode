@@ -1,6 +1,6 @@
 import { Button } from "@opencode/ui/button"
 import { createSignal, Show } from "solid-js"
-import { DialogStoryRuntime, STORY_LOCKED_SERVER, STORY_SERVER } from "@/components-lab/dialog-story-runtime"
+import { DialogStoryRuntime, STORY_LOCKED_SERVER, STORY_SERVER } from "@/lab/dialog-story-runtime"
 import { ServerProvider } from "@/runtime/server/current"
 import type { ServerConnection } from "@/runtime/server/registry"
 import { ServerSignedOutPanel, ServerUnavailablePanel } from "./server-unavailable-panel"

@@ -44,7 +44,7 @@ const websearchRequest: FormInfo = {
 }
 
 // The real composer region with its docks, queue and subagent bar, driven by the story's args or by its replay
-// buttons (the components lab shows them under Knobs → Composer → Docks). Answering, dismissing and Esc close docks the way they do in the app.
+// buttons (the Lab shows them under Knobs → Composer → Docks). Answering, dismissing and Esc close docks the way they do in the app.
 function ComposerDocksPreview(props: DockArgs) {
   const queryClient = new QueryClient({ defaultOptions: { mutations: { retry: false } } })
 
@@ -220,7 +220,7 @@ export default {
   component: ComposerDocksPreview,
   parameters: {
     layout: "fullscreen",
-    // The components lab shows these Knobs and their replay buttons in its inspector.
+    // The Lab shows these Knobs and their replay buttons in its inspector.
     motion: ["Docks"],
     docs: {
       description: {
