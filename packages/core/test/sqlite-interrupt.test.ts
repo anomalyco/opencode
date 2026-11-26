@@ -6,6 +6,7 @@ import { EffectDrizzleSqlite } from "@opencode/core/database/drizzle"
 import { sqliteLayer as bunSqliteLayer } from "@opencode/core/database/sqlite.bun"
 import { sqliteLayer as workerdSqliteLayer } from "@opencode/core/database/sqlite.workerd"
 import { makeDurableObjectStorage } from "./fixture/durable-object-storage"
+import { TestDatabase } from "./lib/database"
 
 // The holder keeps the connection across yields, so the queued fiber parks in
 // the semaphore's waiter queue and is woken when the holder lets go. The sweep
@@ -79,6 +80,14 @@ describe("sqlite transaction interrupts", () => {
     const leaked = await sweep(
       () => bunSqliteLayer({ filename: ":memory:", disableWAL: true }),
       (sql) => Effect.scoped(Effect.andThen(sql.reserve, Effect.yieldNow)),
+    )
+    expect(leaked).toEqual([])
+  })
+
+  test("template client releases the connection when a queued transaction is interrupted", async () => {
+    const leaked = await sweep(
+      () => TestDatabase.client,
+      (sql) => sql.withTransaction(sql`SELECT 2`),
     )
     expect(leaked).toEqual([])
   })
