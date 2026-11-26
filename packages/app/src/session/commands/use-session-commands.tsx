@@ -1,4 +1,4 @@
-import { createEffect, createSignal, createUniqueId, on, onCleanup, type JSX } from "solid-js"
+import { createEffect, createMemo, createSignal, createUniqueId, on, onCleanup, type JSX } from "solid-js"
 import { createEventListener } from "@solid-primitives/event-listener"
 import { useCommand, type CommandOption } from "@/shell/commands/command"
 import { adjacentTabKey } from "@/shell/titlebar/tab-order"
@@ -344,6 +344,34 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     return !!info && !info.parentID && info.time.archived === undefined
   }
 
+  const unarchivable = () => {
+    const info = actions.session.data.info()
+
+    return !!info && !info.parentID && info.time.archived !== undefined
+  }
+
+  const invalidateSessionLists = () => {
+    for (const queryKey of ["home-sessions", "inbox-sessions", "inbox-archived-sessions"]) {
+      void queryClient.invalidateQueries({ queryKey: [queryKey, server.conn], exact: true })
+    }
+  }
+
+  const unarchiveSession = async () => {
+    const info = actions.session.data.info()
+
+    if (!info || !unarchivable()) return
+
+    try {
+      await serverSDK.api.session.update({ sessionID: info.id, archived: false })
+    } catch (cause) {
+      showToast({ title: formatServerError(cause, language.t, language.t("common.requestFailed")) })
+
+      return
+    }
+
+    invalidateSessionLists()
+  }
+
   const archiveSession = async () => {
     const info = actions.session.data.info()
 
@@ -357,9 +385,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       return
     }
 
-    for (const queryKey of ["home-sessions", "inbox-sessions", "inbox-archived-sessions"]) {
-      void queryClient.invalidateQueries({ queryKey: [queryKey, server.conn], exact: true })
-    }
+    invalidateSessionLists()
 
     notifySessionTabsRemoved({ server: server.key, directory: info.location.directory, sessionIDs: [info.id] })
   }
@@ -509,6 +535,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
     if (actions.session.identity.params.id) openDialog("fork")
   }
 
+  // Every change to what the list below reads rebuilds all commands, registers every keybind again and re-renders the
+  // controls that show one. The transcript changes with each message, tool update and history page, so the list reads
+  // it only through values that change when a command does.
+  const hasMessages = createMemo(() => actions.session.history.visibleUserMessages().length > 0)
+  const canUndo = createMemo(actions.revert.canUndo)
+  const canRedo = createMemo(actions.revert.canRedo)
+  const blocking = createMemo(actions.background.blocking)
+
   const sessionCmds = () => [
     sessionCommand({
       id: "session.new",
@@ -521,7 +555,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.undo"),
       description: language.t("command.session.undo.description"),
       slash: "undo",
-      disabled: !actions.revert.canUndo(),
+      disabled: !canUndo(),
       onSelect: undo,
     }),
     sessionCommand({
@@ -529,7 +563,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.redo"),
       description: language.t("command.session.redo.description"),
       slash: "redo",
-      disabled: !actions.revert.canRedo(),
+      disabled: !canRedo(),
       onSelect: redo,
     }),
     sessionCommand({
@@ -537,14 +571,14 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.compact"),
       description: language.t("command.session.compact.description"),
       slash: "compact",
-      disabled: !actions.session.identity.params.id || actions.session.history.visibleUserMessages().length === 0,
+      disabled: !actions.session.identity.params.id || !hasMessages(),
       onSelect: compact,
     }),
     sessionCommand({
       id: "session.background",
       title: language.t("command.session.background"),
       keybind: "ctrl+b",
-      disabled: !actions.background.blocking(),
+      disabled: !blocking(),
       onSelect: actions.background.move,
     }),
     sessionCommand({
@@ -552,7 +586,7 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       title: language.t("command.session.fork"),
       description: language.t("command.session.fork.description"),
       slash: "fork",
-      disabled: !actions.session.identity.params.id || actions.session.history.visibleUserMessages().length === 0,
+      disabled: !actions.session.identity.params.id || !hasMessages(),
       onSelect: fork,
     }),
     sessionCommand({
@@ -575,8 +609,15 @@ export const useSessionCommands = (actions: SessionCommandContext) => {
       id: "session.archive",
       title: language.t("command.session.archive"),
       keybind: "mod+shift+s",
-      disabled: !archivable(),
-      onSelect: archiveSession,
+      // Toggles, so one shortcut archives a session and brings an archived one back.
+      disabled: !archivable() && !unarchivable(),
+      onSelect: () => (unarchivable() ? unarchiveSession() : archiveSession()),
+    }),
+    sessionCommand({
+      id: "session.unarchive",
+      title: language.t("command.session.unarchive"),
+      disabled: !unarchivable(),
+      onSelect: unarchiveSession,
     }),
   ]
 

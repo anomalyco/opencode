@@ -194,11 +194,7 @@ async fn patch_previews(input: ToolInput<'_>, cwd: &str) -> Option<Vec<Diff>> {
     for hunk in patch_hunks(input) {
         let path = absolute_path(hunk.path(), cwd);
         let preview = match hunk {
-            patch::Hunk::Add { contents, .. } => {
-                let new_text =
-                    if contents.is_empty() || contents.ends_with('\n') { contents } else { format!("{contents}\n") };
-                Diff { path, old_text: None, new_text }
-            }
+            patch::Hunk::Add { contents, .. } => Diff { path, old_text: None, new_text: contents },
             patch::Hunk::Delete { .. } => {
                 Diff { old_text: Some(read_text(&path).await?), path, new_text: String::new() }
             }

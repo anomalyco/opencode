@@ -4,7 +4,8 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Location } from "@opencode/core/location"
 import { Mcp } from "@opencode/core/mcp/index"
 import { McpInstructions } from "@opencode/core/mcp/instructions"
-import { Permission } from "@opencode/core/permission"
+import type { Permission } from "@opencode/core/permission"
+import { PermissionPolicy } from "@opencode/core/permission/policy"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Tool } from "@opencode/core/tool"
 import { McpTool } from "@opencode/core/tool/mcp"
@@ -39,7 +40,7 @@ const load = (permissions: Permission.Ruleset = []) =>
     const registry = yield* Tool.Service
     const service = yield* McpInstructions.Service
     yield* mcpTools.flush
-    return yield* service.load(yield* registry.snapshot(permissions))
+    return yield* service.load(yield* registry.snapshot(PermissionPolicy.fromRules(permissions)))
   })
 
 describe("McpInstructions", () => {

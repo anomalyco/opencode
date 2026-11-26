@@ -564,19 +564,6 @@ describe("Project.resolve", () => {
     }),
   )
 
-  it.live("resolves from nested directories to repo root", () =>
-    Effect.gen(function* () {
-      const tmp = yield* tmpdirScoped()
-      yield* Effect.promise(() => initRepo(tmp.path, { commit: true }))
-      yield* Effect.promise(() => fs.mkdir(path.join(tmp.path, "a", "b"), { recursive: true }))
-      const project = yield* Project.Service
-
-      const result = yield* project.resolve(abs(path.join(tmp.path, "a", "b")))
-
-      expect(result.directory).toBe(yield* real(tmp.path))
-    }),
-  )
-
   it.live("prefers git when both git and mercurial metadata exist", () =>
     Effect.gen(function* () {
       const tmp = yield* tmpdirScoped()

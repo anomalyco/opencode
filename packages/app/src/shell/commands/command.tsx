@@ -508,13 +508,18 @@ export const { use: useCommand, provider: CommandProvider } = createSimpleContex
       })
     }
 
+    // Keybind labels read this, not the option list, which is rebuilt whenever a command's title or state changes.
+    // A control that shows a keybind then re-renders only when a keybind changes. The first option of an id wins.
+    const keybinds = createMemo(
+      () => new Map(options().map((option) => [actionId(option.id), option.keybind] as const).reverse()),
+      undefined,
+      { equals: (a, b) => a.size === b.size && [...a].every(([id, keybind]) => b.has(id) && b.get(id) === keybind) },
+    )
+
     const keybindConfig = (id: string) => {
       const base = actionId(id)
 
-      return (
-        options().find((x) => actionId(x.id) === base)?.keybind ??
-        bind(base, catalog[base]?.keybind, catalog[base]?.follows)
-      )
+      return keybinds().get(base) ?? bind(base, catalog[base]?.keybind, catalog[base]?.follows)
     }
 
     return {

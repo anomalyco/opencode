@@ -3,10 +3,13 @@ import path from "node:path"
 import { solidStart } from "@solidjs/start/config"
 import { nitro } from "nitro/vite"
 import { defineConfig, type PluginOption } from "vite"
+import { enabledDataFlags } from "./src/lib/flags"
 import { stageHeaders } from "./src/lib/noindex"
 
 export default defineConfig({
   base: "/data/",
+  // The feature flags this build turns on (src/lib/flags.ts), for dataFlag() in the app.
+  define: { "import.meta.env.DATA_FLAGS": JSON.stringify(enabledDataFlags().join(",")) },
   plugins: [
     solidStart({ middleware: "./src/middleware.ts" }) as PluginOption,
     nitro({

@@ -107,6 +107,11 @@ const tests = [
   String.raw`\begin{matrix}]`,
   String.raw`\begin{matrix}x}`,
   String.raw`\begin{matrix}&}`,
+  String.raw`a\ b`,
+  String.raw`\forall \varepsilon>0\ \exists K\in\mathbb{N}`,
+  "a\\\nb",
+  "a\\\tb",
+  "a\\\r\nb",
   "{".repeat(300) + "x" + "}".repeat(300),
   // markdown.test.ts
   String.raw`\frac{1}{`,

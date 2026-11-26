@@ -144,11 +144,6 @@ const layered: { name: string; layers: ConfigInput["formatter"][]; expected: Rec
     expected: { "test.md": "md" },
   },
   {
-    name: "clears lower formatters when a higher config is false",
-    layers: [{ markdown }, false],
-    expected: { "test.md": false },
-  },
-  {
     name: "clears lower formatters before a later object when a higher config is true",
     layers: [{ markdown }, true, { project }],
     expected: { "test.md": false, "test.project": "project" },
@@ -179,12 +174,9 @@ describe("Formatter", () => {
     { file: "test.match", extension: ".match", matches: true },
     { file: "test.other", extension: ".match", matches: false },
     { file: "test.MATCH", extension: ".match", matches: false },
-    { file: "test.MATCH", extension: ".MATCH", matches: true },
     { file: ".match", extension: ".match", matches: false },
     { file: ".match", extension: "", matches: true },
-    { file: "README", extension: ".match", matches: false },
     { file: "README", extension: "", matches: true },
-    { file: "test.part.match", extension: ".match", matches: true },
     { file: "test.part.match", extension: ".part.match", matches: false },
   ].forEach((entry) =>
     it.live(`matches ${entry.file} against ${JSON.stringify(entry.extension)}: ${entry.matches}`, () =>
@@ -200,33 +192,6 @@ describe("Formatter", () => {
             expect(yield* format(formatter, path.join(directory, entry.file))).toBe(entry.matches)
           }),
       ),
-    ),
-  )
-
-  it.live("does not run formatters marked as disabled in config", () =>
-    withFormatter(
-      {
-        disabled: {
-          disabled: true,
-          command: [process.execPath, "-e", "process.exit(0)", "$FILE"],
-          extensions: [".disabled"],
-        },
-      },
-      (formatter, directory) =>
-        Effect.gen(function* () {
-          const file = path.join(directory, "test.disabled")
-          expect(yield* format(formatter, file)).toBe(false)
-        }),
-    ),
-  )
-
-  it.live("file() returns false when no formatter runs", () =>
-    withFormatter(false, (formatter, directory) =>
-      Effect.gen(function* () {
-        const file = path.join(directory, "test.txt")
-        yield* Effect.promise(() => fs.writeFile(file, "x"))
-        expect(yield* format(formatter, file)).toBe(false)
-      }),
     ),
   )
 

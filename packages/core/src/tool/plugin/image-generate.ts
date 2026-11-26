@@ -66,11 +66,7 @@ export const Input = Schema.Struct({
   }),
 })
 
-export const Output = Schema.Struct({
-  id: Schema.String.annotate({ description: "The image job's ID, repeated in its completion notice" }),
-  path: Schema.String.annotate({ description: "Where the image is saved, without its extension" }),
-  model: Schema.String.annotate({ description: "providerID/modelID" }),
-})
+export const Output = Schema.String
 
 export const Plugin = {
   id: "opencode.tool.image-generate",
@@ -163,7 +159,7 @@ export const Plugin = {
             yield* permission.assert({
               action: "webfetch",
               resources: [source],
-              save: ["*"],
+              save: Permission.site(source),
               metadata: { url: source },
               ...Permission.invocation(context),
             })
@@ -256,7 +252,7 @@ export const Plugin = {
         if (!enabled || imageGenerate(loaded.entries) === false) return
         editor.add({
           name,
-          options: { codemode: false },
+          options: { codemode: true },
           description,
           input: Input,
           output: Output,
@@ -354,8 +350,7 @@ export const Plugin = {
               })
               yield* notifyWhenDone({ sessionID: context.sessionID, id, notificationID, file: stem })
               return {
-                output: { id, path: stem, model: ref },
-                content: [
+                output: [
                   `Image job ${id} started in the background with ${ref}. It will be saved as ${stem} with the extension of its real format (.png, .jpg, .webp or .gif); the notice gives the exact path.${resolved.note ?? ""}`,
                   "You will be notified automatically when it finishes or fails.",
                   "DO NOT sleep, poll, check whether the file exists, or request the same image again while it runs.",

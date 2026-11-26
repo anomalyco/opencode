@@ -86,7 +86,12 @@ const files: Environment.Files = {
 }
 const environment = Layer.succeed(
   Environment.Service,
-  Environment.Service.of({ id: Environment.localID, files, spawner: Environment.makeMemoryDriver().spawner }),
+  Environment.Service.of({
+    id: Environment.localID,
+    local: true,
+    files,
+    spawner: Environment.makeMemoryDriver().spawner,
+  }),
 )
 const seed = (file: string, content: string | Uint8Array = "x\n") =>
   files.write(AbsolutePath.make(file), typeof content === "string" ? encoder.encode(content) : content)
@@ -208,7 +213,7 @@ describe("ReadTool", () => {
       })
       expect(execution.status).toBe("completed")
       if (execution.status !== "completed") return
-      expect(execution.output).toEqual({ type: "text", content: "hello", offset: 1, lineCount: 1 })
+      expect(execution.output).toEqual({ type: "text", content: "hello", offset: 1 })
       expect(execution.metadata).toEqual({ truncated: false })
       expect(execution.content).toEqual([{ type: "text", text: "Read file README.md, lines 1-1\n1: hello" }])
       expect(assertions).toMatchObject([{ sessionID, action: "read", resources: ["README.md"], save: ["*"] }])
@@ -226,9 +231,10 @@ describe("ReadTool", () => {
         type: "tool",
         name: "read",
         pinned: true,
+        signature: expect.not.stringContaining("lineCount"),
       })
-      expect(inCodeMode.codeModeCatalog?.tools[0]?.description).toContain(
-        "Reading an image or PDF automatically attaches it to the execute result",
+      expect(inCodeMode.codeModeCatalog?.tools[0]?.description).toBe(
+        "Read a file or directory: text, images, and PDFs. An image or PDF is attached to the execute result even if the program doesn't return it. A call returns one page, at most 2000 lines or 50 KB, and `next` is where the following page starts.",
       )
       const demoted = yield* registry.snapshot(undefined, { tools: { direct: new Set(["read"]) } })
       expect(demoted.definitions.map((tool) => tool.name)).toEqual(["read", "execute"])
@@ -1109,11 +1115,9 @@ describe("ReadTool", () => {
           input: { path: "large.txt", offset: 2, limit: 1 },
         },
       })
-      expect(result).toMatchObject({
-        status: "completed",
-        output: { type: "text", content: "hello", offset: 2, lineCount: 1, next: 3 },
-      })
+      expect(result).toMatchObject({ status: "completed" })
       if (result.status !== "completed") return
+      expect(result.output).toEqual({ type: "text", content: "hello", offset: 2, next: 3 })
       expect(result.metadata).toEqual({ truncated: true })
       expect(result.content).toEqual([
         {
@@ -1122,6 +1126,21 @@ describe("ReadTool", () => {
         },
       ])
       expect(readPaths()).toEqual([AbsolutePath.make(path.join(process.cwd(), "large.txt"))])
+
+      const following = yield* executeTool(registry, {
+        sessionID,
+        ...toolIdentity,
+        call: {
+          type: "tool-call",
+          id: "call-large-next",
+          name: "read",
+          input: { path: "large.txt", offset: result.output.next },
+        },
+      })
+      expect(following).toMatchObject({ status: "completed" })
+      if (following.status !== "completed") return
+      expect(following.output).toEqual({ type: "text", content: "c", offset: 3 })
+      expect(following.content).toEqual([{ type: "text", text: "Read file large.txt, lines 3-3\n3: c" }])
     }),
   )
 
@@ -1212,7 +1231,7 @@ describe("ReadTool", () => {
           })
           expect(file).toMatchObject({
             status: "completed",
-            output: { type: "text", content: "Line 2", offset: 2, lineCount: 1 },
+            output: { type: "text", content: "Line 2", offset: 2 },
             content: [{ type: "text", text: "Read file skill://guide/references/style.md, lines 2-2\n2: Line 2" }],
           })
 

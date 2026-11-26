@@ -14,6 +14,7 @@ export function createActiveComposerAdapter(input: {
   submitted: () => void
   setEditor: (element: HTMLDivElement) => void
   background: NonNullable<ComposerSession["background"]>
+  takeBack: () => Promise<void>
 }) {
   const id = input.sessionID
 
@@ -53,11 +54,20 @@ export function createActiveComposerAdapter(input: {
       admitted: (messageID) => data.session.input.has(id, messageID) || !!data.session.message.get(id, messageID),
       background: input.background,
     }),
-    interrupt: () =>
-      server.api.session
-        .interrupt({ sessionID: id, resume: true })
-        .then(() => undefined)
-        .catch(() => undefined),
+    // Stopping before the model has answered with text or a tool call takes the prompt back, as undo does: the
+    // likeliest reason to stop that early is to reword what was just sent. A draft or a pending prompt means the user
+    // has moved on to something else, so those only stop.
+    interrupt: async () => {
+      const takeBack =
+        state.current().every((part) => part.type === "text" && part.content.trim() === "") &&
+        state.context.items().length === 0 &&
+        data.session.pending.list(id).length === 0
+
+      const result = await server.api.session.interrupt({ sessionID: id, resume: true }).catch(() => undefined)
+
+      // A repeated Stop finds the execution already stopping and reports nothing interrupted.
+      if (takeBack && result?.interrupted) await input.takeBack().catch(() => undefined)
+    },
   }
 
   return adapter

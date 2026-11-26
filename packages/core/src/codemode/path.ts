@@ -35,7 +35,7 @@ const workingContext = Effect.gen(function* () {
   if (cwd) return { directory: cwd.absolute, rules: cwd.environment.path ?? path }
   const location = yield* Effect.serviceOption(Location.Service)
   if (Option.isSome(location)) return { directory: location.value.directory, rules: path }
-  return yield* Effect.die("Code Mode path needs a Location.")
+  return yield* Effect.die(new Error("Code Mode path needs a Location."))
 })
 
 /** The host's own path module, as Node gives it, with `path.posix` and `path.win32`. */

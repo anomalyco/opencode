@@ -67,36 +67,7 @@ export const Plugin = {
     const models = yield* Model.Service
     const subagents = yield* SubagentJob.Service
 
-    const resolveModel = Effect.fn("SubagentTool.resolveModel")(function* (input: string) {
-      const ref = yield* Effect.try({
-        try: () => Model.Ref.parse(input),
-        catch: () =>
-          new ToolFailure({
-            message: `Invalid model "${input}". Use "providerID/modelID" or "providerID/modelID#variant".`,
-          }),
-      })
-      const model = (yield* models.available()).find(
-        (model) => model.providerID === ref.providerID && model.id === ref.id,
-      )
-      if (model === undefined) {
-        const other = (yield* models.available(["image", "video", "decision"])).find(
-          (model) => model.providerID === ref.providerID && model.id === ref.id,
-        )
-        return yield* new ToolFailure({
-          message: other
-            ? `Model "${ref.providerID}/${ref.id}" is ${other.type === "image" ? "an image" : other.type === "video" ? "a video" : "a decision"} model; subagents need a chat model. Use the models tool to find one.`
-            : `Model "${ref.providerID}/${ref.id}" is not available. Use the models tool to see what is available.`,
-        })
-      }
-      if (ref.variant !== undefined && !model.variants.some((variant) => variant.id === ref.variant))
-        return yield* new ToolFailure({
-          message:
-            model.variants.length === 0
-              ? `Model "${ref.providerID}/${ref.id}" has no variants. Omit the variant.`
-              : `Variant "${ref.variant}" is not available for "${ref.providerID}/${ref.id}". Available: ${model.variants.map((variant) => variant.id).join(", ")}.`,
-        })
-      return ref
-    })
+    const resolveModel = (input: string) => resolveModelRef(models, input)
 
     yield* ctx.tool
       .transform((editor) =>
@@ -267,3 +238,36 @@ export const Plugin = {
     yield* ctx.session.hook("generate", hook)
   }),
 }
+
+/** A model a caller named as "providerID/modelID" or "providerID/modelID#variant", checked to be an available chat model. */
+export const resolveModelRef = Effect.fn("SubagentTool.resolveModel")(function* (
+  models: Model.Interface,
+  input: string,
+) {
+  const ref = yield* Effect.try({
+    try: () => Model.Ref.parse(input),
+    catch: () =>
+      new ToolFailure({
+        message: `Invalid model "${input}". Use "providerID/modelID" or "providerID/modelID#variant".`,
+      }),
+  })
+  const model = (yield* models.available()).find((model) => model.providerID === ref.providerID && model.id === ref.id)
+  if (model === undefined) {
+    const other = (yield* models.available(["image", "video", "decision"])).find(
+      (model) => model.providerID === ref.providerID && model.id === ref.id,
+    )
+    return yield* new ToolFailure({
+      message: other
+        ? `Model "${ref.providerID}/${ref.id}" is ${other.type === "image" ? "an image" : other.type === "video" ? "a video" : "a decision"} model; subagents need a chat model. Use the models tool to find one.`
+        : `Model "${ref.providerID}/${ref.id}" is not available. Use the models tool to see what is available.`,
+    })
+  }
+  if (ref.variant !== undefined && !model.variants.some((variant) => variant.id === ref.variant))
+    return yield* new ToolFailure({
+      message:
+        model.variants.length === 0
+          ? `Model "${ref.providerID}/${ref.id}" has no variants. Omit the variant.`
+          : `Variant "${ref.variant}" is not available for "${ref.providerID}/${ref.id}". Available: ${model.variants.map((variant) => variant.id).join(", ")}.`,
+    })
+  return ref
+})
