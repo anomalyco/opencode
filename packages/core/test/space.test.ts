@@ -1,46 +1,23 @@
 import { describe, expect } from "bun:test"
-import { SqliteClient } from "@effect/sql-sqlite-bun"
 import { and, asc, eq, isNull } from "drizzle-orm"
 import { Effect, Layer } from "effect"
-import { Reactivity } from "effect/reactivity"
-import { SqlClient, Statement } from "effect/sql"
+import { SqlClient } from "effect/sql"
 import { SpaceRows } from "@opencode/core/space"
 import { SpaceTable } from "@opencode/core/space/sql"
 import { Database } from "@opencode/core/database/database"
 import { sqliteLayer } from "@opencode/core/database/sqlite.workerd"
 import { makeDurableObjectStorage } from "./fixture/durable-object-storage"
 import { tempGlobalLayer } from "./fixture/global"
+import { recordedSql } from "./fixture/recorded-sql"
 import { testEffect } from "./lib/effect"
 
 // Every statement the database runs, so a test can ask SQLite how it plans the ones Space issues.
-const statements: Array<{ readonly query: string; readonly params: ReadonlyArray<unknown> }> = []
+const recorded = recordedSql()
+const statements = recorded.statements
 
-const recording = Layer.effect(
-  SqlClient.SqlClient,
-  Effect.gen(function* () {
-    const client = yield* SqlClient.SqlClient
-    const connection = yield* client.reserve
-    const record = (query: string, params: ReadonlyArray<unknown>) => statements.push({ query, params })
-    return yield* SqlClient.make({
-      acquirer: Effect.succeed({
-        ...connection,
-        execute: (query, params, transform) => {
-          record(query, params)
-          return connection.execute(query, params, transform)
-        },
-        executeValues: (query, params) => {
-          record(query, params)
-          return connection.executeValues(query, params)
-        },
-      }),
-      compiler: Statement.makeCompilerSqlite(),
-      driver: client.driver,
-      spanAttributes: [],
-    })
-  }),
-).pipe(Layer.provide(SqliteClient.layer({ filename: ":memory:", disableWAL: true })), Layer.provide(Reactivity.layer))
-
-const local = testEffect(Database.layerFromClient.pipe(Layer.provideMerge(recording), Layer.provide(tempGlobalLayer)))
+const local = testEffect(
+  Database.layerFromClient.pipe(Layer.provideMerge(recorded.layer), Layer.provide(tempGlobalLayer)),
+)
 const durableObject = testEffect(
   Database.layerFromClient.pipe(
     Layer.provide(sqliteLayer({ storage: makeDurableObjectStorage() })),
@@ -71,35 +48,114 @@ describe.each([
         { space: "other", key: "a", value: "x", revision: 1 },
       ])
       expect(yield* SpaceRows.head(db, "app")).toBe(4)
-      expect(yield* SpaceRows.changes(db, "app", 2)).toEqual([
-        { key: "a", value: "2", revision: 3 },
-        { key: "b", value: null, revision: 4 },
-      ])
+      expect(yield* SpaceRows.read(db, "app", { type: "delta", since: 2, snapshot: false }, 10)).toEqual({
+        head: 4,
+        continued: true,
+        rows: [
+          { key: "a", value: "2", revision: 3 },
+          { key: "b", value: null, revision: 4 },
+        ],
+      })
       expect(yield* SpaceRows.set(db, "app", "b", "true")).toBe(5)
     }),
   )
 
-  it.effect("writes changes in order in one transaction, returning those that changed a row and the head", () =>
+  it.effect(
+    "writes changes in order in one transaction, returning those that changed a row and each space's head",
+    () =>
+      Effect.gen(function* () {
+        const db = (yield* Database.Service).db
+        expect(
+          yield* SpaceRows.write(db, [
+            { space: "batch", key: "a", value: "1" },
+            { space: "second", key: "a", value: "x" },
+            { space: "batch", key: "b", value: null },
+            { space: "batch", key: "a", value: null },
+            { space: "second", key: "a", value: "y" },
+            { space: "batch", key: "a", value: null },
+            { space: "batch", key: "b", value: "2" },
+          ]),
+        ).toEqual({
+          written: [
+            { space: "batch", key: "a", value: "1", revision: 1 },
+            { space: "second", key: "a", value: "x", revision: 1 },
+            { space: "batch", key: "a", value: null, revision: 2 },
+            { space: "second", key: "a", value: "y", revision: 2 },
+            { space: "batch", key: "b", value: "2", revision: 3 },
+          ],
+          heads: [
+            { space: "batch", revision: 3 },
+            { space: "second", revision: 2 },
+          ],
+        })
+        // A space whose changes change nothing reports its head.
+        expect(
+          yield* SpaceRows.write(db, [
+            { space: "unwritten", key: "c", value: null },
+            { space: "batch", key: "c", value: null },
+            { space: "second", key: "b", value: "1" },
+          ]),
+        ).toEqual({
+          written: [{ space: "second", key: "b", value: "1", revision: 3 }],
+          heads: [
+            { space: "unwritten", revision: 0 },
+            { space: "batch", revision: 3 },
+            { space: "second", revision: 3 },
+          ],
+        })
+      }),
+  )
+
+  it.effect("reads a page with the head in one statement: a delta, a snapshot, or a snapshot instead of a delta", () =>
     Effect.gen(function* () {
       const db = (yield* Database.Service).db
-      expect(
-        yield* SpaceRows.write(db, "batch", [
-          { key: "a", value: "1" },
-          { key: "b", value: null },
-          { key: "a", value: null },
-          { key: "a", value: null },
-          { key: "b", value: "2" },
-        ]),
-      ).toEqual({
-        written: [
-          { key: "a", value: "1", revision: 1 },
-          { key: "a", value: null, revision: 2 },
-          { key: "b", value: "2", revision: 3 },
-        ],
-        head: 3,
+      const read = (from: SpaceRows.From, limit = 10) => SpaceRows.read(db, "read", from, limit)
+      const row = (key: string, value: string | null, revision: number) => ({ key, value, revision })
+      // An empty space: a snapshot of nothing at head 0, and a delta from 0.
+      expect(yield* read({ type: "snapshot", since: 0 })).toEqual({ head: 0, continued: false, rows: [] })
+      expect(yield* read({ type: "delta", since: 0, snapshot: true })).toEqual({ head: 0, continued: true, rows: [] })
+
+      yield* Effect.forEach(["a", "b", "c", "d"], (key) => SpaceRows.set(db, "read", key, key), { discard: true })
+      yield* SpaceRows.remove(db, "read", "a")
+      yield* SpaceRows.remove(db, "read", "b")
+      // With a limit of 1, the purge takes a's tombstone at revision 5: the floor is 5, the head 6.
+      yield* SpaceRows.purge(db, "read", 1)
+      yield* SpaceRows.set(db, "other", "x", "1")
+
+      // A snapshot reads live rows only, up to the head without `until`, and `limit` of them.
+      expect(yield* read({ type: "snapshot", since: 0 })).toEqual({
+        head: 6,
+        continued: false,
+        rows: [row("c", "c", 3), row("d", "d", 4)],
       })
-      expect(yield* SpaceRows.write(db, "batch", [{ key: "c", value: null }])).toEqual({ written: [], head: 3 })
-      expect(yield* SpaceRows.write(db, "unwritten", [])).toEqual({ written: [], head: 0 })
+      expect(yield* read({ type: "snapshot", since: 0 }, 1)).toEqual({
+        head: 6,
+        continued: false,
+        rows: [row("c", "c", 3)],
+      })
+      // A continuation up to its own head; one past the head starts over.
+      expect(yield* read({ type: "snapshot", since: 3, until: 4 })).toEqual({
+        head: 6,
+        continued: true,
+        rows: [row("d", "d", 4)],
+      })
+      expect((yield* read({ type: "snapshot", since: 3, until: 7 })).continued).toBe(false)
+      // A delta at or above the floor, tombstones included; at the head, nothing.
+      expect(yield* read({ type: "delta", since: 5, snapshot: true })).toEqual({
+        head: 6,
+        continued: true,
+        rows: [row("b", null, 6)],
+      })
+      expect(yield* read({ type: "delta", since: 6, snapshot: true })).toEqual({ head: 6, continued: true, rows: [] })
+      // Below the floor or past the head, a snapshot instead, or no rows without `snapshot`.
+      for (const since of [4, 7]) {
+        expect(yield* read({ type: "delta", since, snapshot: true })).toEqual({
+          head: 6,
+          continued: false,
+          rows: [row("c", "c", 3), row("d", "d", 4)],
+        })
+        expect(yield* read({ type: "delta", since, snapshot: false })).toEqual({ head: 6, continued: false, rows: [] })
+      }
     }),
   )
 
@@ -138,11 +194,18 @@ describe.each([
       expect(yield* SpaceRows.floor(db, "pruned")).toBe(10)
 
       // Live rows and other spaces stay, and the newest tombstone keeps the head, so no revision is reissued.
-      expect(yield* SpaceRows.changes(db, "pruned", 0)).toEqual([
+      const stored = (space: string) =>
+        db
+          .select({ key: SpaceTable.key, value: SpaceTable.value, revision: SpaceTable.revision })
+          .from(SpaceTable)
+          .where(eq(SpaceTable.space, space))
+          .orderBy(asc(SpaceTable.revision))
+          .all()
+      expect(yield* stored("pruned")).toEqual([
         { key: "f", value: "f", revision: 6 },
         { key: "e", value: null, revision: 11 },
       ])
-      expect(yield* SpaceRows.changes(db, "kept", 0)).toEqual([{ key: "a", value: null, revision: 2 }])
+      expect(yield* stored("kept")).toEqual([{ key: "a", value: null, revision: 2 }])
       expect(yield* SpaceRows.floor(db, "kept")).toBe(0)
       expect(yield* SpaceRows.head(db, "pruned")).toBe(11)
       expect(yield* SpaceRows.set(db, "pruned", "a", "1")).toBe(12)
@@ -166,16 +229,14 @@ local.effect("reads and writes a space through its indexes: deltas on the revisi
     // Then a purge past a limit of 1 takes c's tombstone.
     yield* SpaceRows.remove(db, "app", "b")
     yield* SpaceRows.purge(db, "app", 1)
-    yield* SpaceRows.floor(db, "app")
     yield* SpaceRows.head(db, "app")
-    yield* SpaceRows.changes(db, "app", 2)
-    yield* SpaceRows.live(db, "app", 0, 6, 500)
+    const planned = (statement: { readonly query: string; readonly params: ReadonlyArray<unknown> }) =>
+      client
+        .unsafe<{ detail: string }>(`EXPLAIN QUERY PLAN ${statement.query}`, statement.params)
+        .pipe(Effect.map((rows) => rows.map((row) => row.detail)))
     const plans = yield* Effect.forEach(
       statements.filter((statement) => /^\s*(select|insert|update|delete)\b/iu.test(statement.query)),
-      (statement) =>
-        client
-          .unsafe<{ detail: string }>(`EXPLAIN QUERY PLAN ${statement.query}`, statement.params)
-          .pipe(Effect.map((rows) => rows.map((row) => row.detail))),
+      planned,
     )
     const revisionIndex = "SEARCH space USING COVERING INDEX space_revision_idx (space=?)"
     const tombstoneIndex = "SEARCH space USING COVERING INDEX space_tombstone_idx (space=?)"
@@ -191,14 +252,34 @@ local.effect("reads and writes a space through its indexes: deltas on the revisi
       ["SEARCH space USING INDEX space_tombstone_idx (space=? AND revision<?)"],
       // and the floor written, which needs no search.
       [],
-      // floor
-      [primaryKey],
       // head
       [revisionIndex],
-      // changes
-      ["SEARCH space USING INDEX space_revision_idx (space=? AND revision>?)"],
-      // live
-      ["SEARCH space USING INDEX space_live_idx (space=? AND revision>? AND revision<?)"],
+    ])
+
+    // Each read is one statement. Its head is one search at the end of the space's revision index and its floor one
+    // primary key lookup; its rows are one range of the revision or live index, never a scan of the table.
+    const reads = yield* Effect.forEach(
+      [
+        { type: "snapshot", since: 0 },
+        { type: "snapshot", since: 1, until: 5 },
+        { type: "delta", since: 2, snapshot: false },
+        { type: "delta", since: 2, snapshot: true },
+      ] satisfies ReadonlyArray<SpaceRows.From>,
+      (from) =>
+        Effect.gen(function* () {
+          statements.length = 0
+          yield* SpaceRows.read(db, "app", from, 501)
+          expect(statements).toHaveLength(1)
+          return (yield* planned(statements[0])).filter((detail) => /^(SEARCH|SCAN) space\b/u.test(detail))
+        }),
+    )
+    const live = "SEARCH space USING INDEX space_live_idx (space=? AND revision>? AND revision<?)"
+    const delta = "SEARCH space USING INDEX space_revision_idx (space=? AND revision>?)"
+    expect(reads).toEqual([
+      [revisionIndex, live],
+      [revisionIndex, live],
+      [revisionIndex, primaryKey, delta],
+      [revisionIndex, primaryKey, delta, live],
     ])
   }),
 )

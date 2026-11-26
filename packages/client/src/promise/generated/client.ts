@@ -1995,7 +1995,7 @@ export function make(options: ClientOptions) {
           request<ExperimentalSpaceWriteOutput>(
             {
               method: "POST",
-              path: `/api/experimental/space/${encodeURIComponent(input.space)}/write`,
+              path: `/api/experimental/space/write`,
               body: { changes: input["changes"] },
               successStatus: 200,
               declaredStatuses: [400, 401],
@@ -2006,9 +2006,9 @@ export function make(options: ClientOptions) {
         sync: (input: ExperimentalSpaceSyncInput, requestOptions?: RequestOptions) =>
           request<ExperimentalSpaceSyncOutput>(
             {
-              method: "GET",
-              path: `/api/experimental/space/${encodeURIComponent(input.space)}`,
-              query: { cursor: input["cursor"] },
+              method: "POST",
+              path: `/api/experimental/space/sync`,
+              body: { spaces: input["spaces"] },
               successStatus: 200,
               declaredStatuses: [400, 401],
               empty: false,

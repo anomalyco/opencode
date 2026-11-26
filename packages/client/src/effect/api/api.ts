@@ -2679,35 +2679,41 @@ export type ExperimentalPushSettingsSetOperation<E = never> = (
 ) => Effect.Effect<ExperimentalPushSettingsSetOutput, E>
 
 export type ExperimentalSpaceWriteInput = {
-  readonly space: string
-  readonly changes: ReadonlyArray<{ readonly key: string; readonly value: string | null }>
+  readonly changes: ReadonlyArray<{ readonly space: string; readonly key: string; readonly value: string | null }>
 }
-export type ExperimentalSpaceWriteOutput = { readonly revision: number; readonly cursor: string }
+export type ExperimentalSpaceWriteOutput = {
+  readonly spaces: ReadonlyArray<{ readonly space: string; readonly revision: number; readonly cursor: string }>
+}
 export type ExperimentalSpaceWriteOperation<E = never> = (
   input: ExperimentalSpaceWriteInput,
 ) => Effect.Effect<ExperimentalSpaceWriteOutput, E>
 
-export type ExperimentalSpaceSyncInput = { readonly space: string; readonly cursor?: string | undefined }
-export type ExperimentalSpaceSyncOutput =
-  | {
-      readonly type: "snapshot"
-      readonly space: string
-      readonly epoch: string
-      readonly revision: number
-      readonly entries: ReadonlyArray<{ readonly key: string; readonly value: string }>
-      readonly cursor: string
-      readonly next?: string | undefined
-    }
-  | {
-      readonly type: "delta"
-      readonly space: string
-      readonly epoch: string
-      readonly revision: number
-      readonly entries: ReadonlyArray<{ readonly key: string; readonly value: string }>
-      readonly cursor: string
-      readonly next?: string | undefined
-      readonly deleted: ReadonlyArray<string>
-    }
+export type ExperimentalSpaceSyncInput = {
+  readonly spaces: ReadonlyArray<{ readonly space: string; readonly cursor?: string | undefined }>
+}
+export type ExperimentalSpaceSyncOutput = {
+  readonly pages: ReadonlyArray<
+    | {
+        readonly type: "snapshot"
+        readonly space: string
+        readonly epoch: string
+        readonly revision: number
+        readonly entries: ReadonlyArray<{ readonly key: string; readonly value: string }>
+        readonly cursor: string
+        readonly next?: string | undefined
+      }
+    | {
+        readonly type: "delta"
+        readonly space: string
+        readonly epoch: string
+        readonly revision: number
+        readonly entries: ReadonlyArray<{ readonly key: string; readonly value: string }>
+        readonly cursor: string
+        readonly next?: string | undefined
+        readonly deleted: ReadonlyArray<string>
+      }
+  >
+}
 export type ExperimentalSpaceSyncOperation<E = never> = (
   input: ExperimentalSpaceSyncInput,
 ) => Effect.Effect<ExperimentalSpaceSyncOutput, E>
