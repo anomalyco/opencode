@@ -1,26 +1,15 @@
 import { Button } from "@opencode/ui/button"
 import { useDialog } from "@opencode/ui/context/dialog"
 import { Dialog, DialogFooter, DialogHeader, DialogTitleGroup } from "@opencode/ui/dialog"
-import { Icon } from "@opencode/ui/icon"
-import { IconButton } from "@opencode/ui/icon-button"
-import { Tooltip } from "@opencode/ui/tooltip"
-import { createMemo, For, Show } from "solid-js"
+import { For, Show } from "solid-js"
 import { AutomationInspector, AutomationListRow } from "./view"
 import { CollapsedSidebarToggleSpace } from "@/shell/sidebar-toggle"
-import type { AutomationFilter } from "./format"
 import { type AutomationItem, createAutomationsController } from "./model"
 
 export function AutomationsScreen() {
   const controller = createAutomationsController()
   const dialog = useDialog()
   const language = controller.language
-
-  const filters = createMemo((): { id: AutomationFilter; label: string; count: number }[] => [
-    { id: "all", label: language.t("automations.filter.all"), count: controller.counts().all },
-    { id: "active", label: language.t("automations.filter.active"), count: controller.counts().active },
-    { id: "paused", label: language.t("automations.filter.paused"), count: controller.counts().paused },
-    { id: "done", label: language.t("automations.filter.done"), count: controller.counts().done },
-  ])
 
   function confirmDelete(entry: AutomationItem) {
     const name = entry.row.name
@@ -61,69 +50,19 @@ export function AutomationsScreen() {
         class="flex h-12 shrink-0 items-center gap-2 border-b border-v2-border-border-base px-2.5"
       >
         <CollapsedSidebarToggleSpace />
-        <div class="flex min-w-0 items-center gap-2">
-          <Icon name="clock" class="shrink-0 text-v2-icon-icon-muted" />
-          <h1 class="truncate text-[14px] leading-5 font-medium text-v2-text-text-base">
-            {language.t("automations.title")}
-          </h1>
-        </div>
+        <h1 class="truncate text-[14px] leading-5 font-medium text-v2-text-text-base">
+          {language.t("automations.title")}
+        </h1>
 
-        <div
-          role="tablist"
-          aria-label={language.t("automations.title")}
-          class="ms-2 hidden items-center gap-0.5 rounded-[7px] bg-v2-background-bg-layer-01 p-0.5 sm:flex"
-        >
-          <For each={filters()}>
-            {(item) => {
-              const active = () => controller.state.filter === item.id
-
-              return (
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={active()}
-                  data-filter={item.id}
-                  data-state={active() ? "active" : undefined}
-                  class="flex h-6 items-center gap-1.5 rounded-[5px] px-2 text-[12px] leading-4 text-v2-text-text-muted transition-colors hover:text-v2-text-text-base data-[state=active]:bg-v2-background-bg-layer-02 data-[state=active]:font-medium data-[state=active]:text-v2-text-text-base"
-                  onClick={() => controller.setFilter(item.id)}
-                >
-                  <span>{item.label}</span>
-                  <Show when={item.count > 0}>
-                    <span class="tabular-nums text-v2-text-text-faint">{item.count}</span>
-                  </Show>
-                </button>
-              )
-            }}
-          </For>
-        </div>
-
-        <div class="ms-auto flex items-center gap-1.5">
-          <div class="relative hidden w-48 items-center md:flex lg:w-60">
-            <Icon
-              name="magnifying-glass"
-              size="small"
-              class="pointer-events-none absolute start-2 text-v2-icon-icon-muted"
-            />
-            <input
-              type="search"
-              value={controller.state.query}
-              onInput={(event) => controller.setQuery(event.currentTarget.value)}
-              placeholder={language.t("automations.search")}
-              aria-label={language.t("automations.search")}
-              class="h-7 w-full rounded-[6px] border border-v2-border-border-base bg-v2-background-bg-layer-01 ps-7 pe-2 text-[12px] leading-4 text-v2-text-text-base placeholder:text-v2-text-text-faint focus:border-v2-border-border-strong focus:outline-none"
-            />
-          </div>
-
-          <Tooltip placement="bottom" value={language.t("automations.refresh")}>
-            <IconButton
-              type="button"
-              variant="ghost-muted"
-              size="normal"
-              icon={<Icon name="refresh" size="small" />}
-              aria-label={language.t("automations.refresh")}
-              onClick={controller.refresh}
-            />
-          </Tooltip>
+        <div class="ms-auto flex items-center gap-2">
+          <input
+            type="search"
+            value={controller.state.query}
+            onInput={(event) => controller.setQuery(event.currentTarget.value)}
+            placeholder={language.t("automations.search")}
+            aria-label={language.t("automations.search")}
+            class="hidden h-7 w-44 rounded-[6px] bg-v2-background-bg-layer-01 px-2.5 text-[12px] leading-4 text-v2-text-text-base placeholder:text-v2-text-text-faint focus:outline-none focus-visible:ring-1 focus-visible:ring-v2-border-border-strong md:block lg:w-56"
+          />
 
           <Show when={controller.draftTarget()}>
             <Button
@@ -133,8 +72,7 @@ export function AutomationsScreen() {
               data-action="automations-new"
               onClick={() => controller.openNewAutomation()}
             >
-              <Icon name="plus-small" size="small" />
-              <span>{language.t("automations.new")}</span>
+              {language.t("automations.new")}
             </Button>
           </Show>
         </div>
@@ -144,7 +82,6 @@ export function AutomationsScreen() {
         when={controller.entries().length > 0}
         fallback={
           <div class="mx-auto flex max-w-[480px] flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
-            <Icon name="clock" class="text-v2-icon-icon-muted" />
             <h2 class="text-14-medium text-v2-text-text-base">
               {language.t(
                 !controller.available()
@@ -179,15 +116,50 @@ export function AutomationsScreen() {
                   </div>
                 }
               >
-                <For each={controller.filtered()}>
-                  {(entry) => (
-                    <AutomationListRow
-                      entry={entry}
-                      selected={controller.selected()?.key === entry.key}
-                      multiServer={controller.multiServer()}
-                      onSelect={() => controller.select(entry.key)}
-                    />
-                  )}
+                <For each={controller.groups()}>
+                  {(group) => {
+                    const done = () => group.status === "done"
+                    const open = () => !done() || controller.state.showDone || !!controller.state.query.trim()
+
+                    return (
+                      <section class="flex flex-col gap-0.5 pb-3 last:pb-0">
+                        <Show
+                          when={done()}
+                          fallback={
+                            <h2 class="flex h-7 items-center gap-1.5 px-2.5 text-[12px] leading-4 text-v2-text-text-faint">
+                              {language.t(`automations.status.${group.status}`)}
+                              <span class="tabular-nums">{group.items.length}</span>
+                            </h2>
+                          }
+                        >
+                          <button
+                            type="button"
+                            aria-expanded={open()}
+                            onClick={controller.toggleDone}
+                            class="flex h-7 items-center gap-1.5 rounded-[6px] px-2.5 text-start text-[12px] leading-4 text-v2-text-text-faint hover:text-v2-text-text-muted"
+                          >
+                            {language.t("automations.status.done")}
+                            <span class="tabular-nums">{group.items.length}</span>
+                            <span class="ms-auto">
+                              {language.t(open() ? "automations.group.hide" : "automations.group.show")}
+                            </span>
+                          </button>
+                        </Show>
+                        <Show when={open()}>
+                          <For each={group.items}>
+                            {(entry) => (
+                              <AutomationListRow
+                                entry={entry}
+                                selected={controller.selected()?.key === entry.key}
+                                context={controller.context(entry)}
+                                onSelect={() => controller.select(entry.key)}
+                              />
+                            )}
+                          </For>
+                        </Show>
+                      </section>
+                    )
+                  }}
                 </For>
               </Show>
             </div>
@@ -199,6 +171,7 @@ export function AutomationsScreen() {
                 <AutomationInspector
                   entry={entry()}
                   busy={controller.busy()}
+                  context={controller.context(entry())}
                   onTogglePause={() => controller.update(entry(), entry().row.status === "paused" ? "resume" : "pause")}
                   onOpenSession={(id) => controller.openSession(entry(), id)}
                   onDelete={() => confirmDelete(entry())}

@@ -8,7 +8,8 @@ import { sessionLabel } from "@/session/title"
 import { showToast } from "@/shell/notifications/toast"
 import { useLayout } from "@/shell/state/layout"
 import { useTabs } from "@/shell/tabs/tabs"
-import { compareAutomations, type AutomationFilter, triggerLabel } from "./format"
+import type { AutomationInfo } from "@opencode/client/promise"
+import { compareAutomations, triggerLabel } from "./format"
 import { useAutomationSource, type AutomationEntry } from "./source"
 
 export function createAutomationsController() {
@@ -18,9 +19,9 @@ export function createAutomationsController() {
   const language = useLanguage()
   const cache = useQueryClient()
 
-  const [state, set] = createStore<{ filter: AutomationFilter; query: string; key?: string }>({
-    filter: "all",
+  const [state, set] = createStore<{ query: string; key?: string; showDone: boolean }>({
     query: "",
+    showDone: false,
   })
 
   const entries = createMemo(() =>
@@ -49,49 +50,45 @@ export function createAutomationsController() {
           projectName: project ? displayName(project) : row.projectID,
           creator: row.sessionID && name(row.sessionID),
           recipient: row.action.type === "prompt" && row.action.to.session ? name(row.action.to.session) : undefined,
-          trigger: triggerLabel(row.trigger, language.t),
+          trigger: triggerLabel(row, language),
         }
       })
       .toSorted((a, b) => compareAutomations(a.row, b.row)),
   )
 
-  const counts = createMemo(() =>
-    entries().reduce(
-      (sum, { row }) => {
-        sum.all++
-        sum[row.status]++
-
-        return sum
-      },
-      { all: 0, active: 0, paused: 0, done: 0 },
-    ),
-  )
-
   const filtered = createMemo(() => {
     const needle = state.query.trim().toLowerCase()
 
-    return entries().filter(
-      ({ row, trigger, projectName, creator, recipient, serverLabel }) =>
-        (state.filter === "all" || state.filter === row.status) &&
-        [
-          row.name,
-          row.id,
-          trigger,
-          projectName,
-          row.directory,
-          creator,
-          recipient,
-          serverLabel,
-          row.trigger.type === "event" && row.trigger.server,
-          row.action.type === "prompt" && row.action.prompt,
-          row.action.type === "code" && row.action.code,
-          row.action.type === "shell" && row.action.command,
-        ]
-          .join(" ")
-          .toLowerCase()
-          .includes(needle),
+    return entries().filter(({ row, trigger, projectName, creator, recipient, serverLabel }) =>
+      [
+        row.name,
+        row.id,
+        trigger,
+        projectName,
+        row.directory,
+        creator,
+        recipient,
+        serverLabel,
+        row.trigger.type === "event" && row.trigger.server,
+        row.action.type === "prompt" && row.action.prompt,
+        row.action.type === "code" && row.action.code,
+        row.action.type === "shell" && row.action.command,
+      ]
+        .join(" ")
+        .toLowerCase()
+        .includes(needle),
     )
   })
+
+  const groups = createMemo(() =>
+    statuses.flatMap((status) => {
+      const items = filtered().filter((item) => item.row.status === status)
+
+      return items.length ? [{ status, items }] : []
+    }),
+  )
+
+  const multiProject = createMemo(() => new Set(entries().map((item) => item.projectName)).size > 1)
 
   const selected = createMemo(() => filtered().find((item) => item.key === state.key) ?? filtered()[0])
   // Pin even the default selection: pausing it may reorder the list, but must not move its inspector.
@@ -138,15 +135,21 @@ export function createAutomationsController() {
   return {
     ...source,
     entries,
-    counts,
     filtered,
+    groups,
+    multiProject,
     selected,
     draftTarget,
     language,
     state,
-    setFilter: (filter: AutomationFilter) => set("filter", filter),
+    toggleDone: () => set("showDone", (value) => !value),
     setQuery: (query: string) => set("query", query),
     select: (key: string) => set("key", key),
+    // Server and project names only tell rows apart when they differ.
+    context: (entry: { serverLabel: string; projectName: string }) => [
+      ...(source.multiServer() ? [entry.serverLabel] : []),
+      ...(multiProject() ? [entry.projectName] : []),
+    ],
     busy: () => change.isPending,
     update: (entry: AutomationEntry, operation: "pause" | "resume" | "delete") => {
       if (!change.isPending) change.mutate({ entry, operation })
@@ -163,5 +166,7 @@ export function createAutomationsController() {
     },
   }
 }
+
+const statuses: AutomationInfo["status"][] = ["active", "paused", "done"]
 
 export type AutomationItem = ReturnType<ReturnType<typeof createAutomationsController>["entries"]>[number]

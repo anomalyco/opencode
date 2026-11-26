@@ -81,25 +81,22 @@ test("inspects event and timer automations and manages the selected row", async 
   await page.goto(sessionHref("ses_release"))
   const nav = page.getByRole("button", { name: "Automations", exact: true })
   await nav.click()
+  await expect(page.getByRole("button", { name: /Morning release brief/ })).toContainText("Weekdays at 9:00 AM")
   const detail = page.getByRole("article")
   await page.getByRole("button", { name: /Release health watch/ }).click()
   await expect(detail.getByRole("heading", { name: "Release health watch" })).toBeVisible()
-  await expect(detail.getByText("deployment.finished", { exact: true })).toBeVisible()
+  await expect(detail.getByText("deployment.finished from deployments", { exact: true })).toBeVisible()
   await expect(
     detail
       .getByRole("term")
       .filter({ hasText: /^Runs on$/ })
       .locator("+ dd"),
   ).toHaveText("release-runner-03")
-  await expect(
-    detail
-      .getByRole("term")
-      .filter({ hasText: /^MCP source$/ })
-      .locator("+ dd"),
-  ).toHaveText("deployments")
-  await expect(detail.getByText('"staging"', { exact: false })).toBeVisible()
+  await expect(detail.getByText('environment = "staging"', { exact: true })).toBeVisible()
   await expect(detail.getByText("Next run")).toHaveCount(0)
-  await expect(detail.getByText("Only if the code returns send", { exact: false })).toBeVisible()
+  await expect(
+    detail.getByText("Wakes the creating session only when the code returns send", { exact: false }),
+  ).toBeVisible()
   await expect(detail.getByText(`${directory}/release`, { exact: true })).toBeVisible()
   await expect(detail.getByText("Deployment status: succeeded", { exact: true })).toBeVisible()
   await page.screenshot({ path: test.info().outputPath("automation-inspector.png"), animations: "disabled" })
@@ -107,7 +104,7 @@ test("inspects event and timer automations and manages the selected row", async 
   await expect(nav).toContainText("2")
   await detail.getByRole("button", { name: "Resume", exact: true }).click()
   await expect(nav).toContainText("3")
-  await detail.getByRole("button", { name: "Delete automation" }).click()
+  await detail.getByRole("button", { name: "Delete", exact: true }).click()
   await page.getByRole("dialog").getByRole("button", { name: "Delete", exact: true }).click()
   await expect(page.getByRole("button", { name: /Release health watch/ })).toHaveCount(0)
   await expect(detail.getByText("Next run")).toBeVisible()
@@ -115,9 +112,9 @@ test("inspects event and timer automations and manages the selected row", async 
   await expect(detail.getByRole("button", { name: "Release notes" })).toBeVisible()
   await page.getByRole("button", { name: /Nightly smoke test/ }).click()
   await expect(detail.getByText("bun run test:smoke --reporter=dot", { exact: true })).toBeVisible()
-  await expect(detail.getByText("No one. The command runs on its own", { exact: false })).toBeVisible()
+  await expect(detail.getByText("Doesn’t wake a session", { exact: false })).toBeVisible()
   await page.getByRole("button", { name: /Documentation review/ }).click()
-  await expect(detail.getByText("New quiet child · reviewer")).toBeVisible()
+  await expect(detail.getByText("Send a prompt to a new reviewer subagent")).toBeVisible()
   await page.getByRole("button", { name: "New automation" }).click()
   await expect(page.locator('[data-component="composer-editor"]')).toHaveText(/\/automation/)
 })

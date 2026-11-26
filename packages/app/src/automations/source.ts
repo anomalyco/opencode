@@ -122,7 +122,6 @@ export const { use: useAutomationSource, provider: AutomationSourceProvider } = 
           (query, index) => query.isError && enabled().some((target) => target.server === connections()[index]?.server),
         ),
       active: createMemo(() => entries().filter((entry) => entry.row.status === "active").length),
-      refresh: () => Promise.all(queries.map((query) => query.refetch())),
     }
   },
 })

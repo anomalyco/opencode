@@ -1,97 +1,53 @@
 import { Button } from "@opencode/ui/button"
-import { Icon } from "@opencode/ui/icon"
-import { IconButton } from "@opencode/ui/icon-button"
-import { Tooltip } from "@opencode/ui/tooltip"
-import { createMemo, Show, type JSX } from "solid-js"
+import { Predicate } from "effect"
+import { createMemo, For, Show, type JSX } from "solid-js"
 import { useLanguage } from "@/runtime/i18n/language"
-import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
-import { statusLabel } from "./format"
+import { formatDate, relativeTime, statusLabel } from "./format"
 import type { AutomationItem } from "./model"
-
-function StatusDot(props: { item: AutomationItem }) {
-  return (
-    <span
-      aria-hidden="true"
-      class="size-2 shrink-0 rounded-full border"
-      classList={{
-        "border-transparent bg-v2-state-fg-success": props.item.row.status === "active",
-        "border-v2-border-border-strong": props.item.row.status === "paused",
-        "border-transparent bg-v2-text-text-faint": props.item.row.status === "done",
-      }}
-    />
-  )
-}
 
 export function AutomationListRow(props: {
   entry: AutomationItem
   selected: boolean
-  multiServer: boolean
+  context: string[]
   onSelect: () => void
 }) {
   const language = useLanguage()
+  const row = () => props.entry.row
+
+  const note = () => {
+    if (row().status === "paused" && row().lastOutcome === "failed") return language.t("automations.note.failed")
+
+    if (row().status === "done" && row().lastOutcome === "expired") return language.t("automations.status.expired")
+
+    const next = row().status === "active" ? row().nextDueAt : undefined
+
+    if (next) return relativeTime(next, language)
+  }
 
   return (
     <button
       type="button"
       aria-pressed={props.selected}
       onClick={props.onSelect}
-      class="flex w-full flex-col gap-1 rounded-[7px] px-2.5 py-2 text-start hover:bg-v2-overlay-simple-overlay-hover aria-pressed:bg-v2-background-bg-layer-02"
+      class="flex w-full flex-col gap-0.5 rounded-[7px] px-2.5 py-2 text-start hover:bg-v2-overlay-simple-overlay-hover aria-pressed:bg-v2-background-bg-layer-02"
     >
-      <span class="flex w-full min-w-0 items-center gap-2">
-        <StatusDot item={props.entry} />
-        <bdi class="min-w-0 flex-1 truncate text-[13px] leading-4 font-medium text-v2-text-text-base">
-          {props.entry.row.name}
-        </bdi>
-        <span class="text-[11px] leading-4 text-v2-text-text-muted">{statusLabel(props.entry.row, language.t)}</span>
+      <span class="flex w-full min-w-0 items-baseline gap-3">
+        <bdi class="min-w-0 flex-1 truncate text-[13px] leading-5 font-medium text-v2-text-text-base">{row().name}</bdi>
+        <Show when={note()}>
+          {(text) => <span class="shrink-0 text-[12px] leading-5 text-v2-text-text-muted">{text()}</span>}
+        </Show>
       </span>
-      <span class="flex w-full min-w-0 items-center gap-1.5 ps-4 text-[12px] leading-4 text-v2-text-text-faint">
-        <span class="flex size-3.5 shrink-0 items-center justify-center">
-          <SessionTabAvatarView project={props.entry.project} directory={props.entry.row.directory} unread={false} />
-        </span>
-        <span class="shrink-0 rounded bg-v2-background-bg-layer-01 px-1 text-[10px] font-medium uppercase tracking-wide">
-          {language.t(
-            props.entry.row.trigger.type === "event" ? "automations.kind.event" : "automations.kind.schedule",
-          )}
-        </span>
-        <span class="truncate">
-          <Show when={props.multiServer}>
-            <bdi>{props.entry.serverLabel}</bdi> ·{" "}
-          </Show>
-          <bdi>{props.entry.projectName}</bdi> · <bdi>{props.entry.trigger}</bdi>
-        </span>
+      <span class="w-full truncate text-[12px] leading-4 text-v2-text-text-faint">
+        <Parts items={[...props.context, props.entry.trigger]} />
       </span>
     </button>
-  )
-}
-
-function Fact(props: { label: string; children: JSX.Element }) {
-  return (
-    <div class="flex min-w-0 flex-col gap-1">
-      <dt class="text-[12px] leading-4 text-v2-text-text-faint">{props.label}</dt>
-      <dd class="min-w-0 break-words text-[13px] leading-5 text-v2-text-text-base">{props.children}</dd>
-    </div>
-  )
-}
-
-function Block(props: { label: string; children: JSX.Element; code?: boolean }) {
-  return (
-    <section class="flex flex-col gap-1.5">
-      <h3 class="text-[12px] leading-4 font-medium text-v2-text-text-muted">{props.label}</h3>
-      <div
-        data-scrollable
-        dir={props.code ? "ltr" : "auto"}
-        class="max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-[8px] border border-v2-border-border-base bg-v2-background-bg-layer-01 p-3 text-[13px] leading-5 text-v2-text-text-base select-text"
-        classList={{ "font-mono": props.code }}
-      >
-        {props.children}
-      </div>
-    </section>
   )
 }
 
 export function AutomationInspector(props: {
   entry: AutomationItem
   busy: boolean
+  context: string[]
   onTogglePause: () => void
   onOpenSession: (id: string) => void
   onDelete: () => void
@@ -99,7 +55,6 @@ export function AutomationInspector(props: {
   const language = useLanguage()
   const t = language.t
   const row = () => props.entry.row
-  const action = createMemo(() => props.entry.row.action)
 
   const event = createMemo(() => {
     const trigger = row().trigger
@@ -107,147 +62,197 @@ export function AutomationInspector(props: {
     return trigger.type === "event" ? trigger : undefined
   })
 
-  const prompt = createMemo(() => {
-    const a = action()
+  // Flat filters read as `environment = "staging"`; anything nested keeps its JSON.
+  const args = createMemo(() => {
+    const value = event()?.args
 
-    return a.type === "prompt" ? a : undefined
+    if (!value) return
+
+    const entries = Object.entries(value)
+
+    if (entries.some(([, item]) => Predicate.isObject(item))) return { block: JSON.stringify(value, null, 2) }
+
+    return { inline: entries.map(([key, item]) => `${key} = ${JSON.stringify(item)}`).join(", ") }
   })
 
-  const code = createMemo(() => {
-    const a = action()
+  const next = () => (row().status === "active" ? row().nextDueAt : undefined)
 
-    return a.type === "code" ? a : undefined
-  })
-
-  const shell = createMemo(() => {
-    const a = action()
-
-    return a.type === "shell" ? a : undefined
-  })
-
-  const date = (at: number) =>
-    new Date(at).toLocaleString(language.intl(), { dateStyle: "medium", timeStyle: "short", timeZone: row().tz })
-
-  const link = (id: string, name: string) => (
+  // Takes accessors: `Show` keeps its children when the selection moves to another automation.
+  const link = (id: () => string, name: () => string) => (
     <button
       type="button"
-      onClick={() => props.onOpenSession(id)}
-      class="inline-flex max-w-full items-center gap-1 text-start hover:underline"
+      onClick={() => props.onOpenSession(id())}
+      class="inline max-w-full text-start font-medium text-v2-text-text-base underline decoration-v2-border-border-strong underline-offset-[3px] hover:decoration-current"
     >
-      <bdi>{name}</bdi>
-      <Icon name="arrow-up-right" size="small" />
+      <bdi>{name()}</bdi>
     </button>
   )
 
+  const action = () => {
+    const value = row().action
+
+    switch (value.type) {
+      case "prompt": {
+        const session = value.to.session
+
+        return {
+          summary: session
+            ? language.rich("automations.do.prompt", {
+                session: link(
+                  () => session,
+                  () => props.entry.recipient ?? session,
+                ),
+              })
+            : t("automations.do.subagent", { agent: value.to.subagent ?? "" }),
+          body: value.prompt,
+        }
+      }
+
+      case "code":
+        return {
+          summary: t("automations.do.code"),
+          hint: t("automations.do.codeHint"),
+          body: value.code,
+          code: true,
+          args: value.args === undefined ? undefined : JSON.stringify(value.args, null, 2),
+        }
+      case "shell":
+        return {
+          summary: t("automations.do.shell"),
+          hint: t("automations.do.shellHint"),
+          body: value.command,
+          code: true,
+        }
+    }
+  }
+
+  const time = (at: () => number) => (
+    <time title={formatDate(at(), row().tz, language)}>{relativeTime(at(), language)}</time>
+  )
+
   return (
-    <article class="mx-auto flex w-full max-w-[760px] flex-col gap-5 p-5 lg:p-6">
+    <article class="mx-auto flex w-full max-w-[720px] flex-col gap-7 px-6 py-6 lg:px-8">
       <header class="flex flex-wrap items-start justify-between gap-3">
-        <div class="flex min-w-0 flex-col gap-1">
-          <div class="flex items-center gap-2 text-[12px] leading-4 text-v2-text-text-muted">
-            <StatusDot item={props.entry} />
-            {statusLabel(row(), t)} · <bdi>{props.entry.projectName}</bdi>
-          </div>
+        <div class="flex min-w-0 flex-col gap-0.5">
           <h2 dir="auto" class="text-[16px] leading-6 font-semibold text-v2-text-text-base">
             {row().name}
           </h2>
-          <bdi dir="ltr" class="break-all font-mono text-[12px] leading-4 text-v2-text-text-faint">
-            {row().directory}
-          </bdi>
+          <p class="text-[13px] leading-5 text-v2-text-text-muted">
+            <Parts items={[statusLabel(row(), t), ...props.context]} />
+          </p>
         </div>
-        <div class="flex items-center gap-1.5">
+        <div class="flex items-center gap-1">
           <Show when={row().status !== "done"}>
             <Button type="button" variant="neutral" size="small" disabled={props.busy} onClick={props.onTogglePause}>
               {t(row().status === "paused" ? "automations.action.resume" : "automations.action.pause")}
             </Button>
           </Show>
-          <Tooltip placement="bottom" value={t("automations.delete.title")}>
-            <IconButton
-              type="button"
-              variant="ghost-muted"
-              size="normal"
-              disabled={props.busy}
-              aria-label={t("automations.delete.title")}
-              icon={<Icon name="trash" size="small" />}
-              onClick={props.onDelete}
-            />
-          </Tooltip>
+          <Button type="button" variant="ghost-muted" size="small" disabled={props.busy} onClick={props.onDelete}>
+            {t("automations.delete.button")}
+          </Button>
         </div>
       </header>
-      <dl class="flex flex-wrap gap-x-8 gap-y-3 rounded-[8px] border border-v2-border-border-base bg-v2-background-bg-layer-01 p-3">
-        <Fact label={t("automations.runsOn")}>
-          <bdi>{props.entry.serverLabel}</bdi>
-        </Fact>
-        <Fact label={t(event() ? "automations.kind.event" : "automations.section.trigger")}>
-          <bdi>{props.entry.trigger}</bdi>
+
+      <dl class="grid grid-cols-[88px_minmax(0,1fr)] gap-x-4 gap-y-5 text-[13px] leading-5">
+        <Row label={t("automations.when")}>
+          <div class="text-v2-text-text-base">
+            <bdi>{props.entry.trigger}</bdi>
+          </div>
           <Show when={!event()}>
-            <div class="text-[12px] text-v2-text-text-faint">
+            <div class="text-v2-text-text-muted">
               <bdi>{row().tz}</bdi>
+              <Show when={next()}>{(at) => <> · {language.rich("automations.nextRun", { time: time(at) })}</>}</Show>
             </div>
           </Show>
-        </Fact>
-        <Show when={event()}>
-          {(trigger) => (
-            <Fact label={t("automations.eventSource")}>
-              <bdi>{trigger().server}</bdi>
-            </Fact>
-          )}
-        </Show>
-        <Show when={!event() && row().status === "active" ? row().nextDueAt : undefined}>
-          {(at) => <Fact label={t("automations.section.nextRun")}>{date(at())}</Fact>}
-        </Show>
-        <Fact label={t("automations.section.runs")}>{row().runCount}</Fact>
-        <Show when={row().lastRunAt}>{(at) => <Fact label={t("automations.section.lastRun")}>{date(at())}</Fact>}</Show>
-      </dl>
-      <dl class="grid gap-x-4 gap-y-3 sm:grid-cols-2">
-        <Show when={row().sessionID}>
-          {(id) => <Fact label={t("automations.creator")}>{link(id(), props.entry.creator ?? id())}</Fact>}
-        </Show>
-        <Fact label={t("automations.recipient")}>
-          <Show when={prompt()} fallback={t(shell() ? "automations.noRecipient" : "automations.conditional")}>
-            {(action) => (
-              <Show when={action().to.session} fallback={t("automations.child", { agent: action().to.subagent ?? "" })}>
-                {(id) => link(id(), props.entry.recipient ?? id())}
-              </Show>
+          <Show when={args()?.inline}>
+            {(text) => (
+              <bdi dir="ltr" class="block font-mono text-[12px] text-v2-text-text-muted">
+                {text()}
+              </bdi>
             )}
           </Show>
-        </Fact>
-      </dl>
-      <Show when={event()?.args}>
-        {(args) => (
-          <Block label={t("automations.eventArgs")} code>
-            {JSON.stringify(args(), null, 2)}
-          </Block>
-        )}
-      </Show>
-      <Show when={prompt()}>{(a) => <Block label={t("automations.section.prompt")}>{a().prompt}</Block>}</Show>
-      <Show when={code()}>
-        {(a) => (
-          <>
-            <Block label={t("automations.section.code")} code>
-              {a().code}
-            </Block>
-            <Show when={a().args !== undefined}>
-              <Block label={t("automations.codeArgs")} code>
-                {JSON.stringify(a().args, null, 2)}
-              </Block>
+          <Show when={args()?.block}>{(text) => <Content code>{text()}</Content>}</Show>
+        </Row>
+
+        <Row label={t("automations.do")}>
+          <div class="text-v2-text-text-base">{action().summary}</div>
+          <Show when={action().hint}>{(hint) => <div class="text-v2-text-text-muted">{hint()}</div>}</Show>
+          <Content code={action().code}>{action().body}</Content>
+          <Show when={action().args}>{(text) => <Content code>{text()}</Content>}</Show>
+        </Row>
+
+        <Row label={t("automations.lastRun")}>
+          <div class="text-v2-text-text-base">
+            <Show when={row().lastRunAt} fallback={t("automations.neverRun")}>
+              {(at) => (
+                <>
+                  {time(at)}
+                  <span class="text-v2-text-text-muted">
+                    {" "}
+                    · {language.plural("automations.runCount", row().runCount)}
+                  </span>
+                </>
+              )}
             </Show>
-          </>
-        )}
-      </Show>
-      <Show when={shell()}>
-        {(a) => (
-          <Block label={t("automations.section.shell")} code>
-            {a().command}
-          </Block>
-        )}
-      </Show>
-      <Show when={row().lastOutput}>
-        {(output) => (
-          <Block label={t("automations.section.output")} code>
-            {output()}
-          </Block>
-        )}
-      </Show>
+          </div>
+          <Show when={row().lastOutput}>{(output) => <Content code>{output()}</Content>}</Show>
+        </Row>
+      </dl>
+
+      <dl class="grid grid-cols-[88px_minmax(0,1fr)] gap-x-4 gap-y-2 border-t border-v2-border-border-base pt-5 text-[12px] leading-5">
+        <Row label={t("automations.folder")} muted>
+          <bdi dir="ltr" class="break-all font-mono">
+            {row().directory}
+          </bdi>
+        </Row>
+        <Show when={row().sessionID}>
+          {(id) => (
+            <Row label={t("automations.creator")} muted>
+              {link(id, () => props.entry.creator ?? id())}
+            </Row>
+          )}
+        </Show>
+        <Row label={t("automations.runsOn")} muted>
+          <bdi>{props.entry.serverLabel}</bdi>
+        </Row>
+      </dl>
     </article>
+  )
+}
+
+function Parts(props: { items: string[] }) {
+  return (
+    <For each={props.items}>
+      {(item, index) => (
+        <>
+          <Show when={index() > 0}> · </Show>
+          <bdi>{item}</bdi>
+        </>
+      )}
+    </For>
+  )
+}
+
+function Row(props: { label: string; muted?: boolean; children: JSX.Element }) {
+  return (
+    <>
+      <dt class="text-v2-text-text-faint">{props.label}</dt>
+      <dd class="flex min-w-0 flex-col gap-1.5 break-words" classList={{ "text-v2-text-text-muted": props.muted }}>
+        {props.children}
+      </dd>
+    </>
+  )
+}
+
+function Content(props: { code?: boolean; children: JSX.Element }) {
+  return (
+    <div
+      data-scrollable
+      dir={props.code ? "ltr" : "auto"}
+      class="mt-1 max-h-56 overflow-auto whitespace-pre-wrap break-words rounded-[6px] bg-v2-background-bg-layer-01 px-3 py-2.5 text-[13px] leading-5 text-v2-text-text-base select-text"
+      classList={{ "font-mono text-[12px]": props.code }}
+    >
+      {props.children}
+    </div>
   )
 }
