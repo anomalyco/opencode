@@ -263,6 +263,10 @@ function MessageTimelineView(
         )
       }
 
+      // Finished thoughts one after another start closed like one thought, and open as their first does.
+      if (Predicate.isTagged(row, "AssistantPart") && row.group.type === "thought")
+        return !disclosure[row.group.refs[0]!.partID]
+
       if (!Predicate.isTagged(row, "AssistantPart") || row.group.type !== "part") return false
       const message = messageByID().get(row.group.ref.messageID)
 
@@ -297,10 +301,21 @@ function MessageTimelineView(
             id: "session.rename",
             category: language.t("command.category.session"),
             title: language.t("command.session.rename"),
+            description: language.t("command.session.rename.description"),
             keybind: "ctrl+r",
+            slash: "rename",
+            slashArguments: true,
             disabled: !sessionID() || !!parentID() || title().editing,
             skip: (event) => pluginScoped(event.target),
-            onSelect: props.title.edit,
+            onSelect: (source, input) => (source === "slash" ? props.title.set(input ?? "") : props.title.edit()),
+          },
+          {
+            id: "session.title.generate",
+            category: language.t("command.category.session"),
+            title: language.t("command.session.title.generate"),
+            description: language.t("command.session.title.generate.description"),
+            disabled: !sessionID() || !!parentID() || title().editing || props.title.generating(),
+            onSelect: () => props.title.set(""),
           },
           {
             id: "session.delete",
@@ -684,7 +699,9 @@ function MessageTimelineView(
                         class="truncate hover:bg-v2-overlay-simple-overlay-hover"
                         onClick={props.title.edit}
                       >
-                        {childTitle()}
+                        <Show when={props.title.generating()} fallback={childTitle()}>
+                          <TextShimmer text={childTitle() ?? ""} active />
+                        </Show>
                       </button>
                     </h1>
                   }

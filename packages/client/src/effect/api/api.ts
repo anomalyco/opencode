@@ -2434,6 +2434,9 @@ export type ExperimentalPersistentPtyConnectTokenOperation<E = never> = (
   input: ExperimentalPersistentPtyConnectTokenInput,
 ) => Effect.Effect<ExperimentalPersistentPtyConnectTokenOutput, E>
 
+export type ExperimentalBrowserTunnelOutput = boolean
+export type ExperimentalBrowserTunnelOperation<E = never> = () => Effect.Effect<ExperimentalBrowserTunnelOutput, E>
+
 export type ExperimentalAutomationCreateInput = {
   readonly sessionID?: Session.ID | undefined
   readonly directory?: string | undefined
@@ -2688,6 +2691,7 @@ export interface ExperimentalApi<E = never> {
     readonly remove: ExperimentalPersistentPtyRemoveOperation<E>
     readonly connectToken: ExperimentalPersistentPtyConnectTokenOperation<E>
   }
+  readonly browser: { readonly tunnel: ExperimentalBrowserTunnelOperation<E> }
   readonly automation: {
     readonly create: ExperimentalAutomationCreateOperation<E>
     readonly list: ExperimentalAutomationListOperation<E>
@@ -2957,6 +2961,19 @@ export type ExperimentalUsageLimitsOperation<E = never> = (
 
 export interface ExperimentalUsageApi<E = never> {
   readonly limits: ExperimentalUsageLimitsOperation<E>
+}
+
+export type ExperimentalFlagGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
+export type ExperimentalFlagGetOutput = {
+  readonly location: Location.PublicRef
+  readonly data: { readonly [x: string]: boolean }
+}
+export type ExperimentalFlagGetOperation<E = never> = (
+  input?: ExperimentalFlagGetInput,
+) => Effect.Effect<ExperimentalFlagGetOutput, E>
+
+export interface ExperimentalFlagApi<E = never> {
+  readonly get: ExperimentalFlagGetOperation<E>
 }
 
 export type ConfigGetInput = { readonly location?: { readonly directory?: string | undefined } | undefined }
@@ -3234,6 +3251,7 @@ export interface AppApi<E = never> {
     readonly file: ExperimentalFileApi<E>
     readonly migration: ExperimentalMigrationApi<E>
     readonly usage: ExperimentalUsageApi<E>
+    readonly flag: ExperimentalFlagApi<E>
     readonly config: ExperimentalConfigApi<E>
   }
   readonly message: MessageApi<E>

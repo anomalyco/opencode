@@ -37,13 +37,8 @@ beforeEach(() => {
 const it = webSearchIntegrationTest
 
 describe("built-in web search providers", () => {
-  ;[
-    WebSearchExa.Plugin,
-    WebSearchParallel.Plugin,
-    WebSearchFirecrawl.Plugin,
-    WebSearchTavily.Plugin,
-    WebSearchTinyFish.Plugin,
-  ].forEach((plugin) => {
+  // Exa stands in for Parallel and Firecrawl, which share its WebSearchMcp request path.
+  ;[WebSearchExa.Plugin, WebSearchTavily.Plugin, WebSearchTinyFish.Plugin].forEach((plugin) => {
     it.effect(`releases rate-limited HTTP requests for ${plugin.id} before caching their errors`, () =>
       Effect.gen(function* () {
         resetWebSearchFixture("Rate limited", 429)

@@ -211,7 +211,7 @@ describe("PushSender", () => {
     }),
   )
 
-  it.effect("shortens a long body so the box fits the relay", () =>
+  it.effect("shortens a long body or resource list so the box fits the relay", () =>
     Effect.sync(() => {
       for (const body of ["é".repeat(5_000), "漢".repeat(1_500), "\n".repeat(3_000)]) {
         const text = PushSender.message({ ...question, body })
@@ -219,6 +219,22 @@ describe("PushSender", () => {
         expect(Buffer.byteLength(text, "utf8")).toBeGreaterThan(2580)
         expect(JSON.parse(text).body.endsWith("…")).toBe(true)
       }
+      const data = { requestID: "per_1", sessionID, action: "shell", resources: ["git push", "x".repeat(5_000), "ls"] }
+      const text = PushSender.message({ ...question, type: "permission", body: "Needs permission: shell", data })
+      expect(Buffer.byteLength(text, "utf8")).toBeLessThanOrEqual(2600)
+      expect(Buffer.byteLength(text, "utf8")).toBeGreaterThan(2580)
+      expect(JSON.parse(text).data).toEqual({
+        ...data,
+        resources: ["git push", expect.stringMatching(/^x+…$/)],
+        truncated: "true",
+      })
+      const many = PushSender.message({
+        ...question,
+        type: "permission",
+        data: { ...data, resources: Array.from({ length: 3000 }, (_, i) => "cmd" + i) },
+      })
+      expect(Buffer.byteLength(many, "utf8")).toBeLessThanOrEqual(2600)
+      expect(JSON.parse(many).data.resources).not.toContain("…")
       expect(PushSender.message(question)).toBe(
         JSON.stringify({
           v: 1,

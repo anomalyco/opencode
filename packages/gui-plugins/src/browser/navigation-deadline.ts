@@ -18,3 +18,32 @@ export function navigationDeadline<T>(work: Promise<T>, ms = NAVIGATION_DEADLINE
 
   return Promise.race([work, deadline]).finally(() => clearTimeout(timer))
 }
+
+export type NavigationOutcome = "completed" | "still_loading"
+
+/**
+ * Guards a navigation against true no-progress stalls while distinguishing a document that has
+ * already committed and is still streaming subresources (`still_loading`) from one that never
+ * committed before `ms` (`NavigationDeadlineError`).
+ */
+export function navigationProgressDeadline(
+  work: Promise<void>,
+  isCommitted: () => boolean,
+  ms = NAVIGATION_DEADLINE_MS,
+): Promise<NavigationOutcome> {
+  let timer: ReturnType<typeof setTimeout>
+
+  const deadline = new Promise<NavigationOutcome>((resolve, reject) => {
+    timer = setTimeout(() => {
+      if (isCommitted()) {
+        resolve("still_loading")
+
+        return
+      }
+
+      reject(new NavigationDeadlineError())
+    }, ms)
+  })
+
+  return Promise.race([work.then((): NavigationOutcome => "completed"), deadline]).finally(() => clearTimeout(timer))
+}

@@ -2,6 +2,7 @@
 
 use crate::bind;
 use crate::keymap::{KeymapLayer, TuiKeymap};
+use crate::scroll;
 use crate::theme::{Surface, Theme};
 use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
@@ -83,6 +84,8 @@ struct Inner {
     layer: RefCell<Option<Disposer>>,
     focus: RefCell<Option<AnyWidget>>,
     dismiss: Cell<bool>,
+    /// The wheel step of every dialog's scroll areas.
+    scroll: scroll::Live,
     /// A rebuild in the new theme is queued.
     restyle: Cell<bool>,
     rebuilding: Cell<bool>,
@@ -122,6 +125,7 @@ impl Dialogs {
             layer: RefCell::new(None),
             focus: RefCell::new(None),
             dismiss: Cell::new(false),
+            scroll: scroll::Live::new(scroll::Config::default()),
             restyle: Cell::new(false),
             rebuilding: Cell::new(false),
         }));
@@ -398,6 +402,11 @@ impl Dialogs {
         self.layout_frame();
     }
 
+    /// `scroll.speed` and `scroll.acceleration` for dialog scroll areas: a change reaches the open dialog's boxes.
+    pub fn set_scroll(&self, config: scroll::Config) {
+        self.0.scroll.set(config);
+    }
+
     /// The page theme. The open dialog is built again in it after the current event, which may be a key the dialog
     /// is still handling (TS restyles in place).
     pub fn set_theme(&self, theme: Theme) {
@@ -464,6 +473,18 @@ impl DialogCx {
         if let Some((x, y)) = self.keep(move || kept.scroll_position()) {
             scroll.scroll_to(x, y);
         }
+    }
+
+    /// A scroll area in this dialog. Its wheel steps follow `scroll.speed`, as TS dialogs' `scrollAcceleration` do.
+    pub fn scroll_box(&self) -> ScrollBox {
+        let scroll = ScrollBox::new(&self.app);
+        self.configure_scroll(&scroll);
+        scroll
+    }
+
+    /// Makes a scroll area made before this build, such as one kept across rebuilds, follow `scroll.speed`.
+    pub fn configure_scroll(&self, scroll: &ScrollBox) {
+        self.dialogs.0.scroll.apply(scroll);
     }
 
     /// Whether this build replaces one in an older theme, so the state it would set up at opening is kept instead.

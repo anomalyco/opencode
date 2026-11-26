@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test"
-import { questionKey, type QuestionKeyZone } from "./question-keys"
+import { questionEnter, questionKey, type QuestionKeyZone, type QuestionSubmitKey } from "./question-keys"
 
 const press = (
   key: string,
@@ -13,6 +13,7 @@ const press = (
     shift?: boolean
     composing?: boolean
     keyCode?: number
+    submit?: QuestionSubmitKey
   } = {},
 ) =>
   questionKey(
@@ -26,7 +27,12 @@ const press = (
       isComposing: options.composing ?? false,
       keyCode: options.keyCode ?? 0,
     },
-    { mac: options.mac ?? true, zone: options.zone ?? "option", count: options.count ?? 3 },
+    {
+      mac: options.mac ?? true,
+      zone: options.zone ?? "option",
+      count: options.count ?? 3,
+      submit: options.submit ?? "enter",
+    },
   )
 
 describe("questionKey", () => {
@@ -88,9 +94,22 @@ describe("questionKey", () => {
     expect(press("Enter")).toEqual({ type: "commit" })
     expect(press("Enter", { zone: "custom" })).toEqual({ type: "commit" })
     expect(press("Enter", { repeat: true })).toEqual({ type: "swallow" })
-    expect(press("Enter", { shift: true })).toEqual({ type: "none" })
     expect(press("Enter", { zone: "input" })).toEqual({ type: "none" })
     expect(press("Enter", { zone: "other" })).toEqual({ type: "none" })
+  })
+
+  test("Shift+Enter marks the highlighted answer without moving on", () => {
+    expect(press("Enter", { shift: true })).toEqual({ type: "activate" })
+    expect(press("Enter", { shift: true, zone: "custom" })).toEqual({ type: "activate" })
+    expect(press("Enter", { shift: true, repeat: true })).toEqual({ type: "swallow" })
+    expect(press("Enter", { shift: true, zone: "input" })).toEqual({ type: "none" })
+  })
+
+  test("with Cmd/Ctrl+Enter submitting, Enter marks the highlighted answer", () => {
+    expect(press("Enter", { submit: "mod+enter" })).toEqual({ type: "activate" })
+    expect(press("Enter", { submit: "mod+enter", shift: true })).toEqual({ type: "activate" })
+    expect(press("Enter", { submit: "mod+enter", meta: true })).toEqual({ type: "advance" })
+    expect(press("Enter", { submit: "mod+enter", zone: "input" })).toEqual({ type: "none" })
   })
 
   test("typing on the custom answer starts the answer", () => {
@@ -102,5 +121,48 @@ describe("questionKey", () => {
     expect(press("a", { zone: "custom", meta: true })).toEqual({ type: "none" })
     expect(press("a")).toEqual({ type: "none" })
     expect(press("Tab", { zone: "custom" })).toEqual({ type: "none" })
+  })
+})
+
+describe("questionEnter", () => {
+  const enter = (
+    submit: QuestionSubmitKey,
+    keys: { shift?: boolean; meta?: boolean; ctrl?: boolean; alt?: boolean } = {},
+  ) =>
+    questionEnter(
+      {
+        key: "Enter",
+        keyCode: 13,
+        repeat: false,
+        metaKey: keys.meta ?? false,
+        ctrlKey: keys.ctrl ?? false,
+        altKey: keys.alt ?? false,
+        shiftKey: keys.shift ?? false,
+        isComposing: false,
+      },
+      submit,
+    )
+
+  test("Enter submits and Shift+Enter selects by default", () => {
+    expect(enter("enter")).toBe("submit")
+    expect(enter("enter", { shift: true })).toBe("select")
+  })
+
+  test("Enter selects when Cmd/Ctrl+Enter submits", () => {
+    expect(enter("mod+enter")).toBe("select")
+    expect(enter("mod+enter", { shift: true })).toBe("select")
+  })
+
+  test("Cmd/Ctrl+Enter submits either way, and Alt+Enter does nothing", () => {
+    expect(enter("enter", { meta: true })).toBe("submit")
+    expect(enter("mod+enter", { ctrl: true })).toBe("submit")
+    expect(enter("enter", { alt: true })).toBeUndefined()
+  })
+
+  test("other keys and IME confirmations do nothing", () => {
+    const key = { keyCode: 0, repeat: false, metaKey: false, ctrlKey: false, altKey: false, shiftKey: false }
+    expect(questionEnter({ ...key, key: " ", isComposing: false }, "enter")).toBeUndefined()
+    expect(questionEnter({ ...key, key: "Enter", isComposing: true }, "enter")).toBeUndefined()
+    expect(questionEnter({ ...key, key: "Enter", keyCode: 229, isComposing: false }, "enter")).toBeUndefined()
   })
 })

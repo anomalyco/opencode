@@ -1,5 +1,5 @@
 import { expect, jest, test } from "bun:test"
-import { NAVIGATION_DEADLINE_MS, navigationDeadline } from "./navigation-deadline"
+import { NAVIGATION_DEADLINE_MS, navigationDeadline, navigationProgressDeadline } from "./navigation-deadline"
 
 test("a page with no first document fails its waiter before the browser RPC deadline", async () => {
   jest.useFakeTimers()
@@ -20,6 +20,29 @@ test("a page with no first document fails its waiter before the browser RPC dead
     const short = navigationDeadline(never.promise, 300).catch((error: Error) => error.message)
     jest.advanceTimersByTime(300)
     expect(await short).toContain("Reload the tab")
+  } finally {
+    jest.useRealTimers()
+  }
+})
+
+test("navigationProgressDeadline distinguishes committed-but-still-loading from uncommitted no-progress", async () => {
+  jest.useFakeTimers()
+
+  try {
+    // 1. Committed document still loading subresources settles cleanly as still_loading instead of failing.
+    const committedWork = Promise.withResolvers<void>()
+    const stillLoading = navigationProgressDeadline(committedWork.promise, () => true, 300)
+    jest.advanceTimersByTime(300)
+    expect(await stillLoading).toBe("still_loading")
+
+    // 2. Uncommitted navigation (true no-progress) still rejects with NavigationDeadlineError.
+    const hungWork = Promise.withResolvers<void>()
+    const failed = navigationProgressDeadline(hungWork.promise, () => false, 300).catch((error: Error) => error.message)
+    jest.advanceTimersByTime(300)
+    expect(await failed).toContain("Reload the tab")
+
+    // 3. Completed load before deadline resolves as completed.
+    expect(await navigationProgressDeadline(Promise.resolve(), () => true, 300)).toBe("completed")
   } finally {
     jest.useRealTimers()
   }

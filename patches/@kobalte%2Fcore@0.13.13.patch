@@ -162,3 +162,31 @@ index a8fa9b06a97cb3d4d5029fc0c929d78dfdc6edd4..42fb6a330c42eaf0479360cb121c6e2a
          return;
        }
        parentMenuContext?.setPointerGraceIntent(null);
+diff --git a/dist/chunk/3D6FM2PJ.js b/dist/chunk/3D6FM2PJ.js
+--- a/dist/chunk/3D6FM2PJ.js
++++ b/dist/chunk/3D6FM2PJ.js
+@@ -417,6 +417,10 @@
+       return;
+     }
+     const manager = access(mergedProps.selectionManager);
++    // Patched: MenuSubTrigger focuses the first item synchronously; don't overwrite a subsequent keyboard move.
++    if (manager.isFocused() && manager.focusedKey() != null) {
++      return;
++    }
+     const delegate = access(mergedProps.keyboardDelegate);
+     let focusedKey;
+     if (autoFocus === "first") {
+diff --git a/dist/chunk/RFN6X5VH.jsx b/dist/chunk/RFN6X5VH.jsx
+--- a/dist/chunk/RFN6X5VH.jsx
++++ b/dist/chunk/RFN6X5VH.jsx
+@@ -449,6 +449,10 @@
+       return;
+     }
+     const manager = access3(mergedProps.selectionManager);
++    // Patched: MenuSubTrigger focuses the first item synchronously; don't overwrite a subsequent keyboard move.
++    if (manager.isFocused() && manager.focusedKey() != null) {
++      return;
++    }
+     const delegate = access3(mergedProps.keyboardDelegate);
+     let focusedKey;
+     if (autoFocus === "first") {

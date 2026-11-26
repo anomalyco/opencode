@@ -12861,6 +12861,8 @@ pub struct ConfigEntryDocumentInfoExperimental {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub mcp_skills: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub compaction_jobs: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sqlite_fts: Option<bool>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub video_generate: Option<ConfigEntryDocumentInfoExperimentalVideoGenerate>,

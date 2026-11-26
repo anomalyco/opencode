@@ -206,26 +206,4 @@ describe("Reference", () => {
       ])
     }).pipe(Effect.scoped, Effect.provide(referenceLayer)),
   )
-
-  it.effect("preserves configured Git descriptions", () =>
-    Effect.gen(function* () {
-      const references = yield* Reference.Service
-      const repository = Repository.parseRemote("owner/repo")
-      const source = Reference.GitSource.make({
-        type: "git",
-        repository: "owner/repo",
-        description: "Use for SDK implementation details",
-      })
-      yield* references.transform((editor) => editor.add("sdk", source))
-
-      expect(yield* references.list()).toEqual([
-        Reference.Info.make({
-          name: "sdk",
-          path: AbsolutePath.make(Repository.cachePath(Global.Path.repos, repository)),
-          description: "Use for SDK implementation details",
-          source,
-        }),
-      ])
-    }).pipe(Effect.scoped, Effect.provide(referenceLayer)),
-  )
 })

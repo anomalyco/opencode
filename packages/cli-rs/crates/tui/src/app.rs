@@ -521,6 +521,7 @@ pub fn mount_with(app: &App, deps: Deps, args: Args) -> Rc<Tui> {
     app.root().add(&shell);
     let toasts = Toasts::new(app, page.clone(), &shell);
     let dialogs = Dialogs::new(app, keymap.clone(), page.clone());
+    dialogs.set_scroll(crate::dialogs::scroll_config(&deps.config.info));
     let plugin_overlays = View::new(app)
         .absolute()
         .z_index(2500)

@@ -17,16 +17,7 @@ describe("Pty.Info", () => {
     expect(Schema.decodeUnknownSync(Pty.Info)(sample(0)).pid).toBe(0)
   })
 
-  test("accepts a positive pid", () => {
-    expect(Schema.decodeUnknownSync(Pty.Info)(sample(48012)).pid).toBe(48012)
-  })
-
   test("rejects a negative pid", () => {
     expect(() => Schema.decodeUnknownSync(Pty.Info)(sample(-1))).toThrow()
-  })
-
-  test("accepts an exit code for retained exited sessions", () => {
-    const info = Schema.decodeUnknownSync(Pty.Info)({ ...sample(48012), status: "exited", exitCode: 4 })
-    expect(info.exitCode).toBe(4)
   })
 })

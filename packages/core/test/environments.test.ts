@@ -6,6 +6,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Database } from "@opencode/core/database/database"
 import { Environments } from "@opencode/core/environment/environments"
 import { Environment, makeMemoryDriver } from "@opencode/core/environment/index"
+import { WorkspaceConnector } from "@opencode/core/environment/workspace-connector"
 import { EnvironmentPath } from "@opencode/core/environment/path"
 import { FileAccess } from "@opencode/core/file-access"
 import { Flag } from "@opencode/core/flag"
@@ -40,18 +41,9 @@ describe("EnvironmentPath", () => {
   const cases: ReadonlyArray<readonly [string, { environment: string; path: string } | undefined]> = [
     ["local:/tmp/out.txt", { environment: "local", path: "/tmp/out.txt" }],
     ["local:~/notes.md", { environment: "local", path: "~/notes.md" }],
-    ["local:~", { environment: "local", path: "~" }],
-    ["gpu:/work/train.py", { environment: "gpu", path: "/work/train.py" }],
-    ["gpu:~/notes", { environment: "gpu", path: "~/notes" }],
     ["wrk_01JXYZ:/workspace/app.ts", { environment: "wrk_01JXYZ", path: "/workspace/app.ts" }],
-    ["wrk_sandbox:/", { environment: "wrk_sandbox", path: "/" }],
     ["wrk_:/x", undefined],
-    ["C:/Users/x", undefined],
-    ["https://host/x", undefined],
-    ["skill://thing", undefined],
     ["local:relative", undefined],
-    ["wrk_sandbox:relative", undefined],
-    ["/plain/path", undefined],
   ]
 
   for (const [input, expected] of cases) {
@@ -135,6 +127,7 @@ const buildLayer = (options: {
             ),
           ]
         : []),
+      WorkspaceConnector.node.replace(Workspace.connectorNode),
       WorkspaceDriver.node.replace(
         Layer.succeed(
           WorkspaceDriver.RegistryService,

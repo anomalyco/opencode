@@ -247,6 +247,7 @@ import type {
   ExperimentalPersistentPtyRemoveOutput,
   ExperimentalPersistentPtyConnectTokenInput,
   ExperimentalPersistentPtyConnectTokenOutput,
+  ExperimentalBrowserTunnelOutput,
   ExperimentalAutomationCreateInput,
   ExperimentalAutomationCreateOutput,
   ExperimentalAutomationListInput,
@@ -341,6 +342,8 @@ import type {
   WebsearchQueryOutput,
   ExperimentalUsageLimitsInput,
   ExperimentalUsageLimitsOutput,
+  ExperimentalFlagGetInput,
+  ExperimentalFlagGetOutput,
   ConfigGetInput,
   ConfigGetOutput,
   ConfigShellsOutput,
@@ -1641,6 +1644,9 @@ const EndpointExperimentalPersistentPtyConnectToken =
       ),
     )
 
+const EndpointExperimentalBrowserTunnel = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalBrowserTunnelOutput>()(raw["browser.tunnel"]({}).pipe(Effect.mapError(mapClientError)))
+
 const EndpointExperimentalAutomationCreate =
   (raw: RawClient["server.experimental"]) => (input: ExperimentalAutomationCreateInput) =>
     preserveEffect<ExperimentalAutomationCreateOutput>()(
@@ -1908,6 +1914,7 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     remove: EndpointExperimentalPersistentPtyRemove(raw),
     connectToken: EndpointExperimentalPersistentPtyConnectToken(raw),
   },
+  browser: { tunnel: EndpointExperimentalBrowserTunnel(raw) },
   automation: {
     create: EndpointExperimentalAutomationCreate(raw),
     list: EndpointExperimentalAutomationList(raw),
@@ -2138,6 +2145,13 @@ const adaptGroupExperimentalUsage = (raw: RawClient["server.usage"]) => ({
   limits: EndpointExperimentalUsageLimits(raw),
 })
 
+const EndpointExperimentalFlagGet = (raw: RawClient["server.flag"]) => (input?: ExperimentalFlagGetInput) =>
+  preserveEffect<ExperimentalFlagGetOutput>()(
+    raw["experimental.flag.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
+  )
+
+const adaptGroupExperimentalFlag = (raw: RawClient["server.flag"]) => ({ get: EndpointExperimentalFlagGet(raw) })
+
 const EndpointConfigGet = (raw: RawClient["server.config"]) => (input?: ConfigGetInput) =>
   preserveEffect<ConfigGetOutput>()(
     raw["config.get"]({ query: { location: input?.["location"] } }).pipe(Effect.mapError(mapClientError)),
@@ -2177,6 +2191,7 @@ const adaptClient = (raw: RawClient) => {
       file: adaptGroupExperimentalFile(raw["server.fs"]),
       migration: adaptGroupExperimentalMigration(raw["server.migration"]),
       usage: adaptGroupExperimentalUsage(raw["server.usage"]),
+      flag: adaptGroupExperimentalFlag(raw["server.flag"]),
       config: adaptGroupExperimentalConfig(raw["server.config"]),
     },
     message: adaptGroupMessage(raw["server.message"]),
