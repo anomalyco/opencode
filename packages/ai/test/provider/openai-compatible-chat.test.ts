@@ -647,6 +647,28 @@ describe("OpenAI-compatible Chat route", () => {
     }),
   )
 
+  it.effect("surfaces a string streaming error without dropping earlier text", () =>
+    Effect.gen(function* () {
+      const error = yield* LLMClient.generate(request).pipe(
+        Effect.provide(
+          fixedResponse(
+            sseEvents(deltaChunk({ role: "assistant", content: "Hel" }), {
+              error: "upstream overloaded, please retry",
+            }),
+          ),
+        ),
+        Effect.flip,
+      )
+
+      expect(error.partial?.text).toBe("Hel")
+      expect(error).toMatchObject({
+        reason: { _tag: "ProviderInternal" },
+        message: "upstream overloaded, please retry",
+      })
+      expect(decodeJson(error.reason.body ?? "")).toEqual({ error: "upstream overloaded, please retry" })
+    }),
+  )
+
   it.effect("preserves content-filter finishes in the common reason algebra", () =>
     Effect.gen(function* () {
       const filtered = yield* LLMClient.generate(request).pipe(

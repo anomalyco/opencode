@@ -342,7 +342,8 @@ export const OpenAIChatEvent = Schema.StructWithRest(
   Schema.Struct({
     choices: optionalNull(Schema.Array(OpenAIChatChoice)),
     usage: optionalNull(OpenAIChatUsage),
-    error: optionalNull(OpenAIChatError),
+    // Some OpenAI-compatible servers send `error` as plain text instead of `{ message }`.
+    error: optionalNull(Schema.Union([OpenAIChatError, Schema.String])),
   }),
   [Schema.Record(Schema.String, Schema.Unknown)],
 )
@@ -1122,6 +1123,13 @@ const reasoningMetadata = (
 
 const step = (state: ParserState, event: OpenAIChatEvent) =>
   Effect.gen(function* () {
+    if (typeof event.error === "string")
+      return yield* new AIError({
+        reason: classifyProviderFailure({
+          message: event.error,
+          rawBody: ProviderShared.encodeJson(event),
+        }),
+      })
     if (event.error) {
       const body = ProviderShared.encodeJson(event)
       return yield* new AIError({
