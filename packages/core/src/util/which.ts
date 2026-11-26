@@ -32,6 +32,14 @@ function appExecutionAlias(cmd: string, search: string | undefined) {
       .split(path.win32.delimiter)
       .filter(Boolean)
       .map((dir) => path.win32.join(dir.replace(/^"(.*)"$/, "$1"), name))
-      .find(isAppExecutionAlias) ?? null
+      .find((file) => {
+        // A PATH entry can be an alias file itself, and lstat of a name under it fails with EACCES; that is a
+        // nonmatch, not a reason for the lookup to throw.
+        try {
+          return isAppExecutionAlias(file)
+        } catch {
+          return false
+        }
+      }) ?? null
   )
 }

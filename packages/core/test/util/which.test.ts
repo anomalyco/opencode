@@ -86,6 +86,16 @@ describe("util.which", () => {
     same(which(path.parse(alias!.name).name, env(alias!.dir)), alias!.file)
   })
 
+  // A PATH entry can be the alias file instead of its folder.
+  test.skipIf(!alias)("ignores a PATH entry that is an alias file", () => {
+    expect(which("pwsh", env(alias!.file))).toBeNull()
+  })
+
+  // The failing entry must not stop the search: the alias after it is still found.
+  test.skipIf(!alias)("finds a Microsoft Store app execution alias after an alias file on PATH", () => {
+    same(which(path.parse(alias!.name).name, env([alias!.file, alias!.dir].join(path.delimiter))), alias!.file)
+  })
+
   test("uses Windows Path casing fallback", async () => {
     if (process.platform !== "win32") return
 
