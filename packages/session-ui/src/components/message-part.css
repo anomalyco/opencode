@@ -2254,5 +2254,10 @@
         line-height: var(--line-height-compact);
       }
     }
+
+    /* The title's row holds the gap below its text, so the View code button sits at its top, centred on the text. */
+    > [data-slot="basic-tool-action"] {
+      align-self: flex-start;
+    }
   }
 }
