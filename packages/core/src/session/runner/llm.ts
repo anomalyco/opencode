@@ -5,6 +5,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
 import { Bus } from "../../bus.js"
+import { CodeModeAgents } from "../../codemode/agents.js"
 import { Environment } from "../../environment/index.js"
 import { Flag } from "../../flag.js"
 import { LocationLifecycle } from "../../location-lifecycle.js"
@@ -48,6 +49,7 @@ const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const bus = yield* Bus.Service
+    const flags = yield* Flag.Service
     const lifecycle = yield* LocationLifecycle.Service
     const store = yield* SessionStore.Service
     const context = yield* SessionContext.Service
@@ -197,10 +199,7 @@ const layer = Layer.effect(
               const ready = yield* restore(
                 Effect.gen(function* () {
                   const selected = yield* prepareContext(sessionID)
-                  const promoted = yield* inbox.promote(
-                    sessionID,
-                    entering && !continuing ? promotable : "steer",
-                  )
+                  const promoted = yield* inbox.promote(sessionID, entering && !continuing ? promotable : "steer")
                   // A control admitted during context preparation owns this boundary.
                   if (promoted === undefined) return undefined
                   if (promoted > 0 && !selected.session.parentID && SessionTitle.isUntitled(selected.session))
@@ -297,6 +296,11 @@ const layer = Layer.effect(
             })),
           )
         const activeCwd = yield* cwd.current(sessionID)
+        const endsTurnTool =
+          (yield* flags.enabled("codemode_agents")) &&
+          CodeModeAgents.sessionMarker(loaded.session.id, loaded.session.metadata)?.structured === true
+            ? CodeModeAgents.OUTPUT_TOOL
+            : undefined
         const outcome = yield* steps
           .attempt({
             isLocationClosed: lifecycle.isClosed,
@@ -311,6 +315,7 @@ const layer = Layer.effect(
               // A tool call can arrive during a reload; its permission check reads the session's agent.
               executeTool: (call) => plugins.awaitActivation.pipe(Effect.andThen(prepared.executeTool(call))),
             },
+            ...(endsTurnTool === undefined ? {} : { endsTurnTool }),
             retryAttempt,
             retry: (cause, error, proposed) =>
               retry.decide({

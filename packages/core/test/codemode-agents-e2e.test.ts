@@ -1,6 +1,6 @@
 import { describe, expect } from "bun:test"
 import path from "path"
-import { LanguageModel } from "@opencode/ai/effect"
+import { AIError, InvalidRequestError, LanguageModel } from "@opencode/ai/effect"
 import type { LLMClientService, LLMRequest } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { TestLLM } from "@opencode/ai/testing"
@@ -107,7 +107,7 @@ const modelLayer = Layer.succeed(
   }),
 )
 
-type Response = ReturnType<typeof TestLLM.text>
+type Response = TestLLM.Response
 
 const script = (responses: Record<string, ReadonlyArray<Response>>) => {
   const queues = new Map(Object.entries(responses).map(([agent, queue]) => [agent, [...queue]]))
@@ -301,6 +301,30 @@ describe("llm()", () => {
       expect(calls[0]?.messages).toHaveLength(1)
       expect(text(calls[0]!)).not.toContain("Run the script")
       expect(text(calls[1]!)).toContain("did not match the required schema")
+    }),
+  )
+
+  e2e.live("falls back to toolChoice auto when a provider rejects named tool_choice", () =>
+    Effect.gen(function* () {
+      const h = yield* harness()
+      const result = yield* h.run(
+        `return await llm("Say ok", { schema: { type: "object", properties: { ok: { type: "boolean" } }, required: ["ok"] } })`,
+        {
+          build: [
+            TestLLM.failAfter(
+              new AIError({
+                reason: new InvalidRequestError({ message: "Only tool_choice: auto is supported by this gateway" }),
+              }),
+            ),
+            TestLLM.toolCall("call-auto", "respond", { ok: true }),
+          ],
+        },
+      )
+      expect(JSON.parse(result)).toEqual({ ok: true })
+      const calls = (yield* h.llm.requests()).filter((request) => toolNames(request).includes("respond"))
+      expect(calls).toHaveLength(2)
+      expect(calls[0]?.toolChoice?.type).toBe("tool")
+      expect(calls[1]?.toolChoice?.type).toBe("auto")
     }),
   )
 })

@@ -24,7 +24,7 @@ import { resolveModelRef } from "./subagent.js"
 import skillContent from "./codemode-agents.md" with { type: "text" }
 
 /** The tool an agent() child with a schema returns its result through. Only those children see it. */
-export const OUTPUT_TOOL = "structured_output"
+export const OUTPUT_TOOL = CodeModeAgents.OUTPUT_TOOL
 
 const DEFAULT_AGENT = "general"
 const LLM_ATTEMPTS = 3
@@ -78,10 +78,7 @@ export const Plugin = {
                 return yield* new ToolFailure({
                   message: `The result does not match the required schema:\n${checked.failure}\n\nCall ${OUTPUT_TOOL} again with a corrected result.`,
                 })
-              return {
-                content: "Result recorded and returned to the script.",
-                metadata: { endsTurn: true },
-              }
+              return { content: "Result recorded and returned to the script." }
             }),
         }),
       )

@@ -126,7 +126,7 @@ Wait for every result first only when the next step needs all of them, such as d
 
 ## Rules of thumb
 
-- Put scouting, per-item pipelining, and writing final files (`Bun.write`) in one `execute` call instead of bouncing intermediate results back to the main session between turns.
+- Put scouting, per-item pipelining, and writing final files in one `execute` call instead of bouncing intermediate results back to the main session between turns.
 - Keep each agent's task small and specific, with a clear result. One agent per file or per finding beats one agent for everything.
 - Agents that edit files at the same time can overwrite each other. Give them separate files, or have them return changes and apply them yourself.
 - Return the summary the user needs from the script, not every raw result: the script's return value is what you read next.

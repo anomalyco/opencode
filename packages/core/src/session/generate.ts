@@ -1,7 +1,7 @@
 export * as SessionGenerate from "./generate.js"
 
 import type { FileSystem } from "../filesystem.js"
-import { LLMClient, Message, SystemPart, type AIError } from "@opencode/ai/effect"
+import { AIError, LLMClient, Message, SystemPart, ToolChoice } from "@opencode/ai/effect"
 import { Effect, type JsonSchema } from "effect"
 import { Agent } from "../agent.js"
 import { Bus } from "../bus.js"
@@ -122,13 +122,42 @@ export const generate = Effect.fn("SessionGenerate.generate")(function* (input: 
       providerID: prepared.model.ref.providerID,
       modelID: prepared.model.ref.id,
     })
-    const response = yield* llm.generate(prepared.prepared.request, prepared.prepared.options).pipe(ModelRetry.retry)
+    const send = llm.generate(prepared.prepared.request, prepared.prepared.options).pipe(ModelRetry.retry)
+    // Providers or gateways that only accept tool_choice: "auto" reject named toolChoice (#45953). Fall back once to
+    // "auto" with only the output tool offered, nudging the model to call it.
+    const response = yield* input.output === undefined
+      ? send
+      : send.pipe(
+          Effect.catchIf(isToolChoiceRejected, () =>
+            llm
+              .generate(
+                {
+                  ...prepared.prepared.request,
+                  toolChoice: new ToolChoice({ type: "auto" }),
+                  system: [
+                    ...prepared.prepared.request.system,
+                    SystemPart.make(`Return your answer by calling the \`${OUTPUT_TOOL}\` tool.`),
+                  ],
+                },
+                prepared.prepared.options,
+              )
+              .pipe(ModelRetry.retry),
+          ),
+        )
     const usage = SessionUsage.record(response.usage, prepared.model.cost)
     yield* bus.publish(SessionEvent.UsageRecorded, { sessionID: prepared.session.id, source: "generate", ...usage })
     const call = input.output === undefined ? undefined : response.toolCalls.find((item) => item.name === OUTPUT_TOOL)
     return { text: response.text, ...(call === undefined ? {} : { output: call.input }), ...usage }
   }).pipe(instances.provide(input.session))
 })
+
+const isToolChoiceRejected = (error: unknown): error is AIError => {
+  if (!(error instanceof AIError)) return false
+  if (error.reason._tag === "UnsupportedOperation") return true
+  if (error.reason._tag !== "InvalidRequest") return false
+  if (error.reason.parameter === "tool_choice" || error.reason.parameter === "toolChoice") return true
+  return /tool[_ ]?choice/i.test(`${error.reason.message}\n${error.reason.body ?? ""}`)
+}
 
 // Only the output tool, so the model has nothing else to call; the forced choice makes it answer through it.
 const outputTools = (schema: JsonSchema.JsonSchema): Snapshot => ({

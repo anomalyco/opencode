@@ -22,6 +22,9 @@ import { CodeModeExecution } from "./execution.js"
 /** Key stored in a child session's metadata when started by Code Mode's `agent()`. */
 export const METADATA_KEY = "codemodeAgent"
 
+/** The tool an `agent()` child with a schema returns its result through. Only those children see it. */
+export const OUTPUT_TOOL = "structured_output"
+
 export interface SessionMarker {
   readonly childID: string
   readonly structured: boolean
@@ -129,7 +132,7 @@ Scripts you run with \`execute\` also have these globals:
 - \`await agent(prompt, { schema?, agent?, model?, effort?, label?, retries? })\` starts a subagent (default \`"general"\`, use \`"explore"\` for read-only work) in its own child session, waits for it, and returns its final text — or a value checked against \`schema\` (a JSON Schema object).
 - \`await llm(prompt, { schema?, system?, model?, effort?, label?, retries? })\` makes one fast model call with no tools and no history (defaults to low reasoning effort). Use it whenever the script already has the text to classify, extract, summarize or verify.
 
-For speed, put scouting, per-item pipelining (\`Promise.all(items.map(async (item) => { const a = await ...; const b = a.flagged ? await ... : null; return ... }))\`), and writing final files (\`Bun.write\`) in ONE \`execute\` call instead of bouncing intermediate results back to the main session between turns. Read small shared files once in the script and include them in prompts instead of having every worker re-read them. Pass \`effort: "low"\` to \`agent()\` for mechanical stages; omit or pass \`"high"\` for harder reasoning. Up to ${LIMITS.agentConcurrency} agents and ${LIMITS.llmConcurrency} \`llm()\` calls run at once (caps: ${LIMITS.agentTotal} agents, ${LIMITS.llmTotal} \`llm()\`); after any usage/rate limit, no more calls start.
+For speed, put scouting, per-item pipelining (\`Promise.all(items.map(async (item) => { const a = await ...; const b = a.flagged ? await ... : null; return ... }))\`), and writing final files in ONE \`execute\` call instead of bouncing intermediate results back to the main session between turns. Read small shared files once in the script and include them in prompts instead of having every worker re-read them. Pass \`effort: "low"\` to \`agent()\` for mechanical stages; omit or pass \`"high"\` for harder reasoning. Up to ${LIMITS.agentConcurrency} agents and ${LIMITS.llmConcurrency} \`llm()\` calls run at once (caps: ${LIMITS.agentTotal} agents, ${LIMITS.llmTotal} \`llm()\`); after any usage/rate limit, no more calls start.
 
 Each \`agent()\` is a full subagent run. Start agents only when the user asks for parallel agents, multi-agent work or a workflow; otherwise describe what a script would do and ask. Load the \`codemode-agents\` skill only if you need advanced multi-stage patterns.`
 
