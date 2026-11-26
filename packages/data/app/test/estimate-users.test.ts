@@ -46,6 +46,23 @@ describe("estimateUsersSinceLaunch", () => {
     expect(users).toBeLessThanOrEqual(185_512)
   })
 
+  // LongCat-2.5 on opencode.ai/data at 2026-11-26: two users the week before real usage began.
+  test("keeps a near-empty early week from deciding the fit", () => {
+    const daily = [
+      1, 0, 0, 0, 1, 0, 0, 3000, 6500, 6500, 5900, 6100, 5500, 5300, 5700, 5800, 5800, 5800, 6200, 5600, 4400,
+    ].map((users, index) => ({ date: new Date(Date.UTC(2026, 10, 2 + index)).toISOString().slice(0, 10), users }))
+    const weekly = [
+      { week: "2026-11-02", users: 1 },
+      { week: "2026-11-09", users: 23000 },
+      { week: "2026-11-16", users: 23000 },
+    ]
+
+    const users = estimateUsersSinceLaunch({ daily, weekly, firstSeen: "2026-11-02", launch: "2026-11-02" })
+
+    expect(users).toBeGreaterThan(30_000)
+    expect(users).toBeLessThan(40_000)
+  })
+
   test("adds up the weeks when no week lines up with the days", () => {
     expect(estimateUsersSinceLaunch({ ...hy4, daily: [] })).toBe(185_512)
     expect(estimateUsersSinceLaunch({ ...hy4, firstSeen: "2026-11-01", daily: hy4.daily.slice(2) })).not.toBeNaN()
