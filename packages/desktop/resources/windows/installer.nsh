@@ -233,7 +233,7 @@
     StrCpy $R1 "${STAGED_PACKAGE_HASH}" 16
     ${If} ${FileExists} "$INSTDIR.update-$R1\${APP_EXECUTABLE_FILENAME}"
       !ifmacrodef setInstallStatus
-        !insertmacro setInstallStatus "Applying staged update..."
+        !insertmacro setInstallStatus "$(applyingStaged)"
       !endif
       SetOutPath $PLUGINSDIR
       ; Removes the directory only while it is empty, so the rename never mixes two versions.
