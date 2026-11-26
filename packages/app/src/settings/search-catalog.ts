@@ -12,7 +12,7 @@ type Entry<Tab> = {
   description?: Label
   section?: Label
   subtab?: "mcps" | "plugins" | "skills" | "lsps"
-  available?: "desktop" | "browser" | "mobile"
+  available?: "desktop" | "linux" | "browser" | "mobile"
 }
 
 export const clientSettings: Entry<SettingsRootTab>[] = [
@@ -81,6 +81,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     target: "settings-spellcheck",
     keywords: "spelling spell check dictionary",
     available: "desktop",
+  },
+  {
+    tab: "general",
+    label: "settings.general.row.smoothScrolling.title",
+    target: "settings-smooth-scrolling",
+    keywords: "scroll wheel mouse animation smooth",
+    available: "linux",
   },
   {
     tab: "general",
