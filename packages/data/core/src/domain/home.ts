@@ -1328,7 +1328,7 @@ function formatDay(value: number) {
   return `${months[date.getUTCMonth()]} ${date.getUTCDate()}`
 }
 
-const knownProviders = new Map<string, string>([
+const knownProviders = new Map([
   ["anthropic", "Anthropic"],
   ["deepseek", "DeepSeek"],
   ["google", "Google"],
@@ -1399,7 +1399,7 @@ function modelKey(provider: string, model: string) {
   return `${provider}\u0000${model}`
 }
 
-const providerSlugAliases = new Map<string, string>([
+const providerSlugAliases = new Map([
   ["alibaba", "qwen"],
   ["moonshotai", "moonshot"],
   ["qwen", "qwen"],

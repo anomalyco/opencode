@@ -92,17 +92,22 @@ describe("revealed model pages", () => {
       models: { "alibaba/qwen-3": { id: "alibaba/qwen-3", name: "Qwen 3" } },
     })
 
-    ;["__proto__", "constructor", "toString", "valueOf", "hasOwnProperty"].forEach((key) => {
-      expect(findModelCatalogEntry(catalog, key, "alibaba")).toBeUndefined()
-      expect(findModelCatalogEntry(catalog, key, key)).toBeUndefined()
-      expect(findModelCatalogLab(catalog, key)).toBeUndefined()
-      expect(typeof formatCatalogLabName(key)).toBe("string")
-      expect(typeof catalogLabPath(key)).toBe("string")
-      expect(formerModelName(key)).toBeUndefined()
-      expect(typeof providerIconId(key)).toBe("string")
+    const cases = [
+      { key: "__proto__", name: "  Proto  ", path: "/data/proto", icon: "proto" },
+      { key: "constructor", name: "Constructor", path: "/data/constructor", icon: "constructor" },
+      { key: "toString", name: "ToString", path: "/data/tostring", icon: "tostring" },
+      { key: "valueOf", name: "ValueOf", path: "/data/valueof", icon: "valueof" },
+      { key: "hasOwnProperty", name: "HasOwnProperty", path: "/data/hasownproperty", icon: "hasownproperty" },
+    ] as const
+
+    cases.forEach((entry) => {
+      expect(findModelCatalogEntry(catalog, entry.key, "alibaba")).toBeUndefined()
+      expect(findModelCatalogEntry(catalog, entry.key, entry.key)).toBeUndefined()
+      expect(findModelCatalogLab(catalog, entry.key)).toBeUndefined()
+      expect(formatCatalogLabName(entry.key)).toBe(entry.name)
+      expect(catalogLabPath(entry.key)).toBe(entry.path)
+      expect(formerModelName(entry.key)).toBeUndefined()
+      expect(providerIconId(entry.key)).toBe(entry.icon)
     })
-    expect(formatCatalogLabName("constructor")).toBe("Constructor")
-    expect(catalogLabPath("constructor")).toBe("/data/constructor")
-    expect(providerIconId("constructor")).toBe("constructor")
   })
 })

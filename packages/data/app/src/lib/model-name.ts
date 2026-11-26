@@ -3,7 +3,7 @@ import { statModel } from "@opencode/data-core/domain/model-normalization"
 const glmFlashModel = "glm-5.3-flash"
 
 // The stealth name a model was served under before its release, shown on its page as "Formerly …".
-const formerNames = new Map<string, string>([
+const formerNames = new Map([
   [glmFlashModel, "ox-alpha"],
   ["muse-ember-1.0", "crouton-alpha"],
 ])

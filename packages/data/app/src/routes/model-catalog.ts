@@ -130,7 +130,7 @@ export function modelPagePath(catalog: ModelCatalog, lab: string, model: string)
   return `/data/${catalogSlug(lab)}/${catalogSlug(model)}`
 }
 
-const knownCatalogLabNames = new Map<string, string>([
+const knownCatalogLabNames = new Map([
   ["ai21", "AI21"],
   ["aisingapore", "AI Singapore"],
   ["alibaba", "Alibaba"],
@@ -481,7 +481,7 @@ function catalogIdKey(value: string) {
   return value.split("/").map(catalogSlug).join("/")
 }
 
-const catalogLabSlugAliases = new Map<string, string>([
+const catalogLabSlugAliases = new Map([
   ["moonshot", "moonshotai"],
   ["qwen", "alibaba"],
   ["zhipu", "zhipuai"],

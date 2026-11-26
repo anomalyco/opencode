@@ -11,7 +11,7 @@ export function hasProviderIcon(lab: string) {
   return iconNames.includes(providerIconId(lab) as IconName)
 }
 
-const aliases = new Map<string, string>([
+const aliases = new Map([
   ["moonshot", "moonshotai"],
   ["qwen", "alibaba"],
   ["zhipu", "zhipuai"],
