@@ -71,9 +71,8 @@ export function parseDelimited(text: string, delimiter: string, limit = 1000) {
       continue
     }
 
-    if (char === "\r") continue
-
-    if (char === "\n") {
+    if (char === "\r" || char === "\n") {
+      if (char === "\r" && text[index + 1] === "\n") index++
       endRow()
       continue
     }
