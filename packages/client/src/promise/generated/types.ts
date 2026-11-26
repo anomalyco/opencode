@@ -2775,6 +2775,7 @@ export type ConfigEntry =
           recommended_api?: boolean
           full_codemode?: boolean
           codemode_agents?: boolean
+          codemode_tools?: boolean
           machines?: boolean
           home_memory?: boolean
           project_overlay?: boolean

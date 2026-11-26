@@ -102,7 +102,9 @@ import { ShellTool } from "../tool/plugin/shell.js"
 import { SkillTool } from "../tool/plugin/skill.js"
 import { SubagentTool } from "../tool/plugin/subagent.js"
 import { CodeModeAgentsPlugin } from "../tool/plugin/codemode-agents.js"
+import { CodeModeToolsPlugin } from "../tool/plugin/codemode-tools.js"
 import { CodeModeAgents } from "../codemode/agents.js"
+import { CodeModeApi } from "../codemode/api.js"
 import { TodoTool } from "../tool/plugin/todo.js"
 import { Tool } from "../tool.js"
 import { ToolOutput } from "../tool-output.js"
@@ -146,6 +148,7 @@ const services = [
   BrowserTunnelGateway.Service,
   BlobStore.Service,
   CodeModeAgents.Service,
+  CodeModeApi.Service,
   Provider.Service,
   Model.Service,
   Command.Service,
@@ -212,6 +215,7 @@ export const requirements = LayerNode.group([
   BrowserTunnelGateway.node,
   BlobStore.node,
   CodeModeAgents.node,
+  CodeModeApi.node,
   Provider.node,
   Model.node,
   Command.node,
@@ -327,6 +331,7 @@ const post = [
   ConfigAgentPlugin.Plugin,
   BrowserPlugin,
   ConfigCommandPlugin.Plugin,
+  CodeModeToolsPlugin.Plugin,
   ConfigCompactionPlugin.Plugin,
   ConfigFormatterPlugin.Plugin,
   ConfigImagePlugin.Plugin,

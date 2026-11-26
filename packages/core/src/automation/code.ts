@@ -4,6 +4,7 @@ import { CodeMode } from "@opencode/codemode"
 import { Automation } from "@opencode/schema/automation"
 import { Array, Effect, Option, Result, Schema } from "effect"
 import { Agent } from "../agent.js"
+import { CodeModeCustomTool } from "../codemode/custom-tool.js"
 import { CodeModeTool } from "../codemode/tool.js"
 import { Permission } from "../permission.js"
 import { Plugin } from "../plugin/service.js"
@@ -40,6 +41,8 @@ const FORBIDDEN_TOOLS = new Set([
   "automation.resume",
   "automation.delete",
   "opencode.session.move",
+  "opencode.tool.create",
+  "opencode.tool.delete",
 ])
 
 export interface RunInput {
@@ -78,7 +81,9 @@ function scan(code: string) {
 function scanProgram(code: string): Result.Result<ProgramScan, string> {
   const scanned = CodeMode.scanProgram(code, ["fetch", "Bun"], ["slice"])
   if (Result.isFailure(scanned)) return Result.fail(scanned.failure.message)
-  const forbidden = scanned.success.tools.find((path) => FORBIDDEN_TOOLS.has(path))
+  const forbidden = scanned.success.tools.find(
+    (path) => FORBIDDEN_TOOLS.has(path) || path.startsWith(`${CodeModeCustomTool.NAMESPACE}.`),
+  )
   if (forbidden !== undefined) return Result.fail(`Tool ${forbidden} cannot be used inside an automation`)
   return Result.succeed({ tools: scanned.success.tools, actions: extensionActions(scanned.success) })
 }

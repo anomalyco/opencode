@@ -93,6 +93,8 @@ export type ToolDescription = {
 }
 
 const defaultSearchLimit = 10
+// Listing one namespace without a query is a browse, not a search: page 2 costs the model another step.
+const namespaceListLimit = 50
 const PositiveInt = Schema.Int.check(Schema.isGreaterThan(0))
 const NonNegativeInt = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))
 const SearchInput = Schema.Struct({
@@ -467,7 +469,8 @@ const makeSearchTool = (searchIndex: ReadonlyArray<SearchEntry>): Tool => ({
               .filter((entry): entry is SearchEntry => entry !== undefined && inScope(entry))
               .toSorted((left, right) => left.position - right.position)[0]
       const ranked = exact !== undefined ? [exact] : rank(scoped, pathQuery, searchIndex)
-      const items = ranked.slice(offset, offset + (request.limit ?? defaultSearchLimit)).map(({ description }) => ({
+      const items = ranked
+        .slice(offset, offset + (request.limit ?? (ns !== undefined && trimmed === "" ? namespaceListLimit : defaultSearchLimit))).map(({ description }) => ({
         ...description,
         path: toolExpression(description.path),
       }))
