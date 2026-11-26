@@ -361,7 +361,12 @@ const schema: Omit<DatabaseMigration.Migration, "id"> = {
       )
       yield* tx.run(`CREATE INDEX \`session_v2_project_idx\` ON \`session_v2\` (\`project_id\`);`)
       yield* tx.run(`CREATE INDEX \`session_v2_workspace_idx\` ON \`session_v2\` (\`workspace_id\`);`)
-      yield* tx.run(`CREATE INDEX \`session_v2_parent_idx\` ON \`session_v2\` (\`parent_id\`);`)
+      yield* tx.run(
+        `CREATE INDEX \`session_v2_parent_updated_idx\` ON \`session_v2\` (\`parent_id\`,\`time_updated\`,\`id\`);`,
+      )
+      yield* tx.run(
+        `CREATE INDEX \`session_v2_directory_updated_idx\` ON \`session_v2\` (\`directory\`,\`time_updated\`,\`id\`);`,
+      )
       yield* tx.run(
         `CREATE INDEX \`session_v2_time_suspended_idx\` ON \`session_v2\` (\`time_suspended\`) WHERE "session_v2"."time_suspended" is not null;`,
       )

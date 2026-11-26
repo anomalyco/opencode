@@ -1,8 +1,8 @@
 {
   "version": "7",
   "dialect": "sqlite",
-  "id": "ea7fb45e-fef3-40b6-8e09-42b781c5bf23",
-  "prevIds": ["6fdb1fc8-74cd-4f15-8faa-e109d3030da9"],
+  "id": "ca58e905-c782-4f55-a786-1cd9dc2ec048",
+  "prevIds": ["ea7fb45e-fef3-40b6-8e09-42b781c5bf23"],
   "ddl": [
     {
       "name": "account_state",
@@ -2786,12 +2786,42 @@
         {
           "value": "parent_id",
           "isExpression": false
+        },
+        {
+          "value": "time_updated",
+          "isExpression": false
+        },
+        {
+          "value": "id",
+          "isExpression": false
         }
       ],
       "isUnique": false,
       "where": null,
       "origin": "manual",
-      "name": "session_v2_parent_idx",
+      "name": "session_v2_parent_updated_idx",
+      "entityType": "indexes",
+      "table": "session_v2"
+    },
+    {
+      "columns": [
+        {
+          "value": "directory",
+          "isExpression": false
+        },
+        {
+          "value": "time_updated",
+          "isExpression": false
+        },
+        {
+          "value": "id",
+          "isExpression": false
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "origin": "manual",
+      "name": "session_v2_directory_updated_idx",
       "entityType": "indexes",
       "table": "session_v2"
     },
