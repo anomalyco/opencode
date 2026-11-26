@@ -1993,7 +1993,6 @@ export type ConfigInfoEncoded = {
         artifacts: boolean?,
         console_watches: boolean?,
         recommended_api: boolean?,
-        model_speeds: boolean?,
         full_codemode: boolean?,
         machines: boolean?,
         home_memory: boolean?,
@@ -3120,7 +3119,7 @@ export type ModelSpeed = {
     faster: boolean,
 }
 
-export type ModelType = (("chat" | "decision" | "image" | "video") | string)
+export type ModelType = (("chat" | "decision" | "image" | "video" | "realtime" | "embedding" | "transcription") | string)
 
 export type ModelUpdated = _Event1<"model.updated", any>
 
@@ -5615,7 +5614,7 @@ export type Client = {
         }?, string?),
         list: (input: {
             location: { directory: string? }?,
-            types: { (("chat" | "decision" | "image" | "video") | string) }?,
+            types: { (("chat" | "decision" | "image" | "video" | "realtime" | "embedding" | "transcription") | string) }?,
         }?) -> ({
             location: LocationPublicRef,
             data: { ModelInfo },

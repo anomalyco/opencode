@@ -60,6 +60,15 @@ export type ReadMediaUrlFn = (uri: string, mime: string, signal?: AbortSignal) =
 
 export type PeekMediaUrlFn = (uri: string, mime: string) => string | undefined
 
+/** A file in the result of a call in a Session, by the call's ID and the file's position in the call's content. */
+export type ToolFileInput = { sessionID: string; callID: string; index: number; mime: string }
+
+/** Reads tool-result files the host keeps without their bytes, one at a time as they show. */
+export type ToolFileSource = {
+  read: (input: ToolFileInput, signal?: AbortSignal) => Promise<string | undefined>
+  peek: (input: ToolFileInput) => string | undefined
+}
+
 export const {
   use: useData,
   provider: DataProvider,
@@ -77,6 +86,7 @@ export const {
     turnDiff?: TurnDiffSource
     readMedia?: ReadMediaUrlFn
     peekMedia?: PeekMediaUrlFn
+    toolFile?: ToolFileSource
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
     /** Resolved feature flags of the session's location, from the server's experimental flag endpoint. */
@@ -111,6 +121,7 @@ export const {
       },
       readMedia: props.readMedia,
       peekMedia: props.peekMedia,
+      toolFile: props.toolFile,
     }
   },
 })

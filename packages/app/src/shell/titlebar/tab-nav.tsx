@@ -15,6 +15,7 @@ import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import type { SessionInfo } from "@opencode/client/promise"
 import { showToast } from "@/shell/notifications/toast"
 import { createSessionExporter } from "@/session/commands/export-session"
+import { SessionCopyMenu } from "@/session/session-copy-menu"
 import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { sessionTabTitle } from "./tab-title"
 import { TabPreviewPopover } from "./tab-popover"
@@ -666,6 +667,10 @@ export function TabNavItem(
               <Menu.Item disabled={!props.session} onSelect={() => startRename("menu")}>
                 {language.t("common.rename")}
               </Menu.Item>
+              <Show when={props.contextMenuExtra}>{(extra) => extra()()}</Show>
+              <SessionReadMenuItem server={props.server} session={props.session} />
+              <Menu.Separator />
+              <SessionCopyMenu server={props.server} session={props.session} />
               <Menu.Item
                 disabled={!props.session || exporter.exporting({ server: props.server, sessionID: props.session.id })}
                 onSelect={() => {
@@ -676,15 +681,6 @@ export function TabNavItem(
               >
                 {language.t("common.export")}…
               </Menu.Item>
-              <SessionReadMenuItem server={props.server} session={props.session} />
-              <Show when={props.contextMenuExtra}>
-                {(extra) => (
-                  <>
-                    <Menu.Separator />
-                    {extra()()}
-                  </>
-                )}
-              </Show>
               <Menu.Separator />
               <TabCloseMenuItems
                 orientation={props.orientation}

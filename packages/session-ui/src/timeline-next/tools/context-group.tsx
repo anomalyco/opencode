@@ -8,6 +8,7 @@ import { BasicTool } from "../../components/basic-tool"
 import {
   currentToolError,
   currentToolGroupedRead,
+  currentToolImages,
   currentToolInput,
   currentToolMetadata,
   currentToolOutput,
@@ -28,6 +29,7 @@ import { toolRule } from "../rules"
 import { sameFileFact, toolStopped } from "../../timeline/facts"
 import { activityLabel, activityText, usedLabel } from "./activity-label"
 import { FileGroup } from "./file-group"
+import { ToolResultImages } from "../../tools/tool-result-images"
 import { ThoughtRow } from "./thought"
 import { ToolDisplay } from "./tool-display"
 
@@ -345,6 +347,10 @@ export function ContextGroup(props: {
               </Index>
             </div>
           </BasicTool>
+          <ToolResultImages
+            images={props.parts.flatMap((part) => (part.type === "tool" ? currentToolImages(part) : []))}
+            onContentRendered={props.onSizeChange}
+          />
         </div>
       </Show>
     </Show>

@@ -12,7 +12,7 @@ type Entry<Tab> = {
   description?: Label
   section?: Label
   subtab?: "mcps" | "plugins" | "skills" | "lsps"
-  available?: "desktop" | "browser" | "mobile"
+  available?: "desktop" | "linux" | "browser" | "mobile"
 }
 
 export const clientSettings: Entry<SettingsRootTab>[] = [
@@ -84,6 +84,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "general",
+    label: "settings.general.row.smoothScrolling.title",
+    target: "settings-smooth-scrolling",
+    keywords: "scroll wheel mouse animation smooth",
+    available: "linux",
+  },
+  {
+    tab: "general",
     label: "settings.general.row.mobileTitlebarBottom.title",
     target: "settings-mobile-titlebar-bottom",
     available: "mobile",
@@ -138,6 +145,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
     target: "settings-new-timeline",
     description: "settings.experimental.row.newTimeline.description",
     keywords: "new timeline redesign activity explored edited ran grouping status",
+  },
+  {
+    tab: "experimental",
+    label: "settings.experimental.row.automations.title",
+    target: "settings-automations",
+    description: "settings.experimental.row.automations.description",
+    keywords: "automations schedules timers cron watches events",
   },
   {
     tab: "experimental",

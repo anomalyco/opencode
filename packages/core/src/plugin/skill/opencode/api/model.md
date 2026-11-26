@@ -19,4 +19,4 @@ Returns: `{ location: Location.PublicRef; data: Model.Info }`
 
 - `Location.PublicRef`: `{ directory: string }`
 - `Model.Info`: `{ id, modelID, providerID, canonical, type, family, name, compatibility, package, settings, headers, body, capabilities, variants, experimental, time, cost, status, enabled, limit }`
-- `Model.Type`: `"chat" | "decision" | "image" | "video" | string`
+- `Model.Type`: `"chat" | "decision" | "image" | "video" | "realtime" | "embedding" | "transcription" | string`

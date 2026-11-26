@@ -298,6 +298,17 @@ import type {
   ExperimentalPushSessionRemoveOutput,
   ExperimentalPushSettingsSetInput,
   ExperimentalPushSettingsSetOutput,
+  ExperimentalSpaceSetInput,
+  ExperimentalSpaceSetOutput,
+  ExperimentalSpaceDeleteInput,
+  ExperimentalSpaceDeleteOutput,
+  ExperimentalSpaceSyncInput,
+  ExperimentalSpaceSyncOutput,
+  ExperimentalSpaceSubscribeInput,
+  ExperimentalSpaceSubscribeOutput,
+  ExperimentalSpaceUnsubscribeInput,
+  ExperimentalSpaceUnsubscribeOutput,
+  ExperimentalSpaceResetOutput,
   ShellListInput,
   ShellListOutput,
   ShellCreateInput,
@@ -1901,6 +1912,47 @@ const EndpointExperimentalPushSettingsSet =
       ),
     )
 
+const EndpointExperimentalSpaceSet = (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceSetInput) =>
+  preserveEffect<ExperimentalSpaceSetOutput>()(
+    raw["space.set"]({ params: { space: input["space"], key: input["key"] }, payload: { value: input["value"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const EndpointExperimentalSpaceDelete =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceDeleteInput) =>
+    preserveEffect<ExperimentalSpaceDeleteOutput>()(
+      raw["space.delete"]({ params: { space: input["space"], key: input["key"] } }).pipe(
+        Effect.mapError(mapClientError),
+      ),
+    )
+
+const EndpointExperimentalSpaceSync = (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceSyncInput) =>
+  preserveEffect<ExperimentalSpaceSyncOutput>()(
+    raw["space.sync"]({ params: { space: input["space"] }, query: { cursor: input["cursor"] } }).pipe(
+      Effect.mapError(mapClientError),
+    ),
+  )
+
+const EndpointExperimentalSpaceSubscribe =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceSubscribeInput) =>
+    preserveEffect<ExperimentalSpaceSubscribeOutput>()(
+      raw["space.subscribe"]({ payload: { stream: input["stream"], spaces: input["spaces"] } }).pipe(
+        Effect.mapError(mapClientError),
+      ),
+    )
+
+const EndpointExperimentalSpaceUnsubscribe =
+  (raw: RawClient["server.experimental"]) => (input: ExperimentalSpaceUnsubscribeInput) =>
+    preserveEffect<ExperimentalSpaceUnsubscribeOutput>()(
+      raw["space.unsubscribe"]({ payload: { stream: input["stream"], spaces: input["spaces"] } }).pipe(
+        Effect.mapError(mapClientError),
+      ),
+    )
+
+const EndpointExperimentalSpaceReset = (raw: RawClient["server.experimental"]) => () =>
+  preserveEffect<ExperimentalSpaceResetOutput>()(raw["space.reset"]({}).pipe(Effect.mapError(mapClientError)))
+
 const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
   persistentPty: {
     read: EndpointExperimentalPersistentPtyRead(raw),
@@ -1950,6 +2002,14 @@ const adaptGroupExperimental = (raw: RawClient["server.experimental"]) => ({
     },
     session: { set: EndpointExperimentalPushSessionSet(raw), remove: EndpointExperimentalPushSessionRemove(raw) },
     settings: { set: EndpointExperimentalPushSettingsSet(raw) },
+  },
+  space: {
+    set: EndpointExperimentalSpaceSet(raw),
+    delete: EndpointExperimentalSpaceDelete(raw),
+    sync: EndpointExperimentalSpaceSync(raw),
+    subscribe: EndpointExperimentalSpaceSubscribe(raw),
+    unsubscribe: EndpointExperimentalSpaceUnsubscribe(raw),
+    reset: EndpointExperimentalSpaceReset(raw),
   },
 })
 
