@@ -50,8 +50,7 @@ export function AssistantContent(props: {
       <Match when={props.content.type === "reasoning" ? props.content : undefined}>
         {(content) => (
           <ThoughtRow
-            id={props.contentID}
-            content={content()}
+            parts={[{ ...content(), id: props.contentID }]}
             streaming={false}
             defaultOpen={props.reasoningDefaultOpen}
             open={props.toolOpen}

@@ -715,6 +715,26 @@ function mockHandlers(
           )
         }),
       )
+      // Serves a listed skill's inline content as its SKILL.md.
+      .handleRaw("skillFile", (ctx) =>
+        Effect.sync(() => {
+          const path = `skill://${decodeURIComponent(new URL(ctx.request.url, "http://localhost").pathname.slice("/api/experimental/skill/".length)).replace("/file/", "/")}`
+
+          const skill = resolve(config.skills ?? []).find(
+            (item) => Predicate.hasProperty(item, "path") && item.path === path,
+          )
+
+          if (Predicate.hasProperty(skill, "content") && Predicate.isString(skill.content))
+            return HttpServerResponse.uint8Array(new TextEncoder().encode(skill.content))
+
+          return HttpServerResponse.jsonUnsafe(
+            // SAFETY: the server's wire body for a missing file, which the client decodes into its own error.
+            // oxlint-disable-next-line anti-slop-effect/no-manual-tagged-construction -- see SAFETY above
+            { _tag: "FileNotFoundError", path, message: `File not found: ${path}` },
+            { status: 404 },
+          )
+        }),
+      )
       // Raw, so a hook's answer can replace the status and body.
       .handleRaw("worktreeCreate", (ctx) =>
         Effect.gen(function* () {
@@ -947,6 +967,9 @@ function mockHandlers(
           Effect.sync(() => ({ location: location(config), data: resolve(config.websearchProviders ?? []) })),
         // No scenario signs in to an OpenCode Console workspace, so none has usage limits.
         usageLimits: () => Effect.succeed({ location: location(config), data: null }),
+        // No scenario turns on a feature flag, so every flag is off.
+        flagList: (ctx) =>
+          Effect.sync(() => ({ location: location(config, requestDirectory(config, ctx.request)), data: {} })),
         // No scenario runs background jobs (Code Mode scripts or subagent work), so none is running.
         jobList: () => Effect.succeed({ data: [] }),
         worktreeList: () =>
@@ -1424,8 +1447,11 @@ function mockHandlers(
             Effect.andThen(noContent),
           )
         },
-        // Like the server for an idle session: nothing was running to interrupt.
-        sessionInterrupt: () => Effect.succeed({ interrupted: false }),
+        // Like the server: an idle session has nothing running to interrupt.
+        sessionInterrupt: (ctx) =>
+          Effect.succeed({
+            interrupted: resolve(config.sessionStatus ?? {})[ctx.params.sessionID]?.type === "running",
+          }),
         // The mock runs no agent loop, so every session is already idle.
         sessionWait: () => noContent,
         sessionRevertStage: (ctx) => {

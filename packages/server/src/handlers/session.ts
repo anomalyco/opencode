@@ -28,7 +28,7 @@ import {
 } from "@opencode/protocol/errors"
 import { AbsolutePath } from "@opencode/core/schema"
 import { locationErrors } from "../location"
-import { failedMessageDecode, failedSnapshot, missingMessage, missingSession } from "./session-error"
+import { failedMessageDecode, failedSnapshot, missingMessage, missingSession, skillLoadFailed } from "./session-error"
 
 function missingForm(id: Form.ID) {
   return new FormNotFoundError({ id, message: `Form not found: ${id}` })
@@ -48,6 +48,10 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       if (info.sessionID !== sessionID) return yield* missingForm(formID)
       return { form, info }
     })
+    // Only these routes take input a person typed, so only they bring an archived session back. Automations, plugins
+    // and subagents prompt in process, and synthetic input is the app's own, so a background session stays archived.
+    const unarchiveOnUserInput = (sessionID: Session.ID) =>
+      session.unarchive(sessionID).pipe(Effect.catchTag("Session.NotFoundError", missingSession))
     const busySession = (error: Session.BusyError) =>
       new SessionBusyError({
         sessionID: error.sessionID,
@@ -289,38 +293,39 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.prompt",
         Effect.fn(function* (ctx) {
-          return {
-            data: yield* session
-              .prompt({
-                sessionID: ctx.params.sessionID,
-                id: ctx.payload.id,
-                text: ctx.payload.text,
-                files: ctx.payload.files,
-                agents: ctx.payload.agents,
-                skills: ctx.payload.skills,
-                metadata: ctx.payload.metadata,
-                delivery: ctx.payload.delivery,
-                resume: ctx.payload.resume,
-              })
-              .pipe(
-                Effect.catchTag("Session.NotFoundError", missingSession),
-                Effect.catchTag("Session.PromptConflictError", (error) =>
-                  Effect.fail(
-                    new ConflictError({
-                      message: `Prompt message ID conflicts with an existing durable record: ${error.messageID}`,
-                      resource: error.messageID,
-                    }),
-                  ),
+          const data = yield* session
+            .prompt({
+              sessionID: ctx.params.sessionID,
+              id: ctx.payload.id,
+              text: ctx.payload.text,
+              files: ctx.payload.files,
+              agents: ctx.payload.agents,
+              skills: ctx.payload.skills,
+              metadata: ctx.payload.metadata,
+              delivery: ctx.payload.delivery,
+              resume: ctx.payload.resume,
+            })
+            .pipe(
+              Effect.catchTag("Session.NotFoundError", missingSession),
+              Effect.catchTag("Session.PromptConflictError", (error) =>
+                Effect.fail(
+                  new ConflictError({
+                    message: `Prompt message ID conflicts with an existing durable record: ${error.messageID}`,
+                    resource: error.messageID,
+                  }),
                 ),
-                Effect.catchTag("Session.AttachmentError", (error) =>
-                  Effect.fail(new InvalidRequestError({ message: error.message, field: "files" })),
-                ),
-                Effect.catchTag("Session.SkillNotFoundError", (error) =>
-                  Effect.fail(new InvalidRequestError({ message: `Skill not found: ${error.skill}`, field: "skills" })),
-                ),
-                locationErrors,
               ),
-          }
+              Effect.catchTag("Session.AttachmentError", (error) =>
+                Effect.fail(new InvalidRequestError({ message: error.message, field: "files" })),
+              ),
+              Effect.catchTag("Session.SkillNotFoundError", (error) =>
+                Effect.fail(new InvalidRequestError({ message: `Skill not found: ${error.skill}`, field: "skills" })),
+              ),
+              Effect.catchTag("Skill.LoadError", skillLoadFailed),
+              locationErrors,
+            )
+          yield* unarchiveOnUserInput(ctx.params.sessionID)
+          return { data }
         }),
       )
       .handle(
@@ -356,6 +361,7 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               ),
               locationErrors,
             )
+          yield* unarchiveOnUserInput(ctx.params.sessionID)
           return HttpApiSchema.NoContent.make()
         }),
       )
@@ -373,8 +379,10 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
               Effect.catchTag("Session.SkillNotFoundError", (error) =>
                 Effect.fail(new SkillNotFoundError({ skill: error.skill, message: `Skill not found: ${error.skill}` })),
               ),
+              Effect.catchTag("Skill.LoadError", skillLoadFailed),
               locationErrors,
             )
+          yield* unarchiveOnUserInput(ctx.params.sessionID)
           return HttpApiSchema.NoContent.make()
         }),
       )
@@ -408,6 +416,8 @@ export const SessionHandler = HttpApiBuilder.group(Api, "server.session", (handl
       .handle(
         "session.shell",
         Effect.fn(function* (ctx) {
+          // The shell call returns when the command ends, so the session comes back as it starts.
+          yield* unarchiveOnUserInput(ctx.params.sessionID)
           yield* session
             .shell({ sessionID: ctx.params.sessionID, id: ctx.payload.id, command: ctx.payload.command })
             .pipe(Effect.catchTag("Session.NotFoundError", missingSession))

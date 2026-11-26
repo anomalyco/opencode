@@ -242,6 +242,8 @@ export function SessionFileBrowserTab(props: {
       toolbarStart={<span class="truncate font-[530]">{title()}</span>}
       toolbarEnd={openInShown() ? openInButton() : undefined}
       sidebarCollapsed={!sidebarOpened()}
+      sidebarSide={props.mobile ? undefined : props.state.side()}
+      onSidebarSideChange={props.mobile ? undefined : props.state.move}
       sidebarToggleGap={10}
       sidebarToggle={
         props.mobile ? undefined : (
@@ -256,6 +258,7 @@ export function SessionFileBrowserTab(props: {
         <SessionReviewV2Sidebar
           open={sidebarOpened()}
           transition={props.state.transition()}
+          side={props.mobile ? undefined : props.state.side()}
           title={<span class="truncate font-[530]">{title()}</span>}
           actions={openInShown() ? openInButton() : undefined}
           filter={filter()}

@@ -88,7 +88,9 @@ impl Transport for Fixture {
             }
             ("PATCH", path) if path.contains("/inbox/") => (204, Value::Null),
             ("POST", path)
-                if ["/model", "/agent", "/shell", "/command", "/background"].iter().any(|end| path.ends_with(end)) =>
+                if ["/model", "/agent", "/shell", "/command", "/background", "/wait"]
+                    .iter()
+                    .any(|end| path.ends_with(end)) =>
             {
                 (204, Value::Null)
             }
@@ -624,4 +626,157 @@ fn history_file_is_shared_with_typescript() {
     assert!(loaded, "{:?}", again.textarea().text());
     again.app.press("up");
     assert_eq!(again.textarea().text(), "second \"quoted\" ünïcode");
+}
+
+fn interrupt_undo_harness(
+    content: Value,
+    pending: Value,
+    interrupted: bool,
+) -> (Harness, support::Log, opencode_util::temp::TempDir) {
+    let dir = support::DIRECTORY;
+    let id = "ses_interrupt_undo";
+    let ask = json!({ "type": "user", "id": "msg_ask", "text": "Reword this prompt", "time": { "created": 1 } });
+    let reply = json!({
+        "type": "assistant", "id": "msg_reply", "agent": "build",
+        "model": { "providerID": "p", "id": "m" }, "time": { "created": 2 }, "content": content,
+    });
+    let session = support::session(id, "Interrupt undo");
+    let fake = support::Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/location") => (200, support::location(dir)),
+        ("GET", "/api/session") => (200, json!({ "data": [session], "cursor": {} })),
+        ("GET", "/api/session/active") => (200, json!({ "data": { "ses_interrupt_undo": { "type": "running" } } })),
+        ("GET", p) if p == format!("/api/session/{id}") => (200, json!({ "data": session })),
+        ("GET", p) if p == format!("/api/session/{id}/inbox") => (200, json!({ "data": pending })),
+        ("GET", p) if p == format!("/api/session/{id}/permission") => (200, json!({ "data": [] })),
+        ("GET", p) if p == format!("/api/session/{id}/message") => (200, json!({ "data": [reply, ask], "cursor": {} })),
+        ("POST", p) if p == format!("/api/session/{id}/interrupt") => (200, json!({ "interrupted": interrupted })),
+        ("POST", p) if p == format!("/api/experimental/session/{id}/wait") => (204, Value::Null),
+        ("POST", p) if p == format!("/api/session/{id}/revert/stage") => {
+            (200, json!({ "data": { "messageID": seen.body["messageID"] } }))
+        }
+        ("POST", p) if p == format!("/api/session/{id}/revert/commit") => (204, Value::Null),
+        _ => support::base(seen, dir),
+    });
+    let log = fake.log();
+    let home = opencode_util::temp::tempdir().unwrap();
+    let deps = Deps {
+        directory: dir.into(),
+        roots: support::roots(support::home_paths(home.path()), "test"),
+        route: support::session_route(id),
+        ..support::deps(Arc::new(fake))
+    };
+    let h = support::mount(100, 30, deps);
+    h.tui.data.set_status(&SessionID(id.into()), opencode_store::SessionStatus::Running);
+    assert!(
+        h.app.wait_until(WAIT, || {
+            let screen = h.app.text();
+            screen.contains("Reword this prompt") && screen.contains("esc interrupt")
+        }),
+        "screen:\n{}",
+        h.app.text()
+    );
+    (h, log, home)
+}
+
+fn interrupt_calls(log: &support::Log) -> Vec<(String, Value)> {
+    log.lock()
+        .unwrap()
+        .iter()
+        .filter(|seen| {
+            seen.method == "POST"
+                && (seen.path.starts_with("/api/session/") || seen.path.starts_with("/api/experimental/session/"))
+        })
+        .map(|seen| (format!("{} {}", seen.method, seen.path), seen.body.clone()))
+        .collect()
+}
+
+#[test]
+fn interrupting_before_the_model_answers_takes_the_prompt_back() {
+    let (h, log, _home) =
+        interrupt_undo_harness(json!([{ "type": "reasoning", "text": "Thinking it over" }]), json!([]), true);
+    h.app.press("escape");
+    h.wait_for("again to interrupt");
+    h.app.press("escape");
+    assert!(
+        h.app.wait_until(WAIT, || interrupt_calls(&log).len() == 4
+            && h.app.text().matches("Reword this prompt").count() == 2),
+        "calls={:?}\n{}",
+        interrupt_calls(&log),
+        h.app.text()
+    );
+    let id = "ses_interrupt_undo";
+    assert_eq!(
+        interrupt_calls(&log),
+        vec![
+            (format!("POST /api/session/{id}/interrupt"), Value::Null),
+            (format!("POST /api/experimental/session/{id}/wait"), Value::Null),
+            (format!("POST /api/session/{id}/revert/stage"), json!({ "messageID": "msg_ask", "files": false })),
+            (format!("POST /api/session/{id}/revert/commit"), Value::Null),
+        ]
+    );
+}
+
+#[test]
+fn interrupting_after_answer_with_draft_with_pending_or_already_stopping_only_interrupts() {
+    let id = "ses_interrupt_undo";
+    let interrupt = format!("POST /api/session/{id}/interrupt");
+    let wait = format!("POST /api/experimental/session/{id}/wait");
+
+    // After the model answered with text: interrupts and waits, does not revert or restore.
+    {
+        let (h, log, _home) =
+            interrupt_undo_harness(json!([{ "type": "text", "text": "Here you go" }]), json!([]), true);
+        h.app.press("escape");
+        h.wait_for("again to interrupt");
+        h.app.press("escape");
+        assert!(h.app.wait_until(WAIT, || interrupt_calls(&log).len() == 2));
+        h.app.wait_until(Duration::from_millis(100), || false);
+        assert_eq!(
+            interrupt_calls(&log).into_iter().map(|(k, _)| k).collect::<Vec<_>>(),
+            vec![interrupt.clone(), wait.clone()]
+        );
+        assert_eq!(h.app.text().matches("Reword this prompt").count(), 1);
+    }
+
+    // With a draft in the composer: only interrupts.
+    {
+        let (h, log, _home) = interrupt_undo_harness(json!([]), json!([]), true);
+        h.app.type_text("something else");
+        h.wait_for("something else");
+        h.app.press("escape");
+        h.wait_for("again to interrupt");
+        h.app.press("escape");
+        assert!(h.app.wait_until(WAIT, || interrupt_calls(&log).len() == 1));
+        h.app.wait_until(Duration::from_millis(100), || false);
+        assert_eq!(interrupt_calls(&log).into_iter().map(|(k, _)| k).collect::<Vec<_>>(), vec![interrupt.clone()]);
+        assert_eq!(h.app.text().matches("Reword this prompt").count(), 1);
+    }
+
+    // With a pending prompt in the inbox: only interrupts.
+    {
+        let pending = json!([{
+            "id": "msg_next", "sessionID": id, "time": { "created": 3 }, "type": "user",
+            "delivery": "queue", "payload": { "text": "follow up" },
+        }]);
+        let (h, log, _home) = interrupt_undo_harness(json!([]), pending, true);
+        h.app.press("escape");
+        h.wait_for("again to interrupt");
+        h.app.press("escape");
+        assert!(h.app.wait_until(WAIT, || interrupt_calls(&log).len() == 1));
+        h.app.wait_until(Duration::from_millis(100), || false);
+        assert_eq!(interrupt_calls(&log).into_iter().map(|(k, _)| k).collect::<Vec<_>>(), vec![interrupt.clone()]);
+        assert_eq!(h.app.text().matches("Reword this prompt").count(), 1);
+    }
+
+    // Repeated press when execution is already stopping (`interrupted: false`): only interrupts.
+    {
+        let (h, log, _home) = interrupt_undo_harness(json!([]), json!([]), false);
+        h.app.press("escape");
+        h.wait_for("again to interrupt");
+        h.app.press("escape");
+        assert!(h.app.wait_until(WAIT, || interrupt_calls(&log).len() == 1));
+        h.app.wait_until(Duration::from_millis(100), || false);
+        assert_eq!(interrupt_calls(&log).into_iter().map(|(k, _)| k).collect::<Vec<_>>(), vec![interrupt]);
+        assert_eq!(h.app.text().matches("Reword this prompt").count(), 1);
+    }
 }

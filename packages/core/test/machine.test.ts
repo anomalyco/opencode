@@ -5,7 +5,7 @@ import { TestClock } from "effect/testing"
 import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { Environment } from "../src/environment/index"
 import { Machine } from "../src/machine/index"
-import messages from "./fixture/machine-v2.json"
+import messages from "./fixture/machine-v3.json"
 import { makeWorker } from "./fixture/machine-worker"
 import { environmentConformance } from "./lib/environment-conformance"
 import { it } from "./lib/effect"
@@ -24,7 +24,7 @@ const text = (stream: Stream.Stream<Uint8Array, PlatformError.PlatformError>) =>
 const cause = (error: PlatformError.PlatformError) => error.reason.cause
 const hello = (processes: Machine.Hello["processes"] = []): Machine.Hello => ({
   type: "hello",
-  protocol: 2,
+  protocol: 3,
   os: "linux",
   arch: "x64",
   home: "/home/worker",
@@ -727,7 +727,7 @@ describe("machine stdio", () => {
 })
 
 describe("machine wire", () => {
-  it.effect("matches the shared v2 messages and requires explicit stdio fields", () =>
+  it.effect("matches the shared v3 messages and requires explicit stdio fields", () =>
     Effect.sync(() => {
       for (const message of messages.to_worker)
         expect(

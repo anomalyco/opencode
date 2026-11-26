@@ -16,18 +16,31 @@ import { withTempDir } from "./fixture/tmpdir"
 import { it } from "./lib/effect"
 import { permissionLayer } from "./lib/permission"
 
-function provide(directory: string, transformFiles: EnvironmentFilesTransform = () => ({})) {
+function mutationLayer(directory: string, transformFiles: EnvironmentFilesTransform = () => ({})) {
   const activeLocation = Layer.succeed(
     Location.Service,
     Location.Service.of(location({ directory: AbsolutePath.make(directory) })),
   )
-  return Effect.provide(
-    AppNodeBuilder.build(LayerNode.group([FileAccess.node, FileMutation.node]), [
-      Location.node.replace(activeLocation),
-      Permission.node.replace(permissionLayer()),
-      Environment.node.replace(transformEnvironmentFiles(transformFiles)),
-    ]),
-  )
+  return AppNodeBuilder.build(LayerNode.group([FileAccess.node, FileMutation.node]), [
+    Location.node.replace(activeLocation),
+    Permission.node.replace(permissionLayer()),
+    Environment.node.replace(transformEnvironmentFiles(transformFiles)),
+  ])
+}
+
+function provide(directory: string, transformFiles: EnvironmentFilesTransform = () => ({})) {
+  return Effect.provide(mutationLayer(directory, transformFiles))
+}
+
+function provideWithMemoMap(directory: string, memoMap: Layer.MemoMap) {
+  const layer = mutationLayer(directory)
+  return <A, E>(effect: Effect.Effect<A, E, FileAccess.Service | FileMutation.Service>) =>
+    Effect.scoped(
+      Effect.gen(function* () {
+        const context = yield* Layer.buildWithMemoMap(layer, memoMap, yield* Effect.scope)
+        return yield* Effect.provide(effect, context)
+      }),
+    )
 }
 
 describe("FileMutation", () => {
@@ -171,9 +184,10 @@ describe("FileMutation", () => {
     ),
   )
 
-  it.live("shares transaction locks across Location service instances", () =>
+  it.live("shares transaction locks across Location service instances on the same host", () =>
     withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
+        const memoMap = yield* Layer.makeMemoMap
         const firstStarted = yield* Deferred.make<void>()
         const releaseFirst = yield* Deferred.make<void>()
         const secondStarted = yield* Deferred.make<void>()
@@ -183,12 +197,12 @@ describe("FileMutation", () => {
           yield* files.withLock([target])(
             Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst))),
           )
-        }).pipe(provide(directory), Effect.forkChild)
+        }).pipe(provideWithMemoMap(directory, memoMap), Effect.forkChild)
         yield* Deferred.await(firstStarted)
         const second = yield* Effect.gen(function* () {
           const files = yield* FileMutation.Service
           yield* files.withLock([target])(Deferred.succeed(secondStarted, undefined))
-        }).pipe(provide(directory), Effect.forkChild)
+        }).pipe(provideWithMemoMap(directory, memoMap), Effect.forkChild)
         yield* Effect.yieldNow
         expect(yield* Deferred.isDone(secondStarted)).toBe(false)
 
@@ -200,25 +214,30 @@ describe("FileMutation", () => {
     ),
   )
 
-  it.live("allows transaction locks for distinct resolved paths to proceed independently", () =>
+  it.live("isolates transaction locks across separate hosts", () =>
     withTempDir(({ path: directory }) =>
       Effect.gen(function* () {
         const firstStarted = yield* Deferred.make<void>()
         const releaseFirst = yield* Deferred.make<void>()
         const secondFinished = yield* Deferred.make<void>()
-        const files = yield* FileMutation.Service
-        const first = yield* files
-          .withLock([path.join(directory, "first.txt")])(
+        const target = path.join(directory, "shared.txt")
+        const first = yield* Effect.gen(function* () {
+          const files = yield* FileMutation.Service
+          yield* files.withLock([target])(
             Deferred.succeed(firstStarted, undefined).pipe(Effect.andThen(Deferred.await(releaseFirst))),
           )
-          .pipe(Effect.forkChild)
+        }).pipe(provide(directory), Effect.forkChild)
         yield* Deferred.await(firstStarted)
-        yield* files.withLock([path.join(directory, "second.txt")])(Deferred.succeed(secondFinished, undefined))
-        expect(yield* Deferred.isDone(secondFinished)).toBe(true)
+        const second = yield* Effect.gen(function* () {
+          const files = yield* FileMutation.Service
+          yield* files.withLock([target])(Deferred.succeed(secondFinished, undefined))
+        }).pipe(provide(directory), Effect.forkChild)
+        yield* Deferred.await(secondFinished)
 
         yield* Deferred.succeed(releaseFirst, undefined)
         yield* Fiber.join(first)
-      }).pipe(provide(directory)),
+        yield* Fiber.join(second)
+      }),
     ),
   )
 

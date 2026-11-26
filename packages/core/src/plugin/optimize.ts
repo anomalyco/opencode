@@ -7,14 +7,27 @@ import { Effect } from "effect"
 import { SessionSystemPrompt } from "../session/system-prompt.js"
 
 import PROMPT_GPT from "./system-prompt/gpt.txt"
+import PROMPT_GPT_6_2 from "./system-prompt/gpt-6.2.txt"
 import PROMPT_ASTRA from "./system-prompt/gpt-astra.txt"
 import PROMPT_KIMI from "./system-prompt/kimi.txt"
 import PROMPT_META from "./system-prompt/meta.txt"
 import PROMPT_TRINITY from "./system-prompt/trinity.txt"
 import PROMPT_ANTHROPIC from "./system-prompt/anthropic.txt"
 
+const GPT_6_2 = [
+  "gpt-6.2",
+  "gpt-6-2",
+  "gpt-62",
+  "gpt-latest",
+  "gpt-sol-latest",
+  "gpt-astra-latest",
+  "gpt-terra-latest",
+]
+
 export const OpenAIPlugin = make("opencode.prompt.openai", (model) => {
   const id = model.id.toLowerCase()
+  // Derived from Codex's prompts, where GPT-6.2 Sol and Astra share the same core instructions.
+  if (GPT_6_2.some((prefix) => id.includes(prefix))) return PROMPT_GPT_6_2
   if (!id.includes("gpt")) return undefined
   return id.includes("astra") ? PROMPT_ASTRA : PROMPT_GPT
 })

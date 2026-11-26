@@ -12,8 +12,9 @@ const FOCUSABLE = [
   '[contenteditable="plaintext-only"]',
   '[contenteditable=""]',
   '[tabindex]:not([tabindex="-1"])',
-  // Roving focus: only one tree item is a Tab stop, but focus may land on any of them.
+  // Roving focus: only one item is a Tab stop, but focus may land on any of them.
   '[role="treeitem"]',
+  "[data-roving]",
 ].join(",")
 
 const SCOPE = "[data-focus-scope]"

@@ -204,10 +204,10 @@ export const GitLabPlugin = define({
                 response
                   .writeHead(400, { "Content-Type": "text/html" })
                   .end(OauthCallbackPage.error(error, { provider: "GitLab" }))
-                Effect.runSync(Deferred.fail(callback, new Error(error)))
+                Deferred.doneUnsafe(callback, Exit.fail(new Error(error)))
                 return
               }
-              if (!Effect.runSync(Deferred.succeed(callback, { code: url.searchParams.get("code") ?? "", response })))
+              if (!Deferred.doneUnsafe(callback, Exit.succeed({ code: url.searchParams.get("code") ?? "", response })))
                 response.writeHead(409).end("OAuth callback already received")
             })
             yield* Effect.addFinalizer(() =>

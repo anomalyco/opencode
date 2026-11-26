@@ -18,7 +18,7 @@
     "build": "vite build",
     "build:og": "bun ./script/build-og-worker.ts",
     "start": "vite start",
-    "test": "bun test --only-failures"
+    "test": "bun test --conditions=solid --only-failures"
   },
   "dependencies": {
     "@kobalte/core": "catalog:",

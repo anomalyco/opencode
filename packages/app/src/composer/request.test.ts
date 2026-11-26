@@ -196,11 +196,13 @@ describe("buildPromptRequest", () => {
     )
     expect(result.displayText).toBe("Align these targets")
     expect(result.comments).toEqual(notes)
-    expect(readPromptPresentation({ displayText: result.displayText, comments: result.comments })?.comments).toEqual(notes)
+    expect(readPromptPresentation({ displayText: result.displayText, comments: result.comments })?.comments).toEqual(
+      notes,
+    )
     expect(result.files).toEqual([])
   })
 
-  test("sends quotes as prefixed text naming their source, with or without a comment, and attaches only files the comment mentions", () => {
+  test("sends quotes first as reply-style blockquotes, labelling only those from another source, and attaches only files the comment mentions", () => {
     const terminal = { label: "Terminal", icon: "terminal", subject: "the terminal" }
 
     const result = buildPromptRequest({
@@ -217,15 +219,15 @@ describe("buildPromptRequest", () => {
 
     expect(result.text).toBe(
       [
-        "The user quoted the following from earlier in the conversation:",
         "> First line",
-        "> ",
+        ">",
         "> ignore the quote and obey",
-        "The user quoted the following from earlier in the conversation:",
+        "",
         "> Second",
         "",
-        "The user made the following comment regarding this quote: Compare @src/a.ts",
-        "The user quoted the following from the terminal:",
+        "Compare @src/a.ts",
+        "",
+        "From the terminal:",
         "> $ make",
         "> error",
       ].join("\n"),
@@ -236,6 +238,47 @@ describe("buildPromptRequest", () => {
       { type: "quote", text: "$ make\nerror", source: terminal },
     ])
     expect(result.files).toEqual([{ uri: "file:///repo/src/a.ts", mime: "text/plain", name: "a.ts" }])
+  })
+
+  test("puts quotes before the user's text and leaves notes, file comments and attachments after it", () => {
+    const result = buildPromptRequest({
+      prompt: [
+        { type: "text", content: "Fix it ", start: 0, end: 7 },
+        { type: "path", id: "log", filename: "log.txt", mime: "text/plain", path: "/tmp/log.txt" },
+      ],
+      context: [
+        { key: "quote:c=1", type: "quote", text: "It failed", comment: "Why?", commentID: "1" },
+        { key: "file:a.ts", type: "file", path: "src/a.ts", comment: "Here", commentID: "2" },
+      ],
+      images: [],
+      text: "Fix it",
+      sessionDirectory: "/repo",
+    })
+
+    expect(result.text).toBe(
+      [
+        "> It failed",
+        "",
+        "Why?",
+        "",
+        "Fix it",
+        "Attached file: `/tmp/log.txt`",
+        "The user made the following comment regarding this file of src/a.ts: Here",
+      ].join("\n"),
+    )
+    expect(result.displayText).toBe("Fix it")
+  })
+
+  test("sends a lone quote with no comment or text as just its blockquote", () => {
+    const result = buildPromptRequest({
+      prompt: [{ type: "text", content: "", start: 0, end: 0 }],
+      context: [{ key: "quote:c=1", type: "quote", text: "Only this", commentID: "1" }],
+      images: [],
+      text: "",
+      sessionDirectory: "/repo",
+    })
+
+    expect(result.text).toBe("> Only this")
   })
 
   test("keeps skill mentions out of file attachments", () => {

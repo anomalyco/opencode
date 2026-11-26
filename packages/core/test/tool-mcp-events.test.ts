@@ -3,6 +3,7 @@ import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Mcp } from "@opencode/core/mcp/index"
 import { McpClient } from "@opencode/core/mcp/client"
 import type { Permission } from "@opencode/core/permission"
+import { PermissionPolicy } from "@opencode/core/permission/policy"
 import { Session } from "@opencode/core/session"
 import { Tool } from "@opencode/core/tool"
 import { McpEventTools } from "@opencode/core/tool/plugin/mcp-events"
@@ -43,7 +44,7 @@ const setup = Effect.fnUntraced(function* () {
   )
   const registry = yield* Tool.Service
   const list = (input: Record<string, unknown>) =>
-    registry.snapshot([{ action: "execute", resource: "*", effect: "deny" }]).pipe(
+    registry.snapshot(PermissionPolicy.fromRules([{ action: "execute", resource: "*", effect: "deny" }])).pipe(
       Effect.flatMap((tools) =>
         tools.execute({
           sessionID: Session.ID.make("ses_mcp_events"),

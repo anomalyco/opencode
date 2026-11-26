@@ -4,6 +4,7 @@
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, HashSet};
 use std::rc::{Rc, Weak};
+use std::sync::Arc;
 
 use opencode_plugin_abi::v2::{ContentRef, DiffView, Node, Source};
 use opencode_plugin_abi::{self as abi};
@@ -427,7 +428,7 @@ struct Pass<'a, 'b> {
     doomed: Vec<Mounted>,
     restyle: bool,
     slots_changed: bool,
-    syntax: std::cell::OnceCell<Rc<SyntaxTheme>>,
+    syntax: std::cell::OnceCell<Arc<SyntaxTheme>>,
     /// The widget that took over from a focused one built again.
     refocus: Option<AnyWidget>,
     over: Placeholders,
@@ -2071,7 +2072,7 @@ impl Pass<'_, '_> {
             (Node::Spinner { .. }, Extra::Spinner(spinner)) => spinner.set_color(theme.interactive().step(200)),
             (Node::Input { .. }, Extra::Input(field, ..)) => paint_field(field, theme),
             (Node::Code { .. }, Extra::Code(code, _)) => {
-                code.fg(theme.text.base).line_number_fg(theme.text.muted).syntax_theme((*self.syntax()).clone());
+                code.fg(theme.text.base).line_number_fg(theme.text.muted).syntax_theme(self.syntax());
             }
             // Under a keep too: the code view in it is the host's, which restyles with its fence, its code on the
             // fence's new background as a fresh build puts it.
@@ -2092,8 +2093,8 @@ impl Pass<'_, '_> {
     }
 
     /// The syntax theme of the pass's theme, made once.
-    fn syntax(&self) -> Rc<SyntaxTheme> {
-        self.syntax.get_or_init(|| Rc::new(opencode_ui::code::syntax_theme(self.env.theme))).clone()
+    fn syntax(&self) -> Arc<SyntaxTheme> {
+        self.syntax.get_or_init(|| opencode_ui::code::syntax_theme(self.env.theme)).clone()
     }
 
     /// `node` built and added to `parent`.

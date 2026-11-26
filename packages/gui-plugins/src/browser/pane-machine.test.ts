@@ -68,6 +68,7 @@ function frame(data: {
   readonly type: string
   readonly connectionID: string
   readonly version?: number
+  readonly capabilities?: readonly string[]
   readonly requestID?: string
 }) {
   return resolveControlFrame(connectionID, decodeControlHeader(data), decodeControl(data))
@@ -255,7 +256,11 @@ describe("control events", () => {
 
   test("decodes this connection's handshake and requests and ignores other connections", () => {
     expect(frame({ type: "attached", connectionID: "other", version: 5 })).toEqual({ kind: "foreign" })
-    expect(frame({ type: "attached", connectionID, version: 4 })).toEqual({ kind: "attached" })
+    expect(frame({ type: "attached", connectionID, version: 4 })).toEqual({ kind: "attached", capabilities: [] })
+    expect(frame({ type: "attached", connectionID, version: 4, capabilities: ["tunnel.ws.v1"] })).toEqual({
+      kind: "attached",
+      capabilities: ["tunnel.ws.v1"],
+    })
     expect(frame({ type: "command", connectionID, requestID: "r1" })).toEqual({ kind: "command", requestID: "r1" })
     expect(frame({ type: "cancel", connectionID, requestID: "r1" })).toEqual({ kind: "cancel", requestID: "r1" })
   })
