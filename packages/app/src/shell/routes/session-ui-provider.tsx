@@ -1,5 +1,5 @@
 import { DataProvider, type ToolFileSource, type TurnDiffInput } from "@opencode/session-ui/context"
-import { MarkdownProvider, type ReadMarkdownImage } from "@opencode/session-ui/context/markdown"
+import { MarkdownProvider, type ReadMarkdownImage, type ReadMarkdownMedia } from "@opencode/session-ui/context/markdown"
 import { useNavigate, useParams } from "@solidjs/router"
 import { createEffect, createMemo, createSignal, on, onCleanup, untrack, type ParentProps } from "solid-js"
 import { useProviders } from "@/providers/catalog/providers"
@@ -10,7 +10,7 @@ import { useData } from "@/runtime/server/current"
 import { useServerSDK } from "@/runtime/server/client"
 import { formatServerError, isSessionNotFoundError } from "@/runtime/server/errors"
 import { findSessionTab, useTabs } from "@/shell/tabs/tabs"
-import { readLocalImage } from "@/runtime/server/image"
+import { readLocalImage, readLocalMedia } from "@/runtime/server/image"
 import { useLanguage } from "@/runtime/i18n/language"
 import { showToast } from "@/shell/notifications/toast"
 import { SessionExportProvider } from "@/session/commands/export-session"
@@ -50,6 +50,13 @@ export function SessionUIProvider(
     const dir = directory()
 
     return (path, signal) => readLocalImage(serverSDK.api, dir, path, signal)
+  })
+
+  const readMedia = createMemo<ReadMarkdownMedia>(() => {
+    const server = serverSDK.http
+    const dir = directory()
+
+    return (path, signal) => readLocalMedia(serverSDK.api, server, dir, path, signal)
   })
 
   const href = (sessionID: string) => sessionHref(props.server, sessionID)
@@ -275,6 +282,7 @@ export function SessionUIProvider(
       >
         <MarkdownProvider
           readImage={readImage()}
+          readMedia={readMedia()}
           openSession={openReferencedSession}
           sessionTitle={sessionTitle}
           sessionMenu={(target) => setReferenceMenu({ ...target })}

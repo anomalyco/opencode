@@ -331,7 +331,7 @@ export const Plugin = {
                     : permission.assertNotDenied(request)
                 }
                 yield* files.write(file, bytes)
-                return `Image request finished. Saved image: ${file} (${ref}).\nUse the read tool on this path to view the image.`
+                return `Image request finished. Saved image: ${file} (${ref}).\nUse the read tool on this path to view the image.\nShow it inline in your reply with ${ImageNotice.embed(file)}, and also give the path.`
               }).pipe(
                 // The job keeps this text, so a restart can still deliver the outcome.
                 Effect.mapError((error) => new Error(`Image request failed for ${stem}: ${error.message}`)),

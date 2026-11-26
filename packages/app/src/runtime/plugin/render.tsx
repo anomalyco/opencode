@@ -172,6 +172,7 @@ export function PluginLinks(props: ParentProps<{ session: MountedSession; active
     <MarkdownProvider
       appLinks={desktop}
       readImage={markdown?.readImage}
+      readMedia={markdown?.readMedia}
       openLocalFile={(href) => void host.links.open({ href, session: props.session })}
       localFileExists={localFileExists}
       codeBlocks={inner.codeBlocks}

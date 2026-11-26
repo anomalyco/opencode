@@ -216,6 +216,7 @@ describe("web UI", () => {
           expect(yield* Effect.promise(() => fallback.text())).toContain("embedded")
           expect(fallback.headers.get("content-security-policy")).toContain("default-src 'self'")
           expect(fallback.headers.get("content-security-policy")).toContain("connect-src * data: blob:")
+          expect(fallback.headers.get("content-security-policy")).toContain("media-src 'self' data: blob:")
           expect(fallback.headers.get("content-security-policy")).toContain("worker-src 'self' blob:")
           expect(fallback.headers.get("content-security-policy")).toContain("frame-src 'self' blob:")
           expect(fallback.headers.get("content-security-policy")).toContain("object-src 'self' blob:")

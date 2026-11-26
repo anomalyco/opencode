@@ -1130,7 +1130,7 @@ describe("SessionRestart background recovery", () => {
         Effect.timeout("10 seconds"),
       )
       expect(texts).toEqual([
-        `<background-result kind="video" id="${videoID}" state="completed">\nVideo request finished. Saved video: /tmp/running.mp4.\n</background-result>`,
+        `<background-result kind="video" id="${videoID}" state="completed">\nVideo request finished. Saved video: /tmp/running.mp4.\nShow it inline in your reply with <video controls src="/tmp/running.mp4"></video>, and also give the path.\n</background-result>`,
       ])
       expect(waited).toEqual([videoID])
       expect((yield* files.read("/tmp/running.mp4")).bytes).toEqual(Uint8Array.of(1, 2, 3))

@@ -1,6 +1,10 @@
 import { GlobalRegistrator } from "@happy-dom/global-registrator"
 import { afterAll, afterEach, beforeAll, describe, expect, jest, test } from "bun:test"
-import { createMarkdownImages, localImagePath, localLinkPath } from "./markdown-image"
+import { createMarkdownImages, createMarkdownMedia, localMediaPath, localLinkPath } from "./markdown-image"
+
+// Lets the read's promise chain settle; fake timers do not drive microtasks.
+const settle = (ticks = 10): Promise<void> =>
+  ticks === 0 ? Promise.resolve() : Promise.resolve().then(() => settle(ticks - 1))
 
 test.each([
   ["./out/report.html", "./out/report.html"],
@@ -38,8 +42,8 @@ test.each([
   ["./images/chart%20one.svg", "./images/chart one.svg"],
   ["chart.png", "chart.png"],
   ["./chart%25.png", "./chart%.png"],
-])("recognizes local image %s", (source, path) => {
-  expect(localImagePath(source)).toBe(path)
+])("recognizes local media %s", (source, path) => {
+  expect(localMediaPath(source)).toBe(path)
 })
 
 test.each([
@@ -57,16 +61,12 @@ test.each([
   "chart%ZZ.png",
   "",
 ])("does not read non-local or invalid source %s", (source) => {
-  expect(localImagePath(source)).toBeUndefined()
+  expect(localMediaPath(source)).toBeUndefined()
 })
 
 describe("createMarkdownImages", () => {
   // Happy DOM's fetch cannot read `blob:` URLs; Bun's can, and fails once the URL is revoked.
   const nativeFetch = fetch
-
-  // Lets the read's promise chain settle; fake timers do not drive microtasks.
-  const settle = (ticks = 10): Promise<void> =>
-    ticks === 0 ? Promise.resolve() : Promise.resolve().then(() => settle(ticks - 1))
 
   beforeAll(() => GlobalRegistrator.register())
 
@@ -104,5 +104,58 @@ describe("createMarkdownImages", () => {
 
     images.dispose()
     await expect(nativeFetch(url!)).rejects.toThrow()
+  })
+})
+
+describe("createMarkdownMedia", () => {
+  const nativeFetch = fetch
+
+  beforeAll(() => GlobalRegistrator.register())
+
+  afterAll(() => GlobalRegistrator.unregister())
+
+  afterEach(() => jest.useRealTimers())
+
+  test("resolves local video, audio and source elements", async () => {
+    jest.useFakeTimers()
+
+    const media = createMarkdownMedia(async (path) => ({
+      url: `https://media.example/${path.replace(/^\.\//, "")}`,
+      revoke: false,
+    }))
+
+    const root = document.createElement("div")
+    root.innerHTML =
+      '<video controls data-local-media="./out/race.mp4"></video><audio data-local-media="./out/voice.mp3"></audio><video><source data-local-media="./out/clip.webm"></video>'
+    document.body.replaceChildren(root)
+    const video = root.querySelector("video")!
+    const audio = root.querySelector("audio")!
+    const source = root.querySelector("source")!
+
+    media.update(root)
+    await settle()
+    expect(video.getAttribute("src")).toBe("https://media.example/out/race.mp4")
+    expect(audio.getAttribute("src")).toBe("https://media.example/out/voice.mp3")
+    expect(source.getAttribute("src")).toBe("https://media.example/out/clip.webm")
+
+    media.dispose()
+  })
+
+  test("revokes a downloaded media URL when the element goes away", async () => {
+    jest.useFakeTimers()
+    const url = URL.createObjectURL(new Blob(["mp4"], { type: "video/mp4" }))
+    const media = createMarkdownMedia(async () => ({ url, revoke: true }))
+
+    const root = document.createElement("div")
+    root.innerHTML = '<video controls data-local-media="./out/race.mp4"></video>'
+    document.body.replaceChildren(root)
+    const video = root.querySelector("video")!
+
+    media.update(root)
+    await settle()
+    expect(video.getAttribute("src")).toBe(url)
+
+    media.dispose()
+    await expect(nativeFetch(url)).rejects.toThrow()
   })
 })

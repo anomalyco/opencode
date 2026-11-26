@@ -4,6 +4,12 @@ import type { SessionReferenceMenu } from "../components/markdown-session-links"
 
 export type ReadMarkdownImage = (path: string, signal: AbortSignal) => Promise<Blob | undefined>
 
+/** A URL an inline media element plays, and whether the host must revoke it once the element goes away. */
+export type MarkdownMediaSource = { readonly url: string; readonly revoke: boolean }
+
+/** Resolve a local path for an inline `<video>`, `<audio>` or `<source>`, which routes URLs cannot reference. */
+export type ReadMarkdownMedia = (path: string, signal: AbortSignal) => Promise<MarkdownMediaSource | undefined>
+
 /** Open a local file path linked from markdown. The path is decoded and may be relative or absolute. */
 export type OpenMarkdownLocalFile = (path: string) => void
 
@@ -58,6 +64,7 @@ export type MarkdownCodeBlocks = {
 const context = createContext<{
   readonly appLinks?: boolean
   readonly readImage?: ReadMarkdownImage
+  readonly readMedia?: ReadMarkdownMedia
   readonly openLocalFile?: OpenMarkdownLocalFile
   readonly localFileExists?: MarkdownLocalFileExists
   readonly openSession?: (sessionID: string) => void
@@ -71,6 +78,7 @@ export function MarkdownProvider(
   props: ParentProps<{
     appLinks?: boolean
     readImage?: ReadMarkdownImage
+    readMedia?: ReadMarkdownMedia
     openLocalFile?: OpenMarkdownLocalFile
     localFileExists?: MarkdownLocalFileExists
     openSession?: (id: string) => void
@@ -92,6 +100,9 @@ export function MarkdownProvider(
         },
         get readImage() {
           return props.readImage
+        },
+        get readMedia() {
+          return props.readMedia
         },
         get openLocalFile() {
           return props.openLocalFile

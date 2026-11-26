@@ -753,6 +753,7 @@ function ArtifactMarkdown(props: { session: MountedSession; path: string; text: 
   return (
     <MarkdownProvider
       readImage={(src, signal) => parent?.readImage?.(resolve(src), signal) ?? Promise.resolve(undefined)}
+      readMedia={(src, signal) => parent?.readMedia?.(resolve(src), signal) ?? Promise.resolve(undefined)}
       openLocalFile={(href) => void links.open({ href, base: dir(), session: props.session })}
       localFileExists={(href) => untrack(() => links.exists({ href, base: dir(), session: props.session }))}
     >

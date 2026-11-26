@@ -9,7 +9,7 @@ import {
   type MarkdownCacheEvent,
 } from "./markdown-cache-machine"
 import { abortParseMarkdown, markdownWorkerDisposed, startParseMarkdown } from "./markdown-worker"
-import { localImagePath, localLinkPath } from "./markdown-image"
+import { localMediaPath, localLinkPath } from "./markdown-image"
 import type { MarkdownHTML } from "./markdown-worker-protocol"
 
 export type { MarkdownCacheEntry } from "./markdown-cache-machine"
@@ -51,6 +51,7 @@ if (typeof window !== "undefined" && purifier.isSupported) {
   const appLinks = new WeakMap<HTMLAnchorElement, string>()
   const files = new WeakMap<HTMLAnchorElement, string>()
   const images = new WeakMap<HTMLImageElement, string>()
+  const media = new WeakMap<HTMLVideoElement | HTMLAudioElement | HTMLSourceElement, string>()
 
   const prose = new Set(
     "a abbr b bdi bdo blockquote br caption center cite code col colgroup data dd del details dfn div dl dt em figcaption figure h1 h2 h3 h4 h5 h6 hr i img ins kbd li mark ol p pre q rp rt ruby s samp small span strong sub summary sup table tbody td tfoot th thead time tr u ul var wbr".split(
@@ -227,14 +228,25 @@ if (typeof window !== "undefined" && purifier.isSupported) {
       return
     }
 
-    if (!(node instanceof HTMLImageElement)) return
-    // Local paths are not browser URLs. Keep them inert until the host reads them.
-    const path = localImagePath(node.getAttribute("src") ?? "")
+    if (node instanceof HTMLImageElement) {
+      // Local paths are not browser URLs. Keep them inert until the host reads them.
+      const path = localMediaPath(node.getAttribute("src") ?? "")
 
-    if (!path) return
-    images.set(node, path)
+      if (!path) return
+      images.set(node, path)
+      node.removeAttribute("src")
+      node.removeAttribute("srcset")
+
+      return
+    }
+
+    if (!(node instanceof HTMLVideoElement || node instanceof HTMLAudioElement || node instanceof HTMLSourceElement))
+      return
+    const mediaPath = localMediaPath(node.getAttribute("src") ?? "")
+
+    if (!mediaPath) return
+    media.set(node, mediaPath)
     node.removeAttribute("src")
-    node.removeAttribute("srcset")
   })
   purifier.addHook("afterSanitizeAttributes", (node: Element) => {
     // This application-owned marker only adds containment. Renderer fragments never pass through this hook.
@@ -249,6 +261,12 @@ if (typeof window !== "undefined" && purifier.isSupported) {
       const path = images.get(node)
 
       if (path) node.dataset.localImage = path
+    }
+
+    if (node instanceof HTMLVideoElement || node instanceof HTMLAudioElement || node instanceof HTMLSourceElement) {
+      const path = media.get(node)
+
+      if (path) node.dataset.localMedia = path
     }
 
     if (!(node instanceof HTMLAnchorElement)) return

@@ -197,7 +197,7 @@ describe("generate_video", () => {
         ].join("\n"),
       )
       expect(yield* notice(result)).toBe(
-        `<background-result kind="video" id="${id}" state="completed">\nVideo request finished. Saved 2 videos: ${file}, ${second}.\n</background-result>`,
+        `<background-result kind="video" id="${id}" state="completed">\nVideo request finished. Saved 2 videos: ${file}, ${second}.\nShow them inline in your reply with <video controls src="${file}"></video> <video controls src="${second}"></video>, and also give each path.\n</background-result>`,
       )
       expect(new Uint8Array(yield* Effect.promise(() => fs.readFile(file)))).toEqual(Uint8Array.of(...MP4, 0))
       expect(new Uint8Array(yield* Effect.promise(() => fs.readFile(second)))).toEqual(Uint8Array.of(...MP4, 1))

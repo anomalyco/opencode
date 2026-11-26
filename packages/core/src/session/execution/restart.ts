@@ -151,7 +151,8 @@ export const layer = (options?: Options) =>
             background.status === "running"
               ? `Video request for ${recovery.path} couldn't be saved after the server restarted: its project folder no longer exists.`
               : state === "completed"
-                ? (background.output ?? `Video request finished. Saved video: ${recovery.path}.`)
+                ? (background.output ??
+                  `Video request finished. Saved video: ${recovery.path}.\nShow it inline in your reply with ${VideoGenerateTool.embed(recovery.path)}, and also give the path.`)
                 : state === "error"
                   ? (background.error ?? `Video request failed for ${recovery.path}.`)
                   : `Video request for ${recovery.path} was cancelled.`
@@ -165,7 +166,8 @@ export const layer = (options?: Options) =>
           background.status === "running"
             ? `Image request for ${recovery.path} was cancelled because the server restarted.`
             : state === "completed"
-              ? (background.output ?? `Image request finished. Saved image: ${recovery.path} (${recovery.model}).`)
+              ? (background.output ??
+                `Image request finished. Saved image: ${recovery.path} (${recovery.model}).\nShow it inline in your reply with ${ImageNotice.embed(recovery.path)}, and also give the path.`)
               : state === "error"
                 ? (background.error ?? `Image request failed for ${recovery.path}.`)
                 : `Image request for ${recovery.path} was cancelled.`

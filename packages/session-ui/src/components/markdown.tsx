@@ -66,9 +66,10 @@ import {
   type MarkdownCodeBlocks,
   type OpenMarkdownLocalFile,
   type ReadMarkdownImage,
+  type ReadMarkdownMedia,
   type MarkdownLocalFileExists,
 } from "../context/markdown"
-import { createMarkdownImages } from "./markdown-image"
+import { createMarkdownImages, createMarkdownMedia } from "./markdown-image"
 import { createImagePreview } from "./image-preview"
 import { createDiagramPreview } from "./diagram-preview"
 import { setupFragmentLinks } from "./markdown-fragment-links"
@@ -1161,6 +1162,8 @@ export function Markdown(
   let fragmentLinkCleanup: (() => void) | undefined
   let readImage: ReadMarkdownImage | undefined
   let images: ReturnType<typeof createMarkdownImages> | undefined
+  let readMedia: ReadMarkdownMedia | undefined
+  let media: ReturnType<typeof createMarkdownMedia> | undefined
 
   createEffect(() => {
     const container = root()
@@ -1176,6 +1179,12 @@ export function Markdown(
       images?.dispose()
       readImage = markdown?.readImage
       images = readImage ? createMarkdownImages(readImage) : undefined
+    }
+
+    if (readMedia !== markdown?.readMedia) {
+      media?.dispose()
+      readMedia = markdown?.readMedia
+      media = readMedia ? createMarkdownMedia(readMedia) : undefined
     }
 
     const codeBlocks = markdown?.codeBlocks
@@ -1197,6 +1206,7 @@ export function Markdown(
       disposeRenderedMarkdown(container)
       container.innerHTML = ""
       images?.update(container)
+      media?.update(container)
       renderedEvent.pendingChecks = 0
       dispatchPhase(renderedEvent)
 
@@ -1269,6 +1279,7 @@ export function Markdown(
     }
 
     images?.update(container)
+    media?.update(container)
     previewImages(container)
     container.querySelectorAll<HTMLImageElement>("img[data-markdown-favicon]").forEach((image) => {
       if (image.complete && image.naturalWidth > 0) showFavicon(image)
@@ -1317,6 +1328,7 @@ export function Markdown(
   onCleanup(() => {
     abort(lifetime)
     images?.dispose()
+    media?.dispose()
 
     if (copyCleanup) copyCleanup()
 

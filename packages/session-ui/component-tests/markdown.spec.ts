@@ -58,6 +58,7 @@ story("sanitizes raw HTML while preserving supported Markdown markup", async ({ 
       '<form id="location" name="document"><input name="cookie"></form>',
       "<math><mrow><mi>x</mi><mo>+</mo><mn>1</mn></mrow></math>",
       '<svg viewBox="0 0 10 10"><path d="M0 0L10 10" onload="alert(4)"></path><script>alert(5)</script></svg>',
+      '<video controls src="/tmp/race.mp4" onerror="alert(6)"></video><audio src="https://example.com/voice.mp3"></audio><video controls src="https://example.com/race.mp4"></video>',
     ].map(sanitizeMarkdown)
   }, fixture)
 
@@ -68,13 +69,14 @@ story("sanitizes raw HTML while preserving supported Markdown markup", async ({ 
     '',
     '<math data-markdown-contain=""><mrow data-markdown-contain=""><mi data-markdown-contain="">x</mi><mo data-markdown-contain="">+</mo><mn data-markdown-contain="">1</mn></mrow></math>',
     '<svg viewBox="0 0 10 10" data-markdown-contain=""><path d="M0 0L10 10" data-markdown-contain=""></path></svg>',
+    '<video controls="" data-markdown-contain="" data-local-media="/tmp/race.mp4"></video><audio src="https://example.com/voice.mp3" data-markdown-contain=""></audio><video controls="" src="https://example.com/race.mp4" data-markdown-contain=""></video>',
   ])
 })
 
 story("authored HTML cannot supply application behavior attributes", async ({ page }) => {
   const result = await page.evaluate(async (fixture) => {
     const { sanitizeMarkdown } = await import(fixture)
-    const names = ["data-owns-keyboard", "data-owns-escape", "data-prevent-autofocus", "data-floating-overlay", "data-app-link", "data-local-link", "data-local-image", "data-slot", "data-component", "data-future-marker", "aria-owns", "aria-controls", "aria-modal", "aria-hidden", "role", "class", "tabindex", "contenteditable", "draggable", "inert", "hidden", "popover", "autofocus", "slot", "part", "exportparts", "for", "form", "formaction", "command", "commandfor", "accesskey"]
+    const names = ["data-owns-keyboard", "data-owns-escape", "data-prevent-autofocus", "data-floating-overlay", "data-app-link", "data-local-link", "data-local-image", "data-local-media", "data-slot", "data-component", "data-future-marker", "aria-owns", "aria-controls", "aria-modal", "aria-hidden", "role", "class", "tabindex", "contenteditable", "draggable", "inert", "hidden", "popover", "autofocus", "slot", "part", "exportparts", "for", "form", "formaction", "command", "commandfor", "accesskey"]
     const box = document.createElement("div")
     box.innerHTML = sanitizeMarkdown(`<a href="#sample" id="sample" name="legacy" ${names.map(n => `${n}="fixture"`).join(" ")}>sample</a><label for="sample">label</label>`)
     const a = box.querySelector("a")!
@@ -1434,6 +1436,20 @@ story("keeps remote images browser-owned and rejects unsafe image sources", asyn
     "https://images.example/chart.png",
   )
   await expect(harness.locator("[onerror], [src^='javascript:'], [data-local-image]")).toHaveCount(0)
+})
+
+story("resolves local video, audio and source elements", async ({ page }) => {
+  await page.evaluate(async (fixture) => {
+    const { mountMarkdown } = await import(fixture)
+    await mountMarkdown({
+      media: true,
+      text: '<video controls src="/tmp/race.mp4"></video><audio src="./voice.mp3"></audio><video><source src="/tmp/clip.webm" type="video/webm"></video>',
+    })
+  }, fixture)
+  const markdown = page.getByTestId("markdown-fixture").locator('[data-component="markdown"]')
+  await expect(markdown.locator("video").nth(0)).toHaveAttribute("src", "https://media.example/tmp/race.mp4")
+  await expect(markdown.locator("audio")).toHaveAttribute("src", "https://media.example/voice.mp3")
+  await expect(markdown.locator("source")).toHaveAttribute("src", "https://media.example/tmp/clip.webm")
 })
 
 story("keeps scripts and external resources inactive inside local SVG images", async ({ page }) => {

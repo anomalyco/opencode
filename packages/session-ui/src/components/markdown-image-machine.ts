@@ -68,13 +68,14 @@ export const NO_MARKDOWN_IMAGE_EFFECTS: readonly MarkdownImagesEffect[] = Object
 export function transitionMarkdownImages(
   state: MarkdownImagesState,
   event: MarkdownImagesEvent,
+  readTimeoutMs = IMAGE_READ_TIMEOUT_MS,
 ): MarkdownImagesTransition {
   if (state.status === "disposed") return ignore(state, event)
 
   if (event.type === "disposed")
     return { state: DISPOSED_MARKDOWN_IMAGES_STATE, effects: [...state.entries.values()].flatMap(release) }
 
-  if (event.type === "paths.synced") return sync(state, event.paths)
+  if (event.type === "paths.synced") return sync(state, event.paths, readTimeoutMs)
 
   if (event.type === "retry.due") {
     const entry = state.entries.get(event.path)
@@ -86,7 +87,7 @@ export function transitionMarkdownImages(
       state: withEntry(state, event.path, { status: "loading", attempt, failures: entry.failures }, attempt),
       effects: [
         { type: "cancel", attempt: entry.attempt },
-        { type: "read", path: event.path, attempt, timeoutMs: IMAGE_READ_TIMEOUT_MS },
+        { type: "read", path: event.path, attempt, timeoutMs: readTimeoutMs },
       ],
     }
   }
@@ -123,6 +124,7 @@ export function selectMarkdownImageUrl(state: MarkdownImagesState, path: string)
 function sync(
   state: Extract<MarkdownImagesState, { status: "active" }>,
   paths: ReadonlySet<string>,
+  readTimeoutMs: number,
 ): MarkdownImagesTransition {
   const removed = [...state.entries].filter(([path]) => !paths.has(path))
   const added = [...paths].filter((path) => path && !state.entries.has(path))
@@ -135,7 +137,7 @@ function sync(
     const attempt = state.attempts + index + 1
     entries.set(path, { status: "loading", attempt, failures: 0 })
 
-    return { type: "read", path, attempt, timeoutMs: IMAGE_READ_TIMEOUT_MS } as const
+    return { type: "read", path, attempt, timeoutMs: readTimeoutMs } as const
   })
 
   return {

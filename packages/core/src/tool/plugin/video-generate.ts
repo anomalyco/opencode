@@ -90,6 +90,11 @@ export function notice(input: { id: string; state: string; body: string }) {
   return BackgroundResult.render(`kind="video" id="${input.id}" state="${input.state}"`, input.body)
 }
 
+/** The inline HTML a reply uses to play a saved video. */
+export function embed(file: string) {
+  return `<video controls src="${file.replaceAll("&", "&amp;").replaceAll('"', "&quot;")}"></video>`
+}
+
 /** Where the job's `index`th video is saved: the path itself for the first, then `cat-1.mp4`, `cat-2.mp4`, … */
 export function videoPath(file: string, index: number) {
   if (index === 0) return file
@@ -130,9 +135,12 @@ export const track = Effect.fnUntraced(function* (input: {
         return file
       }),
     )
-    return files.length === 1
-      ? `Video request finished. Saved video: ${files[0]}.`
-      : `Video request finished. Saved ${files.length} videos: ${files.join(", ")}.`
+    const inline = files.map(embed).join(" ")
+    const saved =
+      files.length === 1
+        ? `Video request finished. Saved video: ${files[0]}.`
+        : `Video request finished. Saved ${files.length} videos: ${files.join(", ")}.`
+    return `${saved}\nShow ${files.length === 1 ? "it" : "them"} inline in your reply with ${inline}, and also give ${files.length === 1 ? "the path" : "each path"}.`
   }).pipe(
     // The job keeps this text, so a restart can still deliver the outcome.
     Effect.mapError((error) => new Error(`Video request failed for ${input.path}: ${error.message}`)),

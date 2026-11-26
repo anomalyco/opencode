@@ -30,6 +30,7 @@ export async function mountMarkdown(options: {
   streaming?: boolean
   cached?: boolean
   images?: boolean
+  media?: boolean
   synchronousFiles?: boolean
   localFileExists?: MarkdownLocalFileExists
 }) {
@@ -76,6 +77,11 @@ export async function mountMarkdown(options: {
           <MarkdownProvider
             readImage={(path, signal) =>
               options.images ? readLocalImage(api, "C:/project", path, signal) : Promise.resolve(undefined)
+            }
+            readMedia={
+              options.media
+                ? async (path) => ({ url: `https://media.example/${path.replace(/^\.?\//, "")}`, revoke: false })
+                : undefined
             }
             localFileExists={(path) =>
               options.localFileExists?.(path) ??

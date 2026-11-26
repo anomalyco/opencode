@@ -2,17 +2,18 @@ import { describe, expect, test } from "bun:test"
 import { resolveObjectURL } from "node:buffer"
 import { resolveBlobUrl, setMediaBlobLoader } from "../persistence/drafts"
 import { createApiForServer } from "./api"
-import { readLocalImage } from "./image"
+import { readLocalImage, readLocalMedia } from "./image"
 import { createMediaCache } from "./media"
 import { createToolFileCache } from "./tool-file"
 
 function setup(
   respond: (init?: RequestInit) => Response | Promise<Response> = () => new Response(new Uint8Array([0, 127, 255])),
+  server: { url: string; password?: string } = { url: "https://server.example:4096", password: "secret" },
 ) {
   const requests: Array<{ url: URL; init?: RequestInit }> = []
 
   const api = createApiForServer({
-    server: { url: "https://server.example:4096", password: "secret" },
+    server,
     // SAFETY: the API client only calls fetch with a URL and init, which this stub accepts.
     fetch: (async (input: string | URL | Request, init?: RequestInit) => {
       requests.push({ url: new URL(input instanceof Request ? input.url : input), init })
@@ -262,5 +263,86 @@ describe("readLocalImage", () => {
     cache.dispose()
     media.dispose()
     expect(resolveObjectURL(inline!)).toBeUndefined()
+  })
+})
+
+describe("readLocalMedia", () => {
+  test.each([
+    ["/tmp/opencode/race clip.mp4", "/workspace/project", "race%20clip.mp4", "/tmp/opencode/"],
+    ["C:\\tmp\\opencode\\race.mp4", "/workspace/project", "race.mp4", "C:/tmp/opencode/"],
+    ["/screen.mp4", "/workspace/project", "screen.mp4", "/"],
+    ["clips/final cut.webm", "C:/project #1 + 50%", "clips/final%20cut.webm", "C:/project #1 + 50%"],
+  ])("streams %s with a ranged read", async (path, directory, encoded, location) => {
+    const server = { url: "http://127.0.0.1:4096" }
+    const { api, requests } = setup(undefined, server)
+
+    const source = await readLocalMedia(api, server, directory, path, new AbortController().signal)
+
+    expect(source).toEqual({
+      url: `http://127.0.0.1:4096/api/fs/read/${encoded}?location%5Bdirectory%5D=${encodeURIComponent(location).replace(/%20/g, "+")}`,
+      revoke: false,
+    })
+    expect(requests).toHaveLength(0)
+  })
+
+  test.each([
+    ["mp4", "video/mp4"],
+    ["mov", "video/quicktime"],
+    ["webm", "video/webm"],
+    ["mp3", "audio/mpeg"],
+    ["wav", "audio/wav"],
+    ["ogg", "audio/ogg"],
+  ])("downloads .%s as %s when the server needs a password", async (extension, type) => {
+    const server = { url: "https://server.example:4096", password: "secret" }
+    const { api, requests } = setup(() => new Response(new Uint8Array([0, 127, 255])), server)
+
+    const source = await readLocalMedia(
+      api,
+      server,
+      "/workspace/project",
+      `C:/tmp/opencode/race clip.${extension}`,
+      new AbortController().signal,
+    )
+
+    expect(source?.revoke).toBe(true)
+    expect(source?.url).toStartWith("blob:")
+    expect(requests).toHaveLength(1)
+    expect(requests[0].url.pathname).toBe(`/api/fs/read/race%20clip.${extension}`)
+    expect([...requests[0].url.searchParams]).toEqual([["location[directory]", "C:/tmp/opencode/"]])
+    expect(new Headers(requests[0].init?.headers).get("authorization")).toBe(`Basic ${btoa("opencode:secret")}`)
+    expect(resolveObjectURL(source!.url)?.type).toBe(type)
+    expect(await resolveObjectURL(source!.url)?.bytes()).toEqual(new Uint8Array([0, 127, 255]))
+    URL.revokeObjectURL(source!.url)
+  })
+
+  test.each([
+    "https://example.com/race.mp4",
+    "HTTP://example.com/race.mp4",
+    "file:///tmp/race.mp4",
+    "data:video/mp4;base64,AA==",
+    "blob:https://example.com/race.mp4",
+    "C:race.mp4",
+    "//server/share/race.mp4",
+    "\\\\server\\share\\race.mp4",
+    "//?/C:/race.mp4",
+    "race.png",
+    "race.txt",
+    "race.mp4.txt",
+    "race",
+    "race.mp4/",
+    "",
+  ])("does not request unsupported media %s", async (path) => {
+    const { api, requests } = setup()
+
+    expect(
+      await readLocalMedia(
+        api,
+        { url: "https://server.example:4096", password: "secret" },
+        "/repo",
+        path,
+        new AbortController().signal,
+      ),
+    ).toBeUndefined()
+    expect(requests).toHaveLength(0)
   })
 })

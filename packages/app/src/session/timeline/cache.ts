@@ -80,6 +80,7 @@ export function createTimelineCache(
         const flags = select(() => data.flags)
         // Local file links are not held: each view provides its own link handling for its session.
         const readImage = select(() => markdown?.readImage)
+        const readMedia = select(() => markdown?.readMedia)
         const openSession = select(() => markdown?.openSession)
         const sessionTitle = select(() => markdown?.sessionTitle)
         const sessionMenu = select(() => markdown?.sessionMenu)
@@ -145,6 +146,9 @@ export function createTimelineCache(
                   {
                     get readImage() {
                       return readImage()
+                    },
+                    get readMedia() {
+                      return readMedia()
                     },
                     get openSession() {
                       return openSession()

@@ -1,6 +1,6 @@
 import { abort } from "@opencode/util/abort"
 import { isLineRangeHash, parsePathLineSuffix } from "@opencode/util/path"
-import type { ReadMarkdownImage } from "../context/markdown"
+import type { MarkdownMediaSource, ReadMarkdownImage, ReadMarkdownMedia } from "../context/markdown"
 import {
   INITIAL_MARKDOWN_IMAGES_STATE,
   selectMarkdownImageUrl,
@@ -9,7 +9,7 @@ import {
   type MarkdownImagesEvent,
 } from "./markdown-image-machine"
 
-export function localImagePath(source: string) {
+export function localMediaPath(source: string) {
   // Marked percent-encodes image sources, so `C:\tmp\chart.png` arrives as `C:%5Ctmp%5Cchart.png`.
   const value = source.trim().replace(/\\|%5c/gi, "/")
 
@@ -45,7 +45,7 @@ export function localLinkPath(href: string) {
   // `app.tsx:42` is a file and line, not a URL scheme. The `.` or `/` keeps `tel:5551234` external.
   const cited = parsePathLineSuffix(target)
   const line = cited.path !== target && /[./]/.test(cited.path) ? cited : undefined
-  const base = localImagePath(line?.path ?? target)
+  const base = localMediaPath(line?.path ?? target)
 
   if (!base) return
 
@@ -71,22 +71,67 @@ function decodePath(value: string) {
 }
 
 export function createMarkdownImages(read: ReadMarkdownImage) {
+  return createInlineMedia({
+    elements: (container) => Array.from(container.querySelectorAll<HTMLImageElement>("img[data-local-image]")),
+    path: (element) => element.dataset.localImage ?? "",
+    async read(path, signal) {
+      const blob = await read(path, signal)
+
+      if (!blob) return
+
+      // SVG documents must not inherit the app origin if opened outside the image element.
+      if (blob.type === "image/svg+xml")
+        return { url: `data:image/svg+xml;charset=utf-8,${encodeURIComponent(await blob.text())}`, revoke: false }
+
+      return { url: URL.createObjectURL(blob), revoke: true }
+    },
+  })
+}
+
+export function createMarkdownMedia(read: ReadMarkdownMedia) {
+  return createInlineMedia({
+    elements: (container) =>
+      Array.from(
+        container.querySelectorAll<HTMLVideoElement | HTMLAudioElement | HTMLSourceElement>("[data-local-media]"),
+      ),
+    path: (element) => element.dataset.localMedia ?? "",
+    read,
+    // A downloaded video can be far larger than an image, so its fallback read is allowed to finish.
+    readTimeoutMs: 5 * 60_000,
+    applied(element) {
+      // A source added after its media element was inserted needs its parent to select it again.
+      if (!(element instanceof HTMLSourceElement)) return
+      const parent = element.parentElement
+
+      if (parent instanceof HTMLMediaElement) parent.load()
+    },
+  })
+}
+
+type InlineMediaElement = HTMLImageElement | HTMLVideoElement | HTMLAudioElement | HTMLSourceElement
+
+function createInlineMedia(options: {
+  elements(container: HTMLElement): InlineMediaElement[]
+  path(element: InlineMediaElement): string
+  read(path: string, signal: AbortSignal): Promise<MarkdownMediaSource | undefined>
+  readTimeoutMs?: number
+  applied?(element: InlineMediaElement): void
+}) {
   let state = INITIAL_MARKDOWN_IMAGES_STATE
   let root: HTMLElement | undefined
   const pending = new Map<number, { controller?: AbortController; timer: ReturnType<typeof setTimeout> }>()
 
-  const images = (container: HTMLElement) =>
-    Array.from(container.querySelectorAll<HTMLImageElement>("img[data-local-image]"))
-
   const syncDom = (container: HTMLElement) =>
-    images(container).forEach((image) => {
-      const url = selectMarkdownImageUrl(state, image.dataset.localImage ?? "")
+    options.elements(container).forEach((element) => {
+      const url = selectMarkdownImageUrl(state, options.path(element))
 
-      if (url && image.getAttribute("src") !== url) image.src = url
+      if (!url || element.getAttribute("src") === url) return
+      element.src = url
+      options.applied?.(element)
     })
 
   const dispatch = (event: MarkdownImagesEvent) => {
-    const next = transitionMarkdownImages(state, event)
+    const next = transitionMarkdownImages(state, event, options.readTimeoutMs)
     const changed = next.state !== state
     state = next.state
 
@@ -119,20 +164,13 @@ export function createMarkdownImages(read: ReadMarkdownImage) {
     const result = { path: effect.path, attempt: effect.attempt }
     const timer = setTimeout(() => dispatch({ type: "read.timed-out", ...result }), effect.timeoutMs)
     pending.set(effect.attempt, { controller, timer })
-    void read(effect.path, controller.signal)
-      .then(async (blob) => {
+    void options
+      .read(effect.path, controller.signal)
+      .then((source) => {
         if (controller.signal.aborted) return
 
-        if (!blob) return dispatch({ type: "read.empty", ...result })
-
-        // SVG documents must not inherit the app origin if opened outside the image element.
-        if (blob.type === "image/svg+xml") {
-          const url = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(await blob.text())}`
-
-          return dispatch({ type: "read.succeeded", ...result, url, revoke: false })
-        }
-
-        dispatch({ type: "read.succeeded", ...result, url: URL.createObjectURL(blob), revoke: true })
+        if (!source) return dispatch({ type: "read.empty", ...result })
+        dispatch({ type: "read.succeeded", ...result, url: source.url, revoke: source.revoke })
       })
       .catch(() => {
         if (controller.signal.aborted) return
@@ -143,9 +181,9 @@ export function createMarkdownImages(read: ReadMarkdownImage) {
   return {
     update(container: HTMLElement) {
       root = container
-      const paths = new Set(images(container).flatMap((image) => image.dataset.localImage || []))
+      const paths = new Set(options.elements(container).flatMap((element) => options.path(element) || []))
       dispatch({ type: "paths.synced", paths })
-      // Newly inserted images of an already loaded path get their `src` before paint.
+      // Newly inserted media of an already loaded path gets its `src` before paint.
       syncDom(container)
     },
     dispose() {
