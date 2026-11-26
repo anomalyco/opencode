@@ -1,0 +1,55 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Dune",
+  "id": "dune",
+  "light": {
+    "palette": {
+      "neutral": "#faf6ec",
+      "ink": "#241f12",
+      "primary": "#8a5d00",
+      "accent": "#9e3f1f",
+      "success": "#386e34",
+      "warning": "#945800",
+      "error": "#b52b24",
+      "info": "#1f6a73",
+      "interactive": "#8a5d00",
+      "diffAdd": "#386e34",
+      "diffDelete": "#b52b24"
+    },
+    "overrides": {
+      "text-weak": "#635a44",
+      "syntax-comment": "#6e644d",
+      "syntax-keyword": "#8a5d00",
+      "syntax-string": "#386e34",
+      "syntax-primitive": "#1f6a73",
+      "syntax-property": "#9e3f1f",
+      "syntax-type": "#735200",
+      "syntax-constant": "#a83327"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#191712",
+      "ink": "#efe9d8",
+      "primary": "#e6b450",
+      "accent": "#e8835c",
+      "success": "#95c76f",
+      "warning": "#f2c45a",
+      "error": "#eb6b5e",
+      "info": "#73c4c9",
+      "interactive": "#e6b450",
+      "diffAdd": "#95c76f",
+      "diffDelete": "#eb6b5e"
+    },
+    "overrides": {
+      "text-weak": "#a69e8a",
+      "syntax-comment": "#8f8774",
+      "syntax-keyword": "#edc062",
+      "syntax-string": "#9fd179",
+      "syntax-primitive": "#7ecdd1",
+      "syntax-property": "#ed916d",
+      "syntax-type": "#f5cf73",
+      "syntax-constant": "#f08073"
+    }
+  }
+}

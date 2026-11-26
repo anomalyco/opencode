@@ -1,0 +1,59 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "E-Ink",
+  "id": "eink",
+  "light": {
+    "palette": {
+      "neutral": "#f3f2ee",
+      "ink": "#171717",
+      "primary": "#3f3f42",
+      "accent": "#525257",
+      "success": "#2d593e",
+      "warning": "#6b5322",
+      "error": "#7a2e2e",
+      "info": "#3f3f42",
+      "interactive": "#3f3f42",
+      "diffAdd": "#2d593e",
+      "diffDelete": "#7a2e2e"
+    },
+    "overrides": {
+      "text-weak": "#575754",
+      "syntax-comment": "#63635f",
+      "syntax-keyword": "#171717",
+      "syntax-string": "#383836",
+      "syntax-primitive": "#262625",
+      "syntax-property": "#454542",
+      "syntax-type": "#2e2e2c",
+      "syntax-constant": "#383836",
+      "syntax-operator": "#52524f",
+      "syntax-punctuation": "#575754"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#171717",
+      "ink": "#e6e5e1",
+      "primary": "#a8a8ad",
+      "accent": "#c2c2c7",
+      "success": "#8ab89a",
+      "warning": "#c9b382",
+      "error": "#cf8a8a",
+      "info": "#a8a8ad",
+      "interactive": "#a8a8ad",
+      "diffAdd": "#8ab89a",
+      "diffDelete": "#cf8a8a"
+    },
+    "overrides": {
+      "text-weak": "#969590",
+      "syntax-comment": "#82817c",
+      "syntax-keyword": "#f2f1ed",
+      "syntax-string": "#bfbeb8",
+      "syntax-primitive": "#dcdbd6",
+      "syntax-property": "#b3b2ac",
+      "syntax-type": "#d4d3ce",
+      "syntax-constant": "#c7c6c0",
+      "syntax-operator": "#9e9d98",
+      "syntax-punctuation": "#969590"
+    }
+  }
+}

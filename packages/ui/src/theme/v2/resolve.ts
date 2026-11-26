@@ -141,7 +141,7 @@ function generateV2NeutralScale(neutral: HexColor, ink: HexColor, isDark: boolea
 function generateV2HueScale(seed: HexColor, isDark: boolean, anchors: HueScaleAnchors): HexColor[] {
   const base = hexToOklch(seed)
   const bgBaseL = hexToOklch(anchors.bgBase).l
-  const chroma = clamp(base.c, 0.075, 0.22)
+  const chroma = base.c < 0.025 ? base.c : clamp(base.c, 0.075, 0.22)
   const h = base.h
 
   const step100 = oklchToHexExact({
@@ -163,7 +163,7 @@ function generateV2HueScale(seed: HexColor, isDark: boolean, anchors: HueScaleAn
 
   const raw1200 = oklchToHexExact({
     l: isDark ? clamp(bgBaseL + 0.035, 0.2, 0.31) : 0.23,
-    c: clamp(chroma * 0.42, 0.035, 0.072),
+    c: base.c < 0.025 ? chroma * 0.42 : clamp(chroma * 0.42, 0.035, 0.072),
     h,
   })
 

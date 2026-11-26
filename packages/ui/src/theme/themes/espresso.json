@@ -1,0 +1,55 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Espresso",
+  "id": "espresso",
+  "light": {
+    "palette": {
+      "neutral": "#f7f1e8",
+      "ink": "#261b14",
+      "primary": "#994f1c",
+      "accent": "#7d3c56",
+      "success": "#35733c",
+      "warning": "#8f5c0c",
+      "error": "#ad2e24",
+      "info": "#2e6978",
+      "interactive": "#994f1c",
+      "diffAdd": "#35733c",
+      "diffDelete": "#ad2e24"
+    },
+    "overrides": {
+      "text-weak": "#665448",
+      "syntax-comment": "#705d50",
+      "syntax-keyword": "#994f1c",
+      "syntax-string": "#35733c",
+      "syntax-primitive": "#2e6978",
+      "syntax-property": "#7d3c56",
+      "syntax-type": "#87580d",
+      "syntax-constant": "#a33b2a"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#1c1613",
+      "ink": "#ede0d4",
+      "primary": "#e09052",
+      "accent": "#d98ca3",
+      "success": "#8ec479",
+      "warning": "#e8bd70",
+      "error": "#e86f61",
+      "info": "#7ec2cf",
+      "interactive": "#e09052",
+      "diffAdd": "#8ec479",
+      "diffDelete": "#e86f61"
+    },
+    "overrides": {
+      "text-weak": "#a89587",
+      "syntax-comment": "#948072",
+      "syntax-keyword": "#e59a5e",
+      "syntax-string": "#98cc82",
+      "syntax-primitive": "#86cad6",
+      "syntax-property": "#e09ab0",
+      "syntax-type": "#ecc57c",
+      "syntax-constant": "#eb8475"
+    }
+  }
+}

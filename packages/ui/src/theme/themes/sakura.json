@@ -1,0 +1,55 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Sakura",
+  "id": "sakura",
+  "light": {
+    "palette": {
+      "neutral": "#fff5f8",
+      "ink": "#2b1422",
+      "primary": "#c22575",
+      "accent": "#8f2d8c",
+      "success": "#237d52",
+      "warning": "#9c6200",
+      "error": "#c9224b",
+      "info": "#a63288",
+      "interactive": "#c22575",
+      "diffAdd": "#237d52",
+      "diffDelete": "#c9224b"
+    },
+    "overrides": {
+      "text-weak": "#6e4b5e",
+      "syntax-comment": "#7a586b",
+      "syntax-keyword": "#b51f6d",
+      "syntax-string": "#237a50",
+      "syntax-primitive": "#852b82",
+      "syntax-property": "#6e327a",
+      "syntax-type": "#8f5900",
+      "syntax-constant": "#c22575"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#21151d",
+      "ink": "#f7e6ef",
+      "primary": "#f26cb2",
+      "accent": "#d58cff",
+      "success": "#7ddba6",
+      "warning": "#f5c77e",
+      "error": "#ff6b8b",
+      "info": "#ffa6d8",
+      "interactive": "#f26cb2",
+      "diffAdd": "#7ddba6",
+      "diffDelete": "#ff6b8b"
+    },
+    "overrides": {
+      "text-weak": "#b896a9",
+      "syntax-comment": "#9e7c90",
+      "syntax-keyword": "#ff85c2",
+      "syntax-string": "#8be3b0",
+      "syntax-primitive": "#d99cff",
+      "syntax-property": "#ffb5df",
+      "syntax-type": "#f7cf8b",
+      "syntax-constant": "#ff94b2"
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://opencode.ai/desktop-theme.json",
+  "name": "Witch Hazel",
+  "id": "witchhazel",
+  "light": {
+    "palette": {
+      "neutral": "#f8f2fc",
+      "ink": "#261a33",
+      "primary": "#7a35cc",
+      "accent": "#b5267a",
+      "success": "#1c7a58",
+      "warning": "#946000",
+      "error": "#bf2450",
+      "info": "#166f8c",
+      "interactive": "#7a35cc",
+      "diffAdd": "#1c7a58",
+      "diffDelete": "#bf2450"
+    },
+    "overrides": {
+      "text-weak": "#5c4d70",
+      "syntax-comment": "#68587d",
+      "syntax-keyword": "#1c7a58",
+      "syntax-string": "#166f8c",
+      "syntax-primitive": "#7a35cc",
+      "syntax-property": "#8c2b9e",
+      "syntax-type": "#8c5b00",
+      "syntax-constant": "#b5267a"
+    }
+  },
+  "dark": {
+    "palette": {
+      "neutral": "#282236",
+      "ink": "#f8f8f2",
+      "primary": "#ceb1ff",
+      "accent": "#ffb8d1",
+      "success": "#c2ffdf",
+      "warning": "#fff352",
+      "error": "#ff6e8e",
+      "info": "#1bc5e0",
+      "interactive": "#ceb1ff",
+      "diffAdd": "#c2ffdf",
+      "diffDelete": "#ff6e8e"
+    },
+    "overrides": {
+      "text-weak": "#b0bec5",
+      "syntax-comment": "#9baab2",
+      "syntax-keyword": "#c2ffdf",
+      "syntax-string": "#7ce4f7",
+      "syntax-primitive": "#ceb1ff",
+      "syntax-property": "#ffb8d1",
+      "syntax-type": "#fff2a6",
+      "syntax-constant": "#c5a3ff"
+    }
+  }
+}
