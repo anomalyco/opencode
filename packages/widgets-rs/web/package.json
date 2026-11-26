@@ -1,0 +1,35 @@
+{
+  "name": "widget-web",
+  "version": "0.1.0",
+  "description": "PsychoScript widgets in the browser: the Rust PsychoScript in WebAssembly, run in Web Workers, rendered with plain DOM, Canvas2D and WebGPU",
+  "type": "module",
+  "license": "MIT",
+  "private": true,
+  "sideEffects": false,
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./worker.js": "./dist/worker.js",
+    "./widget_web_bg.wasm": "./dist/widget_web_bg.wasm",
+    "./package.json": "./package.json"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build:wasm": "bash scripts/build-wasm.sh",
+    "build": "bun scripts/build.ts",
+    "typecheck": "tsc --noEmit -p .",
+    "fixtures": "bun scripts/fixtures.ts",
+    "demo": "bun scripts/serve.ts"
+  },
+  "devDependencies": {
+    "@webgpu/types": "0.1.69",
+    "typescript": "5.9.3",
+    "playwright-core": "1.57.0"
+  }
+}

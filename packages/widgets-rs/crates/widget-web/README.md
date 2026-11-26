@@ -92,9 +92,9 @@ caller's stack fails with "nested too deeply" (no thread with a larger stack).
 
 | Module | Raw | gzip -9 | brotli -q 11 |
 | --- | --- | --- | --- |
-| `widget_web_bg.wasm` (language) | 9.54 MB | 3.19 MB | 2.21 MB |
-|   of which code | 3.84 MB | 1.36 MB | 0.93 MB |
-|   of which data | 5.69 MB | 1.83 MB | 1.24 MB |
+| `widget_web_bg.wasm` (language) | 9.95 MB | 3.36 MB | 2.33 MB |
+|   of which code | 4.22 MB | 1.50 MB | 1.02 MB |
+|   of which data | 5.72 MB | 1.85 MB | 1.25 MB |
 
 The data is mostly ICU4X's compiled data for every CLDR locale (date/time names and patterns for
 `toLocale*String`/`Intl.DateTimeFormat`, collation for `localeCompare`). Data segments are copied into each
