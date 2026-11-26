@@ -526,9 +526,17 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
   const failure = (error: unknown) => {
     // A tool call that relists first can fail with the list's already mapped expiry.
     if (error instanceof SessionExpiredError) return error
+    // The server refused the credential even after a refresh, or there is none it would take: only a new login helps.
+    if (
+      error instanceof UnauthorizedError ||
+      error instanceof InsufficientScopeError ||
+      (error instanceof SdkHttpError && error.code === SdkErrorCode.ClientHttpAuthentication)
+    )
+      return new NeedsAuthError({ server, message: describe(error) })
     if (!(error instanceof SdkHttpError) || session.transport?.sessionId === undefined) return new Error(explain(error))
+    // Some servers answer a method they don't implement with a 404 that carries a JSON-RPC method-not-found error.
     const expired =
-      error.status === 404 ||
+      (error.status === 404 && !methodNotFound(error.data.text)) ||
       (error.status === 400 &&
         typeof error.data.text === "string" &&
         error.data.text.includes("Bad Request: Server not initialized"))
@@ -1043,6 +1051,11 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
     })
   return yield* new ConnectError({ server, message: explain(error), answered: !repeats(error) })
 })
+
+const decodeMethodNotFound = Schema.decodeUnknownOption(
+  Schema.fromJsonString(Schema.Struct({ error: Schema.Struct({ code: Schema.Literal(-32601) }) })),
+)
+const methodNotFound = (body: unknown) => typeof body === "string" && Option.isSome(decodeMethodNotFound(body))
 
 // Connecting again would fail the same way: the server could not be spawned or reached, did not answer in
 // time, is overloaded or down for now, or refused this client's access. A failed auto probe wraps the error it hit.

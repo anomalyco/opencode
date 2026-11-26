@@ -152,16 +152,30 @@ export function make(input: Input): Connection {
       yield* start
     }).pipe(input.lock)
 
+  // A request the server refused for authorization ends the connection in needs_auth, as a refused connect does, so the
+  // status says so and later calls stop refreshing a token the server will not take.
+  const refused = (client: McpClient.Connection, message: string) =>
+    Effect.gen(function* () {
+      if (state.client !== client) return
+      // A shared connection's holders learn of its end only through `closed`, which stops it.
+      if (input.shared) return yield* input.events.closed(message)
+      yield* stop
+      yield* input.events.failed({ status: "needs_auth", error: message }, false)
+    }).pipe(input.lock)
+
+  // The client module is loaded lazily, so match its tagged errors by tag rather than class.
+  const tagged = (error: Error, tag: string) => "_tag" in error && error._tag === tag
+
   const recovering = <A, E extends Error>(
     client: McpClient.Connection,
     run: (client: McpClient.Connection) => Effect.Effect<A, E>,
   ) =>
     run(client).pipe(
       Effect.catchIf(
-        // The client module is loaded lazily, so match the tagged error by tag rather than class.
-        (error) => "_tag" in error && error._tag === "MCP.SessionExpiredError",
+        (error) => tagged(error, "MCP.SessionExpiredError"),
         (error) => recover(client).pipe(Effect.flatMap(() => (state.client ? run(state.client) : Effect.fail(error)))),
       ),
+      Effect.tapError((error) => (tagged(error, "MCP.NeedsAuthError") ? refused(client, error.message) : Effect.void)),
     )
 
   const watch = (client: McpClient.Connection) => {

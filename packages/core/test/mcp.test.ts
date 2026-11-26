@@ -1165,6 +1165,90 @@ test("reconnects and retries a tool call after the MCP session expires", async (
   )
 })
 
+test("keeps the session when a method the server lacks answers 404 with method-not-found (#60583)", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const server = yield* resourceServer({
+          respond: async (request) => {
+            const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
+            if (!isRecord(body) || body.method !== "resources/templates/list") return undefined
+            return Response.json(
+              { jsonrpc: "2.0", id: body.id, error: { code: -32601, message: "Method not found" } },
+              { status: 404 },
+            )
+          },
+        })
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          expect((yield* service.resources({ server: "resources" })).templates).toEqual([])
+          yield* service.callTool({ server: "resources", name: "echo", args: { n: 1 } })
+
+          expect(server.state.initializations).toBe(1)
+          expect(server.state.sessions).toHaveLength(1)
+        }).pipe(Effect.provide(resourceMcpLayer(server.url)))
+      }),
+    ),
+  )
+})
+
+test("reports needs_auth when a connected server refuses a tool call's credential (#53942)", async () => {
+  await Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const refusing = { tools: false }
+        const server = yield* resourceServer({
+          respond: async (request) => {
+            const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
+            if (!refusing.tools || !isRecord(body) || body.method !== "tools/call") return undefined
+            return new Response(null, { status: 401 })
+          },
+        })
+        // A signed-in credential with no refresh token: a 401 can only end in a new login.
+        const credential = (integrationID: Integration.ID) =>
+          new Credential.Info({
+            id: Credential.ID.make("cred_signed"),
+            integrationID,
+            label: "signed",
+            value: {
+              type: "oauth",
+              methodID: Integration.MethodID.make("signed"),
+              access: "signed-in",
+              refresh: "",
+              expires: Date.now() + 3_600_000,
+              metadata: { serverUrl: server.url, tokenType: "Bearer" },
+            },
+          })
+        const credentials: Partial<Credential.Interface> = {
+          list: (integrationID) => Effect.succeed([credential(integrationID)]),
+          get: () => Effect.succeed(credential(Integration.ID.make("unused"))),
+        }
+        yield* Effect.gen(function* () {
+          const service = yield* Mcp.Service
+          yield* service.callTool({ server: "resources", name: "echo", args: { n: 1 } })
+          refusing.tools = true
+
+          const error = yield* service.callTool({ server: "resources", name: "echo", args: { n: 2 } }).pipe(Effect.flip)
+
+          expect(error).toBeInstanceOf(Mcp.ToolCallError)
+          expect((yield* service.servers()).find((entry) => entry.name === "resources")?.status).toMatchObject({
+            status: "needs_auth",
+          })
+          // The refused connection is closed, so later calls don't reach the server.
+          yield* service.callTool({ server: "resources", name: "echo", args: { n: 3 } }).pipe(Effect.flip)
+          expect(server.state.toolCalls.map((call) => call.arguments)).toEqual([{ n: 1 }])
+        }).pipe(
+          Effect.provide(
+            resourceMcpLayer(new ConfigMCP.Remote({ type: "remote", url: server.url }), undefined, undefined, {
+              credentials,
+            }),
+          ),
+        )
+      }),
+    ),
+  )
+})
+
 describe.each([
   ["legacy", undefined],
   ["modern", "2026-07-28"],
