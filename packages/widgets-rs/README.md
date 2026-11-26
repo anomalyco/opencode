@@ -11,12 +11,11 @@ OpenCode widgets' Rust hosts, as one Cargo workspace on PsychoScript's crates (`
 
 ## PsychoScript's crates
 
-`psychoscript-gpu` and `psychoscript-mobile` come from git at one revision of `anomalyco/psychoscript`
-(`[workspace.dependencies]` in `Cargo.toml`), and `psychoscript` itself, `"0.1"` in the crates that need only it, is
-patched to the same revision, so every crate here shares one. `wgpu-hal` is patched to PsychoScript's vendored copy at
-that revision too (published wgpu-hal plus the Metal fix of gfx-rs/wgpu#10875: any command buffer that fails loses the
-device), until a wgpu release has it. To bump the revision, change every `rev = ` in `Cargo.toml`, then run
-`cargo update -p psychoscript` and commit `Cargo.lock`.
+`psychoscript`, `psychoscript-gpu` and `psychoscript-mobile` come from crates.io (`"0.1"`; `[workspace.dependencies]` in
+`Cargo.toml` and the crates' own manifests); bump them with `cargo update -p <crate>` and commit `Cargo.lock`. A
+published crate can't carry PsychoScript's vendored `wgpu-hal` (wgpu-hal 30.0.2 plus the Metal fix of
+gfx-rs/wgpu#10875: any command buffer that fails loses the device), so this workspace patches `wgpu-hal` to it
+(`[patch.crates-io]`, by git at a commit of PsychoScript's `dev`) until a wgpu release has the fix.
 
 ## Commands
 

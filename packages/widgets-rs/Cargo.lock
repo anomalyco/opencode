@@ -1484,8 +1484,9 @@ checksum = "3d595e54a326bc53c1c197b32d295e14b169e3cfeaa8dc82b529f947fba6bcf5"
 
 [[package]]
 name = "psychoscript"
-version = "0.1.0"
-source = "git+https://github.com/anomalyco/psychoscript?rev=2e2c0199b043ce419992211a6b63a489f4cd45d8#2e2c0199b043ce419992211a6b63a489f4cd45d8"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a51c3983159fc04f0f78e13f92ff44f6aa6c1e2b45b5b129f74eda2448bae3f7"
 dependencies = [
  "fixed_decimal",
  "icu_calendar",
@@ -1520,7 +1521,8 @@ dependencies = [
 [[package]]
 name = "psychoscript-gpu"
 version = "0.1.0"
-source = "git+https://github.com/anomalyco/psychoscript?rev=2e2c0199b043ce419992211a6b63a489f4cd45d8#2e2c0199b043ce419992211a6b63a489f4cd45d8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b0b893763c16cf57bb94d37ca6ba61c17bbd819354d4d6f8ce8e4285c9e62071"
 dependencies = [
  "serde_json",
  "wgpu",
@@ -1529,7 +1531,8 @@ dependencies = [
 [[package]]
 name = "psychoscript-mobile"
 version = "0.1.0"
-source = "git+https://github.com/anomalyco/psychoscript?rev=2e2c0199b043ce419992211a6b63a489f4cd45d8#2e2c0199b043ce419992211a6b63a489f4cd45d8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "55495cdfdfd730a870d4dd6dd63cd0bb5e04edd9df11ad0bf7dc45b916cbb497"
 dependencies = [
  "libc",
  "psychoscript",
@@ -2307,7 +2310,7 @@ dependencies = [
 [[package]]
 name = "wgpu-hal"
 version = "30.0.2"
-source = "git+https://github.com/anomalyco/psychoscript?rev=2e2c0199b043ce419992211a6b63a489f4cd45d8#2e2c0199b043ce419992211a6b63a489f4cd45d8"
+source = "git+https://github.com/anomalyco/psychoscript?rev=2ef493f1646bb7457047598156f1a4708261ad62#2ef493f1646bb7457047598156f1a4708261ad62"
 dependencies = [
  "android_system_properties",
  "arrayvec",
