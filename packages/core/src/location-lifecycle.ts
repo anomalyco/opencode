@@ -27,6 +27,8 @@ export class Service extends Context.Service<
     /** Keeps the idle sweep from evicting the Location for the calling scope, for open client connections. */
     readonly retain: Effect.Effect<void, never, Scope.Scope>
     readonly isRetained: () => boolean
+    /** Resolves the Project this Location belongs to again, without persisting it. */
+    readonly resolveProject: Effect.Effect<Project.Resolved>
   }
 >()("@opencode/LocationLifecycle") {}
 
@@ -86,6 +88,7 @@ const layer = Layer.effect(
           }),
       ),
       isRetained: () => retained > 0,
+      resolveProject: project.resolve(location.directory, { persist: false }),
     })
   }),
 )
