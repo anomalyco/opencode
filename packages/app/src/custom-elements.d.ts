@@ -1,1 +1,1 @@
-../../ui/src/custom-elements.d.ts
+import "@opencode/ui/custom-elements"
