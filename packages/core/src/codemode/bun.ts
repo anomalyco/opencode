@@ -541,12 +541,17 @@ export const extension = Extension.make({
   },
 })
 
-/** What to show for a Bun call: the function, its path or pattern, and the file a write copies. */
-export const display = (name: string, args: ReadonlyArray<unknown>) => {
-  const from = name === "Bun.write" ? handleOf(args[1])?.name : undefined
-  return {
-    method: name.slice(name.lastIndexOf(".") + 1),
-    path: handleOf(args[0])?.name ?? String(args[0]),
-    ...(from === undefined ? {} : { from }),
-  }
+/**
+ * The row a Bun call shows as: `Bun.file` as a read and `Bun.write` as a write of its path, with the file a write
+ * copies, so they look like the file tools they stand in for. Anything else names its function and path or pattern.
+ */
+export const display = (
+  name: string,
+  args: ReadonlyArray<unknown>,
+): { tool: string; input: Record<string, string> } => {
+  const path = handleOf(args[0])?.name ?? String(args[0])
+  if (name === "Bun.file") return { tool: "read", input: { path } }
+  if (name !== "Bun.write") return { tool: "Bun", input: { method: name.slice(name.lastIndexOf(".") + 1), path } }
+  const from = handleOf(args[1])?.name
+  return { tool: "write", input: { path, ...(from === undefined ? {} : { from }) } }
 }

@@ -317,6 +317,29 @@ describe("Bun", () => {
     )
   })
 
+  test("Bun.file and Bun.write show as read and write calls", async () => {
+    await using tmp = await tmpdir()
+    await Bun.write(path.join(tmp.path, "notes.txt"), "hello")
+    const result = await Effect.runPromise(
+      createCodeMode(new Map(), allowAll, codeModeServices(tmp.path)).execute(
+        {
+          code: `await Bun.file("notes.txt").text()
+          await Bun.write("copy.txt", Bun.file("notes.txt"))
+          await Bun.write("new.txt", "text")
+          new Bun.Glob("*.txt")`,
+        },
+        context,
+      ),
+    )
+    expect(result.output.toolCalls).toEqual([
+      { tool: "read", status: "completed", input: { path: "notes.txt" } },
+      { tool: "read", status: "completed", input: { path: "notes.txt" } },
+      { tool: "write", status: "completed", input: { path: "copy.txt", from: "notes.txt" } },
+      { tool: "write", status: "completed", input: { path: "new.txt" } },
+      { tool: "Bun", status: "completed", input: { method: "Glob", path: "*.txt" } },
+    ])
+  })
+
   test("Bun.Glob scans for files, with dot files, folders and absolute paths on request", async () => {
     await using tmp = await tmpdir()
     await Bun.write(path.join(tmp.path, "src", "a.ts"), "a")
