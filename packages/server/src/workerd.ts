@@ -7,6 +7,7 @@ import { Database } from "@opencode/core/database/database"
 import { sqliteLayer } from "@opencode/core/database/sqlite.workerd"
 import type { DurableObjectStorage } from "@opencode/core/database/sqlite.workerd"
 import { EnvironmentUnavailable } from "@opencode/core/environment/unavailable"
+import { WorkspaceConnector } from "@opencode/core/environment/workspace-connector"
 import { Identity } from "@opencode/core/machine/identity"
 import { Pty } from "@opencode/core/pty"
 import { Snapshot } from "@opencode/core/snapshot"
@@ -116,6 +117,7 @@ export function replacements(options: Options): LayerNode.Replacements {
         onIdleScheduled: (atMs) => Effect.tryPromise(() => options.storage.setAlarm(atMs)),
       }),
     ),
+    WorkspaceConnector.node.replace(Workspace.connectorNode),
     CrossSpawnSpawner.node.replace(EnvironmentUnavailable.layer),
     Snapshot.node.replace(Snapshot.noopLayer),
     Vcs.node.replace(vcsLayer),

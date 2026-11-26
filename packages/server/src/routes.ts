@@ -45,6 +45,7 @@ import { PushList } from "@opencode/core/push/list"
 import { PushSender } from "@opencode/core/push/sender"
 import { PushWatcher } from "@opencode/core/push/watcher"
 import { Workspace } from "@opencode/core/workspace"
+import { WorkspaceConnector } from "@opencode/core/environment/workspace-connector"
 import { Watcher } from "@opencode/core/filesystem/watcher"
 import { FileWatch } from "@opencode/core/filesystem/file-watch"
 import { HttpEffect, HttpRouter } from "effect/http"
@@ -168,6 +169,7 @@ function makeRoutes(
       ),
     ),
     Database.node.replace(Database.configured(options.database)),
+    WorkspaceConnector.node.replace(Workspace.connectorNode),
     PersistentPty.node.replace(PersistentPty.configured(options.pty)),
     Bus.node.replace(Bus.configured({ persist: options.events?.persist })),
     App.node.replace(App.configured(options.app)),
