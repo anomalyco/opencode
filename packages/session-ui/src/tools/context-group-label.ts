@@ -56,7 +56,7 @@ function toolTitle(tool: Summary["toolNames"][number], i18n: UiI18n) {
  * A context group's parts as facts. A user's shell command counts as a call; notices and text count nothing. A script's
  * files count where they are placed, so only those in the group.
  */
-export function contextGroupFacts(parts: readonly ContextGroupPart[]) {
+export function contextGroupFacts(parts: readonly ContextGroupPart[], scriptSteps = false) {
   return parts.flatMap((part) => {
     if (part.type === "file") return [part.file]
 
@@ -67,17 +67,17 @@ export function contextGroupFacts(parts: readonly ContextGroupPart[]) {
           ? [{ type: "shell", id: part.id }]
           : []
 
-    return factsOf(own).filter((fact) => fact.kind !== "file" || fact.via !== "script")
+    return factsOf(own, true, scriptSteps).filter((fact) => fact.kind !== "file" || fact.via !== "script")
   })
 }
 
 /** The closed label of a group of calls and thoughts: "Used 3 Read, Grep". */
-export function contextGroupLabel(parts: readonly ContextGroupPart[], i18n: UiI18n) {
-  const facts = contextGroupFacts(parts)
+export function contextGroupLabel(parts: readonly ContextGroupPart[], i18n: UiI18n, scriptSteps = false) {
+  const facts = contextGroupFacts(parts, scriptSteps)
   const summary = summarize(facts)
   const thoughts = summary.thoughts
   // Rows pass calls by their part id and a script's changes by message and part id, so a change names its script by either.
-  const calls = new Set(facts.flatMap((fact) => (fact.kind === "call" ? [fact.id] : [])))
+  const calls = new Set(parts.flatMap((part) => (part.type === "tool" ? [part.id] : [])))
   const shown = (by: string) => calls.has(by) || calls.has(by.slice(by.indexOf(":") + 1))
 
   // A hidden script's changes read as the patch a direct edit shows as, one call per script, in the order they came.

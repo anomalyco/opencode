@@ -387,6 +387,7 @@ export function CurrentContextToolGroup(props: {
   patchGroupKey?: (tools: SessionMessageAssistantTool[]) => string
 }) {
   const i18n = useI18n()
+  const data = useData()
   const tools = createMemo(() => props.parts.filter((part) => part.type === "tool"))
 
   const pending = createMemo(
@@ -434,7 +435,7 @@ export function CurrentContextToolGroup(props: {
       return { text, title: text, before: "", count: undefined, between: "", after: "" }
     }
 
-    return contextGroupLabel(props.parts, i18n)
+    return contextGroupLabel(props.parts, i18n, data.flag("full_codemode"))
   })
 
   const items = createMemo(() =>

@@ -34,4 +34,29 @@ describe("group labels", () => {
     expect(contextGroupLabel(parts, i18n).text).toBe("Used 2 Shell, Read")
     expect(contextGroupLabel([{ type: "notice", id: "n1", render: () => null }], i18n).text).toBe("Updates")
   })
+
+  test("the current timeline counts a script's steps, without a patch for its changes, with scriptSteps", () => {
+    const step = (tool: string, input: Record<string, string>) => ({ tool, status: "completed", input })
+
+    const script = storyTool(
+      "x1",
+      "execute",
+      "completed",
+      {},
+      {
+        metadata: {
+          toolCalls: [
+            step("read", { path: "/repo/a.ts" }),
+            step("shell", { command: "ls" }),
+            step("edit", { path: "/repo/b.ts" }),
+            step("Bun", { method: "write", path: "/repo/c.ts" }),
+          ],
+          files: [{ file: "/repo/b.ts" }, { file: "/repo/c.ts" }],
+        },
+      },
+    )
+
+    expect(contextGroupLabel([script], i18n, true).text).toBe("Used 4 Read, Shell, Edit")
+    expect(contextGroupLabel([script], i18n).text).toBe("Used 1 Execute")
+  })
 })
