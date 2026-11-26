@@ -550,22 +550,24 @@ const lowerToolCall = (
   part: ToolCallPart,
   providerMetadataKey: string,
   custom: OpenAIFreeform.Custom | undefined,
+  callID: string,
 ): OpenResponsesInputItem => {
-  const id = OpenAIFreeform.keepsItemID(part.providerMetadata, providerMetadataKey, custom !== undefined)
-    ? itemID(part.providerMetadata, providerMetadataKey)
-    : undefined
+  const id =
+    callID === part.id && OpenAIFreeform.keepsItemID(part.providerMetadata, providerMetadataKey, custom !== undefined)
+      ? itemID(part.providerMetadata, providerMetadataKey)
+      : undefined
   if (custom)
     return {
       type: "custom_tool_call",
       ...(id === undefined ? {} : { id }),
-      call_id: part.id,
+      call_id: callID,
       name: part.name,
       input: OpenAIFreeform.toRaw(custom, part.input, part.providerMetadata?.[providerMetadataKey]?.header),
     }
   return {
     type: "function_call",
     ...(id === undefined ? {} : { id }),
-    call_id: part.id,
+    call_id: callID,
     name: part.name,
     namespace: part.namespace,
     arguments: ProviderShared.encodeJson(part.input === undefined ? {} : part.input),
@@ -655,6 +657,15 @@ const DEFAULT_EFFORT = "medium"
 
 export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, adapter: ProviderAdapter) {
   const input: OpenResponsesInputItem[] = []
+  // A model can reuse an ID in a later step. Reserve the whole history before assigning replay IDs.
+  const reserved = new Set(
+    request.messages.flatMap((message) =>
+      message.content.flatMap((part) => (part.type === "tool-call" || part.type === "tool-result" ? [part.id] : [])),
+    ),
+  )
+  const emitted = new Set<string>()
+  const calls = new Map<string, string[]>()
+  let sequence = 0
   const providerMetadataKey = metadataKey(request.model)
   const custom = OpenAIFreeform.tools(request)
   const customTool = (part: ToolCallPart | ToolResultPart) =>
@@ -760,7 +771,18 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
         if (part.type === "tool-call") {
           flushText()
           if (part.providerExecuted === true) continue
-          input.push(lowerToolCall(part, providerMetadataKey, customTool(part)))
+          let id = part.id
+          if (emitted.has(id)) {
+            do {
+              id = `call_replay_${++sequence}`
+            } while (reserved.has(id))
+          }
+          emitted.add(id)
+          reserved.add(id)
+          const pending = calls.get(part.id) ?? []
+          pending.push(id)
+          calls.set(part.id, pending)
+          input.push(lowerToolCall(part, providerMetadataKey, customTool(part), id))
           continue
         }
         if (part.type === "tool-result" && part.providerExecuted === true) {
@@ -815,7 +837,7 @@ export const lowerMessages = Effect.fnUntraced(function* (request: LLMRequest, a
     for (const part of message.content) {
       input.push({
         type: customTool(part) ? "custom_tool_call_output" : "function_call_output",
-        call_id: part.id,
+        call_id: calls.get(part.id)?.shift() ?? part.id,
         output: yield* lowerToolResultOutput(part, request, adapter),
       })
     }
