@@ -64,6 +64,7 @@ import { ModelsDev } from "../models-dev.js"
 import { Mcp } from "../mcp/index.js"
 import { Npm } from "@opencode/util/npm"
 import { Permission } from "../permission.js"
+import { PersistentPty } from "../persistent-pty/index.js"
 import { Reference } from "../reference.js"
 import { WebSearch } from "../websearch.js"
 import { Ripgrep } from "../ripgrep.js"
@@ -93,6 +94,7 @@ import { McpEventTools } from "../tool/plugin/mcp-events.js"
 import { McpResourceTools } from "../tool/plugin/mcp-resource.js"
 import { OpenCodeTools } from "../tool/plugin/opencode.js"
 import { QuestionTool } from "../tool/plugin/question.js"
+import { ReadTerminalTool } from "../tool/plugin/read-terminal.js"
 import { ReadTool } from "../tool/plugin/read.js"
 import { ArtifactTools } from "../tool/plugin/artifact.js"
 import { AutomationTools } from "../tool/plugin/automation.js"
@@ -176,6 +178,7 @@ const services = [
   Mcp.Service,
   Npm.Service,
   Permission.Service,
+  PersistentPty.Service,
   Form.Service,
   Reference.Service,
   WebSearch.Service,
@@ -244,6 +247,7 @@ export const requirements = LayerNode.group([
   Mcp.node,
   Npm.node,
   Permission.node,
+  PersistentPty.node,
   Form.node,
   Reference.node,
   WebSearch.node,
@@ -304,6 +308,7 @@ const pre = [
   McpResourceTools.Plugin,
   QuestionTool.Plugin,
   ReadTool.Plugin,
+  ReadTerminalTool.Plugin,
   ArtifactTools.Plugin,
   AutomationTools.Plugin,
   CdTool.Plugin,

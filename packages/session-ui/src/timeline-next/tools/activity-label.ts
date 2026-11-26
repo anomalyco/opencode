@@ -146,6 +146,7 @@ export function usedLabel(parts: readonly ActivityGroupPart[], i18n: UiI18n) {
 function toolTitle(name: string, i18n: UiI18n) {
   const key = {
     read: "ui.tool.read",
+    read_terminal: "ui.tool.readTerminal",
     list: "ui.tool.list",
     glob: "ui.tool.glob",
     grep: "ui.tool.grep",

@@ -1401,6 +1401,8 @@ export const dict = {
   "settings.permissions.tool.webfetch.description": "Fetch content from a URL",
   "settings.permissions.tool.websearch.title": "Web Search",
   "settings.permissions.tool.websearch.description": "Search the web",
+  "settings.permissions.tool.terminal.title": "Terminal",
+  "settings.permissions.tool.terminal.description": "Read the terminal you are viewing (matches the terminal's ID)",
   "settings.permissions.tool.external_directory.title": "External Directory",
   "settings.permissions.tool.external_directory.description": "Access files outside the project directory",
   "settings.permissions.tool.doom_loop.title": "Doom Loop",

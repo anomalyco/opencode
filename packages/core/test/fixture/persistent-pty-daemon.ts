@@ -146,9 +146,13 @@ export const fakeDaemon = Effect.fn(function* () {
   const holdList: { until?: Promise<void> } = {}
   const ops: string[] = []
   const requests: Record<string, unknown>[] = []
+  const rows = new Map<number, string[]>()
   let nextID = 1
 
   const find = (id: unknown) => processes.find((item) => item.id === id)
+  const setRows = (id: string | number, lines: string[]) => {
+    rows.set(typeof id === "number" ? id : Number(id.slice("pty_persistent_".length)), lines)
+  }
   const exit = (id: number, exitCode: number | null, signal?: string) => {
     const found = find(id)
     if (!found || found.lifecycle.status !== "running") return
@@ -194,6 +198,7 @@ export const fakeDaemon = Effect.fn(function* () {
     }
     if (request.op === "create_pty") {
       const created = terminal(nextID++, String(request.group_id))
+      if (created.pty && typeof request.title === "string") created.pty.title = request.title
       processes.push(created)
       return { type: "created", process: created }
     }
@@ -210,6 +215,14 @@ export const fakeDaemon = Effect.fn(function* () {
       return holdCreate.until ? holdCreate.until.then(create) : create()
     }
     if (request.op === "control") return { type: "ok" }
+    if (request.op === "read_rows") {
+      const found = find(request.id)
+      if (!found?.pty) return { type: "error", message: "terminal not found" }
+      const all = rows.get(found.id) ?? [""]
+      const count = typeof request.rows === "number" ? Math.max(0, Math.min(request.rows, all.length)) : all.length
+      const lines = all.slice(all.length - count)
+      return { type: "rows", process: found, lines, cursor_x: 0, cursor_y: Math.max(0, lines.length - 1) }
+    }
     // Unregisters, so the server sees it stopped; it keeps serving connections already open.
     if (request.op === "shutdown") {
       rmSync(path.join(directory, "service.json"), { force: true })
@@ -277,6 +290,7 @@ export const fakeDaemon = Effect.fn(function* () {
     exit,
     output,
     fail,
+    setRows,
     drop,
     processes,
     waiters: (id: number) => waiters.get(id)?.length ?? 0,

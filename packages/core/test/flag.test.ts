@@ -26,11 +26,12 @@ const document = (experimental?: ConstructorParameters<typeof ConfigExperimental
     info: new Info(experimental === undefined ? {} : { experimental: new ConfigExperimental.Info(experimental) }),
   })
 
-// todo and opencode_api are opt-in only, so the build defaults and both wildcards leave them off.
+// todo, opencode_api and terminal_read are opt-in only, so the build defaults and both wildcards leave them off.
 const every = (state: Flag.State): Record<Flag.Key, Flag.State> => ({
   ...Record.map(ConfigFlag.registry, () => state),
   todo: { enabled: false, source: "default" },
   opencode_api: { enabled: false, source: "default" },
+  terminal_read: { enabled: false, source: "default" },
 })
 
 describe("Flag.resolve", () => {
@@ -43,20 +44,23 @@ describe("Flag.resolve", () => {
     expect(Flag.resolve({ entries: [], channel })).toEqual(every({ enabled, source: "default" }))
   })
 
-  test.each(["todo"] as const)("%s is opt-in only: on only when named in OPENCODE_FLAGS or experimental.%s", (key) => {
-    expect(Flag.resolve({ entries: [], channel: "dev", overrides: "all" })[key]).toEqual({
-      enabled: false,
-      source: "default",
-    })
-    expect(Flag.resolve({ entries: [], channel: "latest", overrides: key })[key]).toEqual({
-      enabled: true,
-      source: "env",
-    })
-    expect(Flag.resolve({ entries: [document({ [key]: true })], channel: "latest" })[key]).toEqual({
-      enabled: true,
-      source: "config",
-    })
-  })
+  test.each(["todo", "terminal_read"] as const)(
+    "%s is opt-in only: on only when named in OPENCODE_FLAGS or experimental.%s",
+    (key) => {
+      expect(Flag.resolve({ entries: [], channel: "dev", overrides: "all" })[key]).toEqual({
+        enabled: false,
+        source: "default",
+      })
+      expect(Flag.resolve({ entries: [], channel: "latest", overrides: key })[key]).toEqual({
+        enabled: true,
+        source: "env",
+      })
+      expect(Flag.resolve({ entries: [document({ [key]: true })], channel: "latest" })[key]).toEqual({
+        enabled: true,
+        source: "config",
+      })
+    },
+  )
 
   test("opencode_api turns on only by name, and only in local and dev builds", () => {
     const resolve = (channel: string, overrides?: string, experimental?: { opencode_api?: boolean }) =>

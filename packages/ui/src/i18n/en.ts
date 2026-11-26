@@ -274,6 +274,7 @@ const source = {
   "ui.scrollView.ariaLabel": "scrollable content",
 
   "ui.tool.read": "Read",
+  "ui.tool.readTerminal": "Read terminal",
   "ui.tool.loaded": "Loaded",
   "ui.tool.loadedFile": "Loaded {{path}}",
   "ui.tool.loadedSkill": "Loaded {{name}} skill",

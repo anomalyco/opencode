@@ -19,6 +19,8 @@ function toolTitle(tool: Summary["toolNames"][number], i18n: UiI18n) {
   switch (tool.tool) {
     case "read":
       return i18n.t("ui.tool.read")
+    case "read_terminal":
+      return i18n.t("ui.tool.readTerminal")
     case "list":
       return i18n.t("ui.tool.list")
     case "glob":

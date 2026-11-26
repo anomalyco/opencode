@@ -21,6 +21,7 @@ export interface ErrorCardProps extends Omit<ComponentProps<typeof Card>, "child
 // Tools named by what they did rather than the provider or the raw tool name.
 const titles = new Map([
   ["read", "ui.tool.read"],
+  ["read_terminal", "ui.tool.readTerminal"],
   ["list", "ui.tool.list"],
   ["glob", "ui.tool.glob"],
   ["grep", "ui.tool.grep"],

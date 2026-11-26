@@ -69,6 +69,7 @@ export function ToolErrorCard(props: ToolErrorCardProps) {
 
     const map = new Map([
       ["read", "ui.tool.read"],
+      ["read_terminal", "ui.tool.readTerminal"],
       ["list", "ui.tool.list"],
       ["glob", "ui.tool.glob"],
       ["grep", "ui.tool.grep"],
