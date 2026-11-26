@@ -175,40 +175,6 @@ export function SidebarInbox() {
   // The vertical tab strip's shortcuts, over the session rows in the order they show: ⌘1-9, ⌥↑/⌥↓ and ⇧⌥↑/⇧⌥↓.
   const rowRefs = new Map<string, HTMLElement>()
 
-  // A session changing section remounts its card. Focus follows it to the new card, without scrolling, so focus rescue
-  // does not pick another row and scroll the list to it (to the bottom when the card left the Working shelf).
-  const moving = new Set<string>()
-
-  const follow = (element: HTMLElement) =>
-    queueMicrotask(() => {
-      if (element.isConnected && document.activeElement !== element) element.focus({ preventScroll: true })
-    })
-
-  const rowRef = (key: string, element: HTMLElement) => {
-    const previous = rowRefs.get(key)
-
-    rowRefs.set(key, element)
-
-    if (moving.delete(key) || (previous !== undefined && previous === document.activeElement)) follow(element)
-    onCleanup(() => {
-      const focused = document.activeElement === element
-
-      if (rowRefs.get(key) !== element) {
-        const next = rowRefs.get(key)
-
-        if (focused && next) follow(next)
-
-        return
-      }
-
-      rowRefs.delete(key)
-
-      if (!focused) return
-      moving.add(key)
-      queueMicrotask(() => moving.delete(key))
-    })
-  }
-
   const navigationKeys = () => {
     const visible = sections()
 
@@ -311,7 +277,11 @@ export function SidebarInbox() {
         <Show when={inbox.byKey().get(key)}>
           {(entry) => (
             <InboxSessionCard
-              ref={(element) => rowRef(key, element)}
+              ref={(element) => {
+                rowRefs.set(key, element)
+                onCleanup(() => rowRefs.get(key) === element && rowRefs.delete(key))
+              }}
+              focusKey={`inbox:${key}`}
               project={entry().ctx.projects.forSession(entry().session)}
               directory={entry().session.location.directory}
               title={entry().session.title}
@@ -861,6 +831,8 @@ export function InboxDraftCard(props: {
 
 export function InboxSessionCard(props: {
   ref?: (element: HTMLButtonElement) => void
+  // A session changing section remounts its card, and focus rescue follows this key to the new one.
+  focusKey?: string
   project?: LocalProject
   directory: string
   title?: string
@@ -916,6 +888,7 @@ export function InboxSessionCard(props: {
         tabIndex={navigation ? (navigation() === id ? 0 : -1) : 0}
         aria-current={props.selected ? "page" : undefined}
         data-slot="sidebar-inbox-item"
+        data-focus-key={props.focusKey}
         data-roving
         onPointerDown={(event: PointerEvent) => event.stopPropagation()}
         data-status={status()}
