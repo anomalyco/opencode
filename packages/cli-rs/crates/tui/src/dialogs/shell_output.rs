@@ -86,7 +86,7 @@ fn build(tui: &Weak<Tui>, cx: &Rc<DialogCx>, shell: ShellInfo, location: Locatio
 
     let note = Text::new(app, "Earlier output omitted · showing recent output").fg(theme.text.muted).visible(false);
     let text = Text::new(app, "").fg(theme.text.base).wrap(WrapMode::Word);
-    let scroll = ScrollBox::new(app).scrollbars(false).sticky(true).sticky_start(ScrollEdge::Bottom).height(height);
+    let scroll = cx.scroll_box().scrollbars(false).sticky(true).sticky_start(ScrollEdge::Bottom).height(height);
     scroll.add(&text);
     let failure = Text::new(app, "").fg(theme.text.feedback.error.base).visible(false);
     let body = View::new(app)

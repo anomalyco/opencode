@@ -93,7 +93,7 @@ fn view(cx: &Rc<DialogCx>, tui: Weak<Tui>, live: &Rc<Live>, page: Theme) -> View
             ..HeaderProps::default()
         },
     );
-    let scroll = ScrollBox::new(app).scrollbars(false);
+    let scroll = cx.scroll_box().scrollbars(false);
     let body = View::new(app)
         .bg(page.background.raised.high)
         .margin_edge(Edge::Left, -(DIALOG_INSET as i32))

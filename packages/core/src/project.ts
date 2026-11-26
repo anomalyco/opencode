@@ -1,15 +1,17 @@
 export * as Project from "./project.js"
 
 import { Cache, Context, Duration, Effect, Layer, Schedule, Schema, Scope } from "effect"
-import { ChildProcess } from "effect/process"
+import { ChildProcess, ChildProcessSpawner } from "effect/process"
 import { and, asc, desc, eq, gte, inArray, isNotNull, isNull, lt, lte, ne, sql } from "drizzle-orm"
-import path from "path"
+import path, { type PlatformPath } from "path"
 import { AbsolutePath } from "./schema.js"
 import { Bus } from "./bus.js"
 import { Database } from "./database/database.js"
+import { EnvironmentUnavailable } from "./environment/unavailable.js"
 import { Worktree } from "@opencode/schema/worktree"
 import { FSUtil } from "@opencode/util/fs-util"
 import { Git } from "./git.js"
+import { CrossSpawnSpawner } from "@opencode/util/cross-spawn-spawner"
 import { AppProcess } from "@opencode/util/process"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { Hash } from "@opencode/util/hash"
@@ -56,12 +58,13 @@ export const root = Effect.fn("Project.root")(
     fs: { readonly exists: (path: string) => Effect.Effect<boolean, unknown> },
     input: AbsolutePath,
     markers: readonly string[] = [".git", ".hg"],
+    rules: Pick<PlatformPath, "dirname" | "join"> = path,
   ) {
-    for (let current: string = input; ; current = path.dirname(current)) {
+    for (let current: string = input; ; current = rules.dirname(current)) {
       for (const marker of markers) {
-        if (yield* fs.exists(path.join(current, marker))) return AbsolutePath.make(current)
+        if (yield* fs.exists(rules.join(current, marker))) return AbsolutePath.make(current)
       }
-      if (path.dirname(current) === current) return undefined
+      if (rules.dirname(current) === current) return undefined
     }
   },
   Effect.orElseSucceed(() => undefined),
@@ -85,6 +88,8 @@ export interface ListInput {
 export interface ResolveOptions {
   /** Discover ownership without persisting or announcing it. */
   readonly persist?: boolean
+  /** Whether the path lives on this host's filesystem. Defaults to true. */
+  readonly local?: boolean
 }
 
 export interface ActivateOptions {
@@ -142,6 +147,8 @@ const layer = Layer.effect(
     const db = (yield* Database.Service).db
     const kv = yield* KV.Service
     const scope = yield* Scope.Scope
+    const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+    const hostLocal = spawner !== EnvironmentUnavailable.spawner
 
     const announcing = new Set<string>()
     const hasSessionsToAdopt = (projectIDs: ReadonlyArray<ID>, directory: AbsolutePath) =>
@@ -163,13 +170,15 @@ const layer = Layer.effect(
               Effect.orDie,
               Effect.map((rows) => rows.some((row) => FSUtil.contains(directory, row.directory))),
             )
-    const persist = Effect.fnUntraced(function* (project: Resolved) {
-      const previous = yield* db
-        .select({ canonical: ProjectTable.worktree })
-        .from(ProjectTable)
-        .where(eq(ProjectTable.id, project.id))
-        .get()
-        .pipe(Effect.orDie)
+    const persist = Effect.fnUntraced(function* (project: Resolved, local = true) {
+      const previous = local
+        ? yield* db
+            .select({ canonical: ProjectTable.worktree })
+            .from(ProjectTable)
+            .where(eq(ProjectTable.id, project.id))
+            .get()
+            .pipe(Effect.orDie)
+        : undefined
       yield* upsertProject(db, project).pipe(Effect.orDie)
       const unarchived = yield* db
         .update(ProjectTable)
@@ -180,6 +189,7 @@ const layer = Layer.effect(
         .pipe(Effect.orDie)
       // Clones share a project ID; only replace a canonical directory that is gone.
       const replaced =
+        local &&
         previous &&
         previous.canonical !== project.canonical &&
         !(yield* fs.exists(previous.canonical).pipe(Effect.orElseSucceed(() => true)))
@@ -193,11 +203,13 @@ const layer = Layer.effect(
           : undefined
       const changed = replaced ?? unarchived
       if (changed) yield* bus.publish(ProjectSchema.Event.Updated, fromRow(changed))
-      yield* ProjectIcon.refresh(fs, db, project.id).pipe(
-        Effect.flatMap((row) => (row ? bus.publish(ProjectSchema.Event.Updated, fromRow(row)) : Effect.void)),
-        Effect.ignoreCause,
-        Effect.forkIn(scope),
-      )
+      if (local) {
+        yield* ProjectIcon.refresh(fs, db, project.id).pipe(
+          Effect.flatMap((row) => (row ? bus.publish(ProjectSchema.Event.Updated, fromRow(row)) : Effect.void)),
+          Effect.ignoreCause,
+          Effect.forkIn(scope),
+        )
+      }
       if (!project.vcs) return project
       const directories: Array<{ projectID: ID; directory: AbsolutePath; strategy?: Worktree.StrategyID }> = [
         { projectID: project.id, directory: project.canonical },
@@ -485,7 +497,17 @@ const layer = Layer.effect(
     })
 
     const resolve = Effect.fn("Project.resolve")(function* (input: AbsolutePath, options?: ResolveOptions) {
-      const save = (project: Resolved) => (options?.persist === false ? Effect.succeed(project) : persist(project))
+      const local = hostLocal && options?.local !== false
+      const save = (project: Resolved) =>
+        options?.persist === false ? Effect.succeed(project) : persist(project, local)
+      if (!local) {
+        return yield* save({
+          id: ID.make(Hash.fast(`directory:${input}`)),
+          directory: input,
+          canonical: input,
+          vcs: undefined,
+        })
+      }
       const directory = AbsolutePath.make(yield* fs.resolve(input))
       const native = yield* fs.up({ targets: [".git", ".hg"], start: directory, mode: "first" }).pipe(
         Effect.map((matches) => matches[0]),
@@ -520,6 +542,7 @@ const layer = Layer.effect(
     })
 
     const sweep = Effect.fn("Project.sweep")(function* () {
+      if (!hostLocal) return
       const cutoff = Date.now() - Duration.toMillis(SWEEP_INTERVAL)
       // Projects touched since the cutoff are left alone. Checking again in the update means a
       // resolve that moves the canonical directory mid-sweep bumps time_updated and wins.
@@ -573,7 +596,7 @@ export function configured(options?: Options) {
   return makeGlobalNode({
     service: Service,
     layer: options?.now ? layer.pipe(Layer.provide(Layer.succeed(Now, options.now))) : layer,
-    deps: [Bus.node, Database.node, KV.node, FSUtil.node, Git.node, AppProcess.node],
+    deps: [Bus.node, CrossSpawnSpawner.node, Database.node, KV.node, FSUtil.node, Git.node, AppProcess.node],
   })
 }
 
@@ -583,6 +606,8 @@ export const sweepNode = makeGlobalNode({
   name: "project-archive-sweep",
   layer: Layer.effectDiscard(
     Effect.gen(function* () {
+      const spawner = yield* ChildProcessSpawner.ChildProcessSpawner
+      if (spawner === EnvironmentUnavailable.spawner) return
       const project = yield* Service
       yield* project
         .sweep()
@@ -593,5 +618,5 @@ export const sweepNode = makeGlobalNode({
         )
     }),
   ),
-  deps: [node],
+  deps: [CrossSpawnSpawner.node, node],
 })

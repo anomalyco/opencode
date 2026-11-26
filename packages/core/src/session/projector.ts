@@ -233,19 +233,26 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
           // Split parents' envelopes carry no content, so only unsplit parents' inline media moves here.
           data: media ? yield* SessionBlob.externalizeRow(db, row.data) : row.data,
         }
-        // A summary references the first message it kept, which the fork copied under a new ID.
-        const keepID = row.type === "compaction" ? row.data.metadata?.keepID : undefined
-        if (!Schema.is(SessionMessage.ID)(keepID)) return copy
-        const kept = yield* db
-          .select({ seq: SessionMessageTable.seq })
-          .from(SessionMessageTable)
-          .where(and(eq(SessionMessageTable.session_id, event.data.parentID), eq(SessionMessageTable.id, keepID)))
-          .get()
-          .pipe(Effect.orDie)
-        if (!kept) return copy
+        // A fork owns neither the original session's subagents nor its background jobs, and a summary
+        // references the first message it kept, which the fork copied under a new ID.
+        if (row.type !== "compaction" || !row.data.metadata) return copy
+        const hasLists = "subagents" in row.data.metadata || "background" in row.data.metadata
+        const { subagents: _, background: ___, ...rest } = row.data.metadata
+        const keepID = rest.keepID
+        const kept = Schema.is(SessionMessage.ID)(keepID)
+          ? yield* db
+              .select({ seq: SessionMessageTable.seq })
+              .from(SessionMessageTable)
+              .where(and(eq(SessionMessageTable.session_id, event.data.parentID), eq(SessionMessageTable.id, keepID)))
+              .get()
+              .pipe(Effect.orDie)
+          : undefined
+        if (!kept && !hasLists) return copy
+        const metadata = kept ? { ...rest, keepID: forkedID(kept.seq) } : rest
+        const { metadata: __, ...data } = copy.data
         return {
           ...copy,
-          data: { ...row.data, metadata: { ...row.data.metadata, keepID: forkedID(kept.seq) } },
+          data: Object.keys(metadata).length > 0 ? { ...data, metadata } : data,
         }
       }),
     )

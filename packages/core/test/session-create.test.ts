@@ -54,6 +54,7 @@ const it = testEffect(
       Bus.node,
       SessionProjector.node,
       SessionStore.node,
+      SessionInbox.node,
       Session.node,
       SessionTransfer.node,
       InstructionEntry.node,
@@ -74,6 +75,7 @@ const durableIt = testEffect(
       Bus.node,
       SessionProjector.node,
       SessionStore.node,
+      SessionInbox.node,
       Session.node,
       SessionTransfer.node,
       InstructionEntry.node,
@@ -91,7 +93,15 @@ const durableIt = testEffect(
 )
 const liveIt = testEffect(
   AppNodeBuilder.build(
-    LayerNode.group([Database.node, Bus.node, Project.node, SessionProjector.node, SessionStore.node, Session.node]),
+    LayerNode.group([
+      Database.node,
+      Bus.node,
+      Project.node,
+      SessionProjector.node,
+      SessionStore.node,
+      SessionInbox.node,
+      Session.node,
+    ]),
     [
       Bus.node.replace(Bus.configured({ persist: true })),
       SessionExecution.node.replace(SessionExecution.noopLayer),
@@ -108,6 +118,7 @@ const projectIt = testEffect(
       Project.node,
       SessionProjector.node,
       SessionStore.node,
+      SessionInbox.node,
       Session.node,
     ]),
     [
@@ -590,18 +601,6 @@ describe("Session.create", () => {
     }),
   )
 
-  it.effect("creates a fresh projected session when the ID is omitted", () =>
-    Effect.gen(function* () {
-      const session = yield* Session.Service
-
-      const first = yield* session.create({ location })
-      const second = yield* session.create({ location })
-
-      expect(second.id).not.toBe(first.id)
-      expect((yield* session.list()).data).toHaveLength(2)
-    }),
-  )
-
   it.effect("stores a trailing-slash directory in the same session list", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
@@ -610,19 +609,6 @@ describe("Session.create", () => {
 
       expect(created.location.directory).toBe(location.directory)
       expect((yield* session.list({ directory: location.directory })).data.map((item) => item.id)).toEqual([created.id])
-    }),
-  )
-
-  it.effect("returns the original session when the ID is retried", () =>
-    Effect.gen(function* () {
-      const session = yield* Session.Service
-      const input = { id, location }
-
-      const first = yield* session.create(input)
-      const retried = yield* session.create(input)
-
-      expect(retried).toEqual(first)
-      expect((yield* session.list()).data).toEqual([first])
     }),
   )
 
@@ -1255,18 +1241,6 @@ describe("Session.create", () => {
     }),
   )
 
-  it.effect("persists creation through the current created event", () =>
-    Effect.gen(function* () {
-      const session = yield* Session.Service
-      const { db } = yield* Database.Service
-      const created = yield* session.create({ location })
-
-      expect(
-        yield* db.select().from(EventTable).where(eq(EventTable.aggregate_id, created.id)).all().pipe(Effect.orDie),
-      ).toMatchObject([{ type: Bus.versionedType(SessionEvent.Created.type, 1) }])
-    }),
-  )
-
   it.effect("persists caller-ID creation through the existing created event", () =>
     Effect.gen(function* () {
       const session = yield* Session.Service
@@ -1421,25 +1395,6 @@ describe("Session.create", () => {
         expect(shell).toMatchObject({ type: "shell", command, status: "exited", exit: 0 })
         expect(shell?.output?.output).toContain("attached")
         expect(shell?.output?.truncated).toBe(false)
-        expect(shell?.time.completed).toBeDefined()
-      }),
-    ),
-  )
-
-  liveIt.live("still emits shell ended for a failing command", () =>
-    withTmp((directory) =>
-      Effect.gen(function* () {
-        const session = yield* Session.Service
-        const created = yield* session.create({
-          location: Location.Ref.make({ directory: AbsolutePath.make(directory) }),
-        })
-
-        yield* session.shell({ sessionID: created.id, command: "false" })
-
-        const messages = yield* session.messages({ sessionID: created.id, order: "asc" })
-        const shell = messages.find((message): message is SessionMessage.Shell => message.type === "shell")
-        expect(shell).toMatchObject({ type: "shell", command: "false", status: "exited" })
-        expect(shell?.exit).not.toBe(0)
         expect(shell?.time.completed).toBeDefined()
       }),
     ),

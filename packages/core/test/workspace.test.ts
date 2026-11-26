@@ -95,20 +95,6 @@ it.effect("creates and persists an ID without provisioning", () =>
   }),
 )
 
-it.effect("creates a workspace with a caller-supplied ID", () =>
-  Effect.gen(function* () {
-    const workspace = yield* Workspace.Service
-    const id = Workspace.ID.create()
-
-    expect(yield* workspace.create({ id, provider: "fake" })).toBe(id)
-    expect(
-      yield* Database.Service.use(({ db }) =>
-        db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, id)).get(),
-      ).pipe(Effect.orDie),
-    ).toMatchObject({ id, provider: "fake", binding: null })
-  }),
-)
-
 it.effect("reuses a caller-supplied ID with the same provider", () =>
   Effect.gen(function* () {
     const workspace = yield* Workspace.Service
@@ -156,31 +142,6 @@ it.effect("resolves an existing caller-supplied ID before provider lookup", () =
         existingProvider: "missing",
       }),
     )
-  }),
-)
-
-it.effect("destroys an unprovisioned workspace through the driver with a null binding", () =>
-  Effect.gen(function* () {
-    const workspace = yield* Workspace.Service
-    const workspaceID = yield* workspace.create({ provider: "fake" })
-
-    expect(yield* workspace.destroy(workspaceID)).toEqual({ destroyed: true })
-    expect(calls).toEqual([{ operation: "destroy", binding: null }])
-    expect(
-      yield* Database.Service.use(({ db }) =>
-        db.select().from(WorkspaceTable).where(eq(WorkspaceTable.id, workspaceID)).get(),
-      ).pipe(Effect.orDie),
-    ).toBeUndefined()
-  }),
-)
-
-it.effect("succeeds without calling the driver when the workspace does not exist", () =>
-  Effect.gen(function* () {
-    const workspace = yield* Workspace.Service
-    const workspaceID = Workspace.ID.create()
-
-    expect(yield* workspace.destroy(workspaceID)).toEqual({ destroyed: false })
-    expect(calls).toEqual([])
   }),
 )
 

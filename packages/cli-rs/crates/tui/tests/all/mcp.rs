@@ -331,6 +331,59 @@ fn skills_dialog_shows_a_failed_read() {
     assert!(!screen.contains("Search"), "{screen}");
 }
 
+#[test]
+fn mcp_skill_load_error_shows_its_message_on_prompt_submit() {
+    let message = "Failed to load SKILL.md of MCP skill team:deploy: connection closed";
+    let fake = Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/location") => (
+            200,
+            json!({ "directory": DIRECTORY, "project": { "id": "proj_app", "directory": DIRECTORY, "canonical": DIRECTORY } }),
+        ),
+        ("GET", "/api/skill") => (
+            200,
+            list(
+                DIRECTORY,
+                json!([{
+                    "id": "team:deploy",
+                    "name": "team:deploy",
+                    "description": "Deploy from MCP.",
+                    "path": "skill://team:deploy/SKILL.md",
+                    "content": "",
+                }]),
+            ),
+        ),
+        ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
+        ("GET", "/api/session/ses_skill") => (200, json!({ "data": session("ses_skill") })),
+        ("GET", "/api/session/ses_skill/message") => (200, json!({ "data": [], "cursor": {} })),
+        ("POST", "/api/session/ses_skill/prompt") => {
+            (502, json!({ "_tag": "SkillLoadError", "skill": "team:deploy", "message": message }))
+        }
+        _ => support::base(seen, DIRECTORY),
+    });
+    let home = opencode_util::temp::tempdir().unwrap();
+    let deps = Deps {
+        directory: DIRECTORY.into(),
+        config: support::config(support::decode(r#"{ "theme": { "name": "opencode", "mode": "dark" } }"#)),
+        roots: support::roots(support::home_paths(home.path()), "test"),
+        route: support::session_route("ses_skill"),
+        ..support::deps(Arc::new(fake))
+    };
+    let h = support::mount(100, 30, deps);
+    h.wait_for("opencode");
+    h.tui.keymap.dispatch("prompt.skills", None);
+    h.wait_for("team:deploy");
+    h.app.press("return");
+    h.wait_gone("Skills");
+    let textarea = h.tui.textarea.borrow().clone().unwrap();
+    assert_eq!(textarea.text(), "@team:deploy ");
+
+    h.app.press("return");
+    let screen = h.wait_for("Failed to send prompt");
+    assert!(screen.contains("connection closed"), "{screen}");
+    assert!(!screen.contains("UnexpectedStatus") && !screen.contains("SkillLoadError"), "{screen}");
+    assert_eq!(textarea.text(), "@team:deploy ");
+}
+
 impl Kit {
     fn slash_dialog_pick(&self, id: &str) {
         self.tui.keymap.dispatch("prompt.skills", None);

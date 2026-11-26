@@ -37,11 +37,11 @@
   }
 }
 
-/* A stretch of thoughts alone lists them without a group around them. */
-[data-timeline="next"] [data-component="thought-rows"] {
+/* Thoughts one after another read as one, a paragraph apart. */
+[data-timeline="next"] [data-slot="reasoning-part-run"] {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 12px;
 }
 
 /* A script's changes, each its own card, keep the spacing of a direct patch's files. */
@@ -381,7 +381,7 @@
 
   [data-component="collapsed-tool-group"] > [data-component="collapsible"].tool-collapsible {
     --tool-content-gap: var(--timeline-gap-s);
-    gap: 0;
+    row-gap: 0;
 
     > [data-slot="collapsible-trigger"] {
       height: calc(var(--line-height-compact) + 12px);
@@ -463,7 +463,7 @@
 
   /* An open row's nested content starts the small gap below its header. */
   [data-component="collapsible"].tool-collapsible:has(> [data-slot="collapsible-content"]) {
-    gap: 0;
+    row-gap: 0;
 
     > [data-slot="collapsible-trigger"][aria-expanded="true"] {
       margin-bottom: 0;
@@ -488,8 +488,10 @@
     }
   }
 
-  /* A row's action is as tall as its line, so its button never makes the row taller. */
+  /* A row's action is as tall as its line, so its button never makes the row taller. It sits at the top, on the line
+     of text, because an open header also holds the gap below it. */
   [data-slot="basic-tool-action"] {
+    align-self: flex-start;
     height: var(--line-height-compact);
 
     [data-component="icon-button-v2"] {

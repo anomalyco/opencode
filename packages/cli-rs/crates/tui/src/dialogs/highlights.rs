@@ -41,7 +41,7 @@ pub fn show(tui: &Tui, version: &str, items: &[Highlight]) {
                         .child(&body),
                 );
             }
-            let scroll = ScrollBox::new(app).scrollbars(false).max_height(max_height);
+            let scroll = cx.scroll_box().scrollbars(false).max_height(max_height);
             scroll.content_view().min_height(0);
             scroll.add(&list);
             cx.keep_scroll(&scroll);

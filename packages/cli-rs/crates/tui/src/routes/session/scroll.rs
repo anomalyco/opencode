@@ -1,10 +1,7 @@
 //! Scroll commands, history loading, and the jump-to-latest hint.
 
-use std::time::Instant;
-
 use opencode_local::cli_config::{Grouping, Info, SubmitScroll, Verbosity};
 use opentui::input::MouseEventKind;
-use opentui::widget::{MacOsScroll, ScrollAcceleration};
 
 use super::grouping::DEFAULT_VERBOSITY;
 use super::messages::list::{ScrollAnchor, Transcript};
@@ -154,11 +151,15 @@ impl Inner {
             }
             cx.set_timeout(Duration::ZERO, bind!(weak, |inner, _| inner.update_away()));
         });
-        self.transcript.scroll().content_view().on_resize(bind!(self.this, |inner, _, _| inner.update_away()));
+        self.transcript.scroll().content_view().on_resize(bind!(self.this, |inner, _, _| {
+            if !inner.transcript.resizing() {
+                inner.update_away();
+            }
+        }));
         // A resize ends message navigation and drops its slack; the hint follows once the new size is laid out.
         self.resize.set(Some(tui.app.on_resize(bind!(self.this, |inner, cx, _, _| {
             inner.clear_navigation();
-            after_layout(cx.app(), bind!(inner.this, |inner| inner.update_away()));
+            inner.update_away_after_resize(cx.app());
         }))));
         let weak = self.this.clone();
         self.transcript.publish(
@@ -179,6 +180,7 @@ impl Inner {
     fn plugin_scroll(&self, verb: &opencode_plugin::abi::v2::Scroll) {
         use opencode_plugin::abi::v2::{Edge, Scroll};
         let Some(tui) = self.tui.upgrade() else { return };
+        self.transcript.clear_resize_pin();
         let scroll = self.transcript.scroll();
         let (_, top) = scroll.scroll_position();
         let up = match verb {
@@ -229,13 +231,7 @@ impl Inner {
         let padding = u16::from(scrollbar);
         scroll.content_view().padding_edge(Edge::Right, padding);
         scroll.wrapper_view().padding_edge(Edge::Right, padding);
-        let speed = info.scroll.as_ref();
-        if speed.and_then(|scroll| scroll.acceleration) == Some(true) {
-            scroll.scroll_acceleration(MacOsScroll::default());
-        } else {
-            let speed = speed.and_then(|scroll| scroll.speed).map_or(3.0, |speed| speed.0);
-            scroll.scroll_acceleration(Speed(speed));
-        }
+        opencode_ui::scroll::apply(scroll, crate::dialogs::scroll_config(info));
     }
 
     /// Register scroll commands with their focus and mode restrictions.
@@ -363,10 +359,14 @@ impl Inner {
     /// follows once they are laid out.
     fn move_by(&self, tui: &Tui, delta: f64) {
         self.clear_navigation();
+        self.transcript.clear_resize_pin();
         let scroll = self.transcript.scroll().clone();
         if delta < 0.0 && self.transcript.reveal_older(tui) || delta > 0.0 && self.transcript.reveal_newer(tui) {
             let weak = self.this.clone();
             after_layout(&tui.app, move || {
+                if let Some(inner) = weak.upgrade() {
+                    inner.transcript.clear_resize_pin();
+                }
                 scroll.scroll_by(0.0, delta);
                 if let Some(inner) = weak.upgrade() {
                     inner.update_away();
@@ -474,8 +474,10 @@ impl Inner {
         if self.first_jump.replace(false) {
             self.transcript.hint().visible(false);
         }
-        self.navigation.replace(None);
-        self.set_slack(0.0);
+        let had = self.navigation.replace(None).is_some() || self.slack_height.get() > 0.0;
+        if had {
+            self.set_slack(0.0);
+        }
     }
 
     pub(super) fn set_slack(&self, height: f64) {
@@ -483,7 +485,24 @@ impl Inner {
         self.slack.height(height.max(0.0) as u16);
         let navigating = self.navigation.borrow().is_some() || height > 0.0;
         self.transcript.navigating(navigating);
-        self.transcript.scroll().sticky(!navigating);
+        self.transcript.scroll().sticky(!navigating && self.transcript.at_end() && !self.transcript.resizing());
+    }
+
+    /// Waits for the resize layout and any deferred `refit` or `mount_newer` re-anchor before updating the hint.
+    fn update_away_after_resize(&self, app: &App) {
+        let mut first = true;
+        let weak = self.this.clone();
+        app.animate(move |_, _| {
+            if std::mem::take(&mut first) {
+                return true;
+            }
+            let Some(inner) = weak.upgrade() else { return false };
+            if inner.transcript.resizing() {
+                return true;
+            }
+            inner.update_away();
+            false
+        });
     }
 
     /// `updateAwayFromBottom`: shows "Jump to latest" while the reader is away from the bottom.
@@ -491,7 +510,7 @@ impl Inner {
         let away = self.is_away();
         self.away.set(away);
         self.latest.visible(away && !self.first_jump.get());
-        if !away {
+        if !away && !self.transcript.resizing() {
             self.transcript.scroll().sticky(true);
         }
         if let Some(tui) = self.tui.upgrade() {
@@ -530,14 +549,4 @@ pub(super) fn after_layout(app: &App, continuation: impl FnOnce() + 'static) {
         }
         false
     });
-}
-
-struct Speed(f64);
-
-impl ScrollAcceleration for Speed {
-    fn tick(&mut self, _now: Instant) -> f64 {
-        self.0
-    }
-
-    fn reset(&mut self) {}
 }

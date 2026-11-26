@@ -73,6 +73,8 @@ test("What's New shows the highlights since the version seen, pages to Get start
   const title = dialog.getByRole("heading", { level: 1 })
   const next = dialog.getByRole("button", { name: "Next", exact: true })
   await expect(title).toHaveText("Split panes")
+  // Focus opens on Next, a visible control, rather than on a wrapper with no ring.
+  await expect(next).toBeFocused()
   await expect(dialog.getByText("Work side by side.", { exact: true })).toBeVisible()
   await expect(dialog.getByRole("img", { name: "Split panes", exact: true })).toHaveAttribute("src", "/split.png")
   // Seen as soon as it shows, so however it closes, the next start shows nothing.
@@ -95,6 +97,8 @@ test("What's New shows the highlights since the version seen, pages to Get start
   await next.click()
   await expect(title).toHaveText("Session tabs")
   await expect(next).toHaveCount(0)
+  // Next becomes Get started in place, so focus doesn't drop to the page on the last highlight.
+  await expect(dialog.getByRole("button", { name: "Get started", exact: true })).toBeFocused()
   await dialog.getByRole("button", { name: "Get started", exact: true }).click()
   await expect(dialog).toBeHidden()
   expect(requests).toHaveLength(1)

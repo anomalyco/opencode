@@ -282,7 +282,6 @@ impl Parser {
         let command = command.as_str();
         Ok(Some(match command {
             "\\" => Node::Row(Vec::new()),
-            " " => Node::Space(1),
             "limits" | "nolimits" | "displaystyle" | "textstyle" | "scriptstyle" | "scriptscriptstyle" => {
                 return Ok(None);
             }

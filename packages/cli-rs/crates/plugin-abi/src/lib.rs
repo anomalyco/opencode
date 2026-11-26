@@ -1646,7 +1646,9 @@ pub enum HostRequest {
     /// [`Read::limits`].
     Limits,
     /// [`Read::providers`].
-    Providers,
+    Providers {
+        location: Option<LocationRef>,
+    },
     /// [`Read::info`].
     Info,
     /// [`Read::mcp_servers`].
@@ -2550,6 +2552,10 @@ pub struct Panel {
     /// footer row (TS `DialogLayout` without a footer).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub height: Option<u16>,
+    /// The body also stops where the screen ends under a dialog a quarter down it, and is at least 3 rows high
+    /// (TS `GoalDialog`'s `maxHeight`); otherwise it is at most 60% of the screen and at least 8 rows.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub fit_screen: bool,
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -2654,8 +2660,8 @@ pub trait Read {
     fn limits(&self) -> Option<UsageLimitsInfo> {
         None
     }
-    /// The providers where the TUI works; `None` while they are not loaded.
-    fn providers(&self) -> Option<std::sync::Arc<[ProviderInfo]>> {
+    /// The providers of `location`, or of the location the TUI works in for `None`; `None` while they are not loaded.
+    fn providers(&self, _location: Option<&LocationRef>) -> Option<std::sync::Arc<[ProviderInfo]>> {
         None
     }
     /// The value stored under one of the plugin's declared storage keys ([`Setup::storage_key`]). It shows a
@@ -3129,8 +3135,8 @@ impl Read for HostHandle {
         self.read(&HostRequest::Limits)
     }
 
-    fn providers(&self) -> Option<std::sync::Arc<[ProviderInfo]>> {
-        self.read::<Vec<_>>(&HostRequest::Providers).map(Into::into)
+    fn providers(&self, location: Option<&LocationRef>) -> Option<std::sync::Arc<[ProviderInfo]>> {
+        self.read::<Vec<_>>(&HostRequest::Providers { location: location.cloned() }).map(Into::into)
     }
 
     fn storage_get(&self, key: &str) -> Option<serde_json::Value> {

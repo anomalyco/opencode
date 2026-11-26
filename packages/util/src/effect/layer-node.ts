@@ -12,8 +12,18 @@ export type Tag<Name extends string = string> = Name & Brand.Brand<"LayerNode.Ta
 const makeTag = Brand.nominal<Tag>()
 
 export type Graph<A, E = never, T extends Tag | undefined = Tag | undefined> = GraphValue<A, E, T>
-export type Node<A, E = never, T extends Tag | undefined = undefined> = NodeValue<A, E, T>
-export type Provider<A, E = never, T extends Tag | undefined = undefined> = ProviderNode<A, E, T>
+export type Node<A, E = never, T extends Tag | undefined = undefined, Mockable extends boolean = true> = NodeValue<
+  A,
+  E,
+  T,
+  Mockable
+>
+export type Provider<
+  A,
+  E = never,
+  T extends Tag | undefined = undefined,
+  Mockable extends boolean = true,
+> = ProviderNode<A, E, T, Mockable>
 export type Replacement = ReplacementValue
 export type Replacements = readonly Replacement[]
 
@@ -23,8 +33,8 @@ type RuntimeLayer = Layer.Layer<never, unknown, unknown>
 type GraphList = readonly [] | readonly [AnyGraph, ...AnyGraph[]]
 
 export type Output<Item> = CommonOutput<Item, Item extends Graph<infer A, unknown> ? A : never>
-export type Error<Item> = Item extends Graph<never, infer E> ? E : never
-type GraphTag<Item> = [Item] extends [never] ? undefined : Item extends Graph<never, unknown, infer T> ? T : never
+type GraphError<Item> = Item extends Graph<never, infer E> ? E : never
+type GraphTag<Item> = Item extends Graph<never, unknown, infer T> ? T : never
 type CommonOutput<Item, A> = A extends unknown ? ([Item] extends [Graph<A, unknown>] ? A : never) : never
 type LayerOutput<Item extends Layer.Any, A = Layer.Success<Item>> = A extends unknown
   ? [Item] extends [Layer.Layer<A, unknown, unknown>]
@@ -36,15 +46,33 @@ type ListOutput<Items extends readonly AnyGraph[], A = never> = [Items] extends 
 ]
   ? ListOutput<Tail, A | Output<Head>>
   : A
+type MockShape<A, All = A> = A extends unknown
+  ? [All] extends [A]
+    ? [A] extends [Context.ServiceClass.Shape<string, infer S>]
+      ? [S] extends [object]
+        ? S
+        : never
+      : [A] extends [object]
+        ? A
+        : never
+    : never
+  : never
+type IsMockable<Service> = [Service] extends [never] ? false : true
 
 type Definition =
-  | { readonly kind: "group"; readonly name: string; readonly dependencies: readonly AnyGraph[] }
-  | { readonly kind: "unbound"; readonly name: string }
+  | {
+      readonly kind: "group"
+      readonly name: string
+      readonly dependencies: readonly AnyGraph[]
+      readonly service?: undefined
+    }
+  | { readonly kind: "unbound"; readonly name: string; readonly service: Context.Service.Any }
   | {
       readonly kind: "layer"
       readonly name: string
       readonly implementation: RuntimeLayer
       readonly dependencies: readonly AnyGraph[]
+      readonly service?: Context.Service.Any
     }
 
 class GraphValue<in A, out E, out T extends Tag | undefined> {
@@ -67,9 +95,15 @@ class GraphValue<in A, out E, out T extends Tag | undefined> {
   }
 }
 
-class NodeValue<in out A, in out E, in out T extends Tag | undefined> extends GraphValue<A, E, T> {
+class NodeValue<
+  in out A,
+  in out E,
+  in out T extends Tag | undefined,
+  Mockable extends boolean = true,
+> extends GraphValue<A, E, T> {
   // Forgetting part of a node's contract must not authorize a weaker replacement.
   declare readonly [NodeTypeId]: (_: [A, E, T]) => [A, E, T]
+  declare private readonly mockable: Mockable
 
   constructor(
     definition: Exclude<Definition, { kind: "group" }>,
@@ -80,7 +114,7 @@ class NodeValue<in out A, in out E, in out T extends Tag | undefined> extends Gr
 
   /** Replace this declaration, including every dependency on it, without acquiring its old wiring. */
   replace<const Target extends AnyNode | Layer.Any>(
-    this: Node<A, E, T>,
+    this: Node<A, E, T, boolean>,
     replacement: Target & CheckReplacement<A, E, T, Target>,
   ): Replacement {
     if (replacement instanceof NodeValue) {
@@ -90,11 +124,39 @@ class NodeValue<in out A, in out E, in out T extends Tag | undefined> extends Gr
     if (!Layer.isLayer(replacement)) throw new Error("A replacement must be a node or an Effect Layer")
     return new ReplacementValue(this, makeProvider({ name: this.name, layer: replacement, deps: [] }, this.tag))
   }
+
+  /** Replace this single-service declaration with a partial mock backed by `Layer.mock`. */
+  mock(
+    this: [Mockable] extends [true] ? ([MockShape<A>] extends [never] ? never : Node<A, E, T, true>) : never,
+    implementation: Layer.PartialEffectful<MockShape<A>>,
+  ): Replacement {
+    const service = this[GraphTypeId].service
+    if (!service) throw new Error(`Cannot mock layer node without a service: ${this.name}`)
+    return new ReplacementValue(
+      this,
+      makeProvider(
+        {
+          service,
+          layer: Layer.mock(service as Context.Key<A, MockShape<A>>, implementation),
+          deps: [],
+        },
+        this.tag,
+      ),
+    )
+  }
 }
 
-class ProviderNode<in out A, in out E, in out T extends Tag | undefined> extends NodeValue<A, E, T> {
+class ProviderNode<
+  in out A,
+  in out E,
+  in out T extends Tag | undefined,
+  Mockable extends boolean = true,
+> extends NodeValue<A, E, T, Mockable> {
   /** Decorate the implementation while preserving its dependency wiring and service contract. */
-  mapLayer(this: Provider<A, E, T>, f: <R>(layer: Layer.Layer<A, E, R>) => Layer.Layer<A, E, R>): Provider<A, E, T> {
+  mapLayer(
+    this: Provider<A, E, T, Mockable>,
+    f: <R>(layer: Layer.Layer<A, E, R>) => Layer.Layer<A, E, R>,
+  ): Provider<A, E, T, Mockable> {
     const definition = this[GraphTypeId]
     if (definition.kind !== "layer") throw new Error(`Cannot map unbound layer node: ${this.name}`)
     return new ProviderNode(
@@ -124,7 +186,7 @@ type CheckReplacement<A, E, T, Target> = [ReplacementErrors<A, E, T, Target>] ex
 type ReplacementErrors<A, E, T, Target> = Target extends AnyNode
   ? [Exclude<A, Output<Target>>] extends [never]
     ? [GraphTag<Target>] extends [T]
-      ? CheckErrors<E, Error<Target>>
+      ? CheckErrors<E, GraphError<Target>>
       : { readonly "Invalid replacement tag": GraphTag<Target> }
     : { readonly "Missing replacement outputs": Exclude<A, Output<Target>> }
   : Target extends Layer.Layer<A, infer E2, never>
@@ -137,19 +199,29 @@ type CheckDependencies<Implementation extends Layer.Any, Items extends GraphList
   ? unknown
   : { readonly "Missing dependencies": Exclude<Layer.Services<Implementation>, ListOutput<Items>> }
 
-type Identity =
-  | { readonly service: Context.Service.Any; readonly name?: never }
+type CheckService<Implementation extends Layer.Any, Service> = [Service] extends [never]
+  ? unknown
+  : [Exclude<Context.Service.Identifier<Service>, LayerOutput<Implementation>>] extends [never]
+    ? unknown
+    : { readonly "Service must be provided by layer": Context.Service.Identifier<Service> }
+
+type Identity<Service extends Context.Service.Any> =
+  | { readonly service: Service; readonly name?: never }
   | { readonly name: string; readonly service?: never }
 type CheckLayer<Implementation> = [Implementation] extends [RuntimeLayer]
   ? unknown
   : { readonly "Layer contract must be preserved": Implementation }
 type TagInput<T> = { readonly tag: T } | ([T] extends [undefined] ? { readonly tag?: undefined } : never)
-type MakeInput<Implementation extends Layer.Any, Items extends GraphList, T extends Tag | undefined> = Identity &
-  TagInput<T> & {
-    readonly layer: Implementation & CheckLayer<NoInfer<Implementation>>
-    readonly deps: Items & CheckDependencies<Implementation, NoInfer<Items>>
-  }
-type DistributiveOmit<A, K extends PropertyKey> = A extends unknown ? Omit<A, K> : never
+type BaseInput<
+  Implementation extends Layer.Any,
+  Items extends GraphList,
+  Service extends Context.Service.Any,
+> = Identity<Service> & {
+  readonly layer: Implementation &
+    CheckLayer<NoInfer<Implementation>> &
+    CheckService<NoInfer<Implementation>, NoInfer<Service>>
+  readonly deps: Items & CheckDependencies<Implementation, NoInfer<Items>>
+}
 
 export type TagConfig = Readonly<Record<string, readonly string[]>>
 type TagNames<Config extends TagConfig> = keyof Config & string
@@ -168,25 +240,24 @@ export interface Tags<Config extends TagConfig> {
 export type TagMaker<Config extends TagConfig, Name extends TagNames<Config>> = <
   const Implementation extends Layer.Any,
   const Items extends GraphList,
+  const Service extends Context.Service.Any = never,
 >(
-  input: DistributiveOmit<MakeInput<Implementation, Items, Tag<Name>>, "tag"> &
-    CheckTags<Items, Name | Extract<Config[Name][number], string>>,
-) => Provider<LayerOutput<Implementation>, Layer.Error<Implementation> | Error<Items[number]>, Tag<Name>>
+  input: BaseInput<Implementation, Items, Service> & CheckTags<Items, Name | Config[Name][number]>,
+) => Provider<
+  LayerOutput<Implementation>,
+  Layer.Error<Implementation> | GraphError<Items[number]>,
+  Tag<Name>,
+  IsMockable<Service>
+>
 
 export function tags<const Config extends { readonly [Name in keyof Config]: readonly (keyof Config & string)[] }>(
   config: Config,
 ): Tags<Config> {
-  const names = Object.keys(config) as TagNames<Config>[]
-  const values = Object.fromEntries(names.map((name) => [name, makeTag(name)])) as Tags<Config>["values"]
+  const values = Object.fromEntries(Object.keys(config).map((name) => [name, makeTag(name)])) as Tags<Config>["values"]
   return {
     values,
-    make:
-      <Name extends TagNames<Config>>(name: Name) =>
-      <const Implementation extends Layer.Any, const Items extends GraphList>(
-        input: DistributiveOmit<MakeInput<Implementation, Items, Tag<Name>>, "tag"> &
-          CheckTags<Items, Name | Extract<Config[Name][number], string>>,
-      ) =>
-        makeProvider<Implementation, Items, Tag<Name>>(input, values[name]),
+    make: <Name extends TagNames<Config>>(name: Name): TagMaker<Config, Name> =>
+      ((input) => makeProvider(input, values[name])) as TagMaker<Config, Name>,
   }
 }
 
@@ -194,16 +265,30 @@ export function make<
   const Implementation extends Layer.Any,
   const Items extends GraphList,
   const T extends Tag | undefined = undefined,
+  const Service extends Context.Service.Any = never,
 >(
-  input: MakeInput<Implementation, Items, T>,
-): Provider<LayerOutput<Implementation>, Layer.Error<Implementation> | Error<Items[number]>, T> {
-  return makeProvider<Implementation, Items, T>(input, input.tag as T)
+  input: BaseInput<Implementation, Items, Service> & TagInput<T>,
+): Provider<
+  LayerOutput<Implementation>,
+  Layer.Error<Implementation> | GraphError<Items[number]>,
+  T,
+  IsMockable<Service>
+> {
+  return makeProvider<Implementation, Items, T, IsMockable<Service>>(input, input.tag as T)
 }
 
-function makeProvider<Implementation extends Layer.Any, Items extends readonly AnyGraph[], T extends Tag | undefined>(
-  input: Identity & { readonly layer: Implementation; readonly deps: Items },
+function makeProvider<
+  Implementation extends Layer.Any,
+  Items extends readonly AnyGraph[],
+  T extends Tag | undefined,
+  Mockable extends boolean = true,
+>(
+  input: (
+    | { readonly service: Context.Service.Any; readonly name?: never }
+    | { readonly name: string; readonly service?: never }
+  ) & { readonly layer: Implementation; readonly deps: Items },
   tag: T,
-): Provider<LayerOutput<Implementation>, Layer.Error<Implementation> | Error<Items[number]>, T> {
+): Provider<LayerOutput<Implementation>, Layer.Error<Implementation> | GraphError<Items[number]>, T, Mockable> {
   if (!Layer.isLayer(input.layer)) throw new Error("A layer node requires an Effect Layer")
   return new ProviderNode(
     {
@@ -211,19 +296,20 @@ function makeProvider<Implementation extends Layer.Any, Items extends readonly A
       name: input.service !== undefined ? input.service.key : input.name,
       implementation: input.layer,
       dependencies: [...input.deps],
+      service: input.service,
     },
     tag,
   )
 }
 
 export function unbound<R, Shape, const T extends Tag>(service: Context.Key<R, Shape>, tag: T): Node<R, never, T> {
-  return new NodeValue({ kind: "unbound", name: service.key }, tag)
+  return new NodeValue({ kind: "unbound", name: service.key, service }, tag)
 }
 
 /** Ordered, associative composition. Only these roots' outputs are exposed; their dependencies remain private. */
 export function group<const Items extends readonly AnyGraph[]>(
   dependencies: Items,
-): Graph<ListOutput<Items>, Error<Items[number]>, GraphTag<Items[number]>> {
+): Graph<ListOutput<Items>, GraphError<Items[number]>, GraphTag<Items[number]>> {
   return new GraphValue({ kind: "group", name: "group", dependencies: [...dependencies] })
 }
 
@@ -249,18 +335,50 @@ export function compile<A, E>(root: Graph<A, E>, options: CompileOptions = {}): 
       return [replacement.source, replacement.target] as const
     }),
   )
-  const cache = {
-    shared: new Map<AnyGraph, readonly Resolved[]>(),
-    local: new Map<AnyGraph, readonly Resolved[]>(),
-  }
+  const makeDomain = (isShared: boolean) => ({
+    shared: isShared,
+    cache: new Map<AnyGraph, readonly Resolved[]>(),
+    definitions: new Map<RuntimeLayer, Resolved>(),
+  })
+  const domains = { shared: makeDomain(true), local: makeDomain(false) }
   const stack: AnyGraph[] = []
-  const definitions = { shared: new Map<RuntimeLayer, Resolved>(), local: new Map<RuntimeLayer, Resolved>() }
 
-  const resolve = (graph: AnyGraph, inherited = false): readonly Resolved[] => {
+  const resolveDefinition = (graph: AnyGraph, domain: ReturnType<typeof makeDomain>): readonly Resolved[] => {
+    const replacement = replacements.get(graph)
+    if (replacement && replacement !== graph) return resolve(replacement, domain)
     const definition = graph[GraphTypeId]
-    const isShared = inherited || (shared !== undefined && graph instanceof NodeValue && graph.tag === shared)
-    const resolved = isShared ? cache.shared : cache.local
-    const cached = resolved.get(graph)
+    if (definition.kind === "group") return definition.dependencies.flatMap((dependency) => resolve(dependency, domain))
+    if (definition.kind === "unbound") throw new Error(`Unbound layer node: ${definition.name}`)
+
+    const dependencies = definition.dependencies.flatMap((dependency) => resolve(dependency, domain))
+    const existing = domain.definitions.get(definition.implementation)
+    if (!existing) {
+      const node: Resolved = {
+        name: definition.name,
+        implementation: definition.implementation,
+        dependencies,
+        shared: domain.shared,
+      }
+      domain.definitions.set(definition.implementation, node)
+      return [node]
+    }
+    if (
+      existing.dependencies.length !== dependencies.length ||
+      existing.dependencies.some((dependency, index) => dependency !== dependencies[index])
+    ) {
+      throw new Error(
+        `Layer ${definition.name} is wired to different dependencies; use a distinct implementation Layer`,
+      )
+    }
+    return [existing]
+  }
+
+  const resolve = (graph: AnyGraph, domain = domains.local): readonly Resolved[] => {
+    const current =
+      domain.shared || (shared !== undefined && graph instanceof NodeValue && graph.tag === shared)
+        ? domains.shared
+        : domains.local
+    const cached = current.cache.get(graph)
     if (cached) return cached
     const cycle = stack.indexOf(graph)
     if (cycle !== -1) {
@@ -269,36 +387,9 @@ export function compile<A, E>(root: Graph<A, E>, options: CompileOptions = {}): 
       )
     }
     stack.push(graph)
-    const replacement = replacements.get(graph)
-    const result = (() => {
-      if (replacement && replacement !== graph) return resolve(replacement, isShared)
-      if (definition.kind === "group")
-        return definition.dependencies.flatMap((dependency) => resolve(dependency, isShared))
-      if (definition.kind === "unbound") throw new Error(`Unbound layer node: ${definition.name}`)
-      const node: Resolved = {
-        name: definition.name,
-        implementation: definition.implementation,
-        dependencies: definition.dependencies.flatMap((dependency) => resolve(dependency, isShared)),
-        shared: isShared,
-      }
-      const registry = node.shared ? definitions.shared : definitions.local
-      const existing = registry.get(node.implementation)
-      if (existing) {
-        if (
-          existing.dependencies.length !== node.dependencies.length ||
-          existing.dependencies.some((dependency, index) => dependency !== node.dependencies[index])
-        ) {
-          throw new Error(
-            `Layer ${definition.name} is wired to different dependencies; use a distinct implementation Layer`,
-          )
-        }
-        return [existing]
-      }
-      registry.set(node.implementation, node)
-      return [node]
-    })()
+    const result = resolveDefinition(graph, current)
     stack.pop()
-    resolved.set(graph, result)
+    current.cache.set(graph, result)
     return result
   }
 

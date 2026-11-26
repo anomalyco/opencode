@@ -45,8 +45,10 @@ const sessionID = Session.ID.make("ses_push_sender")
 
 const finished: PushSender.Notification = {
   id: sessionID,
-  type: "session.idle",
+  type: "turn",
   sessionID,
+  directory: "/home/me/shop",
+  time: 1_000,
   title: "Fix the login bug",
   body: "Finished",
   data: { outcome: "succeeded" },
@@ -55,8 +57,10 @@ const finished: PushSender.Notification = {
 
 const question: PushSender.Notification = {
   id: "frm_1",
-  type: "question",
+  type: "form",
   sessionID,
+  directory: "/home/me/shop",
+  time: 1_000,
   title: "Fix the login bug",
   body: "Which database?",
   data: { formID: "frm_1" },
@@ -149,9 +153,11 @@ describe("PushSender", () => {
       expect(delivered!.silent).toBeUndefined()
       expect(open(ok, delivered!.box)).toEqual({
         v: 1,
+        type: "turn",
         id: sessionID,
-        type: "session.idle",
+        time: 1_000,
         sessionID,
+        directory: "/home/me/shop",
         title: "Fix the login bug",
         body: "Finished",
         data: { outcome: "succeeded" },
@@ -192,39 +198,112 @@ describe("PushSender", () => {
       const ok = yield* phone(ids.ok, "ok")
       yield* phone(ids.quiet, "quiet", { default: "attention" })
 
-      yield* sender.clear([sessionID])
+      yield* sender.clear([sessionID], 2_000)
       yield* drain
       expect(calls).toEqual([])
 
       yield* sender.send(finished)
       yield* advance(() => calls.length === 1)
-      yield* sender.clear([sessionID, "frm_unknown"])
+      yield* sender.clear([sessionID, "frm_unknown"], 2_000)
       yield* advance(() => calls.length === 2)
-      yield* sender.clear([sessionID])
+      yield* sender.clear([sessionID], 2_000)
       yield* drain
 
       expect(calls.map((call) => [call.path.split("/").pop(), call.silent])).toEqual([
         ["ok", undefined],
         ["ok", true],
       ])
-      expect(open(ok, calls[1]!.box)).toEqual({ v: 1, id: sessionID, type: "clear", sessionID })
+      expect(open(ok, calls[1]!.box)).toEqual({ v: 1, type: "clear", ids: [sessionID], time: 2_000 })
     }),
   )
 
-  it.effect("shortens a long body so the box fits the relay", () =>
+  it.effect("cuts bulk before small facts so the box fits the relay", () =>
     Effect.sync(() => {
       for (const body of ["é".repeat(5_000), "漢".repeat(1_500), "\n".repeat(3_000)]) {
         const text = PushSender.message({ ...question, body })
         expect(Buffer.byteLength(text, "utf8")).toBeLessThanOrEqual(2600)
-        expect(Buffer.byteLength(text, "utf8")).toBeGreaterThan(2580)
-        expect(JSON.parse(text).body.endsWith("…")).toBe(true)
+        expect(JSON.parse(text).body).toBe(body.slice(0, 199) + "…")
       }
+      const data = {
+        requestID: "per_1",
+        replySessionID: sessionID,
+        action: "shell",
+        resources: ["git push", "x".repeat(5_000), "ls"],
+        save: ["git push *"],
+        decisions: ["once", "always", "reject"],
+      }
+      const text = PushSender.message({ ...question, type: "permission", body: "Needs permission: shell", data })
+      expect(Buffer.byteLength(text, "utf8")).toBeLessThanOrEqual(2600)
+      expect(Buffer.byteLength(text, "utf8")).toBeGreaterThan(2580)
+      expect(JSON.parse(text).data).toEqual({
+        ...data,
+        resources: ["git push", expect.stringMatching(/^x+…$/)],
+        resourceCount: 3,
+        truncated: true,
+      })
+      const many = PushSender.message({
+        ...question,
+        type: "permission",
+        data: { ...data, resources: Array.from({ length: 300 }, (_, i) => "mkdir -p src/dir" + i) },
+      })
+      expect(Buffer.byteLength(many, "utf8")).toBeLessThanOrEqual(2600)
+      expect(JSON.parse(many).data.resources).not.toContain("…")
+      expect(JSON.parse(many).data.resourceCount).toBe(300)
+      const options = [{ label: "A" }, { label: "abcd", value: "b" }, { label: "Z".repeat(100) }]
+      const described = options.map((option) => ({ ...option, description: "An option" }))
+      const field = { key: "q0", type: "string", description: "b".repeat(3_000), options: described }
+      const cut = PushSender.message({ ...question, data: { formID: "frm_1", inlineReply: true, fields: [field] } })
+      expect(Buffer.byteLength(cut, "utf8")).toBeLessThanOrEqual(2600)
+      expect(JSON.parse(cut).data).toEqual({
+        formID: "frm_1",
+        fields: [{ key: "q0", type: "string", description: expect.stringMatching(/^b+…$/), options }],
+        truncated: true,
+      })
+      // More options than fit: only the ids and small facts go out, and the app fetches the form.
+      const paths = Array.from({ length: 100 }, (_, i) => ({ label: "src/components/feature-" + i + "/index.tsx" }))
+      const most = PushSender.message({
+        ...question,
+        data: {
+          formID: "frm_1",
+          replySessionID: sessionID,
+          kind: "question",
+          fieldCount: 1,
+          inlineReply: true,
+          fields: [{ key: "q0", type: "string", options: paths }],
+        },
+      })
+      expect(JSON.parse(most)).toEqual({
+        v: 1,
+        type: "form",
+        id: question.id,
+        time: 1_000,
+        sessionID,
+        attention: true,
+        title: question.title,
+        body: question.body,
+        data: { formID: "frm_1", replySessionID: sessionID, kind: "question", fieldCount: 1, truncated: true },
+      })
+      const error = { type: "provider.rate-limit", message: "e".repeat(3_000), status: 429, retryAfterMs: 30_000 }
+      const failed = PushSender.message({
+        ...finished,
+        body: "Failed",
+        data: { outcome: "failed", text: "a".repeat(500), error },
+      })
+      expect(Buffer.byteLength(failed, "utf8")).toBeLessThanOrEqual(2600)
+      expect(JSON.parse(failed).data).toEqual({
+        outcome: "failed",
+        error: { ...error, message: expect.stringMatching(/^e+…$/) },
+        truncated: true,
+      })
       expect(PushSender.message(question)).toBe(
         JSON.stringify({
           v: 1,
+          type: "form",
           id: question.id,
-          type: "question",
+          time: 1_000,
           sessionID,
+          directory: question.directory,
+          attention: true,
           title: question.title,
           body: question.body,
           data: question.data,

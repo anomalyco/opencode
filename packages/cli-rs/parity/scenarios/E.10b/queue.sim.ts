@@ -59,7 +59,7 @@ export default defineSim({
     { checkpoint: "moved", until: "2 queued" },
     // A delivered prompt opens the message actions.
     ...click(5, 3),
-    { checkpoint: "message", until: "Message Actions" },
+    { checkpoint: "message", until: "Search actions" },
     { press: "escape" },
     { checkpoint: "closed", until: "2 queued" },
     { release: "busy" },

@@ -79,6 +79,8 @@ export const {
     peekMedia?: PeekMediaUrlFn
     onNavigateToSession?: NavigateToSessionFn
     onSessionHref?: SessionHrefFn
+    /** Resolved feature flags of the session's location, from the server's experimental flag endpoint. */
+    flags?: Readonly<Record<string, boolean>>
   }) => {
     return {
       get store() {
@@ -92,6 +94,13 @@ export const {
       },
       get agents() {
         return props.agents ?? true
+      },
+      get flags() {
+        return props.flags
+      },
+      /** Whether the server reports `key` on for the session's location; off when unknown. */
+      flag(key: string) {
+        return props.flags?.[key] === true
       },
       navigateToSession: props.onNavigateToSession,
       sessionHref: props.onSessionHref,

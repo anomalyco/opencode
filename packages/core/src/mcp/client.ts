@@ -15,7 +15,6 @@ import {
   UnauthorizedError,
   UnsupportedProtocolVersionError,
   type CallToolRequestOptions,
-  type CallToolResult as SdkCallToolResult,
   type ElicitRequestFormParams,
   type ElicitRequestParams,
   type ElicitRequestURLParams,
@@ -29,12 +28,9 @@ import {
   type Transport,
   type VersionNegotiationOptions,
 } from "@modelcontextprotocol/client"
-import {
-  SKILLS_EXTENSION_ID,
-  SkillsClient,
-  type Skill as SdkSkill,
-  type SkillFile as SdkSkillFile,
-} from "@modelcontextprotocol/client/ext/skills"
+import type { CallToolResult as SdkCallToolResult } from "@modelcontextprotocol/client"
+import { SKILLS_EXTENSION_ID, SkillsClient } from "@modelcontextprotocol/client/ext/skills"
+import type { Skill as SdkSkill, SkillFile as SdkSkillFile } from "@modelcontextprotocol/client/ext/skills"
 import {
   Cause,
   Clock,

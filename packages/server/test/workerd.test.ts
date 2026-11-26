@@ -5,10 +5,17 @@ import { TestClock } from "effect/testing"
 import { AppNodeBuilder } from "@opencode/core/effect/app-node-builder"
 import { Environment, makeFiles, makeMemoryDriver } from "@opencode/core/environment/index"
 import { FileSystem } from "@opencode/core/filesystem"
+import { Database } from "@opencode/core/database/database"
 import { Location } from "@opencode/core/location"
 import { Identity } from "@opencode/core/machine/identity"
+import { Project } from "@opencode/core/project"
+import { ProjectTable } from "@opencode/core/project/sql"
 import { AbsolutePath, RelativePath } from "@opencode/core/schema"
+import { Snapshot } from "@opencode/core/snapshot"
+import { Vcs } from "@opencode/core/vcs"
 import { Workspace } from "@opencode/core/workspace"
+import { Worktree } from "@opencode/core/worktree"
+import { LayerNode } from "@opencode/util/effect/layer-node"
 import { WorkspaceDriver } from "@opencode/core/workspace/driver"
 import { Npm } from "@opencode/util/npm"
 import { makeDurableObjectStorage } from "../../core/test/fixture/durable-object-storage"
@@ -52,7 +59,7 @@ it.effect("fails Npm.add with a clear workerd error instead of running the insta
     const npm = yield* Npm.Service
     const error = yield* npm.add("some-package").pipe(Effect.flip)
     expect(error).toBeInstanceOf(Npm.InstallFailedError)
-    expect(String(error.cause)).toContain("Npm.add is unavailable in the workerd profile")
+    expect(String(error.cause)).toContain("Npm.add is not supported in this runtime")
   }).pipe(
     Effect.provide(AppNodeBuilder.build(Npm.node, ServerWorkerd.replacements({ storage: makeDurableObjectStorage() }))),
   ),
@@ -224,4 +231,45 @@ it.effect(
         "Search is not available",
       )
     }),
+)
+
+it.effect("degrades Snapshot, Vcs, and Worktree cleanly on workerd through Environment gating", () =>
+  Effect.gen(function* () {
+    const storage = makeDurableObjectStorage()
+    const layer = AppNodeBuilder.build(LayerNode.group([Database.node, Snapshot.node, Vcs.node, Worktree.node]), [
+      ...ServerWorkerd.replacements({ storage }),
+      Location.node.replace(
+        Layer.succeed(Location.Service, Location.Service.of(location({ directory: AbsolutePath.make("/") }))),
+      ),
+    ])
+
+    yield* Effect.gen(function* () {
+      const snapshot = yield* Snapshot.Service
+      const tree = Snapshot.ID.make("0".repeat(40))
+      expect(yield* snapshot.capture()).toBeUndefined()
+      expect(yield* snapshot.files({ from: tree, to: tree })).toEqual([])
+      expect(yield* snapshot.diff({ from: tree, to: tree })).toEqual([])
+      yield* snapshot.restore({ files: new Map([[RelativePath.make("a.txt"), tree]]) })
+
+      const vcs = yield* Vcs.Service
+      expect(yield* vcs.info()).toEqual({ branch: {} })
+      expect(yield* vcs.base()).toBeNull()
+      expect(yield* vcs.branches()).toEqual([])
+      expect(yield* vcs.status()).toEqual([])
+      expect(yield* vcs.diff("working")).toEqual([])
+      expect(yield* vcs.initialize("git").pipe(Effect.flip)).toMatchObject({ kind: "unsupported" })
+
+      const db = (yield* Database.Service).db
+      const projectID = Project.ID.make("workerd-project")
+      yield* db
+        .insert(ProjectTable)
+        .values({ id: projectID, worktree: AbsolutePath.make("/"), sandboxes: [], time_created: 1, time_updated: 1 })
+        .run()
+        .pipe(Effect.orDie)
+
+      const worktrees = yield* Worktree.Service
+      expect(yield* worktrees.list({ projectID })).toEqual([])
+      expect(yield* worktrees.create({ projectID }).pipe(Effect.flip)).toBeInstanceOf(Worktree.OperationError)
+    }).pipe(Effect.provide(layer))
+  }),
 )

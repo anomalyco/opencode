@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
+import type {
+  SessionMessageAssistant,
+  SessionMessageInfo,
+  SessionMessageUser,
+  SessionStatus,
+} from "@opencode/client/promise"
 import { Predicate } from "effect"
 import { createRoot } from "solid-js"
 import { commentaryRuns, subagentReport } from "../storybook/current-session-fixtures"
@@ -88,6 +93,108 @@ describe("New timeline projection", () => {
     })
 
     expect(groups).toEqual(["first", "notice", "second"])
+  })
+
+  describe("a run of thoughts", () => {
+    const everything = timelinePresets.find((preset) => preset.id === "everything")!.value
+
+    const reasoning = (created: number, completed?: number) =>
+      ({ type: "reasoning", text: "Checking the folder.", time: { created, completed } }) as const
+
+    const shell = {
+      id: "shell",
+      type: "tool",
+      name: "shell",
+      state: { status: "running", input: { command: "ls" }, metadata: {} },
+      time: { created: 5 },
+    } as const
+
+    const user = { id: "user", type: "user", text: "Go", time: { created: 0 } } as const
+
+    // Each row the turn shows after the prompt, with the parts it holds.
+    const rowsAfterPrompt = (
+      messages: SessionMessageInfo[],
+      status: SessionStatus,
+      detail: TimelineDetail = everything,
+    ) =>
+      createRoot((dispose) => {
+        const projection = createNextTimelineProjection({
+          sessionMessages: () => messages,
+          status: () => status,
+          timelineDetail: () => detail,
+        })
+
+        const result = projection.rows().flatMap((row) => {
+          if (Predicate.isTagged(row, "Thinking"))
+            return [`Thinking ${[...(row.before ?? []), row.ref].map((ref) => ref.partID).join(",")}`]
+
+          if (!Predicate.isTagged(row, "AssistantPart")) return []
+          const refs = row.group.type === "part" ? [row.group.ref] : row.group.refs
+
+          return [`${row.group.type} ${refs.map((ref) => ref.partID).join(",")}`]
+        })
+
+        dispose()
+
+        return result
+      })
+
+    test("thoughts from steps one after another read as one", () => {
+      const messages: SessionMessageInfo[] = [
+        user,
+        step("a", 1, { content: [reasoning(1, 2)], time: { created: 1, completed: 2 } }),
+        step("b", 3, { content: [{ type: "text", text: "" }, reasoning(3, 4), shell], time: { created: 3 } }),
+      ]
+
+      expect(rowsAfterPrompt(messages, { type: "idle" })).toEqual(["thought a:reasoning:0,b:reasoning:0", "part shell"])
+    })
+
+    test("text between two thoughts keeps them apart", () => {
+      const messages: SessionMessageInfo[] = [
+        user,
+        step("a", 1, {
+          content: [reasoning(1, 2), { type: "text", text: "Looking." }, reasoning(3, 4)],
+          time: { created: 1, completed: 4 },
+        }),
+      ]
+
+      expect(rowsAfterPrompt(messages, { type: "idle" })).toEqual([
+        "part a:reasoning:0",
+        "part a:text:0",
+        "part a:reasoning:1",
+      ])
+    })
+
+    test("a finished thought stays Thinking while the model may think again", () => {
+      const messages: SessionMessageInfo[] = [
+        user,
+        step("a", 1, { content: [reasoning(1, 2)], time: { created: 1, completed: 2 } }),
+        step("b", 3, { content: [], time: { created: 3 } }),
+      ]
+
+      expect(rowsAfterPrompt(messages, { type: "busy" })).toEqual(["Thinking a:reasoning:0"])
+    })
+
+    test("the next thought joins the live one", () => {
+      const messages: SessionMessageInfo[] = [
+        user,
+        step("a", 1, { content: [reasoning(1, 2)], time: { created: 1, completed: 2 } }),
+        step("b", 3, { content: [reasoning(3)], time: { created: 3 } }),
+      ]
+
+      expect(rowsAfterPrompt(messages, { type: "busy" })).toEqual(["Thinking a:reasoning:0,b:reasoning:0"])
+      expect(rowsAfterPrompt(messages, { type: "busy" }, detailed)).toEqual(["Thinking a:reasoning:0,b:reasoning:0"])
+    })
+
+    test("a call settles the thoughts before it", () => {
+      const messages: SessionMessageInfo[] = [
+        user,
+        step("a", 1, { content: [reasoning(1, 2)], time: { created: 1, completed: 2 } }),
+        step("b", 3, { content: [reasoning(3, 4), shell], time: { created: 3 } }),
+      ]
+
+      expect(rowsAfterPrompt(messages, { type: "busy" })).toEqual(["thought a:reasoning:0,b:reasoning:0", "part shell"])
+    })
   })
 
   test("a subagent's report shows above the status line before the agent takes it, and the user's input below", () => {
