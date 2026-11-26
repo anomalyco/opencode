@@ -182,6 +182,7 @@ export function adaptiveSessionTabLayout(
   active: string | undefined,
   available: number,
   previousStart = 0,
+  scrollStart?: number,
 ) {
   if (tabs.length === 0) return { tabs: [], widths: [], before: 0, after: 0, start: 0, total: 0 }
 
@@ -201,7 +202,7 @@ export function adaptiveSessionTabLayout(
     const nextStart = Math.min(
       Math.max(
         0,
-        activeIndex === -1
+        activeIndex === -1 || scrollStart !== undefined
           ? boundedStart
           : activeIndex < boundedStart
             ? activeIndex
@@ -216,9 +217,9 @@ export function adaptiveSessionTabLayout(
       (nextStart + count < tabs.length ? sessionTabOverflowWidth(tabs.length - nextStart - count) : 0)
     const nextCount = fit(available - markers)
     if (nextCount === count || attempts === 0) return { count, start: nextStart }
-    return solve(nextCount, nextStart, attempts - 1)
+    return solve(nextCount, scrollStart ?? nextStart, attempts - 1)
   }
-  const solved = solve(fit(available), previousStart, 3)
+  const solved = solve(fit(available), scrollStart ?? previousStart, 3)
   const visible = tabs.slice(solved.start, solved.start + solved.count)
   const before = solved.start
   const after = tabs.length - solved.start - solved.count
@@ -228,7 +229,7 @@ export function adaptiveSessionTabLayout(
   )
   const roomy = contentWidth >= SESSION_TAB_WIDTH * visible.length
   const total = roomy ? Math.min(contentWidth, SESSION_TAB_MAX_WIDTH * visible.length) : contentWidth
-  if (roomy || activeIndex === -1) {
+  if (roomy || activeIndex < before || activeIndex >= before + visible.length) {
     const width = Math.floor(total / visible.length)
     const remainder = total - width * visible.length
     return {
