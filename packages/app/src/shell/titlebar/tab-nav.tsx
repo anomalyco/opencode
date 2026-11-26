@@ -669,6 +669,7 @@ export function TabNavItem(
               </Menu.Item>
               <Show when={props.contextMenuExtra}>{(extra) => extra()()}</Show>
               <SessionReadMenuItem server={props.server} session={props.session} />
+              <Menu.Separator />
               <SessionCopyMenu session={props.session} />
               <Menu.Item
                 disabled={!props.session || exporter.exporting({ server: props.server, sessionID: props.session.id })}

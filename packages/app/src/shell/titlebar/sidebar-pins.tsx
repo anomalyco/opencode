@@ -310,7 +310,7 @@ export function SidebarSectionLabel(props: { id?: string; label: string; class?:
   )
 }
 
-function PinnedSessionRow(props: {
+export function PinnedSessionRow(props: {
   item: PinnedItem
   index: number
   pins: SessionPins
@@ -403,12 +403,13 @@ function PinnedSessionRow(props: {
       <Menu.Item onSelect={() => props.pins.unpin(props.item.server, props.item.session.id)}>
         {language.t("sidebar.recent.unpin")}
       </Menu.Item>
+      <SessionReadMenuItem server={props.item.server} session={props.item.session} />
       <Menu.Item
         onSelect={() => global.sessionPreferences.update("muted", props.item.server, props.item.session.id, !muted())}
       >
         {language.t(muted() ? "sidebar.recent.unmute" : "sidebar.recent.mute")}
       </Menu.Item>
-      <SessionReadMenuItem server={props.item.server} session={props.item.session} />
+      <Menu.Separator />
       <SessionCopyMenu session={props.item.session} />
       <Menu.Item disabled={exporter.exporting(exportTarget())} onSelect={() => exporter.export(exportTarget())}>
         {language.t("common.export")}…

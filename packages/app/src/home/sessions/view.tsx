@@ -925,6 +925,7 @@ function HomeSessionRow(
               {props.language.t("common.rename")}
             </Menu.Item>
             <SessionReadMenuItem server={props.server} session={props.record.session} />
+            <Menu.Separator />
             <SessionCopyMenu session={props.record.session} />
             <Menu.Item
               disabled={props.isExportingSession(props.server, props.record.session)}

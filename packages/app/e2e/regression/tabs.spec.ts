@@ -770,10 +770,12 @@ test("an unread tab whose run failed shows the failed dot, as the inbox does", a
   const time = { created: T0, updated: T0, idle: T0 + 1 }
 
   await context.grantPermissions(["clipboard-read", "clipboard-write"])
+
   const workspace = await mockWorkspace(page, {
     name: "FailedTabs",
     sessions: [a, { ...b, outcome: "failed", time }, { ...c, outcome: "succeeded", time }],
   })
+
   await page.goto(sessionHref(a.id))
   const tab = (id: string) => page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(id)}"])`)
 
@@ -2492,8 +2494,8 @@ test("the inbox lists archived sessions in a collapsed section and pins sessions
     "Archive",
     "Delete…",
   ])
-  // Archive and Delete share the menu's only separator.
-  await expect(page.getByRole("menu").getByRole("separator")).toHaveCount(1)
+  // One separator before Copy and Export, and one before Archive and Delete.
+  await expect(page.getByRole("menu").getByRole("separator")).toHaveCount(2)
   await page.getByRole("menuitem", { name: "Pin", exact: true }).click()
 
   const recent = inbox.getByRole("group", { name: "Recent", exact: true }).locator('[data-slot="sidebar-inbox-item"]')

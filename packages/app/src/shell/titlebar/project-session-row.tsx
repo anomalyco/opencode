@@ -215,6 +215,7 @@ export function ProjectSessionRow(props: {
             {language.t("common.rename")}
           </Menu.Item>
           <SessionReadMenuItem server={props.server} session={props.session} />
+          <Menu.Separator />
           <SessionCopyMenu session={props.session} />
           <Menu.Item
             disabled={!ctx() || exporter.exporting(exportTarget())}

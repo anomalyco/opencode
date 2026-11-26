@@ -14,6 +14,9 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
+import { createSessionExporter } from "@/session/commands/export-session"
+import { SessionCopyMenu } from "@/session/session-copy-menu"
+import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { sessionStatus, useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { projectSettingsKey, useSettings } from "@/settings/model"
 import { tabHref, tabKey, useTabs, type Tab } from "@/shell/tabs/tabs"
@@ -502,7 +505,7 @@ export function GroupSquare(props: { color: TabGroupColor }) {
   return <span data-slot="pinned-group-rect" data-group-color={props.color} aria-hidden="true" />
 }
 
-function PinnedSession(props: { pin: PinRef; orientation: Orientation; grouped?: boolean }) {
+export function PinnedSession(props: { pin: PinRef; orientation: Orientation; grouped?: boolean }) {
   const pins = usePins()
   const language = useLanguage()
   const server = () => ServerConnection.Key.make(props.pin.server)
@@ -536,10 +539,23 @@ function PinnedSession(props: { pin: PinRef; orientation: Orientation; grouped?:
     return index !== -1 && index < 9 ? index + 1 : undefined
   }
 
+  const exporter = createSessionExporter()
+
+  const exportTarget = () => ({ server: server(), sessionID: props.pin.sessionId })
+
   const menu = (rename: () => void): JSX.Element => (
     <>
       <Menu.Item onSelect={rename}>{language.t("common.rename")}</Menu.Item>
       <PinMenuItems pin={props.pin} />
+      <SessionReadMenuItem server={server()} session={session()} />
+      <Menu.Separator />
+      <SessionCopyMenu session={session()} />
+      <Menu.Item
+        disabled={!session() || exporter.exporting(exportTarget())}
+        onSelect={() => exporter.export(exportTarget())}
+      >
+        {language.t("common.export")}…
+      </Menu.Item>
     </>
   )
 
