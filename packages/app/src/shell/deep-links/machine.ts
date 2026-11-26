@@ -8,7 +8,7 @@ export type DeepLink =
   | { readonly type: "open-project"; readonly directory: string }
   | { readonly type: "new-session"; readonly directory: string; readonly prompt: string | undefined }
 
-export type DeepLinkConfirm =
+type DeepLinkConfirm =
   | { readonly status: "idle"; readonly attempt: number }
   | {
       readonly status: "asking"
@@ -17,7 +17,7 @@ export type DeepLinkConfirm =
       readonly queued: readonly DeepLink[]
     }
 
-export type DeepLinkServer =
+type DeepLinkServer =
   | { readonly status: "waiting"; readonly accepted: readonly DeepLink[] }
   | { readonly status: "ready" }
 
@@ -91,7 +91,7 @@ export function parseDeepLink(value: string): DeepLink | undefined {
   if (url.protocol !== "opencode:") return
   const directory = url.searchParams.get("directory")
 
-  if (!directory || !localDirectory(directory)) return
+  if (!directory || !isLocalDirectory(directory)) return
 
   if (url.hostname === "open-project") return { type: "open-project", directory }
 
@@ -114,17 +114,20 @@ function ask(state: DeepLinkState, attempt: number, links: readonly DeepLink[]):
 // An absolute folder on this computer: `/…` or `C:\…`. Not relative (`repo`, `~/repo`, `C:repo`, `..` segments),
 // not a share (`\\host\share`, `//host/share`, macOS `/net/<host>`), and without control or bidirectional characters,
 // so the dialog shows the folder as it opens.
-function localDirectory(directory: string) {
+function isLocalDirectory(directory: string) {
   if (/[\u0000-\u001f\u007f\u061c\u200e\u200f\u202a-\u202e\u2066-\u2069]/.test(directory)) return false
 
   if (/^[\\/]{2}/.test(directory)) return false
 
   if (!/^(?:\/|[a-z]:[\\/])/i.test(directory)) return false
+
   const segments = directory.split(/[\\/]/)
 
   if (segments.some((segment) => segment === "." || segment === "..")) return false
 
-  return !(directory.startsWith("/") && segments[1]?.toLowerCase() === "net")
+  if (directory.startsWith("/") && segments[1]?.toLowerCase() === "net") return false
+
+  return true
 }
 
 function open(link: DeepLink): DeepLinkEffect {

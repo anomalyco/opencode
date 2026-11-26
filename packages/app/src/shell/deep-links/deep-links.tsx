@@ -51,7 +51,7 @@ export function useDeepLinks() {
     open(effect.link)
   }
 
-  // Accepting closes the dialog, which reports a decline after its exit animation; the attempt makes that harmless.
+  // Accepting closes the dialog, which reports a decline as it starts closing; the attempt makes that harmless.
   const ask = (effect: Extract<DeepLinkEffect, { type: "ask" }>) => {
     const attempt = effect.attempt
 
@@ -64,10 +64,12 @@ export function useDeepLinks() {
   // A project that can't be added shows the server's error (`projects.add`); one that can opens in a new session.
   const open = (link: DeepLink) => {
     const conn = untrack(own)
-    const ctx = conn && untrack(() => global.serverCtx(ServerConnection.key(conn)))
 
-    if (!conn || !ctx) return
+    if (!conn) return
     const server = ServerConnection.key(conn)
+    const ctx = untrack(() => global.serverCtx(server))
+
+    if (!ctx) return
 
     opening.last = opening.last.then(async () => {
       const project = await ctx.projects.add(link.directory)
@@ -92,7 +94,6 @@ export function useDeepLinks() {
   if (stop) onCleanup(stop)
 }
 
-// Cancel has focus, so a link can't open a folder on a stray Enter.
 function DialogOpenDeepLink(props: { link: DeepLink; onOpen: () => void }) {
   const dialog = useDialog()
   const language = useLanguage()
@@ -125,6 +126,7 @@ function DialogOpenDeepLink(props: { link: DeepLink; onOpen: () => void }) {
         />
       </DialogHeader>
       <DialogFooter>
+        {/* Cancel has focus, so a link can't open a folder on a stray Enter. */}
         <Button type="button" variant="neutral" autofocus onClick={() => dialog.close()}>
           {language.t("common.cancel")}
         </Button>

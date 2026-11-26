@@ -5,7 +5,6 @@ import {
   transitionDeepLinks,
   type DeepLinkEffect,
   type DeepLinkEvent,
-  type DeepLinkState,
 } from "./machine"
 
 const project = `opencode://open-project?directory=${encodeURIComponent("C:\\work\\api")}`
@@ -14,8 +13,8 @@ const session = `opencode://new-session?directory=%2Frepo&prompt=${encodeURIComp
 
 const ready = transitionDeepLinks(INITIAL_DEEP_LINK_STATE, { type: "server.ready" }).state
 
-function replay(events: readonly DeepLinkEvent[], from: DeepLinkState = INITIAL_DEEP_LINK_STATE) {
-  return events.reduce(
+const replay = (events: readonly DeepLinkEvent[], from = INITIAL_DEEP_LINK_STATE) =>
+  events.reduce(
     (acc, event) => {
       const next = transitionDeepLinks(acc.state, event)
 
@@ -23,7 +22,6 @@ function replay(events: readonly DeepLinkEvent[], from: DeepLinkState = INITIAL_
     },
     { state: from, effects: new Array<DeepLinkEffect>() },
   )
-}
 
 const opened = (effects: readonly DeepLinkEffect[]) =>
   effects.flatMap((effect) => (effect.type === "open" ? [effect.link.directory] : []))
