@@ -1,11 +1,5 @@
 # session/message
 
-## GET /api/session/{sessionID}/context
-
-Retrieve the active context messages for a session (all messages after the last compaction).
-
-Returns: `{ data: Session.Message.Info[] }`
-
 ## GET /api/session/{sessionID}/message/{messageID}
 
 Retrieve one message of the session by ID.

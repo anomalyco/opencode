@@ -72,18 +72,36 @@ Call any endpoint below from Code Mode with `fetch("opencode:///api/...")`. Each
 
 - GET /api/session: List sessions
 - POST /api/session: Create session
-- GET /api/session/active: List active sessions
 - GET /api/session/{sessionID}: Get session
 - PATCH /api/session/{sessionID}: Update session
-- POST /api/session/{sessionID}/fork: Fork session
+
+## api/session/active.md
+
+- GET /api/session/active: List active sessions
+
+## api/session/agent.md
+
 - POST /api/session/{sessionID}/agent: Switch session agent
-- POST /api/session/{sessionID}/model: Switch session model
-- POST /api/experimental/session/{sessionID}/wait (experimental): Wait for session
+
+## api/session/command.md
+
+- POST /api/session/{sessionID}/command: Run command
+
+## api/session/compact.md
+
+- POST /api/session/{sessionID}/compact: Compact session
+
+## api/session/context.md
+
+- GET /api/session/{sessionID}/context: Get session context
+
+## api/session/diff.md
+
 - GET /api/session/{sessionID}/diff: Diff session turns
-- POST /api/session/{sessionID}/generate: Generate text from session context
-- POST /api/session/{sessionID}/interrupt: Interrupt session execution
-- GET /api/session/{sessionID}/permission: List session permission requests
-- GET /api/session/{sessionID}/permission/{requestID}: Get permission request
+
+## api/session/fork.md
+
+- POST /api/session/{sessionID}/fork: Fork session
 
 ## api/session/form.md
 
@@ -91,21 +109,45 @@ Call any endpoint below from Code Mode with `fetch("opencode:///api/...")`. Each
 - GET /api/session/{sessionID}/form/{formID}: Get session form
 - POST /api/session/{sessionID}/form/{formID}/reply: Reply to form
 
-## api/session/input.md
+## api/session/generate.md
 
-- POST /api/session/{sessionID}/prompt: Send message
-- POST /api/session/{sessionID}/command: Run command
-- POST /api/session/{sessionID}/synthetic: Add synthetic message
-- POST /api/session/{sessionID}/compact: Compact session
+- POST /api/session/{sessionID}/generate: Generate text from session context
+
+## api/session/inbox.md
+
 - GET /api/session/{sessionID}/inbox: List session inbox
 - PATCH /api/session/{sessionID}/inbox/{inboxID}: Update inbox item
 - DELETE /api/session/{sessionID}/inbox/{inboxID}: Cancel inbox input
 
+## api/session/interrupt.md
+
+- POST /api/session/{sessionID}/interrupt: Interrupt session execution
+
 ## api/session/message.md
 
-- GET /api/session/{sessionID}/context: Get session context
 - GET /api/session/{sessionID}/message/{messageID}: Get session message
 - GET /api/session/{sessionID}/message: Get session messages
+
+## api/session/model.md
+
+- POST /api/session/{sessionID}/model: Switch session model
+
+## api/session/permission.md
+
+- GET /api/session/{sessionID}/permission: List session permission requests
+- GET /api/session/{sessionID}/permission/{requestID}: Get permission request
+
+## api/session/prompt.md
+
+- POST /api/session/{sessionID}/prompt: Send message
+
+## api/session/synthetic.md
+
+- POST /api/session/{sessionID}/synthetic: Add synthetic message
+
+## api/session/wait.md
+
+- POST /api/experimental/session/{sessionID}/wait (experimental): Wait for session
 
 ## api/skill.md
 
