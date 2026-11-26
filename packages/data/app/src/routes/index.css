@@ -1610,11 +1610,10 @@ body {
 }
 
 /* The range choices in one frame, as the leaderboard's cards and the Share button beside them: a hairline over the
-   layer, 28px tall; the chosen one on grey inside it. */
+   layer, its 2px padding round the buttons (28px tall with the 22px ones); the chosen one on grey inside it. */
 [data-page="stats"] [data-component="usage-filter"][data-variant="range"] {
   box-sizing: border-box;
   gap: 2px;
-  height: 28px;
   padding: 2px;
   background: linear-gradient(180deg, #ffffff0a 0%, #ffffff00 100%), var(--stats-layer);
   border: 1px solid var(--stats-line);
@@ -8287,6 +8286,24 @@ body {
 
   [data-page="stats"] [data-slot="section-heading-row"] [data-component="usage-filter"] button {
     height: 32px;
+  }
+
+  /* On a touch screen, 38px buttons, each reaching into the frame's padding for a 44px target. */
+  @media (pointer: coarse) {
+    [data-page="stats"] [data-slot="section-heading-row"] [data-component="usage-filter"] button {
+      position: relative;
+      height: 38px;
+      touch-action: manipulation;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-tap-highlight-color: transparent;
+
+      &::after {
+        content: "";
+        position: absolute;
+        inset: -3px -1px;
+      }
+    }
   }
 
   [data-page="stats"] [data-slot="cache-ratio-heading"],
