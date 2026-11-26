@@ -1,5 +1,5 @@
 /* The docs lockup word after the site's logo ("DOCS"), set like the Data and Console header lockups
-   (packages/nav-menus): OpenTUI Mono Bold 15px caps, 12px after the logo's box and cap-centred on it. */
+   (packages/nav-menus): OpenMono Bold 15px caps, 12px after the logo's box and cap-centred on it. */
 [data-site] [data-component="docs-lockup"] {
   --lockup-logo: var(--logo-box, calc(var(--logo-height) * 4 / 5));
 

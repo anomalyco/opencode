@@ -341,7 +341,7 @@ export const content = {
       badges: {
         body: "ضع شارة في ملف README أو الوثائق أو موقعك واربطها بـ opencode.ai. اختر الملف الفاتح أو الداكن حسب خلفيتك (تتبدّل نسخة HTML تلقائيًا)، ولا تغيّر الألوان أو النص.",
         sizes: "يتوفر كل نمط بأحجام 20 و32 و44px (Shields بحجم 20px فقط)، بصيغة SVG وبصيغة PNG بدقة 2×.",
-        mono: "لكل ملف أيضًا نسخة بخط OpenTUI Mono. أضف -mono قبل الامتداد، كما في opencode-works-with-a-light-20-mono.svg، أو -mono-caps لخط OpenTUI Mono بالأحرف الكبيرة.",
+        mono: "لكل ملف أيضًا نسخة بخط OpenMono. أضف -mono قبل الامتداد، كما في opencode-works-with-a-light-20-mono.svg، أو -mono-caps لخط OpenMono بالأحرف الكبيرة.",
         groups: {
           "works-with": {
             title: "يعمل مع",

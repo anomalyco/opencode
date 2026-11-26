@@ -680,7 +680,7 @@ export const content = {
       badges: {
         body: "Coloque um selo no seu README, docs ou site com link para opencode.ai. Escolha o arquivo claro ou escuro para o seu fundo (o HTML alterna sozinho) e não mude as cores nem o texto.",
         sizes: "Todo estilo vem em 20, 32 e 44px (Shields só em 20px), em SVG e em PNG a 2×.",
-        mono: "Cada arquivo também vem com texto em OpenTUI Mono. Adicione -mono antes da extensão, como em opencode-works-with-a-light-20-mono.svg, ou -mono-caps para OpenTUI Mono em maiúsculas.",
+        mono: "Cada arquivo também vem com texto em OpenMono. Adicione -mono antes da extensão, como em opencode-works-with-a-light-20-mono.svg, ou -mono-caps para OpenMono em maiúsculas.",
         groups: {
           "works-with": {
             title: "Funciona com",

@@ -147,7 +147,7 @@ function LogoMark(props: { item: Logo }) {
 
 /**
  * The container query that swaps the label for its short form: below the long label's width plus a
- * 24px gap to the logos. The label is set in OpenTUI Mono, so its width is 0.6em a character (twice
+ * 24px gap to the logos. The label is set in OpenMono, so its width is 0.6em a character (twice
  * that for CJK and Hangul); scripts drawn in fallback fonts (Arabic, Thai, CJK) come out narrower,
  * so for them the estimate errs wide. `em` in a container query is the label's own font size.
  */
