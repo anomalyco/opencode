@@ -43,8 +43,8 @@ export interface GpuHost {
   canvas(key: string): GpuCanvas | undefined
   /** The keys of the GPU canvases in the last rendered view. */
   keys(): ReadonlySet<string>
-  /** A program error (phase `gpu`), reported once by the host. */
-  programError(message: string): void
+  /** A program error (phase `gpu`), reported once by the host; `at`: the line and column of its batch's post. */
+  programError(message: string, at?: readonly [number, number]): void
   clientError(message: string, cause?: unknown): void
   /** The device was lost: `{ type: "gpu", lost: reason, message }` to the program. */
   lost(reason: string, message: string): void
@@ -105,7 +105,7 @@ export class GpuReplay {
   private device: GPUDevice | undefined
   private starting = false
   /** Checked batches waiting for the device, in order, and the frame ends between them (`null`). */
-  private waiting: Array<{ batch: Batch; checked: Checked; boundary: boolean } | null> = []
+  private waiting: Array<{ batch: Batch; checked: Checked; boundary: boolean; at?: readonly [number, number] } | null> = []
   private unavailable = false
   private objects: Array<Obj | undefined> = []
   private closed = false
@@ -132,22 +132,22 @@ export class GpuReplay {
   }
 
   /** Checks `batch` now, in order, and replays what passes after the batches before it. `boundary`: the batch of a
-   * frame request (not one repeated while a frame is pending), which `frame()` follows. */
-  batch(batch: unknown, boundary: boolean) {
+   * frame request (not one repeated while a frame is pending), which `frame()` follows; `at`: its post's line and column. */
+  batch(batch: unknown, boundary: boolean, at?: readonly [number, number]) {
     if (this.closed || this.unavailable) return
     const checked = this.checks.batch(batch)
-    if (checked.error) this.fail(checked.error)
+    if (checked.error) this.fail(checked.error, at)
     // Ignored: every canvas it renders into stopped, it is from before a device loss, or it failed before its first op.
     if (checked.skip || (checked.error && checked.at === undefined)) return
     const b = batch as Batch
-    if (this.device && this.waiting.length === 0) return this.replay(this.device, b, checked, boundary)
-    this.waiting.push({ batch: b, checked, boundary })
+    if (this.device && this.waiting.length === 0) return this.replay(this.device, b, checked, boundary, at)
+    this.waiting.push({ batch: b, checked, boundary, at })
     void this.start()
   }
 
   /** A program error: reported once; its canvases (or every one) stop and show their placeholder with it. */
-  private fail(error: GpuError) {
-    this.host.programError(error.message)
+  private fail(error: GpuError, at?: readonly [number, number]) {
+    this.host.programError(error.message, at)
     this.stop(error)
   }
 
@@ -203,7 +203,7 @@ export class GpuReplay {
       return this.host.unavailable()
     }
     this.adopt(device)
-    for (const entry of this.waiting.splice(0)) entry ? this.replay(device, entry.batch, entry.checked, entry.boundary) : this.endFrame()
+    for (const entry of this.waiting.splice(0)) entry ? this.replay(device, entry.batch, entry.checked, entry.boundary, entry.at) : this.endFrame()
   }
 
   private adopt(device: GPUDevice) {
@@ -235,7 +235,7 @@ export class GpuReplay {
     })
   }
 
-  private replay(device: GPUDevice, batch: Batch, checked: Checked, boundary: boolean) {
+  private replay(device: GPUDevice, batch: Batch, checked: Checked, boundary: boolean, at?: readonly [number, number]) {
     const started = performance.now()
     this.boundary = boundary
     this.submitted = false
@@ -262,7 +262,7 @@ export class GpuReplay {
     } catch (e) {
       // A WebGPU call that throws (a value it refuses) is the program's too, in WebGPU's words.
       const error = this.checks.scoped(String((e as Error)?.message ?? e), checked.keys)
-      if (error) this.fail(error)
+      if (error) this.fail(error, at)
     }
     // A failed batch ends there: what it began isn't submitted.
     if (count < batch.ops.length || this.pass) {
@@ -279,7 +279,7 @@ export class GpuReplay {
     const keys = checked.keys
     void device.popErrorScope().then((e) => {
       const error = e && !this.closed ? this.checks.scoped(e.message, keys) : undefined
-      if (error) this.fail(error)
+      if (error) this.fail(error, at)
     })
     void device.popErrorScope().then((e) => {
       if (!e || this.closed) return

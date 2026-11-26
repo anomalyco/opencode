@@ -80,6 +80,8 @@ export type ToWorker =
       sliceBudgetMs?: number
       /** The live input's `gpu` (widgets-gpu.md). */
       gpu?: { available: boolean; format: string }
+      /** The program's lines that are the widget template's, `[first, last]`, when known. */
+      programLines?: [number, number]
     }
   | { t: "deliver"; wid: number; message: unknown }
   | { t: "pause"; wid: number }

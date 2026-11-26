@@ -405,6 +405,7 @@ function handle(m: ToWorker) {
           httpsHosts: m.hosts,
           allowLocalNetwork: m.localNetwork === true,
           sliceBudgetMs: m.sliceBudgetMs,
+          programLines: m.programLines,
         })
         const live: Live = { run, scheduled: false, timer: undefined, fetches: new Map() }
         lives.set(m.wid, live)

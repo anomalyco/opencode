@@ -638,6 +638,8 @@ class Widget implements MountedWidget {
         this.gpuHung = false
         this.live = { ...this.live, commands: new Map(), frameWanted: false, startedAt: performance.now(), pausedAt: undefined, pausedTotal: 0, running: true }
         this.paused = false
+        // The widget template's lines: errors in the preludes, and GPU batches' posts, are located in it.
+        const offset = this.prelude()
         worker.send({
           t: "live",
           wid: this.wid,
@@ -647,6 +649,7 @@ class Widget implements MountedWidget {
           localNetwork: this.options.allowLocalNetwork === true,
           sliceBudgetMs: this.host.options.sliceBudgetMs ?? SLICE_BUDGET_MS,
           gpu: gpuInput(),
+          programLines: offset === null ? undefined : [offset + 1, text.split("\n").length],
         })
         if (!this.visible) this.livePause(true)
       } else worker.send({ t: "open", wid: this.wid, pid: p.pid, data })
@@ -748,13 +751,13 @@ class Widget implements MountedWidget {
       case "frame":
         // A frame request may carry the GPU batch recorded before it (widgets-gpu.md, Transport): replayed first; then
         // the frame ends. One while a frame is pending changes nothing but its batch, a plain one.
-        if (p.gpu !== undefined) this.gpuBatch(p.gpu, !this.live.frameWanted)
+        if (p.gpu !== undefined) this.gpuBatch(p.gpu, !this.live.frameWanted, p.at)
         if (!this.live.frameWanted) this.gpu?.frame()
         this.live.frameWanted = true
         this.host.ticker.add(this.liveTick)
         return
       case "gpu":
-        if (p.batch !== undefined) this.gpuBatch(p.batch, false)
+        if (p.batch !== undefined) this.gpuBatch(p.batch, false, p.at)
         return
       case "submit":
         this.finish("submitted", p.value ?? null)
@@ -779,8 +782,10 @@ class Widget implements MountedWidget {
     this.stopWorker()
     if (exit.type === "failed" && this.status === "open") {
       const e = this.relative(exit.error)
-      this.problem(e.phase ?? "main", e)
-      this.inlineError(e, e.phase ?? "main", true)
+      // A fetch rejection the program let escape is a fetch error: the run's error has the rejection's kind.
+      const phase = e.phase ?? (FETCH_KINDS.includes(e.kind ?? "") ? "fetch" : "main")
+      this.problem(phase, e)
+      this.inlineError(e, phase, true)
     }
   }
 
@@ -1155,12 +1160,13 @@ class Widget implements MountedWidget {
     return id === undefined ? undefined : surfaces(this.viewEl).find((s): s is WebGpuCanvasView => s instanceof WebGpuCanvasView && s.id === id)
   }
 
-  /** A batch as posted, for the checks and the replay; `boundary`: a frame request's, ending the frame. */
-  private gpuBatch(batch: unknown, boundary: boolean) {
+  /** A batch as posted, for the checks and the replay; `boundary`: a frame request's, ending the frame; `at`: its post's
+   * line and column in the program, where its errors are reported. */
+  private gpuBatch(batch: unknown, boundary: boolean, at: unknown) {
     this.gpu ??= new GpuReplay({
       canvas: (key) => this.gpuCanvas(key),
       keys: () => new Set(Object.keys(this.gpuKeys)),
-      programError: (message) => this.report("gpu", { message }),
+      programError: (message, at) => this.report("gpu", this.relative({ type: "gpu", message, line: at?.[0], column: at?.[1] })),
       metric: (ms) => this.metric("gpu", ms),
       nextFrame: (f) => {
         const once = () => {
@@ -1177,7 +1183,7 @@ class Widget implements MountedWidget {
         for (const s of surfaces(this.viewEl)) if (s instanceof WebGpuCanvasView) s.placeholder()
       },
     })
-    this.gpu.batch(batch, boundary)
+    this.gpu.batch(batch, boundary, at as [number, number] | undefined)
   }
 
   /**
@@ -1314,6 +1320,9 @@ class Widget implements MountedWidget {
     this.element.remove()
   }
 }
+
+/** The kinds of a fetch rejection (widgets-live.md, `fetch`). */
+const FETCH_KINDS = ["CapabilityDenied", "RateLimited", "Network", "Timeout", "TooLarge"]
 
 /**
  * Whether an error is the widget template's (widgets.md, Failures): the language's own failures (parse, exception, the step

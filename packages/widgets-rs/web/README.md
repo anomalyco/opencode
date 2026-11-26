@@ -324,6 +324,7 @@ bun scripts/build.ts         # -> dist/ (index.js, worker.js, .wasm, .d.ts)
 bun scripts/fixtures.ts      # demo/fixtures.js from packages/widget (or another checkout's: pass its path)
 bun scripts/gpu-fixtures.ts  # packages/widget's GPU fixtures on wasm/: batches byte for byte, host-check errors, ends
 bun scripts/watchdog-check.ts  # the GPU hang watchdog on a queue the check finishes: no GPU
+bun scripts/report-check.ts  # with the demo server: live failures' reports (fetch kinds, template lines), headless
 bun scripts/serve.ts         # http://localhost:4173/demo/ (with the CSP above)
 ```
 
