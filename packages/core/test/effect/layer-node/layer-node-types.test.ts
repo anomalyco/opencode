@@ -123,6 +123,15 @@ const contracts = (tag: LayerNode.Tag<"app"> | LayerNode.Tag<"other">, flag: boo
   namedA.mapLayer((layer) => layer).mock({ read: () => Effect.succeed("mock") })
   // @ts-expect-error Service key must match a service provided by the layer
   make({ service: A, layer: bLayer, deps: [a] })
+  // @ts-expect-error Multi-service layers require a named node rather than a single service key
+  make({ service: A, layer: Layer.mergeAll(aLayer, bLayer), deps: [a] })
+  // @ts-expect-error Union service keys cannot be used for a single-service node
+  make({ service: flag ? A : B, layer: aLayer, deps: [] })
+  // @ts-expect-error Union service keys cannot be used for an unbound node
+  LayerNode.unbound(flag ? A : B, tags.values.global)
+  const picked: Context.Context<A | B> = Context.pick(a.service, b.service)(Context.empty() as Context.Context<A | B>)
+  // @ts-expect-error Context.pick over node.service preserves exact output types (not Context<any>)
+  const wrongPick: Context.Context<C> = picked
   const effectOnly = make({ name: "effect-only", layer: Layer.empty, deps: [] })
   // @ts-expect-error Side-effect nodes without a service output cannot be mocked
   effectOnly.mock({})
