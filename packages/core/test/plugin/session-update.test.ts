@@ -12,7 +12,7 @@ it.live("plugins archive sessions through session.update", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const sessions = yield* Session.Service
-    const context = yield* PluginHost.make(plugins)
+    const context = yield* PluginHost.make(plugins, "test")
     const session = yield* context.session.create()
 
     yield* context.session.update({ sessionID: session.id, archived: true })
@@ -28,7 +28,7 @@ it.live("plugins unarchive sessions through session.update", () =>
   Effect.gen(function* () {
     const plugins = yield* Plugin.Service
     const sessions = yield* Session.Service
-    const context = yield* PluginHost.make(plugins)
+    const context = yield* PluginHost.make(plugins, "test")
     const session = yield* context.session.create()
     yield* sessions.archive(session.id)
 
