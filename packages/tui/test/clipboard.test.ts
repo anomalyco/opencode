@@ -96,6 +96,7 @@ test("uses all available routes but skips the process host remotely", async () =
         },
       },
     }),
+    { wsl: false },
   )
 
   expect(await clipboard.write("hello")).toBeUndefined()
@@ -108,6 +109,7 @@ test("removes NUL characters before writing", async () => {
     coreClipboard({
       onWrite: (text) => writes.push(text),
     }),
+    { wsl: false },
   )
 
   expect(await clipboard.write("before\0after")).toBeUndefined()
@@ -125,6 +127,7 @@ test("rejects only when no clipboard route accepted the write", async () => {
         terminal: { status: "local-failure", capability: "supported" },
       },
     }),
+    { wsl: false },
   )
   const clipboard = createClipboardAdapter(
     coreClipboard({
@@ -134,6 +137,7 @@ test("rejects only when no clipboard route accepted the write", async () => {
       },
       onWrite: (text, input) => writes.push([text, input]),
     }),
+    { wsl: false },
   )
 
   expect(await fallback.write("hello")).toBeUndefined()
@@ -145,4 +149,111 @@ test("rejects reads when no clipboard route is supported", async () => {
   const clipboard = createClipboardAdapter(coreClipboard({ read: { status: "unsupported" } }))
 
   await expect(clipboard.read()).rejects.toThrow("Clipboard read is not supported on this system")
+})
+
+const windowsWriteFailed: ClipboardWriteResult = {
+  host: { status: "failed", error: new Error("native clipboard failed") },
+  terminal: { status: "attempted", capability: "unknown" },
+}
+
+test("writes through Windows interop when the host clipboard does not write on WSL", async () => {
+  const writes: string[] = []
+  const clipboard = createClipboardAdapter(coreClipboard({ write: windowsWriteFailed }), {
+    wsl: true,
+    windowsClipboard: async (text) => {
+      writes.push(text)
+    },
+  })
+  const text = "line 1\r\n\t世界 😀 $dollar `tick` \\back"
+
+  expect(await clipboard.write(text)).toBeUndefined()
+  expect(writes).toEqual([text])
+})
+
+test("reports a failed WSL interop when the terminal cannot copy", async () => {
+  const clipboard = createClipboardAdapter(
+    coreClipboard({
+      write: {
+        host: { status: "failed", error: new Error("native clipboard failed") },
+        terminal: { status: "local-failure", capability: "supported" },
+      },
+    }),
+    {
+      wsl: true,
+      windowsClipboard: async () => {
+        throw new Error("Clipboard copy under WSL needs powershell.exe interop, which is not available")
+      },
+    },
+  )
+
+  await expect(clipboard.write("hello")).rejects.toThrow("needs powershell.exe interop")
+})
+
+test("keeps an unknown terminal result when WSL interop fails", async () => {
+  const clipboard = createClipboardAdapter(coreClipboard({ write: windowsWriteFailed }), {
+    wsl: true,
+    windowsClipboard: async () => {
+      throw new Error("interop failed")
+    },
+  })
+
+  expect(await clipboard.write("hello")).toBeUndefined()
+})
+
+test("keeps a terminal that reports OSC 52 support when WSL interop fails", async () => {
+  const clipboard = createClipboardAdapter(
+    coreClipboard({
+      write: {
+        host: { status: "failed", error: new Error("native clipboard failed") },
+        terminal: { status: "attempted", capability: "supported" },
+      },
+    }),
+    {
+      wsl: true,
+      windowsClipboard: async () => {
+        throw new Error("interop failed")
+      },
+    },
+  )
+
+  expect(await clipboard.write("hello")).toBeUndefined()
+})
+
+test("mirrors the copy through WSL interop even when the host reports written", async () => {
+  let calls = 0
+  const clipboard = createClipboardAdapter(
+    coreClipboard({
+      write: { host: { status: "written" }, terminal: { status: "not-attempted", capability: "unknown" } },
+    }),
+    {
+      wsl: true,
+      windowsClipboard: async () => {
+        calls++
+      },
+    },
+  )
+
+  expect(await clipboard.write("hello")).toBeUndefined()
+  expect(calls).toBe(1)
+})
+
+test("does not use Windows interop when WSL is disabled", async () => {
+  let calls = 0
+  const clipboard = createClipboardAdapter(
+    coreClipboard({
+      write: {
+        host: { status: "failed", error: new Error("native clipboard failed") },
+        terminal: { status: "local-failure", capability: "supported" },
+      },
+    }),
+    {
+      wsl: false,
+      windowsClipboard: async () => {
+        calls++
+      },
+    },
+  )
+
+  await expect(clipboard.write("hello")).rejects.toThrow("native clipboard failed")
+  expect(calls).toBe(0)
 })
