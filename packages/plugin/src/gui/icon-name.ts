@@ -29,6 +29,7 @@ export type AppIconName =
   | "circle-exclamation"
   | "circle-x"
   | "circle-xmark"
+  | "clock"
   | "close"
   | "close-small"
   | "cloud-upload"

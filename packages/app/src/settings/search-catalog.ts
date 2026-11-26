@@ -148,6 +148,13 @@ export const clientSettings: Entry<SettingsRootTab>[] = [
   },
   {
     tab: "experimental",
+    label: "settings.experimental.row.automations.title",
+    target: "settings-automations",
+    description: "settings.experimental.row.automations.description",
+    keywords: "automations schedules timers cron watches events",
+  },
+  {
+    tab: "experimental",
     label: "settings.experimental.row.newQuestionUI.title",
     target: "settings-new-question-ui",
     description: "settings.experimental.row.newQuestionUI.description",
