@@ -7,6 +7,7 @@ import {
   Alibaba,
   AmazonBedrock,
   AnthropicCompatible,
+  Azure,
   CloudflareAIGateway,
   DigitalOcean,
   GoogleVertexMessages,
@@ -221,6 +222,10 @@ describe("applyCachePolicy", () => {
   const messagesModels = [
     ["alibaba-messages", Alibaba.configure({ region: "ap-southeast-1", apiKey: "test" }).messages("qwen3.8-max")],
     [
+      "azure-anthropic-messages",
+      Azure.configure({ resourceName: "test", apiKey: "test" }).messages("claude-sonnet-4-6"),
+    ],
+    [
       "cloudflare-ai-gateway-messages",
       CloudflareAIGateway.configure({ accountId: "test", gatewayId: "test", apiKey: "test" }).model(
         "anthropic/claude-sonnet-4-6",
@@ -244,6 +249,67 @@ describe("applyCachePolicy", () => {
         })
       }),
     ),
+  )
+
+  it.effect("every registered Anthropic Messages route emits inline cache markers", () =>
+    Effect.gen(function* () {
+      const providers = yield* Effect.promise(() => import("../src/providers.js"))
+      const routes = Object.values(providers)
+        .flatMap((entry) => ("routes" in entry ? entry.routes : "route" in entry ? [entry.route] : []))
+        .filter((route) => route.protocol.endsWith("-messages") || route.id.endsWith("-messages"))
+
+      expect(routes.length).toBeGreaterThanOrEqual(12)
+
+      for (const route of routes) {
+        const model = route
+          .with({
+            endpoint: { baseURL: "https://messages.example.test/v1" },
+            auth: Auth.header("x-api-key", "test"),
+          })
+          .model({ id: "anthropic/claude-sonnet-4-6" })
+
+        const autoPrepared = yield* compileRequest(
+          ai.request({
+            model,
+            system: "Sys",
+            tools: [{ name: "t1", description: "t1", inputSchema: { type: "object", properties: {} } }],
+            prompt: "hi",
+          }),
+        )
+
+        expect({ route: route.id, body: autoPrepared.body }).toMatchObject({
+          route: route.id,
+          body: {
+            tools: [{ name: "t1", cache_control: { type: "ephemeral" } }],
+            system: [{ type: "text", text: "Sys", cache_control: { type: "ephemeral" } }],
+            messages: [
+              {
+                role: "user",
+                content: [{ type: "text", text: "hi", cache_control: { type: "ephemeral" } }],
+              },
+            ],
+          },
+        })
+
+        const scopedPrepared = yield* compileRequest(
+          ai.request({
+            model,
+            system: "Sys",
+            tools: [{ name: "t1", description: "t1", inputSchema: { type: "object", properties: {} } }],
+            prompt: "hi",
+            cache: { tools: true, ttl: "1h" },
+          }),
+        )
+
+        expect({ route: route.id, body: scopedPrepared.body }).toMatchObject({
+          route: route.id,
+          body: {
+            tools: [{ name: "t1", cache_control: { type: "ephemeral", ttl: "1h" } }],
+            system: [{ type: "text", text: "Sys", cache_control: undefined }],
+          },
+        })
+      }
+    }),
   )
 
   it.effect("'auto' is a no-op on OpenAI (implicit caching protocol)", () =>
