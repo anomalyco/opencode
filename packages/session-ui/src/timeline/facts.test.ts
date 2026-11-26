@@ -55,6 +55,50 @@ describe("timeline facts", () => {
     })
   })
 
+  test("counts a script's steps in place of the script with scriptSteps", () => {
+    const step = (tool: string, input: Record<string, JsonValue>) => ({ tool, status: "completed", input })
+
+    const script = storyTool(
+      "x1",
+      "execute",
+      "completed",
+      {},
+      {
+        metadata: {
+          toolCalls: [
+            step("read", { path: "/repo/a.ts" }),
+            step("read", { path: "/repo/b.ts" }),
+            step("shell", { command: "ls" }),
+            step("edit", { path: "/repo/c.ts" }),
+            step("Bun", { method: "write", path: "/repo/c.ts" }),
+          ],
+          files: [{ file: "/repo/c.ts", additions: 1 }],
+        },
+      },
+    )
+
+    expect(summarize(factsOf([script], true, true))).toMatchObject({
+      calls: 3,
+      reads: 2,
+      commands: 1,
+      files: ["/repo/c.ts"],
+      modes: { explore: 2, edit: 0, run: 1, tool: 0 },
+    })
+    expect(summarize(factsOf([script], true, false))).toMatchObject({
+      calls: 1,
+      reads: 0,
+      commands: 1,
+      toolNames: [{ tool: "execute" }],
+    })
+
+    const direct = [
+      storyTool("r1", "read", "completed", { path: "/repo/a.ts" }),
+      storyTool("e1", "edit", "completed", { path: "/repo/c.ts" }),
+    ]
+
+    expect(factsOf(direct, true, true)).toEqual(factsOf(direct))
+  })
+
   test("follows a part updated in place", () => {
     const part = storyTool("s1", "shell", "running", { command: "false" })
     const before = summarize(factsOf([part]))

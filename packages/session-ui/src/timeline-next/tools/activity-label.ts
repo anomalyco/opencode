@@ -18,7 +18,7 @@ const modeVerb = {
  * A group's parts as facts. What background work reported counts as its outcome; notices count nothing. A script's
  * files count where they are placed, so only those in the group.
  */
-export function activityFacts(parts: readonly ActivityGroupPart[]) {
+export function activityFacts(parts: readonly ActivityGroupPart[], scriptSteps = false) {
   const facts = factsOf(
     parts.flatMap((part, index): FactPart[] => {
       // Thoughts one after another count as one, as they show.
@@ -31,6 +31,8 @@ export function activityFacts(parts: readonly ActivityGroupPart[]) {
 
       return [{ type: "outcome", id: part.id, outcome: { kind, verb, failed, key: workKey(part.event) } }]
     }),
+    true,
+    scriptSteps,
   )
 
   return [
@@ -43,8 +45,8 @@ export function activityFacts(parts: readonly ActivityGroupPart[]) {
  * Names a stretch of the agent's work by its main mode, then what its other calls did: "Edited 4 files · 2 commands,
  * started 1 shell". A background shell is counted once by its outcome.
  */
-export function activityLabel(parts: readonly ActivityGroupPart[], i18n: UiI18n) {
-  const summary = summarize(activityFacts(parts))
+export function activityLabel(parts: readonly ActivityGroupPart[], i18n: UiI18n, scriptSteps = false) {
+  const summary = summarize(activityFacts(parts, scriptSteps))
   const launches = summary.background.verbs
   const launched = launches.map((bucket) => i18n.plural(launchKeys[bucket.verb], bucket.count))
   // Files a script changed name the group as edits do, where they are placed in it.

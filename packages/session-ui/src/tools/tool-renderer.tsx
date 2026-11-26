@@ -434,7 +434,7 @@ export function CurrentContextToolGroup(props: {
       return { text, title: text, before: "", count: undefined, between: "", after: "" }
     }
 
-    return contextGroupLabel(props.parts, i18n)
+    return contextGroupLabel(props.parts, i18n, useData().flag("full_codemode"))
   })
 
   const items = createMemo(() =>

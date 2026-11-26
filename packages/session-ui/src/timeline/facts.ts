@@ -6,6 +6,7 @@ import {
   currentToolHasLoadedFiles,
   currentToolInput,
   currentToolMetadata,
+  executeToolCalls,
   readImagePath,
 } from "../message/current-tool-state"
 import { isInterruptedError } from "./turn-phase-machine"
@@ -121,13 +122,14 @@ const modes = new Map<string, FactMode>(
 /**
  * The facts in a list of parts, in order. Not cached: stores update a part in place as it streams, so its identity
  * says nothing about whether its facts changed. Callers read it inside a memo. Without `scriptDiffs` (the server's
- * `full_codemode` flag off), a script's changes are not facts: they neither show nor count.
+ * `full_codemode` flag off), a script's changes are not facts: they neither show nor count. With `scriptSteps`, a script
+ * counts as the calls it made rather than as itself.
  */
-export function factsOf(parts: readonly FactPart[], scriptDiffs = true): Fact[] {
-  return parts.flatMap((part) => partFacts(part, scriptDiffs))
+export function factsOf(parts: readonly FactPart[], scriptDiffs = true, scriptSteps = false): Fact[] {
+  return parts.flatMap((part) => partFacts(part, scriptDiffs, scriptSteps))
 }
 
-function partFacts(part: FactPart, scriptDiffs: boolean): Fact[] {
+function partFacts(part: FactPart, scriptDiffs: boolean, scriptSteps: boolean): Fact[] {
   const id = part.messageID ? `${part.messageID}:${part.id ?? ""}` : (part.id ?? "")
 
   if (part.type === "text") return [{ kind: "text", id }]
@@ -156,7 +158,7 @@ function partFacts(part: FactPart, scriptDiffs: boolean): Fact[] {
       },
     ]
 
-  return toolFacts(part, id, scriptDiffs)
+  return toolFacts(part, id, scriptDiffs, scriptSteps)
 }
 
 const decodeFile = Schema.decodeUnknownOption(
@@ -257,7 +259,7 @@ export function launchOf(tool: Tool) {
   return placeFact(tool, tool.id, read).background ? launch(tool, toolName(tool.name), read) : undefined
 }
 
-function toolFacts(tool: Tool, id: string, scriptDiffs: boolean): Fact[] {
+function toolFacts(tool: Tool, id: string, scriptDiffs: boolean, scriptSteps = false): Fact[] {
   const read = reads(tool)
   const fact = placeFact(tool, id, read, scriptDiffs)
   const raw = read.input().path
@@ -284,7 +286,7 @@ function toolFacts(tool: Tool, id: string, scriptDiffs: boolean): Fact[] {
 
   if (fact.name === "execute")
     return [
-      call,
+      ...(scriptSteps ? stepFacts(tool, id) : [call]),
       // One fact per change, in order: a script can change the same file more than once.
       ...scriptChanges(tool, read).map((file, index) => scriptFileFactOf(file, index, id, state.status)),
     ]
@@ -298,6 +300,38 @@ function toolFacts(tool: Tool, id: string, scriptDiffs: boolean): Fact[] {
   const files = changed.length ? changed : path ? [{ file: path }] : []
 
   return [call, ...files.map((file) => fileFact(file, id, state.status, "direct"))]
+}
+
+// A script's steps, each counted as a direct call of its tool. Edits count by the files the script changed instead, and
+// `Bun` file calls are not tools, so neither adds a call.
+function stepFacts(tool: Tool, id: string): CallFact[] {
+  return executeToolCalls(currentToolMetadata(tool)).flatMap(({ index, call }) => {
+    const name = toolName(call.tool)
+    const mode = modes.get(name) ?? "tool"
+
+    if (mode === "edit" || call.tool === "Bun") return []
+
+    const input = call.input ?? {}
+
+    const fact: CallFact = {
+      kind: "call",
+      id: `${id}:step:${index}`,
+      name,
+      tool: call.tool,
+      mode,
+      status: call.status,
+      failed: call.status === "error",
+      stopped: false,
+      called: true,
+      groupedRead: name === "read",
+      background: name === "shell" && input.background === true,
+      changes: 0,
+    }
+
+    if (Predicate.isString(input.path) && input.path) fact.path = input.path
+
+    return [fact]
+  })
 }
 
 function fileFact(
