@@ -57,7 +57,14 @@ const patterns = [
   /request_too_large/i,
 ]
 
-const payloadPatterns = [/request entity too large/i, /payload too large/i, /request too large/i]
+const payloadPatterns = [
+  /request entity too large/i,
+  /payload too large/i,
+  /request too large/i,
+  // GitHub Copilot answers an oversized body with HTTP 408 `user_request_timeout`:
+  // "Timed out reading request body. Try again, or use a smaller request size."
+  /use a smaller request size/i,
+]
 
 const exclusions = [
   /^(throttling error|service unavailable):/i,
@@ -240,7 +247,7 @@ export function classifyProviderFailure(input: ProviderFailure): AIError["reason
       (input.status !== 429 && !codes.includes("throttlingexception") && isContextOverflow(text)))
   )
     return new InvalidRequestError({ ...details, classification: "context-overflow" })
-  if (input.status === 413 || isPayloadTooLarge(text))
+  if (input.status === 413 || codes.includes("user_request_timeout") || isPayloadTooLarge(text))
     return new InvalidRequestError({ ...details, classification: "payload-too-large" })
   if (codes.some((code) => CONTENT_POLICY_CODES.has(code)) || (clientScoped && CONTENT_POLICY_TEXT.test(input.message)))
     return new ContentPolicyError(details)
