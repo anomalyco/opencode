@@ -334,12 +334,14 @@ export const layer = Layer.effect(
         promptCacheKey: /^ses_[0-9a-f]{64}$/.test(affinity) ? affinity.slice(4) : affinity,
         cache: model.cache?.ttl === undefined ? undefined : { ttl: model.cache.ttl },
         system: shaped.system,
-        // Strip the stored metadata hooks could read, so it never reaches the provider.
+        // Strip the stored metadata hooks could read, so it never reaches the provider. Canonicalize every
+        // message, not only the ones with metadata, so a hook that writes a plain part still reaches the
+        // media passes in their normalized shape.
         messages: boundImages(
           unsupportedParts(
             shaped.messages.map((message) => {
               const { metadata, ...rest } = message
-              return metadata === undefined ? message : Message.make(rest)
+              return Message.make(rest)
             }),
             model.capabilities,
             model.model.provider,

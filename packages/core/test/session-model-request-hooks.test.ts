@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { ToolDefinition } from "@opencode/ai/effect"
+import { Media, ToolDefinition } from "@opencode/ai/effect"
 import { OpenAIChat } from "@opencode/ai/protocols"
 import { Agent } from "@opencode/schema/agent"
 import { Money } from "@opencode/schema/money"
@@ -158,6 +158,37 @@ describe("SessionModelRequest HTTP hooks", () => {
       expect(replaced.body._tag).toBe("Uint8Array")
       if (replaced.body._tag !== "Uint8Array") return
       expect(new TextDecoder().decode(replaced.body.body)).toBe('{"replaced":true}')
+    }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
+  )
+
+  it.effect("normalizes a media part a hook writes in the legacy flat shape", () =>
+    Effect.gen(function* () {
+      const hooks = yield* PluginHooks.Service
+      yield* hooks.register("session", "context", (event) =>
+        Effect.sync(() => {
+          event.messages.push({
+            role: "user",
+            content: [{ type: "media", mediaType: "image/png", data: "AQID" }],
+          } as never)
+        }),
+      )
+      const requests = yield* SessionModelRequest.Service.pipe(Effect.provide(SessionModelRequest.layer))
+      const prepared = yield* requests.primary({
+        session,
+        agent: Agent.ID.make("build"),
+        model: SessionRunnerModel.resolved(OpenAIChat.route.model({ id: "gpt-5.5", provider: "test" }), {
+          capabilities: { tools: true, input: ["text", "image"], output: ["text"] },
+          cost: [],
+          limit: { context: 200_000, output: 32_000 },
+        }),
+        system: [],
+        messages: [],
+      })
+
+      expect(prepared.request.messages[0]?.content[0]).toEqual({
+        type: "media",
+        media: Media.base64("AQID", "image/png"),
+      })
     }).pipe(Effect.provideService(SessionModelTransport.Service, transport)),
   )
 
