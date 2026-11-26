@@ -12,5 +12,7 @@ test("the opencode skill's API reference matches openapi.json", async () => {
   for (const [file, content] of Object.entries(files)) {
     // Run `bun run generate` from packages/protocol (or `bun run generate:api-skill` from packages/core) when this fails.
     expect(await Bun.file(path.join(directory, file)).text()).toBe(content)
+    // Keep individual group files small enough for progressive disclosure.
+    if (file.startsWith("api/")) expect(Buffer.byteLength(content)).toBeLessThanOrEqual(8192)
   }
 })
