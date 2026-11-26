@@ -66,6 +66,7 @@ function knownThemes() {
 const names = new Map(
   Object.entries({
     "oc-2": "OpenCode",
+    alabaster: "Alabaster",
     amoled: "AMOLED",
     aura: "Aura",
     ayu: "Ayu",
@@ -75,6 +76,7 @@ const names = new Map(
     "catppuccin-macchiato": "Catppuccin Macchiato",
     cobalt2: "Cobalt2",
     cursor: "Cursor",
+    cyberdream: "Cyberdream",
     dracula: "Dracula",
     everforest: "Everforest",
     flexoki: "Flexoki",
@@ -85,6 +87,7 @@ const names = new Map(
     material: "Material",
     matrix: "Matrix",
     mercury: "Mercury",
+    modus: "Modus",
     monokai: "Monokai",
     nightowl: "Night Owl",
     nord: "Nord",
@@ -92,7 +95,9 @@ const names = new Map(
     onedarkpro: "One Dark Pro",
     orng: "Orng",
     "osaka-jade": "Osaka Jade",
+    oxocarbon: "Oxocarbon",
     palenight: "Palenight",
+    poimandres: "Poimandres",
     rosepine: "Rose Pine",
     shadesofpurple: "Shades of Purple",
     solarized: "Solarized",
@@ -100,6 +105,7 @@ const names = new Map(
     tokyonight: "Tokyonight",
     vercel: "Vercel",
     vesper: "Vesper",
+    vscode: "VS Code",
     zenburn: "Zenburn",
   }),
 )
