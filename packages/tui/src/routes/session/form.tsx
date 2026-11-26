@@ -931,7 +931,9 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                       >
                         <box flexDirection="row">
                           <box
-                            backgroundColor={theme.background.raised.base}
+                            backgroundColor={
+                              active() ? theme.background.action.primary.focused : theme.background.raised.base
+                            }
                             paddingRight={1}
                           >
                             <text
@@ -939,7 +941,9 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                             >{`${i() + 1}.`}</text>
                           </box>
                           <box
-                            backgroundColor={theme.background.raised.base}
+                            backgroundColor={
+                              active() ? theme.background.action.primary.focused : theme.background.raised.base
+                            }
                             flexDirection="row"
                           >
                             <Show when={multi()}>
@@ -957,7 +961,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                                 [{picked() ? "✓" : " "}]
                               </text>
                             </Show>
-                            <text fg={active() ? theme.text.formfield.focused : theme.text.formfield.base}>
+                            <text fg={active() ? theme.text.action.primary.focused : theme.text.formfield.base}>
                               {row.label}
                             </text>
                           </box>
@@ -985,7 +989,9 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                   >
                     <box flexDirection="row">
                       <box
-                        backgroundColor={theme.background.raised.base}
+                        backgroundColor={
+                          other() ? theme.background.action.primary.focused : theme.background.raised.base
+                        }
                         paddingRight={1}
                       >
                         <text fg={other() ? theme.text.formfield.focused : theme.text.muted}>
@@ -995,7 +1001,9 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                       <box
                         flexDirection="row"
                         flexGrow={1}
-                        backgroundColor={theme.background.raised.base}
+                        backgroundColor={
+                          other() ? theme.background.action.primary.focused : theme.background.raised.base
+                        }
                       >
                         <Show when={multi()}>
                           <text
@@ -1016,7 +1024,7 @@ export function FormPrompt(props: { form: FormWithLocation }) {
                           when={store.editing}
                           fallback={
                             <>
-                              <text fg={other() ? theme.text.formfield.focused : theme.text.formfield.base}>
+                              <text fg={other() ? theme.text.action.primary.focused : theme.text.formfield.base}>
                                 {input() || "Type your own answer"}
                               </text>
                               <Show when={!multi() && customPicked()}>
