@@ -5,7 +5,7 @@ import { Database } from "@opencode/core/database/database"
 import { SpaceRows } from "@opencode/core/space"
 import { SpaceTable } from "@opencode/core/space/sql"
 import { LayerNode } from "@opencode/util/effect/layer-node"
-import type { Space } from "@opencode/schema/space"
+import { Space } from "@opencode/schema/space"
 import { Context, Deferred, Effect, Fiber, Layer, Stream } from "effect"
 import { it } from "../../core/test/lib/effect"
 import { SpaceStore } from "../src/space-store"
@@ -93,7 +93,10 @@ it.live("syncs a space in pages: live rows up to the starting head, then a delta
     const { boot } = yield* setup
     const { store } = yield* boot()
     const count = SpaceStore.BatchSize + 10
-    yield* Effect.forEach(range(count), (index) => store.set("big", `k${index}`, String(index)), { discard: true })
+    yield* store.write(
+      "big",
+      range(count).map((index) => ({ key: `k${index}`, value: String(index) })),
+    )
     const epoch = store.epoch
 
     const first = yield* store.sync("big")
@@ -105,10 +108,10 @@ it.live("syncs a space in pages: live rows up to the starting head, then a delta
       `${epoch}.${SpaceStore.BatchSize}.${count}`,
     ])
     // Between pages: a delete and a rewrite of keys the first page held, and of keys the second would hold.
-    yield* store.remove("big", "k0")
-    yield* store.set("big", "k1", "new")
-    yield* store.set("big", `k${SpaceStore.BatchSize + 5}`, "new")
-    yield* store.remove("big", `k${SpaceStore.BatchSize + 6}`)
+    yield* store.write("big", [{ key: "k0", value: null }])
+    yield* store.write("big", [{ key: "k1", value: "new" }])
+    yield* store.write("big", [{ key: `k${SpaceStore.BatchSize + 5}`, value: "new" }])
+    yield* store.write("big", [{ key: `k${SpaceStore.BatchSize + 6}`, value: null }])
 
     const second = yield* store.sync("big", first.next)
     // The rest of the keys up to the starting head, without the two changed meanwhile, and no deletions.
@@ -155,10 +158,11 @@ it.live("a snapshot reads no tombstones, and its last page reports the head it s
   Effect.gen(function* () {
     const { boot } = yield* setup
     const { store } = yield* boot()
-    yield* Effect.forEach(range(SpaceStore.BatchSize + 1), (index) => store.set("big", `k${index}`, String(index)), {
-      discard: true,
-    })
-    yield* store.remove("big", "k0")
+    yield* store.write(
+      "big",
+      range(SpaceStore.BatchSize + 1).map((index) => ({ key: `k${index}`, value: String(index) })),
+    )
+    yield* store.write("big", [{ key: "k0", value: null }])
     const page = yield* store.sync("big")
     expect([page.type, page.revision, page.entries.length, page.next]).toEqual([
       "snapshot",
@@ -174,20 +178,20 @@ it.live("syncs each space from its cursor: final values and deletions, else a sn
   Effect.gen(function* () {
     const { boot } = yield* setup
     const { store } = yield* boot()
-    yield* store.set("app", "kept", "v1")
-    yield* store.set("app", "churn", "1")
-    yield* store.set("app", "doomed", "true")
-    yield* store.set("other", "x", "y")
+    yield* store.write("app", [{ key: "kept", value: "v1" }])
+    yield* store.write("app", [{ key: "churn", value: "1" }])
+    yield* store.write("app", [{ key: "doomed", value: "true" }])
+    yield* store.write("other", [{ key: "x", value: "y" }])
 
     // While the client is away: repeated updates, a delete, a delete repeated, and a delete then re-set.
-    yield* store.set("app", "churn", "2")
-    yield* store.set("app", "churn", "3")
-    yield* store.remove("app", "doomed")
-    yield* store.remove("app", "doomed")
-    yield* store.remove("app", "never-set")
-    yield* store.set("app", "back", "a")
-    yield* store.remove("app", "back")
-    yield* store.set("app", "back", "b")
+    yield* store.write("app", [{ key: "churn", value: "2" }])
+    yield* store.write("app", [{ key: "churn", value: "3" }])
+    yield* store.write("app", [{ key: "doomed", value: null }])
+    yield* store.write("app", [{ key: "doomed", value: null }])
+    yield* store.write("app", [{ key: "never-set", value: null }])
+    yield* store.write("app", [{ key: "back", value: "a" }])
+    yield* store.write("app", [{ key: "back", value: null }])
+    yield* store.write("app", [{ key: "back", value: "b" }])
 
     const epoch = store.epoch
     const page = (space: string, cursor?: string) => store.sync(space, cursor)
@@ -239,7 +243,10 @@ it.live("a cursor below the space's floor gets a snapshot and one at or above it
   Effect.gen(function* () {
     const { boot, db } = yield* setup
     const before = yield* boot()
-    yield* Effect.forEach(["a", "b", "c", "d"], (key) => before.store.set("app", key, key), { discard: true })
+    yield* before.store.write(
+      "app",
+      ["a", "b", "c", "d"].map((key) => ({ key, value: key })),
+    )
     // With a limit of 2, the third delete purges the first tombstone, at revision 5.
     yield* Effect.forEach(["a", "b", "c"], (key) => SpaceRows.remove(db, "app", key), { discard: true })
     yield* SpaceRows.purge(db, "app", 2)
@@ -274,12 +281,16 @@ it.live("a delta page whose deletions were purged meanwhile comes back as a snap
     const { boot, db } = yield* setup
     const { store } = yield* boot()
     // The client holds k0 to k9, at revision 10.
-    yield* Effect.forEach(range(10), (index) => store.set("app", `k${index}`, String(index)), { discard: true })
+    yield* store.write(
+      "app",
+      range(10).map((index) => ({ key: `k${index}`, value: String(index) })),
+    )
     const held = new Map(range(10).map((index) => [`k${index}`, String(index)]))
     // Then come a full page of new keys and two tombstones.
-    yield* Effect.forEach(range(SpaceStore.BatchSize), (index) => store.set("app", `u${index}`, String(index)), {
-      discard: true,
-    })
+    yield* store.write(
+      "app",
+      range(SpaceStore.BatchSize).map((index) => ({ key: `u${index}`, value: String(index) })),
+    )
     yield* SpaceRows.remove(db, "app", "k0")
     yield* SpaceRows.remove(db, "app", "k1")
 
@@ -305,14 +316,14 @@ it.live("a restarted store resumes revisions and sync from storage alone", () =>
   Effect.gen(function* () {
     const { boot } = yield* setup
     const before = yield* boot()
-    yield* before.store.set("app", "k", "a")
-    yield* before.store.set("app", "k", "b")
-    yield* before.store.remove("app", "k")
+    yield* before.store.write("app", [{ key: "k", value: "a" }])
+    yield* before.store.write("app", [{ key: "k", value: "b" }])
+    yield* before.store.write("app", [{ key: "k", value: null }])
 
     // A new process over the same database. Its first write must not reuse a revision, even the tombstone's.
     const after = yield* boot()
     expect(after.store.epoch).toBe(before.store.epoch)
-    yield* after.store.set("app", "j", "c")
+    yield* after.store.write("app", [{ key: "j", value: "c" }])
     expect(yield* after.store.sync("app", `${after.store.epoch}.1`)).toEqual({
       type: "delta",
       space: "app",
@@ -329,21 +340,21 @@ it.live("a subscription sends the changes since its cursor once, then live chang
   Effect.gen(function* () {
     const { boot } = yield* setup
     const { store, feed, bus } = yield* boot()
-    yield* store.set("app", "k", "1")
-    yield* store.set("app", "gone", "x")
-    yield* store.set("other", "x", "1")
+    yield* store.write("app", [{ key: "k", value: "1" }])
+    yield* store.write("app", [{ key: "gone", value: "x" }])
+    yield* store.write("other", [{ key: "x", value: "1" }])
     const synced = yield* store.sync("app")
     // After the sync and before the subscription.
-    yield* store.set("app", "k", "2")
-    yield* store.remove("app", "gone")
+    yield* store.write("app", [{ key: "k", value: "2" }])
+    yield* store.write("app", [{ key: "gone", value: null }])
 
     const stream = yield* feed.subscribe([Agent.Event.Updated.type])
     const plain = yield* feed.subscribe()
     const seen: Array<string> = []
     yield* bus.listen((event) => Effect.sync(() => seen.push(event.type)))
     expect(yield* store.subscribe(stream.id, [{ space: "app", cursor: synced.cursor }])).toBe(true)
-    yield* store.set("app", "k", "3")
-    yield* store.set("other", "x", "2")
+    yield* store.write("app", [{ key: "k", value: "3" }])
+    yield* store.write("other", [{ key: "x", value: "2" }])
     yield* bus.publish(Agent.Event.Updated, {})
 
     // The changes since the cursor, one event per row in revision order, then the live ones.
@@ -359,23 +370,86 @@ it.live("a subscription sends the changes since its cursor once, then live chang
   }),
 )
 
+it.live("a write commits all its changes, each at the next revision in order, then sends one event per change", () =>
+  Effect.gen(function* () {
+    const { boot, hold } = yield* setup
+    const { store, feed } = yield* boot()
+    const epoch = store.epoch
+    const stream = yield* feed.subscribe()
+    yield* store.subscribe(stream.id, [{ space: "app", cursor: `${epoch}.0` }])
+    const updated = (key: string, value: string, revision: number) => ({
+      type: "experimental.space.updated",
+      data: { space: "app", key, value, revision },
+    })
+    const deleted = (key: string, revision: number) => ({
+      type: "experimental.space.deleted",
+      data: { space: "app", key, revision },
+    })
+
+    // The most changes a write takes: sets, then deletes of the same keys.
+    const half = Space.MaxChanges / 2
+    expect(
+      yield* store.write(
+        "app",
+        range(Space.MaxChanges).map((index) => ({ key: `k${index % half}`, value: index < half ? `${index}` : null })),
+      ),
+    ).toEqual({ revision: Space.MaxChanges, cursor: `${epoch}.${Space.MaxChanges}` })
+    expect(yield* take(stream.events, Space.MaxChanges)).toEqual([
+      ...range(half).map((index) => updated(`k${index}`, `${index}`, index + 1)),
+      ...range(half).map((index) => deleted(`k${index}`, half + index + 1)),
+    ])
+
+    // Held after its first change reaches listeners: by then every change is committed. A delete of an unset key, or
+    // of one already deleted, takes no revision and sends nothing; a key changed twice gets both.
+    const head = Space.MaxChanges
+    const pending = yield* hold(head + 1)
+    const write = yield* store
+      .write("app", [
+        { key: "a", value: "1" },
+        { key: "never", value: null },
+        { key: "a", value: "2" },
+        { key: "b", value: "1" },
+        { key: "b", value: null },
+        { key: "b", value: null },
+      ])
+      .pipe(Effect.forkChild(now))
+    yield* Deferred.await(pending.reached)
+    expect(yield* current(store, "app")).toEqual(new Map([["a", "2"]]))
+    yield* Deferred.succeed(pending.release, undefined)
+    // The head after the write, also when its last changes change nothing.
+    expect(yield* Fiber.join(write)).toEqual({ revision: head + 4, cursor: `${epoch}.${head + 4}` })
+    expect(yield* store.write("app", [{ key: "never", value: null }])).toEqual({
+      revision: head + 4,
+      cursor: `${epoch}.${head + 4}`,
+    })
+    yield* store.write("app", [{ key: "c", value: "1" }])
+    expect(yield* take(stream.events, 5)).toEqual([
+      updated("a", "1", head + 1),
+      updated("a", "2", head + 2),
+      updated("b", "1", head + 3),
+      deleted("b", head + 4),
+      updated("c", "1", head + 5),
+    ])
+  }),
+)
+
 it.live("a write committed before the subscribe read and delivered after it reaches the stream once, in order", () =>
   Effect.gen(function* () {
     const { boot, hold } = yield* setup
     const { store, feed } = yield* boot()
-    yield* store.set("app", "k", "1")
+    yield* store.write("app", [{ key: "k", value: "1" }])
     const synced = yield* store.sync("app")
     const stream = yield* feed.subscribe()
 
     const pending = yield* hold(2)
-    const write = yield* store.set("app", "k", "2").pipe(Effect.forkChild(now))
+    const write = yield* store.write("app", [{ key: "k", value: "2" }]).pipe(Effect.forkChild(now))
     yield* Deferred.await(pending.reached)
     // "2" is committed but not yet delivered, and the space's lock is held; neither sync, subscribe nor other spaces
     // wait for it.
     expect((yield* store.sync("app", synced.cursor)).revision).toBe(2)
-    yield* store.set("other", "x", "1")
+    yield* store.write("other", [{ key: "x", value: "1" }])
     expect(yield* store.subscribe(stream.id, [{ space: "app", cursor: synced.cursor }])).toBe(true)
-    const next = yield* store.set("app", "k", "3").pipe(Effect.forkChild(now))
+    const next = yield* store.write("app", [{ key: "k", value: "3" }]).pipe(Effect.forkChild(now))
     yield* Deferred.succeed(pending.release, undefined)
     yield* Fiber.join(write)
     yield* Fiber.join(next)
@@ -398,7 +472,10 @@ it.live("concurrent writes reach a subscribed stream in revision order", () =>
       writes,
       (index) =>
         Effect.all(
-          [store.set("app", `k${index % 4}`, String(index)), store.set(`space-${index % 3}`, "k", String(index))],
+          [
+            store.write("app", [{ key: `k${index % 4}`, value: String(index) }]),
+            store.write(`space-${index % 3}`, [{ key: "k", value: String(index) }]),
+          ],
           { concurrency: "unbounded" },
         ),
       { concurrency: "unbounded", discard: true },
@@ -419,15 +496,20 @@ it.live("a subscription sends resync instead of changes that do not fit one batc
     const { boot, db } = yield* setup
     const { store, feed } = yield* boot()
     const epoch = store.epoch
-    yield* Effect.forEach(range(SpaceStore.BatchSize + 1), (index) => store.set("big", `k${index}`, String(index)), {
-      discard: true,
-    })
-    yield* Effect.forEach(["a", "b", "c"], (key) => store.set("purged", key, key), { discard: true })
+    yield* store.write(
+      "big",
+      range(SpaceStore.BatchSize + 1).map((index) => ({ key: `k${index}`, value: String(index) })),
+    )
+    yield* store.write(
+      "purged",
+      ["a", "b", "c"].map((key) => ({ key, value: key })),
+    )
     yield* Effect.forEach(["a", "b", "c"], (key) => SpaceRows.remove(db, "purged", key), { discard: true })
     yield* SpaceRows.purge(db, "purged", 2)
-    yield* Effect.forEach(range(SpaceStore.BatchSize), (index) => store.set("full", `k${index}`, String(index)), {
-      discard: true,
-    })
+    yield* store.write(
+      "full",
+      range(SpaceStore.BatchSize).map((index) => ({ key: `k${index}`, value: String(index) })),
+    )
 
     const stream = yield* feed.subscribe()
     yield* store.subscribe(stream.id, [
@@ -440,7 +522,7 @@ it.live("a subscription sends resync instead of changes that do not fit one batc
       // Exactly one batch still fits.
       { space: "full", cursor: `${epoch}.0` },
     ])
-    yield* store.set("big", "after", "true")
+    yield* store.write("big", [{ key: "after", value: "true" }])
     const events = yield* take(stream.events, 5 + SpaceStore.BatchSize + 1)
     expect(events.slice(0, 5)).toEqual(
       ["big", "purged", "elsewhere", "ahead", "partial"].map((space) => ({
@@ -477,7 +559,7 @@ it.live("subscribe needs an open stream, and a stream leaves the store when it c
     )
     expect(yield* store.subscribe(id, [{ space: "app", cursor }])).toBe(false)
     // Writes to a space a closed stream subscribed to go nowhere.
-    yield* store.set("app", "k", "1")
+    yield* store.write("app", [{ key: "k", value: "1" }])
   }),
 )
 
@@ -488,9 +570,9 @@ it.live("subscribing a space again on the same stream replaces its subscription"
     const cursor = (yield* store.sync("app")).cursor
     const stream = yield* feed.subscribe()
     yield* store.subscribe(stream.id, [{ space: "app", cursor }])
-    yield* store.set("app", "k", "1")
+    yield* store.write("app", [{ key: "k", value: "1" }])
     yield* store.subscribe(stream.id, [{ space: "app", cursor }])
-    yield* store.set("app", "k", "2")
+    yield* store.write("app", [{ key: "k", value: "2" }])
 
     const updated = (value: string, revision: number) => ({
       type: "experimental.space.updated",
@@ -534,8 +616,8 @@ it.live("of two overlapping subscribes of one space on a stream, only the newer 
       type: "experimental.space.updated",
       data: { space, key, value, revision },
     })
-    yield* store.set("other", "x", "1")
-    yield* store.set("app", "a", "1")
+    yield* store.write("other", [{ key: "x", value: "1" }])
+    yield* store.write("app", [{ key: "a", value: "1" }])
 
     // The older subscribe pauses on its first space, before it reads app's changes; the newer one replaces its app.
     const first = yield* pausedStream(store, "first")
@@ -546,11 +628,11 @@ it.live("of two overlapping subscribes of one space on a stream, only the newer 
       ])
       .pipe(Effect.forkChild(now))
     yield* Deferred.await(first.reached)
-    yield* store.set("app", "b", "2")
+    yield* store.write("app", [{ key: "b", value: "2" }])
     expect(yield* store.subscribe("first", [{ space: "app", cursor }])).toBe(true)
     yield* Deferred.succeed(first.release, undefined)
     yield* Fiber.join(older)
-    yield* store.set("app", "c", "3")
+    yield* store.write("app", [{ key: "c", value: "3" }])
     expect(first.sent.filter((event) => (event.data as { space: string }).space === "app")).toEqual([
       updated("app", "a", "1", 1),
       updated("app", "b", "2", 2),
@@ -564,7 +646,7 @@ it.live("of two overlapping subscribes of one space on a stream, only the newer 
     expect(yield* store.subscribe("second", [{ space: "app", cursor }])).toBe(true)
     yield* Deferred.succeed(second.release, undefined)
     yield* Fiber.join(paused)
-    yield* store.set("app", "d", "4")
+    yield* store.write("app", [{ key: "d", value: "4" }])
     expect(second.sent).toEqual([
       // The newer catch-up, then the one event the older was already sending, then the next change once.
       updated("app", "a", "1", 1),
@@ -590,10 +672,10 @@ it.live("unsubscribing stops a space's events, also mid catch-up, while other sp
       { space: "app", cursor },
       { space: "other", cursor },
     ])
-    yield* store.set("app", "a", "1")
+    yield* store.write("app", [{ key: "a", value: "1" }])
     expect(yield* store.unsubscribe(stream.id, ["app"])).toBe(true)
-    yield* store.set("app", "b", "2")
-    yield* store.set("other", "x", "1")
+    yield* store.write("app", [{ key: "b", value: "2" }])
+    yield* store.write("other", [{ key: "x", value: "1" }])
     expect(yield* take(stream.events, 2)).toEqual([updated("app", "a", "1", 1), updated("other", "x", "1", 1)])
     // A space the stream does not follow is fine; a stream that is not open is not.
     expect(yield* store.unsubscribe(stream.id, ["never"])).toBe(true)
@@ -606,7 +688,7 @@ it.live("unsubscribing stops a space's events, also mid catch-up, while other sp
     expect(yield* store.unsubscribe("paused", ["app"])).toBe(true)
     yield* Deferred.succeed(paused.release, undefined)
     yield* Fiber.join(subscribing)
-    yield* store.set("app", "c", "3")
+    yield* store.write("app", [{ key: "c", value: "3" }])
     // Only the event it was already sending.
     expect(paused.sent).toEqual([updated("app", "a", "1", 1)])
   }),
@@ -616,9 +698,10 @@ it.live("a client that syncs while writes go on, then subscribes, ends with exac
   Effect.gen(function* () {
     const { boot } = yield* setup
     const { store, feed } = yield* boot()
-    yield* Effect.forEach(range(SpaceStore.BatchSize + 5), (index) => store.set("app", `k${index}`, String(index)), {
-      discard: true,
-    })
+    yield* store.write(
+      "app",
+      range(SpaceStore.BatchSize + 5).map((index) => ({ key: `k${index}`, value: String(index) })),
+    )
     const stream = yield* feed.subscribe()
 
     // Writes between every page, and between the last page and the subscription.
@@ -626,16 +709,16 @@ it.live("a client that syncs while writes go on, then subscribes, ends with exac
     let page = yield* store.sync("app")
     applyPage(state, page)
     for (let round = 0; page.next !== undefined; round++) {
-      yield* store.set("app", `k${round}`, `during ${round}`)
-      yield* store.remove("app", `k${SpaceStore.BatchSize + round}`)
+      yield* store.write("app", [{ key: `k${round}`, value: `during ${round}` }])
+      yield* store.write("app", [{ key: `k${SpaceStore.BatchSize + round}`, value: null }])
       page = yield* store.sync("app", page.next)
       applyPage(state, page)
     }
-    yield* store.set("app", "k1", "before subscribe")
-    yield* store.remove("app", "k2")
+    yield* store.write("app", [{ key: "k1", value: "before subscribe" }])
+    yield* store.write("app", [{ key: "k2", value: null }])
     yield* store.subscribe(stream.id, [{ space: "app", cursor: page.cursor }])
-    yield* store.set("app", "k3", "live")
-    yield* store.remove("app", "k4")
+    yield* store.write("app", [{ key: "k3", value: "live" }])
+    yield* store.write("app", [{ key: "k4", value: null }])
 
     const events = yield* take(stream.events, 4)
     expect(events.map((event) => event.type)).toEqual([
@@ -666,34 +749,42 @@ it.live("checks a space's tombstones on its first delete after a start, then on 
     const floor = SpaceRows.floor(db, "app")
 
     const { store } = yield* boot()
-    yield* Effect.forEach(range(interval + 2), (index) => store.set("app", `k${index}`, String(index)), {
-      discard: true,
-    })
-    yield* store.remove("app", "missing")
+    yield* store.write(
+      "app",
+      range(interval + 2).map((index) => ({ key: `k${index}`, value: String(index) })),
+    )
+    yield* store.write("app", [{ key: "missing", value: null }])
     // Neither writes nor deletes that make no tombstone check.
     expect([yield* tombstones, yield* floor]).toEqual([limit + 5, 0])
-    yield* store.remove("app", "k0")
+    yield* store.write("app", [{ key: "k0", value: null }])
     expect([yield* tombstones, yield* floor]).toEqual([limit, 6])
 
     yield* Effect.forEach(
       range(interval - 1),
       (index) =>
-        Effect.all([
-          store.remove("app", `k${index + 1}`),
-          store.remove("app", `k${index + 1}`),
-          store.remove("app", "missing"),
-          store.set("app", "written", String(index)),
+        store.write("app", [
+          { key: `k${index + 1}`, value: null },
+          { key: `k${index + 1}`, value: null },
+          { key: "missing", value: null },
+          { key: "written", value: String(index) },
         ]),
       { discard: true },
     )
     // At most `interval - 1` past the limit between checks.
     expect([yield* tombstones, yield* floor]).toEqual([limit + interval - 1, 6])
-    yield* store.remove("app", `k${interval}`)
+    yield* store.write("app", [{ key: `k${interval}`, value: null }])
     expect([yield* tombstones, yield* floor]).toEqual([limit, 6 + interval])
 
     // A restarted store checks on the first delete again.
     const restarted = yield* boot()
-    yield* restarted.store.remove("app", `k${interval + 1}`)
+    yield* restarted.store.write("app", [{ key: `k${interval + 1}`, value: null }])
     expect([yield* tombstones, yield* floor]).toEqual([limit, 7 + interval])
+
+    // A write that makes `interval` tombstones counts each of them, and checks once after it.
+    yield* restarted.store.write("app", [
+      ...range(interval).map((index) => ({ key: `n${index}`, value: "1" })),
+      ...range(interval).map((index) => ({ key: `n${index}`, value: null })),
+    ])
+    expect(yield* tombstones).toBe(limit)
   }),
 )

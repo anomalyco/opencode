@@ -14913,10 +14913,10 @@
         }
       }
     },
-    "/api/experimental/space/{space}/{key}": {
-      "put": {
+    "/api/experimental/space/{space}/write": {
+      "post": {
         "tags": ["experimental"],
-        "operationId": "experimental.space.set",
+        "operationId": "experimental.space.write",
         "parameters": [
           {
             "name": "space",
@@ -14925,20 +14925,29 @@
               "$ref": "#/components/schemas/Space.Name"
             },
             "required": true
-          },
-          {
-            "name": "key",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Space.Key"
-            },
-            "required": true
           }
         ],
         "security": [],
         "responses": {
-          "204": {
-            "description": "<No Content>"
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "revision": {
+                      "$ref": "#/components/schemas/Space.Revision"
+                    },
+                    "cursor": {
+                      "$ref": "#/components/schemas/Space.Cursor"
+                    }
+                  },
+                  "required": ["revision", "cursor"],
+                  "additionalProperties": false
+                }
+              }
+            }
           },
           "400": {
             "description": "InvalidRequestError",
@@ -14961,75 +14970,30 @@
             }
           }
         },
-        "description": "Store a client-defined string of at most 1 MiB of UTF-8, replacing any previous value, and send it to the space's subscribers unchanged. The server does not interpret it; its format, such as JSON text, is up to the client. To follow a space, a client opens /api/event and reads its stream ID from server.connected, syncs with experimental.space.sync until no `next` remains, then subscribes the stream with the saved cursor through experimental.space.subscribe and applies the stream's events in order. On experimental.space.resync it syncs and subscribes that space again; after a reconnect it subscribes again with its latest cursor. Experimental: may change without compatibility guarantees.",
-        "summary": "Set value",
+        "description": "Commit 1 to 1024 changes in one transaction, their values at most 1 MiB of UTF-8 in total. A string value sets the key, replacing any previous value; null deletes it, and deleting an unset key changes nothing. In request order, each change that changes a key takes the space's next revision and goes to its subscribers as its own experimental.space.updated or experimental.space.deleted event, so a key that appears twice keeps its last value. Values are client-defined, such as JSON text, and sent back unchanged. Returns the space's revision after the write. To follow a space, a client opens /api/event and reads its stream ID from server.connected, syncs with experimental.space.sync until no `next` remains, then subscribes the stream with the saved cursor through experimental.space.subscribe and applies the stream's events in order. On experimental.space.resync it syncs and subscribes that space again; after a reconnect it subscribes again with its latest cursor. Experimental: may change without compatibility guarantees.",
+        "summary": "Write values",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
                 "properties": {
-                  "value": {
-                    "$ref": "#/components/schemas/Space.Value"
+                  "changes": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Space.Change"
+                    },
+                    "minItems": 1,
+                    "maxItems": 1024
                   }
                 },
-                "required": ["value"],
+                "required": ["changes"],
                 "additionalProperties": false
               }
             }
           },
           "required": true
         }
-      },
-      "delete": {
-        "tags": ["experimental"],
-        "operationId": "experimental.space.delete",
-        "parameters": [
-          {
-            "name": "space",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Space.Name"
-            },
-            "required": true
-          },
-          {
-            "name": "key",
-            "in": "path",
-            "schema": {
-              "$ref": "#/components/schemas/Space.Key"
-            },
-            "required": true
-          }
-        ],
-        "security": [],
-        "responses": {
-          "204": {
-            "description": "<No Content>"
-          },
-          "400": {
-            "description": "InvalidRequestError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "UnauthorizedError",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
-                }
-              }
-            }
-          }
-        },
-        "description": "Remove a stored value and tell the space's subscribers. Removing an unset key succeeds. To follow a space, a client opens /api/event and reads its stream ID from server.connected, syncs with experimental.space.sync until no `next` remains, then subscribes the stream with the saved cursor through experimental.space.subscribe and applies the stream's events in order. On experimental.space.resync it syncs and subscribes that space again; after a reconnect it subscribes again with its latest cursor. Experimental: may change without compatibility guarantees.",
-        "summary": "Delete value"
       }
     },
     "/api/experimental/space/{space}": {
@@ -15051,7 +15015,7 @@
             "schema": {
               "anyOf": [
                 {
-                  "$ref": "#/components/schemas/Space.Cursor"
+                  "$ref": "#/components/schemas/Space.Cursor_1"
                 }
               ]
             },
@@ -15148,7 +15112,7 @@
                           "$ref": "#/components/schemas/Space.Name"
                         },
                         "cursor": {
-                          "$ref": "#/components/schemas/Space.Cursor"
+                          "$ref": "#/components/schemas/Space.Cursor_1"
                         }
                       },
                       "required": ["space", "cursor"],
@@ -27668,10 +27632,34 @@
       "Snapshot.ID": {
         "type": "string"
       },
+      "Space.Change": {
+        "type": "object",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/Space.Key"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Space.Value"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": ["key", "value"],
+        "additionalProperties": false
+      },
       "Space.Cursor": {
-        "type": "string"
+        "type": "string",
+        "description": "Covers this write and every change before it."
       },
       "Space.Cursor_1": {
+        "type": "string"
+      },
+      "Space.Cursor_2": {
         "type": "string",
         "description": "Covers every change up to this page; save it to subscribe or sync from."
       },
@@ -27698,10 +27686,10 @@
             }
           },
           "cursor": {
-            "$ref": "#/components/schemas/Space.Cursor_1"
+            "$ref": "#/components/schemas/Space.Cursor_2"
           },
           "next": {
-            "$ref": "#/components/schemas/Space.Cursor"
+            "$ref": "#/components/schemas/Space.Cursor_1"
           },
           "deleted": {
             "type": "array",
@@ -27777,10 +27765,10 @@
             }
           },
           "cursor": {
-            "$ref": "#/components/schemas/Space.Cursor_1"
+            "$ref": "#/components/schemas/Space.Cursor_2"
           },
           "next": {
-            "$ref": "#/components/schemas/Space.Cursor"
+            "$ref": "#/components/schemas/Space.Cursor_1"
           }
         },
         "required": ["type", "space", "epoch", "revision", "entries", "cursor"],

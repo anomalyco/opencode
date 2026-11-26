@@ -2678,17 +2678,14 @@ export type ExperimentalPushSettingsSetOperation<E = never> = (
   input: ExperimentalPushSettingsSetInput,
 ) => Effect.Effect<ExperimentalPushSettingsSetOutput, E>
 
-export type ExperimentalSpaceSetInput = { readonly space: string; readonly key: string; readonly value: string }
-export type ExperimentalSpaceSetOutput = void
-export type ExperimentalSpaceSetOperation<E = never> = (
-  input: ExperimentalSpaceSetInput,
-) => Effect.Effect<ExperimentalSpaceSetOutput, E>
-
-export type ExperimentalSpaceDeleteInput = { readonly space: string; readonly key: string }
-export type ExperimentalSpaceDeleteOutput = void
-export type ExperimentalSpaceDeleteOperation<E = never> = (
-  input: ExperimentalSpaceDeleteInput,
-) => Effect.Effect<ExperimentalSpaceDeleteOutput, E>
+export type ExperimentalSpaceWriteInput = {
+  readonly space: string
+  readonly changes: ReadonlyArray<{ readonly key: string; readonly value: string | null }>
+}
+export type ExperimentalSpaceWriteOutput = { readonly revision: number; readonly cursor: string }
+export type ExperimentalSpaceWriteOperation<E = never> = (
+  input: ExperimentalSpaceWriteInput,
+) => Effect.Effect<ExperimentalSpaceWriteOutput, E>
 
 export type ExperimentalSpaceSyncInput = { readonly space: string; readonly cursor?: string | undefined }
 export type ExperimentalSpaceSyncOutput =
@@ -2787,8 +2784,7 @@ export interface ExperimentalApi<E = never> {
     readonly settings: { readonly set: ExperimentalPushSettingsSetOperation<E> }
   }
   readonly space: {
-    readonly set: ExperimentalSpaceSetOperation<E>
-    readonly delete: ExperimentalSpaceDeleteOperation<E>
+    readonly write: ExperimentalSpaceWriteOperation<E>
     readonly sync: ExperimentalSpaceSyncOperation<E>
     readonly subscribe: ExperimentalSpaceSubscribeOperation<E>
     readonly unsubscribe: ExperimentalSpaceUnsubscribeOperation<E>

@@ -20,8 +20,14 @@ export type Listener = (change: Change) => Effect.Effect<void>
 type Send = (event: typeof Space.Event.Resync.Type | Change) => Effect.Effect<void>
 
 export interface Interface {
-  readonly set: (space: Space.Name, key: Space.Key, value: Space.Value) => Effect.Effect<void>
-  readonly remove: (space: Space.Name, key: Space.Key) => Effect.Effect<void>
+  /**
+   * Commits the changes in one transaction, as `SpaceRows.write` applies them, then sends each one that changed a row
+   * in revision order. Returns the space's head after them, with its cursor.
+   */
+  readonly write: (
+    space: Space.Name,
+    changes: ReadonlyArray<Space.Change>,
+  ) => Effect.Effect<{ readonly revision: Space.Revision; readonly cursor: string }>
   /** This database's epoch, created once and kept, so revisions from another server or database are never used. */
   readonly epoch: string
   /** Replaces the epoch: every client's next sync starts from a snapshot, e.g. after a database restore. */
@@ -64,36 +70,23 @@ const layer = Layer.effect(
       ),
     )
     const listeners = new Array<Listener>()
-    // Held per space from the commit until listeners have the change, so they get each space in revision order.
+    // Held per space from the commit until listeners have its changes, so they get each space in revision order.
     // Reads and other spaces never wait on it.
     const locks = KeyedMutex.makeUnsafe<Space.Name>()
     // Tombstone-creating deletes per space since its last purge check. A space missing here, as after a restart, is
     // checked on its next one, so between commits a space holds at most `PurgeInterval - 1` tombstones past the limit.
     const deletes = new Map<Space.Name, number>()
-    const tombstoned = (space: Space.Name) =>
+    const tombstoned = (space: Space.Name, count: number) =>
       Effect.suspend(() => {
-        const since = (deletes.get(space) ?? PurgeInterval - 1) + 1
+        if (count === 0) return Effect.void
+        const since = (deletes.get(space) ?? PurgeInterval - 1) + count
         if (since < PurgeInterval) return Effect.sync(() => deletes.set(space, since))
-        // The delete is committed already, so a failed purge must not keep listeners from hearing of it.
+        // The deletes are committed already, so a failed purge must not keep listeners from hearing of them.
         return SpaceRows.purge(db, space).pipe(
           Effect.andThen(Effect.sync(() => deletes.set(space, 0))),
           Effect.catchCause((cause) => Effect.logWarning("Could not purge space tombstones", { space, cause })),
         )
       })
-
-    const commit = (space: Space.Name, write: Effect.Effect<Change["data"] | undefined>) =>
-      locks.withLock(space)(
-        // A dropped request must not commit a change that listeners never hear about.
-        Effect.uninterruptible(
-          Effect.gen(function* () {
-            const data = yield* write
-            if (!data) return
-            const committed = change(data, yield* Clock.currentTimeMillis)
-            yield* Effect.forEach(listeners, (listener) => listener(committed), { discard: true })
-            yield* Effect.forEach(streams.values(), (stream) => deliver(stream, committed), { discard: true })
-          }),
-        ),
-      )
 
     // Each attached stream with its subscribed spaces. A subscription holds the changes that arrive while its catch-up
     // is read, then forwards only those after the revision the catch-up covers.
@@ -165,31 +158,26 @@ const layer = Layer.effect(
         if (rows.length > BatchSize || (yield* SpaceRows.floor(db, space)) > position.since) return resync
         return {
           covered: rows.at(-1)?.revision ?? position.since,
-          events: rows.map((row) =>
-            change(
-              row.value === null
-                ? { space, key: row.key, revision: row.revision }
-                : { space, key: row.key, value: row.value, revision: row.revision },
-              created,
-            ),
-          ),
+          events: rows.map((row) => change(space, row, created)),
         }
       })
 
     return Service.of({
-      set: Effect.fn("SpaceStore.set")(function* (space, key, value) {
-        yield* commit(
-          space,
-          SpaceRows.set(db, space, key, value).pipe(Effect.map((revision) => ({ space, key, value, revision }))),
-        )
-      }),
-      remove: Effect.fn("SpaceStore.remove")(function* (space, key) {
-        yield* commit(
-          space,
-          SpaceRows.remove(db, space, key).pipe(
-            Effect.flatMap((revision) =>
-              revision === undefined ? Effect.undefined : tombstoned(space).pipe(Effect.as({ space, key, revision })),
-            ),
+      write: Effect.fn("SpaceStore.write")(function* (space, changes) {
+        return yield* locks.withLock(space)(
+          // A dropped request must not commit changes that listeners never hear about.
+          Effect.uninterruptible(
+            Effect.gen(function* () {
+              const result = yield* SpaceRows.write(db, space, changes)
+              yield* tombstoned(space, result.written.filter((row) => row.value === null).length)
+              const created = yield* Clock.currentTimeMillis
+              for (const row of result.written) {
+                const committed = change(space, row, created)
+                yield* Effect.forEach(listeners, (listener) => listener(committed), { discard: true })
+                yield* Effect.forEach(streams.values(), (stream) => deliver(stream, committed), { discard: true })
+              }
+              return { revision: result.head, cursor: `${epoch}.${result.head}` }
+            }),
           ),
         )
       }),
@@ -290,10 +278,24 @@ interface Attached {
   readonly spaces: Map<Space.Name, Subscription>
 }
 
-function change(data: Change["data"], created: number): Change {
-  return "value" in data
-    ? { id: Event.ID.create(), created, type: Space.Event.Updated.type, data }
-    : { id: Event.ID.create(), created, type: Space.Event.Deleted.type, data }
+function change(
+  space: Space.Name,
+  row: { readonly key: Space.Key; readonly value: Space.Value | null; readonly revision: Space.Revision },
+  created: number,
+): Change {
+  return row.value === null
+    ? {
+        id: Event.ID.create(),
+        created,
+        type: Space.Event.Deleted.type,
+        data: { space, key: row.key, revision: row.revision },
+      }
+    : {
+        id: Event.ID.create(),
+        created,
+        type: Space.Event.Updated.type,
+        data: { space, key: row.key, value: row.value, revision: row.revision },
+      }
 }
 
 function entries(rows: ReadonlyArray<{ readonly key: Space.Key; readonly value: Space.Value | null }>) {

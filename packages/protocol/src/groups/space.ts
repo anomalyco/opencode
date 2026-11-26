@@ -3,7 +3,6 @@ import { InvalidRequestError } from "../errors.js"
 import { Schema } from "effect"
 import { HttpApiEndpoint, HttpApiSchema, OpenApi } from "effect/http-api"
 
-const params = { space: Space.Name, key: Space.Key }
 const annotations = (identifier: string, summary: string, description: string) =>
   OpenApi.annotations({
     identifier: `experimental.space.${identifier}`,
@@ -15,26 +14,21 @@ const annotations = (identifier: string, summary: string, description: string) =
 
 /** Lives in the `server.experimental` group (see `groups/experimental.ts`). */
 export const SpaceEndpoints = [
-  HttpApiEndpoint.put("space.set", "/api/experimental/space/:space/:key", {
-    params,
-    payload: Schema.Struct({ value: Space.Value }),
+  HttpApiEndpoint.post("space.write", "/api/experimental/space/:space/write", {
+    params: { space: Space.Name },
+    payload: Schema.Struct({
+      changes: Schema.Array(Space.Change).check(Schema.isMinLength(1), Schema.isMaxLength(Space.MaxChanges)),
+    }),
     error: InvalidRequestError,
-    success: HttpApiSchema.NoContent,
+    success: Schema.Struct({
+      revision: Space.Revision,
+      cursor: Space.Cursor.annotate({ description: "Covers this write and every change before it." }),
+    }),
   }).annotateMerge(
     annotations(
-      "set",
-      "Set value",
-      "Store a client-defined string of at most 1 MiB of UTF-8, replacing any previous value, and send it to the space's subscribers unchanged. The server does not interpret it; its format, such as JSON text, is up to the client.",
-    ),
-  ),
-  HttpApiEndpoint.delete("space.delete", "/api/experimental/space/:space/:key", {
-    params,
-    success: HttpApiSchema.NoContent,
-  }).annotateMerge(
-    annotations(
-      "delete",
-      "Delete value",
-      "Remove a stored value and tell the space's subscribers. Removing an unset key succeeds.",
+      "write",
+      "Write values",
+      "Commit 1 to 1024 changes in one transaction, their values at most 1 MiB of UTF-8 in total. A string value sets the key, replacing any previous value; null deletes it, and deleting an unset key changes nothing. In request order, each change that changes a key takes the space's next revision and goes to its subscribers as its own experimental.space.updated or experimental.space.deleted event, so a key that appears twice keeps its last value. Values are client-defined, such as JSON text, and sent back unchanged. Returns the space's revision after the write.",
     ),
   ),
   HttpApiEndpoint.get("space.sync", "/api/experimental/space/:space", {
