@@ -8,6 +8,8 @@ import { makeGlobalNode } from "@opencode/util/effect/app-node"
 /** How long a result stays fresh, and how often callers refresh, unless a caller passes its own. */
 export const interval = Duration.minutes(10)
 
+const retrySchedule = Schedule.exponential("1 second").pipe(Schedule.jittered)
+
 export interface Input<A, E> {
   /** Everything that changes the answer, such as the connection and base URL. Never a raw secret: see `fingerprint`. */
   readonly key: string
@@ -21,9 +23,10 @@ export interface Input<A, E> {
 export interface Interface {
   /**
    * Returns the last result for `key` while it is fresh, otherwise joins the running load or starts one, so loads
-   * never overlap per key. A load retries `transient` failures 3 times. A failure keeps the last good value, or
-   * without one is returned, until the next interval. Interrupts and defects are never kept. Entries nobody asked
-   * for in 24 hours, or in two of their intervals if longer, are dropped.
+   * never overlap per key. A cold load retries `transient` failures twice with jittered backoff; a refresh with a
+   * cached value does not retry in-flight. A failure keeps the last good value, or without one is returned, until
+   * the next interval. Interrupts and defects are never kept. Entries nobody asked for in 24 hours, or in two of
+   * their intervals if longer, are dropped.
    */
   readonly get: <A, E>(input: Input<A, E>) => Effect.Effect<A, E>
 }
@@ -58,15 +61,19 @@ const layer = Layer.effect(
 
     const start = Effect.fnUntraced(function* (key: string, entry: Entry, load: Effect.Effect<unknown, unknown>) {
       const time = yield* Clock.currentTimeMillis
-      const exit = yield* Effect.exit(
-        Effect.retry(load, { schedule: Schedule.exponential("1 second"), times: 3, while: transient }),
-      )
+      const previous = entry.last?.exit
+      const hasValue = previous !== undefined && Exit.isSuccess(previous)
+      // Only retry cold loads: warm refreshes keep the last good value, and retrying inside a refresh multiplies
+      // load on a stalled upstream.
+      const attempt = !hasValue
+        ? Effect.retry(load, { schedule: retrySchedule, times: 2, while: transient })
+        : load
+      const exit = yield* Effect.exit(attempt)
       entry.read = yield* Clock.currentTimeMillis
       if (Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)) return yield* exit
       if (Exit.isFailure(exit)) yield* Effect.logWarning("failed to load shared value", { key, cause: exit.cause })
       if (Exit.isFailure(exit) && Cause.hasDies(exit.cause)) return yield* exit
-      const previous = entry.last?.exit
-      entry.last = { exit: Exit.isFailure(exit) && previous && Exit.isSuccess(previous) ? previous : exit, time }
+      entry.last = { exit: Exit.isFailure(exit) && hasValue ? previous : exit, time }
       return yield* entry.last.exit
     })
 

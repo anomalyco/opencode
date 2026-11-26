@@ -58,7 +58,7 @@ describe("SharedCache", () => {
     }),
   )
 
-  it.effect("retries transient failures, then keeps the last list or the failure until the next interval", () =>
+  it.effect("retries cold transient failures, skips retries on warm refresh, and keeps the last list", () =>
     Effect.gen(function* () {
       const cache = yield* SharedCache.Service
       const remote = { results: [] as unknown[], loads: 0 }
@@ -80,19 +80,18 @@ describe("SharedCache", () => {
       expect(yield* Effect.flip(get())).toBe(401)
       remote.results = [timeout, timeout, "list"]
       const flaky = yield* get(true).pipe(Effect.forkChild({ startImmediately: true }))
-      yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust("1 second")))
-      yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust("2 seconds")))
+      // Jittered exponential backoff: up to 1.2s, then up to 2.4s.
+      yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust("1200 millis")))
+      yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust("2400 millis")))
       expect(yield* Fiber.join(flaky)).toBe("list")
       expect(remote.loads).toBe(4)
 
-      remote.results = [401, timeout, timeout, timeout, timeout]
+      // A warm refresh does not retry transient failures in-flight, avoiding retry storms during stalls.
+      remote.results = [401, timeout]
       expect(yield* get(true)).toBe("list")
-      const outage = yield* get(true).pipe(Effect.forkChild({ startImmediately: true }))
-      for (const wait of ["1 second", "2 seconds", "4 seconds"] as const)
-        yield* Effect.yieldNow.pipe(Effect.andThen(TestClock.adjust(wait)))
-      expect(yield* Fiber.join(outage)).toBe("list")
+      expect(yield* get(true)).toBe("list")
       expect(yield* get()).toBe("list")
-      expect(remote.loads).toBe(9)
+      expect(remote.loads).toBe(6)
     }),
   )
 
