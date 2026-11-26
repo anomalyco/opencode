@@ -1,4 +1,4 @@
-import type { Locator } from "@playwright/test"
+import type { Locator, Page } from "@playwright/test"
 import { expect, sourceURL, story } from "../../stories/playwright/story"
 
 const fixture = sourceURL(new URL("./focus-rescue.fixture.tsx", import.meta.url))
@@ -57,6 +57,44 @@ story.describe("scopes", () => {
 
     // Tab A and Add tab are still there, but a tab list's tabs select themselves on focus.
     await expect(page.getByTestId("opener")).toBeFocused()
+  })
+
+  // What has focus: a test id, a button's text, or "page" when focus rests on nothing.
+  const focused = (page: Page) =>
+    page.evaluate(() => {
+      const active = document.activeElement
+
+      return !active || active === document.body ? "page" : (active.getAttribute("data-testid") ?? active.textContent)
+    })
+
+  story(
+    "gives focus to the scroll area, and scrolls nothing, when the only item left is out of view",
+    async ({ page }) => {
+      const scroller = page.getByTestId("scroller")
+
+      await scroller.getByRole("button", { name: "Near" }).focus()
+      await page.keyboard.press("Enter")
+
+      // Far is the next item, 800 px down. Focus on it would scroll it into view.
+      await expect.poll(() => focused(page)).toBe("scroller")
+      expect(await scroller.evaluate((element) => element.scrollTop)).toBe(0)
+    },
+  )
+
+  story("moves no focus when what had it last is still there and can still take it", async ({ page }) => {
+    const scroller = page.getByTestId("scroller")
+
+    // A click in a scroll area gives it focus as a whole, and a click on the bare page takes focus away again.
+    await scroller.click({ position: { x: 8, y: 64 } })
+    await expect(scroller).toBeFocused()
+    await page.mouse.click(4, (page.viewportSize()?.height ?? 600) - 4)
+    await expect.poll(() => focused(page)).toBe("page")
+
+    // The toggle takes no focus, and the panel it shows changes the page around the scroll area.
+    await page.getByTestId("panel").click()
+    await expect(page.getByTestId("side")).toBeVisible()
+    expect(await scroller.evaluate((element) => element.scrollTop)).toBe(0)
+    expect(await focused(page)).toBe("page")
   })
 })
 
