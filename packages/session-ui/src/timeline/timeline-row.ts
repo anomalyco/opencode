@@ -187,10 +187,13 @@ export namespace TimelineRow {
     Activity: () => (other: TimelineRow) => Predicate.isTagged(other, "Activity"),
   })
 
-  /** A row of the changes a script made, which belongs to the script's block above it. */
+  /**
+   * A row of the changes a script made, drawn as their own cards, which belongs to the script's block above it. Changes
+   * grouped into a summary row with other edits stand apart from the script, as any other block does.
+   */
   export function scriptChanges(row: TimelineRow) {
-    if (!Predicate.isTagged(row, "AssistantPart")) return false
-    const refs = row.group.type === "part" ? [row.group.ref] : row.group.refs
+    if (!Predicate.isTagged(row, "AssistantPart") || row.group.type !== "file") return false
+    const refs = row.group.refs
 
     return refs.length > 0 && refs.every((ref) => isScriptFilePartID(ref.partID))
   }
