@@ -122,6 +122,16 @@ describe("bundled non-default themes accessibility and hierarchy", () => {
     expect(resolved.dark["background-stronger"]).toBeUndefined()
   })
 
+  test("custom theme v1 surface overrides are not overwritten by the code/diff bridge", () => {
+    const resolved = resolveThemeVariantV2(
+      { ...theme.dark, v2Overrides: undefined, overrides: { "background-base": "#00000080" } },
+      true,
+    )
+
+    expect(resolved["background-base"]).toBeUndefined()
+    expect(resolved["background-stronger"]).toBe("var(--v2-background-bg-layer-01)")
+  })
+
   test.each(bundledThemeFiles)("%s meets WCAG 2.2 contrast, code surface, and emphasis contracts", async (file) => {
     const bundled: DesktopTheme = await Bun.file(new URL(file, themesDir)).json()
     const resolved = resolveThemeV2(bundled)

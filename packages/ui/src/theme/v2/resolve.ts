@@ -328,7 +328,9 @@ function v1CodeAndDiffBridge(variant: ThemeVariant, primitives: ResolvedV2Theme,
   const dir = isDark ? "lighter" : "darker"
   const syntaxColor = (seed: HexColor) => ensureContrast(seed, codeBg, 4.55, dir)
 
-  const tokens: ResolvedV2Theme = {
+  const tokens: ResolvedV2Theme = {}
+
+  const defaults: ResolvedV2Theme = {
     "background-base": "var(--v2-background-bg-base)",
     "background-weak": "var(--v2-background-bg-layer-01)",
     "background-strong": "var(--v2-background-bg-base)",
@@ -340,9 +342,6 @@ function v1CodeAndDiffBridge(variant: ThemeVariant, primitives: ResolvedV2Theme,
     "surface-diff-hidden-strong": "var(--v2-background-bg-layer-03)",
     "icon-weak": "var(--v2-icon-icon-muted)",
     "icon-weaker": "var(--v2-icon-icon-faint)",
-  }
-
-  const defaults: ResolvedV2Theme = {
     "text-base": "var(--v2-text-text-base)",
     "text-strong": "var(--v2-text-text-base)",
     "text-weak": "var(--v2-text-text-muted)",
