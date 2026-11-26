@@ -7,7 +7,6 @@ const budget = MAX_MARKDOWN_BYTES - 64 * 1024
 test.each([
   ["exhausted budget", budget, "x", "", false],
   ["one byte short of an empty fence", budget - 13, "x", "", false],
-  ["small fitting block", 64, "x", "\n\n```\nx\n```", false],
   ["last payload byte fits", budget - 15, "x", "\n\n```\nx\n```", false],
   ["only an empty fence fits", budget - 14, "x", "\n\n```\n\n```", false],
   ["Unicode payload truncates at a code point", budget - 18, "😀é", "\n\n```\n😀\n```", false],

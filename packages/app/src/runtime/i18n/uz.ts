@@ -861,7 +861,6 @@ export const dict = {
   "session.location.description": "Ushbu sessiyani davom ettirish uchun boshqa katalogni tanlang.",
   "session.location.choose": "Katalogni tanlash",
   "session.location.worktree": "Worktree tanlash",
-  "session.location.worktreesFailed": "Worktree’larni yuklab bo‘lmadi",
   "session.rewind.toast.title": "Qaytarildi",
   "session.rewind.toast.undo": "Bekor qilish",
   "session.location.moving": "Sessiya ko‘chirilmoqda…",

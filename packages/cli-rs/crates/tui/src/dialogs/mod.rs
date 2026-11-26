@@ -36,3 +36,15 @@ pub mod variant;
 pub mod working_directory;
 pub mod worktree_name;
 pub mod worktrees;
+
+use opencode_local::cli_config::Info;
+use opencode_ui::scroll;
+
+/// TS `getScrollAcceleration(config)`: `scroll.acceleration` first, then `scroll.speed`, else 3 rows a step.
+pub fn scroll_config(info: &Info) -> scroll::Config {
+    let config = info.scroll.as_ref();
+    scroll::Config {
+        speed: config.and_then(|config| config.speed).map_or(3.0, |speed| speed.0),
+        acceleration: config.and_then(|config| config.acceleration) == Some(true),
+    }
+}

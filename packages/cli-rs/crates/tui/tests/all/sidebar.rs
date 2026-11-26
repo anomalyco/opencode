@@ -222,3 +222,51 @@ fn a_hidden_sidebar_mounts_no_section() {
     h.app.wait_until(std::time::Duration::from_millis(100), || false);
     assert_eq!(h.tui.settings.listener_count(), hidden);
 }
+
+#[test]
+fn hides_onboarding_for_a_connected_integration_or_configured_provider() {
+    let render = |integrations: Value, providers: Value, models: Value| {
+        let fake = Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+            ("GET", "/api/integration") => (200, list(DIRECTORY, integrations.clone())),
+            ("GET", "/api/provider") => (200, list(DIRECTORY, providers.clone())),
+            ("GET", "/api/model") => (200, list(DIRECTORY, models.clone())),
+            _ => support::base(seen, DIRECTORY),
+        });
+        let deps = Deps {
+            config: support::config(support::decode(r#"{ "animations": false }"#)),
+            ..support::deps(Arc::new(fake))
+        };
+        let h = support::mount_still(170, 30, deps);
+        h.wait_for("Fix the parser");
+        h.wait("catalogs loaded", || {
+            h.tui.data.read(|state| {
+                state
+                    .location(None)
+                    .is_some_and(|loc| loc.integration.is_some() && loc.provider.is_some() && loc.model.is_some())
+            })
+        });
+        h.wait("views synced", || h.tui.synced());
+        h.app.render().text()
+    };
+    let connected = render(
+        json!([{
+            "id": "anthropic", "name": "Anthropic", "methods": [],
+            "connections": [{ "type": "env", "name": "ANTHROPIC_API_KEY" }],
+        }]),
+        json!([]),
+        json!([]),
+    );
+    let configured = render(
+        json!([]),
+        json!([{ "id": "ollama", "name": "Ollama", "activation": "enabled", "package": "openai-compatible" }]),
+        json!([support::model("ollama", "local", "Local Model")]),
+    );
+    let keyless = render(
+        json!([]),
+        json!([{ "id": "opencode", "name": "OpenCode", "activation": "auto", "package": "opencode" }]),
+        json!([support::model("opencode", "free", "Free Model")]),
+    );
+    assert!(!connected.contains("Getting started"), "{connected}");
+    assert!(!configured.contains("Getting started"), "{configured}");
+    assert!(keyless.contains("Getting started"), "{keyless}");
+}

@@ -857,7 +857,6 @@ export const dict = {
   "session.location.description": "Zgjidhni një drejtori tjetër për të vazhduar këtë sesion.",
   "session.location.choose": "Zgjidhni drejtorinë",
   "session.location.worktree": "Zgjidhni pemën e punës",
-  "session.location.worktreesFailed": "Pemët e punës nuk u ngarkuan",
   "session.rewind.toast.title": "U rikthye",
   "session.rewind.toast.undo": "Zhbëj",
   "session.location.moving": "Po zhvendoset sesioni…",

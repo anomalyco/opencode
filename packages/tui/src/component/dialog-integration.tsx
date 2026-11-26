@@ -58,7 +58,7 @@ const INTEGRATION_PRIORITY: Record<string, number> = {
 type ConnectMethod = Exclude<IntegrationInfo["methods"][number], { type: "env" }>
 type IntegrationAttempt = IntegrationOauthConnectOutput["data"]
 type CommandAttempt = IntegrationCommandConnectOutput["data"]
-type OnIntegrationConnected = (providerID?: string) => void
+type OnIntegrationConnected = (integrationID?: string) => void
 const CANCELLED = Symbol("cancelled")
 const CUSTOM = Symbol("custom")
 const OPEN = Symbol("open")
@@ -1313,22 +1313,18 @@ async function connected(
   ])
   toast.show({ variant: "success", message: `Connected ${integration.name}` })
   if (onConnected) {
-    onConnected(providerID(data, location, integration.id))
+    // One integration can serve several providers, such as OpenCode's workspace models and OpenCode Go, so the
+    // model picker that follows lists all of them rather than the first.
+    onConnected(
+      (data.location.provider.list(location) ?? []).some(
+        (provider) => provider.integrationID === integration.id || provider.id === integration.id,
+      )
+        ? integration.id
+        : undefined,
+    )
     return
   }
   dialog.clear()
-}
-
-function providerID(data: ReturnType<typeof useData>, location: LocationRef, integrationID: string) {
-  const models = data.location.model.list(location) ?? []
-  const matches = (data.location.provider.list(location) ?? []).filter(
-    (provider) => provider.integrationID === integrationID || provider.id === integrationID,
-  )
-  return (
-    matches.find((provider) =>
-      models.some((model) => model.providerID === provider.id && model.status !== "deprecated"),
-    )?.id ?? matches[0]?.id
-  )
 }
 
 function locationQuery(location: LocationRef) {

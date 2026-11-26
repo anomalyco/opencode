@@ -111,6 +111,7 @@ translates. See [Base URLs](/console/harnesses#base-urls) for the full set.
 | Kimi K2.6                   | kimi-k2.6                   | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Kimi K2.7 Code              | kimi-k2.7-code              | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Kimi K3                     | kimi-k3                     | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Kimi K3.1 Pro               | kimi-k3.1-pro               | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Mistral Large 4             | mistral-large-4             | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | GPT 6 Luna Decision         | gpt-6-luna-decision         | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
 | Gemini Decision 1           | gemini-decision-1           | `https://opencode.ai/inference/systemone/v1/systemone`                                      | -                           |
@@ -134,6 +135,7 @@ translates. See [Base URLs](/console/harnesses#base-urls) for the full set.
 | BGE M3                      | bge-m3                      | `https://opencode.ai/inference/openai/v1/embeddings`                                        | `@ai-sdk/openai-compatible` |
 | Big Pickle                  | big-pickle                  | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Tidepool Alpha Free         | tidepool-alpha-free         | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
+| Seaglass Alpha Free         | seaglass-alpha-free         | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Iceman Free                 | iceman-free                 | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | DeepSeek V4.1 Flash Free    | deepseek-v4.1-flash-free    | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
 | Beam Free                   | beam-free                   | `https://opencode.ai/inference/openai/v1/chat/completions`                                  | `@ai-sdk/openai-compatible` |
@@ -295,6 +297,7 @@ noted.
 | ----------------------------------- | --------------- | ----------------- | ------------------ | ------------ |
 | Big Pickle                          | Free            | Free              | Free               | -            |
 | Tidepool Alpha Free                 | Free            | Free              | Free               | -            |
+| Seaglass Alpha Free                 | Free            | Free              | Free               | -            |
 | Iceman Free                         | Free            | Free              | Free               | -            |
 | DeepSeek V4.1 Flash Free            | Free            | Free              | Free               | -            |
 | Beam Free                           | Free            | Free              | Free               | -            |
@@ -315,6 +318,7 @@ noted.
 | GLM 5.3 Flash                       | $0.15           | $0.50             | $0.03              | -            |
 | GLM 5.3 (60% off)                   | ~~$1.40~~ $0.56 | ~~$4.40~~ $1.76   | ~~$0.26~~ $0.104   | -            |
 | Kimi K2.7 Code                      | $0.95           | $4.00             | $0.19              | -            |
+| Kimi K3.1 Pro                       | $2.00           | $10.00            | $0.20              | $2.00        |
 | Kimi K3                             | $3.00           | $15.00            | $0.30              | $3.00        |
 | Kimi K2.6                           | $0.95           | $4.00             | $0.16              | -            |
 | Kimi K2.5                           | $0.60           | $3.00             | $0.10              | -            |
@@ -449,6 +453,7 @@ Embedding models charge for input tokens only. Prices are **per 1M tokens**.
 - Nemotron 3.5 Super VL Free is available on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Big Pickle is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Tidepool Alpha Free is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
+- Seaglass Alpha Free is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Iceman Free is a stealth model that's free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
 - Beam Free is free on OpenCode for a limited time. Its provider does not use your data for model training and retains it for 30 days for safety reasons. It's not available in Angola, Belarus, Cambodia, China (including Hong Kong and Macau), Cuba, the Democratic Republic of the Congo, Equatorial Guinea, Iran, Iraq, Laos, Libya, Nigeria, North Korea, Russia, Syria, Turkmenistan, Uzbekistan, Venezuela, or the Crimea, Donetsk, and Luhansk regions of Ukraine.
 - Flint 40B Free is free on OpenCode for a limited time. The team is using this time to collect feedback and improve the model.
@@ -499,6 +504,7 @@ All our models are hosted in the US and EU. Our providers follow a zero-retentio
 
 - Big Pickle: During its free period, collected data may be used to improve the model.
 - Tidepool Alpha Free: During its free period, collected data is retained and used to improve the model.
+- Seaglass Alpha Free: During its free period, collected data is retained and used to improve the model.
 - Iceman Free: During its free period, collected data is retained and used to improve the model.
 - Flint 40B Free: During its free period, collected data may be used to improve the model. Data is retained for 30 days.
 - Nemotron 3.5 Lightning Free (NVIDIA free endpoints): Trial use only — do not submit personal or confidential data. Your use is logged for security purposes and to improve NVIDIA products and services. The logged session data for improvement purposes is not linked to your identity or any persistent identifier. For more information about our data processing practices, see our [Privacy Policy](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf). By interacting with this endpoint, you consent to our collection, recording, and use of such information and the [NVIDIA API Trial Terms of Service](https://assets.ngc.nvidia.com/products/api-catalog/legal/NVIDIA%20API%20Trial%20Terms%20of%20Service.pdf).

@@ -881,7 +881,6 @@ export const dict = {
   "session.location.description": "Wählen Sie ein anderes Verzeichnis, um diese Sitzung fortzusetzen.",
   "session.location.choose": "Verzeichnis wählen",
   "session.location.worktree": "Worktree wählen",
-  "session.location.worktreesFailed": "Worktrees konnten nicht geladen werden",
   "session.rewind.toast.title": "Zurückgesetzt",
   "session.rewind.toast.undo": "Rückgängig",
   "session.location.moving": "Sitzung wird verschoben…",

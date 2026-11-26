@@ -40,15 +40,15 @@ interface OptionField {
 export const PREFIX = "// @options:"
 
 /**
- * How a tool goes out: a custom tool when it declares `freeform` in a format the model accepts (`formats`, every
- * format when unset), with its required string parameter. Other parameters need a grammar for their values, and a raw
+ * How a tool goes out: a custom tool when it declares `freeform` in a format the model accepts (`formats`; none when
+ * unset), with its required string parameter. Other parameters need a grammar for their values, and a raw
  * text body when the model can't take Lark; otherwise the tool stays a JSON tool.
  */
-export const resolve = (tool: ToolDefinition, formats?: ReadonlyArray<Freeform["type"]>): Custom | undefined => {
+export const resolve = (tool: ToolDefinition, formats: ReadonlyArray<Freeform["type"]> = []): Custom | undefined => {
   const field = ToolDefinition.freeformField(tool.inputSchema, tool.freeform)
   if (tool.freeform === undefined || tool.native !== undefined || field === undefined) return undefined
-  if (formats !== undefined && !formats.includes(tool.freeform.type)) return undefined
-  const lark = formats === undefined || formats.includes("lark")
+  if (!formats.includes(tool.freeform.type)) return undefined
+  const lark = formats.includes("lark")
   const required = Array.isArray(tool.inputSchema.required) ? tool.inputSchema.required : []
   const fields = Object.entries(Schema.is(JsonSchema)(tool.inputSchema.properties) ? tool.inputSchema.properties : {})
     .filter(([name]) => name !== field)

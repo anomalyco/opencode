@@ -4,9 +4,9 @@ import { SessionError } from "@opencode/schema/session-error"
 import { PlatformError } from "effect"
 import { AppProcess } from "@opencode/util/process"
 import { Environment } from "../environment/index.js"
+import { EnvironmentPath } from "../environment/path.js"
 import { Machine } from "../machine/index.js"
 import { Machines } from "../machine/machines.js"
-import { MachinePath } from "../machine/path.js"
 import { Permission } from "../permission.js"
 import { Integration } from "../integration.js"
 import { AgentNotFoundError, StepFailedError } from "./error.js"
@@ -167,7 +167,7 @@ const machineMessage = (error: unknown): string | undefined => {
   if (
     error instanceof Machines.NotFound ||
     error instanceof Workspace.NotFound ||
-    error instanceof MachinePath.NotAbsolute
+    error instanceof EnvironmentPath.NotAbsolute
   )
     return error.message
   if (

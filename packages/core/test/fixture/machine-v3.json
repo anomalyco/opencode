@@ -1,0 +1,141 @@
+{
+  "to_worker": [
+    {
+      "type": "start",
+      "id": "p1",
+      "argv": ["cat"],
+      "cwd": "/",
+      "env": {},
+      "stdin": true
+    },
+    {
+      "type": "start",
+      "id": "p2",
+      "argv": ["true"],
+      "cwd": "/",
+      "env": {},
+      "stdin": false
+    },
+    {
+      "type": "stdin",
+      "id": "p1",
+      "req": 1,
+      "data": "aGk="
+    },
+    {
+      "type": "stdin",
+      "id": "p1",
+      "req": 2,
+      "data": null
+    },
+    {
+      "type": "attach",
+      "id": "p1",
+      "from": 1
+    },
+    {
+      "type": "peer-accept",
+      "req": 3,
+      "link": "l1",
+      "key": "O2onvM62pC1io6jQKm8Nc2UyFXcd4kOmOsBIoYtZ2ik"
+    },
+    {
+      "type": "peer-connect",
+      "req": 4,
+      "link": "l1",
+      "key": "O2onvM62pC1io6jQKm8Nc2UyFXcd4kOmOsBIoYtZ2ik"
+    },
+    {
+      "type": "peer-receive",
+      "req": 5,
+      "link": "l1",
+      "token": "t1",
+      "path": "/srv/data.bin"
+    },
+    {
+      "type": "peer-send",
+      "req": 6,
+      "link": "l1",
+      "token": "t1",
+      "path": "/home/worker/data.bin"
+    },
+    {
+      "type": "peer-allow",
+      "req": 7,
+      "link": "l1",
+      "token": "t2",
+      "port": 8000
+    },
+    {
+      "type": "peer-forward",
+      "req": 8,
+      "link": "l1",
+      "token": "t2",
+      "port": 3000
+    },
+    {
+      "type": "peer-revoke",
+      "req": 9,
+      "token": "t2"
+    },
+    {
+      "type": "peer-close",
+      "req": 10,
+      "link": "l1"
+    }
+  ],
+  "from_worker": [
+    {
+      "type": "output",
+      "id": "p1",
+      "offset": 0,
+      "stream": "stdout",
+      "data": "aGk="
+    },
+    {
+      "type": "output",
+      "id": "p1",
+      "offset": 2,
+      "stream": "stderr",
+      "data": "ZXJy"
+    },
+    {
+      "type": "stdin",
+      "id": "p1",
+      "req": 1,
+      "ok": true
+    },
+    {
+      "type": "stdin",
+      "id": "p1",
+      "req": 2,
+      "ok": false,
+      "message": "Broken pipe"
+    },
+    {
+      "type": "peer",
+      "req": 3,
+      "ok": true
+    },
+    {
+      "type": "peer",
+      "req": 5,
+      "ok": false,
+      "message": "revoked"
+    },
+    {
+      "type": "peer-closed",
+      "link": "l1"
+    },
+    {
+      "type": "hello",
+      "protocol": 3,
+      "os": "linux",
+      "arch": "x64",
+      "home": "/home/worker",
+      "instance": "i1",
+      "processes": [],
+      "links": ["l1"]
+    }
+  ]
+}

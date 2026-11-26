@@ -595,6 +595,30 @@ fn a_model_runs_at_its_last_speed_and_lists_name_it_once() {
 }
 
 #[test]
+fn a_speed_switch_uses_the_targets_legacy_variant_instead_of_its_siblings() {
+    let home = opencode_util::temp::tempdir().unwrap();
+    let paths = support::home_paths(home.path());
+    std::fs::create_dir_all(&paths.state).unwrap();
+    // Saved before speeds shared their model's variant.
+    let preferences = json!({
+        "recent": [],
+        "favorite": [],
+        "variant": { "anthropic/claude-sonnet-flex": "low", "anthropic/claude-sonnet-fast": "high" },
+        "speed": {},
+    });
+    std::fs::write(paths.state.join("model.json"), preferences.to_string()).unwrap();
+    let deps = Deps { roots: support::roots(paths, "test"), route: Route::Home, ..support::deps(Server::new()) };
+    let h = support::mount(100, 34, deps);
+    let local = h.tui.local.clone();
+    assert!(h.app.wait_until(WAIT, || local.ready() && local.catalog_ready() && !local.agents().is_empty()));
+    assert_eq!(local.current(), Some(Model::new("anthropic", "claude-sonnet")));
+    assert_eq!(local.variant().as_deref(), Some("low"));
+    local.set_speed(Some("fast"));
+    assert_eq!(local.current(), Some(Model::new("anthropic", "claude-sonnet-fast")));
+    assert_eq!(local.variant().as_deref(), Some("high"));
+}
+
+#[test]
 fn leader_a_switches_the_agent() {
     let h = mount();
     h.app.press("ctrl+x");
@@ -676,6 +700,166 @@ fn go_upsell_is_offered_once_a_day_and_remembers_dont_show() {
     let saved = h.app.wait_until(WAIT, || storage.load("go-upsell", &json!({})).unwrap()["dontShow"] == true);
     assert!(saved, "{}", storage.load("go-upsell", &json!({})).unwrap());
     assert_no_writes(&h.fixture);
+}
+
+#[test]
+fn lists_every_provider_of_the_integration_just_connected() {
+    let dir = "/tmp/opencode/app";
+    let fake = support::Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/location") => (200, support::location(dir)),
+        ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
+        ("GET", "/api/integration") => (
+            200,
+            support::list(
+                dir,
+                json!([{
+                    "id": "opencode",
+                    "name": "OpenCode",
+                    "methods": [{ "type": "oauth", "id": "oauth", "label": "OpenCode account" }],
+                    "connections": [{ "type": "credential", "id": "cred_1", "label": "Personal", "method": "oauth" }],
+                }]),
+            ),
+        ),
+        ("GET", "/api/provider") => (
+            200,
+            support::list(
+                dir,
+                json!([
+                    {
+                        "id": "opencode", "name": "Personal / OpenCode", "integrationID": "opencode",
+                        "activation": "enabled", "package": "opencode",
+                    },
+                    {
+                        "id": "opencode-go", "name": "OpenCode Go", "integrationID": "opencode",
+                        "activation": "enabled", "package": "opencode",
+                    },
+                    { "id": "ollama", "name": "Ollama", "activation": "enabled", "package": "openai-compatible" },
+                ]),
+            ),
+        ),
+        ("GET", "/api/model") => (
+            200,
+            support::list(
+                dir,
+                json!([
+                    support::model("opencode", "zen", "Zen Model"),
+                    support::model("opencode-go", "go", "Go Model"),
+                    support::model("ollama", "local", "Local Model"),
+                ]),
+            ),
+        ),
+        _ => support::base(seen, dir),
+    });
+    let home = opencode_util::temp::tempdir().unwrap();
+    let deps = Deps {
+        directory: dir.into(),
+        roots: support::roots(support::home_paths(home.path()), "test"),
+        route: Route::Home,
+        ..support::deps(Arc::new(fake))
+    };
+    let h = support::mount(100, 34, deps);
+    let local = h.tui.local.clone();
+    assert!(h.app.wait_until(WAIT, || local.ready() && local.catalog_ready() && local.connected()));
+    model::show(&local, Some("opencode".into()));
+    let screen = h.wait_for("Search models");
+    assert!(screen.contains("Zen Model"), "{screen}");
+    assert!(screen.contains("Go Model"), "{screen}");
+    assert!(!screen.contains("Local Model"), "{screen}");
+}
+
+#[test]
+fn lists_models_of_a_provider_declared_only_in_config() {
+    let dir = "/tmp/opencode/app";
+    let free = support::merge(
+        support::model("opencode", "free", "Free Model"),
+        json!({ "cost": [{ "input": 0, "output": 0, "cache": { "read": 0, "write": 0 } }] }),
+    );
+    let local_model = support::model("ollama", "local", "Local Model");
+    let fake = support::Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/location") => (200, support::location(dir)),
+        ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
+        ("GET", "/api/integration") => (
+            200,
+            support::list(
+                dir,
+                json!([{
+                    "id": "ollama",
+                    "name": "Ollama",
+                    "methods": [{ "type": "key" }],
+                    "connections": [],
+                }]),
+            ),
+        ),
+        ("GET", "/api/provider") => (
+            200,
+            support::list(
+                dir,
+                json!([
+                    { "id": "opencode", "name": "OpenCode", "activation": "auto", "package": "opencode" },
+                    { "id": "ollama", "name": "Ollama", "activation": "enabled", "package": "openai-compatible" },
+                ]),
+            ),
+        ),
+        ("GET", "/api/model") => (200, support::list(dir, json!([free.clone(), local_model.clone()]))),
+        _ => support::base(seen, dir),
+    });
+    let home = opencode_util::temp::tempdir().unwrap();
+    let deps = Deps {
+        directory: dir.into(),
+        roots: support::roots(support::home_paths(home.path()), "test"),
+        route: Route::Home,
+        ..support::deps(Arc::new(fake))
+    };
+    let h = support::mount(100, 34, deps);
+    let local = h.tui.local.clone();
+    assert!(h.app.wait_until(WAIT, || {
+        local.ready()
+            && local.catalog_ready()
+            && local.integrations().is_some()
+            && !local.providers(|providers| providers.is_empty())
+    }));
+    model::show(&local, None);
+    let screen = h.wait_for("Local Model");
+    assert!(!screen.contains("Free models"), "{screen}");
+}
+
+#[test]
+fn opens_the_free_models_list_without_a_connection_or_a_configured_provider() {
+    let dir = "/tmp/opencode/app";
+    let free = support::merge(
+        support::model("opencode", "free", "Free Model"),
+        json!({ "cost": [{ "input": 0, "output": 0, "cache": { "read": 0, "write": 0 } }] }),
+    );
+    let fake = support::Fake::new(move |seen| match (seen.method.as_str(), seen.path.as_str()) {
+        ("GET", "/api/location") => (200, support::location(dir)),
+        ("GET", "/api/session") => (200, json!({ "data": [], "cursor": {} })),
+        ("GET", "/api/provider") => (
+            200,
+            support::list(
+                dir,
+                json!([{ "id": "opencode", "name": "OpenCode", "activation": "auto", "package": "opencode" }]),
+            ),
+        ),
+        ("GET", "/api/model") => (200, support::list(dir, json!([free.clone()]))),
+        _ => support::base(seen, dir),
+    });
+    let home = opencode_util::temp::tempdir().unwrap();
+    let deps = Deps {
+        directory: dir.into(),
+        roots: support::roots(support::home_paths(home.path()), "test"),
+        route: Route::Home,
+        ..support::deps(Arc::new(fake))
+    };
+    let h = support::mount(100, 34, deps);
+    let local = h.tui.local.clone();
+    assert!(h.app.wait_until(WAIT, || {
+        local.ready()
+            && local.catalog_ready()
+            && local.integrations().is_some()
+            && !local.providers(|providers| providers.is_empty())
+    }));
+    model::show(&local, None);
+    h.wait_for("Free models");
 }
 
 #[test]

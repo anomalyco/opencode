@@ -57,7 +57,7 @@ export const execute = (tool: Tool.Info<any, any>, input: unknown, context: Tool
     )
     const outputSchema = overrides?.output ?? tool.output
     if (outputSchema === undefined) {
-      if ("output" in result) return yield* Effect.die("Tool result declared output without an output schema")
+      if ("output" in result) return yield* Effect.die(new Error("Tool result declared output without an output schema"))
       return {
         output: undefined,
         content: normalizeContent(result.content),

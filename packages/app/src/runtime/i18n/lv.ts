@@ -870,7 +870,6 @@ export const dict = {
   "session.location.description": "Izvēlieties citu direktoriju, lai turpinātu šo sesiju.",
   "session.location.choose": "Izvēlēties direktoriju",
   "session.location.worktree": "Izvēlēties darbkoku",
-  "session.location.worktreesFailed": "Neizdevās ielādēt darbkokus",
   "session.rewind.toast.title": "Atjaunots",
   "session.rewind.toast.undo": "Atsaukt",
   "session.location.moving": "Pārvieto sesiju…",

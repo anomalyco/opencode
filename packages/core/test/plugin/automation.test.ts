@@ -17,7 +17,8 @@ it.live("Effect plugins can create, list and delete automations", () =>
     const session = yield* context.session.create({ title: "Effect automation target" })
 
     const created = yield* context.experimental.automation.create({
-      directory: context.location.directory,
+      sessionID: session.id,
+      directory: undefined,
       name: "effect inbox",
       trigger: { type: "cron", cron: "0 * * * *", tz: "Europe/Madrid" },
       action: { type: "prompt", prompt: "Clean up the inboxes now.", to: { session: session.id } },
@@ -34,6 +35,28 @@ it.live("Effect plugins can create, list and delete automations", () =>
 
     yield* context.experimental.automation.delete({ automationID: created.id })
     expect((yield* automations.list()).map((item) => item.id)).not.toContain(created.id)
+  }),
+)
+
+it.live("Effect plugins cannot store an automation with an invalid target", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const automations = yield* Automation.Service
+    const context = yield* PluginHost.make(plugins, "test")
+    const session = yield* context.session.create({ title: "Effect invalid automation" })
+
+    // A JavaScript plugin is not held to the input type.
+    const exit = yield* context.experimental.automation
+      .create({
+        sessionID: session.id,
+        name: "empty target",
+        trigger: { type: "every", every: "1 hour" },
+        action: { type: "prompt", prompt: "Check in.", to: {} as never },
+      })
+      .pipe(Effect.exit)
+
+    expect(exit._tag).toBe("Failure")
+    expect((yield* automations.list()).map((item) => item.name)).not.toContain("empty target")
   }),
 )
 
@@ -66,5 +89,36 @@ it.live("Promise plugins can create, list and delete automations", () =>
 
     expect(ids).toHaveLength(1)
     expect((yield* automations.list()).map((item) => item.id)).not.toContain(ids[0])
+  }),
+)
+
+it.live("Promise plugins cannot delete an automation with an aborted signal", () =>
+  Effect.gen(function* () {
+    const plugins = yield* Plugin.Service
+    const automations = yield* Automation.Service
+    const context = yield* PluginHost.make(plugins, "test")
+    const session = yield* context.session.create({ title: "Promise automation abort target" })
+    const ids: string[] = []
+
+    yield* PluginPromise.fromPromise({
+      id: "test.automation.abort",
+      async setup(ctx) {
+        const created = await ctx.experimental.automation.create({
+          directory: ctx.location.directory,
+          name: "kept inbox",
+          trigger: { type: "cron", cron: "0 9 * * *" },
+          action: { type: "prompt", prompt: "Check the balance now.", to: { session: session.id } },
+        })
+        ids.push(created.id)
+        const controller = new AbortController()
+        controller.abort()
+        await expect(
+          ctx.experimental.automation.delete({ automationID: created.id }, { signal: controller.signal }),
+        ).rejects.toThrow()
+      },
+    }).effect(context)
+
+    expect(ids).toHaveLength(1)
+    expect((yield* automations.list()).map((item): string => item.id)).toContain(ids[0])
   }),
 )

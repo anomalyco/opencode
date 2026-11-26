@@ -129,13 +129,19 @@ export function BaseBranchPicker(props: { workspace: NewSessionWorkspaceControll
       placement="top"
       openDelay={800}
       value={
-        <div class="flex flex-col gap-1">
-          <span class="flex items-center gap-2">
+        <div class="flex flex-col items-center gap-1.5">
+          <div class="flex items-center gap-1.5">
+            {language.t("session.location.worktree")}
+            <Show when={command.keybindParts("session.location.select").length}>
+              <Keybind keys={command.keybindParts("session.location.select")} variant="neutral" />
+            </Show>
+          </div>
+          <div class="flex items-center gap-1.5">
             {language.t("command.session.branch.choose")}
             <Show when={command.keybindParts("session.branch.choose").length}>
               <Keybind keys={command.keybindParts("session.branch.choose")} variant="neutral" />
             </Show>
-          </span>
+          </div>
           <Show when={layout.truncated}>{label()}</Show>
         </div>
       }

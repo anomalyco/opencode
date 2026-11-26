@@ -1,7 +1,6 @@
-import { Meta, Title } from "@solidjs/meta"
+import { Link, Meta, Title } from "@solidjs/meta"
 import { ProviderIcon } from "@opencode/ui/provider-icon"
 import { scaleSqrt } from "d3-scale"
-import countryCodesSource from "i18n-iso-countries/codes.json?raw"
 import {
   type CacheRatioEntry,
   type CountryEntry,
@@ -20,15 +19,53 @@ import { DEFAULT_PERIOD, PeriodToggle, type Period } from "../component/period-t
 import { useI18n } from "../context/i18n"
 import { useLanguage } from "../context/language"
 import { formatPeriodDate } from "../lib/format"
-import { jsonUrl, localizedUrl, markdownUrl } from "../lib/language"
+import { baseUrl, jsonUrl, localizedUrl, markdownUrl, type Locale } from "../lib/language"
 import { providerIconId } from "../lib/provider-icon"
 import { dismissChartTooltipOnExit } from "../lib/chart-tooltip"
+import { dataFlag } from "../lib/flag"
 import { methodologyItems } from "../lib/methodology"
 import { loadHomePage, type HomePageData } from "../lib/page-data"
 import { homeSummary } from "../lib/summaries"
 import { formatCatalogLabName, isKnownCatalogLab } from "./model-catalog"
 import { NewModelsSection } from "./new-models"
 import { SectionHeading } from "./section-heading"
+import { installShareDesign } from "../share/design"
+import { ShareButton, ShareDialog, type ShareDraft } from "../share/share"
+import {
+  usageColors,
+  otherUsageColor,
+  marketColors,
+  usageTotal,
+  formatTokens,
+  formatUsers,
+  formatRetentionRate,
+  formatBillions,
+  getTopModelsSegmentOrder,
+  formatTopModelsMobileDate,
+  formatCountryName,
+  formatGeoTokens,
+  formatGeoShare,
+  getMarketAuthorOrder,
+  formatTrillions,
+  marketDateParts,
+  getRankColor,
+  formatRatio,
+  formatDollars,
+  formatSessionCost,
+  modelNames,
+} from "../share/sections"
+import {
+  cacheRatioCard,
+  comparisonCard,
+  geoCard,
+  leaderboardCard,
+  marketShareCard,
+  retentionCard,
+  sessionCostCard,
+  tokenCostCard,
+  topModelsCard,
+  uniqueUsersCard,
+} from "../share/sections"
 import { setStatsPageCacheHeaders } from "./stats-cache"
 import { ComparisonCardsSection, uniqueComparisonPairs, type ComparisonModelRef } from "./compare-cards"
 import {
@@ -49,28 +86,9 @@ const comparisonPairIndexes = [
   [2, 3, "Top model alternative"],
 ] as const
 const statsUnfurlPath = "banner.jpg"
-const usageColors = [
-  "#ed6aff",
-  "#a684ff",
-  "#7c86ff",
-  "#51a2ff",
-  "#00d3f2",
-  "#00d5be",
-  "#00bc7d",
-  "#9ae600",
-  "#ffb900",
-  "#ff8904",
-  "#ff6467",
-]
-const marketColors = ["#ed6aff", "#a684ff", "#7c86ff", "#51a2ff", "#00d3f2", "#00d5be", "#00bc7d", "#9ae600", "#ffb900"]
 
-type IsoCountryCode = readonly [string, string, string]
 type HomeLeaderboardEntry = HomePageData["leaderboard"]["weekly"][number]
 type HomeRetentionEntry = HomePageData["retention"][number]
-
-const countryNumericIds = new Map(
-  (JSON.parse(countryCodesSource) as IsoCountryCode[]).map((country) => [country[0], country[2]] as const),
-)
 
 const getData = query(async () => {
   "use server"
@@ -100,6 +118,7 @@ export default function StatsHome() {
     const nextPreference = isThemePreference(preference) ? preference : "system"
     applyThemePreference(nextPreference)
     setThemePreference(nextPreference)
+    if (import.meta.env.DEV) onCleanup(installShareDesign())
   })
 
   return (
@@ -112,6 +131,15 @@ export default function StatsHome() {
             <Meta name="description" content={homeSummary(language.locale(), stats()) ?? i18n.t("app.description")} />
             <LocaleLinks path="/data/" />
             <FormatLinks path="/data/" />
+            {/* A pasted link to the page embeds its Top Models card (routes/oembed.ts). */}
+            <Show when={dataFlag("share")}>
+              <Link
+                rel="alternate"
+                type="application/json+oembed"
+                href={`${baseUrl}/data/oembed?format=json&url=${encodeURIComponent(`${baseUrl}/data/`)}`}
+                title="OpenCode Data"
+              />
+            </Show>
             <LastModified value={stats().updatedAt} />
             <Meta property="og:type" content="website" />
             <Meta property="og:site_name" content="OpenCode" />
@@ -145,22 +173,33 @@ export default function StatsHome() {
           <Show when={data()} fallback={<StatsLoading />}>
             {(stats) => (
               <>
+                <Show when={dataFlag("share")}>
+                  <ShareDialog updatedAt={stats().updatedAt} url="opencode.ai/data" />
+                </Show>
                 <Hero updatedAt={stats().updatedAt} summary={homeSummary(language.locale(), stats())} />
                 <TopModelsSection
                   data={stats().usage}
                   leaderboard={stats().leaderboard}
                   catalogLabs={stats().catalogLabs}
                 />
-                <NewModelsSection data={stats().newModels} catalogLabs={stats().catalogLabs} />
-                <UniqueUsersSection data={stats().users} />
+                <NewModelsSection
+                  data={stats().newModels}
+                  catalogLabs={stats().catalogLabs}
+                  colorFor={(model) =>
+                    usageColors.at(getTopModelsSegmentOrder(stats().usage.daily).get(model) ?? usageColors.length) ??
+                    "var(--stats-accent)"
+                  }
+                />
+                <UniqueUsersSection data={stats().users} names={modelNames(stats())} />
                 <RetentionSection data={stats().retention} />
-                <SessionCostSection data={stats().sessionCost} />
-                <TokenCostSection data={stats().tokenCost} />
-                <CacheRatioSection data={stats().cacheRatio} />
+                <SessionCostSection data={stats().sessionCost} names={modelNames(stats())} />
+                <TokenCostSection data={stats().tokenCost} names={modelNames(stats())} />
+                <CacheRatioSection data={stats().cacheRatio} names={modelNames(stats())} />
                 <MarketShareSection data={stats().market} labPaths={stats().labPaths} />
                 <GeoBreakdownSection data={stats().country} />
                 <MethodologySection />
                 <ComparisonCardsSection
+                  share={(locale) => comparisonCard(locale, stats(), stats().catalogLabs)}
                   pairs={homeComparisonPairs(stats().leaderboard.weekly, stats().catalogLabs)}
                   title="Model Comparisons"
                   description="Popular model pairs from the leaderboard."
@@ -332,9 +371,23 @@ function ChartSection(props: {
   )
 }
 
-function SectionTitle(props: { id: string; title: string; description?: string; action?: JSX.Element }) {
+function SectionTitle(props: {
+  id: string
+  title: string
+  description?: string
+  action?: JSX.Element
+  share?: (locale: Locale) => ShareDraft | undefined
+}) {
+  const i18n = useI18n()
+  const share = props.share
   return (
-    <SectionHeading href={`#${props.id}`} title={props.title} description={props.description} action={props.action} />
+    <SectionHeading
+      href={`#${props.id}`}
+      title={props.title}
+      description={props.description}
+      action={props.action}
+      share={share && <ShareButton label={i18n.t("share.openSection", { title: props.title })} card={share} />}
+    />
   )
 }
 
@@ -401,6 +454,17 @@ function TopModelsSection(props: {
         title={i18n.t("nav.topModels")}
         description={i18n.t("home.topModelsDescription")}
         action={<PeriodToggle value={chartPeriod()} onChange={setChartPeriod} label={i18n.t("nav.topModels")} />}
+        share={
+          <ShareButton
+            label={i18n.t("share.openSection", { title: i18n.t("nav.topModels") })}
+            card={(locale) =>
+              topModelsCard(locale, props.data[chartPeriod()], leaderboard(), {
+                period: chartPeriod(),
+                leaderboard: period(),
+              })
+            }
+          />
+        }
       />
       <Show
         when={props.data[chartPeriod()].some((item) => usageTotal(item) > 0)}
@@ -438,6 +502,10 @@ function TopModelsSection(props: {
             {i18n.t("chart.daily")}
           </button>
         </div>
+        <ShareButton
+          label={i18n.t("share.openSection", { title: i18n.t("nav.leaderboard") })}
+          card={(locale) => leaderboardCard(locale, leaderboard(), period(), props.catalogLabs)}
+        />
       </div>
       <Show
         when={leaderboard().length > 0}
@@ -636,7 +704,7 @@ function TopModelsChart(props: {
                             <span data-slot="tooltip-label">
                               <i
                                 style={{
-                                  background: getRankColor(item.segment.model, item.index, segmentOrder(), usageColors),
+                                  background: getTopModelColor(item.segment.model, item.index, segmentOrder()),
                                 }}
                               />
                               <span data-slot="tooltip-name">{item.segment.model}</span>
@@ -670,7 +738,7 @@ function TopModelsChart(props: {
   )
 }
 
-function UniqueUsersSection(props: { data: HomePageData["users"] }) {
+function UniqueUsersSection(props: { data: HomePageData["users"]; names: Map<string, string> }) {
   const i18n = useI18n()
   const [activeModel, setActiveModel] = createSignal<string>()
   const [period, setPeriod] = createSignal(DEFAULT_PERIOD)
@@ -683,6 +751,7 @@ function UniqueUsersSection(props: { data: HomePageData["users"] }) {
         title={i18n.t("home.uniqueUsersTitle")}
         description={i18n.t("home.uniqueUsersDescription")}
         action={<PeriodToggle value={period()} onChange={setPeriod} label={i18n.t("home.uniqueUsersTitle")} />}
+        share={(locale) => uniqueUsersCard(locale, props.data[period()], period(), props.names)}
       />
       <Show
         when={props.data[period()].some((item) => usageTotal(item) > 0)}
@@ -709,7 +778,12 @@ function RetentionSection(props: { data: HomeRetentionEntry[] }) {
 
   return (
     <section id="retention" data-section="retention">
-      <SectionTitle id="retention" title="Weekly Retention" description="Weekly users returning the next week." />
+      <SectionTitle
+        id="retention"
+        title="Weekly Retention"
+        description="Weekly users returning the next week."
+        share={(locale) => retentionCard(locale, props.data)}
+      />
       <Show
         when={props.data.length > 0}
         fallback={
@@ -798,10 +872,6 @@ function RetentionMarker(props: { rate: number; active: boolean }) {
   )
 }
 
-function formatRetentionRate(value: number) {
-  return `${value.toFixed(1)}%`
-}
-
 function isTopModelsBlankHover(bar: HTMLElement, clientY: number) {
   const stack = bar.querySelector<HTMLElement>('[data-slot="top-models-stack"]')
   if (!stack) return true
@@ -838,12 +908,6 @@ function stackedTopModelsSegments(point: UsagePoint, order: Map<string, number>)
     .sort((a, b) => (order.get(b.segment.model) ?? b.index) - (order.get(a.segment.model) ?? a.index))
 }
 
-function getTopModelsSegmentOrder(data: UsagePoint[]) {
-  return new Map(
-    data.find((point) => point.segments.length > 0)?.segments.map((segment, index) => [segment.model, index]) ?? [],
-  )
-}
-
 function getTopModelsSegmentColor(
   model: string,
   index: number,
@@ -852,8 +916,14 @@ function getTopModelsSegmentColor(
   activeModel: string | undefined,
 ) {
   if (activeModel !== undefined)
-    return activeModel === model ? getRankColor(model, index, order, usageColors) : "var(--stats-layer-2)"
+    return activeModel === model ? getTopModelColor(model, index, order) : "var(--stats-layer-2)"
   if (muted) return "var(--stats-layer-2)"
+  return getTopModelColor(model, index, order)
+}
+
+// Other keeps one color whether the chart colors the daily 9 models or the weekly 11.
+function getTopModelColor(model: string, index: number, order: Map<string, number>) {
+  if (model === "Other") return otherUsageColor
   return getRankColor(model, index, order, usageColors)
 }
 
@@ -875,19 +945,6 @@ function scrollDenseChartToEnd(element: HTMLDivElement | undefined, count: numbe
   })
 }
 
-function formatTopModelsMobileDate(label: string) {
-  return label.split(" - ")[0] ?? label
-}
-
-function usageTotal(point: UsagePoint) {
-  return point.segments.reduce((sum, item) => sum + item.value, 0)
-}
-
-function formatTokens(value: number) {
-  if (value >= 1) return `${value.toFixed(value >= 10 ? 0 : 1)}T`
-  return `${Math.round(value * 1000)}B`
-}
-
 function formatUsageChartValue(value: number, metric: "tokens" | "users") {
   if (metric === "users") return formatUsers(value)
   return formatTokens(value)
@@ -896,12 +953,6 @@ function formatUsageChartValue(value: number, metric: "tokens" | "users") {
 function usageChartTotalLabel(metric: "tokens" | "users", i18n: ReturnType<typeof useI18n>) {
   if (metric === "users") return i18n.t("home.modelUsers")
   return i18n.t("home.total")
-}
-
-function formatUsers(value: number) {
-  if (value >= 1_000_000) return `${(value / 1_000_000).toFixed(value >= 10_000_000 ? 0 : 1)}M`
-  if (value >= 1_000) return `${(value / 1_000).toFixed(value >= 10_000 ? 0 : 1)}K`
-  return new Intl.NumberFormat("en").format(Math.round(value))
 }
 
 function Leaderboard(props: {
@@ -1025,11 +1076,6 @@ function LeaderboardCard(props: {
   )
 }
 
-function formatBillions(value: number) {
-  if (value >= 1000) return `${(value / 1000).toFixed(value >= 10000 ? 0 : 1)}T`
-  return `${value}B`
-}
-
 function formatChange(value: number | null, i18n: ReturnType<typeof useI18n>) {
   if (value === null) return i18n.t("home.new")
   if (value > 0) return `+${value}%`
@@ -1063,6 +1109,7 @@ function MarketShareSection(props: { data: HomePageData["market"]; labPaths: Hom
         title={i18n.t("home.marketShareTitle")}
         description={i18n.t("home.marketShareDescription")}
         action={<PeriodToggle value={period()} onChange={setPeriod} label={i18n.t("home.marketShareTitle")} />}
+        share={(locale) => marketShareCard(locale, data(), period())}
       />
       <Show
         when={today()}
@@ -1365,7 +1412,11 @@ function GeoBreakdownSection(props: { data: CountryEntry[] }) {
       }}
     >
       <SectionBridge label={i18n.t("nav.marketShare").toUpperCase()} href="#market-share" />
-      <SectionTitle id="geo-breakdown" title={i18n.t("home.geoTitle")} />
+      <SectionTitle
+        id="geo-breakdown"
+        title={i18n.t("home.geoTitle")}
+        share={(locale) => geoCard(locale, topCountries())}
+      />
       <Show
         when={props.data.length > 0}
         fallback={<EmptyState title={i18n.t("home.noGeoTitle")} description={i18n.t("home.noGeoDescription")} />}
@@ -1448,25 +1499,6 @@ function MethodologySection() {
   )
 }
 
-function countryNumericId(country: string) {
-  return countryNumericIds.get(country.toUpperCase())?.padStart(3, "0")
-}
-
-function formatCountryName(country: string, locale: string, unknown: string) {
-  const code = country.toUpperCase()
-  if (code === "ZZ") return unknown
-  if (!countryNumericId(code)) return code
-  return new Intl.DisplayNames([locale], { type: "region" }).of(code) ?? code
-}
-
-function formatGeoTokens(value: number) {
-  return formatTrillions(value)
-}
-
-function formatGeoShare(value: number) {
-  return `${value.toFixed(value > 0 && value < 1 ? 1 : 0)}%`
-}
-
 function getMarketSegmentColor(author: string, color: string, activeAuthor: string | undefined) {
   if (!activeAuthor) return color
   if (activeAuthor === author) return color
@@ -1484,33 +1516,6 @@ function stackedMarketAuthors(day: MarketDay, order: Map<string, number>) {
     .sort((a, b) => (order.get(b.author.author) ?? b.index) - (order.get(a.author.author) ?? a.index))
 }
 
-function getMarketAuthorOrder(data: MarketDay[]) {
-  return getRankOrder(
-    data.flatMap((day) => day.authors.map((author, index) => ({ key: author.author, value: author.tokens, index }))),
-  )
-}
-
-function getRankOrder(items: { key: string; value: number; index: number }[]) {
-  return new Map<string, number>(
-    Object.values(
-      items.reduce<Record<string, { key: string; value: number; index: number }>>((result, item) => {
-        result[item.key] = {
-          key: item.key,
-          value: (result[item.key]?.value ?? 0) + item.value,
-          index: Math.min(result[item.key]?.index ?? item.index, item.index),
-        }
-        return result
-      }, {}),
-    )
-      .toSorted((a, b) => b.value - a.value || a.index - b.index || a.key.localeCompare(b.key))
-      .map((item, index) => [item.key, index] as const),
-  )
-}
-
-function getRankColor(key: string, fallbackIndex: number, order: Map<string, number>, colors: readonly string[]) {
-  return colors[order.get(key) ?? fallbackIndex] ?? "var(--stats-text)"
-}
-
 function isMarketMobileLabelHidden(index: number, count: number) {
   return count > 7 && (count - 1 - index) % 2 === 1
 }
@@ -1519,24 +1524,12 @@ function formatMarketMobileDate(label: string) {
   return marketDateParts(label).start
 }
 
-function formatTrillions(value: number) {
-  if (value === 0) return "0"
-  if (value < 0.001) return `${Number((value * 1_000_000).toFixed(value >= 0.00001 ? 0 : 1))}M`
-  if (value < 1) return `${Number((value * 1_000).toFixed(value >= 0.01 ? 0 : 1))}B`
-  return `${value.toFixed(value >= 10 ? 0 : 1)}T`
-}
-
 function formatMarketDate(day: MarketDay | undefined, fallback: string) {
   if (!day) return fallback
   return formatPeriodDate(day.start, day.end)
 }
 
-function marketDateParts(label: string) {
-  const [start, end] = label.split(" - ")
-  return { start: start ?? label, end: end ?? start ?? label }
-}
-
-function TokenCostSection(props: { data: TokenCostEntry[] }) {
+function TokenCostSection(props: { data: TokenCostEntry[]; names: Map<string, string> }) {
   const i18n = useI18n()
   const [activeIndex, setActiveIndex] = createSignal(2)
   const visible = createMemo(() => props.data.slice(0, 13))
@@ -1549,6 +1542,7 @@ function TokenCostSection(props: { data: TokenCostEntry[] }) {
         id="token-cost"
         title={i18n.t("home.tokenCostTitle")}
         description={i18n.t("home.tokenCostDescription")}
+        share={(locale) => tokenCostCard(locale, visible(), props.names)}
       />
       <Show
         when={visible().length > 0}
@@ -1610,7 +1604,7 @@ function TokenCostChart(props: {
   )
 }
 
-function CacheRatioSection(props: { data: CacheRatioEntry[] }) {
+function CacheRatioSection(props: { data: CacheRatioEntry[]; names: Map<string, string> }) {
   const i18n = useI18n()
   const [activeIndex, setActiveIndex] = createSignal(2)
   const visible = createMemo(() => props.data.slice(0, 16))
@@ -1623,6 +1617,7 @@ function CacheRatioSection(props: { data: CacheRatioEntry[] }) {
         id="cache-ratio"
         title={i18n.t("home.cacheRatioTitle")}
         description={i18n.t("home.cacheRatioDescription")}
+        share={(locale) => cacheRatioCard(locale, visible(), props.names)}
       />
       <Show
         when={visible().length > 0}
@@ -1705,14 +1700,6 @@ function CacheRatioMarker(props: { ratio: number; active: boolean }) {
   )
 }
 
-function formatRatio(value: number) {
-  return `${value.toFixed(value > 0 && value < 10 ? 1 : 0)}%`
-}
-
-function formatDollars(value: number) {
-  return `$${value.toFixed(value > 0 && value < 0.01 ? 4 : 2)}`
-}
-
 function MetricBar(props: { value: number; max: number; active: boolean }) {
   const fill = createMemo(() => Math.min(1, Math.max(props.value / props.max, props.value > 0 ? 0.03 : 0)))
   return (
@@ -1727,7 +1714,7 @@ function MetricBar(props: { value: number; max: number; active: boolean }) {
   )
 }
 
-function SessionCostSection(props: { data: SessionCostEntry[] }) {
+function SessionCostSection(props: { data: SessionCostEntry[]; names: Map<string, string> }) {
   const i18n = useI18n()
   const [activeIndex, setActiveIndex] = createSignal(2)
   const visible = createMemo(() => props.data.slice(0, 16))
@@ -1740,6 +1727,7 @@ function SessionCostSection(props: { data: SessionCostEntry[] }) {
         id="session-cost"
         title={i18n.t("home.sessionCostTitle")}
         description={i18n.t("home.sessionCostDescription")}
+        share={(locale) => sessionCostCard(locale, visible(), props.names)}
       />
       <Show
         when={visible().length > 0}
@@ -1813,10 +1801,6 @@ function SessionCostChart(props: {
 function formatTokenCount(value: number) {
   if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))}M`
   return `${Math.round(value / 1_000)}K`
-}
-
-function formatSessionCost(value: number) {
-  return `$${value.toFixed(4)}`
 }
 
 function homeStructuredData(

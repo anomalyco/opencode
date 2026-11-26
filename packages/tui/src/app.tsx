@@ -1065,7 +1065,7 @@ function App() {
         run: () => {
           dialog.replace(() => (
             <DialogIntegration
-              onConnected={(providerID) => dialog.replace(() => <DialogModel providerID={providerID} />)}
+              onConnected={(integrationID) => dialog.replace(() => <DialogModel integrationID={integrationID} />)}
             />
           ))
         },

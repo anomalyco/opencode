@@ -711,7 +711,12 @@ fn presentation_body(tui: &Tui, theme: &Theme, request: &PermissionRequest, curr
 fn edit_body(tui: &Tui, theme: &Theme, current: &Presentation) -> View {
     let app = &tui.app;
     let syntax = opencode_ui::code::syntax_theme(theme);
-    let scroll = || ScrollBox::new(app).height(Length::percent(100.0));
+    let config = crate::dialogs::scroll_config(&tui.settings.info());
+    let scroll = || {
+        let scroll = ScrollBox::new(app).height(Length::percent(100.0));
+        opencode_ui::scroll::apply(&scroll, config);
+        scroll
+    };
     let column = View::new(app).column().gap(1).grow(1.0).basis(Length::Auto).min_height(0);
     if let Some(diff) = &current.diff {
         let view = match tui.config().info.diffs.as_ref().and_then(|diffs| diffs.view) {

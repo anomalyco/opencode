@@ -1,6 +1,7 @@
 import { Session } from "@opencode/core/session"
 import type { Snapshot } from "@opencode/core/snapshot"
-import { MessageNotFoundError, SessionNotFoundError, UnknownError } from "@opencode/protocol/errors"
+import { Skill } from "@opencode/core/skill"
+import { MessageNotFoundError, SessionNotFoundError, SkillLoadError, UnknownError } from "@opencode/protocol/errors"
 import { Effect } from "effect"
 
 export function missingSession(error: Session.NotFoundError) {
@@ -8,6 +9,10 @@ export function missingSession(error: Session.NotFoundError) {
     sessionID: error.sessionID,
     message: `Session not found: ${error.sessionID}`,
   })
+}
+
+export function skillLoadFailed(error: Skill.LoadError) {
+  return new SkillLoadError({ skill: Skill.ID.make(error.skill), message: error.message })
 }
 
 export function missingMessage(error: Session.MessageNotFoundError) {

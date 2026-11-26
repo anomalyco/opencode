@@ -20,6 +20,8 @@ export interface Interface {
    * Fails immediately with NotFound when a machine or workspace does not exist, without waking lazy sandboxes.
    */
   readonly lookup: (id: Environment.ID) => Effect.Effect<Environment.Interface, Machines.NotFound | Workspace.NotFound>
+  /** Whether an environment prefix is known (local, any workspace ID, or a registered paired machine). */
+  readonly has: (id: Environment.ID) => Effect.Effect<boolean>
   /** Whether an environment is currently reachable in memory without waking a cold/lazy sandbox. */
   readonly ready: (id: Environment.ID) => Effect.Effect<boolean>
 }
@@ -34,11 +36,9 @@ const layer = Layer.effect(
     const workspaces = yield* Workspace.Service
     const local = Environment.local(spawner)
 
-    const sandbox = Effect.fnUntraced(function* (id: Workspace.ID) {
-      // Workspace.connect builds a lazy per-operation driver without waking or provisioning here.
-      const driver = yield* workspaces.connect(id).pipe(Effect.orDie)
-      return Environment.workspace(id, driver)
-    })
+    // Workspace.connect builds a lazy per-operation driver without waking or provisioning here.
+    const sandbox = (id: Workspace.ID) =>
+      Effect.map(workspaces.connect(id), (driver) => Environment.workspace(id, driver))
 
     return Service.of({
       get: Effect.fn("Environments.get")(function* (id: Environment.ID) {
@@ -55,6 +55,10 @@ const layer = Layer.effect(
           return yield* sandbox(id)
         }
         return yield* machines.get(id)
+      }),
+      has: Effect.fn("Environments.has")(function* (id: Environment.ID) {
+        if (id === Environment.localID || Workspace.isID(id)) return true
+        return (yield* machines.list()).some((info) => info.id === id)
       }),
       ready: Effect.fn("Environments.ready")(function* (id: Environment.ID) {
         if (id === Environment.localID) return true

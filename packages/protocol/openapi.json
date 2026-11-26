@@ -2140,9 +2140,19 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "SkillLoadError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillLoadErrorEncoded"
+                }
+              }
+            }
           }
         },
-        "description": "Send a user message and start the agent unless resume is false. Returns once the message is queued, not when the agent finishes: wait with experimental.session.wait or the session.execution.* events, then read the reply with session.message.list.",
+        "description": "Send a user message and start the agent unless resume is false. Returns once the message is queued, not when the agent finishes: wait with POST /api/experimental/session/:sessionID/wait or the session.execution.* events, then read the reply with GET /api/session/:sessionID/message. An archived session is unarchived.",
         "summary": "Send message",
         "requestBody": {
           "content": {
@@ -2287,7 +2297,7 @@
             }
           }
         },
-        "description": "Run a named command in the session. Most commands send a prompt, so like session.prompt this returns before the agent finishes.",
+        "description": "Run a named command in the session. Most commands send a prompt, so like session.prompt this returns before the agent finishes. An archived session is unarchived.",
         "summary": "Run command",
         "requestBody": {
           "content": {
@@ -2398,9 +2408,19 @@
                 }
               }
             }
+          },
+          "502": {
+            "description": "SkillLoadError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillLoadErrorEncoded"
+                }
+              }
+            }
           }
         },
-        "description": "Activate a skill for a session by appending a skill message and resuming execution.",
+        "description": "Activate a skill for a session by appending a skill message and resuming execution. An archived session is unarchived.",
         "summary": "Activate skill",
         "requestBody": {
           "content": {
@@ -2630,7 +2650,7 @@
             }
           }
         },
-        "description": "Execute one shell command in the session's working directory. Emits a shell.started event before execution and a shell.ended event with the merged output after.",
+        "description": "Execute one shell command in the session's working directory. Emits a shell.started event before execution and a shell.ended event with the merged output after. An archived session is unarchived.",
         "summary": "Run shell command",
         "requestBody": {
           "content": {
@@ -10236,6 +10256,111 @@
         "summary": "List skills"
       }
     },
+    "/api/experimental/skill/{skillID}/file/*": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.skill.file",
+        "parameters": [
+          {
+            "name": "skillID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Skill.ID"
+            },
+            "required": true
+          },
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Absolute path of the directory."
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "SkillNotFoundError | FileNotFoundError | LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/SkillNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/FileNotFoundErrorEncoded"
+                    },
+                    {
+                      "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "SkillLoadError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SkillLoadErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Read one file of a skill, loading it when the skill serves it on demand. SKILL.md returns the body without frontmatter. Experimental: may change without compatibility guarantees.",
+        "summary": "Read skill file"
+      }
+    },
     "/api/rpc/{rpcID}/{method}": {
       "post": {
         "tags": ["rpc"],
@@ -10456,6 +10581,7 @@
                     "form.replied",
                     "form.cancelled",
                     "websearch.updated",
+                    "experimental.push.updated",
                     "artifact.updated",
                     "session.status",
                     "session.idle",
@@ -10568,6 +10694,7 @@
                           "form.replied",
                           "form.cancelled",
                           "websearch.updated",
+                          "experimental.push.updated",
                           "artifact.updated",
                           "session.status",
                           "session.idle",
@@ -12460,6 +12587,59 @@
         "summary": "Read a blob"
       }
     },
+    "/api/experimental/browser/tunnel": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.browser.tunnel",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "boolean"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "ForbiddenError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ForbiddenErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Upgrade to a binary WebSocket carrying multiplexed TCP streams for one live desktop browser attachment. Requires a short-lived, single-use attachment-bound ticket in the x-opencode-browser-ticket header minted through authenticated browser RPC. Never accepts a session ID or browser cookie alone. Experimental: may change without compatibility guarantees.",
+        "summary": "Open a browser attachment binary stream tunnel",
+        "x-websocket": true
+      }
+    },
     "/api/experimental/automation": {
       "post": {
         "tags": ["experimental"],
@@ -14181,6 +14361,556 @@
         },
         "description": "Forget a machine by name, closing any live link and revoking its key. Behind the machines flag. Experimental: may change without compatibility guarantees.",
         "summary": "Remove a machine"
+      }
+    },
+    "/api/experimental/push": {
+      "get": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.get",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Push.Info"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "List the registered phones with their choices, bells and pauses, the server-wide pause and the shared session bells. Never returns callback URLs or keys. Experimental: may change without compatibility guarantees.",
+        "summary": "Get push settings"
+      }
+    },
+    "/api/experimental/push/device/{deviceID}": {
+      "put": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.register",
+        "parameters": [
+          {
+            "name": "deviceID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Push.Registered"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Register or renew a phone's relay callback URL and public key, and answer with the server's public key for it. Keeps the phone's pause, session bells and, unless given, its level. Experimental: may change without compatibility guarantees.",
+        "summary": "Register a phone",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.Register"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.remove",
+        "parameters": [
+          {
+            "name": "deviceID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Stop sending notifications to a phone. Experimental: may change without compatibility guarantees.",
+        "summary": "Remove a phone"
+      },
+      "patch": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.update",
+        "parameters": [
+          {
+            "name": "deviceID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Push.Device"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PushDeviceNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushDeviceNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Pause or resume notifications to one phone, or change the level it gets by default. Experimental: may change without compatibility guarantees.",
+        "summary": "Update a phone",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.DevicePatch"
+              }
+            }
+          },
+          "required": true
+        }
+      }
+    },
+    "/api/experimental/push/device/{deviceID}/session/{sessionID}": {
+      "put": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.session.set",
+        "parameters": [
+          {
+            "name": "deviceID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Push.Bell"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PushDeviceNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushDeviceNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Choose what one phone gets for one session. Experimental: may change without compatibility guarantees.",
+        "summary": "Set a phone's session bell",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.Bell"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.device.session.remove",
+        "parameters": [
+          {
+            "name": "deviceID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Push.DeviceID"
+            },
+            "required": true
+          },
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "PushDeviceNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PushDeviceNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Let one phone follow the shared bell or its default for one session again. Experimental: may change without compatibility guarantees.",
+        "summary": "Clear a phone's session bell"
+      }
+    },
+    "/api/experimental/push/session/{sessionID}": {
+      "put": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.session.set",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Push.Bell"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Choose what every phone gets for one session. Experimental: may change without compatibility guarantees.",
+        "summary": "Set a session bell",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.Bell"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "delete": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.session.remove",
+        "parameters": [
+          {
+            "name": "sessionID",
+            "in": "path",
+            "schema": {
+              "$ref": "#/components/schemas/Session.ID"
+            },
+            "required": true
+          }
+        ],
+        "security": [],
+        "responses": {
+          "204": {
+            "description": "<No Content>"
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Let every phone follow its default for one session again. Experimental: may change without compatibility guarantees.",
+        "summary": "Clear a session bell"
+      }
+    },
+    "/api/experimental/push/settings": {
+      "put": {
+        "tags": ["experimental"],
+        "operationId": "experimental.push.settings.set",
+        "parameters": [],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Push.Settings"
+                    }
+                  },
+                  "required": ["data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Pause or resume notifications to every phone. Experimental: may change without compatibility guarantees.",
+        "summary": "Pause all notifications",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Push.Settings"
+              }
+            }
+          },
+          "required": true
+        }
       }
     },
     "/api/shell": {
@@ -16372,6 +17102,97 @@
         "summary": "Get usage limits"
       }
     },
+    "/api/experimental/flag": {
+      "get": {
+        "tags": ["flag"],
+        "operationId": "experimental.flag.get",
+        "parameters": [
+          {
+            "name": "location",
+            "in": "query",
+            "schema": {
+              "type": "object",
+              "properties": {
+                "directory": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "description": "Absolute path of the directory."
+                }
+              },
+              "additionalProperties": false
+            },
+            "required": false,
+            "style": "deepObject",
+            "explode": true,
+            "description": "Location to run the request in, sent as location[directory]. Omit to use the server's default location."
+          }
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "location": {
+                      "$ref": "#/components/schemas/Location.PublicRef"
+                    },
+                    "data": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "boolean"
+                      }
+                    }
+                  },
+                  "required": ["location", "data"],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "InvalidRequestError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvalidRequestErrorEncoded"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "UnauthorizedError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UnauthorizedErrorEncoded"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "LocationNotFoundError",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LocationNotFoundErrorEncoded"
+                }
+              }
+            }
+          }
+        },
+        "description": "Experimental. Return the resolved feature flags the location's clients may act on, keyed by flag name. Flags not listed are off.",
+        "summary": "Get feature flags"
+      }
+    },
     "/api/config": {
       "get": {
         "tags": ["config"],
@@ -17875,6 +18696,9 @@
               "full_codemode": {
                 "type": "boolean"
               },
+              "codemode_agents": {
+                "type": "boolean"
+              },
               "machines": {
                 "type": "boolean"
               },
@@ -17887,7 +18711,16 @@
               "opencode_api": {
                 "type": "boolean"
               },
+              "mcp_skills": {
+                "type": "boolean"
+              },
+              "compaction_jobs": {
+                "type": "boolean"
+              },
               "sqlite_fts": {
+                "type": "boolean"
+              },
+              "browser_stream_tunnel": {
                 "type": "boolean"
               },
               "video_generate": {
@@ -23865,6 +24698,202 @@
         "required": ["ticket", "expires_in"],
         "additionalProperties": false
       },
+      "Push.Bell": {
+        "type": "object",
+        "properties": {
+          "level": {
+            "$ref": "#/components/schemas/Push.Level"
+          },
+          "until": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch"
+          }
+        },
+        "required": ["level"],
+        "additionalProperties": false
+      },
+      "Push.Device": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Push.DeviceID"
+          },
+          "name": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Push.Platform"
+          },
+          "expiresAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Push.DeviceSettings"
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "sessions": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Push.Bell"
+            }
+          },
+          "time": {
+            "type": "object",
+            "properties": {
+              "created": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Milliseconds since the Unix epoch"
+              },
+              "updated": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 9007199254740991,
+                "description": "Milliseconds since the Unix epoch"
+              }
+            },
+            "required": ["created", "updated"],
+            "additionalProperties": false
+          }
+        },
+        "required": ["id", "name", "platform", "expiresAt", "settings", "paused", "sessions", "time"],
+        "additionalProperties": false
+      },
+      "Push.DeviceID": {
+        "type": "string",
+        "description": "A lowercase canonical UUID chosen by the phone"
+      },
+      "Push.DevicePatch": {
+        "type": "object",
+        "properties": {
+          "paused": {
+            "type": "boolean"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Push.DeviceSettings"
+          }
+        },
+        "additionalProperties": false
+      },
+      "Push.DeviceSettings": {
+        "type": "object",
+        "properties": {
+          "default": {
+            "$ref": "#/components/schemas/Push.Level"
+          }
+        },
+        "required": ["default"],
+        "additionalProperties": false
+      },
+      "Push.Info": {
+        "type": "object",
+        "properties": {
+          "settings": {
+            "$ref": "#/components/schemas/Push.Settings"
+          },
+          "devices": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Push.Device"
+            }
+          },
+          "sessions": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/components/schemas/Push.Bell"
+            }
+          }
+        },
+        "required": ["settings", "devices", "sessions"],
+        "additionalProperties": false
+      },
+      "Push.Level": {
+        "type": "string",
+        "enum": ["all", "attention", "none"]
+      },
+      "Push.Platform": {
+        "type": "string",
+        "enum": ["android", "ios"]
+      },
+      "Push.Register": {
+        "type": "object",
+        "properties": {
+          "callbackURL": {
+            "type": "string"
+          },
+          "expiresAt": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch"
+          },
+          "publicKey": {
+            "type": "string"
+          },
+          "platform": {
+            "$ref": "#/components/schemas/Push.Platform"
+          },
+          "name": {
+            "type": "string"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/Push.DeviceSettings"
+          }
+        },
+        "required": ["callbackURL", "expiresAt", "publicKey", "platform", "name"],
+        "additionalProperties": false
+      },
+      "Push.Registered": {
+        "type": "object",
+        "properties": {
+          "publicKey": {
+            "type": "string"
+          }
+        },
+        "required": ["publicKey"],
+        "additionalProperties": false
+      },
+      "Push.Settings": {
+        "type": "object",
+        "properties": {
+          "paused": {
+            "type": "boolean"
+          },
+          "until": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 9007199254740991,
+            "description": "Milliseconds since the Unix epoch"
+          }
+        },
+        "required": ["paused"],
+        "additionalProperties": false
+      },
+      "PushDeviceNotFoundErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["PushDeviceNotFoundError"]
+          },
+          "deviceID": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "deviceID", "message"],
+        "additionalProperties": false
+      },
       "Reference.GitSource": {
         "type": "object",
         "properties": {
@@ -26249,7 +27278,8 @@
             "$ref": "#/components/schemas/AbsolutePath"
           },
           "content": {
-            "type": "string"
+            "type": "string",
+            "description": "The SKILL.md body. Empty for a skill whose body loads on demand, such as an MCP skill."
           }
         },
         "required": ["id", "name", "path", "content"],
@@ -26257,6 +27287,23 @@
       },
       "Skill.Name": {
         "type": "string"
+      },
+      "SkillLoadErrorEncoded": {
+        "type": "object",
+        "properties": {
+          "_tag": {
+            "type": "string",
+            "enum": ["SkillLoadError"]
+          },
+          "skill": {
+            "$ref": "#/components/schemas/Skill.ID"
+          },
+          "message": {
+            "type": "string"
+          }
+        },
+        "required": ["_tag", "skill", "message"],
+        "additionalProperties": false
       },
       "SkillNotFoundErrorEncoded": {
         "type": "object",
@@ -26833,6 +27880,9 @@
           },
           {
             "$ref": "#/components/schemas/websearch.updated"
+          },
+          {
+            "$ref": "#/components/schemas/experimental.push.updated"
           },
           {
             "$ref": "#/components/schemas/artifact.updated"
@@ -27702,6 +28752,34 @@
             },
             "required": ["id", "server", "name", "eventId", "timestamp", "data", "cursor"],
             "additionalProperties": false
+          }
+        },
+        "required": ["id", "created", "type", "data"],
+        "additionalProperties": false
+      },
+      "experimental.push.updated": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/Event.ID"
+          },
+          "created": {
+            "type": "number"
+          },
+          "metadata": {
+            "type": "object"
+          },
+          "type": {
+            "type": "string",
+            "enum": ["experimental.push.updated"]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location.Ref"
+          },
+          "data": {
+            "not": {
+              "type": "null"
+            }
           }
         },
         "required": ["id", "created", "type", "data"],
@@ -32285,6 +33363,10 @@
     {
       "name": "usage",
       "description": "Experimental usage limit routes."
+    },
+    {
+      "name": "flag",
+      "description": "Experimental feature flag routes."
     },
     {
       "name": "config",

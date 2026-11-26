@@ -847,7 +847,6 @@ export const dict = {
   "session.location.description": "ជ្រើសថតផ្សេងទៀតដើម្បីបន្តសម័យនេះ។",
   "session.location.choose": "ជ្រើសថត",
   "session.location.worktree": "ជ្រើស worktree",
-  "session.location.worktreesFailed": "បរាជ័យក្នុងការផ្ទុក worktrees",
   "session.rewind.toast.title": "បានត្រឡប់វិញ",
   "session.rewind.toast.undo": "មិនធ្វើវិញ",
   "session.location.moving": "កំពុងផ្លាស់ទីសម័យ…",

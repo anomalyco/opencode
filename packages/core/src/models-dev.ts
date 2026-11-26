@@ -434,10 +434,8 @@ const zero = Money.USDPerMillionTokens.zero
 // no place in opencode's cost yet. Context overrides become tiers; other conditions
 // (service tier, time of day…) are left out.
 function cost(input: SourceCost | undefined): Model.Info["cost"] {
-  const text = input?.text
-  const perToken = (unit: string | undefined) => unit === undefined || unit === "token"
-  if (!text?.input || !text.output || !perToken(text.input.unit) || !perToken(text.output.unit))
-    return [{ input: zero, output: zero, cache: { read: zero, write: zero } }]
+  const text = perTokenText(input)
+  if (!text) return [{ input: zero, output: zero, cache: { read: zero, write: zero } }]
   const textInput = text.input
   const textOutput = text.output
   const base = {
@@ -474,6 +472,14 @@ function cost(input: SourceCost | undefined): Model.Info["cost"] {
   return [base, ...tiers.values()]
 }
 
+// Both text prices, when both are set and per token; otherwise opencode can't price the model.
+function perTokenText(source: SourceCost | undefined) {
+  const text = source?.text
+  const perToken = (unit: string | undefined) => unit === undefined || unit === "token"
+  if (!text?.input || !text.output || !perToken(text.input.unit) || !perToken(text.output.unit)) return undefined
+  return { input: text.input, output: text.output }
+}
+
 // opencode has one cache write price: the first TTL listed, else the explicit cache's.
 function cacheWrite(cache: typeof CachePrices.Type | undefined) {
   const first = (write: typeof CacheWrite.Type | undefined) =>
@@ -482,8 +488,8 @@ function cacheWrite(cache: typeof CachePrices.Type | undefined) {
 }
 
 // A mode (a speed, or a mode listed as its own model) without its own cost takes the base prices scaled by its
-// service tier's multiplier (the mode name by default), or else the tier's own prices. The base context tiers are kept
-// as they are.
+// service tier's multiplier (the mode name by default), or else the tier's own prices, context tiers included. The base
+// context tiers are otherwise kept as they are.
 function modeCost(model: SourceModel, base: Model.Info["cost"], name: string, mode: SourceMode): Model.Info["cost"] {
   const [baseDefault, ...baseTiers] = base
   if (mode.cost) return [cost(mode.cost)[0], ...baseTiers]
@@ -504,7 +510,7 @@ function modeCost(model: SourceModel, base: Model.Info["cost"], name: string, mo
     )
   })?.factor
   if (!baseDefault) return base
-  if (factor === undefined) return [tierPrices(model.cost, baseDefault, tier), ...baseTiers]
+  if (factor === undefined) return [baseDefault, ...baseTiers].map((prices) => tierPrices(model.cost, prices, tier))
   const scale = (price: Money.USDPerMillionTokens, path: readonly string[]) =>
     Money.USDPerMillionTokens.make(Math.round(price * factorAt(factor, path) * 1e10) / 1e10)
   return [
@@ -520,13 +526,24 @@ function modeCost(model: SourceModel, base: Model.Info["cost"], name: string, mo
   ]
 }
 
-// Hosts such as DigitalOcean list a tier's prices instead of a multiplier, as overrides of the base prices.
+// Hosts such as DigitalOcean list a tier's prices instead of a multiplier, as overrides of the base prices. A context
+// tier takes the overrides for both the service tier and its context size.
 function tierPrices(source: SourceCost | undefined, base: Model.Info["cost"][number], tier: string) {
-  const matches = (when: Record<string, unknown>) =>
-    Object.keys(when).length === 1 && Option.getOrUndefined(decodeServiceTier(when.service_tier))?.equals === tier
-  const input = source?.text?.input?.overrides?.find((override) => matches(override.when))
-  const output = source?.text?.output?.overrides?.find((override) => matches(override.when))
+  const matches = (when: Record<string, unknown>) => {
+    const context = Option.getOrUndefined(decodeContext(when.context))
+    return (
+      Object.keys(when).length === (base.tier ? 2 : 1) &&
+      Option.getOrUndefined(decodeServiceTier(when.service_tier))?.equals === tier &&
+      (!base.tier || (context?.gt ?? context?.gte) === base.tier.size)
+    )
+  }
+  // The base is free when its prices aren't per token, and so is every tier.
+  const text = perTokenText(source)
+  if (!text) return base
+  const input = text.input.overrides?.find((override) => matches(override.when))
+  const output = text.output.overrides?.find((override) => matches(override.when))
   return {
+    ...base,
     input: input?.price ?? base.input,
     output: output?.price ?? base.output,
     cache: { read: input?.cache?.read ?? base.cache.read, write: cacheWrite(input?.cache) ?? base.cache.write },

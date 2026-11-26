@@ -25,10 +25,12 @@ export type Interface = Omit<OpenCodeClient, "plugin" | "workspace"> & {
   readonly events: OpenCodeClient["event"]
   readonly workspace: {
     readonly create: Workspace.Interface["create"]
+    readonly attach: Workspace.Interface["attach"]
     readonly provision: (options: {
       readonly workspaceID: Workspace.ID
     }) => ReturnType<Workspace.Interface["provision"]>
     readonly destroy: (options: { readonly workspaceID: Workspace.ID }) => ReturnType<Workspace.Interface["destroy"]>
+    readonly suspendIdle: Workspace.Interface["suspendIdle"]
   }
   readonly plugin: EmbeddedHost.Interface["plugins"]["register"] & OpenCodeClient["plugin"]
 }
@@ -60,8 +62,10 @@ export const create: <R = never>(
     events: client.event,
     workspace: {
       create: host.workspace.create,
+      attach: host.workspace.attach,
       provision: ({ workspaceID }: { readonly workspaceID: Workspace.ID }) => host.workspace.provision(workspaceID),
       destroy: ({ workspaceID }: { readonly workspaceID: Workspace.ID }) => host.workspace.destroy(workspaceID),
+      suspendIdle: host.workspace.suspendIdle,
     },
     plugin: Object.assign(host.plugins.register, client.plugin),
   }

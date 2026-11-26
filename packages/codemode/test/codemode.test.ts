@@ -1117,6 +1117,37 @@ describe("CodeMode public contract", () => {
     if (!invalid.ok) expect(invalid.error.kind).toBe("InvalidToolInput")
   })
 
+  test("an exact match is the first tool in scope that the query names by path or by call expression", async () => {
+    const simple = (description: string) =>
+      Tool.make({
+        description,
+        input: Schema.Struct({ id: Schema.String }),
+        output: Schema.String,
+        execute: () => Effect.succeed("ok"),
+      })
+    const runtime = CodeMode.make({
+      tools: {
+        "a-b": simple("Dashed"),
+        'tools["a-b"]': simple("Bracketed"),
+        github: { list_issues: simple("List issues") },
+        linear: { list_issues: simple("List Linear issues") },
+      },
+    })
+    const search = async (input: unknown) => {
+      const result = await Effect.runPromise(runtime.execute(`return search(${JSON.stringify(input)})`))
+      if (!result.ok) throw new Error(result.error.message)
+      return (result.value as { items: Array<{ path: string; description: string }> }).items
+    }
+
+    expect(await search('tools["a-b"]')).toMatchObject([{ path: 'tools["a-b"]', description: "Dashed" }])
+    expect(await search({ query: "linear.list_issues", namespace: "linear" })).toMatchObject([
+      { path: "tools.linear.list_issues" },
+    ])
+    expect((await search({ query: "linear.list_issues", namespace: "github" })).map((item) => item.path)).toEqual([
+      "tools.github.list_issues",
+    ])
+  })
+
   test("matches input parameter names and partial-word substrings", async () => {
     const upload = Tool.make({
       description: "Send a document to the workspace",

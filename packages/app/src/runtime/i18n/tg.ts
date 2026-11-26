@@ -864,7 +864,6 @@ export const dict = {
   "session.location.description": "Барои идомаи ин сессия феҳристи дигарро интихоб кунед.",
   "session.location.choose": "Интихоби феҳрист",
   "session.location.worktree": "Интихоби worktree",
-  "session.location.worktreesFailed": "Worktree-ҳо бор карда нашуданд",
   "session.rewind.toast.title": "Баргардонида шуд",
   "session.rewind.toast.undo": "Бекор кардан",
   "session.location.moving": "Сессия гузаронида мешавад…",

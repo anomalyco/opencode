@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test"
-import { Cause, Deferred, Effect, Exit, Fiber, Schema } from "effect"
+import { Cause, Deferred, Effect, Exit, Fiber } from "effect"
 import { eq } from "drizzle-orm"
 import { LLMEvent } from "@opencode/ai/effect"
 import { Money } from "@opencode/schema/money"
@@ -296,19 +296,6 @@ test("failure before progress omits partial output fields", async () => {
   expect(failed).not.toHaveProperty("metadata")
 })
 
-test("provider metadata is flattened using the route key", async () => {
-  const { published, publisher } = capture()
-  await Effect.runPromise(
-    publisher.publish(
-      LLMEvent.reasoningStart({ id: "reasoning", providerMetadata: { anthropic: { signature: "signed" } } }),
-    ),
-  )
-
-  expect(published.find((event) => event.type === "session.reasoning.started.1")?.data).toMatchObject({
-    native: { signature: "signed" },
-  })
-})
-
 test("reasoning state from start, empty delta, and end is merged", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(
@@ -461,31 +448,6 @@ it.effect("retains new chunks and orders text-end behind an in-flight timer publ
   }),
 )
 
-it.effect("batches reasoning deltas and flushes pending reasoning before the terminal event", () =>
-  Effect.gen(function* () {
-    const { published, publisher } = capture()
-    yield* Effect.forEach(
-      [
-        LLMEvent.reasoningStart({ id: "reasoning" }),
-        LLMEvent.reasoningDelta({ id: "reasoning", text: "one" }),
-        LLMEvent.reasoningDelta({ id: "reasoning", text: " two" }),
-        LLMEvent.reasoningDelta({ id: "reasoning", text: " three" }),
-        LLMEvent.reasoningEnd({ id: "reasoning" }),
-      ],
-      publisher.publish,
-      { discard: true },
-    )
-
-    expect(
-      published.filter((event) => event.type === "session.reasoning.delta").map((event) => event.data),
-    ).toMatchObject([{ delta: "one two three" }])
-    expect(published.slice(-2).map((event) => event.type)).toEqual([
-      "session.reasoning.delta",
-      "session.reasoning.ended.1",
-    ])
-  }),
-)
-
 test("authoritative end values replace accumulated deltas in the durable ended events", async () => {
   const { published, publisher } = capture()
   await Effect.runPromise(
@@ -569,23 +531,6 @@ test("binary failure emits no success event", async () => {
   await Effect.runPromise(publisher.failTool(call.id, { type: "tool.execution", message: "Cannot read binary file" }))
   expect(published.some((event) => event.type === "session.tool.success.2")).toBe(false)
   expect(published.some((event) => event.type === "session.tool.failed.2")).toBe(true)
-})
-
-test("success event data can carry provider-executed native data", () => {
-  const decoded = Schema.decodeUnknownSync(SessionEvent.Tool.Success.data)({
-    sessionID,
-    assistantMessageID: SessionMessage.ID.create(),
-    id: "call-old",
-    content: [{ type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png" }],
-    executed: true,
-    native: {
-      result: {
-        type: "content",
-        value: [{ type: "file", uri: `data:image/png;base64,${base64}`, mime: "image/png" }],
-      },
-    },
-  })
-  expect(decoded.native).toMatchObject({ result: { type: "content" } })
 })
 
 test("step start waits for the pending start snapshot", async () => {

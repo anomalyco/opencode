@@ -39,6 +39,7 @@ export interface DurableObjectStorage {
   readonly sql: SqlStorage
   transaction<T>(closure: (txn: { rollback(): void }) => Promise<T>): Promise<T>
   transactionSync<T>(closure: () => T): T
+  setAlarm(scheduledTime: number | Date): Promise<void>
 }
 
 interface SqliteClient extends SqlClient.SqlClient {

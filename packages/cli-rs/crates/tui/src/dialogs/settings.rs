@@ -11,6 +11,8 @@ use opencode_ui::select::{Choice, Detail, select};
 use opencode_ui::theme::ModeSetting;
 use serde_json::Map;
 
+use super::scroll_config;
+
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Lit {
     Bool(bool),
@@ -613,6 +615,7 @@ fn apply(tui: &Tui, info: Info) {
         tui.theme_changed();
     }
     opencode_ui::motion::set_running(&tui.app, opencode_ui::motion::enabled(info.animations));
+    tui.dialogs.set_scroll(scroll_config(&info));
     let leader = tui.settings.config().leader_timeout;
     tui.keymap.set_leader_timeout(leader);
     let keybinds = tui.settings.config().keybinds();
