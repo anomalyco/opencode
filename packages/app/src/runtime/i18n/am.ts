@@ -904,8 +904,6 @@ export const dict = {
   "provider.connect.console.statusFailed": "ፍቃድን ማረጋገጥ አልተቻለም። የአገልጋይ ግንኙነትዎን ያረጋግጡ እና እንደገና ይሞክሩ።",
   "provider.connect.console.startFailed": "መግባትን መጀመር አልተቻለም። የአገልጋይ ግንኙነትዎን ያረጋግጡ እና እንደገና ይሞክሩ።",
   "provider.connect.models.title": "ከ{{provider}} ጋር ተገናኝቷል",
-  "provider.connect.models.description": "ለመጀመር ሞዴል ይምረጡ። በማንኛውም ጊዜ ሞዴሎችን መቀየር ይችላሉ።",
-  "provider.connect.models.available": "የሚገኙ ሞዴሎች",
   "provider.connect.chatgptWelcome.title": "ChatGPT ተገናኝቷል",
   "provider.connect.chatgptWelcome.description": "በOpenCode ውስጥ ብቁ የሆኑ ጥያቄዎች የChatGPT እቅድዎን መጠቀም ይችላሉ።",
   "provider.connect.chatgptWelcome.usage": "አጠቃቀምን በChatGPT ቅንብሮች ውስጥ ያስተዳድሩ",

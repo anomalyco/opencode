@@ -947,8 +947,6 @@ export const dict = {
   "provider.connect.console.statusFailed": "ခွင့်ပြုချက်ကို စစ်ဆေး၍ မရပါ။ ဆာဗာချိတ်ဆက်မှုကို စစ်ဆေးပြီး ထပ်ကြိုးစားပါ။",
   "provider.connect.console.startFailed": "အကောင့်ဝင်ခြင်းကို စတင်၍ မရပါ။ ဆာဗာချိတ်ဆက်မှုကို စစ်ဆေးပြီး ထပ်ကြိုးစားပါ။",
   "provider.connect.models.title": "{{provider}} သို့ ချိတ်ဆက်ပြီးပါပြီ",
-  "provider.connect.models.description": "စတင်ရန် မော်ဒယ်တစ်ခုကို ရွေးပါ။ မော်ဒယ်ကို အချိန်မရွေး ပြောင်းနိုင်သည်။",
-  "provider.connect.models.available": "ရရှိနိုင်သော မော်ဒယ်များ",
   "provider.connect.chatgptWelcome.title": "ChatGPT ချိတ်ဆက်ပြီးပါပြီ",
   "provider.connect.chatgptWelcome.description":
     "OpenCode ရှိ သတ်မှတ်ချက်ပြည့်မီသော တောင်းဆိုမှုများသည် သင်၏ ChatGPT အစီအစဉ်ကို အသုံးပြုနိုင်သည်။",

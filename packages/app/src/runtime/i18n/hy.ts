@@ -936,8 +936,6 @@ export const dict = {
   "provider.connect.console.statusFailed": "Չհաջողվեց ստուգել լիազորումը։ Ստուգեք սերվերի հետ կապը և կրկին փորձեք։",
   "provider.connect.console.startFailed": "Չհաջողվեց սկսել մուտքը։ Ստուգեք սերվերի հետ կապը և կրկին փորձեք։",
   "provider.connect.models.title": "Միացված է {{provider}}-ին",
-  "provider.connect.models.description": "Ընտրեք մոդել՝ սկսելու համար։ Մոդելը կարող եք փոխել ցանկացած պահի։",
-  "provider.connect.models.available": "Հասանելի մոդելներ",
   "provider.connect.chatgptWelcome.title": "ChatGPT-ն միացված է",
   "provider.connect.chatgptWelcome.description":
     "OpenCode-ի համապատասխան հարցումները կարող են օգտագործել ձեր ChatGPT պլանը։",

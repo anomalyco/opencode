@@ -959,8 +959,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Nu s-a putut porni autentificarea. Verifică conexiunea la server și încearcă din nou.",
   "provider.connect.models.title": "Conectat la {{provider}}",
-  "provider.connect.models.description": "Alege un model cu care să începi. Poți schimba modelul oricând.",
-  "provider.connect.models.available": "Modele disponibile",
   "provider.connect.chatgptWelcome.title": "ChatGPT conectat",
   "provider.connect.chatgptWelcome.description": "Cererile eligibile din OpenCode pot folosi abonamentul tău ChatGPT.",
   "provider.connect.chatgptWelcome.usage": "Gestionează utilizarea în setările ChatGPT",

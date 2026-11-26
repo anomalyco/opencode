@@ -934,8 +934,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Ekki tókst að hefja innskráningu. Athugaðu tenginguna við netþjóninn og reyndu aftur.",
   "provider.connect.models.title": "Tengt við {{provider}}",
-  "provider.connect.models.description": "Veldu líkan til að byrja með. Þú getur skipt um líkan hvenær sem er.",
-  "provider.connect.models.available": "Tiltæk líkön",
   "provider.connect.chatgptWelcome.title": "ChatGPT tengt",
   "provider.connect.chatgptWelcome.description": "Gjaldgengar beiðnir í OpenCode geta notað ChatGPT-áskriftina þína.",
   "provider.connect.chatgptWelcome.usage": "Stjórnaðu notkun í stillingum ChatGPT",

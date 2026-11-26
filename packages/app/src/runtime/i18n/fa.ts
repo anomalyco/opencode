@@ -935,8 +935,6 @@ export const dict = {
   "provider.connect.console.statusFailed": "بررسی مجوز ممکن نشد. اتصال سرور را بررسی کنید و دوباره تلاش کنید.",
   "provider.connect.console.startFailed": "شروع ورود ممکن نشد. اتصال سرور را بررسی کنید و دوباره تلاش کنید.",
   "provider.connect.models.title": "به ⁨{{provider}}⁩ متصل شد",
-  "provider.connect.models.description": "یک مدل برای شروع انتخاب کنید. هر زمان می‌توانید مدل را عوض کنید.",
-  "provider.connect.models.available": "مدل‌های در دسترس",
   "provider.connect.chatgptWelcome.title": "ChatGPT متصل شد",
   "provider.connect.chatgptWelcome.description":
     "درخواست‌های واجد شرایط در OpenCode می‌توانند از طرح ChatGPT شما استفاده کنند.",

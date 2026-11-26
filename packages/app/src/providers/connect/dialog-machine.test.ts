@@ -338,7 +338,6 @@ test("a Claude Agent check that outlives its timeout still finishes", () => {
   expect(selectProviderDialogView(done.state).body).toEqual({
     kind: "models",
     selectedModel: "claude-agent:sonnet",
-    collapsed: {},
   })
   expect(types(done.effects)).toEqual(["models.reveal", "toast.connected"])
 })
@@ -556,7 +555,6 @@ test("confirming a model closes once and keeps the outcome through disposal", ()
         { type: "refresh.succeeded", attempt: connectEffect(refreshing.effects, "refresh").attempt },
         { pending: false, firstModel: "opencode:big" },
       ),
-      { type: "model.selected", modelKey: "opencode:small" },
     ],
     refreshing.state,
   )

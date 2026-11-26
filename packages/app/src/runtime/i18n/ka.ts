@@ -942,8 +942,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "შესვლის დაწყება ვერ მოხერხდა. შეამოწმეთ სერვერთან კავშირი და სცადეთ ხელახლა.",
   "provider.connect.models.title": "დაკავშირებულია {{provider}}-თან",
-  "provider.connect.models.description": "აირჩიეთ მოდელი დასაწყებად. მოდელის შეცვლა ნებისმიერ დროს შეგიძლიათ.",
-  "provider.connect.models.available": "ხელმისაწვდომი მოდელები",
   "provider.connect.chatgptWelcome.title": "ChatGPT დაკავშირებულია",
   "provider.connect.chatgptWelcome.description":
     "OpenCode-ში შესაბამის მოთხოვნებს შეუძლია თქვენი ChatGPT-ის გეგმის გამოყენება.",

@@ -1003,8 +1003,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Tidak dapat memulai proses masuk. Periksa koneksi server Anda dan coba lagi.",
   "provider.connect.models.title": "Terhubung ke {{provider}}",
-  "provider.connect.models.description": "Pilih model untuk memulai. Anda dapat mengganti model kapan saja.",
-  "provider.connect.models.available": "Model yang tersedia",
   "provider.connect.chatgptWelcome.title": "ChatGPT terhubung",
   "provider.connect.chatgptWelcome.description":
     "Permintaan yang memenuhi syarat di OpenCode dapat menggunakan paket ChatGPT Anda.",

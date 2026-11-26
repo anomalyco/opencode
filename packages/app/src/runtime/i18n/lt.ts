@@ -969,8 +969,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Nepavyko pradėti prisijungimo. Patikrinkite ryšį su serveriu ir bandykite dar kartą.",
   "provider.connect.models.title": "Prisijungta prie {{provider}}",
-  "provider.connect.models.description": "Pasirinkite modelį pradžiai. Modelį galite pakeisti bet kada.",
-  "provider.connect.models.available": "Pasiekiami modeliai",
   "provider.connect.chatgptWelcome.title": "ChatGPT prijungtas",
   "provider.connect.chatgptWelcome.description": "Tinkamos OpenCode užklausos gali naudoti jūsų ChatGPT planą.",
   "provider.connect.chatgptWelcome.usage": "Tvarkykite naudojimą ChatGPT nustatymuose",

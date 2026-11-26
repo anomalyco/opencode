@@ -969,8 +969,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Die Anmeldung konnte nicht gestartet werden. Prüfen Sie Ihre Serververbindung und versuchen Sie es erneut.",
   "provider.connect.models.title": "Mit {{provider}} verbunden",
-  "provider.connect.models.description": "Wählen Sie ein Modell für den Einstieg. Sie können jederzeit wechseln.",
-  "provider.connect.models.available": "Verfügbare Modelle",
   "provider.connect.chatgptWelcome.title": "ChatGPT verbunden",
   "provider.connect.chatgptWelcome.description": "Berechtigte Anfragen in OpenCode können Ihr ChatGPT-Abo nutzen.",
   "provider.connect.chatgptWelcome.usage": "Nutzung in den ChatGPT-Einstellungen verwalten",

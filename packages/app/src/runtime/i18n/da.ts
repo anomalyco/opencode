@@ -996,8 +996,6 @@ export const dict = {
   "provider.connect.console.statusFailed": "Kunne ikke tjekke godkendelsen. Tjek din serverforbindelse, og prøv igen.",
   "provider.connect.console.startFailed": "Kunne ikke starte login. Tjek din serverforbindelse, og prøv igen.",
   "provider.connect.models.title": "Forbundet til {{provider}}",
-  "provider.connect.models.description": "Vælg en model at starte med. Du kan altid skifte model.",
-  "provider.connect.models.available": "Tilgængelige modeller",
   "provider.connect.chatgptWelcome.title": "ChatGPT forbundet",
   "provider.connect.chatgptWelcome.description":
     "Berettigede forespørgsler i OpenCode kan bruge dit ChatGPT-abonnement.",

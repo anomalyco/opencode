@@ -943,8 +943,6 @@ export const dict = {
     "অনুমোদন পরীক্ষা করা যায়নি। আপনার সার্ভার সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।",
   "provider.connect.console.startFailed": "সাইন ইন শুরু করা যায়নি। আপনার সার্ভার সংযোগ পরীক্ষা করে আবার চেষ্টা করুন।",
   "provider.connect.models.title": "{{provider}}-এর সঙ্গে সংযুক্ত",
-  "provider.connect.models.description": "শুরু করতে একটি মডেল বেছে নিন। আপনি যেকোনো সময় মডেল বদলাতে পারবেন।",
-  "provider.connect.models.available": "উপলব্ধ মডেল",
   "provider.connect.chatgptWelcome.title": "ChatGPT সংযুক্ত",
   "provider.connect.chatgptWelcome.description":
     "OpenCode-এর যোগ্য অনুরোধগুলি আপনার ChatGPT প্ল্যান ব্যবহার করতে পারে।",

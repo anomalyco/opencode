@@ -991,8 +991,6 @@ export const dict = {
   "provider.connect.console.statusFailed": "تعذر التحقق من التفويض. تحقق من اتصالك بالخادم وحاول مرة أخرى.",
   "provider.connect.console.startFailed": "تعذر بدء تسجيل الدخول. تحقق من اتصالك بالخادم وحاول مرة أخرى.",
   "provider.connect.models.title": "متصل بـ {{provider}}",
-  "provider.connect.models.description": "اختر نموذجًا للبدء. يمكنك تبديل النماذج في أي وقت.",
-  "provider.connect.models.available": "النماذج المتاحة",
   "provider.connect.chatgptWelcome.title": "تم توصيل ChatGPT",
   "provider.connect.chatgptWelcome.description": "يمكن للطلبات المؤهلة في OpenCode استخدام خطة ChatGPT الخاصة بك.",
   "provider.connect.chatgptWelcome.usage": "إدارة الاستخدام في إعدادات ChatGPT",

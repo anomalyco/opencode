@@ -1004,8 +1004,6 @@ export const dict = {
   "provider.connect.console.statusFailed": "Kunne ikke sjekke autoriseringen. Sjekk servertilkoblingen og prøv igjen.",
   "provider.connect.console.startFailed": "Kunne ikke starte påloggingen. Sjekk servertilkoblingen og prøv igjen.",
   "provider.connect.models.title": "Koblet til {{provider}}",
-  "provider.connect.models.description": "Velg en modell å starte med. Du kan bytte modell når som helst.",
-  "provider.connect.models.available": "Tilgjengelige modeller",
   "provider.connect.chatgptWelcome.title": "ChatGPT er tilkoblet",
   "provider.connect.chatgptWelcome.description":
     "Kvalifiserte forespørsler i OpenCode kan bruke ChatGPT-abonnementet ditt.",

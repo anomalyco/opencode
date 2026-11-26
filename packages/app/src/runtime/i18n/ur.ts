@@ -955,8 +955,6 @@ export const dict = {
   "provider.connect.console.statusFailed": "اجازت کی جانچ نہیں ہو سکی۔ اپنا سرور کنکشن چیک کریں اور دوبارہ کوشش کریں۔",
   "provider.connect.console.startFailed": "سائن ان شروع نہیں ہو سکا۔ اپنا سرور کنکشن چیک کریں اور دوبارہ کوشش کریں۔",
   "provider.connect.models.title": "⁨{{provider}}⁩ سے منسلک",
-  "provider.connect.models.description": "شروع کرنے کے لیے ایک ماڈل منتخب کریں۔ آپ کسی بھی وقت ماڈل تبدیل کر سکتے ہیں۔",
-  "provider.connect.models.available": "دستیاب ماڈلز",
   "provider.connect.chatgptWelcome.title": "ChatGPT منسلک ہو گیا",
   "provider.connect.chatgptWelcome.description": "OpenCode میں اہل درخواستیں آپ کا ChatGPT پلان استعمال کر سکتی ہیں۔",
   "provider.connect.chatgptWelcome.usage": "ChatGPT کی ترتیبات میں استعمال کا نظم کریں",

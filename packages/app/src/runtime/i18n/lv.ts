@@ -959,8 +959,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Neizdevās sākt pierakstīšanos. Pārbaudiet savienojumu ar serveri un mēģiniet vēlreiz.",
   "provider.connect.models.title": "Savienots ar {{provider}}",
-  "provider.connect.models.description": "Izvēlieties modeli, ar ko sākt. Modeļus varat mainīt jebkurā laikā.",
-  "provider.connect.models.available": "Pieejamie modeļi",
   "provider.connect.chatgptWelcome.title": "ChatGPT savienots",
   "provider.connect.chatgptWelcome.description": "Atbilstoši pieprasījumi OpenCode var izmantot jūsu ChatGPT plānu.",
   "provider.connect.chatgptWelcome.usage": "Pārvaldiet lietojumu ChatGPT iestatījumos",

@@ -982,8 +982,6 @@ export const dict = {
   "provider.connect.console.statusFailed": "ตรวจสอบการอนุญาตไม่ได้ ตรวจสอบการเชื่อมต่อเซิร์ฟเวอร์แล้วลองอีกครั้ง",
   "provider.connect.console.startFailed": "เริ่มการลงชื่อเข้าใช้ไม่ได้ ตรวจสอบการเชื่อมต่อเซิร์ฟเวอร์แล้วลองอีกครั้ง",
   "provider.connect.models.title": "เชื่อมต่อกับ {{provider}} แล้ว",
-  "provider.connect.models.description": "เลือกโมเดลเพื่อเริ่มต้น คุณเปลี่ยนโมเดลได้ทุกเมื่อ",
-  "provider.connect.models.available": "โมเดลที่พร้อมใช้งาน",
   "provider.connect.chatgptWelcome.title": "เชื่อมต่อ ChatGPT แล้ว",
   "provider.connect.chatgptWelcome.description": "คำขอที่เข้าเกณฑ์ใน OpenCode สามารถใช้แพ็กเกจ ChatGPT ของคุณได้",
   "provider.connect.chatgptWelcome.usage": "จัดการการใช้งานในการตั้งค่า ChatGPT",

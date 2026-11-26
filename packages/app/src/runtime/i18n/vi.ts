@@ -939,8 +939,6 @@ export const dict = {
   "provider.connect.console.statusFailed": "Không thể kiểm tra ủy quyền. Kiểm tra kết nối máy chủ và thử lại.",
   "provider.connect.console.startFailed": "Không thể bắt đầu đăng nhập. Kiểm tra kết nối máy chủ và thử lại.",
   "provider.connect.models.title": "Đã kết nối với {{provider}}",
-  "provider.connect.models.description": "Chọn một mô hình để bắt đầu. Bạn có thể đổi mô hình bất cứ lúc nào.",
-  "provider.connect.models.available": "Mô hình khả dụng",
   "provider.connect.chatgptWelcome.title": "Đã kết nối ChatGPT",
   "provider.connect.chatgptWelcome.description":
     "Các yêu cầu đủ điều kiện trong OpenCode có thể dùng gói ChatGPT của bạn.",

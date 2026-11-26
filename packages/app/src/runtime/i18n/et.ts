@@ -930,8 +930,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Sisselogimist ei õnnestunud alustada. Kontrolli serveriühendust ja proovi uuesti.",
   "provider.connect.models.title": "Ühendatud: {{provider}}",
-  "provider.connect.models.description": "Vali mudel, millega alustada. Mudelit saad igal ajal vahetada.",
-  "provider.connect.models.available": "Saadaolevad mudelid",
   "provider.connect.chatgptWelcome.title": "ChatGPT ühendatud",
   "provider.connect.chatgptWelcome.description": "Sobivad OpenCode'i päringud saavad kasutada sinu ChatGPT paketti.",
   "provider.connect.chatgptWelcome.usage": "Halda kasutust ChatGPT seadetes",

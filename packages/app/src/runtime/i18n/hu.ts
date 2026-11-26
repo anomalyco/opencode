@@ -948,8 +948,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Nem sikerült elindítani a bejelentkezést. Ellenőrizze a szerverkapcsolatot, majd próbálja újra.",
   "provider.connect.models.title": "Csatlakoztatva: {{provider}}",
-  "provider.connect.models.description": "Válasszon egy modellt a kezdéshez. Bármikor válthat modellt.",
-  "provider.connect.models.available": "Elérhető modellek",
   "provider.connect.chatgptWelcome.title": "ChatGPT csatlakoztatva",
   "provider.connect.chatgptWelcome.description":
     "Az OpenCode jogosult kérései használhatják az Ön ChatGPT-előfizetését.",

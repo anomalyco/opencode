@@ -938,8 +938,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Tidak dapat memulakan log masuk. Semak sambungan pelayan anda dan cuba lagi.",
   "provider.connect.models.title": "Disambungkan ke {{provider}}",
-  "provider.connect.models.description": "Pilih model untuk bermula. Anda boleh menukar model pada bila-bila masa.",
-  "provider.connect.models.available": "Model tersedia",
   "provider.connect.chatgptWelcome.title": "ChatGPT disambungkan",
   "provider.connect.chatgptWelcome.description":
     "Permintaan yang layak dalam OpenCode boleh menggunakan pelan ChatGPT anda.",

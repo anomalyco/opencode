@@ -936,8 +936,6 @@ export const dict = {
   "provider.connect.console.statusFailed": "Kundi ikki kanna heimildina. Kanna sambandið við ambætaran og royn aftur.",
   "provider.connect.console.startFailed": "Kundi ikki byrja innritanina. Kanna sambandið við ambætaran og royn aftur.",
   "provider.connect.models.title": "Tengt við {{provider}}",
-  "provider.connect.models.description": "Vel eitt modell at byrja við. Tú kanst skifta modell nær tú vilt.",
-  "provider.connect.models.available": "Tøk modell",
   "provider.connect.chatgptWelcome.title": "ChatGPT tengt",
   "provider.connect.chatgptWelcome.description": "Hóskandi umbønir í OpenCode kunnu brúka ChatGPT-ætlanina hjá tær.",
   "provider.connect.chatgptWelcome.usage": "Umsit nýtslu í ChatGPT-innstillingunum",

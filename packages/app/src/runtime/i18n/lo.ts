@@ -926,8 +926,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "ບໍ່ສາມາດເລີ່ມການເຂົ້າສູ່ລະບົບໄດ້. ກວດສອບການເຊື່ອມຕໍ່ເຊີບເວີຂອງທ່ານ ແລ້ວລອງອີກຄັ້ງ.",
   "provider.connect.models.title": "ເຊື່ອມຕໍ່ກັບ {{provider}} ແລ້ວ",
-  "provider.connect.models.description": "ເລືອກຕົວແບບເພື່ອເລີ່ມຕົ້ນ. ທ່ານສາມາດປ່ຽນຕົວແບບໄດ້ທຸກເວລາ.",
-  "provider.connect.models.available": "ຕົວແບບທີ່ມີໃຫ້ໃຊ້",
   "provider.connect.chatgptWelcome.title": "ເຊື່ອມຕໍ່ ChatGPT ແລ້ວ",
   "provider.connect.chatgptWelcome.description": "ຄຳຂໍທີ່ມີສິດໃນ OpenCode ສາມາດໃຊ້ແພັກເກດ ChatGPT ຂອງທ່ານໄດ້.",
   "provider.connect.chatgptWelcome.usage": "ຈັດການການນຳໃຊ້ໃນການຕັ້ງຄ່າ ChatGPT",

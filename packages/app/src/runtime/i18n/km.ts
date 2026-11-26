@@ -930,8 +930,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "មិនអាចចាប់ផ្តើមការចូលគណនីបានទេ។ ពិនិត្យការតភ្ជាប់ម៉ាស៊ីនមេរបស់អ្នក ហើយព្យាយាមម្តងទៀត។",
   "provider.connect.models.title": "បានភ្ជាប់ទៅ {{provider}}",
-  "provider.connect.models.description": "ជ្រើសម៉ូដែលដើម្បីចាប់ផ្តើម។ អ្នកអាចប្តូរម៉ូដែលបានគ្រប់ពេល។",
-  "provider.connect.models.available": "ម៉ូដែលដែលអាចប្រើបាន",
   "provider.connect.chatgptWelcome.title": "បានភ្ជាប់ ChatGPT",
   "provider.connect.chatgptWelcome.description": "សំណើដែលមានសិទ្ធិនៅក្នុង OpenCode អាចប្រើគម្រោង ChatGPT របស់អ្នក។",
   "provider.connect.chatgptWelcome.usage": "គ្រប់គ្រងការប្រើប្រាស់ក្នុងការកំណត់ ChatGPT",

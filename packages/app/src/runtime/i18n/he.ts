@@ -930,8 +930,6 @@ export const dict = {
   "provider.connect.console.statusFailed": "לא ניתן לבדוק את ההרשאה. בדוק את החיבור לשרת ונסה שוב.",
   "provider.connect.console.startFailed": "לא ניתן להתחיל את ההתחברות. בדוק את החיבור לשרת ונסה שוב.",
   "provider.connect.models.title": "מחובר ל-{{provider}}",
-  "provider.connect.models.description": "בחר מודל להתחלה. אפשר להחליף מודל בכל עת.",
-  "provider.connect.models.available": "מודלים זמינים",
   "provider.connect.chatgptWelcome.title": "ChatGPT מחובר",
   "provider.connect.chatgptWelcome.description": "בקשות מתאימות ב-OpenCode יכולות להשתמש בתוכנית ChatGPT שלך.",
   "provider.connect.chatgptWelcome.usage": "נהל את השימוש בהגדרות ChatGPT",

@@ -1034,8 +1034,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Не удалось начать вход. Проверьте подключение к серверу и повторите попытку.",
   "provider.connect.models.title": "Подключено к {{provider}}",
-  "provider.connect.models.description": "Выберите модель для начала. Сменить модель можно в любой момент.",
-  "provider.connect.models.available": "Доступные модели",
   "provider.connect.chatgptWelcome.title": "ChatGPT подключён",
   "provider.connect.chatgptWelcome.description": "Подходящие запросы в OpenCode могут использовать ваш план ChatGPT.",
   "provider.connect.chatgptWelcome.usage": "Управляйте использованием в настройках ChatGPT",

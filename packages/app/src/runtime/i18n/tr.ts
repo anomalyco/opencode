@@ -1014,8 +1014,6 @@ export const dict = {
     "Yetkilendirme kontrol edilemedi. Sunucu bağlantınızı kontrol edip tekrar deneyin.",
   "provider.connect.console.startFailed": "Oturum açma başlatılamadı. Sunucu bağlantınızı kontrol edip tekrar deneyin.",
   "provider.connect.models.title": "{{provider}} bağlandı",
-  "provider.connect.models.description": "Başlamak için bir model seçin. Modeli istediğiniz zaman değiştirebilirsiniz.",
-  "provider.connect.models.available": "Kullanılabilir modeller",
   "provider.connect.chatgptWelcome.title": "ChatGPT bağlandı",
   "provider.connect.chatgptWelcome.description": "OpenCode'daki uygun istekler ChatGPT planınızı kullanabilir.",
   "provider.connect.chatgptWelcome.usage": "Kullanımı ChatGPT ayarlarından yönetin",

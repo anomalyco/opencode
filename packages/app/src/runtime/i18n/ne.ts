@@ -942,8 +942,6 @@ export const dict = {
     "प्राधिकरण जाँच गर्न सकिएन। आफ्नो सर्भर जडान जाँच गरी फेरि प्रयास गर्नुहोस्।",
   "provider.connect.console.startFailed": "साइन इन सुरु गर्न सकिएन। आफ्नो सर्भर जडान जाँच गरी फेरि प्रयास गर्नुहोस्।",
   "provider.connect.models.title": "{{provider}} मा जडान भयो",
-  "provider.connect.models.description": "सुरु गर्न एउटा मोडेल छान्नुहोस्। तपाईं जुनसुकै बेला मोडेल बदल्न सक्नुहुन्छ।",
-  "provider.connect.models.available": "उपलब्ध मोडेलहरू",
   "provider.connect.chatgptWelcome.title": "ChatGPT जडान भयो",
   "provider.connect.chatgptWelcome.description":
     "OpenCode का योग्य अनुरोधहरूले तपाईंको ChatGPT योजना प्रयोग गर्न सक्छन्।",

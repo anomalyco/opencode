@@ -959,8 +959,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "ནང་བསྐྱོད་འགོ་བཙུགས་མ་ཚུགས། ཁྱོད་ཀྱི་སར་བར་མཐུད་ལམ་ཞིབ་དཔྱད་འབད་ཞིནམ་ལས་ ལོག་འབད་རྩོལ་བསྐྱེད།",
   "provider.connect.models.title": "{{provider}} ལུ་མཐུད་ཡོདཔ།",
-  "provider.connect.models.description": "འགོ་བཙུགས་ནིའི་དོན་ལུ་ དཔེ་ཚད་ཅིག་གདམ་ཁ་རྐྱབས། དཔེ་ཚད་ནམ་རང་ཡང་སོར་ཚུགས།",
-  "provider.connect.models.available": "འཐོབ་ཚུགས་པའི་དཔེ་ཚད་ཚུ།",
   "provider.connect.chatgptWelcome.title": "ChatGPT མཐུད་ཡོདཔ།",
   "provider.connect.chatgptWelcome.description":
     "OpenCode ནང་གི་ འོས་འབབ་ཅན་གྱི་ཞུ་བ་ཚུ་གིས་ ཁྱོད་ཀྱི་ ChatGPT འཆར་གཞི་ལག་ལེན་འཐབ་ཚུགས།",

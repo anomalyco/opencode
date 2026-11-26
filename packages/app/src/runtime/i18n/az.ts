@@ -945,8 +945,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Girişi başlatmaq mümkün olmadı. Server bağlantınızı yoxlayıb yenidən cəhd edin.",
   "provider.connect.models.title": "{{provider}} qoşuldu",
-  "provider.connect.models.description": "Başlamaq üçün model seçin. Modeli istənilən vaxt dəyişə bilərsiniz.",
-  "provider.connect.models.available": "Mövcud modellər",
   "provider.connect.chatgptWelcome.title": "ChatGPT qoşuldu",
   "provider.connect.chatgptWelcome.description": "OpenCode-dakı uyğun sorğular ChatGPT planınızdan istifadə edə bilər.",
   "provider.connect.chatgptWelcome.usage": "İstifadəni ChatGPT tənzimləmələrində idarə edin",

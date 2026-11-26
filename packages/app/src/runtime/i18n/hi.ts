@@ -944,8 +944,6 @@ export const dict = {
     "प्राधिकरण की जाँच नहीं हो सकी। अपना सर्वर कनेक्शन जाँचें और पुनः प्रयास करें।",
   "provider.connect.console.startFailed": "साइन इन शुरू नहीं हो सका। अपना सर्वर कनेक्शन जाँचें और पुनः प्रयास करें।",
   "provider.connect.models.title": "{{provider}} से कनेक्ट हो गया",
-  "provider.connect.models.description": "शुरू करने के लिए एक मॉडल चुनें। मॉडल कभी भी बदला जा सकता है।",
-  "provider.connect.models.available": "उपलब्ध मॉडल",
   "provider.connect.chatgptWelcome.title": "ChatGPT कनेक्ट हो गया",
   "provider.connect.chatgptWelcome.description": "OpenCode में योग्य अनुरोध आपके ChatGPT प्लान का उपयोग कर सकते हैं।",
   "provider.connect.chatgptWelcome.usage": "ChatGPT सेटिंग्स में उपयोग प्रबंधित करें",

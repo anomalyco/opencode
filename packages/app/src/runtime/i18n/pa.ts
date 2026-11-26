@@ -950,8 +950,6 @@ export const dict = {
   "provider.connect.console.statusFailed": "اجازت دی جانچ نئیں ہو سکی۔ اپنا سرور کنکشن چیک کرو تے فیر کوشش کرو۔",
   "provider.connect.console.startFailed": "سائن ان شروع نئیں ہو سکیا۔ اپنا سرور کنکشن چیک کرو تے فیر کوشش کرو۔",
   "provider.connect.models.title": "⁨{{provider}}⁩ نال جڑ گئے",
-  "provider.connect.models.description": "شروع کرن لئی اک ماڈل چنو۔ تسیں کدے وی ماڈل بدل سکدے او۔",
-  "provider.connect.models.available": "دستیاب ماڈل",
   "provider.connect.chatgptWelcome.title": "ChatGPT جڑ گیا",
   "provider.connect.chatgptWelcome.description": "OpenCode وچ اہل درخواستاں تہاڈا ChatGPT پلان ورت سکدیاں نیں۔",
   "provider.connect.chatgptWelcome.usage": "ChatGPT دیاں ترتیبات وچ ورتوں سنبھالو",

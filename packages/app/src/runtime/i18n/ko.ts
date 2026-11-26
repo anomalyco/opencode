@@ -942,8 +942,6 @@ export const dict = {
   "provider.connect.console.statusFailed": "인증 상태를 확인할 수 없습니다. 서버 연결을 확인한 후 다시 시도하세요.",
   "provider.connect.console.startFailed": "로그인을 시작할 수 없습니다. 서버 연결을 확인한 후 다시 시도하세요.",
   "provider.connect.models.title": "{{provider}}에 연결됨",
-  "provider.connect.models.description": "시작할 모델을 선택하세요. 모델은 언제든지 바꿀 수 있습니다.",
-  "provider.connect.models.available": "사용 가능한 모델",
   "provider.connect.chatgptWelcome.title": "ChatGPT 연결됨",
   "provider.connect.chatgptWelcome.description": "OpenCode의 해당 요청에 ChatGPT 플랜을 사용할 수 있습니다.",
   "provider.connect.chatgptWelcome.usage": "ChatGPT 설정에서 사용량 관리",

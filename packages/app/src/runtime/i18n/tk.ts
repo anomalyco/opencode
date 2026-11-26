@@ -933,8 +933,6 @@ export const dict = {
     "Ygtyýarlandyrmany barlap bolmady. Serwer birikmäňizi barlaň we täzeden synanyşyň.",
   "provider.connect.console.startFailed": "Girişi başlap bolmady. Serwer birikmäňizi barlaň we täzeden synanyşyň.",
   "provider.connect.models.title": "{{provider}} bilen birikdirildi",
-  "provider.connect.models.description": "Başlamak üçin model saýlaň. Modeli islän wagtyňyz çalşyp bilersiňiz.",
-  "provider.connect.models.available": "Elýeterli modeller",
   "provider.connect.chatgptWelcome.title": "ChatGPT birikdirildi",
   "provider.connect.chatgptWelcome.description": "OpenCode-daky laýyk haýyşlar ChatGPT meýilnamaňyzy ulanyp biler.",
   "provider.connect.chatgptWelcome.usage": "Ulanylyşy ChatGPT sazlamalarynda dolandyryň",

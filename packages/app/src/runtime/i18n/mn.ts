@@ -946,8 +946,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Нэвтрэлтийг эхлүүлж чадсангүй. Серверийн холболтоо шалгаад дахин оролдоно уу.",
   "provider.connect.models.title": "{{provider}}-д холбогдлоо",
-  "provider.connect.models.description": "Эхлэх загвараа сонгоно уу. Загвараа хэзээ ч сольж болно.",
-  "provider.connect.models.available": "Боломжтой загварууд",
   "provider.connect.chatgptWelcome.title": "ChatGPT холбогдлоо",
   "provider.connect.chatgptWelcome.description":
     "OpenCode дахь шаардлага хангасан хүсэлтүүд таны ChatGPT багцыг ашиглаж болно.",

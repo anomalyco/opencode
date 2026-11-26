@@ -981,8 +981,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Nie udało się rozpocząć logowania. Sprawdź połączenie z serwerem i spróbuj ponownie.",
   "provider.connect.models.title": "Połączono z {{provider}}",
-  "provider.connect.models.description": "Wybierz model na start. Możesz zmienić model w dowolnym momencie.",
-  "provider.connect.models.available": "Dostępne modele",
   "provider.connect.chatgptWelcome.title": "Połączono ChatGPT",
   "provider.connect.chatgptWelcome.description":
     "Kwalifikujące się żądania w OpenCode mogą korzystać z Twojego planu ChatGPT.",

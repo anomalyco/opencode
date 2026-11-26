@@ -951,8 +951,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Воридшавиро оғоз карда натавонист. Пайвасти серверро санҷед ва аз нав кӯшиш кунед.",
   "provider.connect.models.title": "Ба {{provider}} пайваст шуд",
-  "provider.connect.models.description": "Барои оғоз моделеро интихоб кунед. Моделҳоро ҳар вақт иваз карда метавонед.",
-  "provider.connect.models.available": "Моделҳои дастрас",
   "provider.connect.chatgptWelcome.title": "ChatGPT пайваст шуд",
   "provider.connect.chatgptWelcome.description":
     "Дархостҳои мувофиқ дар OpenCode метавонанд нақшаи ChatGPT-и шуморо истифода баранд.",

@@ -940,8 +940,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Kirjautumista ei voitu aloittaa. Tarkista palvelinyhteys ja yritä uudelleen.",
   "provider.connect.models.title": "Yhdistetty: {{provider}}",
-  "provider.connect.models.description": "Valitse malli, jolla aloitat. Voit vaihtaa mallia milloin tahansa.",
-  "provider.connect.models.available": "Saatavilla olevat mallit",
   "provider.connect.chatgptWelcome.title": "ChatGPT yhdistetty",
   "provider.connect.chatgptWelcome.description": "Kelpoiset OpenCoden pyynnöt voivat käyttää ChatGPT-tilaustasi.",
   "provider.connect.chatgptWelcome.usage": "Hallitse käyttöä ChatGPT:n asetuksissa",

@@ -970,8 +970,6 @@ export const dict = {
   "provider.connect.console.statusFailed": "无法检查授权状态。请检查服务器连接后重试。",
   "provider.connect.console.startFailed": "无法开始登录。请检查服务器连接后重试。",
   "provider.connect.models.title": "已连接到 {{provider}}",
-  "provider.connect.models.description": "选择一个模型开始使用。你可以随时切换模型。",
-  "provider.connect.models.available": "可用模型",
   "provider.connect.chatgptWelcome.title": "ChatGPT 已连接",
   "provider.connect.chatgptWelcome.description": "OpenCode 中符合条件的请求可以使用你的 ChatGPT 订阅。",
   "provider.connect.chatgptWelcome.usage": "在 ChatGPT 设置中管理用量",

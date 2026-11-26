@@ -947,9 +947,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Kirishni boshlab bo‘lmadi. Server ulanishini tekshiring va qayta urinib ko‘ring.",
   "provider.connect.models.title": "{{provider}} ga ulandi",
-  "provider.connect.models.description":
-    "Boshlash uchun modelni tanlang. Modelni istalgan vaqtda almashtirishingiz mumkin.",
-  "provider.connect.models.available": "Mavjud modellar",
   "provider.connect.chatgptWelcome.title": "ChatGPT ulandi",
   "provider.connect.chatgptWelcome.description":
     "OpenCode’dagi mos so‘rovlar ChatGPT tarifingizdan foydalanishi mumkin.",

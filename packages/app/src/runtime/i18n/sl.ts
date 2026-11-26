@@ -968,8 +968,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "Prijave ni bilo mogoče začeti. Preverite povezavo s strežnikom in poskusite znova.",
   "provider.connect.models.title": "Povezano s ponudnikom {{provider}}",
-  "provider.connect.models.description": "Izberite model za začetek. Modele lahko kadar koli zamenjate.",
-  "provider.connect.models.available": "Razpoložljivi modeli",
   "provider.connect.chatgptWelcome.title": "ChatGPT je povezan",
   "provider.connect.chatgptWelcome.description": "Ustrezne zahteve v OpenCode lahko uporabljajo vaš paket ChatGPT.",
   "provider.connect.chatgptWelcome.usage": "Porabo upravljajte v nastavitvah ChatGPT",

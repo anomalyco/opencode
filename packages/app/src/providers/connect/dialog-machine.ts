@@ -62,7 +62,6 @@ export type ProviderDialogStep =
   | {
       readonly kind: "models"
       readonly selectedModel: string
-      readonly collapsed: Readonly<Record<string, boolean>>
     }
 
 /** What the server lists for the selected integration. The server lists the active account first. */
@@ -143,8 +142,6 @@ export type ProviderDialogEvent =
       readonly firstModel: string | undefined
     }
   | { readonly type: "link.copied"; readonly session: number; readonly attemptID: string; readonly copied: boolean }
-  | { readonly type: "model.selected"; readonly modelKey: string }
-  | { readonly type: "group.collapsed"; readonly providerID: string; readonly collapsed: boolean }
   | { readonly type: "model.confirmed"; readonly selection: ModelChoice }
   /** A breadcrumb in the header: the provider list, or the provider's accounts or sign-in methods. */
   | { readonly type: "navigate"; readonly target: ProviderBackTarget }
@@ -279,18 +276,6 @@ export function transitionProviderDialog(
   if (step.kind === "claude") return claude(state, step, event)
 
   if (step.kind === "models") {
-    if (event.type === "model.selected")
-      return unchanged({ ...state, step: { ...step, selectedModel: event.modelKey } })
-
-    if (event.type === "group.collapsed") {
-      if (!!step.collapsed[event.providerID] === event.collapsed) return unchanged(state)
-
-      return unchanged({
-        ...state,
-        step: { ...step, collapsed: { ...step.collapsed, [event.providerID]: event.collapsed } },
-      })
-    }
-
     if (event.type !== "model.confirmed") return unchanged(state)
 
     return {
@@ -350,7 +335,7 @@ export type ProviderDialogCrumb =
 
 export type ProviderDialogBody =
   | { readonly kind: "picker" }
-  | { readonly kind: "models"; readonly selectedModel: string; readonly collapsed: Readonly<Record<string, boolean>> }
+  | { readonly kind: "models"; readonly selectedModel: string }
   | {
       readonly kind: "accounts"
       readonly action: AccountStepAction
@@ -408,7 +393,7 @@ function selectBody(
 
   const step = state.step
 
-  if (step.kind === "models") return { kind: "models", selectedModel: step.selectedModel, collapsed: step.collapsed }
+  if (step.kind === "models") return { kind: "models", selectedModel: step.selectedModel }
 
   if (step.kind === "accounts") {
     const busy = step.action.type === "activating" || step.action.type === "removing"
@@ -776,7 +761,7 @@ function finish(
 
   if (firstModel)
     return {
-      state: { ...state, step: { kind: "models", selectedModel: firstModel, collapsed: {} } },
+      state: { ...state, step: { kind: "models", selectedModel: firstModel } },
       effects: announce,
     }
 

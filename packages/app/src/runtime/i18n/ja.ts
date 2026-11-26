@@ -950,8 +950,6 @@ export const dict = {
   "provider.connect.console.startFailed":
     "サインインを開始できませんでした。サーバーへの接続を確認して、再試行してください。",
   "provider.connect.models.title": "{{provider}}に接続しました",
-  "provider.connect.models.description": "最初に使用するモデルを選択してください。モデルはいつでも切り替えられます。",
-  "provider.connect.models.available": "利用可能なモデル",
   "provider.connect.chatgptWelcome.title": "ChatGPTが接続されました",
   "provider.connect.chatgptWelcome.description": "OpenCodeの対象リクエストでChatGPTプランを利用できます。",
   "provider.connect.chatgptWelcome.usage": "ChatGPTの設定で使用量を管理",
