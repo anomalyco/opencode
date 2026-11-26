@@ -12,6 +12,7 @@ import { Job } from "@opencode/core/job"
 import { LocationActivity } from "@opencode/core/location-activity"
 import { LocationServiceMap } from "@opencode/core/location-services"
 import { Plugin } from "@opencode/core/plugin"
+import { PluginHooks } from "@opencode/core/plugin/hooks"
 import { Rpc } from "@opencode/core/rpc"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
@@ -38,6 +39,10 @@ const activityClock: Clock.Clock = {
   sleep: (duration) => live.sleep(duration),
 }
 
+// A step's wait for its session's desktop runs on this clock, which never ends a sleep: such a step goes on only once
+// the desktop is attached, however slow the machine is.
+const unending: Clock.Clock = { ...live, sleep: () => Effect.never }
+
 const it = testEffect(
   AppNodeBuilder.build(
     LayerNode.group([Database.node, Bus.node, Session.node, LocationServiceMap.node, LocationActivity.node]),
@@ -58,7 +63,7 @@ const it = testEffect(
 )
 
 it.live(
-  "idle eviction ends the browser attachment and permits a fresh attachment",
+  "idle eviction ends the browser attachment, and the session's next step waits for a fresh one",
   () =>
     Effect.gen(function* () {
       const dir = yield* tmpdirScoped()
@@ -91,8 +96,20 @@ it.live(
 
       const replacement = yield* locations.contextEffect(ref)
       yield* Plugin.awaitActivation.pipe(Effect.provideContext(replacement))
+      // The desktop attaches again once it sees the session run. The step that starts that run selects its tools
+      // only after it did, so the step lists the browser.
+      const step = yield* Context.get(replacement, PluginHooks.Service)
+        .trigger("session", "experimental.step.before", { sessionID: session.id })
+        .pipe(Effect.provideService(Clock.Clock, unending), Effect.forkScoped({ startImmediately: true }))
+      expect(step.pollUnsafe()).toBeUndefined()
       const fresh = Context.get(replacement, Rpc.Service).client(Browser.Definition)
       const resumed = yield* fresh.attach({ ...attachment, version: 4 }).pipe(Effect.forkScoped)
+      yield* Fiber.join(step)
+      expect((yield* sessions.get(session.id)).permissions).toContainEqual({
+        action: "browser",
+        resource: "*",
+        effect: "allow",
+      })
       yield* fresh.state(state).pipe(
         Effect.retry({
           while: (error) => "type" in error && error.type === "unavailable",

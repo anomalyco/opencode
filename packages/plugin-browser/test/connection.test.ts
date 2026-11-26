@@ -6,7 +6,9 @@ import type { PermissionEvaluation } from "@opencode/plugin/effect/permission"
 import type { Permission } from "@opencode/schema/permission"
 import { Tool } from "@opencode/schema/tool"
 import { Effect, Fiber, Schedule, Stream } from "effect"
+import { TestClock } from "effect/testing"
 import { BrowserConnection } from "../src/connection.js"
+import { BrowserMachine } from "../src/machine.js"
 import { Browser } from "../src/rpc.js"
 import { BrowserTools } from "../src/tools.js"
 
@@ -41,6 +43,7 @@ function plugin(input: {
   const storage = new Map(Object.entries(input.storage ?? {}))
   const hooks: ((event: PermissionEvaluation) => Effect.Effect<void>)[] = []
   const prompts: ((event: { sessionID: string }) => Effect.Effect<void>)[] = []
+  const steps: ((event: { sessionID: string }) => Effect.Effect<void>)[] = []
   const tools: ToolDefinition[] = []
   const asserts: AssertCall[] = []
   const controls: Control[] = []
@@ -72,7 +75,8 @@ function plugin(input: {
 
           if (row) row.permissions = request.permissions
         }),
-      hook: (_name: "prompt", hook: (event: { sessionID: string }) => Effect.Effect<void>) => Effect.sync(() => void prompts.push(hook)),
+      hook: (name: "prompt" | "experimental.step.before", hook: (event: { sessionID: string }) => Effect.Effect<void>) =>
+        Effect.sync(() => void (name === "prompt" ? prompts : steps).push(hook)),
     },
     storage: {
       scan: (request: { prefix: string }) =>
@@ -124,6 +128,11 @@ function plugin(input: {
     commands: () => controls.filter((control) => control.type === "command").length,
     evaluate: (event: PermissionEvaluation) => Effect.forEach(hooks, (hook) => hook(event), { discard: true }).pipe(Effect.as(event)),
     prompt: (sessionID: string) => Effect.forEach(prompts, (hook) => hook({ sessionID }), { discard: true }),
+    /** What core runs before a step of `sessionID` selects its tools. */
+    step: (sessionID: string) => Effect.forEach(steps, (hook) => hook({ sessionID }), { discard: true }),
+    /** A desktop's `attach` call for `sessionID`, without waiting for its handshake. */
+    connect: (sessionID: string) =>
+      Effect.forkChild(rpc.handlers!.attach({ sessionID, connectionID: crypto.randomUUID(), version: 4 }, call), { startImmediately: true }),
     /** Attaches a desktop to `sessionID` and reports one open tab; interrupting the fiber detaches it. */
     attach: (sessionID: string) =>
       Effect.gen(function* () {
@@ -365,7 +374,8 @@ describe("grants", () => {
 
     expect([...fake.sessions.values()].map((row) => [row.id, row.permissions?.length])).toEqual([["ses_dead", 1], ["ses_live", 3], ["ses_remote", 3], ["ses_elsewhere", 3]])
     expect(fake.sessions.get("ses_dead")?.permissions).toEqual([rule("*", "deny", "bash")])
-    expect([...fake.storage.keys()]).toEqual(["grant:ses_live", "grant:ses_remote", "grant:ses_elsewhere"])
+    // Its desktop was attached when its server died, so the session is expected.
+    expect([...fake.storage.keys()]).toEqual(["grant:ses_live", "grant:ses_remote", "grant:ses_elsewhere", "expect:ses_dead"])
   })
 
   test("attaching grants the session, and detaching revokes it and forgets its owner", async () => {
@@ -406,5 +416,72 @@ describe("grants", () => {
         expect(fake.sessions.get("ses_viewed")?.permissions).toEqual(grant)
       }).pipe(Effect.scoped),
     )
+  })
+})
+
+// The server restarts, or unloads a location that went idle, with a desktop attached. That desktop attaches again once
+// it sees the session run, a moment after the step that starts the run has selected its tools: without the grant, so
+// without the browser. The step waits for the desktop the session expects instead, for a bounded time and once.
+describe("a step and the desktop its session expects", () => {
+  const expected = (directory = "/workspace", at = Date.now()) => ({ location: { directory }, at })
+
+  // On the test clock: only the test moves time, so a step that goes on did so because the desktop attached.
+  test("the step waits until the desktop holds the grant again", async () => {
+    const fake = plugin({ directory: "/workspace", sessions: [session("ses_a", "/workspace")], storage: { "expect:ses_a": expected() } })
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* BrowserConnection.make(fake.context)
+        const step = yield* Effect.forkChild(fake.step("ses_a"), { startImmediately: true })
+        expect(step.pollUnsafe()).toBeUndefined()
+
+        yield* fake.connect("ses_a")
+        yield* Fiber.join(step)
+        expect(fake.sessions.get("ses_a")?.permissions).toEqual(grant)
+        expect(fake.storage.has("expect:ses_a")).toBe(false)
+      }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+    )
+  })
+
+  test("a desktop that does not come back costs the next step its grace, and no step after it", async () => {
+    const fake = plugin({ directory: "/workspace", sessions: [session("ses_a", "/workspace")], storage: { "expect:ses_a": expected() } })
+
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* BrowserConnection.make(fake.context)
+        const first = yield* Effect.forkChild(fake.step("ses_a"), { startImmediately: true })
+        yield* TestClock.adjust(BrowserMachine.ATTACH_GRACE_MS - 1)
+        expect(first.pollUnsafe()).toBeUndefined()
+        yield* TestClock.adjust(1)
+        yield* Fiber.join(first)
+        expect(fake.storage.has("expect:ses_a")).toBe(false)
+
+        // Time stands still here: a second wait would never end.
+        yield* fake.step("ses_a")
+      }).pipe(Effect.scoped, Effect.provide(TestClock.layer())),
+    )
+  })
+
+  test("an attachment that ends leaves its session expected for the plugin's next instance", async () => {
+    const fake = plugin({
+      directory: "/workspace",
+      sessions: [session("ses_a", "/workspace")],
+      storage: { "expect:ses_old": expected("/workspace", 0), "expect:ses_elsewhere": expected("/other") },
+    })
+
+    const loaded = await Effect.runPromise(
+      Effect.gen(function* () {
+        yield* BrowserConnection.make(fake.context)
+        yield* Fiber.interrupt(yield* fake.attach("ses_a"))
+        yield* until(() => fake.storage.has("expect:ses_a"))
+        expect(fake.sessions.get("ses_a")?.permissions).toEqual([])
+
+        return yield* BrowserConnection.loadExpectations(fake.context)
+      }).pipe(Effect.scoped),
+    )
+
+    // One that did not run for the whole TTL was forgotten when the plugin started; another location's is not ours.
+    expect<string[]>(loaded).toEqual(["ses_a"])
+    expect([...fake.storage.keys()].toSorted()).toEqual(["expect:ses_a", "expect:ses_elsewhere"])
   })
 })

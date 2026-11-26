@@ -9,7 +9,7 @@ import { Location } from "@opencode/schema/location"
 import type { Permission } from "@opencode/schema/permission"
 import { Session } from "@opencode/schema/session"
 import { Tool } from "@opencode/schema/tool"
-import { Cause, Deferred, Duration, Effect, Exit, Option, Schema, Scope, Semaphore, Stream } from "effect"
+import { Cause, Clock, Deferred, Duration, Effect, Exit, Option, Schema, Scope, Semaphore, Stream } from "effect"
 import { BrowserMachine } from "./machine.js"
 import { Browser } from "./rpc.js"
 import { BrowserTunnel } from "./tunnel.js"
@@ -27,40 +27,87 @@ const GrantOwner = Schema.Struct({ host: Schema.String, pid: Schema.Number, loca
 const GRANT_PREFIX = "grant:"
 
 /**
- * A crash or SIGKILL skips the revokes, so a session keeps its grant with no attachment behind it. Revokes the grants
- * this location's servers recorded, except those of a process that still runs: several servers can share one
- * database, and another one's attachment may be live. Runs before the RPC registers, so no attach here can race it.
+ * A session a desktop was attached to and that has not run since, stored as `expect:<sessionID>` when that attachment
+ * ended, until the session runs, a desktop attaches or `EXPECTATION_TTL_MS` passes.
  */
-export const reconcileStaleGrants = Effect.fn("BrowserConnection.reconcileStaleGrants")(function* (ctx: {
+const Expectation = Schema.Struct({ location: Location.Ref, at: Schema.Finite })
+
+const EXPECT_PREFIX = "expect:"
+
+type Stored = {
   readonly session: Pick<Context["session"], "get" | "update">
-  readonly storage: Pick<Context["storage"], "scan" | "remove">
+  readonly storage: Pick<Context["storage"], "scan" | "set" | "remove">
   readonly location: Pick<Context["location"], "directory" | "workspaceID">
-}) {
-  const revoke = (entry: { readonly key: string; readonly value: Schema.Json }) => {
-    const owner = Schema.decodeUnknownOption(GrantOwner)(entry.value)
-    if (
-      Option.isNone(owner) ||
-      owner.value.location.directory !== ctx.location.directory ||
-      owner.value.location.workspaceID !== ctx.location.workspaceID ||
-      running(owner.value)
-    )
-      return Effect.void
-    return writePermissions(ctx, Session.ID.make(entry.key.slice(GRANT_PREFIX.length)), false).pipe(
-      Effect.ignore,
-      Effect.andThen(ctx.storage.remove(entry.key)),
-    )
-  }
+}
+
+/** This plugin's location, as its stored records name it. */
+const locationOf = (ctx: Pick<Stored, "location">): typeof Location.Ref.Encoded => ({
+  directory: ctx.location.directory,
+  ...(ctx.location.workspaceID === undefined ? {} : { workspaceID: ctx.location.workspaceID }),
+})
+
+const here = (ctx: Pick<Stored, "location">, location: Location.Ref) =>
+  location.directory === ctx.location.directory && location.workspaceID === ctx.location.workspaceID
+
+/** Runs `each` on every stored entry under `prefix`, a page at a time. */
+const scan = (
+  ctx: Pick<Stored, "storage">,
+  prefix: string,
+  each: (entry: { readonly key: string; readonly value: Schema.Json }) => Effect.Effect<void>,
+) => {
   const page = (after?: string): Effect.Effect<void> =>
     ctx.storage
-      .scan({ prefix: GRANT_PREFIX, after })
+      .scan({ prefix, after })
       .pipe(
         Effect.flatMap((result) =>
-          Effect.forEach(result.entries, revoke, { discard: true }).pipe(
+          Effect.forEach(result.entries, each, { discard: true }).pipe(
             Effect.andThen(result.next === undefined ? Effect.void : page(result.next)),
           ),
         ),
       )
-  yield* page()
+  return page()
+}
+
+const expect = (ctx: Pick<Stored, "storage" | "location">, sessionID: Session.ID) =>
+  Clock.currentTimeMillis.pipe(
+    Effect.flatMap((at) => ctx.storage.set(EXPECT_PREFIX + sessionID, { location: locationOf(ctx), at })),
+  )
+
+/**
+ * A crash or SIGKILL skips the revokes, so a session keeps its grant with no attachment behind it. Revokes the grants
+ * this location's servers recorded, except those of a process that still runs: several servers can share one
+ * database, and another one's attachment may be live. Such a session's desktop was attached when its server died, so
+ * the session is expected. Runs before the RPC registers, so no attach here can race it.
+ */
+export const reconcileStaleGrants = Effect.fn("BrowserConnection.reconcileStaleGrants")(function* (ctx: Stored) {
+  yield* scan(ctx, GRANT_PREFIX, (entry) => {
+    const owner = Schema.decodeUnknownOption(GrantOwner)(entry.value)
+    if (Option.isNone(owner) || !here(ctx, owner.value.location) || running(owner.value)) return Effect.void
+    const sessionID = Session.ID.make(entry.key.slice(GRANT_PREFIX.length))
+    return writePermissions(ctx, sessionID, false).pipe(
+      Effect.ignore,
+      Effect.andThen(ctx.storage.remove(entry.key)),
+      Effect.andThen(expect(ctx, sessionID)),
+    )
+  })
+})
+
+/**
+ * The sessions this location's earlier plugin instances left expected. One that has not run for `EXPECTATION_TTL_MS`
+ * is forgotten instead, so the records of sessions that never run again do not pile up.
+ */
+export const loadExpectations = Effect.fn("BrowserConnection.loadExpectations")(function* (
+  ctx: Pick<Stored, "storage" | "location">,
+) {
+  const now = yield* Clock.currentTimeMillis
+  const expected: Session.ID[] = []
+  yield* scan(ctx, EXPECT_PREFIX, (entry) => {
+    const record = Schema.decodeUnknownOption(Expectation)(entry.value)
+    if (Option.isNone(record) || !here(ctx, record.value.location)) return Effect.void
+    if (record.value.at + BrowserMachine.EXPECTATION_TTL_MS <= now) return ctx.storage.remove(entry.key)
+    return Effect.sync(() => void expected.push(Session.ID.make(entry.key.slice(EXPECT_PREFIX.length))))
+  })
+  return expected
 })
 
 export const make = Effect.fn("BrowserConnection.make")(function* (
@@ -112,9 +159,12 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
   // Permission syncs run here. Registered first, so it closes last: after disposal has drained the revokes.
   const work = yield* Scope.make()
   yield* Effect.addFinalizer((exit) => Scope.close(work, exit))
-  const machine = { state: BrowserMachine.createConnectionState() }
+  yield* reconcileStaleGrants(ctx)
+  const machine = { state: BrowserMachine.createConnectionState(yield* loadExpectations(ctx)) }
   const attachments = new Map<number, Attachment>()
   const requests = new Map<string, Deferred.Deferred<Browser.Result, Tool.Error>>()
+  // Steps that wait for their session's attachment, each until `notify-settled` or its grace runs out.
+  const waiting = new Map<Session.ID, Deferred.Deferred<void>>()
   const drained = Deferred.makeUnsafe<void>()
   // One event at a time, effects included, so controls reach the bus in transition order: `attached` before any
   // `command` of that attachment.
@@ -163,16 +213,18 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
         ).pipe(Effect.asVoid)
       })
     if (effect.type === "warn") return Effect.logWarning(effect.message, effect.error)
+    if (effect.type === "record-expectation") return expect(ctx, effect.sessionID)
+    if (effect.type === "forget-expectation") return ctx.storage.remove(EXPECT_PREFIX + effect.sessionID)
+    if (effect.type === "notify-settled")
+      return Effect.suspend(() => {
+        const settled = waiting.get(effect.sessionID)
+        if (!settled) return Effect.void
+        waiting.delete(effect.sessionID)
+        return Deferred.done(settled, Exit.void).pipe(Effect.asVoid)
+      })
     return Deferred.done(drained, Exit.void).pipe(Effect.asVoid)
   }
-  const owner: typeof GrantOwner.Encoded = {
-    host: hostname(),
-    pid: process.pid,
-    location: {
-      directory: ctx.location.directory,
-      ...(ctx.location.workspaceID === undefined ? {} : { workspaceID: ctx.location.workspaceID }),
-    },
-  }
+  const owner: typeof GrantOwner.Encoded = { host: hostname(), pid: process.pid, location: locationOf(ctx) }
   const syncPermissions = (effect: Extract<BrowserMachine.ConnectionEffect, { readonly type: "sync-permissions" }>) =>
     // The owner is recorded before the grant and forgotten after the revoke, so a stored grant always has one.
     (effect.allow
@@ -210,7 +262,6 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       ? Effect.succeed(attachment.tunnels)
       : Effect.fail(new Error("Browser attachment is unavailable; its network connections were closed."))
   }
-  yield* reconcileStaleGrants(ctx)
   const rpc: RpcRegistration<typeof Browser.Definition> = yield* ctx.rpc
     .register(Browser.Definition, {
       attach: (input, call) =>
@@ -332,6 +383,23 @@ export const make = Effect.fn("BrowserConnection.make")(function* (
       ),
       Effect.catchCause((cause) => Effect.logWarning("Browser permission revoke failed", cause)),
     ),
+  )
+  // A step lists the browser tools only if its session holds the grant when the step selects its tools. A step that
+  // would start just ahead of it waits here: for a desktop that is attaching, and once for one that is expected to
+  // attach again, as after the server restarted or unloaded the session's location. The grace that runs out ends the
+  // expectation, so no later step waits for a desktop that is gone.
+  yield* ctx.session.hook("experimental.step.before", (event) =>
+    Effect.suspend(() => {
+      if (!BrowserMachine.isAwaited(machine.state, event.sessionID)) return Effect.void
+      const settled = waiting.get(event.sessionID) ?? Deferred.makeUnsafe<void>()
+      waiting.set(event.sessionID, settled)
+      return Deferred.await(settled).pipe(
+        Effect.timeoutOrElse({
+          duration: Duration.millis(BrowserMachine.ATTACH_GRACE_MS),
+          orElse: () => dispatch({ type: "step.timed-out", sessionID: event.sessionID }),
+        }),
+      )
+    }),
   )
   // Registered last, so it runs first: attachments close and revokes drain while the RPC and `work` are still open.
   yield* Effect.addFinalizer(() => dispatch({ type: "disposed" }).pipe(Effect.andThen(Deferred.await(drained))))

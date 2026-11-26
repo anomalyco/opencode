@@ -230,6 +230,8 @@ const layer = Layer.effect(
     const prepareContext = Effect.fn("SessionRunner.prepareContext")(function* (sessionID: SessionSchema.ID) {
       // Plugins can reload mid-turn; each step and retry must read the settled agents, models and skills.
       yield* plugins.awaitActivation
+      // A plugin may settle Session state the selection reads, such as permissions a client is about to grant.
+      yield* hooks.trigger("session", "experimental.step.before", { sessionID })
       const selected = yield* context.select(sessionID)
       // A blocked initial instruction baseline must leave admitted input pending.
       yield* InstructionState.prepare(db, bus, selected.instructions, sessionID)

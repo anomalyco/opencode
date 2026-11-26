@@ -13,6 +13,15 @@ export const PERMISSION_SYNC_TIMEOUT_MS = 10_000
 /** How long a dispatched browser command may run before it times out and is cancelled on the desktop. */
 export const REQUEST_TIMEOUT_MS = 60_000
 
+/**
+ * How long a step may wait, before it selects its tools, for a desktop that is attaching to its session or is expected
+ * to attach again. Core gives an MCP server that is still connecting the same grace.
+ */
+export const ATTACH_GRACE_MS = 2_000
+
+/** How long a session stays `expected` while it does not run. A desktop that has not come back by then is not waited for. */
+export const EXPECTATION_TTL_MS = 7 * 24 * 60 * 60 * 1_000
+
 /** The browser tools and their skill, which an attachment allows together. */
 export const ACCESS = [
   { action: "browser", resource: "*" },
@@ -28,7 +37,12 @@ export type PermissionSync = { readonly attempt: number; readonly allow: boolean
  * - `attaching`: the desktop called `attach` as `attempt`. Its grant runs after any revoke in flight (`sync`); until it
  *   succeeds, no `attached` handshake is sent and no command is dispatched.
  * - `attached`: the session allows the browser and the desktop received `attached`; commands run.
- * - `revoking`: no attachment; `sync` settles, then a revoke follows unless the session was `deleted`.
+ * - `revoking`: no attachment; `sync` settles, then a revoke follows unless the session was `deleted`. With `expect`,
+ *   the session is `expected` once that revoke settles.
+ * - `expected`: no attachment and no sync in flight. A desktop was attached and the session has not run since, so that
+ *   desktop may attach again once it does: one the server cut off, as when it unloads the session's location or
+ *   restarts, attaches again when it sees the session run. The session's next step waits for that, `ATTACH_GRACE_MS`
+ *   at most, and the entry ends with that step or with the attachment.
  */
 export type SessionState =
   | {
@@ -44,9 +58,12 @@ export type SessionState =
       readonly browserState: Browser.State
       readonly pending: ReadonlyMap<string, Browser.Command>
     }
-  | { readonly status: "revoking"; readonly sync: PermissionSync; readonly deleted: boolean }
+  | { readonly status: "revoking"; readonly sync: PermissionSync; readonly deleted: boolean; readonly expect: boolean }
+  | { readonly status: "expected" }
 
 export type RevokingSession = Extract<SessionState, { readonly status: "revoking" }>
+
+type ExpectedSession = Extract<SessionState, { readonly status: "expected" }>
 
 type AttachingSession = Extract<SessionState, { readonly status: "attaching" }>
 
@@ -132,6 +149,8 @@ export type ConnectionEvent =
     }
   | { readonly type: "session.moved"; readonly sessionID: Session.ID }
   | { readonly type: "session.deleted"; readonly sessionID: Session.ID }
+  /** A step waited `ATTACH_GRACE_MS` for the session's attachment before it selected its tools, and went on without. */
+  | { readonly type: "step.timed-out"; readonly sessionID: Session.ID }
   | { readonly type: "disposed" }
 
 export type ConnectionEffect =
@@ -153,6 +172,11 @@ export type ConnectionEffect =
     }
   | { readonly type: "settle-request"; readonly requestID: string; readonly settlement: RequestSettlement }
   | { readonly type: "warn"; readonly message: string; readonly error: unknown }
+  /** Stores that the session is `expected`, for the plugin's next instance in this location. */
+  | { readonly type: "record-expectation"; readonly sessionID: Session.ID }
+  | { readonly type: "forget-expectation"; readonly sessionID: Session.ID }
+  /** No step waits for the session any more (`isAwaited`): a desktop attached, or none is expected. */
+  | { readonly type: "notify-settled"; readonly sessionID: Session.ID }
   /** The disposed plugin has no revoke left in flight. */
   | { readonly type: "notify-drained" }
 
@@ -166,8 +190,13 @@ type Step<S extends SessionState> = {
   readonly effects: readonly ConnectionEffect[]
 }
 
-export function createConnectionState(): ConnectionState {
-  return { status: "active", nextAttempt: 1, sessions: new Map() }
+/** `expected` are the sessions the plugin's earlier instances in this location left `expected`. */
+export function createConnectionState(expected: Iterable<Session.ID> = []): ConnectionState {
+  return {
+    status: "active",
+    nextAttempt: 1,
+    sessions: new Map(Array.from(expected, (sessionID) => [sessionID, { status: "expected" }])),
+  }
 }
 
 export function transitionConnection(state: ConnectionState, event: ConnectionEvent): ConnectionTransition {
@@ -195,9 +224,10 @@ export function transitionConnection(state: ConnectionState, event: ConnectionEv
     if (!step) return { state, effects: [] }
     const sessions = new Map(state.sessions)
 
-    if (step.entry) sessions.set(event.sessionID, step.entry)
+    // A disposed plugin keeps only its revokes: an expectation waits in storage for the next instance.
+    if (step.entry?.status === "revoking") sessions.set(event.sessionID, step.entry)
 
-    if (!step.entry) sessions.delete(event.sessionID)
+    if (step.entry?.status !== "revoking") sessions.delete(event.sessionID)
 
     return {
       state: { status: "disposed", nextAttempt: step.nextAttempt, sessions },
@@ -213,8 +243,12 @@ export function transitionConnection(state: ConnectionState, event: ConnectionEv
   if (step.entry) sessions.set(event.sessionID, step.entry)
 
   if (!step.entry) sessions.delete(event.sessionID)
+  const settled = awaited(entry) && !awaited(step.entry)
 
-  return { state: { status: "active", nextAttempt: step.nextAttempt, sessions }, effects: step.effects }
+  return {
+    state: { status: "active", nextAttempt: step.nextAttempt, sessions },
+    effects: settled ? [...step.effects, { type: "notify-settled", sessionID: event.sessionID }] : step.effects,
+  }
 }
 
 function transitionSession(
@@ -225,6 +259,8 @@ function transitionSession(
   if (event.type === "attach.started") return attach(entry, event, nextAttempt)
 
   if (!entry) return undefined
+
+  if (entry.status === "expected") return transitionExpected(event, nextAttempt)
 
   if (entry.status === "revoking") return transitionRevoking(entry, event, nextAttempt)
 
@@ -259,7 +295,9 @@ function attach(
   const effects: ConnectionEffect[] =
     entry?.status === "attached"
       ? [...failPending(entry), { type: "close-attachment", attempt: entry.attempt, outcome: "replaced" }]
-      : []
+      : entry?.status === "expected"
+        ? [{ type: "forget-expectation", sessionID: event.sessionID }]
+        : []
 
   return {
     entry: attaching(sync),
@@ -310,7 +348,7 @@ function transitionAttaching(
     const sync = { attempt: nextAttempt, allow: false }
 
     return {
-      entry: { status: "revoking", sync, deleted: false },
+      entry: { status: "revoking", sync, deleted: false, expect: false },
       nextAttempt: nextAttempt + 1,
       effects: [
         ...warning,
@@ -326,7 +364,7 @@ function transitionAttaching(
     event.type === "session.deleted"
   )
     return {
-      entry: { status: "revoking", sync: entry.sync, deleted: event.type === "session.deleted" },
+      entry: { status: "revoking", sync: entry.sync, deleted: event.type === "session.deleted", expect: false },
       nextAttempt,
       effects: [{ type: "close-attachment", attempt: entry.attempt, outcome: "closed" }],
     }
@@ -380,19 +418,31 @@ function transitionAttached(
       effects: [...failPending(entry), { type: "close-attachment", attempt: entry.attempt, outcome: "closed" }],
     }
 
+  // A session that moved runs in another location, so no step here waits for its desktop.
   if ((event.type === "attach.closed" && event.attempt === entry.attempt) || event.type === "session.moved")
-    return revokeAttached(entry, event.sessionID, nextAttempt)
+    return revokeAttached(entry, event.sessionID, nextAttempt, event.type === "attach.closed")
 
   return undefined
+}
+
+function transitionExpected(event: SessionEvent, nextAttempt: number): Step<SessionState> | undefined {
+  // The step that waited was the desktop's one chance; a deleted session has no step, and a moved one none here.
+  if (event.type !== "step.timed-out" && event.type !== "session.moved" && event.type !== "session.deleted")
+    return undefined
+
+  return { entry: undefined, nextAttempt, effects: [{ type: "forget-expectation", sessionID: event.sessionID }] }
 }
 
 function transitionRevoking(
   entry: RevokingSession,
   event: SessionEvent,
   nextAttempt: number,
-): Step<RevokingSession> | undefined {
+): Step<RevokingSession | ExpectedSession> | undefined {
   if (event.type === "session.deleted")
     return entry.deleted ? undefined : { entry: { ...entry, deleted: true }, nextAttempt, effects: [] }
+
+  if (event.type === "step.timed-out" || event.type === "session.moved")
+    return entry.expect ? { entry: { ...entry, expect: false }, nextAttempt, effects: [] } : undefined
 
   if (
     event.type !== "permissions.synced" &&
@@ -409,11 +459,18 @@ function transitionRevoking(
     const sync = { attempt: nextAttempt, allow: false }
 
     return {
-      entry: { status: "revoking", sync, deleted: false },
+      entry: { status: "revoking", sync, deleted: false, expect: entry.expect },
       nextAttempt: nextAttempt + 1,
       effects: [...warning, { type: "sync-permissions", sessionID: event.sessionID, ...sync }],
     }
   }
+
+  if (entry.expect && !entry.deleted)
+    return {
+      entry: { status: "expected" },
+      nextAttempt,
+      effects: [...warning, { type: "record-expectation", sessionID: event.sessionID }],
+    }
 
   return { entry: undefined, nextAttempt, effects: warning }
 }
@@ -423,6 +480,12 @@ function dispose(state: ConnectionState): ConnectionTransition {
   const effects: ConnectionEffect[] = []
   const sessions = new Map<Session.ID, RevokingSession>()
   const nextAttempt = Array.from(state.sessions).reduce((attempt, [sessionID, entry]) => {
+    // A step that waits for the session's attachment goes on: this instance takes none.
+    if (awaited(entry)) effects.push({ type: "notify-settled", sessionID })
+
+    // Its record stays in storage for the next instance.
+    if (entry.status === "expected") return attempt
+
     if (entry.status === "revoking") {
       sessions.set(sessionID, entry)
 
@@ -430,12 +493,12 @@ function dispose(state: ConnectionState): ConnectionTransition {
     }
 
     if (entry.status === "attaching") {
-      sessions.set(sessionID, { status: "revoking", sync: entry.sync, deleted: false })
+      sessions.set(sessionID, { status: "revoking", sync: entry.sync, deleted: false, expect: false })
       effects.push({ type: "close-attachment", attempt: entry.attempt, outcome: "closed" })
 
       return attempt
     }
-    const step = revokeAttached(entry, sessionID, attempt)
+    const step = revokeAttached(entry, sessionID, attempt, true)
 
     if (step.entry) sessions.set(sessionID, step.entry)
     effects.push(...step.effects)
@@ -448,11 +511,16 @@ function dispose(state: ConnectionState): ConnectionTransition {
   return { state: { status: "disposed", nextAttempt, sessions }, effects }
 }
 
-function revokeAttached(entry: AttachedSession, sessionID: Session.ID, nextAttempt: number): Step<RevokingSession> {
+function revokeAttached(
+  entry: AttachedSession,
+  sessionID: Session.ID,
+  nextAttempt: number,
+  expect: boolean,
+): Step<RevokingSession> {
   const sync = { attempt: nextAttempt, allow: false }
 
   return {
-    entry: { status: "revoking", sync, deleted: false },
+    entry: { status: "revoking", sync, deleted: false, expect },
     nextAttempt: nextAttempt + 1,
     effects: [
       ...failPending(entry),
@@ -595,7 +663,23 @@ export function isConnectionDisposed(state: ConnectionState) {
 
 /** Whether the session has an attachment or a permission sync in flight, either of which owns its browser rules. */
 export function hasSession(state: ConnectionState, sessionID: Session.ID) {
-  return state.sessions.has(sessionID)
+  const entry = state.sessions.get(sessionID)
+
+  return entry !== undefined && entry.status !== "expected"
+}
+
+/**
+ * Whether a step waits before it selects its tools: a desktop is attaching to the session, or one is expected to
+ * attach again. The step lists the browser tools only if the session holds the grant by then.
+ */
+export function isAwaited(state: ConnectionState, sessionID: Session.ID) {
+  return state.status === "active" && awaited(state.sessions.get(sessionID))
+}
+
+function awaited(entry: SessionState | undefined) {
+  return (
+    entry?.status === "attaching" || entry?.status === "expected" || (entry?.status === "revoking" && entry.expect)
+  )
 }
 
 /** The attempt the next `attach` gets; the driver keys its handle by it before dispatching `attach.started`. */
@@ -608,7 +692,8 @@ export function selectAttachment(state: ConnectionState, sessionID: Session.ID, 
   if (state.status === "disposed") return undefined
   const entry = state.sessions.get(sessionID)
 
-  if (entry?.status === "revoking" || entry?.connectionID !== connectionID) return undefined
+  if (entry?.status === "revoking" || entry?.status === "expected" || entry?.connectionID !== connectionID)
+    return undefined
 
   return entry.attempt
 }
@@ -646,7 +731,7 @@ export function selectConnection(
   | { readonly ok: false; readonly error: Tool.Error } {
   const entry = state.status === "active" ? state.sessions.get(sessionID) : undefined
 
-  if (!entry || entry.status === "revoking")
+  if (!entry || entry.status === "revoking" || entry.status === "expected")
     return {
       ok: false,
       error: new Tool.Error({
