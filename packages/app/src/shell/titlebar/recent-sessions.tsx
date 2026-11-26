@@ -1362,7 +1362,7 @@ export function RecentSessionTab(props: RecentSessionTabProps & { dragging?: boo
         </Menu.Item>
       </Show>
       <Menu.Separator />
-      <SessionCopyMenu session={item().session} />
+      <SessionCopyMenu server={server()} session={item().session} />
       <Menu.Item disabled={exporter.exporting(exportTarget())} onSelect={() => exporter.export(exportTarget())}>
         {language.t("common.export")}…
       </Menu.Item>

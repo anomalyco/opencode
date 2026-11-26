@@ -926,7 +926,7 @@ function HomeSessionRow(
             </Menu.Item>
             <SessionReadMenuItem server={props.server} session={props.record.session} />
             <Menu.Separator />
-            <SessionCopyMenu session={props.record.session} />
+            <SessionCopyMenu server={props.server} session={props.record.session} />
             <Menu.Item
               disabled={props.isExportingSession(props.server, props.record.session)}
               onSelect={() => props.onExportSession(props.server, props.record.session)}

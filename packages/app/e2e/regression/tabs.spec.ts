@@ -766,16 +766,13 @@ test("icon-only inactive tabs retain their avatar and attention badge instead of
   await expect(tabB.locator('[data-slot="tab-avatar-unread-dot"]')).toHaveCount(0)
 })
 
-test("an unread tab whose run failed shows the failed dot, as the inbox does", async ({ page, context }) => {
+test("an unread tab whose run failed shows the failed dot, as the inbox does", async ({ page }) => {
   const time = { created: T0, updated: T0, idle: T0 + 1 }
 
-  await context.grantPermissions(["clipboard-read", "clipboard-write"])
-
-  const workspace = await mockWorkspace(page, {
+  await mockWorkspace(page, {
     name: "FailedTabs",
     sessions: [a, { ...b, outcome: "failed", time }, { ...c, outcome: "succeeded", time }],
   })
-
   await page.goto(sessionHref(a.id))
   const tab = (id: string) => page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(id)}"])`)
 
@@ -798,17 +795,6 @@ test("an unread tab whose run failed shows the failed dot, as the inbox does", a
     "Close tabs to the right",
     "Delete…",
   ])
-  await page.getByRole("menuitem", { name: "Copy", exact: true }).hover()
-  const copy = page.getByRole("menu").last()
-  await expect(copy.getByRole("menuitem")).toHaveText(["Session ID", "Session title", "Project ID"])
-  await copy.getByRole("menuitem", { name: "Session ID", exact: true }).click()
-  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(c.id)
-  await expect(page.getByRole("menu")).toHaveCount(0)
-  await tab(c.id).locator("[data-titlebar-tab-link]").click({ button: "right" })
-  await page.getByRole("menuitem", { name: "Copy", exact: true }).hover()
-  await page.getByRole("menu").last().getByRole("menuitem", { name: "Project ID", exact: true }).click()
-  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(workspace.projectID)
-  await tab(c.id).locator("[data-titlebar-tab-link]").click({ button: "right" })
   await page.getByRole("menuitem", { name: "Mark as unread", exact: true }).click()
   await expect(tab(c.id).locator('[data-mark="unread"]')).toBeVisible()
   await tab(c.id).locator("[data-titlebar-tab-link]").click()
@@ -827,6 +813,32 @@ test("an unread tab whose run failed shows the failed dot, as the inbox does", a
   await tab(a.id).locator("[data-titlebar-tab-link]").click()
   await expectPath(page, sessionHref(a.id))
   await expect(tab(c.id).locator('[data-mark="unread"]')).toBeHidden()
+})
+
+test("the tab menu copies the session ID, title and project ID", async ({ page, context }) => {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"])
+
+  const workspace = await mockWorkspace(page, { name: "CopyTabs", sessions: [a, b] })
+
+  await page.goto(sessionHref(a.id))
+
+  const link = page.locator(`[data-titlebar-tab-slot]:has(a[href="${sessionHref(b.id)}"]) [data-titlebar-tab-link]`)
+
+  const copy = async (item: string) => {
+    await link.click({ button: "right" })
+    await page.getByRole("menuitem", { name: "Copy", exact: true }).hover()
+    await page.getByRole("menu").last().getByRole("menuitem", { name: item, exact: true }).click()
+    await expect(page.getByRole("menu")).toHaveCount(0)
+  }
+
+  const clipboard = () => page.evaluate(() => navigator.clipboard.readText())
+
+  await copy("Session ID")
+  await expect.poll(clipboard).toBe(b.id)
+  await copy("Session title")
+  await expect.poll(clipboard).toBe(b.title)
+  await copy("Project ID")
+  await expect.poll(clipboard).toBe(workspace.projectID)
 })
 
 test("Recent and Pinned rows show the side tabs' status dots and shortcuts for sessions that aren't open as tabs", async ({

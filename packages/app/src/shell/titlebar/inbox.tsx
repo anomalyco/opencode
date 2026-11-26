@@ -834,7 +834,7 @@ export function InboxSessionMenuItems(props: {
       </Menu.Item>
       <SessionReadMenuItem server={props.server} session={props.session} />
       <Menu.Separator />
-      <SessionCopyMenu session={props.session} />
+      <SessionCopyMenu server={props.server} session={props.session} />
       <Menu.Item
         disabled={exporter.exporting({ server: props.server, sessionID: props.session.id })}
         onSelect={() => exporter.export({ server: props.server, sessionID: props.session.id })}

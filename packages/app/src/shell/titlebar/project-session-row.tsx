@@ -216,7 +216,7 @@ export function ProjectSessionRow(props: {
           </Menu.Item>
           <SessionReadMenuItem server={props.server} session={props.session} />
           <Menu.Separator />
-          <SessionCopyMenu session={props.session} />
+          <SessionCopyMenu server={props.server} session={props.session} />
           <Menu.Item
             disabled={!ctx() || exporter.exporting(exportTarget())}
             onSelect={() => exporter.export(exportTarget())}

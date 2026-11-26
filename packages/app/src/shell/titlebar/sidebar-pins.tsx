@@ -410,7 +410,7 @@ export function PinnedSessionRow(props: {
         {language.t(muted() ? "sidebar.recent.unmute" : "sidebar.recent.mute")}
       </Menu.Item>
       <Menu.Separator />
-      <SessionCopyMenu session={props.item.session} />
+      <SessionCopyMenu server={props.item.server} session={props.item.session} />
       <Menu.Item disabled={exporter.exporting(exportTarget())} onSelect={() => exporter.export(exportTarget())}>
         {language.t("common.export")}…
       </Menu.Item>

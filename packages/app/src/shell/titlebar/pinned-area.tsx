@@ -549,7 +549,7 @@ export function PinnedSession(props: { pin: PinRef; orientation: Orientation; gr
       <PinMenuItems pin={props.pin} />
       <SessionReadMenuItem server={server()} session={session()} />
       <Menu.Separator />
-      <SessionCopyMenu session={session()} />
+      <SessionCopyMenu server={server()} session={session()} />
       <Menu.Item
         disabled={!session() || exporter.exporting(exportTarget())}
         onSelect={() => exporter.export(exportTarget())}
