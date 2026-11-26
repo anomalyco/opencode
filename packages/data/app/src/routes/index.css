@@ -8280,6 +8280,12 @@ body {
     margin-bottom: 0;
   }
 
+  /* The section's controls (Daily and Weekly, Share) above its title, at the top right. */
+  [data-page="stats"] [data-slot="section-heading-row"] > :not(h2) {
+    order: -1;
+    align-self: flex-end;
+  }
+
   [data-page="stats"] [data-slot="section-heading-row"] > [data-component="usage-filter"] {
     margin-top: 0;
   }
