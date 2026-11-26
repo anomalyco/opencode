@@ -29,7 +29,7 @@ import {
   type VersionNegotiationOptions,
 } from "@modelcontextprotocol/client"
 import type { CallToolResult as SdkCallToolResult } from "@modelcontextprotocol/client"
-import { SKILLS_EXTENSION_ID, SkillsClient } from "@modelcontextprotocol/client/ext/skills"
+import { SKILLS_EXTENSION_ID, SkillsClient, SkillVerificationError } from "@modelcontextprotocol/client/ext/skills"
 import type { Skill as SdkSkill, SkillFile as SdkSkillFile } from "@modelcontextprotocol/client/ext/skills"
 import {
   Cause,
@@ -320,6 +320,13 @@ export interface Events {
   }) => Stream.Stream<EventMessage, Error>
 }
 
+/** A skill file the server served doesn't match its entry: not listed, or a different size, digest or frontmatter. */
+export class SkillMismatchError extends Schema.TaggedError<SkillMismatchError>()("McpClient.SkillMismatchError", {
+  uri: Schema.String,
+  check: Schema.Literals(["unlisted", "size", "digest", "frontmatter"]),
+  message: Schema.String,
+}) {}
+
 /** Experimental: MCP Skills is a beta extension; may change without compatibility guarantees. */
 export interface Skills {
   /** Every valid skill the server lists (`skills/list`); invalid entries are logged and skipped. No file is read. */
@@ -328,7 +335,7 @@ export interface Skills {
    * Reads one file of a listed skill, its `SKILL.md` when `ref` is omitted, and verifies its size, digest and, for
    * `SKILL.md`, frontmatter against the entry.
    */
-  readonly read: (skill: Skill, ref?: string) => Effect.Effect<SkillFile, Error>
+  readonly read: (skill: Skill, ref?: string) => Effect.Effect<SkillFile, SkillMismatchError | Error>
   /** One skill by its `SKILL.md` URI, listed or not (`skills/get`). No file is read. */
   readonly get: (uri: string) => Effect.Effect<Skill, Error>
 }
@@ -838,7 +845,17 @@ export const connect = Effect.fnUntraced(function* (options: ConnectOptions) {
                 Effect.map((result) => result.skills),
               ),
             read: (skill, ref) =>
-              request("read MCP skill file", (signal) => skills.read(skill, ref, { signal, timeout: execution })),
+              Effect.tryPromise({
+                try: (signal) => skills.read(skill, ref, { signal, timeout: execution }),
+                catch: (error) =>
+                  error instanceof SkillVerificationError
+                    ? new SkillMismatchError({ uri: error.uri, check: error.reason, message: error.message })
+                    : failure(error),
+              }).pipe(
+                Effect.tapError((error) =>
+                  Effect.logWarning("failed to read MCP skill file", { server, error: error.message }),
+                ),
+              ),
             get: (uri) =>
               request("get MCP skill", (signal) => skills.get(uri, { signal, timeout: execution })).pipe(
                 Effect.map((result) => result.skill),
