@@ -55,8 +55,10 @@ import type {
   SessionMessageAssistantReasoning,
   SessionMessageAssistantTool,
   SessionMessageShell,
+  ToolFileContent,
 } from "@opencode/client/promise"
 import {
+  capturedReadImage,
   currentToolError,
   currentToolGroupedRead,
   currentToolInput,
@@ -680,6 +682,7 @@ export function CurrentContextToolGroup(props: {
                                         input={currentToolInput(tool())}
                                         metadata={currentToolMetadata(tool())}
                                         output={currentToolOutput(tool())}
+                                        imageShownInline={!!capturedReadImage(tool())}
                                         error={currentToolError(tool())}
                                         status={tool().state.status}
                                         defaultOpen={props.toolDefaultOpen?.(tool()) ?? false}
@@ -787,6 +790,10 @@ export function CurrentContextToolGroup(props: {
           </Index>
         </div>
       </BasicTool>
+      <CapturedReadImages
+        files={tools().flatMap((tool) => capturedReadImage(tool) ?? [])}
+        onLoad={props.onSizeChange}
+      />
     </div>
   )
 }
@@ -1271,6 +1278,8 @@ export interface ToolProps {
   tool: string
   sessionID?: string
   output?: string
+  imageShownInline?: boolean
+  capturedImage?: ToolFileContent
   status?: string
   hideDetails?: boolean
   defaultOpen?: boolean
@@ -1613,7 +1622,11 @@ ToolRegistry.register({
   render(props) {
     const data = useData()
     const i18n = useI18n()
-    const image = createMemo(() => (props.status === "completed" ? readImagePath(props.input) : undefined))
+    const image = createMemo(() =>
+      props.status === "completed" && !props.imageShownInline && !props.capturedImage
+        ? readImagePath(props.input)
+        : undefined,
+    )
 
     const loaded = createMemo(() => {
       if (props.status !== "completed") return []
@@ -1653,6 +1666,9 @@ ToolRegistry.register({
             {(path) => <ReadImage path={path} onContentRendered={props.onContentRendered} />}
           </Show>
         </BasicTool>
+        <Show when={props.capturedImage}>
+          {(file) => <CapturedReadImages files={[file()]} onLoad={props.onContentRendered} />}
+        </Show>
         <Show when={paths().length > 0}>
           <div
             data-component="tool-loaded-item"
@@ -1677,6 +1693,35 @@ ToolRegistry.register({
     )
   },
 })
+
+export function CapturedReadImages(props: { files: ToolFileContent[]; onLoad?: () => void }) {
+  const data = useData()
+  const i18n = useI18n()
+  return (
+    <For each={props.files}>
+      {(file) => {
+        const preview = createImagePreview()
+        const [src, setSrc] = createSignal(
+          file.uri.startsWith("data:") ? file.uri : data.peekMedia?.(file.uri, file.mime),
+        )
+        if (!src()) {
+          const controller = new AbortController()
+          onCleanup(() => controller.abort())
+          void data.readMedia?.(file.uri, file.mime, controller.signal).then(setSrc, () => undefined)
+        }
+        return (
+          <Show when={src()}>
+            {(url) => (
+              <div data-component="read-image" ref={(el) => onMount(() => preview(el))}>
+                <img src={url()} alt={file.name || i18n.t("ui.message.attachment.alt")} onLoad={props.onLoad} />
+              </div>
+            )}
+          </Show>
+        )
+      }}
+    </For>
+  )
+}
 
 function ReadImage(props: { path: string; onContentRendered?: () => void }) {
   const markdown = useMarkdown()

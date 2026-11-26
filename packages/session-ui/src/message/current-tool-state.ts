@@ -1,4 +1,9 @@
-import type { SessionMessageAssistant, SessionMessageAssistantTool } from "@opencode/client/promise"
+import {
+  mediaHashFromUri,
+  type SessionMessageAssistant,
+  type SessionMessageAssistantTool,
+  type ToolFileContent,
+} from "@opencode/client/promise"
 import { Option, Predicate, Schema } from "effect"
 import type { ToolProps } from "../tools/tool-renderer"
 
@@ -126,11 +131,22 @@ export function readImagePath(input: ToolProps["input"]) {
   return input.path.replaceAll("\\", "/")
 }
 
+export function capturedReadImage(tool: SessionMessageAssistantTool) {
+  if (tool.name !== "read" || tool.state.status !== "completed") return
+  return tool.state.content.find(
+    (item): item is ToolFileContent =>
+      item.type === "file" &&
+      item.mime.startsWith("image/") &&
+      (!!mediaHashFromUri(item.uri) || (item.uri.startsWith("data:image/") && !item.uri.endsWith(","))),
+  )
+}
+
 // Plain file reads render as one comma-separated row; images and loaded instructions keep their own rows.
 export function currentToolGroupedRead(tool: SessionMessageAssistantTool) {
   return (
     tool.name === "read" &&
     tool.state.status !== "error" &&
+    !capturedReadImage(tool) &&
     !readImagePath(currentToolInput(tool)) &&
     !currentToolHasLoadedFiles(tool)
   )

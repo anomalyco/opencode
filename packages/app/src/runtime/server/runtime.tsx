@@ -220,8 +220,8 @@ function createServerController(
     },
     connection: sdk.connection,
     directory: "",
-    // The timeline shows tool output as text only, so screenshots in tool results never need their bytes here.
     omitToolFileData: true,
+    keepReadImages: true,
     onError(error) {
       showToast({
         variant: "error",

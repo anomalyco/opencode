@@ -2,6 +2,7 @@ import type { SessionMessageAssistant } from "@opencode/client/promise"
 import { Match, Switch } from "solid-js"
 import { AssistantTextContent } from "../../message/message-content"
 import {
+  capturedReadImage,
   currentToolError,
   currentToolInput,
   currentToolMetadata,
@@ -67,6 +68,7 @@ export function AssistantContent(props: {
             input={currentToolInput(tool())}
             metadata={currentToolMetadata(tool())}
             output={currentToolOutput(tool())}
+            capturedImage={capturedReadImage(tool())}
             status={tool().state.status}
             error={currentToolError(tool())}
             stopped={toolStopped(tool())}

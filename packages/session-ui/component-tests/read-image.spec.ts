@@ -12,6 +12,34 @@ story.beforeEach(async ({ mount }) => {
   await expect(root.getByRole("button", { name: "Used 4 Shell, Read, Agent", exact: true })).toBeVisible()
 })
 
+for (const source of ["inline", "media"])
+  story(`shows a captured ${source} PNG below a closed group without reopening the original file`, async ({ page }) => {
+    const hash = "a".repeat(64)
+    await page.route(`**/api/experimental/media/${hash}`, (route) =>
+      route.fulfill({ contentType: "application/octet-stream", body: png }),
+    )
+    const paths: string[] = []
+    await page.route("**/api/fs/read/**", async (route) => {
+      paths.push(route.request().url())
+      await route.fulfill({ status: 404 })
+    })
+    await page.evaluate(
+      async ({ fixture, captured }) => {
+        const { mountReadImage } = await import(fixture)
+        mountReadImage({ path: "/removed/chart.png", grouped: true, captured })
+      },
+      { fixture, captured: source === "media" ? `media:${hash}` : `data:image/png;base64,${png.toString("base64")}` },
+    )
+    const root = page.getByTestId("read-image-fixture")
+    const group = root.getByRole("button", { name: /Used 2 Read/ })
+    const image = root.getByRole("button", { name: "chart.png", exact: true })
+    await expect(group).toHaveAttribute("aria-expanded", "false")
+    await expect(image).toHaveJSProperty("naturalWidth", 1)
+    await group.click()
+    await expect(image).toHaveCount(1)
+    expect(paths).toEqual([])
+  })
+
 for (const grouped of [true, false]) {
   story(
     `lazily previews ${grouped ? "grouped" : "standalone"} image reads and releases them on collapse`,
