@@ -29,6 +29,7 @@ import { ServerConnection } from "@/runtime/server/registry"
 import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import { showToast } from "@/shell/notifications/toast"
 import { sessionLabel } from "@/session/title"
+import { SessionCopyMenu } from "@/session/session-copy-menu"
 import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { shouldOpenSessionInBackground } from "./open"
 import { createAltHold } from "./alt-hold"
@@ -929,6 +930,7 @@ function HomeSessionRow(
             >
               {props.language.t("common.export")}…
             </Menu.Item>
+            <SessionCopyMenu session={props.record.session} />
             <SessionReadMenuItem server={props.server} session={props.record.session} />
             <Menu.Separator />
             <Menu.Item onSelect={() => props.onDeleteSession(props.server, props.record.session)}>

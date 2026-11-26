@@ -17,6 +17,7 @@ import { ServerConnection, useServers } from "@/runtime/server/registry"
 import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
 import { createSessionExporter } from "@/session/commands/export-session"
 import { sessionTreeIDs } from "@/session/requests/session-request-tree"
+import { SessionCopyMenu } from "@/session/session-copy-menu"
 import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { errorMessage } from "@/shell/layout/helpers"
 import { useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
@@ -411,6 +412,7 @@ function PinnedSessionRow(props: {
       <Menu.Item disabled={exporter.exporting(exportTarget())} onSelect={() => exporter.export(exportTarget())}>
         {language.t("common.export")}…
       </Menu.Item>
+      <SessionCopyMenu session={props.item.session} />
       <SessionReadMenuItem server={props.item.server} session={props.item.session} />
       <Show when={props.open}>
         <Menu.Separator />

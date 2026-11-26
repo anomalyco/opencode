@@ -335,6 +335,7 @@ for (const [tabLayout, direction, label] of [
     await expect(menu.getByRole("menuitem")).toHaveText([
       "Rename",
       "Export…",
+      "Copy",
       "Close tab",
       "Close other tabs",
       label,
@@ -765,10 +766,11 @@ test("icon-only inactive tabs retain their avatar and attention badge instead of
   await expect(tabB.locator('[data-slot="tab-avatar-unread-dot"]')).toHaveCount(0)
 })
 
-test("an unread tab whose run failed shows the failed dot, as the inbox does", async ({ page }) => {
+test("an unread tab whose run failed shows the failed dot, as the inbox does", async ({ page, context }) => {
   const time = { created: T0, updated: T0, idle: T0 + 1 }
 
-  await mockWorkspace(page, {
+  await context.grantPermissions(["clipboard-read", "clipboard-write"])
+  const workspace = await mockWorkspace(page, {
     name: "FailedTabs",
     sessions: [a, { ...b, outcome: "failed", time }, { ...c, outcome: "succeeded", time }],
   })
@@ -787,12 +789,24 @@ test("an unread tab whose run failed shows the failed dot, as the inbox does", a
   await expect(page.getByRole("menu").getByRole("menuitem")).toHaveText([
     "Rename",
     "Export…",
+    "Copy",
     "Mark as unread",
     "Close tab",
     "Close other tabs",
     "Close tabs to the right",
     "Delete…",
   ])
+  await page.getByRole("menuitem", { name: "Copy", exact: true }).hover()
+  const copy = page.getByRole("menu").last()
+  await expect(copy.getByRole("menuitem")).toHaveText(["Session ID", "Session title", "Project ID"])
+  await copy.getByRole("menuitem", { name: "Session ID", exact: true }).click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(c.id)
+  await expect(page.getByRole("menu")).toHaveCount(0)
+  await tab(c.id).locator("[data-titlebar-tab-link]").click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Copy", exact: true }).hover()
+  await page.getByRole("menu").last().getByRole("menuitem", { name: "Project ID", exact: true }).click()
+  await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toBe(workspace.projectID)
+  await tab(c.id).locator("[data-titlebar-tab-link]").click({ button: "right" })
   await page.getByRole("menuitem", { name: "Mark as unread", exact: true }).click()
   await expect(tab(c.id).locator('[data-mark="unread"]')).toBeVisible()
   await tab(c.id).locator("[data-titlebar-tab-link]").click()

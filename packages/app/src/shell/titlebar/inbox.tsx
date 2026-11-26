@@ -32,6 +32,7 @@ import type { LocalProject } from "@/shell/state/layout"
 import { sessionTabTitle } from "./tab-title"
 import { sessionLabel, sessionTitle } from "@/session/title"
 import { createSessionExporter } from "@/session/commands/export-session"
+import { SessionCopyMenu } from "@/session/session-copy-menu"
 import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { RenameDialog } from "./project-session-row"
 import { createSessionInbox, inboxArchived, inboxWaiting, type InboxEntry, type InboxStatus } from "./inbox-model"
@@ -320,6 +321,7 @@ export function SidebarInbox() {
                   >
                     {language.t("common.export")}…
                   </Menu.Item>
+                  <SessionCopyMenu session={entry().session} />
                   <SessionReadMenuItem server={entry().server} session={entry().session} />
                   <Menu.Separator />
                 </>

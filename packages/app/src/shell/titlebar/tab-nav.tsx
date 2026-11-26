@@ -15,6 +15,7 @@ import { SessionTabAvatarView } from "@/shell/layout/session-tab-avatar"
 import type { SessionInfo } from "@opencode/client/promise"
 import { showToast } from "@/shell/notifications/toast"
 import { createSessionExporter } from "@/session/commands/export-session"
+import { SessionCopyMenu } from "@/session/session-copy-menu"
 import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { sessionTabTitle } from "./tab-title"
 import { TabPreviewPopover } from "./tab-popover"
@@ -676,6 +677,7 @@ export function TabNavItem(
               >
                 {language.t("common.export")}…
               </Menu.Item>
+              <SessionCopyMenu session={props.session} />
               <SessionReadMenuItem server={props.server} session={props.session} />
               <Show when={props.contextMenuExtra}>
                 {(extra) => (
