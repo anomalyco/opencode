@@ -1,5 +1,5 @@
 diff --git a/templates/nsis/include/extractAppPackage.nsh b/templates/nsis/include/extractAppPackage.nsh
-index f5470bf52e923dc47266cea4684c76ef78ced451..6c4a4c193a2ca1dc2413482606b9be5c1c2aa1a9 100644
+index f5470bf52e923dc47266cea4684c76ef78ced451..ba5a7d92434351a7c7bea660c393288a1b9a88d7 100644
 --- a/templates/nsis/include/extractAppPackage.nsh
 +++ b/templates/nsis/include/extractAppPackage.nsh
 @@ -1,4 +1,11 @@
@@ -14,7 +14,7 @@ index f5470bf52e923dc47266cea4684c76ef78ced451..6c4a4c193a2ca1dc2413482606b9be5c
    !ifdef COMPRESS
      SetCompress off
    !endif
-@@ -13,6 +20,10 @@
+@@ -13,6 +20,16 @@
    !endif
  
    !insertmacro decompress
@@ -22,27 +22,68 @@ index f5470bf52e923dc47266cea4684c76ef78ced451..6c4a4c193a2ca1dc2413482606b9be5c
 +  !ifmacrodef customInstallStagedApp
 +    extractEmbeddedAppPackageDone:
 +  !endif
++  !ifmacrodef setInstallProgress
++    !insertmacro setInstallProgress 25500
++  !endif
++  !ifmacrodef setInstallStatus
++    !insertmacro setInstallStatus "$(finishingInstall)"
++  !endif
    !insertmacro custom_files_post_decompression
  !macroend
  
-@@ -90,6 +101,15 @@
+@@ -90,11 +107,23 @@
  !macroend
  
  !macro extractUsing7za FILE
 +  # OpenCode: extract straight into an empty install directory. The copy through $PLUGINSDIR below
 +  # only protects files that a running old version still holds, and an empty directory has none,
 +  # so it would write the whole app a second time and delete it again on exit.
++  StrCpy $extractStartMs 0
 +  ${DirState} $OUTDIR $R0
 +  ${if} $R0 != 1
-+    Nsis7z::Extract "${FILE}"
++    GetFunctionAddress $R9 onExtractProgress
++    Nsis7z::ExtractWithCallback "${FILE}" $R9
 +    Goto DoneExtract7za
 +  ${endIf}
 +
    Push $OUTDIR
    CreateDirectory "$PLUGINSDIR\7z-out"
    ClearErrors
+   SetOutPath "$PLUGINSDIR\7z-out"
+-  Nsis7z::Extract "${FILE}"
++  GetFunctionAddress $R9 onExtractProgress
++  Nsis7z::ExtractWithCallback "${FILE}" $R9
+   Pop $R0
+   SetOutPath $R0
+ 
+@@ -124,7 +153,9 @@
+     # much disk space.
+     RMDir /r "$PLUGINSDIR\7z-out"
+ 
+-    Nsis7z::Extract "${FILE}"
++    StrCpy $extractStartMs 0
++    GetFunctionAddress $R9 onExtractProgress
++    Nsis7z::ExtractWithCallback "${FILE}" $R9
+     Goto DoneExtract7za
+ 
+   AbortExtract7za:
+diff --git a/templates/nsis/include/installUtil.nsh b/templates/nsis/include/installUtil.nsh
+index 47367741632726ba0886ac516461dbe98b7aea58..5f8e08e87fc3411afbf05efbe09d4a8fb4c9dc7a 100644
+--- a/templates/nsis/include/installUtil.nsh
++++ b/templates/nsis/include/installUtil.nsh
+@@ -209,6 +209,10 @@ Function uninstallOldVersion
+   StrCpy $uninstallerFileNameTemp "$PLUGINSDIR\old-uninstaller.exe"
+   !insertmacro copyFile "$uninstallerFileName" "$uninstallerFileNameTemp"
+ 
++  !ifmacrodef setInstallStatus
++    !insertmacro setInstallStatus "$(removingPrevious)"
++  !endif
++
+   # Retry counter
+   StrCpy $R5 0
+ 
 diff --git a/templates/nsis/include/installer.nsh b/templates/nsis/include/installer.nsh
-index 300ef3dd699d0f5a081b1934fcc22dbe12025bdb..6bc1c7f368208024c52aff9ae53f299ce4b632f3 100644
+index 300ef3dd699d0f5a081b1934fcc22dbe12025bdb..3ef8a89ec48d59fa0862ac6916f3097cdb9d99b5 100644
 --- a/templates/nsis/include/installer.nsh
 +++ b/templates/nsis/include/installer.nsh
 @@ -90,7 +90,21 @@
@@ -68,3 +109,267 @@ index 300ef3dd699d0f5a081b1934fcc22dbe12025bdb..6bc1c7f368208024c52aff9ae53f299c
        ${if} $installMode == "all"
          SetShellVarContext all
        ${endif}
+diff --git a/templates/nsis/installSection.nsh b/templates/nsis/installSection.nsh
+index 053772f55ca6ece52f0a34c4fa0f05c9a5f07bd2..6974ebfbcbcd2bf2cb4eb45067e5754cd626d5d4 100644
+--- a/templates/nsis/installSection.nsh
++++ b/templates/nsis/installSection.nsh
+@@ -30,12 +30,18 @@ StrCpy $appExe "$INSTDIR\${APP_EXECUTABLE_FILENAME}"
+     StrCpy $1 $hwndparent
+ 		System::Call 'user32::ShutdownBlockReasonCreate(${SYSTYPE_PTR}r1, w "$(installing)")'
+   ${endif}
++  Call initInstallProgress
++  !insertmacro setInstallProgress 1500
+   !insertmacro CHECK_APP_RUNNING
+ !else
++  Call initInstallProgress
++  !insertmacro setInstallProgress 1500
+   ${ifNot} ${UAC_IsInnerInstance}
+     !insertmacro CHECK_APP_RUNNING
+   ${endif}
+ !endif
++!insertmacro setInstallProgress 6000
++!insertmacro setInstallStatus "$(installing)"
+ 
+ Var /GLOBAL keepShortcuts
+ StrCpy $keepShortcuts "false"
+@@ -56,6 +62,7 @@ ${if} $installMode == "all"
+   !insertmacro uninstallOldVersion HKEY_CURRENT_USER
+   !insertmacro handleUninstallResult HKEY_CURRENT_USER
+ ${endIf}
++!insertmacro setInstallProgress 13500
+ 
+ SetOutPath $INSTDIR
+ 
+@@ -64,6 +71,8 @@ SetOutPath $INSTDIR
+ !endif
+ 
+ !insertmacro installApplicationFiles
++!insertmacro setInstallProgress 26700
++!insertmacro setInstallStatus "$(finishingInstall)"
+ !insertmacro registryAddInstallInfo
+ !insertmacro addStartMenuLink $keepShortcuts
+ !insertmacro addDesktopLink $keepShortcuts
+@@ -77,10 +86,18 @@ ${endIf}
+ !ifmacrodef registerFileAssociations
+   !insertmacro registerFileAssociations
+ !endif
++!insertmacro setInstallProgress 27900
+ 
+ !ifmacrodef customInstall
++  !insertmacro setInstallStatus "$(settingPermissions)"
+   !insertmacro customInstall
+ !endif
++!insertmacro setInstallProgress 30000
++!insertmacro setInstallStatus "$(launchingApp)"
++${IfNot} ${Silent}
++  # Give Windows's smooth progress bar animation a moment to settle at 100% before hiding the banner.
++  Sleep 120
++${EndIf}
+ 
+ !macro doStartApp
+   # otherwise app window will be in background
+diff --git a/templates/nsis/installer.nsi b/templates/nsis/installer.nsi
+index 4b1f42e4e96ba2b3e7d6d8d2f9ee19b46779a422..777ae1f2e7b40bfb426c6e1c96eabba7611a968c 100644
+--- a/templates/nsis/installer.nsi
++++ b/templates/nsis/installer.nsi
+@@ -89,6 +89,168 @@ FunctionEnd
+ 
+ !ifndef BUILD_UNINSTALLER
+   !include "installUtil.nsh"
++
++  # OpenCode: drive the install progress bar monotonically inside a Function instead of letting NSIS
++  # update IDC_PROGRESS from section instruction offsets (which causes loops like CHECK_APP_RUNNING
++  # to flicker backwards and staged-update skips or Nsis7z::Extract to reset/jump the bar).
++  Var /GLOBAL progressBarHwnd
++  Var /GLOBAL progressBarPos
++  Var /GLOBAL bannerTextHwnd
++  Var /GLOBAL extractStartMs
++  Var /GLOBAL extractLastTextMs
++
++  Function initInstallProgress
++    StrCpy $progressBarHwnd 0
++    StrCpy $progressBarPos 0
++    StrCpy $bannerTextHwnd 0
++    StrCpy $extractStartMs 0
++    StrCpy $extractLastTextMs 0
++    ${IfNot} ${Silent}
++      FindWindow $0 "#32770" "" $HWNDPARENT
++      ${If} $0 != 0
++        GetDlgItem $progressBarHwnd $0 1004
++        ${If} $progressBarHwnd != 0
++          # Change the hidden control ID (1004 -> 1099) after SpiderBanner subclasses it so plugins
++          # such as Nsis7z cannot look up IDC_PROGRESS and reset the bar back to 0%.
++          System::Call 'user32::SetWindowLongW(p $progressBarHwnd, i -12, i 1099)'
++        ${EndIf}
++        FindWindow $1 "#32770" "" $HWNDPARENT $0
++        ${If} $1 != 0
++          GetDlgItem $bannerTextHwnd $1 1000
++        ${EndIf}
++      ${EndIf}
++    ${EndIf}
++  FunctionEnd
++
++  Function setInstallStatus
++    Exch $0
++    ${If} $bannerTextHwnd != 0
++      SendMessage $bannerTextHwnd ${WM_SETTEXT} 0 "STR:$0"
++    ${EndIf}
++    Pop $0
++  FunctionEnd
++
++  !macro setInstallStatus TEXT
++    Push `${TEXT}`
++    Call setInstallStatus
++  !macroend
++
++  Function setInstallProgress
++    Exch $0
++    ${If} $progressBarHwnd != 0
++      ${If} $0 > 30000
++        StrCpy $0 30000
++      ${EndIf}
++      ${If} $0 > $progressBarPos
++        StrCpy $progressBarPos $0
++        SendMessage $progressBarHwnd 0x0402 $0 0
++      ${EndIf}
++    ${EndIf}
++    Pop $0
++  FunctionEnd
++
++  Function advanceInstallProgress
++    Exch $0
++    Exch
++    Exch $1
++    Push $2
++    ${If} $progressBarHwnd != 0
++      IntOp $2 $progressBarPos + $1
++      ${If} $2 > $0
++        StrCpy $2 $0
++      ${EndIf}
++      Push $2
++      Call setInstallProgress
++    ${EndIf}
++    Pop $2
++    Pop $1
++    Pop $0
++  FunctionEnd
++
++  !macro setInstallProgress POS
++    Push ${POS}
++    Call setInstallProgress
++  !macroend
++
++  !macro advanceInstallProgress STEP CAP
++    Push ${STEP}
++    Push ${CAP}
++    Call advanceInstallProgress
++  !macroend
++
++  !ifndef ZIP_COMPRESSION
++    !ifndef APP_BUILD_DIR
++      Function onExtractProgress
++        Pop $R8
++        Pop $R9
++        Push $0
++        Push $1
++        Push $2
++        Push $3
++        ${If} $R9 != 0
++          # Map 7z extraction progress linearly into 45%..85% (13500..25500, span 12000).
++          System::Int64Op $R8 * 12000
++          Pop $0
++          System::Int64Op $0 / $R9
++          Pop $0
++          IntOp $0 $0 + 13500
++          Push $0
++          Call setInstallProgress
++
++          ${If} $bannerTextHwnd != 0
++            System::Call "kernel32::GetTickCount() i .r0"
++            ${If} $extractStartMs == 0
++              StrCpy $extractStartMs $0
++              StrCpy $extractLastTextMs 0
++            ${EndIf}
++            IntOp $1 $0 - $extractLastTextMs
++            ${If} $extractLastTextMs == 0
++            ${OrIf} $1 >= 80
++            ${OrIf} $R8 == $R9
++              StrCpy $extractLastTextMs $0
++              IntOp $1 $0 - $extractStartMs
++              System::Int64Op $R9 / 1048576
++              Pop $2
++              ${If} $2 > 0
++                System::Int64Op $R8 / 1048576
++                Pop $3
++                ${If} $1 >= 150
++                  System::Int64Op $R8 * 1000
++                  Pop $0
++                  System::Int64Op $1 * 1048576
++                  Pop $1
++                  System::Int64Op $0 / $1
++                  Pop $0
++                  ${If} $0 > 0
++                    Push "$(extracting) $3 / $2 MB ($0 MB/s)"
++                  ${Else}
++                    Push "$(extracting) $3 / $2 MB"
++                  ${EndIf}
++                ${Else}
++                  Push "$(extracting) $3 / $2 MB"
++                ${EndIf}
++              ${Else}
++                System::Int64Op $R9 / 1024
++                Pop $2
++                System::Int64Op $R8 / 1024
++                Pop $3
++                Push "$(extracting) $3 / $2 KB"
++              ${EndIf}
++              Call setInstallStatus
++            ${EndIf}
++          ${EndIf}
++        ${EndIf}
++        Pop $3
++        Pop $2
++        Pop $1
++        Pop $0
++      FunctionEnd
++    !endif
++  !endif
++
++  Function runInstallSection
++    !include "installSection.nsh"
++  FunctionEnd
+ !endif
+ 
+ Section "install" INSTALL_SECTION_ID
+@@ -119,7 +281,7 @@ Section "install" INSTALL_SECTION_ID
+           ${endIf}
+       !endif
+     !endif
+-    !include "installSection.nsh"
++    Call runInstallSection
+   !endif
+ SectionEnd
+ 
+diff --git a/templates/nsis/messages.yml b/templates/nsis/messages.yml
+index 982e1b09e424c4f07ce7c1152fe5ce8b703f5f57..e8195a6646be9047f11b9574b1ac356ef25ba42e 100644
+--- a/templates/nsis/messages.yml
++++ b/templates/nsis/messages.yml
+@@ -235,6 +235,18 @@ uninstallFailed:
+   sv: Det gick inte att avinstallera gamla programfiler. Försök att köra installationsprogrammet igen.
+   uk: Не вдалось видалити старі файли застосунку. Будь ласка, спробуйте запустити встановлювач знов.
+   zh_TW: 無法俺安裝舊的應用程式檔案。 請嘗試再次執行安裝程式。
++removingPrevious:
++  en: "Removing previous version..."
++applyingStaged:
++  en: "Applying staged update..."
++extracting:
++  en: "Extracting..."
++finishingInstall:
++  en: "Finishing installation..."
++settingPermissions:
++  en: "Setting permissions..."
++launchingApp:
++  en: "Launching ${PRODUCT_NAME}..."
+ appClosing:
+   en: "Closing running ${PRODUCT_NAME}..."
+   cs: "Ukončuji aplikaci ${PRODUCT_NAME}..."
