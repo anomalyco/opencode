@@ -214,10 +214,12 @@ function createLayer(input: () => KeymapLayer) {
     const layer = input()
     const { commands, bindings, mode, ...options } = layer
     const grouped = groupCommands(commands)
+    const hasPaletteCommands = grouped.named.some((c) => c.palette === true)
+    const layerMode = hasPaletteCommands ? "global" : mode
     return {
       ...options,
-      enabled: enabled() ? options.enabled : false,
-      ...(mode === "global" ? {} : { mode: mode ?? MODE.base }),
+      enabled: enabled() && (options.enabled ?? true),
+      ...(layerMode === "global" ? {} : { mode: layerMode ?? MODE.base }),
       commands: grouped.named.map((command) => {
         const previous = stable.get(command.id)
         if (previous && sameData(previous, command))

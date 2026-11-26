@@ -84,3 +84,70 @@ test("searches settings globally and opens the matching setting", async () => {
     app.renderer.destroy()
   }
 })
+
+test("non-global palette commands appear in command palette", async () => {
+  let current: Info = { experimental: { "new-designs": false } }
+  const service: Interface = {
+    get: async () => current,
+    update: async (update) => {
+      const draft = structuredClone(current)
+      update(draft)
+      current = draft
+      return current
+    },
+  }
+
+  function Fixture() {
+    const dialog = useDialog()
+    Keymap.createLayer(() => ({
+      // No mode: "global" - this should still appear in palette
+      commands: [
+        {
+          id: "session.new",
+          title: "New session",
+          group: "Session",
+          palette: true,
+          run() {},
+        },
+        {
+          id: "model.list",
+          title: "Switch model",
+          group: "Agent",
+          palette: true,
+          run() {},
+        },
+      ],
+    }))
+    onMount(() => dialog.replace(() => <CommandPaletteDialog />))
+    return null
+  }
+
+  const app = await testRender(
+    () => (
+      <TestTuiContexts>
+        <ConfigProvider config={resolve(current, { terminalSuspend: true })} service={service}>
+          <Keymap.Provider>
+            <ThemeProvider mode="dark" source={emptyThemeSource}>
+              <ToastProvider>
+                <DialogProvider>
+                  <Fixture />
+                </DialogProvider>
+              </ToastProvider>
+            </ThemeProvider>
+          </Keymap.Provider>
+        </ConfigProvider>
+      </TestTuiContexts>
+    ),
+    { width: 80, height: 24, kittyKeyboard: true },
+  )
+  app.renderer.start()
+
+  try {
+    await app.waitForFrame((frame) => frame.includes("New session"))
+    expect(app.captureCharFrame()).toContain("New session")
+    expect(app.captureCharFrame()).toContain("Switch model")
+  } finally {
+    app.renderer.destroy()
+  }
+})
+
