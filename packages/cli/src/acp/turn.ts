@@ -56,6 +56,7 @@ type Subscription = {
 }
 
 type Turn = {
+  readonly attached: Attached
   readonly ctx: ACPTranslate.TurnContext
   readonly state: Ref.Ref<ACPTranslate.TurnState>
   readonly subscription: Subscription
@@ -114,7 +115,7 @@ export const make = Effect.fnUntraced(function* (input: {
       Effect.forever,
       Effect.forkIn(subscriptionScope),
     )
-    return { ctx, state, subscription, cancelled: yield* Deferred.make<void>() } satisfies Turn
+    return { attached, ctx, state, subscription, cancelled: yield* Deferred.make<void>() } satisfies Turn
   })
 
   const take = (subscription: Subscription) =>
@@ -222,6 +223,8 @@ export const make = Effect.fnUntraced(function* (input: {
 
   const advance = Effect.fnUntraced(function* (turn: Turn) {
     const event = yield* take(turn.subscription)
+    if (event.type === "session.moved" && event.data.sessionID === turn.attached.id)
+      turn.attached.cwd = event.data.location.directory
     const folded = yield* Ref.modify(turn.state, (current) => {
       const next = ACPTranslate.fold(current, event, turn.ctx)
       return [next, next.state]
@@ -341,7 +344,20 @@ export const make = Effect.fnUntraced(function* (input: {
       backgrounds.set(attached, { state: nextState, fiber })
       return Effect.exit(responded).pipe(
         Effect.andThen(
-          followBackground({ ...turn, ctx: { ...turn.ctx, start: undefined }, state: nextState, cancelled }),
+          followBackground({
+            ...turn,
+            ctx: {
+              sessionID: turn.ctx.sessionID,
+              get cwd() {
+                return attached.cwd
+              },
+              start: undefined,
+              childUpdates: turn.ctx.childUpdates,
+              compaction: turn.ctx.compaction,
+            },
+            state: nextState,
+            cancelled,
+          }),
         ),
         Effect.interruptible,
       )

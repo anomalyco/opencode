@@ -4,7 +4,7 @@ import type { OpenCodeClient, OpenCodeEvent } from "@opencode/client/effect"
 import { Mcp } from "@opencode/schema/mcp"
 import type { Session } from "@opencode/schema/session"
 import { FSUtil } from "@opencode/util/fs-util"
-import { Cause, Deferred, Effect, Exit, Queue, Ref, Scope, Semaphore, Stream } from "effect"
+import { Cause, Deferred, Effect, Exit, Queue, Ref, Scope, Schedule, Semaphore, Stream } from "effect"
 import type { ACPCatalog, Catalog } from "./catalog"
 import { ACPClient } from "./client"
 import { availableCommands, configOptions, type Change, type Selection } from "./config-option"
@@ -36,6 +36,7 @@ type Entry = {
   readonly attached: Attached
   readonly scope: Scope.Closeable
   catalogScope: Scope.Closeable
+  catalogCwd: string
   readonly selected: Queue.Queue<Change>
   readonly moved: Queue.Queue<MovedEvent>
   readonly mcpServers: readonly SupportedMcpServer[]
@@ -70,7 +71,10 @@ export const make = Effect.fnUntraced(function* (input: {
     Stream.runForEach((event) => {
       const entry = sessions.get(event.data.sessionID)
       if (!entry) return Effect.void
-      if (event.type === "session.moved") return Queue.offer(entry.moved, event)
+      if (event.type === "session.moved") {
+        entry.attached.cwd = event.data.location.directory
+        return Queue.offer(entry.moved, event)
+      }
       return Queue.offer(
         entry.selected,
         event.type === "session.model.selected" ? { model: event.data.model } : { modeID: event.data.agent },
@@ -101,9 +105,9 @@ export const make = Effect.fnUntraced(function* (input: {
     if (!isDeepStrictEqual(next.commands, previous.commands)) yield* sendCommands(attached.id, next)
   })
 
-  const follow = (entry: Entry, current: Catalog) =>
+  const follow = (entry: Entry, current: Catalog, cwd: string) =>
     Stream.merge(
-      input.catalog.changes(entry.attached.cwd).pipe(Stream.map((catalog) => ({ catalog, patch: {} }))),
+      input.catalog.changes(cwd).pipe(Stream.map((catalog) => ({ catalog, patch: {} }))),
       Stream.fromQueue(entry.selected).pipe(Stream.map((patch) => ({ catalog: undefined, patch }))),
     ).pipe(
       Stream.runFoldEffect(
@@ -115,14 +119,14 @@ export const make = Effect.fnUntraced(function* (input: {
       ),
     )
 
-  const start = Effect.fnUntraced(function* (entry: Entry, current: Catalog) {
+  const start = Effect.fnUntraced(function* (entry: Entry, current: Catalog, cwd: string) {
     const responded = yield* ACPConnection.Responded
     yield* responded
     yield* sendCommands(entry.attached.id, current)
-    yield* follow(entry, current)
+    yield* follow(entry, current, cwd)
   })
 
-  const registerMcp = (attached: Attached, servers: readonly SupportedMcpServer[]) =>
+  const registerMcp = (attached: Attached, servers: readonly SupportedMcpServer[], directory: string) =>
     Effect.suspend(() => {
       const registered = registeredMcpBySession.get(attached.id) ?? new Map<string, Mcp.ServerConfig>()
       registeredMcpBySession.set(attached.id, registered)
@@ -133,7 +137,7 @@ export const make = Effect.fnUntraced(function* (input: {
             const config = mcpConfig(server)
             if (isDeepStrictEqual(registered.get(server.name), config)) return Effect.void
             registered.set(server.name, config)
-            return input.client.experimental.mcp.add({ server: server.name, location: { directory: attached.cwd }, config }).pipe(
+            return input.client.experimental.mcp.add({ server: server.name, location: { directory }, config }).pipe(
               Effect.catch(ACPClient.classify),
               Effect.onError(() => Effect.sync(() => registered.delete(server.name))),
               Effect.uninterruptible,
@@ -143,14 +147,24 @@ export const make = Effect.fnUntraced(function* (input: {
       )
     })
 
+  const recover = Effect.fnUntraced(function* (entry: Entry, previous: Catalog, directory: string) {
+    const next = yield* input.catalog.get(directory).pipe(
+      Effect.retry({ schedule: Schedule.spaced("1 second") }),
+    )
+    if (sessions.get(entry.attached.id) !== entry || entry.catalogCwd !== directory) return
+    yield* changed(entry.attached, previous, next, {}).pipe(Effect.ignore)
+    yield* follow(entry, next, directory).pipe(Effect.ignore, Effect.forkIn(entry.catalogScope))
+  })
+
   const consumeMoves = (entry: Entry) =>
     Stream.fromQueue(entry.moved).pipe(
       Stream.runForEach((event) =>
         entry.lock.withPermit(
           Effect.gen(function* () {
             const directory = event.data.location.directory
-            if (FSUtil.resolve(directory) === FSUtil.resolve(entry.attached.cwd)) return
-            const current = yield* input.catalog.get(entry.attached.cwd)
+            const previousCwd = entry.catalogCwd
+            if (FSUtil.resolve(directory) === FSUtil.resolve(previousCwd)) return
+            const current = yield* input.catalog.get(previousCwd)
             const next = yield* input.catalog.get(directory).pipe(
               Effect.catchCause((cause) =>
                 Cause.hasInterruptsOnly(cause)
@@ -160,9 +174,9 @@ export const make = Effect.fnUntraced(function* (input: {
             )
             if (sessions.get(entry.attached.id) !== entry) return
 
-            entry.attached.cwd = directory
+            entry.catalogCwd = directory
             registeredMcpBySession.delete(entry.attached.id)
-            yield* registerMcp(entry.attached, entry.mcpServers).pipe(
+            yield* registerMcp(entry.attached, entry.mcpServers, directory).pipe(
               Effect.catchCause((cause) =>
                 Cause.hasInterruptsOnly(cause)
                   ? Effect.failCause(cause)
@@ -175,7 +189,9 @@ export const make = Effect.fnUntraced(function* (input: {
             entry.catalogScope = Scope.forkUnsafe(entry.scope)
             if (next) {
               yield* changed(entry.attached, current, next, {}).pipe(Effect.ignore)
-              yield* follow(entry, next).pipe(Effect.ignore, Effect.forkIn(entry.catalogScope))
+              yield* follow(entry, next, directory).pipe(Effect.ignore, Effect.forkIn(entry.catalogScope))
+            } else {
+              yield* recover(entry, current, directory).pipe(Effect.ignore, Effect.forkIn(entry.catalogScope))
             }
             if (sessions.get(entry.attached.id) !== entry) return
             yield* input.connection.sessionUpdate({
@@ -212,6 +228,7 @@ export const make = Effect.fnUntraced(function* (input: {
         },
         scope: entryScope,
         catalogScope: Scope.forkUnsafe(entryScope),
+        catalogCwd: cwd,
         selected: yield* Queue.unbounded<Change>(),
         moved: yield* Queue.unbounded<MovedEvent>(),
         mcpServers,
@@ -221,9 +238,9 @@ export const make = Effect.fnUntraced(function* (input: {
       const replaced = sessions.get(session.id)
       sessions.set(session.id, entry)
       if (replaced) yield* Scope.close(replaced.scope, Exit.void)
-      yield* registerMcp(entry.attached, mcpServers).pipe(Effect.onError(() => remove(session.id, entry)))
+      yield* registerMcp(entry.attached, mcpServers, cwd).pipe(Effect.onError(() => remove(session.id, entry)))
       // `changes` replays the latest catalog, so a reload since `current` still pushes.
-      yield* start(entry, current).pipe(Effect.ignore, Effect.forkIn(entry.catalogScope))
+      yield* start(entry, current, cwd).pipe(Effect.ignore, Effect.forkIn(entry.catalogScope))
       yield* Effect.gen(function* () {
         yield* ACPConnection.Responded
         yield* consumeMoves(entry)

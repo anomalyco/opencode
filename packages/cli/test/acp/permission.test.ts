@@ -98,10 +98,17 @@ describe("acp permissions over the wire", () => {
     ])
   })
 
-  test("uses the moved directory for permission locations during an active prompt", async () => {
+  test("uses the moved directory before a delayed catalog rebind finishes", async () => {
     const server = Promise.withResolvers<Wire["server"]>()
-    const moved = Promise.withResolvers<void>()
+    const blocked = Promise.withResolvers<void>()
+    const release = Promise.withResolvers<void>()
     await using acp = await startWire({
+      fetch: async (request) => {
+        if (request.path === "/api/model" && request.query["location[directory]"] === "/moved") {
+          blocked.resolve()
+          await release.promise
+        }
+      },
       permission: allowOnce,
       onPrompt: async ({ sessionID, id }) => {
         const fixture = await server.promise
@@ -112,7 +119,7 @@ describe("acp permissions over the wire", () => {
             projectID: "global",
           }),
         )
-        await moved.promise
+        await blocked.promise
         fixture.send(
           permissionAsked(sessionID, "perm_moved", {
             action: "edit",
@@ -130,6 +137,10 @@ describe("acp permissions over the wire", () => {
     acp.server.sessions.set(session.sessionId, makeSession(session.sessionId, { cwd: "/moved" }))
 
     const prompt = acp.prompt(session.sessionId, "hello")
+    await acp.until(() => acp.permissions.length === 1, "permission during the delayed rebind")
+    const locations = acp.permissions[0]?.toolCall.locations
+    release.resolve()
+    await prompt
     await acp.waitForUpdate(
       (item) =>
         item.sessionId === session.sessionId &&
@@ -137,10 +148,7 @@ describe("acp permissions over the wire", () => {
         item.update._meta?.["opencode/directory"] === "/moved",
       "session directory update",
     )
-    moved.resolve()
-    await prompt
-
-    expect(acp.permissions[0]?.toolCall.locations).toEqual([{ path: "/moved/src/a.ts" }])
+    expect(locations).toEqual([{ path: "/moved/src/a.ts" }])
   })
 
   test.each<[string, string, string, (sessionID: string, id: string) => OpenCodeEventEncoded]>([
