@@ -77,7 +77,7 @@ import { permissionLayer } from "./lib/permission"
 import { registerIntegrationPolicy, setOrganizationPolicy } from "./fixture/policy"
 import { location } from "./fixture/location"
 import { host } from "./plugin/host"
-import { tmpdirScoped } from "./fixture/tmpdir"
+import { tmpdir, tmpdirScoped } from "./fixture/tmpdir"
 import { hostEnvironmentLayer, recordingEnvironmentLayer } from "./fixture/environment"
 import {
   codeModeListings,
@@ -1016,6 +1016,41 @@ testEffect(Layer.empty).live("falls back to legacy when a remote server answers 
     expect(server.state.initializations).toBe(1)
   }),
 )
+
+test("respawns for legacy when a slow modern stdio server refuses the initialize sent in place", async () => {
+  await using tmp = await tmpdir()
+  const release = path.join(tmp.path, "release")
+  const pids = path.join(tmp.path, "pids")
+  const connected = Effect.runPromise(
+    Effect.scoped(
+      Effect.gen(function* () {
+        const connection = yield* connect(
+          "era-locked",
+          new ConfigMCP.Local({
+            type: "local",
+            command: [process.execPath, path.join(import.meta.dir, "fixture/mcp-era-locked.ts")],
+            environment: { MCP_PID_FILE: pids, MCP_RELEASE_FILE: release },
+            protocol: "auto",
+            // The probe gives up at the 1.5 s startup timeout; the initialize sent in place gets another 1.5 s.
+            timeout: new ConfigMCP.Timeout({ startup: 1_500 }),
+          }),
+          import.meta.dir,
+        )
+        return { modern: connection.modern, tools: yield* connection.tools() }
+      }),
+    ),
+  )
+  // Released once the probe has timed out and before that initialize does, so the server reads the probe
+  // first, as a slow start makes it.
+  await Bun.sleep(2_100)
+  await Bun.write(release, "")
+
+  const { modern, tools } = await connected
+
+  expect(modern).toBe(false)
+  expect(tools.map((tool) => tool.name)).toEqual(["echo"])
+  expect((await fs.readFile(pids, "utf8")).trim().split("\n")).toHaveLength(2)
+})
 
 test("applies the configured MCP catalog timeout", async () => {
   const result = Effect.runPromise(
