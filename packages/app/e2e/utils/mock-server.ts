@@ -1432,10 +1432,20 @@ function mockHandlers(
             if (update.title !== undefined) session.title = update.title
 
             if (update.archived !== undefined) {
-              session.time = {
-                ...currentSession(session, config.directory).time,
-                archived: update.archived ? Date.now() : undefined,
-              }
+              const archived = update.archived ? Date.now() : undefined
+
+              session.time = { ...currentSession(session, config.directory).time, archived }
+              // Like the server, so sessions the client already loaded change section too.
+              state.emit([
+                {
+                  id: `evt_${update.archived ? "archived" : "unarchived"}_${session.id}_${archived ?? Date.now()}`,
+                  created: archived ?? Date.now(),
+                  type: update.archived ? "session.archived" : "session.unarchived",
+                  durable: { aggregateID: session.id, seq: 1, version: 1 },
+                  location: { directory: requestDirectory(config, ctx.request) },
+                  data: { sessionID: session.id },
+                },
+              ])
             }
           }).pipe(Effect.andThen(noContent)),
         sessionCommand: (ctx) => {

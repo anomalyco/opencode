@@ -43,6 +43,7 @@ import { createDraftComposerState } from "@/composer/state"
 import { pinnedRefs, pinKey } from "@/shell/tabs/pins"
 import { usePins } from "./pinned-area"
 import { createSessionRowNavigation } from "./tab-strip"
+import { inboxSuccessor } from "./inbox-successor"
 import { isAttachment } from "@/composer/prompt-parts"
 
 const RECENT_LIMIT = 10
@@ -207,6 +208,44 @@ export function SidebarInbox() {
       if (reveal) rowRefs.get(key)?.scrollIntoView({ behavior: "instant", block: "nearest" })
     },
   })
+
+  // Archiving or deleting the open session opens the row below it, as the list showed before the session left, rather
+  // than its neighbour in the hidden tab order. Neither a row moving to Archived nor one leaving updates the snapshot.
+  let shown: { entry: InboxEntry; keys: string[] } | undefined
+
+  createEffect(() => {
+    const keys = navigationKeys()
+    const current = inbox.entries().find((entry) => inbox.selected(entry))
+
+    if (!current || !keys.includes(current.key)) return
+
+    if (inboxArchived(current) && shown?.entry.key === current.key) return
+    shown = { entry: current, keys }
+  })
+
+  onCleanup(
+    tabs.setRemovedSessionSuccessor((detail) => {
+      const gone = (entry: InboxEntry) => entry.server === detail.server && detail.sessionIDs.includes(entry.session.id)
+
+      if (!shown || !gone(shown.entry)) return false
+
+      // Only a row the list still shows, so a session that left alongside it is skipped.
+      const visible = new Set(navigationKeys())
+
+      const key = inboxSuccessor(shown.keys, shown.entry.key, (key) => {
+        const entry = inbox.byKey().get(key)
+
+        return !!entry && visible.has(key) && !gone(entry)
+      })
+
+      const next = key && inbox.byKey().get(key)
+
+      if (!next) return false
+      inbox.open(next)
+
+      return true
+    }),
+  )
 
   // The inbox lists sessions, not tabs, so drafts get their own group: the open one and every other still holding
   // something, newest first. Without it a draft left for a session can't be reached again.
