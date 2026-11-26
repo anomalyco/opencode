@@ -8,7 +8,6 @@ import { LocationServiceMap } from "@opencode/core/location-service-map"
 import { buildLocationServiceMap } from "@opencode/core/location-services"
 import { Project } from "@opencode/core/project"
 import { AbsolutePath } from "@opencode/core/schema"
-import { offlineModels } from "../../fixture/models"
 import { tmpdir } from "../../fixture/tmpdir"
 import { testEffect } from "../../lib/effect"
 
@@ -76,7 +75,7 @@ describe("node build", () => {
   it.effect("caller replacements override the lazy default without building any locations", () =>
     Effect.gen(function* () {
       const acquisitions: string[] = []
-      const override = buildLocationServiceMap([offlineModels]).pipe(
+      const override = buildLocationServiceMap().pipe(
         Layer.tap(() =>
           Effect.sync(() => {
             acquisitions.push("caller map")

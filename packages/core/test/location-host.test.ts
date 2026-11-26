@@ -1,5 +1,5 @@
 import { describe, expect } from "bun:test"
-import { Cause, Context, Effect, Exit, Layer } from "effect"
+import { Cause, Context, Deferred, Effect, Exit, Layer, Scope } from "effect"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Global } from "@opencode/util/global"
@@ -53,21 +53,23 @@ const locationAt = Effect.fn(function* () {
 })
 
 describe("location host", () => {
-  it.live("does not build Location globals for a graph that never reaches the Location map", () =>
+  it.live("does not build Location globals until a Location actually boots", () =>
     Effect.gen(function* () {
       const api = codeModeApi(() => Effect.void)
       yield* Layer.build(AppNodeBuilder.build(LayerNode.group([Database.node, Bus.node]), api.replacements))
       expect(api.state.acquired).toBe(0)
+      yield* Layer.build(AppNodeBuilder.build(LocationServiceMap.node, api.replacements))
+      expect(api.state.acquired).toBe(0)
     }),
   )
 
-  it.live("builds Location globals once with the host, and every Location reads them", () =>
+  it.live("builds Location globals once on first Location boot, and every Location reads them across reloads", () =>
     Effect.gen(function* () {
       // Create temp directories before building the host so their cleanup runs after Locations close.
       const [first, second] = [yield* locationAt(), yield* locationAt()]
       const api = codeModeApi(() => Effect.void)
       const context = yield* Layer.build(AppNodeBuilder.build(LocationServiceMap.node, api.replacements))
-      expect(api.state.acquired).toBe(1)
+      expect(api.state.acquired).toBe(0)
       const locations = Context.get(context, LocationServiceMap.Service)
       const directory = (ref: Location.Ref) =>
         Location.Service.pipe(
@@ -76,8 +78,11 @@ describe("location host", () => {
           Effect.map((info) => info.directory),
         )
 
-      expect(yield* directory(first)).toBe(first.directory)
-      expect(yield* directory(second)).toBe(second.directory)
+      expect(yield* Effect.all([directory(first), directory(second)], { concurrency: "unbounded" })).toEqual([
+        first.directory,
+        second.directory,
+      ])
+      expect(api.state.acquired).toBe(1)
       yield* locations.invalidate(first)
       expect(yield* directory(first)).toBe(first.directory)
       expect(api.state.acquired).toBe(1)
@@ -106,24 +111,66 @@ describe("location host", () => {
       const api = codeModeApi((locations) =>
         Effect.scoped(locations.contextEffect(ref)).pipe(Effect.orDie, Effect.asVoid),
       )
-      const exit = yield* Layer.build(AppNodeBuilder.build(LocationServiceMap.node, api.replacements)).pipe(
-        Effect.scoped,
-        Effect.exit,
-      )
+      const context = yield* Layer.build(AppNodeBuilder.build(LocationServiceMap.node, api.replacements))
+      const locations = Context.get(context, LocationServiceMap.Service)
+      const exit = yield* Effect.scoped(locations.contextEffect(ref)).pipe(Effect.exit)
       expect(Exit.isFailure(exit) && Cause.pretty(exit.cause)).toContain("still building globals")
+    }),
+  )
+
+  it.live("lets a forked background fiber during Stage 1 await hostContext instead of failing", () =>
+    Effect.gen(function* () {
+      const ref = yield* locationAt()
+      const result = yield* Deferred.make<AbsolutePath>()
+      const api = codeModeApi((locations) =>
+        Effect.gen(function* () {
+          yield* Effect.scoped(
+            locations.contextEffect(ref).pipe(Effect.map((ctx) => Context.get(ctx, Location.Service).directory)),
+          ).pipe(
+            Effect.flatMap((dir) => Deferred.succeed(result, dir)),
+            Effect.forkDetach,
+          )
+          // Give the forked fiber a turn to hit locations.host before Stage 1 finishes.
+          yield* Effect.yieldNow
+        }),
+      )
+      const context = yield* Layer.build(AppNodeBuilder.build(LocationServiceMap.node, api.replacements))
+      const locations = Context.get(context, LocationServiceMap.Service)
+      expect(
+        yield* Effect.scoped(
+          locations.contextEffect(ref).pipe(Effect.map((ctx) => Context.get(ctx, Location.Service).directory)),
+        ),
+      ).toBe(ref.directory)
+      expect(yield* Deferred.await(result)).toBe(ref.directory)
+      expect(api.state.acquired).toBe(1)
     }),
   )
 
   it.live("fails the host context when Stage 1 fails", () =>
     Effect.gen(function* () {
+      const ref = yield* locationAt()
       const api = codeModeApi(() => Effect.die(new Error("stage 1 broke")))
-      const exit = yield* Layer.build(AppNodeBuilder.build(LocationServiceMap.node, api.replacements)).pipe(
-        Effect.scoped,
-        Effect.exit,
-      )
+      const context = yield* Layer.build(AppNodeBuilder.build(LocationServiceMap.node, api.replacements))
+      const locations = Context.get(context, LocationServiceMap.Service)
+      const exit = yield* Effect.scoped(locations.contextEffect(ref)).pipe(Effect.exit)
       expect(Exit.isFailure(exit) && Cause.pretty(exit.cause)).toContain("stage 1 broke")
-      const host = yield* Effect.exit(api.state.locations?.host ?? Effect.die(new Error("no host")))
+      const host = yield* Effect.exit(locations.host ?? Effect.die(new Error("no host")))
       expect(Exit.isFailure(host) && Cause.pretty(host.cause)).toContain("stage 1 broke")
+    }),
+  )
+
+  it.live("interrupts host lookup cleanly after the host scope closes", () =>
+    Effect.gen(function* () {
+      const api = codeModeApi(() => Effect.void)
+      const scope = yield* Scope.make()
+      const context = yield* Layer.buildWithScope(
+        AppNodeBuilder.build(LocationServiceMap.node, api.replacements),
+        scope,
+      )
+      const locations = Context.get(context, LocationServiceMap.Service)
+      yield* Scope.close(scope, Exit.void)
+      const exit = yield* Effect.exit(locations.host ?? Effect.die(new Error("no host")))
+      expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true)
     }),
   )
 })

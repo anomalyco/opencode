@@ -1,4 +1,17 @@
-import { Context, Duration, Effect, Exit, Layer, LayerMap, MutableHashMap, Option, RcMap, Scope } from "effect"
+import {
+  Context,
+  Deferred,
+  Duration,
+  Effect,
+  Exit,
+  Fiber,
+  Layer,
+  LayerMap,
+  MutableHashMap,
+  Option,
+  RcMap,
+  Scope,
+} from "effect"
 import { Node } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { Instance } from "./instance.js"
@@ -21,16 +34,56 @@ export function buildLocationServiceMap(
       // Forked first so it closes last: Locations and secondary instance containers shut down before Stage-1 globals.
       const globalScope = yield* Scope.fork(owner)
       const instanceScope = yield* Scope.fork(owner)
-      let settled: Exit.Exit<LayerNode.Host> | undefined
-      const host = Effect.suspend(
-        () =>
-          settled ??
-          Effect.die(
-            new Error(
-              "A global service booted a Location while its host was still building globals; boot it after startup",
-            ),
-          ),
+      let closed = false
+      let deferred: Deferred.Deferred<LayerNode.Host> | undefined
+      let buildingFiber: Fiber.Fiber<unknown, unknown> | undefined
+      yield* Scope.addFinalizer(
+        globalScope,
+        Effect.sync(() => {
+          closed = true
+          if (deferred) Deferred.doneUnsafe(deferred, Exit.interrupt())
+        }),
       )
+      // Synchronous re-entrancy from the Stage-1 builder fiber would deadlock (including on the same Location ref
+      // already in flight in RcMap); concurrent or background fibers can safely wait on the shared Deferred.
+      const reentrant = () => buildingFiber !== undefined && Fiber.getCurrent() === buildingFiber
+      const reentrantError = () =>
+        new Error("A global service booted a Location while its host was still building globals; boot it after startup")
+      const host: Effect.Effect<LayerNode.Host> = Effect.suspend(() => {
+        if (closed) return Effect.interrupt
+        if (deferred) {
+          if (reentrant()) return Effect.die(reentrantError())
+          return Deferred.await(deferred)
+        }
+        const pending = Deferred.makeUnsafe<LayerNode.Host>()
+        deferred = pending
+        const build = Effect.suspend(() => {
+          buildingFiber = Fiber.getCurrent()
+          return Layer.buildWithMemoMap(
+            LayerNode.compile(Instance.globals(stage1), { replacements: stage1 }),
+            memoMap,
+            globalScope,
+          )
+        }).pipe(
+          // Like a Location's other boot failures, a global that fails to build is a defect.
+          Effect.orDie,
+          Effect.onExit((exit) =>
+            Effect.sync(() => {
+              buildingFiber = undefined
+              Deferred.doneUnsafe(
+                pending,
+                Exit.map(exit, (context) => ({ tag: Node.tags.values.global, context, replacements })),
+              )
+            }),
+          ),
+        )
+        // Fork into globalScope so one cancelled Location boot cannot interrupt the shared Stage-1 build,
+        // while closing the host cleanly interrupts it.
+        return build.pipe(
+          Effect.forkIn(globalScope, { startImmediately: true }),
+          Effect.andThen(Deferred.await(pending)),
+        )
+      })
       const builds = MutableHashMap.empty<Location.Ref, { close?: Effect.Effect<void> }>()
       const inner: LayerMap.LayerMap<Location.Ref, LocationServices, Instance.Error> = yield* LayerMap.make(
         (ref: Location.Ref) => {
@@ -90,8 +143,14 @@ export function buildLocationServiceMap(
         ...inner,
         host,
         instanceScope,
-        get: (ref: Location.Ref) => inner.get(LocationServiceMap.canonical(ref)),
-        contextEffect: (ref: Location.Ref) => inner.contextEffect(LocationServiceMap.canonical(ref)),
+        get: (ref: Location.Ref) =>
+          Layer.suspend(() =>
+            reentrant() ? Layer.unwrap(Effect.die(reentrantError())) : inner.get(LocationServiceMap.canonical(ref)),
+          ),
+        contextEffect: (ref: Location.Ref) =>
+          Effect.suspend(() =>
+            reentrant() ? Effect.die(reentrantError()) : inner.contextEffect(LocationServiceMap.canonical(ref)),
+          ),
         contextEffectOption: (ref: Location.Ref) => inner.contextEffectOption(LocationServiceMap.canonical(ref)),
         invalidate: (ref: Location.Ref) =>
           Effect.suspend(() => {
@@ -128,8 +187,8 @@ export function buildLocationServiceMap(
             )
           }).pipe(Effect.uninterruptible),
       }
-      // Stage 1: build every global a Location reaches, once, before any Location boots. Globals that depend on
-      // this map or on Instance receive the map itself rather than waiting on the layer currently being built.
+      // Stage 1 runs lazily on the first Location or SDK instance boot, into globalScope (which closes last), so
+      // hosts that never open a Location skip Location-only globals while hosts that do build them once for life.
       const stage1: LayerNode.Replacements = [
         // The default selector, for hosts that bring none of their own.
         Instance.node.replace(
@@ -141,21 +200,6 @@ export function buildLocationServiceMap(
         ...replacements,
         LocationServiceMap.node.replace(Layer.succeed(LocationServiceMap.Service, map)),
       ]
-      yield* Effect.suspend(() =>
-        Layer.buildWithMemoMap(
-          LayerNode.compile(Instance.globals(stage1), { replacements: stage1 }),
-          memoMap,
-          globalScope,
-        ),
-      ).pipe(
-        // Like a Location's other boot failures, a global that fails to build is a defect.
-        Effect.orDie,
-        Effect.onExit((exit) =>
-          Effect.sync(() => {
-            settled = Exit.map(exit, (context) => ({ tag: Node.tags.values.global, context, replacements }))
-          }),
-        ),
-      )
       return Context.make(LocationServiceMap.Service, map)
     }).pipe(Scope.provide(owner)),
   )
