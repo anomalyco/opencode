@@ -69,6 +69,11 @@ const it = testEffect(
 const DEPLOY = "---\nname: deploy\ndescription: Deploy the app\n---\n# Deploy\n\nRun scripts/run.sh.\n"
 const deploy = { "SKILL.md": DEPLOY, "scripts/run.sh": "echo run" }
 const id = Skill.ID.make("team:deploy")
+const script = (() => {
+  const parsed = Skill.parseFilePath("scripts/run.sh")
+  if (!parsed) throw new Error("scripts/run.sh should be a safe skill file path")
+  return parsed
+})()
 
 /**
  * A Streamable HTTP MCP server publishing skills through the SDK's skills extension. Keys are skill folders below
@@ -172,7 +177,7 @@ describe("MCP skills", () => {
         },
       ])
       const skills = yield* Skill.Service
-      expect(yield* skills.files(id)).toEqual(["scripts/run.sh"])
+      expect((yield* skills.files(id))?.map(String)).toEqual(["scripts/run.sh"])
       expect(server.state.reads).toEqual([])
     }),
   )
@@ -222,11 +227,11 @@ describe("MCP skills", () => {
       expect(yield* skills.instructions(id)).toBe(
         'This skill comes from MCP server "team", not from this machine.\n\n# Deploy\n\nRun scripts/run.sh.\n',
       )
-      expect(new TextDecoder().decode(yield* skills.read(id, "scripts/run.sh"))).toBe("echo run")
+      expect(new TextDecoder().decode(yield* skills.read(id, script))).toBe("echo run")
       // Once loaded, the content is listed and nothing is read again.
       yield* eventually(skills.get(id), (skill) => skill?.content === "# Deploy\n\nRun scripts/run.sh.\n")
       yield* skills.content(id)
-      yield* skills.read(id, "scripts/run.sh")
+      yield* skills.read(id, script)
       expect(server.state.reads).toEqual(["skill://deploy/SKILL.md", "skill://deploy/scripts/run.sh"])
     }),
   )
@@ -243,7 +248,7 @@ describe("MCP skills", () => {
       expect(content).toBeInstanceOf(Skill.LoadError)
       expect(content.message).toStartWith("Failed to load SKILL.md of MCP skill team:deploy: ")
       expect(content.message).toContain("digest")
-      const file = yield* skills.read(id, "scripts/run.sh").pipe(Effect.flip)
+      const file = yield* skills.read(id, script).pipe(Effect.flip)
       expect(file.message).toContain("digest")
     }),
   )
