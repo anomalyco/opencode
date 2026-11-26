@@ -18690,9 +18690,6 @@
               "recommended_api": {
                 "type": "boolean"
               },
-              "model_speeds": {
-                "type": "boolean"
-              },
               "full_codemode": {
                 "type": "boolean"
               },

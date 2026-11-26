@@ -2703,7 +2703,6 @@ export type ConfigEntry =
           artifacts?: boolean
           console_watches?: boolean
           recommended_api?: boolean
-          model_speeds?: boolean
           full_codemode?: boolean
           codemode_agents?: boolean
           machines?: boolean

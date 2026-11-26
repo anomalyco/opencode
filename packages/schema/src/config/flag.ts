@@ -14,8 +14,6 @@ export const registry = {
   console_watches:
     "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console, and wake sessions when they change.",
   recommended_api: "Use each model's recommended API from models.dev instead of the first API it lists.",
-  model_speeds:
-    "Offer a model's faster and slower service tiers (fast, flex…) as speeds of that model: one entry in the model picker with a speed selector, instead of a separate entry per tier such as gpt-5.5-fast.",
   full_codemode: "Enable the full Code Mode work in progress.",
   codemode_agents:
     "Let Code Mode scripts start subagents with agent() and make single model calls with llm(), each optionally returning a value checked against a schema, so one script can fan work out, verify it and combine the results.",
