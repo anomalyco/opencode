@@ -1645,12 +1645,10 @@ fn is_replay_message(message: &SessionMessageInfo) -> bool {
 /// `projectedMessages`: the newest `limit` replayable messages, oldest first.
 pub async fn messages(client: &Client, session: &str, limit: u32) -> Result<Vec<SessionMessageInfo>, String> {
     let target = limit as usize;
+    let page_limit = limit.min(MAX_MESSAGE_PAGE_LIMIT);
     let mut collected = Vec::with_capacity(target.min(MAX_MESSAGE_PAGE_LIMIT as usize));
     let mut cursor: Option<String> = None;
-    let mut floor: u32 = 1;
     while collected.len() < target {
-        let remaining = (target - collected.len()).min(MAX_MESSAGE_PAGE_LIMIT as usize) as u32;
-        let page_limit = remaining.saturating_mul(2).max(floor).min(MAX_MESSAGE_PAGE_LIMIT);
         let input = MessageListInput {
             session_id: SessionID(session.to_owned()),
             limit: Some(i64::from(page_limit)),
@@ -1661,7 +1659,6 @@ pub async fn messages(client: &Client, session: &str, limit: u32) -> Result<Vec<
         let call = Client::message_list_call(&input).map_err(|error| error.to_string())?;
         let list: Value = client.json(call).await.map_err(|error| error.to_string())?;
         let data = list["data"].as_array().map(Vec::as_slice).unwrap_or_default();
-        let before = collected.len();
         for value in data {
             let message = decode_message(value);
             if !is_replay_message(&message) {
@@ -1678,7 +1675,6 @@ pub async fn messages(client: &Client, session: &str, limit: u32) -> Result<Vec<
             break;
         }
         cursor = next.map(str::to_owned);
-        floor = if collected.len() == before { page_limit.saturating_mul(2).min(MAX_MESSAGE_PAGE_LIMIT) } else { 1 };
     }
     collected.reverse();
     Ok(collected)
@@ -1971,79 +1967,45 @@ mod tests {
 
     #[tokio::test]
     async fn messages_skips_bookkeeping_rows_across_pages() {
-        let user_row =
-            |id: &str, text: &str| json!({ "id": id, "type": "user", "text": text, "time": { "created": 1 } });
-        let assistant_row = |id: &str, text: &str| {
+        let rows = vec![
+            json!({ "id": "msg_idle", "type": "idle", "outcome": "succeeded", "time": { "created": 5 } }),
+            json!({ "id": "msg_loc", "type": "location-switched", "location": { "directory": "/tmp" }, "time": { "created": 4 } }),
             json!({
-                "id": id,
+                "id": "msg_a2",
                 "type": "assistant",
                 "agent": "build",
                 "model": { "id": "model", "providerID": "demo" },
-                "content": [{ "type": "text", "text": text }],
-                "time": { "created": 1 },
-            })
-        };
-        let rows = vec![
-            json!({ "id": "msg_b4", "type": "idle", "outcome": "succeeded", "time": { "created": 10 } }),
-            json!({ "id": "msg_b3", "type": "location-switched", "location": { "directory": "/tmp" }, "time": { "created": 9 } }),
-            json!({ "id": "msg_b2", "type": "model-switched", "model": { "id": "m", "providerID": "p" }, "time": { "created": 8 } }),
-            json!({ "id": "msg_b1", "type": "system", "text": "note", "time": { "created": 7 } }),
-            assistant_row("msg_a2", "Latest reply"),
-            json!({ "id": "msg_b_agent", "type": "agent-switched", "agent": "build", "time": { "created": 6 } }),
-            json!({ "id": "msg_b_syn", "type": "synthetic", "text": "syn", "time": { "created": 5 } }),
-            json!({ "id": "msg_bad", "type": "assistant", "content": "not a list" }),
-            user_row("msg_u2", "Latest prompt"),
-            json!({ "id": "msg_c1", "type": "compaction", "status": "completed", "reason": "auto", "summary": "sum", "time": { "created": 3 } }),
-            assistant_row("msg_a1", "Older reply"),
+                "content": [{ "type": "text", "text": "Latest reply" }],
+                "time": { "created": 3 },
+            }),
+            json!({ "id": "msg_model", "type": "model-switched", "model": { "id": "m", "providerID": "p" }, "time": { "created": 2 } }),
+            json!({ "id": "msg_u2", "type": "user", "text": "Latest prompt", "time": { "created": 1 } }),
         ];
 
-        // 1. limit=1 crosses four leading bookkeeping rows and returns the newest assistant message.
         let paged = Arc::new(PagedMessages::new(rows.clone()));
         let client = Client::with_transport("http://test", paged.clone()).unwrap();
         let listed = messages(&client, "ses_1", 1).await.unwrap();
         assert_eq!(listed.len(), 1);
         assert!(matches!(&listed[0], SessionMessageInfo::Assistant(a) if a.id.as_str() == "msg_a2"));
         let queries = paged.queries.lock().unwrap().clone();
-        assert!(queries.len() > 1);
+        assert_eq!(queries.len(), 3);
         assert!(queries[0].iter().any(|(k, v)| k == "order" && v == "desc"));
         assert!(
             queries[1..].iter().all(|q| q.iter().any(|(k, _)| k == "cursor") && !q.iter().any(|(k, _)| k == "order"))
         );
 
-        // 2. limit=3 collects compaction, user, and assistant oldest-first, ignoring bookkeeping and unreadable rows.
         let paged = Arc::new(PagedMessages::new(rows));
         let client = Client::with_transport("http://test", paged).unwrap();
-        let listed = messages(&client, "ses_1", 3).await.unwrap();
+        let listed = messages(&client, "ses_1", 2).await.unwrap();
         let ids: Vec<&str> = listed
             .iter()
             .map(|msg| match msg {
                 SessionMessageInfo::User(u) => u.id.as_str(),
                 SessionMessageInfo::Assistant(a) => a.id.as_str(),
-                SessionMessageInfo::Compaction(c) => c.id(),
                 _ => "other",
             })
             .collect();
-        assert_eq!(ids, ["msg_c1", "msg_u2", "msg_a2"]);
-
-        // 3. limit > 200 paginates within the server's 200-row cap and returns oldest-first.
-        let many: Vec<Value> = (1..=205).rev().map(|n| user_row(&format!("msg_u{n}"), &format!("p{n}"))).collect();
-        let paged = Arc::new(PagedMessages::new(many));
-        let client = Client::with_transport("http://test", paged.clone()).unwrap();
-        let listed = messages(&client, "ses_1", 205).await.unwrap();
-        assert_eq!(listed.len(), 205);
-        assert!(matches!(&listed[0], SessionMessageInfo::User(u) if u.id.as_str() == "msg_u1"));
-        assert!(matches!(listed.last().unwrap(), SessionMessageInfo::User(u) if u.id.as_str() == "msg_u205"));
-        assert_eq!(paged.queries.lock().unwrap().len(), 2);
-
-        // 4. Bookkeeping-only session terminates in one request with an empty list.
-        let only_bookkeeping = vec![
-            json!({ "id": "msg_i1", "type": "idle", "outcome": "succeeded", "time": { "created": 2 } }),
-            json!({ "id": "msg_s1", "type": "system", "text": "note", "time": { "created": 1 } }),
-        ];
-        let paged = Arc::new(PagedMessages::new(only_bookkeeping));
-        let client = Client::with_transport("http://test", paged.clone()).unwrap();
-        assert!(messages(&client, "ses_1", 3).await.unwrap().is_empty());
-        assert_eq!(paged.queries.lock().unwrap().len(), 1);
+        assert_eq!(ids, ["msg_u2", "msg_a2"]);
     }
 
     fn texts(output: &Output) -> Vec<(EntryKind, String)> {

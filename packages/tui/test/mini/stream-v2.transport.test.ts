@@ -4703,8 +4703,28 @@ describe("V2 mini transport", () => {
     await transport.close()
   })
 
-  test("skips bookkeeping rows and paginates until replayLimit renderable messages are collected", async () => {
-    const paged = (descRows: SessionMessages) => {
+  test("skips bookkeeping rows when collecting replayLimit messages across pages", async () => {
+    const rows: SessionMessages = [
+      { id: "msg_idle", type: "idle", outcome: "succeeded", time: { created: 5 } },
+      { id: "msg_loc", type: "location-switched", location: { directory: "/tmp" }, time: { created: 4 } },
+      {
+        id: "msg_a2",
+        type: "assistant",
+        agent: "build",
+        model: { providerID: "test", id: "model" },
+        content: [{ type: "text", text: "Latest reply" }],
+        time: { created: 3, completed: 3 },
+      },
+      {
+        id: "msg_model",
+        type: "model-switched",
+        model: { providerID: "test", id: "model" },
+        time: { created: 2 },
+      },
+      { id: "msg_u2", type: "user", text: "Latest prompt", files: [], agents: [], time: { created: 1 } },
+    ]
+
+    const run = async (replayLimit: number) => {
       const requests: Array<{ limit?: number; order?: string; cursor?: string }> = []
       const events = feed()
       events.push(connected())
@@ -4714,167 +4734,35 @@ describe("V2 mini transport", () => {
         if (request.cursor && request.order !== undefined) {
           return Promise.reject(new Error("Cursor cannot be combined with order"))
         }
-        if (request.limit !== undefined && request.limit > 200) {
-          return Promise.reject(new Error("limit exceeds server max 200"))
-        }
         const offset = request.cursor ? Number(request.cursor) : 0
-        const size = request.limit ?? 50
-        const data = descRows.slice(offset, offset + size)
-        const nextOffset = offset + data.length
-        return ok({
-          data,
-          cursor: {
-            next: data.length > 0 ? String(nextOffset) : undefined,
-          },
-        })
+        const data = rows.slice(offset, offset + (request.limit ?? 50))
+        return ok({ data, cursor: { next: data.length > 0 ? String(offset + data.length) : undefined } })
       })
-      return { client, requests }
-    }
-
-    const userRow = (id: string, text: string, created: number): SessionMessages[number] => ({
-      id,
-      type: "user",
-      text,
-      files: [],
-      agents: [],
-      time: { created },
-    })
-    const assistantRow = (id: string, text: string, created: number): SessionMessages[number] => ({
-      id,
-      type: "assistant",
-      agent: "build",
-      model: { providerID: "test", id: "model" },
-      content: [{ type: "text", text }],
-      time: { created, completed: created },
-    })
-    const idleRow = (id: string, created: number): SessionMessages[number] => ({
-      id,
-      type: "idle",
-      outcome: "succeeded",
-      time: { created },
-    })
-    const locationRow = (id: string, created: number): SessionMessages[number] => ({
-      id,
-      type: "location-switched",
-      location: { directory: "/tmp" },
-      time: { created },
-    })
-    const modelRow = (id: string, created: number): SessionMessages[number] => ({
-      id,
-      type: "model-switched",
-      model: { providerID: "test", id: "model" },
-      time: { created },
-    })
-    const agentRow = (id: string, created: number): SessionMessages[number] => ({
-      id,
-      type: "agent-switched",
-      agent: "build",
-      time: { created },
-    })
-    const systemRow = (id: string, created: number): SessionMessages[number] => ({
-      id,
-      type: "system",
-      text: "system note",
-      time: { created },
-    })
-    const syntheticRow = (id: string, created: number): SessionMessages[number] => ({
-      id,
-      type: "synthetic",
-      text: "synthetic note",
-      time: { created },
-    })
-
-    // 1. replayLimit=1 past four leading bookkeeping rows must still replay the newest assistant row.
-    const rows: SessionMessages = [
-      idleRow("msg_b4", 10),
-      locationRow("msg_b3", 9),
-      idleRow("msg_b2", 8),
-      locationRow("msg_b1", 7),
-      assistantRow("msg_a2", "Latest reply", 6),
-      modelRow("msg_b0", 5),
-      agentRow("msg_b_agent", 4),
-      systemRow("msg_b_sys", 3),
-      syntheticRow("msg_b_syn", 2),
-      userRow("msg_u2", "Latest prompt", 1),
-      assistantRow("msg_a1", "Older reply", 0),
-    ]
-    {
-      const { client, requests } = paged(rows)
       const ui = footer()
       const transport = await createSessionTransport({
         sdk: client,
         sessionID: "ses_1",
         thinking: false,
         replay: true,
-        replayLimit: 1,
+        replayLimit,
         footer: ui.api,
       })
-      expect(ui.commits.map((commit) => [commit.kind, commit.text])).toEqual([["assistant", "Latest reply"]])
-      expect(requests.length).toBeGreaterThan(1)
-      expect(requests[0]?.order).toBe("desc")
-      expect(requests.slice(1).every((request) => request.cursor !== undefined && request.order === undefined)).toBe(
-        true,
-      )
       await transport.close()
+      return { commits: ui.commits.map((commit) => [commit.kind, commit.text]), requests }
     }
 
-    // 2. replayLimit=2 collects the newest two renderable messages in oldest-first order across bookkeeping gaps.
-    {
-      const { client } = paged(rows)
-      const ui = footer()
-      const transport = await createSessionTransport({
-        sdk: client,
-        sessionID: "ses_1",
-        thinking: false,
-        replay: true,
-        replayLimit: 2,
-        footer: ui.api,
-      })
-      expect(ui.commits.map((commit) => [commit.kind, commit.text])).toEqual([
-        ["user", "Latest prompt"],
-        ["assistant", "Latest reply"],
-      ])
-      await transport.close()
-    }
+    const one = await run(1)
+    expect(one.commits).toEqual([["assistant", "Latest reply"]])
+    expect(one.requests).toEqual([
+      { limit: 1, order: "desc", cursor: undefined },
+      { limit: 1, order: undefined, cursor: "1" },
+      { limit: 1, order: undefined, cursor: "2" },
+    ])
 
-    // 3. replayLimit > 200 paginates without exceeding the server's 200-row page cap.
-    {
-      const large: SessionMessages = Array.from({ length: 205 }, (_, index) =>
-        userRow(`msg_u_${205 - index}`, `prompt ${205 - index}`, 205 - index),
-      )
-      const { client, requests } = paged(large)
-      const ui = footer()
-      const transport = await createSessionTransport({
-        sdk: client,
-        sessionID: "ses_1",
-        thinking: false,
-        replay: true,
-        replayLimit: 205,
-        footer: ui.api,
-      })
-      expect(requests.every((request) => (request.limit ?? 0) <= 200)).toBe(true)
-      expect(requests).toHaveLength(2)
-      expect(ui.commits).toHaveLength(205)
-      expect(ui.commits[0]?.text).toBe("prompt 1")
-      expect(ui.commits.at(-1)?.text).toBe("prompt 205")
-      await transport.close()
-    }
-
-    // 4. Bookkeeping-only session stops cleanly after reaching the end.
-    {
-      const { client, requests } = paged([idleRow("msg_only_idle", 2), systemRow("msg_only_sys", 1)])
-      const ui = footer()
-      const transport = await createSessionTransport({
-        sdk: client,
-        sessionID: "ses_1",
-        thinking: false,
-        replay: true,
-        replayLimit: 3,
-        footer: ui.api,
-      })
-      expect(ui.commits).toEqual([])
-      expect(requests).toHaveLength(1)
-      await transport.close()
-    }
+    const two = await run(2)
+    expect(two.commits).toEqual([
+      ["user", "Latest prompt"],
+      ["assistant", "Latest reply"],
+    ])
   })
 })

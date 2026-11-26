@@ -906,16 +906,14 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
 
   const projectedMessages = async (client: OpenCodeClient, signal: AbortSignal) => {
     const target = input.replayLimit ?? DEFAULT_REPLAY_LIMIT
+    const limit = Math.min(MAX_MESSAGE_PAGE_LIMIT, target)
     const collected: SessionMessageInfo[] = []
     let cursor: string | undefined
-    let floor = 1
     while (collected.length < target) {
-      const limit = Math.min(MAX_MESSAGE_PAGE_LIMIT, Math.max((target - collected.length) * 2, floor))
       const page = await client.message.list(
         cursor ? { sessionID: input.sessionID, limit, cursor } : { sessionID: input.sessionID, limit, order: "desc" },
         { signal },
       )
-      const before = collected.length
       for (const message of page.data) {
         if (!replayMessageTypes.has(message.type)) continue
         collected.push(message)
@@ -924,7 +922,6 @@ export async function createSessionTransport(input: StreamInput): Promise<Sessio
       const next = page.cursor.next ?? undefined
       if (collected.length >= target || !next || next === cursor || page.data.length < limit) break
       cursor = next
-      floor = collected.length === before ? Math.min(MAX_MESSAGE_PAGE_LIMIT, limit * 2) : 1
     }
     return collected.toReversed()
   }
