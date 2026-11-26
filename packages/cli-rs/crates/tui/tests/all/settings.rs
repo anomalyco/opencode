@@ -110,6 +110,22 @@ fn settings_dialog_shows_configured_values_as_typescript() {
 }
 
 #[test]
+fn a_wheel_step_in_a_dialog_scrolls_by_scroll_speed() {
+    let app = TestApp::new(80, 30);
+    let tui = support::mount_empty(&app, support::component_info(json!({ "scroll": { "speed": 2 } })), None);
+    settings::show(&tui, None);
+    let row = |title: &str| {
+        wait_for(&app, title);
+        app.text().lines().position(|line| line.contains(title)).unwrap() as i32
+    };
+    let before = row("Scrollbar");
+    app.scroll(40, before as u16, true);
+    app.advance(std::time::Duration::from_millis(1));
+    let after = row("Scrollbar");
+    assert_eq!(before - after, 2, "one wheel step did not move two rows:\n{}", app.text());
+}
+
+#[test]
 fn experiments_dialog_matches_typescript() {
     let app = TestApp::new(80, 24);
     let tui = support::mount_empty(&app, support::component_info(json!({})), None);

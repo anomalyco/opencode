@@ -267,6 +267,49 @@ story("compact checkboxes use the design system control states and focus ring", 
   await expect(controls.nth(0)).toHaveCSS("outline-offset", "2px")
 })
 
+story("radios support their surfaces with the design system control states", async ({ mount, page }) => {
+  const root = await mount("ui-radio--surfaces")
+
+  await page.addStyleTag({
+    content: `[data-component="radio-v2"] {
+      --v2-background-bg-base: rgb(20, 30, 40);
+      --v2-background-bg-layer-01: rgb(50, 60, 70);
+      --v2-background-bg-accent: rgb(1, 2, 3);
+      --v2-border-border-strong: rgb(4, 5, 6);
+      --v2-overlay-simple-overlay-hover: rgb(10, 20, 30);
+      --v2-state-fg-danger: rgb(7, 8, 9);
+    }`,
+  })
+
+  const controls = root.locator('[data-slot="radio-v2-item-control"]')
+
+  for (const [index, background] of [
+    [0, "rgb(20, 30, 40)"],
+    [2, "rgb(20, 30, 40)"],
+    [4, "rgb(50, 60, 70)"],
+    [6, "rgb(50, 60, 70)"],
+  ] as const) {
+    await expect(controls.nth(index)).toHaveCSS("background-color", background)
+    await expect(controls.nth(index)).toHaveCSS("background-image", "none")
+  }
+
+  for (const index of [1, 5]) {
+    await expect(controls.nth(index)).toHaveCSS("background-color", "rgb(1, 2, 3)")
+    await expect(controls.nth(index)).not.toHaveCSS("background-image", "none")
+  }
+
+  for (const index of [3, 7]) {
+    await expect(controls.nth(index)).toHaveCSS("box-shadow", "rgb(7, 8, 9) 0px 0px 0px 0.5px inset")
+  }
+
+  await controls.nth(4).hover()
+  await expect(controls.nth(4)).toHaveCSS("background-color", "rgb(50, 60, 70)")
+  await expect(controls.nth(4)).toHaveCSS(
+    "box-shadow",
+    /^rgb\(4, 5, 6\) 0px 0px 0px 0\.5px inset, rgb\(10, 20, 30\) 0px 0px 0px [\d.]+px inset$/,
+  )
+})
+
 story(
   "text inputs keep clear and copy actions equally sized and inset across sizes and directions",
   async ({ mount, page }) => {

@@ -8,6 +8,7 @@ import type { Tool } from "@opencode/schema/tool"
 import { Clock, Deferred, Effect, Fiber, Option, Schema, Stream, Struct } from "effect"
 import { Agent } from "../../agent.js"
 import { Bus } from "../../bus.js"
+import { CodeModeTool } from "../../codemode/tool.js"
 import { Config } from "../../config.js"
 import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Environment } from "../../environment/index.js"
@@ -345,10 +346,10 @@ export const Plugin = {
         command: invocation.command,
         program: invocation.shell,
         target,
-        rules: Effect.gen(function* () {
+        policy: Effect.gen(function* () {
           const session = yield* sessions.get(context.sessionID)
           const agent = yield* agents.resolve(context.agent)
-          return Permission.merge(agent?.permissions ?? [], session.permissions ?? [])
+          return Permission.Policy.fromRules(agent?.permissions ?? [], session.permissions ?? [])
         }),
       })
       yield* Effect.forEach(
@@ -483,7 +484,8 @@ export const Plugin = {
                       environment: target.environment,
                       timeout,
                       shell: yield* compatibleShell,
-                      metadata: { sessionID: context.sessionID },
+                      // The call in the transcript that started the command, so clients can tell whose it is.
+                      metadata: { sessionID: context.sessionID, callID: (yield* CodeModeTool.Parent) ?? context.id },
                       waited: timeoutBackgrounds,
                       toolCall: {
                         sessionID: context.sessionID,

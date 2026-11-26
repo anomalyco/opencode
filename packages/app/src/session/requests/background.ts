@@ -7,7 +7,7 @@ import type {
   ShellInfo,
 } from "@opencode/client/promise"
 import { Option, Schema } from "effect"
-import { createMemo } from "solid-js"
+import { createMemo, mapArray } from "solid-js"
 
 // `started` is when the work began running: the latest call's run time, the child session's creation, or the shell's
 // start.
@@ -58,34 +58,31 @@ export function createSessionBackground(input: {
   // Running background jobs in the session's tree.
   jobs?: () => readonly JobInfo[]
 }) {
+  // What each message adds to the history below. A message is read again only when it changes, so a history page that
+  // lands, or a tool that updates, costs that page or that message and not the loaded transcript.
+  const facts = mapArray(
+    () => {
+      const id = input.sessionID()
+
+      return id ? input.messages(id) : []
+    },
+    (message) => createMemo(() => messageFacts(message)),
+  )
+
   const history = createMemo(() => {
     // The latest call for each child names it; calls never decide whether it still runs.
-    const calls = new Map<string, { label: string | undefined; agent: string | undefined; started: number }>()
+    const calls = new Map<string, SubagentCall>()
     // A script moved to the background ends its execute call with the job's id; its first line names it.
     const scripts = new Map<string, string | undefined>()
-    const id = input.sessionID()
 
-    const assistant = (id ? input.messages(id) : []).reduce<SessionMessageAssistant | undefined>((latest, message) => {
-      if (message.type !== "assistant") return latest
-      message.content.forEach((part) => {
-        if (part.type === "tool" && part.name === "execute" && part.state.status === "completed") {
-          const jobID = text(part.state.metadata?.jobID)
+    const assistant = facts().reduce<SessionMessageAssistant | undefined>((latest, read) => {
+      const fact = read()
 
-          if (jobID) scripts.set(jobID, firstLine(text(part.state.input.code)))
-        }
+      if (!fact) return latest
+      fact.scripts.forEach(([jobID, label]) => scripts.set(jobID, label))
+      fact.calls.forEach(([sessionID, call]) => calls.set(sessionID, call))
 
-        if (part.type !== "tool" || part.name !== "subagent" || part.state.status === "streaming") return
-        const sessionID = text(part.state.metadata?.sessionID)
-
-        if (!sessionID) return
-        calls.set(sessionID, {
-          label: text(part.state.input.description),
-          agent: text(part.state.input.agent),
-          started: part.time.ran ?? part.time.created,
-        })
-      })
-
-      return message.time.completed === undefined ? message : latest
+      return fact.open ? fact.message : latest
     }, undefined)
 
     return {
@@ -196,6 +193,11 @@ export function createSessionBackground(input: {
     if (!id) return []
     const current = history()
 
+    // A shell whose call ended while it runs has a running job.
+    const moved = new Set(
+      (input.jobs?.() ?? []).flatMap((job) => (job.kind === "shell" && job.status === "running" ? [job.shellID] : [])),
+    )
+
     const shells = oldestFirst(input.shells(), (shell) => shell.time.started).flatMap((shell) => {
       if (shell.status !== "running" || shell.metadata.sessionID !== id) return []
 
@@ -203,7 +205,9 @@ export function createSessionBackground(input: {
         current.blocking.some((item) =>
           item.type === "shell"
             ? item.id === shell.id || (!!item.label && shell.command === item.label)
-            : shell.time.started >= item.started && item.commands.includes(shell.command),
+            : // A script's shell names its execute call. A server that doesn't is matched by the calls the script lists.
+              (shell.metadata.callID === item.partID && !moved.has(shell.id)) ||
+              (shell.time.started >= item.started && item.commands.includes(shell.command)),
         )
       )
         return []
@@ -238,6 +242,42 @@ export function createSessionBackground(input: {
   })
 
   return { blocking, tasks, scripts }
+}
+
+type SubagentCall = { label: string | undefined; agent: string | undefined; started: number }
+
+// One message's part in the history: the subagents it called, the scripts it moved to the background, and whether it
+// is still open. Later parts of a message come later in each list, as later messages do in the transcript.
+function messageFacts(message: SessionMessageInfo) {
+  if (message.type !== "assistant") return
+
+  return {
+    message,
+    open: message.time.completed === undefined,
+    scripts: message.content.flatMap((part): [string, string | undefined][] => {
+      if (part.type !== "tool" || part.name !== "execute" || part.state.status !== "completed") return []
+      const jobID = text(part.state.metadata?.jobID)
+
+      return jobID ? [[jobID, firstLine(text(part.state.input.code))]] : []
+    }),
+    calls: message.content.flatMap((part): [string, SubagentCall][] => {
+      if (part.type !== "tool" || part.name !== "subagent" || part.state.status === "streaming") return []
+      const sessionID = text(part.state.metadata?.sessionID)
+
+      if (!sessionID) return []
+
+      return [
+        [
+          sessionID,
+          {
+            label: text(part.state.input.description),
+            agent: text(part.state.input.agent),
+            started: part.time.ran ?? part.time.created,
+          },
+        ],
+      ]
+    }),
+  }
 }
 
 // A row keeps its place for as long as it is listed: work is ordered by when it was created, which never changes, and

@@ -2,6 +2,8 @@ export * as OpenCode from "./opencode"
 export * as Tool from "./tool"
 export { EnvironmentDriver } from "@opencode/core/environment/driver"
 export { EnvironmentFiles } from "@opencode/core/environment/files"
+export { Identity } from "@opencode/core/machine/identity"
+export { WorkerClient } from "@opencode/core/machine/worker-client"
 export { WorkspaceDriver } from "@opencode/core/workspace/driver"
 
 export { ClientError } from "@opencode/client/effect"

@@ -241,7 +241,7 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       )
     }
 
-    // Built-in and virtual skills register `skill://` (or legacy `/builtin/`) paths whose content is inline in `/api/skill`.
+    // Built-in and virtual skills register `skill://` (or legacy `/builtin/`) paths.
     const isVirtualSkill = (file: string) => file.startsWith("skill://") || file.startsWith("/builtin/")
 
     const builtinSkill = async (file: string, directory: string) => {
@@ -252,10 +252,21 @@ export const { use: useFile, provider: FileProvider } = createSimpleContext({
       return (data.location.skill.list({ directory }) ?? data.location.skill.list())?.find((item) => item.path === file)
     }
 
-    const readBuiltin = (file: string, directory: string): Promise<FileContent | undefined> =>
-      builtinSkill(file, directory).then((skill) =>
+    // `skill://<id>/<file>` reads through the server, which loads files a skill serves on demand. Legacy `/builtin/`
+    // skills keep their content inline in `/api/skill`.
+    const readBuiltin = (file: string, directory: string): Promise<FileContent | undefined> => {
+      if (file.startsWith("skill://")) {
+        const [skillID, ...rest] = file.slice("skill://".length).split("/")
+
+        return serverSDK.api.experimental.skill
+          .file({ skillID, path: rest.join("/"), location: { directory } })
+          .then((data) => fileContentFromBytes(file, data))
+      }
+
+      return builtinSkill(file, directory).then((skill) =>
         skill ? { type: "text", content: skill.content, mimeType: artifactMime(file) } : undefined,
       )
+    }
 
     const load = (input: string, options?: { force?: boolean; silent?: boolean }) => {
       const file = path.normalize(input)

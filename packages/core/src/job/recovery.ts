@@ -27,7 +27,7 @@ const subagent = {
 }
 
 const CodeMode = Schema.Struct({ kind: Schema.Literal("codemode"), sessionID: SessionSchema.ID, jobID: Schema.String })
-const OutstandingItem = Schema.Union([
+export const OutstandingItem = Schema.Union([
   Shell,
   Image,
   Video,

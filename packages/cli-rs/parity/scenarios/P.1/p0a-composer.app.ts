@@ -2,7 +2,7 @@
 // and typing goes on after it; F9 sets the text and puts the cursor at its end. TS's plugin inserts through `renderer.currentFocusedEditor`, as npm plugins do; Rust's twin
 // through `edit_composer`. TS loads the plugin from parity/plugins/p0a as a local plugin; Rust registers its twin when
 // OPENCODE_PARITY_PLUGIN is `p0a`.
-import { defineApp } from "../../lib/app"
+import { defineApp, HOME_PLACEHOLDER } from "../../lib/app"
 
 // TS shows "Finishing startup…" for three seconds once loading the local TSX plugin took over half a second
 // (`component/startup-loading.tsx`); Rust loads no TS plugin (F16).
@@ -12,6 +12,9 @@ export default defineApp({
   config: { plugins: ["./plugins/p0a"] },
   env: { OPENCODE_PARITY_PLUGIN: "p0a" },
   steps: [
+    // With `@opentui/core` 0.9.9 under the step's CPU cap, keys typed before TS has loaded the plugin were lost every
+    // time, so typing waits for its box.
+    { checkpoint: "loaded", until: "alpha beta gamma", masks: [startup, { ...HOME_PLACEHOLDER, y: 14 }] },
     { type: "hello world" },
     { keys: ["left", "left", "left", "left", "left"] },
     { keys: ["f8"] },

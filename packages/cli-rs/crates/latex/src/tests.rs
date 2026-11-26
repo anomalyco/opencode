@@ -549,3 +549,18 @@ fn sources_layouts_and_nesting_are_bounded() {
     assert_eq!(parsed.unwrap().join().unwrap(), [true; 6]);
     assert_eq!(crate::render(&format!("{}x{}", "{".repeat(255), "}".repeat(255))).unwrap().to_string(), "x");
 }
+
+#[test]
+fn accepts_the_control_space_in_strict_mode() {
+    use crate::parse::{Node, Role};
+    let expected = Node::Row(vec![
+        Node::Symbol { value: "a".into(), role: Some(Role::Ordinary) },
+        Node::Space(1),
+        Node::Symbol { value: "b".into(), role: Some(Role::Ordinary) },
+    ]);
+    assert_eq!(crate::parse::parse(r"a\ b").unwrap(), expected);
+    assert!(crate::parse::parse(r"\forall \varepsilon>0\ \exists K\in\mathbb{N}").is_ok());
+    for whitespace in ["\n", "\t", "\r\n"] {
+        assert_eq!(crate::parse::parse(&format!("a\\{whitespace}b")).unwrap(), expected, "{whitespace:?}");
+    }
+}

@@ -18,12 +18,21 @@ import {
   type ModelCatalog,
 } from "../routes/model-catalog"
 import { resolveComparisonFamily } from "./comparison-pages"
+import { estimateUsersSinceLaunch } from "./estimate-users"
 
 const DAY_MS = 86_400_000
 const NEW_MODEL_DAYS = 30
 const NEW_MODEL_LIMIT = 8
 
-export async function loadHomePage() {
+export async function loadHomePage(): Promise<HomePageData> {
+  if (import.meta.env.DEV && !process.env.DATA_DATABASE_HOST) {
+    const { loadPublicHomePage } = await import("./page-data.public")
+    return loadPublicHomePage()
+  }
+  return loadDatabaseHomePage()
+}
+
+async function loadDatabaseHomePage() {
   const [stats, catalog] = await Promise.all([runStatsEffect(getStatsHomeData()), loadModelCatalog()])
   const link = <T extends { model: string; provider: string }>(entry: T) => ({
     ...entry,
@@ -47,7 +56,7 @@ export async function loadHomePage() {
   }
 }
 
-export type HomePageData = Awaited<ReturnType<typeof loadHomePage>>
+export type HomePageData = Awaited<ReturnType<typeof loadDatabaseHomePage>>
 
 export async function loadLabPage(labParam: string) {
   const [catalog, home] = await Promise.all([loadModelCatalog(), runStatsEffect(getStatsHomeData())])
@@ -169,8 +178,15 @@ function newModelsFromCatalog(candidates: NewModelCandidate[], catalog: ModelCat
       return [
         {
           ...item,
+          free: catalog.freeModels.includes(item.model),
           releaseDate,
           daysLive: Math.round((Date.parse(latest) - Date.parse(launch)) / DAY_MS) + 1,
+          users: estimateUsersSinceLaunch({
+            daily: item.daily,
+            weekly: item.weekly,
+            firstSeen: item.firstSeen,
+            launch,
+          }),
           tokens: daily.reduce((sum, day) => sum + day.tokens, 0),
           sessions: daily.reduce((sum, day) => sum + day.sessions, 0),
           peakUsers: Math.max(0, ...daily.map((day) => day.users)),

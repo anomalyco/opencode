@@ -162,7 +162,7 @@ fn content(cx: &DialogCx, value: &Pairing) -> View {
         return row;
     }
     let scroll =
-        ScrollBox::new(app).scrollbars(false).height((8.max(i32::from(height) - i32::from(height) / 4 - 6)) as u32);
+        cx.scroll_box().scrollbars(false).height((8.max(i32::from(height) - i32::from(height) / 4 - 6)) as u32);
     scroll.add(&row);
     cx.keep_scroll(&scroll);
     View::new(app).child(&scroll)

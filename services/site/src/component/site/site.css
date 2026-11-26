@@ -4360,7 +4360,7 @@ html [data-site][data-nav-numbers="1"][data-status-bars="6"] {
       position: fixed;
       top: calc(var(--banner-offset, 0px) + var(--top));
       inset-inline-start: calc(var(--page-offset) + var(--edge) - var(--bracket-bearing));
-      z-index: 3;
+      z-index: 4;
 
       &::after {
         content: "";
@@ -4390,8 +4390,8 @@ html [data-site][data-nav-numbers="1"][data-status-bars="6"] {
       position: fixed;
       top: calc(var(--banner-offset, 0px) + var(--top));
       inset-inline-start: calc(var(--page-offset) + var(--edge) + var(--lockup-logo) + 12px - 6px);
-      /* Over the logo's strip, so the lockup and its menus show above it. */
-      z-index: 4;
+      /* Over the fixed docs header band and logo strip. */
+      z-index: 5;
     }
   }
 }

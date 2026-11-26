@@ -1,12 +1,3 @@
-[data-component="assistant-message"] {
-  content-visibility: auto;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 12px;
-}
-
 [data-component="user-message"] {
   font-family: var(--font-family-sans);
   font-size: var(--font-size-base);
@@ -786,6 +777,68 @@
   }
 }
 
+[data-component="tool-result-images"] {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-top: 8px;
+}
+
+[data-slot="tool-result-image"] {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 88px;
+  aspect-ratio: 3 / 2;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--v2-background-bg-layer-02);
+  color: var(--icon-weak);
+  cursor: zoom-in;
+
+  /* inset box-shadows do not paint over <img> content, so the hairline is an overlay */
+  &::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-base);
+    pointer-events: none;
+    transition: box-shadow 0.15s ease;
+  }
+
+  &:hover::after {
+    box-shadow: inset 0 0 0 0.5px var(--v2-border-border-strong);
+  }
+
+  &:disabled {
+    cursor: default;
+  }
+
+  &[data-retry] {
+    cursor: pointer;
+  }
+
+  img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  [data-slot="icon-svg"] {
+    width: 20px;
+    height: 20px;
+  }
+
+  @media (forced-colors: active) {
+    border: 1px solid CanvasText;
+  }
+}
+
 [data-slot="linked-text-link"] {
   color: inherit;
   text-decoration: underline;
@@ -1161,24 +1214,6 @@
   align-items: center;
   gap: 8px;
   min-width: 0;
-
-  [data-slot="execute-details-status"] {
-    padding: 0 6px;
-    border-radius: 4px;
-    font-size: 12px;
-    line-height: var(--line-height-base);
-    color: var(--v2-text-text-muted);
-    background: var(--v2-background-bg-layer-02);
-  }
-
-  [data-slot="execute-details-status"][data-status="error"] {
-    color: var(--v2-state-fg-danger);
-  }
-
-  [data-slot="execute-details-meta"] {
-    font-size: 12px;
-    color: var(--v2-text-text-faint);
-  }
 }
 
 [data-component="execute-details"] {
@@ -1216,11 +1251,6 @@
     color: var(--v2-text-text-muted);
   }
 
-  [data-slot="execute-details-section-meta"] {
-    font-size: 12px;
-    color: var(--v2-text-text-faint);
-  }
-
   [data-slot="execute-details-source"] {
     max-height: 360px;
     overflow: auto;
@@ -1237,16 +1267,8 @@
     }
   }
 
-  [data-slot="execute-details-error"] {
-    margin: 0;
-    padding: 12px 14px;
-    font-family: var(--v2-font-family-code);
-    font-size: 13px;
-    line-height: var(--line-height-base);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-    color: var(--v2-state-fg-danger);
-    background: var(--v2-background-bg-layer-01);
+  [data-tone="danger"] {
+    --opencode-diffs-fg: var(--v2-state-fg-danger);
   }
 }
 
@@ -2085,6 +2107,13 @@
     &[data-expandable]:focus-visible {
       color: var(--v2-text-text-base);
     }
+  }
+
+  /* Inter centers capitals on the line, so lowercase reads about 1px low against the bar. A one-line quote's bar runs
+     1px past the line, which puts the text half a pixel above its middle, between the two. Wrapped quotes already sit
+     evenly between the bar's ends. */
+  [data-slot="user-message-quote"][data-single-line] {
+    padding-bottom: 1px;
   }
 
   /* A source's icon leads the quote like a file's. It sits inline, so wrapped lines return to the bar. */

@@ -48,17 +48,6 @@
   text-align: right;
 }
 
-/* The docs lockup's "›" opens a submenu: it points the way the submenu opens, and down (not up)
-   once a nested one is open. */
-[dir="rtl"] [data-site] [data-component="docs-lockup"] [data-slot="expand"] svg {
-  scale: -1 1;
-}
-
-[dir="rtl"]
-  [data-site]
-  [data-component="docs-lockup"]
-  [data-submenu="nested"]
-  [data-slot="expand"][aria-expanded="true"]
-  svg {
-  rotate: -90deg;
+[dir="rtl"] [data-site][data-layout="docs"] [data-component="docs-sections"] [data-slot="links"] a::after {
+  transform-origin: right;
 }

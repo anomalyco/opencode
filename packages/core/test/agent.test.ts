@@ -120,22 +120,6 @@ describe("Agent", () => {
     }),
   )
 
-  it.effect("applies direct agent updates", () =>
-    Effect.gen(function* () {
-      const agent = yield* Agent.Service
-      const id = Agent.ID.make("build")
-
-      yield* agent.transform((editor) =>
-        editor.update(id, (info) => {
-          info.mode = "primary"
-          info.hidden = true
-        }),
-      )
-
-      expect(yield* agent.get(id)).toMatchObject({ id, mode: "primary", hidden: true })
-    }),
-  )
-
   it.effect("creates agents with runtime defaults and supports direct removal", () =>
     Effect.gen(function* () {
       const agent = yield* Agent.Service

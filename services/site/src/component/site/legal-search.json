@@ -875,6 +875,69 @@
     ]
   },
   {
+    "title": "Refund Policy",
+    "path": "/legal/refund-policy",
+    "description": "When you can get a refund for OpenCode Go subscriptions and OpenCode Models credits, how to ask for one, how to cancel and how refunds are paid.",
+    "headings": [
+      {
+        "id": "requesting-a-refund",
+        "title": "Requesting a refund",
+        "body": " Email help@anoma.ly from the email address on the OpenCode account that made the payment. For a workspace, write from the workspace owner's email address. Include the invoice or receipt number, or the date of the charge, if you have it.",
+        "path": "/legal/refund-policy",
+        "document": "Refund Policy"
+      },
+      {
+        "id": "opencode-go-and-go-plus",
+        "title": "OpenCode Go and Go Plus",
+        "body": " You can get a refund of your most recent Go or Go Plus payment if you ask within 14 days of the charge and have used almost none of that billing period's allowance. We refund the full charge, including tax. Your subscription ends when the refund is issued and won't renew. Go Teams charges and upgrades: the same rule applies to each Go charge, including a Go Teams member charge or an upgrade to Go Plus or Go Teams. You can get a refund of that charge if you ask within 14 days of it and have used almost none of what it paid for. Otherwise these charges aren't refunded, except where the law requ",
+        "path": "/legal/refund-policy",
+        "document": "Refund Policy"
+      },
+      {
+        "id": "opencode-models-credits",
+        "title": "OpenCode Models credits",
+        "body": " You can get a refund of your most recent credit purchase, including one made by auto-recharge, if you ask within 14 days of the purchase and have used almost none of its credit. We refund the credit still in your balance, up to the amount you bought, plus the tax charged on it. The processing fee isn't refunded. A credit refund turns off auto-recharge.",
+        "path": "/legal/refund-policy",
+        "document": "Refund Policy"
+      },
+      {
+        "id": "your-legal-rights",
+        "title": "Your legal rights",
+        "body": " These rules don't limit any rights you have under the law where you live. For example, if you're a consumer in the European Union or the United Kingdom, you can withdraw from a new Go or Go Plus subscription within 14 days of your first payment, without giving a reason, by emailing help@anoma.ly. If you do, we refund the share of the charge for the part of the billing period you haven't used. If you've already used the whole period's allowance, a refund isn't available. This doesn't apply to renewals or to business accounts.",
+        "path": "/legal/refund-policy",
+        "document": "Refund Policy"
+      },
+      {
+        "id": "when-refunds-arent-available",
+        "title": "When refunds aren't available",
+        "body": " We don't refund payments or remaining credit for an account or workspace that we suspend or close because it violated our Terms of Use or Customer Agreement, or because it was used for fraudulent or abusive activity, except where the law requires a refund. If a payment is disputed or reversed, we may suspend the account and remove the credit or access that payment bought.",
+        "path": "/legal/refund-policy",
+        "document": "Refund Policy"
+      },
+      {
+        "id": "cancelling",
+        "title": "Cancelling",
+        "body": " An owner or admin can cancel Go at any time on the Go page in the Console. Your plan stays active until the end of the period you paid for, and you won't be charged again. Cancelling doesn't refund the current period. To ask for a refund, see Requesting a refund. To stop auto-recharge, remove its rule in Settings › Billing.",
+        "path": "/legal/refund-policy",
+        "document": "Refund Policy"
+      },
+      {
+        "id": "how-refunds-are-paid",
+        "title": "How refunds are paid",
+        "body": " We reply to refund requests within two business days and issue an approved refund at the same time. Refunds go back to the original payment method, in the currency you paid. Your bank or payment provider usually shows the refund within 5 to 10 business days.",
+        "path": "/legal/refund-policy",
+        "document": "Refund Policy"
+      },
+      {
+        "id": "questions",
+        "title": "Questions",
+        "body": " Email help@anoma.ly with any questions. Our Terms of Use and Customer Agreement also apply.",
+        "path": "/legal/refund-policy",
+        "document": "Refund Policy"
+      }
+    ]
+  },
+  {
     "title": "Terms of Use",
     "path": "/legal/terms-of-service",
     "description": "The rules that govern your use of the OpenCode website, inference product and hosted software, including your account, payments and acceptable use.",
@@ -966,7 +1029,7 @@
       {
         "id": "paid-services",
         "title": "Paid Services",
-        "body": " Certain of our Services, including OpenCode Models, may be subject to payments now or in the future (the \"Paid Services\"). Please see our Paid Services page https://opencode.ai/console/models for a description of the current Paid Services. Please note that any payment terms presented to you in the process of using or signing up for a Paid Service are deemed part of these Terms.",
+        "body": " Certain of our Services, including OpenCode Models, may be subject to payments now or in the future (the \"Paid Services\"). Please see our Paid Services page https://opencode.ai/console/models for a description of the current Paid Services. Please note that any payment terms presented to you in the process of using or signing up for a Paid Service are deemed part of these Terms. Refunds are governed by our Refund Policy at opencode.ai/legal/refund-policy, which forms part of these Terms.",
         "path": "/legal/terms-of-service",
         "document": "Terms of Use"
       },
@@ -999,9 +1062,23 @@
         "document": "Terms of Use"
       },
       {
+        "id": "prepaid-credits",
+        "title": "Prepaid Credits",
+        "body": " We may offer the option to prepay for certain Paid Services by purchasing credits (\"Credits\"). Credits have no cash value and may be used only for the Services in the account for which they were purchased. All purchases of Credits are final and non-refundable, except as stated in our Refund Policy or as required by applicable law. Credits may not be sold, transferred, or shared, and any attempt to do so is a violation of these Terms.",
+        "path": "/legal/terms-of-service",
+        "document": "Terms of Use"
+      },
+      {
+        "id": "usage-limits",
+        "title": "Usage Limits",
+        "body": " We may set and adjust limits on your use of the Services, including limits on account balances, purchase amounts, spending, and request rates, based on factors such as your account history. These limits are not guaranteed minimums and may change at any time.",
+        "path": "/legal/terms-of-service",
+        "document": "Terms of Use"
+      },
+      {
         "id": "what-if-i-want-to-stop",
         "title": "What if I want to stop using the Services?",
-        "body": " You're free to do that at any time; please refer to our Privacy Policy https://opencode.ai/legal/privacy-policy, as well as the licenses above, to understand how we treat information you provide to us after you have stopped using our Services. OpenCode is also free to terminate (or suspend access to) your use of the Services for any reason in our discretion, including your breach of these Terms. OpenCode has the sole right to decide whether you are in violation of any of the restrictions set forth in these Terms. Provisions that, by their nature, should survive termination of these Terms shal",
+        "body": " You're free to do that at any time; please refer to our Privacy Policy https://opencode.ai/legal/privacy-policy, as well as the licenses above, to understand how we treat information you provide to us after you have stopped using our Services. OpenCode is also free to terminate (or suspend access to) your use of the Services for any reason in our discretion, including your breach of these Terms. OpenCode has the sole right to decide whether you are in violation of any of the restrictions set forth in these Terms. If we suspend or terminate your access because you violated these Terms or engag",
         "path": "/legal/terms-of-service",
         "document": "Terms of Use"
       },

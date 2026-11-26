@@ -24,7 +24,13 @@ feed() {
   done | jq -s --arg date "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" '{files: ., releaseDate: $date}'
 }
 
-files=$(upload_files "${win[@]}" "${mac[@]}" "${linux[@]}" "${linux_arm[@]}" "${bundles[@]}")
+# electron-updater fetches <file>.blockmap next to the Windows installer and the macOS zip for a differential
+# download. Signing changes these files, so the blockmaps electron-builder made at pack time no longer match.
+differential=("${win[@]}" "$macos/opencode-desktop-mac-arm64.zip" "$macos/opencode-desktop-mac-x64.zip")
+node "$release_dir/blockmap.mjs" "${differential[@]}"
+blockmaps=("${differential[@]/%/.blockmap}")
+
+files=$(upload_files "${win[@]}" "${mac[@]}" "${linux[@]}" "${linux_arm[@]}" "${bundles[@]}" "${blockmaps[@]}")
 manifests=$(jq -n --argjson win "$(feed "${win[@]}")" --argjson mac "$(feed "${mac[@]}")" \
   --argjson linux "$(feed "${linux[@]}")" --argjson linux_arm64 "$(feed "${linux_arm[@]}")" \
   '{"desktop.yml": $win, "desktop-mac.yml": $mac, "desktop-linux.yml": $linux, "desktop-linux-arm64.yml": $linux_arm64}')

@@ -319,6 +319,8 @@ function ReviewPanel(props: ReviewPanelProps) {
       stats={<DiffChanges changes={diffs()} />}
       empty={props.empty}
       sidebarOpen={props.state.sidebar.opened()}
+      sidebarSide={props.state.sidebar.side()}
+      onSidebarSideChange={props.state.sidebar.move}
       sidebarToggle={
         <SessionReviewV2SidebarToggle opened={props.state.sidebar.opened()} onToggle={props.state.sidebar.toggle} />
       }
@@ -433,6 +435,7 @@ function ReviewPanelSidebar(props: {
     <SessionReviewV2Sidebar
       open={props.state.sidebar.opened()}
       transition={props.state.sidebar.transition()}
+      side={props.state.sidebar.side()}
       title={props.title}
       stats={<DiffChanges changes={props.diffs} />}
       actions={props.actions}

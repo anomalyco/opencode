@@ -32,20 +32,20 @@ const darkAgentTokens = {
 } satisfies Record<string, V2ColorValue>
 
 const light = {
-  "v2-background-bg-base": ref("v2-grey-100"),
-  "v2-background-bg-deep": ref("v2-grey-200"),
-  "v2-background-bg-layer-01": ref("v2-grey-300"),
-  "v2-background-bg-layer-02": ref("v2-grey-400"),
-  "v2-background-bg-layer-03": ref("v2-grey-500"),
-  "v2-background-bg-layer-04": ref("v2-grey-600"),
-  "v2-background-bg-inverse": ref("v2-grey-1000"),
-  "v2-background-bg-contrast": ref("v2-grey-900"),
+  "v2-background-bg-base": ref("v2-grey-50"),
+  "v2-background-bg-deep": ref("v2-grey-100"),
+  "v2-background-bg-layer-01": ref("v2-grey-100"),
+  "v2-background-bg-layer-02": ref("v2-grey-200"),
+  "v2-background-bg-layer-03": ref("v2-grey-300"),
+  "v2-background-bg-layer-04": ref("v2-grey-400"),
+  "v2-background-bg-inverse": ref("v2-grey-1100"),
+  "v2-background-bg-contrast": ref("v2-grey-1000"),
   "v2-background-bg-icon-button-contrast": ref("v2-background-bg-contrast"),
-  "v2-background-bg-button-neutral": ref("v2-grey-100"),
+  "v2-background-bg-button-neutral": ref("v2-grey-50"),
   "v2-background-bg-accent": ref("v2-blue-600"),
   "v2-background-bg-code-path": ref("v2-cyan-100"),
-  "v2-text-text-inverse": ref("v2-grey-100"),
-  "v2-text-text-contrast": ref("v2-grey-100"),
+  "v2-text-text-inverse": ref("v2-grey-50"),
+  "v2-text-text-contrast": ref("v2-grey-50"),
   "v2-text-text-accent": ref("v2-blue-600"),
   "v2-text-text-accent-hover": ref("v2-blue-700"),
   "v2-text-text-code-accent": ref("v2-blue-900"),
@@ -80,42 +80,42 @@ const light = {
   ...lightAgentTokens,
   ...V2_AVATAR_LIGHT,
   "v2-elevation-raised":
-    "0px 2px 4px 0px var(--v2-alpha-dark-4), 0px 1px 2px -1px var(--v2-alpha-dark-8), 0px 0px 0px 0.5px var(--v2-alpha-dark-12), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
+    "0px 0px 0px 0px var(--v2-alpha-dark-0), 0px 0px 0px 0.5px var(--v2-alpha-dark-12), 0px 1px 2px -1px var(--v2-alpha-dark-8), 0px 2px 4px 0px var(--v2-alpha-dark-4)",
   "v2-elevation-floating":
-    "0px 8px 16px 0px var(--v2-alpha-dark-4), 0px 4px 8px 0px var(--v2-alpha-dark-8), 0px 0px 0px 0.5px var(--v2-alpha-dark-12), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
+    "0px 0px 0px 0px var(--v2-alpha-dark-0), 0px 0px 0px 0.5px var(--v2-alpha-dark-12), 0px 4px 8px 0px var(--v2-alpha-dark-8), 0px 8px 16px 0px var(--v2-alpha-dark-4)",
   "v2-elevation-overlay":
-    "0px 16px 32px 0px var(--v2-alpha-dark-4), 0px 8px 16px 0px var(--v2-alpha-dark-8), 0px 0px 0px 0.5px var(--v2-alpha-dark-12), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
+    "0px 0px 0px 0px var(--v2-alpha-dark-0), 0px 0px 0px 0.5px var(--v2-alpha-dark-12), 0px 8px 16px 0px var(--v2-alpha-dark-8), 0px 16px 32px 0px var(--v2-alpha-dark-4)",
   "v2-elevation-input":
-    "0px 1px 1.5px 0px var(--v2-alpha-dark-10), 0px 0px 0px 0.5px var(--v2-alpha-dark-14), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
+    "0px 0px 0px 0px var(--v2-alpha-dark-0), 0px 0px 0px 0.5px var(--v2-alpha-dark-14), 0px 1px 1.5px 0px var(--v2-alpha-dark-10)",
   "v2-elevation-button-neutral":
-    "0px 1px 1.5px 0px var(--v2-alpha-dark-10), 0px 0px 0px 0.5px var(--v2-alpha-dark-14), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
+    "0px 0px 0px 0px var(--v2-alpha-dark-0), 0px 0px 0px 0.5px var(--v2-alpha-dark-14), 0px 1px 1.5px 0px var(--v2-alpha-dark-10)",
   "v2-elevation-button-contrast":
-    "0px 1px 1.5px 0px var(--v2-alpha-dark-20), 0px 0px 0px 0.5px var(--v2-grey-800), inset 0px 1px 2px 0px var(--v2-alpha-light-14), inset 0px -1px 2px 0px var(--v2-alpha-dark-6), 0px 0px 0px 0px var(--v2-alpha-dark-0)",
+    "0px 0px 0px 0px var(--v2-alpha-dark-0), inset 0px -1px 2px 0px var(--v2-alpha-dark-6), inset 0px 1px 2px 0px var(--v2-alpha-light-14), 0px 0px 0px 0.5px var(--v2-grey-800), 0px 1px 1.5px 0px var(--v2-alpha-dark-20)",
   "v2-elevation-elements": "0px 0.5px 0.5px 0px var(--v2-alpha-dark-40)",
   "v2-elevation-switch-off":
-    "inset 0px 1px 1px 0px var(--v2-alpha-dark-8), inset 0px 0.5px 0.5px 0px var(--v2-alpha-dark-8), inset 0px 0px 0px 0.5px var(--v2-alpha-dark-10)",
+    "inset 0px 0px 0px 0.5px var(--v2-alpha-dark-10), inset 0px 0.5px 0.5px 0px var(--v2-alpha-dark-8), inset 0px 1px 1px 0px var(--v2-alpha-dark-8)",
   "v2-elevation-switch-on":
-    "inset 0px 2px 2px 0px var(--v2-alpha-dark-10), inset 0px 1px 1px 0px var(--v2-alpha-dark-10), inset 0px 0px 0px 0.5px var(--v2-alpha-dark-20)",
+    "inset 0px 0px 0px 0.5px var(--v2-alpha-dark-20), inset 0px 1px 1px 0px var(--v2-alpha-dark-10), inset 0px 2px 2px 0px var(--v2-alpha-dark-10)",
   "v2-illustration-illustration-layer-01": ref("v2-grey-300"),
   "v2-illustration-illustration-layer-02": ref("v2-grey-400"),
   "v2-illustration-illustration-layer-03": ref("v2-grey-500"),
 } satisfies Record<string, V2ColorValue>
 
 const dark = {
-  "v2-background-bg-base": ref("v2-grey-1000"),
-  "v2-background-bg-deep": ref("v2-grey-1100"),
-  "v2-background-bg-layer-01": ref("v2-grey-800"),
-  "v2-background-bg-layer-02": ref("v2-grey-600"),
-  "v2-background-bg-layer-03": ref("v2-grey-500"),
-  "v2-background-bg-layer-04": ref("v2-grey-400"),
-  "v2-background-bg-inverse": ref("v2-grey-100"),
+  "v2-background-bg-base": ref("v2-grey-1100"),
+  "v2-background-bg-deep": ref("v2-grey-1200"),
+  "v2-background-bg-layer-01": ref("v2-grey-1000"),
+  "v2-background-bg-layer-02": ref("v2-grey-900"),
+  "v2-background-bg-layer-03": ref("v2-grey-800"),
+  "v2-background-bg-layer-04": ref("v2-grey-700"),
+  "v2-background-bg-inverse": ref("v2-grey-50"),
   "v2-background-bg-contrast": ref("v2-grey-700"),
   "v2-background-bg-icon-button-contrast": ref("v2-grey-400"),
   "v2-background-bg-button-neutral": ref("v2-alpha-light-6"),
   "v2-background-bg-accent": ref("v2-blue-600"),
   "v2-background-bg-code-path": ref("v2-cyan-1200"),
-  "v2-text-text-inverse": ref("v2-grey-1000"),
-  "v2-text-text-contrast": ref("v2-grey-100"),
+  "v2-text-text-inverse": ref("v2-grey-1100"),
+  "v2-text-text-contrast": ref("v2-grey-50"),
   "v2-text-text-accent": ref("v2-blue-400"),
   "v2-text-text-accent-hover": ref("v2-blue-300"),
   "v2-text-text-code-accent": ref("v2-blue-400"),
@@ -150,22 +150,22 @@ const dark = {
   ...darkAgentTokens,
   ...V2_AVATAR_DARK,
   "v2-elevation-raised":
-    "0px 2px 4px 0px var(--v2-alpha-dark-30), 0px 1px 2px 0px var(--v2-alpha-dark-30), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px -0.5px 0px 0px var(--v2-alpha-light-6)",
+    "0px -0.5px 0px 0px var(--v2-alpha-light-6), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px 1px 2px 0px var(--v2-alpha-dark-30), 0px 2px 4px 0px var(--v2-alpha-dark-30)",
   "v2-elevation-floating":
-    "0px 8px 16px 0px var(--v2-alpha-dark-30), 0px 4px 8px 0px var(--v2-alpha-dark-30), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px -0.5px 0px 0px var(--v2-alpha-light-6)",
+    "0px -0.5px 0px 0px var(--v2-alpha-light-6), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px 4px 8px 0px var(--v2-alpha-dark-30), 0px 8px 16px 0px var(--v2-alpha-dark-30)",
   "v2-elevation-overlay":
-    "0px 16px 32px 0px var(--v2-alpha-dark-30), 0px 8px 16px 0px var(--v2-alpha-dark-30), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px -0.5px 0px 0px var(--v2-alpha-light-6)",
+    "0px -0.5px 0px 0px var(--v2-alpha-light-6), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px 8px 16px 0px var(--v2-alpha-dark-30), 0px 16px 32px 0px var(--v2-alpha-dark-30)",
   "v2-elevation-input":
-    "0px 1px 2px 0px var(--v2-alpha-dark-0), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px -0.5px 0px 0px var(--v2-alpha-light-6)",
+    "0px -0.5px 0px 0px var(--v2-alpha-light-6), 0px 0px 0px 0.5px var(--v2-alpha-light-16), 0px 1px 2px 0px var(--v2-alpha-dark-0)",
   "v2-elevation-button-neutral":
-    "0px 1px 2px 0px var(--v2-alpha-dark-40), 0px 0px 0px 0.5px var(--v2-alpha-light-20), 0px -0.5px 0px 0px var(--v2-alpha-light-10)",
+    "0px -0.5px 0px 0px var(--v2-alpha-light-10), 0px 0px 0px 0.5px var(--v2-alpha-light-20), 0px 1px 2px 0px var(--v2-alpha-dark-40)",
   "v2-elevation-button-contrast":
-    "0px 1px 2px 0px var(--v2-alpha-dark-40), 0px 0px 0px 0.5px var(--v2-alpha-light-40), inset 0px 0px 0px 0px var(--v2-alpha-light-0), inset 0px 0px 0px 0px var(--v2-alpha-light-0), 0px -0.5px 0px 0px var(--v2-alpha-light-30)",
+    "0px -0.5px 0px 0px var(--v2-alpha-light-30), inset 0px 0px 0px 0px var(--v2-alpha-light-0), inset 0px 0px 0px 0px var(--v2-alpha-light-0), 0px 0px 0px 0.5px var(--v2-alpha-light-40), 0px 1px 2px 0px var(--v2-alpha-dark-40)",
   "v2-elevation-elements": "0px 0.5px 0.5px 0px var(--v2-alpha-dark-40)",
   "v2-elevation-switch-off":
-    "inset 0px -0.5px 0px 0px var(--v2-alpha-light-10), inset 0px 0px 0px 0px var(--v2-alpha-light-0), inset 0px 0px 0px 0.5px var(--v2-alpha-light-16)",
+    "inset 0px 0px 0px 0.5px var(--v2-alpha-light-16), inset 0px 0px 0px 0px var(--v2-alpha-light-0), inset 0px -0.5px 0px 0px var(--v2-alpha-light-10)",
   "v2-elevation-switch-on":
-    "inset 0px -0.5px 0px 0px var(--v2-alpha-light-10), inset 0px 0px 0px 0px var(--v2-alpha-light-0), inset 0px 0px 0px 0.5px var(--v2-alpha-light-16)",
+    "inset 0px 0px 0px 0.5px var(--v2-alpha-light-16), inset 0px 0px 0px 0px var(--v2-alpha-light-0), inset 0px -0.5px 0px 0px var(--v2-alpha-light-10)",
   "v2-illustration-illustration-layer-01": ref("v2-grey-900"),
   "v2-illustration-illustration-layer-02": ref("v2-grey-800"),
   "v2-illustration-illustration-layer-03": ref("v2-grey-700"),

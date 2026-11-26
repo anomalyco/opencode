@@ -24,6 +24,11 @@
   color: var(--v2-icon-icon-base);
 }
 
+/* The tabs below inset their icons 6px. The other 2px goes after the icon, so the text still lines up with theirs. */
+.settings-search [data-slot="text-input-v2-leading-icon"] {
+  padding-inline: 6px 2px;
+}
+
 .settings-search [data-component="text-input-v2"] {
   width: 100%;
   flex-shrink: 0;

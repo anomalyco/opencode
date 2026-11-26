@@ -1,7 +1,7 @@
 export * as FileMutation from "./file-mutation.js"
 
 import { isUtf8 } from "node:buffer"
-import { makeLocationNode } from "@opencode/util/effect/app-node"
+import { makeGlobalNode, makeLocationNode } from "@opencode/util/effect/app-node"
 import { Context, Effect, Layer, Schema } from "effect"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
 import { FSUtil } from "@opencode/util/fs-util"
@@ -87,17 +87,26 @@ export const syncTextBom = Effect.fn("FileMutation.syncTextBom")(function* (
   return synced.text
 })
 
-/** Share transaction locks across Location graphs that address the same file. */
-const transactionLocks = KeyedMutex.makeUnsafe<string>()
+/** Share transaction locks across Location graphs within the same host. */
+class TransactionLocks extends Context.Service<TransactionLocks, KeyedMutex.KeyedMutex<string>>()(
+  "@opencode/FileMutation.TransactionLocks",
+) {}
+
+const transactionLocksNode = makeGlobalNode({
+  service: TransactionLocks,
+  layer: Layer.effect(TransactionLocks, KeyedMutex.make<string>()),
+  deps: [],
+})
 
 /**
- * Mutation locking is process-local and serializes cooperating OpenCode
+ * Mutation locking is host-local and serializes cooperating OpenCode
  * changes; external writes can still race.
  */
 const layer = Layer.effect(
   Service,
   Effect.gen(function* () {
     const access = yield* FileAccess.Service
+    const transactionLocks = yield* TransactionLocks
     const locks = KeyedMutex.makeUnsafe<string>()
     const withLock: Interface["withLock"] = (targets) => (effect) =>
       Effect.gen(function* () {
@@ -172,7 +181,7 @@ const layer = Layer.effect(
   }),
 )
 
-export const node = makeLocationNode({ service: Service, layer, deps: [FileAccess.node] })
+export const node = makeLocationNode({ service: Service, layer, deps: [FileAccess.node, transactionLocksNode] })
 
 /**
  * Deferred until the corresponding integrations exist.

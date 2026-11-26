@@ -14,6 +14,9 @@ import { useLanguage } from "@/runtime/i18n/language"
 import { Persist, persisted } from "@/runtime/persistence/storage"
 import { ServerConnection } from "@/runtime/server/registry"
 import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
+import { createSessionExporter } from "@/session/commands/export-session"
+import { SessionCopyMenu } from "@/session/session-copy-menu"
+import { SessionReadMenuItem } from "@/session/session-read-menu-item"
 import { sessionStatus, useSessionTabAvatarState } from "@/shell/layout/project-avatar-state"
 import { projectSettingsKey, useSettings } from "@/settings/model"
 import { tabHref, tabKey, useTabs, type Tab } from "@/shell/tabs/tabs"
@@ -193,6 +196,13 @@ export const { use: usePins, provider: PinsProvider } = createSimpleContext({
       setUnread: (key: string, value: boolean) => setLocal("unread", key, value),
       pin: (ref: PinRef) => apply((value) => pin(value, ref)),
       unpin: (ref: PinRef) => apply((value) => unpin(value, ref)),
+      /** Unpins the session and closes its tab, if one is open. */
+      close: (ref: PinRef) => {
+        apply((value) => unpin(value, ref))
+        const index = tabs.store.findIndex((tab) => tabKey(tab) === keyOf(ref))
+
+        if (index !== -1) tabs.closeTab(index)
+      },
       newGroup: (ref: PinRef) => {
         const existing = groups().map((group) => ({ id: group.id, name: group.name, color: group.color }))
         const taken = new Set(existing.map((group) => group.name))
@@ -340,7 +350,8 @@ function PinnedGroupView(props: { group: PinGroup; orientation: Orientation }) {
       class="flex shrink-0 items-center rounded-[6px] focus-visible:-outline-offset-2"
       classList={{
         "size-7 justify-center hover:bg-v2-overlay-simple-overlay-hover": props.orientation === "horizontal",
-        "h-7 w-full gap-2 ps-2 pe-8 text-start group-hover/row:bg-v2-overlay-simple-overlay-hover": props.orientation === "vertical",
+        "group/toggle h-7 w-full gap-2 ps-2 pe-8 text-start group-hover/row:bg-v2-overlay-simple-overlay-hover":
+          props.orientation === "vertical",
       }}
       onClick={() => pins.toggle(props.group.id)}
       onContextMenu={(event) => {
@@ -365,7 +376,7 @@ function PinnedGroupView(props: { group: PinGroup; orientation: Orientation }) {
         </span>
         <Icon
           name="fill-triangle-down"
-          class="shrink-0 text-v2-icon-icon-muted transition-transform motion-reduce:transition-none"
+          class="shrink-0 text-v2-icon-icon-muted opacity-0 transition-[transform,opacity] motion-reduce:transition-none group-hover/row:opacity-100 group-focus-visible/toggle:opacity-100 [@media(hover:none)]:opacity-100"
           classList={{ "-rotate-90 rtl:rotate-90": !open() }}
         />
       </Show>
@@ -379,7 +390,7 @@ function PinnedGroupView(props: { group: PinGroup; orientation: Orientation }) {
       data-group-color={props.group.color}
       class="relative flex shrink-0"
       classList={{
-        "flex-row items-center gap-1": props.orientation === "horizontal",
+        "flex-row items-center": props.orientation === "horizontal",
         "w-full flex-col gap-[3px]": props.orientation === "vertical",
       }}
     >
@@ -494,7 +505,7 @@ export function GroupSquare(props: { color: TabGroupColor }) {
   return <span data-slot="pinned-group-rect" data-group-color={props.color} aria-hidden="true" />
 }
 
-function PinnedSession(props: { pin: PinRef; orientation: Orientation; grouped?: boolean }) {
+export function PinnedSession(props: { pin: PinRef; orientation: Orientation; grouped?: boolean }) {
   const pins = usePins()
   const language = useLanguage()
   const server = () => ServerConnection.Key.make(props.pin.server)
@@ -528,11 +539,23 @@ function PinnedSession(props: { pin: PinRef; orientation: Orientation; grouped?:
     return index !== -1 && index < 9 ? index + 1 : undefined
   }
 
+  const exporter = createSessionExporter()
+
+  const exportTarget = () => ({ server: server(), sessionID: props.pin.sessionId })
+
   const menu = (rename: () => void): JSX.Element => (
     <>
-      <PinMenuItems pin={props.pin} />
-      <Menu.Separator />
       <Menu.Item onSelect={rename}>{language.t("common.rename")}</Menu.Item>
+      <PinMenuItems pin={props.pin} />
+      <SessionReadMenuItem server={server()} session={session()} />
+      <Menu.Separator />
+      <SessionCopyMenu server={server()} session={session()} />
+      <Menu.Item
+        disabled={!session() || exporter.exporting(exportTarget())}
+        onSelect={() => exporter.export(exportTarget())}
+      >
+        {language.t("common.export")}…
+      </Menu.Item>
     </>
   )
 
@@ -556,6 +579,7 @@ function PinnedSession(props: { pin: PinRef; orientation: Orientation; grouped?:
         loading={status.loading()}
         shortcut={shortcut()}
         onNavigate={() => pins.open(props.pin)}
+        onMiddleClick={() => pins.close(props.pin)}
         active={pins.isCurrent(props.pin)}
         orientation={props.orientation}
         menu={menu}

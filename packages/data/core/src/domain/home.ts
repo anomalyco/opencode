@@ -38,7 +38,15 @@ export type RetentionEntry = {
   rank: number | null
 }
 export type CountryEntry = { country: string; continent: string; tokens: number; share: number; rank: number }
-export type NewModelDay = { date: string; tokens: number; users: number; sessions: number }
+export type NewModelDay = {
+  date: string
+  tokens: number
+  users: number
+  sessions: number
+  // Of all tokens that day, and among individual models.
+  share: number
+  rank: number
+}
 // A model used in the recent window, with the day it first had usage. The site decides which ones are new.
 export type NewModelCandidate = {
   model: string
@@ -49,6 +57,8 @@ export type NewModelCandidate = {
   sessions: number
   peakUsers: number
   daily: NewModelDay[]
+  // Distinct users per ISO week, keyed by the week's Monday. Weeks are the widest grain with distinct counts.
+  weekly: { week: string; users: number }[]
 }
 export type ModelUsagePoint = {
   date: string
@@ -163,7 +173,7 @@ export class StatsDataError extends Error {
   override name = "StatsDataError"
 
   constructor(readonly cause: unknown) {
-    super("Failed to load stats data")
+    super(`Failed to load stats data: ${cause instanceof Error ? cause.message : String(cause)}`)
   }
 }
 
@@ -176,6 +186,8 @@ const RETENTION_MIN_ELIGIBLE_USER_WEEKS = 100
 const RETENTION_COHORT_WEEKS = 7
 const NEW_MODEL_WINDOW_DAYS = 30
 const TOP_MODEL_SEGMENT_LIMIT = 9
+// The weekly series also colors this many past leaders that fell out of the past 7 days' top models.
+const WEEKLY_PAST_LEADER_LIMIT = 2
 const WEEKLY_BUCKETS = 20
 const QUERY_CACHE_TTL_MS = 5 * 60 * 1000
 const QUERY_CACHE_MAX_ENTRIES = 256
@@ -223,7 +235,7 @@ type ModelAggregate = {
 }
 
 type RawRow = Record<string, unknown>
-type CachedQuery = { expiresAt: number; value: Promise<RawRow[]> }
+type CachedQuery = { expiresAt: number; value: RawRow[] }
 
 const queryCache = new Map<string, CachedQuery>()
 
@@ -404,22 +416,17 @@ async function listRetentionWeekly(): Promise<RetentionMetricRow[]> {
   }
 }
 
+// Only resolved rows are cached: a Worker request cannot await I/O started by another request that has ended.
 async function queryRows(query: string, params: string[] = []) {
   const key = JSON.stringify([query, params])
-  const now = Date.now()
   const cached = queryCache.get(key)
-  if (cached && cached.expiresAt > now) return cached.value
+  if (cached && cached.expiresAt > Date.now()) return cached.value
   if (cached) queryCache.delete(key)
 
-  const value = new Client({ url: databaseUrl() }).execute(query, params).then((result) => result.rows as RawRow[])
-  const entry = { expiresAt: now + QUERY_CACHE_TTL_MS, value }
-  queryCache.set(key, entry)
+  const value = (await new Client({ url: databaseUrl() }).execute(query, params)).rows as RawRow[]
+  queryCache.set(key, { expiresAt: Date.now() + QUERY_CACHE_TTL_MS, value })
   if (queryCache.size > QUERY_CACHE_MAX_ENTRIES) queryCache.delete(queryCache.keys().next().value!)
-
-  return value.catch((cause) => {
-    if (queryCache.get(key) === entry) queryCache.delete(key)
-    throw cause
-  })
+  return value
 }
 
 function databaseUrl() {
@@ -535,14 +542,14 @@ export function buildStatsHomeData(
         weekly,
         SITE_PRODUCT,
         weeks,
-        topModels(normalized, SITE_PRODUCT, rankWindow, "tokens"),
+        weeklyModels(normalized, weekly, weeks, rankWindow, "tokens"),
         "tokens",
       ),
       users: buildUsagePoints(
         weekly,
         SITE_PRODUCT,
         weeks,
-        topModels(normalized, SITE_PRODUCT, rankWindow, "users"),
+        weeklyModels(normalized, weekly, weeks, rankWindow, "users"),
         "users",
       ),
       market: buildMarketShare(weekly, SITE_PRODUCT, weeks),
@@ -560,11 +567,15 @@ export function buildStatsHomeData(
       .filter((item) => item.rank !== null)
       .slice(0, RETENTION_MODEL_LIMIT),
     country: buildCountryStats(countryRows),
-    newModels: buildNewModelCandidates(normalized, latest),
+    newModels: buildNewModelCandidates(normalized, weekly, latest),
   }
 }
 
-function buildNewModelCandidates(rows: StatMetricRow[], latest: number): NewModelCandidate[] {
+function buildNewModelCandidates(
+  rows: StatMetricRow[],
+  weekRows: StatMetricRow[],
+  latest: number,
+): NewModelCandidate[] {
   const productRows = rowsForProduct(rows, SITE_PRODUCT, -Infinity, latest + DAY_MS).filter(
     (row) => row.totalTokens > 0,
   )
@@ -574,7 +585,15 @@ function buildNewModelCandidates(rows: StatMetricRow[], latest: number): NewMode
   }, new Map())
   const start = latest - (NEW_MODEL_WINDOW_DAYS - 1) * DAY_MS
   const days = Array.from({ length: NEW_MODEL_WINDOW_DAYS }, (_, index) => start + index * DAY_MS)
-  return aggregateByModelName(productRows.filter((row) => row.periodStart >= start))
+  const recentRows = productRows.filter((row) => row.periodStart >= start)
+  const recentWeekRows = rowsForProduct(weekRows, SITE_PRODUCT, start - 6 * DAY_MS, latest + DAY_MS)
+  const tokensByDay = new Map(
+    days.map((day) => [
+      day,
+      aggregateByModelName(recentRows.filter((row) => row.periodStart === day)).map((item) => item.totalTokens),
+    ]),
+  )
+  return aggregateByModelName(recentRows)
     .map((item) => {
       const modelRows = productRows.filter((row) => row.model === item.model && row.periodStart >= start)
       const first = firstSeen.get(item.model) ?? start
@@ -585,11 +604,15 @@ function buildNewModelCandidates(rows: StatMetricRow[], latest: number): NewMode
             item.model,
             modelRows.filter((row) => row.periodStart === day),
           )
+          const dayTokens = tokensByDay.get(day) ?? []
+          const dayTotal = dayTokens.reduce((sum, tokens) => sum + tokens, 0)
           return {
             date: periodKey(day),
             tokens: aggregate.totalTokens,
             users: aggregate.uniqueUsers,
             sessions: aggregate.sessions,
+            share: dayTotal > 0 ? aggregate.totalTokens / dayTotal : 0,
+            rank: dayTokens.filter((tokens) => tokens > aggregate.totalTokens).length + 1,
           }
         })
       return {
@@ -601,6 +624,16 @@ function buildNewModelCandidates(rows: StatMetricRow[], latest: number): NewMode
         sessions: item.sessions,
         peakUsers: Math.max(0, ...daily.map((day) => day.users)),
         daily,
+        weekly: [...new Set(recentWeekRows.map((row) => row.periodStart))]
+          .toSorted((a, b) => a - b)
+          .map((week) => ({
+            week: periodKey(week),
+            users: combineRowsForModel(
+              item.model,
+              recentWeekRows.filter((row) => row.model === item.model && row.periodStart === week),
+            ).uniqueUsers,
+          }))
+          .filter((week) => week.users > 0),
       }
     })
     .toSorted((a, b) => b.tokens - a.tokens || a.model.localeCompare(b.model))
@@ -823,6 +856,22 @@ function topModels(rows: StatMetricRow[], product: UsageProduct, rankWindow: Dat
     .toSorted((a, b) => modelUsageValue(b, metric) - modelUsageValue(a, metric))
     .slice(0, TOP_MODEL_SEGMENT_LIMIT)
     .map((item) => item.model)
+}
+
+// The weekly series reaches back 20 weeks, so the biggest models over that span keep their own color too.
+function weeklyModels(
+  daily: StatMetricRow[],
+  weekly: StatMetricRow[],
+  weeks: Bucket[],
+  rankWindow: DateWindow,
+  metric: "tokens" | "users",
+) {
+  const current = topModels(daily, SITE_PRODUCT, rankWindow, metric)
+  const leaders = aggregateByModelName(rowsForProduct(weekly, SITE_PRODUCT, weeks[0]!.start, weeks.at(-1)!.end))
+    .toSorted((a, b) => modelUsageValue(b, metric) - modelUsageValue(a, metric))
+    .map((item) => item.model)
+    .filter((model) => !current.includes(model))
+  return [...current, ...leaders.slice(0, WEEKLY_PAST_LEADER_LIMIT)]
 }
 
 function buildUsagePoints(

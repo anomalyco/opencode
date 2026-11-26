@@ -67,6 +67,7 @@ export async function llmsText(locale: Locale) {
       page("/press"),
       page("/brand"),
       page("/legal/privacy-policy"),
+      page("/legal/refund-policy"),
       page("/legal/terms-of-service"),
       `- ${link("Full site", context.route("/llms-full.txt"))}: the site's own pages in one Markdown file, without the docs or Console`,
       `- ${link("Discord", config.social.discord)}: the community`,
