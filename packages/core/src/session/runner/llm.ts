@@ -4,6 +4,7 @@ import { Message } from "@opencode/ai/effect"
 import { and, desc, eq, inArray, sql } from "drizzle-orm"
 import { Cause, Effect, Exit, FiberMap, Layer } from "effect"
 import { Database } from "../../database/database.js"
+import { jsonText } from "#dialect"
 import { Bus } from "../../bus.js"
 import { CodeModeAgents } from "../../codemode/agents.js"
 import { Environment } from "../../environment/index.js"
@@ -360,7 +361,7 @@ const layer = Layer.effect(
             const recent = yield* db
               .select({
                 type: SessionMessageTable.type,
-                finish: sql<string | null>`json_extract(${SessionMessageTable.data}, '$.finish')`,
+                finish: sql<string | null>`${jsonText(SessionMessageTable.data, "$.finish")}`,
               })
               .from(SessionMessageTable)
               .where(
@@ -410,7 +411,7 @@ const layer = Layer.effect(
           and(
             eq(SessionMessageTable.session_id, sessionID),
             eq(SessionMessageTable.type, "compaction"),
-            sql`json_extract(${SessionMessageTable.data}, '$.status') = 'running'`,
+            sql`${jsonText(SessionMessageTable.data, "$.status")} = 'running'`,
           ),
         )
         .orderBy(desc(SessionMessageTable.seq))

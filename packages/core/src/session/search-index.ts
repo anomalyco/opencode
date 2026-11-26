@@ -1,10 +1,12 @@
 export * as SessionSearchIndex from "./search-index.js"
 
-import { eq, sql } from "drizzle-orm"
+import { eq, sql, type SQL } from "drizzle-orm"
 import { Cause, Effect, Option, Predicate, Schema } from "effect"
 import { isSqlError } from "effect/sql/SqlError"
 import type { Database } from "../database/database.js"
 import { KVTable } from "../kv/sql.js"
+import { kind } from "#dialect"
+import * as PgIndex from "./search-index.postgres.js"
 import { SessionMessage } from "./message.js"
 
 /**
@@ -71,13 +73,7 @@ export type Ensured =
 export const ensure = Effect.fn("SessionSearchIndex.ensure")(function* (
   db: DatabaseService,
 ): Effect.fn.Return<Ensured> {
-  const objects = yield* db
-    .all<{
-      name: string
-    }>(
-      sql`SELECT name FROM sqlite_master WHERE name GLOB 'session_search*' AND type IN ('table', 'view', 'trigger')`,
-    )
-    .pipe(Effect.orDie)
+  const objects = yield* list(db).pipe(Effect.orDie)
   const names = new Set(objects.map((object) => object.name))
   const unsupported = yield* probe(db, names.has("session_search"))
   if (unsupported) return { status: "unsupported", reason: unsupported }
@@ -95,11 +91,7 @@ export const ensure = Effect.fn("SessionSearchIndex.ensure")(function* (
       // Another server may have rebuilt it meanwhile.
       const state = yield* readState(db)
       if (state && state.version > Version) return { status: "newer" } as const
-      const present = new Set(
-        (yield* db.all<{ name: string }>(sql`SELECT name FROM sqlite_master WHERE name GLOB 'session_search*'`)).map(
-          (row) => row.name,
-        ),
-      )
+      const present = new Set((yield* list(db)).map((row) => row.name))
       if (state && current(state) && state.layout === layout && expected(layout).every((name) => present.has(name)))
         return { status: "ready", state } as const
       yield* reset(db, layout)
@@ -159,7 +151,7 @@ export const buildChunk = Effect.fn("SessionSearchIndex.buildChunk")(function* (
       }
       // Message IDs ascend over time, so descending order is newest first. `octet_length` reads only the record
       // header but needs SQLite 3.43+, like the compact layout.
-      const size = sql.raw(state.layout === "compact" ? "octet_length" : "length")
+      const size = sql.raw(kind === "postgres" || state.layout === "compact" ? "octet_length" : "length")
       const before = state.after === undefined ? sql`1 = 1` : sql`id < ${state.after}`
       const candidates = yield* db.all<{ id: string; session: string; indexed: number; bytes: number }>(sql`
         SELECT message.id, message.session_id AS session,
@@ -203,6 +195,10 @@ export const state = (db: DatabaseService) => readState(db).pipe(Effect.orDie)
  * failing row.
  */
 export const isBusy = (cause: Cause.Cause<unknown>) => {
+  if (kind === "postgres") {
+    const code = pgCode(Cause.squash(cause))
+    return code === "40001" || code === "40P01" || /deadlock detected|could not serialize/i.test(pgMessage(cause))
+  }
   const code = primaryCode(sqlError(Cause.squash(cause))?.reason)
   return code === 5 || code === 6
 }
@@ -242,6 +238,45 @@ const Folds = [
 ]
 const fold = (column: string) =>
   `${Folds.reduce((text, [from, to]) => `replace(${text}, '${from}', '${to}')`, column)} AS ${column}`
+
+/** The fold chain without the alias, for use inside larger expressions. */
+const foldChain = (column: string) =>
+  Folds.reduce((text, [from, to]) => `replace(${text}, '${from}', '${to}')`, column)
+
+/** PostgreSQL spelling of the index-side normalization: ASCII folds, accents stripped, lowercased. */
+const normalize = (expression: string) => `lower(unaccent(${foldChain(expression)}))`
+
+/** The fold chain over an SQL expression, for the query side. */
+const foldSql = (value: SQL) =>
+  Folds.reduce((text, [from, to]) => sql`replace(${text}, ${from}, ${to})`, value)
+
+/**
+ * Query-side spelling of the index normalization: PostgreSQL folds and
+ * unaccents, SQLite has the text as-is. The query text is bound, never spliced
+ * into the statement, and the fold chain runs over the bound value so a search
+ * is normalized exactly like the indexed document.
+ */
+export const queryExpression = (value: string) =>
+  kind === "postgres" ? sql`lower(unaccent(${foldSql(sql`${value}`)}))` : sql`${value}`
+
+/** Names of the objects a session search index owns on this engine. */
+const list = (db: DatabaseService) =>
+  kind === "postgres"
+    ? db.all<{ name: string }>(sql`
+        SELECT c.relname::text AS name FROM pg_class c
+        WHERE c.oid = to_regclass('session_search')
+        UNION
+        SELECT proname::text FROM pg_proc
+        WHERE proname IN ('session_search_text', 'session_search_completed', 'session_search_reindex', 'session_search_refresh')
+          AND pronamespace = current_schema()::regnamespace
+        UNION
+        SELECT tgname::text FROM pg_trigger
+        WHERE tgname LIKE 'session_search%'
+          AND tgrelid IN (SELECT oid FROM pg_class WHERE relnamespace = current_schema()::regnamespace)
+      `)
+    : db.all<{ name: string }>(
+        sql`SELECT name FROM sqlite_master WHERE name GLOB 'session_search*' AND type IN ('table', 'view', 'trigger')`,
+      )
 
 /** Applies the same extra-letter ASCII folds that {@link SourceView} indexes into `session_search`. */
 export const foldText = (value: string) =>
@@ -342,12 +377,24 @@ const Layouts = {
 } satisfies Record<Layout, { document: string; triggers: Record<string, string> }>
 
 const Tables = ["session_search", "session_search_document"]
-const expected = (layout: Layout) => [
-  ...Tables,
-  "session_search_source",
-  ...Object.keys(sourceTriggers(layout)),
-  ...Object.keys(Layouts[layout].triggers),
+/** The objects a PostgreSQL index owns; the state machine only checks that all of them exist. */
+const PgObjects = [
+  "session_search",
+  "session_search_text",
+  "session_search_completed",
+  "session_search_reindex",
+  "session_search_refresh",
+  ...PgIndex.triggers(Indexed).map((trigger) => trigger.name),
 ]
+const expected = (layout: Layout) =>
+  kind === "postgres"
+    ? PgObjects
+    : [
+        ...Tables,
+        "session_search_source",
+        ...Object.keys(sourceTriggers(layout)),
+        ...Object.keys(Layouts[layout].triggers),
+      ]
 
 /**
  * Bulk-reindexes a batch of sources using bound `IN (?, ...)` lists (not subqueries) on `source.source_id`, so SQLite
@@ -358,6 +405,11 @@ const reindexBatch = Effect.fnUntraced(function* (
   layout: Layout,
   rows: ReadonlyArray<{ readonly id: string; readonly session: string }>,
 ) {
+  if (kind === "postgres") {
+    // The PL/pgSQL function owns extraction and normalization; the build only feeds it ids.
+    for (const row of rows) yield* db.run(sql`SELECT session_search_reindex(${row.id}, ${row.session})`)
+    return
+  }
   for (let start = 0; start < rows.length; start += ChunkLimit) {
     const batch = rows.slice(start, start + ChunkLimit)
     const ids = sql.join(
@@ -392,6 +444,12 @@ const reindexBatch = Effect.fnUntraced(function* (
 })
 
 const reset = Effect.fnUntraced(function* (db: DatabaseService, layout: Layout) {
+  if (kind === "postgres") {
+    yield* unlink(db)
+    for (const statement of PgIndex.createStatements(normalize)) yield* db.run(sql.raw(statement))
+    yield* link(db, layout)
+    return
+  }
   yield* unlink(db)
   for (const name of Tables) yield* db.run(`DROP TABLE IF EXISTS ${name}`)
   yield* db.run(Layouts[layout].document)
@@ -401,6 +459,19 @@ const reset = Effect.fnUntraced(function* (db: DatabaseService, layout: Layout) 
 
 /** Drops the view and every search trigger. */
 const unlink = Effect.fnUntraced(function* (db: DatabaseService) {
+  if (kind === "postgres") {
+    for (const trigger of PgIndex.triggers(Indexed))
+      yield* db.run(sql.raw("DROP TRIGGER IF EXISTS " + trigger.name + " ON " + trigger.table))
+    for (const signature of [
+      "session_search_refresh()",
+      "session_search_reindex(text, text)",
+      "session_search_text(text)",
+      "session_search_completed(text)",
+    ])
+      yield* db.run(sql.raw("DROP FUNCTION IF EXISTS " + signature + " CASCADE"))
+    yield* db.run(sql.raw("DROP TABLE IF EXISTS session_search"))
+    return
+  }
   const triggers = yield* db.all<{ name: string }>(
     sql`SELECT name FROM sqlite_master WHERE type = 'trigger' AND name GLOB 'session_search*'`,
   )
@@ -409,6 +480,25 @@ const unlink = Effect.fnUntraced(function* (db: DatabaseService) {
 })
 
 const link = Effect.fnUntraced(function* (db: DatabaseService, layout: Layout) {
+  if (kind === "postgres") {
+    for (const trigger of PgIndex.triggers(Indexed)) {
+      yield* db.run(sql.raw("DROP TRIGGER IF EXISTS " + trigger.name + " ON " + trigger.table))
+      yield* db.run(
+        sql.raw(
+          "CREATE TRIGGER " +
+            trigger.name +
+            " AFTER " +
+            trigger.event +
+            " ON " +
+            trigger.table +
+            " FOR EACH ROW " +
+            (trigger.when ? "WHEN (" + trigger.when + ") " : "") +
+            "EXECUTE FUNCTION session_search_refresh()",
+        ),
+      )
+    }
+    return
+  }
   yield* db.run(SourceView)
   for (const [name, body] of Object.entries({ ...Layouts[layout].triggers, ...sourceTriggers(layout) }))
     yield* db.run(`CREATE TRIGGER ${name} ${body}`)
@@ -430,6 +520,8 @@ const immediate = <A, E>(db: DatabaseService, effect: Effect.Effect<A, E>) =>
 
 /** The triggers read sources with the JSON functions, and the index must open. Returns why not, if not. */
 const probe = Effect.fnUntraced(function* (db: DatabaseService, index: boolean) {
+  // tsvector and its casts are part of PostgreSQL; nothing to probe.
+  if (kind === "postgres") return undefined
   const json = yield* db
     .all(
       sql.raw(
@@ -443,13 +535,16 @@ const probe = Effect.fnUntraced(function* (db: DatabaseService, index: boolean) 
 })
 
 const pick = Effect.fnUntraced(function* (db: DatabaseService) {
+  if (kind === "postgres") return "compact" as const
   if (!(yield* creatable(db, "compact"))) return "compact" as const
   return (yield* creatable(db, "text")) ?? ("text" as const)
 })
 
 /** Undefined when this SQLite can create the layout's FTS table. */
 const creatable = (db: DatabaseService, layout: Layout) =>
-  db
+  kind === "postgres"
+    ? Effect.succeed(undefined)
+    : db
     .transaction(
       () =>
         Effect.gen(function* () {
@@ -462,6 +557,11 @@ const creatable = (db: DatabaseService, layout: Layout) =>
 
 /** True when an error is a generic `SQLITE_ERROR` (code 1: syntax error, unknown function/option/table). */
 export const isQueryError = (error: unknown) => {
+  if (kind === "postgres") {
+    const code = pgCode(error)
+    if (code !== undefined && (code.startsWith("42") || code === "42704" || code === "42883")) return true
+    return /syntax error|does not exist|undefined (function|object|table)/i.test(pgMessage(error))
+  }
   const native = sqlError(error)?.reason
   return native?._tag === "UnknownError" && primaryCode(native) === 1
 }
@@ -486,6 +586,21 @@ const sqlError = (error: unknown) => {
   const failure = Cause.squash(error.cause)
   return isSqlError(failure) ? failure : undefined
 }
+
+/** The underlying pg error, as `@effect/sql-pg` wraps it in a SqlError reason. */
+const pgCause = (error: unknown) => {
+  const reason = sqlError(error)?.reason as
+    | { readonly cause?: { readonly code?: unknown; readonly message?: unknown } }
+    | undefined
+  return reason?.cause
+}
+
+const pgCode = (error: unknown) => {
+  const code = pgCause(error)?.code
+  return typeof code === "string" ? code : undefined
+}
+
+const pgMessage = (error: unknown) => String(pgCause(error)?.message ?? "")
 
 // Bun reports the result code as `errno`, Node as `errcode`.
 const primaryCode = (reason: unknown) => {

@@ -16,7 +16,9 @@ describe.skipIf(process.platform === "win32" || !node)("node sqlite client", () 
       const build = await Bun.build({
         entrypoints: [join(import.meta.dir, "fixture/sqlite-node-client.ts")],
         target: "node",
-        conditions: ["node"],
+        // The fixture builds the SQLite database shape, so it pins the sqlite
+        // build of the driver seam alongside the node one.
+        conditions: ["node", "sqlite"],
         outdir: join(dir, "bundle"),
         throw: false,
       })

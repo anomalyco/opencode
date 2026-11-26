@@ -7,6 +7,7 @@ import { optional } from "@opencode/schema/schema"
 import { Project } from "@opencode/schema/project"
 import { Session } from "@opencode/schema/session"
 import type { Tool } from "@opencode/schema/tool"
+import { kind } from "#dialect"
 import { Database } from "../database/database.js"
 import { SessionHistory } from "./history.js"
 import { SessionMessage } from "./message.js"
@@ -218,16 +219,26 @@ const searchSessions = Effect.fnUntraced(function* (
     subagents: input.sessionID ? true : (input.subagents ?? true),
   })
   const runMatch = (expression: string) =>
-    db.all<{ source_id: string; session_id: string; score: number }>(sql`
-      SELECT d.source_id AS source_id, d.session_id AS session_id,
-        bm25(session_search, 3.0, 2.0, 1.5, 1.0) AS score
-      FROM session_search
-      JOIN session_search_document AS d ON d.id = session_search.rowid
-      JOIN session_v2 ON session_v2.id = d.session_id
-      WHERE session_search MATCH ${expression}${filters.length > 0 ? sql` AND ${and(...filters)}` : sql``}
-      ORDER BY score
-      LIMIT ${hitLimit}
-    `)
+    kind === "postgres"
+      ? db.all<{ source_id: string; session_id: string; score: number }>(sql`
+          SELECT d.source_id AS source_id, d.session_id AS session_id,
+            ts_rank(d.document, websearch_to_tsquery('simple', ${SessionSearchIndex.queryExpression(expression)})) AS score
+          FROM session_search AS d
+          JOIN session_v2 ON session_v2.id = d.session_id
+          WHERE d.document @@ websearch_to_tsquery('simple', ${SessionSearchIndex.queryExpression(expression)})${filters.length > 0 ? sql` AND ${and(...filters)}` : sql``}
+          ORDER BY score DESC
+          LIMIT ${hitLimit}
+        `)
+      : db.all<{ source_id: string; session_id: string; score: number }>(sql`
+          SELECT d.source_id AS source_id, d.session_id AS session_id,
+            bm25(session_search, 3.0, 2.0, 1.5, 1.0) AS score
+          FROM session_search
+          JOIN session_search_document AS d ON d.id = session_search.rowid
+          JOIN session_v2 ON session_v2.id = d.session_id
+          WHERE session_search MATCH ${expression}${filters.length > 0 ? sql` AND ${and(...filters)}` : sql``}
+          ORDER BY score
+          LIMIT ${hitLimit}
+        `)
 
   const raw = hasFtsSyntax(folded) ? folded : fallback
   const hits = yield* runMatch(raw).pipe(

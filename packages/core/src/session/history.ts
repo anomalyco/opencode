@@ -4,6 +4,7 @@ import { Effect, Option, Schema } from "effect"
 import type { Model } from "@opencode/schema/model"
 import { SessionLegacy } from "@opencode/schema/session-legacy"
 import { Database } from "../database/database.js"
+import { jsonText } from "#dialect"
 import { DatabaseBatch } from "../database/batch.js"
 import { MessageDecodeError } from "./error.js"
 import { SessionMessage } from "./message.js"
@@ -65,18 +66,18 @@ const latestCompaction = Effect.fnUntraced(function* (
       and(
         eq(SessionMessageTable.session_id, sessionID),
         eq(SessionMessageTable.type, "compaction"),
-        sql`json_extract(${SessionMessageTable.data}, '$.status') = 'completed'`,
+        sql`${jsonText(SessionMessageTable.data, "$.status")} = 'completed'`,
         before === undefined ? undefined : lt(SessionMessageTable.seq, before),
         boundary === "latest"
           ? undefined
           : or(
               // Rows written before v2.1 hold the window in `providerContext`.
-              sql`coalesce(json_extract(${SessionMessageTable.data}, '$.native.messages'), json_extract(${SessionMessageTable.data}, '$.providerContext')) is null`,
+              sql`coalesce(${jsonText(SessionMessageTable.data, "$.native.messages")}, ${jsonText(SessionMessageTable.data, "$.providerContext")}) is null`,
               boundary === "local"
                 ? undefined
                 : and(
-                    sql`json_extract(${SessionMessageTable.data}, '$.model.providerID') = ${boundary.providerID}`,
-                    sql`json_extract(${SessionMessageTable.data}, '$.model.id') = ${boundary.id}`,
+                    sql`${jsonText(SessionMessageTable.data, "$.model.providerID")} = ${boundary.providerID}`,
+                    sql`${jsonText(SessionMessageTable.data, "$.model.id")} = ${boundary.id}`,
                   ),
             ),
       ),
@@ -374,7 +375,7 @@ export const incompleteAssistants = Effect.fn("SessionHistory.incompleteAssistan
       and(
         eq(SessionMessageTable.session_id, sessionID),
         eq(SessionMessageTable.type, "assistant"),
-        sql`json_extract(${SessionMessageTable.data}, '$.time.completed') is null`,
+        sql`${jsonText(SessionMessageTable.data, "$.time.completed")} is null`,
         compaction ? gte(SessionMessageTable.seq, compaction.seq) : undefined,
       ),
     )
@@ -392,7 +393,7 @@ export const firstUserMessage = Effect.fn("SessionHistory.firstUserMessage")(fun
   const row = yield* db
     .select({
       id: SessionMessageTable.id,
-      text: sql<unknown>`json_extract(${SessionMessageTable.data}, '$.text')`,
+      text: sql<unknown>`${jsonText(SessionMessageTable.data, "$.text")}`,
     })
     .from(SessionMessageTable)
     .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "user")))

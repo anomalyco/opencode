@@ -4,6 +4,7 @@ import { and, asc, desc, eq, gt, lt, sql } from "drizzle-orm"
 import { Context, Effect, Schema } from "effect"
 import { Location } from "@opencode/schema/location"
 import { Database } from "../database/database.js"
+import { jsonNumber, jsonText } from "#dialect"
 import { LocationServiceMap } from "../location-service-map.js"
 import { Snapshot } from "../snapshot.js"
 import { PATCH_CONTEXT_LINES } from "../vcs/patch.js"
@@ -98,9 +99,9 @@ export const turn = Effect.fn("SessionDiff.turn")(function* (
   const steps = yield* db
     .select({
       seq: SessionMessageTable.seq,
-      start: sql<string | null>`json_extract(${SessionMessageTable.data}, '$.snapshot.start')`,
-      end: sql<string | null>`json_extract(${SessionMessageTable.data}, '$.snapshot.end')`,
-      completed: sql<number | null>`json_extract(${SessionMessageTable.data}, '$.time.completed')`,
+      start: sql<string | null>`${jsonText(SessionMessageTable.data, "$.snapshot.start")}`,
+      end: sql<string | null>`${jsonText(SessionMessageTable.data, "$.snapshot.end")}`,
+      completed: sql<number | null>`${jsonNumber(SessionMessageTable.data, "$.time.completed")}`,
     })
     .from(SessionMessageTable)
     .where(
@@ -121,8 +122,8 @@ export const turn = Effect.fn("SessionDiff.turn")(function* (
   const switches = yield* db
     .select({
       seq: SessionMessageTable.seq,
-      location: sql<string>`json_extract(${SessionMessageTable.data}, '$.location')`,
-      previous: sql<string | null>`json_extract(${SessionMessageTable.data}, '$.previous.location')`,
+      location: sql<string>`${jsonText(SessionMessageTable.data, "$.location")}`,
+      previous: sql<string | null>`${jsonText(SessionMessageTable.data, "$.previous.location")}`,
     })
     .from(SessionMessageTable)
     .where(and(eq(SessionMessageTable.session_id, sessionID), eq(SessionMessageTable.type, "location-switched")))

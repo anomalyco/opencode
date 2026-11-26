@@ -2,12 +2,14 @@ import { describe, expect, test } from "bun:test"
 import type { BunPlugin } from "bun"
 import { join } from "path"
 
-// Pins the #sqlite subpath-import condition gate: bundling database.ts for a
-// non-Bun runtime must never reach @effect/sql-sqlite-bun (and its static
-// `import "bun:sqlite"`), which crashes workerd (and any other non-Bun bundle)
-// at module load. Bare imports are externalized so only core-relative modules —
-// including the #sqlite resolution under test — end up in the bundle, and the
-// client package each runtime picked stays visible as an import specifier.
+// Pins the #database and #sqlite subpath-import condition gates: bundling
+// database.ts for a non-Bun runtime must never reach @effect/sql-sqlite-bun
+// (and its static `import "bun:sqlite"`), which crashes workerd (and any other
+// non-Bun bundle) at module load. The default build talks to PostgreSQL; only
+// the workerd and explicit sqlite conditions select a SQLite client. Bare
+// imports are externalized so only core-relative modules — including the
+// resolution under test — end up in the bundle, and the client package each
+// runtime picked stays visible as an import specifier.
 const externalizeBare: BunPlugin = {
   name: "externalize-bare",
   setup(build) {
@@ -34,20 +36,31 @@ const bundle = async (conditions: Array<string>) => {
 // there ("Internal assertion failure", twice in a row on CI, always at this
 // file). The assertions pin platform-independent package.json condition
 // resolution, so Linux coverage loses nothing.
-describe.skipIf(process.platform === "win32")("sqlite bundle conditions", () => {
+describe.skipIf(process.platform === "win32")("database driver bundle conditions", () => {
   test("workerd conditions select the Durable Object driver and never bun:sqlite", async () => {
     const output = await bundle(["workerd"])
     expect(output).not.toContain("bun:sqlite")
     expect(output).not.toContain("node:sqlite")
     expect(output).not.toContain("@effect/sql-sqlite-bun")
     expect(output).not.toContain("@effect/sql-sqlite-node")
+    expect(output).not.toContain("@effect/sql-pg")
     expect(output).toContain("SqliteWorkerd")
   })
 
-  test.each([[["node"]], [[]]])("%p conditions select the Node client, not bun:sqlite", async (conditions) => {
+  test.each([[["node"]], [[]]])("%p conditions select PostgreSQL, not a SQLite client", async (conditions) => {
     const output = await bundle(conditions)
     expect(output).not.toContain("bun:sqlite")
+    expect(output).not.toContain("node:sqlite")
     expect(output).not.toContain("@effect/sql-sqlite-bun")
+    expect(output).not.toContain("@effect/sql-sqlite-node")
+    expect(output).toContain("@effect/sql-pg")
+  })
+
+  test("the sqlite condition selects the Node client, not bun:sqlite", async () => {
+    const output = await bundle(["node", "sqlite"])
+    expect(output).not.toContain("bun:sqlite")
+    expect(output).not.toContain("@effect/sql-sqlite-bun")
+    expect(output).not.toContain("@effect/sql-pg")
     expect(output).toContain("@effect/sql-sqlite-node")
   })
 })

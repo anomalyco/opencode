@@ -6,6 +6,7 @@ import { DateTime, Effect, Layer, Option, Schema, Stream } from "effect"
 import path from "path"
 import { Config } from "../config.js"
 import { Database } from "../database/database.js"
+import { greatest, jsonArrayLength, jsonSetContent, jsonText } from "#dialect"
 import { DatabaseBatch } from "../database/batch.js"
 import { Bus } from "../bus.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
@@ -210,9 +211,9 @@ const projectFork = Effect.fn("SessionProjector.projectFork")(function* (
           gt(SessionMessageTable.seq, cursor),
           lt(SessionMessageTable.seq, copiedSeq + 1),
           // Terminal events for active projections stay on the parent, so forks copy only settled history.
-          sql`${SessionMessageTable.type} != 'assistant' or json_extract(${SessionMessageTable.data}, '$.time.completed') is not null`,
-          sql`${SessionMessageTable.type} != 'shell' or json_extract(${SessionMessageTable.data}, '$.status') != 'running'`,
-          sql`${SessionMessageTable.type} != 'compaction' or json_extract(${SessionMessageTable.data}, '$.status') != 'running'`,
+          sql`${SessionMessageTable.type} != 'assistant' or ${jsonText(SessionMessageTable.data, "$.time.completed")} is not null`,
+          sql`${SessionMessageTable.type} != 'shell' or ${jsonText(SessionMessageTable.data, "$.status")} != 'running'`,
+          sql`${SessionMessageTable.type} != 'compaction' or ${jsonText(SessionMessageTable.data, "$.status")} != 'running'`,
         ),
       )
       .orderBy(asc(SessionMessageTable.seq))
@@ -408,7 +409,7 @@ function run(db: DatabaseService, event: MessageEvent) {
               and(
                 eq(SessionMessageTable.session_id, event.data.sessionID),
                 eq(SessionMessageTable.type, "shell"),
-                sql`json_extract(${SessionMessageTable.data}, '$.shellID') = ${shellID}`,
+                sql`${jsonText(SessionMessageTable.data, "$.shellID")} = ${shellID}`,
               ),
             )
             .orderBy(desc(SessionMessageTable.seq))
@@ -429,7 +430,7 @@ function run(db: DatabaseService, event: MessageEvent) {
               and(
                 eq(SessionMessageTable.session_id, event.data.sessionID),
                 eq(SessionMessageTable.type, "compaction"),
-                sql`json_extract(${SessionMessageTable.data}, '$.status') = 'running'`,
+                sql`${jsonText(SessionMessageTable.data, "$.status")} = 'running'`,
               ),
             )
             .orderBy(desc(SessionMessageTable.seq))
@@ -624,7 +625,7 @@ function partRowWrites(db: DatabaseService, event: MessageEvent): Writes {
       .select({
         id: SessionMessageTable.id,
         seq: SessionMessageTable.seq,
-        inlineCount: sql<number>`json_array_length(${SessionMessageTable.data}, '$.content')`,
+        inlineCount: sql<number>`${jsonArrayLength(SessionMessageTable.data, "$.content")}`,
       })
       .from(SessionMessageTable)
       .where(
@@ -696,9 +697,7 @@ function partRowWrites(db: DatabaseService, event: MessageEvent): Writes {
           ? { time_created: DateTime.toEpochMillis(message.time.created) }
           : {}),
         data:
-          message.type === "assistant"
-            ? sql`json_set(${JSON.stringify(data)}, '$.content', json(coalesce(json_extract(${SessionMessageTable.data}, '$.content'), '[]')))`
-            : data,
+          message.type === "assistant" ? jsonSetContent(SessionMessageTable.data, data) : data,
       })
       .where(and(eq(SessionMessageTable.id, message.id), eq(SessionMessageTable.session_id, event.data.sessionID)))
       .run()
@@ -749,7 +748,7 @@ function partRowWrites(db: DatabaseService, event: MessageEvent): Writes {
               eq(SessionPartTable.type, match.type),
               match.callID !== undefined ? eq(SessionPartTable.call_id, match.callID) : undefined,
               match.incompleteReasoning
-                ? sql`json_extract(${SessionPartTable.data}, '$.time.completed') is null`
+                ? sql`${jsonText(SessionPartTable.data, "$.time.completed")} is null`
                 : undefined,
             ),
           )
@@ -866,7 +865,7 @@ function projectIdle(
           : "interrupted"
     yield* setSession(db, event.data.sessionID, {
       // Unread uses a strict timestamp comparison, so every terminal must advance even within one millisecond.
-      time_idle: sql`max(${time}, coalesce(${SessionTable.time_idle} + 1, ${time}))`,
+      time_idle: greatest(time, sql`coalesce(${SessionTable.time_idle} + 1, ${time})`),
       idle_outcome: outcome,
       time_updated: sql`${SessionTable.time_updated}`,
     })
@@ -1010,7 +1009,7 @@ const layer = Layer.effectDiscard(
       return setSession(db, event.data.sessionID, {
         // Monotone watermark: a duplicate or stale view never regresses, and a terminal event
         // committing after the viewer's observation keeps the newer idle transition unread.
-        time_viewed: sql`max(${idle}, coalesce(${SessionTable.time_viewed}, ${idle}))`,
+        time_viewed: greatest(idle, sql`coalesce(${SessionTable.time_viewed}, ${idle})`),
         time_updated: sql`${SessionTable.time_updated}`,
       })
     })

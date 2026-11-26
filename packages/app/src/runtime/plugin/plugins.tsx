@@ -1,6 +1,6 @@
 import { createMemo, onCleanup, untrack } from "solid-js"
 import type { PluginOptions } from "@opencode/plugin/gui"
-import type { Bridge, BridgePluginGui, Entry } from "@opencode/plugin/gui/host"
+import type { Bridge, BridgePluginGui, BridgePluginGuis, Entry } from "@opencode/plugin/gui/host"
 import type { OpenCodeClient } from "@opencode/client/promise"
 import { useGlobal } from "@/runtime/server/runtime"
 import { ServerConnection } from "@/runtime/server/registry"
@@ -31,7 +31,10 @@ export type PluginGui = {
  * hands the definitions up through `onChange` rather than the root reading them.
  */
 export function PluginGuiLoader(props: {
-  bridge: Bridge
+  /** Desktop: the main-process bridge. Web: absent, and `source` lists the plugin GUIs instead. */
+  bridge?: Bridge
+  /** Web: lists the GUIs to load from the app's own server. */
+  source?: () => Promise<BridgePluginGuis>
   /** The GUIs that load, and the ids of plugins whose GUI cannot load because a built-in claims the id. */
   onChange: (plugins: readonly PluginGui[], reserved: readonly string[]) => void
 }) {
@@ -80,7 +83,7 @@ export function PluginGuiLoader(props: {
 
   const run = (effect: PluginGuiEffect) => {
     if (effect.type === "fetch.initial")
-      return void Promise.try(() => props.bridge.pluginGuis()).then(
+      return void Promise.try(props.source ?? (() => props.bridge!.pluginGuis())).then(
         (guis) => dispatch({ type: "initial.resolved", attempt: effect.attempt, guis }),
         (cause: unknown) => dispatch({ type: "initial.failed", attempt: effect.attempt, cause }),
       )
@@ -114,12 +117,13 @@ export function PluginGuiLoader(props: {
     console.error("[plugin] failed to load plugin GUIs", effect.cause)
   }
 
-  onCleanup(
-    props.bridge.on((message) => {
-      if (message.type === "pluginGuis")
-        dispatch({ type: "pushed", guis: { plugins: message.plugins, reserved: message.reserved } })
-    }),
-  )
+  if (props.bridge)
+    onCleanup(
+      props.bridge.on((message) => {
+        if (message.type === "pluginGuis")
+          dispatch({ type: "pushed", guis: { plugins: message.plugins, reserved: message.reserved } })
+      }),
+    )
   onCleanup(() => dispatch({ type: "disposed" }))
   initial.effects.forEach(run)
 
@@ -134,4 +138,59 @@ async function evaluate(plugin: BridgePluginGui): Promise<LoadedPluginGui> {
     options: plugin.options,
     definition: await pluginDefinition(plugin.id, plugin.code),
   }
+}
+
+/**
+ * Web: loads the plugin GUIs from the app's own server, with no main process involved. In the desktop app main reads
+ * each `./gui-experimental` bundle and sends it to the windows; a browser has no main, so the window asks the server it
+ * is already connected to and evaluates what comes back itself (see `pluginDefinition`).
+ */
+export function WebPluginGuiLoader(props: {
+  onChange: (plugins: readonly PluginGui[], reserved: readonly string[]) => void
+}) {
+  const global = useGlobal()
+
+  const controller = createMemo(() => {
+    const list = global.servers.list()
+    const conn = list.find(ServerConnection.builtin) ?? list[0]
+
+    return conn ? global.serverCtx(ServerConnection.key(conn)) : undefined
+  })
+
+  const source = () => pluginGuisFromServer(controller()?.sdk.api)
+
+  return <PluginGuiLoader source={source} onChange={props.onChange} />
+}
+
+/** The plugin list and each GUI bundle, shaped as the desktop main process sends them. */
+async function pluginGuisFromServer(api: OpenCodeClient | undefined): Promise<BridgePluginGuis> {
+  if (!api) return { plugins: [], reserved: [] }
+
+  const listed = await api.plugin.list(undefined).catch(() => undefined)
+  const rows = (listed?.data ?? []) as readonly {
+    id: string
+    features?: { gui?: boolean }
+    state?: { status?: string }
+  }[]
+
+  const plugins: BridgePluginGui[] = []
+  for (const row of rows) {
+    if (!row?.features?.gui || row.state?.status !== "active") continue
+
+    const bundle = await api.plugin.gui({ id: row.id } as never).catch(() => undefined)
+    const code = (bundle as { data?: { code?: unknown } } | undefined)?.data?.code
+
+    if (typeof code === "string" && code) plugins.push({ id: row.id, revision: revisionOf(code), code, options: {} })
+  }
+
+  return { plugins, reserved: [] }
+}
+
+/** A stable revision per bundle, so an unchanged one keeps its evaluated definition. */
+function revisionOf(code: string): string {
+  let hash = 5381
+
+  for (let index = 0; index < code.length; index++) hash = ((hash << 5) + hash + code.charCodeAt(index)) | 0
+
+  return `${code.length}:${(hash >>> 0).toString(36)}`
 }

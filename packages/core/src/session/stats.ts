@@ -11,6 +11,7 @@ import { SessionEvent } from "@opencode/schema/session-event"
 import { ToolMode } from "@opencode/schema/session-stats"
 import { TokenUsage } from "@opencode/schema/token-usage"
 import { Database } from "../database/database.js"
+import { jsonArrayJoin, jsonArrayLength, jsonNumber, jsonText } from "#dialect"
 import { DatabaseBatch } from "../database/batch.js"
 import { EventTable } from "../event/sql.js"
 import { SessionMessageTable, SessionPartTable, SessionTable } from "./sql.js"
@@ -126,15 +127,15 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
             session.parent_id AS parentID,
             message.type AS type,
             message.time_created AS timeCreated,
-            json_extract(message.data, '$.model.providerID') AS providerID,
-            json_extract(message.data, '$.model.id') AS modelID,
-            json_extract(message.data, '$.model.variant') AS variant,
-            json_extract(message.data, '$.tokens.input') AS input,
-            json_extract(message.data, '$.tokens.output') AS output,
-            json_extract(message.data, '$.tokens.reasoning') AS reasoning,
-            json_extract(message.data, '$.tokens.cache.read') AS cacheRead,
-            json_extract(message.data, '$.tokens.cache.write') AS cacheWrite,
-            json_extract(message.data, '$.cost') AS cost
+            ${jsonText(sql`message.data`, "$.model.providerID")} AS providerID,
+            ${jsonText(sql`message.data`, "$.model.id")} AS modelID,
+            ${jsonText(sql`message.data`, "$.model.variant")} AS variant,
+            ${jsonNumber(sql`message.data`, "$.tokens.input")} AS input,
+            ${jsonNumber(sql`message.data`, "$.tokens.output")} AS output,
+            ${jsonNumber(sql`message.data`, "$.tokens.reasoning")} AS reasoning,
+            ${jsonNumber(sql`message.data`, "$.tokens.cache.read")} AS cacheRead,
+            ${jsonNumber(sql`message.data`, "$.tokens.cache.write")} AS cacheWrite,
+            ${jsonNumber(sql`message.data`, "$.cost")} AS cost
           FROM ${SessionMessageTable} AS message
           JOIN ${SessionTable} AS session ON session.id = message.session_id
           WHERE message.type IN ('user', 'assistant')
@@ -194,7 +195,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
             .get<ToolSummaryRow>(
               sql`
             WITH calls AS MATERIALIZED (
-              SELECT json_extract(part.data, '$.state.status') AS status
+              SELECT ${jsonText(sql`part.data`, "$.state.status")} AS status
               FROM ${SessionPartTable} AS part
               JOIN ${SessionMessageTable} AS message ON message.id = part.message_id
               JOIN ${SessionTable} AS session ON session.id = message.session_id
@@ -205,16 +206,16 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
                 AND part.type = 'tool'
                 ${project}
               UNION ALL
-              SELECT json_extract(content.value, '$.state.status') AS status
+              SELECT ${jsonText(sql`content.value`, "$.state.status")} AS status
               FROM ${SessionMessageTable} AS message
-              JOIN ${SessionTable} AS session ON session.id = message.session_id,
-                json_each(message.data, '$.content') AS content
+              JOIN ${SessionTable} AS session ON session.id = message.session_id
+              ${jsonArrayJoin(sql`message.data`, "$.content")}
               WHERE message.type = 'assistant'
                 AND message.time_created >= ${range.from}
                 AND message.time_created < ${range.to}
                 AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
-                AND json_array_length(message.data, '$.content') > 0
-                AND json_extract(content.value, '$.type') = 'tool'
+                AND ${jsonArrayLength(sql`message.data`, "$.content")} > 0
+                AND ${jsonText(sql`content.value`, "$.type")} = 'tool'
                 ${project}
             )
             SELECT
@@ -242,12 +243,12 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
           .all<ToolRow>(
             sql`
           SELECT
-            json_extract(part.data, '$.name') AS name,
-            json_extract(part.data, '$.state.status') AS status,
+            ${jsonText(sql`part.data`, "$.name")} AS name,
+            ${jsonText(sql`part.data`, "$.state.status")} AS status,
             CASE
-              WHEN json_extract(part.data, '$.time.completed') IS NULL THEN NULL
-              ELSE json_extract(part.data, '$.time.completed')
-                - coalesce(json_extract(part.data, '$.time.ran'), json_extract(part.data, '$.time.created'))
+              WHEN ${jsonNumber(sql`part.data`, "$.time.completed")} IS NULL THEN NULL
+              ELSE ${jsonNumber(sql`part.data`, "$.time.completed")}
+                - coalesce(${jsonNumber(sql`part.data`, "$.time.ran")}, ${jsonNumber(sql`part.data`, "$.time.created")})
             END AS duration
           FROM ${SessionPartTable} AS part
           JOIN ${SessionMessageTable} AS message ON message.id = part.message_id
@@ -260,22 +261,22 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
             ${project}
           UNION ALL
           SELECT
-            json_extract(content.value, '$.name') AS name,
-            json_extract(content.value, '$.state.status') AS status,
+            ${jsonText(sql`content.value`, "$.name")} AS name,
+            ${jsonText(sql`content.value`, "$.state.status")} AS status,
             CASE
-              WHEN json_extract(content.value, '$.time.completed') IS NULL THEN NULL
-              ELSE json_extract(content.value, '$.time.completed')
-                - coalesce(json_extract(content.value, '$.time.ran'), json_extract(content.value, '$.time.created'))
+              WHEN ${jsonNumber(sql`content.value`, "$.time.completed")} IS NULL THEN NULL
+              ELSE ${jsonNumber(sql`content.value`, "$.time.completed")}
+                - coalesce(${jsonNumber(sql`content.value`, "$.time.ran")}, ${jsonNumber(sql`content.value`, "$.time.created")})
             END AS duration
           FROM ${SessionMessageTable} AS message
-          JOIN ${SessionTable} AS session ON session.id = message.session_id,
-            json_each(message.data, '$.content') AS content
+          JOIN ${SessionTable} AS session ON session.id = message.session_id
+              ${jsonArrayJoin(sql`message.data`, "$.content")}
           WHERE message.type = 'assistant'
             AND message.time_created >= ${range.from}
             AND message.time_created < ${range.to}
             AND (session.fork_session_id IS NULL OR message.time_created >= session.time_created)
-            AND json_array_length(message.data, '$.content') > 0
-            AND json_extract(content.value, '$.type') = 'tool'
+            AND ${jsonArrayLength(sql`message.data`, "$.content")} > 0
+            AND ${jsonText(sql`content.value`, "$.type")} = 'tool'
             ${project}
         `,
           )
@@ -329,7 +330,7 @@ export const get = Effect.fn("SessionStats.get")(function* (input: Input = {}) {
               EventTable.type,
               Event.versionedType(SessionEvent.UsageRecorded.type, SessionEvent.UsageRecorded.durable.version),
             ),
-            sql`json_extract(${EventTable.data}, '$.source') = 'compaction'`,
+            sql`${jsonText(EventTable.data, "$.source")} = 'compaction'`,
             gte(EventTable.created, from),
             lt(EventTable.created, to),
           ),

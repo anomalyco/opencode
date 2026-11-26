@@ -34,9 +34,32 @@ const environment = {
   ...(process.platform === "win32" ? { USERPROFILE: home, TMP: temporary, TEMP: temporary } : {}),
 }
 
+const args = process.argv.slice(2)
+const postgres = args.includes("--postgres")
+const passthrough = args.filter((arg) => arg !== "--postgres")
+
+// The PostgreSQL suite needs a disposable server; a lane that silently skipped
+// would look green while testing nothing.
+if (postgres && !process.env.OPENCODE_PG_TEST_DSN) {
+  console.error("--postgres needs OPENCODE_PG_TEST_DSN pointing at a disposable PostgreSQL database")
+  process.exit(1)
+}
+
 const child = Bun.spawn({
   // The 30s default timeout matches cli and tui; npm.test's Git package installs ran past Bun's 5s default on Windows.
-  cmd: [process.execPath, "test", "--only-failures", "--timeout=30000", ...process.argv.slice(2)],
+  //
+  // Every suite here was written against SQLite's in-memory database, so the
+  // run pins the sqlite build of the driver seam (#database, #dialect). The
+  // PostgreSQL build runs through --postgres, which leaves the default
+  // (PostgreSQL) build in place for test/postgres.test.ts.
+  cmd: [
+    process.execPath,
+    "test",
+    ...(postgres ? [] : ["--conditions=sqlite"]),
+    "--only-failures",
+    "--timeout=30000",
+    ...passthrough,
+  ],
   env: environment,
   stdin: "inherit",
   stdout: "inherit",

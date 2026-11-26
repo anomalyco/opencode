@@ -25,7 +25,8 @@
     "generate:api-skill": "bun run script/generate-api-skill.ts",
     "test": "bun run script/test.ts",
     "typecheck": "bun check --no-script -b -p tsconfig.tests.json",
-    "typecheck:tsc": "tsc -b tsconfig.json tsconfig.tests.json"
+    "typecheck:tsc": "tsc -b tsconfig.json tsconfig.tests.json",
+    "test:postgres": "bun run script/test.ts --postgres test/postgres.test.ts"
   },
   "exports": {
     "./*": "./src/*.ts"
@@ -77,6 +78,16 @@
       "node": "./src/database/v1-migration.noop.ts",
       "workerd": "./src/database/v1-migration.noop.ts",
       "default": "./src/database/v1-migration.noop.ts"
+    },
+    "#database": {
+      "sqlite": "./src/database/driver.sqlite.ts",
+      "workerd": "./src/database/driver.sqlite.ts",
+      "default": "./src/database/driver.postgres.ts"
+    },
+    "#dialect": {
+      "sqlite": "./src/database/dialect.sqlite.ts",
+      "workerd": "./src/database/dialect.sqlite.ts",
+      "default": "./src/database/dialect.postgres.ts"
     }
   },
   "devDependencies": {
@@ -110,6 +121,7 @@
     "@ai-sdk/provider": "3.0.19",
     "@effect/platform-node": "catalog:",
     "@effect/platform-node-shared": "catalog:",
+    "@effect/sql-pg": "4.1.0",
     "@effect/sql-sqlite-bun": "catalog:",
     "@effect/sql-sqlite-node": "catalog:",
     "@ff-labs/fff-bun": "0.10.5",
@@ -118,11 +130,11 @@
     "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/core": "2.4.0",
     "@modelcontextprotocol/server": "2.4.0",
-    "@opencode/pty": "0.6.0",
     "@opencode/ai": "workspace:*",
     "@opencode/codemode": "workspace:*",
     "@opencode/plugin": "workspace:*",
     "@opencode/plugin-browser": "workspace:*",
+    "@opencode/pty": "0.6.0",
     "@opencode/schema": "workspace:*",
     "@opencode/util": "workspace:*",
     "@parcel/watcher": "2.5.1",

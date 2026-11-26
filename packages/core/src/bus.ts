@@ -3,8 +3,9 @@ export * as Bus from "./bus.js"
 import { Cause, Clock, Context, Effect, Layer, Option, PubSub, Schema, Stream } from "effect"
 import { Event } from "@opencode/schema/event"
 import type { EventLog } from "@opencode/schema/event-log"
-import { and, asc, eq, gt, lte, sql } from "drizzle-orm"
+import { and, asc, eq, gt, lte } from "drizzle-orm"
 import { Database } from "./database/database.js"
+import { greatest } from "#dialect"
 import { EventSequenceTable, EventTable } from "./event/sql.js"
 import type { Location } from "@opencode/schema/location"
 import { KeyedMutex } from "./effect/keyed-mutex.js"
@@ -43,7 +44,7 @@ export const reserveSequence = Effect.fn("Bus.reserveSequence")(function* (
     .values([{ aggregate_id: aggregateID, seq }])
     .onConflictDoUpdate({
       target: EventSequenceTable.aggregate_id,
-      set: { seq: sql`max(${EventSequenceTable.seq}, ${seq})` },
+      set: { seq: greatest(EventSequenceTable.seq, seq) },
     })
     .run()
     .pipe(Effect.orDie)
@@ -422,7 +423,7 @@ export function configured(options?: Options) {
                           .onConflictDoUpdate({
                             target: EventSequenceTable.aggregate_id,
                             set: {
-                              seq: sql`max(${EventSequenceTable.seq}, ${seq})`,
+                              seq: greatest(EventSequenceTable.seq, seq),
                               ...(input?.ownerID && row?.ownerID == null ? { owner_id: input.ownerID } : {}),
                             },
                           })

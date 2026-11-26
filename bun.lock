@@ -233,6 +233,7 @@
         "@ai-sdk/provider": "3.0.19",
         "@effect/platform-node": "catalog:",
         "@effect/platform-node-shared": "catalog:",
+        "@effect/sql-pg": "4.1.0",
         "@effect/sql-sqlite-bun": "catalog:",
         "@effect/sql-sqlite-node": "catalog:",
         "@ff-labs/fff-bun": "0.10.5",
@@ -1016,8 +1017,16 @@
     },
   },
   "trustedDependencies": [
-    "electron",
+    "@parcel/watcher",
+    "sharp",
+    "@tailwindcss/oxide",
     "esbuild",
+    "workerd",
+    "@sentry/cli",
+    "electron-winstaller",
+    "@ast-grep/cli",
+    "electron",
+    "@ibm/plex",
   ],
   "patchedDependencies": {
     "@ai-sdk/openai-compatible@2.0.41": "patches/@ai-sdk%2Fopenai-compatible@2.0.41.patch",
@@ -1474,6 +1483,8 @@
     "@effect/platform-node": ["@effect/platform-node@4.1.0", "", { "dependencies": { "@effect/platform-node-shared": "^4.1.0", "undici": "^8.12.2" }, "peerDependencies": { "effect": "^4.1.0", "redis": ">=5.0.0 <7.0.0" } }, "sha512-v+X7moGVF9k5oMVvz0slA+NgtEod+W+oygeI285MDJgSlUCW3JcqElj+cD3rlijFZtpKhC7RLkU1GuCxjGHTpA=="],
 
     "@effect/platform-node-shared": ["@effect/platform-node-shared@4.1.0", "", { "dependencies": { "@types/ws": "^8.18.2", "ws": "^8.22.0" }, "peerDependencies": { "effect": "^4.1.0" } }, "sha512-uYQfFRoxWLo8fIhiSeBcmz/R1ooOfE3HF3cWHFgxz82tZMk2Wn02BGABcdLmaAch9VpDLbtWnuhSxNyBsGMUFg=="],
+
+    "@effect/sql-pg": ["@effect/sql-pg@4.1.0", "", { "peerDependencies": { "effect": "^4.1.0" } }, "sha512-/Q1M2PEuk8eSLEmgjfvix1/WZTuRBxu75ZENbKkIh2J3c50dQb8NMFOGMPocMFlPFh5k4WUOUKZQcgXzBljTFA=="],
 
     "@effect/sql-sqlite-bun": ["@effect/sql-sqlite-bun@4.1.0", "", { "peerDependencies": { "effect": "^4.1.0" } }, "sha512-V05HFjGmSnzIvXuxiHABw67SNf70dNbIvhUfyM7woDrgOu0JlqA8BTIhrwEPy0+GPwyvS5ALolcyNOMRgPVxyA=="],
 

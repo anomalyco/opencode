@@ -138,10 +138,18 @@
     "printWidth": 120
   },
   "trustedDependencies": [
+    "@ast-grep/cli",
+    "@ibm/plex",
+    "@parcel/watcher",
+    "@sentry/cli",
+    "@tailwindcss/oxide",
+    "electron",
+    "electron-winstaller",
     "esbuild",
     "node-pty",
     "protobufjs",
-    "electron"
+    "sharp",
+    "workerd"
   ],
   "overrides": {
     "@opentui/core": "catalog:",

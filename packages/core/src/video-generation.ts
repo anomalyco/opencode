@@ -17,6 +17,7 @@ import { Global } from "@opencode/util/global"
 import { Clock, Context, Duration, Effect, Fiber, FiberMap, Layer, Option, Schedule, Schema } from "effect"
 import { BlobStore } from "./blob-store.js"
 import { Database } from "./database/database.js"
+import { jsonNumber, jsonText } from "#dialect"
 import { Generate } from "./generate.js"
 import { KV } from "./kv.js"
 import { KVTable } from "./kv/sql.js"
@@ -120,7 +121,7 @@ const layer = Layer.effect(
         .onConflictDoUpdate({
           target: KVTable.key,
           set: { value, time_updated: now },
-          where: sql`json_extract(${KVTable.value}, '$.owner') = ${owner} or json_extract(${KVTable.value}, '$.until') <= ${now}`,
+          where: sql`${jsonText(KVTable.value, "$.owner")} = ${owner} or ${jsonNumber(KVTable.value, "$.until")} <= ${now}`,
         })
         .returning({ key: KVTable.key })
         .get()
@@ -131,7 +132,7 @@ const layer = Layer.effect(
     yield* Effect.addFinalizer(() =>
       db
         .delete(KVTable)
-        .where(and(eq(KVTable.key, LEADER), sql`json_extract(${KVTable.value}, '$.owner') = ${owner}`))
+        .where(and(eq(KVTable.key, LEADER), sql`${jsonText(KVTable.value, "$.owner")} = ${owner}`))
         .run()
         .pipe(Effect.ignore),
     )
@@ -150,7 +151,7 @@ const layer = Layer.effect(
       const updated = yield* db
         .update(KVTable)
         .set({ value, time_updated: now })
-        .where(and(eq(KVTable.key, PREFIX + id), sql`json_extract(${KVTable.value}, '$.status') = 'running'`))
+        .where(and(eq(KVTable.key, PREFIX + id), sql`${jsonText(KVTable.value, "$.status")} = 'running'`))
         .returning({ key: KVTable.key })
         .get()
         .pipe(Effect.orDie)

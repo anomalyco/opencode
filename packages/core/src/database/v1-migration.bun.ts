@@ -10,6 +10,7 @@ import { SessionSchema } from "../session/schema.js"
 import { KVTable } from "../kv/sql.js"
 import { EventSequenceTable } from "../event/sql.js"
 import { eq, sql } from "drizzle-orm"
+import { kind } from "#dialect"
 import { Global } from "@opencode/util/global"
 import { FSUtil } from "@opencode/util/fs-util"
 import { existsSync } from "node:fs"
@@ -1227,6 +1228,9 @@ function parseState(input: unknown): MigrationState | undefined {
 }
 
 function hasLegacySessions(db: Database.Interface["db"]) {
+  // The V1 store was a SQLite file with its own session/message/part tables.
+  // A PostgreSQL database never carries them, and sqlite_master does not exist.
+  if (kind === "postgres") return Effect.succeed(false)
   return db.get(sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'session'`).pipe(
     Effect.map((row) => row !== undefined),
     Effect.orDie,

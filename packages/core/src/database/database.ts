@@ -1,17 +1,15 @@
 export * as Database from "./database.js"
 
-import { EffectDrizzleSqlite } from "./drizzle.js"
-import { sqliteLayer, supportsForeignKeyToggle, supportsTuningPragmas } from "#sqlite"
+import { Driver } from "#database"
 import { Context, Effect, Layer, Schema, Semaphore } from "effect"
 import type { SqlClient } from "effect/sql"
 import { Global } from "@opencode/util/global"
 import { closeSync, existsSync, openSync } from "node:fs"
 import { chmod } from "node:fs/promises"
 import { isAbsolute, join } from "path"
-import { DatabaseMigration } from "./migration.js"
 import { makeGlobalNode } from "@opencode/util/effect/app-node"
 
-const makeDatabase = EffectDrizzleSqlite.makeWithDefaults()
+const makeDatabase = Driver.makeWithDefaults()
 type DatabaseShape = Effect.Success<typeof makeDatabase>
 
 export interface Interface {
@@ -20,6 +18,8 @@ export interface Interface {
 
 export const Options = Schema.Struct({
   path: Schema.optional(Schema.String),
+  url: Schema.optional(Schema.String),
+  maxConnections: Schema.optional(Schema.Number),
 })
 export type Options = typeof Options.Type
 
@@ -38,18 +38,18 @@ const databaseLayer = (lock: Effect.Effect<Semaphore.Semaphore>, legacyCredentia
     Effect.gen(function* () {
       const db = yield* makeDatabase
       // An injected Durable Object client may run under a non-workerd module condition in tests.
-      const durableObject = EffectDrizzleSqlite.managesTransactionsNatively(db.$client)
+      const durableObject = Driver.managesTransactionsNatively(db.$client)
 
-      if (supportsTuningPragmas && !durableObject) {
+      if (Driver.supportsTuningPragmas && !durableObject) {
         yield* db.run("PRAGMA journal_mode = WAL")
         yield* db.run("PRAGMA synchronous = NORMAL")
         yield* db.run("PRAGMA busy_timeout = 5000")
         yield* db.run("PRAGMA cache_size = -64000")
       }
       // Durable Object SQLite always enforces foreign keys and rejects the pragma.
-      if (supportsForeignKeyToggle && !durableObject) yield* db.run("PRAGMA foreign_keys = ON")
+      if (Driver.supportsForeignKeyToggle && !durableObject) yield* db.run("PRAGMA foreign_keys = ON")
       const semaphore = yield* lock
-      yield* semaphore.withPermit(DatabaseMigration.apply(db, { legacyCredentials }))
+      yield* semaphore.withPermit(Driver.applyMigrations(db, { legacyCredentials }))
 
       return { db }
     }).pipe(Effect.orDie),
@@ -70,16 +70,19 @@ function lockFor(filename: string) {
 export function layer(options: Options = { path: ":memory:" }) {
   return Layer.unwrap(
     Effect.gen(function* () {
-      const provide = (filename: string) =>
-        (filename === ":memory:"
-          ? databaseLayer(Semaphore.make(1))
-          : databaseLayer(Effect.succeed(lockFor(filename)), true)
-        ).pipe(Layer.provide(sqliteLayer({ filename })))
+      // The driver is chosen at build time (#database), so exactly one branch
+      // below is live in any given binary.
+      if ((Driver.kind as string) === "postgres") {
+        return databaseLayer(Effect.succeed(lockFor(options.url ?? "env")), false).pipe(
+          Layer.provide(Driver.layer({ url: options.url, maxConnections: options.maxConnections })),
+        )
+      }
       const filename = options.path ?? ":memory:"
-      if (filename === ":memory:") return provide(filename)
+      if (filename === ":memory:")
+        return databaseLayer(Semaphore.make(1), false).pipe(Layer.provide(Driver.layer({ path: filename })))
       const file = isAbsolute(filename) ? filename : join((yield* Global.Service).data, filename)
       yield* Effect.promise(() => restrictToOwner(file))
-      return provide(file)
+      return databaseLayer(Effect.succeed(lockFor(file)), true).pipe(Layer.provide(Driver.layer({ path: file })))
     }),
   )
 }

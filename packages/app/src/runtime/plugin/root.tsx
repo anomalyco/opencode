@@ -1,7 +1,7 @@
 import { createMemo, createSignal, lazy, onCleanup, Show, Suspense, type ParentProps } from "solid-js"
 import { runsOn, type Bridge, type Entry } from "@opencode/plugin/gui/host"
 import { builtins } from "./builtins"
-import { PluginGuiLoader, type PluginGui } from "./plugins"
+import { PluginGuiLoader, WebPluginGuiLoader, type PluginGui } from "./plugins"
 import { createMenubarItems, MenubarItemsProvider } from "./menubar-items"
 import { usePlatform } from "@/runtime/platform/platform"
 import { PluginHostProvider, usePluginHost } from "./host"
@@ -17,7 +17,8 @@ const HostApisContext = createContext<HostApis>()
 
 // Desktop only: a window loads the plugin GUIs main sends.
 const PluginsContext = createContext<{
-  bridge: Bridge
+  /** Desktop only; the web lists the plugin GUIs itself through `WebPluginGuiLoader`. */
+  bridge?: Bridge
   set: (plugins: readonly PluginGui[], reserved: readonly string[]) => void
   reserved: () => readonly string[]
 }>()
@@ -75,13 +76,11 @@ export function PluginRoot(props: ParentProps) {
   return (
     <HostApisContext.Provider value={apis}>
       <PluginsContext.Provider
-        value={
-          bridge && {
-            bridge,
-            set: (plugins, reserved) => setLoaded({ settled: true, plugins, reserved }),
-            reserved: () => loaded().reserved,
-          }
-        }
+        value={{
+          bridge,
+          set: (plugins, reserved) => setLoaded({ settled: true, plugins, reserved }),
+          reserved: () => loaded().reserved,
+        }}
       >
         <PluginHostProvider
           definitions={definitions}
@@ -121,7 +120,15 @@ export function PluginAttachment(props: ParentProps) {
     <PluginAttachmentProvider value={attachment}>
       <PluginCommands />
       <PluginServerEndpoints />
-      <Show when={plugins}>{(value) => <PluginGuiLoader bridge={value().bridge} onChange={value().set} />}</Show>
+      <Show when={plugins}>
+        {(value) =>
+          value().bridge ? (
+            <PluginGuiLoader bridge={value().bridge} onChange={value().set} />
+          ) : (
+            <WebPluginGuiLoader onChange={value().set} />
+          )
+        }
+      </Show>
       <Show when={host.ready()}>
         <MountedInterface attach={attachment.attach} />
         {props.children}

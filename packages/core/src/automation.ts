@@ -24,6 +24,7 @@ import {
   Stream,
 } from "effect"
 import { Node, makeGlobalNode } from "@opencode/util/effect/app-node"
+import { jsonNumber, jsonText } from "#dialect"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { FSUtil } from "@opencode/util/fs-util"
 import {
@@ -775,7 +776,7 @@ const layer = Layer.effect(
         .onConflictDoUpdate({
           target: KVTable.key,
           set: { value, time_updated: now },
-          where: sql`json_extract(${KVTable.value}, '$.owner') = ${ownerID} or json_extract(${KVTable.value}, '$.until') <= ${now}`,
+          where: sql`${jsonText(KVTable.value, "$.owner")} = ${ownerID} or ${jsonNumber(KVTable.value, "$.until")} <= ${now}`,
         })
         .returning({ key: KVTable.key })
         .get()
@@ -788,7 +789,7 @@ const layer = Layer.effect(
       leadership = "follower"
       yield* db
         .delete(KVTable)
-        .where(and(eq(KVTable.key, LEADER_KEY), sql`json_extract(${KVTable.value}, '$.owner') = ${ownerID}`))
+        .where(and(eq(KVTable.key, LEADER_KEY), sql`${jsonText(KVTable.value, "$.owner")} = ${ownerID}`))
         .run()
         .pipe(Effect.ignore)
     })

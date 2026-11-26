@@ -82,8 +82,10 @@ function isRouteNotFound(error: unknown) {
 // Chrome on Windows and Linux). Without worker-src that worker falls under script-src 'self' and never starts.
 // Artifact previews render HTML and PDF files from blob: URLs; without frame-src and object-src they fall back to
 // default-src 'self' and are blocked.
+// GUI plugin bundles are CommonJS evaluated with new Function against a require shim (see evaluatePluginBundle),
+// which needs 'unsafe-eval'. Only plugins the user configured can supply code, and they already run in the server.
 function csp(hash = "") {
-  return `default-src 'self'; script-src 'self' 'wasm-unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; media-src 'self' data:; connect-src * data: blob:; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'self' blob:`
+  return `default-src 'self'; script-src 'self' 'wasm-unsafe-eval' 'unsafe-eval'${hash ? ` 'sha256-${hash}'` : ""}; style-src 'self' 'unsafe-inline'; img-src 'self' data: https: blob:; font-src 'self' data:; media-src 'self' data:; connect-src * data: blob:; worker-src 'self' blob:; frame-src 'self' blob:; object-src 'self' blob:`
 }
 
 function cspForHtml(body: string) {
