@@ -10,8 +10,10 @@ target="${CARGO_TARGET_DIR:-$rust/target}"
 mkdir -p "$out"
 # Source paths in panic messages, made the same on every machine: the build is reproducible, and no build machine's
 # directories end up in the module.
+# PsychoScript's crates come from cargo's git checkouts (the rev Cargo.toml pins).
 registry="${CARGO_HOME:-$HOME/.cargo}/registry/src"
-export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$registry=/cargo/registry/src --remap-path-prefix=$(cd "$rust/../.." && pwd)=/opencode"
+checkouts="${CARGO_HOME:-$HOME/.cargo}/git/checkouts"
+export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$registry=/cargo/registry/src --remap-path-prefix=$checkouts=/cargo/git/checkouts --remap-path-prefix=$(cd "$rust/../.." && pwd)=/opencode"
 
 build() { # features out-name
   (cd "$rust" && cargo build --locked --release -p widget-web --target wasm32-unknown-unknown $1)
