@@ -34,7 +34,6 @@ export function estimateUsersSinceLaunch(input: { daily: Day[]; weekly: Week[]; 
       : 1,
   )
   const fit = search(days, activity, targets)
-  if (!fit) return fallback
   const total = fit.adopters.reduce((sum, value, index) => (days[index]!.date >= input.launch ? sum + value : sum), 0)
   return Math.round(Math.min(Math.max(total, floor), fallback))
 }
@@ -47,11 +46,8 @@ function search(days: Day[], activity: number[], targets: { start: number; end: 
   const best = (regulars: number[], chances: number[]) =>
     regulars
       .flatMap((regular) => chances.map((chance) => simulate(days, activity, targets, regular, chance)))
-      .reduce<
-        ReturnType<typeof simulate>
-      >((top, item) => (item && (!top || item.error < top.error) ? item : top), undefined)
+      .reduce((top, item) => (item.error < top.error ? item : top))
   const coarse = best(grid(undefined, 0.05), grid(undefined, 0.05))
-  if (!coarse) return undefined
   return best(grid(coarse.regular, 0.01), grid(coarse.chance, 0.01))
 }
 
@@ -66,12 +62,14 @@ function simulate(
   // earlier[t]: adopters before day t, each weighted by the chance they are still around on day t.
   const earlier: number[] = []
   const adopters: number[] = []
-  for (const [index, day] of days.entries()) {
+  // Returning users the day can't hold. Small days are noisy (one user, then none), so a shortfall is a miss to fit
+  // away rather than a reason to rule the parameters out.
+  const shortfall = days.reduce((sum, day, index) => {
     earlier.push(index === 0 ? 0 : STAY * (earlier[index - 1]! + adopters[index - 1]!))
     const value = day.users - regular * chance * activity[index]! * earlier[index]!
-    if (value < 0) return undefined
-    adopters.push(value)
-  }
+    adopters.push(Math.max(0, value))
+    return sum + Math.min(0, value) ** 2
+  }, 0)
   const error = targets.reduce((sum, target) => {
     // Chance that a regular still around on the week's first day uses the model at least once that week.
     const back = Array.from({ length: target.end - target.start + 1 }, (_, offset) => target.start + offset).reduce(
@@ -82,9 +80,16 @@ function simulate(
       { chance: 0, unseen: 1 },
     ).chance
     const fresh = adopters.slice(target.start, target.end + 1).reduce((total, value) => total + value, 0)
-    return sum + ((fresh + regular * back * earlier[target.start]! - target.users) / target.users) ** 2
+    return sum + (fresh + regular * back * earlier[target.start]! - target.users) ** 2
   }, 0)
-  return { error, regular, chance, adopters }
+  // Misses are measured against all weeks together: per-week shares would let a near-empty early-access week, where
+  // one user is a 100% miss, outweigh the weeks that hold the launch.
+  return {
+    error: (error + shortfall) / targets.reduce((sum, target) => sum + target.users ** 2, 0),
+    regular,
+    chance,
+    adopters,
+  }
 }
 
 function isoAfter(date: string, days: number) {
