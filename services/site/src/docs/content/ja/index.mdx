@@ -1,6 +1,6 @@
 ---
 title: "はじめに"
-description: "オープンソースのコーディングエージェント OpenCode を CLI、デスクトップアプリ、Web アプリ、Docker イメージとしてインストールし、モデルプロバイダーに接続します。"
+description: "オープンソースのコーディングエージェント OpenCode の CLI、デスクトップアプリ、Web アプリ、Docker イメージの導入方法と、モデルプロバイダーへの接続方法を説明します。"
 ---
 
 OpenCode はオープンソースのコーディングエージェントです。ターミナル、デスクトップアプリ、Web アプリから利用できます。
@@ -24,7 +24,7 @@ OpenCode はオープンソースのコーディングエージェントです�
   ]}
 />
 
-npm パッケージは postinstall スクリプトを使って、お使いのプラットフォーム向けのネイティブな `opencode` バイナリを選択します。Bun と pnpm のコマンドは必要なスクリプトを明示的に許可し、Vite+ では追加のフラグは不要です。mise のコマンドには mise 2026.10.9 以降が必要で、それより古いバージョンでは OpenCode 1 がインストールされます。
+npm パッケージは postinstall スクリプトで、実行環境に合ったネイティブの `opencode` バイナリを選びます。上記の Bun と pnpm のコマンドでは、そのスクリプトの実行を明示的に許可しています。Vite+ では追加のフラグは不要です。mise のコマンドには mise 2026.10.9 以降が必要です。それより古いバージョンでは OpenCode 1 がインストールされます。
 
 Windows のパッケージマネージャーには対応していません。
 
@@ -61,7 +61,7 @@ $ opencode pair
 
 ## Docker
 
-Docker イメージには、`ghcr.io/anomalyco/opencode:2.0.0` のようにバージョンのタグが付きます。コンテナでサーバーを実行するには、[Docker](/cli/web#docker)を参照してください。
+Docker イメージには、`ghcr.io/anomalyco/opencode:2.0.0` のようにバージョンを示すタグが付きます。コンテナでサーバーを実行するには、[Docker](/cli/web#docker)を参照してください。
 
 ---
 
@@ -71,18 +71,18 @@ OpenCode は多くの LLM プロバイダーに標準で対応しています。
 
 カスタムプロバイダーを設定するには [プロバイダー](/providers) を参照してください。
 
-最高のコーディングモデルに手軽にアクセスしたい場合は、[OpenCode Console](/console) を試してください。
+最高水準のコーディングモデルを手軽に使いたい場合は、[OpenCode Console](/console) をお試しください。
 
-月額 $10 で契約でき、最高のコーディングモデルを利用できる [OpenCode Go](/console/go) もお試しいただけます。
+月額 $10 のサブスクリプション [OpenCode Go](/console/go) でも、最高水準のコーディングモデルを利用できます。
 
 ---
 
 ## カスタマイズ
 
-[OpenCode の設定](/config)を編集したり、[プラグインを読み込んだり](/plugins)、[MCP サーバーに接続](/mcp-servers)したり、[コマンドを作成](/commands)したりして、OpenCode を自分好みにカスタマイズできます。ターミナルインターフェースのテーマとキーバインドについては、[CLI の設定](/cli/config)を参照してください。
+[OpenCode の設定](/config)の編集、[プラグインの読み込み](/plugins)、[MCP サーバーへの接続](/mcp-servers)、[コマンドの作成](/commands)で、OpenCode を自分好みにカスタマイズできます。ターミナルインターフェースのテーマとキーバインドについては、[CLI の設定](/cli/config)を参照してください。
 
 ---
 
 ## 学習
 
-OpenCode の詳しいコースに興味がある場合は、Boot.dev が私たちのチームと相談して作成した [AI Coding with OpenCode](https://www.boot.dev/courses/learn-ai-coding) コースがおすすめです。コースの内容はすべて無料で読んだり視聴したりできますが、一部のインタラクティブな機能には料金がかかる場合があります。
+OpenCode を詳しく学ぶなら、Boot.dev が OpenCode チームの協力を得て作成したコース [AI Coding with OpenCode](https://www.boot.dev/courses/learn-ai-coding) がおすすめです。すべての教材を無料で閲覧・視聴できますが、一部のインタラクティブな機能は有料の場合があります。

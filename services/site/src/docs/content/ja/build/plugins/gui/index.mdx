@@ -3324,7 +3324,7 @@ type IpcClient<S extends IpcSpec> = {
 
 `src/gui.tsx` で両方の setup を持つプラグインを定義します。`Plugin.define({ ...definition, setup, main })` です。
 
-### Other plugins
+### 他のプラグイン
 
 他のプラグインは、コントラクトと同様に `ctx.use(Counter)` で `Ipc` を参照します。`active` の間、その値は同じ `IpcClient` です。
 

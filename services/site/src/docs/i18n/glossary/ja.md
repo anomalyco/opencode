@@ -35,6 +35,7 @@
 | tool | ツール | |
 | skill | スキル | |
 | plugin | プラグイン | |
+| transform (plugin API) | トランスフォーム | `ctx.worktree.transform` などの API 名は変更しない |
 | command | コマンド | スラッシュコマンドも コマンド |
 | prompt | プロンプト | |
 | token | トークン | 数値の隣でも トークン（`1M トークン`） |
@@ -90,7 +91,9 @@
 | shell | シェル | |
 | directory | ディレクトリ | |
 | repository | リポジトリ | |
+| worktree | ワークツリー | コマンドや API の識別子は変更しない |
 | branch | ブランチ | |
+| frontmatter | フロントマター | |
 | gateway | ゲートウェイ | |
 | endpoint | エンドポイント | |
 | inference | 推論 | Console の Inference ページ名は 推論 |

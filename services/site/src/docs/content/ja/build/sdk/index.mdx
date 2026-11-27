@@ -46,7 +46,7 @@ await opencode.worktree.refresh({ projectID })
 await opencode.worktree.remove({ projectID, directory: worktree.directory, force: false })
 ```
 
-更新は、利用可能なすべてのストラテジーを使って既知のチェックアウトルート全体で worktree を検出します。カスタムのストラテジーは[プラグインの worktree transform](/build/plugins/server#worktrees)で登録します。
+更新時は、利用可能なすべてのストラテジーを使い、既知のチェックアウトルートからワークツリーを検出します。独自のストラテジーは、プラグインの[ワークツリーのトランスフォーム](/build/plugins/server#worktrees)で登録します。
 
 ## イベントのストリーミング
 

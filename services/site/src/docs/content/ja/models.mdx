@@ -1,6 +1,6 @@
 ---
 title: "モデル"
-description: "セッションまたは実行ごとにモデルを選択し、デフォルトを設定し、バリアント、推論、プロンプトキャッシュ、ローカルモデルを構成します。"
+description: "セッションごと、実行ごとのモデルの選び方と、デフォルトモデル、バリアント、推論、プロンプトキャッシュ、ローカルモデルの設定方法を説明します。"
 ---
 
 現在のセッションのモデルは `/models` で選択します。
@@ -9,17 +9,17 @@ description: "セッションまたは実行ごとにモデルを選択し、デ
 /models
 ```
 
-OpenCode は [models.dev](https://models.dev)、プロバイダーの連携、設定からモデルを一覧表示します。セレクターには、有効で、かつ現在のプロジェクトでプロバイダーが利用可能なモデルだけが表示されます。プロバイダーの接続は[プロバイダー](/providers)で行います。
+OpenCode は、[models.dev](https://models.dev) やプロバイダー連携、設定から取得したモデルを一覧表示します。モデル選択画面に表示されるのは、有効なモデルのうち、現在のプロジェクトで利用できるプロバイダーのものだけです。接続方法は[プロバイダー](/providers)を参照してください。
 
 ## 選択
 
-プロバイダーやモデル ID を推測するのではなく、`/models` からエントリを選んでください。選択は現在のセッションに適用され、設定は変更されません。
+プロバイダーやモデル ID を推測して指定するのではなく、`/models` の一覧から選んでください。選択は現在のセッションだけに適用され、設定は変わりません。
 
 ```text
 anthropic/claude-sonnet-5-5
 ```
 
-利用可能性はプロジェクトごとに異なります。
+利用できるモデルはプロジェクトごとに異なります。
 
 - モデルが有効であること。
 - そのプロバイダーが現在のプロジェクトで利用可能であること。
@@ -27,7 +27,7 @@ anthropic/claude-sonnet-5-5
 
 ## 実行
 
-設定済みのデフォルトを変更せずに、コマンドラインの 1 回の実行でモデルを選ぶには `--model` を使用します。
+設定済みのデフォルトは変えずに、コマンドラインでその実行にだけ使うモデルを選ぶには `--model` を指定します。
 
 ```bash
 opencode run --model anthropic/claude-sonnet-5-5 "Refactor parseToken"
@@ -37,7 +37,7 @@ opencode run --model anthropic/claude-sonnet-5-5 "Refactor parseToken"
 
 ## デフォルト
 
-新しい作業のデフォルトを選ぶには、`opencode.json` または `opencode.jsonc` で `model` を設定します。
+新しい作業でデフォルトで使うモデルを決めるには、`opencode.json` または `opencode.jsonc` で `model` を設定します。
 
 ```jsonc title="opencode.jsonc"
 {
@@ -46,7 +46,7 @@ opencode run --model anthropic/claude-sonnet-5-5 "Refactor parseToken"
 }
 ```
 
-設定したモデルは、有効でプロバイダーが利用可能な場合にカタログのデフォルトになります。そうでない場合、OpenCode は利用可能な最新のサポート対象モデルにフォールバックします。
+モデルが有効で、プロバイダーも利用できる場合は、そのモデルがカタログのデフォルトになります。それ以外の場合は、サポート対象のうち、利用できる最新のモデルにフォールバックします。
 
 - セッションですでに選択されているモデルは、設定されたデフォルトより優先されます。
 - セッションのモデルを切り替えても、設定ファイルは書き換えられません。
@@ -74,7 +74,7 @@ opencode service set env OPENCODE_DISABLE_FREE_MODELS 1
 
 ## バリアント
 
-バリアントは 1 つのモデルに対する名前付きのオプションで、推論の強度やトークンのバジェットなどに使われます。実行、セッション、エージェント、コマンドで選択する場合は `#variant` を追加します。
+バリアントは、推論の強度やトークンの予算などを切り替えるために、モデルごとに用意する名前付きのオプションです。実行、セッション、エージェント、コマンドでバリアントを選ぶには `#variant` を追加します。
 
 ```bash
 opencode run --model openai/gpt-6.1-sol#high "Review this migration plan"
@@ -118,7 +118,7 @@ opencode run --model openai/gpt-6.1-sol#high "Review this migration plan"
 
 各バリアントには `settings`、`headers`、`body` を含められます。その値はプロバイダーとモデルの値の後に適用されます。
 
-モデルの推論バリアントを置き換えるには、[models.dev](https://models.dev) の v2 形式で `capabilities.reasoning` に推論の制御を記述します。OpenCode はそれらから、そのモデルのパッケージ用のバリアントを構築します。
+モデルの推論バリアントを置き換えるには、[models.dev](https://models.dev) の v2 形式に従い、`capabilities.reasoning` に推論の設定を記述します。OpenCode はこの設定から、モデルが使うパッケージに合わせてバリアントを生成します。
 
 ```jsonc title="opencode.jsonc"
 {
@@ -141,12 +141,12 @@ opencode run --model openai/gpt-6.1-sol#high "Review this migration plan"
 
 | フィールド  | 目的                                                                       |
 | ----------- | -------------------------------------------------------------------------- |
-| `supported` | モデルが推論するか。`false`、または制御のない `true` ではバリアントは追加されません。 |
+| `supported` | モデルが推論に対応しているかどうか。`false` の場合や、推論の設定なしで `true` にした場合は、バリアントは追加されません。 |
 | `toggle`    | 推論をオフにする `none` バリアントを追加します。                           |
-| `effort`    | 提供する強度のレベル。`default` はプロバイダーのデフォルトを維持し、バリアントを追加しません。 |
-| `budget`    | 任意の `min` と `max` の思考トークン。`effort` が設定されている場合は無視されます。 |
+| `effort`    | 選択できる推論の強度。`default` はプロバイダーのデフォルトを維持し、バリアントを追加しません。 |
+| `budget`    | 推論に使うトークン数の下限 `min` と上限 `max`（いずれも省略可能）。`effort` が設定されている場合は無視されます。 |
 
-`variants` に列挙したバリアントは、`capabilities.reasoning` から構築されたものの上に適用されます。
+`variants` に記述したバリアントは、`capabilities.reasoning` から生成されたバリアントの後に適用されます。
 
 ## オプション
 
@@ -221,13 +221,13 @@ OpenCode はプロバイダーの値、モデルの値、選択したバリア�
 }
 ```
 
-ここでは `openai/coding-default` が選択用の参照で、プロバイダーには `gpt-6.1-sol` が送信されます。カタログにまだないモデルの場合、OpenCode は次のように仮定します。
+この例では、OpenCode で `openai/coding-default` を選ぶと、プロバイダーには `gpt-6.1-sol` が送信されます。カタログにないモデルについて、OpenCode は次の前提で動作します。
 
-- JSON ツールのサポート、テキストと画像の入力、テキストの出力。`capabilities.freeform` が形式を列挙していない限り、自由形式のツール入力はなし。
+- JSON 形式のツール、テキストと画像の入力、テキストの出力に対応します。自由形式のツール入力に対応するのは、`capabilities.freeform` に形式を指定した場合だけです。
 - 200,000 トークンのコンテキスト上限と 32,000 トークンの出力上限。
 - 入力の上限は未指定。
 
-OpenCode は `text`、`regex`、`lark` を認識します。models.dev の他の形式名は無視されますが、モデルやそのツールは失われません。カタログのモデルの前段のプロキシが自由形式のツールを拒否する場合は、そのモデルの `capabilities.freeform` を `[]` に設定してください。
+OpenCode は `text`、`regex`、`lark` を認識します。models.dev にほかの形式名が登録されていれば無視しますが、それが理由でモデルやツールを除外することはありません。カタログにあるモデルへのリクエストを中継するプロキシが自由形式のツールを拒否する場合は、そのモデルの `capabilities.freeform` を `[]` に設定してください。
 
 これらはフォールバック用の想定値であり、実際の機能を検出した結果ではありません。正確な値が分かっている場合は、`capabilities` と `limit` に設定してください。明示した値がフォールバック値に優先します。自動コンパクションでは、`limit.context` を上限として `limit.input` を使います。詳しくは[ウィンドウ](/compaction#window)を参照してください。利用可能なモデルの一覧からモデルを非表示にするには、`disabled: true` を追加します。
 
@@ -247,7 +247,7 @@ OpenCode は `text`、`regex`、`lark` を認識します。models.dev の他の
 
 ## 推論
 
-推論を独自のアシスタントメッセージのフィールドでストリーミングする OpenAI 互換モデルでは、`compatibility.reasoningField` を設定します。
+OpenAI 互換モデルがアシスタントメッセージ内の独自フィールドで推論内容をストリーミングする場合は、`compatibility.reasoningField` を設定します。
 
 ```jsonc title="opencode.jsonc"
 {
@@ -269,7 +269,7 @@ OpenCode は `reasoning`、`reasoning_content`、`reasoning_text` を認識し�
 
 ## プロンプトキャッシュ
 
-OpenCode は、必要と分かっている経路（Anthropic など）にプロンプトキャッシュのブレークポイントを自動的に配置します。Claude モデルが LiteLLM などの OpenAI 互換プロキシ経由で提供される場合、OpenCode は Anthropic 形式の `cache_control` ブレークポイントが必要であることを判別できません。そのような Claude モデルには `compatibility.cacheFormat` を設定します。
+OpenCode は Anthropic など、プロンプトキャッシュのブレークポイントが必要と分かっている経路では、ブレークポイントを自動で追加します。LiteLLM などの OpenAI 互換プロキシ経由で Claude モデルを使う場合、Anthropic 形式の `cache_control` ブレークポイントが必要かどうかを OpenCode は判別できません。こうした Claude モデルには `compatibility.cacheFormat` を設定してください。
 
 ```jsonc title="opencode.jsonc"
 {
@@ -325,7 +325,7 @@ OpenCode はデフォルトではキャッシュの有効期間を送信しな�
 
 ## 互換性
 
-`compatibility` は、モデルが提供される API のリクエストとレスポンスの癖（推論をどのフィールドで運ぶか、エンドポイントが `prompt_cache_key` を受け付けるかなど）を記述します。各モデルは 1 つの API を通じて提供され、フィールドはその API が読み取る場合にのみ有効になります。他のフィールドは無視されます。
+`compatibility` では、モデルを提供する API 固有のリクエストやレスポンスの仕様を指定します。たとえば、推論内容がどのフィールドに入るか、エンドポイントが `prompt_cache_key` を受け付けるかなどです。各モデルの API は 1 つで、その API が読み取るフィールドだけが有効になります。それ以外は無視されます。
 
 ```jsonc title="opencode.jsonc"
 {
@@ -346,11 +346,11 @@ OpenCode はデフォルトではキャッシュの有効期間を送信しな�
 
 | フィールド | 動作 | 読み取る API | 値とデフォルト |
 | --- | --- | --- | --- |
-| `reasoningField` | 推論を運ぶアシスタントメッセージのフィールド。ストリーミングされた推論を読み取るときに最初に確認され、以前の推論を送り返すときにも使用されます。 | OpenAI Chat | `role`、`content`、`refusal`、`tool_calls` を除く任意のフィールド名。未設定の場合はストリームで見られたフィールドを使い、それもなければ `reasoning_content` を使用します。 |
+| `reasoningField` | 推論内容を含むアシスタントメッセージのフィールド。ストリームから推論を読み取るときに最初に確認し、過去の推論を送り返すときにも使います。 | OpenAI Chat | `role`、`content`、`refusal`、`tool_calls` を除く任意のフィールド名。未設定の場合はストリームで検出したフィールドを使い、見つからなければ `reasoning_content` を使います。 |
 | `requireReasoning` | 以前のすべてのアシスタントメッセージに推論フィールドを送信し、推論がなかった場合は空文字列にします。 | OpenAI Chat | `true` または `false`。デフォルトは、`reasoningField` が設定されているかモデルが DeepSeek の場合は `true`、それ以外は `false`。 |
-| `maxTokensField` | 出力トークンの上限を運ぶボディのフィールド。 | OpenAI Chat | `max_completion_tokens` または `max_tokens`。未設定の場合、max_tokens を必要とするプロバイダー（DeepSeek、Moonshot、Together AI、Z.AI、Cerebras など）では `max_tokens` を検出し、それ以外は `max_completion_tokens` を使用します。 |
+| `maxTokensField` | 出力トークンの上限を指定するボディのフィールド。 | OpenAI Chat | `max_completion_tokens` または `max_tokens`。未設定の場合は、DeepSeek、Moonshot、Together AI、Z.AI、Cerebras など、このフィールドが必要なプロバイダーを判別して `max_tokens` を使います。それ以外では `max_completion_tokens` を使います。 |
 | `requireFinishReason` | `finish_reason` なしで終了するストリームを不完全なレスポンスのエラーとして扱います。`false` の場合は終了済みとして受け入れます。 | OpenAI Chat | `true` または `false`。デフォルトは `true`。 |
-| `requireAssistantAfterTool` | その順序を拒否するエンドポイントのために、ツールの結果と次のユーザーメッセージの間にアシスタントメッセージを挿入します。 | OpenAI Chat | `true` または `false`。デフォルトは Mistral ファミリーのモデル ID では `true`、それ以外は `false`。 |
+| `requireAssistantAfterTool` | ツールの結果の直後にユーザーメッセージが来る順序を受け付けないエンドポイント向けに、両者の間にアシスタントメッセージを挿入します。 | OpenAI Chat | `true` または `false`。デフォルトは Mistral ファミリーのモデル ID では `true`、それ以外は `false`。 |
 | `supportsPromptCacheKey` | エンドポイントが `prompt_cache_key` ボディフィールドを受け付けるか。 | OpenAI Chat、OpenAI Responses、Mistral | `true` または `false`。OpenAI Chat は `true` の場合にのみキーを送信し、一部のプロバイダーパッケージはデフォルトで有効にしています。他の API は `false` でない限り送信します。 |
 | `streamUsage` | `stream_options.include_usage` でストリーム内のトークン使用量を要求します。 | OpenAI Chat | `true` または `false`。デフォルトは `true`。 |
 | `cacheFormat` | エンドポイントが受け付けるプロンプトキャッシュのマーカー構文。プロバイダーの自動ブレークポイント配置を上書きします。`alibaba` はツール定義をスキップします。 | OpenAI Chat、Anthropic Messages、Bedrock Converse など、プロンプトキャッシュのマーカーを持つすべての API | `anthropic` または `alibaba`。未設定の場合はプロバイダーのデフォルトを使用します。[プロンプトキャッシュ](#prompt-caching)を参照してください。 |
@@ -380,9 +380,9 @@ Ollama が `http://127.0.0.1:11434` で待ち受けている場合、`ollama` �
 }
 ```
 
-OpenCode はバックグラウンドで一覧を更新し、コンテキスト、画像認識、ツール使用に関する情報を Ollama から取得します。ベクトル化専用のモデルは除外します。
+OpenCode は一覧をバックグラウンドで更新し、コンテキストや画像入力、ツール使用への対応状況を Ollama から取得します。ベクトル化専用モデルは一覧に含めません。
 
-別のホストやポートを使う場合は、Ollama の OpenAI 互換 URL を設定します。検出は同じパスプレフィックスのネイティブ Ollama API を引き続き使用します。
+別のホストやポートを使う場合は、Ollama の OpenAI 互換 URL を設定します。モデルの検出には、同じパスプレフィックスにある Ollama API を引き続き直接使用します。
 
 ```jsonc title="opencode.jsonc"
 {
@@ -411,7 +411,7 @@ OpenCode はバックグラウンドで一覧を更新し、コンテキスト�
 }
 ```
 
-OpenCode はバックグラウンドで一覧を更新し、コンテキスト、画像認識、ツール使用に関する情報を LM Studio から取得します。ベクトル化用のモデルは除外します。
+OpenCode は一覧をバックグラウンドで更新し、コンテキストや画像入力、ツール使用への対応状況を LM Studio から取得します。ベクトル化用モデルは一覧に含めません。
 
 別のホストやポートを使う場合は、OpenAI 互換 URL を設定します。モデルは引き続き自動的に検出されます。
 
@@ -444,7 +444,7 @@ vLLM が `http://127.0.0.1:8000` で待ち受けている場合、`vllm` プロ�
 
 OpenCode は `/health` を確認し、バックグラウンドで `/v1/models` を更新し、報告された `max_model_len` をコンテキスト上限として使用し、`vllm` が所有するモデルカードだけを含めます。
 
-検出されたモデルはテキストの入力と出力を提示しますが、ビジョンやツールは提示しません。vLLM は `--enable-auto-tool-choice` や `--tool-call-parser` などのサーバーフラグでツール呼び出しを有効にしますが、検出では報告されません。
+自動検出されたモデルでは、テキストの入出力への対応は表示されますが、画像入力やツールへの対応は表示されません。vLLM では `--enable-auto-tool-choice` や `--tool-call-parser` などのサーバーフラグでツール呼び出しを有効にできますが、この対応状況は自動検出には反映されません。
 
 別のエンドポイントや認証ありのサーバーの場合は、その OpenAI 互換 URL を設定します。
 
@@ -463,7 +463,7 @@ OpenCode は `/health` を確認し、バックグラウンドで `/v1/models` �
 
 - 認証が無効な場合は `apiKey` を省略します。
 - 検出を無効にするには `"plugins": ["-opencode.provider.vllm"]` を設定します。
-- パスプレフィックス付きのプロキシに対応しています。たとえば `https://example.com/vllm/v1` は `/vllm/health` を確認し、`/vllm/v1/models` を検出します。
+- パスプレフィックス付きのプロキシにも対応しています。たとえば `https://example.com/vllm/v1` を指定すると、OpenCode は `/vllm/health` を確認し、`/vllm/v1/models` からモデルを検出します。
 
 ### 互換サーバー
 
@@ -542,7 +542,7 @@ openrouter/anthropic/claude-sonnet-5.5#high
 ```
 
 - セレクターのオブジェクトは `model` を使用し、プロバイダーのカタログエントリはプロバイダーに送信する ID に `modelID` を使用します。
-- ルートの選択の形状はバリアントを受け付けますが、V2 のカタログのデフォルトはそれを保持しません。代わりにセッション、実行、エージェント、コマンドでバリアントを選択してください。
+- トップレベルのモデル指定にはバリアントを含められますが、V2 のカタログのデフォルトには保存されません。バリアントは、セッション、実行、エージェント、コマンドごとに選んでください。
 - モデルのオプションはプロバイダー固有です。別のプロバイダーパッケージでは無視または拒否されることがあります。
 - カタログデータ、認証情報、設定は Location 単位です。あるプロジェクトで利用できるモデルが、別のプロジェクトでは利用できないことがあります。
 - 設定ファイルは通常、自動的に再読み込みされます。すでに進行中のモデルリクエストは、開始時の設定を保持します。

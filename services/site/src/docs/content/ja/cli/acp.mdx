@@ -106,9 +106,9 @@ OpenCode は次のクライアントの機能を読み取ります。
 
 クライアントはセッションの作成時に作業ディレクトリを設定します。OpenCode はそのディレクトリの設定（モデル、エージェント、コマンド、スキル、指示、プラグイン、MCP サーバー）を使用します。
 
-- `cwd` は絶対パスである必要があります。OpenCode は相対的な `cwd` を invalid params エラーで拒否します。
+- `cwd` には絶対パスを指定してください。相対パスを `cwd` に指定すると、OpenCode はパラメーターが無効であることを示すエラーを返します。
 - `session/load` は保存されたメッセージを再生します。`session/resume` と `session/fork` は再生しません。
-- セッションを読み込み、再開、またはフォークするには、クライアントはそのセッションのディレクトリ、または同じプロジェクトの別のディレクトリ（worktree に移動したセッションのメインチェックアウトなど）を `cwd` として渡す必要があります。それ以外の `cwd` は、`data.directory` がセッションのディレクトリである invalid params エラーで拒否されます。
+- セッションを読み込む、再開する、またはフォークするには、そのセッションのディレクトリか、同じプロジェクト内の別のディレクトリ（ワークツリーに移動したセッションであればメインのチェックアウトなど）を `cwd` に指定します。それ以外の `cwd` を指定すると、OpenCode はパラメーターが無効であることを示すエラーを返し、エラーの `data.directory` にセッションのディレクトリを含めます。
 - `session/list` は 1 ページあたり最大 100 セッションを返します。`cwd` フィルターと `cursor` を受け付けます。各サブエージェントのセッションは、`id`、`parentID`、`title` を持つ `_meta["opencode/child-session"]` を伴います。
 - OpenCode がセッションの名前を変更すると（タイトルの生成後など）、新しい `title` を含む `session_info_update` を送信します。
 - `session/close` は実行中の作業を中断し、セッションを ACP プロセスから切り離します。OpenCode は保存されたセッションを保持します。
@@ -130,7 +130,7 @@ OpenCode は次のクライアントの機能を読み取ります。
 
 - 各エントリは `*` や `?` を含まない絶対パスである必要があります。
 - OpenCode は各ルートの内部への外部ディレクトリアクセスを許可します。読み取り、編集、シェルの権限ルールは引き続き適用されます。
-- 各リクエストのリストは、[additional directories の RFD](https://agentclientprotocol.com/rfds/additional-directories) が定めるとおり、セッションの以前のリストを置き換えます。
+- [追加ディレクトリの RFD](https://agentclientprotocol.com/rfds/additional-directories) が定めるとおり、各リクエストのリストはセッションに保存されている前のリストを置き換えます。
 - OpenCode は許可をセッションに保存するため、別の OpenCode クライアントがそのセッションを使用する場合にも適用されます。子セッションは、OpenCode が作成するときに許可をコピーします。
 
 `session/list` は各セッションに保存されたリストを `additionalDirectories` で返します。
@@ -244,7 +244,7 @@ OpenCode が質問を表示できない場合、質問をキャンセルし、�
 
 ### コンパクション
 
-クライアントが `session.compaction` を提示している場合、OpenCode は ACP の [session compaction](https://agentclientprotocol.com/rfds/session-compaction) RFD（プレビュー中）の `compaction_update` と `compaction_summary_chunk` の更新でコンパクションを報告します。クライアントがセッションを読み込むと、OpenCode は完了または失敗した各コンパクションを 1 つの更新として再生します。
+クライアントが `session.compaction` への対応を通知している場合、OpenCode は ACP の[セッションのコンパクションに関する RFD](https://agentclientprotocol.com/rfds/session-compaction)（プレビュー）に従い、`compaction_update` と `compaction_summary_chunk` でコンパクションを通知します。クライアントがセッションを読み込むと、OpenCode は完了または失敗したコンパクションごとに 1 件の更新を再送します。
 
 ```json
 {
@@ -259,13 +259,13 @@ OpenCode が質問を表示できない場合、質問をキャンセルし、�
 
 ### 使用量
 
-プロンプトのレスポンスには、[end-turn usage](https://agentclientprotocol.com/rfds/end-turn-token-usage) RFD（ドラフト）の `usage` が含まれます。`usage` は、このセッションでそのプロンプトを処理するために行ったモデル呼び出しの使用量を合計した値です。子セッションの使用量は含みません。
+プロンプトのレスポンスには、[ターン終了時のトークン使用量に関する RFD](https://agentclientprotocol.com/rfds/end-turn-token-usage)（ドラフト）で定義された `usage` が含まれます。`usage` は、このセッションでそのプロンプトを処理するために行ったモデル呼び出しの使用量を合計した値です。子セッションの使用量は含みません。
 
 ```json
 { "stopReason": "end_turn", "usage": { "inputTokens": 1200, "outputTokens": 340, "totalTokens": 1540 }, "_meta": {} }
 ```
 
-レスポンスの前に、OpenCode は [session usage](https://agentclientprotocol.com/rfds/session-usage) RFD の `usage_update` を送信します。送信するのは、プロンプトがトークンを使用し、OpenCode がモデルのコンテキストサイズを認識している場合だけです。`cost` はセッションとその子セッションの合計コスト（USD）です。
+レスポンスを返す前に、OpenCode は[セッションの使用量に関する RFD](https://agentclientprotocol.com/rfds/session-usage) で定義された `usage_update` を送信します。送信するのは、プロンプトの処理でトークンを消費し、かつモデルのコンテキストサイズが分かっている場合だけです。`cost` はセッションとその子セッションの合計コスト（USD）です。
 
 ```json
 { "sessionUpdate": "usage_update", "used": 1540, "size": 200000, "cost": { "amount": 0.012, "currency": "USD" } }
