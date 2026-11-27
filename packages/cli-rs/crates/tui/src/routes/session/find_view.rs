@@ -1259,8 +1259,7 @@ fn prepare_pass(inner: &mut FindMarkdownInner, parsed: &ParsedMarkdown, pattern:
                 cursor += count;
             }
             ShownBlock::Code { claimed, text, .. } => {
-                let drawn =
-                    if *claimed { inner.code_slots.get(code_index).map_or(true, |slot| slot.drawn) } else { false };
+                let drawn = *claimed && inner.code_slots.get(code_index).is_none_or(|slot| slot.drawn);
                 assumed.push(drawn);
                 code_index += 1;
                 inner.code_plan.push_back(cursor);
