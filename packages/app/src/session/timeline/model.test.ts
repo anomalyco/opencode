@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test"
-import type { SessionMessageAssistant, SessionMessageInfo, SessionMessageUser } from "@opencode/client/promise"
+import {
+  ClientError,
+  type SessionMessageAssistant,
+  type SessionMessageInfo,
+  type SessionMessageUser,
+} from "@opencode/client/promise"
 import {
   createTimelineSyncState,
   DISPOSED_TIMELINE_SYNC_EVENT,
@@ -157,6 +162,52 @@ describe("timeline sync", () => {
     expect(isTimelineSyncing(switched.state, other)).toBe(true)
     expect(switched.effects).toEqual([{ type: "sync.start", target: other, attempt: switched.state.attempt }])
   })
+
+  test("reconnecting retries a transport failure without accepting the previous attempt's results", () => {
+    const loading = syncing()
+    const error = new ClientError("Transport", { cause: new TypeError("Load failed") })
+    const failed = transitionTimelineSync(loading, { type: "sync.failed", attempt: loading.attempt, error }).state
+    const retry = transitionTimelineSync(failed, { type: "connection.restored" })
+
+    expect(isTimelineSyncing(retry.state, target)).toBe(true)
+    expect(timelineSyncError(retry.state, target)).toBeUndefined()
+    expect(retry.effects).toEqual([{ type: "sync.start", target, attempt: retry.state.attempt }])
+    expect(transitionTimelineSync(retry.state, { type: "connection.restored" }).state).toBe(retry.state)
+
+    const stale: TimelineSyncEvent[] = [
+      { type: "sync.failed", attempt: loading.attempt, error },
+      { type: "sync.succeeded", attempt: loading.attempt, assistantID: undefined, needsParent: false, more: false },
+      { type: "sync.timed-out", attempt: loading.attempt },
+    ]
+
+    stale.forEach((event) => expect(transitionTimelineSync(retry.state, event).state).toBe(retry.state))
+
+    const ready = transitionTimelineSync(retry.state, {
+      type: "sync.succeeded",
+      attempt: retry.state.attempt,
+      assistantID: undefined,
+      needsParent: false,
+      more: false,
+    }).state
+
+    expect(isTimelineReady(ready, target, () => true)).toBe(true)
+    expect(transitionTimelineSync(ready, { type: "connection.restored" }).state).toBe(ready)
+
+    const disposed = transitionTimelineSync(retry.state, DISPOSED_TIMELINE_SYNC_EVENT).state
+    expect(transitionTimelineSync(disposed, { type: "connection.restored" }).state).toBe(disposed)
+  })
+
+  test.each([new Error("render failed"), new ClientError("UnexpectedStatus"), new ClientError("MalformedResponse")])(
+    "reconnecting preserves a non-transport failure: %s",
+    (error) => {
+      const loading = syncing()
+      const failed = transitionTimelineSync(loading, { type: "sync.failed", attempt: loading.attempt, error }).state
+      const next = transitionTimelineSync(failed, { type: "connection.restored" })
+
+      expect(next.state).toBe(failed)
+      expect(next.effects).toEqual([])
+    },
+  )
 
   test("a first sync that never settles reveals the timeline and ignores its late result", () => {
     const loading = syncing()

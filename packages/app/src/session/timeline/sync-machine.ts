@@ -1,4 +1,4 @@
-import type { SessionMessageInfo } from "@opencode/client/promise"
+import { ClientError, type SessionMessageInfo } from "@opencode/client/promise"
 
 // A first sync that never settles reveals the timeline instead of hiding it forever.
 export const TIMELINE_SYNC_TIMEOUT_MS = 30_000
@@ -39,6 +39,7 @@ export type TimelineSyncState =
 
 export type TimelineSyncEvent =
   | { readonly type: "target.changed"; readonly target: TimelineSyncTarget | undefined }
+  | { readonly type: "connection.restored" }
   | {
       readonly type: "sync.succeeded"
       readonly attempt: number
@@ -105,6 +106,18 @@ export function createTimelineSyncState(): TimelineSyncState {
 
 export function transitionTimelineSync(state: TimelineSyncState, event: TimelineSyncEvent): TimelineSyncTransition {
   if (event.type === "disposed") return stop(state)
+
+  if (event.type === "connection.restored") {
+    if (state.status !== "failed" || !(state.error instanceof ClientError) || state.error.reason !== "Transport")
+      return unchanged(state)
+
+    const attempt = state.attempt + 1
+
+    return {
+      state: { status: "syncing", target: state.target, attempt },
+      effects: [{ type: "sync.start", target: state.target, attempt }],
+    }
+  }
 
   if (event.type === "target.changed") {
     const target = event.target

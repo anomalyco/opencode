@@ -5,6 +5,7 @@ import { expected, messages } from "../utils/markdown-sessions"
 import { expectPath, holdRoute, seed, sessionHref, type SeedInput } from "../utils/app"
 import type { MockServerConfig } from "../utils/mock-server"
 import { fixture, installTimelineSettings, mockStressTimeline } from "../utils/session-fixture"
+import { installSseTransport } from "../utils/sse-transport"
 import { mockWorkspace } from "../utils/workspace"
 
 test.use({ viewport: { width: 1440, height: 900 }, serviceWorkers: "block" })
@@ -329,7 +330,36 @@ test("fills a short cold transcript before revealing it", async ({ page }) => {
   }
 })
 
+test("recovers from a failed cold history load after reconnecting", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+  const transport = await installSseTransport(page, { server: fixture.serverKey })
+  await openTabs(page, { pageMessages: placeholderHistory })
+  const reads: string[] = []
+  const writes: string[] = []
+  page.on("request", (request) => {
+    if (new URL(request.url()).pathname.startsWith("/api/session/") && request.method() !== "GET")
+      writes.push(request.method())
+  })
+  await page.route(`**/api/session/${fixture.sourceID}/message?*`, (route) => {
+    reads.push(route.request().method())
+
+    return reads.length === 1 ? route.abort("failed") : route.fallback()
+  })
+  await page.goto(sessionHref(fixture.sourceID))
+  const error = page.getByRole("heading", { name: "Something went wrong", exact: true })
+  await expect(error).toBeVisible()
+  const connection = await transport.waitForConnection()
+  await transport.disconnect()
+  await transport.waitForConnection({ after: connection.id })
+  await expect(page.getByText(`History for ${fixture.sourceID}`, { exact: true })).toBeVisible()
+  await expect(error).toHaveCount(0)
+  await expect(page.getByRole("textbox", { name: "Prompt", exact: true })).toBeEditable()
+  expect(reads.length).toBeGreaterThan(1)
+  expect(writes).toEqual([])
+})
+
 test("recovers from a failed cold history load when another session is selected", async ({ page }) => {
+  const transport = await installSseTransport(page, { server: fixture.serverKey })
   await openTabs(page, { pageMessages: placeholderHistory })
   await page.route(`**/api/session/${fixture.targetID}/message?*`, (route) =>
     route.fulfill({ status: 500, json: { message: "History unavailable" } }),
@@ -337,6 +367,16 @@ test("recovers from a failed cold history load when another session is selected"
   await page.goto(sessionHref(fixture.sourceID))
   await expect(page.getByText(`History for ${fixture.sourceID}`, { exact: true })).toBeVisible()
   await tab(page, fixture.targetID).click()
+  await expect(page.getByRole("heading", { name: "Something went wrong", exact: true })).toBeVisible()
+  const connection = await transport.waitForConnection()
+
+  const metadata = page.waitForResponse(
+    (response) => new URL(response.url()).pathname === `/api/session/${fixture.targetID}`,
+  )
+
+  await transport.disconnect()
+  await transport.waitForConnection({ after: connection.id })
+  await metadata
   await expect(page.getByRole("heading", { name: "Something went wrong", exact: true })).toBeVisible()
   await tab(page, fixture.sourceID).click()
   await expect(page.getByText(`History for ${fixture.sourceID}`, { exact: true })).toBeVisible()

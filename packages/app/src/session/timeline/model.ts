@@ -1,4 +1,4 @@
-import { createEffect, createMemo, createSignal, onCleanup, untrack } from "solid-js"
+import { createEffect, createMemo, createSignal, on, onCleanup, untrack } from "solid-js"
 import type { SessionMessageInfo } from "@opencode/client/promise"
 import { useServer } from "@/runtime/server/current"
 import type { SessionModel } from "../model"
@@ -157,6 +157,15 @@ export function createTimelineModel(input: { session: Pick<SessionModel, "identi
   }
 
   createEffect(() => dispatch({ type: "target.changed", target: target() }))
+  createEffect(
+    on(
+      () => server.ctx.sdk.connection.status(),
+      (status) => {
+        if (status === "connected") dispatch({ type: "connection.restored" })
+      },
+      { defer: true },
+    ),
+  )
   onCleanup(() => dispatch(DISPOSED_TIMELINE_SYNC_EVENT))
 
   // Enrich the partial leading group without withholding the already loaded tail. Undelivered inbox rows
