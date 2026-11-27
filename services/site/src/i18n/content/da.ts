@@ -597,6 +597,13 @@ export const content = {
         "wordmark-black": { name: "Ordmærke, sort" },
         "wordmark-white": { name: "Ordmærke, hvid" },
       },
+      avatars: {
+        body: "Kvadratiske avatarer til X, GitHub, Slack, LinkedIn og andre profiler. Mærket sidder et godt stykke inde i cirklen, så det klarer en rund beskæring. PNG'er er 1024 og 400 px brede.",
+        items: {
+          "avatar-dark": { name: "Avatar, mørk" },
+          "avatar-light": { name: "Avatar, lys" },
+        },
+      },
       all: { text: "Download alt" },
     },
     coverage: { title: "Omtale" },

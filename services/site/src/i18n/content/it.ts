@@ -955,6 +955,13 @@ export const content = {
           name: "Logotipo, bianco",
         },
       },
+      avatars: {
+        body: "Avatar quadrati per X, GitHub, Slack, LinkedIn e altri profili. Il simbolo sta ben dentro il cerchio, così regge un ritaglio rotondo. I PNG sono larghi 1024 e 400 px.",
+        items: {
+          "avatar-dark": { name: "Avatar, scuro" },
+          "avatar-light": { name: "Avatar, chiaro" },
+        },
+      },
       all: {
         text: "Scarica tutto",
       },
