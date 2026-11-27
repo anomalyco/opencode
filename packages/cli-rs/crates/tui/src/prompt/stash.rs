@@ -8,8 +8,7 @@ use opencode_local::serial::Serial;
 use opencode_ui::dialog::FocusId;
 use tokio::sync::oneshot;
 
-use super::autocomplete::parts;
-use super::editor::Inner;
+use super::editor::{Inner, Mode};
 
 use crate::prelude::*;
 
@@ -123,8 +122,10 @@ pub fn layer(inner: &Rc<Inner>) -> KeymapLayer<FocusId> {
             }
             let mut entry = prompt.prompt.borrow().clone();
             entry["text"] = Value::String(prompt.textarea.text());
+            entry["mode"] = Value::String(prompt.mode.get().as_str().to_owned());
             tui.prompt.stash.push(tui, entry);
             prompt.reset();
+            prompt.set_mode(Mode::Normal);
             tui.dialogs.clear();
         })
         .enabled(when(|prompt, _| !prompt.textarea.text().is_empty())),
@@ -145,14 +146,9 @@ pub fn layer(inner: &Rc<Inner>) -> KeymapLayer<FocusId> {
     ])
 }
 
-/// Puts a stashed prompt in the composer with its parts, the cursor at the end; the mode stays (`ref.set`:
-/// `history.reset`, `input.setText`, `setStore("prompt")`, `restoreExtmarksFromPrompt`, `gotoBufferEnd`).
+/// Puts a stashed prompt in the composer with its parts and mode, cursor at the end (`restoreStash`).
 fn show(prompt: &Inner, entry: Value) {
     prompt.history.reset();
-    let text = entry["text"].as_str().unwrap_or_default().to_owned();
-    prompt.textarea.set_text(&text);
-    *prompt.prompt.borrow_mut() = entry;
-    parts::restore(prompt);
+    prompt.restore(entry);
     prompt.textarea.set_cursor_offset(prompt.text_end());
-    prompt.parts_changed();
 }
