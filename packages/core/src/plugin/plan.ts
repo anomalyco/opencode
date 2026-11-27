@@ -5,12 +5,15 @@ import { define } from "@opencode/plugin/effect/plugin"
 import { Agent } from "@opencode/schema/agent"
 import { Global } from "@opencode/util/global"
 import { Effect } from "effect"
+import fs from "fs/promises"
 import path from "path"
 import { Permission } from "../permission.js"
 
 const plan = Agent.ID.make("plan")
 
-const selected = (directory: string) => `You are in Plan mode. Discuss the plan with the user directly in the conversation. Do not create or update plan files unless the user explicitly asks you to; when they do, write them only in:
+const selected = (
+  directory: string,
+) => `You are in Plan mode. Discuss the plan with the user directly in the conversation. Do not create or update plan files unless the user explicitly asks you to; when they do, write them only in:
 ${directory}
 
 Do not modify any other files or ask a subagent to do so.
@@ -24,6 +27,9 @@ export const Plugin = define({
   effect: Effect.fn(function* (ctx) {
     const global = yield* Global.Service
     const directory = path.join(global.data, "plan")
+    yield* Effect.tryPromise(() => moveLegacyPlans(path.join(global.home, ".opencode", "plan"), directory)).pipe(
+      Effect.catch((cause) => Effect.logWarning("failed to move plan files to the data directory", { cause })),
+    )
     yield* ctx.agent.transform((editor) => {
       editor.update(plan, (item) => {
         item.name = Agent.Name.make("Plan")
@@ -48,3 +54,16 @@ export const Plugin = define({
     })
   }),
 })
+
+// Plans lived in ~/.opencode/plan before they moved to the data directory. Move them once, and never
+// over plans already in the new directory.
+async function moveLegacyPlans(from: string, to: string) {
+  const exists = (target: string) =>
+    fs.stat(target).then(
+      () => true,
+      () => false,
+    )
+  if ((await exists(to)) || !(await exists(from))) return
+  await fs.mkdir(path.dirname(to), { recursive: true })
+  await fs.rename(from, to)
+}

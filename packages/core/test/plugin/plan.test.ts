@@ -13,6 +13,7 @@ import { Global } from "@opencode/util/global"
 import path from "path"
 import { it } from "../lib/effect"
 import { host } from "./host"
+import { tmpdir } from "../fixture/tmpdir"
 
 const sessionID = Session.ID.make("ses_plan_test")
 const plan = Agent.ID.make("plan")
@@ -20,7 +21,7 @@ const data = "/home/plan-test/.local/share/opencode"
 const planDirectory = path.join(data, "plan")
 
 /** Runs the plan plugin against stubbed domains, capturing the plan agent and the tool hook. */
-const run = Effect.fnUntraced(function* () {
+const run = Effect.fnUntraced(function* (paths: { readonly home?: string; readonly data?: string } = {}) {
   let toolHook: ((input: ToolHooks["execute.after"]) => Effect.Effect<void>) | undefined
   const defaults = Agent.Info.default(plan)
   const planAgent: Types.DeepMutable<Agent.Info> = {
@@ -62,7 +63,7 @@ const run = Effect.fnUntraced(function* () {
       },
     }),
   ).pipe(
-    Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), data })),
+    Effect.provideService(Global.Service, Global.Service.of({ ...Global.make(), data, ...paths })),
     Effect.provideService(Environment.Service, Environment.make(Environment.localID, driver)),
   )
   if (!toolHook) return yield* Effect.die("plan plugin did not register a tool hook")
@@ -91,10 +92,44 @@ describe("plan plugin instructions", () => {
       const instructions = planAgent.instructions
       if (typeof instructions !== "object") return yield* Effect.die("expected selected and unselected instructions")
       expect(instructions.selected).toContain("You are in Plan mode")
-      expect(instructions.selected).toContain("Do not create or update plan files unless the user explicitly asks you to")
+      expect(instructions.selected).toContain(
+        "Do not create or update plan files unless the user explicitly asks you to",
+      )
       expect(instructions.selected).toContain(planDirectory)
       expect(instructions.selected).toContain("Do not modify any other files")
       expect(instructions.unselected).toContain("You are no longer the Plan agent, so you are NO LONGER in Plan mode")
+    }),
+  )
+})
+
+describe("plan plugin legacy directory", () => {
+  it.effect("moves plans from ~/.opencode/plan into the data directory", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.promise(() => tmpdir())
+      yield* Effect.addFinalizer(() => Effect.promise(() => tmp[Symbol.asyncDispose]()))
+      const home = path.join(tmp.path, "home")
+      const data = path.join(tmp.path, "data")
+      yield* Effect.promise(() => Bun.write(path.join(home, ".opencode", "plan", "old.md"), "old plan"))
+      yield* run({ home, data })
+      expect(yield* Effect.promise(() => Bun.file(path.join(data, "plan", "old.md")).text())).toBe("old plan")
+      expect(yield* Effect.promise(() => Bun.file(path.join(home, ".opencode", "plan", "old.md")).exists())).toBe(false)
+    }),
+  )
+
+  it.effect("leaves both directories alone when the data directory already has plans", () =>
+    Effect.gen(function* () {
+      const tmp = yield* Effect.promise(() => tmpdir())
+      yield* Effect.addFinalizer(() => Effect.promise(() => tmp[Symbol.asyncDispose]()))
+      const home = path.join(tmp.path, "home")
+      const data = path.join(tmp.path, "data")
+      yield* Effect.promise(() => Bun.write(path.join(home, ".opencode", "plan", "old.md"), "old plan"))
+      yield* Effect.promise(() => Bun.write(path.join(data, "plan", "new.md"), "new plan"))
+      yield* run({ home, data })
+      expect(yield* Effect.promise(() => Bun.file(path.join(home, ".opencode", "plan", "old.md")).text())).toBe(
+        "old plan",
+      )
+      expect(yield* Effect.promise(() => Bun.file(path.join(data, "plan", "old.md")).exists())).toBe(false)
+      expect(yield* Effect.promise(() => Bun.file(path.join(data, "plan", "new.md")).text())).toBe("new plan")
     }),
   )
 })
