@@ -1,4 +1,5 @@
-import { watch, type WatchListener } from "node:fs"
+import { realpathSync, watch, type WatchListener } from "node:fs"
+import path from "node:path"
 
 /**
  * Watch a path without letting a failed watch take down the TUI. fs.watch throws
@@ -21,4 +22,20 @@ export function safeWatch(target: string, listener: WatchListener<string>) {
     console.error("Failed to watch path, live-reload disabled", { target, error })
     return
   }
+}
+
+/**
+ * Directories to watch so edits to a file are seen even when the file is a symlink. The symlink's own
+ * directory is watched for replaced links; the target's directory is watched because that is where
+ * writes to the target land.
+ */
+export function fileWatchDirs(file: string) {
+  const dirs = [path.dirname(file)]
+  try {
+    const real = path.dirname(realpathSync(file))
+    if (!dirs.includes(real)) dirs.push(real)
+  } catch {
+    // The file may not exist yet; the symlink's own directory is still watched.
+  }
+  return dirs
 }
