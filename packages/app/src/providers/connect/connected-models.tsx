@@ -1,10 +1,11 @@
 import { DialogBody, DialogTitle } from "@opencode/ui/dialog"
 import { SearchHighlight, SearchList } from "@opencode/ui/search-list"
-import { createMemo, createSignal } from "solid-js"
+import { createMemo, createSignal, Show } from "solid-js"
 import { consoleProviderName } from "@/providers/catalog/console"
 import { matchesModelSearch } from "@/providers/models/search"
 import { useLanguage } from "@/runtime/i18n/language"
 import { modelKey } from "./controller"
+import { RemoteServerLabel } from "./remote"
 import "@/shell/commands/dialog.css"
 import "@/providers/models/select-dialog.css"
 
@@ -20,6 +21,8 @@ type Row = { id: string; model: ConnectionModel; provider: ConnectionGroup["prov
  */
 export function ConnectedModelPicker(props: {
   providerName: string
+  /** The remote server a Console sign-in is stored on. */
+  server?: string
   groups: ConnectionGroup[]
   /** A Console workspace's providers, whose section names drop the workspace prefix. */
   workspace?: { prefix: string }
@@ -61,6 +64,7 @@ export function ConnectedModelPicker(props: {
           ].join(" ")}
           query={query()}
           onQuery={setQuery}
+          trailing={<Show when={props.server}>{(server) => <RemoteServerLabel server={server()} class="me-2" />}</Show>}
           placeholder={language.t("provider.connect.models.search", { provider: props.providerName })}
           label={language.t("provider.connect.models.list", { provider: props.providerName })}
           items={rows()}

@@ -9,7 +9,6 @@ import { Field } from "@opencode/ui/field"
 import { DialogBody, DialogHeader, DialogTitle, DialogTitleGroup, Dialog } from "@opencode/ui/dialog"
 import { RedirectPasteForm } from "@opencode/ui/redirect-paste"
 import { TextInput } from "@opencode/ui/text-input"
-import { Tooltip } from "@opencode/ui/tooltip"
 import { type Component, createMemo, createUniqueId, For, type JSX, Match, onMount, Show, Switch } from "solid-js"
 import { createStore } from "solid-js/store"
 import { useParams } from "@solidjs/router"
@@ -32,7 +31,7 @@ import type { ProviderFormInput, ProviderFormView } from "./form-machine"
 import { ConsoleAuthorization } from "./console"
 import { StepActions, WaitingButton } from "./step-actions"
 import { DialogChatGPTPlanWelcome } from "./chatgpt-welcome"
-import { authServerName } from "./remote"
+import { authServerName, RemoteServerLabel } from "./remote"
 import { ConnectedModelPicker } from "./connected-models"
 import { providerAccounts } from "@/settings/providers/accounts"
 import { AccountNameInput } from "@/settings/providers/account-name"
@@ -134,6 +133,7 @@ export const DialogConnectProvider: Component<{
         fallback={
           <ConnectedModelPicker
             providerName={providerName()}
+            server={remoteServer()}
             groups={controller.connectionGroups()}
             workspace={controller.managedProviders()}
             onSelect={(model) =>
@@ -237,22 +237,7 @@ export const DialogConnectProvider: Component<{
               />
             </Match>
           </Switch>
-          <Show when={remoteServer()}>
-            {(server) => (
-              <Tooltip
-                value={language.t("provider.connect.remote.description")}
-                placement="bottom"
-                contentClass="!max-w-64 !whitespace-normal"
-                triggerTabIndex={0}
-                class="me-3 flex min-w-0 shrink-0 !cursor-default items-center gap-1.5 rounded-sm text-[13px] font-[440] leading-5 tracking-[-0.04px] text-v2-text-text-muted"
-              >
-                <Icon name="server" class="shrink-0 text-v2-icon-icon-muted" />
-                <span class="max-w-40 truncate">
-                  {language.t("provider.connect.remote.label", { server: server() })}
-                </span>
-              </Tooltip>
-            )}
-          </Show>
+          <Show when={remoteServer()}>{(server) => <RemoteServerLabel server={server()} class="me-3" />}</Show>
         </DialogHeader>
         <DialogBody class="min-h-0 flex-1 overflow-hidden px-2 pb-2">
           {/* Outside the scrolling content, so it can reach across the body's padding without scrolling sideways. */}

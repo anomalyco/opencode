@@ -35,7 +35,7 @@ const workspace: Groups = [
 ]
 
 // The connect dialog's models step around the real picker. Picking only shows a toast here.
-function PickerStory(props: { providerName: string; groups: Groups; workspace?: { prefix: string } }) {
+function PickerStory(props: { providerName: string; groups: Groups; workspace?: { prefix: string }; server?: string }) {
   const dialog = useDialog()
 
   const open = () =>
@@ -45,6 +45,7 @@ function PickerStory(props: { providerName: string; groups: Groups; workspace?: 
           providerName={props.providerName}
           groups={props.groups}
           workspace={props.workspace}
+          server={props.server}
           onSelect={(model) => {
             dialog.close()
             showToast({ variant: "success", icon: "circle-check", title: `Picked ${model.name}` })
@@ -73,4 +74,11 @@ export const SingleProvider = { render: () => <PickerStory providerName="Google"
 /** A Console workspace: one section per provider, named without the workspace prefix. */
 export const ConsoleWorkspace = {
   render: () => <PickerStory providerName="OpenCode" groups={workspace} workspace={{ prefix: "Acme / " }} />,
+}
+
+/** A Console sign-in through a remote server names the server it is stored on. */
+export const ConsoleRemote = {
+  render: () => (
+    <PickerStory providerName="OpenCode" groups={workspace} workspace={{ prefix: "Acme / " }} server="Dev box" />
+  ),
 }
