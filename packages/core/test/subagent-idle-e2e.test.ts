@@ -148,7 +148,7 @@ const crashInbox = (crashed: Deferred.Deferred<void>) =>
 
 type InboxNode = ReturnType<typeof crashInbox>
 
-type Response = ReturnType<typeof TestLLM.text>
+type Response = TestLLM.Response
 
 const script = (responses: Record<string, ReadonlyArray<Response>>) => {
   const queues = new Map(Object.entries(responses).map(([agent, queue]) => [agent, [...queue]]))
@@ -451,6 +451,72 @@ describe("subagent idle reports end to end", () => {
         expect(second[1]!.text).toContain("Tests green")
         expect(second[1]!.text).not.toContain("Started tests")
         expect(second[1]!.text).not.toContain("Background work still running:")
+        expect(yield* h.jobs.pendingBackground).toEqual([])
+      }),
+    30_000,
+  )
+
+  e2e.live(
+    "preserves the main report when a background shell finishes before the child settles",
+    () =>
+      Effect.gen(function* () {
+        const h = yield* harness()
+        const release = path.join(h.dir.path, "release")
+        const command =
+          process.platform === "win32"
+            ? `while (!(Test-Path -LiteralPath '${release}')) { Start-Sleep -Milliseconds 25 }; Write-Output done`
+            : `while [ ! -e '${release}' ]; do sleep 0.025; done; printf done`
+        const reportStarted = yield* Deferred.make<void>()
+        const reportRelease = yield* Deferred.make<void>()
+        yield* h.llm.serve(
+          script({
+            reviewer: [
+              TestLLM.toolCall("call-shell", "shell", { command, background: true }),
+              Stream.unwrap(
+                Deferred.succeed(reportStarted, undefined).pipe(
+                  Effect.andThen(Deferred.await(reportRelease)),
+                  Effect.as(Stream.fromIterable(TestLLM.text("Main report", "turn-1"))),
+                ),
+              ),
+              TestLLM.text("Addendum: shell changed nothing.", "turn-2"),
+            ],
+            build: [TestLLM.text("parent ack", "parent-1")],
+          }),
+        )
+
+        const launched = yield* h.call("call-launch")
+        expect(launched).toMatchObject({ status: "completed", metadata: { status: "running" } })
+        const childID = outputSessionID(launched.metadata)
+
+        const shellNotice = yield* Context.get(h.context, Bus.Service)
+          .subscribe(SessionEvent.InboxEnqueued)
+          .pipe(
+            Stream.filter((event) => event.data.sessionID === childID && event.data.item.type === "synthetic"),
+            Stream.runHead,
+            Effect.forkScoped({ startImmediately: true }),
+          )
+
+        // Finish the background shell while the child is still writing its main report.
+        yield* Deferred.await(reportStarted)
+        yield* Effect.promise(() => Bun.write(release, "go"))
+        yield* Fiber.join(shellNotice)
+        yield* Deferred.succeed(reportRelease, undefined)
+
+        yield* waitForReports(h, h.parent.id, 1)
+        yield* h.sessions.wait(childID)
+        yield* h.jobs.wait({ id: childID })
+
+        const reports = yield* deliveredReports(h, h.parent.id)
+        expect(reports).toHaveLength(1)
+        expect(reports[0]!.text).toBe(
+          [
+            `<background-result kind="subagent" sessionID="${childID}" state="completed" description="review">`,
+            "Main report",
+            "",
+            "Addendum: shell changed nothing.",
+            "</background-result>",
+          ].join("\n"),
+        )
         expect(yield* h.jobs.pendingBackground).toEqual([])
       }),
     30_000,

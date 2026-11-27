@@ -21,7 +21,7 @@ export type Period = {
 }
 
 export type Deps = {
-  readonly store: Pick<SessionStore.Interface, "get" | "lastAssistantAfter" | "release">
+  readonly store: Pick<SessionStore.Interface, "get" | "lastAssistantAfter" | "completedAssistantsAfter" | "release">
   readonly jobs: Job.Interface
   readonly inbox: Inbox
   readonly wake: (sessionID: SessionSchema.ID) => Effect.Effect<void>
@@ -62,10 +62,21 @@ export const make = (deps: Deps) => {
     if (outcome.type === "failed") return { status: "error", body: outcome.error.message }
     if (outcome.type === "interrupted") return { status: "cancelled", body: "Subagent cancelled" }
     // A corrupt message row must not abort the release or skip the outbox row.
-    const assistant = yield* deps.store.lastAssistantAfter({ sessionID, afterSeq: startedSeq }).pipe(Effect.result)
-    if (Result.isFailure(assistant)) return { status: "error", body: assistant.failure.message }
-    if (assistant.success !== undefined) {
-      return { status: "completed", body: SubagentCompletion.text(assistant.success) }
+    if (startedSeq === undefined) {
+      const assistant = yield* deps.store.lastAssistantAfter({ sessionID }).pipe(Effect.result)
+      if (Result.isFailure(assistant)) return { status: "error", body: assistant.failure.message }
+      if (assistant.success !== undefined) {
+        return { status: "completed", body: SubagentCompletion.text(assistant.success) }
+      }
+      if (mode === "background") return { status: "completed", body: SubagentCompletion.NO_TEXT }
+      return undefined
+    }
+    const assistants = yield* deps.store
+      .completedAssistantsAfter({ sessionID, afterSeq: startedSeq })
+      .pipe(Effect.result)
+    if (Result.isFailure(assistants)) return { status: "error", body: assistants.failure.message }
+    if (assistants.success.length > 0) {
+      return { status: "completed", body: reportBody(assistants.success) }
     }
     // An empty wake or control-only period has no result to report unless a Job promised one.
     if (mode === "background") return { status: "completed", body: SubagentCompletion.NO_TEXT }
@@ -200,4 +211,24 @@ export const make = (deps: Deps) => {
   })
 
   return { started, clear, prepare }
+}
+
+/**
+ * Joins every terminal assistant reply in the busy period so a coalesced wake
+ * cannot overwrite an earlier report. Steps with client-executed tool calls are
+ * intermediate work and stay out unless no terminal step exists in the period.
+ */
+function reportBody(assistants: ReadonlyArray<SessionMessage.Assistant>) {
+  const terminal = assistants.filter(
+    (message) => !message.content.some((part) => part.type === "tool" && part.executed !== true),
+  )
+  const sources = terminal.length > 0 ? terminal : [assistants.at(-1)!]
+  return (
+    sources
+      .flatMap((message) => message.content)
+      .filter((part) => part.type === "text")
+      .map((part) => part.text)
+      .filter((text) => text.length > 0)
+      .join("\n\n") || SubagentCompletion.NO_TEXT
+  )
 }

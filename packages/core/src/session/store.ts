@@ -66,6 +66,14 @@ export interface Interface {
     readonly sessionID: Session.ID
     readonly afterSeq?: number
   }) => Effect.Effect<SessionMessage.Assistant | undefined, MessageDecodeError>
+  /**
+   * Completed, error-free assistant messages above the sequence bound, in
+   * ascending sequence order.
+   */
+  readonly completedAssistantsAfter: (input: {
+    readonly sessionID: Session.ID
+    readonly afterSeq: number
+  }) => Effect.Effect<SessionMessage.Assistant[], MessageDecodeError>
   readonly message: (
     messageID: SessionMessage.ID,
   ) => Effect.Effect<{ readonly sessionID: Session.ID; readonly message: SessionMessage.Info } | undefined>
@@ -229,6 +237,25 @@ const layer = Layer.effect(
           if (rows.length < 20) return undefined
           cursorSeq = rows[rows.length - 1]!.seq
         }
+      }),
+      completedAssistantsAfter: Effect.fn("SessionStore.completedAssistantsAfter")(function* (input) {
+        const rows = yield* db
+          .select()
+          .from(SessionMessageTable)
+          .where(
+            and(
+              eq(SessionMessageTable.session_id, input.sessionID),
+              eq(SessionMessageTable.type, "assistant"),
+              gt(SessionMessageTable.seq, input.afterSeq),
+            ),
+          )
+          .orderBy(asc(SessionMessageTable.seq))
+          .all()
+          .pipe(Effect.orDie)
+        return (yield* SessionHistory.decodeMessageRows(db, rows)).filter(
+          (message): message is SessionMessage.Assistant =>
+            message.type === "assistant" && message.time.completed !== undefined && message.error === undefined,
+        )
       }),
       message: Effect.fn("SessionStore.message")(function* (messageID) {
         const row = yield* messageRow(messageID)

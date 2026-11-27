@@ -540,4 +540,39 @@ describe("SessionStore", () => {
       expect(yield* store.lastAssistantAfter({ sessionID, afterSeq: 9 })).toBeUndefined()
     }),
   )
+
+  it.effect(
+    "completedAssistantsAfter returns completed error-free assistants after the boundary in ascending order",
+    () =>
+      Effect.gen(function* () {
+        const sessionID = Session.ID.make("ses_completed_assistants")
+        yield* seedSessions([{ id: sessionID, updated: 0 }])
+        const store = yield* SessionStore.Service
+        yield* insertAssistant({
+          sessionID,
+          id: "msg_before",
+          seq: 4,
+          text: "before the boundary",
+          completed: true,
+          inline: true,
+        })
+        yield* insertAssistant({ sessionID, id: "msg_first", seq: 6, text: "first reply", completed: true })
+        yield* insertAssistant({ sessionID, id: "msg_incomplete", seq: 8, text: "still streaming" })
+        yield* insertAssistant({
+          sessionID,
+          id: "msg_error",
+          seq: 9,
+          text: "failed reply",
+          completed: true,
+          error: true,
+        })
+        yield* insertAssistant({ sessionID, id: "msg_second", seq: 11, text: "second reply", completed: true })
+
+        expect(yield* store.completedAssistantsAfter({ sessionID, afterSeq: 5 })).toMatchObject([
+          { id: SessionMessage.ID.make("msg_first"), content: [{ type: "text", text: "first reply" }] },
+          { id: SessionMessage.ID.make("msg_second"), content: [{ type: "text", text: "second reply" }] },
+        ])
+        expect(yield* store.completedAssistantsAfter({ sessionID, afterSeq: 11 })).toEqual([])
+      }),
+  )
 })
