@@ -35,6 +35,11 @@ describe("find", () => {
     expect(findPattern("Needle")?.source).toBe(findPattern("needle")?.source)
   })
 
+  test("finds the literal capital I with dot above", () => {
+    expect(findRanges("İstanbul", findPattern("İstanbul"))).toEqual([{ start: 0, end: 8 }])
+    expect(findRanges("i\u0307stanbul", findPattern("İstanbul"))).toEqual([])
+  })
+
   test("searches prompts, assistant text and compaction summaries in transcript order, not reasoning or tools", () => {
     const messages: Record<string, SessionMessageInfo> = {
       u1: { id: "u1", type: "user", text: "find the needle", time: { created: 1 } } as SessionMessageInfo,
