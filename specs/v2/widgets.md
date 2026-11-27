@@ -746,8 +746,9 @@ type Instance = {
 An instance renders like the widget in its timeline: its program from `program` (`state.widgetTemplate`), `data`, and
 `state`. Its calls (`program`, `respond`, `send`, `report`) go to its Session's Location, as in the timeline. A client
 refetches `instances` when it opens the view or reconnects and applies `changed` after that; a `changed` for a widget
-it doesn't know means a new widget. The plugin reads each widget's message through the plugin API's
-`session.message.get`, once per message.
+it doesn't know means a new widget. A client offering widgets to pick (the apps' list) shows only open ones, and counts
+a `failure` only when its `client` is its own: another client's failure (iOS without storage, say) says nothing about
+running there. The plugin reads each widget's message through the plugin API's `session.message.get`, once per message.
 
 Event `changed`, `{ sessionID, state: State }`, published (as `rpc.opencode.widget.changed`) in the Session's Location
 whenever a widget is posted or answered. A client fetches `states` when it opens a Session or reconnects, since changes
