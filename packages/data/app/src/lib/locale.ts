@@ -1,4 +1,4 @@
-import { fromPathname, LOCALE_HEADER, parseLocale, strip, type Locale } from "@opencode/locale"
+import { fix, fromPathname, LOCALE_HEADER, parseLocale, strip, type Locale } from "@opencode/locale"
 
 export {
   LOCALES,
@@ -79,11 +79,6 @@ const DOCS_LOCALE = {
   "zh-cn": "zh",
   "zh-tw": "zht",
 } as const satisfies Record<string, Locale>
-
-function fix(pathname: string) {
-  if (pathname.startsWith("/")) return pathname
-  return `/${pathname}`
-}
 
 function suffix(pathname: string) {
   const index = pathname.search(/[?#]/)

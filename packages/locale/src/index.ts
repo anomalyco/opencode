@@ -64,9 +64,9 @@ const TAG = {
   br: "pt-BR",
   th: "th",
   tr: "tr",
-} as const satisfies Record<Locale, string>
+} satisfies Record<Locale, string>
 
-function fix(pathname: string) {
+export function fix(pathname: string) {
   if (pathname.startsWith("/")) return pathname
   return `/${pathname}`
 }
