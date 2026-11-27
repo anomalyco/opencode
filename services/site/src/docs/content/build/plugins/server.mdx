@@ -1055,7 +1055,7 @@ await ctx.tool.reload()
 Use `list()` and `get()` to inspect tools currently in the editor. Tools have an `id` containing their effective name,
 and `get()` returns `undefined` when that ID is not present. Use `update` and `remove` with the effective tool name,
 including its namespace (`acme_greeting` above). Dots in
-namespaces and unsupported characters in tool names become `_`. Missing names are ignored; creating a tool requires
+namespaces become `_`, and characters in tool names other than letters, digits, `_` and `-` become `_`. Missing names are ignored; creating a tool requires
 `add` with a complete definition. Updates preserve the name and namespace. Assign new schemas or options to replace
 them rather than mutating nested values. Invalid updates are logged and leave the previous definition intact.
 
