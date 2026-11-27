@@ -1011,6 +1011,13 @@ export const content = {
           name: "Logotyp, biały",
         },
       },
+      avatars: {
+        body: "Kwadratowe awatary dla X, GitHuba, Slacka, LinkedIna i innych profili. Znak leży głęboko w okręgu, więc przetrwa okrągłe przycięcie. Pliki PNG mają 1024 i 400 px szerokości.",
+        items: {
+          "avatar-dark": { name: "Awatar, ciemny" },
+          "avatar-light": { name: "Awatar, jasny" },
+        },
+      },
       all: {
         text: "Pobierz wszystko",
       },

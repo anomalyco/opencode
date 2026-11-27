@@ -592,6 +592,13 @@ export const content = {
         "wordmark-black": { name: "Вордмарк, чёрный" },
         "wordmark-white": { name: "Вордмарк, белый" },
       },
+      avatars: {
+        body: "Квадратные аватары для X, GitHub, Slack, LinkedIn и других профилей. Знак стоит глубоко внутри круга, поэтому аватары переживают круглую обрезку. Ширина PNG — 1024 и 400 px.",
+        items: {
+          "avatar-dark": { name: "Аватар, тёмный" },
+          "avatar-light": { name: "Аватар, светлый" },
+        },
+      },
       all: { text: "Скачать всё" },
     },
     coverage: { title: "Публикации" },

@@ -608,6 +608,13 @@ export const content = {
         "wordmark-black": { name: "ワードマーク、黒" },
         "wordmark-white": { name: "ワードマーク、白" },
       },
+      avatars: {
+        body: "X、GitHub、Slack、LinkedInなどのプロフィール用の正方形アバター。マークは円の内側に十分収まっているので、丸く切り抜いても問題ありません。PNGの幅は1024 pxと400 pxです。",
+        items: {
+          "avatar-dark": { name: "アバター、ダーク" },
+          "avatar-light": { name: "アバター、ライト" },
+        },
+      },
       all: { text: "一括ダウンロード" },
     },
     coverage: { title: "掲載実績" },

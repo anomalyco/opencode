@@ -524,6 +524,13 @@ export const content = {
         "wordmark-black": { name: "الشعار النصي، أسود" },
         "wordmark-white": { name: "الشعار النصي، أبيض" },
       },
+      avatars: {
+        body: "صور رمزية مربعة لحسابات X وGitHub وSlack وLinkedIn وغيرها. يقع الرمز داخل الدائرة بمسافة كافية، فيصمد أمام القص الدائري. عرض ملفات PNG هو 1024 و400 px.",
+        items: {
+          "avatar-dark": { name: "صورة رمزية، داكنة" },
+          "avatar-light": { name: "صورة رمزية، فاتحة" },
+        },
+      },
       all: { text: "تنزيل الكل" },
     },
     coverage: { title: "التغطية" },
