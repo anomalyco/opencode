@@ -1,15 +1,15 @@
-import { Show, type JSX, type ParentProps } from "solid-js"
 import { createSimpleContext } from "@opencode/ui/context"
 import { ServerConnection } from "./registry"
-import { useGlobal, type ServerCtx } from "./runtime"
+import type { ServerHealth } from "./health-machine"
+import type { ServerCtx } from "./runtime"
 
+// Takes the server's health as a prop rather than reading `useGlobal`, so this module doesn't import `./runtime`,
+// which imports modules that call `useServer`. `ServerProvider` in `./runtime` provides it.
 const context = createSimpleContext({
   name: "Server",
-  init: (props: { conn: ServerConnection.Any; ctx: ServerCtx }) => {
+  init: (props: { conn: ServerConnection.Any; ctx: ServerCtx; health: ServerHealth | undefined }) => {
     const conn = props.conn
     const key = ServerConnection.key(conn)
-
-    const global = useGlobal()
 
     return {
       conn,
@@ -19,7 +19,7 @@ const context = createSimpleContext({
       },
       ctx: props.ctx,
       get health() {
-        return global.servers.health[key]
+        return props.health
       },
     }
   },
@@ -27,26 +27,7 @@ const context = createSimpleContext({
 
 export const useServer = context.use
 
-// Keyed by controller: while the server rejects our credentials the children unmount and `signedOut` shows instead,
-// and they mount again with the controller its new credentials start.
-export function ServerProvider(props: ParentProps<{ conn: ServerConnection.Any; signedOut?: JSX.Element }>) {
-  const global = useGlobal()
-  const key = ServerConnection.key(props.conn)
-
-  return (
-    <Show
-      when={global.serverCtx(key)}
-      keyed
-      fallback={<Show when={global.serverSignedOut(key)}>{props.signedOut}</Show>}
-    >
-      {(ctx) => (
-        <context.provider conn={props.conn} ctx={ctx}>
-          {props.children}
-        </context.provider>
-      )}
-    </Show>
-  )
-}
+export const ServerContextProvider = context.provider
 
 export const useData = () => {
   const server = useServer()

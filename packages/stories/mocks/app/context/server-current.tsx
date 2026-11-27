@@ -1,6 +1,6 @@
-import { createContext, Show, useContext, type ParentProps } from "solid-js"
+import { createContext, useContext, type ParentProps } from "solid-js"
 import { ServerConnection } from "@/runtime/server/registry"
-import { useGlobal, type ServerCtx } from "@/runtime/server/runtime"
+import type { ServerCtx, useGlobal } from "@/runtime/server/runtime"
 
 // Stories render without a connected server by default: no location has synced integrations or usage limits yet.
 const fallbackData = {
@@ -77,33 +77,26 @@ export function useData() {
   return useServer().ctx.data
 }
 
-export function ServerProvider(props: ParentProps<{ conn?: ServerConnection.Any }>) {
-  if (!props.conn) return props.children
+// The real `ServerProvider` in `@/runtime/server/runtime` resolves the controller and provides it through this.
+export function ServerContextProvider(
+  props: ParentProps<{ conn: ServerConnection.Any; ctx: ServerCtx; health: ActiveServerValue["health"] }>,
+) {
   const conn = props.conn
-
-  const global = useGlobal()
-
   const key = ServerConnection.key(conn)
 
-  const ctx = () => global.serverCtx(key)
-
   return (
-    <Show when={ctx()} keyed>
-      {(resolved) => (
-        <ServerContext.Provider
-          value={{
-            conn,
-            key,
-            isLocal: ServerConnection.local(conn),
-            ctx: resolved,
-            get health() {
-              return global.servers.health[key]
-            },
-          }}
-        >
-          {props.children}
-        </ServerContext.Provider>
-      )}
-    </Show>
+    <ServerContext.Provider
+      value={{
+        conn,
+        key,
+        isLocal: ServerConnection.local(conn),
+        ctx: props.ctx,
+        get health() {
+          return props.health
+        },
+      }}
+    >
+      {props.children}
+    </ServerContext.Provider>
   )
 }
