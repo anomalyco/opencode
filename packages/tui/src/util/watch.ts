@@ -1,4 +1,4 @@
-import { realpathSync, watch, type WatchListener } from "node:fs"
+import { readlinkSync, realpathSync, watch, type WatchListener } from "node:fs"
 import path from "node:path"
 
 /**
@@ -35,7 +35,14 @@ export function fileWatchDirs(file: string) {
     const real = path.dirname(realpathSync(file))
     if (!dirs.includes(real)) dirs.push(real)
   } catch {
-    // The file may not exist yet; the symlink's own directory is still watched.
+    // The target is missing (or the file does not exist). For a dangling symlink keep watching the directory the
+    // link points into, so the target coming back is still seen.
+    try {
+      const dir = path.dirname(path.resolve(path.dirname(file), readlinkSync(file)))
+      if (!dirs.includes(dir)) dirs.push(dir)
+    } catch {
+      // Not a symlink: only the file's own directory is watched.
+    }
   }
   return dirs
 }
