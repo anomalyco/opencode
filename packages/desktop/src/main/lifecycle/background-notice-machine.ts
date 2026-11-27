@@ -1,6 +1,6 @@
 /**
  * The one-time notice on the first quit that the background service outlives the app. `pending` until it is shown,
- * `showing` while its dialog is open, `done` once the user answered it or chose to stop the service on quit.
+ * `showing` while its dialog is open, `done` once the user answered it or already stops the service on quit.
  */
 export type State = { readonly status: "pending" } | { readonly status: "showing" } | { readonly status: "done" }
 
@@ -9,13 +9,11 @@ export type Choice = "quit" | "settings"
 export type Event =
   /** A quit the user started; `keepRunning` is the setting as it stands. */
   | { readonly type: "quit.requested"; readonly keepRunning: boolean }
-  /** `stopService` is the dialog's checkbox. */
-  | { readonly type: "dialog.closed"; readonly choice: Choice; readonly stopService: boolean }
+  | { readonly type: "dialog.closed"; readonly choice: Choice }
 
 export type Command =
   | { readonly type: "show" }
   | { readonly type: "persist-shown" }
-  | { readonly type: "stop-service-on-quit" }
   | { readonly type: "quit" }
   | { readonly type: "open-settings" }
 
@@ -44,10 +42,6 @@ export function transition(state: State, event: Event): Transition {
   return {
     state: { status: "done" },
     holdsQuit: false,
-    commands: [
-      { type: "persist-shown" },
-      ...(event.stopService ? [{ type: "stop-service-on-quit" as const }] : []),
-      { type: event.choice === "settings" ? "open-settings" : "quit" },
-    ],
+    commands: [{ type: "persist-shown" }, { type: event.choice === "settings" ? "open-settings" : "quit" }],
   }
 }

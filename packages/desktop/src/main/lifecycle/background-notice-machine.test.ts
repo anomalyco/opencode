@@ -17,23 +17,15 @@ describe("background service notice", () => {
       name: "the first quit holds for the notice, and Quit quits",
       events: [
         { type: "quit.requested", keepRunning: true },
-        { type: "dialog.closed", choice: "quit", stopService: false },
+        { type: "dialog.closed", choice: "quit" },
       ],
       commands: [{ type: "show" }, { type: "persist-shown" }, { type: "quit" }],
-    },
-    {
-      name: "the checkbox turns the service off before quitting",
-      events: [
-        { type: "quit.requested", keepRunning: true },
-        { type: "dialog.closed", choice: "quit", stopService: true },
-      ],
-      commands: [{ type: "show" }, { type: "persist-shown" }, { type: "stop-service-on-quit" }, { type: "quit" }],
     },
     {
       name: "Open Settings opens them instead of quitting",
       events: [
         { type: "quit.requested", keepRunning: true },
-        { type: "dialog.closed", choice: "settings", stopService: false },
+        { type: "dialog.closed", choice: "settings" },
       ],
       commands: [{ type: "show" }, { type: "persist-shown" }, { type: "open-settings" }],
     },

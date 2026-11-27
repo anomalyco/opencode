@@ -321,8 +321,7 @@ export const DESKTOP_NATIVE_ENGLISH = {
 
   "desktop.backgroundNotice.message": "OpenCode keeps running in the background",
   "desktop.backgroundNotice.detail":
-    "Your sessions, terminals and MCP servers keep going after you quit, and OpenCode opens faster next time. You can change this anytime in Settings > General.",
-  "desktop.backgroundNotice.stopOnQuit": "Stop OpenCode when I quit",
+    "Your sessions, terminals and MCP servers keep going after you quit. You can change this anytime in Settings > General.",
   "desktop.backgroundNotice.quit": "Quit",
   "desktop.backgroundNotice.openSettings": "Open Settings",
 } as const
