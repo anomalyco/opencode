@@ -11,6 +11,8 @@ export type DocsModule = {
   frontmatter: Frontmatter
   headings: DocsHeading[]
   markdown: string
+  /** A translation whose heading structure no longer matches the English page's (vite.ts). */
+  stale: boolean
 }
 
 type Loader = () => Promise<DocsModule>
@@ -54,8 +56,6 @@ export const docsFiles = new Map<DocsSet["id"], Map<string, string>>([
 export const docsTranslations = new Map<Locale, Map<string, Loader>>()
 /** A translated page's source file, by language and slug, for its "Edit this page" link. */
 export const docsTranslationFiles = new Map<Locale, Map<string, string>>()
-/** The languages each English page is translated into. */
-export const docsTranslated = new Map<string, Locale[]>()
 const englishSlugs = docsContent.get("latest")!
 
 for (const entry of latestTranslations) {
@@ -70,5 +70,4 @@ for (const entry of latestTranslations) {
   const files = docsTranslationFiles.get(entry.locale) ?? new Map<string, string>()
   files.set(entry.slug, `${latestDocs.content}/${entry.path}`)
   docsTranslationFiles.set(entry.locale, files)
-  docsTranslated.set(entry.slug, [...(docsTranslated.get(entry.slug) ?? []), entry.locale])
 }

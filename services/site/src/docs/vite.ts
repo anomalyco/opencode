@@ -12,6 +12,7 @@ import type { Plugin } from "vite"
 import { parse } from "yaml"
 import { docsSets, latestDocs, v1Docs, type DocsSet } from "./config"
 import { frontmatterSchema } from "./frontmatter"
+import { headingDepths, sameHeadingStructure } from "./lib/heading-structure"
 import { docsLocaleBase, docsSlug, docsTranslation } from "./lib/navigation"
 import recmaSolid from "./recma-solid"
 import rehypeHeadings, { type DocsHeading } from "./rehype-headings"
@@ -103,6 +104,14 @@ async function compileMdx(source: string, id: string, set: DocsSet) {
   const body = match ? source.slice(match[0].length) : source
   const translation = set.id === "latest" ? translationOf(id) : undefined
   const base = translation ? docsLocaleBase(translation.locale, set) : set.base
+  const english = translation ? await headingsOf(translation.slug) : undefined
+  // A translation that added, removed or reordered headings would reuse the English ids on the
+  // wrong sections: it is stale, and the page shows English until it matches again.
+  const stale = english ? !sameHeadingStructure(english.depths, headingDepths(source)) : false
+  if (stale)
+    console.warn(
+      `docs: ${translation?.locale}/${translation?.slug}: the headings differ from the English page; serving it until the translation matches`,
+    )
   // Blank lines in place of the frontmatter keep compile errors' line numbers right.
   const file = new VFile({ path: id, value: (match ? "\n".repeat(match[0].split("\n").length - 1) : "") + body })
   const compiled = await compile(file, {
@@ -112,11 +121,7 @@ async function compileMdx(source: string, id: string, set: DocsSet) {
     stylePropertyNameCase: "css",
     remarkPlugins:
       set.id === "v1" ? v1Plugins(id) : [remarkGfm, remarkSmartypants, [remarkDocsLinks, { base }], remarkSlots],
-    rehypePlugins: [
-      rehypeShiki,
-      rehypeTableScroll,
-      [rehypeHeadings, { ids: translation ? await headingsOf(translation.slug) : undefined }],
-    ],
+    rehypePlugins: [rehypeShiki, rehypeTableScroll, [rehypeHeadings, { ids: english?.ids }]],
     recmaPlugins: [recmaSolid],
   })
   const markdown = set.id === "v1" ? v1Markdown(body) : body.trim()
@@ -124,6 +129,7 @@ async function compileMdx(source: string, id: string, set: DocsSet) {
     String(compiled.value).replaceAll("import.meta.env.BASE_URL", JSON.stringify(set.base)),
     `export const frontmatter = ${JSON.stringify(parsed.data)}`,
     `export const headings = ${JSON.stringify(compiled.data.headings ?? [])}`,
+    `export const stale = ${stale}`,
     `export const markdown = ${JSON.stringify(
       `# ${parsed.data.title}\n\n${translation ? localizeMarkdownLinks(markdown, base) : markdown}`,
     )}`,
@@ -137,10 +143,12 @@ function translationOf(id: string) {
   return docsTranslation(path.relative(folder, id).replaceAll("\\", "/"))
 }
 
-// English heading ids, by slug: a translated page reuses them in order (rehype-headings.ts). Parsing
-// the English page's headings needs its MDX, not a second Shiki pass, so it compiles with the same
-// Markdown plugins and only the heading plugin.
-const englishHeadings = new Map<string, Promise<string[]>>()
+// English heading ids and structure, by slug: a translated page reuses the ids in order
+// (rehype-headings.ts) and must have kept the structure. Parsing the headings needs the English
+// page's MDX, not a second Shiki pass, so it compiles with the same Markdown plugins and only the
+// heading plugin.
+type EnglishHeadings = { ids: string[]; depths: number[] }
+const englishHeadings = new Map<string, Promise<EnglishHeadings>>()
 function headingsOf(slug: string) {
   const known = englishHeadings.get(slug)
   if (known) return known
@@ -149,7 +157,7 @@ function headingsOf(slug: string) {
   return promise
 }
 
-async function readHeadings(slug: string) {
+async function readHeadings(slug: string): Promise<EnglishHeadings> {
   const id = path.join(repository, latestDocs.content, `${slug}.mdx`)
   const source = await readFile(id, "utf8")
   const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(source)
@@ -160,7 +168,10 @@ async function readHeadings(slug: string) {
     remarkPlugins: [remarkGfm, remarkSmartypants],
     rehypePlugins: [rehypeHeadings],
   })
-  return ((file.data.headings ?? []) as DocsHeading[]).map((heading) => heading.slug)
+  return {
+    ids: ((file.data.headings ?? []) as DocsHeading[]).map((heading) => heading.slug),
+    depths: headingDepths(source),
+  }
 }
 
 /**

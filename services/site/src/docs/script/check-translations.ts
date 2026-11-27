@@ -1,7 +1,9 @@
 // Checks the latest docs' translations against their English pages, as src/i18n/check.ts does for
 // the site's strings: which pages a language has translated, which English pages it is missing,
 // which translations the English has changed since (a stamp records the English a translation was
-// made from), and translations whose English page is gone. Run it from services/site:
+// made from), which translations no longer have the English page's heading structure (the build
+// serves those as the English fallback), and translations whose English page is gone. Run it from
+// services/site:
 //
 //   bun src/docs/script/check-translations.ts [locale ...] [--stamp]
 //
@@ -11,6 +13,7 @@ import { readdirSync } from "node:fs"
 import path from "node:path"
 import type { Locale } from "~/lib/language"
 import { latestDocsLocales } from "../config"
+import { headingDepths, sameHeadingStructure } from "../lib/heading-structure"
 import { docsSlug, docsTranslation } from "../lib/navigation"
 
 const content = path.resolve(import.meta.dir, "../content")
@@ -27,6 +30,7 @@ type Report = {
   translated: string[]
   untranslated: string[]
   stale: string[]
+  structure: string[]
   unstamped: string[]
   orphans: string[]
   stamps: Record<string, string>
@@ -43,6 +47,7 @@ async function checkLocale(locale: Exclude<Locale, "en">): Promise<Report> {
     translated: [],
     untranslated: [],
     stale: [],
+    structure: [],
     unstamped: [],
     orphans: [],
     stamps: {},
@@ -55,7 +60,12 @@ async function checkLocale(locale: Exclude<Locale, "en">): Promise<Report> {
       continue
     }
     report.translated.push(slug)
-    const hash = Bun.hash(await Bun.file(source).text()).toString(36)
+    const [englishText, translatedText] = await Promise.all([
+      Bun.file(source).text(),
+      Bun.file(path.join(content, locale, file)).text(),
+    ])
+    if (!sameHeadingStructure(headingDepths(englishText), headingDepths(translatedText))) report.structure.push(slug)
+    const hash = Bun.hash(englishText).toString(36)
     report.stamps[slug] = hash
     if (!stamps[slug]) report.unstamped.push(slug)
     else if (stamps[slug] !== hash) report.stale.push(slug)
@@ -82,11 +92,12 @@ if (import.meta.main) {
   const reports = await Promise.all(locales.map(checkLocale))
   for (const report of reports) {
     console.log(
-      `${report.locale}: ${report.translated.length} translated, ${report.untranslated.length} untranslated, ${report.stale.length} changed in English, ${report.unstamped.length} without a stamp, ${report.orphans.length} orphans`,
+      `${report.locale}: ${report.translated.length} translated, ${report.untranslated.length} untranslated, ${report.stale.length} changed in English, ${report.structure.length} with a different heading structure, ${report.unstamped.length} without a stamp, ${report.orphans.length} orphans`,
     )
     if (asked.length) {
       report.untranslated.forEach((slug) => console.log(`  todo     ${slug} (untranslated)`))
       report.stale.forEach((slug) => console.log(`  todo     ${slug} (English changed)`))
+      report.structure.forEach((slug) => console.log(`  stale    ${slug} (headings differ from English)`))
       report.unstamped.forEach((slug) => console.log(`  todo     ${slug} (no stamp)`))
       report.orphans.forEach((slug) => console.log(`  orphan   ${slug} (no English page)`))
     }

@@ -1,15 +1,15 @@
 import { renderToString } from "solid-js/web"
 import type { Locale } from "~/lib/language"
 import { docsSets, latestDocs, latestDocsLocales, v1Docs, type DocsSet } from "./config"
-import { docsContent, docsTranslated, docsTranslations } from "./content"
+import { docsContent, docsTranslations } from "./content"
 import { DocsDocument, docsI18n } from "./document"
 import type { DocsAssets } from "./layouts/DocsLayout"
-import { docsAlternates, docsLocaleHref, docsHref } from "./lib/navigation"
+import { currentTranslation } from "./lib/heading-structure"
+import { docsLocaleHref, docsHref } from "./lib/navigation"
+import { renderSitemap } from "./lib/sitemap"
 import { latestHref, v1Href, v1Locales, v1Page, v1Section, v1Slug, type V1Locale } from "./lib/v1-navigation"
 
 export { renderLlmsTxt } from "./lib/llms"
-export { renderSitemap } from "./lib/sitemap"
-export { docsTranslated } from "./content"
 
 // The docs' renderer: script/build.ts prerenders every page with it, and the development server
 // renders on request (middleware.ts). The Worker never renders docs.
@@ -30,7 +30,9 @@ export async function renderDocsPage(set: DocsSet, slug: string, assets: DocsAss
   if (!docsSlugs[set.id].includes(slug) || !docsPageLocales[set.id].includes(locale)) return
   const english = await docsContent.get(set.id)!.get(slug)?.()
   const translation =
-    set.id === "latest" && locale !== "en" ? await docsTranslations.get(locale)?.get(slug)?.() : undefined
+    set.id === "latest" && locale !== "en"
+      ? currentTranslation(await docsTranslations.get(locale)?.get(slug)?.())
+      : undefined
   const module = translation ?? english
   const translated = translation !== undefined || locale === "en"
   const { locale: v1Locale, page } = v1Page(slug)
@@ -47,6 +49,7 @@ export async function renderDocsPage(set: DocsSet, slug: string, assets: DocsAss
           anchor: anchor(slug, await v1Ids()),
         }
       : undefined
+  const alternates = set.id === "latest" ? await translatedLocales(slug) : []
   return renderToString(() => (
     <DocsDocument
       set={set}
@@ -55,11 +58,38 @@ export async function renderDocsPage(set: DocsSet, slug: string, assets: DocsAss
       assets={assets}
       locale={set.id === "latest" ? locale : "en"}
       translated={translated}
-      alternates={set.id === "latest" ? docsAlternates(slug, docsTranslated) : []}
+      alternates={alternates}
       versions={versions}
       v1={v1}
     />
   ))
+}
+
+/**
+ * The languages whose translation of a page is current: its file exists and its headings still
+ * match the English page's (a stale translation is served as the English fallback, like a missing
+ * one, and stays out of hreflang and the sitemap). Loaded once per page.
+ */
+const currentTranslations = new Map<string, Promise<Locale[]>>()
+function translatedLocales(slug: string) {
+  const known = currentTranslations.get(slug)
+  if (known) return known
+  const promise = Promise.all(
+    [...docsTranslations].map(async ([locale, pages]) => {
+      const load = pages.get(slug)
+      if (!load) return
+      return currentTranslation(await load()) ? locale : undefined
+    }),
+  ).then((locales) => locales.filter((locale): locale is Locale => locale !== undefined))
+  currentTranslations.set(slug, promise)
+  return promise
+}
+
+/** The latest docs' sitemap, with only the translations that are current (lib/sitemap.ts). */
+export async function renderDocsSitemap(site: URL) {
+  const translated = new Map<string, Locale[]>()
+  for (const slug of docsSlugs.latest) translated.set(slug, await translatedLocales(slug))
+  return renderSitemap(site, translated)
 }
 
 /**
@@ -69,7 +99,9 @@ export async function renderDocsPage(set: DocsSet, slug: string, assets: DocsAss
  */
 export async function renderDocsMarkdown(set: DocsSet, slug: string, locale: Locale = "en") {
   const translation =
-    set.id === "latest" && locale !== "en" ? await docsTranslations.get(locale)?.get(slug)?.() : undefined
+    set.id === "latest" && locale !== "en"
+      ? currentTranslation(await docsTranslations.get(locale)?.get(slug)?.())
+      : undefined
   const markdown = (translation ?? (await docsContent.get(set.id)!.get(slug)?.()))?.markdown
   if (set.id !== "v1" || markdown === undefined) return markdown
   const note = docsI18n(v1Page(slug).locale).t("docs.v1.markdownNote")

@@ -41,7 +41,7 @@ When translating a page of the latest docs (`services/site/src/docs/content`):
 
 - Translate the English page at `src/docs/content/<same path>.mdx` into `src/docs/content/<locale>/<same path>.mdx`, using the site's language folder (`zh`, `zht`, `ko`, `de`, `es`, `fr`, `it`, `da`, `ja`, `pl`, `ru`, `uk`, `ar`, `no`, `br`, `th`, `tr`). English stays at the root.
 - Translate the frontmatter's `title` and `description`; keep every other key and value as written.
-- Keep the English heading structure: the same headings, in the same order and depth. Translated pages reuse the English heading ids, so `#anchors` keep working in every language. If you must add a heading, add it after the English headings it follows; do not reorder or remove them.
+- Keep the English heading structure: the same headings, in the same order and depth. Translated pages reuse the English heading ids, so `#anchors` keep working in every language. A translation whose heading depths differ is treated as stale: the build warns, the page shows the English fallback, and `check-translations.ts` lists it. If the English page gains a heading, update the translation's headings in the same place.
 - Keep every MDX component, prop, code block, inline code span, path, URL, command, flag, config key and product name exactly as written. Translate only prose, table headers and code-block captions.
 - Keep internal links docs-root-relative (`/config`): the site adds the page's language prefix. Do not write `/docs/...`, `/<locale>/docs/...` or `https://opencode.ai/docs/...`.
 - A page you do not translate is served in English under that language's chrome, with a notice, so partial translations are safe.

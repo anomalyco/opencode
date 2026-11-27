@@ -101,6 +101,18 @@ describe("docs headings", () => {
     ])
   })
 
+  test("a heading written with its own id keeps it verbatim", () => {
+    const heading: Element = {
+      type: "element",
+      tagName: "h2",
+      properties: { id: "Keep-Me" },
+      children: [{ type: "text", value: "Written by hand" }],
+    }
+    const tree: Root = { type: "root", children: [heading] }
+    rehypeHeadings()(tree, new VFile())
+    expect(heading.properties.id).toBe("Keep-Me")
+  })
+
   test("a translated page reuses the English page's ids in order, and names any heading it adds", () => {
     const heading = (tagName: string, text: string): Element => ({
       type: "element",

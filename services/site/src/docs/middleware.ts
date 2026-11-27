@@ -44,8 +44,8 @@ export const docsMiddleware = createMiddleware({
         // The built sitemap is an asset; only the development server renders it, so the renderer
         // (and every page's MDX) stays out of the Worker.
         if (!import.meta.env.DEV) return notFound()
-        const { docsTranslated, renderSitemap } = await import("./render")
-        return new Response(renderSitemap(new URL(config.baseUrl), docsTranslated), {
+        const { renderDocsSitemap } = await import("./render")
+        return new Response(await renderDocsSitemap(new URL(config.baseUrl)), {
           headers: { "Content-Type": "application/xml; charset=utf-8" },
         })
       }

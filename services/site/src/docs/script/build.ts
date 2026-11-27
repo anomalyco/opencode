@@ -22,11 +22,10 @@ import { docsLocaleHref, docsLocaleMarkdownHref } from "../lib/navigation"
 import type {
   docsPageLocales,
   docsSlugs,
-  docsTranslated,
   renderDocsMarkdown,
   renderDocsPage,
+  renderDocsSitemap,
   renderLlmsTxt,
-  renderSitemap,
   v1EnglishSection,
 } from "../render"
 import { docs } from "../vite"
@@ -98,11 +97,10 @@ await build({
 const render = (await import(path.join(cache, "render/render.js"))) as {
   docsPageLocales: typeof docsPageLocales
   docsSlugs: typeof docsSlugs
-  docsTranslated: typeof docsTranslated
   renderDocsPage: typeof renderDocsPage
   renderDocsMarkdown: typeof renderDocsMarkdown
+  renderDocsSitemap: typeof renderDocsSitemap
   renderLlmsTxt: typeof renderLlmsTxt
-  renderSitemap: typeof renderSitemap
   v1EnglishSection: typeof v1EnglishSection
 }
 // Every page in every language it is prerendered in: the latest docs' languages, and the V1 docs'
@@ -132,7 +130,7 @@ await Promise.all([
   write(`${v1Docs.base}llms.txt`, render.renderLlmsTxt(site, v1Docs, [await render.v1EnglishSection()])),
   // Only the latest docs are in the sitemap: the V1 docs are noindex. It lists each page's
   // translated languages too, with their alternates (lib/sitemap.ts).
-  write(`${base}sitemap.xml`, render.renderSitemap(site, render.docsTranslated)),
+  write(`${base}sitemap.xml`, await render.renderDocsSitemap(site)),
 ])
 
 await Promise.all(
