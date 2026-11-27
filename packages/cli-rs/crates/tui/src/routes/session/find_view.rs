@@ -28,6 +28,7 @@ struct ShownEntry {
     text: String,
     conceal: bool,
     hyperlinks: bool,
+    has_claimed: bool,
     count: usize,
 }
 
@@ -53,6 +54,7 @@ struct FindSpot {
 pub struct FindSnapshot {
     pub pattern: FindPattern,
     pub current: Option<FindMatch>,
+    parse_epoch: u64,
     handle: Weak<FindInner>,
 }
 
@@ -71,9 +73,9 @@ impl FindSnapshot {
     }
 
     /// Reports how many matches a rendered part shows for the current pattern.
-    pub fn counted(&self, key: FindPartKey, text: &str, conceal: bool, links: bool, count: usize) {
+    pub fn counted(&self, key: FindPartKey, text: &str, conceal: bool, links: bool, has_claimed: bool, count: usize) {
         if let Some(inner) = self.handle.upgrade() {
-            inner.counted(key, &self.pattern.key, text, conceal, links, count);
+            inner.counted(key, &self.pattern.key, text, conceal, links, has_claimed, count);
         }
     }
 
@@ -98,7 +100,7 @@ impl FindHandle {
         }
         let pattern = inner.pattern.borrow().clone()?;
         let current = inner.current();
-        Some(FindSnapshot { pattern, current, handle: self.0.clone() })
+        Some(FindSnapshot { pattern, current, parse_epoch: inner.parse_epoch.get(), handle: self.0.clone() })
     }
 }
 
@@ -127,6 +129,7 @@ pub(super) struct FindInner {
     spot: RefCell<Option<FindSpot>>,
     reconcile_due: Cell<bool>,
     pinning: Cell<bool>,
+    parse_epoch: Cell<u64>,
     layers: RefCell<Vec<Disposer>>,
     resize: Cell<Option<HandlerId>>,
     settings: RefCell<Option<Disposer>>,
@@ -274,6 +277,7 @@ impl Find {
             spot: RefCell::new(None),
             reconcile_due: Cell::new(false),
             pinning: Cell::new(false),
+            parse_epoch: Cell::new(0),
             layers: RefCell::default(),
             resize: Cell::new(None),
             settings: RefCell::default(),
@@ -306,6 +310,7 @@ impl Find {
         if sessions_changed {
             self.0.parsed_cache.borrow_mut().clear();
             self.0.shown.borrow_mut().clear();
+            self.0.parse_epoch.set(self.0.parse_epoch.get().wrapping_add(1));
         }
         if self.0.pattern.borrow().is_some() {
             self.0.reconcile(tui);
@@ -314,6 +319,7 @@ impl Find {
 
     pub fn restyle(&self, tui: &Tui) {
         self.0.parsed_cache.borrow_mut().clear();
+        self.0.parse_epoch.set(self.0.parse_epoch.get().wrapping_add(1));
         if let Some(bar) = self.0.bar.borrow().as_ref() {
             let theme = tui.page();
             bar.paint(&theme, &self.0.query.borrow(), self.0.index.get(), self.0.list.borrow().len());
@@ -557,6 +563,22 @@ impl FindInner {
                         counts.push(Some(find_ranges(&part.text, Some(pattern)).len()));
                         continue;
                     }
+                    let shown = self
+                        .shown
+                        .borrow()
+                        .get(&part.key)
+                        .filter(|entry| {
+                            !entry.has_claimed
+                                && entry.pattern_key == pattern.key
+                                && entry.text == part.text
+                                && entry.conceal == conceal
+                                && entry.hyperlinks == links
+                        })
+                        .map(|entry| entry.count);
+                    if let Some(count) = shown {
+                        counts.push(Some(count));
+                        continue;
+                    }
                     let (has_claimed_match, unmounted_count) =
                         self.inspect_unmounted(tui, part, pattern, conceal, links);
                     if has_claimed_match {
@@ -564,18 +586,7 @@ impl FindInner {
                         counts.push(None);
                         continue;
                     }
-                    let shown = self
-                        .shown
-                        .borrow()
-                        .get(&part.key)
-                        .filter(|entry| {
-                            entry.pattern_key == pattern.key
-                                && entry.text == part.text
-                                && entry.conceal == conceal
-                                && entry.hyperlinks == links
-                        })
-                        .map(|entry| entry.count);
-                    counts.push(Some(shown.unwrap_or(unmounted_count)));
+                    counts.push(Some(unmounted_count));
                 }
                 self.pinning.set(true);
                 self.transcript.pin_find_rows(tui, &pinned);
@@ -676,13 +687,24 @@ impl FindInner {
         }
     }
 
-    fn counted(&self, key: FindPartKey, pattern_key: &str, text: &str, conceal: bool, links: bool, count: usize) {
+    #[allow(clippy::too_many_arguments)]
+    fn counted(
+        &self,
+        key: FindPartKey,
+        pattern_key: &str,
+        text: &str,
+        conceal: bool,
+        links: bool,
+        has_claimed: bool,
+        count: usize,
+    ) {
         let mut shown = self.shown.borrow_mut();
         if shown.get(&key).is_some_and(|entry| {
             entry.pattern_key == pattern_key
                 && entry.text == text
                 && entry.conceal == conceal
                 && entry.hyperlinks == links
+                && entry.has_claimed == has_claimed
                 && entry.count == count
         }) {
             return;
@@ -694,6 +716,7 @@ impl FindInner {
                 text: text.to_owned(),
                 conceal,
                 hyperlinks: links,
+                has_claimed,
                 count,
             },
         );
@@ -781,6 +804,8 @@ struct FindMarkdownInner {
     last_hyperlinks: bool,
     last_colors: (Color, Color, Color),
     last_width: u16,
+    last_parse_epoch: u64,
+    last_parsed: Option<Rc<ParsedMarkdown>>,
     has_claimed: bool,
     theme: Theme,
     syntax: Arc<SyntaxTheme>,
@@ -852,6 +877,8 @@ impl FindMarkdown {
                     last_hyperlinks: has_links,
                     last_colors: colors,
                     last_width: cx.content,
+                    last_parse_epoch: active.parse_epoch,
+                    last_parsed: None,
                     has_claimed: false,
                     theme: cx.theme.clone(),
                     syntax: cx.syntax.clone(),
@@ -879,15 +906,32 @@ impl FindMarkdown {
                 && inner.last_conceal == cx.conceal
                 && inner.last_hyperlinks == has_links
                 && inner.last_colors == colors
+                && inner.last_parse_epoch == active.parse_epoch
                 && (!inner.has_claimed || inner.last_width == cx.content)
         };
         if unchanged {
             return;
         }
-        let parsed = active.parse_markdown(cx.tui, source, cx.conceal);
         let fresh_empty = markdown.with_markdown(str::is_empty);
-        let tagged = tag_untagged_code_blocks(source, &parsed, PLAIN_FENCE_LANG);
-        if !fresh_empty {
+        let reuse_parsed = {
+            let inner = state.borrow();
+            was_active
+                && !fresh_empty
+                && inner.last_source == source
+                && inner.last_conceal == cx.conceal
+                && inner.last_hyperlinks == has_links
+                && inner.last_parse_epoch == active.parse_epoch
+                && inner.last_parsed.is_some()
+        };
+        let parsed: Rc<ParsedMarkdown> = if reuse_parsed {
+            state.borrow().last_parsed.clone().unwrap()
+        } else {
+            let parsed = Rc::new(active.parse_markdown(cx.tui, source, cx.conceal));
+            state.borrow_mut().last_parsed = Some(parsed.clone());
+            parsed
+        };
+        let tagged = if reuse_parsed { None } else { tag_untagged_code_blocks(source, &parsed, PLAIN_FENCE_LANG) };
+        if !fresh_empty && !reuse_parsed {
             if let Some(tagged) = &tagged {
                 feed_raw(markdown, tagged);
                 self.tagged_plain.set(true);
@@ -1017,6 +1061,7 @@ impl FindMarkdown {
             inner.last_hyperlinks = has_links;
             inner.last_colors = colors;
             inner.last_width = cx.content;
+            inner.last_parse_epoch = active.parse_epoch;
             inner.has_claimed = has_claimed;
             inner.theme = cx.theme.clone();
             inner.syntax = cx.syntax.clone();
@@ -1132,11 +1177,11 @@ impl FindMarkdown {
                 state.borrow_mut().pass_active = false;
             }
         }
-        let (total, loc) = {
+        let (total, has_claimed, loc) = {
             let inner = state.borrow();
-            (inner.actual_total, inner.current_loc.clone())
+            (inner.actual_total, inner.has_claimed, inner.current_loc.clone())
         };
-        active.counted(part_key.clone(), source, cx.conceal, has_links, total);
+        active.counted(part_key.clone(), source, cx.conceal, has_links, has_claimed, total);
         if let Some(occurrence) = my_current {
             let md = markdown.clone();
             let row = move || -> Option<f64> {
@@ -1187,6 +1232,7 @@ impl FindMarkdown {
             inner.pass_active = false;
             inner.code_slots.clear();
             inner.actual_code_slots.clear();
+            inner.last_parsed = None;
             std::mem::take(&mut inner.registered_langs)
         };
         for lang in langs {

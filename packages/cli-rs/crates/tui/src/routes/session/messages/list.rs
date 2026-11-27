@@ -1423,18 +1423,31 @@ impl Inner {
         let mut rows = self.rows.borrow_mut();
         let mut pinned = self.find_pinned.borrow_mut();
         let pinned_keys = self.find_pinned_keys.borrow();
-        let gone: Vec<RowKey> = rows.keys().copied().filter(|key| !plan.wanted.contains(key)).collect();
-        let mut dropped_count = 0usize;
-        for key in gone {
-            if let Some(row) = rows.remove(&key) {
-                row.wrapper.detach();
-                if pinned_keys.contains(&key) {
-                    pinned.insert(key, row);
-                } else {
-                    dropped_count += 1;
+        let dropped_count = if pinned_keys.is_empty() {
+            let before = rows.len();
+            rows.retain(|key, row| {
+                let keep = plan.wanted.contains(key);
+                if !keep {
+                    row.wrapper.detach();
+                }
+                keep
+            });
+            before - rows.len()
+        } else {
+            let gone: Vec<RowKey> = rows.keys().copied().filter(|key| !plan.wanted.contains(key)).collect();
+            let mut count = 0usize;
+            for key in gone {
+                if let Some(row) = rows.remove(&key) {
+                    row.wrapper.detach();
+                    if pinned_keys.contains(&key) {
+                        pinned.insert(key, row);
+                    } else {
+                        count += 1;
+                    }
                 }
             }
-        }
+            count
+        };
         if dropped_count > 0 {
             crate::features::release::dropped(cx.app, dropped_count);
         }
