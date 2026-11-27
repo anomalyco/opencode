@@ -114,7 +114,7 @@ export const empty = makeLocationNode({
   deps: [],
 })
 
-function parse(input: ConfigPlugin.Plugin): Operation {
+export function parse(input: ConfigPlugin.Plugin): Operation {
   if (typeof input !== "string") {
     return { type: "add", target: input.package, options: input.options ?? {} }
   }

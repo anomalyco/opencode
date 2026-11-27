@@ -33,22 +33,11 @@ const resolve = Effect.fn("PluginSupervisor.resolve")(function* (
   for (const operation of operations) {
     if (operation.type === "remove") {
       if (operation.target === "*") failures.clear()
-      plugins()
-        .filter((plugin) => matches(operation.target, plugin.id) && !PluginInternal.guarded.has(plugin.id))
-        .forEach((plugin) => enabled.delete(plugin.id))
+      applySelection(plugins(), enabled, operation)
       continue
     }
 
-    const matched = plugins().filter((plugin) => matches(operation.target, plugin.id))
-    const selectsPlugins =
-      matched.length > 0 ||
-      operation.target === "*" ||
-      operation.target.endsWith(".*") ||
-      operation.target.startsWith("opencode.")
-    if (selectsPlugins) {
-      matched.forEach((plugin) => enabled.add(plugin.id))
-      continue
-    }
+    if (applySelection(plugins(), enabled, operation)) continue
 
     const plugin = yield* modules.load(operation, { install }).pipe(
       Effect.catchCause((cause) => {
@@ -106,20 +95,34 @@ function matches(selector: string, target: string) {
   return selector === "*" || (selector.endsWith(".*") ? target.startsWith(selector.slice(0, -1)) : selector === target)
 }
 
+function applySelection(
+  plugins: readonly Plugin.Generation[],
+  enabled: Set<string>,
+  operation: Pick<ConfigPluginSource.Operation, "type" | "target">,
+) {
+  if (operation.type === "remove") {
+    plugins
+      .filter((plugin) => matches(operation.target, plugin.id) && !PluginInternal.guarded.has(plugin.id))
+      .forEach((plugin) => enabled.delete(plugin.id))
+    return true
+  }
+  const matched = plugins.filter((plugin) => matches(operation.target, plugin.id))
+  const selectsPlugins =
+    matched.length > 0 ||
+    operation.target === "*" ||
+    operation.target.endsWith(".*") ||
+    operation.target.startsWith("opencode.")
+  if (!selectsPlugins) return false
+  matched.forEach((plugin) => enabled.add(plugin.id))
+  return true
+}
+
 function selectDefinitions(
   definitions: readonly Plugin.Generation[],
   operations: readonly Pick<ConfigPluginSource.Operation, "type" | "target">[],
 ) {
   const enabled = new Set(definitions.map((plugin) => plugin.id))
-  for (const operation of operations) {
-    if (operation.type === "remove") {
-      definitions
-        .filter((plugin) => matches(operation.target, plugin.id) && !PluginInternal.guarded.has(plugin.id))
-        .forEach((plugin) => enabled.delete(plugin.id))
-      continue
-    }
-    definitions.filter((plugin) => matches(operation.target, plugin.id)).forEach((plugin) => enabled.add(plugin.id))
-  }
+  operations.forEach((operation) => applySelection(definitions, enabled, operation))
   return definitions.filter((plugin) => enabled.has(plugin.id))
 }
 
@@ -128,10 +131,11 @@ function documentOperations(entries: readonly Entry[]) {
     .filter((entry): entry is Document => entry.type === "document")
     .flatMap((entry) => entry.info.plugins ?? [])
     .flatMap((input): readonly Pick<ConfigPluginSource.Operation, "type" | "target">[] => {
-      if (typeof input !== "string") return [{ type: "add", target: input.package }]
-      if (!input.startsWith("-")) return [{ type: "add", target: input }]
-      if (input.length === 1) return []
-      return [{ type: "remove", target: input.slice(1) }]
+      // ConfigPluginSource.parse throws on a lone "-"; skip only that entry so one invalid item
+      // does not discard valid config operations during first-activation fallback.
+      if (input === "-") return []
+      const operation = ConfigPluginSource.parse(input)
+      return [{ type: operation.type, target: operation.target }]
     })
 }
 

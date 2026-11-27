@@ -710,4 +710,172 @@ describe("PluginSupervisor", () => {
       )
     }),
   )
+
+  const bootInventory = (
+    plugins: readonly (string | { package: string; options?: Record<string, unknown> })[],
+    fail?: Error,
+  ) =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      yield* Effect.promise(() =>
+        Bun.write(path.join(directory.path, ".opencode/opencode.json"), JSON.stringify({ plugins })),
+      )
+      const locationReplacements: LayerNode.Replacements = [
+        Global.node.replace(tempGlobalLayer),
+        offlineModels,
+        ...(fail
+          ? [
+              ConfigPluginSource.node.replace(
+                Layer.succeed(
+                  ConfigPluginSource.Service,
+                  ConfigPluginSource.Service.of({
+                    operations: () => Effect.die(fail),
+                    changes: () => Stream.never,
+                  }),
+                ),
+              ),
+            ]
+          : []),
+      ]
+      const layer = AppNodeBuilder.build(
+        LayerNode.group([Database.node, Bus.node, SdkPlugins.node, LocationServiceMap.node]),
+        [
+          Global.node.replace(tempGlobalLayer),
+          offlineModels,
+          LocationServiceMap.node.replace(buildLocationServiceMap(locationReplacements)),
+        ],
+      )
+      return yield* Effect.gen(function* () {
+        const locations = yield* LocationServiceMap.Service
+        return yield* Effect.gen(function* () {
+          const pluginService = yield* Plugin.Service
+          yield* pluginService.awaitActivation
+          return yield* pluginService.list()
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+        )
+      }).pipe(Effect.provide(layer), Effect.scoped)
+    })
+
+  const activeIDs = (inventory: readonly Plugin.Info[]) =>
+    inventory.flatMap((plugin) => (plugin.state.status === "active" && plugin.id ? [plugin.id] : []))
+
+  testEffect(Layer.empty).live(
+    "agrees between normal activation and first-activation fallback when disabling a builtin provider",
+    () =>
+      Effect.gen(function* () {
+        const plugins = ["-opencode.provider.ollama"] as const
+        const normal = yield* bootInventory(plugins)
+        const fallback = yield* bootInventory(plugins, new Error("broken plugin config"))
+
+        const normalActive = activeIDs(normal)
+        const fallbackActive = activeIDs(fallback)
+        expect(fallbackActive).toEqual(normalActive)
+        expect(normalActive).not.toContain(Plugin.ID.make("opencode.provider.ollama"))
+        expect(normalActive).toContain(Plugin.ID.make("opencode.provider.openai"))
+        expect(normalActive).toContain(Plugin.ID.make("opencode.provider.opencode"))
+        expect(normalActive).toContain(Plugin.ID.make("opencode.config.policy"))
+        expect(fallback).toContainEqual(
+          expect.objectContaining({
+            source: { type: "builtin" },
+            state: expect.objectContaining({
+              status: "failed",
+              error: expect.stringContaining("broken plugin config"),
+              ref: expect.stringMatching(/^err_/),
+            }),
+          }),
+        )
+      }),
+  )
+
+  testEffect(Layer.empty).live(
+    "agrees between normal activation and first-activation fallback for .* prefix matching and object entries",
+    () =>
+      Effect.gen(function* () {
+        const plugins = ["-opencode.provider.*", { package: "opencode.provider.openai" }] as const
+        const normal = yield* bootInventory(plugins)
+        const fallback = yield* bootInventory(plugins, new Error("broken plugin config"))
+
+        const normalActive = activeIDs(normal)
+        const fallbackActive = activeIDs(fallback)
+        expect(fallbackActive).toEqual(normalActive)
+        expect(normalActive).not.toContain(Plugin.ID.make("opencode.provider.ollama"))
+        expect(normalActive).toContain(Plugin.ID.make("opencode.provider.openai"))
+        expect(normalActive).toContain(Plugin.ID.make("opencode.provider.opencode"))
+        expect(normalActive).toContain(Plugin.ID.make("opencode.config.agent"))
+        expect(fallback).toContainEqual(
+          expect.objectContaining({
+            source: { type: "builtin" },
+            state: expect.objectContaining({
+              status: "failed",
+              error: expect.stringContaining("broken plugin config"),
+              ref: expect.stringMatching(/^err_/),
+            }),
+          }),
+        )
+      }),
+  )
+
+  testEffect(Layer.empty).live(
+    "agrees between normal activation and first-activation fallback for * removal and guarded builtins",
+    () =>
+      Effect.gen(function* () {
+        const plugins = [
+          "-*",
+          "-opencode.config.policy",
+          "-opencode.provider.opencode",
+          "opencode.provider.openai",
+        ] as const
+        const normal = yield* bootInventory(plugins)
+        const fallback = yield* bootInventory(plugins, new Error("broken plugin config"))
+
+        const normalActive = activeIDs(normal)
+        const fallbackActive = activeIDs(fallback)
+        expect(fallbackActive).toEqual(normalActive)
+        expect(normalActive.toSorted()).toEqual([
+          Plugin.ID.make("opencode.config.policy"),
+          Plugin.ID.make("opencode.provider.openai"),
+          Plugin.ID.make("opencode.provider.opencode"),
+        ])
+        expect(fallback).toContainEqual(
+          expect.objectContaining({
+            source: { type: "builtin" },
+            state: expect.objectContaining({
+              status: "failed",
+              error: expect.stringContaining("broken plugin config"),
+              ref: expect.stringMatching(/^err_/),
+            }),
+          }),
+        )
+      }),
+  )
+
+  testEffect(Layer.empty).live(
+    "skips a lone '-' entry in first-activation fallback without discarding other config operations or builtins",
+    () =>
+      Effect.gen(function* () {
+        const normal = yield* bootInventory(["-opencode.provider.*", "opencode.provider.openai"])
+        const fallback = yield* bootInventory(["-opencode.provider.*", "-", "opencode.provider.openai"])
+
+        const normalActive = activeIDs(normal)
+        const fallbackActive = activeIDs(fallback)
+        expect(fallbackActive).toEqual(normalActive)
+        expect(fallbackActive).not.toContain(Plugin.ID.make("opencode.provider.ollama"))
+        expect(fallbackActive).toContain(Plugin.ID.make("opencode.provider.openai"))
+        expect(fallbackActive).toContain(Plugin.ID.make("opencode.provider.opencode"))
+        expect(fallbackActive).toContain(Plugin.ID.make("opencode.config.policy"))
+        expect(fallbackActive).toContain(Plugin.ID.make("opencode.config.agent"))
+        expect(fallback).toContainEqual(
+          expect.objectContaining({
+            source: { type: "builtin" },
+            state: expect.objectContaining({
+              status: "failed",
+              error: expect.stringContaining("Plugin remove operation requires a target"),
+              ref: expect.stringMatching(/^err_/),
+            }),
+          }),
+        )
+      }),
+  )
 })
