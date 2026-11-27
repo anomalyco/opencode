@@ -14,7 +14,6 @@ import {
 import type {
   BackgroundTask,
   Comments,
-  Composer,
   ComposerDelivery,
   Files,
   LineRange,
@@ -22,6 +21,7 @@ import type {
   MountedSession,
   SessionScreen,
 } from "@opencode/plugin/gui"
+import type { BuiltinComposer } from "@opencode/plugin/gui/builtin"
 import { useComments } from "@/composer/comments"
 import { createComposerEditorActions } from "@/composer/editor/actions"
 import { useComposerState } from "@/composer/persistence"
@@ -238,7 +238,7 @@ export function createMountedSession(session: SessionModel) {
     if (!session.data.isChild()) write((target) => apply(createComposerEditorActions(target.store)))
   }
 
-  const composerRef: Composer = {
+  const composerRef: BuiltinComposer = {
     text: () =>
       session.data.isChild()
         ? ""

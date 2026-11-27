@@ -1,5 +1,6 @@
 import { createSignal, Match, onCleanup, Show, Switch, untrack } from "solid-js"
 import { ComposerPill, createKeyed, Style, type ComposerPillProps, type Plugin } from "@opencode/plugin/gui"
+import { builtinComposer } from "@opencode/plugin/gui/builtin"
 import { Goal } from "@opencode/schema/goal"
 import { Button } from "@opencode/ui/button"
 import { showToast } from "@opencode/ui/toast"
@@ -119,7 +120,7 @@ const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
         // The goal's continuations run with the session's agent and model, which a pick in the composer changes only
         // once a prompt is sent. Resuming is the user's next send, so it applies the pick first.
         if (effect.action === "resume" && screen && ctx.sessions.current()?.key === effect.key)
-          await screen.composer.applySelection()
+          await builtinComposer(screen.composer).applySelection()
 
         return client.session.command({ sessionID: effect.sessionID, name: "goal", text: effect.action }, { signal })
       },

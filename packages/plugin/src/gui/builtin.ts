@@ -4,7 +4,16 @@
 import type { Schema } from "effect"
 import type { Context } from "./context.js"
 import { Registry, type Catalog, type Cleanup, type Contract, type Messages, type Persisted, type StoreDeclaration, type StoreFrom } from "./core.js"
-import type { Desktop, Layout, Locale, OpenOptions, SessionRef, StorageScope, StoreOptions } from "./host-apis.js"
+import type {
+  Composer,
+  Desktop,
+  Layout,
+  Locale,
+  OpenOptions,
+  SessionRef,
+  StorageScope,
+  StoreOptions,
+} from "./host-apis.js"
 import type { MainContext } from "./main.js"
 import type { Command, IconName, Panel, PanelTab, SlotMap } from "./registries.js"
 import { type JSX } from "solid-js"
@@ -365,6 +374,38 @@ export interface BuiltinLocale extends Locale {
    * @param direction - `ltr` or `rtl`.
    */
   setDirection(direction: "ltr" | "rtl"): void
+}
+
+/** A session screen's `Composer` with the abilities only built-ins use. */
+export interface BuiltinComposer extends Composer {
+  /**
+   * Switches the routed session to the agent and model the next prompt is sent with, as sending a prompt does: the
+   * session's next steps run with them, and the composer follows the session again once the server confirms. Call it
+   * before an action that makes the session work without a prompt from the composer, such as resuming a goal.
+   * Resolves once the server took both, at once when they already match, and does nothing while the model catalog
+   * loads and in a subagent's session. Rejects when the server refuses a switch; the composer then keeps the choice.
+   *
+   * @example
+   * await builtinComposer(input.screen.composer).applySelection()
+   */
+  applySelection(): Promise<void>
+}
+
+/**
+ * The members only built-ins use, on a session screen's composer.
+ *
+ * @param composer - The screen's composer, such as `input.screen.composer`.
+ * @returns The same object, typed with the built-in members.
+ *
+ * @example
+ * ```ts
+ * await builtinComposer(input.screen.composer).applySelection()
+ * ```
+ */
+export function builtinComposer(composer: Composer): BuiltinComposer {
+  // SAFETY: the app's window host builds every screen's composer as a `BuiltinComposer` (`createMountedSession`),
+  // and built-ins run only in that host.
+  return composer as BuiltinComposer
 }
 
 /** The window context as the app's host builds it for every plugin, with the members only built-ins use. */
