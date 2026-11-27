@@ -408,10 +408,9 @@ await context.ui.dialog.select({
 - Appuyer sur Échap, appeler `clear()` ou ouvrir une autre boîte de dialogue résout la promesse avec `undefined`.
 - N’attribuez pas `ctrl+n` ni `ctrl+p` à une action. La boîte de dialogue réserve ces raccourcis à la navigation, et ses propres raccourcis priment.
 
-Les boîtes de dialogue JSX personnalisées peuvent définir leur taille et se fermer.
+Les boîtes de dialogue JSX personnalisées peuvent définir leur taille et se fermer d’elles-mêmes. Appelez `set` après `show` : à l’ouverture, la taille revient à `medium` et la boîte de dialogue n’est pas centrée. Les tailles `medium`, `large` et `xlarge` correspondent à des largeurs de 60, 88 et 116 colonnes.
 
 ```tsx
-context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.show(
   () => (
     <box>
@@ -420,6 +419,7 @@ context.ui.dialog.show(
   ),
   () => console.log("closed"),
 )
+context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.clear()
 ```
 
@@ -465,7 +465,7 @@ if (context.ui.tabs.enabled()) {
 
 ## Modèle
 
-Lisez le modèle sélectionné du prompt et changez sa variante. `current()` et `variant.list()` sont réactifs lorsqu’ils sont lus dans un calcul Solid. Une valeur `undefined` pour `variant` sélectionne la variante par défaut du modèle.
+Lisez le modèle sélectionné pour le prompt et changez sa variante. `current()` et `variant.list()` sont réactifs lorsqu’ils sont lus dans un calcul Solid. Si `variant` vaut `undefined`, la variante par défaut du modèle est utilisée.
 
 ```ts
 const selected = context.ui.model.current()
@@ -618,8 +618,8 @@ Exposez le plugin TUI via `./tui` ; déclarez les dépendances homologues d’O
     "@opencode/plugin": "latest"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.6.6",
-    "@opentui/solid": ">=0.6.6",
+    "@opentui/core": ">=0.8.0",
+    "@opentui/solid": ">=0.8.0",
     "solid-js": ">=1.9.0"
   }
 }

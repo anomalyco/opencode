@@ -511,6 +511,8 @@ V2 remplace les fichiers `tui.json(c)` V1 superposés par un seul fichier de con
 
 Le client terminal possède ce fichier ; le service d’arrière-plan ne le charge pas. Lorsque `cli.json` est absent, le premier démarrage du client terminal V2 migre les réglages `tui.json` globaux pris en charge et les préférences persistées, en laissant les fichiers V1 inchangés. La configuration client propre à un projet n’est pas migrée, car la configuration client V2 est globale. Consultez [Réglages du CLI](/cli/config) pour la référence actuelle des réglages client.
 
+Une fois `cli.json` créé, les modifications apportées à `tui.json` sont ignorées. Consultez la section [Ancien fichier `tui.json`](/cli/config#legacy-tuijson).
+
 ## Plugins
 
 Renommez `plugin` en `plugins`. Remplacez chaque couple paquet-options par un objet :

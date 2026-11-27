@@ -3,17 +3,16 @@ title: Réseau
 description: Configurez des proxys, des autorités de certification personnalisées et des certificats client.
 ---
 
-Définissez les variables de proxy standard et excluez les adresses de bouclage. OpenCode utilise des connexions HTTP locales entre le CLI et son service d’arrière-plan : l’exclusion du bouclage est donc requise lorsqu’un proxy est configuré dans l’environnement du CLI.
+Définissez les variables de proxy standard. OpenCode utilise des connexions HTTP locales entre le CLI et son service d’arrière-plan. Le CLI exclut automatiquement les adresses de bouclage du proxy.
 
 ```bash
 export HTTP_PROXY=http://proxy.example.com:8080
 export HTTPS_PROXY=http://proxy.example.com:8080
-export NO_PROXY=localhost,127.0.0.1,::1
 
 opencode
 ```
 
-`HTTP_PROXY` gère les destinations HTTP et `HTTPS_PROXY` les destinations HTTPS. L’URL du proxy peut utiliser `http://` pour les deux variables. `NO_PROXY` est une liste d’hôtes et d’adresses séparés par des virgules qui se connectent directement.
+`HTTP_PROXY` s’applique aux destinations HTTP et `HTTPS_PROXY` aux destinations HTTPS. Dans les deux cas, l’URL du proxy peut utiliser `http://`. Au démarrage, le CLI ajoute `127.0.0.1`, `localhost` et `::1` à `NO_PROXY` ainsi qu’à `no_proxy`. Indiquez dans `NO_PROXY`, en les séparant par des virgules, les autres hôtes à joindre sans proxy.
 
 ## Service
 
@@ -22,11 +21,11 @@ Les exportations du shell n’affectent un service d’arrière-plan que si ce s
 ```bash
 opencode service set env HTTP_PROXY http://proxy.example.com:8080
 opencode service set env HTTPS_PROXY http://proxy.example.com:8080
-opencode service set env NO_PROXY localhost,127.0.0.1,::1
+opencode service set env NO_PROXY llm.company.example
 opencode service start
 ```
 
-Modifier une variable d’environnement gérée arrête le service en cours. `service start` le redémarre avec le nouvel environnement. Gardez aussi `NO_PROXY` dans le shell du CLI lorsque ce shell définit un proxy, car les variables du service géré s’appliquent au processus serveur, pas au processus du CLI.
+Modifier une variable d’environnement gérée arrête le service en cours. `service start` le redémarre avec le nouvel environnement. Définissez les variables de proxy du CLI dans son propre shell : les variables du service géré ne s’appliquent qu’au processus serveur. Les adresses de bouclage sont automatiquement exclues des deux côtés.
 
 Supprimez une variable enregistrée avec `service unset env` :
 
@@ -116,7 +115,6 @@ Chaque requête de modèle de ce fournisseur présente le certificat : chat, co
 ```bash
 HTTP_PROXY=http://proxy.example.com:8080 \
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode --standalone
 ```
 
@@ -124,7 +122,6 @@ Appliquez le même schéma à un serveur au premier plan :
 
 ```bash
 HTTPS_PROXY=http://proxy.example.com:8080 \
-NO_PROXY=localhost,127.0.0.1,::1 \
 opencode serve
 ```
 

@@ -48,7 +48,7 @@ OpenCode recherche automatiquement dans ces emplacements :
 | Projet | `.opencode/skills` |
 | Compatibilité projet | `.claude/skills`, `.agents/skills` |
 
-Pour les sources de projet, OpenCode recherche depuis le répertoire courant jusqu’à la racine du projet et inclut les répertoires correspondants à chaque niveau.
+Pour les sources propres au projet, OpenCode remonte du répertoire courant jusqu’à la racine du système de fichiers et inclut les répertoires correspondants à chaque niveau.
 
 Chaque source peut contenir l’une ou l’autre forme :
 
@@ -174,10 +174,10 @@ Les skills sont sélectionnés par ID. Si deux sources définissent `git-release
 OpenCode enregistre les sources de la priorité la plus faible à la plus forte :
 
 1. Skills intégrés
-2. `.claude/skills`, d’abord global puis de l’ancêtre le plus lointain vers le répertoire courant
-3. `.agents/skills`, d’abord global puis de l’ancêtre le plus lointain vers le répertoire courant
+2. `.claude/skills`, d’abord au niveau global, puis du répertoire parent le plus éloigné jusqu’au répertoire courant
+3. `.agents/skills`, d’abord au niveau global, puis du répertoire parent le plus éloigné jusqu’au répertoire courant
 4. `~/.config/opencode/skills`
-5. `.opencode/skills` du projet, de la racine du projet vers le répertoire courant
+5. `.opencode/skills` du projet, du répertoire parent le plus éloigné jusqu’au répertoire courant
 6. Entrées explicites de configuration `skills`, selon la priorité de configuration et l’ordre du tableau
 
 Évitez les ID en double, sauf si vous voulez remplacer un skill antérieur.

@@ -72,7 +72,7 @@ Ajoutez `compaction` à n’importe quel [fichier de configuration OpenCode](/co
 
 | Champ | Valeur par défaut | Comportement |
 | --- | ---: | --- |
-| `auto` | `true` | Compacte automatiquement près de la limite de contexte, et se rétablit une fois lorsqu’un fournisseur rejette une requête comme trop longue. Le compactage manuel fonctionne toujours. |
+| `auto` | `true` | Déclenche le compactage à l’approche de la limite de contexte. Si le fournisseur rejette une requête parce qu’elle est trop longue, OpenCode compacte la conversation et réessaie une fois. Le compactage manuel reste possible dans tous les cas. |
 | `background` | `true` | Écrit le résumé à l’avance pour que le compactage automatique ne l’attende pas. Consultez [Compactage en arrière-plan](#background-compaction). |
 | `keep.tokens` | `15000` | Nombre approximatif de tokens des échanges récents conservés en plus du résumé. Une valeur plus élevée conserve davantage de détails, mais laisse moins de place pour la suite. |
 | `buffer` | `"15%"`, au moins 16k | Part de la fenêtre de contexte du modèle laissée libre. Le compactage automatique se déclenche quand la conversation remplit le reste de la fenêtre. Une valeur plus élevée le déclenche plus tôt. |
@@ -88,10 +88,30 @@ Ajoutez `compaction` à n’importe quel [fichier de configuration OpenCode](/co
 | 128k | ~102k |
 | 1M | 800k |
 
-- C’est la place laissée libre, pas le seuil de démarrage du compactage : `"20%"` compacte à 80 % de remplissage.
+- C’est la place laissée libre, pas le seuil de déclenchement du compactage : avec `"20%"`, le compactage se déclenche à 80 % de remplissage.
 - Accepte `"1%"` à `"99%"`, décimales comprises, par exemple `"12.5%"`.
 - Un nombre de tokens comme `20000` fonctionne aussi. Le même nombre représente une grande part d’une petite fenêtre et une petite part d’une grande.
 - Un nombre de tokens au moins égal à la fenêtre du modèle est ignoré et la valeur par défaut s’applique.
+
+### Fenêtre de contexte
+
+La taille de la fenêtre correspond à la limite d’entrée du modèle (`limit.input`), sans dépasser sa limite de contexte (`limit.context`). Si le modèle ne définit qu’une de ces deux limites, OpenCode utilise celle-ci. S’il n’en définit aucune, il n’y a pas de compactage automatique. OpenCode compacte alors la conversation une fois si le fournisseur rejette une requête parce qu’elle est trop longue.
+
+Dans la configuration, chaque limite définie ne remplace que le champ correspondant dans le catalogue. Si le catalogue fixe les deux limites, augmenter seulement `limit.context` laisse la fenêtre à la limite d’entrée du catalogue. Définissez donc aussi `limit.input` :
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "limit": { "context": 1050000, "input": 1000000 },
+        },
+      },
+    },
+  },
+}
+```
 
 ## Modèle
 

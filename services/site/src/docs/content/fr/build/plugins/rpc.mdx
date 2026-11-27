@@ -66,7 +66,16 @@ Une définition RPC décrit la structure des entrées et des sorties des méthod
 
 ### Entrée et sortie
 
-Chaque méthode peut définir un schéma `input` pour son argument et un schéma `output` pour sa valeur de retour. Omettez le schéma d’entrée si la méthode ne prend pas d’argument, et le schéma de sortie si elle ne renvoie rien.
+Chaque méthode exige un schéma `input` pour son argument et un schéma `output` pour sa valeur de retour. Utilisez un schéma d’objet vide pour toute entrée ou sortie absente : appelez la méthode avec `{}` si elle ne prend aucun argument et renvoyez `{}` si elle ne renvoie aucune valeur.
+
+```ts
+refresh: {
+  input: { type: "object", additionalProperties: false },
+  output: { type: "object", additionalProperties: false },
+}
+```
+
+Une méthode qui renvoie `undefined` échoue avec l’erreur `rpc.invalid_output`.
 
 ```ts
 search: {
@@ -104,7 +113,7 @@ Les noms d’erreur commençant par `rpc.` sont réservés par OpenCode.
 
 ### Événements
 
-Ajoutez des événements à la table `events` à la racine de la définition. Chaque événement a un schéma pour les données envoyées aux abonnés.
+Ajoutez les événements à la table `events` à la racine de la définition. Chaque événement a un schéma pour les données envoyées aux abonnés. La table est obligatoire : utilisez `events: {}` si le RPC ne définit aucun événement.
 
 Les données d’événement doivent être un objet. Utilisez un schéma d’objet vide lorsqu’il n’y a pas de données :
 

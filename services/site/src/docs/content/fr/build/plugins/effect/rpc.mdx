@@ -44,7 +44,7 @@ JSON Schema et Standard Schema sont aussi pris en charge.
 
 ### Entrée et sortie
 
-Utilisez `input` pour l’argument de la méthode et `output` pour sa valeur de retour. Omettez l’un ou l’autre lorsqu’il n’y a pas de valeur.
+Utilisez `input` pour l’argument de la méthode et `output` pour sa valeur de retour. Les deux sont obligatoires. Utilisez `Schema.Struct({})` pour toute entrée ou sortie absente : appelez la méthode avec `{}` si elle ne prend aucun argument et renvoyez `{}` si elle ne renvoie aucune valeur.
 
 ```ts
 search: {
@@ -65,7 +65,7 @@ errors: {
 
 ### Événements
 
-Ajoutez des événements à la table `events` à la racine de la définition. Les données d’événement doivent être un objet.
+Ajoutez les événements à la table `events` à la racine de la définition. Les données d’un événement doivent former un objet. La table est obligatoire : utilisez `events: {}` si le RPC ne définit aucun événement.
 
 ```ts
 events: {

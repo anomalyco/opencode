@@ -173,7 +173,7 @@ const agents = await ctx.agent.list()
 const build = await ctx.agent.get({ agentID: "build" })
 ```
 
-Enregistrez un transform pour inspecter, mettre à jour, retirer ou sélectionner l’agent par défaut.
+Enregistrez un transform pour inspecter, créer, mettre à jour ou retirer des agents, ou pour sélectionner l’agent par défaut.
 
 ```ts
 await ctx.agent.transform((editor) => {
@@ -185,6 +185,18 @@ await ctx.agent.transform((editor) => {
     agent.description = "Builds features and fixes bugs"
   })
   editor.remove("legacy")
+})
+```
+
+Enregistrez un nouvel agent avec `editor.update`. Si l’ID existe déjà, la méthode modifie l’agent correspondant. Sinon, elle en crée un avec `Agent.Info.default(id)` avant d’exécuter le callback.
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
 })
 ```
 
@@ -992,7 +1004,7 @@ Appelez `reload()` après avoir changé les données de source capturées par le
 await ctx.tool.reload()
 ```
 
-Utilisez `list()` et `get()` pour inspecter les outils actuellement dans l’éditeur. Les outils ont un `id` contenant leur nom effectif, et `get()` renvoie `undefined` lorsque cet ID n’est pas présent. Utilisez `update` et `remove` avec le nom d’outil effectif, espace de noms compris (`acme_greeting` ci-dessus). Les points dans les espaces de noms et les caractères non pris en charge dans les noms d’outils deviennent `_`. Les noms absents sont ignorés ; créer un outil nécessite `add` avec une définition complète. Les mises à jour conservent le nom et l’espace de noms. Affectez de nouveaux schémas ou options pour les remplacer plutôt que de modifier les valeurs imbriquées sur place. Les mises à jour invalides sont journalisées et laissent la définition précédente intacte.
+Utilisez `list()` et `get()` pour inspecter les outils actuellement dans l’éditeur. Les outils ont un `id` contenant leur nom effectif, et `get()` renvoie `undefined` lorsque cet ID n’est pas présent. Utilisez `update` et `remove` avec le nom d’outil effectif, espace de noms compris (`acme_greeting` ci-dessus). Les points des espaces de noms deviennent `_`. Dans les noms d’outils, OpenCode conserve les lettres, les chiffres, `_` et `-` et remplace tout autre caractère par `_`. Les noms absents sont ignorés. Pour créer un outil, appelez `add` avec une définition complète. Les mises à jour conservent le nom et l’espace de noms. Pour remplacer les schémas ou les options, affectez-leur de nouvelles valeurs plutôt que de modifier les valeurs imbriquées sur place. Les mises à jour non valides sont consignées dans les journaux et laissent la définition précédente intacte.
 
 ```ts
 await ctx.tool.transform((editor) => {

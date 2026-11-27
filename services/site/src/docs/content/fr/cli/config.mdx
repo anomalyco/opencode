@@ -35,6 +35,16 @@ OpenCode ajoute `$schema` lorsqu’il crée ou migre ce fichier. Les modificatio
 
 Les réglages inconnus sont ignorés. Conservez `$schema` pour que votre éditeur signale les valeurs invalides.
 
+### Ancien fichier `tui.json`
+
+En V1, les réglages du client terminal étaient stockés dans `tui.json`. La V2 ne lit ce fichier que pour la migration et ne fusionne jamais ses réglages avec ceux de `cli.json` :
+
+- Si `cli.json` n’existe pas, le CLI le crée à partir des réglages pris en charge dans le fichier global `tui.json` situé dans le même répertoire et des préférences enregistrées dans `kv.json`, dans le répertoire d’état.
+- Une fois `cli.json` créé, `tui.json` est ignoré. Les modifications ultérieures de ce fichier n’ont aucun effet. Vous pouvez le conserver ou le supprimer.
+- Si vous supprimez `cli.json`, la migration se relance au prochain démarrage.
+- Les anciens fichiers ne sont jamais modifiés ni supprimés.
+- Seul le fichier global `tui.json` est lu. Les fichiers `tui.json` propres aux projets et les fichiers `tui.jsonc` ne sont pas migrés.
+
 ## Configuration en ligne
 
 Définissez `OPENCODE_CLI_CONFIG_CONTENT` pour appliquer des réglages CLI depuis du JSON en ligne :

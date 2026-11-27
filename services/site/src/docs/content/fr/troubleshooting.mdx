@@ -106,6 +106,33 @@ grep 'role=server' ~/.local/share/opencode/log/opencode.log
 grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
 ```
 
+## Exporter la télémétrie
+
+OpenCode peut envoyer ses journaux et ses traces à un collecteur OpenTelemetry ou à un service APM qui accepte OTLP sur HTTP. Indiquez l’URL de base du collecteur, sans chemin :
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer example-token"
+export OTEL_RESOURCE_ATTRIBUTES="team=platform,host.name=dev-laptop"
+opencode
+```
+
+| Variable | Comportement |
+| --- | --- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | URL de base. Les journaux sont envoyés à `<endpoint>/v1/logs` et les traces à `<endpoint>/v1/traces`. Si la variable n’est pas définie, l’exportation est désactivée. |
+| `OTEL_EXPORTER_OTLP_HEADERS` | En-têtes au format `key=value`, séparés par des virgules et envoyés avec chaque exportation. Ils peuvent par exemple contenir une clé API. |
+| `OTEL_RESOURCE_ATTRIBUTES` | Attributs au format `key=value`, encodés pour une URL et séparés par des virgules, ajoutés à chaque enregistrement. Si une seule entrée est mal formée, tous ces attributs sont ignorés. |
+
+Chaque enregistrement contient aussi `service.name` (`opencode`), `service.version`, `deployment.environment.name` (le canal de publication), `opencode.client` et `opencode.run`, qui correspond à l’ID d’exécution du fichier journal.
+
+Le service d’arrière-plan s’exécute dans un processus distinct et n’hérite pas des variables de votre shell. Définissez-les aussi pour le service afin de tracer les appels aux modèles et les exécutions d’outils :
+
+```bash
+opencode service set env OTEL_EXPORTER_OTLP_ENDPOINT http://localhost:4318
+opencode service set env OTEL_EXPORTER_OTLP_HEADERS "authorization=Bearer example-token"
+opencode service start
+```
+
 ## Capturer un instantané de tas
 
 Écrivez un instantané de mémoire (tas) du serveur d’arrière-plan en cours d’exécution, sur n’importe quelle plateforme :

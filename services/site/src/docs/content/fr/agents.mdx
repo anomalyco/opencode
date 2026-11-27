@@ -39,7 +39,7 @@ Enregistrez les agents Markdown globalement pour tous les projets ou dans un pro
 .opencode/agents/<name>.md
 ```
 
-OpenCode découvre les répertoires `.opencode` du projet depuis le répertoire courant jusqu’à la racine du projet. Un chemin imbriqué fait partie de l’ID de l’agent :
+OpenCode recherche les répertoires `.opencode` du projet en remontant du répertoire courant jusqu’à la racine du système de fichiers. Un chemin imbriqué fait partie de l’ID de l’agent :
 
 ```text
 .opencode/agents/team/reviewer.md  →  team/reviewer

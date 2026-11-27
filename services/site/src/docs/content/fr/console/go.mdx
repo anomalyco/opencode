@@ -87,6 +87,7 @@ Outre OpenCode, les clients suivants ont été validés pour fonctionner correct
 | **jcode** | Mettez à jour vers **v0.81.6 ou ultérieur**, qui inclut le [correctif d’en-tête de session](https://github.com/1jehuang/jcode/issues/1167). |
 | **OpenClaw** | Les versions actuelles envoient `x-opencode-session` sur les requêtes Go. La connexion par navigateur nécessite **2026.11.7 ou ultérieur**. |
 | **Kilo Code CLI** | Les versions contenant la [PR #13752](https://github.com/Kilo-Org/kilocode/pull/13752) restaurent les en-têtes de session OpenCode. Ce correctif couvre le CLI, pas l’extension VS Code. Consultez [le ticket #13723](https://github.com/Kilo-Org/kilocode/issues/13723). |
+| **MiMo Code** | Passez à la **v0.1.16 ou à une version ultérieure** pour que `x-opencode-session` soit envoyé dans les requêtes Go ([PR #2655](https://github.com/XiaomiMiMo/MiMo-Code/pull/2655)). |
 
 ### Clients problématiques connus
 
@@ -97,7 +98,6 @@ Dans les versions que nous avons examinées, ces clients ne prennent pas en char
 | **DeepSeek Harness** | Les informations de session arrivent sur certains chemins de modèles, mais manquent sur d’autres. Nous reconnaissons son en-tête natif ; il reste à l’envoyer sur tous les adaptateurs. [Discussion #5495](https://github.com/deepseek-ai/deepseek-harness/discussions/5495). |
 | **GitHub Copilot Chat** | La prise en charge automatique de l’en-tête de session est demandée dans [le ticket VS Code #334186](https://github.com/microsoft/vscode/issues/334186). |
 | **Kimi Code** | La demande d’en-tête de session dans [le ticket #3506](https://github.com/MoonshotAI/kimi-code/issues/3506) a été fermée comme non prévue. |
-| **MiMo Code** | [Le ticket #2317](https://github.com/XiaomiMiMo/MiMo-Code/issues/2317) est fermé, et [la PR #2327](https://github.com/XiaomiMiMo/MiMo-Code/pull/2327) a été fermée sans être fusionnée. |
 
 ## Limites d’utilisation
 

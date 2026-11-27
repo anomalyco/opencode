@@ -233,7 +233,7 @@ OpenCode s’identifie auprès du serveur d’autorisation avec la première mé
 | --- | --- |
 | Client préenregistré | `oauth.client_id` est configuré. |
 | [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents) (CIMD) | Le serveur d’autorisation prend en charge CIMD et les clients publics, et `oauth.redirect_uri` n’est pas défini. |
-| [Dynamic client registration](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | Aucune des deux précédentes ne s’applique. OpenCode enregistre un client et le réutilise lors des connexions suivantes. |
+| [Dynamic client registration](https://datatracker.ietf.org/doc/html/rfc7591) (DCR) | Aucune des deux autres méthodes ne s’applique. OpenCode enregistre un client et le réutilise lors des connexions suivantes, en écoutant sur le port déclaré à l’enregistrement. Si ce port est occupé, OpenCode procède à un nouvel enregistrement. |
 
 Un serveur d’autorisation active CIMD via ses métadonnées :
 
@@ -290,8 +290,8 @@ Lorsqu’un fournisseur vous donne des identifiants client, utilisez les champs 
 | --- | --- |
 | `client_id` | ID de client préenregistré. Prioritaire sur CIMD et DCR. |
 | `client_secret` | Secret d’un client confidentiel, envoyé dans le corps de la requête de token. Omis pour les clients publics. |
-| `scope` | Portées demandées, séparées par des espaces. Par défaut, la portée indiquée par le serveur lorsqu’il rejette une requête non authentifiée. |
-| `callback_port` | Port de rappel local de `1` à `65535`. Par défaut, le port de `redirect_uri`, puis un port éphémère disponible. |
+| `scope` | Portées demandées, séparées par des espaces. Par défaut, la portée indiquée par le serveur lorsqu’il rejette une requête non authentifiée. OpenCode transmet à nouveau la portée accordée lors du renouvellement du token. |
+| `callback_port` | Port de rappel local de `1` à `65535`. Par défaut, OpenCode utilise le port de `redirect_uri` en priorité, puis celui d’un client enregistré lors d’une connexion précédente, puis un port éphémère disponible. |
 | `redirect_uri` | URI de bouclage préenregistrée dont le chemin et le port atteignent l’écouteur de rappel local. La définir désactive CIMD. |
 | `auth_server_metadata_url` | URL du document de métadonnées OAuth ou OpenID Connect du serveur d’autorisation. À définir lorsque le serveur MCP ne publie pas de métadonnées de ressource protégée indiquant son serveur d’autorisation. |
 

@@ -114,10 +114,12 @@ Les noms d’action V2 sont des chaînes, donc les plugins peuvent en définir d
 | `websearch` | Requête de recherche |
 | `generate_image` | Modèle d’image sélectionné sous la forme `providerID/modelID`, plus `#variant` lorsqu’il est défini |
 | `external_directory` | Limite canonique du répertoire externe, se terminant normalement par `/*` |
-| `<server>_<tool>` | `*` pour un outil MCP ; les caractères non pris en charge dans les deux noms deviennent `_` |
+| `<server>_<tool>` | `*` pour un outil MCP ; dans les deux noms, les lettres, les chiffres, `_` et `-` sont conservés et tout autre caractère devient `_` |
 | `opencode_list_mcp_resources` | Nom du serveur MCP |
 | `opencode_read_mcp_resource` | `<server>:<uri>` |
 | `execute` | `*` ; un refus désactive Code Mode et présente ses outils directement. Les outils imbriqués continuent d’appliquer leurs propres règles. |
+
+Les noms d’action MCP conservent les traits d’union. Ainsi, les outils d’un serveur nommé `mcp-atlassian` correspondent au motif `mcp-atlassian_*`, et non à `mcp_atlassian_*`.
 
 Par exemple, autorisez un skill et refusez tous les autres :
 

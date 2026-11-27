@@ -16,6 +16,18 @@ Explain how authentication works in this project
 
 Appuyez sur **Shift+Enter**, **Ctrl+Enter**, **Alt+Enter** ou **Ctrl+J** pour une nouvelle ligne. Pendant qu’OpenCode travaille, **Enter** pilote la session active ; appuyez sur **Ctrl+X**, puis **Enter** pour mettre le prompt en file d’attente.
 
+## Projets et répertoires
+
+OpenCode recherche les fichiers et exécute les commandes shell dans le répertoire depuis lequel vous le lancez. Les répertoires d’un même dépôt Git, y compris ses worktrees, appartiennent à un seul projet. Un répertoire non géré par un système de contrôle de version constitue un projet à part entière.
+
+Indiquez un répertoire pour démarrer dans un autre projet :
+
+```bash
+opencode ~/code/another-project
+```
+
+Appuyez sur **Ctrl+O** pour ouvrir la liste des sessions et des projets récents. Sur un projet, appuyez sur **Right** pour afficher ses worktrees, puis sur **Ctrl+N** dans cette liste pour en créer un.
+
 ## Contexte
 
 Saisissez `@` pour rechercher un fichier, puis sélectionnez-le pour joindre ce fichier au prompt. Continuez à taper après `@` pour affiner les résultats.
@@ -68,7 +80,9 @@ Appuyez sur **Ctrl+X**, puis **A** pour choisir un agent, ou lancez `/agents`. A
 
 ## Sessions
 
-Appuyez sur **Ctrl+X**, puis **N** pour démarrer une nouvelle session. Appuyez sur **Ctrl+X**, puis **L** ou lancez `/sessions` pour revenir à une session existante ; **Ctrl+O** ouvre ensemble les sessions et projets récents.
+Chaque session est une conversation distincte, avec son propre historique et son propre répertoire. Lancez `/new` ou appuyez sur **Ctrl+X**, puis **N**, pour démarrer une session dédiée à une autre tâche. Vos sessions précédentes restent accessibles. Une nouvelle session démarre dans le répertoire depuis lequel vous avez lancé OpenCode, ou dans celui de la session en cours si [`session.new_location`](/cli/config#sessions) est réglé sur `inherit`.
+
+Appuyez sur **Ctrl+X**, puis **L**, ou lancez `/sessions` pour revenir à une session existante. Dans cette liste, **Ctrl+A** permet de basculer entre les sessions du répertoire courant et celles de tous les projets. **Ctrl+O** ouvre une liste commune aux sessions et aux projets récents.
 
 Les onglets sont activés par défaut. Utilisez **Ctrl+Tab** et **Ctrl+Shift+Tab** pour passer de l’un à l’autre, **Ctrl+X** puis **W** pour en fermer un, et **Ctrl+Shift+T** pour rouvrir le dernier onglet fermé.
 

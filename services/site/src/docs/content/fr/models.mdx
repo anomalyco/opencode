@@ -229,7 +229,7 @@ Ici, `openai/coding-default` est la référence sélectionnable et `gpt-6.1-sol`
 
 OpenCode reconnaît `text`, `regex` et `lark`. Les autres noms de format de models.dev sont ignorés sans retirer le modèle ni ses outils. Si un proxy devant un modèle de catalogue rejette les outils libres, définissez `capabilities.freeform` sur `[]` pour ce modèle.
 
-Ce sont des hypothèses de repli, pas des capacités détectées. Définissez des valeurs `capabilities` et `limit` exactes lorsque vous les connaissez ; les valeurs explicites remplacent les replis. Ajoutez `disabled: true` pour masquer un modèle du catalogue disponible :
+Ces valeurs servent de repli et ne reflètent pas des capacités détectées. Indiquez les valeurs exactes de `capabilities` et de `limit` si vous les connaissez : elles remplacent les valeurs de repli. Le compactage automatique utilise `limit.input`, sans dépasser `limit.context` (voir [Fenêtre de contexte](/compaction#window)). Ajoutez `disabled: true` pour masquer un modèle dans le catalogue des modèles disponibles :
 
 ```jsonc title="opencode.jsonc"
 {

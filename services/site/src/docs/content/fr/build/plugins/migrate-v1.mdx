@@ -86,7 +86,31 @@ Le contexte V2 est à la fois un client OpenCode et l’API de plugin. La plupar
 
 `ctx.location` décrit la Location dans laquelle l’instance du plugin s’est chargée, et non celle des sessions ou des événements que le plugin peut observer. Lisez les données de session ou d’événement lorsque cette distinction compte.
 
-Le contexte expose bien plus de domaines que le tableau ne le liste, notamment les catalogues, commandes, intégrations, serveurs MCP, références, skills, stockage, VCS, worktrees et la recherche web. Consultez le [contexte complet des plugins](/build/plugins/server#api).
+Le contexte expose d’autres domaines que ceux du tableau, notamment les commandes, les intégrations, les serveurs MCP, les références, les skills, le stockage, le VCS, les worktrees et la recherche web. Consultez la [référence complète du contexte des plugins](/build/plugins/server#api).
+
+### Migrer le domaine du catalogue
+
+Les anciennes versions des plugins publiaient les fournisseurs et les modèles via `ctx.catalog`. OpenCode expose désormais `ctx.provider` et `ctx.model` dans deux domaines distincts. Un plugin qui appelle `ctx.catalog.transform` ne peut donc pas se charger.
+
+| Ancienne API du catalogue | Équivalent actuel |
+| --- | --- |
+| `ctx.catalog.transform(draft => …)` | `ctx.provider.transform(editor => …)` et `ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)` | `editor.update(id, fn)` sur `ctx.provider` |
+| `draft.model.update(providerID, modelID, fn)` | `editor.update(providerID, modelID, fn)` sur `ctx.model` |
+| `ctx.catalog.reload()` | `ctx.provider.reload()` et `ctx.model.reload()` |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+Consultez [Fournisseurs](/build/plugins/server#providers) et [Modèles](/build/plugins/server#models) pour la référence complète des API des éditeurs.
 
 ## Enregistrer les hooks dans `setup`
 
