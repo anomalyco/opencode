@@ -475,46 +475,60 @@ const layer = (options: Options) =>
           )
         }),
         provision,
-        connect: (workspaceID) =>
-          Effect.sync(() => {
-            const acquire = Effect.acquireRelease(
-              Effect.gen(function* () {
-                while (true) {
-                  const connection = yield* locks.withLock(workspaceID)(
-                    Effect.gen(function* () {
-                      const connection = yield* open(workspaceID)
-                      if (!connection) return undefined
-                      yield* Ref.set(connection.lastActivity, yield* Clock.currentTimeMillis)
-                      yield* Ref.update(connection.active, (active) => active + 1)
-                      return connection
-                    }),
-                  )
-                  if (connection) return connection
-                  // Provision takes the same lock. Release it first, then recheck in case destroy/create raced again.
-                  yield* provision(workspaceID)
-                }
-              }),
-              (connection) =>
-                locks.withLock(workspaceID)(
+        connect: Effect.fn("Workspace.connect")(function* (workspaceID) {
+          const row = yield* find(workspaceID)
+          const providerOptions = row
+            ? yield* registry.get(row.provider).pipe(
+                Effect.map((driver) => driver.options),
+                Effect.catchTag("WorkspaceDriver.ProviderNotFound", () => Effect.undefined),
+              )
+            : undefined
+          const home =
+            providerOptions !== undefined && "home" in providerOptions
+              ? providerOptions.home
+              : Effect.suspend(() => connections.get(workspaceID)?.environment.options?.home ?? Effect.undefined)
+          const acquire = Effect.acquireRelease(
+            Effect.gen(function* () {
+              while (true) {
+                const connection = yield* locks.withLock(workspaceID)(
                   Effect.gen(function* () {
-                    const active = yield* Ref.updateAndGet(connection.active, (count) => count - 1)
-                    const now = yield* Clock.currentTimeMillis
-                    yield* Ref.set(connection.lastActivity, now)
-                    if (active > 0) return
-                    // Connection was detached by re-attach or destroy while this op ran: close only its own scope.
-                    if (connections.get(workspaceID) !== connection) return yield* closeScope(connection.scope)
-                    yield* touch(workspaceID, now)
-                    yield* kv.set(idleKey(workspaceID), now + idleThreshold)
-                    if (keepWarm === 0) yield* dropConnection(workspaceID)
-                    yield* scheduleNextIdle()
+                    const connection = yield* open(workspaceID)
+                    if (!connection) return undefined
+                    yield* Ref.set(connection.lastActivity, yield* Clock.currentTimeMillis)
+                    yield* Ref.update(connection.active, (active) => active + 1)
+                    return connection
                   }),
-                ),
-            )
-            return EnvironmentDriver.lazy(
-              Effect.map(acquire, (connection) => connection.environment),
-              { module: "Workspace", spawnDescription: `Failed to wake workspace ${workspaceID}` },
-            )
-          }),
+                )
+                if (connection) return connection
+                // Provision takes the same lock. Release it first, then recheck in case destroy/create raced again.
+                yield* provision(workspaceID)
+              }
+            }),
+            (connection) =>
+              locks.withLock(workspaceID)(
+                Effect.gen(function* () {
+                  const active = yield* Ref.updateAndGet(connection.active, (count) => count - 1)
+                  const now = yield* Clock.currentTimeMillis
+                  yield* Ref.set(connection.lastActivity, now)
+                  if (active > 0) return
+                  // Connection was detached by re-attach or destroy while this op ran: close only its own scope.
+                  if (connections.get(workspaceID) !== connection) return yield* closeScope(connection.scope)
+                  yield* touch(workspaceID, now)
+                  yield* kv.set(idleKey(workspaceID), now + idleThreshold)
+                  if (keepWarm === 0) yield* dropConnection(workspaceID)
+                  yield* scheduleNextIdle()
+                }),
+              ),
+          )
+          return EnvironmentDriver.lazy(
+            Effect.map(acquire, (connection) => connection.environment),
+            {
+              module: "Workspace",
+              spawnDescription: `Failed to wake workspace ${workspaceID}`,
+              options: { ...providerOptions, home },
+            },
+          )
+        }),
         exists: Effect.fn("Workspace.exists")(function* (workspaceID) {
           return (yield* find(workspaceID)) !== undefined
         }),

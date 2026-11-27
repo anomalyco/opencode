@@ -1,4 +1,5 @@
 import fs from "node:fs/promises"
+import path from "node:path"
 import { describe, expect } from "bun:test"
 import { Effect, Layer, Sink, Stream } from "effect"
 import { ChildProcess, ChildProcessSpawner } from "effect/process"
@@ -56,8 +57,40 @@ describe("no execution plane", () => {
     Effect.sync(() => {
       const unavailable = Environment.local(EnvironmentUnavailable.spawner)
       expect(unavailable.local).toBe(false)
+      expect(unavailable.path).toBe(path.posix)
       expect(unavailable.rg).toBeUndefined()
       expect(unavailable.home).toBeUndefined()
+    }),
+  )
+
+  it.effect("always resolves path in Environment.make and omits rg and home on Environment.unavailable", () =>
+    Effect.sync(() => {
+      expect(Environment.make(Environment.ID.make("default"), makeMemoryDriver()).path).toBe(path)
+      expect(Environment.make(Environment.ID.make("posix"), makeMemoryDriver(), { path: path.posix }).path).toBe(
+        path.posix,
+      )
+      const wrkDefault = Environment.workspace(Workspace.ID.make("wrk_path"), makeMemoryDriver())
+      expect(wrkDefault.path).toBe(path.posix)
+      expect(wrkDefault.shell).toBe("sh")
+      expect(wrkDefault.rg).toBeDefined()
+
+      const wrkCustom = Environment.workspace(Workspace.ID.make("wrk_custom"), {
+        ...makeMemoryDriver(),
+        options: { shell: "/bin/dash", rg: undefined },
+      })
+      expect(wrkCustom.shell).toBe("/bin/dash")
+      expect(wrkCustom.rg).toBeUndefined()
+
+      const wrkHostShell = Environment.workspace(Workspace.ID.make("wrk_host_shell"), {
+        ...makeMemoryDriver(),
+        options: { shell: undefined },
+      })
+      expect(wrkHostShell.shell).toBeUndefined()
+
+      const gone = Environment.unavailable(Environment.ID.make("gone"), new Error("gone"))
+      expect(gone.path).toBe(path.posix)
+      expect(gone.rg).toBeUndefined()
+      expect(gone.home).toBeUndefined()
     }),
   )
 })
@@ -97,6 +130,39 @@ describe("ripgrep environment", () => {
       expect(matches).toEqual([])
       expect(spawned).toHaveLength(1)
       expect(ChildProcess.isStandardCommand(spawned[0]) && spawned[0].command).toBe("rg")
+    }),
+  )
+
+  it.effect("refuses search on local environments when rg is unset", () =>
+    Effect.gen(function* () {
+      const env = Environment.make(Environment.localID, makeMemoryDriver(), { local: true })
+      const layer = AppNodeBuilder.build(Ripgrep.node, [
+        RipgrepBinary.node.replace(
+          Layer.succeed(RipgrepBinary.Service, RipgrepBinary.Service.of({ filepath: Effect.succeed("/host/bin/rg") })),
+        ),
+      ])
+      const error = yield* Effect.flatMap(Ripgrep.Service, (rg) =>
+        rg.grep({ environment: env, cwd: "/workspace", pattern: "needle", limit: 10 }),
+      ).pipe(Effect.provide(layer), Effect.flip)
+      expect(error.message).toBe("Search is not available on local yet.")
+    }),
+  )
+
+  it.effect("refuses search on workspaces that explicitly set rg to undefined", () =>
+    Effect.gen(function* () {
+      const remote = Environment.workspace(Workspace.ID.make("wrk_no_rg"), {
+        ...makeMemoryDriver(),
+        options: { rg: undefined },
+      })
+      const layer = AppNodeBuilder.build(Ripgrep.node, [
+        RipgrepBinary.node.replace(
+          Layer.succeed(RipgrepBinary.Service, RipgrepBinary.Service.of({ filepath: Effect.succeed("/host/bin/rg") })),
+        ),
+      ])
+      const error = yield* Effect.flatMap(Ripgrep.Service, (rg) =>
+        rg.grep({ environment: remote, cwd: "/workspace", pattern: "needle", limit: 10 }),
+      ).pipe(Effect.provide(layer), Effect.flip)
+      expect(error.message).toBe("Search is not available on wrk_no_rg yet.")
     }),
   )
 })

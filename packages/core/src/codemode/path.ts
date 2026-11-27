@@ -32,7 +32,7 @@ const flavor = (module: path.PlatformPath) => {
 // A run gets `path` only with the session's Location (see `CodeModeTool.create`).
 const workingContext = Effect.gen(function* () {
   const cwd = yield* Environment.CurrentWorkingDirectory
-  if (cwd) return { directory: cwd.absolute, rules: cwd.environment.path ?? path }
+  if (cwd) return { directory: cwd.absolute, rules: cwd.environment.path }
   const location = yield* Effect.serviceOption(Location.Service)
   if (Option.isSome(location)) return { directory: location.value.directory, rules: path }
   return yield* Effect.die(new Error("Code Mode path needs a Location."))

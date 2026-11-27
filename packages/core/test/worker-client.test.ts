@@ -89,6 +89,7 @@ describe("EnvironmentDriver.lazy", () => {
       expect(env.local).toBe(false)
       expect(env.shell).toBe("sh")
       expect(yield* env.home!).toBe("/home/sandbox")
+      expect(events).toEqual([])
 
       yield* env.files.write("/hello.txt", text("world"))
       expect(utf8.decode((yield* env.files.read("/hello.txt")).bytes)).toBe("world")

@@ -89,6 +89,7 @@ const environment = Layer.succeed(
   Environment.Service.of({
     id: Environment.localID,
     local: true,
+    path,
     files,
     spawner: Environment.makeMemoryDriver().spawner,
   }),
