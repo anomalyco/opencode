@@ -1,0 +1,146 @@
+---
+title: "JavaScript"
+description: "用 @opencode/client 将应用连接到 OpenCode 服务器，这是 OpenCode HTTP API 的 TypeScript 客户端。"
+---
+
+`@opencode/client` 是 OpenCode HTTP API 的 TypeScript 客户端。当你的应用通过网络连接到 OpenCode 服务器时，请使用它。它的原生类型和方法与 [API 参考](/api)由同一份契约生成。插件 RPC 类型来自导入的 RPC 定义。
+
+## 安装
+
+```sh
+bun add @opencode/client
+```
+
+## 创建客户端
+
+使用服务器 URL 创建客户端，然后调用按 API 资源分组的方法：
+
+```ts
+import { OpenCode } from "@opencode/client"
+
+const client = OpenCode.make({
+  baseUrl: "http://localhost:4096",
+})
+
+const session = await client.session.create({
+  location: { directory: "/workspace" },
+})
+
+await client.session.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+## 请求头与请求选项
+
+通过 `headers` 向 `OpenCode.make` 传入默认的身份验证或应用请求头。你也可以提供自定义的 `fetch` 实现。每个操作都接受请求选项作为最后一个参数，用于 `AbortSignal` 或单次请求的请求头。事件订阅是例外：它们只接受订阅者本地的取消操作，并使用基础客户端的请求头。
+
+```ts
+const client = OpenCode.make({
+  baseUrl: "https://opencode.example.com",
+  headers: {
+    authorization: `Bearer ${process.env.OPENCODE_TOKEN}`,
+  },
+})
+
+await client.session.list(undefined, {
+  signal: AbortSignal.timeout(10_000),
+})
+```
+
+## 流式事件
+
+流式端点返回异步可迭代对象：
+
+```ts
+for await (const event of client.event.subscribe()) {
+  console.log(event.type)
+}
+```
+
+原生和 RPC 事件订阅者在每个客户端上共享一个惰性连接。创建客户端、句柄或可迭代对象不会打开事件连接；开始消费时才会连接。结束迭代或中止订阅者只会结束该迭代器。最后一个订阅者离开时会关闭连接。共享源会等待活动订阅者接受每个事件；消费者应在执行慢速工作之前缓冲。
+
+订阅只推送实时事件，不会重放，也不会自动重连。事件源失败时，当前订阅会全部结束，恢复后需要重新订阅。较晚加入的原生订阅者会收到当前的 `server.connected` 标记，但不会收到过去的业务事件。
+
+传入 `types` 可以只接收部分事件类型。事件会相应地获得类型，而 `server.connected` 始终会送达，因此经过筛选的订阅者仍能知道何时需要重新同步。筛选在客户端内部的共享连接上进行。
+
+```ts
+for await (const event of client.event.subscribe({ types: ["config.updated"] })) {
+  // event.type is "config.updated" | "server.connected"
+}
+```
+
+## 插件 RPC
+
+导入插件的共享契约并将其传给 `client.rpc`：
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Acme } from "opencode-acme-plugin/rpc"
+
+const acme = client.rpc(Acme)
+const result = await acme.search(
+  { query: "hello" },
+  { location: { directory: "/workspace" }, signal: AbortSignal.timeout(10_000) },
+)
+
+const unsubscribe = acme.events.on("updated", (event) => {
+  console.log(event.type, event.location.directory, event.data.text)
+})
+```
+
+第二个可选的方法参数包含 `location`、`signal` 和 `headers`，与插件定义的输入相互独立。省略 location 时会遵循原生请求的默认值：先是基础 location 请求头，然后是服务器的工作目录。构造子客户端时不会选择任何 location。
+
+方法会从定义推断参数和结果。Schema 解析属于契约边界；调用方发送可接受的输入表示，处理程序收到解析后的值。Promise 客户端接受 Standard Schema 或普通 JSON Schema 定义，并且不会在本地运行 schema 解析器：服务器会返回已经解析和转换的输出。Effect Schema 定义需要使用 Effect 客户端。
+
+声明的方法错误会像其他 Promise 客户端端点的错误一样拒绝，捕获到的错误保持无类型。带类型的子客户端会移除通用的 HTTP RPC 错误包装。保留的 `rpc.*` 框架故障仍是普通 RPC 故障，而无关的身份验证、传输和协议错误保持其常规客户端表示。
+
+RPC 订阅使用本地名称，并接收该 RPC 在所有位置上的事件。请检查必需的 `event.location` 进行筛选。`events.subscribe` 与原生异步可迭代 API 一致：
+
+```ts
+for await (const event of acme.events.subscribe("updated")) {
+  console.log(event.data.text)
+}
+```
+
+`events.on` 是同一数据源上的便捷包装。它返回取消订阅函数；异步回调会按顺序等待。回调或数据源失败会被记录，并结束该监听器。原生和带类型的订阅都会收到相同的常规 `rpc.<rpcID>.<event>` 信封，事件数据为直接对象。实时订阅不会重放错过的事件。
+
+服务器插件必须已配置并实现该 RPC；导入定义不会注册它。定义和注册 API 请参阅[插件 RPC](/build/plugins/rpc)。任何 HTTP 客户端也可以调用通用的 `POST /api/rpc/{rpcID}/{method}` 路由，传入 `{ "input": ... }` 并收到 `{ "output": ... }`。省略的 input/output 字段表示没有值。
+
+## 本地后台服务
+
+主要的客户端入口与浏览器兼容，不包含本地进程管理。在 Node 应用中，请从 `@opencode/client/service` 导入原生的 Promise 服务 API。
+
+- `Service.discover()` 返回一个健康的已注册端点，而不启动进程。
+- `Service.ensure()` 返回兼容的服务，必要时启动一个。
+- `Service.stop()` 停止已注册的精确服务实例。
+- `Service.headers(endpoint)` 为客户端创建身份验证请求头。
+
+```ts
+import { OpenCode } from "@opencode/client"
+import { Service } from "@opencode/client/service"
+
+const endpoint = await Service.ensure()
+const client = OpenCode.make({
+  baseUrl: endpoint.url,
+  headers: Service.headers(endpoint),
+})
+
+const info = await client.server.info()
+```
+
+`Service.ensure()` 接受可选的注册文件、版本、服务命令和 `onStart` 回调。`version` 接受确切值或兼容性判断函数：
+
+```ts
+const endpoint = await Service.ensure({
+  file: "/var/run/opencode/service.json",
+  version: (version) => version.startsWith("2."),
+  command: ["opencode", "serve", "--service"],
+  onStart(reason, previousVersion) {
+    console.log(reason, previousVersion)
+  },
+})
+```
+
+省略这些选项时，会使用标准注册路径和 `opencode serve --service` 命令。

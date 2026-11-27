@@ -1,0 +1,138 @@
+---
+title: "API 概览"
+description: "使用个人 API 密钥或服务账号密钥对 OpenCode Console API 进行身份验证，并限定每个密钥可以做什么。"
+---
+
+Console API 让你的脚本和集成能够调用模型并导出用量。每个请求都需要通过 API 密钥进行身份验证。
+
+```bash
+curl --fail-with-body "https://opencode.ai/inference/v1/models" \
+  --header "Authorization: Bearer oc_sk_..."
+```
+
+| API                                       | 端点                                         |
+| ----------------------------------------- | ------------------------------------------------- |
+| [模型](/console/api/models)             | `https://opencode.ai/console/api/v1/models`       |
+| [推理](/console/api/inference)       | `https://opencode.ai/inference/...`               |
+| [提供商](/console/api/providers)       | `https://opencode.ai/inference/custom/...`        |
+| [用量导出](/console/api/usage-export) | `https://opencode.ai/console/api/v2/usage/export` |
+
+## API 密钥
+
+团队成员和服务账号都可以拥有 API 密钥。请将密钥作为 bearer token 发送。
+
+```text
+Authorization: Bearer oc_sk_...
+```
+
+|                  | 个人 API 密钥                                       | 服务账号密钥                                                      |
+| ---------------- | ------------------------------------------------------ | ------------------------------------------------------------------------ |
+| 创建者       | 任意成员，为自己创建                             | 所有者和管理员                                                        |
+| 创建位置       | **Account › Personal API keys**                        | **Settings › Service accounts**                                          |
+| 身份         | 创建它的成员                              | 该服务账号                                                      |
+| 用量计入 | 成员的[预算](/console/budgets#member-budgets) | 服务账号的[预算](/console/budgets#service-account-budgets) |
+| 适用场景         | 你自己的脚本和 [Harness](/console/harnesses)   | CI、共享机器和集成                                    |
+
+- 每个密钥仅在一个团队中有效，创建时选择该团队。无需额外的团队请求头。
+- 完整密钥只会在创建后显示一次，之后 Console 只显示其前缀。
+- **Expiration** 是可选的：**Never**、**1 day**、**7 days**、**30 days** 或 **Custom**（1 到 365 天）。过期的密钥无法续期，请创建新密钥。
+
+## 个人 API 密钥
+
+个人密钥以你的身份行事。你的角色、[预算](/console/budgets#member-budgets)和模型规则都会对它生效。
+
+1. 从账号菜单打开 **Account**，找到 **Personal API keys**。
+2. 点击 **Add API key**。
+3. 选择 **Workspace**、**Key name**，以及可选的 **Expiration**。所有者和管理员还需选择 **Permissions**。
+4. 点击 **Create**，然后复制密钥。
+
+```text
+oc_sk_1a2b3c4d5e6f_...
+```
+
+密钥会遵循你当前对团队的访问权限。如果你的角色发生变化，密钥能做的事情也会随之变化。如果团队强制执行 [SSO](/console/sso#sso-enforcement)，密钥只会在你拥有有效 SSO 会话时有效，所有者除外。
+
+## 服务账号
+
+服务账号是团队中的非人类成员，拥有自己的 API 密钥、用量和[预算](/console/budgets#service-account-budgets)。请为自动化使用服务账号，这样用量就不会绑定到某个人。所有者和管理员负责管理它们。
+
+1. 打开 **Settings › Service accounts**，点击 **Add Service Account**，然后为它命名，例如 `CI Pipeline`。
+2. 打开该服务账号，点击 **Add API Key**。
+3. 选择 **Key name**、可选的 **Expiration** 和 **Permissions**，然后点击 **Create**。
+4. 复制密钥。
+
+```bash
+export SERVICE_API_KEY="oc_sk_..."
+```
+
+所有者和管理员之后可以在密钥操作菜单中点击 **Edit…**，重命名服务账号密钥或更改其权限。
+
+## 权限
+
+每个密钥都有一个权限级别，在创建时通过 **Permissions** 选择。
+
+| 权限    | 允许的操作                                                                               |
+| -------------- | ------------------------------------------------------------------------------------ |
+| **All**        | 该成员或服务账号能做的所有事情，**This account's API keys** 除外。 |
+| **Restricted** | 仅限你选择的资源。                                                       |
+| **Read only**  | 对所有资源的读取权限。密钥可以列出模型，但不能调用模型。            |
+
+密钥的权限永远不会超过它代表的身份。个人密钥受成员当前角色的限制，服务账号密钥受[服务账号能做的事](#limitations)限制。
+
+### 受限密钥
+
+将每个资源设为 **None**、**Read** 或 **Write**。**Write** 包含 **Read**。
+
+| 资源                    | 级别                |
+| --------------------------- | --------------------- |
+| **Models**                  | **Read**、**Request** |
+| **Usage**                   | **Read**              |
+| **Budgets**                 | **Read**、**Write**   |
+| **Members**                 | **Read**、**Write**   |
+| **Providers**               | **Read**、**Write**   |
+| **Billing**                 | **Read**、**Write**   |
+| **Workspace settings**      | **Read**、**Write**   |
+| **SSO**                     | **Read**              |
+| **Service accounts**        | **Read**              |
+| **This account's API keys** | **Write**             |
+
+**Models › Read** 可以列出模型，**Models › Request** 还会通过[推理](/console/api/inference)和[提供商](/console/api/providers) API 调用模型。例如，只调用模型的密钥需要：
+
+```text
+Permissions: Restricted
+Models:      Request
+```
+
+在引入细粒度权限之前创建为 **Inference only** 的密钥，会显示为 **Restricted**，并将 **Models** 设为 **Request**。
+
+### 谁可以授予什么
+
+- **成员**只能创建用于列出和调用模型的个人密钥。Console 会显示“This key can list and call models as you.”，而不是权限选项。
+- **所有者和管理员**可以为其个人密钥授予 **All**、**Restricted** 或 **Read only**，但不超过自己的角色。默认为 **Restricted**，并将 **Models** 设为 **Request**。如果之后被降级，其密钥的权限也会相应缩小。
+- **服务账号密钥**默认为 **All**。所有者和管理员选择其权限。
+
+### 限制
+
+有些操作始终需要有人在 Console 中登录，使用密钥创建密钥也受到严格限制。
+
+- 任何 API 密钥都不能更改 SSO 设置或删除团队。
+- 服务账号密钥不能邀请成员、更改角色、移除成员、管理计费、更改团队设置、管理模型，也不能创建或移除服务账号，即使拥有 **All** 也不行。
+- **This account's API keys** 仅在服务账号密钥上可用，且 **All** 不包含它。拥有该权限的密钥只能为其所属的服务账号创建和撤销密钥。新密钥必须是 **Restricted**，权限不得超过创建它的密钥，并且不能包含 **This account's API keys**。
+- 个人密钥永远无法获得 **This account's API keys**，任何 API 密钥都无法创建或撤销个人 API 密钥。
+
+超出密钥权限的请求会返回 HTTP `403`。
+
+## 撤销
+
+| 密钥                 | 谁可以撤销      | 位置                                                                             |
+| ------------------- | ---------------------- | --------------------------------------------------------------------------------- |
+| 个人 API 密钥    | 拥有它的成员 | **Account › Personal API keys**，然后点击 **Revoke**                                  |
+| 个人 API 密钥    | 所有者和管理员      | **Settings › Members** 中的成员页面，位于 **API Keys** 下                   |
+| 服务账号密钥 | 所有者和管理员      | **Settings › Service accounts** 中的服务账号页面，位于 **API Keys** 下 |
+
+密钥也会被自动撤销：
+
+- 离开或被移出团队，或通过 [SCIM](/console/scim) 取消预配，会撤销该成员在团队中创建的所有密钥，包括服务账号密钥。同一服务账号上的其他密钥继续有效。
+- 移除服务账号会撤销其所有密钥。
+
+已撤销和已过期的密钥会立即失效，并返回 HTTP `401`。

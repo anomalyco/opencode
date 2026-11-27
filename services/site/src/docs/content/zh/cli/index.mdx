@@ -1,0 +1,95 @@
+---
+title: "CLI 简介"
+description: "启动 OpenCode 终端界面，在脚本和 CI 中运行提示词，并管理共享的后台服务。"
+---
+
+在项目中运行 CLI，即可打开全屏终端界面：
+
+```bash
+opencode
+```
+
+传入一个目录，可以在其他项目中工作：
+
+```bash
+opencode ~/code/my-project
+```
+
+推荐使用以下终端：
+
+- [Ghostty](https://ghostty.org)
+- [WezTerm](https://wezterm.org)
+- [Alacritty](https://alacritty.org)
+- [Kitty](https://sw.kovidgoyal.net/kitty/)
+
+终端支持真彩色（Truecolor）时，主题颜色最为准确；不支持的终端会使用可用调色板中的近似颜色。
+
+## 自动化
+
+使用 `opencode run` 可以直接提交提示词，而不打开交互界面。它专为脚本、CI 任务以及其他需要在终端中直接获取模型输出的工作流设计。
+
+```bash
+opencode run "Explain this repository"
+```
+
+## Mini
+
+使用 `opencode mini` 启动 OpenCode 的精简交互界面，代替全屏 TUI。
+
+```bash
+opencode mini
+```
+
+运行 `opencode mini --help` 可以查看其会话、模型、agent、提示词和重放选项。
+
+## 后台服务
+
+默认情况下，OpenCode 会为你的用户账号发现或启动一个共享的后台服务器。每个本地 OpenCode 客户端都会连接到该服务器，由它负责会话、配置、集成、权限和工具执行。
+
+使用 `--standalone` 运行私有服务器，或使用 `--server` 连接指定的服务器 URL：
+
+```bash
+opencode --standalone
+opencode --server http://localhost:4096
+```
+
+要让 CLI 命令默认使用私有服务器而不是启动共享服务，请禁用共享服务：
+
+```bash
+opencode service set disabled true
+opencode
+```
+
+这会停止正在运行的后台服务。`--server` 仍可连接到显式选择的服务器；`opencode service start` 仍可显式启动共享服务。要恢复自动使用服务，请运行 `opencode service unset disabled`。配对需要共享服务，在禁用期间不可用。
+
+共享服务的诊断请参阅[故障排查](/troubleshooting)，服务器端点请参阅 [API 参考](/api)。
+
+## 路径
+
+输出指定的本地路径，供其他工具使用：
+
+```bash
+opencode debug paths db
+sqlite3 "$(opencode debug paths db)"
+```
+
+可选的选择器接受 `db`、`home`、`data`、`config`、`cache`、`state`、`tmp`、`bin`、`log` 或 `repos`，只输出路径和一个换行。数据库路径会遵循发布通道和 `OPENCODE_DB`；相对的数据库覆盖路径会在数据目录下解析，`:memory:` 则按原样输出。该命令不会启动服务器或打开数据库。
+
+省略选择器会显示带标签的所有路径：
+
+```bash
+opencode debug paths
+```
+
+## 卸载
+
+预览将被移除的文件和安装内容：
+
+```bash
+opencode uninstall --dry-run
+```
+
+运行 `opencode uninstall` 确认移除。OpenCode 会先停止已注册的后台服务和持久终端，然后移除由各 OpenCode 版本和通道共享的全局缓存目录。会话数据、配置和状态永远不会被移除。
+
+- `--force`（`-f`）会跳过确认；适用于非交互式移除。
+- 包管理器安装会使用检测到的包管理器。Curl 安装会输出最终命令，供你手动移除可执行文件。
