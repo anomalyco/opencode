@@ -5,8 +5,7 @@ import { Vcs } from "@opencode/schema/vcs"
 import { Schema } from "effect"
 import { createContext, createMemo, onCleanup, type JSX, useContext } from "solid-js"
 import { createStore, reconcile } from "solid-js/store"
-import { safeWatch } from "../util/watch"
-import path from "path"
+import { watchFile } from "../util/watch"
 import { TuiKeybind } from "./keybind"
 
 export interface Interface {
@@ -366,7 +365,7 @@ export function ConfigProvider(props: {
     return save
   }
   const watcher = host?.path
-    ? safeWatch(path.dirname(host.path), () => {
+    ? watchFile(host.path, () => {
         pending = pending
           .then(() => host.get())
           .then(apply)
