@@ -1,0 +1,344 @@
+---
+title: "エージェント"
+description: "Markdown または設定で再利用可能なエージェントを定義します。それぞれにシステムプロンプト、モデル、権限、モードを持たせられます。"
+---
+
+Markdown ファイルを作成すると、再利用可能なエージェントを追加できます。次の例は、メインのエージェントがコードレビューのために起動できる、読み取り専用のレビューアを追加します。
+
+```md title=".opencode/agents/reviewer.md"
+---
+description: Reviews changes for correctness and regressions
+mode: subagent
+model: anthropic/claude-sonnet-5-5#high
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+  - action: shell
+    resource: "*"
+    effect: deny
+---
+
+Review the current changes. List findings in severity order with file and line references.
+```
+
+このエージェントを使うよう、プライマリエージェントに次のように依頼します。
+
+```text
+Use the reviewer subagent to review my current changes.
+```
+
+エージェントは、システムプロンプト、モデルの優先設定、権限、表示情報をまとめた名前付きのアシスタントプロファイルです。
+
+## 配置場所
+
+Markdown のエージェントは、すべてのプロジェクトで使う場合はグローバルに、特定のプロジェクトで使う場合はプロジェクト内に保存します。
+
+```text
+~/.config/opencode/agents/<name>.md
+.opencode/agents/<name>.md
+```
+
+OpenCode は、カレントディレクトリからプロジェクトルートまでプロジェクトの `.opencode` ディレクトリを検出します。ネストしたパスはエージェント ID の一部になります。
+
+```text
+.opencode/agents/team/reviewer.md  →  team/reviewer
+```
+
+## 形式
+
+### Markdown
+
+frontmatter は `agents` の設定エントリと同じフィールドを受け付けます。Markdown の本文がエージェントの `system` プロンプトになります。
+
+```md title=".opencode/agents/explainer.md"
+---
+description: Explains code without changing it
+mode: subagent
+---
+
+Explain the relevant code with short examples. Do not edit files.
+```
+
+V1 の frontmatter フィールドは非推奨です。これらのフィールドを使用しているファイルがどのように読み込まれるかは、[エージェントファイル](/migrate-v1#agent-files)を参照してください。
+
+### JSONC
+
+任意の [OpenCode 設定ファイル](/config)の `agents` の下にエージェントを定義します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agents": {
+    "reviewer": {
+      "description": "Reviews current changes",
+      "mode": "subagent",
+      "system": "Report findings in severity order.",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}
+```
+
+## 選択
+
+セッションでエージェントが選択されていない場合に使用するプライマリエージェントを設定します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "writer",
+  "agents": {
+    "writer": { "mode": "primary" },
+  },
+}
+```
+
+デフォルトに指定するエージェントは、定義済みで、非表示ではなく、プライマリとして使える必要があります。条件を満たさなければ、OpenCode は `build` を使用し、それも使えなければ、一覧に表示されるプライマリ対応のエージェントのうち最初のものを使用します。この設定を変更しても、既存のセッションに保存されているエージェントは変わりません。
+
+## モード
+
+エージェントを実行する場所に応じて `mode` を設定します。
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "mode": "subagent" },
+  },
+}
+```
+
+| モード     | 動作                                                                                     |
+| ---------- | ---------------------------------------------------------------------------------------- |
+| `primary`  | セッションのメインエージェントとして実行されます。新しいカスタムエージェントのデフォルトです。 |
+| `subagent` | `subagent` ツールを通じて子セッションでのみ実行されます。                                |
+| `all`      | プライマリエージェントとしてもサブエージェントとしても実行されます。                     |
+
+サブエージェントは、独自の子セッションで新しいコンテキストを使って実行されます。常にバックグラウンドで実行され、子がアイドルになると親にレポートが届き、その後の作業の各ラウンドの後にも再度届きます。親エージェントの `subagent` 権限が、起動できるエージェントを制御します。子は自身に設定された権限を使用します。
+
+```jsonc
+{
+  "agents": {
+    "orchestrator": {
+      "permissions": [
+        { "action": "subagent", "resource": "*", "effect": "deny" },
+        { "action": "subagent", "resource": "reviewer", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+## 組み込み
+
+OpenCode の一覧に表示される組み込みエージェントは次のとおりです。
+
+| エージェント | モード | 用途 |
+| --- | --- | --- |
+| **Build**（`build`） | `primary` | デフォルトのコーディングエージェント。ツールとワークスペース外へのアクセスはデフォルトで許可されます。機密性の高い環境ファイルの読み取りは承認を求めます。 |
+| **Plan**（`plan`） | `primary` | 通常のプロジェクトファイルを編集せずに調査と計画を行います。依頼されれば OpenCode のプランファイルを書き込むことがあり、シェルコマンドは引き続き権限で制御されます。 |
+| **General**（`general`） | `subagent` | 幅広いツールアクセスで調査や複数ステップの作業を担当しますが、さらにサブエージェントを起動することはできません。 |
+| **Explore**（`explore`） | `subagent` | ファイルを編集せずにコードや Web の情報を検索・読み取りします。 |
+
+同じ ID を使うと組み込みエージェントを上書きできます。
+
+```jsonc
+{
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git push *", "effect": "ask" },
+      ],
+    },
+  },
+}
+```
+
+非表示の `compaction`、`title`、`summary` エージェントはメンテナンスを行い、直接選択することはできません。V2 に組み込みの `scout` エージェントはありません。
+
+## マージ
+
+エージェントの定義は設定の順序でマージされます。後のスカラー値が前の値を置き換え、リクエストのマップはキーごとにマージされ、権限ルールは追加されます。
+
+```jsonc
+{
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+  ],
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git status", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+グローバルの `permissions` はエージェント固有のルールより前に適用されるため、後のエージェントルールでそれらを細かく調整できます。
+
+## オプション
+
+### Description
+
+`description` にはエージェントの目的を記述します。起動するエージェントを選ぶ際にモデルが参照するため、サブエージェントには追加してください。
+
+```yaml
+description: Reviews database migrations for safety
+```
+
+### Mode
+
+`mode` は `primary`、`subagent`、`all` を受け付けます。新しいカスタムエージェントで省略した場合は `primary` になります。
+
+```yaml
+mode: all
+```
+
+### Model
+
+`model` は `provider/model` を使用し、任意で `#variant` を付けられます。
+
+```yaml
+model: anthropic/claude-sonnet-5-5#high
+```
+
+JSON 設定では展開形式も使用できます。
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "model": {
+        "providerID": "anthropic",
+        "model": "claude-sonnet-5-5",
+        "variant": "high",
+      },
+    },
+  },
+}
+```
+
+- サブエージェントは設定されたモデルを使用し、設定がない場合は親セッションのモデルを継承します。
+- セッションは選択したモデルを別に保存します。ID でプライマリエージェントを選択しても、そのモデルは変わりません。
+
+### System
+
+`system` はエージェントのシステムプロンプトを設定します。空でない値を指定すると、そのエージェントのプロバイダーの基本プロンプトが置き換わります。
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "system": "Review only. Do not modify files." },
+  },
+}
+```
+
+プロジェクトの指示、スキル、参照、その他の指示ソースは引き続き追加されます。Markdown エージェントでは、このテキストを frontmatter の `system` フィールドではなく本文に記述します。
+
+### Permissions
+
+`permissions` はマッチングルールの順序付きリストです。
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "permissions": [
+        { "action": "*", "resource": "*", "effect": "deny" },
+        { "action": "read", "resource": "src/**", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+| フィールド | 意味                                                                                     |
+| ---------- | ---------------------------------------------------------------------------------------- |
+| `action`   | ツールまたは権限のアクション。ワイルドカードに対応。                                     |
+| `resource` | アクションが照合するパス、コマンド、エージェント ID、その他の値。ワイルドカードに対応。 |
+| `effect`   | `allow`、`ask`、`deny`。                                                                 |
+
+最後に一致したルールが優先されるため、広いルールを例外より前に置きます。よく使うアクションは次のとおりです。
+
+| アクション            | 対象                       |
+| --------------------- | -------------------------- |
+| `shell`               | シェルコマンド             |
+| `edit`                | edit、write、patch ツール  |
+| `subagent`            | 子エージェント             |
+| `read`, `glob`, `grep` | ローカルの検索ツール      |
+| `webfetch`, `websearch` | Web ツール               |
+| `skill`               | スキルの読み込み           |
+
+`read`、`edit`、`external_directory` のリソースでは、OpenCode が `~` と `$HOME` を展開します。
+
+```jsonc
+{ "action": "read", "resource": "~/notes/**", "effect": "allow" }
+```
+
+シェルのリソースは生のコマンドテキストのままで、これらの値は展開されません。
+
+### Steps
+
+`steps` はモデルのステップ数の正の上限を設定します。
+
+```yaml
+steps: 8
+```
+
+最後のステップでは、OpenCode はモデルにツールを渡さず、テキストで要約するよう求めます。新しいユーザー入力があると、使えるステップ数が上限まで戻ります。
+
+### Hidden
+
+`hidden` は、通常の一覧、インタラクティブな検出、サブエージェントのカタログからエージェントを除外します。
+
+```yaml
+hidden: true
+```
+
+これは表示を制御するもので、セキュリティではありません。動作を制限するには権限を使用します。
+
+### Color
+
+`color` は 6 桁の 16 進数値でエージェントの UI カラーを設定します。
+
+```yaml
+color: "#ff6b6b"
+```
+
+### Disabled
+
+`disabled` は、設定の読み込みのその時点で組み込みエージェントまたはカスタムエージェントを削除します。
+
+```jsonc
+{
+  "agents": {
+    "plan": { "disabled": true },
+  },
+}
+```
+
+### Request
+
+`request` はエージェントごとのヘッダーと JSON ボディのオーバーレイを受け付けます。
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "request": {
+        "headers": { "x-agent": "reviewer" },
+        "body": { "temperature": 0.1 },
+      },
+    },
+  },
+}
+```
+
+<Callout type="warning">
+  V2 のセッションランナーはこれらの値を保持しますが、まだモデルリクエストとともに送信しません。有効なリクエスト設定は、代わりにプロバイダー、モデル、モデルバリアントで構成してください。
+</Callout>
+
+新しい V2 のエージェント設定では、`temperature`、`top_p`、`prompt`、`permission`、`tools`、`disable`、`maxSteps` などの従来のトップレベルフィールドを使用しないでください。

@@ -1,0 +1,338 @@
+---
+title: "V1 からプラグインを移行する"
+description: "V1 プラグインのツールとフックを V2 のプラグイン API に移植します。"
+---
+
+プラグインの設定は自動的に正規化できますが、プラグインの実装コードは移植する必要があります。V1 のプラグイン関数は、ツールとフックを含む 1 つのオブジェクトを返します。V2 のプラグインは `id` と `setup(ctx)` を持つ定義をデフォルトエクスポートし、`setup` がコンテキストを通じてフック、transform、ツール、購読を登録します。
+
+<Callout type="warning">
+  V1 のプラグイン実装は V2 では動作しません。ファイルを移動したり設定エントリの名前を変えたりするだけでは足りません。
+</Callout>
+
+## プラグインの設定を移行する
+
+`plugin` を `plugins` に改名します。パッケージとオプションのタプルはオブジェクトに置き換えます。
+
+```jsonc
+// V1
+{
+  "plugin": [
+    "opencode-example-plugin",
+    ["./plugin/local.ts", { "enabled": true }]
+  ]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+V2 は `.opencode/plugin/` と `.opencode/plugins/` の両方からローカルのプラグインを検出します。V2 のファイルには `.opencode/plugins/` を使用してください。設定するローカルパスはディレクトリを指す必要があります。上記の例では、移植した実装を `./plugin/local/index.ts` に移動します。`./plugin/local.ts` を設定した場合は、ログに警告を出してスキップされます。移動するときは補助モジュールもプラグインの隣に置いてください。ローカルのプラグインとパッケージのプラグインは同じ実装 API を使用します。
+
+## エントリポイントを置き換える
+
+パッケージのインポートを変更し、エクスポートするプラグイン関数を `Plugin.define` に置き換え、初期化を `setup` に移します。
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const ExamplePlugin: Plugin = async ({ directory, project, client }) => {
+  await client.app.log({
+    body: { service: "example", level: "info", message: `Loaded for ${project.id}` },
+  })
+
+  return {
+    // V1 tools and hooks
+  }
+}
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("last-project", ctx.location.project.id)
+    console.log(`Loaded for ${ctx.location.directory}`)
+  },
+})
+```
+
+すべての V2 プラグインには安定した `id` が必要です。プラグインのストレージはこの ID でスコープされ、ステータスや診断でもこの ID がプラグインを識別します。公開するプラグインは、対象とする OpenCode のリリースと互換性のある `@opencode/plugin` のバージョンに依存する必要があります。
+
+## コンテキストを移行する
+
+V2 のコンテキストは OpenCode クライアントであり、プラグイン API でもあります。ほとんどの操作は、別の `client` プロパティではなくドメインごとにグループ化されています。
+
+| V1                                      | V2                                                                  |
+| --------------------------------------- | ------------------------------------------------------------------- |
+| `directory`                             | `ctx.location.directory`                                            |
+| `project`                               | `ctx.location.project`                                              |
+| `client`                                | `ctx.session`、`ctx.permission`、`ctx.agent` などのドメインのメソッド |
+| プラグインのオプションの引数            | `ctx.options`                                                       |
+| 返される `dispose()` フック             | `setup` が返すクリーンアップ関数                                    |
+| 返される `event` フック                 | `ctx.event.subscribe()`                                             |
+| 返される設定、モデル、ツールの変更      | ドメインの `transform(...)`                                         |
+| `$` の Bun シェルヘルパー               | プラグインが使用するプロセス API をインポートして管理               |
+
+`ctx.location` は、このプラグインインスタンスが読み込まれた location を表します。プラグインが観測するすべてのセッションやイベントの location ではありません。その区別が重要な場合は、セッションまたはイベントのデータを読み取ってください。
+
+コンテキストは表に挙げたより多くのドメインを公開しており、カタログ、コマンド、連携、MCP サーバー、参照、スキル、ストレージ、VCS、worktree、Web 検索などが含まれます。[完全なプラグインコンテキスト](/build/plugins/server#api)を参照してください。
+
+## `setup` でフックを登録する
+
+V1 は文字列のキーでフックを返します。V2 は、その操作を所有するドメインに各フックを登録します。コールバックは、別々の `input` と `output` オブジェクトではなく、1 つの可変イベントを受け取ります。
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const GuardPlugin: Plugin = async () => ({
+  "tool.execute.before": async (input, output) => {
+    if (input.tool === "read" && output.args.filePath.includes(".env")) {
+      throw new Error("Do not read .env files")
+    }
+  },
+  "shell.env": async (_input, output) => {
+    output.env.COMPANY_ENV = "development"
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "company.guard",
+  async setup(ctx) {
+    await ctx.tool.hook("execute.before", (event) => {
+      const input = event.input as { filePath?: string }
+      if (event.tool === "read" && input.filePath?.includes(".env")) {
+        throw new Error("Do not read .env files")
+      }
+    })
+
+    await ctx.shell.hook("create.before", (event) => {
+      event.env.COMPANY_ENV = "development"
+    })
+  },
+})
+```
+
+登録はプラグインの存続期間中有効で、アンロード時に破棄されます。返された登録を保持するのは、`registration.dispose()` でその特定のフックや transform を早めに削除する必要がある場合だけです。
+
+次の表で、各 V1 フックに最も近い V2 API を確認できます。
+
+| V1 フック                              | V2 API                                                       |
+| -------------------------------------- | ------------------------------------------------------------ |
+| `event`                                | `ctx.event.subscribe()`                                      |
+| `dispose`                              | `setup` が返すクリーンアップ関数                              |
+| `config`                               | 影響を受けるドメインの transform                              |
+| `tool` マップ                          | `ctx.tool.transform(...)`                                    |
+| `auth`                                 | `ctx.integration.transform(...)` と連携の API                 |
+| `provider`                             | `ctx.provider.transform(...)` と `ctx.model.transform(...)`  |
+| `chat.message`                         | `ctx.session.hook("prompt", ...)`                            |
+| `chat.params`                          | `ctx.session.hook("context", ...)`                           |
+| `chat.headers`                         | `ctx.session.hook("model.request", ...)` または `"http.request"` |
+| `permission.ask`                       | `ctx.permission.hook("evaluate", ...)`                       |
+| `command.execute.before`               | 意図に応じて、コマンドの transform またはプロンプトのフック   |
+| `tool.execute.before`                  | `ctx.tool.hook("execute.before", ...)`                       |
+| `tool.execute.after`                   | `ctx.tool.hook("execute.after", ...)`                        |
+| `shell.env`                            | `ctx.shell.hook("create.before", ...)`                       |
+| `tool.definition`                      | `ctx.tool.transform(...)`                                    |
+| `experimental.chat.system.transform`   | `ctx.session.hook("context", ...)` で `event.system` を編集   |
+| `experimental.chat.messages.transform` | `ctx.session.hook("context", ...)` で `event.messages` を編集 |
+| `experimental.session.compacting`      | `ctx.session.hook("compaction", ...)`                        |
+
+表は移行先の目安です。名前を置き換えるだけで移行できるとは限りません。特に、V2 の `prompt` フックはプロンプトを受け付けて永続化する前に実行され、`context` はエージェントがモデルにリクエストを送る直前に実行されます。すべての種類のモデルリクエストに変更を適用するには、`context`、`compaction`、`generate`、`title` を個別に登録してください。
+
+すべての実験的な V1 フックに直接対応する V2 フックがあるわけではありません。`experimental.compaction.autocontinue`、`experimental.provider.small_model`、`experimental.text.complete` を使用するプラグインは、内部のライフサイクルの前提を保つのではなく、V2 のセッション、プロバイダー、モデル、イベントの API に照らして再評価してください。
+
+`command.execute.before` にも 1 対 1 のグローバルフックはありません。プラグインがそのコマンドを所有する場合は、`ctx.command.transform` でコマンドを登録します。本当の意図が、コマンドやその他のプロンプトソースから送信されるプロンプトを変更することである場合は、プロンプトのフックを使用します。
+
+## リクエストのフックを移行する
+
+V2 は、プロンプトの受け付け、モデルから見えるコンテキスト、セマンティックなモデルのオプション、ネイティブ HTTP を分離しています。プラグインに必要な最も狭い層を選んでください。
+
+```ts title="V1"
+import type { Plugin } from "@opencode-ai/plugin"
+
+export const RequestPlugin: Plugin = async () => ({
+  "chat.params": async (_input, output) => {
+    output.temperature = 0.2
+    output.maxOutputTokens = 8_000
+  },
+  "chat.headers": async (_input, output) => {
+    output.headers["x-plugin"] = "review"
+  },
+  "experimental.chat.system.transform": async (_input, output) => {
+    output.system.push("Focus on correctness.")
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "review-request",
+  async setup(ctx) {
+    await ctx.session.hook("context", (event) => {
+      event.system.push({ type: "text", text: "Focus on correctness." })
+      event.options.temperature = 0.2
+      event.options.maxTokens = 8_000
+    })
+
+    await ctx.session.hook("model.request", (event) => {
+      event.headers["x-plugin"] = "review"
+    })
+  },
+})
+```
+
+`event.options` にはセマンティックなプロバイダーのオプションを使用します。モデルリクエストのヘッダーと生のリクエスト設定には `model.request` を使用し、`http.request` または `http.response` は、プラグインがネイティブのプロバイダー HTTP のやり取りを必要とする場合にのみ使用します。プロバイダー固有のフックでは、`ctx.session.hook` の 3 番目の引数として `{ providerID: "..." }` を渡せます。
+
+## カスタムツールを移行する
+
+V1 は従来の `tool()` ヘルパーで構築した `tool` マップを返します。V2 は同期の `ctx.tool.transform` エディタを通じてツール定義を登録します。ツールのスキーマは JSON Schema を使用し、実行は構造化されたコンテンツを返します。
+
+```ts title="V1"
+import { tool } from "@opencode-ai/plugin"
+
+export const ToolsPlugin = async () => ({
+  tool: {
+    greeting: tool({
+      description: "Create a greeting",
+      args: { name: tool.schema.string() },
+      async execute(args) {
+        return `Hello ${args.name}!`
+      },
+    }),
+  },
+})
+```
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "greeting",
+  async setup(ctx) {
+    await ctx.tool.transform((editor) => {
+      editor.add({
+        name: "greeting",
+        description: "Create a greeting",
+        input: {
+          type: "object",
+          properties: { name: { type: "string" } },
+          required: ["name"],
+          additionalProperties: false,
+        },
+        async execute(input) {
+          return { content: `Hello ${(input as { name: string }).name}!` }
+        },
+      })
+    })
+  },
+})
+```
+
+Transform は再生可能な状態の編集です。コールバックは同期で軽量にし、1 回限りの副作用を含めないでください。外部データは登録前に読み込み、コールバックに取り込み、そのデータが変わったときはドメインの `reload()` メソッドを呼び出します。後のプラグインの transform は以前の変更を認識し、更新、置き換え、削除できます。
+
+同じ transform のパターンが V1 の `config` と `provider` のフックを置き換えますが、V2 は可変のグローバル設定オブジェクトを 1 つ公開するわけではありません。変更は、それを所有するドメインに登録します。`ctx.agent`、`ctx.provider`、`ctx.model`、`ctx.command`、`ctx.integration`、`ctx.mcp`、`ctx.reference`、`ctx.skill`、`ctx.tool`、`ctx.vcs`、`ctx.websearch`、`ctx.worktree` です。認証方法は連携に属し、プロバイダーの transform はソースの定義とプロバイダーの設定を提供し、モデルの transform はアクティブなプロバイダーのモデル全体に制限と上書きを適用します。
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("anthropic", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+})
+
+await ctx.model.transform((editor) => {
+  editor.list("anthropic").forEach((model) => {
+    if (!model.capabilities.tools) editor.remove(model.providerID, model.id)
+  })
+})
+```
+
+## イベントとクリーンアップを移行する
+
+V1 の `event` コールバックは、公開されているサーバーのイベントストリームの非同期購読になります。`setup` が返すクリーンアップ関数から中止します。
+
+```ts title="V2"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "notifications",
+  setup(ctx) {
+    const controller = new AbortController()
+
+    void (async () => {
+      for await (const event of ctx.event.subscribe({ signal: controller.signal })) {
+        if (event.type === "session.idle") console.log("Session completed")
+      }
+    })()
+
+    return () => controller.abort()
+  },
+})
+```
+
+タイマー、サブプロセス、ソケットなど、プラグインが所有するリソースにはクリーンアップ関数を使用します。フックと transform の登録はプラグインにスコープされ、自動的にクリーンアップされます。
+
+## オプションと永続状態を移行する
+
+オプションは `ctx.options` から読み取ります。状態がプラグインに属する場合は、独自のグローバルファイルを作るのではなく `ctx.storage` を使用します。その JSON の値は永続的で、プラグインにスコープされます。
+
+```ts
+const strict = ctx.options.strict === true
+await ctx.storage.set("settings", { strict })
+const settings = await ctx.storage.get("settings")
+```
+
+## 1 つのパッケージで V1 と V2 をサポートする
+
+パッケージは、1 つのデフォルトエクスポートから両方の実装を一時的に公開できます。V1 は `server()` を、V2 は `setup()` を呼び出します。API は別々のままで、この形がフックを自動的に変換することはありません。
+
+```ts title="src/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default {
+  ...Plugin.define({
+    id: "example",
+    async setup(ctx) {
+      await ctx.tool.hook("execute.before", () => {
+        console.log("A tool is about to run")
+      })
+    },
+  }),
+  async server() {
+    return {
+      "tool.execute.before": async () => {
+        console.log("A tool is about to run")
+      },
+    }
+  },
+}
+```
+
+V1 のオブジェクトのエントリポイントは OpenCode `1.18.29` 以降でサポートされています。より古い V1 のリリースをサポートする場合は、別々のパッケージバージョンまたはエントリポイントを使用し、サポート対象と称する最も古いリリースでテストしてください。サポート期間が終わったら V1 の実装を削除してください。
+
+## 移植したプラグインを検証する
+
+各プラグインについて、次のことを行います。
+
+1. その ID とソースがアクティブなプラグイン一覧に表示されることを確認する。
+2. 登録したすべてのフック、transform、ツール、コマンド、イベント購読を実行する。
+3. プラグインを再読み込みまたは削除して、クリーンアップを確認する。
+4. クリーンなプロジェクトで、プラグインのオプションと永続状態をテストする。
+5. 公開パッケージの場合は、ワークスペースにリンクしたコピーだけでなく、インストールしたパッケージをテストする。
+
+完全な Promise API については[サーバー](/build/plugins/server)、Effect のエントリポイントについては [Effect プラグイン](/build/plugins/effect)、カスタムメソッドとイベントについては[プラグイン RPC](/build/plugins/rpc)、ターミナル UI については [TUI プラグイン](/build/plugins/cli)を参照してください。

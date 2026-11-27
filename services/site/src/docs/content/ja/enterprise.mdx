@@ -1,0 +1,118 @@
+---
+title: "エンタープライズ"
+description: "組織のユーザーが OpenCode で使用できるモデル、プロバイダー、連携を制御します。"
+---
+
+[ポリシー](/policies)を使って、組織のマシンで OpenCode が使用できるものを制御します。ユーザーやプロジェクトが変更できないよう、管理設定に置きます。
+
+## 配信
+
+ポリシーはシステム設定ファイルに置きます。
+
+| プラットフォーム | ファイル                                              |
+| ---------------- | ----------------------------------------------------- |
+| macOS            | `/Library/Application Support/opencode/opencode.json` |
+| Linux            | `/etc/opencode/opencode.json`                         |
+| Windows          | `%ProgramData%\opencode\opencode.json`                |
+
+macOS では、MDM を使って `ai.opencode.managed` ドメインの管理対象の環境設定として配信することもできます。[設定の場所](/config#locations)を参照してください。
+
+```jsonc title="/etc/opencode/opencode.json"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+これらのファイルのポリシーはユーザー設定やプロジェクト設定より優先されます。管理者が拒否したものは、ユーザーやリポジトリの設定では許可できません。[優先順位](/policies#precedence)を参照してください。
+
+## 無料モデルをブロックする
+
+サインアウト状態の無料枠を拒否します。それ以外は引き続き機能し、ユーザーは自分のプロバイダーやアカウントを接続できます。
+
+```jsonc
+{
+  "policies": [{ "action": "integration.use", "resource": "opencode", "effect": "deny" }],
+}
+```
+
+無料枠は、アカウントのない `opencode` 連携です。サインイン済みの Console アカウントは `opencode#<account>` であるため、このステートメントの影響を受けません。
+
+Console のワークスペースも無料モデルを提供できます。それらをブロックするには次のようにします。
+
+- 自分のワークスペースでは、Console の Models タブで **Free models** をオフにします。[OpenCode のモデル](/console/providers#opencode-models)を参照してください。
+- すべてのアカウントで無料モデルを非表示にするには、OpenCode サービスで `OPENCODE_DISABLE_FREE_MODELS=1` を設定します。[無料モデル](/models#free-models)を参照してください。
+
+## 組織の Console ワークスペースに限定する
+
+組織の Console ワークスペースだけを許可します。それ以外は接続も使用もできません。
+
+```jsonc
+{
+  "policies": [
+    { "action": "integration.connect", "resource": "*", "effect": "deny" },
+    { "action": "integration.connect", "resource": "opencode", "effect": "allow" },
+    { "action": "integration.use", "resource": "*", "effect": "deny" },
+    { "action": "integration.use", "resource": "opencode#org_01M3CAP8H43Z49CER6NT0Y3ZF1", "effect": "allow" },
+  ],
+}
+```
+
+- `/connect` には OpenCode Console だけが表示され、ユーザーはサインインできます。
+- 利用できるのは組織のワークスペースだけです。無料枠、個人の Console アカウント、他の組織、環境変数で指定した API キー、`opencode.json` で設定したプロバイダーはブロックされます。
+- 組織のワークスペースのモデル、MCP サーバー、Web 検索は利用できます。ポリシーを再配信せずに Console で変更できます。
+
+`org_01M3CAP8H43Z49CER6NT0Y3ZF1` は自分のワークスペースの組織 ID に置き換えます。ワークスペース内の無料モデルもブロックするには、Console で **Free models** をオフにします。
+
+## 承認したプロバイダーだけを許可する
+
+すべてのプロバイダーを拒否し、承認したものだけを許可します。次の例では、社内の OpenAI 互換ゲートウェイだけを許可しています。
+
+```jsonc
+{
+  "providers": {
+    "company-ai": {
+      "package": "@opencode/ai/providers/openai-compatible",
+      "settings": { "baseURL": "https://ai.company.example/v1" },
+    },
+  },
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "company-ai", "effect": "allow" },
+  ],
+}
+```
+
+拒否されたプロバイダーは、誰かが認証情報を持っていても削除されます。[プロバイダー](/policies#providers)を参照してください。
+
+## MCP サーバーとツールを制限する
+
+承認した MCP サーバーだけを許可し、エージェントに実行させたくないツールをブロックします。
+
+```jsonc
+{
+  "policies": [
+    { "action": "mcp.use", "resource": "*", "effect": "deny" },
+    { "action": "mcp.use", "resource": "github", "effect": "allow" },
+    { "action": "tool.use", "resource": "shell:git push *", "effect": "deny" },
+    { "action": "tool.use", "resource": "read:*/.ssh/*", "effect": "deny" },
+  ],
+}
+```
+
+[MCP サーバー、スキル、プラグイン](/policies#mcp-servers-skills-and-plugins)と[ツール](/policies#tools)を参照してください。
+
+## 動作確認
+
+- ユーザーとして `/connect` と `/models` を実行し、許可したものだけが表示されることを確認します。
+- サーバーログで警告を確認します。検証に失敗したステートメントは破棄され、残りは引き続き適用されます。
+- ブロックされたツール呼び出しは `Blocked by configuration policy` で失敗します。
+
+## バージョン
+
+| アクション                                                                     | 必要なバージョン |
+| ------------------------------------------------------------------------------ | ---------------- |
+| `integration.connect`、`integration.use`、`mcp.use`、`skill.use`、`plugin.use` | 2.2.3            |
+| `websearch.use`                                                                | 2.2.6            |
+
+古いクライアントはこれらのステートメントを無視します。

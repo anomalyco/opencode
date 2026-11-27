@@ -1,0 +1,567 @@
+---
+title: "V1 からの移行"
+description: "OpenCode 1 から OpenCode 2 にアップグレードします。プラグイン、サーバー API、ターミナルクライアントの設定に破壊的変更があります。"
+---
+
+OpenCode 1 と OpenCode 2 はどちらも `opencode` コマンドを使用し、デフォルトでは並行してインストールされなくなりました。V2 をインストールする前に、パッケージマネージャーで管理された V1 のインストールを削除してください。V2 の curl インストーラーは V1 のバイナリを置き換えます。
+
+## 破壊的変更
+
+V2 には意図的な破壊的変更が 3 つあります。
+
+- [プラグイン](/build/plugins/migrate-v1)は新しいプラグイン API を使用します。
+- [サーバー API とクライアント](#server-api-and-clients)のインターフェース仕様が変わります。
+- [ターミナルクライアントの設定](/cli/config)は、階層化された `tui.json(c)` ファイルから 1 つのグローバルな `cli.json` ファイルに移行します（自動移行）。
+
+これらの領域以外のサポート対象の V1 機能は、V1 との互換性を保つ想定です。V1 のスキーマが受け付けていたフィールドのうち、V2 に対応するものがなかったものは意図的に無視されます。[受け付けるがサポートしないフィールド](#accepted-but-unsupported-fields)に記載しています。
+
+既存のサポート対象のサーバー設定フィールド、エージェント定義、コマンド定義、スキル、その他の `.opencode/` 内のファイルは、変更なしで動作し続けるはずです。このガイドで説明されているサポート対象の動作が V2 で動作しなくなった場合は、想定された移行要件ではなく互換性のバグとして扱ってください。
+
+<Callout type="tip">
+  サポート対象の V1 機能が V2 で動作しない場合は、[トラブルシューティング](/troubleshooting)の問題報告のガイダンスに従って、互換性の問題を報告してください。
+</Callout>
+
+## V2 をインストールする
+
+[インストール手順](/#cli)に従って V2 のターミナルクライアントをインストールします。
+
+V2 を始める前にすべてを書き換える必要はありません。実用的な移行手順は次のとおりです。
+
+1. 既存の設定とファイルベースの定義をそのまま使う。
+2. V2 を起動し、モデル、認証情報、エージェント、権限、MCP サーバーを確認する。
+3. V1 のプラグイン実装は V2 で動作しないため、プラグインを移植する。
+4. サーバー API を呼び出す連携を移植する。
+5. 準備ができたら、設定を V2 ネイティブの形に変換する。この手順は任意です。
+
+移行を検証する間は、V1 のセットアップのコピーを保持してください。V1 と V2 は同じ設定場所を使用するため、V2 ネイティブ専用の形に変換したファイルを V1 で使わないでください。
+
+## 設定
+
+このセクションでは、JSON/JSONC の設定と、`.opencode/` 以下のファイルベースの定義の両方を扱います。
+
+### 既存の設定を使う
+
+V2 は、既存のシステム、グローバル、プロジェクトの設定を V1 と同じ場所から読み取ります。
+
+```text
+/Library/Application Support/opencode/opencode.json(c)
+/etc/opencode/opencode.json(c)
+%ProgramData%\opencode\opencode.json(c)
+/Library/Managed Preferences/<user>/ai.opencode.managed.plist
+/Library/Managed Preferences/ai.opencode.managed.plist
+~/.config/opencode/opencode.json(c)
+<project>/opencode.json(c)
+<project>/.opencode/opencode.json(c)
+```
+
+V2 は、ソースファイルを書き換えずに、サポート対象の V1 と V2 ネイティブのフィールドをメモリ上で正規化します。既存のサポート対象の V1 設定は動作し続ける想定のため、V2 を試したり採用したりするために変換する必要はありません。
+
+V1 と同様、システム設定と macOS の管理対象の環境設定が最も優先されるため、その設定はグローバルファイルとプロジェクトファイルを上書きします。移行された `enabled_providers` と `disabled_providers` を含む[ポリシー](/policies#precedence)も、グローバルとプロジェクトのポリシーより優先されます。設定を上書きしても、ユーザーがプロバイダー、MCP サーバー、エージェント、プラグインを追加することを防げないため、管理者が強制する制限は `permissions` などの通常の設定ではなく `policies` として表現してください。
+
+### OpenCode に移行を依頼する
+
+V1 の設定形式は引き続きサポートされます。V2 ネイティブの形式は任意で、いくつかの設定がより明示的で扱いやすくなります。
+
+推奨される移行方法は、OpenCode に設定の更新を依頼することです。
+
+```text
+Migrate my OpenCode configuration, including file-based definitions, from the V1 format to the native V2 format.
+Preserve its behavior and all unrelated settings.
+```
+
+OpenCode はファイル全体を検査し、以下の関連する変更を適用し、変更不要な設定を書き換えないようにできます。変換は一度に行う必要はなく、サポート対象の V1 と V2 ネイティブのフィールドはトップレベルで共存できます。両方の形式が同じ正規の値を設定している場合、JSON のキーの順序に関係なく、有効な V2 ネイティブの値が優先されます。
+
+ネストした設定で形式を混在できる範囲は限られています。OpenCode は `mcp`、`compaction`、`experimental` の中では V1 と V2 のフィールドが混在していても認識しますが、個々のエージェント、プロバイダー、コマンド、モデルの中で形式を再帰的に判定することはありません。各エントリ内では形式を統一してください。対応している V1 構文を使うだけなら警告は出ません。不正な値、未対応の旧フィールド、V1 と V2 で競合する値には警告が出ますが、それらとは無関係の有効な設定は引き続き読み込まれます。
+
+### 権限とツール
+
+V1 はツールごとに権限の効果をグループ化します。V2 は 1 つの順序付き `permissions` 配列を使用し、優先順位と例外を明示します。
+
+```jsonc
+// V1
+{
+  "permission": {
+    "bash": {
+      "git push *": "ask"
+    },
+    "edit": "allow"
+  },
+  "tools": {
+    "websearch": false
+  }
+}
+
+// V2
+{
+  "permissions": [
+    { "action": "shell", "resource": "git push *", "effect": "ask" },
+    { "action": "edit", "resource": "*", "effect": "allow" },
+    { "action": "websearch", "resource": "*", "effect": "deny" }
+  ]
+}
+```
+
+権限のアクションも変わりました。`bash` は `shell`、`task` は `subagent`、`write` と `patch` は `edit` になりました。V2 の順序付きルール形式については[権限](/permissions)を参照してください。
+
+V2 では Todo はデフォルトでオフです。有効にするには実験的なフラグを使用します。将来のリリースで変更または削除される可能性があります。[実験的な設定](/config#experimental)を参照してください。
+
+```jsonc
+{
+  "experimental": {
+    "todo": true,
+  },
+}
+```
+
+<Callout type="warning">
+  V1 はプロジェクト外のパスへのアクセス前に確認します。V2 は確認しません。`external_directory` はデフォルトで許可されています。V1 の動作を保つには、`permissions` に `{ "action": "external_directory", "resource": "*", "effect": "ask" }` を追加します。
+</Callout>
+
+### エージェントとモード
+
+単数形の `agent` と非推奨の `mode` のマップは `agents` になります。エージェントのフィールドは V2 設定の他の部分とより一貫した形になります。
+
+```jsonc
+// V1
+{
+  "agent": {
+    "reviewer": {
+      "prompt": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-5-5",
+      "variant": "high",
+      "disable": false,
+      "permission": {
+        "edit": "deny"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "agents": {
+    "reviewer": {
+      "system": "Review for correctness and missing tests.",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "disabled": false,
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" }
+      ]
+    }
+  }
+}
+```
+
+`prompt` は `system`、`disable` は `disabled` になり、別個の `variant` はモデル参照の `#` の後に結合されます。`maxSteps` は `steps` になります。以前の `mode` マップのエントリはプライマリエージェントになります。
+
+エージェントの [`request.body`](/agents#request) は保持されますがモデルには送信されないため、V1 の `temperature`、`top_p`、`options` はそこで効果を持ちません。代わりにモデルのバリアントで設定してください。DeepSeek は thinking をオフにした場合にのみ `temperature` を適用するため、このバリアントでは thinking もオフにします。
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "opencode": {
+      "models": {
+        "deepseek-v4.1-flash": {
+          "variants": [{ "id": "review", "body": { "thinking": { "type": "disabled" }, "temperature": 0.2 } }],
+        },
+      },
+    },
+  },
+  "agents": {
+    "reviewer": { "model": "opencode/deepseek-v4.1-flash#review" },
+  },
+}
+```
+
+プロバイダーの JSON フィールドには `body`、プロバイダーパッケージのオプションには `settings` を使用します。[モデルのオプション](/models#options)を参照してください。
+
+### スナップショット
+
+単数形の `snapshot` フィールドを `snapshots` に改名します。真偽値は変わりません。
+
+```jsonc
+// V1
+{ "snapshot": false }
+
+// V2
+{ "snapshots": false }
+```
+
+### メディア
+
+単数形の `attachment` オブジェクトを `media` に改名します。ネストした画像設定の名前は変わりません。
+
+```jsonc
+// V1
+{ "attachment": { "image": { "auto_resize": true } } }
+
+// V2
+{ "media": { "image": { "auto_resize": true } } }
+```
+
+### MCP サーバー
+
+V2 はサーバーを `mcp.servers` の下にまとめ、`enabled` を逆の `disabled` に置き換え、タイムアウトの用途を分離します。
+
+```jsonc
+// V1
+{
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "@playwright/mcp"],
+      "enabled": true,
+      "timeout": 30000
+    }
+  }
+}
+
+// V2
+{
+  "mcp": {
+    "servers": {
+      "playwright": {
+        "type": "local",
+        "command": ["npx", "@playwright/mcp"],
+        "disabled": false,
+        "timeout": {
+          "catalog": 30000,
+          "execution": 30000
+        }
+      }
+    }
+  }
+}
+```
+
+リモートの OAuth フィールドはスネークケースを使用します。`clientId` は `client_id`、`clientSecret` は `client_secret`、`callbackPort` は `callback_port`、`redirectUri` は `redirect_uri` になります。V1 の `experimental.mcp_timeout` の値は、デフォルトの `mcp.timeout.catalog` と `mcp.timeout.execution` の値にもなります。[MCP サーバー](/mcp-servers)を参照してください。
+
+### コンパクション
+
+V2 は保持するコンテキストのトークンバジェットを `keep` の下にまとめ、予備に分かりやすい名前を付けます。
+
+```jsonc
+// V1
+{
+  "compaction": {
+    "preserve_recent_tokens": 8000,
+    "reserved": 20000
+  }
+}
+
+// V2
+{
+  "compaction": {
+    "keep": {
+      "tokens": 8000
+    },
+    "buffer": 20000
+  }
+}
+```
+
+V1 のトークン数はそのまま引き継がれます。V2 は `"buffer": "15%"` のようにモデルのウィンドウの割合も受け付けるため、ウィンドウサイズの異なるモデルにも対応できます。
+
+`auto` は名前を保ちます。V2 にはネイティブの `tail_turns` や `prune` フィールドはなく、両方の従来のフィールドは警告とともに無視されます。代わりに、直近のコンテキストはトークンバジェットで保持されます。[コンパクション](/compaction)を参照してください。
+
+### スキル
+
+V1 は追加のスキルのパスと URL を分けています。V2 は両方を 1 つの順序付き配列にまとめます。
+
+```jsonc
+// V1
+{
+  "skills": {
+    "paths": ["./team-skills"],
+    "urls": ["https://example.com/skills/"]
+  }
+}
+
+// V2
+{
+  "skills": ["./team-skills", "https://example.com/skills/"]
+}
+```
+
+既存のスキルファイルと `.opencode/skills/` の自動検出は変わりません。[スキル](/skills)を参照してください。
+
+### コマンド
+
+単数形の `command` マップを `commands` に、`subtask` を `subagent` に改名します。別個のモデルの `variant` はモデル参照に結合します。
+
+```jsonc
+// V1
+{
+  "command": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-5-5",
+      "variant": "high",
+      "subtask": true
+    }
+  }
+}
+
+// V2
+{
+  "commands": {
+    "review": {
+      "template": "Review the current changes.",
+      "model": "anthropic/claude-sonnet-5-5#high",
+      "subagent": true
+    }
+  }
+}
+```
+
+`template`、`description`、`agent` は名前を保ちます。従来の `subtask` も引き続き受け付けられます。委任されたコマンドはバックグラウンドで自動的に実行され、結果を親セッションに報告します。既存の Markdown のコマンド定義も引き続きサポートされます。[コマンド](/commands)を参照してください。
+
+### 参照
+
+非推奨の単数形の `reference` マップを `references` に改名します。
+
+```jsonc
+// V1
+{ "reference": { "docs": "../docs" } }
+
+// V2
+{ "references": { "docs": "../docs" } }
+```
+
+V1 もすでに `references` を受け付けるため、ファイルがそれを使用している場合は変更不要です。参照のエントリは同じ形を保ちます。[参照](/references)を参照してください。
+
+### プロバイダー
+
+単数形の `provider` マップを `providers` に改名します。V2 はランタイムパッケージ、エンドポイント、リクエスト設定を分離します。
+
+```jsonc
+// V1
+{
+  "provider": {
+    "acme": {
+      "npm": "@ai-sdk/openai-compatible",
+      "api": "https://llm.example.com/v1",
+      "options": {
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+
+// V2
+{
+  "providers": {
+    "acme": {
+      "package": "aisdk:@ai-sdk/openai-compatible",
+      "settings": {
+        "baseURL": "https://llm.example.com/v1",
+        "apiKey": "{env:ACME_API_KEY}"
+      }
+    }
+  }
+}
+```
+
+V1 の `npm` は `package` になり、AI SDK パッケージには `aisdk:` のプレフィックスが付きます。`api` は `settings.baseURL` になります。プロバイダーの `options` は、リクエストでの役割に応じて `settings`、`headers`、`body` に分かれます。`options.setCacheKey` はプロバイダーの `compatibility.supportsPromptCacheKey` になります。[プロバイダー](/providers)を参照してください。
+
+V2 は 2 つの従来のプロバイダー名前空間を統合しました。
+
+| V1 のプロバイダー ID         | 正規の V2 プロバイダー ID |
+| ---------------------------- | ------------------------- |
+| `azure-cognitive-services`   | `azure`                   |
+| `google-vertex-anthropic`    | `google-vertex`           |
+
+曖昧さのない V1 のプロバイダー、エージェント、コマンド、プロバイダーフィルターのフィールドの移行には、これらの正規の ID が使用されます。共有のトップレベル `model` フィールドは、同じ構文が V2 ネイティブの設定でも有効なため、プロバイダー ID をそのまま保ちます。従来の組み込みプロバイダーを移行するときは、そのフィールドを正規の ID に更新してください。
+
+### モデルとバリアント
+
+モデルはプロバイダーの下にネストされたままですが、いくつかのフィールドがより明示的になります。
+
+- `id` は `modelID` になります。
+- `tool_call` と `modalities` は `capabilities.tools`、`capabilities.input`、`capabilities.output` になります。
+- `status` の `"deprecated"` は `disabled: true` になります。
+- キャッシュのコストは `cache_read` と `cache_write` から `cache.read` と `cache.write` に移ります。
+- プロバイダー固有の `options` は `settings` になります。
+- V1 のバリアントのオブジェクトは、各エントリに `id` を持つ V2 の配列になります。
+
+```jsonc
+// V1
+{
+  "variants": {
+    "high": {
+      "reasoningEffort": "high"
+    }
+  }
+}
+
+// V2
+{
+  "variants": [
+    {
+      "id": "high",
+      "settings": {
+        "reasoningEffort": "high"
+      }
+    }
+  ]
+}
+```
+
+V2 ネイティブのモデルの完全な形については[モデル](/models)を参照してください。
+
+### 直接対応するネイティブのフィールドがないサポート対象のフィールド
+
+`shell`、`model`、`default_agent`、`watcher`、`formatter`、`instructions`、`enterprise`、`tool_output` など、同じ形を保つほとんどのフィールドは移行不要です。
+
+V2 は `lsp` の設定を受け付けて保持しますが、言語サーバーを実行せず、LSP ツールを公開せず、LSP の診断も生成しません。これらの機能に依存するワークフローは、プロジェクトの lint、typecheck、コンパイラのコマンドに置き換えてください。
+
+V1 のプロバイダーフィルターには 1 対 1 で対応する V2 ネイティブの設定フィールドはありませんが、その動作は[ポリシー](/policies)を通じて引き続きサポートされます。
+
+- `enabled_providers` は、内部的には全プロバイダーを拒否するポリシーに変換され、その後にリスト内のプロバイダーを許可するポリシーが続きます。
+- `disabled_providers` は、列挙されたプロバイダーの内部的な拒否ポリシーになります。
+- `autoupdate` は `update` になります。`false` は `"disable"`、`"notify"` は `"notify"`、`true` は `"auto"` に対応します。
+- `small_model` は、組み込みの `title` エージェントの `model` の選択になります。V2 ネイティブの設定では `agents.title.model` を使用してください。
+
+これらのフィールドは V1 の構文のまま保持できます。OpenCode は警告なしで正規化します。
+
+### 受け付けるがサポートしないフィールド
+
+V1 のスキーマは、V2 でサポートされる動作のないフィールドも受け付けていました。V2 はこれらの値を無視し、有効な設定と誤解されないよう警告を出します。
+
+- `logLevel`：OpenCode を起動するときに `OPENCODE_LOG_LEVEL` を使用してください。
+- `server`：V2 のサービスと明示的なサーバーのオプションを使用してください。サーバー API は意図的な破壊的変更です。
+- トップレベルの `subagent_depth`：代わりに `experimental.subagent_depth` を使用してください。
+- `compaction.tail_turns` と `compaction.prune`：V2 は代わりに `compaction.keep.tokens` とチェックポイントベースのコンパクションを使用します。
+- V1 の JSON 設定内のエージェントの `name`。
+- `type` のない、有効のみの V1 の MCP エントリ。
+- V1 の実験的なフィールド `batch_tool`、`openTelemetry`、`primary_tools`、`continue_loop_on_deny`。
+- V1 のプロバイダーのフィールド `id`、`whitelist`、`blacklist`。
+- V1 のプロバイダーモデルのフィールド `release_date`、`attachment`、`reasoning`、`temperature`、`experimental`、`deprecated` 以外の `status`、真偽値の `interleaved`。
+
+これらのフィールドを無視することは意図的であり、互換性の後退ではありません。このガイドの他の場所でサポート対象とされている動作が V2 で保たれない場合は、[トラブルシューティング](/troubleshooting)の問題報告のガイダンスに従ってください。
+
+### エージェントファイル
+
+V1 のエージェントファイルは `agent/`、`agents/`、`mode/`、`modes/` を使用できます。V2 は 4 つのディレクトリすべてを引き続き検出します。推奨される V2 の場所は次のとおりです。
+
+```text
+.opencode/agents/<name>.md
+```
+
+V1 の `mode/` または `modes/` ディレクトリのファイルは、プライマリエージェントを表します。`agents/` に移動するときは、frontmatter に `mode: primary` を追加してください。`agent/` のファイルは、パスから導出される ID を変えずに `agents/` に移動できます。
+
+frontmatter を V2 ネイティブのフィールドに変換するときは、次のようにします。
+
+- Markdown の本文はエージェントのシステム指示として保持する。
+- JSON 設定に現れる `prompt` は `system` に改名する。ファイルの本文には `system` フィールドは不要です。
+- `disable` は `disabled`、`permission` は `permissions` に改名する。
+- `model` と `variant` を `provider/model#variant` として結合する。
+- サンプリングとプロバイダーのオプションは、[上記](#agents-and-modes)のようにモデルのバリアントで設定する。
+
+V1 のエージェントの frontmatter は非推奨ですが、引き続き自動的に変換されます。各ファイルは 1 つの形式として読み込まれます。`permissions`、`request`、`system`、`disabled` のいずれかを使用するファイルは V2 として読み込まれ、その中の V1 のフィールド（`name`、`tools`、`permission`、`temperature` など）はログの警告とともに無視されます。V1 のフィールドを使用するその他のファイルは V1 として読み込まれます。2 つの形式を混在させず、ファイルの frontmatter をまとめて変換してください。[エージェント](/agents)を参照してください。
+
+### コマンドファイル
+
+V1 のコマンドファイルは `command/` または `commands/` を使用できます。V2 は両方を検出します。推奨される場所は次のとおりです。
+
+```text
+.opencode/commands/<name>.md
+```
+
+コマンド名を保つには、`command/` のファイルを `commands/` の下の同じ相対パスに移動します。Markdown の本文はコマンドのテンプレートのままで、`description` と `agent` の frontmatter は名前を保ちます。バックグラウンドへの委任にネイティブの名前を使うには、`subtask` を `subagent` に改名します。frontmatter に別々の `model` と `variant` フィールドがある場合は、バリアントをモデルに追加し、`variant` を削除します。
+
+```yaml
+# V1
+model: anthropic/claude-sonnet-5-5
+variant: high
+subtask: true
+
+# V2
+model: anthropic/claude-sonnet-5-5#high
+subagent: true
+```
+
+[コマンド](/commands)を参照してください。
+
+### スキルファイル
+
+V2 は `.opencode/skill/` と `.opencode/skills/` の両方からスキルを検出します。推奨されるレイアウトは次のとおりです。
+
+```text
+.opencode/skills/<skill-id>/SKILL.md
+```
+
+相対パスのスクリプト、参照、その他の補助ファイルを利用できるよう、`SKILL.md` だけでなくスキルのディレクトリ全体を移動してください。スキル ID を保つため、ディレクトリ名は変えないでください。既存のスキルの frontmatter と Markdown の本文に V2 向けの書き換えは不要です。[スキル](/skills)を参照してください。
+
+### 指示ファイル
+
+既存の `AGENTS.md` ファイルは移動する必要がありません。V2 はグローバルの `~/.config/opencode/AGENTS.md` に加え、カレントディレクトリからホームディレクトリまでの各階層にある `AGENTS.md` を検出します。ホームディレクトリ外のプロジェクトでは、プロジェクトルートまで探索します。
+
+V2 は V1 の `CLAUDE.md` のフォールバックを保ちます。`AGENTS.md` のないディレクトリはその `CLAUDE.md` を使用し、グローバルの `AGENTS.md` がない場合は `~/.claude/CLAUDE.md` が代わりになります。`OPENCODE_DISABLE_CLAUDE_CODE` はすべての `CLAUDE.md` をスキップし、`OPENCODE_DISABLE_CLAUDE_CODE_PROMPT` も同様です（V1 では `~/.claude/CLAUDE.md` のみをスキップしていました）。ツリーのどこかで最初に見つかったファイル名で停止した V1 とは異なり、V2 はディレクトリごとに選択するため、ルートの `AGENTS.md` がネストした `CLAUDE.md` を隠すことはなくなりました。[指示](/instructions)を参照してください。
+
+## ターミナルクライアントの設定
+
+V2 は、階層化された V1 の `tui.json(c)` ファイルを、1 つのグローバルなターミナルクライアント設定ファイルに置き換えます。
+
+```text
+~/.config/opencode/cli.json
+```
+
+このファイルはターミナルクライアントが所有し、バックグラウンドサービスは読み込みません。`cli.json` がない場合、V2 のターミナルクライアントの初回起動時に、サポート対象のグローバルの `tui.json` 設定と保存済みの環境設定を移行し、V1 のファイルは変更しません。V2 のクライアント設定はグローバルであるため、プロジェクトローカルのクライアント設定は移行されません。現在のクライアント設定のリファレンスについては [CLI の設定](/cli/config)を参照してください。
+
+## プラグイン
+
+`plugin` を `plugins` に改名します。パッケージとオプションのタプルはオブジェクトに置き換えます。
+
+```jsonc
+// V1
+{
+  "plugin": ["opencode-example-plugin", ["./plugin/local.ts", { "enabled": true }]]
+}
+
+// V2
+{
+  "plugins": [
+    "opencode-example-plugin",
+    {
+      "package": "./plugin/local",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+V2 は `.opencode/plugin/` と `.opencode/plugins/` の両方からローカルのプラグインを検出します。V2 のファイルには `.opencode/plugins/` を使用してください。設定するローカルパスはディレクトリである必要があるため、移植したプラグインを `./plugin/local/index.ts` に移動します。
+
+<Callout type="warning">
+  V1 のプラグイン実装は V2 では動作しません。ファイルを移動したり設定エントリの名前を変えたりするだけでは足りません。
+</Callout>
+
+エントリポイント、フック、ツール、イベント、パッケージのエクスポートは、専用の[プラグイン移行ガイド](/build/plugins/migrate-v1)で移植してください。
+
+## サーバー API とクライアント
+
+OpenCode 2 では、サーバー API が使いやすくなり、クライアントも一新されました。V1 のサーバー API を呼び出す連携は、V2 の API に移行する必要があります。
+
+リリースされた V2 の API にアクセスするには `@opencode/client` パッケージを使用します。エンドポイント、リクエストの型、レスポンスについては、生成された [API リファレンス](/api)を参照してください。
+
+### サーバーの認証
+
+V2 のサーバーは引き続き HTTP Basic 認証を使用しますが、次の変更があります。
+
+- `OPENCODE_PASSWORD` がパスワードを設定します。`OPENCODE_SERVER_PASSWORD` も引き続き機能します。
+- `OPENCODE_SERVER_USERNAME` はサポートされなくなりました。ユーザー名は常に `opencode` です。
+
+```bash
+# V1
+OPENCODE_SERVER_USERNAME=alice OPENCODE_SERVER_PASSWORD=secret opencode serve
+
+# V2
+OPENCODE_PASSWORD=secret opencode serve
+```
+
+[Web](/cli/web#authentication)を参照してください。
+
+## セットアップを確認する
+
+通常の作業で V2 に依存する前に、プロジェクトでモデル、プロバイダーの認証情報、エージェント、権限、MCP サーバー、プラグインを確認してください。必要な V2 の動作を確認するまで V1 のセットアップを保持し、V2 ネイティブの形に変換した設定を V1 で使わないでください。

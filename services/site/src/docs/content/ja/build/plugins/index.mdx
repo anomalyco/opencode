@@ -1,0 +1,106 @@
+---
+title: "プラグインの作成"
+description: "OpenCode のプラグインを作成します。サーバー部分、TUI 部分、GUI 部分、またはその任意の組み合わせを持つ 1 つのパッケージです。"
+---
+
+プラグインは OpenCode の動作を変更し、新しい機能を追加します。プラグインは、サーバー部分、TUI 部分、GUI 部分、またはその任意の組み合わせを持つ 1 つのパッケージです。
+
+```ts title=".opencode/plugins/example/index.ts"
+import { Plugin } from "@opencode/plugin"
+
+export default Plugin.define({
+  id: "example",
+  async setup(ctx) {
+    await ctx.storage.set("loaded", true)
+  },
+})
+```
+
+既存の OpenCode 1 のプラグインを移行する場合は、[V1 プラグイン移行ガイド](/build/plugins/migrate-v1)に従ってください。
+
+## パッケージの構成
+
+パッケージの各部分は個別にエクスポートします。必要な SDK はすべて、1 つの依存パッケージ `@opencode/plugin` から提供されます。
+
+```json title="package.json"
+{
+  "name": "opencode-acme-plugin",
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./tui": "./src/tui.tsx",
+    "./gui-experimental": "./dist/gui-experimental.cjs",
+    "./rpc": "./src/rpc.ts"
+  },
+  "files": ["src", "dist"],
+  "dependencies": {
+    "@opencode/plugin": "latest"
+  }
+}
+```
+
+- **サーバー**（`.` または `./server`）は `@opencode/plugin` を使って OpenCode サーバーで実行されます。ツール、フック、連携、コマンド、エージェントを追加します。[サーバー](/build/plugins/server)、Effect API については [Effect プラグイン](/build/plugins/effect)を参照してください。
+- **TUI**（`./tui`）は `@opencode/plugin/tui` を使ってターミナル UI で実行されます。[TUI](/build/plugins/cli)を参照してください。
+- **GUI**（`./gui-experimental`）は `@opencode/plugin/gui` を使って、`setup` をすべての OpenCode Desktop ウィンドウで、`main` をデスクトップアプリのメインプロセスで実行します。[GUI](/build/plugins/gui)を参照してください。
+- **RPC**（`./rpc`）は、サーバー部分が実装し、他の部分やクライアントが呼び出す型付きのコントラクトです。[RPC](/build/plugins/rpc)を参照してください。
+
+プラグインの `id` はサーバー部分の `Plugin.define` から取得します。GUI 部分を持ちサーバー部分を持たないパッケージは、パッケージ名（またはローカルディレクトリの名前）を `id` とします。TUI 部分は自身の `id` を宣言し、GUI 部分は宣言せずプラグインの ID を使用します。
+
+## 読み込み
+
+`.opencode/plugins/` の下のプラグインは、上記のローカルの例のように自動的に読み込まれます。公開パッケージや他の場所のプラグインディレクトリを読み込むには、`opencode.json(c)` の `plugins` に追加します。
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "plugins": [
+    "opencode-acme-plugin",
+    "opencode-acme-plugin@1.2.0",
+    "@acme/opencode-plugin",
+    "./plugins/local",
+    "../shared/plugin",
+    "/absolute/path/plugin",
+    "file:///home/me/plugins/local",
+    {
+      "package": "@acme/opencode-plugin",
+      "options": {
+        "agent": "reviewer",
+        "strict": true,
+      },
+    },
+  ],
+}
+```
+
+- 1 つのエントリで各部分が読み込まれます。TUI はサーバーが読み込むプラグインの TUI 部分を読み込み、OpenCode Desktop はグローバルの `opencode.json(c)` にあるプラグインの GUI 部分を読み込みます。
+- TUI 部分だけを持つパッケージは、代わりに [`cli.json`](/cli/plugins) に置きます。
+- `package.json` の `name` と `exports` を持つローカルのプラグインディレクトリは、公開パッケージと同様にそれらを通じて各部分を読み込みます。それらがない場合は、ルートのファイル名を使用します。`.ts`、`.tsx`、`.js` 拡張子の `server`（なければ `index`）、`tui`、`rpc`、および `gui-experimental.cjs`（または `.js`）です。
+- その他の読み込みと設定のオプションについては[プラグインの設定](/plugins)を参照してください。
+
+## 公開
+
+公開するプラグインは、上記の `package.json` を持つ npm パッケージです。各部分はローカルのプラグインと同じデフォルトエクスポートを使用します。
+
+```bash
+npm publish
+```
+
+- 他のプラグインやクライアントが実装を読み込まずに [RPC コントラクト](/build/plugins/rpc)をインポートする場合は、`./rpc` をエクスポートします。
+- 公開する前に GUI のバンドルをビルドし、`files` で含めます。[バンドルのビルド](/build/plugins/gui#build-the-bundle)を参照してください。
+- 対象とする OpenCode のリリースと互換性のあるバージョンを使用し、ワークスペースにリンクしたコピーだけでなく、インストールしたパッケージをテストしてください。新しい API コントラクトを採用したときは、互換性のあるプラグインの更新を公開してください。
+
+<CardGroup cols={2}>
+  <Card title="Server" href="/build/plugins/server">
+    OpenCode サーバーにツール、フック、連携、コマンド、エージェントを追加します。
+  </Card>
+  <Card title="TUI" href="/build/plugins/cli">
+    ターミナル UI にコマンド、ルート、スロット、Markdown レンダラーを追加します。
+  </Card>
+  <Card title="GUI" href="/build/plugins/gui">
+    OpenCode Desktop にパネル、コマンド、設定ページ、ネイティブ連携を追加します。
+  </Card>
+  <Card title="RPC" href="/build/plugins/rpc">
+    サーバー部分から他の部分やクライアントに、型付きのメソッドとイベントを公開します。
+  </Card>
+</CardGroup>

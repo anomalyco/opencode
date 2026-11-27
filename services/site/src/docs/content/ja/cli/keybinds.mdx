@@ -1,0 +1,413 @@
+---
+title: "キーバインド"
+description: "cli.json で OpenCode CLI のキーバインドをカスタマイズし、各コマンドの ID とデフォルトのバインドを確認します。"
+---
+
+バインドは `cli.json` でカスタマイズします。
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "command.palette.show": "ctrl+k",
+    "app.exit": ["ctrl+c", "ctrl+d"],
+    "app.debug": false
+  },
+  "leader": {
+    "timeout": 1500
+  }
+}
+```
+
+1 つのキーには文字列を使用します。
+
+```json
+{
+  "keybinds": {
+    "command.palette.show": "ctrl+k"
+  }
+}
+```
+
+代替のキーはカンマで区切ります。
+
+```json
+{
+  "keybinds": {
+    "app.exit": "ctrl+c,ctrl+d"
+  }
+}
+```
+
+バインドを無効にするには `"none"` または `false` を使用します。
+
+```json
+{
+  "keybinds": {
+    "app.debug": "none",
+    "help.show": false
+  }
+}
+```
+
+イベントの動作にはオブジェクトを使用します。
+
+```json
+{
+  "keybinds": {
+    "prompt.paste": {
+      "key": "ctrl+v",
+      "preventDefault": false
+    }
+  }
+}
+```
+
+`leader` のデフォルトは `ctrl+x` です。他のバインドの `<leader>` はそのキーを参照します。
+
+```json
+{
+  "keybinds": {
+    "leader": "ctrl+space",
+    "model.list": "<leader>m"
+  },
+  "leader": {
+    "timeout": 2000
+  }
+}
+```
+
+不明なコマンド ID は無視されます。
+
+## アプリケーション
+
+| ID                         | デフォルト                | 説明                               |
+| -------------------------- | ------------------------- | ---------------------------------- |
+| `leader`                   | `ctrl+x`                  | キーバインドの組み合わせのリーダーキー |
+| `app.exit`                 | `ctrl+c,ctrl+d,<leader>q` | アプリケーションを終了             |
+| `app.debug`                | `none`                    | デバッグパネルを切り替え           |
+| `app.console`              | `none`                    | コンソールを切り替え               |
+| `app.scrap`                | `none`                    | スクラップ画面を開く               |
+| `app.toggle.animations`    | `none`                    | アニメーションを切り替え           |
+| `app.toggle.file_context`  | `none`                    | ファイルのコンテキストを切り替え   |
+| `app.toggle.diffwrap`      | `none`                    | Diff の折り返しを切り替え          |
+| `app.toggle.paste_summary` | `none`                    | 貼り付けの概要を切り替え           |
+| `command.palette.show`     | `ctrl+p`                  | 利用可能なコマンドを一覧表示       |
+| `help.show`                | `none`                    | ヘルプダイアログを開く             |
+| `docs.open`                | `none`                    | ドキュメントを開く                 |
+| `opencode.settings`        | `none`                    | 設定を開く                         |
+| `server.pair`              | `none`                    | デバイスをペアリング               |
+| `service.restart`          | `none`                    | サービスを再起動                   |
+| `location.reload`          | `none`                    | 設定を再読み込み                   |
+
+## Mini
+
+`app.clear` コマンドは [`opencode mini`](/cli) でのみ機能します。`ctrl+l` を押すと、表示中の画面をクリアしてプロンプトを描き直します。ターミナルはスクロールバックを保持します。
+
+```json title="cli.json"
+{
+  "keybinds": {
+    "app.clear": "ctrl+l"
+  }
+}
+```
+
+| ID          | デフォルト | 説明           |
+| ----------- | ---------- | -------------- |
+| `app.clear` | `ctrl+l`   | 画面をクリア   |
+
+## Diff ビューア
+
+`d`（`diff.switch_source`）を押すと、**All**、**Committed**、**Uncommitted**、**Last turn**（セッション内）から選ぶか、**Base** を選択して比較するブランチを変更できます。選択は TUI を終了するまで記憶されます。初期のスコープは [`cli.json` の `diffs.source`](/cli/config#diffs) で設定します。
+
+スクロール、ページ送り、先頭 / 末尾のショートカットは常に Diff を操作します。キーボードフォーカスの切り替えはありません。ファイルをクリックして開き、フォルダをクリックして展開または折りたたみ、マウスホイールでファイルツリーをスクロールします。
+
+ファイル間の移動には `n` / `p` または `alt+down` / `alt+up`（macOS では Option）を使用します。Diff ビューア内では、Alt のショートカットはセッションタブではなくファイルを移動します。
+
+`m` を押すとファイルをレビュー済みとしてマークし、そのパッチ本体を折りたたみます。すべてのファイルのビューでは、もう一度 `m` を押すとマークを解除してパッチを開きます。単一ファイルのビューでは、レビュー済みにすると自動的に次のファイルへ進みますが、最後のファイルでは折り返さずそのまま留まります。マークの解除では進みません。
+
+サイドバーまたは Diff の見出しでファイルを右クリックすると、**Mark complete**（または **Mark incomplete**）を選べます。これは `m` と同じレビュー状態を変更します。別のファイルをそのメニューから完了しても、そのファイルが選択されたり、現在読んでいるファイルが進んだりすることはありません。
+
+`diff.help` に Shift 付きのキーバインドもあるのは、`?` を入力したときに Shift 修飾キーも通知するターミナルに対応するためです。
+
+| ID                       | デフォルト          | 説明                                     |
+| ------------------------ | ------------------- | ---------------------------------------- |
+| `diff.open`              | `none`              | Diff ビューアを開く                      |
+| `diff.close`             | `escape,q`          | Diff ビューアを閉じる                    |
+| `diff.down`              | `j,down`            | Diff ビューアを下に移動                  |
+| `diff.up`                | `k,up`              | Diff ビューアを上に移動                  |
+| `diff.page.down`         | `pagedown,ctrl+f`   | Diff ビューアを 1 ページ下に移動         |
+| `diff.page.up`           | `pageup,ctrl+b`     | Diff ビューアを 1 ページ上に移動         |
+| `diff.half_page.down`    | `ctrl+d`            | Diff ビューアを半ページ下にスクロール    |
+| `diff.half_page.up`      | `ctrl+u`            | Diff ビューアを半ページ上にスクロール    |
+| `diff.first`             | `gg,home`           | Diff の先頭へ移動                        |
+| `diff.last`              | `shift+g,end`       | Diff の末尾へ移動                        |
+| `diff.next_hunk`         | `]`                 | 次の Diff ハンクへ移動                   |
+| `diff.previous_hunk`     | `[`                 | 前の Diff ハンクへ移動                   |
+| `diff.next_file`         | `n,alt+down`        | 次の Diff ファイルへ移動                 |
+| `diff.previous_file`     | `p,alt+up`          | 前の Diff ファイルへ移動                 |
+| `diff.toggle_file_tree`  | `b`                 | Diff ビューアのファイルツリーを切り替え  |
+| `diff.single_patch`      | `s`                 | 単一パッチのビューを切り替え             |
+| `diff.switch_source`     | `d`                 | Diff のレビューのスコープを選択          |
+| `diff.toggle_view`       | `v`                 | Diff ビューアの分割 / 統合ビューを切り替え |
+| `diff.toggle_fullscreen` | `f`                 | Diff ビューアの全画面を切り替え          |
+| `diff.mark_reviewed`     | `m`                 | 選択した Diff ファイルのレビュー済みを切り替え |
+| `diff.help`              | `?,shift+?,shift+/` | Diff ビューアの他のショートカットを表示  |
+
+廃止された `diff.toggle`、`diff.expand`、`diff.expand_all`、`diff.collapse`、`diff.switch_focus` の設定エントリは引き続き受け付けられますが、ショートカットは登録されなくなりました。
+
+## 外観とナビゲーション
+
+| ID                         | デフォルト      | 説明                                     |
+| -------------------------- | --------------- | ---------------------------------------- |
+| `prompt.editor`            | `<leader>e`     | 外部エディタを開く                       |
+| `theme.switch`             | `none`          | 利用可能なテーマを一覧表示               |
+| `theme.switch_mode`        | `none`          | ライトとダークのテーマモードを切り替え   |
+| `theme.mode.lock`          | `none`          | テーマモードをロックまたは解除           |
+| `session.sidebar.toggle`   | `<leader>b`     | サイドバーを切り替え                     |
+| `pane.focus.left`          | `<leader>left`  | セッションのペインにフォーカス           |
+| `pane.focus.right`         | `<leader>right` | 右のペインにフォーカス                   |
+| `terminal.select`          | `<leader>down`  | ターミナルを選択                         |
+| `terminal.toggle`          | `<leader>t`     | ターミナルのペインを切り替え             |
+| `terminal.close`           | `<leader>up`    | ターミナルのペインを閉じる               |
+| `session.toggle.scrollbar` | `none`          | セッションのスクロールバーを切り替え     |
+| `opencode.status`          | `<leader>s`     | ステータスを表示                         |
+| `opencode.debug`           | `none`          | デバッグ情報を表示                       |
+
+## セッション
+
+| ID                                    | デフォルト              | 説明                                     |
+| ------------------------------------- | ----------------------- | ---------------------------------------- |
+| `session.export`                      | `<leader>x`             | セッションをエディタにエクスポート       |
+| `session.copy`                        | `none`                  | セッションのトランスクリプトをコピー     |
+| `session.copy.id`                     | `none`                  | セッション ID をコピー                   |
+| `session.move`                        | `none`                  | セッションを移動                         |
+| `session.new`                         | `<leader>n`             | 新しいセッションを作成                   |
+| `session.list`                        | `<leader>l`             | すべてのセッションを一覧表示             |
+| `open.menu`                           | `ctrl+o`                | 最近のセッションとプロジェクトを開く     |
+| `session.tab.next`                    | `ctrl+tab,alt+down`     | 次の開いているセッションタブに切り替え   |
+| `session.tab.previous`                | `ctrl+shift+tab,alt+up` | 前の開いているセッションタブに切り替え   |
+| `session.tab.history.back`            | `none`                  | セッションタブの履歴を戻る               |
+| `session.tab.history.forward`         | `ctrl+i`                | セッションタブの履歴を進む               |
+| `session.tab.next_unread`             | `alt+shift+down`        | 次の未読セッションタブに切り替え         |
+| `session.tab.previous_unread`         | `alt+shift+up`          | 前の未読セッションタブに切り替え         |
+| `session.tab.close`                   | `<leader>w`             | 現在のセッションタブを閉じる             |
+| `session.tab.reopen`                  | `ctrl+shift+t`          | 最後に閉じたセッションタブを開き直す     |
+| `session.timeline`                    | `<leader>g`             | セッションのタイムラインを表示           |
+| `session.fork`                        | `none`                  | メッセージからセッションをフォーク       |
+| `session.rename`                      | `ctrl+r`                | セッションの名前を変更                   |
+| `session.delete`                      | `ctrl+d`                | セッションを削除                         |
+| `session.interrupt`                   | `escape`                | 現在のセッションを中断                   |
+| `session.background`                  | `ctrl+b`                | ブロック中のセッションツールをバックグラウンドへ |
+| `session.compact`                     | `<leader>c`             | セッションをコンパクション               |
+| `session.aside`                       | `none`                  | 補足の質問をする                         |
+| `session.cd`                          | `none`                  | 作業ディレクトリを変更                   |
+| `session.queued_prompts`              | `<leader>q`             | キューに入れたプロンプトを管理           |
+| `queued_prompt.undo`                  | `ctrl+u`                | キューに入れたプロンプトを元に戻す       |
+| `queued_prompt.delete`                | `ctrl+d`                | キューに入れたプロンプトを削除           |
+| `session.toggle.exploration_grouping` | `none`                  | 関連するツール呼び出しのグループ化を切り替え |
+| `session.verbosity.cycle`             | `none`                  | トランスクリプトの詳細度を順に切り替え   |
+| `session.child.first`                 | `down`                  | サブエージェントのピッカーを切り替え     |
+| `session.child.next`                  | `right`                 | 次の子セッションへ移動                   |
+| `session.child.previous`              | `left`                  | 前の子セッションへ移動                   |
+| `session.parent`                      | `up`                    | 親セッションへ移動                       |
+| `session.pin.toggle`                  | `ctrl+f`                | セッション一覧でセッションをピン留め / 解除 |
+| `session.quick_switch.1`              | `<leader>1`             | クイックスロット 1 のセッションに切り替え |
+| `session.quick_switch.2`              | `<leader>2`             | クイックスロット 2 のセッションに切り替え |
+| `session.quick_switch.3`              | `<leader>3`             | クイックスロット 3 のセッションに切り替え |
+| `session.quick_switch.4`              | `<leader>4`             | クイックスロット 4 のセッションに切り替え |
+| `session.quick_switch.5`              | `<leader>5`             | クイックスロット 5 のセッションに切り替え |
+| `session.quick_switch.6`              | `<leader>6`             | クイックスロット 6 のセッションに切り替え |
+| `session.quick_switch.7`              | `<leader>7`             | クイックスロット 7 のセッションに切り替え |
+| `session.quick_switch.8`              | `<leader>8`             | クイックスロット 8 のセッションに切り替え |
+| `session.quick_switch.9`              | `<leader>9`             | クイックスロット 9 のセッションに切り替え |
+| `session.tab.select.1`                | `<leader>1,ctrl+1`      | セッションタブ 1 に切り替え              |
+| `session.tab.select.2`                | `<leader>2,ctrl+2`      | セッションタブ 2 に切り替え              |
+| `session.tab.select.3`                | `<leader>3,ctrl+3`      | セッションタブ 3 に切り替え              |
+| `session.tab.select.4`                | `<leader>4,ctrl+4`      | セッションタブ 4 に切り替え              |
+| `session.tab.select.5`                | `<leader>5,ctrl+5`      | セッションタブ 5 に切り替え              |
+| `session.tab.select.6`                | `<leader>6,ctrl+6`      | セッションタブ 6 に切り替え              |
+| `session.tab.select.7`                | `<leader>7,ctrl+7`      | セッションタブ 7 に切り替え              |
+| `session.tab.select.8`                | `<leader>8,ctrl+8`      | セッションタブ 8 に切り替え              |
+| `session.tab.select.9`                | `<leader>9,ctrl+9`      | セッションタブ 9 に切り替え              |
+| `session.tab.select.10`               | `<leader>0,ctrl+0`      | セッションタブ 10 に切り替え             |
+
+## モデルとエージェント
+
+| ID                             | デフォルト  | 説明                                     |
+| ------------------------------ | ----------- | ---------------------------------------- |
+| `stash.delete`                 | `ctrl+d`    | スタッシュのエントリを削除               |
+| `model.dialog.provider`        | `ctrl+a`    | モデルダイアログからプロバイダー一覧を開く |
+| `model.dialog.favorite`        | `ctrl+f`    | モデルのお気に入り状態を切り替え         |
+| `model.dialog.usage`           | `ctrl+u`    | モデルダイアログから使用量の上限を開く   |
+| `model.list`                   | `<leader>m` | 利用可能なモデルを一覧表示               |
+| `model.cycle_recent`           | `f2`        | 次に最近使用したモデル                   |
+| `model.cycle_recent_reverse`   | `shift+f2`  | 前に最近使用したモデル                   |
+| `model.cycle_favorite`         | `none`      | 次のお気に入りモデル                     |
+| `model.cycle_favorite_reverse` | `none`      | 前のお気に入りモデル                     |
+| `mcp.list`                     | `none`      | MCP サーバーを一覧表示                   |
+| `usage.show`                   | `none`      | 使用量の上限を表示                       |
+| `provider.connect`             | `none`      | 連携を接続                               |
+| `agent.list`                   | `<leader>a` | エージェントを一覧表示                   |
+| `agent.cycle`                  | `shift+tab` | 次のエージェント                         |
+| `agent.cycle.reverse`          | `none`      | 前のエージェント                         |
+| `variant.cycle`                | `ctrl+t`    | モデルのバリアントを順に切り替え         |
+| `variant.list`                 | `none`      | モデルのバリアントを一覧表示             |
+| `speed.cycle`                  | `none`      | モデルの速度を順に切り替え               |
+| `speed.list`                   | `none`      | モデルの速度を一覧表示                   |
+
+## セッションのナビゲーション
+
+| ID                              | デフォルト             | 説明                               |
+| ------------------------------- | ---------------------- | ---------------------------------- |
+| `session.page.up`               | `pageup,ctrl+alt+b`    | メッセージを 1 ページ上にスクロール |
+| `session.page.down`             | `pagedown,ctrl+alt+f`  | メッセージを 1 ページ下にスクロール |
+| `session.line.up`               | `ctrl+alt+y`           | メッセージを 1 行上にスクロール    |
+| `session.line.down`             | `ctrl+alt+e`           | メッセージを 1 行下にスクロール    |
+| `session.half.page.up`          | `ctrl+alt+u`           | メッセージを半ページ上にスクロール |
+| `session.half.page.down`        | `ctrl+alt+d`           | メッセージを半ページ下にスクロール |
+| `session.first`                 | `ctrl+g,home,alt+home` | 最初のメッセージへ移動             |
+| `session.last`                  | `ctrl+alt+g,end`       | 最後のメッセージへ移動             |
+| `session.message.next`          | `none`                 | 次のメッセージへ移動               |
+| `session.message.previous`      | `none`                 | 前のメッセージへ移動               |
+| `session.message.user.next`     | `none`                 | 次のユーザーメッセージへ移動       |
+| `session.message.user.previous` | `none`                 | 前のユーザーメッセージへ移動       |
+| `session.messages_last_user`    | `alt+end`              | 最後のユーザーメッセージへ移動     |
+| `messages.copy`                 | `<leader>y`            | メッセージをコピー                 |
+| `session.undo`                  | `<leader>u`            | メッセージを元に戻す               |
+| `session.redo`                  | `<leader>r`            | メッセージをやり直す               |
+| `session.toggle.thinking`       | `none`                 | thinking ブロックの表示を切り替え  |
+
+## プロンプトのコマンド
+
+| ID                            | デフォルト       | 説明                       |
+| ----------------------------- | ---------------- | -------------------------- |
+| `prompt.submit`               | `none`           | プロンプトを送信           |
+| `prompt.queue`                | `<leader>return` | プロンプトをキューに入れる |
+| `prompt.editor_context.clear` | `none`           | エディタのコンテキストをクリア |
+| `prompt.images.view`          | `<leader>i`      | 画像の添付を表示           |
+| `prompt.skills`               | `none`           | スキルのセレクターを開く   |
+| `prompt.stash`                | `none`           | プロンプトをスタッシュ     |
+| `prompt.stash.pop`            | `none`           | スタッシュしたプロンプトを取り出す |
+| `prompt.stash.list`           | `none`           | スタッシュしたプロンプトを一覧表示 |
+
+## 入力の編集
+
+| ID                              | デフォルト                                                                    | 説明                                 |
+| ------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------ |
+| `prompt.clear`                  | `ctrl+c`                                                                      | 入力欄をクリア                       |
+| `prompt.paste`                  | `{"key":"ctrl+v","preventDefault":false}`（`ctrl+v`、`preventDefault: false`） | クリップボードから貼り付け           |
+| `input.submit`                  | `return`                                                                      | 入力を送信                           |
+| `input.newline`                 | `shift+return,ctrl+return,alt+return,ctrl+j`                                  | 入力に改行を挿入                     |
+| `input.move.left`               | `left,ctrl+b`                                                                 | 入力内でカーソルを左に移動           |
+| `input.move.right`              | `right,ctrl+f`                                                                | 入力内でカーソルを右に移動           |
+| `input.move.up`                 | `up`                                                                          | 入力内でカーソルを上に移動           |
+| `input.move.down`               | `down`                                                                        | 入力内でカーソルを下に移動           |
+| `input.select.left`             | `shift+left`                                                                  | 入力内で左を選択                     |
+| `input.select.right`            | `shift+right`                                                                 | 入力内で右を選択                     |
+| `input.select.up`               | `shift+up`                                                                    | 入力内で上を選択                     |
+| `input.select.down`             | `shift+down`                                                                  | 入力内で下を選択                     |
+| `input.line.home`               | `ctrl+a`                                                                      | 入力内で行の先頭へ移動               |
+| `input.line.end`                | `ctrl+e`                                                                      | 入力内で行の末尾へ移動               |
+| `input.select.line.home`        | `ctrl+shift+a`                                                                | 入力内で行の先頭まで選択             |
+| `input.select.line.end`         | `ctrl+shift+e`                                                                | 入力内で行の末尾まで選択             |
+| `input.visual.line.home`        | `alt+a`                                                                       | 入力内で表示行の先頭へ移動           |
+| `input.visual.line.end`         | `alt+e`                                                                       | 入力内で表示行の末尾へ移動           |
+| `input.select.visual.line.home` | `alt+shift+a`                                                                 | 入力内で表示行の先頭まで選択         |
+| `input.select.visual.line.end`  | `alt+shift+e`                                                                 | 入力内で表示行の末尾まで選択         |
+| `input.buffer.home`             | `none`                                                                        | 入力内でバッファの先頭へ移動         |
+| `input.buffer.end`              | `none`                                                                        | 入力内でバッファの末尾へ移動         |
+| `input.select.buffer.home`      | `shift+home`                                                                  | 入力内でバッファの先頭まで選択       |
+| `input.select.buffer.end`       | `shift+end`                                                                   | 入力内でバッファの末尾まで選択       |
+| `input.delete.line`             | `ctrl+shift+d`                                                                | 入力内の行を削除                     |
+| `input.delete.to.line.end`      | `ctrl+k`                                                                      | 入力内で行の末尾まで削除             |
+| `input.delete.to.line.start`    | `ctrl+u`                                                                      | 入力内で行の先頭まで削除             |
+| `input.backspace`               | `backspace,shift+backspace`                                                   | 入力内でバックスペース               |
+| `input.delete`                  | `ctrl+d,delete,shift+delete`                                                  | 入力内の文字を削除                   |
+| `input.undo`                    | `ctrl+-,super+z`                                                              | 入力内で元に戻す                     |
+| `input.redo`                    | `ctrl+.,super+shift+z`                                                        | 入力内でやり直す                     |
+| `input.word.forward`            | `alt+f,alt+right,ctrl+right`                                                  | 入力内でカーソルを単語単位で前へ移動 |
+| `input.word.backward`           | `alt+b,alt+left,ctrl+left`                                                    | 入力内でカーソルを単語単位で後ろへ移動 |
+| `input.select.word.forward`     | `alt+shift+f,alt+shift+right`                                                 | 入力内で単語を前方へ選択             |
+| `input.select.word.backward`    | `alt+shift+b,alt+shift+left`                                                  | 入力内で単語を後方へ選択             |
+| `input.delete.word.forward`     | `alt+d,alt+delete,ctrl+delete`                                                | 入力内で単語を前方へ削除             |
+| `input.delete.word.backward`    | `ctrl+w,ctrl+backspace,alt+backspace`                                         | 入力内で単語を後方へ削除             |
+| `input.select.all`              | `super+a`                                                                     | 入力内ですべて選択                   |
+| `prompt.history.previous`       | `up`                                                                          | 前の履歴項目                         |
+| `prompt.history.next`           | `down`                                                                        | 次の履歴項目                         |
+
+## Composer
+
+| ID                            | デフォルト | 説明                 |
+| ----------------------------- | ---------- | -------------------- |
+| `composer.subagent.up`        | `up`       | 前のサブエージェント |
+| `composer.subagent.down`      | `down`     | 次のサブエージェント |
+| `composer.subagent.select`    | `return`   | サブエージェントへ移動 |
+| `composer.subagent.interrupt` | `ctrl+d`   | サブエージェントを中断 |
+| `composer.shell.up`           | `up`       | 前のシェル           |
+| `composer.shell.down`         | `down`     | 次のシェル           |
+| `composer.shell.select`       | `return`   | シェルの出力を表示   |
+| `composer.shell.kill`         | `ctrl+d`   | シェルコマンドを終了 |
+| `composer.terminal.up`        | `up,k`     | 前のターミナル       |
+| `composer.terminal.down`      | `down,j`   | 次のターミナル       |
+| `composer.terminal.select`    | `return`   | ターミナルを選択     |
+
+**Shell** タブで実行中のコマンドを選択して **Enter** を押すか、クリックすると、キャプチャされた stdout と stderr を表示できます。
+スクロールには **↑/↓**、**Page Up/Down**、**Home**、新しい出力への追従には **End**、コマンドを止めずに戻るには **Esc** を使用します。
+ビューアは最近の出力を表示し、終了後も開いたままです。ファイルにリダイレクトされた出力は含まれません。
+
+## ダイアログと補完
+
+| ID                             | デフォルト    | 説明                                 |
+| ------------------------------ | ------------- | ------------------------------------ |
+| `dialog.select.prev`           | `up,ctrl+p`   | 前のダイアログ項目へ移動             |
+| `dialog.select.next`           | `down,ctrl+n` | 次のダイアログ項目へ移動             |
+| `dialog.select.page_up`        | `pageup`      | ダイアログを 1 ページ上に移動        |
+| `dialog.select.page_down`      | `pagedown`    | ダイアログを 1 ページ下に移動        |
+| `dialog.select.home`           | `home`        | 最初のダイアログ項目へ移動           |
+| `dialog.select.end`            | `end`         | 最後のダイアログ項目へ移動           |
+| `dialog.select.submit`         | `return`      | 選択したダイアログ項目を送信         |
+| `dialog.prompt.submit`         | `return`      | ダイアログのプロンプトを送信         |
+| `dialog.integration.rename`    | `ctrl+r`      | 連携のアカウント名を変更             |
+| `dialog.integration.delete`    | `ctrl+d`      | 連携のアカウントを削除               |
+| `dialog.integration.copy`      | `tab`         | 認可リンクをコピー                   |
+| `dialog.worktree.generate`     | `tab`         | worktree 名を生成                    |
+| `dialog.move_session.new`      | `ctrl+a`      | 新しい worktree                      |
+| `dialog.move_session.move`     | `ctrl+m`      | セッションを worktree に移動         |
+| `dialog.move_session.delete`   | `ctrl+d`      | worktree を削除                      |
+| `dialog.move_session.refresh`  | `ctrl+r`      | worktree を更新                      |
+| `prompt.autocomplete.prev`     | `up,ctrl+p`   | 前の補完項目へ移動                   |
+| `prompt.autocomplete.next`     | `down,ctrl+n` | 次の補完項目へ移動                   |
+| `prompt.autocomplete.hide`     | `escape`      | 補完を隠す                           |
+| `prompt.autocomplete.select`   | `return`      | 補完項目を選択                       |
+| `prompt.autocomplete.complete` | `tab`         | 補完項目を確定                       |
+| `permission.prompt.fullscreen` | `ctrl+f`      | 権限のプロンプトの全画面を切り替え   |
+| `plugins.toggle`               | `return`      | プラグインを切り替え                 |
+| `dialog.mcp.toggle`            | `space`       | MCP サーバーを切り替え               |
+| `dialog.plugins.error`         | `space`       | プラグインのエラーを表示             |
+| `dialog.plugins.update`        | `ctrl+u`      | プラグインのダイアログからプラグインを更新 |
+| `dialog.plugins.check`         | `ctrl+r`      | プラグインの更新を確認               |
+
+## ターミナルとプラグイン
+
+| ID                      | デフォルト | 説明                             |
+| ----------------------- | ---------- | -------------------------------- |
+| `terminal.suspend`      | `ctrl+z`   | ターミナルを一時停止             |
+| `terminal.title.toggle` | `none`     | ターミナルのタイトルを切り替え   |
+| `plugins.list`          | `none`     | プラグインマネージャーのダイアログを開く |
+
+## Which-Key
+
+| ID                         | デフォルト                  | 説明                                 |
+| -------------------------- | --------------------------- | ------------------------------------ |
+| `which-key.toggle`         | `ctrl+alt+k`                | which-key パネルを切り替え           |
+| `which-key.layout.toggle`  | `ctrl+alt+shift+k`          | which-key のレイアウトを切り替え     |
+| `which-key.pending.toggle` | `ctrl+alt+shift+p`          | which-key の保留プレビューを切り替え |
+| `which-key.group.previous` | `ctrl+alt+left,ctrl+alt+[`  | 前の which-key グループ              |
+| `which-key.group.next`     | `ctrl+alt+right,ctrl+alt+]` | 次の which-key グループ              |
+| `which-key.scroll.up`      | `ctrl+alt+up,ctrl+alt+p`    | which-key を上にスクロール           |
+| `which-key.scroll.down`    | `ctrl+alt+down,ctrl+alt+n`  | which-key を下にスクロール           |
+| `which-key.page.up`        | `ctrl+alt+pageup`           | which-key を 1 ページ上に             |
+| `which-key.page.down`      | `ctrl+alt+pagedown`         | which-key を 1 ページ下に             |
+| `which-key.home`           | `ctrl+alt+home`             | 最初の which-key バインドへ移動      |
+| `which-key.end`            | `ctrl+alt+end`              | 最後の which-key バインドへ移動      |

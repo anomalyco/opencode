@@ -1,0 +1,225 @@
+---
+title: "トラブルシューティング"
+description: "バックグラウンドサービスを確認し、API を検査し、ログを読み、プロファイルを取得して OpenCode の問題を診断します。"
+---
+
+<Callout type="tip">
+  OpenCode に問題の調査を任せることもできます。症状を伝え、このトラブルシューティングページを参照するよう依頼してください。OpenCode が以下の手順に沿って自身のサービスやログを調べ、問題の特定を支援します。
+</Callout>
+
+OpenCode はクライアント・サーバー構成です。バックグラウンドサーバーがセッション、プラグイン、権限、その他のアプリケーション状態を管理します。まず、問題がクライアント、共有サーバー、特定のプロジェクトのどこにあるかを切り分けます。
+
+## バックグラウンドサービスを確認する
+
+現在のサーバー情報を表示します。
+
+```bash
+opencode service status
+```
+
+API が正常か確認します。
+
+```bash
+opencode api get /api/info
+```
+
+サービスが応答しないか正常に動いていない場合は、再起動します。
+
+```bash
+opencode service restart
+```
+
+明示的に停止して起動することもできます。
+
+```bash
+opencode service stop
+opencode service start
+```
+
+<Callout type="note">
+  OpenCode は通常、共有のバックグラウンドサービスを自動的に検出または起動します。サービスのコマンドは、そのライフサイクルを診断する場合にのみ必要です。
+</Callout>
+
+## ブラウザのオリジンを許可する
+
+別のオリジンのブラウザクライアントが CORS のために接続できない場合は、クライアントのオリジンをサービス設定に追加します。
+
+```bash
+opencode service set cors http://192.168.1.10:3001
+opencode service get cors
+```
+
+パスや末尾のスラッシュを含めず、必要に応じてポートを含めた正確な HTTP または HTTPS のオリジンを使用します。複数のオリジンを許可するには、カンマ区切りのリストを 1 つの引数として渡します。各オリジンの前後の空白は削除されます。
+
+```bash
+opencode service set cors "http://192.168.1.10:3001, https://app.example.com"
+```
+
+`service get cors` は JSON の配列を出力します。設定されたリストを削除するには次のようにします。
+
+```bash
+opencode service unset cors
+```
+
+サービス設定を追加・変更または解除すると、バックグラウンドサービスが停止します。新しい設定は次回起動時に反映されます。手動で起動するには `opencode service start` を実行します。
+
+フォアグラウンドサーバーの場合は、許可するオリジンごとに `--cors` を繰り返します。
+
+```bash
+opencode serve --cors http://192.168.1.10:3001 --cors https://app.example.com
+```
+
+`serve --service` の場合、指定した `--cors` フラグはそのプロセスの永続化されたリストを上書きします。フラグがない場合、サービスのモードは永続化されたリストを使用します。CORS は待ち受けアドレスを変更せず、サーバーの認証もバイパスしません。
+
+## API を検査する
+
+`api` コマンドはローカルのサービス検出と認証のフローを使用します。HTTP メソッドとパス、または OpenAPI の操作 ID のいずれかを受け付けます。
+
+すべてのエンドポイントと操作 ID については [API リファレンス](/api)を参照してください。
+
+JSON のリクエストボディは `--data` または `-d` で渡し、ヘッダーは `--header` または `-H` で追加します。
+
+<Callout type="warning">
+  `opencode api` を実行すると、互換性のある正常なサービスが利用できない場合にバックグラウンドサービスが起動することがあります。
+</Callout>
+
+## ログを読む
+
+インストール版のビルドは次の場所にログを書き込みます。
+
+```text
+~/.local/share/opencode/log/opencode.log
+```
+
+問題を再現しながらログを追跡します。
+
+```bash
+tail -f ~/.local/share/opencode/log/opencode.log
+```
+
+各行にはプロセスの `run` ID と `role` フィールドが含まれます。セッション、プロバイダー、プラグイン、権限、ツールのアクティビティには `role=server` を使用します。
+
+```bash
+grep 'role=server' ~/.local/share/opencode/log/opencode.log
+grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
+```
+
+## ヒープスナップショットを取得する
+
+任意のプラットフォームで、実行中のバックグラウンドサーバーのメモリ（ヒープ）スナップショットを書き出します。
+
+```bash
+opencode debug heap-dump
+```
+
+このコマンドはスナップショットが完了するまで待ち、そのパスを出力します。
+
+```text
+/home/me/.local/share/opencode/log/heap-48213-2026-10-23T013012345Z.heapsnapshot
+```
+
+別の場所に書き出すには `--directory` を使用します。ディレクトリが存在しない場合はサーバーが作成します。
+
+```bash
+opencode debug heap-dump --directory ./snapshots
+```
+
+- すでに実行中のサーバーのみを使用します。起動、置き換え、再起動は行いません。
+- `opencode serve` で起動したサーバーのスナップショットを取得するには `--server <url>` を指定します。サーバーにパスワードがある場合は `OPENCODE_PASSWORD` を設定します。`--directory` は、サーバーを実行しているマシン上のパスを指定します。
+- ファイルは Chrome DevTools の Memory パネルで開きます。
+
+<Callout type="warning">
+  スナップショットの書き出し中はサーバーが一時停止し、メモリ使用量が短時間増加することがあります。スナップショットにはプロンプト、ファイルの内容、認証情報が含まれることがあります。公開しないでください。
+</Callout>
+
+### デスクトップアプリの場合
+
+コマンドパレットから **Capture heap snapshots** を実行します。ダウンロードフォルダに 1 つのフォルダを作成し、アプリの各部分のスナップショットと、スナップショットでは示せないメモリの内訳を書き出します。
+
+```text
+opencode-heap-2026-10-23T013012345Z/
+  memory.json                  where the memory is, per process, in MiB: start here
+  memory-infra.json            Chromium's memory dump trace; open it in https://ui.perfetto.dev
+  heap-48213-….heapsnapshot    the desktop's own server
+  window-1-48390.heapsnapshot  one per app window
+  main-48102.heapsnapshot      the desktop main process
+  gpu.json                     the GPU and driver
+  manifest.json                processes, PIDs, and memory before and after; written last
+```
+
+- ヒープスナップショットには JavaScript のオブジェクトとページだけが含まれます。画像、レイアウト、コンポジターレイヤー、GPU メモリは代わりに `memory.json` と `memory-infra.json` に含まれます。
+- リモートサーバーのスナップショットは取得されません。代わりに、そのサーバーを実行しているマシンで `opencode debug heap-dump` を実行してください。
+- サーバーはスナップショットを直接フォルダに書き出すため、大きなデータの移動やコピーは発生しません。
+- ブラウザのタブは含まれません。そのスナップショットには閲覧したページの内容が含まれるためです。
+
+## CPU とメモリのプロファイルを取得する
+
+macOS と Linux では、実行中の OpenCode プロセスにシグナルを送って診断データを取得できます。ヘルスエンドポイントからバックグラウンドサーバーの PID を取得します。
+
+```bash
+opencode api get /api/info
+```
+
+レスポンスの `pid` を次のいずれかのシグナルで使用します。
+
+- `SIGPROF` は 10 秒間の CPU プロファイルを取得します。
+
+  ```bash
+  kill -SIGPROF <pid>
+  ```
+
+  結果は `cpu-<pid>-<timestamp>.cpuprofile` としてログディレクトリに書き出されます。
+
+- `SIGUSR1` はメモリ（ヒープ）スナップショットを取得します。
+
+  ```bash
+  kill -SIGUSR1 <pid>
+  ```
+
+  結果は `heap-<pid>-<timestamp>.heapsnapshot` としてログディレクトリに書き出されます。
+
+ファイルを開く前に、`opencode.log` に `CPU profile written` または `heap snapshot written` が記録されるまで待ちます。対応するログエントリには完全なパスが含まれます。どちらのファイル形式も Chrome DevTools で検査できます。
+
+<Callout type="note">
+  シグナルによるプロファイルは Windows では利用できません。ヒープスナップショットには代わりに `opencode debug heap-dump` を使用してください。ヒープスナップショットの書き出し中はプロセスが一時停止し、メモリ使用量が一時的に増加することがあります。
+</Callout>
+
+## サービスのファイル
+
+共有サーバーは次の場所に自身を登録します。
+
+```text
+~/.local/state/opencode/service.json
+```
+
+そのプライベートなサービス設定は次の場所に別に保存されます。
+
+```text
+~/.config/opencode/service.json
+```
+
+データベースは通常次の場所にあります。
+
+```text
+~/.local/share/opencode/opencode.db
+```
+
+`OPENCODE_DB` でデータベースの場所を上書きできます。
+
+<Callout type="warning">
+  トラブルシューティング中にサービスのファイルやデータベースを削除または編集しないでください。デーモンの管理にはサービスのコマンドを使用し、外部ツールで永続データを検査する前にバックアップを作成してください。
+</Callout>
+
+## 問題を報告する
+
+再現可能な問題を報告するときは、次のものを含めてください。
+
+- `opencode --version` の出力
+- `opencode service status` の出力
+- 問題を再現する最小の手順
+- 問題が共有サービス、特定のクライアント、1 つのプロジェクトのどれに影響するか
+- 関連するログ行（`run` と `role` フィールドを含む）
+
+ログを共有する前に、API キー、認可ヘッダー、プロンプト、ファイルの内容、その他の機密データを削除してください。
+
+再現可能な問題は [GitHub Issues](https://github.com/anomalyco/opencode/issues) で報告してください。

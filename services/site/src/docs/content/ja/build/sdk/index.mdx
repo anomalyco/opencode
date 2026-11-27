@@ -1,0 +1,85 @@
+---
+title: "SDK の概要"
+description: "@opencode/sdk でアプリケーション内に OpenCode をホストします。HTTP リスナーなしで API をメモリ内で提供します。"
+---
+
+`@opencode/sdk` は OpenCode をアプリケーション内で直接ホストします。[ネットワーククライアント](/build/client)とは異なり、OpenCode サーバーを組み立て、API 呼び出しをメモリ内の HTTP ルーター経由でルーティングします。HTTP リスナーを開かず、クライアントとサーバーの間にネットワークホップも追加しません。
+
+Cloudflare Durable Objects については [Cloudflare ガイド](/build/sdk/cloudflare)を参照してください。
+
+SDK をインストールします。
+
+```sh
+bun add @opencode/sdk
+```
+
+## ホストを作成する
+
+`OpenCode.create()` が返すホストのライフサイクルは、呼び出し側が管理します。`await using` を使うと、ルーター、Location サービス、ファイバー、スコープ付きのプラグイン登録を解放できます。
+
+```ts
+import { OpenCode } from "@opencode/sdk"
+
+await using opencode = await OpenCode.create()
+const session = await opencode.sessions.create({
+  location: { directory: "/workspace" },
+})
+
+await opencode.sessions.prompt({
+  sessionID: session.id,
+  text: "Review the current changes",
+})
+```
+
+明示的なリソース管理が利用できない場合は、`await opencode.close()` を明示的に呼び出してください。
+
+組み込みホストは、`@opencode/client` と同じ Promise の値、宣言されたエラー、リクエストオプション、`AsyncIterable` ストリームを使用します。生成された完全なクライアントを公開し、セッションとイベントのグループに便利なエイリアス `sessions` と `events` を追加します。
+
+## Worktree
+
+Worktree の操作には `projectID` が必要です。作成と更新では、プロジェクトの正規のチェックアウトとして保存されている場所から設定とプラグインを読み込みます。一覧の取得では保存済みの一覧だけを読み取ります。削除では正規のチェックアウトのプラグインを有効にし、記録済みのストラテジーを使います。そのストラテジーが利用できない場合、削除は失敗します。
+
+```ts
+const projectID = session.projectID
+const worktree = await opencode.worktree.create({ projectID, name: "task" })
+await opencode.worktree.refresh({ projectID })
+await opencode.worktree.remove({ projectID, directory: worktree.directory, force: false })
+```
+
+更新は、利用可能なすべてのストラテジーを使って既知のチェックアウトルート全体で worktree を検出します。カスタムのストラテジーは[プラグインの worktree transform](/build/plugins/server#worktrees)で登録します。
+
+## イベントのストリーミング
+
+```ts
+for await (const event of opencode.events.subscribe()) {
+  console.log(event.type)
+}
+```
+
+生成されたリクエストオプションで `AbortSignal` を渡すか、イテレーションを抜けてレスポンスボディをキャンセルします。
+
+## カスタマイズ
+
+プラグインを登録して OpenCode のインスタンスをカスタマイズします。`OpenCode.create()` にプラグインを渡すと、組み込みホストの起動時にエージェント、モデル、ツール、その他の動作をカスタマイズできます。
+
+```ts
+import { Plugin } from "@opencode/plugin"
+import { OpenCode } from "@opencode/sdk"
+
+const plugin = Plugin.define({
+  id: "customize-agent",
+  async setup(ctx) {
+    await ctx.agent.transform((agents) => {
+      agents.update("build", (agent) => {
+        agent.description = "Builds features and fixes bugs for our team"
+      })
+    })
+  },
+})
+
+await using opencode = await OpenCode.create({ plugins: [plugin] })
+```
+
+起動後に別のプラグインを登録するには、`await opencode.plugin(plugin)` を呼び出します。
+
+プラグインのフック、transform、ツール、完全なプラグインコンテキストについては[プラグインの完全なドキュメント](/build/plugins/server)を参照してください。

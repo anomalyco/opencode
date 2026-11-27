@@ -1,0 +1,88 @@
+---
+title: "Codex"
+description: "Codex から Console と Go のモデルを使用します。"
+---
+
+Codex は OpenAI Responses API に対応しています。Console を指定すると、Claude、Gemini、オープンモデルを含む、有料モデルや Go のモデルを任意に使用できます。Responses に対応していないモデルでは、Console がリクエストを変換します。
+
+<Callout>
+  [Console CLI](/console/harnesses#console-cli) を使えば、1 つのコマンドで Codex を設定できます。ワークスペースのポリシー、MCP サーバー、スキル、指示も含まれます。`npx @opencode/console setup codex` を実行してください。以下の手順は手動で設定する方法です。
+</Callout>
+
+## 設定
+
+`~/.codex/config.toml` に Console をモデルプロバイダーとして追加し、デフォルトに設定します。
+
+```toml title="~/.codex/config.toml"
+model = "gpt-6.1-sol"
+model_provider = "opencode"
+
+[model_providers.opencode]
+name = "OpenCode Console"
+base_url = "https://opencode.ai/inference/openai/v1"
+env_key = "OPENCODE_API_KEY"
+wire_api = "responses"
+```
+
+Codex はベース URL に `/responses` を追加し、キーを `env_key` から読み取ります。[パーソナル API キー](/console/harnesses#get-an-api-key)を作成し、エクスポートします。
+
+```bash
+export OPENCODE_API_KEY="oc_sk_..."
+codex
+```
+
+<Callout>
+  Codex は `~/.codex/config.toml` からしかモデルプロバイダーを読み取りません。プロジェクトの `.codex/config.toml` では設定できません。
+</Callout>
+
+## Go
+
+Go のベース URL と、[Go](/console/go) のサブスクリプションがあるワークスペースのキーを使用します。
+
+```toml title="~/.codex/config.toml"
+model = "kimi-k3"
+model_provider = "opencode-go"
+
+[model_providers.opencode-go]
+name = "OpenCode Go"
+base_url = "https://opencode.ai/inference/go/openai/v1"
+env_key = "OPENCODE_API_KEY"
+wire_api = "responses"
+```
+
+## モデル
+
+`model` には、[Console](/console/models#endpoints) または [Go](/console/go#endpoints) の表にある任意のモデル ID を設定します。1 回の実行だけ変更する場合は `--model` で上書きします。
+
+```bash
+codex --model claude-sonnet-5-5
+```
+
+Codex のカタログにないモデルには、コンテキストウィンドウや推論設定に汎用のデフォルト値が使われます。その際に表示される警告は無視してかまいません。
+
+## profile
+
+profile を使うと、従量課金と Go を併用できます。両方のプロバイダーを `~/.codex/config.toml` に定義し、Go に切り替える profile ファイルを追加します。
+
+```toml title="~/.codex/go.config.toml"
+model = "kimi-k3"
+model_provider = "opencode-go"
+```
+
+```bash
+codex --profile go
+```
+
+## Console MCP
+
+[Console MCP](/console/harnesses#console-mcp) サーバーを追加し、ブラウザからサインインします。
+
+```bash
+codex mcp add opencode-console --url https://opencode.ai/console/mcp
+```
+
+サインインが自動的に始まらない場合は、手動で実行します。
+
+```bash
+codex mcp login opencode-console
+```
