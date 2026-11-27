@@ -1,6 +1,6 @@
 {
   "$schema": "https://json.schemastore.org/package.json",
-  "name": "@opencode/stories",
+  "name": "@opencode/lab",
   "private": true,
   "type": "module",
   "scripts": {
