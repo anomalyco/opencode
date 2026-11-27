@@ -16,7 +16,7 @@ import path from "node:path"
 import { EOL, tmpdir } from "node:os"
 import { mkdir, writeFile } from "node:fs/promises"
 import { useRoute, useRouteData } from "../../context/route"
-import { createStore } from "solid-js/store"
+import { createStore, reconcile } from "solid-js/store"
 import { useData } from "../../context/data"
 import { SplitBorder } from "../../ui/border"
 import { useSessionLinks } from "../../ui/session-link"
@@ -24,14 +24,7 @@ import { useTuiPaths, useTuiTerminalEnvironment } from "../../context/runtime"
 import { Spinner, SPINNER_FRAMES } from "../../component/spinner"
 import { PatchDiff } from "../../component/patch-diff"
 import { useTheme, useThemes } from "../../context/theme"
-import {
-  BoxRenderable,
-  ScrollBoxRenderable,
-  addDefaultParsers,
-  TextAttributes,
-  RGBA,
-  MouseEvent,
-} from "@opentui/core"
+import { BoxRenderable, ScrollBoxRenderable, addDefaultParsers, TextAttributes, RGBA, MouseEvent } from "@opentui/core"
 import { Prompt, type PromptRef } from "../../component/prompt"
 import {
   mediaHashFromUri,
@@ -94,7 +87,7 @@ import { PermissionPrompt } from "./permission"
 import { FormPrompt } from "./form"
 import { DialogExportOptions } from "../../ui/dialog-export-options"
 import { DialogExportResult } from "../../ui/dialog-export-result"
-import { useConfig, useNewDesigns } from "../../config"
+import { useConfig, useNewDesigns, useSessionFindExperiment } from "../../config"
 import { useClipboard } from "../../context/clipboard"
 import { nextThinkingMode, type ThinkingMode } from "../../context/thinking"
 import { getScrollAcceleration } from "../../util/scroll"
@@ -136,6 +129,8 @@ import { SessionGroupView } from "./group-view"
 import { useEntryAnchor } from "./anchor-view"
 import { containsAnchor, createTimelineAnchors, groupID } from "./anchors"
 import { rowsAfter, rowsBefore, rowWeight } from "./mount-budget"
+import { findMatches, findParts, findPattern, sameFindMatch, type FindMatch } from "./find"
+import { FindBar, FindText, useFindHighlight } from "./find-view"
 export { InlineToolRow } from "./message-parts"
 export { toolDisplay } from "./message-parts"
 
@@ -901,6 +896,109 @@ export function Session(props: {
       alignMessage(messageID, Math.max(0, y - (message?.type === "assistant" ? 1 : 0)))
     })
 
+  // Find, like the web app's: plain case-insensitive text over the loaded prompts and assistant
+  // text. A new query selects the first match; a selected match that goes away falls back to it.
+  const findEnabled = useSessionFindExperiment()
+  const [findOpen, setFindOpen] = createSignal(false)
+  const [findFocus, setFindFocus] = createSignal(0)
+  const [findQuery, setFindQuery] = createSignal("")
+  const [findSelected, setFindSelected] = createSignal<FindMatch>()
+  const findActivePattern = createMemo(() => (findOpen() ? findPattern(findQuery()) : undefined), undefined, {
+    equals: (previous, next) => previous?.source === next?.source,
+  })
+  // How many matches each rendered part shows, which can differ from its source.
+  const [findShown, setFindShown] = createStore<Record<string, { source: string; text: string; count: number }>>({})
+  const findList = createMemo(() => {
+    const pattern = findActivePattern()
+    if (!pattern) return []
+    return findMatches(
+      findParts(rows, (messageID) => data.session.message.get(route.sessionID, messageID)),
+      pattern,
+      (part) => {
+        const shown = findShown[`${part.messageID}:${part.partID}`]
+        return shown?.source === pattern.source && shown.text === part.text ? shown.count : undefined
+      },
+    )
+  })
+  const findIndex = createMemo(() => Math.max(0, findList().findIndex((match) => sameFindMatch(match, findSelected()))))
+  const findCurrent = () => findList()[findIndex()]
+  // The match a reveal is waiting for, and where a part last rendered the current match.
+  let findSeek: FindMatch | undefined
+  let findSpot: { match: FindMatch; pattern: RegExp; row: () => number | undefined } | undefined
+
+  // Every row mounts, so each part counts what it shows, even when no source has a match.
+  const revealFind = (match: FindMatch | undefined) => {
+    findSeek = match
+    if (findActivePattern()) ensureAllRows(() => match && locateFind(match))
+  }
+  const locateFind = (match: FindMatch) => {
+    if (findSeek !== match || !scroll || scroll.isDestroyed) return
+    const spot = findSpot
+    const row =
+      spot && sameFindMatch(spot.match, match) && spot.pattern === findActivePattern() ? spot.row() : undefined
+    if (row !== undefined) {
+      findSeek = undefined
+      centerFind(match.messageID, row)
+      return
+    }
+    // Until the match's block paints and reports its row, bring the part on screen.
+    const anchor = anchors.get({ type: "part", ref: { messageID: match.messageID, partID: match.partID } })
+    if (!anchor) return
+    const viewport = scroll.viewport
+    if (anchor.node.y + anchor.node.height > viewport.y && anchor.node.y < viewport.y + viewport.height) return
+    centerFind(match.messageID, anchor.node.y)
+  }
+  const centerFind = (messageID: string, y: number) => {
+    const slack = scroll.getRenderable(NAVIGATION_SLACK_ID)?.height ?? 0
+    const top = scroll.scrollTop + y - scroll.viewport.y - Math.floor(scroll.viewport.height / 2)
+    alignMessage(messageID, Math.max(0, Math.min(top, scroll.scrollHeight - slack - scroll.viewport.height)))
+  }
+  const searchFind = (value: string) => {
+    const previous = findActivePattern()
+    batch(() => {
+      setFindQuery(value)
+      // Whitespace or case changes keep the current match.
+      if (findActivePattern() === previous) return
+      setFindSelected(undefined)
+      revealFind(findCurrent())
+    })
+  }
+  const moveFind = (delta: 1 | -1) => {
+    const list = findList()
+    if (list.length === 0) return
+    const next = list[(findIndex() + delta + list.length) % list.length]
+    batch(() => {
+      setFindSelected(next)
+      revealFind(next)
+    })
+  }
+  // Parts recount once they render, which can change the current match without a key press.
+  createEffect(
+    on(
+      findCurrent,
+      (match, previous) => {
+        if (!sameFindMatch(match, previous) && !sameFindMatch(match, findSeek)) revealFind(match)
+      },
+      { defer: true },
+    ),
+  )
+  // The prompt refocuses itself once it is visible again.
+  const closeFind = () => {
+    findSeek = undefined
+    batch(() => {
+      setFindOpen(false)
+      setFindQuery("")
+      setFindSelected(undefined)
+      setFindShown(reconcile({}))
+    })
+  }
+  // Find lives in the prompt's place, so a permission, form or composer that replaces the prompt closes it.
+  createEffect(
+    on(prompt, (ref) => {
+      if (!ref && findOpen()) closeFind()
+    }),
+  )
+
   function toBottom() {
     clearMessageNavigation()
     ensureAllRowsPending = undefined
@@ -1081,6 +1179,20 @@ export function Session(props: {
       slash: { name: "timeline" },
       run: () => {
         dialog.replace(() => <DialogTimeline sessionID={route.sessionID} onMove={jumpToMessage} />)
+      },
+    },
+    {
+      title: "Find in session",
+      id: "session.find",
+      group: "Session",
+      enabled: findEnabled() && !!prompt(),
+      slash: { name: "find" },
+      run: () => {
+        dialog.clear()
+        batch(() => {
+          setFindOpen(true)
+          setFindFocus((count) => count + 1)
+        })
       },
     },
     {
@@ -1519,6 +1631,23 @@ export function Session(props: {
         config,
         mutatePending,
         pendingDelivery: (inboxID) => pendingDeliveries().get(inboxID),
+        find: {
+          pattern: findActivePattern,
+          current: findCurrent,
+          counted: (part, pattern, count) => {
+            const key = `${part.messageID}:${part.partID}`
+            const shown = findShown[key]
+            if (shown?.source === pattern.source && shown.text === part.text && shown.count === count) return
+            setFindShown(key, { source: pattern.source, text: part.text, count })
+          },
+          located: (match, row) => {
+            const pattern = findActivePattern()
+            if (!pattern) return
+            findSpot = { match, pattern, row }
+            const seek = findSeek
+            if (seek && sameFindMatch(seek, match)) afterLayout(() => locateFind(seek))
+          },
+        },
       }}
     >
       <box flexDirection="row" flexGrow={1} minHeight={0}>
@@ -1655,8 +1784,20 @@ export function Session(props: {
                   />
                 </Match>
                 <Match when={!disabled()}>
+                  <Show when={findOpen()}>
+                    <FindBar
+                      query={findQuery()}
+                      index={findIndex()}
+                      count={findList().length}
+                      focus={findFocus()}
+                      onInput={searchFind}
+                      onMove={moveFind}
+                      onClose={closeFind}
+                    />
+                  </Show>
+                  {/* Hidden rather than unmounted, so the draft, cursor and undo history survive Find. */}
                   <Prompt
-                    visible={true}
+                    visible={!findOpen()}
                     ref={bind}
                     muted={props.promptMuted}
                     onSubmit={() => {
@@ -2001,6 +2142,7 @@ function SessionPartView(props: {
           <Match when={item().type === "text"}>
             <TextPart
               part={item() as SessionMessageAssistantText}
+              partID={props.partRef.partID}
               message={message() as SessionMessageAssistant}
               last={false}
             />
@@ -2196,6 +2338,8 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
   const text = () =>
     props.message.status === "failed" ? (cancelled() ? "" : props.message.error.message) : props.message.summary
   const content = createMemo(() => text().trim())
+  const links = useSessionLinks()
+  const find = useFindHighlight(() => ({ messageID: props.message.id, partID: "message", text: content() }))
   const color = () => (status() === "failed" && !cancelled() ? theme.text.feedback.error.base : theme.text.muted)
   // Usage of the compaction request itself; the resulting context size only shows on the next assistant step.
   const usage = () => {
@@ -2238,7 +2382,10 @@ function CompactionMessage(props: { message: Extract<SessionMessageInfo, { type:
       <Show when={content()}>
         <box paddingTop={1} paddingLeft={3}>
           <markdown
-            ref={useSessionLinks()}
+            ref={(renderable) => {
+              links(renderable)
+              find(renderable)
+            }}
             syntaxStyle={syntax()}
             renderBlock={plugins.markdown()}
             streaming={status() === "running"}
@@ -2443,7 +2590,10 @@ function UserMessage(props: { message: SessionMessageUser }) {
           backgroundColor={hover() ? theme.decrease(theme.background.raised.base) : theme.background.raised.base}
           flexShrink={0}
         >
-          <text fg={theme.text.base}>{props.message.text}</text>
+          <FindText
+            part={{ messageID: props.message.id, partID: "message", text: props.message.text }}
+            fg={theme.text.base}
+          />
           <Show when={skills().length}>
             <box flexDirection="row" paddingTop={1} gap={1} flexWrap="wrap">
               <For each={skills()}>
