@@ -621,6 +621,15 @@ export interface Composer {
    */
   setText(text: string): void
   /**
+   * The name of the agent the next prompt is sent with: the user's choice for the routed session, else the session's
+   * agent, else the app's default. Sending a prompt switches the session to it; until then the session keeps its own.
+   * Undefined while the agent list loads and in a subagent's session, which has no composer. Reactive.
+   *
+   * @example
+   * const planning = () => screen.composer.agent() === "plan"
+   */
+  agent(): string | undefined
+  /**
    * The model the next prompt is sent with: the user's choice for the routed session, else the session's agent
    * default, else the app's default. Undefined while the model catalog loads, when no connected provider offers the
    * choice, and in a subagent's session, which has no composer. Reactive.

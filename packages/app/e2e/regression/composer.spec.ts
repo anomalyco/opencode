@@ -621,6 +621,49 @@ test("a catalog refresh cannot replace an existing session's model", async ({ pa
   expect(switches).toEqual([{ model: { id: "beta", providerID: "opencode" } }])
 })
 
+test("resuming a paused goal switches to the model picked in the composer first", async ({ page }) => {
+  const sessionID = "ses_goal_resume"
+  const requests: unknown[] = []
+
+  await openSession(page, {
+    name: "GoalResume",
+    sessions: [{ id: sessionID, agent: "build", model: { id: "alpha", providerID: "opencode" } }],
+    provider: provider({ id: "alpha", name: "Alpha" }, { id: "beta", name: "Beta" }),
+    goal: (id) =>
+      id === sessionID
+        ? {
+            id: "goal_1",
+            objective: "Ship the release",
+            status: "paused",
+            reason: "The user paused the goal.",
+            rounds: 3,
+            maxRounds: 20,
+            boot: "boot_1",
+            updatedAt: T0,
+          }
+        : null,
+    onSwitch: (input) => void requests.push(input.body),
+    onCommand: (input) => void requests.push(input.body),
+  })
+
+  const control = page.locator('[data-action="composer-model"]')
+  await expect(control).toHaveText("Alpha")
+  await control.click()
+  await page
+    .getByRole("dialog", { name: "Select model" })
+    .getByRole("button", { name: "Beta Free", exact: true })
+    .click()
+  await expect(control).toHaveText("Beta")
+
+  await page.getByRole("button", { name: "Goal paused", exact: true }).click()
+  await page.getByRole("button", { name: "Resume", exact: true }).click()
+
+  // The goal's continuations run with the session's agent and model, so both are set before the command.
+  await expect
+    .poll(() => requests)
+    .toEqual([{ agent: "build" }, { model: { id: "beta", providerID: "opencode" } }, { name: "goal", text: "resume" }])
+})
+
 test("an existing session's model never shows a fallback while its agent loads", async ({ page }) => {
   const sessionID = "ses_agent_pending"
   await mockWorkspace(page, {

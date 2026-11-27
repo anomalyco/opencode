@@ -235,6 +235,7 @@ export function createWorkspace(
       text: () => "",
       setText() {},
       insert() {},
+      agent: () => undefined,
       model: () => undefined,
       setModel: () => false,
       setVariant: () => false,

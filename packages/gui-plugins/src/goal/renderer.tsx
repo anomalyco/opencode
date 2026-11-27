@@ -112,10 +112,29 @@ const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
     guard(
       attempt,
       GOAL_COMMAND_TIMEOUT_MS,
-      (signal) => {
+      async (signal) => {
         if (!client) throw new Error("server unavailable")
+        const sessionID = effect.sessionID
+        const selection = effect.selection
 
-        return client.session.command({ sessionID: effect.sessionID, name: "goal", text: effect.action }, { signal })
+        // As sending a prompt does, the agent first: switching it can move the model. The server ignores a switch to
+        // what the session already has.
+        if (selection?.agent) await client.session.switchAgent({ sessionID, agent: selection.agent }, { signal })
+
+        if (selection?.model)
+          await client.session.switchModel(
+            {
+              sessionID,
+              model: {
+                id: selection.model.modelID,
+                providerID: selection.model.providerID,
+                variant: selection.model.variant,
+              },
+            },
+            { signal },
+          )
+
+        return client.session.command({ sessionID, name: "goal", text: effect.action }, { signal })
       },
       () => ({ type: "command.succeeded", key, attempt }),
       (message) => ({ type: "command.failed", key, attempt, message }),
@@ -197,6 +216,11 @@ const setup: Plugin.Setup<typeof GoalDefinition> = (ctx) => {
       serverID: input.session.server.id,
       sessionID: input.session.id,
       action,
+      // The goal's continuations run with the session's agent and model, which a pick in the composer changes only
+      // once a prompt is sent. Resuming is the user's next send, so it takes the pick along.
+      ...(action === "resume" && {
+        selection: { agent: input.screen.composer.agent(), model: input.screen.composer.model() },
+      }),
     })
 
   ctx.add(Style, styles)

@@ -252,6 +252,7 @@ export function createMountedSession(session: SessionModel) {
       if (value) edit((draft) => draft.addText(value))
     },
     setText: (value) => edit((draft) => draft.setText(value.replace(/\r\n?/g, "\n"))),
+    agent: () => (session.data.isChild() ? undefined : local.agent.current()?.name),
     model() {
       const item = session.data.isChild() ? undefined : local.model.current()
 
