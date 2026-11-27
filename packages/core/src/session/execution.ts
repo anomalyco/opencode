@@ -253,11 +253,14 @@ function publishTerminal(
   outcome: ReturnType<typeof terminal>,
   commit: (seq: number) => Effect.Effect<void>,
 ) {
-  if (outcome.type === "succeeded") return bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, { commit })
+  if (outcome.type === "succeeded")
+    return bus.publish(SessionEvent.Execution.Succeeded, { sessionID }, { commit }).pipe(Effect.as(true))
   if (outcome.type === "interrupted") {
-    return bus.publish(SessionEvent.Execution.Interrupted, { sessionID, reason: outcome.reason }, { commit })
+    return bus
+      .publish(SessionEvent.Execution.Interrupted, { sessionID, reason: outcome.reason }, { commit })
+      .pipe(Effect.as(true))
   }
-  return bus.publish(SessionEvent.Execution.Failed, { sessionID, error: outcome.error }, { commit })
+  return bus.publish(SessionEvent.Execution.Failed, { sessionID, error: outcome.error }, { commit }).pipe(Effect.as(true))
 }
 
 export const node = makeGlobalNode({
