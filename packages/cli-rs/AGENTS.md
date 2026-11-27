@@ -18,7 +18,7 @@ CI (`.github/workflows/check-cli-rs.yml`) runs:
 
 - `bun run cargo fmt --check`
 - `bun run cargo clippy --locked --workspace --all-targets -- -D warnings`
-- `bun run cargo test --locked --workspace`
+- `bun run cargo test --locked --workspace --no-fail-fast`
 - `bun run check:drift`
 
 CI has no `opencode` binary, so a few tests that need one skip. Before merging, also run these locally:

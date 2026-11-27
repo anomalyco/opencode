@@ -46,6 +46,6 @@ jobs:
       - run: rustup toolchain install
       - run: bun run cargo fmt --check
       - run: bun run cargo clippy --locked --workspace --all-targets -- -D warnings
-      - run: bun run cargo test --locked --workspace
-      # Fails until the cli-rs port PR (native-next-12) lands: dev lacks the files it regenerates.
+      # Every crate's tests, even after one fails, so one run shows every failure.
+      - run: bun run cargo test --locked --workspace --no-fail-fast
       - run: bun run check:drift
