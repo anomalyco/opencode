@@ -41,13 +41,13 @@ describe("Open Responses-compatible route", () => {
         }),
       )
 
-      expect(prepared.api).toBe("openai-compatible-responses")
+      expect(prepared.api).toBe("example-responses")
       expect(prepared.protocol).toBe("open-responses")
       expect(prepared.model).toMatchObject({
         id: "example-model",
         provider: "example",
         baseURL: "https://responses.example.test/v1",
-        api: { id: "openai-compatible-responses", path: "/responses" },
+        api: { id: "example-responses", path: "/responses" },
       })
       expect(prepared.body).toEqual({
         model: "example-model",

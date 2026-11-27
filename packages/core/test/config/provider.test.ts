@@ -75,7 +75,7 @@ describe("ConfigProviderPlugin.Plugin", () => {
       yield* ModelResolver.fromCatalogModel(defaultModel)
       expect(yield* ModelResolver.fromCatalogModel(unsupported).pipe(Effect.flip)).toMatchObject({
         _tag: "SessionRunnerModel.UnsupportedCompactionError",
-        message: "Provider compaction is not supported by custom/unsupported (openai-chat)",
+        message: "Provider compaction is not supported by custom/unsupported (custom-chat)",
       })
     }),
   )

@@ -47,7 +47,7 @@ describe("provider package entrypoints", () => {
       headers: { "x-application": "fixture" },
       body: { future_option: true },
     }
-    const routes = ["moonshot-chat", "moonshot-chat", "moonshot-messages", "moonshot-responses"]
+    const routes = ["moonshotai-chat", "moonshotai-chat", "moonshotai-messages", "moonshotai-responses"]
     modules.forEach((module, index) => {
       const selected = module.model("kimi-k3", settings)
       expect(selected.provider).toBe("moonshotai")
@@ -158,10 +158,10 @@ describe("provider package entrypoints", () => {
     const routes = [
       "zai-chat",
       "zai-chat",
-      "zai-coding-chat",
-      "zai-coding-chat",
-      "zai-coding-messages",
-      "zai-coding-responses",
+      "zai-coding-plan-chat",
+      "zai-coding-plan-chat",
+      "zai-coding-plan-messages",
+      "zai-coding-plan-responses",
     ]
     const settings = {
       apiKey: "fixture",
@@ -272,7 +272,7 @@ describe("provider package entrypoints", () => {
     })
 
     expect(String(selected.provider)).toBe("example")
-    expect(selected.api.id).toBe("openai-compatible-responses")
+    expect(selected.api.id).toBe("example-responses")
     expect(selected.baseURL).toBe("https://responses.example.test/v1")
     expect(selected.api.path).toBe("/responses")
     expect(selected.options?.headers).toEqual({ "x-application": "opencode" })
@@ -296,7 +296,7 @@ describe("provider package entrypoints", () => {
     })
 
     expect(String(selected.provider)).toBe("example")
-    expect(selected.api.id).toBe("anthropic-compatible-messages")
+    expect(selected.api.id).toBe("example-messages")
     expect(selected.api.protocol.id).toBe("anthropic-messages")
     expect(selected.metadataKey).toBe("example")
     expect(selected.baseURL).toBe("https://messages.example.test/v1")
@@ -380,12 +380,12 @@ describe("provider package entrypoints", () => {
     const responses = AzureResponses.model("deployment", settings)
     const chat = AzureChat.model("deployment", settings)
 
-    expect(Azure.model("deployment", settings).api.id).toBe("azure-openai-responses")
-    expect(responses.api.id).toBe("azure-openai-responses")
+    expect(Azure.model("deployment", settings).api.id).toBe("azure-responses")
+    expect(responses.api.id).toBe("azure-responses")
     expect(responses.baseURL).toBe("https://opencode-test.openai.azure.com/openai/v1")
     expect(responses.options?.headers).toEqual({ "x-application": "opencode" })
     expect(responses.options?.http?.body).toEqual({ service_tier: "priority" })
-    expect(chat.api.id).toBe("azure-openai-chat")
+    expect(chat.api.id).toBe("azure-chat")
   })
 
   test("constructs Azure deployment URLs and preserves custom gateway URLs", async () => {
@@ -420,7 +420,7 @@ describe("provider package entrypoints", () => {
       thinkingConfig: { thinkingBudget: 1_024 },
     })
 
-    expect(selected.api.id).toBe("gemini")
+    expect(selected.api.id).toBe("google-gemini")
     expect(selected.baseURL).toBe("https://generativelanguage.test/v1beta")
     expect(selected.options?.headers).toEqual({ "x-application": "opencode" })
     expect(selected.options?.http?.body).toEqual({ safetySettings: [] })

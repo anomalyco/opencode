@@ -156,6 +156,7 @@ const prepare = (api: "messages" | "responses" | "chat") =>
 export const api = <const Name extends string, Caps extends Capabilities.Any, Body, Event, State>(input: {
   readonly name: Name
   readonly id: string
+  readonly short?: string
   readonly protocol: Protocol<Body, string, Event, State>
   readonly kind: "messages" | "responses" | "chat"
   readonly path: string
@@ -166,6 +167,7 @@ export const api = <const Name extends string, Caps extends Capabilities.Any, Bo
   Api.make({
     name: input.name,
     id: input.id,
+    short: input.short,
     protocol: gatewayProtocol(input.protocol, { id: input.id, prepare: prepare(input.kind) }),
     path: input.path,
     framing: input.framing,

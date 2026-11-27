@@ -95,7 +95,7 @@ describe("provider error retention", () => {
       ).pipe(Effect.provide(fixedResponse(sseEvents(body))), Effect.flip)
 
       expect(error.reason._tag).toBe("InvalidProviderOutput")
-      expect(error.message).toContain("Invalid google/gemini stream event")
+      expect(error.message).toContain("Invalid google/google-gemini stream event")
       expect(error.reason.body).toBe(body)
       expect(error.reason.http?.status).toBe(200)
     }),

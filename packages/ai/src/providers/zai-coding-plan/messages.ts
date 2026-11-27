@@ -5,7 +5,6 @@ import { shared, type MessagesOptionsInput, type Settings as SharedSettings } fr
 export type Settings = SharedSettings<MessagesOptionsInput>
 
 export const messages = ZAIMessages.api.configure({
-  id: "zai-coding-messages",
   baseURL: "https://api.z.ai/api/anthropic/v1",
   metadataKey: "zai",
   capabilities: { reasoning: { signature: false } },

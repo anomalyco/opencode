@@ -28,7 +28,7 @@ export const chatCompletions = OpenAIChat.api
     id: "digitalocean-chat",
     body: (request) => OpenAIChat.fromRequest(request, { cacheControl: cacheControl() }),
   })
-  .configure({ id: "digitalocean", capabilities: { cache: { markers: true, promptCacheKey: true } } })
+  .configure({ capabilities: { cache: { markers: true, promptCacheKey: true } } })
 
 export const digitalocean = Provider.make({ ...shared, apis: [chatCompletions, responses] })
 

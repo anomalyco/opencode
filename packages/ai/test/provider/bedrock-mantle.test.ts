@@ -29,17 +29,17 @@ describe("Amazon Bedrock Mantle provider", () => {
       const responses = yield* compileRequest(ai.request({ model: responsesModel, prompt: "Hi" }))
 
       expect(chat).toMatchObject({
-        api: "bedrock-mantle-chat",
+        api: "amazon-bedrock-chat",
         protocol: "openai-chat",
         body: { model: "openai.gpt-oss-120b" },
       })
       expect(messages).toMatchObject({
-        api: "bedrock-mantle-messages",
+        api: "amazon-bedrock-messages",
         protocol: "anthropic-messages",
         body: { model: "anthropic.claude-opus-4-8", stream: true },
       })
       expect(responses).toMatchObject({
-        api: "bedrock-mantle-responses",
+        api: "amazon-bedrock-responses",
         protocol: "open-responses",
         body: { model: "openai.gpt-oss-120b", store: false },
       })

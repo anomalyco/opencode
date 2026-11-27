@@ -6,6 +6,7 @@ export type Settings = SharedSettings<ChatOptionsInput>
 
 /** Cohere's OpenAI-compatible Chat Completions API. */
 export const chatCompletions = OpenAIChat.api.configure({
+  // The native Chat API is cohere-chat.
   id: "cohere-chat-completions",
   baseURL: compatibilityBaseURL,
   capabilities: {

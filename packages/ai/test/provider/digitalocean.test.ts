@@ -28,13 +28,13 @@ describe("DigitalOcean", () => {
       expect(model).toMatchObject({
         id: "anthropic-claude-fable-5.1",
         provider: "digitalocean",
-        api: { id: "digitalocean" },
+        api: { id: "digitalocean-chat" },
       })
       expect(model.baseURL).toBe("https://inference.do-ai.run/v1")
 
       const prepared = yield* compileRequest(ai.request({ model, prompt: "Say hello.", cache: "none" }))
 
-      expect(prepared.api).toBe("digitalocean")
+      expect(prepared.api).toBe("digitalocean-chat")
       expect(prepared.body).toMatchObject({
         model: "anthropic-claude-fable-5.1",
         messages: [{ role: "user", content: "Say hello." }],

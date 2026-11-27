@@ -346,6 +346,7 @@ export const protocol = Protocol.make({
 export const api = Api.make({
   name: "chat-completions",
   id: "venice-chat",
+  short: "chat",
   protocol,
   path: OpenAIChat.PATH,
   framing: OpenAIChat.framing,

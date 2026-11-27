@@ -5,7 +5,6 @@ import { shared, type ChatOptionsInput, type Settings as SharedSettings } from "
 export type Settings = SharedSettings<ChatOptionsInput>
 
 export const chatCompletions = ZAIChat.api.configure({
-  id: "zai-coding-chat",
   baseURL: "https://api.z.ai/api/coding/paas/v4",
   metadataKey: "zai",
 })

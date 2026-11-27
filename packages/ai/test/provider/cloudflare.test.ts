@@ -242,13 +242,13 @@ describe("Cloudflare", () => {
       expect(model).toMatchObject({
         id: "@cf/meta/llama-3.1-8b-instruct",
         provider: "cloudflare-workers-ai",
-        api: { id: "cloudflare-workers-ai" },
+        api: { id: "cloudflare-workers-ai-chat" },
       })
       expect(model.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/test-account/ai/v1")
 
       const prepared = yield* compileRequest(ai.request({ model, prompt: "Say hello." }))
 
-      expect(prepared.api).toBe("cloudflare-workers-ai")
+      expect(prepared.api).toBe("cloudflare-workers-ai-chat")
       expect(prepared.body).toMatchObject({
         model: "@cf/meta/llama-3.1-8b-instruct",
         messages: [{ role: "user", content: "Say hello." }],

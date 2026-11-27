@@ -853,7 +853,9 @@ const lowerOptions = (request: LLMRequest, supportsStore: boolean, hasActiveTool
   // the key where compatibility explicitly allows it. Header-based affinity
   // (x-session-affinity, x-grok-conv-id, ...) is unaffected.
   const cacheKey =
-    (Capabilities.cache(request.model.capabilities)?.promptCacheKey ?? false) ? ProviderShared.promptCacheKey(request) : undefined
+    (Capabilities.cache(request.model.capabilities)?.promptCacheKey ?? false)
+      ? ProviderShared.promptCacheKey(request)
+      : undefined
   return {
     ...(supportsStore ? { store: options.store ?? false } : {}),
     ...(cacheKey ? { prompt_cache_key: cacheKey } : {}),
@@ -1425,6 +1427,7 @@ export const httpTransport = HttpTransport.sseJson.with<OpenAIChatBody>().with({
 export const api = Api.make({
   name: "chat-completions",
   id: ADAPTER,
+  short: "chat",
   protocol,
   path: PATH,
   transport: httpTransport,

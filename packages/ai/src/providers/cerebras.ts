@@ -15,7 +15,6 @@ export const cerebras = Provider.make({
   auth: Provider.apiKey("CEREBRAS_API_KEY"),
   apis: [
     OpenAIChat.api.configure({
-      id: "cerebras-chat",
       capabilities: {
         output: { maxTokensField: "max_tokens" },
         reasoning: { field: "reasoning" },

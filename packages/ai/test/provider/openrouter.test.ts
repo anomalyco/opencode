@@ -16,13 +16,13 @@ describe("OpenRouter", () => {
       expect(model).toMatchObject({
         id: "openai/gpt-4o-mini",
         provider: "openrouter",
-        api: { id: "openrouter" },
+        api: { id: "openrouter-chat" },
       })
       expect(model.baseURL).toBe("https://openrouter.ai/api/v1")
 
       const prepared = yield* compileRequest(ai.request({ model, prompt: "Say hello." }))
 
-      expect(prepared.api).toBe("openrouter")
+      expect(prepared.api).toBe("openrouter-chat")
       expect(prepared.body).toMatchObject({
         model: "openai/gpt-4o-mini",
         messages: [{ role: "user", content: "Say hello." }],

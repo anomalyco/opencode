@@ -5,7 +5,7 @@ import { shared, type Settings as SharedSettings } from "./shared.js"
 
 export type Settings = SharedSettings<OpenResponsesProviderOptionsInput>
 
-export const responses = OpenAICompatibleResponses.api.configure({ id: "venice-responses" })
+export const responses = OpenAICompatibleResponses.api
 
 export const model = Provider.entrypoint<Settings, OpenResponsesProviderOptionsInput>(
   Provider.make({ ...shared, apis: [responses] }),

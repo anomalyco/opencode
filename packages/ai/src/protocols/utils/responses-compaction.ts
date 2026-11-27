@@ -113,7 +113,10 @@ export const make = (
         request.http?.body,
       ),
     )
-    const url = Endpoint.render({ baseURL: model.baseURL, path: model.api.path, query: model.query }, { request, body: native })
+    const url = Endpoint.render(
+      { baseURL: model.baseURL, path: model.api.path, query: model.query },
+      { request, body: native },
+    )
     url.pathname = `${url.pathname.replace(/\/$/, "")}/compact`
     const parts = yield* HttpTransport.jsonRequestParts({
       request: {

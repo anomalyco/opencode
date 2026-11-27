@@ -10,9 +10,7 @@ export type Settings = MessagesSettings
 export const azureMessages = Provider.make({
   id,
   auth: authentication("x-api-key"),
-  apis: [
-    AnthropicMessages.api.configure({ id: "azure-anthropic-messages", capabilities: { cache: { markers: false } } }),
-  ],
+  apis: [AnthropicMessages.api.configure({ capabilities: { cache: { markers: false } } })],
 })
 
 export const model = entrypoint<AnthropicMessages.ProviderOptionsInput>(

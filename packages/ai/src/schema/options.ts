@@ -236,8 +236,11 @@ export class LanguageModel<
     Compact extends CompactionOperations | undefined = CompactionOperations | undefined,
   >(input: LanguageModel.Input<Compact>) {
     const provider = ProviderID.make(input.provider)
+    // Errors and compiled requests name the host: `deepseek-chat`, not the shared `openai-chat`.
+    const id = input.api.host.id ?? hostID(provider, input.api.short)
     return new LanguageModel<Options, Compact>({
       ...input,
+      api: input.api.id === id ? input.api : { ...input.api, id },
       id: ModelID.make(input.id),
       provider,
       metadataKey: input.metadataKey ?? provider,
@@ -253,6 +256,9 @@ export class LanguageModel<
     return LanguageModel.make<Options, Compact>({ ...model, ...patch })
   }
 }
+
+const hostID = (provider: string, short: string) =>
+  short === provider || short.startsWith(`${provider}-`) ? short : `${provider}-${short}`
 
 export namespace LanguageModel {
   export type ConstructorInput<Compact extends CompactionOperations | undefined = CompactionOperations | undefined> = {

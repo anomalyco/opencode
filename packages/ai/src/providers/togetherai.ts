@@ -15,7 +15,6 @@ export const togetherai = Provider.make({
   auth: Provider.apiKey(["TOGETHER_API_KEY", "TOGETHER_AI_API_KEY"]),
   apis: [
     OpenAIChat.api.configure({
-      id: "togetherai-chat",
       capabilities: { output: { maxTokensField: "max_tokens" }, tools: { strict: false } },
     }),
   ],

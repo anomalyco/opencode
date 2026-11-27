@@ -58,7 +58,7 @@ export const model: ProviderPackage.Model<Settings, AnthropicMessages.ProviderOp
     Provider.make({
       id: provider ?? id,
       auth: shared.auth([]),
-      apis: [shared.api.configure({ id: "anthropic-compatible-messages" })],
+      apis: [shared.api],
       settings: shared.settings,
     }),
   )(modelID, settings)

@@ -21,8 +21,10 @@ export interface Definition<
 > {
   /** Selects the API on a provider: `provider.model(id, { api: "chat-completions" })`. Dialects keep their parent's. */
   readonly name: Name
-  /** This implementation, for diagnostics. A dialect has its own. */
+  /** This implementation. A model's `api.id` is `<provider>-<short>` instead, so errors name the host. */
   readonly id: string
+  /** The API in model ids: `deepseek` + `chat` → `deepseek-chat`. Defaults to `name`. */
+  readonly short: string
   // Frames, events and parser state are internal to the codec and erased once the API is built.
   // oxlint-disable-next-line typescript-eslint/no-explicit-any
   readonly protocol: Protocol<Body, any, any, any>
@@ -60,7 +62,7 @@ export type CompactOf<A> = A extends { readonly compact: infer Compact extends C
 export type Models<Caps> = Readonly<Record<string, Caps>> | ((modelID: string) => Caps | undefined)
 
 export interface Host<Caps> {
-  /** This API as this host serves it, for diagnostics: errors and compiled requests report it. Defaults to the API's id. */
+  /** Overrides the derived `<provider>-<short>` model `api.id`, for a host whose two APIs would otherwise share one. */
   readonly id?: string
   /** Overrides the provider's base URL for this API. */
   readonly baseURL?: string
@@ -79,6 +81,8 @@ export type MakeInput<Name extends string, Caps, Compact, Body, Frame, Event, St
   readonly name: Name
   /** Defaults to `name`. */
   readonly id?: string
+  /** Defaults to `name`. */
+  readonly short?: string
   readonly protocol: Protocol<Body, Frame, Event, State>
   readonly path: EndpointPart<Body>
   readonly headers?: (input: { readonly request: LLMRequest }) => Record<string, string>
@@ -121,6 +125,7 @@ export const make = <
   build({
     name: input.name,
     id: input.id ?? input.name,
+    short: input.short ?? input.name,
     protocol: input.protocol,
     transport: input.transport ?? HttpTransport.httpJson({ framing: input.framing! }),
     path: input.path,
@@ -140,7 +145,7 @@ const build = <
   definition: Omit<Definition<Name, Caps, Compact, Body>, "extend" | "configure">,
 ): Definition<Name, Caps, Compact, Body> => ({
   ...definition,
-  configure: (host) => build({ ...definition, id: host.id ?? definition.id, host: { ...definition.host, ...host } }),
+  configure: (host) => build({ ...definition, host: { ...definition.host, ...host } }),
   extend: <NextName extends string = Name>(patch: Extend<NextName, Caps, Body>) =>
     build<NextName, Caps, Compact, Body>({
       ...definition,

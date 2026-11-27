@@ -134,13 +134,13 @@ describe("ModelResolver", () => {
       )
 
       expect(responses).toMatchObject({ id: "responses-deployment", provider: "azure" })
-      expect(responses.api.id).toBe("azure-openai-responses")
+      expect(responses.api.id).toBe("azure-responses")
       expect(responses).toMatchObject({
         baseURL: "https://modern-resource.openai.azure.com/openai/v1",
         query: { "api-version": "2025-01-01-preview" },
       })
       expect(chat).toMatchObject({ id: "chat-deployment", provider: "azure" })
-      expect(chat.api.id).toBe("azure-openai-chat")
+      expect(chat.api.id).toBe("azure-chat")
       expect(deployment).toMatchObject({ id: "legacy-url-deployment", provider: "azure" })
       expect(deployment).toMatchObject({
         baseURL: "https://modern-resource.openai.azure.com/openai/deployments/legacy-url-deployment",
@@ -154,17 +154,17 @@ describe("ModelResolver", () => {
   it.effect("routes compatible packages to the host's dedicated package when one exists", () =>
     Effect.gen(function* () {
       const routes = {
-        "alibaba-coding-plan-cn": "alibaba-chat",
+        "alibaba-coding-plan-cn": "alibaba-coding-plan-cn-chat",
         baseten: "baseten-chat",
         deepseek: "deepseek-chat",
-        "fireworks-ai": "fireworks-chat",
-        "moonshotai-cn": "moonshot-chat",
-        zhipuai: "zai-chat",
-        "zhipuai-coding-plan": "zai-coding-chat",
-        cerebras: "openai-compatible-chat",
-        deepinfra: "openai-compatible-chat",
-        groq: "openai-compatible-chat",
-        togetherai: "openai-compatible-chat",
+        "fireworks-ai": "fireworks-ai-chat",
+        "moonshotai-cn": "moonshotai-cn-chat",
+        zhipuai: "zhipuai-chat",
+        "zhipuai-coding-plan": "zhipuai-coding-plan-chat",
+        cerebras: "cerebras-chat",
+        deepinfra: "deepinfra-chat",
+        groq: "groq-chat",
+        togetherai: "togetherai-chat",
       }
       for (const [providerID, route] of Object.entries(routes)) {
         const selected = yield* ModelResolver.fromCatalogModel(
@@ -219,9 +219,9 @@ describe("ModelResolver", () => {
         credential,
       )
 
-      expect(responses.api.id).toBe("bedrock-mantle-responses")
+      expect(responses.api.id).toBe("test-provider-responses")
       expect(responses).toMatchObject({ baseURL: "https://bedrock-mantle.us-east-2.api.aws/v1" })
-      expect(chat.api.id).toBe("bedrock-mantle-chat")
+      expect(chat.api.id).toBe("test-provider-chat")
       expect(chat).toMatchObject({ baseURL: "https://bedrock-mantle.us-east-2.api.aws/v1" })
     }),
   )
@@ -239,7 +239,7 @@ describe("ModelResolver", () => {
         })
         const resolved = yield* ModelResolver.fromCatalogModel(catalog)
 
-        expect(resolved.api.id).toBe("bedrock-mantle-responses")
+        expect(resolved.api.id).toBe("amazon-bedrock-responses")
         expect(resolved).toMatchObject({ baseURL: "https://bedrock-mantle.us-west-2.api.aws/openai/v1" })
         expect(catalog.settings?.baseURL).toBe("https://bedrock-mantle.us-west-2.api.aws/openai/v1")
       }),
@@ -295,7 +295,7 @@ describe("ModelResolver", () => {
 
       expect(catalog.id).toBe(ID.make("test-model"))
       expect(resolved).toMatchObject({ id: "api-test-model", provider: "test-provider" })
-      expect(resolved.api.id).toBe("openai-responses")
+      expect(resolved.api.id).toBe("test-provider-responses")
       expect(resolved).toMatchObject({ metadataKey: "openai", baseURL: "https://openai.example/v1" })
       expect(resolved.options).toMatchObject({
         headers: { "x-test": "header" },
@@ -503,7 +503,7 @@ describe("ModelResolver", () => {
       })
 
       expect(headers.authorization).toBe("Bearer settings-secret")
-      expect(resolved.api.id).toBe("openai-compatible-chat")
+      expect(resolved.api.id).toBe("deepseek-chat")
       expect(String(resolved.provider)).toBe("deepseek")
       expect(resolved.metadataKey).toBe("deepseek")
       expect(resolved.capabilities).toMatchObject({
@@ -697,7 +697,7 @@ describe("ModelResolver", () => {
         }),
       )
 
-      expect(resolved.api.id).toBe("anthropic-messages")
+      expect(resolved.api.id).toBe("test-provider-messages")
       expect(resolved).toMatchObject({ metadataKey: "anthropic", baseURL: "https://anthropic.example/v1" })
     }),
   )
@@ -854,7 +854,7 @@ describe("ModelResolver", () => {
         headers: Headers.empty,
       })
 
-      expect(resolved.api.id).toBe("openai-responses")
+      expect(resolved.api.id).toBe("test-provider-responses")
       expect(resolved).toMatchObject({ baseURL: "https://chatgpt.com/backend-api/codex" })
       expect(resolved.options?.headers).toMatchObject({ "chatgpt-account-id": "acct_123" })
       expect(headers.authorization).toBe("Bearer chatgpt-token")
@@ -885,7 +885,7 @@ describe("ModelResolver", () => {
         }),
       )
 
-      expect(resolved.api.id).toBe("openai-compatible-chat")
+      expect(resolved.api.id).toBe("test-provider-chat")
       expect(resolved.baseURL).toBe("https://compatible.example/v1")
     }),
   )
@@ -1369,41 +1369,41 @@ describe("ModelResolver", () => {
         Credential.Key.make({ type: "key", key: "workers-secret" }),
       )
 
-      expect(google.api.id).toBe("gemini")
+      expect(google.api.id).toBe("test-provider-gemini")
       expect(google.options?.providerOptions).toEqual({ thinkingConfig: { thinkingBudget: 1_024 } })
-      expect(openrouter.api.id).toBe("openrouter")
+      expect(openrouter.api.id).toBe("test-provider-chat")
       expect(openrouter.options?.providerOptions).toEqual({ reasoning: { effort: "high" } })
-      expect(cerebras.api.id).toBe("cerebras-chat")
+      expect(cerebras.api.id).toBe("test-provider-chat")
       expect(cerebras.options?.providerOptions).toEqual({ reasoningEffort: "high" })
       expect(String(cerebras.provider)).toBe("test-provider")
-      expect(deepinfra.api.id).toBe("deepinfra-chat")
+      expect(deepinfra.api.id).toBe("test-provider-chat")
       expect(deepinfra.baseURL).toBe("https://deepinfra.example/provider-root/openai")
       expect(deepinfra.options?.providerOptions).toEqual({ reasoningEffort: "none" })
       expect(String(deepinfra.provider)).toBe("test-provider")
-      expect(togetherai.api.id).toBe("togetherai-chat")
+      expect(togetherai.api.id).toBe("test-provider-chat")
       expect(togetherai.options?.providerOptions).toEqual({ reasoningEffort: "high" })
       expect(String(togetherai.provider)).toBe("test-provider")
-      expect(groq.api.id).toBe("groq-chat")
+      expect(groq.api.id).toBe("test-provider-chat")
       expect(groq.api.protocol.id).toBe("groq-chat")
       expect(groq.options?.providerOptions).toEqual({ reasoningEffort: "high", parallelToolCalls: false })
       expect(String(groq.provider)).toBe("test-provider")
-      expect(mistral.api.id).toBe("mistral-chat")
+      expect(mistral.api.id).toBe("test-provider-mistral-chat")
       expect(mistral.options?.providerOptions).toEqual({
         safePrompt: true,
         promptCacheKey: "session-123",
         reasoningEffort: "high",
       })
       expect(String(mistral.provider)).toBe("test-provider")
-      expect(xai.api.id).toBe("xai-responses")
+      expect(xai.api.id).toBe("test-provider-responses")
       expect(xai.options?.providerOptions).toEqual({
         reasoningEffort: "high",
         store: false,
         include: ["reasoning.encrypted_content"],
       })
-      expect(bedrock.api.id).toBe("bedrock-converse")
+      expect(bedrock.api.id).toBe("test-provider-converse")
       expect(bedrock.options?.topP).toBe(0.8)
       expect(bedrock.options?.http?.body).toEqual({ serviceTier: { type: "priority" } })
-      expect(mantle.api.id).toBe("bedrock-mantle-chat")
+      expect(mantle.api.id).toBe("test-provider-chat")
       expect(mantle.options?.topP).toBe(0.6)
       expect(workers.baseURL).toBe("https://api.cloudflare.com/client/v4/accounts/account/ai/v1")
     }),

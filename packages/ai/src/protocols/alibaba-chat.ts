@@ -89,6 +89,7 @@ export const protocol = Protocol.make({
 export const api = Api.make({
   name: "chat-completions",
   id: "alibaba-chat",
+  short: "chat",
   protocol,
   path: OpenAIChat.PATH,
   framing: Framing.sse,

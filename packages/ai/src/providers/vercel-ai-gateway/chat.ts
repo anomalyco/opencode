@@ -8,6 +8,7 @@ export type { Settings } from "./shared.js"
 export const chatCompletions = api({
   name: "chat-completions",
   id: "vercel-ai-gateway-chat",
+  short: "chat",
   protocol: OpenAIChat.protocol,
   kind: "chat",
   path: OpenAIChat.PATH,

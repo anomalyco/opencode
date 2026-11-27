@@ -86,7 +86,7 @@ for (const item of cases) {
             {
               role: "assistant",
               content:
-                item.model.api.id === "openrouter"
+                item.model.api.id === "openrouter-chat"
                   ? [{ type: "text", text: response.text, cache_control: { type: "ephemeral" } }]
                   : response.text,
               reasoning: response.reasoning,

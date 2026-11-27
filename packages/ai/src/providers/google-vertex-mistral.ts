@@ -21,7 +21,7 @@ export const mistral = MistralChat.api
     body: (request, base) => base(request).pipe(Effect.map((body) => Struct.omit(body, ["prompt_cache_key"]))),
     path: ({ request }) => `/${request.model.id}:streamRawPredict`,
   })
-  .configure({ id: "google-vertex-mistral", metadataKey: "vertex" })
+  .configure({ metadataKey: "vertex" })
 
 export const googleVertexMistral = Provider.make({
   ...GoogleVertexShared.shared,

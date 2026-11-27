@@ -432,7 +432,8 @@ function modelFromLanguage(info: RuntimeInfo, language: LanguageModelV3) {
           ).pipe(Stream.map((event) => new Finished(event))),
         }),
     },
-  })
+  }).configure({ id: `ai-sdk:${packageName}` })
+
   return LanguageModel.make({
     id: info.modelID ?? info.id,
     provider: providerID,

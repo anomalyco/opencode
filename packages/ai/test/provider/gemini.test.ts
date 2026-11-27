@@ -1236,7 +1236,7 @@ describe("Gemini route", () => {
 
       expect(error).toBeInstanceOf(AIError)
       expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
-      expect(error.message).toContain("Invalid google/gemini stream event")
+      expect(error.message).toContain("Invalid google/google-gemini stream event")
     }),
   )
 
@@ -1963,7 +1963,7 @@ describe("Gemini route", () => {
 
       expect(error).toBeInstanceOf(AIError)
       expect(error.reason).toMatchObject({ _tag: "InvalidProviderOutput" })
-      expect(error.message).toContain("Invalid google/gemini stream event")
+      expect(error.message).toContain("Invalid google/google-gemini stream event")
     }),
   )
 

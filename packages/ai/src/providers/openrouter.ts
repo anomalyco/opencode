@@ -195,6 +195,7 @@ const bodyOptions = (body: OpenAIChat.OpenAIChatBody, input: unknown, maxTokens:
 export const chatCompletions = Api.make({
   name: "chat-completions",
   id: "openrouter",
+  short: "chat",
   protocol,
   path: OpenAIChat.PATH,
   framing: OpenAIChat.framing,

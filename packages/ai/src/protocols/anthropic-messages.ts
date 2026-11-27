@@ -665,9 +665,7 @@ const lowerMedia = Effect.fnUntraced(function* (part: MediaPart, request: LLMReq
       ...(cacheControlValue === undefined ? {} : { cache_control: cacheControlValue }),
     } satisfies AnthropicVideoBlock
   }
-  const options = yield* decodeMediaOptions(
-    part.providerMetadata?.[request.model.metadataKey] ?? {},
-  )
+  const options = yield* decodeMediaOptions(part.providerMetadata?.[request.model.metadataKey] ?? {})
   const image = (source: AnthropicImageBlock["source"]): AnthropicImageBlock => ({
     type: "image",
     source,
@@ -733,7 +731,8 @@ const lowerToolResultContent = Effect.fnUntraced(function* (part: ToolResultPart
 })
 
 const requireThinkingSignature = (request: LLMRequest) => {
-  if (request.model.capabilities?.reasoning?.signature !== undefined) return request.model.capabilities.reasoning.signature
+  if (request.model.capabilities?.reasoning?.signature !== undefined)
+    return request.model.capabilities.reasoning.signature
   const provider = request.model.provider.toLowerCase()
   const model = request.model.id.toLowerCase()
   const baseURL = (request.model.baseURL ?? "").toLowerCase()

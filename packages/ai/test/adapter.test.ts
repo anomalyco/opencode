@@ -78,6 +78,7 @@ const fake = Api.make({
 const gemini = Api.make({
   name: "fake",
   id: "gemini-fake",
+  short: "gemini",
   protocol: fakeProtocol,
   path: "/chat",
   framing: fakeFraming,
@@ -146,7 +147,7 @@ describe("llm api", () => {
         model: LanguageModel.make({ ...request.model, api: gemini }),
       })
 
-      expect(prepared.api).toBe("gemini-fake")
+      expect(prepared.api).toBe("fake-provider-gemini")
     }),
   )
 

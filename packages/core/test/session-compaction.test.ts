@@ -1041,7 +1041,7 @@ it.effect("native compaction fails without a model call on a route that cannot c
       status: "failed",
       error: {
         type: "provider.unsupported-operation",
-        message: "Native compaction is not supported for test/openai-chat",
+        message: "Native compaction is not supported for test/test-chat",
       },
     })
     expect(requests).toHaveLength(0)

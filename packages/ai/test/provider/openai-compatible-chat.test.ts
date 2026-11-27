@@ -94,11 +94,11 @@ describe("OpenAI-compatible Chat route", () => {
         toolChoice: ToolChoice.make({ type: "required" }),
       })
 
-      expect(prepared.api).toBe("openai-compatible-chat")
+      expect(prepared.api).toBe("deepseek-chat")
       expect(prepared.model).toMatchObject({
         id: "deepseek-chat",
         provider: "deepseek",
-        api: { id: "openai-compatible-chat" },
+        api: { id: "deepseek-chat" },
         baseURL: "https://api.deepseek.test/v1/",
         query: { "api-version": "2026-01-01" },
       })
