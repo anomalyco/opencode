@@ -1,5 +1,5 @@
 import { createSignal } from "solid-js"
-import { Tooltip } from "./tooltip"
+import { Tooltip, TooltipText } from "./tooltip"
 import { Button } from "@opencode/ui/button"
 import { Keybind } from "@opencode/ui/keybind"
 import { Menu } from "@opencode/ui/menu"
@@ -126,7 +126,9 @@ export const Path = {
       <Tooltip
         value={
           <>
-            Components <span style={{ color: "var(--text-text-faint)" }}>/</span> Tooltip
+            <TooltipText>Components</TooltipText>
+            <TooltipText variant="faint">/</TooltipText>
+            <TooltipText>Tooltip</TooltipText>
           </>
         }
       >
@@ -142,13 +144,56 @@ export const TitleDescription = {
       <Tooltip
         value={
           <>
-            <span>Title</span>
-            <span style={{ color: "var(--text-text-faint)" }}>·</span>
-            <span style={{ color: "var(--text-text-faint)" }}>Description</span>
+            <TooltipText>Title</TooltipText>
+            <TooltipText variant="muted">·</TooltipText>
+            <TooltipText variant="muted">Description</TooltipText>
           </>
         }
       >
         <span>Hover me</span>
+      </Tooltip>
+    </div>
+  ),
+}
+
+export const Colors = {
+  render: () => (
+    <div style={{ padding: "80px", display: "flex", "flex-direction": "column", gap: "48px", "align-items": "center" }}>
+      <Tooltip
+        forceOpen
+        value={
+          <>
+            <TooltipText>Included in Go</TooltipText>
+            <TooltipText variant="accent">60% off</TooltipText>
+          </>
+        }
+      >
+        <span>Accent</span>
+      </Tooltip>
+      <Tooltip
+        forceOpen
+        value={
+          <>
+            <TooltipText>Everyone except</TooltipText>
+            <TooltipText variant="warning">Set by the rules below</TooltipText>
+          </>
+        }
+      >
+        <span>Warning</span>
+      </Tooltip>
+    </div>
+  ),
+}
+
+export const Wrapping = {
+  render: () => (
+    <div style={{ padding: "80px", display: "flex", "justify-content": "center" }}>
+      <Tooltip
+        forceOpen
+        contentStyle={{ "max-width": "200px" }}
+        value="Only with OpenCode Go. Stops when the allowance runs out."
+      >
+        <span>Two lines</span>
       </Tooltip>
     </div>
   ),
