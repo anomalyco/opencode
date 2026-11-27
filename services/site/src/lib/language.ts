@@ -135,6 +135,35 @@ export function label(locale: Locale) {
   return LABEL[locale]
 }
 
+// The Console serves its marketing pages at /<locale>/console/... and keeps the guides and app
+// pages (workspace, login, ...) at /console/...; consoleRoute leaves those alone too.
+const consoleMarketing = [
+  "/console",
+  "/console/models",
+  "/console/go",
+  "/console/enterprise",
+  "/console/teams",
+  "/console/support",
+  "/console/integrations",
+]
+
+/** True for one of the Console's marketing pages, and only that page: its guides stay English. */
+function consoleMarketingPath(pathname: string) {
+  const path = pathname.split(/[?#]/, 1)[0]?.replace(/\/$/, "") || "/"
+  return consoleMarketing.includes(path)
+}
+
+/**
+ * A link to a Console marketing page in the page's language. The Console serves its marketing pages
+ * at /<locale>/console/... and keeps its guides and app pages (workspace, login, ...) at /console/...;
+ * this app's own route() leaves /console unprefixed (localized() excludes it).
+ */
+export function consoleRoute(locale: Locale, pathname: string) {
+  const next = strip(pathname)
+  if (locale === "en" || !consoleMarketingPath(next)) return next
+  return `/${locale}${next}`
+}
+
 export function english(locale: Locale) {
   return ENGLISH[locale]
 }

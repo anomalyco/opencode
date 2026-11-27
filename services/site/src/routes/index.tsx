@@ -96,7 +96,7 @@ export default function Home() {
     siteSettings.consoleLayout === "block" && siteSettings.consoleSection !== "off"
       ? "panel"
       : siteSettings.consoleSection
-  const content = createMemo(() => homeContent(i18n.t, language.route))
+  const content = createMemo(() => homeContent(i18n.t, language.route, language.consoleRoute))
   // Its own meta description (140–155 characters). Until a locale translates it, the locale keeps
   // the tagline and hero subtitle it already has in its language.
   const description = () =>
@@ -956,7 +956,9 @@ function stripTags(html: string) {
 function GetStarted() {
   const i18n = useI18n()
   const language = useLanguage()
-  const content = createMemo(() => localize(language.locale(), "getStarted", getStarted(language.route)))
+  const content = createMemo(() =>
+    localize(language.locale(), "getStarted", getStarted(language.route, language.consoleRoute)),
+  )
   // On a phone or tablet, Download is that device's app; on a computer, the desktop build.
   const platform = useDevicePlatform()
   const downloadSlug = () => (isMobile(platform()) ? "mobile" : "desktop")
@@ -1189,7 +1191,7 @@ function BringYourOwnSubs() {
   const [tab, setTab] = createSignal<"yours" | "ours">("yours")
   const yours = () => <ToolGrid items={subs().yours.items} label={subs().yours.label} iconTiles />
   const providers = () => <ToolGrid items={subs().providers} label={i18n.t("home.byos.providersLabel")} iconTiles />
-  const goHref = () => subs().plansHref
+  const goHref = () => language.consoleRoute(subs().plansHref)
   const select = (next: "yours" | "ours", focus?: boolean) => {
     setTab(next)
     if (focus) document.getElementById(`byos-tab-${next}`)?.focus()

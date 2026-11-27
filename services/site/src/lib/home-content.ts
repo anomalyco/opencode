@@ -31,7 +31,7 @@ export function linkPhrases(text: string, links: readonly { text: string; href: 
  * The home page copy, shared by the page and its Markdown version so the two never drift.
  * `route` localizes a site path.
  */
-export function homeContent(t: Translate, route: (path: string) => string) {
+export function homeContent(t: Translate, route: (path: string) => string, consoleHref = route) {
   const docs = (path: string) => `https://opencode.ai${docsUrl(path)}`
   return {
     title: t("home.title"),
@@ -163,10 +163,10 @@ export function homeContent(t: Translate, route: (path: string) => string) {
       title: t("site.nav.console"),
       headline: t("home.console.headline"),
       body: t("home.console.body"),
-      cta: { text: t("home.console.cta"), href: "/console" },
+      cta: { text: t("home.console.cta"), href: consoleHref("/console") },
       // The slim option: one line that names the Console, and a second action.
       slimHeadline: t("home.console.slimHeadline"),
-      sales: { text: t("home.console.sales"), href: "/console/enterprise" },
+      sales: { text: t("home.console.sales"), href: consoleHref("/console/enterprise") },
     },
   }
 }
