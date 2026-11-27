@@ -282,6 +282,8 @@ import type {
   ExperimentalJobListOutput,
   ExperimentalJobCancelInput,
   ExperimentalJobCancelOutput,
+  ExperimentalJobCancelShellsInput,
+  ExperimentalJobCancelShellsOutput,
   ExperimentalMachineListOutput,
   ExperimentalMachineAddInput,
   ExperimentalMachineAddOutput,
@@ -1828,6 +1830,18 @@ export function make(options: ClientOptions) {
               path: `/api/experimental/job/${encodeURIComponent(input.id)}/cancel`,
               successStatus: 204,
               declaredStatuses: [400, 401],
+              empty: true,
+            },
+            requestOptions,
+          ),
+        cancelShells: (input: ExperimentalJobCancelShellsInput, requestOptions?: RequestOptions) =>
+          request<ExperimentalJobCancelShellsOutput>(
+            {
+              method: "POST",
+              path: `/api/experimental/job/cancel-shells`,
+              body: { sessionID: input["sessionID"], descendants: input["descendants"] },
+              successStatus: 204,
+              declaredStatuses: [400, 401, 404],
               empty: true,
             },
             requestOptions,

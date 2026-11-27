@@ -2568,6 +2568,15 @@ export type ExperimentalJobCancelOperation<E = never> = (
   input: ExperimentalJobCancelInput,
 ) => Effect.Effect<ExperimentalJobCancelOutput, E>
 
+export type ExperimentalJobCancelShellsInput = {
+  readonly sessionID: Session.ID
+  readonly descendants?: boolean | undefined
+}
+export type ExperimentalJobCancelShellsOutput = void
+export type ExperimentalJobCancelShellsOperation<E = never> = (
+  input: ExperimentalJobCancelShellsInput,
+) => Effect.Effect<ExperimentalJobCancelShellsOutput, E>
+
 export type ExperimentalMachineListOutput = ReadonlyArray<{
   readonly id: string
   readonly online: boolean
@@ -2766,7 +2775,11 @@ export interface ExperimentalApi<E = never> {
     readonly update: ExperimentalArtifactsUpdateOperation<E>
     readonly delete: ExperimentalArtifactsDeleteOperation<E>
   }
-  readonly job: { readonly list: ExperimentalJobListOperation<E>; readonly cancel: ExperimentalJobCancelOperation<E> }
+  readonly job: {
+    readonly list: ExperimentalJobListOperation<E>
+    readonly cancel: ExperimentalJobCancelOperation<E>
+    readonly cancelShells: ExperimentalJobCancelShellsOperation<E>
+  }
   readonly machine: {
     readonly list: ExperimentalMachineListOperation<E>
     readonly add: ExperimentalMachineAddOperation<E>

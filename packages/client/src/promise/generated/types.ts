@@ -5007,6 +5007,13 @@ export type ExperimentalJobCancelInput = { readonly id: string }
 
 export type ExperimentalJobCancelOutput = void
 
+export type ExperimentalJobCancelShellsInput = {
+  readonly sessionID: string
+  readonly descendants?: boolean | undefined
+}
+
+export type ExperimentalJobCancelShellsOutput = void
+
 export type ExperimentalMachineListOutput = { data: Array<MachineInfo> }["data"]
 
 export type ExperimentalMachineAddInput = {
