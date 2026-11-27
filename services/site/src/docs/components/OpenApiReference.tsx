@@ -4,6 +4,7 @@ import type { Locale } from "~/lib/language"
 import openapi from "../../../../../packages/protocol/openapi.json"
 import { latestDocs } from "../config"
 import { DocsLayout, type DocsAssets } from "../layouts/DocsLayout"
+import type { DocsSection } from "../lib/navigation"
 import { formatOpenApiValue, openApiSchemaLabel, type OpenApiOperation, type OpenApiSchema } from "../lib/openapi"
 
 const methods = ["get", "post", "put", "patch", "delete", "options", "head"] as const
@@ -47,6 +48,7 @@ export function OpenApiReference(props: {
   locale: Locale
   translated: boolean
   alternates: readonly Locale[]
+  section: DocsSection
 }) {
   return (
     <DocsLayout
@@ -62,6 +64,7 @@ export function OpenApiReference(props: {
       locale={props.locale}
       translated={props.translated}
       alternates={props.alternates}
+      section={props.section}
     >
       <p>
         {openapi.info.description} The reference covers {operations.length} operations and {schemas.length} schemas from

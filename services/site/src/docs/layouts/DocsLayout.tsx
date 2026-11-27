@@ -19,14 +19,7 @@ import { latestDocs, type DocsSet } from "../config"
 import { DocsFooter } from "../components/DocsFooter"
 import { DocsSearchDialog } from "../components/DocsSearchDialog"
 import { DocsNav } from "../components/DocsSidebar"
-import {
-  docsCanonicalHref,
-  docsHref,
-  docsLocaleBase,
-  docsLocaleHref,
-  getDocsSection,
-  type DocsSection,
-} from "../lib/navigation"
+import { docsCanonicalHref, docsHref, docsLocaleBase, docsLocaleHref, type DocsSection } from "../lib/navigation"
 import type { V1Locale } from "../lib/v1-navigation"
 import type { DocsHeading } from "../rehype-headings"
 
@@ -76,6 +69,8 @@ export function DocsLayout(props: {
   translated: boolean
   /** The languages the page is translated into, for its hreflang links. */
   alternates: readonly Locale[]
+  /** The current section in the page's language (render.tsx). */
+  section: DocsSection
   /** The page's source file from the repository root, for "Edit this page"; generated pages have none. */
   source?: string
   /** The page's Markdown twin; generated pages have none. */
@@ -85,7 +80,7 @@ export function DocsLayout(props: {
   children: JSX.Element
 }) {
   const i18n = useI18n()
-  const section = props.v1?.section ?? getDocsSection(props.currentSlug)
+  const section = props.section
   // Pagination stays in the set.
   const pages = section.groups.flatMap((group) => group.items.filter((item) => !item.href))
   const at = pages.findIndex((item) => item.slug === props.currentSlug)
@@ -210,7 +205,7 @@ export function DocsLayout(props: {
             <GitHubLink owner="topbar" />
           </header>
           <DocsSectionLinks
-            current={section.title}
+            current={section.key}
             v1={props.set.id === "v1"}
             v1Href={props.versions?.v1}
             hrefs={sectionHrefs}

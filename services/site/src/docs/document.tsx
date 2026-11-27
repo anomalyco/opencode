@@ -19,7 +19,7 @@ import { Tabs } from "./components/Tabs"
 import type { DocsSet } from "./config"
 import { docsFiles, docsTranslationFiles, type DocsModule } from "./content"
 import { DocsLayout, type DocsAssets, type DocsV1, type DocsVersions } from "./layouts/DocsLayout"
-import { docsLocaleMarkdownHref, docsMarkdownHref } from "./lib/navigation"
+import { docsLocaleMarkdownHref, docsMarkdownHref, type DocsSection } from "./lib/navigation"
 import type { V1Locale } from "./lib/v1-navigation"
 
 /**
@@ -36,6 +36,8 @@ export type DocsRender = {
   translated: boolean
   /** The languages the page is translated into, for its hreflang links. */
   alternates: readonly Locale[]
+  /** The current section in the page's language, with its pages' titles (render.tsx). */
+  section: DocsSection
   versions?: DocsVersions
   v1?: DocsV1
 }
@@ -119,6 +121,7 @@ export function DocsDocument(props: DocsRender) {
             locale={props.locale}
             translated={props.translated}
             alternates={props.alternates}
+            section={props.section}
             source={source}
             markdown={
               props.set.id === "latest"
@@ -136,6 +139,7 @@ export function DocsDocument(props: DocsRender) {
             locale={props.locale}
             translated={props.translated}
             alternates={props.alternates}
+            section={props.section}
           />
         )}
       </I18nContext.Provider>

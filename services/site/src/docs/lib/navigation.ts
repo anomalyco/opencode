@@ -9,14 +9,28 @@ export interface DocsNavItem {
   href?: string
 }
 
+/**
+ * A section or group label that is UI copy rather than a page title: the sidebar reads it from the
+ * page language's dictionary (`docs.nav.*`), while page titles come from the pages themselves.
+ */
+export type DocsNavLabel =
+  | "docs.nav.docs"
+  | "docs.nav.build"
+  | "docs.nav.configure"
+  | "docs.nav.plugins"
+  | "docs.nav.client"
+  | "docs.nav.workspace"
+
 export interface DocsNavGroup {
   title?: string
+  titleKey?: DocsNavLabel
   items: DocsNavItem[]
 }
 
 export interface DocsSection {
   key: "docs" | "cli" | "build" | "api" | "console"
   title: string
+  titleKey?: DocsNavLabel
   landingSlug: string
   groups: DocsNavGroup[]
 }
@@ -25,6 +39,7 @@ export const docsSections: DocsSection[] = [
   {
     key: "docs",
     title: "Docs",
+    titleKey: "docs.nav.docs",
     landingSlug: "index",
     groups: [
       {
@@ -38,6 +53,7 @@ export const docsSections: DocsSection[] = [
       },
       {
         title: "Configure",
+        titleKey: "docs.nav.configure",
         items: [
           { title: "Agents", slug: "agents" },
           { title: "Models", slug: "models" },
@@ -87,6 +103,7 @@ export const docsSections: DocsSection[] = [
   {
     key: "build",
     title: "Build",
+    titleKey: "docs.nav.build",
     landingSlug: "build",
     groups: [
       {
@@ -94,6 +111,7 @@ export const docsSections: DocsSection[] = [
       },
       {
         title: "Plugins",
+        titleKey: "docs.nav.plugins",
         items: [
           { title: "Overview", slug: "build/plugins" },
           { title: "Server", slug: "build/plugins/server" },
@@ -105,6 +123,7 @@ export const docsSections: DocsSection[] = [
       },
       {
         title: "Client",
+        titleKey: "docs.nav.client",
         items: [{ title: "JavaScript", slug: "build/client" }],
       },
       {
@@ -152,6 +171,7 @@ export const docsSections: DocsSection[] = [
       },
       {
         title: "Workspace",
+        titleKey: "docs.nav.workspace",
         items: [
           { title: "Basics", slug: "console/workspaces" },
           { title: "Members", slug: "console/members" },
@@ -261,4 +281,25 @@ export function getDocsSection(slug: string) {
     docsSections.find((section) => section.groups.some((group) => group.items.some((item) => item.slug === slug))) ??
     docsSections[0]
   )
+}
+
+/**
+ * A section in a page's language: its UI labels from the dictionary (`docs.nav.*`) and its page
+ * titles from `titles`, a translated page's own frontmatter title by slug. A page without a current
+ * translation has no entry, so the English navigation title stays (as do pages in another set).
+ */
+export function docsSectionTitles(
+  section: DocsSection,
+  titles: ReadonlyMap<string, string>,
+  label: (key: DocsNavLabel) => string,
+): DocsSection {
+  return {
+    ...section,
+    title: section.titleKey ? label(section.titleKey) : section.title,
+    groups: section.groups.map((group) => ({
+      ...group,
+      title: group.titleKey ? label(group.titleKey) : group.title,
+      items: group.items.map((item) => ({ ...item, title: titles.get(item.slug) ?? item.title })),
+    })),
+  }
 }

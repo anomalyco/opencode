@@ -5,7 +5,7 @@ import { docsContent, docsTranslations } from "./content"
 import { DocsDocument, docsI18n } from "./document"
 import type { DocsAssets } from "./layouts/DocsLayout"
 import { currentTranslation } from "./lib/heading-structure"
-import { docsLocaleHref, docsHref } from "./lib/navigation"
+import { docsHref, docsLocaleHref, docsSectionTitles, getDocsSection } from "./lib/navigation"
 import { renderSitemap } from "./lib/sitemap"
 import { latestHref, v1Href, v1Locales, v1Page, v1Section, v1Slug, type V1Locale } from "./lib/v1-navigation"
 
@@ -50,6 +50,7 @@ export async function renderDocsPage(set: DocsSet, slug: string, assets: DocsAss
         }
       : undefined
   const alternates = set.id === "latest" ? await translatedLocales(slug) : []
+  const section = v1?.section ?? (await localizedSection(slug, locale))
   return renderToString(() => (
     <DocsDocument
       set={set}
@@ -59,10 +60,42 @@ export async function renderDocsPage(set: DocsSet, slug: string, assets: DocsAss
       locale={set.id === "latest" ? locale : "en"}
       translated={translated}
       alternates={alternates}
+      section={section}
       versions={versions}
       v1={v1}
     />
   ))
+}
+
+/**
+ * The current section in the page's language: UI labels from `docs.nav.*`, and each page's title
+ * from its current translation's frontmatter. Untranslated or stale pages keep the English
+ * navigation title; only translated pages load their module here.
+ */
+async function localizedSection(slug: string, locale: Locale) {
+  const section = getDocsSection(slug)
+  const titles = new Map<string, string>()
+  if (locale !== "en") {
+    const slugs = [
+      ...new Set(section.groups.flatMap((group) => group.items.filter((item) => !item.href).map((item) => item.slug))),
+    ]
+    const found = await Promise.all(slugs.map(async (item) => [item, await translatedTitle(item, locale)] as const))
+    for (const [item, title] of found) if (title) titles.set(item, title)
+  }
+  return docsSectionTitles(section, titles, (key) => docsI18n(locale).t(key))
+}
+
+const translatedTitleCache = new Map<string, Promise<string | undefined>>()
+function translatedTitle(slug: string, locale: Locale) {
+  const key = `${locale}/${slug}`
+  const known = translatedTitleCache.get(key)
+  if (known) return known
+  const promise = (async () => {
+    const module = currentTranslation(await docsTranslations.get(locale)?.get(slug)?.())
+    return module?.frontmatter.title
+  })()
+  translatedTitleCache.set(key, promise)
+  return promise
 }
 
 /**

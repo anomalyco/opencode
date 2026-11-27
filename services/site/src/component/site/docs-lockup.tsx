@@ -14,8 +14,8 @@ export type DocsVersion = (typeof docsVersions)[number]["id"]
 
 /** A docs section's name in the page's language: "Docs" and "Build" translate, the product names don't. */
 export function docsSectionName(i18n: I18n, section: string) {
-  if (section === "Docs") return i18n.t("nav.docs")
-  if (section === "Build") return i18n.t("docs.section.build")
+  if (section === "Docs") return i18n.t("docs.nav.docs")
+  if (section === "Build") return i18n.t("docs.nav.build")
   return section
 }
 
@@ -43,6 +43,7 @@ export function DocsLockup(props: { inline?: "sidebar" | "topbar"; home?: string
  * phones and tablets.
  */
 export function DocsSectionLinks(props: {
+  /** The current section's key (`docs`, `cli`, `build`, `api`, `console`), not its translated name. */
   current: string
   v1?: boolean
   v1Href?: string
@@ -63,7 +64,7 @@ export function DocsSectionLinks(props: {
               <li>
                 <a
                   href={props.hrefs?.[product.label] ?? product.href}
-                  aria-current={!props.v1 && props.current === product.label ? "page" : undefined}
+                  aria-current={!props.v1 && props.current === product.label.toLowerCase() ? "page" : undefined}
                 >
                   {linkLabel(product.label)}
                 </a>

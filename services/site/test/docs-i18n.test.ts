@@ -12,8 +12,8 @@ const pages = (folder: string) =>
     .filter((file) => file.endsWith(".mdx"))
     .map((file) => file.replace(/\.mdx$/, ""))
     .toSorted()
-// Docs words some languages write as English does ("Terminal" in German, "Tip" in Danish, "Pages" in French).
-const shared = new Set(["Terminal", "Diff", "Note", "Tip", "Danger", "Documentation", "Pages"])
+// Docs words some languages write as English does ("Terminal" in German, "Tip" in Danish, "Pages" in French, "Client" in French and Italian).
+const shared = new Set(["Terminal", "Diff", "Note", "Tip", "Danger", "Documentation", "Pages", "Client"])
 const docsKeys = Object.keys(en).filter((key) => key.startsWith("docs.")) as (keyof typeof en)[]
 
 describe("V1 docs in every language", () => {
