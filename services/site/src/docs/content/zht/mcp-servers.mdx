@@ -233,7 +233,7 @@ OpenCode 會使用第一個適用的方法向授權伺服器表明身分：
 | --- | --- |
 | 預先註冊的用戶端 | 已設定 `oauth.client_id`。 |
 | [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2025-11-25/basic/authorization#client-id-metadata-documents)（CIMD） | 授權伺服器支援 CIMD 與公開用戶端，且未設定 `oauth.redirect_uri`。 |
-| [動態用戶端註冊](https://datatracker.ietf.org/doc/html/rfc7591)（DCR） | 上述兩者皆不適用。OpenCode 會註冊用戶端，並在之後登入時重複使用。 |
+| [動態用戶端註冊](https://datatracker.ietf.org/doc/html/rfc7591)（DCR） | 上述兩者皆不適用。OpenCode 會註冊用戶端，之後登入時會沿用該用戶端，並監聽註冊時使用的連接埠。若連接埠已被占用，OpenCode 會重新註冊。 |
 
 授權伺服器可在中繼資料中宣告支援 CIMD：
 
@@ -290,8 +290,8 @@ https://opencode.ai/oauth/opencode/client.json
 | --- | --- |
 | `client_id` | 預先註冊的用戶端 ID。優先於 CIMD 與 DCR。 |
 | `client_secret` | 機密用戶端的密鑰，會放在權杖請求主體中傳送。公開用戶端請省略。 |
-| `scope` | 以空格分隔的要求範圍。預設為伺服器在拒絕未驗證請求時指定的範圍。 |
-| `callback_port` | 本機回呼連接埠，從 `1` 到 `65535`。預設為 `redirect_uri` 的連接埠，否則使用可用的臨時連接埠。 |
+| `scope` | 要求的授權範圍，以空格分隔。預設使用伺服器拒絕未驗證的請求時指定的範圍。OpenCode 重新整理權杖時，會再次傳送已授予的範圍。 |
+| `callback_port` | 本機回呼連接埠，範圍為 `1` 到 `65535`。預設依序採用 `redirect_uri` 的連接埠、先前登入時註冊的用戶端連接埠，最後才使用可用的臨時連接埠。 |
 | `redirect_uri` | 預先註冊的迴環 URI，其路徑與連接埠會連到本機回呼監聽器。設定後會停用 CIMD。 |
 | `auth_server_metadata_url` | 授權伺服器的 OAuth 或 OpenID Connect 中繼資料文件 URL。若 MCP 伺服器未發布可辨識授權伺服器的受保護資源中繼資料，就設定此欄位。 |
 

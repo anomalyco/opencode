@@ -36,6 +36,16 @@ OpenCode 會在建立或移轉此檔案時加入 `$schema`。有效的編輯會�
 
 未知的設定會被忽略。請保留 `$schema`，讓編輯器標示無效的值。
 
+### 舊版 `tui.json`
+
+V1 將終端機用戶端設定儲存在 `tui.json`。V2 只在移轉時讀取一次，不會將它當成 `cli.json` 的底層設定：
+
+- 若沒有 `cli.json`，CLI 會從同一個目錄下的全域 `tui.json` 讀取支援的設定，並從狀態目錄下的 `kv.json` 讀取已儲存的偏好設定，據此建立設定檔。
+- `cli.json` 建立後，CLI 就會忽略 `tui.json`。之後修改舊檔不會生效，你可以保留或刪除它。
+- 刪除 `cli.json` 後，下次啟動時會重新移轉。
+- CLI 不會修改或刪除舊版檔案。
+- CLI 只會讀取全域 `tui.json`，不會移轉專案內的 `tui.json`，也不會移轉 `tui.jsonc`。
+
 ## 內嵌設定
 
 設定 `OPENCODE_CLI_CONFIG_CONTENT`，從內嵌 JSON 套用 CLI 設定：

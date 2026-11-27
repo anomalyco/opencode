@@ -137,3 +137,23 @@ $ OPENCODE_PASSWORD="a-long-secret" opencode --server http://127.0.0.1:4096
 ```bash
 $ curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info
 ```
+
+`opencode service set password` 只適用於受管理的背景服務。`opencode serve` 會讀取 `OPENCODE_PASSWORD`；若未設定，每次啟動時都會產生新密碼。
+
+### Docker
+
+每個版本都會將映像發布到 `ghcr.io/anomalyco/opencode`，並以版本號作為標籤。映像的進入點是 `opencode`，預設會啟動 TUI，因此請傳入 `serve`。請繫結至 `0.0.0.0`，因為預設的 `127.0.0.1` 只能從容器內連線。
+
+```bash
+$ docker run -d --name opencode -p 4096:4096 \
+    -e OPENCODE_PASSWORD="a-long-secret" \
+    -e ANTHROPIC_API_KEY \
+    -v opencode-data:/root/.local/share/opencode \
+    -v opencode-config:/root/.config/opencode \
+    -v "$PWD":/workspace -w /workspace \
+    ghcr.io/anomalyco/opencode:<version> serve --hostname 0.0.0.0 --port 4096
+```
+
+- 設定 `OPENCODE_PASSWORD`，讓密碼在重新啟動後維持不變。
+- 請掛載資料目錄 `/root/.local/share/opencode`，其中的資料庫存放你的工作階段。若未掛載，工作階段會隨容器一併消失。也請掛載設定目錄 `/root/.config/opencode`，以保留全域設定。
+- 使用 `curl -u opencode:a-long-secret http://127.0.0.1:4096/api/info` 確認伺服器是否就緒。

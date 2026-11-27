@@ -44,7 +44,7 @@ input: Schema.Struct({ query: Schema.String })
 
 ### 輸入與輸出
 
-方法引數請使用 `input`，傳回值請使用 `output`。如果沒有引數或傳回值，就省略對應的欄位。
+方法引數使用 `input`，回傳值使用 `output`，兩者都必填。若方法不接收引數或不回傳值，請在對應欄位使用 `Schema.Struct({})`。沒有引數時傳入 `{}`，沒有回傳值時則回傳 `{}`。
 
 ```ts
 search: {
@@ -65,7 +65,7 @@ errors: {
 
 ### 事件
 
-將事件加入頂層 `events` 對照表。事件資料必須是物件。
+將事件加入頂層 `events` 對照表。事件資料必須是物件。這個對照表是必填的；若 RPC 沒有事件，請使用 `events: {}`。
 
 ```ts
 events: {

@@ -48,7 +48,7 @@ OpenCode 會自動搜尋下列位置：
 | 專案 | `.opencode/skills` |
 | 專案相容 | `.claude/skills`、`.agents/skills` |
 
-對於專案來源，OpenCode 會從目前目錄向上搜尋到專案根目錄，並納入每一層的相符目錄。
+對於專案來源，OpenCode 會從目前目錄一路向上搜尋到檔案系統的根目錄，並納入每一層相符的目錄。
 
 每個來源可以包含任一種形式：
 
@@ -177,7 +177,7 @@ V2 目前不會強制此模式、1 到 64 個字元的建議、`name` 與目錄�
 2. `.claude/skills`，先全域，再從最遠的上層目錄到目前目錄
 3. `.agents/skills`，先全域，再從最遠的上層目錄到目前目錄
 4. `~/.config/opencode/skills`
-5. 專案的 `.opencode/skills`，從專案根目錄到目前目錄
+5. 專案的 `.opencode/skills`，從最上層目錄一路往下到目前目錄
 6. 明確的 `skills` 設定項目，依設定優先順序與陣列順序
 
 除非你想覆寫先前的技能，否則請避免重複的 ID。

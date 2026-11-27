@@ -101,6 +101,26 @@ opencode api post /api/session/ses_example/compact --data '{"id":"msg_compact_on
 - `20000` 等 token 數量也可使用。相同數量在小視窗中佔很大比例，在大視窗中則佔很小比例。
 - 大於或等於模型視窗的 token 數量會被忽略，並套用預設值。
 
+### 上下文視窗
+
+視窗大小取模型的輸入上限（`limit.input`），但不超過上下文上限（`limit.context`）。模型若只有其中一項上限，就採用該值。兩項上限都未設定時，不會自動壓縮；若供應商因請求過長而拒絕，OpenCode 會壓縮一次。
+
+設定會逐欄覆寫上限。若目錄已提供兩項上限，只調高 `limit.context`，視窗仍受目錄中的輸入上限限制，因此也要設定 `limit.input`：
+
+```jsonc title="opencode.jsonc"
+{
+  "providers": {
+    "openai": {
+      "models": {
+        "gpt-6.1-sol": {
+          "limit": { "context": 1050000, "input": 1000000 },
+        },
+      },
+    },
+  },
+}
+```
+
 ## 模型
 
 OpenCode 預設會使用工作階段的模型自行撰寫摘要。設定

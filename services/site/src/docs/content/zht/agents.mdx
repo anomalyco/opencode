@@ -39,7 +39,7 @@ Markdown agent 可以儲存在全域設定中供所有專案使用，也可以�
 .opencode/agents/<name>.md
 ```
 
-OpenCode 會從目前目錄向上直到專案根目錄，尋找專案中的 `.opencode` 目錄。巢狀路徑會成為 agent ID 的一部分：
+OpenCode 會從目前目錄一路向上搜尋到檔案系統的根目錄，尋找專案的 `.opencode` 目錄。巢狀路徑會成為 agent ID 的一部分：
 
 ```text
 .opencode/agents/team/reviewer.md  →  team/reviewer

@@ -426,10 +426,9 @@ await context.ui.dialog.select({
 - 按 Escape、呼叫 `clear()` 或顯示另一個對話框時，Promise 會以 `undefined` 完成。
 - 請勿繫結 `ctrl+n` 或 `ctrl+p`。對話框會保留它們用於導覽，且其自有繫結優先。
 
-自訂 JSX 對話框可以設定大小並自行關閉。
+自訂 JSX 對話框可以設定大小並自行關閉。請先呼叫 `show` 再呼叫 `set`：顯示對話框時，大小會重設為 `medium`，並取消置中。`medium`、`large` 和 `xlarge` 的寬度分別為 60、88 和 116 欄。
 
 ```tsx
-context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.show(
   () => (
     <box>
@@ -438,6 +437,7 @@ context.ui.dialog.show(
   ),
   () => console.log("closed"),
 )
+context.ui.dialog.set({ size: "large", centered: true })
 context.ui.dialog.clear()
 ```
 
@@ -644,8 +644,8 @@ const displayPath = context.ui.format.path(context.location?.directory ?? "/home
     "@opencode/plugin": "latest"
   },
   "peerDependencies": {
-    "@opentui/core": ">=0.6.6",
-    "@opentui/solid": ">=0.6.6",
+    "@opentui/core": ">=0.8.0",
+    "@opentui/solid": ">=0.8.0",
     "solid-js": ">=1.9.0"
   }
 }

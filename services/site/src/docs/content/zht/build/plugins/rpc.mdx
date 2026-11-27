@@ -67,8 +67,16 @@ RPC 定義會描述方法、事件與錯誤的輸入和輸出結構，支援兩�
 
 ### 輸入與輸出
 
-每個方法可以為其引數定義 `input` schema，並為其傳回值定義 `output` schema。若方法不接受或
-不傳回值，請省略對應的 schema。
+每個方法都必須為引數定義 `input` schema，並為回傳值定義 `output` schema。若方法不接收引數或不回傳值，請在對應欄位使用空物件 schema。沒有引數時傳入 `{}`，沒有回傳值時則回傳 `{}`：
+
+```ts
+refresh: {
+  input: { type: "object", additionalProperties: false },
+  output: { type: "object", additionalProperties: false },
+}
+```
+
+如果方法回傳 `undefined`，就會發生 `rpc.invalid_output` 錯誤。
 
 ```ts
 search: {
@@ -108,8 +116,7 @@ errors: {
 
 ### 事件
 
-將事件加入頂層 `events` 對照表。每個事件都有傳送給訂閱者之資料的
-schema。
+將事件加入頂層 `events` 對照表。每個事件都有自己的 schema，用來定義傳送給訂閱者的資料。這個對照表是必填的；若 RPC 沒有事件，請使用 `events: {}`。
 
 事件資料必須是物件。沒有資料時請使用空物件 schema：
 

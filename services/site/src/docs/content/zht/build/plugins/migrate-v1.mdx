@@ -96,8 +96,31 @@ V2 上下文既是 OpenCode 用戶端，也是外掛 API。大多數操作會依
 `ctx.location` 描述此外掛執行個體載入的位置。它不是外掛可能觀察到的每個工作階段或事件的
 位置。當這項區別很重要時，請讀取工作階段或事件資料。
 
-上下文公開的網域比表格所列更多，包括目錄、指令、整合、MCP 伺服器、
-引用、技能、儲存、VCS、worktree 與網路搜尋。請參閱[完整外掛上下文](/build/plugins/server#api)。
+外掛上下文提供的網域不只表中所列，還包括指令、整合、MCP 伺服器、引用、技能、儲存、VCS、worktree 與網路搜尋。請參閱[完整外掛上下文](/build/plugins/server#api)。
+
+### 移轉目錄網域
+
+較早版本的外掛透過 `ctx.catalog` 發布供應商與模型。現在 OpenCode 分別透過 `ctx.provider` 和 `ctx.model` 提供這兩個網域，因此呼叫 `ctx.catalog.transform` 的外掛將無法載入。
+
+| 舊版目錄 API | 目前的對應用法 |
+| --- | --- |
+| `ctx.catalog.transform(draft => …)` | `ctx.provider.transform(editor => …)` 和 `ctx.model.transform(editor => …)` |
+| `draft.provider.update(id, fn)` | `ctx.provider` 的 `editor.update(id, fn)` |
+| `draft.model.update(providerID, modelID, fn)` | `ctx.model` 的 `editor.update(providerID, modelID, fn)` |
+| `ctx.catalog.reload()` | `ctx.provider.reload()` 和 `ctx.model.reload()` |
+
+```ts
+await ctx.provider.transform((editor) => {
+  editor.update("acme", (provider) => {
+    provider.headers = { ...provider.headers, "x-company": "engineering" }
+  })
+  editor.models.update("acme", "reasoner", (model) => {
+    model.name = "Acme Reasoner"
+  })
+})
+```
+
+完整的編輯器 API 請參閱[供應商](/build/plugins/server#providers)和[模型](/build/plugins/server#models)。
 
 ## 在 `setup` 中註冊掛鉤
 

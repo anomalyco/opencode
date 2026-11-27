@@ -112,6 +112,33 @@ grep 'role=server' ~/.local/share/opencode/log/opencode.log
 grep 'run=8fc3b1d5' ~/.local/share/opencode/log/opencode.log
 ```
 
+## 匯出遙測資料
+
+OpenCode 可以將日誌與追蹤資料傳送到 OpenTelemetry 收集器，或支援透過 HTTP 接收 OTLP 的 APM 後端。請設定收集器的基礎 URL，不要加上路徑：
+
+```bash
+export OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+export OTEL_EXPORTER_OTLP_HEADERS="authorization=Bearer example-token"
+export OTEL_RESOURCE_ATTRIBUTES="team=platform,host.name=dev-laptop"
+opencode
+```
+
+| 變數 | 行為 |
+| --- | --- |
+| `OTEL_EXPORTER_OTLP_ENDPOINT` | 基礎 URL。日誌會送到 `<endpoint>/v1/logs`，追蹤資料會送到 `<endpoint>/v1/traces`。不設定就不會匯出。 |
+| `OTEL_EXPORTER_OTLP_HEADERS` | 每次匯出時都會傳送的標頭，例如 API 金鑰。採用 `key=value` 格式，以逗號分隔。 |
+| `OTEL_RESOURCE_ATTRIBUTES` | 附加到每筆記錄的屬性。採用經過 URL 編碼的 `key=value` 格式，以逗號分隔。只要有一項格式錯誤，就會捨棄所有屬性。 |
+
+每筆記錄也會帶有 `service.name`（`opencode`）、`service.version`、`deployment.environment.name`（發布通道）、`opencode.client` 和 `opencode.run`（與日誌檔案中的執行 ID 相同）。
+
+背景服務是獨立的處理程序，不會繼承你的 shell 環境。若要追蹤模型呼叫及工具執行，請一併為背景服務設定這些變數：
+
+```bash
+opencode service set env OTEL_EXPORTER_OTLP_ENDPOINT http://localhost:4318
+opencode service set env OTEL_EXPORTER_OTLP_HEADERS "authorization=Bearer example-token"
+opencode service start
+```
+
 ## 擷取堆積快照
 
 在任一平台上寫入執行中背景伺服器的記憶體（堆積）快照：

@@ -16,6 +16,18 @@ Explain how authentication works in this project
 
 按 **Shift+Enter**、**Ctrl+Enter**、**Alt+Enter** 或 **Ctrl+J** 換行。OpenCode 工作時，**Enter** 會引導作用中的工作階段；按 **Ctrl+X** 再按 **Enter**，可將提示詞排入佇列稍後送出。
 
+## 專案與目錄
+
+OpenCode 會在你啟動它的目錄中搜尋檔案並執行 shell 指令。同一個 Git 儲存庫中的目錄（包括其 worktree）都屬於同一個專案。不受版本控制的目錄則各自成為獨立的專案。
+
+若要在其他專案中啟動，請指定目錄：
+
+```bash
+opencode ~/code/another-project
+```
+
+按 **Ctrl+O** 開啟最近使用的工作階段與專案清單。選取專案後，按 **Right** 列出該專案的 worktree，再按 **Ctrl+N** 即可新增 worktree。
+
 ## 上下文
 
 輸入 `@` 搜尋檔案，然後選取它，將該檔案附加到提示詞。在 `@` 之後繼續輸入可縮小結果範圍。
@@ -68,7 +80,9 @@ Shell 指令會在工作階段的工作目錄中執行，其輸出會留在工�
 
 ## 工作階段
 
-按 **Ctrl+X** 再按 **N** 開始新的工作階段。按 **Ctrl+X** 再按 **L**，或執行 `/sessions`，回到既有工作階段；**Ctrl+O** 會同時開啟最近的工作階段與專案。
+每個工作階段都是獨立的對話，有自己的記錄和目錄。若要處理另一項工作，請執行 `/new`，或按 **Ctrl+X** 再按 **N** 開啟新的工作階段；先前的工作階段仍可使用。新的工作階段會從你啟動 OpenCode 的目錄開始。若將 [`session.new_location`](/cli/config#sessions) 設為 `inherit`，則會沿用目前工作階段的目錄。
+
+按 **Ctrl+X** 再按 **L**，或執行 `/sessions`，即可回到既有的工作階段。在該清單中，按 **Ctrl+A** 可在目前目錄的工作階段與所有專案的工作階段之間切換。按 **Ctrl+O** 可同時開啟最近使用的工作階段與專案清單。
 
 分頁預設為啟用。使用 **Ctrl+Tab** 與 **Ctrl+Shift+Tab** 在分頁之間移動，按 **Ctrl+X** 再按 **W** 關閉一個分頁，按 **Ctrl+Shift+T** 重新開啟最後關閉的分頁。
 

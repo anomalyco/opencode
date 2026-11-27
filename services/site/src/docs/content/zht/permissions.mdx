@@ -119,10 +119,12 @@ V2 的動作名稱是字串，因此外掛可以定義更多動作。內建工�
 | `websearch` | 搜尋查詢 |
 | `generate_image` | 所選圖片模型，格式為 `providerID/modelID`，設定時再加上 `#variant` |
 | `external_directory` | 標準化的外部目錄邊界，通常以 `/*` 結尾 |
-| `<server>_<tool>` | MCP 工具為 `*`；兩個名稱中不支援的字元會變成 `_` |
+| `<server>_<tool>` | MCP 工具為 `*`；兩個名稱都保留字母、數字、`_` 和 `-`，其餘字元一律換成 `_` |
 | `opencode_list_mcp_resources` | MCP 伺服器名稱 |
 | `opencode_read_mcp_resource` | `<server>:<uri>` |
 | `execute` | `*`；拒絕時會移除 Code Mode 並直接列出其工具，而巢狀工具則會套用各自的規則 |
+
+MCP 動作名稱會保留連字號，因此名為 `mcp-atlassian` 的伺服器所提供的工具會比對 `mcp-atlassian_*`，而不是 `mcp_atlassian_*`。
 
 例如，允許一個技能並拒絕其他所有技能：
 

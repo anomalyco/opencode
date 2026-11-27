@@ -188,7 +188,7 @@ const agents = await ctx.agent.list()
 const build = await ctx.agent.get({ agentID: "build" })
 ```
 
-註冊轉換以檢視、更新、移除或選取預設 agent。
+註冊轉換以檢視、新增、更新或移除 agent，也可以選取預設 agent。
 
 ```ts
 await ctx.agent.transform((editor) => {
@@ -200,6 +200,18 @@ await ctx.agent.transform((editor) => {
     agent.description = "Builds features and fixes bugs"
   })
   editor.remove("legacy")
+})
+```
+
+使用 `editor.update` 註冊新的 agent。若 ID 已存在，就編輯該 agent；否則會先以 `Agent.Info.default(id)` 建立 agent，再執行回呼函式。
+
+```ts
+await ctx.agent.transform((editor) => {
+  editor.update("reviewer", (agent) => {
+    agent.description = "Reviews code for correctness and maintainability"
+    agent.mode = "subagent"
+    agent.system = "Review the proposed changes and report actionable findings."
+  })
 })
 ```
 
@@ -1034,8 +1046,8 @@ await ctx.tool.reload()
 ```
 
 使用 `list()` 與 `get()` 檢視編輯器中目前的工具。工具具有包含其有效名稱的 `id`，
-當該 ID 不存在時，`get()` 會回傳 `undefined`。請以有效工具名稱（包括其命名空間，如上方的 `acme_greeting`）使用 `update` 與 `remove`。命名空間中的
-點與工具名稱中不支援的字元會變成 `_`。缺少的名稱會被忽略；建立工具需要
+當該 ID 不存在時，`get()` 會回傳 `undefined`。請以有效工具名稱（含命名空間，如上方的 `acme_greeting`）呼叫 `update` 和 `remove`。
+命名空間中的句點會換成 `_`；工具名稱則保留字母、數字、`_` 和 `-`，其餘字元一律換成 `_`。找不到名稱時會略過該操作；建立工具時，必須
 以 `add` 提供完整定義。更新會保留名稱與命名空間。請指派新的 schema 或選項來取代
 它們，而不要變更巢狀值。無效的更新會記錄下來，並保留先前的定義。
 

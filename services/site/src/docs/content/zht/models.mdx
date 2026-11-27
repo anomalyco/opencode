@@ -238,7 +238,7 @@ OpenCode 會先套用供應商值，其次套用模型值，最後套用所選�
 OpenCode 能辨識 `text`、`regex` 與 `lark`。models.dev 的其他格式名稱會被忽略，但不會因此捨棄模型或其工具。若目錄模型前方的代理會拒絕自由格式工具，請在該模型上將 `capabilities.freeform` 設為 `[]`。
 
 這些是備援假設，不是偵測到的能力。已知時請設定準確的 `capabilities` 與 `limit` 值；
-明確的值會取代備援值。新增 `disabled: true` 可將模型從可用目錄中隱藏：
+明確設定的值會取代備援值。自動壓縮採用 `limit.input`，但不超過 `limit.context`；請參閱[上下文視窗](/compaction#window)。加上 `disabled: true` 即可從可用模型目錄中隱藏模型：
 
 ```jsonc title="opencode.jsonc"
 {
