@@ -538,29 +538,22 @@ export async function editedPromptInput(
       .map(async (part) => ({ ...part, dataUrl: await blobDataUrl(part.blob, part.mime) })),
   )
 
-  const request = buildPromptRequest({ prompt, context: [], images, text, sessionDirectory: directory })
   const payload = item?.payload
   const display = item ? queuedPromptText(item) : ""
-  const presentation = payload ? readPromptPresentation(payload.metadata) : undefined
-  // The hidden suffix mixes review comments with generated path references. When the app owns the presentation,
-  // rebuild only the comment notes so a removed card leaves no reference and a retained card is not duplicated.
-  // An opaque suffix from another client has no presentation to rebuild from, so it is preserved verbatim.
-  const retained = presentation
-    ? buildPromptRequest({
-        prompt: [],
-        context: presentation.comments.map((comment) => {
-          const context = commentContextItem(comment)
-          return { ...context, key: contextItemKey(context) }
-        }),
-        images: [],
-        text: "",
-        sessionDirectory: directory,
-      }).text
-    : payload && display && payload.text.startsWith(display)
-      ? payload.text.slice(display.length)
-      : ""
-  // Generated notes follow the user's own text, so they keep the leading newline the original suffix had.
-  const notes = presentation && retained ? `\n${retained}` : retained
+  // Only a hidden suffix behind non-empty display text is generated content. With no display text the editor already
+  // shows the notes as editable text, so rebuilding them would duplicate comments the user may have removed.
+  const suffix = display && payload?.text.startsWith(display) ? payload.text.slice(display.length) : ""
+  const presentation = suffix ? readPromptPresentation(payload?.metadata) : undefined
+  const context = presentation
+    ? presentation.comments.map((comment) => {
+        const entry = commentContextItem(comment)
+        return { ...entry, key: contextItemKey(entry) }
+      })
+    : []
+  // Build the replacement with the presentation's comments as context, so quotes keep their leading position and
+  // path references come only from the current composer. Opaque suffixes from other clients stay verbatim.
+  const request = buildPromptRequest({ prompt, context, images, text, sessionDirectory: directory })
+  const notes = presentation ? "" : suffix
 
   const mention = (value: { start: number; end: number; text: string } | undefined) => {
     if (!value) return undefined
@@ -623,7 +616,7 @@ export async function editedPromptInput(
     // notes as text (a prompt with no display text), the edit owns them and the comments go.
     metadata: {
       ...payload?.metadata,
-      comments: notes ? (payload?.metadata?.["comments"] ?? []) : [],
+      comments: presentation || notes ? (payload?.metadata?.["comments"] ?? []) : [],
       displayText: request.displayText,
       attachments: request.attachments,
     },

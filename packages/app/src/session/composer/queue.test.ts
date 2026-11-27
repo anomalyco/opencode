@@ -390,4 +390,31 @@ describe("editedPromptInput", () => {
     expect(result.text).toBe(`${editedText}\n${reference}`)
     expect(result.metadata).toMatchObject({ client: "external", displayText: editedText })
   })
+
+  test("does not duplicate comments on a comment-only queued message", async () => {
+    const commentOnly = {
+      ...queued[0],
+      payload: { text: review, metadata: { displayText: "", comments, attachments: [] } },
+    } satisfies SessionInboxInfo
+    const text = `${review} please`
+    const prompt = [{ type: "text" as const, content: text, start: 0, end: text.length }]
+    const result = await editedPromptInput("ses_1", "/repo", commentOnly, prompt, text)
+
+    expect(result.text).toBe(text)
+    expect(result.metadata.comments).toEqual([])
+  })
+
+  test("keeps quoted comments before the edited text", async () => {
+    const quote = { type: "quote" as const, text: "Earlier answer", comment: "check this" }
+    const quoted = {
+      ...queued[0],
+      payload: {
+        text: `${display}\n> Earlier answer\n\ncheck this`,
+        metadata: { displayText: display, comments: [quote], attachments: [] },
+      },
+    } satisfies SessionInboxInfo
+    const result = await editedPromptInput("ses_1", "/repo", quoted, typed, editedText)
+
+    expect(result.text).toBe(`> Earlier answer\n\ncheck this\n\n${editedText}`)
+  })
 })
