@@ -36,6 +36,7 @@ import { Permission } from "@opencode/core/permission"
 import { PermissionSaved } from "@opencode/core/permission/saved"
 import { Plugin } from "@opencode/core/plugin"
 import { PluginSupervisor } from "@opencode/core/plugin/supervisor"
+import { RipgrepBinary } from "@opencode/core/ripgrep/binary"
 import { Shell } from "@opencode/core/shell"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { ShellResult } from "@opencode/core/shell/result"
@@ -150,6 +151,7 @@ const shellPluginSupervisor = makeLocationNode({
     Job.node,
     Location.node,
     Shell.node,
+    RipgrepBinary.node,
     Shell.daemonNode,
     ShellSelect.node,
     Bus.node,
@@ -170,8 +172,17 @@ const nodes = LayerNode.group([
   FSUtil.node,
   Global.node,
 ])
+// Stands in for the rg the search tools resolve, so no command downloads one.
+const ripgrepDirectory = path.join(os.tmpdir(), "opencode-shell-test-ripgrep")
+const ripgrep = RipgrepBinary.node.replace(
+  Layer.succeed(
+    RipgrepBinary.Service,
+    RipgrepBinary.Service.of({ filepath: Effect.succeed(path.join(ripgrepDirectory, "rg")) }),
+  ),
+)
 const daemonReplacements = [
   SessionExecution.node.replace(executionNode),
+  ripgrep,
   Permission.node.replace(permission),
   Global.node.replace(tempGlobalLayer),
   offlineModels,
@@ -226,6 +237,7 @@ const permissionIt = testEffect(
     Global.node.replace(tempGlobalLayer),
     PluginSupervisor.node.replace(shellPluginSupervisor),
     PersistentPty.node.replace(disabledPersistentPtyLayer),
+    ripgrep,
     offlineModels,
   ]).pipe(Layer.provide(noFlagOverrides)),
 )
@@ -1121,6 +1133,35 @@ describe("ShellTool", () => {
   )
 
   productionIt.live(
+    "appends the ripgrep directory to PATH once",
+    () =>
+      withTempDir((tmp) => {
+        reset()
+        return withSession(tmp.path, (registry) =>
+          Effect.gen(function* () {
+            const command = isWindows ? "[Console]::Out.Write($env:PATH)" : 'printf %s "$PATH"'
+            const first = yield* executeTool(registry, call({ command }))
+            const sessions = yield* Session.Service
+            yield* sessions.environment({
+              sessionID,
+              variables: { PATH: [ripgrepDirectory, process.env.PATH].join(path.delimiter) },
+            })
+            const second = yield* executeTool(registry, call({ command }, "call-shell-2"))
+
+            expect(first.status).toBe("completed")
+            const entries = (settled: typeof first) => {
+              const part = settled.content?.[0]
+              return part?.type === "text" ? part.text.split(path.delimiter) : []
+            }
+            expect(entries(first).at(-1)).toBe(ripgrepDirectory)
+            expect(entries(second).filter((entry) => entry === ripgrepDirectory)).toHaveLength(1)
+          }),
+        )
+      }),
+    { timeout: 15_000 },
+  )
+
+  productionIt.live(
     "preserves an outer AI_AGENT marker in agent shell commands",
     () =>
       withTempDir((tmp) => {
@@ -1349,6 +1390,7 @@ describe("ShellTool", () => {
             Job.node,
             Location.node,
             Shell.node,
+            RipgrepBinary.node,
             Shell.daemonNode,
             ShellSelect.node,
             Bus.node,

@@ -65,6 +65,7 @@ import { Permission } from "../permission.js"
 import { Reference } from "../reference.js"
 import { WebSearch } from "../websearch.js"
 import { Ripgrep } from "../ripgrep.js"
+import { RipgrepBinary } from "../ripgrep/binary.js"
 import { Automation } from "../automation.js"
 import { Session } from "../session.js"
 import { SessionCompaction } from "../session/compaction.js"
@@ -178,6 +179,7 @@ const nodes = [
   Reference.node,
   WebSearch.node,
   Ripgrep.node,
+  RipgrepBinary.node,
   Automation.node,
   Session.node,
   SessionCompaction.node,

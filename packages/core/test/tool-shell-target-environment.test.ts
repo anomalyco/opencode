@@ -18,6 +18,7 @@ import { Permission } from "@opencode/core/permission"
 import { PersistentPty } from "@opencode/core/persistent-pty"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Session } from "@opencode/core/session"
+import { RipgrepBinary } from "@opencode/core/ripgrep/binary"
 import { Shell } from "@opencode/core/shell"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { Tool } from "@opencode/core/tool"
@@ -46,6 +47,7 @@ const shellToolNode = makeLocationNode({
     Job.node,
     Location.node,
     Shell.node,
+    RipgrepBinary.node,
     Shell.daemonNode,
     ShellSelect.node,
     Bus.node,

@@ -28,6 +28,7 @@ import { SessionRunnerModel } from "@opencode/core/session/runner/model"
 import { SessionTable } from "@opencode/core/session/sql"
 import { SessionStore } from "@opencode/core/session/store"
 import { SubagentJob } from "@opencode/core/session/subagent-job"
+import { RipgrepBinary } from "@opencode/core/ripgrep/binary"
 import { Shell } from "@opencode/core/shell"
 import { ShellTool } from "@opencode/core/tool/plugin/shell"
 import { SubagentTool } from "@opencode/core/tool/plugin/subagent"
@@ -75,6 +76,7 @@ const pluginSupervisor = makeLocationNode({
     PluginHooks.node,
     Session.node,
     Shell.node,
+    RipgrepBinary.node,
     ShellSelect.node,
     Bus.node,
     SubagentJob.node,

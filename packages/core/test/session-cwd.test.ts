@@ -36,6 +36,7 @@ import { SessionInstructions } from "@opencode/core/session/instructions"
 import { SessionProjector } from "@opencode/core/session/projector"
 import { SessionStore } from "@opencode/core/session/store"
 import { SessionTable } from "@opencode/core/session/sql"
+import { RipgrepBinary } from "@opencode/core/ripgrep/binary"
 import { Shell } from "@opencode/core/shell"
 import { ShellSelect } from "@opencode/core/shell/select"
 import { Skill } from "@opencode/core/skill"
@@ -179,6 +180,7 @@ const toolPlugins = makeLocationNode({
     Session.node,
     SessionInstructions.node,
     Shell.node,
+    RipgrepBinary.node,
     Shell.daemonNode,
     ShellSelect.node,
     Skill.node,
