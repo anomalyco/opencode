@@ -280,9 +280,12 @@ describe("MCP skills", () => {
       const skills = yield* Skill.Service
       const content = yield* skills.content(id).pipe(Effect.flip)
       expect(content).toBeInstanceOf(Skill.LoadError)
-      expect(content.reason).toEqual({ _tag: "Mismatch", file: "SKILL.md", check: "digest" })
+      expect(content.reason).toMatchObject({ _tag: "Mismatch", file: "SKILL.md", check: "digest" })
+      expect(content.message).toStartWith(
+        "Failed to load SKILL.md of skill team:deploy: skill://deploy/SKILL.md has digest ",
+      )
       const file = yield* skills.read(id, script).pipe(Effect.flip)
-      expect(file._tag === "Skill.LoadError" && file.reason).toEqual({
+      expect(file._tag === "Skill.LoadError" && file.reason).toMatchObject({
         _tag: "Mismatch",
         file: "scripts/run.sh",
         check: "digest",

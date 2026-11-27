@@ -65,7 +65,7 @@ export const Plugin = define({
                 skill: id,
                 reason:
                   error instanceof McpClient.SkillMismatchError
-                    ? { _tag: "Mismatch", file: file ?? Skill.manifest, check: error.check }
+                    ? { _tag: "Mismatch", file: file ?? Skill.manifest, check: error.check, detail: error.message }
                     : { _tag: "Unavailable", file: file ?? Skill.manifest, detail: error.message },
               }),
           ),

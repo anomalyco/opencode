@@ -48,6 +48,7 @@ export const LoadReason = Schema.Union([
   Schema.TaggedStruct("Mismatch", {
     file: Schema.String,
     check: Schema.Literals(["unlisted", "size", "digest", "frontmatter"]),
+    detail: Schema.String,
   }),
   /** The server didn't confirm a skill named by address. */
   Schema.TaggedStruct("NotConfirmed", { server: Schema.String, uri: Schema.String, detail: Schema.String }),
@@ -63,7 +64,7 @@ export class LoadError extends Schema.TaggedError<LoadError>()("Skill.LoadError"
       case "Unavailable":
         return `Failed to load ${this.reason.file} of skill ${this.skill}: ${this.reason.detail}`
       case "Mismatch":
-        return `Failed to load ${this.reason.file} of skill ${this.skill}: it doesn't match what the server listed (${this.reason.check})`
+        return `Failed to load ${this.reason.file} of skill ${this.skill}: ${this.reason.detail}`
       case "NotConfirmed":
         return `MCP server "${this.reason.server}" did not confirm ${this.reason.uri}: ${this.reason.detail}`
     }
