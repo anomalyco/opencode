@@ -19,6 +19,7 @@ import { Keymap } from "../../context/keymap"
 import { useTheme } from "../../context/theme"
 import { EmptyBorder, SplitBorder } from "../../ui/border"
 import { useDialog } from "../../ui/dialog"
+import { urlRanges } from "../../ui/link"
 import { displayRanges, findRanges, offsetRow, paintChunks, type FindPart, type FindRange } from "./find"
 import { use } from "./render-context"
 
@@ -323,14 +324,30 @@ export function FindText(props: { part: FindPart; fg: TextRenderable["fg"] }) {
     return match?.messageID === props.part.messageID && match.partID === props.part.partID ? match.occurrence : -1
   })
   const ranges = createMemo(() => findRanges(props.part.text, ctx.find.pattern()))
+  const links = createMemo(() => urlRanges(props.part.text))
   const pieces = createMemo(() => {
-    const cuts = [0, ...ranges().flatMap((range) => [range.start, range.end]), props.part.text.length]
-    return cuts.slice(1).map((end, index) => ({
-      text: props.part.text.slice(cuts[index], end),
-      // Odd pieces are matches.
-      occurrence: index % 2 ? (index - 1) / 2 : undefined,
-    }))
+    const cuts = [
+      ...new Set([
+        0,
+        ...[...ranges(), ...links()].flatMap((range) => [range.start, range.end]),
+        props.part.text.length,
+      ]),
+    ].sort((a, b) => a - b)
+    return cuts.slice(1).map((end, index) => {
+      const start = cuts[index]!
+      const occurrence = ranges().findIndex((range) => range.start <= start && start < range.end)
+      return {
+        text: props.part.text.slice(start, end),
+        occurrence: occurrence === -1 ? undefined : occurrence,
+        href: links().find((link) => link.start <= start && start < link.end)?.href,
+      }
+    })
   })
+  const found = (occurrence: number | undefined) => {
+    if (occurrence === undefined) return {}
+    if (occurrence === current()) return { fg: theme.find.text.current, bg: theme.find.background.current }
+    return { bg: theme.find.background.match }
+  }
 
   createEffect(() => {
     const occurrence = current()
@@ -340,23 +357,17 @@ export function FindText(props: { part: FindPart; fg: TextRenderable["fg"] }) {
 
   return (
     <text ref={node} fg={props.fg}>
-      <Show when={ranges().length} fallback={props.part.text}>
-        <For each={pieces()}>
-          {(piece) => (
-            <Show when={piece.occurrence !== undefined} fallback={piece.text}>
-              <span
-                style={
-                  piece.occurrence === current()
-                    ? { fg: theme.find.text.current, bg: theme.find.background.current }
-                    : { bg: theme.find.background.match }
-                }
-              >
+      <For each={pieces()}>
+        {(piece) => (
+          <Show when={piece.href} fallback={<span style={found(piece.occurrence)}>{piece.text}</span>}>
+            {(href) => (
+              <a href={href()} style={{ fg: theme.markdown.link, underline: true, ...found(piece.occurrence) }}>
                 {piece.text}
-              </span>
-            </Show>
-          )}
-        </For>
-      </Show>
+              </a>
+            )}
+          </Show>
+        )}
+      </For>
     </text>
   )
 }
