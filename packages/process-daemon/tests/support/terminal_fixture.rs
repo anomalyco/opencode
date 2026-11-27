@@ -27,6 +27,9 @@ pub enum Command {
     Context,
     Exit(i32),
     Flood,
+    /// Starts a suspended process on this console and answers its PID. It never
+    /// runs, so it never leaves the console when the console closes.
+    SpawnSuspended,
 }
 
 pub struct Fixture {
@@ -179,6 +182,7 @@ fn child() {
                 send(channel.get_mut(), &serde_json::Value::Null);
                 std::process::exit(code);
             }
+            Command::SpawnSuspended => spawn_suspended(),
             Command::Flood => {
                 send(channel.get_mut(), &serde_json::Value::Null);
                 let mut stdout = io::stdout().lock();
@@ -191,6 +195,25 @@ fn child() {
         };
         send(channel.get_mut(), &result);
     }
+}
+
+#[cfg(windows)]
+// Never resumed, so never waited on: the test expects terminate to end it.
+#[allow(clippy::zombie_processes)]
+fn spawn_suspended() -> serde_json::Value {
+    use std::os::windows::process::CommandExt;
+    use windows_sys::Win32::System::Threading::CREATE_SUSPENDED;
+    let child = std::process::Command::new(env::current_exe().unwrap())
+        .arg("--list")
+        .creation_flags(CREATE_SUSPENDED)
+        .spawn()
+        .unwrap();
+    serde_json::json!(child.id())
+}
+
+#[cfg(unix)]
+fn spawn_suspended() -> serde_json::Value {
+    unimplemented!("suspended console processes are a Windows case")
 }
 
 #[cfg(unix)]

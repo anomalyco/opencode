@@ -33,6 +33,10 @@ const OUTPUT_BATCH_BYTES: usize = 8 * 1024;
 const OUTPUT_BATCH_DELAY: Duration = Duration::from_millis(1);
 const MAX_INPUT_BYTES: usize = 1024 * 1024;
 const MAX_ROWS_BYTES: usize = 1024 * 1024;
+/// How long terminate waits for a terminal's workers before ending what is left
+/// of its process tree, and again before it stops waiting for them.
+#[cfg(windows)]
+const TEARDOWN_GRACE: Duration = Duration::from_millis(1500);
 
 pub type TerminalId = u64;
 
@@ -651,6 +655,9 @@ struct TerminalHandle {
     process: Option<Arc<pipe::Process>>,
     info: Arc<RwLock<ProcessInfo>>,
     joins: Mutex<Option<Vec<JoinHandle<()>>>>,
+    /// PTY only: the job the root shell and its descendants run in.
+    #[cfg(windows)]
+    job: Option<windows::TerminalJob>,
 }
 
 /// The actor thread and the channels other workers share with it.
@@ -753,6 +760,8 @@ impl TerminalHandle {
             .spawn_command(command)
             .with_context(|| format!("failed to spawn {}", request.program))?;
         let pid = child.process_id();
+        #[cfg(windows)]
+        let job = windows::TerminalJob::assign(id, child.as_raw_handle());
         let killer = child.clone_killer();
         let mut reader = pair
             .master
@@ -890,6 +899,8 @@ impl TerminalHandle {
                 reader_thread,
                 wait_thread,
             ])),
+            #[cfg(windows)]
+            job,
         })
     }
 
@@ -942,10 +953,53 @@ impl TerminalHandle {
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner())
             .take();
+        #[cfg(windows)]
+        let handles = self.release_stuck_console(handles);
         for join in handles {
             let _ = join.join();
         }
         Ok(())
+    }
+
+    /// Closing ConPTY ends the programs on its console, and its output ends
+    /// with them. A program that cannot leave the console (one that is
+    /// suspended, or never answers the close) keeps the output open, and the
+    /// reader waiting on it, for as long as it lives. Give the close a moment,
+    /// then end what is left of the root's process tree; a worker still blocked
+    /// after that is left to finish on its own rather than blocking terminate.
+    #[cfg(windows)]
+    fn release_stuck_console(&self, handles: Vec<JoinHandle<()>>) -> Vec<JoinHandle<()>> {
+        if finished_within(&handles, TEARDOWN_GRACE) {
+            return handles;
+        }
+        if let Some(job) = &self.job {
+            job.terminate();
+        }
+        if finished_within(&handles, TEARDOWN_GRACE) {
+            return handles;
+        }
+        eprintln!(
+            "terminal {}: its workers are still blocked; terminate stops waiting for them",
+            self.info().id
+        );
+        handles
+            .into_iter()
+            .filter(|handle| handle.is_finished())
+            .collect()
+    }
+}
+
+#[cfg(windows)]
+fn finished_within(handles: &[JoinHandle<()>], grace: Duration) -> bool {
+    let deadline = Instant::now() + grace;
+    loop {
+        if handles.iter().all(JoinHandle::is_finished) {
+            return true;
+        }
+        if Instant::now() >= deadline {
+            return false;
+        }
+        thread::sleep(Duration::from_millis(10));
     }
 }
 
@@ -2285,6 +2339,8 @@ mod tests {
                     #[cfg(windows)]
                     closer,
                 ])),
+                #[cfg(windows)]
+                job: None,
             },
             writer_rx,
         )

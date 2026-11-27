@@ -443,6 +443,29 @@ fn terminating_a_shell_releases_its_console_child() {
     descendant.assert_exited();
 }
 
+#[test]
+#[cfg(windows)]
+fn terminating_a_terminal_ends_a_descendant_that_cannot_leave_its_console() {
+    let _deadline = Deadline::new();
+    let fixture = Fixture::new();
+    let service = TerminalService::default();
+    let info = service.create_pty(fixture.request()).unwrap();
+    let mut child = fixture.connect();
+    // A process that never runs keeps the console, and with it ConPTY's output,
+    // open after the root is killed and the pseudo console is closed, as a Git
+    // Bash prompt's `git` does when its MSYS parent is killed while starting it.
+    let pid = u32::try_from(child.command(Command::SpawnSuspended).as_u64().unwrap()).unwrap();
+    let suspended = ChildProcess::open(pid);
+    let started = Instant::now();
+    service.terminate(info.id).unwrap();
+    assert!(
+        started.elapsed() < Duration::from_secs(10),
+        "terminate waited {:?}",
+        started.elapsed()
+    );
+    suspended.assert_exited();
+}
+
 impl ChildProcess {
     fn open(pid: u32) -> Self {
         #[cfg(unix)]

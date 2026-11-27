@@ -224,6 +224,9 @@ fn start_pipe(
         process: Some(process),
         info,
         joins: Mutex::new(Some(joins)),
+        // The pipe process owns its own job.
+        #[cfg(windows)]
+        job: None,
     })
 }
 
