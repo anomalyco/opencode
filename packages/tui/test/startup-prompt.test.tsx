@@ -2,6 +2,7 @@ import { expect, test } from "bun:test"
 import { createAppFixture } from "./fixture/app"
 import { json } from "./fixture/tui-client"
 import type { TuiInput } from "../src/app"
+import { takeDraft } from "../src/component/prompt/draft-stash"
 
 type SessionInput = { id?: string; location?: { directory: string } }
 
@@ -22,6 +23,8 @@ function sessionInfo(record: SessionInput) {
 }
 
 async function launch(args: TuiInput["args"]) {
+  // Other app tests can leave a home draft in the process-wide stash, which a later home view would restore.
+  takeDraft(undefined)
   const sessions: SessionInput[] = [{ id: "ses_resume" }]
   const prompts: { sessionID: string; text: string }[] = []
   const setup = await createAppFixture({
