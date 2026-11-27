@@ -42,7 +42,7 @@ pub use opencode_plugin_abi as abi;
 use opencode_plugin_abi::types::kinds::EventKinds;
 use opencode_ui::dialog::DialogKeymap;
 use opencode_ui::keymap::{Bind, Slash, TuiCommand};
-use opencode_ui::markdown::CodeBlockRenderers;
+use opencode_ui::markdown::{CodeBlockProbe, CodeBlockRenderers};
 use opencode_ui::theme::Theme;
 use opentui::keymap::{Condition, Disposer};
 use opentui::prelude::*;
@@ -530,6 +530,27 @@ pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) ->
             }) as node::Gone
         });
         for (language, render) in api.fences() {
+            let probe: CodeBlockProbe = Rc::new({
+                let (render, scope, runs) = (render.clone(), scope.clone(), api.fence_gone().to_vec());
+                move |input| {
+                    let Some(host) = scope.host.upgrade() else { return false };
+                    let fence = abi::Fence {
+                        language: input.language.to_owned(),
+                        info: input.info.to_owned(),
+                        code: input.code.to_owned(),
+                        streaming: false,
+                        closed: true,
+                        key: 0,
+                        width: input.width,
+                    };
+                    let result =
+                        scope.call("render-fence", &*host, |read| render(read, &fence)).unwrap_or(abi::Fenced::Code);
+                    if !runs.is_empty() && !scope.activation.disposed() {
+                        scope.call("fence-gone", &*host, |_| runs.iter().for_each(|run| run(0)));
+                    }
+                    !matches!(result, abi::Fenced::Code)
+                }
+            });
             let (render, scope, fences) = (render.clone(), scope.clone(), node::Fences::new(gone.clone()));
             let render: CodeBlockRender = Rc::new(move |block, theme| {
                 let host = scope.host.upgrade()?;
@@ -537,7 +558,7 @@ pub(crate) fn linked(id: impl Into<String>, run: LinkedSetup, external: bool) ->
                     scope.call("render-fence", &*host, |read| render(read, &fence)).unwrap_or(abi::Fenced::Code)
                 })
             });
-            setup.registration.code_blocks.push((language.clone(), render));
+            setup.registration.code_blocks.push((language.clone(), render, Some(probe)));
         }
         for render in api.inline_math() {
             let (render, scope) = (render.clone(), scope.clone());
@@ -2320,7 +2341,7 @@ impl Setup<'_> {
         match target {
             abi::claim::Target::Tool(name) => self.registration.tools.push((name, registered)),
             abi::claim::Target::Fence(language) => {
-                self.registration.code_blocks.push((language, claim::fence(registered)));
+                self.registration.code_blocks.push((language, claim::fence(registered), None));
             }
         }
     }
@@ -2337,7 +2358,7 @@ impl Setup<'_> {
         language: impl Into<String>,
         render: impl Fn(&CodeBlock<'_>, &Theme) -> Option<AnyWidget> + 'static,
     ) {
-        self.registration.code_blocks.push((language.into(), Rc::new(render)));
+        self.registration.code_blocks.push((language.into(), Rc::new(render), None));
     }
 
     /// Runs `cleanup` when the plugin deactivates (the cleanup TS `setup` returns).
@@ -2363,7 +2384,7 @@ struct Registration {
     dialogs: Vec<(String, DialogRender)>,
     /// The searches a select names.
     searches: Vec<(String, SearchCall)>,
-    code_blocks: Vec<(String, CodeBlockRender)>,
+    code_blocks: Vec<(String, CodeBlockRender, Option<CodeBlockProbe>)>,
     inline_math: Vec<InlineMathRender>,
     /// The tool claims, by the tool they claim.
     tools: Vec<(String, Rc<claim::Registered>)>,
@@ -3098,9 +3119,13 @@ impl Registry {
     /// wins; a plugin keeps its place. The same holds for the inline math renderer.
     pub fn code_blocks(&self, theme: Rc<dyn Fn() -> Theme>) -> CodeBlockRenderers {
         let mut renderers = CodeBlockRenderers::default();
-        for (language, render) in self.by_activation(|registration| &registration.code_blocks) {
+        for (language, render, probe) in self.by_activation(|registration| &registration.code_blocks) {
             let theme = theme.clone();
-            renderers.register(language, Rc::new(move |block| render(block, &theme())));
+            let render = Rc::new(move |block: &CodeBlock<'_>| render(block, &theme()));
+            match probe {
+                Some(probe) => renderers.register_with_probe(language, render, probe),
+                None => renderers.register(language, render),
+            }
         }
         if let Some(render) = self.by_activation(|registration| &registration.inline_math).pop() {
             renderers.register_math(Rc::new(move |tex| render(tex, &theme())));
