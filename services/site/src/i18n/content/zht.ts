@@ -24,76 +24,76 @@ export const content = {
     desktop: {
       title: "OpenCode | 適用於 macOS、Windows 和 Linux 的桌面應用程式",
       description:
-        "平行執行任意多個 OpenCode 代理，在旁邊的瀏覽器中查看每項變更，並在任何裝置上繼續。適用於 macOS、Windows 和 Linux。",
+        "平行執行任意多個 OpenCode agent，在旁邊的瀏覽器中查看每項變更，並在任何裝置上繼續。適用於 macOS、Windows 和 Linux。",
       intro:
-        "同時執行多個代理，每個工作階段都有獨立的分頁。以 diff 審查每項變更，在任何一行留言，並在內建瀏覽器中檢查結果。支援 macOS、Windows 和 Linux。",
+        "同時執行多個 agent，每個工作階段都有獨立的分頁。以 diff 審查每項變更，在任何一行留言，並在內建瀏覽器中檢查結果。支援 macOS、Windows 和 Linux。",
       showcase: {
         "parallel-agents": {
-          title: "平行代理",
-          body: "想啟動多少個代理都可以，讓它們全部平行工作。哪個完成了，就切換過去查看。",
+          title: "平行 agent",
+          body: "想啟動多少個 agent 都可以，讓它們全部平行工作。哪個完成了，就切換過去查看。",
         },
         "see-it-in-the-browser": {
           title: "在瀏覽器中查看",
-          body: "你的應用程式會在代理旁的瀏覽器中開啟，你和代理都能看到每項變更落地。",
+          body: "你的應用程式會在 agent 旁的瀏覽器中開啟，你和 agent 都能看到每項變更落地。",
         },
         "on-every-device": {
           title: "在每台裝置上",
-          body: "在你的所有裝置上啟動代理，並在桌面應用程式、終端機或手機上繼續。",
+          body: "在你的所有裝置上啟動 agent，並在桌面應用程式、終端機或手機上繼續。",
         },
         "extend-it": {
           title: "擴充它",
-          body: "連接你的工具和服務，讓代理能處理任何事情。或者讓 OpenCode 為自己建立外掛程式，並在側邊欄中擁有自己的介面。",
+          body: "連接你的工具和服務，讓 agent 能處理任何事情。或者讓 OpenCode 為自己建立外掛程式，並在側邊欄中擁有自己的介面。",
         },
       },
     },
     mobile: {
-      title: "OpenCode | 用手機引導編碼代理的行動應用程式",
+      title: "OpenCode | 用手機引導編碼 agent 的行動應用程式",
       description:
-        "在手機上啟動並引導 OpenCode 工作階段。代理在您的電腦上執行時，您可以與它對話。",
+        "在手機上啟動並引導 OpenCode 工作階段。agent 在你的電腦上執行時，你可以與它對話。",
       intro:
-        "無論身在何處，都能在手機上啟動並引導工作階段。打電話給工作階段與代理交談，或開啟任一工作階段從上次中斷處繼續，一切都在您自己電腦上的 OpenCode 中執行。",
+        "無論身在何處，都能在手機上啟動並引導工作階段。打電話給工作階段與 agent 交談，或開啟任一工作階段從上次中斷處繼續，一切都在你自己電腦上的 OpenCode 中執行。",
       features: {
         "notify-when-done": { title: "完成時通知", body: "你啟動的工作階段完成後，會收到一段簡短摘要。" },
         "pair-from-anywhere": { title: "隨處配對", body: "使用 opencode pair --remote 從任何網路連線。" },
         "every-computer": { title: "每台電腦", body: "輕點一下即可切換已配對的電腦。" },
         "siri-and-shortcuts": { title: "Siri 與捷徑", body: "透過 Siri 或控制中心發起通話或工作階段。" },
-        "follow-along": { title: "即時跟進", body: "看著時間軸隨代理的工作即時更新。" },
+        "follow-along": { title: "即時跟進", body: "看著時間軸隨 agent 的工作即時更新。" },
         "your-computer": { title: "你的電腦", body: "連線到你自己電腦上執行的 OpenCode。" },
         "share-sheet": { title: "分享表單", body: "不用開啟應用程式，就能把任何內容分享到工作階段。" },
         "mute-sessions": { title: "靜音工作階段", body: "將工作階段留在清單中，但不接收它的通知。" },
       },
       showcase: {
         results: { title: "結果", body: "你交代的工作完成後，通話會告訴你改了什麼。" },
-        voice: { title: "語音", body: "撥打給工作階段，說出你的需求。代理會出聲回答。" },
+        voice: { title: "語音", body: "撥打給工作階段，說出你的需求。agent 會出聲回答。" },
         sessions: { title: "工作階段", body: "開啟任何工作階段查看進度，再從上次中斷的地方繼續。" },
         steer: { title: "引導", body: "傳送後續訊息，在工作階段中途調整方向。" },
       },
     },
     terminal: {
-      title: "OpenCode | 開源編碼代理的終端機介面",
+      title: "OpenCode | 開源編碼 agent 的終端機介面",
       description:
         "OpenCode 的快速終端機介面，可在任何 shell、編輯器或遠端伺服器中使用。描述你的需求，以 diff 查看每處編輯，並核准指令。",
       intro:
         "快速的終端機介面，可在任何 shell、編輯器或遠端伺服器中使用。用日常語言描述需求，看著每處編輯以 diff 呈現，並選擇哪些指令可以自動執行。",
       features: {
         "any-terminal": { title: "任何終端機", body: "可在任何 shell、編輯器的終端機或遠端伺服器中使用。" },
-        "diffs-in-the-timeline": { title: "時間軸中的 diff", body: "代理每做一處編輯，都會以 diff 顯示在時間軸中。" },
+        "diffs-in-the-timeline": { title: "時間軸中的 diff", body: "agent 每做一處編輯，都會以 diff 顯示在時間軸中。" },
         "pick-up-later": { title: "稍後繼續", body: "用 -c 繼續上一個工作階段，或用 -s 繼續任何工作階段。" },
         "one-off-runs": { title: "單次執行", body: "opencode run 傳送一則訊息並輸出回覆。" },
-        "agents-and-commands": { title: "代理與指令", body: "用 shift+tab 切換代理，用 ctrl+p 開啟所有指令。" },
+        "agents-and-commands": { title: "agent 與指令", body: "用 shift+tab 切換 agent，用 ctrl+p 開啟所有指令。" },
         "auto-approve": { title: "自動核准", body: "以 --auto 執行，即可允許所有你未拒絕的動作。" },
         "any-server": { title: "任何伺服器", body: "使用 --server 透過 URL 連線到 OpenCode 伺服器。" },
         "usage-stats": { title: "使用統計", body: "opencode stats 顯示可分享的使用統計。" },
       },
       showcase: {
-        "ask-in-plain-words": { title: "用日常語言提問", body: "輸入你的需求，代理會在工作時展示計畫。" },
+        "ask-in-plain-words": { title: "用日常語言提問", body: "輸入你的需求，agent 會在工作時展示計畫。" },
         "approve-what-runs": { title: "核准要執行的內容", body: "編輯以 diff 顯示，指令會等待你的許可。" },
         "make-it-yours": { title: "隨心打造", body: "一鍵切換主題，從預設主題到 tokyonight 等。" },
         mini: { title: "Mini", body: "執行 opencode mini，回覆會輸出到你自己的捲動紀錄中。" },
       },
     },
     sdk: {
-      title: "OpenCode | 用程式碼驅動代理的 TypeScript SDK",
+      title: "OpenCode | 用程式碼驅動 agent 的 TypeScript SDK",
       description:
         "從你自己的腳本、CI 工作和工具驅動 OpenCode。具型別的 TypeScript 用戶端可以建立工作階段、傳送提示詞，並即時串流每個事件。",
       intro:
@@ -117,7 +117,7 @@ export const content = {
           title: "用程式碼修復 CI",
           body: "一段簡短的腳本請 OpenCode 修復失敗的測試，然後重新執行。",
         },
-        "follow-every-step": { title: "追蹤每一步", body: "串流事件，即時查看代理呼叫的每個工具。" },
+        "follow-every-step": { title: "追蹤每一步", body: "串流事件，即時查看 agent 呼叫的每個工具。" },
         "build-your-own-tools": {
           title: "打造自己的工具",
           body: "只要幾行程式碼，就能把 OpenCode 接入機器人、儀表板和工作流程。",
@@ -125,19 +125,19 @@ export const content = {
       },
     },
     mini: {
-      title: "OpenCode | Mini，代理的極簡終端機介面",
+      title: "OpenCode | Mini，agent 的極簡終端機介面",
       description:
         "Mini 在極簡的終端機介面中執行 OpenCode。回覆直接輸出到終端機本身的捲動紀錄中，下方只保留提示詞輸入框和一行狀態列。",
       intro:
         "OpenCode 的極簡終端機介面。執行 opencode mini，回覆會直接輸出到終端機本身的捲動紀錄中，你可以像處理其他輸出一樣捲動、搜尋和複製。底部只保留提示詞輸入框和一行狀態列。",
       features: {
         "your-scrollback": { title: "你的捲動紀錄", body: "回覆就是一般的終端機歷史紀錄。" },
-        "one-prompt": { title: "一個輸入框", body: "代理、模型、上下文和費用都在一行狀態列中。" },
+        "one-prompt": { title: "一個輸入框", body: "agent、模型、上下文和費用都在一行狀態列中。" },
         permissions: { title: "權限", body: "在輸入區域允許編輯和指令。" },
         "how-much-shows": { title: "顯示多少", body: "思考過程和工具輸出可設為安靜、預設或全部。" },
         "pick-up-later": { title: "稍後繼續", body: "用 -c 繼續上一個工作階段，或用 -s 繼續任何工作階段。" },
-        "same-opencode": { title: "同一個 OpenCode", body: "伺服器、代理和模型與其他應用程式相同。" },
-        agents: { title: "代理", body: "直接在輸入框中切換代理。" },
+        "same-opencode": { title: "同一個 OpenCode", body: "伺服器、agent 和模型與其他應用程式相同。" },
+        agents: { title: "agent", body: "直接在輸入框中切換 agent。" },
         compact: { title: "壓縮", body: "用 /compact 壓縮冗長的工作階段。" },
       },
     },
@@ -150,20 +150,20 @@ export const content = {
   extensions: {
     browse: {
       name: "Browse",
-      body: "讓代理使用你真正的瀏覽器。",
-      title: "OpenCode | Browse，為編碼代理準備的真正瀏覽器",
+      body: "讓 agent 使用你真正的瀏覽器。",
+      title: "OpenCode | Browse，為編碼 agent 準備的真正瀏覽器",
       description:
-        "Browse 讓 OpenCode 和其他 MCP 用戶端使用你真正的瀏覽器。代理會閱讀頁面、點擊、輸入、擷取螢幕畫面、錄製分頁，並把登入和雙重驗證交還給你。",
+        "Browse 讓 OpenCode 和其他 MCP 用戶端使用你真正的瀏覽器。agent 會閱讀頁面、點擊、輸入、擷取螢幕畫面、錄製分頁，並把登入和雙重驗證交還給你。",
       intro:
-        "一個 MCP 伺服器加上一個 Chromium 擴充功能，讓你的代理使用真正的瀏覽器，包括你的分頁、登入狀態和擴充功能。代理在背景開啟分頁，分組收好，不打擾你，並閱讀頁面、點擊、輸入、擷取螢幕畫面和錄製分頁。輪到你操作時，例如登入、雙重驗證或付款，代理會把分頁交還給你，你按下「繼續」後它再接著工作。",
+        "一個 MCP 伺服器加上一個 Chromium 擴充功能，讓你的 agent 使用真正的瀏覽器，包括你的分頁、登入狀態和擴充功能。agent 在背景開啟分頁，分組收好，不打擾你，並閱讀頁面、點擊、輸入、擷取螢幕畫面和錄製分頁。輪到你操作時，例如登入、雙重驗證或付款，agent 會把分頁交還給你，你按下「繼續」後它再接著工作。",
       features: {
         "your-real-browser": {
           title: "真正的瀏覽器",
           body: "Chrome、Edge、Brave、Arc、Helium、Vivaldi、Opera 和 Chromium。",
         },
-        "out-of-your-way": { title: "不打擾你", body: "代理的分頁在背景開啟，並收進摺疊的群組中。" },
+        "out-of-your-way": { title: "不打擾你", body: "agent 的分頁在背景開啟，並收進摺疊的群組中。" },
         handoffs: { title: "交接", body: "自己完成登入或雙重驗證，然後按下「繼續」。" },
-        "lend-a-tab": { title: "借出分頁", body: "按一下工具列按鈕，把已開啟的分頁交給代理。" },
+        "lend-a-tab": { title: "借出分頁", body: "按一下工具列按鈕，把已開啟的分頁交給 agent。" },
         "record-and-capture": { title: "錄製與擷取", body: "螢幕截圖、分頁錄製和網路流量。" },
         "any-mcp-client": {
           title: "任何 MCP 用戶端",
@@ -171,16 +171,16 @@ export const content = {
         },
         "all-your-logins": {
           title: "沿用你的所有登入",
-          body: "代理直接使用你已登入的網站。無需金鑰，無需設定。",
+          body: "agent 直接使用你已登入的網站。無需金鑰，無需設定。",
         },
-        "allowed-sites": { title: "允許的網站", body: "讓代理的分頁只停留在你指定的網站。" },
+        "allowed-sites": { title: "允許的網站", body: "讓 agent 的分頁只停留在你指定的網站。" },
       },
       install:
         "請先安裝 [Chrome 擴充功能]，它會引導你完成其餘步驟。如需直接安裝 CLI（通常不需要），可使用以下任一指令。",
     },
   },
   apps: {
-    browse: { category: "代理瀏覽器控制", body: "讓你的代理使用你真正的瀏覽器，保留登入狀態和分頁。" },
+    browse: { category: "agent 瀏覽器控制", body: "讓你的 agent 使用你真正的瀏覽器，保留登入狀態和分頁。" },
     hex: { category: "語音聽寫", body: "適用於任何應用程式的裝置端語音聽寫。" },
     opentunnel: { category: "本機通道", body: "為本機應用程式提供公開的 HTTPS URL。" },
     opentui: { category: "函式庫", body: "用於打造終端機使用者介面的函式庫。" },
@@ -215,7 +215,7 @@ export const content = {
     ours: { label: "OpenCode 方案" },
   },
   brand: {
-    hero: { copy: { text: "給代理的規範", copied: "已複製規範" } },
+    hero: { copy: { text: "給 agent 的規範", copied: "已複製規範" } },
     naming: {
       title: "命名",
       body: "OpenCode 寫成一個字，O 和 C 大寫。不要寫成 Opencode、Open Code、OpenCode AI 或 Open-Code。",
@@ -372,7 +372,7 @@ export const content = {
       projects: {
         opencode: {
           name: "OpenCode",
-          body: "開源編碼代理，提供桌面、終端機和行動應用程式以及 SDK。採用 MIT 授權，GitHub 星星超過 220,000 顆。",
+          body: "開源編碼 agent，提供桌面、終端機和行動應用程式以及 SDK。採用 MIT 授權，GitHub 星星超過 220,000 顆。",
         },
         sst: {
           name: "SST",
@@ -400,19 +400,19 @@ export const content = {
       title: "關於 OpenCode",
       body: "OpenCode 及其產品的介紹，有長短兩個版本，可直接複製。",
       boilerplate: {
-        long: "OpenCode 是一個開源編碼代理。它提供桌面應用程式、終端機介面、行動應用程式和 SDK，並支援任何供應商的模型，包括 Claude、GPT 和 Gemini。OpenCode 採用 MIT 授權，由 Anomaly 打造。它在 GitHub 上擁有超過 220,000 顆星星和 1,000 多位貢獻者，每月有超過 2200 萬名開發者使用。",
-        short: "OpenCode 是 Anomaly 推出的開源編碼代理，提供桌面、終端機和行動應用程式以及 SDK。",
+        long: "OpenCode 是一個開源編碼 agent。它提供桌面應用程式、終端機介面、行動應用程式和 SDK，並支援任何供應商的模型，包括 Claude、GPT 和 Gemini。OpenCode 採用 MIT 授權，由 Anomaly 打造。它在 GitHub 上擁有超過 220,000 顆星星和 1,000 多位貢獻者，每月有超過 2200 萬名開發者使用。",
+        short: "OpenCode 是 Anomaly 推出的開源編碼 agent，提供桌面、終端機和行動應用程式以及 SDK。",
       },
       products: {
         "opencode-console": {
-          name: "OpenCode Console",
-          long: "OpenCode Console 是一款 Web 應用程式，開發者和團隊可以在這裡為 OpenCode 及其他編碼代理購買和管理 AI 模型存取權。它為前沿模型和開放權重模型提供隨用隨付的推論服務，依請求從預付額度扣款，同時提供 OpenCode Go 訂閱。團隊可以取得具備成員、管理員和擁有者角色的工作區、工作區層級與個別使用者的支出上限、透過 Okta、Microsoft Entra ID 或 Google Workspace 進行單一登入，以及 SCIM。Console 支援 30 多家供應商，團隊可以連接既有的供應商帳號，自家推論服務則為選用。網址為 opencode.ai/console。",
+          name: "OpenCode 控制台",
+          long: "OpenCode 控制台是一款 Web 應用程式，開發者和團隊可以在這裡為 OpenCode 及其他編碼 agent 購買和管理 AI 模型存取權。它為前沿模型和開放權重模型提供隨用隨付的推論服務，依請求從預付額度扣款，同時提供 OpenCode Go 訂閱。團隊可以取得具備成員、管理員和擁有者角色的工作區、工作區層級與個別使用者的支出上限、透過 Okta、Microsoft Entra ID 或 Google Workspace 進行單一登入，以及 SCIM。控制台支援 30 多家供應商，團隊可以連接既有的供應商帳號，自家推論服務則為選用。網址為 opencode.ai/console。",
           short:
-            "OpenCode Console 是 Anomaly 的 Web 應用程式，提供隨用隨付的 AI 模型存取、OpenCode Go 訂閱，以及預算和單一登入等團隊管控功能。",
+            "OpenCode 控制台是 Anomaly 的 Web 應用程式，提供隨用隨付的 AI 模型存取、OpenCode Go 訂閱，以及預算和單一登入等團隊管控功能。",
         },
         "opencode-go": {
           name: "OpenCode Go",
-          long: "OpenCode Go 是為希望以固定月費使用編碼模型的開發者提供的訂閱。Go 每月 $10，額度更高的 Go Plus 每月 $40，Go Teams 每位成員每月 $20。每個方案都包含一組針對代理式編碼測試過的精選模型。使用上限是每個模型的每月金額，另有滾動計算的 5 小時和每週額度，分別為每月上限的 20% 和 50%。訂閱者可以儲值額度、在用完後改用隨用隨付餘額，並可隨時取消。Go 適用於 OpenCode 和其他代理。網址為 opencode.ai/console/go。",
+          long: "OpenCode Go 是為希望以固定月費使用編碼模型的開發者提供的訂閱。Go 每月 $10，額度更高的 Go Plus 每月 $40，Go Teams 每位成員每月 $20。每個方案都包含一組針對 agent 編碼測試過的精選模型。使用上限是每個模型的每月金額，另有滾動計算的 5 小時和每週額度，分別為每月上限的 20% 和 50%。訂閱者可以儲值額度、在用完後改用隨用隨付餘額，並可隨時取消。Go 適用於 OpenCode 和其他 agent。網址為 opencode.ai/console/go。",
           short: "OpenCode Go 是 Anomaly 推出的月訂閱，為開發者提供一組精選編碼模型的每月使用額度，每月 $10 起。",
         },
         "opencode-data": {
@@ -539,11 +539,11 @@ export const content = {
       items: {
         desktop: {
           name: "Desktop",
-          body: "在 macOS、Windows 和 Linux 上同時執行多個代理，每個都在獨立的分頁中。以 diff 審查每項變更並預覽。",
+          body: "在 macOS、Windows 和 Linux 上同時執行多個 agent，每個都在獨立的分頁中。以 diff 審查每項變更並預覽。",
         },
         mobile: {
           name: "Mobile",
-          body: "最新的 OpenCode 應用程式。撥打給工作階段與代理對話，再隨時隨地用手機審查並核准它的變更。",
+          body: "最新的 OpenCode 應用程式。撥打給工作階段與 agent 對話，再隨時隨地用手機審查並核准它的變更。",
         },
         terminal: {
           name: "Terminal",
@@ -617,14 +617,14 @@ export const content = {
     facts: [
       "可在任何網路中使用，--remote 透過 OpenTunnel 位址連線。",
       "連結和 QR 碼只能使用一次，5 分鐘後失效。",
-      "請讓電腦保持開機，代理在電腦上執行，而不是在手機上。",
+      "請讓電腦保持開機，agent 在電腦上執行，而不是在手機上。",
       "如果在同一個 Wi-Fi 下，先執行一次 opencode service set hostname 0.0.0.0，再執行 opencode pair。",
     ],
   },
   announcements: {
     "create-install-and-share-desktop-plugins": { text: "建立、安裝和分享桌面外掛。", link: "查看 2.2 的新功能" },
     "desktop-terminals-now-survive-restarts": { text: "桌面終端機現在重新啟動後依然保留。", link: "查看 v2.2.4" },
-    "agents-can-now-generate-images": { text: "代理現在可以產生圖片了。", link: "查看 v2.2.1" },
+    "agents-can-now-generate-images": { text: "agent 現在可以產生圖片了。", link: "查看 v2.2.1" },
     "steer-your-sessions-from-your-phone": { text: "用手機引導你的工作階段。", link: "認識 OpenCode Mobile" },
     "a-refreshed-desktop-app": { text: "煥然一新的桌面應用程式。", link: "查看 2.2 的新功能" },
   },
