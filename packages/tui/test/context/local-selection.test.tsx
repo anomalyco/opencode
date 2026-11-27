@@ -126,6 +126,19 @@ test("a manual agent switch supersedes the CLI agent after its commit", async ()
   expect(setup.local.agent.current()?.id).toBe("plan")
 })
 
+test("a session switched to a hidden agent reports it as current without listing it", async () => {
+  await using setup = await renderLocal({
+    agents: [agent("build"), agent("plan"), { ...agent("helper"), hidden: true }],
+    sessions: [session("ses_first", { providerID: "provider", id: "first" }, "helper")],
+  })
+  await setup.data.session.sync("ses_first")
+  setup.route.navigate({ type: "session", sessionID: "ses_first" })
+  expect(setup.local.agent.current()?.id).toBe("helper")
+  expect(setup.local.agent.list().map((item) => item.id)).toEqual(["build", "plan"])
+  setup.local.agent.move(1)
+  expect(setup.local.agent.current()?.id).toBe("build")
+})
+
 test("a late inactive-agent acknowledgment preserves its choice after the active agent commits", async () => {
   await using setup = await renderLocal({
     models: [model("first"), model("second"), model("third")],

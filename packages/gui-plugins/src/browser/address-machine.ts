@@ -137,6 +137,8 @@ export type AddressEvent =
     }
   /** A click on a row of the list or a recent page. */
   | { readonly type: "navigated"; readonly url: string; readonly epoch: AddressEpoch }
+  /** The page reported a tab switch, a URL change or a finished load. */
+  | { readonly type: "page.followed"; readonly epoch: AddressEpoch }
 
 export type AddressEffect =
   | { readonly type: "select-input" }
@@ -144,7 +146,8 @@ export type AddressEffect =
   | { readonly type: "select-completion"; readonly start: number }
   | { readonly type: "blur-input" }
   | { readonly type: "prevent-default" }
-  | { readonly type: "navigate"; readonly tabID: Browser.TabID; readonly url: string }
+  /** Opens `url` in the page's tab; a field without a tab, as on the side panel's New tab page, opens it in a new one. */
+  | { readonly type: "navigate"; readonly tabID: Browser.TabID | undefined; readonly url: string }
   /** The person is about to type: main reads its history into memory, ahead of the first question. */
   | { readonly type: "prepare" }
   /** Asks main's history for the pages that match `query`; the answer names `attempt`. */
@@ -300,6 +303,21 @@ export function transitionAddress(state: AddressState, event: AddressEvent): Add
 
     case "navigated":
       return navigate(state, event.url, event.epoch)
+
+    // A field focused before its page had an address, as a tab opened on a URL is, shows where the page went until the
+    // person types, as it does at rest.
+    case "page.followed": {
+      if (
+        state.status !== "editing" ||
+        state.typed ||
+        state.hold ||
+        state.list.type !== "following" ||
+        state.text === event.epoch.url
+      )
+        return unchanged(state)
+
+      return { state: { ...state, text: event.epoch.url }, effects: [SELECT] }
+    }
   }
 }
 
@@ -405,8 +423,6 @@ function listRows(text: string, pages: readonly Suggestion[], completing: boolea
 }
 
 function navigate(state: AddressState, url: string, epoch: AddressEpoch): AddressTransition {
-  if (!epoch.tabID) return unchanged(state)
-
   // A blank page keeps the field empty.
   return {
     state: {

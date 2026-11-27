@@ -9,8 +9,6 @@ import { Clock, Deferred, Effect, Fiber, Option, Schema, Stream, Struct } from "
 import { Agent } from "../../agent.js"
 import { Bus } from "../../bus.js"
 import { CodeModeTool } from "../../codemode/tool.js"
-import { Config } from "../../config.js"
-import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Environment } from "../../environment/index.js"
 import { Flag } from "../../flag.js"
 import { Job } from "../../job.js"
@@ -316,9 +314,6 @@ export const Plugin = {
     const shellSelect = yield* ShellSelect.Service
     const compatibleShell = shellSelect.resolve({ priority: "compat" })
     const permission = yield* Permission.Service
-    const config = yield* Config.Service
-    // Internal plugins are not re-run on config changes, so reload the tool transform instead.
-    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
 
     const prepare = Effect.fn("ShellTool.prepare")(function* (
@@ -419,7 +414,7 @@ export const Plugin = {
         editor.add({
           name,
           // With full_codemode, shell is allowed in Code Mode and pinned so the catalog always lists it.
-          options: flags.resolve(loaded.entries).full_codemode.enabled
+          options: flags.current().full_codemode.enabled
             ? {
                 codemode: {
                   pinned: true,

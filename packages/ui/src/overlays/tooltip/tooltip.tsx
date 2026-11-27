@@ -40,6 +40,10 @@ export interface TooltipProps extends ComponentProps<typeof Root> {
   triggerTabIndex?: number
 }
 
+export interface TooltipTextProps extends ComponentProps<"span"> {
+  variant?: "base" | "muted" | "faint" | "accent" | "warning"
+}
+
 type TriggerHandlers = {
   onPointerEnter: (event: PointerEvent) => void
   onFocus: (event: FocusEvent) => void
@@ -87,6 +91,12 @@ export function Tooltip(props: TooltipProps) {
       <ActiveTooltip {...props} />
     </Show>
   )
+}
+
+export function TooltipText(props: TooltipTextProps) {
+  const [local, rest] = splitProps(props, ["variant"])
+
+  return <span {...rest} data-component="tooltip-v2-text" data-variant={local.variant ?? "base"} />
 }
 
 function ActiveTooltip(props: TooltipProps) {

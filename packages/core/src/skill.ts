@@ -81,7 +81,8 @@ export type File = string | Uint8Array | Effect.Effect<string | Uint8Array, Load
 export type Resolver = (id: string) => Effect.Effect<ID | undefined, LoadError>
 
 /** Where a skill that didn't come from this machine came from. */
-export type Origin = { readonly type: "mcp"; readonly server: string }
+/** Where a skill not on this machine comes from. `version` changes whenever any of its files does. */
+export type Origin = { readonly type: "mcp"; readonly server: string; readonly version: string }
 
 export const available = (skills: ReadonlyArray<Info>, policy: PermissionPolicy.Policy) =>
   skills.filter((skill) => PermissionPolicy.evaluate(policy, "skill", skill.id).effect !== "deny")
@@ -224,6 +225,11 @@ export interface Interface extends State.Transformable<Editor> {
   readonly list: () => Effect.Effect<Info[]>
   /** The skill with this ID, or the one a resolver finds for it. */
   readonly resolve: (id: string) => Effect.Effect<Info | undefined, LoadError>
+  /**
+   * What the `skill` permission is checked against: the ID, plus `<id>@<version>` for a skill that has a version.
+   * Approving saves the exact version, so a changed skill is asked about again.
+   */
+  readonly approval: (id: ID) => Effect.Effect<{ resources: string[]; save: string[] }>
   /** The body as the model is given it: `content`, led by where the skill came from when that isn't this machine. */
   readonly instructions: (id: ID) => Effect.Effect<string, LoadError>
 }
@@ -320,6 +326,12 @@ const layer = Layer.effect(
           if (found) return state.get().entries.get(found)?.info
         }
         return undefined
+      }),
+      approval: Effect.fn("Skill.approval")(function* (id) {
+        const origin = state.get().entries.get(id)?.origin
+        if (!origin) return { resources: [id], save: [id] }
+        const versioned = `${id}@${origin.version}`
+        return { resources: [id, versioned], save: [versioned] }
       }),
       instructions: Effect.fn("Skill.instructions")(function* (id) {
         const body = yield* content(id)

@@ -142,6 +142,10 @@ function Provider(props: ParentProps<{ config?: KeymapConfig }>) {
         name: "leader",
         timeoutMs: config.leader?.timeout ?? ("leader_timeout" in config ? config.leader_timeout : undefined) ?? 2000,
       }),
+      // A leader sequence with no reachable command must not type its last key into the focused input.
+      keymap.intercept("key:after", (context) => {
+        if (context.reason === "sequence-miss" && context.sequence[0]?.tokenName === "leader") context.consume()
+      }),
     )
   }
   onCleanup(() => {

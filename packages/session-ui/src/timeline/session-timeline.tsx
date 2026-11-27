@@ -18,7 +18,6 @@ export type SessionTimelineProps = {
   editToolDefaultOpen?: boolean
   timelineDetail?: TimelineDetail
   turnDiffs?: boolean
-  inlineQuotes?: boolean
   class?: string
 }
 
@@ -48,7 +47,6 @@ export function SessionTimeline(props: SessionTimelineProps) {
     shellToolDefaultOpen: () => props.shellToolDefaultOpen ?? false,
     editToolDefaultOpen: () => props.editToolDefaultOpen ?? false,
     timelineDetail: props.timelineDetail && (() => props.timelineDetail!),
-    inlineQuotes: () => props.inlineQuotes ?? false,
     disclosure: {
       value: (key) => toolOpen[key],
       set: (key, open) => setToolOpen(key, open),

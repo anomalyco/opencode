@@ -48,6 +48,7 @@ test("reasoning follows the markdown setting, also when it changes", async () =>
                 config,
                 mutatePending: async () => true,
                 pendingDelivery: () => undefined,
+                find: { pattern: () => undefined, current: () => undefined, counted: () => {}, located: () => {} },
               }}
             >
               <ReasoningBody content={thought} streaming={false} sourceStreaming={false} />

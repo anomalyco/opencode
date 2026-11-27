@@ -50,6 +50,8 @@ export function createDesktopPlatform(api: ElectronAPI, windowState: DesktopWind
     setSpellcheckEnabled: (enabled) => api.setSpellcheckEnabled(enabled),
     getSmoothScrollingEnabled: () => api.getSmoothScrollingEnabled(),
     setSmoothScrollingEnabled: (enabled) => api.setSmoothScrollingEnabled(enabled),
+    getKeepServiceRunning: () => api.getKeepServiceRunning(),
+    setKeepServiceRunning: (enabled) => api.setKeepServiceRunning(enabled),
     onDeepLinks,
     onDragCancel: (callback) => {
       window.addEventListener(DragCancelEvent, callback)

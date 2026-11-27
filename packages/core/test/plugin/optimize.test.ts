@@ -109,7 +109,7 @@ describe("OptimizePlugin", () => {
         ["claude-sonnet-4", appended],
         ["kimi-k2", fallback],
         ["trinity", PROMPT_TRINITY],
-        ["meta/muse-spark-1.1", PROMPT_META.replaceAll("{{MODEL_NAME}}", "Muse Spark")],
+        ["meta/muse-spark-1.1", `${fallback}\n\n${SessionSystemPrompt.render(PROMPT_META, [])}`],
         ["llama-3.3", fallback],
       ] as const
 
@@ -182,36 +182,27 @@ describe("OptimizePlugin", () => {
     }),
   )
 
-  it.effect("uses catalog names in Meta prompts for Muse model IDs", () =>
+  it.effect("appends the Meta prompt for Muse model IDs", () =>
     Effect.gen(function* () {
       const catalog = yield* Provider.Service
       const hooks = yield* PluginHooks.Service
       const pluginHost = yield* makeHost
-      const cases = [
-        ["meta/muse-spark-preview", "Muse Spark Preview"],
-        ["muse-spark-1.2", "Muse Spark 1.2"],
-        ["meta/muse-glimmer-30b", "Muse Glimmer 30B"],
-        ["muse-glimmer-30b", "Muse Glimmer"],
-      ] as const
+      const ids = ["meta/muse-spark-preview", "muse-spark-1.2", "meta/muse-glimmer-30b", "muse-ember-1.0"]
       yield* catalog.transform((editor) => {
-        for (const [id, name] of cases)
-          editor.models.update(Provider.ID.make("test"), Model.ID.make(id), (model) => {
-            model.name = name
-          })
+        for (const id of ids) editor.models.update(Provider.ID.make("test"), Model.ID.make(id), () => {})
       })
       yield* OptimizePlugin.MetaPlugin.effect(pluginHost)
 
       yield* Effect.forEach(
-        cases,
-        ([id, name]) => {
+        ids,
+        (id) => {
           const event = context(id)
           return hooks.trigger("session", "context", event).pipe(
             Effect.tap(() =>
               Effect.sync(() => {
                 expect(event.system[0]?.text).toBe(
-                  SessionSystemPrompt.render(PROMPT_META.replaceAll("{{MODEL_NAME}}", name), Object.keys(event.tools)),
+                  `${fallback}\n\n${SessionSystemPrompt.render(PROMPT_META, Object.keys(event.tools))}`,
                 )
-                expect(event.system[0]?.text).not.toContain("{{MODEL_NAME}}")
               }),
             ),
           )
@@ -326,7 +317,7 @@ describe("OptimizePlugin", () => {
       yield* hooks.trigger("session", "context", named)
       expect(listCalls).toBe(1)
       expect(named.system.map((part) => part.text)).toEqual([
-        SessionSystemPrompt.render(PROMPT_META.replaceAll("{{MODEL_NAME}}", "Muse Spark"), Object.keys(named.tools)),
+        `${fallback}\n\n${SessionSystemPrompt.render(PROMPT_META, Object.keys(named.tools))}`,
         IdentityPlugin.identity({ name: "Muse Spark", ref: named.model }),
       ])
 

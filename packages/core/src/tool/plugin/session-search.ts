@@ -4,8 +4,6 @@ import { ToolFailure } from "@opencode/ai/effect"
 import type { Context } from "@opencode/plugin/effect/plugin"
 import { Session } from "@opencode/schema/session"
 import { Effect, Schema } from "effect"
-import { Config } from "../../config.js"
-import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
 import { SessionMessage } from "../../session/message.js"
 import { SessionSearch } from "../../session/search.js"
@@ -54,12 +52,9 @@ export const ReadInput = Schema.Struct({
 export const Plugin = {
   id: "opencode.tool.session-search",
   effect: Effect.fn("SessionSearchTools.Plugin")(function* (ctx: Context) {
-    const config = yield* Config.Service
     const search = yield* SessionSearch.Service
-    // Internal plugins are not re-run on config changes, so reload the tool transform instead.
-    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
-    const enabled = () => flags.resolve(loaded.entries).sqlite_fts.enabled
+    const enabled = () => flags.current().sqlite_fts.enabled
     const failure = (error: { readonly message: string }) => new ToolFailure({ message: error.message, error })
 
     yield* ctx.tool

@@ -41,7 +41,7 @@ export function convert(
           continue
         }
         if (part.type === "image-data" || part.type === "file-data") {
-          parts.push({ type: "file", mediaType: part.mediaType, data: part.data })
+          parts.push({ ...part, type: "file" })
           continue
         }
         if (part.type === "image-url") {

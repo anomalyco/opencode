@@ -121,10 +121,13 @@ currently use these actions and resources:
 | `websearch`          | Search query                                                                |
 | `generate_image` | Selected image model as `providerID/modelID`, plus `#variant` when set |
 | `external_directory` | Canonical external directory boundary, normally ending in `/*`              |
-| `<server>_<tool>`    | `*` for an MCP tool; unsupported characters in both names become `_`        |
+| `<server>_<tool>`    | `*` for an MCP tool; both names keep letters, digits, `_` and `-`, and any other character becomes `_` |
 | `opencode_list_mcp_resources` | MCP server name                                                    |
 | `opencode_read_mcp_resource`  | `<server>:<uri>`                                                   |
 | `execute`            | `*`; a deny removes Code Mode and lists its tools directly, while nested tools enforce their rules |
+
+MCP actions keep hyphens, so tools from a server named `mcp-atlassian` match `mcp-atlassian_*`, not
+`mcp_atlassian_*`.
 
 For example, allow one skill and deny all other skills:
 

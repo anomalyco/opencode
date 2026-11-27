@@ -138,11 +138,22 @@ impl Connection {
 #[error("{message}")]
 pub struct Error {
     pub message: String,
+    /// Set for tagged upstream errors such as `ServiceConfig.InvalidError` so the CLI prints their tag.
+    pub tag: Option<&'static str>,
 }
 
 impl Error {
     fn new(message: impl Into<String>) -> Self {
-        Self { message: message.into() }
+        Self { message: message.into(), tag: None }
+    }
+
+    fn config(error: service_config::Error) -> Self {
+        match &error {
+            service_config::Error::InvalidConfig { .. } => {
+                Self { message: error.to_string(), tag: Some(service_config::INVALID_ERROR_TAG) }
+            }
+            _ => Self::new(format!("Failed to read the service config: {error}")),
+        }
     }
 }
 
@@ -165,14 +176,15 @@ pub async fn resolve(
         }
         return Ok(Connection { endpoint, version, source: Source::Server, warning });
     }
+    if options.standalone {
+        return start_standalone(env).await;
+    }
     let channels = Channels::from_vars(|name| match name {
         "OPENCODE_CHANNEL" => env.channel.clone().map(Into::into),
         _ => None,
     });
-    let config = ServiceConfig::new(paths, &channels.channel)
-        .read()
-        .map_err(|error| Error::new(format!("Failed to read the service config: {error}")))?;
-    if options.standalone || config.disabled == Some(true) {
+    let config = ServiceConfig::new(paths, &channels.channel).read().map_err(Error::config)?;
+    if config.disabled == Some(true) {
         return start_standalone(env).await;
     }
     let own = registration::Files::new(paths, &channels.channel).file;
@@ -232,7 +244,7 @@ pub async fn reconnect(transport: Arc<dyn Transport>, paths: &Paths, env: &Env) 
                 _ => None,
             })
             .channel;
-            let config = ServiceConfig::new(paths, &channel).read().unwrap_or_default();
+            let config = ServiceConfig::new(paths, &channel).read().map_err(Error::config)?;
             let file = registration::Files::new(paths, &channel).file;
             ensure_missing(transport, paths, env, &config, file, None, missing).await
         }
@@ -607,5 +619,28 @@ mod tests {
         let fallback = Options { standalone_fallback: true, ..options(None) };
         let (result, _) = run(Server::default(), missing_ts(), fallback).await;
         assert!(message(result).starts_with("Failed to start standalone server: "));
+    }
+
+    #[tokio::test]
+    async fn invalid_service_config_fails_resolve_while_server_and_standalone_ignore_it() {
+        let dir = opencode_util::temp::tempdir().unwrap();
+        let paths = paths(dir.path());
+        let file = paths.config.join("service.json");
+        let raw = r#"{"port":"4096"}"#;
+        std::fs::write(&file, raw).unwrap();
+
+        let server: Arc<dyn Transport> = Arc::new(Server::default().reply(INFO, Reply::json(200, HEALTH)));
+        let err = resolve(server.clone(), &paths, &missing_ts(), &options(None)).await.unwrap_err();
+        assert_eq!(err.tag, Some(service_config::INVALID_ERROR_TAG));
+        assert!(err.message.contains(&format!("Invalid service config at {}", file.display())), "{}", err.message);
+        assert!(err.message.contains(r#"["port"]"#), "{}", err.message);
+        assert_eq!(std::fs::read_to_string(&file).unwrap(), raw);
+
+        // `--server` and `--standalone` do not read `service.json`.
+        resolve(server.clone(), &paths, &missing_ts(), &options(Some(URL))).await.unwrap();
+        let standalone = Options { standalone: true, ..options(None) };
+        let err = resolve(server, &paths, &missing_ts(), &standalone).await.unwrap_err();
+        assert_eq!(err.tag, None);
+        assert!(err.message.starts_with("Failed to start standalone server: "), "{}", err.message);
     }
 }

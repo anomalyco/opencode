@@ -19,6 +19,7 @@ import { SessionSearchTools } from "@opencode/core/tool/plugin/session-search"
 import { Document, Event, Info } from "@opencode/schema/config"
 import { ConfigExperimental } from "@opencode/schema/config/experimental"
 import { testEffect } from "./lib/effect"
+import { drain } from "./lib/clock"
 import { codeModeListings, executeTool, toolIdentity } from "./lib/tool"
 import { makePluginTestLayer } from "./plugin/fixture"
 
@@ -153,6 +154,9 @@ describe("SessionSearchTools", () => {
       while (!(yield* SessionSearchIndex.buildChunk(db)).done) {}
 
       yield* config.setEntries(documents(true))
+      const bus = yield* Bus.Service
+      yield* bus.publish(Event.Updated, {})
+      yield* drain
       yield* SessionSearchTools.Plugin.effect(yield* PluginHost.make(plugins, "test"))
 
       // Defaults to the caller's project; scope: "all" widens it.

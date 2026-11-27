@@ -513,6 +513,13 @@ export const content = {
         "wordmark-black": { name: "文字标识，黑色" },
         "wordmark-white": { name: "文字标识，白色" },
       },
+      avatars: {
+        body: "方形头像，适用于 X、GitHub、Slack、LinkedIn 等个人资料。标志位于圆形区域内，即使被裁成圆形也能完整显示。PNG 宽 1024 px 和 400 px。",
+        items: {
+          "avatar-dark": { name: "头像，深色" },
+          "avatar-light": { name: "头像，浅色" },
+        },
+      },
       all: { text: "全部下载" },
     },
     coverage: { title: "媒体报道" },

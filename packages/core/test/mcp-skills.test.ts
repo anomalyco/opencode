@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test"
-import { McpServer, WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/server"
+import { createMcpHandler, McpServer, WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/server"
 import { skillEntry, SkillsExtension, type Skill as ServedSkill } from "@modelcontextprotocol/server/ext/skills"
+import { Agent } from "@opencode/schema/agent"
 import { ConfigMCP } from "@opencode/schema/config/mcp"
+import type { Permission } from "@opencode/schema/permission"
 import { Document, Info } from "@opencode/schema/config"
 import { Bus } from "@opencode/core/bus"
 import { Config } from "@opencode/core/config"
@@ -13,13 +15,15 @@ import { Integration } from "@opencode/core/integration"
 import { Location } from "@opencode/core/location"
 import type { McpClient } from "@opencode/core/mcp/client"
 import { Mcp } from "@opencode/core/mcp/index"
+import { McpPool } from "@opencode/core/mcp/pool"
+import { PermissionPolicy } from "@opencode/core/permission/policy"
 import { McpSkillPlugin } from "@opencode/core/plugin/mcp-skill"
 import { AbsolutePath } from "@opencode/core/schema"
 import { Skill } from "@opencode/core/skill"
 import { makeLocationNode } from "@opencode/util/effect/app-node"
 import { LayerNode } from "@opencode/util/effect/layer-node"
 import { isRecord } from "@opencode/util/record"
-import { Effect, Layer } from "effect"
+import { Context, Effect, Exit, Layer, Scope } from "effect"
 import { hostEnvironmentLayer } from "./fixture/environment"
 import { tempLocationLayer } from "./fixture/location"
 import { host } from "./plugin/host"
@@ -83,7 +87,12 @@ const script = (() => {
  */
 const skillServer = (
   skills: Record<string, Record<string, string>>,
-  options: { instructions?: string; extra?: ServedSkill[]; unlisted?: Record<string, Record<string, string>> } = {},
+  options: {
+    modern?: boolean
+    instructions?: string
+    extra?: ServedSkill[]
+    unlisted?: Record<string, Record<string, string>>
+  } = {},
 ) =>
   Effect.acquireRelease(
     Effect.promise(async () => {
@@ -99,33 +108,52 @@ const skillServer = (
           Object.entries(files).map(([file, content]) => [`skill://${folder}/${file}`, content] as const),
         ),
       )
-      const state = { reads: [] as string[], capabilities: undefined as unknown }
-      const server = new McpServer({ name: "team", version: "1.0.0" }, { instructions: options.instructions })
-      new SkillsExtension({
-        source: {
-          list: async () => ({ skills: entries }),
-          get: async (uri) => [...entries, ...hidden].find((entry) => entry.uri === uri),
-          read: async (uri) => {
-            const text = served.get(uri)
-            return text === undefined ? undefined : { text }
+      const state = {
+        reads: [] as string[],
+        capabilities: undefined as unknown,
+        discovers: 0,
+        skillLists: 0,
+      }
+      const makeServer = () => {
+        const server = new McpServer({ name: "team", version: "1.0.0" }, { instructions: options.instructions })
+        new SkillsExtension({
+          source: {
+            list: async () => {
+              state.skillLists += 1
+              return { skills: entries }
+            },
+            get: async (uri) => [...entries, ...hidden].find((entry) => entry.uri === uri),
+            read: async (uri) => {
+              const text = served.get(uri)
+              return text === undefined ? undefined : { text }
+            },
           },
-        },
-      }).attach(server)
-      const transport = new WebStandardStreamableHTTPServerTransport({
-        sessionIdGenerator: () => crypto.randomUUID(),
-        enableJsonResponse: true,
-      })
-      await server.connect(transport)
+        }).attach(server)
+        return server
+      }
+      const modern = options.modern ? createMcpHandler(makeServer, { legacy: "reject" }) : undefined
+      const legacy = modern ? undefined : makeServer()
+      const transport = legacy
+        ? new WebStandardStreamableHTTPServerTransport({
+            sessionIdGenerator: () => crypto.randomUUID(),
+            enableJsonResponse: true,
+          })
+        : undefined
+      if (legacy && transport) await legacy.connect(transport)
       const http = Bun.serve({
         port: 0,
         fetch: async (request) => {
           const body: unknown = request.method === "POST" ? await request.clone().json() : undefined
-          if (isRecord(body) && isRecord(body.params)) {
-            if (body.method === "resources/read" && typeof body.params.uri === "string")
-              state.reads.push(body.params.uri)
-            if (body.method === "initialize") state.capabilities = body.params.capabilities
+          if (isRecord(body)) {
+            if (body.method === "server/discover") state.discovers += 1
+            if (isRecord(body.params)) {
+              if (body.method === "resources/read" && typeof body.params.uri === "string")
+                state.reads.push(body.params.uri)
+              if (body.method === "initialize") state.capabilities = body.params.capabilities
+            }
           }
-          return transport.handleRequest(request)
+          if (modern) return modern.fetch(request)
+          return transport!.handleRequest(request)
         },
       })
       return {
@@ -133,7 +161,8 @@ const skillServer = (
         state,
         serve: (uri: string, content: string) => served.set(uri, content),
         close: async () => {
-          await server.close().catch(() => {})
+          await legacy?.close().catch(() => {})
+          await modern?.close()
           await http.stop(true)
         },
       }
@@ -173,6 +202,21 @@ describe("McpSkillPlugin.parseEntry", () => {
       entry([file("SKILL.md"), { uri: "skill://acme/other/x.md", digest: "sha256:x", size: 1 }, file("%2e%2e/secret")]),
     )
     expect(parsed._tag === "Served" && parsed.skill.files.size).toBe(0)
+  })
+
+  test("versions a skill by its server and every listed file", () => {
+    const version = (skill: Mcp.Skill) => {
+      const parsed = McpSkillPlugin.parseEntry(skill)
+      if (parsed._tag !== "Served") throw new Error("expected a served skill")
+      return parsed.skill.version
+    }
+    const listed = entry([file("SKILL.md"), file("references/FORMS.md")])
+    expect(version(listed)).toMatch(/^sha256:[0-9a-f]{64}$/)
+    expect(version(entry([file("references/FORMS.md"), file("SKILL.md")]))).toBe(version(listed))
+    expect(version(entry([file("SKILL.md"), { ...file("references/FORMS.md"), digest: "sha256:changed" }]))).not.toBe(
+      version(listed),
+    )
+    expect(version({ ...listed, server: Mcp.ServerName.make("other") })).not.toBe(version(listed))
   })
 
   test("rejects dynamic skills and skills that don't list SKILL.md", () => {
@@ -252,6 +296,36 @@ describe("MCP skills", () => {
     }),
   )
 
+  it.live("asks to load an MCP skill once per version unless config allows it", () =>
+    Effect.gen(function* () {
+      const server = yield* skillServer({ deploy })
+      yield* connect("team", server.url, ["team:deploy"])
+      const skills = yield* Skill.Service
+      const approval = yield* skills.approval(id)
+      expect(approval.resources[0]).toBe(id)
+      expect(approval.resources[1]).toMatch(/^team:deploy@sha256:[0-9a-f]{64}$/)
+      expect(approval.save).toEqual([approval.resources[1]])
+
+      const defaults = Agent.Info.default(Agent.ID.make("build")).permissions
+      const effect = (...rules: Permission.Ruleset) =>
+        PermissionPolicy.evaluateAll(PermissionPolicy.fromRules(defaults, rules), "skill", approval.resources)
+      expect(effect()).toBe("ask")
+      expect(PermissionPolicy.evaluateAll(PermissionPolicy.fromRules(defaults), "skill", ["local-skill"])).toBe("allow")
+      expect(effect({ action: "skill", resource: "team:*", effect: "allow" })).toBe("allow")
+      expect(effect({ action: "skill", resource: "team:deploy", effect: "deny" })).toBe("deny")
+      const saved = PermissionPolicy.fromRules(
+        approval.save.map((resource) => ({ action: "skill", resource, effect: "allow" as const })),
+      )
+      expect(
+        PermissionPolicy.evaluateAll(
+          PermissionPolicy.fallback(PermissionPolicy.fromRules(defaults), saved),
+          "skill",
+          approval.resources,
+        ),
+      ).toBe("allow")
+    }),
+  )
+
   it.live("loads verified files on demand and reuses them by digest", () =>
     Effect.gen(function* () {
       const server = yield* skillServer({ deploy })
@@ -314,6 +388,75 @@ describe("MCP skills", () => {
       yield* connect("other", without.url, [])
       const mcp = yield* Mcp.Service
       expect(yield* mcp.instructions()).toEqual([{ server: Mcp.ServerName.make("other"), instructions: "Call ping." }])
+    }),
+  )
+
+  it.live("lists and shares MCP skills over a pooled modern connection", () =>
+    Effect.gen(function* () {
+      const server = yield* skillServer({ deploy }, { modern: true })
+      const pool = Context.get(yield* Layer.build(LayerNode.compile(McpPool.node)), McpPool.Service)
+      const openLocation = Effect.gen(function* () {
+        const scope = yield* Scope.make()
+        yield* Effect.addFinalizer(() => Scope.close(scope, Exit.void))
+        const context = yield* Layer.buildWithScope(
+          AppNodeBuilder.build(
+            LayerNode.group([
+              Mcp.node,
+              Skill.node,
+              Bus.node,
+              makeLocationNode({
+                name: "test/mcp-skills-plugin",
+                layer: Layer.effectDiscard(McpSkillPlugin.Plugin.effect(host())),
+                deps: [Mcp.node, Bus.node, Skill.node],
+              }),
+            ]),
+            [
+              McpPool.node.replace(Layer.succeed(McpPool.Service, pool)),
+              Config.node.replace(config),
+              Flag.node.replace(Flag.testLayer([], { overrides: "mcp_skills" })),
+              Location.node.replace(tempLocationLayer),
+              Environment.node.replace(hostEnvironmentLayer),
+              Integration.node.replace(
+                Layer.mock(Integration.Service, {
+                  revision: () => 0,
+                  connection: {
+                    active: unused,
+                    resolve: unused,
+                    key: unused,
+                    external: unused,
+                    activate: unused,
+                    update: unused,
+                    remove: unused,
+                    status: unused,
+                  },
+                  oauth: { connect: unused, status: unused, complete: unused, cancel: unused },
+                  command: { connect: unused, status: unused, cancel: unused },
+                }),
+              ),
+              Credential.node.replace(Layer.mock(Credential.Service, {})),
+            ],
+          ),
+          scope,
+        )
+        const mcp = Context.get(context, Mcp.Service)
+        const skills = Context.get(context, Skill.Service)
+        yield* mcp.add("team", new ConfigMCP.Remote({ type: "remote", url: server.url, oauth: false, pool: true }))
+        yield* eventually(mcp.servers(), (servers) =>
+          servers.some((item) => item.name === "team" && item.status.status === "connected"),
+        )
+        yield* eventually(skills.list(), (listed) => listed.some((skill) => skill.id === id))
+        return { mcp, skills }
+      })
+
+      const first = yield* openLocation
+      const second = yield* openLocation
+      // One shared 2026-07-28 discovery and one skills/list serve both Locations.
+      expect(server.state.discovers).toBe(1)
+      expect(server.state.skillLists).toBe(1)
+      expect(yield* first.mcp.skills()).toHaveLength(1)
+      expect(yield* second.mcp.skills()).toHaveLength(1)
+      expect(yield* first.skills.content(id)).toBe("# Deploy\n\nRun scripts/run.sh.\n")
+      expect(yield* second.skills.content(id)).toBe("# Deploy\n\nRun scripts/run.sh.\n")
     }),
   )
 })

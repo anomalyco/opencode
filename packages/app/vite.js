@@ -72,13 +72,13 @@ const bundleNestedWorkerDeps = {
   },
 }
 
-// The components lab globs every story, and the dependency scan cannot parse a .tsx story that calls import.meta.glob
+// The Lab globs every story, and the dependency scan cannot parse a .tsx story that calls import.meta.glob
 // itself. The lab is a development tool, so its dependencies are found when it first opens rather than at startup.
 /** @type {import("rolldown").Plugin} */
-const skipComponentsLab = {
-  name: "opencode-desktop:skip-components-lab",
+const skipLab = {
+  name: "opencode-desktop:skip-lab",
   resolveId(id) {
-    if (id === "@/components-lab/lab") return { id, external: true }
+    if (id === "@/lab/lab") return { id, external: true }
   },
 }
 
@@ -117,7 +117,7 @@ export default [
         },
         optimizeDeps: {
           exclude: [...workerDeps, ...officeDeps],
-          rolldownOptions: { plugins: [bundleNestedWorkerDeps, skipComponentsLab] },
+          rolldownOptions: { plugins: [bundleNestedWorkerDeps, skipLab] },
         },
       }
     },

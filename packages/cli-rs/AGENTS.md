@@ -14,12 +14,17 @@ say "native"; crates, this directory, and `OPENCODE_RS_*` variables say "rs".
 
 ## Checks
 
-Before merging, the whole package must pass:
+CI (`.github/workflows/check-cli-rs.yml`) runs:
 
 - `bun run cargo fmt --check`
 - `bun run cargo clippy --locked --workspace --all-targets -- -D warnings`
 - `bun run cargo test --locked --workspace --no-fail-fast`
 - `bun run check:drift`
+
+CI has no `opencode` binary, so a few tests that need one skip. Before merging, also run these locally:
+
+- `OPENCODE_RS_REQUIRE_TS=1 bun run cargo test --locked --workspace --no-fail-fast`, with an `opencode` binary on
+  `PATH`. Then the TypeScript interop tests fail instead of skipping.
 - `bun run parity:machines`
 
 Each of `opencode-tui` and `opencode-ui` has one integration test binary, `tests/all/main.rs`, with one module per

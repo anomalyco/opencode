@@ -566,7 +566,8 @@ pub(super) fn resolve_integration<'a>(
 // ---------------------------------------------------------------------------------------------------------------
 
 // Picker order under “Popular”.
-const PRIORITY: [&str; 6] = ["opencode-go", "opencode", "openai", "github-copilot", "anthropic", "google"];
+const PRIORITY: [&str; 7] =
+    ["opencode-go", "opencode", "openai", "anthropic", "claude-agent", "github-copilot", "google"];
 
 fn login(context: &Context, args: &AuthLoginArgs) -> error::Result<()> {
     if args.target.is_none() {
@@ -1671,6 +1672,47 @@ mod tests {
         )
         .unwrap();
         assert_eq!(entries[0].value.to_string(), r#"{"type":"key","key":"k","metadata":{"a":1,"b":3}}"#);
+    }
+
+    #[test]
+    fn login_choices_group_and_order_like_connect() {
+        let integration = |id: &str, name: &str, metadata: Option<&str>, connection: &str| -> IntegrationInfo {
+            let metadata = metadata.map(|value| format!(r#","metadata":{value}"#)).unwrap_or_default();
+            serde_json::from_str(&format!(
+                r#"{{"id":"{id}","name":"{name}"{metadata},"methods":[{{"type":"key"}}],"connections":[{connection}]}}"#
+            ))
+            .unwrap()
+        };
+        let go = r#"{"type":"credential","id":"go","label":"Go","method":"key"}"#;
+        let choices = login_choices(&[
+            integration("mistral", "Mistral", None, ""),
+            integration("github-copilot", "GitHub Copilot", None, ""),
+            integration("claude-agent", "Claude Agent", None, ""),
+            integration("anthropic", "Anthropic", None, ""),
+            integration("google", "Google", None, ""),
+            integration("openai", "OpenAI", None, ""),
+            integration("linear", "Linear", Some(r#"{"source":"mcp"}"#), ""),
+            integration("github", "GitHub", Some(r#"{"source":"mcp"}"#), ""),
+            integration("opencode", "OpenCode Console", None, ""),
+            integration("opencode-go", "OpenCode Go", None, go),
+        ]);
+        let actual: Vec<(&str, &str, bool)> =
+            choices.iter().map(|choice| (choice.value.as_str(), choice.category, choice.connected)).collect();
+        assert_eq!(
+            actual,
+            [
+                ("github", "MCP", false),
+                ("linear", "MCP", false),
+                ("opencode-go", "Popular", true),
+                ("opencode", "Popular", false),
+                ("openai", "Popular", false),
+                ("anthropic", "Popular", false),
+                ("claude-agent", "Popular", false),
+                ("github-copilot", "Popular", false),
+                ("google", "Popular", false),
+                ("mistral", "Services", false),
+            ]
+        );
     }
 
     #[test]

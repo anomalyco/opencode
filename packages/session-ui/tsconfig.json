@@ -16,5 +16,5 @@
     "strict": true,
     "types": ["vite/client", "bun"]
   },
-  "exclude": ["**/*.stories.*", "**/*.mdx"]
+  "exclude": ["**/*.lab.tsx", "**/*.mdx"]
 }

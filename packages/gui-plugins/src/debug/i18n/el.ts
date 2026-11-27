@@ -44,9 +44,8 @@ export default {
   "motion.replay": "Επανάληψη",
   "motion.focus": "Εστίαση",
   "motion.enabled": "Ενεργό",
-  "components.label": "COMPONENTS",
-  "components.tip":
-    "Άνοιγμα του εργαστηρίου στοιχείων: κάθε story, με ζωντανά στοιχεία ελέγχου και τις καταστάσεις του",
+  "lab.label": "LAB",
+  "lab.tip": "Άνοιγμα του Lab: κάθε σελίδα, με ζωντανά στοιχεία ελέγχου και τις καταστάσεις της",
   "speed.label": "SPEED",
   "speed.tip": "Καθολική ταχύτητα κινούμενων εφέ. Κάντε κλικ για εναλλαγή μεταξύ 0,5× και 0,25× και πίσω στο 1×.",
   "slow.label": "SLOW",

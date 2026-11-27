@@ -37,18 +37,23 @@ export interface Events {
   readonly legacy?: (version: string | undefined) => Effect.Effect<void>
 }
 
-export interface Input {
+/** Everything about the server to connect to and what capabilities to negotiate with it. */
+export interface Spec {
   readonly name: string
   readonly config: Mcp.ServerConfig
   readonly directory: string
+  readonly clientInfo?: { readonly name: string; readonly version: string }
+  /** Lists the server's MCP Skills when it offers them. */
+  readonly skills?: boolean
+}
+
+export interface Input {
+  readonly spec: Spec
   /**
    * Serves several Locations: it answers no `roots/list`, since no one directory owns it, and skips the
    * per-endpoint handshake turn, since it is already the only connection for its key.
    */
   readonly shared?: boolean
-  readonly clientInfo?: { readonly name: string; readonly version: string }
-  /** Lists the server's MCP Skills when it offers them. */
-  readonly skills?: boolean
   /** Read on every attempt, so a credential change applies to the next one. */
   readonly authProvider: Effect.Effect<AuthProvider | undefined>
   readonly elicitation: McpClient.ElicitationHandler
@@ -76,6 +81,16 @@ export interface Catalog {
   readonly resources: ReadonlyArray<McpClient.Resource>
   readonly templates: ReadonlyArray<McpClient.ResourceTemplate>
 }
+
+export const readCatalog = (client: McpClient.Connection): Effect.Effect<Catalog, Error> =>
+  Effect.all(
+    {
+      resources: client.resources(),
+      // Some servers declare resources without implementing template listing.
+      templates: client.resourceTemplates().pipe(Effect.orElseSucceed(() => [])),
+    },
+    { concurrency: "unbounded" },
+  )
 
 /** One server connection, reconnected in place, with the catalogs it listed. */
 export interface Connection {
@@ -147,22 +162,44 @@ export function make(input: Input): Connection {
   const recover = (client: McpClient.Connection) =>
     Effect.gen(function* () {
       if (state.client !== client) return
-      yield* Effect.logInfo("mcp session expired, reconnecting", { server: input.name })
+      yield* Effect.logInfo("mcp session expired, reconnecting", { server: input.spec.name })
       yield* stop
       yield* start
     }).pipe(input.lock)
 
+  // A request the server refused for authorization ends the connection in needs_auth, as a refused connect does, so the
+  // status says so and later calls stop refreshing a token the server will not take.
+  const refused = (client: McpClient.Connection, message: string) =>
+    Effect.gen(function* () {
+      if (state.client !== client) return
+      // A shared connection's holders learn of its end only through `closed`, which stops it.
+      if (input.shared) return yield* input.events.closed(message)
+      yield* stop
+      yield* input.events.failed({ status: "needs_auth", error: message }, false)
+    }).pipe(input.lock)
+
+  // The client module is loaded lazily, so match its tagged errors by tag rather than class.
+  const tagged = (error: Error, tag: string) => "_tag" in error && error._tag === tag
+
   const recovering = <A, E extends Error>(
     client: McpClient.Connection,
     run: (client: McpClient.Connection) => Effect.Effect<A, E>,
-  ) =>
-    run(client).pipe(
+  ) => {
+    // A retry after reconnecting runs on the new client, so a refusal there must end that one.
+    const attempt = (target: McpClient.Connection) =>
+      run(target).pipe(
+        Effect.tapError((error) =>
+          tagged(error, "MCP.NeedsAuthError") ? refused(target, error.message) : Effect.void,
+        ),
+      )
+    return attempt(client).pipe(
       Effect.catchIf(
-        // The client module is loaded lazily, so match the tagged error by tag rather than class.
-        (error) => "_tag" in error && error._tag === "MCP.SessionExpiredError",
-        (error) => recover(client).pipe(Effect.flatMap(() => (state.client ? run(state.client) : Effect.fail(error)))),
+        (error) => tagged(error, "MCP.SessionExpiredError"),
+        (error) =>
+          recover(client).pipe(Effect.flatMap(() => (state.client ? attempt(state.client) : Effect.fail(error)))),
       ),
     )
+  }
 
   const watch = (client: McpClient.Connection) => {
     const live = whenLive(client)
@@ -180,11 +217,9 @@ export function make(input: Input): Connection {
     Effect.gen(function* () {
       yield* input.events.connecting
       // Checked before the OAuth provider is built, which parses the URL too.
-      if (input.config.type === "remote" && !URL.canParse(input.config.url))
-        return yield* input.events.failed(
-          { status: "failed", error: `Invalid MCP server URL: ${input.config.url}` },
-          false,
-        )
+      const config = input.spec.config
+      if (config.type === "remote" && !URL.canParse(config.url))
+        return yield* input.events.failed({ status: "failed", error: `Invalid MCP server URL: ${config.url}` }, false)
       const scope = yield* Scope.fork(input.scope)
       state.scope = scope
       const authProvider = yield* input.authProvider
@@ -192,17 +227,16 @@ export function make(input: Input): Connection {
       // List tools as part of connect so a failure here marks the server failed rather than
       // leaving it connected with a silently empty tool list and no path to recover. A shared connection
       // decides first: it can only be shared on 2026-07-28, so an older server is never asked to list.
-      const config = input.config
       const result = yield* McpClient.connect({
-        server: input.name,
+        server: input.spec.name,
         config,
-        directory: input.directory,
+        directory: input.spec.directory,
         authProvider,
         elicitation: input.elicitation,
-        clientInfo: input.clientInfo,
+        clientInfo: input.spec.clientInfo,
         roots: !input.shared,
         events: true,
-        skills: input.skills,
+        skills: input.spec.skills,
       }).pipe(
         Effect.flatMap(
           (client): Effect.Effect<{ client: McpClient.Connection; tools?: ReadonlyArray<McpClient.Tool> }, Error> =>
@@ -244,7 +278,11 @@ export function make(input: Input): Connection {
       )
     }).pipe(
       Effect.ensuring(input.events.settled),
-      Effect.annotateLogs({ server: input.name, directory: input.directory, connectionID: crypto.randomUUID() }),
+      Effect.annotateLogs({
+        server: input.spec.name,
+        directory: input.spec.directory,
+        connectionID: crypto.randomUUID(),
+      }),
     ),
   )
 
@@ -279,16 +317,6 @@ export function make(input: Input): Connection {
     start,
     stop,
     recovering,
-    catalog: (client) =>
-      recovering(client, (client) =>
-        Effect.all(
-          {
-            resources: client.resources(),
-            // Some servers declare resources without implementing template listing.
-            templates: client.resourceTemplates().pipe(Effect.orElseSucceed(() => [])),
-          },
-          { concurrency: "unbounded" },
-        ),
-      ),
+    catalog: (client) => recovering(client, readCatalog),
   }
 }

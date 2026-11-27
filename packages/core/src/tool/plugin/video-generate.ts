@@ -270,7 +270,7 @@ export const Plugin = {
 
     // On by default, like image generation: `experimental.video_generate: false` is honored, but permissions are the
     // supported way to turn it off. Internal plugins are not re-run on config changes, so reload the tool transform instead.
-    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
+    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload(), videoGenerate)
 
     // Registered only while a video model is available, re-evaluated whenever the catalog changes.
     const wanted = models.available(["video"]).pipe(Effect.map((available) => available.length > 0))

@@ -55,8 +55,7 @@ export default Runtime.handler(Commands.commands.debug.commands["heap-dump"], (i
 // replace, or restart the background service.
 const running = Effect.fnUntraced(function* (server: string | undefined) {
   if (server !== undefined) return (yield* ServerConnection.resolve({ server })).endpoint
-  const options = yield* ServiceConfig.options()
-  const endpoint = yield* Service.discover({ ...options, version: undefined })
+  const endpoint = yield* Service.discover({ file: yield* ServiceConfig.registrationFile() })
   if (endpoint) return endpoint
   return yield* Effect.fail(
     new Error("No background server is running. Pass --server <url> to capture a server started another way."),

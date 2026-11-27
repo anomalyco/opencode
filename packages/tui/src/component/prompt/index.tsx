@@ -930,6 +930,11 @@ export function Prompt(props: PromptProps) {
     )
   }
 
+  function restoreStash(prompt: PromptInfo) {
+    ref.set(prompt)
+    setStore("mode", prompt.mode ?? "normal")
+  }
+
   const stashCommands = createMemo(() =>
     [
       {
@@ -939,8 +944,9 @@ export function Prompt(props: PromptProps) {
         enabled: !!store.prompt.text,
         run: () => {
           if (!store.prompt.text) return
-          stash.push({ prompt: store.prompt })
+          stash.push({ prompt: { ...store.prompt, mode: store.mode } })
           resetComposer()
+          setStore("mode", "normal")
           dialog.clear()
         },
       },
@@ -951,7 +957,7 @@ export function Prompt(props: PromptProps) {
         enabled: stash.list().length > 0,
         run: () => {
           const entry = stash.pop()
-          if (entry) ref.set(entry.prompt)
+          if (entry) restoreStash(entry.prompt)
           dialog.clear()
         },
       },
@@ -961,7 +967,7 @@ export function Prompt(props: PromptProps) {
         category: "Prompt",
         enabled: stash.list().length > 0,
         run: () => {
-          dialog.replace(() => <DialogStash onSelect={(entry) => ref.set(entry.prompt)} />)
+          dialog.replace(() => <DialogStash onSelect={(entry) => restoreStash(entry.prompt)} />)
         },
       },
     ].map(
@@ -1131,6 +1137,19 @@ export function Prompt(props: PromptProps) {
       ],
     }
   })
+
+  // Down also toggles the subagent picker; keep it moving through a multi-line prompt when history doesn't claim it.
+  Keymap.createLayer(() => ({
+    priority: 1,
+    target: inputTarget,
+    enabled: () =>
+      inputTarget() !== undefined &&
+      !disabled() &&
+      !auto()?.visible &&
+      input !== undefined &&
+      input.scrollY + input.visualCursor.visualRow < input.editorView.getTotalVirtualLineCount() - 1,
+    bindings: ["input.move.down"],
+  }))
 
   let submitting = false
   async function submit(delivery: SessionInbox.Delivery = "steer") {

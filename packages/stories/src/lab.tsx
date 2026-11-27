@@ -2,15 +2,15 @@ import "../../app/src/index.css"
 
 import { createSignal, onCleanup } from "solid-js"
 import { render } from "solid-js/web"
-import { LabBrowser } from "../../app/src/components-lab/browser"
-import { loadLabCatalog, type StoryModule } from "../../app/src/components-lab/catalog"
+import { LabBrowser } from "../../app/src/lab/browser"
+import { loadLabCatalog, type StoryModule } from "../../app/src/lab/catalog"
 import { PluginStory } from "./plugin"
 import { StoryProviders } from "./providers"
 
 // This origin uses the story mocks, so it can include the standalone dialog fixtures as well.
-const modules = import.meta.glob<StoryModule>("../../{app,ui,session-ui,gui-plugins}/src/**/*.stories.tsx")
+const modules = import.meta.glob<StoryModule>("../../{app,ui,session-ui,gui-plugins}/src/**/*.lab.tsx")
 
-const sources = import.meta.glob<string>("../../{app,ui,session-ui,gui-plugins}/src/**/*.stories.tsx", {
+const sources = import.meta.glob<string>("../../{app,ui,session-ui,gui-plugins}/src/**/*.lab.tsx", {
   query: "?raw",
   import: "default",
 })
@@ -50,5 +50,5 @@ function StandaloneLab() {
   )
 }
 
-document.title = "OpenCode Components Lab"
+document.title = "OpenCode Lab"
 render(StandaloneLab, document.getElementById("story-root")!)

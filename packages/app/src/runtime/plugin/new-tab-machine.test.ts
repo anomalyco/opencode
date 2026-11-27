@@ -3,6 +3,7 @@ import type { SessionPane } from "@/shell/state/session-tabs"
 import {
   createNewTabsState,
   selectHasNewTabs,
+  selectNewTabFocus,
   selectPaneNewTabs,
   selectShownNewTab,
   transitionNewTabs,
@@ -196,6 +197,33 @@ describe("new tab machine", () => {
 
     expect(last.state.panes.side).toEqual({ ids: ["new:1"], chosen: "new:1" })
     expect(last.emptied).toBe(0)
+  })
+
+  test("a New tab the person opens takes the keyboard once, and keeps the request while it shows", () => {
+    const region: Region = { regionActive: "file://a.ts", side: { active: "file://a.ts", keys: ["file://a.ts"] } }
+    const opened = run([sync(region), { type: "open", pane: "side" }, sync(region)]).state
+
+    expect(selectNewTabFocus(opened, "side")).toBe(true)
+    expect(selectNewTabFocus(transitionNewTabs(opened, { type: "focus.taken" }).state, "side")).toBe(false)
+  })
+
+  test("opening the side region takes the keyboard into the New tab it opens on, not into a tab", () => {
+    const empty = run([sync({}), { type: "focus.requested", pane: "side" }, sync({ sideOpen: true })]).state
+
+    expect(shown(empty, { sideOpen: true }, "side")).toBe("new:1")
+    expect(selectNewTabFocus(empty, "side")).toBe(true)
+
+    const tab: Region = { sideOpen: true, regionActive: "file://a.ts", side: { active: "file://a.ts", keys: ["file://a.ts"] } }
+    const onTab = run([sync({ ...tab, sideOpen: false }), { type: "focus.requested", pane: "side" }, sync(tab)]).state
+
+    expect(selectNewTabFocus(onTab, "side")).toBe(false)
+  })
+
+  test("a New tab that opens by itself, as another session routes into an open side region, takes no keyboard", () => {
+    const routed = run([sync({ sideOpen: true }), sync({ session: "s2", sideOpen: true })]).state
+
+    expect(shown(routed, { session: "s2", sideOpen: true }, "side")).toBe("new:2")
+    expect(selectNewTabFocus(routed, "side")).toBe(false)
   })
 
   test("a sync that changes nothing returns the same state", () => {

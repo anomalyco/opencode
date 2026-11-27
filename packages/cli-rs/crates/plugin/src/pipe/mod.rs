@@ -1070,6 +1070,15 @@ impl Scripts {
         types.map(Option::unwrap_or_default).collect()
     }
 
+    /// Holds what the host sends the JS host, as one that reads nothing does, while `held`: the child's queue stays
+    /// full, so the host's overflow does not drain behind a test that needs it full.
+    #[doc(hidden)]
+    pub fn hold_input(&self, held: bool) {
+        if let Some(child) = self.child.borrow().as_ref() {
+            child.hold_input(held);
+        }
+    }
+
     /// Holds what the JS host sends, unhandled and in order, while `held`; then handles it. A test closes a mount
     /// before the JS host's answer to its call applies, however fast the JS host answers.
     #[doc(hidden)]

@@ -2402,7 +2402,7 @@ test("opening a session from the inbox keeps the list's scroll position and rows
   await expect(items).toHaveCount(10)
   await expect(items).toContainText(Array.from({ length: 10 }, (_, index) => `Inbox session ${23 - index}`))
   await expect(list.getByRole("group", { name: "Recent", exact: true })).toBeVisible()
-  await expect(list.getByText("Recent", { exact: true })).toHaveCount(0)
+  await expect(list.getByText("Recent", { exact: true })).toBeVisible()
   await list.evaluate((element) => element.scrollTo(0, element.scrollHeight))
   await expect(target).toBeInViewport({ ratio: 1 })
   // Git metadata must load for an unopened worktree, not only after selecting its session.
@@ -2452,6 +2452,55 @@ test("renaming an inbox card updates the same session on Home", async ({ page })
   await expect(inbox.getByText("Original inbox title", { exact: true })).toHaveCount(0)
   await expect(inbox.getByText("Unchanged title", { exact: true })).toBeVisible()
   await expect(home).toContainText("Renamed inbox title")
+})
+
+test("archiving the open inbox session opens the row below it, not the next tab", async ({ page }) => {
+  const sessions = ["First", "Second", "Third", "Fourth"].map((name, index) => ({
+    id: `ses_inbox_next_${index}`,
+    title: `${name} inbox row`,
+    time: { created: T0, updated: T0, idle: T0 - index, viewed: T0 + 100 },
+  }))
+
+  const [first, second, third, fourth] = sessions
+
+  // The tab order differs from the inbox's, so the tab next to each archived session is another row.
+  await mockWorkspace(page, {
+    name: "ArchiveInboxNext",
+    sessions,
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: [second.id, fourth.id, first.id, third.id],
+    },
+  })
+  await page.goto(sessionHref(second.id))
+  await expectSessionTitle(page, second.title)
+
+  const items = page.locator('[data-slot="sidebar-inbox"] [data-slot="sidebar-inbox-item"]')
+  const row = (session: { title: string }) => items.filter({ hasText: session.title })
+  await expect(items).toContainText(sessions.map((session) => session.title))
+  await expect(row(second)).toHaveAttribute("data-state", "active")
+
+  await row(second).click({ button: "right" })
+  await page.getByRole("menuitem", { name: "Archive", exact: true }).click()
+
+  await expectPath(page, sessionHref(third.id))
+  await expect(row(third)).toHaveAttribute("data-state", "active")
+  await expect(items).toContainText([first, third, fourth].map((session) => session.title))
+
+  await page.getByRole("textbox", { name: "Prompt", exact: true }).click()
+  await page.keyboard.press("ControlOrMeta+Shift+s")
+
+  await expectPath(page, sessionHref(fourth.id))
+  await expect(row(fourth)).toHaveAttribute("data-state", "active")
+  await expect(items).toContainText([first, fourth].map((session) => session.title))
+  await expect(page.getByRole("heading", { name: fourth.title, exact: true })).toBeVisible()
+
+  // The last row has nothing below it, so the row above opens.
+  await page.getByRole("textbox", { name: "Prompt", exact: true }).click()
+  await page.keyboard.press("ControlOrMeta+Shift+s")
+
+  await expectPath(page, sessionHref(first.id))
+  await expect(row(first)).toHaveAttribute("data-state", "active")
 })
 
 test("the inbox lists archived sessions in a collapsed section and pins sessions at the top of Recent", async ({ page }) => {
@@ -2732,6 +2781,77 @@ test("the inbox list's own menu moves Working between the bottom shelf and above
   await expect(shelf.locator('[data-slot="sidebar-inbox-item"]')).toHaveText([/Working inbox session/])
 })
 
+test("a working session finishing in the inbox shelf leaves the list where it was", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 480 })
+
+  const workspace = await mockWorkspace(page, {
+    name: "InboxFinish",
+    sessions: [
+      ...Array.from({ length: 12 }, (_, index) => ({
+        id: `ses_finish_read_${String(index).padStart(2, "0")}`,
+        title: `Read session ${index}`,
+        time: { created: T0, updated: T0 + 100 - index, idle: T0 + 100 - index, viewed: T0 + 200 },
+      })),
+      { id: "ses_finish_working", title: "Working session", time: { created: T0, updated: T0 + 150, busy: T0 } },
+    ],
+    sessionStatus: { ses_finish_working: { type: "running" } },
+    seed: {
+      settings: { appearance: { tabLayout: "inbox" } },
+      tabs: [],
+      storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: true, recentExpanded: true } },
+    },
+  })
+
+  await page.goto("/")
+
+  const inbox = page.locator('[data-slot="sidebar-inbox"]')
+  const list = inbox.locator('[data-slot="sidebar-inbox-scroll"]')
+  const shelf = inbox.locator('[data-slot="sidebar-inbox-working"]')
+  const recent = list.getByRole("group", { name: "Recent", exact: true }).locator('[data-slot="sidebar-inbox-item"]')
+
+  await expect(shelf.locator('[data-slot="sidebar-inbox-item"]')).toHaveText([/Working session/])
+  await expect(recent).toHaveCount(12)
+  expect(await list.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true)
+
+  // Open the first session, then move focus down the list to the working card without opening it. The card that
+  // opened the session hands focus to its composer once the session loads, so wait for that before going back to the
+  // list: otherwise the composer can take focus from the list partway through.
+  await recent.first().click()
+  await expectPath(page, sessionHref("ses_finish_read_00"))
+  await expect(page.locator('[data-component="composer-editor"]')).toBeFocused()
+  await recent.first().click()
+  await expectPath(page, sessionHref("ses_finish_read_00"))
+  await expect(recent.first()).toBeFocused()
+  await page.keyboard.press("End")
+  await expect(shelf.locator('[data-slot="sidebar-inbox-item"]')).toBeFocused()
+  await list.evaluate((element) => element.scrollTo(0, 0))
+  expect(await list.evaluate((element) => element.scrollTop)).toBe(0)
+
+  // The mock serves these records, so the session's next load sees the run's end.
+  const working = workspace.sessions.find((session) => session.id === "ses_finish_working")
+
+  if (!working) throw new Error("Unknown session ses_finish_working")
+  Object.assign(working, { time: { ...working.time, updated: T0 + 300, idle: T0 + 300 } })
+  await workspace.push([
+    {
+      id: "evt_finish_succeeded",
+      created: T0 + 300,
+      type: "session.execution.succeeded",
+      location: { directory: workspace.directory },
+      durable: { aggregateID: "ses_finish_working", seq: 1, version: 1 },
+      data: { sessionID: "ses_finish_working" },
+    } satisfies Extract<OpenCodeEvent, { type: "session.execution.succeeded" }>,
+  ])
+
+  // The finished run is the newest unread result, at the top of Recent, and the list stays at the top to show it.
+  await expect(shelf).toHaveCount(0)
+  await expect(recent.first()).toContainText("Working session")
+  await expect(recent.first()).toHaveAttribute("data-status", "done")
+  await expect(recent.first()).toBeFocused()
+  await expect(recent.first()).toBeInViewport({ ratio: 1 })
+  expect(await list.evaluate((element) => element.scrollTop)).toBe(0)
+})
+
 test("deleting from the inbox closes its dialog at once and a slow delete leaves the next dialog open", async ({
   page,
 }) => {
@@ -2776,11 +2896,16 @@ test("deleting from the inbox closes its dialog at once and a slow delete leaves
   expect(remove.requests).toHaveLength(1)
 })
 
-test("opening a working session expands its shelf and still allows manual collapse", async ({ page }) => {
+test("opening a working session expands its shelf, and collapsing it keeps only the selected session", async ({
+  page,
+}) => {
   await openSession(page, {
     name: "WorkingInbox",
-    sessions: [{ id: "ses_working_selected", title: "Selected working session" }],
-    sessionStatus: { ses_working_selected: { type: "running" } },
+    sessions: [
+      { id: "ses_working_selected", title: "Selected working session" },
+      { id: "ses_working_other", title: "Other working session" },
+    ],
+    sessionStatus: { ses_working_selected: { type: "running" }, ses_working_other: { type: "running" } },
     seed: {
       settings: { appearance: { tabLayout: "inbox" } },
       storage: { "opencode.global.dat:sidebar.inbox": { workingExpanded: false } },
@@ -2793,20 +2918,25 @@ test("opening a working session expands its shelf and still allows manual collap
 
   const toggle = shelf.getByRole("button", { name: "Working", exact: true })
 
-  const row = shelf.locator('[data-slot="sidebar-inbox-item"]')
+  const rows = shelf.locator('[data-slot="sidebar-inbox-item"]')
+
+  const selected = rows.filter({ hasText: "Selected working session" })
 
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
-  await expect(row).toHaveAttribute("data-state", "active")
+  await expect(rows).toHaveCount(2)
+  await expect(selected).toHaveAttribute("data-state", "active")
   await expect(toggle.locator('[data-component="text-shimmer"]')).toHaveCount(0)
   await toggle.click()
   await expect(toggle).toHaveAttribute("aria-expanded", "false")
-  await expect(row).toHaveCount(0)
+  await expect(rows).toHaveText([/Selected working session/])
+  await expect(selected).toHaveAttribute("data-state", "active")
   await expect(toggle.locator('[data-component="text-shimmer"]')).toHaveAttribute("data-active", "true")
   await expectPath(page, sessionHref("ses_working_selected"))
   await expect(page.locator('[data-component="composer-editor"]')).toBeEditable()
   await toggle.press("Enter")
   await expect(toggle).toHaveAttribute("aria-expanded", "true")
-  await expect(row).toHaveAttribute("data-state", "active")
+  await expect(rows).toHaveCount(2)
+  await expect(selected).toHaveAttribute("data-state", "active")
   await expect(toggle.locator('[data-component="text-shimmer"]')).toHaveCount(0)
 })
 

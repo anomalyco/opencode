@@ -5,8 +5,6 @@ import { ToolFailure } from "@opencode/ai/effect"
 import { FileDiff } from "@opencode/schema/file-diff"
 import { Effect, Result, Schema } from "effect"
 import { Bom } from "@opencode/util/bom"
-import { Config } from "../../config.js"
-import { ConfigEntryObserver } from "../../config/plugin/entry-observer.js"
 import { Flag } from "../../flag.js"
 import { toolFailure } from "../runtime.js"
 import { Environment } from "../../environment/index.js"
@@ -56,15 +54,13 @@ export const Plugin = {
     const fileMutation = yield* FileMutation.Service
     const formatter = yield* Formatter.Service
     const permission = yield* Permission.Service
-    const config = yield* Config.Service
-    const loaded = yield* ConfigEntryObserver.observe(config, ctx.event, ctx.tool.reload())
     const flags = yield* Flag.Service
 
     yield* ctx.tool
       .transform((editor) =>
         editor.add({
           name,
-          options: flags.resolve(loaded.entries).full_codemode.enabled
+          options: flags.current().full_codemode.enabled
             ? {
                 codemode: {
                   pinned: true,
