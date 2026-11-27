@@ -105,7 +105,6 @@ const Metadata = Schema.Struct({
   clientID: Schema.String,
   scopes: Schema.optional(Schema.Array(Schema.String)),
   email: Schema.optional(Schema.String),
-  idToken: Schema.optional(Schema.String),
 })
 const decodeMetadata = Schema.decodeUnknownOption(
   Schema.Struct({
@@ -217,7 +216,7 @@ const signIn = (app: App.Info, active: () => Credential.OAuth | undefined, stora
                   expiredKey,
                   stale.filter((id) => id !== clientID),
                 )
-              return credential(tokens, { clientID, email, idToken: tokens.id_token })
+              return credential(tokens, { clientID, email })
             }).pipe(
               Effect.tap(() => respond()),
               Effect.tapError((error) => respond(error instanceof Error ? error.message : "ChatGPT sign-in failed")),
@@ -575,7 +574,7 @@ function request<A>(url: string, init: RequestInit, rejected?: string) {
   })
 }
 
-// `idToken` and `email` identify the account when it reconnects, and go away with the credential on logout.
+// `email` preselects the account when it reconnects, and goes away with the credential on logout.
 function credential(tokens: TokenResponse, metadata: typeof Metadata.Type) {
   return Credential.OAuth.make({
     type: "oauth",
@@ -587,7 +586,6 @@ function credential(tokens: TokenResponse, metadata: typeof Metadata.Type) {
       clientID: metadata.clientID,
       scopes: tokens.scope?.split(" ").filter(Boolean) ?? metadata.scopes ?? [],
       ...(metadata.email ? { email: metadata.email } : {}),
-      ...(metadata.idToken ? { idToken: metadata.idToken } : {}),
     },
   })
 }
@@ -614,14 +612,13 @@ function authorizeURL(
   nonce: string,
   savedID: string | undefined,
   hostID: string,
-  account?: { email?: string; idToken?: string },
+  account?: { email?: string },
 ) {
   return `${issuer}/api/accounts/authorize?${new URLSearchParams({
     client_id: savedID ?? registrationClientID,
     ...(savedID ? {} : { agent_name_hint: agentName }),
     ext_agent_host_id: hostID,
     // Preselect the account being reconnected.
-    ...(account?.idToken ? { id_token_hint: account.idToken } : {}),
     ...(account?.email ? { login_hint: account.email } : {}),
     // Enable only for user-requested consent retries after OpenAI confirms deployment;
     // ordinary sign-ins must not force reconsent.
