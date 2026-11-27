@@ -396,6 +396,7 @@ export function Session(props: {
     firstJump()?.()
     if (!scroll || scroll.isDestroyed) return
     scroll.verticalScrollBar.off("change", updateAwayFromBottom)
+    scroll.content.off("resize", contentResized)
     saveScrollAnchor(true)
   })
   const [prompt, setPrompt] = createSignal<PromptRef>()
@@ -533,6 +534,11 @@ export function Session(props: {
       return true
     if (visibleEnd() < rows.length) return true
     return scroll.scrollTop < Math.max(0, scroll.scrollHeight - scroll.viewport.height)
+  }
+  // Content that shrinks under a reader at the top, like a collapsed group, scrolls nothing, so no scroll event
+  // clears "Jump to latest".
+  function contentResized() {
+    if (awayFromBottom()) updateAwayFromBottom()
   }
   function updateAwayFromBottom() {
     const preserveWindow = revealingOlderRows || revealingNewerRows || !!ensureAllRowsPending || !!firstJump()
@@ -1671,6 +1677,7 @@ export function Session(props: {
                   scroll = r
                   props.scrollRef?.(r)
                   scroll.verticalScrollBar.on("change", updateAwayFromBottom)
+                  scroll.content.on("resize", contentResized)
                 }}
                 viewportOptions={{
                   paddingRight: showScrollbar() ? 1 : 0,
