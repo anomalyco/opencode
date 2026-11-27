@@ -5,6 +5,7 @@ import {
   primitiveInputSummary,
   toolDisplayMetadata,
   webSearchProviderLabel,
+  widgetTemplateLine,
 } from "../../src/util/tool-display"
 
 test("normalizes shared tool primitives", () => {
@@ -62,4 +63,19 @@ describe("toolDisplayMetadata", () => {
     expect(toolDisplayMetadata({ status: "completed", metadata: [] })).toEqual({})
     expect(toolDisplayMetadata(undefined)).toEqual({})
   })
+})
+
+test("widget template calls read as one line from their short metadata", () => {
+  expect(widgetTemplateLine({ action: "save" }, { action: "save", name: "pinger", revision: 3, lines: 40 })).toBe(
+    "Saved widget template pinger v3",
+  )
+  expect(widgetTemplateLine({}, { action: "edit", name: "yes-no", revision: 1 })).toBe(
+    "Edited widget template yes-no v1",
+  )
+  expect(widgetTemplateLine({}, { action: "get", name: "confirm", lines: 14 })).toBe("Read widget template confirm")
+  expect(widgetTemplateLine({}, { action: "list", count: 24 })).toBe("Listed 24 widget templates")
+  // While running there is only the input.
+  expect(widgetTemplateLine({ action: "save", name: "pinger", source: "function view() {}" }, {})).toBe(
+    "Saved widget template pinger",
+  )
 })

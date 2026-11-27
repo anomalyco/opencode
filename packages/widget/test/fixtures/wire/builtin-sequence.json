@@ -1,0 +1,154 @@
+{
+  "name": "builtin-sequence",
+  "builtin": "sequence",
+  "source": "// A sequence diagram: participants as columns with lifelines and messages between them, top to bottom in order.\n// Kinds: \"sync\" (solid, filled arrow), \"async\" (solid, open arrow) and \"reply\" (dashed, open arrow); a message to\n// itself loops back. Messages play in one after another; tap one to select it. With `choose`, the Choose button submits it.\n\nconst HEAD = 34\nconst ROW = 36\n\nfunction init(data) {\n  for (const message of data.messages) [message.from, message.to].forEach((name) => participant(data, name))\n  return { selected: null }\n}\n\nfunction view(state, data) {\n  const picked = state.selected === null ? null : data.messages[state.selected]\n  return ui.column({ gap: 1, align: \"stretch\" }, [\n    ui.text(data.title, { style: \"title\" }),\n    ui.canvas({\n      onPointer: (state, p) => tap(state, data, p),\n      height: HEAD + 14 + data.messages.length * ROW + 8,\n      fps: 60,\n      duration: intro(data),\n      alt: summary(data),\n    }),\n    ui.text(picked ? describe(data, state.selected) : \"Tap a message to select it\", {\n      style: \"caption\",\n      tone: picked ? \"default\" : \"muted\",\n    }),\n    data.choose &&\n      ui.row({ gap: 1 }, [\n        ui.button(\"Choose message\", { onPress: (state) => choose(state, data), variant: \"primary\", disabled: !picked }),\n      ]),\n  ])\n}\n\nfunction choose(state, data) {\n  if (state.selected !== null) {\n    const message = data.messages[state.selected]\n    return submit({ index: state.selected, from: message.from, to: message.to, label: message.label })\n  }\n  return state\n}\n\nfunction tap(state, data, pointer) {\n  pointer = below(pointer)\n  if (pointer.kind !== \"up\") return state\n  const hit = locate(data, pointer.y)\n  return { ...state, selected: hit === state.selected ? null : hit }\n}\n\nfunction draw(state, data, frame) {\n  frame = below(frame)\n  const g = ui.draw()\n  if (frame.top) g.translate(0, frame.top)\n  const columns = layout(data, frame.width)\n  const bottom = frame.height - 4\n  const hover = frame.pointer && !frame.pointer.down ? locate(data, frame.pointer.y) : null\n  columns.forEach((column) => {\n    g.path(dashes(column.x, HEAD, column.x, bottom, 4, 4), { stroke: \"border\", width: 1 })\n    g.rrect(column.x - column.w / 2, 2, column.w, HEAD - 6, 6, { fill: \"surface\", stroke: \"border\", width: 1 })\n    g.text(column.x, HEAD / 2 + 3, column.label, { size: 12, weight: 600, align: \"center\" })\n  })\n  const step = (intro(data) - 0.5) / Math.max(1, data.messages.length - 1)\n  data.messages.forEach((message, index) => {\n    const grow = ease((frame.t - 0.2 - index * step) / 0.3)\n    if (grow <= 0) return\n    const y = HEAD + 14 + index * ROW + ROW / 2 + 6\n    const from = columns[participant(data, message.from)].x\n    const to = columns[participant(data, message.to)].x\n    const active = index === state.selected || index === hover\n    if (index === state.selected)\n      g.save()\n        .alpha(0.08)\n        .rect(0, y - ROW + 8, frame.width, ROW, \"text\")\n        .restore()\n    const stroke = active ? \"accent\" : message.kind === \"reply\" ? \"muted\" : \"text\"\n    const width = active ? 2 : 1.25\n    const kind = message.kind ?? \"sync\"\n    g.save().alpha(grow)\n    if (from === to) {\n      const loop = Math.min(36, frame.width - from - 8)\n      g.path(\n        [\n          [\"M\", from, y - 8],\n          [\"L\", from + loop, y - 8],\n          [\"L\", from + loop, y + 6],\n          [\"L\", from + 2, y + 6],\n        ],\n        { stroke, width },\n      )\n      head(g, from + 2, y + 6, -1, stroke, kind)\n      g.text(from + loop + 6, y + 2, fit(number(data, index) + message.label, frame.width - from - loop - 10, 12), {\n        size: 12,\n        color: active ? \"text\" : \"muted\",\n      })\n    } else {\n      const dir = to > from ? 1 : -1\n      const end = from + (to - from) * grow\n      if (kind === \"reply\") g.path(dashes(from, y, end - dir * 2, y, 6, 4), { stroke, width })\n      else g.line(from, y, end - dir * 2, y, { stroke, width })\n      if (grow >= 1) head(g, to, y, dir, stroke, kind)\n      g.text((from + to) / 2, y - 6, fit(number(data, index) + message.label, Math.abs(to - from) - 12, 12), {\n        size: 12,\n        align: \"center\",\n        weight: active ? 600 : 400,\n        color: active ? \"text\" : kind === \"reply\" ? \"muted\" : \"text\",\n      })\n    }\n    g.restore()\n  })\n  return g.commands\n}\n\nfunction layout(data, width) {\n  const slot = (width - 8) / data.participants.length\n  return data.participants.map((name, index) => ({\n    label: fit(name, slot - 20, 12),\n    x: 4 + slot * (index + 0.5),\n    w: Math.min(slot - 10, 7.2 * name.length + 22),\n  }))\n}\n\nfunction participant(data, name) {\n  const index = data.participants.indexOf(name)\n  if (index < 0) throw new Error('Unknown participant \"' + name + '\" in messages')\n  return index\n}\n\nfunction locate(data, y) {\n  const index = Math.floor((y - HEAD - 14) / ROW)\n  return index >= 0 && index < data.messages.length ? index : null\n}\n\n// One path of dash segments: a single draw command however long the line is.\nfunction dashes(x1, y1, x2, y2, on, off) {\n  const length = Math.hypot(x2 - x1, y2 - y1)\n  const dx = (x2 - x1) / (length || 1)\n  const dy = (y2 - y1) / (length || 1)\n  const segments = []\n  for (let at = 0; at < length; at += on + off) {\n    const stop = Math.min(length, at + on)\n    segments.push([\"M\", x1 + dx * at, y1 + dy * at], [\"L\", x1 + dx * stop, y1 + dy * stop])\n  }\n  return segments\n}\n\nfunction head(g, x, y, dir, stroke, kind) {\n  if (kind === \"sync\") g.path([[\"M\", x, y], [\"L\", x - dir * 9, y - 4.5], [\"L\", x - dir * 9, y + 4.5], [\"Z\"]], stroke)\n  else\n    g.path(\n      [\n        [\"M\", x - dir * 9, y - 5],\n        [\"L\", x, y],\n        [\"L\", x - dir * 9, y + 5],\n      ],\n      { stroke, width: 1.5 },\n    )\n}\n\nfunction intro(data) {\n  return Math.round(Math.min(2.4, 0.5 + 0.12 * data.messages.length) * 100) / 100\n}\n\nfunction number(data, index) {\n  return data.numbered ? index + 1 + \". \" : \"\"\n}\n\nfunction describe(data, index) {\n  const message = data.messages[index]\n  return (\n    index +\n    1 +\n    \". \" +\n    message.from +\n    \" → \" +\n    message.to +\n    \": \" +\n    message.label +\n    (message.kind && message.kind !== \"sync\" ? \" (\" + message.kind + \")\" : \"\")\n  )\n}\n\nfunction summary(data) {\n  return (\n    \"Sequence diagram between \" +\n    data.participants.join(\", \") +\n    \". \" +\n    data.messages.map((_, index) => describe(data, index)).join(\"; \")\n  )\n}\n\nfunction fit(text, width, size) {\n  const max = Math.max(1, Math.floor(width / (size * 0.58)))\n  return text.length <= max ? text : text.slice(0, Math.max(1, max - 1)) + \"…\"\n}\n\nfunction ease(p) {\n  const clamped = Math.max(0, Math.min(1, p))\n  return 1 - Math.pow(1 - clamped, 3)\n}\n\n// In full screen, the layout starts below the close button when it overlaps this canvas (widgets-fullscreen.md):\n// `close` comes with the frame and the pointer, so drawing and hit testing agree.\nfunction below(area) {\n  const top = area.close ? Math.max(0, area.close.y + area.close.height) : 0\n  if (top === 0) return area\n  return {\n    ...area,\n    top,\n    height: area.height - top,\n    ...(typeof area.y === \"number\" ? { y: area.y - top } : {}),\n    ...(area.pointer ? { pointer: { ...area.pointer, y: area.pointer.y - top } } : {}),\n  }\n}\n",
+  "input": {
+    "phase": "init",
+    "data": {
+      "title": "Login",
+      "numbered": true,
+      "choose": true,
+      "participants": [
+        "Browser",
+        "API",
+        "Auth",
+        "DB"
+      ],
+      "messages": [
+        {
+          "from": "Browser",
+          "to": "API",
+          "label": "POST /login"
+        },
+        {
+          "from": "API",
+          "to": "Auth",
+          "label": "verify(credentials)"
+        },
+        {
+          "from": "Auth",
+          "to": "DB",
+          "label": "SELECT user"
+        },
+        {
+          "from": "DB",
+          "to": "Auth",
+          "label": "row",
+          "kind": "reply"
+        },
+        {
+          "from": "Auth",
+          "to": "Auth",
+          "label": "check hash"
+        },
+        {
+          "from": "Auth",
+          "to": "API",
+          "label": "token",
+          "kind": "reply"
+        },
+        {
+          "from": "API",
+          "to": "DB",
+          "label": "INSERT session",
+          "kind": "async"
+        },
+        {
+          "from": "API",
+          "to": "Browser",
+          "label": "200 + cookie",
+          "kind": "reply"
+        }
+      ]
+    }
+  },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Login"
+      },
+      {
+        "onPointer": "$function",
+        "height": 344,
+        "fps": 60,
+        "duration": 1.46,
+        "alt": "Sequence diagram between Browser, API, Auth, DB. 1. Browser → API: POST /login; 2. API → Auth: verify(credentials); 3. Auth → DB: SELECT user; 4. DB → Auth: row (reply); 5. Auth → Auth: check hash; 6. Auth → API: token (reply); 7. API → DB: INSERT session (async); 8. API → Browser: 200 + cookie (reply)",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a message to select it"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose message"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Login"
+      },
+      {
+        "height": 344,
+        "fps": 60,
+        "duration": 1.46,
+        "alt": "Sequence diagram between Browser, API, Auth, DB. 1. Browser → API: POST /login; 2. API → Auth: verify(credentials); 3. Auth → DB: SELECT user; 4. DB → Auth: row (reply); 5. Auth → Auth: check hash; 6. Auth → API: token (reply); 7. API → DB: INSERT session (async); 8. API → Browser: 200 + cookie (reply)",
+        "type": "canvas",
+        "id": "0/1",
+        "pointer": true
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a message to select it"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose message",
+            "id": "0/3/0"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/1": "pointer",
+    "0/3/0": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {
+      "selected": null
+    }
+  }
+}

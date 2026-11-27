@@ -1,0 +1,45 @@
+{
+  "name": "error-infinite-depth-clear-value",
+  "source": "async function main() {\n  widget.render(ui.column([ui.canvas({ key: \"scene\", gpu: true, height: 100 })]))\n  const device = await widget.gpu.requestDevice()\n  const format = widget.gpu.getPreferredCanvasFormat()\n  const contexts = {}\n  for (const key of [\"scene\"]) {\n    contexts[key] = widget.gpu.getContext(key)\n    contexts[key].configure({ device, format })\n  }\n  const view = (key) => contexts[key].getCurrentTexture().createView()\n  const clear = (key) => ({ colorAttachments: [{ view: view(key), loadOp: \"clear\", storeOp: \"store\" }] })\n\n  await widget.frame()\n  const depth = device\n    .createTexture({ size: [200, 200], format: \"depth24plus\", usage: GPUTextureUsage.RENDER_ATTACHMENT })\n    .createView()\n  const encoder = device.createCommandEncoder()\n  const depthStencilAttachment = { view: depth, depthClearValue: Infinity, depthLoadOp: \"clear\", depthStoreOp: \"store\" }\n  encoder.beginRenderPass({ ...clear(\"scene\"), depthStencilAttachment }).end()\n  device.queue.submit([encoder.finish()])\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 200,
+      "height": 200
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [
+    {
+      "message": "gpu op 3: \"pass\" argument 1.depthStencilAttachment.depthClearValue must be a finite number",
+      "canvases": [
+        "scene"
+      ]
+    }
+  ],
+  "end": "return",
+  "batches": [
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["context",1,"scene","rgba8unorm","opaque"]
+      ]
+    },
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["texture",2,200,200,1,"depth24plus",16,1,1],
+        ["view",3,2,{"dimension":"2d","baseMipLevel":0,"mipLevelCount":1,"baseArrayLayer":0,"arrayLayerCount":1}],
+        ["view",4,1,{"dimension":"2d","baseMipLevel":0,"mipLevelCount":1,"baseArrayLayer":0,"arrayLayerCount":1}],
+        ["pass",{"colorAttachments":[{"view":4,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":{"view":3,"depthClearValue":{"$num":"Infinity"},"depthLoadOp":"clear","depthStoreOp":"store","depthReadOnly":false}}],
+        ["end"],
+        ["submit"]
+      ]
+    }
+  ]
+}

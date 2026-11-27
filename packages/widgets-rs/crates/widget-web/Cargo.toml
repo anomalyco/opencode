@@ -1,0 +1,35 @@
+[package]
+name = "widget-web"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "PsychoScript in the browser: wasm-bindgen bindings that compile a program once and run it with a JSON input, or live with __host, single-threaded"
+
+[lib]
+name = "widget_web"
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["language"]
+# The language: `Program` and `LiveRun`. The web package builds it into `widget_web_bg.wasm`.
+language = ["dep:psychoscript", "dep:serde", "dep:url", "dep:web-time", "dep:ryu-js"]
+
+[dependencies]
+psychoscript = { version = "0.1", optional = true }
+serde = { version = "1", optional = true }
+serde_json = { version = "1", features = ["preserve_order"] }
+url = { version = "2.5", optional = true }
+# ECMAScript `Number::toString`, for keys and numbers in native view trees (`tree`).
+ryu-js = { version = "1", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+web-time = { version = "1.1", optional = true }
+
+# The tree tests read numbers like 123456789012345680000 from the fixtures: they must parse exactly; the live tests
+# read views 100 levels deep.
+[dev-dependencies]
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip", "unbounded_depth"] }

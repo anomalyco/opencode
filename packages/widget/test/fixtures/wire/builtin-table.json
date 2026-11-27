@@ -1,0 +1,532 @@
+{
+  "name": "builtin-table",
+  "builtin": "table",
+  "source": "// A sortable table built from regular nodes: each row is one monospace line so columns line up in every client (the\n// TUI included), sort buttons above, and a small canvas sparkline per row for its `trend`. With `choose`, rows become\n// selectable cards and the Choose button submits the selected row.\n\nconst SPARK_WIDTH = 96\nconst SPARK_HEIGHT = 22\nconst INTRO = 0.6\nconst MAX_WIDTH = 28\n\nfunction init(data) {\n  return { sort: null, desc: false, selected: null }\n}\n\nfunction view(state, data) {\n  // Once per view: every cell formatted, and per column its width and whether it's numeric. A row's line must not\n  // rescan the rows (that made views O(rows²)).\n  const cells = data.rows.map((row) => data.columns.map((_, index) => text(data, index, row.cells[index])))\n  const widths = measure(data, cells)\n  const numbers = data.columns.map((_, index) => numeric(data, index))\n  const trend = data.rows.some((row) => row.trend)\n  // Rows are keyed by their index in `data.rows`, so sorting keeps each row's ids.\n  const wrap = (index, children) =>\n    data.choose && index !== null\n      ? ui.card(\n          {\n            key: index,\n            selected: state.selected === index,\n            onPress: (state) => ({ ...state, selected: state.selected === index ? null : index }),\n          },\n          [ui.row({ gap: 1, align: \"center\", wrap: true }, children)],\n        )\n      : ui.row({ key: index ?? \"header\", gap: 1, align: \"center\", wrap: true }, children)\n  const picked = state.selected === null ? null : data.rows[state.selected]\n  return ui.column({ gap: 1, align: \"stretch\" }, [\n    ui.text(data.title, { style: \"title\" }),\n    ui.row({ gap: 1, align: \"center\", wrap: true }, [\n      ui.text(\"Sort by\", { style: \"caption\", tone: \"muted\" }),\n      data.columns.map((column, index) =>\n        ui.button(column.label + (state.sort === index ? (state.desc ? \" ↓\" : \" ↑\") : \"\"), {\n          variant: state.sort === index ? \"primary\" : \"secondary\",\n          onPress: (state) =>\n            state.sort === index\n              ? { ...state, desc: !state.desc }\n              : { ...state, sort: index, desc: numeric(data, index) },\n        }),\n      ),\n    ]),\n    wrap(null, [\n      ui.text(\n        line(\n          widths,\n          numbers,\n          data.columns.map((column) => column.label),\n        ),\n        { style: \"code\", tone: \"muted\" },\n      ),\n      trend && ui.text(data.trendLabel ?? \"Trend\", { style: \"caption\", tone: \"muted\" }),\n    ]),\n    !data.choose && ui.divider(),\n    order(state, data).map((index) =>\n      wrap(index, [\n        ui.text(line(widths, numbers, cells[index]), { style: \"code\" }),\n        trend &&\n          data.rows[index].trend &&\n          ui.canvas({\n            key: \"spark\" + index,\n            width: SPARK_WIDTH,\n            height: SPARK_HEIGHT,\n            fps: 60,\n            duration: INTRO,\n            alt: (data.trendLabel ?? \"Trend\") + \": \" + data.rows[index].trend.map(compact).join(\", \"),\n          }),\n      ]),\n    ),\n    data.choose &&\n      ui.row({ gap: 1 }, [\n        ui.button(picked ? \"Choose \" + text(data, 0, picked.cells[0]) : \"Choose\", {\n          variant: \"primary\",\n          disabled: !picked,\n          onPress: (state) => choose(state, data),\n        }),\n      ]),\n  ])\n}\n\nfunction choose(state, data) {\n  if (state.selected === null) return state\n  const row = data.rows[state.selected]\n  return submit({\n    index: state.selected,\n    row: Object.fromEntries(data.columns.map((column, at) => [column.label, row.cells[at] ?? null])),\n  })\n}\n\n// A sparkline: the trend as a line over a faint area, drawn in from the left, with the last value marked.\nfunction draw(state, data, frame) {\n  const g = ui.draw()\n  const values = data.rows[Number(frame.key.slice(5))].trend\n  const min = Math.min(...values)\n  const span = Math.max(...values) - min || 1\n  const x = (index) => 3 + ((frame.width - 6) * index) / Math.max(1, values.length - 1)\n  const y = (value) => 3 + (frame.height - 6) * (1 - (value - min) / span)\n  const shown = Math.max(1, Math.ceil(ease(frame.t / INTRO) * values.length))\n  const points = values.slice(0, shown).map((value, index) => [index === 0 ? \"M\" : \"L\", x(index), y(value)])\n  const stroke = data.color ?? \"accent\"\n  if (points.length > 1)\n    g.save()\n      .alpha(0.15)\n      .path([...points, [\"L\", x(shown - 1), frame.height], [\"L\", x(0), frame.height], [\"Z\"]], stroke)\n      .restore()\n  g.path(points, { stroke, width: 1.5, cap: \"round\" })\n  if (shown === values.length) g.circle(x(shown - 1), y(values[shown - 1]), 2.5, stroke)\n  return g.commands\n}\n\n// Row indices in display order: stable, numbers by value, text case-insensitively, empty cells last.\nfunction order(state, data) {\n  const indices = data.rows.map((_, index) => index)\n  if (state.sort === null) return indices\n  const key = (index) => {\n    const cell = data.rows[index].cells[state.sort]\n    return typeof cell === \"string\" ? cell.toLowerCase() : cell\n  }\n  return indices.sort((a, b) => {\n    const left = key(a)\n    const right = key(b)\n    if (left === right) return a - b\n    if (left === undefined || left === null) return 1\n    if (right === undefined || right === null) return -1\n    return (left < right ? -1 : 1) * (state.desc ? -1 : 1)\n  })\n}\n\nfunction numeric(data, column) {\n  return data.rows.every((row) => typeof (row.cells[column] ?? 0) === \"number\")\n}\n\n// Character widths of each column: the longest of the label and the formatted cells, capped at MAX_WIDTH.\nfunction measure(data, cells) {\n  return data.columns.map((column, index) =>\n    Math.min(\n      MAX_WIDTH,\n      cells.reduce((widest, row) => Math.max(widest, row[index].length), column.label.length),\n    ),\n  )\n}\n\n// One line of already formatted cells, cut and padded to the column widths.\nfunction line(widths, numbers, cells) {\n  return cells\n    .map((value, index) => {\n      const cell = value.length > widths[index] ? value.slice(0, widths[index] - 1) + \"…\" : value\n      return numbers[index] ? cell.padStart(widths[index]) : cell.padEnd(widths[index])\n    })\n    .join(\"  \")\n}\n\nfunction text(data, index, cell) {\n  if (cell === undefined || cell === null) return \"–\"\n  if (typeof cell === \"string\") return cell\n  const column = data.columns[index]\n  const digits = column.digits ?? (Number.isInteger(cell) ? 0 : 2)\n  const [whole, fraction] = Math.abs(cell).toFixed(digits).split(\".\")\n  const number = (cell < 0 ? \"-\" : \"\") + whole.replace(/\\B(?=(\\d{3})+(?!\\d))/g, \",\") + (fraction ? \".\" + fraction : \"\")\n  const unit = column.unit\n  if (!unit) return number\n  if (/^[$€£¥]$/.test(unit)) return (cell < 0 ? \"-\" : \"\") + unit + number.replace(\"-\", \"\")\n  return unit.length > 1 && /^[a-z]/i.test(unit) ? number + \" \" + unit : number + unit\n}\n\nfunction compact(value) {\n  return String(Math.round(value * 100) / 100)\n}\n\nfunction ease(p) {\n  const clamped = Math.max(0, Math.min(1, p))\n  return 1 - Math.pow(1 - clamped, 3)\n}\n",
+  "input": {
+    "phase": "init",
+    "data": {
+      "title": "Top endpoints",
+      "trendLabel": "7d requests",
+      "choose": true,
+      "columns": [
+        {
+          "label": "Endpoint"
+        },
+        {
+          "label": "Requests"
+        },
+        {
+          "label": "p95",
+          "unit": "ms"
+        },
+        {
+          "label": "Errors",
+          "unit": "%",
+          "digits": 2
+        }
+      ],
+      "rows": [
+        {
+          "cells": [
+            "GET /users",
+            182400,
+            120,
+            0.12
+          ],
+          "trend": [
+            20,
+            22,
+            25,
+            24,
+            27,
+            30,
+            34
+          ]
+        },
+        {
+          "cells": [
+            "POST /orders",
+            64200,
+            340,
+            1.4
+          ],
+          "trend": [
+            12,
+            11,
+            13,
+            9,
+            8,
+            10,
+            7
+          ]
+        },
+        {
+          "cells": [
+            "GET /search",
+            120900,
+            210,
+            0.3
+          ],
+          "trend": [
+            15,
+            18,
+            16,
+            19,
+            21,
+            18,
+            23
+          ]
+        },
+        {
+          "cells": [
+            "PUT /profile",
+            8800,
+            95,
+            0.05
+          ],
+          "trend": [
+            3,
+            3,
+            4,
+            3,
+            2,
+            3,
+            3
+          ]
+        }
+      ]
+    }
+  },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Top endpoints"
+      },
+      {
+        "gap": 1,
+        "align": "center",
+        "wrap": true,
+        "type": "row",
+        "children": [
+          {
+            "style": "caption",
+            "tone": "muted",
+            "type": "text",
+            "text": "Sort by"
+          },
+          [
+            {
+              "variant": "secondary",
+              "onPress": "$function",
+              "type": "button",
+              "label": "Endpoint"
+            },
+            {
+              "variant": "secondary",
+              "onPress": "$function",
+              "type": "button",
+              "label": "Requests"
+            },
+            {
+              "variant": "secondary",
+              "onPress": "$function",
+              "type": "button",
+              "label": "p95"
+            },
+            {
+              "variant": "secondary",
+              "onPress": "$function",
+              "type": "button",
+              "label": "Errors"
+            }
+          ]
+        ]
+      },
+      {
+        "key": "header",
+        "gap": 1,
+        "align": "center",
+        "wrap": true,
+        "type": "row",
+        "children": [
+          {
+            "style": "code",
+            "tone": "muted",
+            "type": "text",
+            "text": "Endpoint      Requests     p95  Errors"
+          },
+          {
+            "style": "caption",
+            "tone": "muted",
+            "type": "text",
+            "text": "7d requests"
+          }
+        ]
+      },
+      false,
+      [
+        {
+          "key": 0,
+          "selected": false,
+          "onPress": "$function",
+          "type": "card",
+          "children": [
+            {
+              "gap": 1,
+              "align": "center",
+              "wrap": true,
+              "type": "row",
+              "children": [
+                {
+                  "style": "code",
+                  "type": "text",
+                  "text": "GET /users     182,400  120 ms   0.12%"
+                },
+                {
+                  "key": "spark0",
+                  "width": 96,
+                  "height": 22,
+                  "fps": 60,
+                  "duration": 0.6,
+                  "alt": "7d requests: 20, 22, 25, 24, 27, 30, 34",
+                  "type": "canvas"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": 1,
+          "selected": false,
+          "onPress": "$function",
+          "type": "card",
+          "children": [
+            {
+              "gap": 1,
+              "align": "center",
+              "wrap": true,
+              "type": "row",
+              "children": [
+                {
+                  "style": "code",
+                  "type": "text",
+                  "text": "POST /orders    64,200  340 ms   1.40%"
+                },
+                {
+                  "key": "spark1",
+                  "width": 96,
+                  "height": 22,
+                  "fps": 60,
+                  "duration": 0.6,
+                  "alt": "7d requests: 12, 11, 13, 9, 8, 10, 7",
+                  "type": "canvas"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": 2,
+          "selected": false,
+          "onPress": "$function",
+          "type": "card",
+          "children": [
+            {
+              "gap": 1,
+              "align": "center",
+              "wrap": true,
+              "type": "row",
+              "children": [
+                {
+                  "style": "code",
+                  "type": "text",
+                  "text": "GET /search    120,900  210 ms   0.30%"
+                },
+                {
+                  "key": "spark2",
+                  "width": 96,
+                  "height": 22,
+                  "fps": 60,
+                  "duration": 0.6,
+                  "alt": "7d requests: 15, 18, 16, 19, 21, 18, 23",
+                  "type": "canvas"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "key": 3,
+          "selected": false,
+          "onPress": "$function",
+          "type": "card",
+          "children": [
+            {
+              "gap": 1,
+              "align": "center",
+              "wrap": true,
+              "type": "row",
+              "children": [
+                {
+                  "style": "code",
+                  "type": "text",
+                  "text": "PUT /profile     8,800   95 ms   0.05%"
+                },
+                {
+                  "key": "spark3",
+                  "width": 96,
+                  "height": 22,
+                  "fps": 60,
+                  "duration": 0.6,
+                  "alt": "7d requests: 3, 3, 4, 3, 2, 3, 3",
+                  "type": "canvas"
+                }
+              ]
+            }
+          ]
+        }
+      ],
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "onPress": "$function",
+            "type": "button",
+            "label": "Choose"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Top endpoints"
+      },
+      {
+        "gap": 1,
+        "align": "center",
+        "wrap": true,
+        "type": "row",
+        "children": [
+          {
+            "style": "caption",
+            "tone": "muted",
+            "type": "text",
+            "text": "Sort by"
+          },
+          {
+            "variant": "secondary",
+            "type": "button",
+            "label": "Endpoint",
+            "id": "0/1/1.0"
+          },
+          {
+            "variant": "secondary",
+            "type": "button",
+            "label": "Requests",
+            "id": "0/1/1.1"
+          },
+          {
+            "variant": "secondary",
+            "type": "button",
+            "label": "p95",
+            "id": "0/1/1.2"
+          },
+          {
+            "variant": "secondary",
+            "type": "button",
+            "label": "Errors",
+            "id": "0/1/1.3"
+          }
+        ]
+      },
+      {
+        "gap": 1,
+        "align": "center",
+        "wrap": true,
+        "type": "row",
+        "children": [
+          {
+            "style": "code",
+            "tone": "muted",
+            "type": "text",
+            "text": "Endpoint      Requests     p95  Errors"
+          },
+          {
+            "style": "caption",
+            "tone": "muted",
+            "type": "text",
+            "text": "7d requests"
+          }
+        ]
+      },
+      {
+        "selected": false,
+        "type": "card",
+        "id": "0/:0",
+        "children": [
+          {
+            "gap": 1,
+            "align": "center",
+            "wrap": true,
+            "type": "row",
+            "children": [
+              {
+                "style": "code",
+                "type": "text",
+                "text": "GET /users     182,400  120 ms   0.12%"
+              },
+              {
+                "width": 96,
+                "height": 22,
+                "fps": 60,
+                "duration": 0.6,
+                "alt": "7d requests: 20, 22, 25, 24, 27, 30, 34",
+                "type": "canvas",
+                "id": "0/:0/0/:spark0"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "selected": false,
+        "type": "card",
+        "id": "0/:1",
+        "children": [
+          {
+            "gap": 1,
+            "align": "center",
+            "wrap": true,
+            "type": "row",
+            "children": [
+              {
+                "style": "code",
+                "type": "text",
+                "text": "POST /orders    64,200  340 ms   1.40%"
+              },
+              {
+                "width": 96,
+                "height": 22,
+                "fps": 60,
+                "duration": 0.6,
+                "alt": "7d requests: 12, 11, 13, 9, 8, 10, 7",
+                "type": "canvas",
+                "id": "0/:1/0/:spark1"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "selected": false,
+        "type": "card",
+        "id": "0/:2",
+        "children": [
+          {
+            "gap": 1,
+            "align": "center",
+            "wrap": true,
+            "type": "row",
+            "children": [
+              {
+                "style": "code",
+                "type": "text",
+                "text": "GET /search    120,900  210 ms   0.30%"
+              },
+              {
+                "width": 96,
+                "height": 22,
+                "fps": 60,
+                "duration": 0.6,
+                "alt": "7d requests: 15, 18, 16, 19, 21, 18, 23",
+                "type": "canvas",
+                "id": "0/:2/0/:spark2"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "selected": false,
+        "type": "card",
+        "id": "0/:3",
+        "children": [
+          {
+            "gap": 1,
+            "align": "center",
+            "wrap": true,
+            "type": "row",
+            "children": [
+              {
+                "style": "code",
+                "type": "text",
+                "text": "PUT /profile     8,800   95 ms   0.05%"
+              },
+              {
+                "width": 96,
+                "height": 22,
+                "fps": 60,
+                "duration": 0.6,
+                "alt": "7d requests: 3, 3, 4, 3, 2, 3, 3",
+                "type": "canvas",
+                "id": "0/:3/0/:spark3"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose",
+            "id": "0/5/0"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/1/1.0": "press",
+    "0/1/1.1": "press",
+    "0/1/1.2": "press",
+    "0/1/1.3": "press",
+    "0/:0": "press",
+    "0/:1": "press",
+    "0/:2": "press",
+    "0/:3": "press",
+    "0/5/0": "press"
+  },
+  "canvases": {
+    "spark0": "0/:0/0/:spark0",
+    "spark1": "0/:1/0/:spark1",
+    "spark2": "0/:2/0/:spark2",
+    "spark3": "0/:3/0/:spark3"
+  },
+  "result": {
+    "state": {
+      "sort": null,
+      "desc": false,
+      "selected": null
+    }
+  }
+}

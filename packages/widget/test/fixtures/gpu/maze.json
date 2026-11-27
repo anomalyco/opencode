@@ -1,0 +1,156 @@
+{
+  "name": "maze",
+  "source": "// A first-person maze: walls as a few hundred instanced boxes, WASD to walk, a click captures the pointer for\n// mouse-look; on touch, drag to look and hold still to walk. A HUD in a stack over the canvas. `data.frames`: stop\n// after that many frames (fixtures).\nconst SHADER = `\nstruct Uniforms { viewProjection: mat4x4f, eye: vec4f }\n@group(0) @binding(0) var<uniform> u: Uniforms;\n\nstruct Out { @builtin(position) position: vec4f, @location(0) normal: vec3f, @location(1) world: vec3f, @location(2) tint: f32 }\n\n@vertex fn vs(@location(0) position: vec3f, @location(1) normal: vec3f, @location(2) offset: vec3f, @location(3) size: vec3f) -> Out {\n  let world = position * size + offset;\n  var out: Out;\n  out.position = u.viewProjection * vec4f(world, 1.0);\n  out.normal = normal;\n  out.world = world;\n  out.tint = select(1.0, 0.55, size.y < 0.5);\n  return out;\n}\n\n@fragment fn fs(in: Out) -> @location(0) vec4f {\n  let light = normalize(vec3f(0.3, 1.0, 0.5));\n  let lit = 0.35 + 0.65 * max(dot(in.normal, light), 0.0);\n  let fog = clamp(distance(in.world, u.eye.xyz) / 14.0, 0.0, 1.0);\n  let color = vec3f(0.85, 0.75, 0.6) * in.tint * lit;\n  return vec4f(mix(color, vec3f(0.08, 0.09, 0.12), fog), 1.0);\n}\n`\n\nconst SIZE = 21\n\n// A maze of SIZE x SIZE cells (true: wall), carved by a depth-first walk from a seeded generator.\nfunction maze(seed) {\n  let state = seed\n  const random = () => (state = (state * 1103515245 + 12345) % 2147483648) / 2147483648\n  const walls = Array.from({ length: SIZE }, () => Array(SIZE).fill(true))\n  const stack = [[1, 1]]\n  walls[1][1] = false\n  while (stack.length > 0) {\n    const [x, z] = stack[stack.length - 1]\n    const next = [\n      [2, 0],\n      [-2, 0],\n      [0, 2],\n      [0, -2],\n    ]\n      .map(([dx, dz]) => [x + dx, z + dz, dx, dz])\n      .filter(([nx, nz]) => nx > 0 && nz > 0 && nx < SIZE - 1 && nz < SIZE - 1 && walls[nz][nx])\n    if (next.length === 0) {\n      stack.pop()\n      continue\n    }\n    const [nx, nz, dx, dz] = next[Math.floor(random() * next.length)]\n    walls[z + dz / 2][x + dx / 2] = false\n    walls[nz][nx] = false\n    stack.push([nx, nz])\n  }\n  return walls\n}\n\n// A unit box: 24 vertices of position and normal, 36 indices.\nfunction box() {\n  // prettier-ignore\n  const faces = [\n    [[1, 0, 0], [[1, -1, -1], [1, 1, -1], [1, 1, 1], [1, -1, 1]]],\n    [[-1, 0, 0], [[-1, -1, 1], [-1, 1, 1], [-1, 1, -1], [-1, -1, -1]]],\n    [[0, 1, 0], [[-1, 1, -1], [-1, 1, 1], [1, 1, 1], [1, 1, -1]]],\n    [[0, -1, 0], [[-1, -1, 1], [-1, -1, -1], [1, -1, -1], [1, -1, 1]]],\n    [[0, 0, 1], [[1, -1, 1], [1, 1, 1], [-1, 1, 1], [-1, -1, 1]]],\n    [[0, 0, -1], [[-1, -1, -1], [-1, 1, -1], [1, 1, -1], [1, -1, -1]]],\n  ]\n  const vertices = []\n  const indices = []\n  faces.forEach(([normal, corners], face) => {\n    corners.forEach((corner) => vertices.push(...corner.map((c) => c / 2), ...normal))\n    indices.push(face * 4, face * 4 + 1, face * 4 + 2, face * 4, face * 4 + 2, face * 4 + 3)\n  })\n  return { vertices: new Float32Array(vertices), indices: new Uint16Array(indices) }\n}\n\nfunction perspective(fovy, aspect, near, far) {\n  const f = 1 / Math.tan(fovy / 2)\n  return [f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, far / (near - far), -1, 0, 0, (near * far) / (near - far), 0]\n}\n\n// The view matrix of an eye at `eye` looking along yaw and pitch.\nfunction view(eye, yaw, pitch) {\n  const forward = [Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), -Math.cos(yaw) * Math.cos(pitch)]\n  const right = [Math.cos(yaw), 0, Math.sin(yaw)]\n  const up = [\n    right[1] * forward[2] - right[2] * forward[1],\n    right[2] * forward[0] - right[0] * forward[2],\n    right[0] * forward[1] - right[1] * forward[0],\n  ]\n  const dot = (a) => a[0] * eye[0] + a[1] * eye[1] + a[2] * eye[2]\n  // prettier-ignore\n  return [right[0], up[0], -forward[0], 0, right[1], up[1], -forward[1], 0, right[2], up[2], -forward[2], 0, -dot(right), -dot(up), dot(forward), 1]\n}\n\nfunction multiply(a, b) {\n  const out = new Float32Array(16)\n  for (let column = 0; column < 4; column++)\n    for (let row = 0; row < 4; row++) {\n      let sum = 0\n      for (let k = 0; k < 4; k++) sum += a[k * 4 + row] * b[column * 4 + k]\n      out[column * 4 + row] = sum\n    }\n  return out\n}\n\nasync function main(data) {\n  const walls = maze(7)\n  const open = (x, z) => !walls[Math.floor(z)]?.[Math.floor(x)]\n  // Start facing down the corridor out of the corner: east if it's open, else south.\n  const player = { x: 1.5, z: 1.5, yaw: open(2.5, 1.5) ? Math.PI / 2 : Math.PI, pitch: 0, captured: false }\n  // The touch (or uncaptured mouse button) held: where it started and was last; once 8 px from the start, it's a drag.\n  let touch = null\n  const look = (dx, dy, speed) => {\n    player.yaw += dx * speed\n    player.pitch = Math.max(-1.2, Math.min(1.2, player.pitch - dy * speed))\n  }\n  const hud = () =>\n    widget.render(\n      ui.stack([\n        ui.canvas({\n          key: \"maze\",\n          gpu: true,\n          height: 360,\n          place: \"fill\",\n          alt: \"A first-person maze\",\n          // Under pointer capture, moves are relative: they turn the camera. Without it (touch never captures), a\n          // drag turns it and a touch held still walks.\n          onPointer: (p) => {\n            if (p.dx !== undefined) return look(p.dx, p.dy, 0.004)\n            if (p.kind === \"down\") {\n              touch = { startX: p.x, startY: p.y, x: p.x, y: p.y, dragged: false }\n              if (!player.captured) widget.capturePointer()\n            } else if (p.kind === \"move\" && touch) {\n              look(p.x - touch.x, p.y - touch.y, 0.008)\n              touch.dragged ||= Math.hypot(p.x - touch.startX, p.y - touch.startY) > 8\n              Object.assign(touch, { x: p.x, y: p.y })\n            } else if (p.kind === \"up\") touch = null\n          },\n        }),\n        ui.text(player.captured ? \"WASD to walk, Esc to let go\" : \"Click or drag to look, hold to walk\", {\n          place: \"top-left\",\n          inset: 8,\n        }),\n      ]),\n    )\n  widget.on(\"capture\", (captured) => {\n    player.captured = captured\n    hud()\n  })\n  hud()\n\n  const device = await widget.gpu.requestDevice()\n  const context = widget.gpu.getContext(\"maze\")\n  const format = widget.gpu.getPreferredCanvasFormat()\n  context.configure({ device, format })\n\n  // One instance per wall cell, and one flat one for the floor: offset and size.\n  const instances = []\n  walls.forEach((row, z) => row.forEach((wall, x) => wall && instances.push(x + 0.5, 0.5, z + 0.5, 1, 1, 1)))\n  instances.push(SIZE / 2, -0.05, SIZE / 2, SIZE, 0.1, SIZE)\n  const instanceData = new Float32Array(instances)\n  const mesh = box()\n  const make = (array, usage) => {\n    const buffer = device.createBuffer({ size: array.byteLength, usage: usage | GPUBufferUsage.COPY_DST })\n    device.queue.writeBuffer(buffer, 0, array)\n    return buffer\n  }\n  const vertices = make(mesh.vertices, GPUBufferUsage.VERTEX)\n  const indices = make(mesh.indices, GPUBufferUsage.INDEX)\n  const instanceBuffer = make(instanceData, GPUBufferUsage.VERTEX)\n  const uniforms = device.createBuffer({ size: 80, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST })\n\n  const module = device.createShaderModule({ code: SHADER })\n  const pipeline = device.createRenderPipeline({\n    layout: \"auto\",\n    vertex: {\n      module,\n      entryPoint: \"vs\",\n      buffers: [\n        {\n          arrayStride: 24,\n          attributes: [\n            { format: \"float32x3\", offset: 0, shaderLocation: 0 },\n            { format: \"float32x3\", offset: 12, shaderLocation: 1 },\n          ],\n        },\n        {\n          arrayStride: 24,\n          stepMode: \"instance\",\n          attributes: [\n            { format: \"float32x3\", offset: 0, shaderLocation: 2 },\n            { format: \"float32x3\", offset: 12, shaderLocation: 3 },\n          ],\n        },\n      ],\n    },\n    fragment: { module, entryPoint: \"fs\", targets: [{ format }] },\n    primitive: { cullMode: \"back\" },\n    depthStencil: { format: \"depth24plus\", depthWriteEnabled: true, depthCompare: \"less\" },\n  })\n  const group = device.createBindGroup({\n    layout: pipeline.getBindGroupLayout(0),\n    entries: [{ binding: 0, resource: { buffer: uniforms } }],\n  })\n\n  const depth = { texture: null, width: 0, height: 0 }\n  for (let frame = 0; data?.frames === undefined || frame < data.frames; frame++) {\n    const { dt, width, height, scale } = await widget.frame()\n    // Walk, sliding along walls: each axis moves only into open cells, keeping 0.2 from them.\n    const keys = widget.keys\n    const held = touch && !touch.dragged ? 1 : 0\n    const ahead = Math.min(1, (keys.has(\"KeyW\") ? 1 : 0) + held) - (keys.has(\"KeyS\") ? 1 : 0)\n    const side = (keys.has(\"KeyD\") ? 1 : 0) - (keys.has(\"KeyA\") ? 1 : 0)\n    const speed = 2.5 * dt\n    const dx = (Math.sin(player.yaw) * ahead + Math.cos(player.yaw) * side) * speed\n    const dz = (-Math.cos(player.yaw) * ahead + Math.sin(player.yaw) * side) * speed\n    if (open(player.x + dx + Math.sign(dx) * 0.2, player.z)) player.x += dx\n    if (open(player.x, player.z + dz + Math.sign(dz) * 0.2)) player.z += dz\n\n    const w = context.width || Math.round(width * scale)\n    const h = context.height || Math.round(height * scale)\n    if (depth.width !== w || depth.height !== h) {\n      depth.texture?.destroy()\n      depth.texture = device.createTexture({\n        size: [w, h],\n        format: \"depth24plus\",\n        usage: GPUTextureUsage.RENDER_ATTACHMENT,\n      })\n      Object.assign(depth, { width: w, height: h })\n    }\n    const eye = [player.x, 0.6, player.z]\n    const matrices = new Float32Array(20)\n    matrices.set(multiply(perspective(1.2, w / h, 0.05, 50), view(eye, player.yaw, player.pitch)), 0)\n    matrices.set([...eye, 1], 16)\n    device.queue.writeBuffer(uniforms, 0, matrices)\n\n    const encoder = device.createCommandEncoder()\n    const pass = encoder.beginRenderPass({\n      colorAttachments: [\n        {\n          view: context.getCurrentTexture().createView(),\n          loadOp: \"clear\",\n          storeOp: \"store\",\n          clearValue: [0.08, 0.09, 0.12, 1],\n        },\n      ],\n      depthStencilAttachment: {\n        view: depth.texture.createView(),\n        depthClearValue: 1,\n        depthLoadOp: \"clear\",\n        depthStoreOp: \"store\",\n      },\n    })\n    pass.setPipeline(pipeline)\n    pass.setBindGroup(0, group)\n    pass.setVertexBuffer(0, vertices)\n    pass.setVertexBuffer(1, instanceBuffer)\n    pass.setIndexBuffer(indices, \"uint16\")\n    pass.drawIndexed(36, instances.length / 6)\n    pass.end()\n    device.queue.submit([encoder.finish()])\n  }\n}\n",
+  "data": {
+    "frames": 4
+  },
+  "canvases": [
+    {
+      "key": "maze",
+      "width": 640,
+      "height": 360
+    }
+  ],
+  "inputs": [
+    {
+      "frame": 1,
+      "input": {
+        "type": "event",
+        "event": {
+          "id": "",
+          "type": "key",
+          "value": {
+            "kind": "down",
+            "key": "w",
+            "code": "KeyW",
+            "repeat": false,
+            "shift": false,
+            "alt": false,
+            "ctrl": false,
+            "meta": false
+          }
+        }
+      }
+    },
+    {
+      "frame": 2,
+      "input": {
+        "type": "event",
+        "event": {
+          "id": "",
+          "type": "capture",
+          "value": true
+        }
+      }
+    },
+    {
+      "frame": 2,
+      "input": {
+        "type": "event",
+        "event": {
+          "id": "0/:maze",
+          "type": "pointer",
+          "value": {
+            "kind": "move",
+            "dx": 40,
+            "dy": -10,
+            "button": 0
+          }
+        }
+      }
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [],
+  "end": "stop",
+  "batches": [
+    {
+      "frame": true,
+      "bytes": "AAAAPwAAAL8AAAC/AACAPwAAAAAAAAAAAAAAPwAAAD8AAAC/AACAPwAAAAAAAAAAAAAAPwAAAD8AAAA/AACAPwAAAAAAAAAAAAAAPwAAAL8AAAA/AACAPwAAAAAAAAAAAAAAvwAAAL8AAAA/AACAvwAAAAAAAAAAAAAAvwAAAD8AAAA/AACAvwAAAAAAAAAAAAAAvwAAAD8AAAC/AACAvwAAAAAAAAAAAAAAvwAAAL8AAAC/AACAvwAAAAAAAAAAAAAAvwAAAD8AAAC/AAAAAAAAgD8AAAAAAAAAvwAAAD8AAAA/AAAAAAAAgD8AAAAAAAAAPwAAAD8AAAA/AAAAAAAAgD8AAAAAAAAAPwAAAD8AAAC/AAAAAAAAgD8AAAAAAAAAvwAAAL8AAAA/AAAAAAAAgL8AAAAAAAAAvwAAAL8AAAC/AAAAAAAAgL8AAAAAAAAAPwAAAL8AAAC/AAAAAAAAgL8AAAAAAAAAPwAAAL8AAAA/AAAAAAAAgL8AAAAAAAAAPwAAAL8AAAA/AAAAAAAAAAAAAIA/AAAAPwAAAD8AAAA/AAAAAAAAAAAAAIA/AAAAvwAAAD8AAAA/AAAAAAAAAAAAAIA/AAAAvwAAAL8AAAA/AAAAAAAAAAAAAIA/AAAAvwAAAL8AAAC/AAAAAAAAAAAAAIC/AAAAvwAAAD8AAAC/AAAAAAAAAAAAAIC/AAAAPwAAAD8AAAC/AAAAAAAAAAAAAIC/AAAAPwAAAL8AAAC/AAAAAAAAAAAAAIC/AAABAAIAAAACAAMABAAFAAYABAAGAAcACAAJAAoACAAKAAsADAANAA4ADAAOAA8AEAARABIAEAASABMAFAAVABYAFAAWABcAAAAAPwAAAD8AAAA/AACAPwAAgD8AAIA/AADAPwAAAD8AAAA/AACAPwAAgD8AAIA/AAAgQAAAAD8AAAA/AACAPwAAgD8AAIA/AABgQAAAAD8AAAA/AACAPwAAgD8AAIA/AACQQAAAAD8AAAA/AACAPwAAgD8AAIA/AACwQAAAAD8AAAA/AACAPwAAgD8AAIA/AADQQAAAAD8AAAA/AACAPwAAgD8AAIA/AADwQAAAAD8AAAA/AACAPwAAgD8AAIA/AAAIQQAAAD8AAAA/AACAPwAAgD8AAIA/AAAYQQAAAD8AAAA/AACAPwAAgD8AAIA/AAAoQQAAAD8AAAA/AACAPwAAgD8AAIA/AAA4QQAAAD8AAAA/AACAPwAAgD8AAIA/AABIQQAAAD8AAAA/AACAPwAAgD8AAIA/AABYQQAAAD8AAAA/AACAPwAAgD8AAIA/AABoQQAAAD8AAAA/AACAPwAAgD8AAIA/AAB4QQAAAD8AAAA/AACAPwAAgD8AAIA/AACEQQAAAD8AAAA/AACAPwAAgD8AAIA/AACMQQAAAD8AAAA/AACAPwAAgD8AAIA/AACUQQAAAD8AAAA/AACAPwAAgD8AAIA/AACcQQAAAD8AAAA/AACAPwAAgD8AAIA/AACkQQAAAD8AAAA/AACAPwAAgD8AAIA/AAAAPwAAAD8AAMA/AACAPwAAgD8AAIA/AAAgQAAAAD8AAMA/AACAPwAAgD8AAIA/AABIQQAAAD8AAMA/AACAPwAAgD8AAIA/AACkQQAAAD8AAMA/AACAPwAAgD8AAIA/AAAAPwAAAD8AACBAAACAPwAAgD8AAIA/AAAgQAAAAD8AACBAAACAPwAAgD8AAIA/AABgQAAAAD8AACBAAACAPwAAgD8AAIA/AACQQAAAAD8AACBAAACAPwAAgD8AAIA/AADQQAAAAD8AACBAAACAPwAAgD8AAIA/AADwQAAAAD8AACBAAACAPwAAgD8AAIA/AAAIQQAAAD8AACBAAACAPwAAgD8AAIA/AAAYQQAAAD8AACBAAACAPwAAgD8AAIA/AAAoQQAAAD8AACBAAACAPwAAgD8AAIA/AABIQQAAAD8AACBAAACAPwAAgD8AAIA/AABoQQAAAD8AACBAAACAPwAAgD8AAIA/AACEQQAAAD8AACBAAACAPwAAgD8AAIA/AACMQQAAAD8AACBAAACAPwAAgD8AAIA/AACUQQAAAD8AACBAAACAPwAAgD8AAIA/AACcQQAAAD8AACBAAACAPwAAgD8AAIA/AACkQQAAAD8AACBAAACAPwAAgD8AAIA/AAAAPwAAAD8AAGBAAACAPwAAgD8AAIA/AACQQAAAAD8AAGBAAACAPwAAgD8AAIA/AAAoQQAAAD8AAGBAAACAPwAAgD8AAIA/AABoQQAAAD8AAGBAAACAPwAAgD8AAIA/AACkQQAAAD8AAGBAAACAPwAAgD8AAIA/AAAAPwAAAD8AAJBAAACAPwAAgD8AAIA/AADAPwAAAD8AAJBAAACAPwAAgD8AAIA/AAAgQAAAAD8AAJBAAACAPwAAgD8AAIA/AACQQAAAAD8AAJBAAACAPwAAgD8AAIA/AACwQAAAAD8AAJBAAACAPwAAgD8AAIA/AADQQAAAAD8AAJBAAACAPwAAgD8AAIA/AADwQAAAAD8AAJBAAACAPwAAgD8AAIA/AAAIQQAAAD8AAJBAAACAPwAAgD8AAIA/AAAoQQAAAD8AAJBAAACAPwAAgD8AAIA/AAA4QQAAAD8AAJBAAACAPwAAgD8AAIA/AABIQQAAAD8AAJBAAACAPwAAgD8AAIA/AABYQQAAAD8AAJBAAACAPwAAgD8AAIA/AABoQQAAAD8AAJBAAACAPwAAgD8AAIA/AACEQQAAAD8AAJBAAACAPwAAgD8AAIA/AACMQQAAAD8AAJBAAACAPwAAgD8AAIA/AACUQQAAAD8AAJBAAACAPwAAgD8AAIA/AACkQQAAAD8AAJBAAACAPwAAgD8AAIA/AAAAPwAAAD8AALBAAACAPwAAgD8AAIA/AAAgQAAAAD8AALBAAACAPwAAgD8AAIA/AACQQAAAAD8AALBAAACAPwAAgD8AAIA/AADQQAAAAD8AALBAAACAPwAAgD8AAIA/AAAoQQAAAD8AALBAAACAPwAAgD8AAIA/AABoQQAAAD8AALBAAACAPwAAgD8AAIA/AACEQQAAAD8AALBAAACAPwAAgD8AAIA/AACkQQAAAD8AALBAAACAPwAAgD8AAIA/AAAAPwAAAD8AANBAAACAPwAAgD8AAIA/AAAgQAAAAD8AANBAAACAPwAAgD8AAIA/AACQQAAAAD8AANBAAACAPwAAgD8AAIA/AADQQAAAAD8AANBAAACAPwAAgD8AAIA/AAAIQQAAAD8AANBAAACAPwAAgD8AAIA/AAAYQQAAAD8AANBAAACAPwAAgD8AAIA/AAAoQQAAAD8AANBAAACAPwAAgD8AAIA/AABIQQAAAD8AANBAAACAPwAAgD8AAIA/AABoQQAAAD8AANBAAACAPwAAgD8AAIA/AAB4QQAAAD8AANBAAACAPwAAgD8AAIA/AACEQQAAAD8AANBAAACAPwAAgD8AAIA/AACUQQAAAD8AANBAAACAPwAAgD8AAIA/AACkQQAAAD8AANBAAACAPwAAgD8AAIA/AAAAPwAAAD8AAPBAAACAPwAAgD8AAIA/AAAgQAAAAD8AAPBAAACAPwAAgD8AAIA/AACQQAAAAD8AAPBAAACAPwAAgD8AAIA/AAAIQQAAAD8AAPBAAACAPwAAgD8AAIA/AAAoQQAAAD8AAPBAAACAPwAAgD8AAIA/AABIQQAAAD8AAPBAAACAPwAAgD8AAIA/AACUQQAAAD8AAPBAAACAPwAAgD8AAIA/AACkQQAAAD8AAPBAAACAPwAAgD8AAIA/AAAAPwAAAD8AAAhBAACAPwAAgD8AAIA/AAAgQAAAAD8AAAhBAACAPwAAgD8AAIA/AACQQAAAAD8AAAhBAACAPwAAgD8AAIA/AADQQAAAAD8AAAhBAACAPwAAgD8AAIA/AADwQAAAAD8AAAhBAACAPwAAgD8AAIA/AAAIQQAAAD8AAAhBAACAPwAAgD8AAIA/AAAoQQAAAD8AAAhBAACAPwAAgD8AAIA/AABIQQAAAD8AAAhBAACAPwAAgD8AAIA/AABYQQAAAD8AAAhBAACAPwAAgD8AAIA/AABoQQAAAD8AAAhBAACAPwAAgD8AAIA/AAB4QQAAAD8AAAhBAACAPwAAgD8AAIA/AACEQQAAAD8AAAhBAACAPwAAgD8AAIA/AACMQQAAAD8AAAhBAACAPwAAgD8AAIA/AACUQQAAAD8AAAhBAACAPwAAgD8AAIA/AACkQQAAAD8AAAhBAACAPwAAgD8AAIA/AAAAPwAAAD8AABhBAACAPwAAgD8AAIA/AACQQAAAAD8AABhBAACAPwAAgD8AAIA/AAAoQQAAAD8AABhBAACAPwAAgD8AAIA/AABIQQAAAD8AABhBAACAPwAAgD8AAIA/AACUQQAAAD8AABhBAACAPwAAgD8AAIA/AACkQQAAAD8AABhBAACAPwAAgD8AAIA/AAAAPwAAAD8AAChBAACAPwAAgD8AAIA/AAAgQAAAAD8AAChBAACAPwAAgD8AAIA/AABgQAAAAD8AAChBAACAPwAAgD8AAIA/AACQQAAAAD8AAChBAACAPwAAgD8AAIA/AACwQAAAAD8AAChBAACAPwAAgD8AAIA/AADQQAAAAD8AAChBAACAPwAAgD8AAIA/AADwQAAAAD8AAChBAACAPwAAgD8AAIA/AAAIQQAAAD8AAChBAACAPwAAgD8AAIA/AAAoQQAAAD8AAChBAACAPwAAgD8AAIA/AABIQQAAAD8AAChBAACAPwAAgD8AAIA/AABoQQAAAD8AAChBAACAPwAAgD8AAIA/AAB4QQAAAD8AAChBAACAPwAAgD8AAIA/AACEQQAAAD8AAChBAACAPwAAgD8AAIA/AACMQQAAAD8AAChBAACAPwAAgD8AAIA/AACUQQAAAD8AAChBAACAPwAAgD8AAIA/AACkQQAAAD8AAChBAACAPwAAgD8AAIA/AAAAPwAAAD8AADhBAACAPwAAgD8AAIA/AAAgQAAAAD8AADhBAACAPwAAgD8AAIA/AAAIQQAAAD8AADhBAACAPwAAgD8AAIA/AAAoQQAAAD8AADhBAACAPwAAgD8AAIA/AABIQQAAAD8AADhBAACAPwAAgD8AAIA/AABoQQAAAD8AADhBAACAPwAAgD8AAIA/AACkQQAAAD8AADhBAACAPwAAgD8AAIA/AAAAPwAAAD8AAEhBAACAPwAAgD8AAIA/AAAgQAAAAD8AAEhBAACAPwAAgD8AAIA/AABgQAAAAD8AAEhBAACAPwAAgD8AAIA/AACQQAAAAD8AAEhBAACAPwAAgD8AAIA/AADQQAAAAD8AAEhBAACAPwAAgD8AAIA/AAAIQQAAAD8AAEhBAACAPwAAgD8AAIA/AAAYQQAAAD8AAEhBAACAPwAAgD8AAIA/AAAoQQAAAD8AAEhBAACAPwAAgD8AAIA/AABIQQAAAD8AAEhBAACAPwAAgD8AAIA/AABoQQAAAD8AAEhBAACAPwAAgD8AAIA/AACEQQAAAD8AAEhBAACAPwAAgD8AAIA/AACMQQAAAD8AAEhBAACAPwAAgD8AAIA/AACUQQAAAD8AAEhBAACAPwAAgD8AAIA/AACcQQAAAD8AAEhBAACAPwAAgD8AAIA/AACkQQAAAD8AAEhBAACAPwAAgD8AAIA/AAAAPwAAAD8AAFhBAACAPwAAgD8AAIA/AADQQAAAAD8AAFhBAACAPwAAgD8AAIA/AABIQQAAAD8AAFhBAACAPwAAgD8AAIA/AACEQQAAAD8AAFhBAACAPwAAgD8AAIA/AACkQQAAAD8AAFhBAACAPwAAgD8AAIA/AAAAPwAAAD8AAGhBAACAPwAAgD8AAIA/AADAPwAAAD8AAGhBAACAPwAAgD8AAIA/AAAgQAAAAD8AAGhBAACAPwAAgD8AAIA/AABgQAAAAD8AAGhBAACAPwAAgD8AAIA/AACQQAAAAD8AAGhBAACAPwAAgD8AAIA/AACwQAAAAD8AAGhBAACAPwAAgD8AAIA/AADQQAAAAD8AAGhBAACAPwAAgD8AAIA/AADwQAAAAD8AAGhBAACAPwAAgD8AAIA/AAAIQQAAAD8AAGhBAACAPwAAgD8AAIA/AAAYQQAAAD8AAGhBAACAPwAAgD8AAIA/AAAoQQAAAD8AAGhBAACAPwAAgD8AAIA/AAA4QQAAAD8AAGhBAACAPwAAgD8AAIA/AABIQQAAAD8AAGhBAACAPwAAgD8AAIA/AABoQQAAAD8AAGhBAACAPwAAgD8AAIA/AAB4QQAAAD8AAGhBAACAPwAAgD8AAIA/AACEQQAAAD8AAGhBAACAPwAAgD8AAIA/AACMQQAAAD8AAGhBAACAPwAAgD8AAIA/AACUQQAAAD8AAGhBAACAPwAAgD8AAIA/AACkQQAAAD8AAGhBAACAPwAAgD8AAIA/AAAAPwAAAD8AAHhBAACAPwAAgD8AAIA/AABIQQAAAD8AAHhBAACAPwAAgD8AAIA/AACkQQAAAD8AAHhBAACAPwAAgD8AAIA/AAAAPwAAAD8AAIRBAACAPwAAgD8AAIA/AAAgQAAAAD8AAIRBAACAPwAAgD8AAIA/AACQQAAAAD8AAIRBAACAPwAAgD8AAIA/AACwQAAAAD8AAIRBAACAPwAAgD8AAIA/AADQQAAAAD8AAIRBAACAPwAAgD8AAIA/AADwQAAAAD8AAIRBAACAPwAAgD8AAIA/AAAIQQAAAD8AAIRBAACAPwAAgD8AAIA/AAAYQQAAAD8AAIRBAACAPwAAgD8AAIA/AAAoQQAAAD8AAIRBAACAPwAAgD8AAIA/AAA4QQAAAD8AAIRBAACAPwAAgD8AAIA/AABIQQAAAD8AAIRBAACAPwAAgD8AAIA/AABYQQAAAD8AAIRBAACAPwAAgD8AAIA/AABoQQAAAD8AAIRBAACAPwAAgD8AAIA/AAB4QQAAAD8AAIRBAACAPwAAgD8AAIA/AACEQQAAAD8AAIRBAACAPwAAgD8AAIA/AACMQQAAAD8AAIRBAACAPwAAgD8AAIA/AACUQQAAAD8AAIRBAACAPwAAgD8AAIA/AACkQQAAAD8AAIRBAACAPwAAgD8AAIA/AAAAPwAAAD8AAIxBAACAPwAAgD8AAIA/AAAgQAAAAD8AAIxBAACAPwAAgD8AAIA/AACQQAAAAD8AAIxBAACAPwAAgD8AAIA/AAAoQQAAAD8AAIxBAACAPwAAgD8AAIA/AACUQQAAAD8AAIxBAACAPwAAgD8AAIA/AACkQQAAAD8AAIxBAACAPwAAgD8AAIA/AAAAPwAAAD8AAJRBAACAPwAAgD8AAIA/AAAgQAAAAD8AAJRBAACAPwAAgD8AAIA/AACQQAAAAD8AAJRBAACAPwAAgD8AAIA/AADQQAAAAD8AAJRBAACAPwAAgD8AAIA/AADwQAAAAD8AAJRBAACAPwAAgD8AAIA/AAAIQQAAAD8AAJRBAACAPwAAgD8AAIA/AAAoQQAAAD8AAJRBAACAPwAAgD8AAIA/AABIQQAAAD8AAJRBAACAPwAAgD8AAIA/AABYQQAAAD8AAJRBAACAPwAAgD8AAIA/AABoQQAAAD8AAJRBAACAPwAAgD8AAIA/AAB4QQAAAD8AAJRBAACAPwAAgD8AAIA/AACEQQAAAD8AAJRBAACAPwAAgD8AAIA/AACUQQAAAD8AAJRBAACAPwAAgD8AAIA/AACkQQAAAD8AAJRBAACAPwAAgD8AAIA/AAAAPwAAAD8AAJxBAACAPwAAgD8AAIA/AAAgQAAAAD8AAJxBAACAPwAAgD8AAIA/AAAIQQAAAD8AAJxBAACAPwAAgD8AAIA/AACEQQAAAD8AAJxBAACAPwAAgD8AAIA/AACkQQAAAD8AAJxBAACAPwAAgD8AAIA/AAAAPwAAAD8AAKRBAACAPwAAgD8AAIA/AADAPwAAAD8AAKRBAACAPwAAgD8AAIA/AAAgQAAAAD8AAKRBAACAPwAAgD8AAIA/AABgQAAAAD8AAKRBAACAPwAAgD8AAIA/AACQQAAAAD8AAKRBAACAPwAAgD8AAIA/AACwQAAAAD8AAKRBAACAPwAAgD8AAIA/AADQQAAAAD8AAKRBAACAPwAAgD8AAIA/AADwQAAAAD8AAKRBAACAPwAAgD8AAIA/AAAIQQAAAD8AAKRBAACAPwAAgD8AAIA/AAAYQQAAAD8AAKRBAACAPwAAgD8AAIA/AAAoQQAAAD8AAKRBAACAPwAAgD8AAIA/AAA4QQAAAD8AAKRBAACAPwAAgD8AAIA/AABIQQAAAD8AAKRBAACAPwAAgD8AAIA/AABYQQAAAD8AAKRBAACAPwAAgD8AAIA/AABoQQAAAD8AAKRBAACAPwAAgD8AAIA/AAB4QQAAAD8AAKRBAACAPwAAgD8AAIA/AACEQQAAAD8AAKRBAACAPwAAgD8AAIA/AACMQQAAAD8AAKRBAACAPwAAgD8AAIA/AACUQQAAAD8AAKRBAACAPwAAgD8AAIA/AACcQQAAAD8AAKRBAACAPwAAgD8AAIA/AACkQQAAAD8AAKRBAACAPwAAgD8AAIA/AAAoQc3MTL0AAChBAACoQc3MzD0AAKhB",
+      "ops": [
+        ["context",1,"maze","rgba8unorm","opaque"],
+        ["buffer",2,576,40],
+        ["writeBuffer",2,0,0,576],
+        ["buffer",3,72,24],
+        ["writeBuffer",3,0,576,72],
+        ["buffer",4,5832,40],
+        ["writeBuffer",4,0,648,5832],
+        ["buffer",5,80,72],
+        ["shader",6,"\nstruct Uniforms { viewProjection: mat4x4f, eye: vec4f }\n@group(0) @binding(0) var<uniform> u: Uniforms;\n\nstruct Out { @builtin(position) position: vec4f, @location(0) normal: vec3f, @location(1) world: vec3f, @location(2) tint: f32 }\n\n@vertex fn vs(@location(0) position: vec3f, @location(1) normal: vec3f, @location(2) offset: vec3f, @location(3) size: vec3f) -> Out {\n  let world = position * size + offset;\n  var out: Out;\n  out.position = u.viewProjection * vec4f(world, 1.0);\n  out.normal = normal;\n  out.world = world;\n  out.tint = select(1.0, 0.55, size.y < 0.5);\n  return out;\n}\n\n@fragment fn fs(in: Out) -> @location(0) vec4f {\n  let light = normalize(vec3f(0.3, 1.0, 0.5));\n  let lit = 0.35 + 0.65 * max(dot(in.normal, light), 0.0);\n  let fog = clamp(distance(in.world, u.eye.xyz) / 14.0, 0.0, 1.0);\n  let color = vec3f(0.85, 0.75, 0.6) * in.tint * lit;\n  return vec4f(mix(color, vec3f(0.08, 0.09, 0.12), fog), 1.0);\n}\n"],
+        ["renderPipeline",7,{"layout":"auto","vertex":{"module":6,"entryPoint":"vs","buffers":[{"arrayStride":24,"stepMode":"vertex","attributes":[{"format":"float32x3","offset":0,"shaderLocation":0},{"format":"float32x3","offset":12,"shaderLocation":1}]},{"arrayStride":24,"stepMode":"instance","attributes":[{"format":"float32x3","offset":0,"shaderLocation":2},{"format":"float32x3","offset":12,"shaderLocation":3}]}]},"fragment":{"module":6,"entryPoint":"fs","targets":[{"format":"rgba8unorm","blend":null,"writeMask":15}]},"primitive":{"topology":"triangle-list","stripIndexFormat":null,"frontFace":"ccw","cullMode":"back"},"depthStencil":{"format":"depth24plus","depthWriteEnabled":true,"depthCompare":"less"},"multisample":{"count":1,"mask":4294967295,"alphaToCoverageEnabled":false}}],
+        ["autoLayout",8,7,0],
+        ["bindGroup",9,{"layout":8,"entries":[{"binding":0,"resource":{"buffer":5,"offset":0,"size":-1}}]}]
+      ]
+    },
+    {
+      "frame": true,
+      "bytes": "9ntSvwAAAABgVQ0lMjENJQAAAADaGLs/AAAAAAAAAAByLegkAAAAAM0ggD8AAIA/+NydPzmEYL8+mca/AADAvwAAwD+amRk/AADAPwAAgD8=",
+      "ops": [
+        ["texture",10,640,360,1,"depth24plus",16,1,1],
+        ["writeBuffer",5,0,0,80],
+        ["view",11,1,{"dimension":"2d","baseMipLevel":0,"mipLevelCount":1,"baseArrayLayer":0,"arrayLayerCount":1}],
+        ["view",12,10,{"dimension":"2d","baseMipLevel":0,"mipLevelCount":1,"baseArrayLayer":0,"arrayLayerCount":1}],
+        ["pass",{"colorAttachments":[{"view":11,"resolveTarget":null,"clearValue":[0.08,0.09,0.12,1],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":{"view":12,"depthClearValue":1,"depthLoadOp":"clear","depthStoreOp":"store","depthReadOnly":false}}],
+        ["setPipeline",7],
+        ["setBindGroup",0,9,[]],
+        ["setVertexBuffer",0,2,0,-1],
+        ["setVertexBuffer",1,4,0,-1],
+        ["setIndexBuffer",3,"uint16",0,-1],
+        ["drawIndexed",36,243,0,0,0],
+        ["end"],
+        ["submit"]
+      ]
+    },
+    {
+      "frame": true,
+      "bytes": "9ntSvwAAAABgVQ0lMjENJQAAAADaGLs/AAAAAAAAAAByLegkAAAAAM0ggD8AAIA/+NydPzmEYL/x78u/VVXFvwAAwD+amRk/VVXFPwAAgD8=",
+      "ops": [
+        ["writeBuffer",5,0,0,80],
+        ["pass",{"colorAttachments":[{"view":11,"resolveTarget":null,"clearValue":[0.08,0.09,0.12,1],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":{"view":12,"depthClearValue":1,"depthLoadOp":"clear","depthStoreOp":"store","depthReadOnly":false}}],
+        ["setPipeline",7],
+        ["setBindGroup",0,9,[]],
+        ["setVertexBuffer",0,2,0,-1],
+        ["setVertexBuffer",1,4,0,-1],
+        ["setIndexBuffer",3,"uint16",0,-1],
+        ["drawIndexed",36,243,0,0,0],
+        ["end"],
+        ["submit"]
+      ]
+    },
+    {
+      "frame": true,
+      "bytes": "t8tPv32TGDytLCO+6AIjvgAAAACK8ro/1PUjPdvLIz3IIga+w1xsvePHfD8th3w/KLK1P9KDTL9cErO/Hn6sv3omvz+amRk/OpnKPwAAgD8=",
+      "ops": [
+        ["writeBuffer",5,0,0,80],
+        ["pass",{"colorAttachments":[{"view":11,"resolveTarget":null,"clearValue":[0.08,0.09,0.12,1],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":{"view":12,"depthClearValue":1,"depthLoadOp":"clear","depthStoreOp":"store","depthReadOnly":false}}],
+        ["setPipeline",7],
+        ["setBindGroup",0,9,[]],
+        ["setVertexBuffer",0,2,0,-1],
+        ["setVertexBuffer",1,4,0,-1],
+        ["setIndexBuffer",3,"uint16",0,-1],
+        ["drawIndexed",36,243,0,0,0],
+        ["end"],
+        ["submit"]
+      ]
+    },
+    {
+      "frame": false,
+      "bytes": "t8tPv32TGDytLCO+6AIjvgAAAACK8ro/1PUjPdvLIz3IIga+w1xsvePHfD8th3w/KLK1PzXkS7/3Z7i/XNKxv/VMvj+amRk/H93PPwAAgD8=",
+      "ops": [
+        ["writeBuffer",5,0,0,80],
+        ["pass",{"colorAttachments":[{"view":11,"resolveTarget":null,"clearValue":[0.08,0.09,0.12,1],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":{"view":12,"depthClearValue":1,"depthLoadOp":"clear","depthStoreOp":"store","depthReadOnly":false}}],
+        ["setPipeline",7],
+        ["setBindGroup",0,9,[]],
+        ["setVertexBuffer",0,2,0,-1],
+        ["setVertexBuffer",1,4,0,-1],
+        ["setIndexBuffer",3,"uint16",0,-1],
+        ["drawIndexed",36,243,0,0,0],
+        ["end"],
+        ["submit"]
+      ]
+    }
+  ]
+}

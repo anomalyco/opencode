@@ -1,0 +1,155 @@
+{
+  "name": "number-keys",
+  "source": "function view(state, data) {\n  return ui.row([ui.button(\"a\", { key: 1.5 }), ui.button(\"b\", { key: -0 }), ui.button(\"c\", { key: 1e21 }), ui.button(\"d\", { key: 0.1 + 0.2 }), ui.button(\"e\", { key: 123456789012345680000 }), ui.button(\"f\", { key: 1e-7 }), ui.button(\"g\", { key: -12.25 }), ui.canvas({ key: 2, height: 1 }), ui.button(\"h\", { key: NaN }), ui.button(\"i\", { key: Infinity }), ui.button(\"j\", { key: -Infinity }), ui.button(\"k\", { key: true }), ui.button(\"l\", { key: false })])\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "type": "row",
+    "children": [
+      {
+        "key": 1.5,
+        "type": "button",
+        "label": "a"
+      },
+      {
+        "key": 0,
+        "type": "button",
+        "label": "b"
+      },
+      {
+        "key": 1e+21,
+        "type": "button",
+        "label": "c"
+      },
+      {
+        "key": 0.30000000000000004,
+        "type": "button",
+        "label": "d"
+      },
+      {
+        "key": 123456789012345680000,
+        "type": "button",
+        "label": "e"
+      },
+      {
+        "key": 1e-7,
+        "type": "button",
+        "label": "f"
+      },
+      {
+        "key": -12.25,
+        "type": "button",
+        "label": "g"
+      },
+      {
+        "key": 2,
+        "height": 1,
+        "type": "canvas"
+      },
+      {
+        "key": "$NaN",
+        "type": "button",
+        "label": "h"
+      },
+      {
+        "key": "$Infinity",
+        "type": "button",
+        "label": "i"
+      },
+      {
+        "key": "$-Infinity",
+        "type": "button",
+        "label": "j"
+      },
+      {
+        "key": true,
+        "type": "button",
+        "label": "k"
+      },
+      {
+        "key": false,
+        "type": "button",
+        "label": "l"
+      }
+    ]
+  },
+  "view": {
+    "type": "row",
+    "children": [
+      {
+        "type": "button",
+        "label": "a",
+        "id": "0/:1.5"
+      },
+      {
+        "type": "button",
+        "label": "b",
+        "id": "0/:0"
+      },
+      {
+        "type": "button",
+        "label": "c",
+        "id": "0/:1e%2B21"
+      },
+      {
+        "type": "button",
+        "label": "d",
+        "id": "0/:0.30000000000000004"
+      },
+      {
+        "type": "button",
+        "label": "e",
+        "id": "0/:123456789012345680000"
+      },
+      {
+        "type": "button",
+        "label": "f",
+        "id": "0/:1e-7"
+      },
+      {
+        "type": "button",
+        "label": "g",
+        "id": "0/:-12.25"
+      },
+      {
+        "height": 1,
+        "type": "canvas",
+        "id": "0/:2"
+      },
+      {
+        "type": "button",
+        "label": "h",
+        "id": "0/:NaN"
+      },
+      {
+        "type": "button",
+        "label": "i",
+        "id": "0/:Infinity"
+      },
+      {
+        "type": "button",
+        "label": "j",
+        "id": "0/:-Infinity"
+      },
+      {
+        "type": "button",
+        "label": "k",
+        "id": "0/:true"
+      },
+      {
+        "type": "button",
+        "label": "l",
+        "id": "0/:false"
+      }
+    ]
+  },
+  "handlers": {},
+  "canvases": {
+    "2": "0/:2"
+  },
+  "result": {
+    "state": {}
+  }
+}

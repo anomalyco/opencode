@@ -1,0 +1,54 @@
+{
+  "name": "shared-node",
+  "source": "function view() {\n  const go = ui.button(\"Go\", { onPress: (s) => s })\n  return ui.column([go, ui.text(\"between\"), go])\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "type": "column",
+    "children": [
+      {
+        "onPress": "$function",
+        "type": "button",
+        "label": "Go"
+      },
+      {
+        "type": "text",
+        "text": "between"
+      },
+      {
+        "onPress": "$function",
+        "type": "button",
+        "label": "Go"
+      }
+    ]
+  },
+  "view": {
+    "type": "column",
+    "children": [
+      {
+        "type": "button",
+        "label": "Go",
+        "id": "0/0"
+      },
+      {
+        "type": "text",
+        "text": "between"
+      },
+      {
+        "type": "button",
+        "label": "Go",
+        "id": "0/2"
+      }
+    ]
+  },
+  "handlers": {
+    "0/0": "press",
+    "0/2": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
+}

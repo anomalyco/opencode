@@ -1,0 +1,5 @@
+node_modules/
+# wasm-bindgen's output, before the build copies it into dist/
+/wasm/
+# The build's output (scripts/build-wasm.sh, then scripts/build.ts): not committed, it holds a ~10 MB module.
+/dist/

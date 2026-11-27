@@ -1,0 +1,22 @@
+{
+  "name": "function-key",
+  "source": "function view(state, data) {\n  return ui.column([ui.button(\"b\", { key: () => 1 })])\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "type": "column",
+    "children": [
+      {
+        "key": "$function",
+        "type": "button",
+        "label": "b"
+      }
+    ]
+  },
+  "error": {
+    "view": true,
+    "message": "A node's key must be a string, a number or a boolean"
+  }
+}

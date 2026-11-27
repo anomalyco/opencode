@@ -1,0 +1,29 @@
+[package]
+name = "widget-wire"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "OpenCode widgets' binary wire format (the host's encoder from PsychoScript values, and a bounds-checked decoder) and the wgsl shorthand every native host draws"
+
+[dependencies]
+psychoscript = "0.1"
+# GPU batches (`Arg`, `Batch`) and their replay, for the `wgsl` shorthand.
+psychoscript-gpu.workspace = true
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+# Backends are the host's, as psychoscript-gpu's.
+wgpu = { version = "~30.0.1", default-features = false, features = ["std", "wgsl"] }
+
+[features]
+# The shorthand's tests on Metal (macOS) instead of Vulkan: `cargo test -p widget-wire --features metal`.
+metal = ["wgpu/metal"]
+# For tests (widget-mobile's `test-hooks`): `LivePosts::record_batches`. Never in a release build.
+test-hooks = []
+
+[dev-dependencies]
+# Fixtures' numbers read exactly (a number key's id is its shortest digits), and their views up to 150 levels deep.
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip", "unbounded_depth"] }
+# The shorthand's tests run on Vulkan: lavapipe, or a real GPU.
+wgpu = { version = "~30.0.1", default-features = false, features = ["std", "wgsl", "vulkan"] }

@@ -1,0 +1,277 @@
+{
+  "name": "builtin-sankey",
+  "builtin": "sankey",
+  "source": "// A Sankey diagram: flows between stages. `init` lays it out once in unit coordinates (stage columns, node heights by\n// value, a few relaxation passes to straighten the flows), so draws only scale it. Hovering or tapping a node\n// highlights every flow through it; tapping a flow highlights it. With `choose`, the Choose button submits the selection.\n\nconst HEIGHT = 300\nconst INTRO = 0.8\nconst NODE = 10\nconst GAP = 0.05\nconst PALETTE = [\"accent\", \"#f59e0b\", \"#10b981\", \"#ef4444\", \"#8b5cf6\", \"#06b6d4\", \"#ec4899\", \"#84cc16\"]\n\nfunction init(data) {\n  return { selected: null, ...arrange(data) }\n}\n\nfunction view(state, data) {\n  return ui.column({ gap: 1, align: \"stretch\" }, [\n    ui.text(data.title, { style: \"title\" }),\n    ui.canvas({\n      onPointer: (state, p) => tap(state, data, p),\n      height: HEIGHT,\n      fps: 60,\n      duration: INTRO,\n      alt: summary(state, data),\n    }),\n    ui.text(state.selected ? describe(state, data, state.selected) : \"Tap a stage or a flow to trace it\", {\n      style: \"caption\",\n      tone: state.selected ? \"default\" : \"muted\",\n    }),\n    data.choose &&\n      ui.row({ gap: 1 }, [\n        ui.button(\"Choose\", { onPress: (state) => choose(state, data), variant: \"primary\", disabled: !state.selected }),\n      ]),\n  ])\n}\n\nfunction choose(state, data) {\n  if (state.selected) {\n    if (state.selected.kind === \"link\") {\n      const link = data.links[state.selected.index]\n      return submit({ kind: \"link\", source: link.source, target: link.target, value: link.value })\n    }\n    const node = data.nodes[state.selected.index]\n    return submit({\n      kind: \"node\",\n      id: node.id,\n      label: node.label ?? node.id,\n      value: state.nodes[state.selected.index].value,\n    })\n  }\n  return state\n}\n\nfunction tap(state, data, pointer) {\n  pointer = below(pointer)\n  if (pointer.kind !== \"up\") return state\n  const hit = locate(state, frameOf(state, pointer.width, pointer.height), pointer.x, pointer.y)\n  const same = hit && state.selected && hit.kind === state.selected.kind && hit.index === state.selected.index\n  return { ...state, selected: same ? null : hit }\n}\n\nfunction draw(state, data, frame) {\n  frame = below(frame)\n  const g = ui.draw()\n  if (frame.top) g.translate(0, frame.top)\n  const box = frameOf(state, frame.width, frame.height)\n  const hover = frame.pointer && !frame.pointer.down ? locate(state, box, frame.pointer.x, frame.pointer.y) : null\n  const active = hover ?? state.selected\n  const lit = active ? trace(state, active) : null\n  const grow = ease(frame.t / INTRO)\n  // Dim flows in one alpha group, highlighted flows in another, then the nodes on top.\n  for (const highlighted of [false, true]) {\n    const links = state.links.filter((_, index) => (lit ? lit.links.has(index) : false) === highlighted)\n    if (links.length === 0) continue\n    g.save().alpha((highlighted ? 0.75 : lit ? 0.12 : 0.45) * grow)\n    for (const link of links) g.path(band(box, state, link), color(data, link.source))\n    g.restore()\n  }\n  state.nodes.forEach((node, index) => {\n    const r = rect(box, node)\n    const h = r.h * grow\n    const dim = lit && !lit.nodes.has(index)\n    if (dim) g.save().alpha(0.35)\n    g.rect(r.x, r.y + (r.h - h) / 2, NODE, Math.max(1, h), color(data, index))\n    if (dim) g.restore()\n    const last = node.column === state.columns - 1\n    const text = fit(data.nodes[index].label ?? data.nodes[index].id, box.w / Math.max(2, state.columns) - 16, 12)\n    g.text(last ? r.x - 6 : r.x + NODE + 6, r.y + r.h / 2 + 4, text, {\n      size: 12,\n      align: last ? \"right\" : \"left\",\n      weight: lit && lit.nodes.has(index) ? 600 : 400,\n      color: dim ? \"muted\" : \"text\",\n    })\n  })\n  return g.commands\n}\n\n// Unit layout: column = longest path from a source (sinks pushed to the last column), y extents in 0..1.\nfunction arrange(data) {\n  const index = new Map(data.nodes.map((node, at) => [node.id, at]))\n  for (const link of data.links)\n    for (const id of [link.source, link.target])\n      if (!index.has(id)) throw new Error('Unknown node id \"' + id + '\" in links')\n  const links = data.links.map((link) => ({\n    source: index.get(link.source),\n    target: index.get(link.target),\n    value: link.value,\n  }))\n  const nodes = data.nodes.map(() => ({ column: 0, value: 0, in: 0, out: 0 }))\n  for (const link of links) {\n    nodes[link.source].out += link.value\n    nodes[link.target].in += link.value\n  }\n  for (let pass = 0; pass < nodes.length; pass++)\n    for (const link of links)\n      if (nodes[link.target].column < nodes[link.source].column + 1 && link.source !== link.target)\n        nodes[link.target].column = Math.min(nodes.length - 1, nodes[link.source].column + 1)\n  const columns = Math.max(...nodes.map((node) => node.column)) + 1\n  nodes.forEach((node) => {\n    node.value = Math.max(node.in, node.out)\n    if (node.out === 0 && node.in > 0) node.column = columns - 1\n  })\n  const stacks = []\n  for (let column = 0; column < columns; column++)\n    stacks.push(nodes.map((_, at) => at).filter((at) => nodes[at].column === column))\n  const ky = Math.min(\n    ...stacks\n      .filter((stack) => stack.length)\n      .map((stack) => (1 - GAP * (stack.length - 1)) / stack.reduce((sum, at) => sum + nodes[at].value, 0)),\n  )\n  stacks.forEach((stack) => {\n    let y = 0\n    for (const at of stack) {\n      nodes[at].y0 = y\n      nodes[at].y1 = y + nodes[at].value * ky\n      y = nodes[at].y1 + GAP\n    }\n  })\n  // Move each node toward the value-weighted center of its neighbors, then resolve overlaps; alternate directions.\n  const center = (at) => (nodes[at].y0 + nodes[at].y1) / 2\n  for (let pass = 0; pass < 6; pass++) {\n    const forward = pass % 2 === 0\n    for (const stack of forward ? stacks : [...stacks].reverse()) {\n      for (const at of stack) {\n        const near = links.filter((link) => (forward ? link.target === at : link.source === at))\n        const weight = near.reduce((sum, link) => sum + link.value, 0)\n        if (weight === 0) continue\n        const target =\n          near.reduce((sum, link) => sum + center(forward ? link.source : link.target) * link.value, 0) / weight\n        const shift = (target - center(at)) * 0.6\n        nodes[at].y0 += shift\n        nodes[at].y1 += shift\n      }\n      stack.sort((a, b) => nodes[a].y0 - nodes[b].y0)\n      let y = 0\n      for (const at of stack) {\n        const push = Math.max(0, y - nodes[at].y0)\n        nodes[at].y0 += push\n        nodes[at].y1 += push\n        y = nodes[at].y1 + GAP\n      }\n      let bottom = 1\n      for (const at of [...stack].reverse()) {\n        const pull = Math.max(0, nodes[at].y1 - bottom)\n        nodes[at].y0 -= pull\n        nodes[at].y1 -= pull\n        bottom = nodes[at].y0 - GAP\n      }\n    }\n  }\n  // Stack each node's flows in the order of the nodes at their other end.\n  const placed = links.map((link) => ({ ...link, width: link.value * ky, sy: 0, ty: 0 }))\n  nodes.forEach((node, at) => {\n    let out = node.y0\n    placed\n      .filter((link) => link.source === at)\n      .sort((a, b) => nodes[a.target].y0 - nodes[b.target].y0)\n      .forEach((link) => {\n        link.sy = out\n        out += link.width\n      })\n    let into = node.y0\n    placed\n      .filter((link) => link.target === at)\n      .sort((a, b) => nodes[a.source].y0 - nodes[b.source].y0)\n      .forEach((link) => {\n        link.ty = into\n        into += link.width\n      })\n  })\n  const round = (value) => Math.round(value * 10000) / 10000\n  return {\n    columns,\n    nodes: nodes.map((node) => ({ column: node.column, value: node.value, y0: round(node.y0), y1: round(node.y1) })),\n    links: placed.map((link) => ({\n      source: link.source,\n      target: link.target,\n      width: round(link.width),\n      sy: round(link.sy),\n      ty: round(link.ty),\n    })),\n  }\n}\n\nfunction frameOf(state, width, height) {\n  return { x: 8, y: 8, w: Math.max(1, width - 16 - NODE), h: Math.max(1, height - 16), columns: state.columns }\n}\n\nfunction rect(box, node) {\n  const x = box.x + (box.columns === 1 ? 0 : (box.w * node.column) / (box.columns - 1))\n  return { x, y: box.y + node.y0 * box.h, h: Math.max(1, (node.y1 - node.y0) * box.h) }\n}\n\n// A flow as a filled band between two cubic curves.\nfunction band(box, state, link) {\n  const from = rect(box, state.nodes[link.source])\n  const to = rect(box, state.nodes[link.target])\n  const sx = from.x + NODE\n  const tx = to.x\n  const mid = (sx + tx) / 2\n  const sy = box.y + link.sy * box.h\n  const ty = box.y + link.ty * box.h\n  const w = Math.max(1, link.width * box.h)\n  return [\n    [\"M\", sx, sy],\n    [\"C\", mid, sy, mid, ty, tx, ty],\n    [\"L\", tx, ty + w],\n    [\"C\", mid, ty + w, mid, sy + w, sx, sy + w],\n    [\"Z\"],\n  ]\n}\n\n// Everything upstream and downstream of a node, or one flow and its two nodes.\nfunction trace(state, active) {\n  if (active.kind === \"link\") {\n    const link = state.links[active.index]\n    return { links: new Set([active.index]), nodes: new Set([link.source, link.target]) }\n  }\n  const links = new Set()\n  const nodes = new Set([active.index])\n  for (const forward of [true, false]) {\n    const queue = [active.index]\n    while (queue.length) {\n      const at = queue.shift()\n      state.links.forEach((link, index) => {\n        if ((forward ? link.source : link.target) !== at || links.has(index)) return\n        links.add(index)\n        const next = forward ? link.target : link.source\n        nodes.add(next)\n        queue.push(next)\n      })\n    }\n  }\n  return { links, nodes }\n}\n\nfunction locate(state, box, px, py) {\n  const node = state.nodes.findIndex((node) => {\n    const r = rect(box, node)\n    return px >= r.x - 6 && px <= r.x + NODE + 6 && py >= r.y - 2 && py <= r.y + r.h + 2\n  })\n  if (node >= 0) return { kind: \"node\", index: node }\n  // On a flow: solve the curve's x(t) for t by bisection, then compare y with the band's top edge there.\n  const link = state.links.findIndex((link) => {\n    const sx = rect(box, state.nodes[link.source]).x + NODE\n    const tx = rect(box, state.nodes[link.target]).x\n    if (px < sx || px > tx) return false\n    let low = 0\n    let high = 1\n    for (let step = 0; step < 12; step++) {\n      const t = (low + high) / 2\n      if (sx + (tx - sx) * (1.5 * t * (1 - t) + t * t * t) < px) low = t\n      else high = t\n    }\n    const t = (low + high) / 2\n    const top = box.y + (link.sy + (link.ty - link.sy) * (3 * t * t - 2 * t * t * t)) * box.h\n    return py >= top - 2 && py <= top + Math.max(4, link.width * box.h) + 2\n  })\n  return link >= 0 ? { kind: \"link\", index: link } : null\n}\n\nfunction describe(state, data, active) {\n  const name = (at) => data.nodes[at].label ?? data.nodes[at].id\n  if (active.kind === \"link\") {\n    const link = state.links[active.index]\n    const value = data.links[active.index].value\n    return (\n      name(link.source) +\n      \" → \" +\n      name(link.target) +\n      \": \" +\n      amount(value, data.unit) +\n      \" (\" +\n      share(value, state.nodes[link.source].value) +\n      \" of \" +\n      name(link.source) +\n      \")\"\n    )\n  }\n  const node = state.nodes[active.index]\n  const sources = state.links.filter((link) => link.target === active.index).length\n  const targets = state.links.filter((link) => link.source === active.index).length\n  return name(active.index) + \": \" + amount(node.value, data.unit) + \" · \" + sources + \" in, \" + targets + \" out\"\n}\n\nfunction summary(state, data) {\n  const name = (id) => data.nodes.find((node) => node.id === id)?.label ?? id\n  return (\n    \"Sankey diagram with \" +\n    state.columns +\n    \" stages. Flows: \" +\n    [...data.links]\n      .sort((a, b) => b.value - a.value)\n      .map((link) => name(link.source) + \" → \" + name(link.target) + \" \" + amount(link.value, data.unit))\n      .join(\", \")\n  )\n}\n\nfunction color(data, index) {\n  return data.nodes[index].color ?? PALETTE[index % PALETTE.length]\n}\n\nfunction share(part, whole) {\n  return (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0) + \"%\"\n}\n\nfunction amount(value, unit) {\n  const text = String(Math.round(value * 100) / 100)\n  if (!unit) return text\n  return unit.length > 1 && /^[a-z]/i.test(unit) ? text + \" \" + unit : text + unit\n}\n\nfunction fit(text, width, size) {\n  const max = Math.max(1, Math.floor(width / (size * 0.58)))\n  return text.length <= max ? text : text.slice(0, Math.max(1, max - 1)) + \"…\"\n}\n\nfunction ease(p) {\n  const clamped = Math.max(0, Math.min(1, p))\n  return 1 - Math.pow(1 - clamped, 3)\n}\n\n// In full screen, the layout starts below the close button when it overlaps this canvas (widgets-fullscreen.md):\n// `close` comes with the frame and the pointer, so drawing and hit testing agree.\nfunction below(area) {\n  const top = area.close ? Math.max(0, area.close.y + area.close.height) : 0\n  if (top === 0) return area\n  return {\n    ...area,\n    top,\n    height: area.height - top,\n    ...(typeof area.y === \"number\" ? { y: area.y - top } : {}),\n    ...(area.pointer ? { pointer: { ...area.pointer, y: area.pointer.y - top } } : {}),\n  }\n}\n",
+  "input": {
+    "phase": "init",
+    "data": {
+      "title": "Signup flow",
+      "unit": "k",
+      "choose": true,
+      "nodes": [
+        {
+          "id": "ads",
+          "label": "Ads"
+        },
+        {
+          "id": "search",
+          "label": "Search"
+        },
+        {
+          "id": "social",
+          "label": "Social"
+        },
+        {
+          "id": "landing",
+          "label": "Landing"
+        },
+        {
+          "id": "pricing",
+          "label": "Pricing"
+        },
+        {
+          "id": "signup",
+          "label": "Signed up"
+        },
+        {
+          "id": "bounce",
+          "label": "Left"
+        }
+      ],
+      "links": [
+        {
+          "source": "ads",
+          "target": "landing",
+          "value": 30
+        },
+        {
+          "source": "search",
+          "target": "landing",
+          "value": 45
+        },
+        {
+          "source": "search",
+          "target": "pricing",
+          "value": 15
+        },
+        {
+          "source": "social",
+          "target": "landing",
+          "value": 20
+        },
+        {
+          "source": "landing",
+          "target": "pricing",
+          "value": 40
+        },
+        {
+          "source": "landing",
+          "target": "bounce",
+          "value": 55
+        },
+        {
+          "source": "pricing",
+          "target": "signup",
+          "value": 32
+        },
+        {
+          "source": "pricing",
+          "target": "bounce",
+          "value": 23
+        }
+      ]
+    }
+  },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Signup flow"
+      },
+      {
+        "onPointer": "$function",
+        "height": 300,
+        "fps": 60,
+        "duration": 0.8,
+        "alt": "Sankey diagram with 4 stages. Flows: Landing → Left 55k, Search → Landing 45k, Landing → Pricing 40k, Pricing → Signed up 32k, Ads → Landing 30k, Pricing → Left 23k, Social → Landing 20k, Search → Pricing 15k",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a stage or a flow to trace it"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Signup flow"
+      },
+      {
+        "height": 300,
+        "fps": 60,
+        "duration": 0.8,
+        "alt": "Sankey diagram with 4 stages. Flows: Landing → Left 55k, Search → Landing 45k, Landing → Pricing 40k, Pricing → Signed up 32k, Ads → Landing 30k, Pricing → Left 23k, Social → Landing 20k, Search → Pricing 15k",
+        "type": "canvas",
+        "id": "0/1",
+        "pointer": true
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a stage or a flow to trace it"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose",
+            "id": "0/3/0"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/1": "pointer",
+    "0/3/0": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {
+      "selected": null,
+      "columns": 4,
+      "nodes": [
+        {
+          "column": 0,
+          "value": 30,
+          "y0": 0,
+          "y1": 0.2455
+        },
+        {
+          "column": 0,
+          "value": 60,
+          "y0": 0.2955,
+          "y1": 0.7864
+        },
+        {
+          "column": 0,
+          "value": 20,
+          "y0": 0.8364,
+          "y1": 1
+        },
+        {
+          "column": 1,
+          "value": 95,
+          "y0": 0.1591,
+          "y1": 0.9364
+        },
+        {
+          "column": 2,
+          "value": 55,
+          "y0": 0.2002,
+          "y1": 0.6502
+        },
+        {
+          "column": 3,
+          "value": 32,
+          "y0": 0.05,
+          "y1": 0.3118
+        },
+        {
+          "column": 3,
+          "value": 78,
+          "y0": 0.3618,
+          "y1": 1
+        }
+      ],
+      "links": [
+        {
+          "source": 0,
+          "target": 3,
+          "width": 0.2455,
+          "sy": 0,
+          "ty": 0.1591
+        },
+        {
+          "source": 1,
+          "target": 3,
+          "width": 0.3682,
+          "sy": 0.2955,
+          "ty": 0.4046
+        },
+        {
+          "source": 1,
+          "target": 4,
+          "width": 0.1227,
+          "sy": 0.6636,
+          "ty": 0.5274
+        },
+        {
+          "source": 2,
+          "target": 3,
+          "width": 0.1636,
+          "sy": 0.8364,
+          "ty": 0.7727
+        },
+        {
+          "source": 3,
+          "target": 4,
+          "width": 0.3273,
+          "sy": 0.1591,
+          "ty": 0.2002
+        },
+        {
+          "source": 3,
+          "target": 6,
+          "width": 0.45,
+          "sy": 0.4864,
+          "ty": 0.3618
+        },
+        {
+          "source": 4,
+          "target": 5,
+          "width": 0.2618,
+          "sy": 0.2002,
+          "ty": 0.05
+        },
+        {
+          "source": 4,
+          "target": 6,
+          "width": 0.1882,
+          "sy": 0.462,
+          "ty": 0.8118
+        }
+      ]
+    }
+  }
+}

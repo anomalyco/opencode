@@ -1,0 +1,213 @@
+{
+  "name": "builtin-boxplot",
+  "builtin": "boxplot",
+  "source": "// Box plots comparing distributions. Each group gives raw `values` (quartiles computed once in `init`, whiskers at the\n// furthest values within 1.5 × IQR, the rest drawn as outliers) or precomputed `stats`. Boxes open out from the\n// median; tap a box to read its statistics. With `choose`, the Choose button submits the selected group.\n\nconst HEIGHT = 260\nconst INTRO = 0.6\nconst PALETTE = [\"accent\", \"#f59e0b\", \"#10b981\", \"#ef4444\", \"#8b5cf6\", \"#06b6d4\", \"#ec4899\", \"#84cc16\"]\n\nfunction init(data) {\n  return {\n    selected: null,\n    stats: data.groups.map((group) =>\n      group.stats ? { ...group.stats, outliers: group.stats.outliers ?? [] } : measure(group.values),\n    ),\n  }\n}\n\nfunction view(state, data) {\n  return ui.column({ gap: 1, align: \"stretch\" }, [\n    ui.text(data.title, { style: \"title\" }),\n    ui.canvas({\n      onPointer: (state, p) => tap(state, data, p),\n      height: HEIGHT,\n      fps: 60,\n      duration: INTRO,\n      alt: summary(state, data),\n    }),\n    ui.text(state.selected === null ? \"Tap a box to read its statistics\" : describe(state, data, state.selected), {\n      style: \"caption\",\n      tone: state.selected === null ? \"muted\" : \"default\",\n    }),\n    data.choose &&\n      ui.row({ gap: 1 }, [\n        ui.button(\"Choose group\", {\n          onPress: (state) => choose(state, data),\n          variant: \"primary\",\n          disabled: state.selected === null,\n        }),\n      ]),\n  ])\n}\n\nfunction choose(state, data) {\n  if (state.selected !== null) {\n    const { outliers, ...stats } = state.stats[state.selected]\n    return submit({ label: data.groups[state.selected].label, index: state.selected, ...stats })\n  }\n  return state\n}\n\nfunction tap(state, data, pointer) {\n  if (pointer.kind !== \"up\") return state\n  const hit = locate(data, layout(state, data, pointer.width, pointer.height), pointer.x, pointer.y)\n  return { ...state, selected: hit === state.selected ? null : hit }\n}\n\nfunction draw(state, data, frame) {\n  const g = ui.draw()\n  const box = layout(state, data, frame.width, frame.height)\n  const hover = frame.pointer && !frame.pointer.down ? locate(data, box, frame.pointer.x, frame.pointer.y) : null\n  const active = hover ?? state.selected\n  for (const tick of box.range.ticks) {\n    const at = y(box, tick)\n    g.line(box.plot.x, at, box.plot.x + box.plot.w, at, { stroke: \"border\", width: 1 })\n    g.text(box.plot.x - 8, at + 4, compact(tick), { size: 11, align: \"right\", color: \"muted\" })\n  }\n  const grow = ease(frame.t / INTRO)\n  data.groups.forEach((group, index) => {\n    const stats = state.stats[index]\n    const color = group.color ?? PALETTE[index % PALETTE.length]\n    const cx = box.plot.x + box.slot * (index + 0.5)\n    const half = Math.min(28, box.slot * 0.3)\n    const median = y(box, stats.median)\n    const at = (value) => median + (y(box, value) - median) * grow\n    g.text(cx, box.plot.y + box.plot.h + 18, fit(group.label, box.slot - 4, 11), {\n      size: 11,\n      align: \"center\",\n      weight: index === active ? 600 : 400,\n      color: index === active ? \"text\" : \"muted\",\n    })\n    const dim = active !== null && active !== index\n    if (dim) g.save().alpha(0.45)\n    g.line(cx, at(stats.max), cx, at(stats.q3), { stroke: color, width: 1.5 })\n    g.line(cx, at(stats.q1), cx, at(stats.min), { stroke: color, width: 1.5 })\n    g.line(cx - half / 2, at(stats.max), cx + half / 2, at(stats.max), { stroke: color, width: 1.5 })\n    g.line(cx - half / 2, at(stats.min), cx + half / 2, at(stats.min), { stroke: color, width: 1.5 })\n    g.save()\n      .alpha(dim ? 0.12 : 0.25)\n      .rect(cx - half, at(stats.q3), half * 2, at(stats.q1) - at(stats.q3), color)\n      .restore()\n    g.rect(cx - half, at(stats.q3), half * 2, Math.max(1, at(stats.q1) - at(stats.q3)), {\n      stroke: color,\n      width: index === active ? 2.5 : 1.5,\n    })\n    g.line(cx - half, median, cx + half, median, { stroke: color, width: 3 })\n    if (frame.t >= INTRO)\n      for (const value of stats.outliers.slice(0, 40)) g.circle(cx, y(box, value), 3, { stroke: color, width: 1.5 })\n    if (dim) g.restore()\n  })\n  return g.commands\n}\n\n// Quartiles by linear interpolation; whiskers at the furthest values within 1.5 × IQR of the box.\nfunction measure(values) {\n  const sorted = [...values].sort((a, b) => a - b)\n  const n = sorted.length\n  const quantile = (q) => {\n    const at = (n - 1) * q\n    const low = Math.floor(at)\n    return sorted[low] + (sorted[Math.min(n - 1, low + 1)] - sorted[low]) * (at - low)\n  }\n  const q1 = quantile(0.25)\n  const q3 = quantile(0.75)\n  const fence = 1.5 * (q3 - q1)\n  const inside = sorted.filter((value) => value >= q1 - fence && value <= q3 + fence)\n  const round = (value) => Math.round(value * 1e6) / 1e6\n  return {\n    n,\n    min: inside[0],\n    q1: round(q1),\n    median: round(quantile(0.5)),\n    q3: round(q3),\n    max: inside[inside.length - 1],\n    mean: round(sorted.reduce((sum, value) => sum + value, 0) / n),\n    outliers: sorted.filter((value) => value < q1 - fence || value > q3 + fence),\n  }\n}\n\nfunction layout(state, data, width, height) {\n  const all = state.stats.flatMap((stats) => [stats.min, stats.max, ...stats.outliers])\n  const range = nice(Math.min(...all), Math.max(...all))\n  const left = 14 + 7 * Math.max(...range.ticks.map((tick) => compact(tick).length))\n  const plot = { x: left, y: 12, w: Math.max(1, width - left - 10), h: Math.max(1, height - 12 - 26) }\n  return { plot, range, slot: plot.w / data.groups.length }\n}\n\nfunction nice(min, max) {\n  const span = max - min || Math.abs(max) || 1\n  const raw = span / 4\n  const power = Math.pow(10, Math.floor(Math.log10(raw)))\n  const step = power * ([1, 2, 2.5, 5, 10].find((factor) => factor * power >= raw) ?? 10)\n  const low = Math.floor(min / step) * step\n  const high = Math.max(low + step, Math.ceil(max / step) * step)\n  const ticks = []\n  for (let tick = low; tick <= high + step / 2; tick += step) ticks.push(Math.round(tick / step) * step)\n  return { low, high, ticks }\n}\n\nfunction y(box, value) {\n  return box.plot.y + box.plot.h * (1 - (value - box.range.low) / (box.range.high - box.range.low))\n}\n\nfunction locate(data, box, px, py) {\n  if (px < box.plot.x || px > box.plot.x + box.plot.w || py < 0 || py > box.plot.y + box.plot.h + 24) return null\n  return Math.max(0, Math.min(data.groups.length - 1, Math.floor((px - box.plot.x) / box.slot)))\n}\n\nfunction describe(state, data, index) {\n  const stats = state.stats[index]\n  const unit = data.unit\n  return (\n    data.groups[index].label +\n    \": median \" +\n    amount(stats.median, unit) +\n    \", IQR \" +\n    compact(stats.q1) +\n    \"–\" +\n    amount(stats.q3, unit) +\n    \", whiskers \" +\n    compact(stats.min) +\n    \"–\" +\n    amount(stats.max, unit) +\n    (stats.n !== undefined ? \", n = \" + stats.n : \"\") +\n    (stats.outliers.length\n      ? \", \" + stats.outliers.length + (stats.outliers.length === 1 ? \" outlier\" : \" outliers\")\n      : \"\")\n  )\n}\n\nfunction summary(state, data) {\n  return \"Box plots. \" + data.groups.map((_, index) => describe(state, data, index)).join(\"; \")\n}\n\nfunction amount(value, unit) {\n  const text = compact(value)\n  if (!unit) return text\n  return unit.length > 1 && /^[a-z]/i.test(unit) ? text + \" \" + unit : text + unit\n}\n\nfunction compact(value) {\n  const size = Math.abs(value)\n  const round = (number) => String(Math.round(number * 10) / 10)\n  if (size >= 1e9) return round(value / 1e9) + \"B\"\n  if (size >= 1e6) return round(value / 1e6) + \"M\"\n  if (size >= 1e4) return round(value / 1e3) + \"k\"\n  return String(Math.round(value * 100) / 100)\n}\n\nfunction fit(text, width, size) {\n  const max = Math.max(1, Math.floor(width / (size * 0.58)))\n  return text.length <= max ? text : text.slice(0, Math.max(1, max - 1)) + \"…\"\n}\n\nfunction ease(p) {\n  const clamped = Math.max(0, Math.min(1, p))\n  return 1 - Math.pow(1 - clamped, 3)\n}\n",
+  "input": {
+    "phase": "init",
+    "data": {
+      "title": "Build times by runner",
+      "unit": "s",
+      "choose": true,
+      "groups": [
+        {
+          "label": "linux",
+          "values": [
+            42,
+            45,
+            47,
+            44,
+            51,
+            49,
+            46,
+            43,
+            48,
+            95,
+            44,
+            46,
+            50
+          ]
+        },
+        {
+          "label": "macos",
+          "values": [
+            61,
+            66,
+            70,
+            64,
+            72,
+            69,
+            75,
+            63,
+            67,
+            71,
+            68
+          ]
+        },
+        {
+          "label": "windows",
+          "values": [
+            80,
+            92,
+            85,
+            101,
+            88,
+            96,
+            90,
+            84,
+            99,
+            140,
+            87
+          ]
+        },
+        {
+          "label": "cached",
+          "stats": {
+            "min": 12,
+            "q1": 15,
+            "median": 17,
+            "q3": 20,
+            "max": 26,
+            "outliers": [
+              41
+            ]
+          }
+        }
+      ]
+    }
+  },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Build times by runner"
+      },
+      {
+        "onPointer": "$function",
+        "height": 260,
+        "fps": 60,
+        "duration": 0.6,
+        "alt": "Box plots. linux: median 46s, IQR 44–49s, whiskers 42–51s, n = 13, 1 outlier; macos: median 68s, IQR 65–70.5s, whiskers 61–75s, n = 11; windows: median 90s, IQR 86–97.5s, whiskers 80–101s, n = 11, 1 outlier; cached: median 17s, IQR 15–20s, whiskers 12–26s, 1 outlier",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a box to read its statistics"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose group"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Build times by runner"
+      },
+      {
+        "height": 260,
+        "fps": 60,
+        "duration": 0.6,
+        "alt": "Box plots. linux: median 46s, IQR 44–49s, whiskers 42–51s, n = 13, 1 outlier; macos: median 68s, IQR 65–70.5s, whiskers 61–75s, n = 11; windows: median 90s, IQR 86–97.5s, whiskers 80–101s, n = 11, 1 outlier; cached: median 17s, IQR 15–20s, whiskers 12–26s, 1 outlier",
+        "type": "canvas",
+        "id": "0/1",
+        "pointer": true
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a box to read its statistics"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose group",
+            "id": "0/3/0"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/1": "pointer",
+    "0/3/0": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {
+      "selected": null,
+      "stats": [
+        {
+          "n": 13,
+          "min": 42,
+          "q1": 44,
+          "median": 46,
+          "q3": 49,
+          "max": 51,
+          "mean": 50,
+          "outliers": [
+            95
+          ]
+        },
+        {
+          "n": 11,
+          "min": 61,
+          "q1": 65,
+          "median": 68,
+          "q3": 70.5,
+          "max": 75,
+          "mean": 67.818182,
+          "outliers": []
+        },
+        {
+          "n": 11,
+          "min": 80,
+          "q1": 86,
+          "median": 90,
+          "q3": 97.5,
+          "max": 101,
+          "mean": 94.727273,
+          "outliers": [
+            140
+          ]
+        },
+        {
+          "min": 12,
+          "q1": 15,
+          "median": 17,
+          "q3": 20,
+          "max": 26,
+          "outliers": [
+            41
+          ]
+        }
+      ]
+    }
+  }
+}

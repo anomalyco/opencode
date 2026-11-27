@@ -1,0 +1,286 @@
+{
+  "name": "builtin-suggestions",
+  "builtin": "suggestions",
+  "source": "function init(data) {\n  return { picked: null, note: \"\" }\n}\n\nfunction view(state, data) {\n  return ui.column({ gap: 2 }, [\n    ui.text(data.title, { style: \"title\" }),\n    ui.row(\n      { gap: 2, align: \"start\", wrap: true },\n      data.options.map((option, index) =>\n        ui.card({ selected: state.picked === index, onPress: (state) => ({ ...state, picked: index }) }, [\n          option.images.length === 1\n            ? ui.image(option.images[0], { alt: option.label, aspect: 4 / 3 })\n            : ui.carousel(\n                {},\n                option.images.map((src, page) =>\n                  ui.image(src, {\n                    alt: option.label + \" (\" + (page + 1) + \"/\" + option.images.length + \")\",\n                    aspect: 4 / 3,\n                  }),\n                ),\n              ),\n          ui.row({ gap: 1, align: \"center\", wrap: true }, [\n            ui.text(option.label, { style: \"body\" }),\n            option.recommended && ui.text(\"(Recommended)\", { style: \"caption\", tone: \"accent\" }),\n          ]),\n          option.note && ui.text(option.note, { style: \"caption\", tone: \"muted\" }),\n        ]),\n      ),\n    ),\n    data.allowNote !== false &&\n      ui.input(state.note, {\n        label: \"Note\",\n        placeholder: \"Add a note (optional)\",\n        onChange: (state, note) => ({ ...state, note }),\n      }),\n    ui.row({ gap: 1, align: \"center\" }, [\n      ui.button(\"Choose\", {\n        variant: \"primary\",\n        disabled: state.picked === null,\n        onPress: (state) => choose(state, data),\n      }),\n      ui.button(\"Dismiss\", { variant: \"secondary\", onPress: () => dismiss() }),\n    ]),\n  ])\n}\n\nfunction choose(state, data) {\n  if (state.picked === null) return state\n  const note = state.note.trim()\n  const choice = { choice: data.options[state.picked].label, index: state.picked }\n  return submit(note ? { ...choice, note } : choice)\n}\n",
+  "input": {
+    "phase": "init",
+    "data": {
+      "title": "Pick",
+      "options": [
+        {
+          "label": "A",
+          "note": "n",
+          "images": [
+            "a.png",
+            "b.png"
+          ],
+          "recommended": true
+        },
+        {
+          "label": "B",
+          "images": [
+            "b.png"
+          ]
+        }
+      ]
+    }
+  },
+  "built": {
+    "gap": 2,
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Pick"
+      },
+      {
+        "gap": 2,
+        "align": "start",
+        "wrap": true,
+        "type": "row",
+        "children": [
+          {
+            "selected": false,
+            "onPress": "$function",
+            "type": "card",
+            "children": [
+              {
+                "type": "carousel",
+                "children": [
+                  {
+                    "alt": "A (1/2)",
+                    "aspect": 1.3333333333333333,
+                    "type": "image",
+                    "src": "a.png"
+                  },
+                  {
+                    "alt": "A (2/2)",
+                    "aspect": 1.3333333333333333,
+                    "type": "image",
+                    "src": "b.png"
+                  }
+                ]
+              },
+              {
+                "gap": 1,
+                "align": "center",
+                "wrap": true,
+                "type": "row",
+                "children": [
+                  {
+                    "style": "body",
+                    "type": "text",
+                    "text": "A"
+                  },
+                  {
+                    "style": "caption",
+                    "tone": "accent",
+                    "type": "text",
+                    "text": "(Recommended)"
+                  }
+                ]
+              },
+              {
+                "style": "caption",
+                "tone": "muted",
+                "type": "text",
+                "text": "n"
+              }
+            ]
+          },
+          {
+            "selected": false,
+            "onPress": "$function",
+            "type": "card",
+            "children": [
+              {
+                "alt": "B",
+                "aspect": 1.3333333333333333,
+                "type": "image",
+                "src": "b.png"
+              },
+              {
+                "gap": 1,
+                "align": "center",
+                "wrap": true,
+                "type": "row",
+                "children": [
+                  {
+                    "style": "body",
+                    "type": "text",
+                    "text": "B"
+                  },
+                  null
+                ]
+              },
+              null
+            ]
+          }
+        ]
+      },
+      {
+        "label": "Note",
+        "placeholder": "Add a note (optional)",
+        "onChange": "$function",
+        "type": "input",
+        "value": ""
+      },
+      {
+        "gap": 1,
+        "align": "center",
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "onPress": "$function",
+            "type": "button",
+            "label": "Choose"
+          },
+          {
+            "variant": "secondary",
+            "onPress": "$function",
+            "type": "button",
+            "label": "Dismiss"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "gap": 2,
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Pick"
+      },
+      {
+        "gap": 2,
+        "align": "start",
+        "wrap": true,
+        "type": "row",
+        "children": [
+          {
+            "selected": false,
+            "type": "card",
+            "id": "0/1/0",
+            "children": [
+              {
+                "type": "carousel",
+                "children": [
+                  {
+                    "alt": "A (1/2)",
+                    "aspect": 1.3333333333333333,
+                    "type": "image",
+                    "src": "a.png"
+                  },
+                  {
+                    "alt": "A (2/2)",
+                    "aspect": 1.3333333333333333,
+                    "type": "image",
+                    "src": "b.png"
+                  }
+                ]
+              },
+              {
+                "gap": 1,
+                "align": "center",
+                "wrap": true,
+                "type": "row",
+                "children": [
+                  {
+                    "style": "body",
+                    "type": "text",
+                    "text": "A"
+                  },
+                  {
+                    "style": "caption",
+                    "tone": "accent",
+                    "type": "text",
+                    "text": "(Recommended)"
+                  }
+                ]
+              },
+              {
+                "style": "caption",
+                "tone": "muted",
+                "type": "text",
+                "text": "n"
+              }
+            ]
+          },
+          {
+            "selected": false,
+            "type": "card",
+            "id": "0/1/1",
+            "children": [
+              {
+                "alt": "B",
+                "aspect": 1.3333333333333333,
+                "type": "image",
+                "src": "b.png"
+              },
+              {
+                "gap": 1,
+                "align": "center",
+                "wrap": true,
+                "type": "row",
+                "children": [
+                  {
+                    "style": "body",
+                    "type": "text",
+                    "text": "B"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "label": "Note",
+        "placeholder": "Add a note (optional)",
+        "type": "input",
+        "value": "",
+        "id": "0/2"
+      },
+      {
+        "gap": 1,
+        "align": "center",
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose",
+            "id": "0/3/0"
+          },
+          {
+            "variant": "secondary",
+            "type": "button",
+            "label": "Dismiss",
+            "id": "0/3/1"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/1/0": "press",
+    "0/1/1": "press",
+    "0/2": "change",
+    "0/3/0": "press",
+    "0/3/1": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {
+      "picked": null,
+      "note": ""
+    }
+  }
+}

@@ -1,0 +1,25 @@
+{
+  "name": "error-too-many-draws",
+  "source": "async function main() {\n  widget.render(ui.column([ui.canvas({ key: \"scene\", gpu: true, height: 100 })]))\n  const device = await widget.gpu.requestDevice()\n  const format = widget.gpu.getPreferredCanvasFormat()\n  const contexts = {}\n  for (const key of [\"scene\"]) {\n    contexts[key] = widget.gpu.getContext(key)\n    contexts[key].configure({ device, format })\n  }\n  const view = (key) => contexts[key].getCurrentTexture().createView()\n  const clear = (key) => ({ colorAttachments: [{ view: view(key), loadOp: \"clear\", storeOp: \"store\" }] })\n\n  const module = device.createShaderModule({ code: \"@vertex fn vs() -> @builtin(position) vec4f { return vec4f(0); } @fragment fn fs() -> @location(0) vec4f { return vec4f(1); }\" })\n  const pipeline = device.createRenderPipeline({ layout: \"auto\", vertex: { module }, fragment: { module, targets: [{ format }] } })\n  const frame = async (draws) => {\n    const encoder = device.createCommandEncoder()\n    const pass = encoder.beginRenderPass(clear(\"scene\"))\n    pass.setPipeline(pipeline)\n    for (let i = 0; i < draws; i++) pass.draw(3)\n    pass.end()\n    device.queue.submit([encoder.finish()])\n  }\n  await frame(10000)\n  await widget.frame()\n  await frame(6000)\n  await widget.sleep(1)\n  await frame(4001)\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 200,
+      "height": 200
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "batches": "from-source",
+  "errors": [
+    {
+      "message": "gpu op 4002: the number of draws in a frame is over the limit of 10000",
+      "canvases": [
+        "scene"
+      ]
+    }
+  ],
+  "end": "return"
+}

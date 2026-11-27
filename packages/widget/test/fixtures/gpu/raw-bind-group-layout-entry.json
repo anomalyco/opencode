@@ -1,0 +1,22 @@
+{
+  "name": "raw-bind-group-layout-entry",
+  "source": "async function main() {\n  widget.render(ui.canvas({ key: \"scene\", gpu: true, height: 100 }))\n  __host.post({ type: \"gpu\", ops: [[\"bindGroupLayout\", 1, { entries: [{ binding: 0, visibility: 2, buffer: null, sampler: null, texture: null }] }]], bytes: new ArrayBuffer(8) })\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 100,
+      "height": 100
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [
+    {
+      "message": "gpu op 0: \"bindGroupLayout\" argument 2.entries[0] needs exactly one of buffer, sampler and texture",
+      "canvases": "all"
+    }
+  ],
+  "end": "return"
+}

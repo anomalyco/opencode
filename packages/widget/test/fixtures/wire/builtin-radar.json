@@ -1,0 +1,135 @@
+{
+  "name": "builtin-radar",
+  "builtin": "radar",
+  "source": "// A radar (spider) chart: one polygon per series over 3 to 12 axes on a shared scale. Polygons grow in; tap near an\n// axis to compare every series on it, tap a legend entry to hide a series. With `choose`, the Choose button submits the\n// selected axis with each series' value.\n\nconst HEIGHT = 300\nconst INTRO = 0.7\nconst RINGS = 4\nconst PALETTE = [\"accent\", \"#f59e0b\", \"#10b981\", \"#ef4444\", \"#8b5cf6\", \"#06b6d4\"]\n\nfunction init(data) {\n  return { selected: null, hidden: [] }\n}\n\nfunction view(state, data) {\n  return ui.column({ gap: 1, align: \"stretch\" }, [\n    ui.text(data.title, { style: \"title\" }),\n    ui.canvas({\n      onPointer: (state, p) => tap(state, data, p),\n      height: HEIGHT,\n      fps: 60,\n      duration: INTRO,\n      alt: summary(data),\n    }),\n    ui.text(\n      state.selected === null\n        ? \"Tap an axis to compare the series; tap a legend entry to hide one\"\n        : describe(state, data, state.selected),\n      {\n        style: \"caption\",\n        tone: state.selected === null ? \"muted\" : \"default\",\n      },\n    ),\n    data.choose &&\n      ui.row({ gap: 1 }, [\n        ui.button(\"Choose axis\", {\n          onPress: (state) => choose(state, data),\n          variant: \"primary\",\n          disabled: state.selected === null,\n        }),\n      ]),\n  ])\n}\n\nfunction choose(state, data) {\n  if (state.selected !== null)\n    return submit({\n      axis: data.axes[state.selected],\n      index: state.selected,\n      values: Object.fromEntries(data.series.map((series) => [series.label, series.values[state.selected]])),\n    })\n  return state\n}\n\nfunction tap(state, data, pointer) {\n  if (pointer.kind !== \"up\") return state\n  const box = layout(data, pointer.width, pointer.height)\n  const entry = box.legend.findIndex(\n    (item) => pointer.y >= item.y - 9 && pointer.y <= item.y + 9 && pointer.x <= box.legendRight,\n  )\n  if (entry >= 0) {\n    const hidden = state.hidden.includes(entry)\n      ? state.hidden.filter((index) => index !== entry)\n      : [...state.hidden, entry]\n    return hidden.length === data.series.length ? state : { ...state, hidden }\n  }\n  const hit = axisAt(data, box, pointer.x, pointer.y)\n  return { ...state, selected: hit === state.selected ? null : hit }\n}\n\nfunction draw(state, data, frame) {\n  const g = ui.draw()\n  const box = layout(data, frame.width, frame.height)\n  const n = data.axes.length\n  const hover = frame.pointer && !frame.pointer.down ? axisAt(data, box, frame.pointer.x, frame.pointer.y) : null\n  const active = hover ?? state.selected\n  for (let ring = 1; ring <= RINGS; ring++) {\n    const r = (box.r * ring) / RINGS\n    g.path([...data.axes.map((_, index) => [index === 0 ? \"M\" : \"L\", ...point(box, index, n, r)]), [\"Z\"]], {\n      stroke: \"border\",\n      width: 1,\n    })\n  }\n  g.text(box.cx + 4, box.cy - box.r - 4 + 12, compact(box.max), { size: 10, color: \"muted\" })\n  data.axes.forEach((axis, index) => {\n    const [x, y] = point(box, index, n, box.r)\n    g.line(box.cx, box.cy, x, y, { stroke: index === active ? \"text\" : \"border\", width: index === active ? 1.5 : 1 })\n    const [lx, ly] = point(box, index, n, box.r + 14)\n    const align = Math.abs(lx - box.cx) < 8 ? \"center\" : lx > box.cx ? \"left\" : \"right\"\n    g.text(lx, ly + 4, fit(axis, 110, 11), {\n      size: 11,\n      align,\n      weight: index === active ? 600 : 400,\n      color: index === active ? \"text\" : \"muted\",\n    })\n  })\n  const grow = ease(frame.t / INTRO)\n  data.series.forEach((series, at) => {\n    if (state.hidden.includes(at)) return\n    const color = series.color ?? PALETTE[at % PALETTE.length]\n    const points = series.values\n      .slice(0, n)\n      .map((value, index) => point(box, index, n, (box.r * Math.max(0, value) * grow) / box.max))\n    const segments = [...points.map((p, index) => [index === 0 ? \"M\" : \"L\", p[0], p[1]]), [\"Z\"]]\n    g.save().alpha(0.18).path(segments, color).restore()\n    g.path(segments, { stroke: color, width: 2 })\n    points.forEach((p, index) => g.circle(p[0], p[1], index === active ? 4.5 : 2.5, color))\n  })\n  data.series.forEach((series, at) => {\n    const item = box.legend[at]\n    const hidden = state.hidden.includes(at)\n    const color = series.color ?? PALETTE[at % PALETTE.length]\n    g.circle(8 + 4, item.y, 4, hidden ? { stroke: color, width: 1.5 } : color)\n    g.text(8 + 13, item.y + 4, fit(series.label, box.legendRight - 26, 12), {\n      size: 12,\n      color: hidden ? \"muted\" : \"text\",\n    })\n  })\n  return g.commands\n}\n\n// Geometry shared by draw and tap: the center and radius, the scale's max and the legend rows on the left.\nfunction layout(data, width, height) {\n  const legendRight =\n    data.series.length > 1 ? Math.min(140, 30 + 7 * Math.max(...data.series.map((series) => series.label.length))) : 0\n  const r = Math.max(30, Math.min(height / 2 - 30, (width - legendRight) / 2 - 70))\n  const top = data.max ?? Math.max(...data.series.flatMap((series) => series.values))\n  const legend = data.series.length > 1 ? data.series.map((_, index) => ({ y: 14 + index * 20 })) : []\n  return {\n    cx: legendRight + (width - legendRight) / 2,\n    cy: height / 2,\n    r,\n    max: data.max ?? nice(top),\n    legend,\n    legendRight,\n  }\n}\n\nfunction nice(max) {\n  if (max <= 0) return 1\n  const power = Math.pow(10, Math.floor(Math.log10(max)))\n  return power * ([1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find((factor) => factor * power >= max) ?? 10)\n}\n\n// Axis 0 points up; the rest follow clockwise.\nfunction point(box, index, n, r) {\n  const angle = -Math.PI / 2 + (index * Math.PI * 2) / n\n  return [box.cx + Math.cos(angle) * r, box.cy + Math.sin(angle) * r]\n}\n\nfunction axisAt(data, box, px, py) {\n  const distance = Math.hypot(px - box.cx, py - box.cy)\n  if (distance > box.r + 40 || distance < 8) return null\n  const n = data.axes.length\n  const angle = Math.atan2(py - box.cy, px - box.cx) + Math.PI / 2\n  return ((Math.round((angle / (Math.PI * 2)) * n) % n) + n) % n\n}\n\nfunction describe(state, data, index) {\n  return (\n    data.axes[index] +\n    \": \" +\n    data.series\n      .filter((_, at) => !state.hidden.includes(at))\n      .map((series) => series.label + \" \" + amount(series.values[index], data.unit))\n      .join(\", \")\n  )\n}\n\nfunction summary(data) {\n  return (\n    \"Radar chart over \" +\n    data.axes.join(\", \") +\n    \". \" +\n    data.series\n      .map((series) => series.label + \": \" + series.values.map((value) => amount(value, data.unit)).join(\", \"))\n      .join(\"; \")\n  )\n}\n\nfunction amount(value, unit) {\n  const text = String(Math.round((value ?? 0) * 100) / 100)\n  if (!unit) return text\n  return unit.length > 1 && /^[a-z]/i.test(unit) ? text + \" \" + unit : text + unit\n}\n\nfunction compact(value) {\n  return String(Math.round(value * 100) / 100)\n}\n\nfunction fit(text, width, size) {\n  const max = Math.max(1, Math.floor(width / (size * 0.58)))\n  return text.length <= max ? text : text.slice(0, Math.max(1, max - 1)) + \"…\"\n}\n\nfunction ease(p) {\n  const clamped = Math.max(0, Math.min(1, p))\n  return 1 - Math.pow(1 - clamped, 3)\n}\n",
+  "input": {
+    "phase": "init",
+    "data": {
+      "title": "Model comparison",
+      "choose": true,
+      "max": 10,
+      "axes": [
+        "Speed",
+        "Accuracy",
+        "Cost",
+        "Context",
+        "Tools",
+        "Vision"
+      ],
+      "series": [
+        {
+          "label": "Model A",
+          "values": [
+            8,
+            7,
+            6,
+            9,
+            7,
+            5
+          ]
+        },
+        {
+          "label": "Model B",
+          "values": [
+            5,
+            9,
+            4,
+            7,
+            9,
+            8
+          ]
+        }
+      ]
+    }
+  },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Model comparison"
+      },
+      {
+        "onPointer": "$function",
+        "height": 300,
+        "fps": 60,
+        "duration": 0.7,
+        "alt": "Radar chart over Speed, Accuracy, Cost, Context, Tools, Vision. Model A: 8, 7, 6, 9, 7, 5; Model B: 5, 9, 4, 7, 9, 8",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap an axis to compare the series; tap a legend entry to hide one"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose axis"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Model comparison"
+      },
+      {
+        "height": 300,
+        "fps": 60,
+        "duration": 0.7,
+        "alt": "Radar chart over Speed, Accuracy, Cost, Context, Tools, Vision. Model A: 8, 7, 6, 9, 7, 5; Model B: 5, 9, 4, 7, 9, 8",
+        "type": "canvas",
+        "id": "0/1",
+        "pointer": true
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap an axis to compare the series; tap a legend entry to hide one"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose axis",
+            "id": "0/3/0"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/1": "pointer",
+    "0/3/0": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {
+      "selected": null,
+      "hidden": []
+    }
+  }
+}

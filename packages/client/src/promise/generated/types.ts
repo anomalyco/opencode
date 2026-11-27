@@ -2773,6 +2773,7 @@ export type ConfigEntry =
           media_blob?: boolean
           artifacts?: boolean
           console_watches?: boolean
+          widgets?: boolean
           recommended_api?: boolean
           full_codemode?: boolean
           codemode_agents?: boolean

@@ -1,0 +1,608 @@
+{
+  "name": "builtin-graph",
+  "builtin": "graph",
+  "source": "// A network of nodes and edges. `init` runs a deterministic force layout once (links pull, nodes repel, weak gravity)\n// and keeps a few snapshots of it in unit coordinates; the canvas plays them back so the graph settles in over the\n// intro, then draws only on taps. Tap a node to select it and highlight its neighbors. With `choose`, the Choose button\n// submits the selected node.\n\nconst HEIGHT = 320\nconst INTRO = 1.2\nconst PAD = 22\nconst STEPS = [0, 0.04, 0.1, 0.22, 0.45, 1]\nconst PALETTE = [\"accent\", \"#f59e0b\", \"#10b981\", \"#ef4444\", \"#8b5cf6\", \"#06b6d4\", \"#ec4899\", \"#84cc16\"]\n\nfunction init(data) {\n  return { selected: null, ...settle(data) }\n}\n\nfunction view(state, data) {\n  const picked = state.selected === null ? null : data.nodes[state.selected]\n  return ui.column({ gap: 1, align: \"stretch\" }, [\n    ui.text(data.title, { style: \"title\" }),\n    ui.canvas({\n      onPointer: (state, p) => tap(state, data, p),\n      height: HEIGHT,\n      fps: 60,\n      duration: INTRO,\n      alt: summary(state, data),\n    }),\n    ui.text(picked ? describe(state, data, state.selected) : \"Tap a node to see its neighbors\", {\n      style: \"caption\",\n      tone: picked ? \"default\" : \"muted\",\n    }),\n    data.choose &&\n      ui.row({ gap: 1 }, [\n        ui.button(picked ? \"Choose \" + name(picked) : \"Choose\", {\n          onPress: (state) => choose(state, data),\n          variant: \"primary\",\n          disabled: !picked,\n        }),\n      ]),\n  ])\n}\n\nfunction choose(state, data) {\n  if (state.selected !== null) {\n    const node = data.nodes[state.selected]\n    return submit({\n      id: node.id,\n      label: name(node),\n      neighbors: neighbors(state, state.selected).map((at) => data.nodes[at].id),\n    })\n  }\n  return state\n}\n\nfunction tap(state, data, pointer) {\n  if (pointer.kind !== \"up\") return state\n  const hit = locate(state, data, positions(state, 1, pointer.width, pointer.height), pointer.x, pointer.y)\n  return { ...state, selected: hit === state.selected ? null : hit }\n}\n\nfunction draw(state, data, frame) {\n  const g = ui.draw()\n  const at = positions(state, ease(frame.t / INTRO), frame.width, frame.height)\n  const hover = frame.pointer && !frame.pointer.down ? locate(state, data, at, frame.pointer.x, frame.pointer.y) : null\n  const active = hover ?? state.selected\n  const near = active === null ? null : new Set([active, ...neighbors(state, active)])\n  const groups = [...new Set(data.nodes.map((node) => node.group ?? \"\"))]\n  const fill = (index) =>\n    data.nodes[index].color ??\n    (groups.length > 1 ? PALETTE[groups.indexOf(data.nodes[index].group ?? \"\") % PALETTE.length] : \"accent\")\n  const touches = (edge) => active !== null && (edge[0] === active || edge[1] === active)\n  for (const lit of [false, true]) {\n    const edges = state.edges.filter((edge) => touches(edge) === lit)\n    if (edges.length === 0) continue\n    g.save().alpha(lit ? 0.9 : active === null ? 0.5 : 0.15)\n    for (const [a, b, weight] of edges) {\n      if (a === b) continue\n      const stroke = lit ? fill(active) : \"muted\"\n      g.line(at[a][0], at[a][1], at[b][0], at[b][1], { stroke, width: (lit ? 1.5 : 1) * weight })\n      if (data.directed) arrow(g, at[a], at[b], radius(state, data, b) + 2, stroke)\n    }\n    g.restore()\n  }\n  if (frame.t >= INTRO)\n    data.edges.forEach((edge, index) => {\n      const [a, b] = state.edges[index]\n      if (!edge.label || a === b || !(touches(state.edges[index]) || (active === null && data.edges.length <= 16)))\n        return\n      g.text((at[a][0] + at[b][0]) / 2, (at[a][1] + at[b][1]) / 2 - 4, edge.label, {\n        size: 10,\n        align: \"center\",\n        color: \"muted\",\n      })\n    })\n  const labelled = new Set(\n    data.nodes.length <= 30\n      ? data.nodes.map((_, index) => index)\n      : [\n          ...state.degree\n            .map((d, i) => [d, i])\n            .sort((a, b) => b[0] - a[0])\n            .slice(0, 8)\n            .map((pair) => pair[1]),\n          ...(near ?? []),\n        ],\n  )\n  data.nodes.forEach((node, index) => {\n    const r = radius(state, data, index)\n    const dim = near && !near.has(index)\n    if (dim) g.save().alpha(0.3)\n    g.circle(at[index][0], at[index][1], r, { fill: fill(index), stroke: \"bg\", width: 1.5 })\n    if (index === active) g.circle(at[index][0], at[index][1], r + 3, { stroke: \"text\", width: 2 })\n    if (labelled.has(index) && frame.t >= INTRO * 0.5)\n      g.text(at[index][0], at[index][1] + r + 12, fit(name(node), 120, 11), {\n        size: 11,\n        align: \"center\",\n        weight: index === active ? 600 : 400,\n        color: dim ? \"muted\" : \"text\",\n      })\n    if (dim) g.restore()\n  })\n  return g.commands\n}\n\n// Velocity-Verlet force simulation in unit space (link length 1), keeping snapshots at the STEPS fractions.\nfunction settle(data) {\n  const index = new Map(data.nodes.map((node, at) => [node.id, at]))\n  for (const edge of data.edges)\n    for (const id of [edge.source, edge.target])\n      if (!index.has(id)) throw new Error('Unknown node id \"' + id + '\" in edges')\n  const n = data.nodes.length\n  const edges = data.edges.map((edge) => [index.get(edge.source), index.get(edge.target), edge.weight ?? 1])\n  const degree = data.nodes.map(() => 0)\n  for (const [a, b] of edges) {\n    degree[a]++\n    degree[b]++\n  }\n  const xs = []\n  const ys = []\n  for (let i = 0; i < n; i++) {\n    const r = 0.5 * Math.sqrt(0.5 + i)\n    xs.push(r * Math.cos(i * 2.39996))\n    ys.push(r * Math.sin(i * 2.39996))\n  }\n  const vx = xs.map(() => 0)\n  const vy = xs.map(() => 0)\n  // About 20k pair updates in all: enough to settle 40 nodes, cheap enough for a 250 ms step.\n  const iterations = Math.max(24, Math.min(160, Math.round(20000 / ((n * n) / 2 + edges.length + 1))))\n  const keep = new Set(STEPS.map((step) => Math.round(step * iterations)))\n  const snapshots = []\n  let alpha = 1\n  const decay = 1 - Math.pow(0.001, 1 / iterations)\n  for (let step = 0; step <= iterations; step++) {\n    if (keep.has(step)) snapshots.push([...xs.map((x, i) => [x, ys[i]])])\n    for (const [a, b] of edges) {\n      if (a === b) continue\n      const dx = xs[b] + vx[b] - xs[a] - vx[a]\n      const dy = ys[b] + vy[b] - ys[a] - vy[a]\n      const d = Math.hypot(dx, dy) || 1e-6\n      const pull = ((d - 1) / d) * alpha * (1 / Math.min(degree[a], degree[b]))\n      const bias = degree[a] / (degree[a] + degree[b])\n      vx[b] -= dx * pull * bias\n      vy[b] -= dy * pull * bias\n      vx[a] += dx * pull * (1 - bias)\n      vy[a] += dy * pull * (1 - bias)\n    }\n    for (let i = 0; i < n; i++)\n      for (let j = i + 1; j < n; j++) {\n        const dx = xs[j] - xs[i]\n        const dy = ys[j] - ys[i]\n        const d2 = Math.max(0.01, dx * dx + dy * dy)\n        const push = (0.6 * alpha) / d2\n        vx[i] -= dx * push\n        vy[i] -= dy * push\n        vx[j] += dx * push\n        vy[j] += dy * push\n      }\n    for (let i = 0; i < n; i++) {\n      vx[i] = (vx[i] - xs[i] * 0.06 * alpha) * 0.6\n      vy[i] = (vy[i] - ys[i] * 0.06 * alpha) * 0.6\n      xs[i] += vx[i]\n      ys[i] += vy[i]\n    }\n    alpha -= alpha * decay\n  }\n  // Fit every snapshot with the final layout's bounds, so early ones start small in the middle and spread out.\n  const last = snapshots[snapshots.length - 1]\n  const minX = Math.min(...last.map((p) => p[0]))\n  const minY = Math.min(...last.map((p) => p[1]))\n  const spanX = Math.max(1e-6, Math.max(...last.map((p) => p[0])) - minX)\n  const spanY = Math.max(1e-6, Math.max(...last.map((p) => p[1])) - minY)\n  const unit = (value, min, span) => Math.round(((value - min) / span) * 1000) / 1000\n  return {\n    frames: snapshots.map((points) => points.map((p) => [unit(p[0], minX, spanX), unit(p[1], minY, spanY)])),\n    edges: edges.map(([a, b, weight]) => [a, b, Math.max(0.5, Math.min(4, weight))]),\n    degree,\n  }\n}\n\n// Pixel positions at intro progress p (0..1), interpolated between snapshots.\nfunction positions(state, p, width, height) {\n  const at = p * (state.frames.length - 1)\n  const from = Math.min(state.frames.length - 1, Math.floor(at))\n  const to = Math.min(state.frames.length - 1, from + 1)\n  const mix = at - from\n  return state.frames[from].map((point, index) => {\n    const end = state.frames[to][index]\n    return [\n      PAD + (point[0] + (end[0] - point[0]) * mix) * (width - 2 * PAD),\n      PAD - 4 + (point[1] + (end[1] - point[1]) * mix) * (height - 2 * PAD - 8),\n    ]\n  })\n}\n\nfunction radius(state, data, index) {\n  const size = data.nodes[index].size\n  if (size !== undefined) return 4 + 10 * Math.sqrt(size / Math.max(...data.nodes.map((node) => node.size ?? 0), 1e-6))\n  return 5 + 1.6 * Math.sqrt(state.degree[index])\n}\n\nfunction neighbors(state, index) {\n  return [...new Set(state.edges.flatMap(([a, b]) => (a === b ? [] : a === index ? [b] : b === index ? [a] : [])))]\n}\n\nfunction locate(state, data, at, px, py) {\n  let best = null\n  let distance = Infinity\n  at.forEach((point, index) => {\n    const d = Math.hypot(point[0] - px, point[1] - py) - radius(state, data, index)\n    if (d < Math.min(distance, 10)) {\n      distance = d\n      best = index\n    }\n  })\n  return best\n}\n\nfunction arrow(g, from, to, inset, color) {\n  const angle = Math.atan2(to[1] - from[1], to[0] - from[0])\n  const tip = [to[0] - Math.cos(angle) * inset, to[1] - Math.sin(angle) * inset]\n  const side = (turn) => [\"L\", tip[0] - Math.cos(angle + turn) * 8, tip[1] - Math.sin(angle + turn) * 8]\n  g.path([[\"M\", tip[0], tip[1]], side(0.4), side(-0.4), [\"Z\"]], color)\n}\n\nfunction describe(state, data, index) {\n  const node = data.nodes[index]\n  const near = neighbors(state, index).map((at) => name(data.nodes[at]))\n  return (\n    name(node) +\n    (node.group ? \" (\" + node.group + \")\" : \"\") +\n    \" · \" +\n    near.length +\n    (near.length === 1 ? \" neighbor\" : \" neighbors\") +\n    (near.length ? \": \" + near.slice(0, 8).join(\", \") + (near.length > 8 ? \", …\" : \"\") : \"\")\n  )\n}\n\nfunction summary(state, data) {\n  const hubs = state.degree\n    .map((degree, index) => [degree, index])\n    .sort((a, b) => b[0] - a[0])\n    .slice(0, 3)\n    .map((pair) => name(data.nodes[pair[1]]) + \" (\" + pair[0] + \")\")\n  return (\n    \"Network of \" + data.nodes.length + \" nodes and \" + data.edges.length + \" edges. Most connected: \" + hubs.join(\", \")\n  )\n}\n\nfunction name(node) {\n  return node.label ?? node.id\n}\n\nfunction fit(text, width, size) {\n  const max = Math.max(1, Math.floor(width / (size * 0.58)))\n  return text.length <= max ? text : text.slice(0, Math.max(1, max - 1)) + \"…\"\n}\n\nfunction ease(p) {\n  const clamped = Math.max(0, Math.min(1, p))\n  return 1 - Math.pow(1 - clamped, 3)\n}\n",
+  "input": {
+    "phase": "init",
+    "data": {
+      "title": "Service dependencies",
+      "directed": true,
+      "choose": true,
+      "nodes": [
+        {
+          "id": "web",
+          "group": "edge"
+        },
+        {
+          "id": "mobile",
+          "group": "edge"
+        },
+        {
+          "id": "gateway",
+          "group": "edge"
+        },
+        {
+          "id": "auth",
+          "group": "core"
+        },
+        {
+          "id": "users",
+          "group": "core"
+        },
+        {
+          "id": "orders",
+          "group": "core"
+        },
+        {
+          "id": "billing",
+          "group": "core"
+        },
+        {
+          "id": "search",
+          "group": "core"
+        },
+        {
+          "id": "postgres",
+          "group": "data"
+        },
+        {
+          "id": "redis",
+          "group": "data"
+        },
+        {
+          "id": "kafka",
+          "group": "data"
+        },
+        {
+          "id": "elastic",
+          "group": "data"
+        }
+      ],
+      "edges": [
+        {
+          "source": "web",
+          "target": "gateway"
+        },
+        {
+          "source": "mobile",
+          "target": "gateway"
+        },
+        {
+          "source": "gateway",
+          "target": "auth"
+        },
+        {
+          "source": "gateway",
+          "target": "users"
+        },
+        {
+          "source": "gateway",
+          "target": "orders"
+        },
+        {
+          "source": "gateway",
+          "target": "search"
+        },
+        {
+          "source": "auth",
+          "target": "redis"
+        },
+        {
+          "source": "auth",
+          "target": "users"
+        },
+        {
+          "source": "users",
+          "target": "postgres"
+        },
+        {
+          "source": "orders",
+          "target": "postgres"
+        },
+        {
+          "source": "orders",
+          "target": "billing",
+          "label": "charge"
+        },
+        {
+          "source": "orders",
+          "target": "kafka"
+        },
+        {
+          "source": "billing",
+          "target": "kafka"
+        },
+        {
+          "source": "search",
+          "target": "elastic"
+        },
+        {
+          "source": "kafka",
+          "target": "search"
+        }
+      ]
+    }
+  },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Service dependencies"
+      },
+      {
+        "onPointer": "$function",
+        "height": 320,
+        "fps": 60,
+        "duration": 1.2,
+        "alt": "Network of 12 nodes and 15 edges. Most connected: gateway (6), orders (4), auth (3)",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a node to see its neighbors"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Service dependencies"
+      },
+      {
+        "height": 320,
+        "fps": 60,
+        "duration": 1.2,
+        "alt": "Network of 12 nodes and 15 edges. Most connected: gateway (6), orders (4), auth (3)",
+        "type": "canvas",
+        "id": "0/1",
+        "pointer": true
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a node to see its neighbors"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose",
+            "id": "0/3/0"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/1": "pointer",
+    "0/3/0": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {
+      "selected": null,
+      "frames": [
+        [
+          [
+            0.292,
+            0.482
+          ],
+          [
+            0.186,
+            0.523
+          ],
+          [
+            0.255,
+            0.404
+          ],
+          [
+            0.321,
+            0.555
+          ],
+          [
+            0.107,
+            0.464
+          ],
+          [
+            0.376,
+            0.42
+          ],
+          [
+            0.202,
+            0.603
+          ],
+          [
+            0.162,
+            0.362
+          ],
+          [
+            0.427,
+            0.531
+          ],
+          [
+            0.057,
+            0.54
+          ],
+          [
+            0.336,
+            0.337
+          ],
+          [
+            0.313,
+            0.641
+          ]
+        ],
+        [
+          [
+            0.437,
+            0.143
+          ],
+          [
+            0.016,
+            0.102
+          ],
+          [
+            0.239,
+            0.119
+          ],
+          [
+            0.319,
+            0.691
+          ],
+          [
+            -0.002,
+            0.491
+          ],
+          [
+            0.78,
+            0.264
+          ],
+          [
+            0.511,
+            0.402
+          ],
+          [
+            -0.034,
+            -0.017
+          ],
+          [
+            0.683,
+            0.482
+          ],
+          [
+            0.138,
+            0.787
+          ],
+          [
+            0.564,
+            0.029
+          ],
+          [
+            -0.049,
+            0.224
+          ]
+        ],
+        [
+          [
+            0.275,
+            0.237
+          ],
+          [
+            -0.023,
+            0.315
+          ],
+          [
+            0.228,
+            0.388
+          ],
+          [
+            0.171,
+            0.749
+          ],
+          [
+            0.281,
+            0.593
+          ],
+          [
+            0.863,
+            0.315
+          ],
+          [
+            0.86,
+            0.114
+          ],
+          [
+            0.174,
+            -0.049
+          ],
+          [
+            0.702,
+            0.552
+          ],
+          [
+            0.11,
+            0.908
+          ],
+          [
+            0.661,
+            -0.038
+          ],
+          [
+            -0.104,
+            -0.088
+          ]
+        ],
+        [
+          [
+            0.165,
+            0.388
+          ],
+          [
+            0.039,
+            0.53
+          ],
+          [
+            0.331,
+            0.519
+          ],
+          [
+            0.124,
+            0.819
+          ],
+          [
+            0.49,
+            0.786
+          ],
+          [
+            0.799,
+            0.355
+          ],
+          [
+            0.969,
+            0.151
+          ],
+          [
+            0.304,
+            0.104
+          ],
+          [
+            0.8,
+            0.634
+          ],
+          [
+            -0.033,
+            0.967
+          ],
+          [
+            0.706,
+            0.047
+          ],
+          [
+            0.11,
+            -0.035
+          ]
+        ],
+        [
+          [
+            0.197,
+            0.432
+          ],
+          [
+            0.13,
+            0.59
+          ],
+          [
+            0.4,
+            0.548
+          ],
+          [
+            0.202,
+            0.871
+          ],
+          [
+            0.557,
+            0.823
+          ],
+          [
+            0.84,
+            0.374
+          ],
+          [
+            0.995,
+            0.159
+          ],
+          [
+            0.333,
+            0.145
+          ],
+          [
+            0.856,
+            0.66
+          ],
+          [
+            -0.013,
+            0.991
+          ],
+          [
+            0.732,
+            0.067
+          ],
+          [
+            0.144,
+            -0.005
+          ]
+        ],
+        [
+          [
+            0.206,
+            0.44
+          ],
+          [
+            0.146,
+            0.6
+          ],
+          [
+            0.412,
+            0.554
+          ],
+          [
+            0.219,
+            0.88
+          ],
+          [
+            0.572,
+            0.828
+          ],
+          [
+            0.849,
+            0.376
+          ],
+          [
+            1,
+            0.158
+          ],
+          [
+            0.337,
+            0.152
+          ],
+          [
+            0.87,
+            0.663
+          ],
+          [
+            0,
+            1
+          ],
+          [
+            0.736,
+            0.07
+          ],
+          [
+            0.147,
+            0
+          ]
+        ]
+      ],
+      "edges": [
+        [
+          0,
+          2,
+          1
+        ],
+        [
+          1,
+          2,
+          1
+        ],
+        [
+          2,
+          3,
+          1
+        ],
+        [
+          2,
+          4,
+          1
+        ],
+        [
+          2,
+          5,
+          1
+        ],
+        [
+          2,
+          7,
+          1
+        ],
+        [
+          3,
+          9,
+          1
+        ],
+        [
+          3,
+          4,
+          1
+        ],
+        [
+          4,
+          8,
+          1
+        ],
+        [
+          5,
+          8,
+          1
+        ],
+        [
+          5,
+          6,
+          1
+        ],
+        [
+          5,
+          10,
+          1
+        ],
+        [
+          6,
+          10,
+          1
+        ],
+        [
+          7,
+          11,
+          1
+        ],
+        [
+          10,
+          7,
+          1
+        ]
+      ],
+      "degree": [
+        1,
+        1,
+        6,
+        3,
+        3,
+        4,
+        2,
+        3,
+        2,
+        1,
+        3,
+        1
+      ]
+    }
+  }
+}

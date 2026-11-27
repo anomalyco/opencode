@@ -1,0 +1,123 @@
+{
+  "name": "builtin-funnel",
+  "builtin": "funnel",
+  "source": "// A conversion funnel: stages as centered bars sized by value, joined by tapering bands, with the conversion from the\n// previous stage on the right. Bars widen in; tap a stage to select it. With `choose`, the Choose button submits it.\n\nconst ROW = 44\nconst INTRO = 0.7\n\nfunction init(data) {\n  return { selected: null }\n}\n\nfunction view(state, data) {\n  return ui.column({ gap: 1, align: \"stretch\" }, [\n    ui.text(data.title, { style: \"title\" }),\n    ui.canvas({\n      onPointer: (state, p) => tap(state, data, p),\n      height: data.stages.length * ROW + 4,\n      fps: 60,\n      duration: INTRO,\n      alt: summary(data),\n    }),\n    ui.text(state.selected === null ? \"Tap a stage to see its conversion\" : describe(data, state.selected), {\n      style: \"caption\",\n      tone: state.selected === null ? \"muted\" : \"default\",\n    }),\n    data.choose &&\n      ui.row({ gap: 1 }, [\n        ui.button(\"Choose stage\", {\n          onPress: (state) => choose(state, data),\n          variant: \"primary\",\n          disabled: state.selected === null,\n        }),\n      ]),\n  ])\n}\n\nfunction choose(state, data) {\n  if (state.selected !== null) {\n    const stage = data.stages[state.selected]\n    return submit({ label: stage.label, index: state.selected, value: stage.value, ...rates(data, state.selected) })\n  }\n  return state\n}\n\nfunction tap(state, data, pointer) {\n  if (pointer.kind !== \"up\") return state\n  const index = Math.floor((pointer.y - 2) / ROW)\n  const hit = index >= 0 && index < data.stages.length ? index : null\n  return { ...state, selected: hit === state.selected ? null : hit }\n}\n\nfunction draw(state, data, frame) {\n  const g = ui.draw()\n  const box = layout(data, frame.width)\n  const grow = ease(frame.t / INTRO)\n  const hover = frame.pointer && !frame.pointer.down ? Math.floor((frame.pointer.y - 2) / ROW) : null\n  const active = hover !== null && hover >= 0 && hover < data.stages.length ? hover : state.selected\n  const fill = data.color ?? \"accent\"\n  const half = (index) => (Math.max(0.02, data.stages[index].value / box.max) * box.w * grow) / 2\n  const bar = ROW - 16\n  data.stages.forEach((stage, index) => {\n    const y = 2 + index * ROW\n    if (index > 0) {\n      const above = half(index - 1)\n      const below = half(index)\n      g.save().alpha(0.15)\n      g.path(\n        [\n          [\"M\", box.cx - above, y - 16 + 2],\n          [\"L\", box.cx + above, y - 16 + 2],\n          [\"L\", box.cx + below, y + 8],\n          [\"L\", box.cx - below, y + 8],\n          [\"Z\"],\n        ],\n        fill,\n      )\n      g.restore()\n    }\n    const dim = active !== null && active !== index\n    if (dim) g.save().alpha(0.5)\n    g.rrect(box.cx - half(index), y + 8, half(index) * 2, bar, 6, fill)\n    if (dim) g.restore()\n    g.text(8, y + 8 + bar / 2 - 2, fit(stage.label, box.left - 14, 12), {\n      size: 12,\n      weight: index === active ? 600 : 400,\n    })\n    g.text(8, y + 8 + bar / 2 + 13, amount(stage.value, data.unit), { size: 11, color: \"muted\" })\n    if (half(index) * 2 > 60)\n      g.text(box.cx, y + 8 + bar / 2 + 4, percent(stage.value / data.stages[0].value), {\n        size: 12,\n        weight: 600,\n        align: \"center\",\n        color: \"#ffffff\",\n      })\n    if (index > 0)\n      g.text(frame.width - 8, y + 8 + bar / 2 + 4, percent(stage.value / data.stages[index - 1].value), {\n        size: 12,\n        align: \"right\",\n        color: \"muted\",\n      })\n    if (index === state.selected)\n      g.rrect(box.cx - half(index) - 2, y + 6, half(index) * 2 + 4, bar + 4, 7, { stroke: \"text\", width: 1.5 })\n  })\n  return g.commands\n}\n\nfunction layout(data, width) {\n  const left = Math.min(\n    width * 0.3,\n    Math.max(70, 16 + 6.6 * Math.max(...data.stages.map((stage) => stage.label.length))),\n  )\n  const right = 56\n  const w = Math.max(20, width - left - right)\n  return { left, w, cx: left + w / 2, max: Math.max(...data.stages.map((stage) => stage.value), 1e-9) }\n}\n\nfunction rates(data, index) {\n  const first = data.stages[0].value\n  const previous = data.stages[Math.max(0, index - 1)].value\n  const round = (value) => Math.round(value * 1000) / 1000\n  return {\n    ofFirst: first ? round(data.stages[index].value / first) : 0,\n    ofPrevious: previous ? round(data.stages[index].value / previous) : 0,\n  }\n}\n\nfunction describe(data, index) {\n  const stage = data.stages[index]\n  const rate = rates(data, index)\n  if (index === 0) return stage.label + \": \" + amount(stage.value, data.unit)\n  return (\n    stage.label +\n    \": \" +\n    amount(stage.value, data.unit) +\n    \" · \" +\n    percent(rate.ofPrevious) +\n    \" of \" +\n    data.stages[index - 1].label +\n    \", \" +\n    percent(rate.ofFirst) +\n    \" of \" +\n    data.stages[0].label +\n    \" · drop-off \" +\n    amount(data.stages[index - 1].value - stage.value, data.unit)\n  )\n}\n\nfunction summary(data) {\n  return (\n    \"Funnel. \" +\n    data.stages\n      .map(\n        (stage, index) =>\n          stage.label +\n          \" \" +\n          amount(stage.value, data.unit) +\n          (index ? \" (\" + percent(stage.value / data.stages[index - 1].value) + \" of previous)\" : \"\"),\n      )\n      .join(\", \")\n  )\n}\n\nfunction percent(share) {\n  return (Number.isFinite(share) ? Math.round(share * 1000) / 10 : 0) + \"%\"\n}\n\nfunction amount(value, unit) {\n  const text = String(Math.round(value * 100) / 100).replace(/\\B(?=(\\d{3})+(?!\\d))/g, \",\")\n  if (!unit) return text\n  return unit.length > 1 && /^[a-z]/i.test(unit) ? text + \" \" + unit : text + unit\n}\n\nfunction fit(text, width, size) {\n  const max = Math.max(1, Math.floor(width / (size * 0.58)))\n  return text.length <= max ? text : text.slice(0, Math.max(1, max - 1)) + \"…\"\n}\n\nfunction ease(p) {\n  const clamped = Math.max(0, Math.min(1, p))\n  return 1 - Math.pow(1 - clamped, 3)\n}\n",
+  "input": {
+    "phase": "init",
+    "data": {
+      "title": "Checkout funnel",
+      "choose": true,
+      "stages": [
+        {
+          "label": "Visited",
+          "value": 12400
+        },
+        {
+          "label": "Added to cart",
+          "value": 4100
+        },
+        {
+          "label": "Checkout",
+          "value": 2300
+        },
+        {
+          "label": "Paid",
+          "value": 1650
+        },
+        {
+          "label": "Repeat",
+          "value": 420
+        }
+      ]
+    }
+  },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Checkout funnel"
+      },
+      {
+        "onPointer": "$function",
+        "height": 224,
+        "fps": 60,
+        "duration": 0.7,
+        "alt": "Funnel. Visited 12,400, Added to cart 4,100 (33.1% of previous), Checkout 2,300 (56.1% of previous), Paid 1,650 (71.7% of previous), Repeat 420 (25.5% of previous)",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a stage to see its conversion"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose stage"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Checkout funnel"
+      },
+      {
+        "height": 224,
+        "fps": 60,
+        "duration": 0.7,
+        "alt": "Funnel. Visited 12,400, Added to cart 4,100 (33.1% of previous), Checkout 2,300 (56.1% of previous), Paid 1,650 (71.7% of previous), Repeat 420 (25.5% of previous)",
+        "type": "canvas",
+        "id": "0/1",
+        "pointer": true
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a stage to see its conversion"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose stage",
+            "id": "0/3/0"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/1": "pointer",
+    "0/3/0": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {
+      "selected": null
+    }
+  }
+}

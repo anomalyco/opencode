@@ -1,0 +1,86 @@
+{
+  "name": "cube",
+  "source": "// A rotating, lit, depth-tested cube (widgets-gpu.md). `data.frames`: stop after that many frames (fixtures).\nconst SHADER = `\nstruct Uniforms { mvp: mat4x4f, model: mat4x4f }\n@group(0) @binding(0) var<uniform> u: Uniforms;\n\nstruct Out { @builtin(position) position: vec4f, @location(0) normal: vec3f }\n\n@vertex fn vs(@location(0) position: vec3f, @location(1) normal: vec3f) -> Out {\n  var out: Out;\n  out.position = u.mvp * vec4f(position, 1.0);\n  out.normal = (u.model * vec4f(normal, 0.0)).xyz;\n  return out;\n}\n\n@fragment fn fs(in: Out) -> @location(0) vec4f {\n  let light = normalize(vec3f(0.4, 0.8, 0.6));\n  let lit = 0.2 + 0.8 * max(dot(normalize(in.normal), light), 0.0);\n  return vec4f(vec3f(0.3, 0.6, 1.0) * lit, 1.0);\n}\n`\n\n// Column-major 4x4 matrices, as WGSL reads them.\nfunction multiply(a, b) {\n  const out = new Float32Array(16)\n  for (let column = 0; column < 4; column++)\n    for (let row = 0; row < 4; row++) {\n      let sum = 0\n      for (let k = 0; k < 4; k++) sum += a[k * 4 + row] * b[column * 4 + k]\n      out[column * 4 + row] = sum\n    }\n  return out\n}\n\n// A perspective projection to WebGPU's depth range, 0 to 1.\nfunction perspective(fovy, aspect, near, far) {\n  const f = 1 / Math.tan(fovy / 2)\n  // prettier-ignore\n  return new Float32Array([f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, far / (near - far), -1, 0, 0, (near * far) / (near - far), 0])\n}\n\nfunction rotation(x, y) {\n  const [cx, sx, cy, sy] = [Math.cos(x), Math.sin(x), Math.cos(y), Math.sin(y)]\n  return new Float32Array([cy, sx * sy, -cx * sy, 0, 0, cx, sx, 0, sy, -sx * cy, cx * cy, 0, 0, 0, 0, 1])\n}\n\nconst translation = (x, y, z) => new Float32Array([1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, x, y, z, 1])\n\n// Each face: its normal and its 4 corners; 24 vertices of position and normal, 36 indices.\nfunction cube() {\n  // prettier-ignore\n  const faces = [\n    [[1, 0, 0], [[1, -1, -1], [1, 1, -1], [1, 1, 1], [1, -1, 1]]],\n    [[-1, 0, 0], [[-1, -1, 1], [-1, 1, 1], [-1, 1, -1], [-1, -1, -1]]],\n    [[0, 1, 0], [[-1, 1, -1], [-1, 1, 1], [1, 1, 1], [1, 1, -1]]],\n    [[0, -1, 0], [[-1, -1, 1], [-1, -1, -1], [1, -1, -1], [1, -1, 1]]],\n    [[0, 0, 1], [[1, -1, 1], [1, 1, 1], [-1, 1, 1], [-1, -1, 1]]],\n    [[0, 0, -1], [[-1, -1, -1], [-1, 1, -1], [1, 1, -1], [1, -1, -1]]],\n  ]\n  const vertices = []\n  const indices = []\n  faces.forEach(([normal, corners], face) => {\n    corners.forEach((corner) => vertices.push(...corner, ...normal))\n    const at = face * 4\n    indices.push(at, at + 1, at + 2, at, at + 2, at + 3)\n  })\n  return { vertices: new Float32Array(vertices), indices: new Uint16Array(indices) }\n}\n\nasync function main(data) {\n  widget.render(ui.canvas({ key: \"cube\", gpu: true, height: 240, alt: \"A rotating cube\" }))\n  const device = await widget.gpu.requestDevice()\n  const context = widget.gpu.getContext(\"cube\")\n  const format = widget.gpu.getPreferredCanvasFormat()\n  context.configure({ device, format, alphaMode: \"opaque\" })\n\n  const mesh = cube()\n  const vertices = device.createBuffer({\n    size: mesh.vertices.byteLength,\n    usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST,\n  })\n  device.queue.writeBuffer(vertices, 0, mesh.vertices)\n  const indices = device.createBuffer({\n    size: mesh.indices.byteLength,\n    usage: GPUBufferUsage.INDEX | GPUBufferUsage.COPY_DST,\n  })\n  device.queue.writeBuffer(indices, 0, mesh.indices)\n  const uniforms = device.createBuffer({ size: 128, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST })\n\n  const module = device.createShaderModule({ code: SHADER })\n  const pipeline = device.createRenderPipeline({\n    layout: \"auto\",\n    vertex: {\n      module,\n      entryPoint: \"vs\",\n      buffers: [\n        {\n          arrayStride: 24,\n          attributes: [\n            { format: \"float32x3\", offset: 0, shaderLocation: 0 },\n            { format: \"float32x3\", offset: 12, shaderLocation: 1 },\n          ],\n        },\n      ],\n    },\n    fragment: { module, entryPoint: \"fs\", targets: [{ format }] },\n    primitive: { topology: \"triangle-list\", cullMode: \"back\" },\n    depthStencil: { format: \"depth24plus\", depthWriteEnabled: true, depthCompare: \"less\" },\n  })\n  const group = device.createBindGroup({\n    layout: pipeline.getBindGroupLayout(0),\n    entries: [{ binding: 0, resource: { buffer: uniforms } }],\n  })\n\n  const depth = { texture: null, width: 0, height: 0 }\n  for (let frame = 0; data?.frames === undefined || frame < data.frames; frame++) {\n    const { t, width, height, scale } = await widget.frame()\n    const w = context.width || Math.round(width * scale)\n    const h = context.height || Math.round(height * scale)\n    // The depth texture follows the canvas's size.\n    if (depth.width !== w || depth.height !== h) {\n      depth.texture?.destroy()\n      depth.texture = device.createTexture({\n        size: [w, h],\n        format: \"depth24plus\",\n        usage: GPUTextureUsage.RENDER_ATTACHMENT,\n      })\n      Object.assign(depth, { width: w, height: h })\n    }\n    const model = rotation(t * 0.7, t)\n    const mvp = multiply(perspective(Math.PI / 4, w / h, 0.1, 100), multiply(translation(0, 0, -6), model))\n    const matrices = new Float32Array(32)\n    matrices.set(mvp, 0)\n    matrices.set(model, 16)\n    device.queue.writeBuffer(uniforms, 0, matrices)\n\n    const encoder = device.createCommandEncoder()\n    const pass = encoder.beginRenderPass({\n      colorAttachments: [\n        {\n          view: context.getCurrentTexture().createView(),\n          loadOp: \"clear\",\n          storeOp: \"store\",\n          clearValue: [0.05, 0.05, 0.08, 1],\n        },\n      ],\n      depthStencilAttachment: {\n        view: depth.texture.createView(),\n        depthClearValue: 1,\n        depthLoadOp: \"clear\",\n        depthStoreOp: \"store\",\n      },\n    })\n    pass.setPipeline(pipeline)\n    pass.setBindGroup(0, group)\n    pass.setVertexBuffer(0, vertices)\n    pass.setIndexBuffer(indices, \"uint16\")\n    pass.drawIndexed(36)\n    pass.end()\n    device.queue.submit([encoder.finish()])\n  }\n}\n",
+  "data": {
+    "frames": 3
+  },
+  "canvases": [
+    {
+      "key": "cube",
+      "width": 600,
+      "height": 480
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [],
+  "end": "return",
+  "batches": [
+    {
+      "frame": true,
+      "bytes": "AACAPwAAgL8AAIC/AACAPwAAAAAAAAAAAACAPwAAgD8AAIC/AACAPwAAAAAAAAAAAACAPwAAgD8AAIA/AACAPwAAAAAAAAAAAACAPwAAgL8AAIA/AACAPwAAAAAAAAAAAACAvwAAgL8AAIA/AACAvwAAAAAAAAAAAACAvwAAgD8AAIA/AACAvwAAAAAAAAAAAACAvwAAgD8AAIC/AACAvwAAAAAAAAAAAACAvwAAgL8AAIC/AACAvwAAAAAAAAAAAACAvwAAgD8AAIC/AAAAAAAAgD8AAAAAAACAvwAAgD8AAIA/AAAAAAAAgD8AAAAAAACAPwAAgD8AAIA/AAAAAAAAgD8AAAAAAACAPwAAgD8AAIC/AAAAAAAAgD8AAAAAAACAvwAAgL8AAIA/AAAAAAAAgL8AAAAAAACAvwAAgL8AAIC/AAAAAAAAgL8AAAAAAACAPwAAgL8AAIC/AAAAAAAAgL8AAAAAAACAPwAAgL8AAIA/AAAAAAAAgL8AAAAAAACAPwAAgL8AAIA/AAAAAAAAAAAAAIA/AACAPwAAgD8AAIA/AAAAAAAAAAAAAIA/AACAvwAAgD8AAIA/AAAAAAAAAAAAAIA/AACAvwAAgL8AAIA/AAAAAAAAAAAAAIA/AACAvwAAgL8AAIC/AAAAAAAAAAAAAIC/AACAvwAAgD8AAIC/AAAAAAAAAAAAAIC/AACAPwAAgD8AAIC/AAAAAAAAAAAAAIC/AACAPwAAgL8AAIC/AAAAAAAAAAAAAIC/AAABAAIAAAACAAMABAAFAAYABAAGAAcACAAJAAoACAAKAAsADAANAA4ADAAOAA8AEAARABIAEAASABMAFAAVABYAFAAWABcA",
+      "ops": [
+        ["context",1,"cube","rgba8unorm","opaque"],
+        ["buffer",2,576,40],
+        ["writeBuffer",2,0,0,576],
+        ["buffer",3,72,24],
+        ["writeBuffer",3,0,576,72],
+        ["buffer",4,128,72],
+        ["shader",5,"\nstruct Uniforms { mvp: mat4x4f, model: mat4x4f }\n@group(0) @binding(0) var<uniform> u: Uniforms;\n\nstruct Out { @builtin(position) position: vec4f, @location(0) normal: vec3f }\n\n@vertex fn vs(@location(0) position: vec3f, @location(1) normal: vec3f) -> Out {\n  var out: Out;\n  out.position = u.mvp * vec4f(position, 1.0);\n  out.normal = (u.model * vec4f(normal, 0.0)).xyz;\n  return out;\n}\n\n@fragment fn fs(in: Out) -> @location(0) vec4f {\n  let light = normalize(vec3f(0.4, 0.8, 0.6));\n  let lit = 0.2 + 0.8 * max(dot(normalize(in.normal), light), 0.0);\n  return vec4f(vec3f(0.3, 0.6, 1.0) * lit, 1.0);\n}\n"],
+        ["renderPipeline",6,{"layout":"auto","vertex":{"module":5,"entryPoint":"vs","buffers":[{"arrayStride":24,"stepMode":"vertex","attributes":[{"format":"float32x3","offset":0,"shaderLocation":0},{"format":"float32x3","offset":12,"shaderLocation":1}]}]},"fragment":{"module":5,"entryPoint":"fs","targets":[{"format":"rgba8unorm","blend":null,"writeMask":15}]},"primitive":{"topology":"triangle-list","stripIndexFormat":null,"frontFace":"ccw","cullMode":"back"},"depthStencil":{"format":"depth24plus","depthWriteEnabled":true,"depthCompare":"less"},"multisample":{"count":1,"mask":4294967295,"alphaToCoverageEnabled":false}}],
+        ["autoLayout",7,6,0],
+        ["bindGroup",8,{"layout":7,"entries":[{"binding":0,"resource":{"buffer":4,"offset":0,"size":-1}}]}]
+      ]
+    },
+    {
+      "frame": true,
+      "bytes": "KTf3PwAAAAAAAAAAAAAAAAAAAAB6ghpAAAAAAAAAAAAAAAAAAAAAAM0ggL8AAIC/AAAAAAAAAAAu/bxAAADAQAAAgD8AAAAAAAAAgAAAAAAAAAAAAACAPwAAAAAAAAAAAAAAAAAAAIAAAIA/AAAAAAAAAAAAAAAAAAAAAAAAgD8=",
+      "ops": [
+        ["texture",9,600,480,1,"depth24plus",16,1,1],
+        ["writeBuffer",4,0,0,128],
+        ["view",10,1,{"dimension":"2d","baseMipLevel":0,"mipLevelCount":1,"baseArrayLayer":0,"arrayLayerCount":1}],
+        ["view",11,9,{"dimension":"2d","baseMipLevel":0,"mipLevelCount":1,"baseArrayLayer":0,"arrayLayerCount":1}],
+        ["pass",{"colorAttachments":[{"view":10,"resolveTarget":null,"clearValue":[0.05,0.05,0.08,1],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":{"view":11,"depthClearValue":1,"depthLoadOp":"clear","depthStoreOp":"store","depthReadOnly":false}}],
+        ["setPipeline",6],
+        ["setBindGroup",0,8,[]],
+        ["setVertexBuffer",0,2,0,-1],
+        ["setIndexBuffer",3,"uint16",0,-1],
+        ["drawIndexed",36,1,0,0,0],
+        ["end"],
+        ["submit"]
+      ]
+    },
+    {
+      "frame": true,
+      "bytes": "Xy73P4sZ9jmFp4g8iYSIPAAAAADJfxpAa1U/vHAkP7yX1wM9erLmvAMagL9w8n+/AAAAAAAAAAAu/bxAAADAQOb2fz8v4Es5iYSIvAAAAAAAAAAAivt/P3AkPzwAAAAA6oaIPKQdP7xw8n8/AAAAAAAAAAAAAAAAAAAAAAAAgD8=",
+      "ops": [
+        ["writeBuffer",4,0,0,128],
+        ["pass",{"colorAttachments":[{"view":10,"resolveTarget":null,"clearValue":[0.05,0.05,0.08,1],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":{"view":11,"depthClearValue":1,"depthLoadOp":"clear","depthStoreOp":"store","depthReadOnly":false}}],
+        ["setPipeline",6],
+        ["setBindGroup",0,8,[]],
+        ["setVertexBuffer",0,2,0,-1],
+        ["setIndexBuffer",3,"uint16",0,-1],
+        ["drawIndexed",36,1,0,0,0],
+        ["end"],
+        ["submit"]
+      ]
+    },
+    {
+      "frame": false,
+      "bytes": "ART3P4EM9jqFmwg9jHgIPQAAAAC2dxpAFVK/vBshv7zn0oM92ZVmvagFgL/EyX+/AAAAAAAAAAAu/bxAAADAQJjbfz9i1Us6jHgIvQAAAAAAAAAAKe5/PxshvzwAAAAAEIIIPe0Fv7zEyX8/AAAAAAAAAAAAAAAAAAAAAAAAgD8=",
+      "ops": [
+        ["writeBuffer",4,0,0,128],
+        ["pass",{"colorAttachments":[{"view":10,"resolveTarget":null,"clearValue":[0.05,0.05,0.08,1],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":{"view":11,"depthClearValue":1,"depthLoadOp":"clear","depthStoreOp":"store","depthReadOnly":false}}],
+        ["setPipeline",6],
+        ["setBindGroup",0,8,[]],
+        ["setVertexBuffer",0,2,0,-1],
+        ["setIndexBuffer",3,"uint16",0,-1],
+        ["drawIndexed",36,1,0,0,0],
+        ["end"],
+        ["submit"]
+      ]
+    }
+  ]
+}

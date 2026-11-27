@@ -1,0 +1,23 @@
+[workspace]
+resolver = "3"
+members = ["crates/widget-wire", "crates/widget-mobile", "crates/widget-web"]
+
+[workspace.package]
+edition = "2024"
+rust-version = "1.99.1"
+license = "MIT"
+
+[workspace.dependencies]
+# PsychoScript's crates from crates.io; `psychoscript` itself is "0.1" in the crates that need it.
+psychoscript-gpu = "0.1"
+psychoscript-mobile = { version = "0.2", default-features = false }
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+
+[patch.crates-io]
+# Temporary, as in psychoscript's `rust/Cargo.toml`, until a wgpu release has gfx-rs/wgpu#10875: its vendored wgpu-hal
+# (published 30.0.2 plus the Metal fix: any command buffer that fails loses the device), at psychoscript's `dev`. A
+# published crate can't carry it, so this workspace patches it for psychoscript-gpu and psychoscript-mobile.
+wgpu-hal = { git = "https://github.com/anomalyco/psychoscript", rev = "2ef493f1646bb7457047598156f1a4708261ad62" }

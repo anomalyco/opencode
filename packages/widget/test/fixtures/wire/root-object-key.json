@@ -1,0 +1,17 @@
+{
+  "name": "root-object-key",
+  "source": "function view(state, data) {\n  return ui.column({ key: {} }, [])\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "key": {},
+    "type": "column",
+    "children": []
+  },
+  "error": {
+    "view": true,
+    "message": "A node's key must be a string, a number or a boolean"
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "name": "send-as-json",
+  "source": "function view(state, data) {\n  return ui.button(\"go\", { onPress: () => send({ when: new Date(0), invalid: new Date(NaN), error: Object.assign(new Error(\"boom\"), { code: 7 }), big: [2 ** 64, 1e21, 2 ** 53 + 2, -0], own: { toJSON() { return { v: 1 } } }, nested: { toJSON: () => [1, () => 2] }, f: () => 1, list: [1, () => 2, undefined], map: new Map([[1, 2]]), set: new Set([1]), url: new URL(\"https://a.test/b?c=d\"), nan: [NaN, Infinity] }, { wake: false, state: { n: 2 } }) })\n}",
+  "input": {
+    "phase": "event",
+    "data": null,
+    "state": {
+      "n": 1
+    },
+    "event": {
+      "id": "0",
+      "type": "press"
+    }
+  },
+  "built": {
+    "onPress": "$function",
+    "type": "button",
+    "label": "go"
+  },
+  "view": {
+    "type": "button",
+    "label": "go",
+    "id": "0"
+  },
+  "handlers": {
+    "0": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {
+      "n": 2
+    },
+    "send": {
+      "value": {
+        "when": "1970-01-01T00:00:00.000Z",
+        "invalid": null,
+        "error": {
+          "name": "Error",
+          "message": "boom",
+          "code": 7
+        },
+        "big": [
+          18446744073709552000,
+          1e+21,
+          9007199254740994,
+          0
+        ],
+        "own": {
+          "v": 1
+        },
+        "nested": [
+          1,
+          null
+        ],
+        "list": [
+          1,
+          null,
+          null
+        ],
+        "map": {},
+        "set": [
+          1
+        ],
+        "url": "https://a.test/b?c=d",
+        "nan": [
+          null,
+          null
+        ]
+      },
+      "wake": false
+    }
+  }
+}

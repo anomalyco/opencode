@@ -1,0 +1,31 @@
+{
+  "name": "error-unknown-canvas",
+  "source": "async function main() {\n  widget.render(ui.canvas({ key: \"scene\", gpu: true, height: 100 }))\n  const device = await widget.gpu.requestDevice()\n  widget.gpu.getContext(\"elsewhere\").configure({ device, format: widget.gpu.getPreferredCanvasFormat() })\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 200,
+      "height": 200
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [
+    {
+      "message": "gpu op 0: no GPU canvas with key \"elsewhere\"",
+      "canvases": "all"
+    }
+  ],
+  "end": "return",
+  "batches": [
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["context",1,"elsewhere","rgba8unorm","opaque"]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "name": "function-in-a-prop",
+  "source": "function view(state, data) {\n  return ui.column({ onHover: (s) => s }, [ui.text(\"t\")])\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "onHover": "$function",
+    "type": "column",
+    "children": [
+      {
+        "type": "text",
+        "text": "t"
+      }
+    ]
+  },
+  "error": {
+    "view": false,
+    "message": "TypeError: Argument 1 to __widget_emit contains a function, which cannot be passed to the host. (line 335, col 5)"
+  }
+}

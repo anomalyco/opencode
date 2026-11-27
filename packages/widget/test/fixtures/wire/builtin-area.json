@@ -1,0 +1,171 @@
+{
+  "name": "builtin-area",
+  "builtin": "area",
+  "source": "// A stacked area chart over time: \"stacked\" sums the series, \"percent\" shows each one's share and \"stream\" centers the\n// stack around a middle baseline. Bands rise in; press or drag to read every series at a point in time and tap a\n// legend entry to hide a series. With `choose`, the Choose button submits the selected series at that time.\n\nconst HEIGHT = 260\nconst INTRO = 0.7\nconst PALETTE = [\"accent\", \"#f59e0b\", \"#10b981\", \"#ef4444\", \"#8b5cf6\", \"#06b6d4\", \"#ec4899\", \"#84cc16\"]\n\nfunction init(data) {\n  return { active: null, down: false, hidden: [] }\n}\n\nfunction view(state, data) {\n  const active = state.active\n  return ui.column({ gap: 1, align: \"stretch\" }, [\n    ui.text(data.title, { style: \"title\" }),\n    ui.canvas({\n      onPointer: (state, p) => tap(state, data, p),\n      height: HEIGHT,\n      fps: 60,\n      duration: state.down ? undefined : INTRO,\n      alt: summary(data),\n    }),\n    ui.text(\n      active\n        ? label(data, active.index) +\n            \" · \" +\n            data.series[active.series].label +\n            \": \" +\n            amount(data.series[active.series].values[active.index], data.unit)\n        : \"Press to read the values at a point in time; tap a legend entry to hide a series\",\n      { style: \"caption\", tone: active ? \"default\" : \"muted\" },\n    ),\n    data.choose &&\n      ui.row({ gap: 1 }, [\n        ui.button(\"Choose\", { onPress: (state) => choose(state, data), variant: \"primary\", disabled: !active }),\n      ]),\n  ])\n}\n\nfunction choose(state, data) {\n  if (state.active) {\n    const series = data.series[state.active.series]\n    return submit({\n      series: series.label,\n      index: state.active.index,\n      label: label(data, state.active.index),\n      value: series.values[state.active.index],\n    })\n  }\n  return state\n}\n\nfunction tap(state, data, pointer) {\n  const box = layout(data, state, pointer.width, pointer.height)\n  const entry = box.legend.findIndex(\n    (item) => pointer.y < box.plot.y - 6 && pointer.x >= item.x - 4 && pointer.x <= item.to,\n  )\n  if (entry >= 0) {\n    if (pointer.kind !== \"up\") return state\n    const hidden = state.hidden.includes(entry)\n      ? state.hidden.filter((index) => index !== entry)\n      : [...state.hidden, entry]\n    if (hidden.length === data.series.length) return state\n    return { active: null, down: false, hidden }\n  }\n  const hit = locate(data, state, box, pointer.x, pointer.y)\n  if (pointer.kind !== \"up\") return { ...state, active: hit ?? state.active, down: true }\n  return { ...state, active: hit, down: false }\n}\n\nfunction draw(state, data, frame) {\n  const g = ui.draw()\n  const box = layout(data, state, frame.width, frame.height)\n  const hover = frame.pointer && !frame.pointer.down ? locate(data, state, box, frame.pointer.x, frame.pointer.y) : null\n  const active = state.down || !hover ? state.active : hover\n  const grow = ease(frame.t / INTRO)\n  for (const tick of box.range.ticks) {\n    const at = y(box, tick)\n    g.line(box.plot.x, at, box.plot.x + box.plot.w, at, { stroke: \"border\", width: 1 })\n    if (data.mode !== \"stream\")\n      g.text(box.plot.x - 8, at + 4, compact(tick) + (data.mode === \"percent\" ? \"%\" : \"\"), {\n        size: 11,\n        align: \"right\",\n        color: \"muted\",\n      })\n  }\n  const every = Math.max(1, Math.ceil((7 * Math.max(...box.labels.map((text) => text.length)) + 12) / box.step))\n  for (let index = 0; index < box.count; index += every)\n    g.text(x(box, index), box.plot.y + box.plot.h + 18, box.labels[index], {\n      size: 11,\n      align: \"center\",\n      color: \"muted\",\n    })\n  // Each band is its top edge forward and its bottom edge back, scaled toward the baseline while it rises in.\n  const scale = (index, value) => y(box, box.base[index] + (value - box.base[index]) * grow)\n  box.bands.forEach((band) => {\n    const top = band.top.map((value, index) => [\"L\", x(box, index), scale(index, value)])\n    const bottom = band.bottom.map((value, index) => [\"L\", x(box, index), scale(index, value)]).reverse()\n    top[0][0] = \"M\"\n    const dim = active && active.series !== band.series\n    if (dim) g.save().alpha(0.4)\n    g.path([...top, ...bottom, [\"Z\"]], { fill: band.color, stroke: \"bg\", width: 1 })\n    if (dim) g.restore()\n  })\n  legend(g, data, state, box)\n  if (active && frame.t >= INTRO) tooltip(g, data, box, active, frame.width)\n  return g.commands\n}\n\n// Geometry shared by draw and tap: the plot, the stacked bands of the visible series and the y range.\nfunction layout(data, state, width, height) {\n  const count = Math.max(...data.series.map((series) => series.values.length))\n  const shown = data.series\n    .map((series, index) => ({ series, index }))\n    .filter((item) => !state.hidden.includes(item.index))\n  const totals = []\n  for (let index = 0; index < count; index++)\n    totals.push(shown.reduce((sum, item) => sum + Math.max(0, item.series.values[index] ?? 0), 0))\n  const base = totals.map((total) => (data.mode === \"stream\" ? -total / 2 : 0))\n  const cumulative = [...base]\n  const bands = shown.map((item) => {\n    const bottom = [...cumulative]\n    const top = cumulative.map((value, index) => {\n      const raw = Math.max(0, item.series.values[index] ?? 0)\n      return value + (data.mode === \"percent\" ? (totals[index] ? (raw / totals[index]) * 100 : 0) : raw)\n    })\n    top.forEach((value, index) => (cumulative[index] = value))\n    return { series: item.index, color: color(item.series, item.index), top, bottom }\n  })\n  const peak = Math.max(1, ...totals)\n  const range =\n    data.mode === \"percent\"\n      ? { low: 0, high: 100, ticks: [0, 25, 50, 75, 100] }\n      : data.mode === \"stream\"\n        ? { low: -peak / 2, high: peak / 2, ticks: [-peak / 2, 0, peak / 2] }\n        : nice(peak)\n  const left = data.mode === \"stream\" ? 14 : 14 + 7 * Math.max(...range.ticks.map((tick) => compact(tick).length + 1))\n  const plot = { x: left, y: 34, w: Math.max(1, width - left - 16), h: Math.max(1, height - 34 - 26) }\n  const labels = []\n  for (let index = 0; index < count; index++) labels.push(label(data, index))\n  const legend = []\n  let at = left\n  for (const series of data.series) {\n    legend.push({ x: at, to: at + 20 + 7 * series.label.length })\n    at += 30 + 7 * series.label.length\n  }\n  return { count, plot, base, bands, range, labels, legend, step: plot.w / Math.max(1, count - 1) }\n}\n\nfunction nice(max) {\n  const raw = max / 4\n  const power = Math.pow(10, Math.floor(Math.log10(raw)))\n  const step = power * ([1, 2, 2.5, 5, 10].find((factor) => factor * power >= raw) ?? 10)\n  const high = Math.ceil(max / step) * step\n  const ticks = []\n  for (let tick = 0; tick <= high + step / 2; tick += step) ticks.push(Math.round(tick / step) * step)\n  return { low: 0, high, ticks }\n}\n\nfunction x(box, index) {\n  return box.plot.x + box.step * index\n}\n\nfunction y(box, value) {\n  return box.plot.y + box.plot.h * (1 - (value - box.range.low) / (box.range.high - box.range.low))\n}\n\n// The time index nearest the pointer and the band under it (or the nearest band).\nfunction locate(data, state, box, px, py) {\n  if (\n    px < box.plot.x - 8 ||\n    px > box.plot.x + box.plot.w + 8 ||\n    py < box.plot.y - 4 ||\n    py > box.plot.y + box.plot.h + 8\n  )\n    return null\n  if (box.bands.length === 0) return null\n  const index = Math.max(0, Math.min(box.count - 1, Math.round((px - box.plot.x) / box.step)))\n  const value = box.range.low + (1 - (py - box.plot.y) / box.plot.h) * (box.range.high - box.range.low)\n  const band =\n    box.bands.find((band) => value >= band.bottom[index] && value <= band.top[index]) ??\n    (value > box.bands[box.bands.length - 1].top[index] ? box.bands[box.bands.length - 1] : box.bands[0])\n  return { series: band.series, index }\n}\n\nfunction legend(g, data, state, box) {\n  data.series.forEach((series, index) => {\n    const hidden = state.hidden.includes(index)\n    const fill = color(series, index)\n    const left = box.legend[index].x\n    g.circle(left + 4, 12, 4, hidden ? { stroke: fill, width: 1.5 } : fill)\n    g.text(left + 13, 16, series.label, { size: 12, color: hidden ? \"muted\" : \"text\" })\n  })\n}\n\n// A crosshair and a box listing every visible series at the active time, top band first.\nfunction tooltip(g, data, box, active, width) {\n  const at = x(box, active.index)\n  g.line(at, box.plot.y, at, box.plot.y + box.plot.h, { stroke: \"text\", width: 1 })\n  const rows = [...box.bands].reverse().map((band) => ({\n    band,\n    text: data.series[band.series].label + \"  \" + amount(data.series[band.series].values[active.index] ?? 0, data.unit),\n  }))\n  const w = 34 + 7 * Math.max(box.labels[active.index].length, ...rows.map((row) => row.text.length))\n  const h = 28 + 18 * rows.length\n  const left = at + 12 + w > width - 2 ? at - 12 - w : at + 12\n  const top = box.plot.y + 4\n  g.rrect(left, top, w, h, 8, { fill: \"surface\", stroke: \"border\", width: 1 })\n  g.text(left + 10, top + 17, box.labels[active.index], { size: 11, color: \"muted\" })\n  rows.forEach((row, index) => {\n    const line = top + 36 + 18 * index\n    g.circle(left + 14, line - 4, 4, row.band.color)\n    g.text(left + 24, line, row.text, { size: 12, weight: row.band.series === active.series ? 600 : 400 })\n  })\n}\n\nfunction summary(data) {\n  const kind =\n    data.mode === \"percent\" ? \"Percent stacked area\" : data.mode === \"stream\" ? \"Streamgraph\" : \"Stacked area\"\n  return (\n    kind +\n    \" chart\" +\n    (data.labels ? \" from \" + data.labels[0] + \" to \" + data.labels[data.labels.length - 1] : \"\") +\n    \". \" +\n    data.series\n      .map(\n        (series) =>\n          series.label +\n          \": \" +\n          amount(series.values[0], data.unit) +\n          \" to \" +\n          amount(series.values[series.values.length - 1], data.unit) +\n          \", peak \" +\n          amount(Math.max(...series.values), data.unit),\n      )\n      .join(\"; \")\n  )\n}\n\nfunction label(data, index) {\n  return data.labels?.[index] ?? String(index + 1)\n}\n\nfunction color(series, index) {\n  return series.color ?? PALETTE[index % PALETTE.length]\n}\n\nfunction amount(value, unit) {\n  const text = String(Math.round(value * 100) / 100)\n  if (!unit) return text\n  return unit.length > 1 && /^[a-z]/i.test(unit) ? text + \" \" + unit : text + unit\n}\n\nfunction compact(value) {\n  const size = Math.abs(value)\n  const round = (number) => String(Math.round(number * 10) / 10)\n  if (size >= 1e9) return round(value / 1e9) + \"B\"\n  if (size >= 1e6) return round(value / 1e6) + \"M\"\n  if (size >= 1e4) return round(value / 1e3) + \"k\"\n  return String(Math.round(value * 100) / 100)\n}\n\nfunction ease(p) {\n  const clamped = Math.max(0, Math.min(1, p))\n  return 1 - Math.pow(1 - clamped, 3)\n}\n",
+  "input": {
+    "phase": "init",
+    "data": {
+      "title": "Storage by tier",
+      "unit": "TB",
+      "choose": true,
+      "labels": [
+        "Jan",
+        "Feb",
+        "Mar",
+        "Apr",
+        "May",
+        "Jun",
+        "Jul",
+        "Aug",
+        "Sep",
+        "Oct",
+        "Nov",
+        "Dec"
+      ],
+      "series": [
+        {
+          "label": "Hot",
+          "values": [
+            12,
+            14,
+            15,
+            18,
+            21,
+            22,
+            24,
+            27,
+            26,
+            29,
+            31,
+            34
+          ]
+        },
+        {
+          "label": "Warm",
+          "values": [
+            20,
+            21,
+            23,
+            22,
+            24,
+            27,
+            29,
+            30,
+            33,
+            35,
+            36,
+            38
+          ]
+        },
+        {
+          "label": "Cold",
+          "values": [
+            30,
+            32,
+            35,
+            39,
+            42,
+            44,
+            49,
+            53,
+            58,
+            61,
+            66,
+            70
+          ]
+        }
+      ]
+    }
+  },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Storage by tier"
+      },
+      {
+        "onPointer": "$function",
+        "height": 260,
+        "fps": 60,
+        "duration": 0.7,
+        "alt": "Stacked area chart from Jan to Dec. Hot: 12 TB to 34 TB, peak 34 TB; Warm: 20 TB to 38 TB, peak 38 TB; Cold: 30 TB to 70 TB, peak 70 TB",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Press to read the values at a point in time; tap a legend entry to hide a series"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Storage by tier"
+      },
+      {
+        "height": 260,
+        "fps": 60,
+        "duration": 0.7,
+        "alt": "Stacked area chart from Jan to Dec. Hot: 12 TB to 34 TB, peak 34 TB; Warm: 20 TB to 38 TB, peak 38 TB; Cold: 30 TB to 70 TB, peak 70 TB",
+        "type": "canvas",
+        "id": "0/1",
+        "pointer": true
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Press to read the values at a point in time; tap a legend entry to hide a series"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose",
+            "id": "0/3/0"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/1": "pointer",
+    "0/3/0": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {
+      "active": null,
+      "down": false,
+      "hidden": []
+    }
+  }
+}

@@ -1,0 +1,112 @@
+{
+  "name": "keys-and-repeats",
+  "source": "function view(state, data) {\n  return ui.row({ key: \"root\" }, [ui.button(\"x\", { key: \"k\", onPress: (s) => s }), ui.text(\"kk\", { key: \"k\" }), ui.button(\"y\", { key: \"k\", onPress: (s) => s }), ui.button(\"z\", { key: \"k~2\", onPress: (s) => s }), ui.text(\"t\", { key: 3 }), ui.card({ key: \"a/b c\", onPress: (s) => s }, [ui.button(\"in\")]), ui.button(\"n\", { key: 7 })])\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "key": "root",
+    "type": "row",
+    "children": [
+      {
+        "key": "k",
+        "onPress": "$function",
+        "type": "button",
+        "label": "x"
+      },
+      {
+        "key": "k",
+        "type": "text",
+        "text": "kk"
+      },
+      {
+        "key": "k",
+        "onPress": "$function",
+        "type": "button",
+        "label": "y"
+      },
+      {
+        "key": "k~2",
+        "onPress": "$function",
+        "type": "button",
+        "label": "z"
+      },
+      {
+        "key": 3,
+        "type": "text",
+        "text": "t"
+      },
+      {
+        "key": "a/b c",
+        "onPress": "$function",
+        "type": "card",
+        "children": [
+          {
+            "type": "button",
+            "label": "in"
+          }
+        ]
+      },
+      {
+        "key": 7,
+        "type": "button",
+        "label": "n"
+      }
+    ]
+  },
+  "view": {
+    "type": "row",
+    "children": [
+      {
+        "type": "button",
+        "label": "x",
+        "id": ":root/:k"
+      },
+      {
+        "type": "text",
+        "text": "kk"
+      },
+      {
+        "type": "button",
+        "label": "y",
+        "id": ":root/:k~3"
+      },
+      {
+        "type": "button",
+        "label": "z",
+        "id": ":root/:k~2"
+      },
+      {
+        "type": "text",
+        "text": "t"
+      },
+      {
+        "type": "card",
+        "id": ":root/:a%2Fb%20c",
+        "children": [
+          {
+            "type": "button",
+            "label": "in",
+            "id": ":root/:a%2Fb%20c/0"
+          }
+        ]
+      },
+      {
+        "type": "button",
+        "label": "n",
+        "id": ":root/:7"
+      }
+    ]
+  },
+  "handlers": {
+    ":root/:k": "press",
+    ":root/:k~3": "press",
+    ":root/:k~2": "press",
+    ":root/:a%2Fb%20c": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
+}

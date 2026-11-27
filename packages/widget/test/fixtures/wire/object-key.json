@@ -1,0 +1,24 @@
+{
+  "name": "object-key",
+  "source": "function view(state, data) {\n  return ui.column([ui.text(\"t\", { key: { a: 1 } })])\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "type": "column",
+    "children": [
+      {
+        "key": {
+          "a": 1
+        },
+        "type": "text",
+        "text": "t"
+      }
+    ]
+  },
+  "error": {
+    "view": true,
+    "message": "A node's key must be a string, a number or a boolean"
+  }
+}

@@ -59,6 +59,7 @@
     "@opencode/theme": "workspace:*",
     "@opencode/ui": "workspace:*",
     "@opencode/util": "workspace:*",
+    "@opencode/widget": "workspace:*",
     "@opentui/core": "catalog:",
     "@opentui/keymap": "catalog:",
     "@opentui/solid": "catalog:",
@@ -72,6 +73,7 @@
     "strip-ansi": "7.1.2"
   },
   "devDependencies": {
+    "@opencode/server": "workspace:*",
     "@tsconfig/bun": "catalog:",
     "@types/bun": "catalog:",
     "@typescript/native": "catalog:"

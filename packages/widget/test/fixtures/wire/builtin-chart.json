@@ -1,0 +1,89 @@
+{
+  "name": "builtin-chart",
+  "builtin": "chart",
+  "source": "// A bar or line chart drawn on a canvas. It animates in, then redraws only for pointer input: press (or drag) to read a\n// value; with `choose`, tapping a bar or point submits it.\n\nconst HEIGHT = 240\nconst INTRO = 0.65\nconst PALETTE = [\"accent\", \"#f59e0b\", \"#10b981\", \"#ef4444\", \"#8b5cf6\", \"#06b6d4\"]\n\nfunction init(data) {\n  return { active: null, down: false }\n}\n\nfunction view(state, data) {\n  const active = state.active && point(data, state.active)\n  return ui.column({ gap: 1, align: \"stretch\" }, [\n    ui.text(data.title, { style: \"title\" }),\n    ui.canvas({\n      onPointer: (state, p) => tap(state, data, p),\n      height: HEIGHT,\n      fps: 60,\n      duration: state.down ? undefined : INTRO,\n      alt: summary(data),\n    }),\n    ui.text(\n      active\n        ? active.label + \" · \" + active.series + \": \" + amount(active.value, data.unit)\n        : data.choose\n          ? \"Tap a \" + (data.kind === \"line\" ? \"point\" : \"bar\") + \" to choose it\"\n          : \"Press a \" + (data.kind === \"line\" ? \"point\" : \"bar\") + \" to read its value\",\n      { style: \"caption\", tone: active ? \"default\" : \"muted\" },\n    ),\n  ])\n}\n\nfunction tap(state, data, pointer) {\n  const hit = locate(data, layout(data, pointer.width, pointer.height), pointer.x, pointer.y)\n  if (pointer.kind !== \"up\") return { active: hit ?? state.active, down: true }\n  if (data.choose && hit) {\n    const picked = point(data, hit)\n    return submit({ series: picked.series, index: hit.index, value: picked.value })\n  }\n  return { active: hit, down: false }\n}\n\nfunction draw(state, data, frame) {\n  const g = ui.draw()\n  const box = layout(data, frame.width, frame.height)\n  const hover = frame.pointer && !frame.pointer.down ? locate(data, box, frame.pointer.x, frame.pointer.y) : null\n  const active = state.down || !hover ? state.active : hover\n  axes(g, data, box)\n  if (data.kind === \"line\") lines(g, data, box, frame.t, active)\n  else bars(g, data, box, frame.t, active)\n  if (data.series.length > 1) legend(g, data, box)\n  if (active && frame.t >= INTRO) tooltip(g, data, box, active, frame.width)\n  return g.commands\n}\n\n// Geometry shared by draw and tap: the plot area, the value range and the slots of each index.\nfunction layout(data, width, height) {\n  const count = Math.max(1, ...data.series.map((series) => series.values.length))\n  const values = data.series.flatMap((series) => series.values)\n  const range = nice(Math.min(0, ...values), Math.max(0, ...values))\n  const left = 12 + 7 * Math.max(...range.ticks.map((tick) => compact(tick).length))\n  const top = data.series.length > 1 ? 30 : 14\n  const right = data.kind === \"line\" ? 20 : 12\n  const plot = { x: left, y: top, w: Math.max(1, width - left - right), h: Math.max(1, height - top - 26) }\n  const labels = []\n  for (let index = 0; index < count; index++) labels.push(label(data, index))\n  return { count, range, plot, slot: plot.w / count, labels }\n}\n\n// Rounds the range out to 1, 2, 2.5 or 5 times a power of ten, with 3 to 5 gridlines.\nfunction nice(min, max) {\n  const span = max - min || Math.abs(max) || 1\n  const raw = span / 4\n  const power = Math.pow(10, Math.floor(Math.log10(raw)))\n  const step = power * ([1, 2, 2.5, 5, 10].find((factor) => factor * power >= raw) ?? 10)\n  const low = Math.floor(min / step) * step\n  const high = Math.max(low + step, Math.ceil(max / step) * step)\n  const ticks = []\n  for (let tick = low; tick <= high + step / 2; tick += step) ticks.push(Math.round(tick / step) * step)\n  return { low, high, ticks }\n}\n\nfunction y(box, value) {\n  return box.plot.y + box.plot.h * (1 - (value - box.range.low) / (box.range.high - box.range.low))\n}\n\nfunction x(data, box, index) {\n  if (data.kind !== \"line\") return box.plot.x + box.slot * (index + 0.5)\n  return box.plot.x + (box.count === 1 ? box.plot.w / 2 : (box.plot.w * index) / (box.count - 1))\n}\n\nfunction bar(data, box, series, index) {\n  const group = Math.min(box.slot * 0.72, 28 * data.series.length + 4 * (data.series.length - 1))\n  const width = (group - 4 * (data.series.length - 1)) / data.series.length\n  return { x: x(data, box, index) - group / 2 + series * (width + 4), w: width }\n}\n\nfunction locate(data, box, px, py) {\n  if (\n    px < box.plot.x - 8 ||\n    px > box.plot.x + box.plot.w + 8 ||\n    py < box.plot.y - 20 ||\n    py > box.plot.y + box.plot.h + 8\n  )\n    return null\n  const index =\n    data.kind === \"line\"\n      ? Math.round(((px - box.plot.x) / box.plot.w) * Math.max(1, box.count - 1))\n      : Math.floor((px - box.plot.x) / box.slot)\n  const clamped = Math.max(0, Math.min(box.count - 1, index))\n  const candidates = data.series\n    .map((series, at) => ({ series: at, value: series.values[clamped] }))\n    .filter((candidate) => typeof candidate.value === \"number\")\n  if (candidates.length === 0) return null\n  const nearest = (score) =>\n    candidates.reduce((best, candidate) => (score(candidate) < score(best) ? candidate : best)).series\n  if (data.kind === \"line\") return { series: nearest((c) => Math.abs(y(box, c.value) - py)), index: clamped }\n  return {\n    series: nearest((c) => {\n      const span = bar(data, box, c.series, clamped)\n      return Math.abs(span.x + span.w / 2 - px)\n    }),\n    index: clamped,\n  }\n}\n\nfunction axes(g, data, box) {\n  const right = box.plot.x + box.plot.w\n  for (const tick of box.range.ticks) {\n    const at = y(box, tick)\n    g.line(box.plot.x, at, right, at, { stroke: \"border\", width: tick === 0 ? 1.5 : 1 })\n    g.text(box.plot.x - 8, at + 4, compact(tick), { size: 11, align: \"right\", color: \"muted\" })\n  }\n  const widest = Math.max(...box.labels.map((text) => text.length))\n  const every = Math.max(1, Math.ceil((7 * widest + 12) / (box.plot.w / box.count)))\n  for (let index = 0; index < box.count; index += every)\n    g.text(x(data, box, index), box.plot.y + box.plot.h + 18, box.labels[index], {\n      size: 11,\n      align: \"center\",\n      color: \"muted\",\n    })\n}\n\nfunction bars(g, data, box, t, active) {\n  const base = y(box, Math.max(box.range.low, 0))\n  data.series.forEach((series, at) => {\n    const fill = color(series, at)\n    series.values.forEach((value, index) => {\n      const grow = ease((t - (0.2 * index) / Math.max(1, box.count - 1)) / (INTRO - 0.2))\n      if (grow <= 0) return\n      const span = bar(data, box, at, index)\n      const top = base + (y(box, value) - base) * grow\n      const dim = active && (active.series !== at || active.index !== index)\n      if (dim) g.save().alpha(0.45)\n      g.rrect(span.x, Math.min(top, base), span.w, Math.max(1, Math.abs(base - top)), Math.min(4, span.w / 2), fill)\n      if (dim) g.restore()\n    })\n  })\n}\n\nfunction lines(g, data, box, t, active) {\n  const progress = ease(t / INTRO) * Math.max(1, box.count - 1)\n  const base = y(box, Math.max(box.range.low, 0))\n  if (active) g.line(x(data, box, active.index), box.plot.y, x(data, box, active.index), base, \"border\")\n  data.series.forEach((series, at) => {\n    const stroke = color(series, at)\n    const points = series.values\n      .map((value, index) => [x(data, box, index), y(box, value)])\n      .filter((_, index) => index <= Math.ceil(progress))\n    if (points.length === 0) return\n    const last = Math.min(progress, series.values.length - 1)\n    const whole = Math.floor(last)\n    if (whole < points.length - 1) {\n      const from = points[whole]\n      const to = points[whole + 1]\n      points[whole + 1] = [from[0] + (to[0] - from[0]) * (last - whole), from[1] + (to[1] - from[1]) * (last - whole)]\n    }\n    const segments = points.map((point, index) => [index === 0 ? \"M\" : \"L\", point[0], point[1]])\n    const end = points[points.length - 1]\n    if (data.series.length === 1 && points.length > 1)\n      g.save()\n        .alpha(0.12)\n        .path([...segments, [\"L\", end[0], base], [\"L\", points[0][0], base], [\"Z\"]], stroke)\n        .restore()\n    g.path(segments, { stroke, width: 2.5, cap: \"round\" })\n    points.forEach((point, index) => {\n      if (index > last) return\n      const on = active && active.series === at && active.index === index\n      g.circle(point[0], point[1], on ? 5.5 : 3, { fill: on ? stroke : \"bg\", stroke, width: 2 })\n    })\n  })\n}\n\nfunction legend(g, data, box) {\n  data.series.reduce((left, series, at) => {\n    g.circle(left + 4, 12, 4, color(series, at))\n    g.text(left + 13, 16, series.label, { size: 12, color: \"muted\" })\n    return left + 30 + 7 * series.label.length\n  }, box.plot.x)\n}\n\nfunction tooltip(g, data, box, active, width) {\n  const picked = point(data, active)\n  const title = picked.label\n  const value = amount(picked.value, data.unit)\n  const w = 20 + 7 * Math.max(title.length, value.length)\n  const span = bar(data, box, active.series, active.index)\n  const anchor = data.kind === \"line\" ? x(data, box, active.index) : span.x + span.w / 2\n  const left = Math.max(2, Math.min(width - w - 2, anchor - w / 2))\n  const top = Math.max(2, y(box, Math.max(picked.value, 0)) - 54)\n  g.rrect(left, top, w, 44, 8, { fill: \"surface\", stroke: \"border\", width: 1 })\n  g.text(left + 10, top + 17, title, { size: 11, color: \"muted\" })\n  g.text(left + 10, top + 35, value, { size: 13, weight: 600, color: color(data.series[active.series], active.series) })\n}\n\nfunction point(data, active) {\n  const series = data.series[active.series]\n  return { series: series.label, label: label(data, active.index), value: series.values[active.index] }\n}\n\nfunction summary(data) {\n  const kind = data.kind === \"line\" ? \"Line chart\" : \"Bar chart\"\n  const series = data.series.map(\n    (series) =>\n      series.label +\n      \": \" +\n      series.values\n        .map((value, index) => (data.labels?.[index] ? data.labels[index] + \" \" : \"\") + amount(value, data.unit))\n        .join(\", \"),\n  )\n  return kind + \". \" + series.join(\"; \")\n}\n\nfunction label(data, index) {\n  return data.labels?.[index] ?? String(index + 1)\n}\n\nfunction color(series, index) {\n  return series.color ?? PALETTE[index % PALETTE.length]\n}\n\nfunction amount(value, unit) {\n  const text = String(Math.round(value * 100) / 100)\n  if (!unit) return text\n  return unit.length > 1 && /^[a-z]/i.test(unit) ? text + \" \" + unit : text + unit\n}\n\nfunction compact(value) {\n  const size = Math.abs(value)\n  const round = (number) => String(Math.round(number * 10) / 10)\n  if (size >= 1e9) return round(value / 1e9) + \"B\"\n  if (size >= 1e6) return round(value / 1e6) + \"M\"\n  if (size >= 1e4) return round(value / 1e3) + \"k\"\n  return String(Math.round(value * 100) / 100)\n}\n\nfunction ease(p) {\n  const clamped = Math.max(0, Math.min(1, p))\n  return 1 - Math.pow(1 - clamped, 3)\n}\n",
+  "input": {
+    "phase": "init",
+    "data": {
+      "title": "Chart",
+      "kind": "bar",
+      "labels": [
+        "a",
+        "b"
+      ],
+      "series": [
+        {
+          "label": "s",
+          "values": [
+            1,
+            2
+          ]
+        }
+      ],
+      "choose": true
+    }
+  },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Chart"
+      },
+      {
+        "onPointer": "$function",
+        "height": 240,
+        "fps": 60,
+        "duration": 0.65,
+        "alt": "Bar chart. s: a 1, b 2",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a bar to choose it"
+      }
+    ]
+  },
+  "view": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Chart"
+      },
+      {
+        "height": 240,
+        "fps": 60,
+        "duration": 0.65,
+        "alt": "Bar chart. s: a 1, b 2",
+        "type": "canvas",
+        "id": "0/1",
+        "pointer": true
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a bar to choose it"
+      }
+    ]
+  },
+  "handlers": {
+    "0/1": "pointer"
+  },
+  "canvases": {},
+  "result": {
+    "state": {
+      "active": null,
+      "down": false
+    }
+  }
+}

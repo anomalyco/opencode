@@ -1,0 +1,145 @@
+{
+  "name": "builtin-tree",
+  "builtin": "tree",
+  "source": "// A hierarchy as a tidy tree: \"right\" grows left to right (deep trees, file trees), \"down\" grows top down (org charts).\n// Leaves get one slot each and parents center over their children. Tap a node's +/− knob to collapse or expand it,\n// tap a node to select it (tap it again to toggle it). With `choose`, the Choose button submits the selected node.\n\nconst ROW = 36\nconst LEVEL = 70\n// A fully expanded large tree stops drawing nodes here, under the spec's 2,000 commands per frame.\nconst BUDGET = 1900\nconst PALETTE = [\"accent\", \"#f59e0b\", \"#10b981\", \"#ef4444\", \"#8b5cf6\", \"#06b6d4\", \"#ec4899\", \"#84cc16\"]\n\n// Large trees start collapsed below `expand` levels (default: all open up to 40 nodes, else 2 levels).\nfunction init(data) {\n  const collapsed = []\n  const count = (node) => 1 + (node.children ?? []).reduce((sum, child) => sum + count(child), 0)\n  const expand = data.expand ?? (count(data.root) > 40 ? 2 : Infinity)\n  const close = (node, key, depth) => {\n    if (!node.children) return\n    if (depth >= expand) collapsed.push(key)\n    else node.children.forEach((child, index) => close(child, join(key, index), depth + 1))\n  }\n  close(data.root, \"\", 0)\n  return { collapsed, selected: null }\n}\n\nfunction view(state, data) {\n  const tree = layout(data, state)\n  const picked = state.selected === null ? null : tree.items.find((item) => item.key === state.selected)\n  return ui.column({ gap: 1, align: \"stretch\" }, [\n    ui.text(data.title, { style: \"title\" }),\n    ui.canvas({\n      onPointer: (state, p) => tap(state, data, p),\n      height: data.orientation === \"down\" ? tree.depth * LEVEL + 8 : Math.max(60, tree.leaves * ROW + 8),\n      fps: 60,\n      duration: intro(tree),\n      alt: summary(data),\n    }),\n    ui.text(picked ? describe(data, picked) : \"Tap a node to select it; tap its +/− to collapse or expand it\", {\n      style: \"caption\",\n      tone: picked ? \"default\" : \"muted\",\n    }),\n    data.choose &&\n      ui.row({ gap: 1 }, [\n        ui.button(picked ? \"Choose \" + picked.node.label : \"Choose\", {\n          onPress: (state) => choose(state, data),\n          variant: \"primary\",\n          disabled: !picked,\n        }),\n      ]),\n  ])\n}\n\nfunction choose(state, data) {\n  if (state.selected !== null) {\n    const picked = layout(data, state).items.find((item) => item.key === state.selected)\n    return submit({ label: picked.node.label, path: trail(data, picked.key), note: picked.node.note })\n  }\n  return state\n}\n\nfunction tap(state, data, pointer) {\n  if (pointer.kind !== \"up\") return state\n  const tree = layout(data, state)\n  const hit = locate(data, tree, place(data, tree, pointer.width), pointer.x, pointer.y)\n  if (!hit) return { ...state, selected: null }\n  const toggle = hit.knob || (hit.item.key === state.selected && hit.item.node.children)\n  const collapsed = !toggle\n    ? state.collapsed\n    : state.collapsed.includes(hit.item.key)\n      ? state.collapsed.filter((key) => key !== hit.item.key)\n      : [...state.collapsed, hit.item.key]\n  return { collapsed, selected: hit.knob ? state.selected : hit.item.key }\n}\n\nfunction draw(state, data, frame) {\n  const g = ui.draw()\n  const tree = layout(data, state)\n  const at = place(data, tree, frame.width)\n  const hover = frame.pointer && !frame.pointer.down ? locate(data, tree, at, frame.pointer.x, frame.pointer.y) : null\n  const down = data.orientation === \"down\"\n  // One alpha group per depth, so levels fade in one after another.\n  for (let depth = 0; depth < tree.depth; depth++) {\n    const fade = ease((frame.t - depth * 0.12) / 0.35)\n    if (fade <= 0) break\n    g.save().alpha(fade)\n    tree.items.forEach((item, index) => {\n      if (item.depth !== depth || g.commands.length > BUDGET) return\n      const box = at[index]\n      if (item.parent >= 0) {\n        const from = at[item.parent]\n        if (down) {\n          const mid = (from.y + from.h + box.y) / 2\n          g.path(\n            [\n              [\"M\", from.x + from.w / 2, from.y + from.h],\n              [\"C\", from.x + from.w / 2, mid, box.x + box.w / 2, mid, box.x + box.w / 2, box.y],\n            ],\n            { stroke: \"border\", width: 1.5 },\n          )\n        } else {\n          const mid = (from.x + from.w + box.x) / 2\n          g.path(\n            [\n              [\"M\", from.x + from.w, from.y + from.h / 2],\n              [\"C\", mid, from.y + from.h / 2, mid, box.y + box.h / 2, box.x, box.y + box.h / 2],\n            ],\n            { stroke: \"border\", width: 1.5 },\n          )\n        }\n      }\n      const selected = item.key === state.selected\n      const hovered = hover && hover.item.key === item.key\n      const accent = item.node.color ?? PALETTE[(item.branch < 0 ? 0 : item.branch) % PALETTE.length]\n      g.rrect(box.x, box.y, box.w, box.h, 6, {\n        fill: \"surface\",\n        stroke: selected ? accent : hovered ? \"muted\" : \"border\",\n        width: selected ? 2 : 1,\n      })\n      g.rrect(box.x, box.y, 4, box.h, 2, accent)\n      const lines = item.node.note && box.h > 30\n      g.text(box.x + 11, box.y + (lines ? 15 : box.h / 2 + 4), fit(item.node.label, box.w - 16, 12), {\n        size: 12,\n        weight: depth === 0 || selected ? 600 : 400,\n      })\n      if (lines) g.text(box.x + 11, box.y + 30, fit(item.node.note, box.w - 16, 11), { size: 11, color: \"muted\" })\n      if (item.node.children) {\n        const knob = knobAt(data, box)\n        const closed = state.collapsed.includes(item.key)\n        g.circle(knob.x, knob.y, 7, { fill: closed ? accent : \"bg\", stroke: closed ? accent : \"border\", width: 1 })\n        g.text(knob.x, knob.y + 4, closed ? \"+\" : \"−\", {\n          size: 11,\n          weight: 600,\n          align: \"center\",\n          color: closed ? \"#ffffff\" : \"muted\",\n        })\n      }\n    })\n    g.restore()\n  }\n  return g.commands\n}\n\n// The visible tree in slots: each item has a depth, a breadth slot, its parent's index and its top-level branch.\nfunction layout(data, state) {\n  const items = []\n  let leaves = 0\n  let depth = 0\n  const walk = (node, key, level, parent, branch) => {\n    const index = items.length\n    items.push({ key, node, depth: level, parent, branch, slot: 0 })\n    depth = Math.max(depth, level + 1)\n    if (node.children && !state.collapsed.includes(key)) {\n      const slots = node.children.map((child, at) =>\n        walk(child, join(key, at), level + 1, index, level === 0 ? at : branch),\n      )\n      items[index].slot = (slots[0] + slots[slots.length - 1]) / 2\n    } else items[index].slot = leaves++\n    return items[index].slot\n  }\n  walk(data.root, \"\", 0, -1, -1)\n  return { items, leaves, depth }\n}\n\n// Pixel boxes for the layout at a canvas width; notes show only in the taller \"down\" boxes.\nfunction place(data, tree, width) {\n  if (data.orientation === \"down\") {\n    const slot = (width - 16) / tree.leaves\n    const w = Math.max(40, Math.min(150, slot - 10))\n    const h = tree.items.some((item) => item.node.note) ? 40 : 28\n    return tree.items.map((item) => ({ x: 8 + (item.slot + 0.5) * slot - w / 2, y: 6 + item.depth * LEVEL, w, h }))\n  }\n  const column = (width - 16) / tree.depth\n  const w = Math.max(50, Math.min(170, column - 28))\n  const h = 26\n  return tree.items.map((item) => ({ x: 8 + item.depth * column, y: 4 + item.slot * ROW + (ROW - h) / 2, w, h }))\n}\n\nfunction knobAt(data, box) {\n  return data.orientation === \"down\"\n    ? { x: box.x + box.w / 2, y: box.y + box.h }\n    : { x: box.x + box.w, y: box.y + box.h / 2 }\n}\n\nfunction locate(data, tree, at, px, py) {\n  for (let index = tree.items.length - 1; index >= 0; index--) {\n    const box = at[index]\n    const item = tree.items[index]\n    if (item.node.children) {\n      const knob = knobAt(data, box)\n      if (Math.hypot(px - knob.x, py - knob.y) <= 11) return { item, knob: true }\n    }\n    if (px >= box.x && px <= box.x + box.w && py >= box.y && py <= box.y + box.h) return { item, knob: false }\n  }\n  return null\n}\n\nfunction intro(tree) {\n  return Math.round((0.35 + 0.12 * (tree.depth - 1)) * 100) / 100\n}\n\nfunction join(key, index) {\n  return key === \"\" ? String(index) : key + \".\" + index\n}\n\nfunction trail(data, key) {\n  const labels = [data.root.label]\n  if (key === \"\") return labels\n  key.split(\".\").reduce((node, index) => {\n    labels.push(node.children[Number(index)].label)\n    return node.children[Number(index)]\n  }, data.root)\n  return labels\n}\n\nfunction describe(data, item) {\n  const count = (node) => (node.children ?? []).reduce((sum, child) => sum + 1 + count(child), 0)\n  const below = count(item.node)\n  return (\n    trail(data, item.key).join(\" › \") +\n    (item.node.note ? \" · \" + item.node.note : \"\") +\n    (below ? \" · \" + below + (below === 1 ? \" node below\" : \" nodes below\") : \"\")\n  )\n}\n\nfunction summary(data) {\n  const lines = []\n  const walk = (node, depth) => {\n    if (lines.length < 60) lines.push(\"  \".repeat(depth) + node.label + (node.note ? \" (\" + node.note + \")\" : \"\"))\n    node.children?.forEach((child) => walk(child, depth + 1))\n  }\n  walk(data.root, 0)\n  return \"Tree:\\n\" + lines.join(\"\\n\")\n}\n\nfunction fit(text, width, size) {\n  const max = Math.max(1, Math.floor(width / (size * 0.58)))\n  return text.length <= max ? text : text.slice(0, Math.max(1, max - 1)) + \"…\"\n}\n\nfunction ease(p) {\n  const clamped = Math.max(0, Math.min(1, p))\n  return 1 - Math.pow(1 - clamped, 3)\n}\n",
+  "input": {
+    "phase": "init",
+    "data": {
+      "title": "Team",
+      "orientation": "down",
+      "choose": true,
+      "root": {
+        "label": "Ada",
+        "note": "CEO",
+        "children": [
+          {
+            "label": "Grace",
+            "note": "CTO",
+            "children": [
+              {
+                "label": "Linus",
+                "note": "Platform"
+              },
+              {
+                "label": "Margaret",
+                "note": "Apps"
+              },
+              {
+                "label": "Ken",
+                "note": "Infra"
+              }
+            ]
+          },
+          {
+            "label": "Barbara",
+            "note": "COO",
+            "children": [
+              {
+                "label": "Frances",
+                "note": "Ops"
+              },
+              {
+                "label": "Radia",
+                "note": "Support"
+              }
+            ]
+          },
+          {
+            "label": "Edsger",
+            "note": "CFO"
+          }
+        ]
+      }
+    }
+  },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Team"
+      },
+      {
+        "onPointer": "$function",
+        "height": 218,
+        "fps": 60,
+        "duration": 0.59,
+        "alt": "Tree:\nAda (CEO)\n  Grace (CTO)\n    Linus (Platform)\n    Margaret (Apps)\n    Ken (Infra)\n  Barbara (COO)\n    Frances (Ops)\n    Radia (Support)\n  Edsger (CFO)",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a node to select it; tap its +/− to collapse or expand it"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Team"
+      },
+      {
+        "height": 218,
+        "fps": 60,
+        "duration": 0.59,
+        "alt": "Tree:\nAda (CEO)\n  Grace (CTO)\n    Linus (Platform)\n    Margaret (Apps)\n    Ken (Infra)\n  Barbara (COO)\n    Frances (Ops)\n    Radia (Support)\n  Edsger (CFO)",
+        "type": "canvas",
+        "id": "0/1",
+        "pointer": true
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a node to select it; tap its +/− to collapse or expand it"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose",
+            "id": "0/3/0"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/1": "pointer",
+    "0/3/0": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {
+      "collapsed": [],
+      "selected": null
+    }
+  }
+}

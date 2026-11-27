@@ -1,0 +1,89 @@
+{
+  "name": "builtin-confirm",
+  "builtin": "confirm",
+  "source": "function view(state, data) {\n  return ui.column({ gap: 2 }, [\n    ui.text(data.title, { style: \"title\" }),\n    ui.markdown(data.message),\n    ui.row({ gap: 1, align: \"center\" }, [\n      ui.button(data.confirmLabel || \"Confirm\", {\n        variant: data.danger ? \"danger\" : \"primary\",\n        onPress: () => submit({ confirmed: true }),\n      }),\n      ui.button(data.cancelLabel || \"Cancel\", { variant: \"secondary\", onPress: () => submit({ confirmed: false }) }),\n    ]),\n  ])\n}\n",
+  "input": {
+    "phase": "init",
+    "data": {
+      "title": "Sure?",
+      "message": "Really.",
+      "danger": true
+    }
+  },
+  "built": {
+    "gap": 2,
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Sure?"
+      },
+      {
+        "type": "markdown",
+        "text": "Really."
+      },
+      {
+        "gap": 1,
+        "align": "center",
+        "type": "row",
+        "children": [
+          {
+            "variant": "danger",
+            "onPress": "$function",
+            "type": "button",
+            "label": "Confirm"
+          },
+          {
+            "variant": "secondary",
+            "onPress": "$function",
+            "type": "button",
+            "label": "Cancel"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "gap": 2,
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Sure?"
+      },
+      {
+        "type": "markdown",
+        "text": "Really."
+      },
+      {
+        "gap": 1,
+        "align": "center",
+        "type": "row",
+        "children": [
+          {
+            "variant": "danger",
+            "type": "button",
+            "label": "Confirm",
+            "id": "0/2/0"
+          },
+          {
+            "variant": "secondary",
+            "type": "button",
+            "label": "Cancel",
+            "id": "0/2/1"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/2/0": "press",
+    "0/2/1": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
+}

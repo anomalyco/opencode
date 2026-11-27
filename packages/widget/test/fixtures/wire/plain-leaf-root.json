@@ -1,0 +1,21 @@
+{
+  "name": "plain-leaf-root",
+  "source": "function view(state, data) {\n  return ui.text(\"alone\")\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "type": "text",
+    "text": "alone"
+  },
+  "view": {
+    "type": "text",
+    "text": "alone"
+  },
+  "handlers": {},
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
+}

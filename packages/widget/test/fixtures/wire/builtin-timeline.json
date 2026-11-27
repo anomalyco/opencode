@@ -1,0 +1,221 @@
+{
+  "name": "builtin-timeline",
+  "builtin": "timeline",
+  "source": "// A Gantt timeline: tasks with a start and an end (no end: a milestone), optionally in groups and with progress.\n// Dates are \"YYYY-MM-DD\" (an end date is inclusive) or \"YYYY-MM-DDTHH:MM\"; plain numbers work too (week 1, 2...).\n// `today` draws a marker (programs can't read the clock). Bars grow in; tap a bar to select it. With `choose`, the\n// Choose button submits the selected task.\n\nconst ROW = 26\nconst TOP = 26\nconst INTRO = 0.7\nconst MONTHS = [\"Jan\", \"Feb\", \"Mar\", \"Apr\", \"May\", \"Jun\", \"Jul\", \"Aug\", \"Sep\", \"Oct\", \"Nov\", \"Dec\"]\nconst PALETTE = [\"accent\", \"#f59e0b\", \"#10b981\", \"#ef4444\", \"#8b5cf6\", \"#06b6d4\", \"#ec4899\", \"#84cc16\"]\n\n// Rows (group headers, then their tasks) and the time range are computed once.\nfunction init(data) {\n  const groups = [...new Set(data.tasks.map((task) => task.group ?? \"\"))]\n  const rows = groups.flatMap((group) => [\n    ...(group ? [{ group }] : []),\n    ...data.tasks.flatMap((task, index) => ((task.group ?? \"\") === group ? [{ task: index }] : [])),\n  ])\n  const spans = data.tasks.map((task) => span(task))\n  const today = data.today === undefined ? null : time(data.today, false)\n  const low = Math.min(...spans.map((item) => item.start), today ?? Infinity)\n  const high = Math.max(...spans.map((item) => item.end), today ?? -Infinity)\n  const pad = (high - low || 1) * 0.03\n  const dates = typeof data.tasks[0].start === \"string\"\n  return { selected: null, rows, spans, groups, dates, today, low: low - pad, high: high + pad }\n}\n\nfunction view(state, data) {\n  return ui.column({ gap: 1, align: \"stretch\" }, [\n    ui.text(data.title, { style: \"title\" }),\n    ui.canvas({\n      onPointer: (state, p) => tap(state, data, p),\n      height: TOP + state.rows.length * ROW + 6,\n      fps: 60,\n      duration: INTRO,\n      alt: summary(state, data),\n    }),\n    ui.text(state.selected === null ? \"Tap a bar to see its dates\" : describe(state, data, state.selected), {\n      style: \"caption\",\n      tone: state.selected === null ? \"muted\" : \"default\",\n    }),\n    data.choose &&\n      ui.row({ gap: 1 }, [\n        ui.button(\"Choose task\", {\n          onPress: (state) => choose(state, data),\n          variant: \"primary\",\n          disabled: state.selected === null,\n        }),\n      ]),\n  ])\n}\n\nfunction choose(state, data) {\n  if (state.selected !== null) {\n    const task = data.tasks[state.selected]\n    return submit({\n      label: task.label,\n      index: state.selected,\n      start: task.start,\n      end: task.end ?? task.start,\n      group: task.group,\n    })\n  }\n  return state\n}\n\nfunction tap(state, data, pointer) {\n  pointer = below(pointer)\n  if (pointer.kind !== \"up\") return state\n  const row = state.rows[Math.floor((pointer.y - TOP) / ROW)]\n  const hit = pointer.y >= TOP && row && row.task !== undefined ? row.task : null\n  return { ...state, selected: hit === state.selected ? null : hit }\n}\n\nfunction draw(state, data, frame) {\n  frame = below(frame)\n  const g = ui.draw()\n  if (frame.top) g.translate(0, frame.top)\n  const box = layout(state, data, frame.width)\n  const bottom = TOP + state.rows.length * ROW\n  const today = state.today === null ? null : x(box, state.today)\n  for (const tick of ticks(state, box)) {\n    g.line(tick.x, TOP - 4, tick.x, bottom, { stroke: \"border\", width: 1 })\n    if (today === null || tick.x + 50 < today - 22 || tick.x > today + 22)\n      g.text(tick.x + 3, TOP - 10, tick.label, { size: 11, color: \"muted\" })\n  }\n  const hoverRow = frame.pointer && !frame.pointer.down ? Math.floor((frame.pointer.y - TOP) / ROW) : -1\n  state.rows.forEach((row, at) => {\n    const y = TOP + at * ROW\n    if (row.group !== undefined) {\n      const items = state.spans.filter((_, index) => (data.tasks[index].group ?? \"\") === row.group)\n      const from = x(box, Math.min(...items.map((item) => item.start)))\n      const to = x(box, Math.max(...items.map((item) => item.end)))\n      g.text(8, y + 17, fit(row.group, box.left - 14, 12), { size: 12, weight: 600 })\n      g.save()\n        .alpha(0.5)\n        .rrect(from, y + 11, Math.max(2, to - from), 4, 2, \"muted\")\n        .restore()\n      return\n    }\n    const task = data.tasks[row.task]\n    const item = state.spans[row.task]\n    const active = row.task === state.selected || at === hoverRow\n    if (active) g.save().alpha(0.08).rect(0, y, frame.width, ROW, \"text\").restore()\n    g.text(state.groups.length > 1 || state.groups[0] ? 18 : 8, y + 17, fit(task.label, box.left - 24, 12), {\n      size: 12,\n      weight: row.task === state.selected ? 600 : 400,\n      color: active ? \"text\" : \"muted\",\n    })\n    const fill = task.color ?? PALETTE[state.groups.indexOf(task.group ?? \"\") % PALETTE.length]\n    const grow = ease((frame.t - (0.3 * at) / state.rows.length) / (INTRO - 0.3))\n    if (grow <= 0) return\n    const from = x(box, item.start)\n    if (task.end === undefined) {\n      const s = 7 * grow\n      g.path(\n        [\n          [\"M\", from, y + ROW / 2 - s],\n          [\"L\", from + s, y + ROW / 2],\n          [\"L\", from, y + ROW / 2 + s],\n          [\"L\", from - s, y + ROW / 2],\n          [\"Z\"],\n        ],\n        fill,\n      )\n      return\n    }\n    const w = Math.max(3, (x(box, item.end) - from) * grow)\n    const progress = task.progress ?? 1\n    if (progress < 1)\n      g.save()\n        .alpha(0.35)\n        .rrect(from, y + 5, w, ROW - 10, 4, fill)\n        .restore()\n    if (progress > 0) g.rrect(from, y + 5, Math.max(3, w * progress), ROW - 10, 4, fill)\n    if (row.task === state.selected) g.rrect(from - 1.5, y + 3.5, w + 3, ROW - 7, 5, { stroke: \"text\", width: 1.5 })\n  })\n  if (today !== null && frame.t >= INTRO * 0.5) {\n    g.line(today, TOP - 4, today, bottom, { stroke: \"error\", width: 1.5 })\n    g.rrect(today - 20, 4, 40, 14, 4, \"error\")\n    g.text(today, 15, \"Today\", { size: 10, weight: 600, align: \"center\", color: \"#ffffff\" })\n  }\n  return g.commands\n}\n\nfunction layout(state, data, width) {\n  const longest = Math.max(\n    ...data.tasks.map((task) => task.label.length + 2),\n    ...state.groups.map((group) => group.length),\n  )\n  const left = Math.min(width * 0.38, 180, Math.max(80, 16 + 6.6 * longest))\n  return { left, w: Math.max(1, width - left - 12), low: state.low, high: state.high }\n}\n\nfunction x(box, value) {\n  return box.left + (box.w * (value - box.low)) / (box.high - box.low)\n}\n\n// Tick marks for the axis: hours, days, weeks, months or years for dates; nice steps for plain numbers.\nfunction ticks(state, box) {\n  const perDay = box.w / (state.high - state.low)\n  const out = []\n  if (!state.dates) {\n    const raw = 64 / perDay\n    const power = Math.pow(10, Math.floor(Math.log10(raw)))\n    const step = power * ([1, 2, 5, 10].find((factor) => factor * power >= raw) ?? 10)\n    for (let value = Math.ceil(state.low / step) * step; value <= state.high; value += step)\n      out.push({ x: x(box, value), label: String(Math.round(value * 100) / 100) })\n    return out\n  }\n  const step = [1 / 24, 3 / 24, 6 / 24, 12 / 24, 1, 2, 7, 14].find((days) => days * perDay >= 64)\n  if (step !== undefined) {\n    const first = step >= 7 ? Math.ceil((state.low + 3) / 7) * 7 - 3 : Math.ceil(state.low / step) * step\n    for (let value = first; value <= state.high; value += step)\n      out.push({\n        x: x(box, value),\n        label: step < 1 ? String(Math.round((value % 1) * 24)).padStart(2, \"0\") + \":00\" : short(value),\n      })\n    return out\n  }\n  const months = [1, 3, 12].find((count) => count * 30.4 * perDay >= 64) ?? 12\n  let [year, month] = civil(Math.floor(state.low))\n  month = Math.ceil(month / months) * months - months + 1\n  for (let value = days(year, month, 1); value <= state.high; ) {\n    if (value >= state.low)\n      out.push({\n        x: x(box, value),\n        label: months === 12 ? String(year) : month === 1 ? MONTHS[0] + \" \" + year : MONTHS[month - 1],\n      })\n    month += months\n    if (month > 12) {\n      month -= 12\n      year++\n    }\n    value = days(year, month, 1)\n  }\n  return out\n}\n\n// A task's start and end as numbers (days since 1970 for dates). A date-only end includes that day.\nfunction span(task) {\n  const start = time(task.start, false)\n  return { start, end: task.end === undefined ? start : Math.max(start, time(task.end, true)) }\n}\n\nfunction time(value, end) {\n  if (typeof value === \"number\") return value\n  const [date, clock] = value.split(\"T\")\n  const [y, m, d] = date.split(\"-\").map(Number)\n  const [hours, minutes] = clock ? clock.split(\":\").map(Number) : [0, 0]\n  return days(y, m, d) + (clock ? (hours + (minutes || 0) / 60) / 24 : end ? 1 : 0)\n}\n\n// Days since 1970-01-01 in the civil calendar, and back.\nfunction days(y, m, d) {\n  const year = m <= 2 ? y - 1 : y\n  const era = Math.floor(year / 400)\n  const yoe = year - era * 400\n  const doy = Math.floor((153 * (m + (m > 2 ? -3 : 9)) + 2) / 5) + d - 1\n  return era * 146097 + yoe * 365 + Math.floor(yoe / 4) - Math.floor(yoe / 100) + doy - 719468\n}\n\nfunction civil(day) {\n  const z = day + 719468\n  const era = Math.floor(z / 146097)\n  const doe = z - era * 146097\n  const yoe = Math.floor((doe - Math.floor(doe / 1460) + Math.floor(doe / 36524) - Math.floor(doe / 146096)) / 365)\n  const doy = doe - (365 * yoe + Math.floor(yoe / 4) - Math.floor(yoe / 100))\n  const mp = Math.floor((5 * doy + 2) / 153)\n  const m = mp < 10 ? mp + 3 : mp - 9\n  return [yoe + era * 400 + (m <= 2 ? 1 : 0), m, doy - Math.floor((153 * mp + 2) / 5) + 1]\n}\n\nfunction short(day) {\n  const [, m, d] = civil(Math.floor(day))\n  return MONTHS[m - 1] + \" \" + d\n}\n\nfunction when(state, value) {\n  return state.dates ? short(value) : String(Math.round(value * 100) / 100)\n}\n\nfunction describe(state, data, index) {\n  const task = data.tasks[index]\n  const item = state.spans[index]\n  const length = item.end - item.start\n  const dates =\n    task.end === undefined\n      ? when(state, item.start) + \" (milestone)\"\n      : when(state, item.start) +\n        \" – \" +\n        when(state, state.dates && typeof task.end === \"string\" && !task.end.includes(\"T\") ? item.end - 1 : item.end) +\n        (state.dates ? \" (\" + Math.round(length * 10) / 10 + (length === 1 ? \" day)\" : \" days)\") : \"\")\n  return [\n    task.label,\n    dates,\n    task.progress !== undefined ? Math.round(task.progress * 100) + \"% done\" : \"\",\n    task.group ?? \"\",\n  ]\n    .filter(Boolean)\n    .join(\" · \")\n}\n\nfunction summary(state, data) {\n  return (\n    \"Timeline of \" +\n    data.tasks.length +\n    \" tasks\" +\n    (state.today !== null ? \", today \" + when(state, state.today) : \"\") +\n    \". \" +\n    data.tasks.map((_, index) => describe(state, data, index)).join(\"; \")\n  )\n}\n\nfunction fit(text, width, size) {\n  const max = Math.max(1, Math.floor(width / (size * 0.58)))\n  return text.length <= max ? text : text.slice(0, Math.max(1, max - 1)) + \"…\"\n}\n\nfunction ease(p) {\n  const clamped = Math.max(0, Math.min(1, p))\n  return 1 - Math.pow(1 - clamped, 3)\n}\n\n// In full screen, the layout starts below the close button when it overlaps this canvas (widgets-fullscreen.md):\n// `close` comes with the frame and the pointer, so drawing and hit testing agree.\nfunction below(area) {\n  const top = area.close ? Math.max(0, area.close.y + area.close.height) : 0\n  if (top === 0) return area\n  return {\n    ...area,\n    top,\n    height: area.height - top,\n    ...(typeof area.y === \"number\" ? { y: area.y - top } : {}),\n    ...(area.pointer ? { pointer: { ...area.pointer, y: area.pointer.y - top } } : {}),\n  }\n}\n",
+  "input": {
+    "phase": "init",
+    "data": {
+      "title": "Q2 launch plan",
+      "today": "2026-04-20",
+      "choose": true,
+      "tasks": [
+        {
+          "label": "Research",
+          "start": "2026-04-01",
+          "end": "2026-04-10",
+          "group": "Design",
+          "progress": 1
+        },
+        {
+          "label": "Wireframes",
+          "start": "2026-04-08",
+          "end": "2026-04-21",
+          "group": "Design",
+          "progress": 0.8
+        },
+        {
+          "label": "Visual design",
+          "start": "2026-04-18",
+          "end": "2026-05-02",
+          "group": "Design",
+          "progress": 0.3
+        },
+        {
+          "label": "API",
+          "start": "2026-04-13",
+          "end": "2026-05-08",
+          "group": "Build",
+          "progress": 0.4
+        },
+        {
+          "label": "Client",
+          "start": "2026-04-27",
+          "end": "2026-05-22",
+          "group": "Build",
+          "progress": 0
+        },
+        {
+          "label": "Beta",
+          "start": "2026-05-25",
+          "group": "Build"
+        },
+        {
+          "label": "Launch prep",
+          "start": "2026-05-18",
+          "end": "2026-06-05",
+          "group": "Go to market"
+        }
+      ]
+    }
+  },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Q2 launch plan"
+      },
+      {
+        "onPointer": "$function",
+        "height": 292,
+        "fps": 60,
+        "duration": 0.7,
+        "alt": "Timeline of 7 tasks, today Apr 20. Research · Apr 1 – Apr 10 (10 days) · 100% done · Design; Wireframes · Apr 8 – Apr 21 (14 days) · 80% done · Design; Visual design · Apr 18 – May 2 (15 days) · 30% done · Design; API · Apr 13 – May 8 (26 days) · 40% done · Build; Client · Apr 27 – May 22 (26 days) · 0% done · Build; Beta · May 25 (milestone) · Build; Launch prep · May 18 – Jun 5 (19 days) · Go to market",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a bar to see its dates"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose task"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Q2 launch plan"
+      },
+      {
+        "height": 292,
+        "fps": 60,
+        "duration": 0.7,
+        "alt": "Timeline of 7 tasks, today Apr 20. Research · Apr 1 – Apr 10 (10 days) · 100% done · Design; Wireframes · Apr 8 – Apr 21 (14 days) · 80% done · Design; Visual design · Apr 18 – May 2 (15 days) · 30% done · Design; API · Apr 13 – May 8 (26 days) · 40% done · Build; Client · Apr 27 – May 22 (26 days) · 0% done · Build; Beta · May 25 (milestone) · Build; Launch prep · May 18 – Jun 5 (19 days) · Go to market",
+        "type": "canvas",
+        "id": "0/1",
+        "pointer": true
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a bar to see its dates"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose task",
+            "id": "0/3/0"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/1": "pointer",
+    "0/3/0": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {
+      "selected": null,
+      "rows": [
+        {
+          "group": "Design"
+        },
+        {
+          "task": 0
+        },
+        {
+          "task": 1
+        },
+        {
+          "task": 2
+        },
+        {
+          "group": "Build"
+        },
+        {
+          "task": 3
+        },
+        {
+          "task": 4
+        },
+        {
+          "task": 5
+        },
+        {
+          "group": "Go to market"
+        },
+        {
+          "task": 6
+        }
+      ],
+      "spans": [
+        {
+          "start": 20544,
+          "end": 20554
+        },
+        {
+          "start": 20551,
+          "end": 20565
+        },
+        {
+          "start": 20561,
+          "end": 20576
+        },
+        {
+          "start": 20556,
+          "end": 20582
+        },
+        {
+          "start": 20570,
+          "end": 20596
+        },
+        {
+          "start": 20598,
+          "end": 20598
+        },
+        {
+          "start": 20591,
+          "end": 20610
+        }
+      ],
+      "groups": [
+        "Design",
+        "Build",
+        "Go to market"
+      ],
+      "dates": true,
+      "today": 20563,
+      "low": 20542.02,
+      "high": 20611.98
+    }
+  }
+}

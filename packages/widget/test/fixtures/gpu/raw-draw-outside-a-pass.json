@@ -1,0 +1,22 @@
+{
+  "name": "raw-draw-outside-a-pass",
+  "source": "async function main() {\n  widget.render(ui.canvas({ key: \"scene\", gpu: true, height: 100 }))\n  __host.post({ type: \"gpu\", ops: [[\"draw\", 3, 1, 0, 0]], bytes: new ArrayBuffer(8) })\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 100,
+      "height": 100
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [
+    {
+      "message": "gpu op 0: \"draw\" outside a render pass",
+      "canvases": "all"
+    }
+  ],
+  "end": "return"
+}

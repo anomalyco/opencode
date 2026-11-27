@@ -1,0 +1,17 @@
+{
+  "name": "function-as-an-id",
+  "source": "function view(state, data) {\n  return ui.button(\"b\", { id: (s) => s })\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "id": "$function",
+    "type": "button",
+    "label": "b"
+  },
+  "error": {
+    "view": false,
+    "message": "TypeError: Argument 1 to __widget_emit contains a function, which cannot be passed to the host. (line 335, col 5)"
+  }
+}

@@ -1,0 +1,213 @@
+{
+  "name": "controls",
+  "source": "function view(state, data) {\n  return ui.column([ui.button(\"b\"), ui.button(\"bh\", { onPress: (s) => s, variant: \"primary\" }), ui.checkbox(\"c\", true), ui.checkbox(\"ch\", false, { onChange: (s) => s }), ui.slider({ value: 1, min: 0, max: 2 }), ui.slider({ value: 1, min: 0, max: 2, onChange: (s) => s }), ui.select([\"a\", \"b\"], { value: \"a\" }), ui.select([\"a\"], { multiple: true, onChange: (s) => s }), ui.input(\"v\"), ui.input(\"w\", { onChange: (s) => s, multiline: true }), ui.card({ selected: true }, [ui.text(\"no handler\")]), ui.card({ onPress: (s) => s }, [ui.text(\"handler\")])])\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "type": "column",
+    "children": [
+      {
+        "type": "button",
+        "label": "b"
+      },
+      {
+        "onPress": "$function",
+        "variant": "primary",
+        "type": "button",
+        "label": "bh"
+      },
+      {
+        "type": "checkbox",
+        "label": "c",
+        "checked": true
+      },
+      {
+        "onChange": "$function",
+        "type": "checkbox",
+        "label": "ch",
+        "checked": false
+      },
+      {
+        "value": 1,
+        "min": 0,
+        "max": 2,
+        "type": "slider"
+      },
+      {
+        "value": 1,
+        "min": 0,
+        "max": 2,
+        "onChange": "$function",
+        "type": "slider"
+      },
+      {
+        "value": "a",
+        "type": "select",
+        "options": [
+          {
+            "value": "a",
+            "label": "a"
+          },
+          {
+            "value": "b",
+            "label": "b"
+          }
+        ]
+      },
+      {
+        "multiple": true,
+        "onChange": "$function",
+        "type": "select",
+        "options": [
+          {
+            "value": "a",
+            "label": "a"
+          }
+        ]
+      },
+      {
+        "type": "input",
+        "value": "v"
+      },
+      {
+        "onChange": "$function",
+        "multiline": true,
+        "type": "input",
+        "value": "w"
+      },
+      {
+        "selected": true,
+        "type": "card",
+        "children": [
+          {
+            "type": "text",
+            "text": "no handler"
+          }
+        ]
+      },
+      {
+        "onPress": "$function",
+        "type": "card",
+        "children": [
+          {
+            "type": "text",
+            "text": "handler"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "type": "column",
+    "children": [
+      {
+        "type": "button",
+        "label": "b",
+        "id": "0/0"
+      },
+      {
+        "variant": "primary",
+        "type": "button",
+        "label": "bh",
+        "id": "0/1"
+      },
+      {
+        "type": "checkbox",
+        "label": "c",
+        "checked": true,
+        "id": "0/2"
+      },
+      {
+        "type": "checkbox",
+        "label": "ch",
+        "checked": false,
+        "id": "0/3"
+      },
+      {
+        "value": 1,
+        "min": 0,
+        "max": 2,
+        "type": "slider",
+        "id": "0/4"
+      },
+      {
+        "value": 1,
+        "min": 0,
+        "max": 2,
+        "type": "slider",
+        "id": "0/5"
+      },
+      {
+        "value": "a",
+        "type": "select",
+        "options": [
+          {
+            "value": "a",
+            "label": "a"
+          },
+          {
+            "value": "b",
+            "label": "b"
+          }
+        ],
+        "id": "0/6"
+      },
+      {
+        "multiple": true,
+        "type": "select",
+        "options": [
+          {
+            "value": "a",
+            "label": "a"
+          }
+        ],
+        "id": "0/7"
+      },
+      {
+        "type": "input",
+        "value": "v",
+        "id": "0/8"
+      },
+      {
+        "multiline": true,
+        "type": "input",
+        "value": "w",
+        "id": "0/9"
+      },
+      {
+        "selected": true,
+        "type": "card",
+        "children": [
+          {
+            "type": "text",
+            "text": "no handler"
+          }
+        ]
+      },
+      {
+        "type": "card",
+        "id": "0/11",
+        "children": [
+          {
+            "type": "text",
+            "text": "handler"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/1": "press",
+    "0/3": "change",
+    "0/5": "change",
+    "0/7": "change",
+    "0/9": "change",
+    "0/11": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
+}

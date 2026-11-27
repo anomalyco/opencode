@@ -85,6 +85,11 @@ export function useTuiApp() {
   return required(AppContext, "TuiAppProvider")
 }
 
+/** A development build (`channel` "local"); false outside a TuiAppProvider. */
+export function useTuiDevMode() {
+  return useContext(AppContext)?.channel === "local"
+}
+
 export function useTuiTerminalEnvironment() {
   return required(TerminalEnvironmentContext, "TuiTerminalEnvironmentProvider")
 }

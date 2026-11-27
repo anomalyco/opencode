@@ -15,6 +15,8 @@ export async function createAppFixture(
     config?: Config.Info
     args?: TuiInput["args"]
     fetch?: FetchHandler
+    /** A server to connect to instead of the fixture's fake one, such as `createScriptedServer`. */
+    url?: string
     // A renderer whose owner already set up its terminal, such as the simulation renderer.
     setup?: TestRendererSetup
   } = {},
@@ -42,11 +44,11 @@ export async function createAppFixture(
     experimental: { "new-designs": false, ...base.experimental },
     theme: { name: "opencode-classic", ...base.theme },
   })
-  const server = Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
+  const server = input.url ? undefined : Bun.serve({ port: 0, fetch: (request) => calls.fetch(request) })
   const task = Effect.runPromise(
     run({
       app: { name: "test", version: "test", channel: "test" },
-      server: { endpoint: { url: server.url.toString() } },
+      server: { endpoint: { url: input.url ?? server!.url.toString() } },
       config: {
         get: async () => config,
         update: async (mutate) => {
@@ -87,7 +89,7 @@ export async function createAppFixture(
         if (!setup.renderer.isDestroyed) setup.renderer.destroy()
         await task
       } finally {
-        await server.stop()
+        await server?.stop()
         await root[Symbol.asyncDispose]()
       }
     },

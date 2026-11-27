@@ -1,0 +1,51 @@
+{
+  "name": "canvas-clamped-to-4096",
+  "source": "async function main() {\n  widget.render(ui.column([ui.canvas({ key: \"scene\", gpu: true, height: 100 })]))\n  const device = await widget.gpu.requestDevice()\n  const format = widget.gpu.getPreferredCanvasFormat()\n  const contexts = {}\n  for (const key of [\"scene\"]) {\n    contexts[key] = widget.gpu.getContext(key)\n    contexts[key].configure({ device, format })\n  }\n  const view = (key) => contexts[key].getCurrentTexture().createView()\n  const clear = (key) => ({ colorAttachments: [{ view: view(key), loadOp: \"clear\", storeOp: \"store\" }] })\n\n  for (let frame = 0; frame < 2; frame++) {\n    await widget.frame()\n    const { width, height } = contexts.scene\n    device.createTexture({ size: [width, height], format: \"depth24plus\", usage: GPUTextureUsage.RENDER_ATTACHMENT })\n  }\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 5120,
+      "height": 2880
+    }
+  ],
+  "inputs": [
+    {
+      "frame": 1,
+      "input": {
+        "type": "canvas",
+        "key": "scene",
+        "width": 9000,
+        "height": 1000
+      }
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [],
+  "end": "return",
+  "batches": [
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["context",1,"scene","rgba8unorm","opaque"]
+      ]
+    },
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["texture",2,4096,2304,1,"depth24plus",16,1,1]
+      ]
+    },
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["texture",3,4096,455,1,"depth24plus",16,1,1]
+      ]
+    }
+  ]
+}

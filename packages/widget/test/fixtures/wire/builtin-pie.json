@@ -1,0 +1,126 @@
+{
+  "name": "builtin-pie",
+  "builtin": "pie",
+  "source": "// A pie or donut chart. Slices sweep in; tap a slice to select it (it pulls out) and tap a legend entry to hide or\n// show its slice. With `choose`, the Choose button submits the selected slice.\n\nconst HEIGHT = 240\nconst INTRO = 0.7\nconst START = -Math.PI / 2\nconst ROW = 20\nconst PALETTE = [\"accent\", \"#f59e0b\", \"#10b981\", \"#ef4444\", \"#8b5cf6\", \"#06b6d4\", \"#ec4899\", \"#84cc16\"]\n\nfunction init(data) {\n  return { selected: null, hidden: [] }\n}\n\nfunction view(state, data) {\n  const picked = state.selected === null ? null : data.slices[state.selected]\n  return ui.column({ gap: 1, align: \"stretch\" }, [\n    ui.text(data.title, { style: \"title\" }),\n    ui.canvas({\n      onPointer: (state, p) => tap(state, data, p),\n      height: HEIGHT,\n      fps: 60,\n      duration: INTRO,\n      alt: summary(data),\n    }),\n    ui.text(\n      picked\n        ? picked.label +\n            \": \" +\n            amount(picked.value, data.unit) +\n            \" (\" +\n            percent(picked.value / total(data, state)) +\n            \")\"\n        : \"Tap a slice to select it, or a legend entry to hide it\",\n      { style: \"caption\", tone: picked ? \"default\" : \"muted\" },\n    ),\n    data.choose &&\n      ui.row({ gap: 1 }, [\n        ui.button(picked ? \"Choose \" + picked.label : \"Choose\", {\n          onPress: (state) => choose(state, data),\n          variant: \"primary\",\n          disabled: !picked,\n        }),\n      ]),\n  ])\n}\n\nfunction choose(state, data) {\n  if (state.selected !== null) {\n    const slice = data.slices[state.selected]\n    const share = Math.round((slice.value / total(data, state)) * 1000) / 1000\n    return submit({ label: slice.label, index: state.selected, value: slice.value, share })\n  }\n  return state\n}\n\nfunction tap(state, data, pointer) {\n  if (pointer.kind !== \"up\") return state\n  const hit = locate(layout(data, state, pointer.width, pointer.height), pointer.x, pointer.y)\n  if (!hit) return { ...state, selected: null }\n  if (hit.kind === \"legend\") {\n    const hidden = state.hidden.includes(hit.index)\n      ? state.hidden.filter((index) => index !== hit.index)\n      : [...state.hidden, hit.index]\n    return { hidden, selected: state.selected === hit.index ? null : state.selected }\n  }\n  return { ...state, selected: state.selected === hit.index ? null : hit.index }\n}\n\nfunction draw(state, data, frame) {\n  const g = ui.draw()\n  const box = layout(data, state, frame.width, frame.height)\n  const hover = frame.pointer && !frame.pointer.down ? locate(box, frame.pointer.x, frame.pointer.y) : null\n  const active = hover && hover.kind === \"slice\" ? hover.index : state.selected\n  const end = START + ease(frame.t / INTRO) * Math.PI * 2\n  if (box.slices.length === 0) g.circle(box.cx, box.cy, box.r, { stroke: \"border\", width: 1.5 })\n  for (const slice of box.slices) {\n    const to = Math.min(slice.to, end)\n    if (to <= slice.from) continue\n    const mid = (slice.from + slice.to) / 2\n    const out = slice.index === active ? 8 : 0\n    const cx = box.cx + Math.cos(mid) * out\n    const cy = box.cy + Math.sin(mid) * out\n    g.path(wedge(cx, cy, box.r, box.inner, slice.from, to), { fill: slice.color, stroke: \"bg\", width: 2 })\n    if (to === slice.to && slice.to - slice.from > 0.35 && box.r > 60) {\n      const at = box.inner ? (box.r + box.inner) / 2 : box.r * 0.66\n      g.text(cx + Math.cos(mid) * at, cy + Math.sin(mid) * at + 4, percent(slice.share), {\n        size: 11,\n        weight: 600,\n        align: \"center\",\n        color: \"#ffffff\",\n      })\n    }\n  }\n  if (box.inner) {\n    const picked = active === null ? null : box.slices.find((slice) => slice.index === active)\n    g.text(box.cx, box.cy - 2, picked ? fit(data.slices[active].label, box.inner * 1.6, 11) : \"Total\", {\n      size: 11,\n      align: \"center\",\n      color: \"muted\",\n    })\n    g.text(box.cx, box.cy + 16, picked ? percent(picked.share) : compact(box.total), {\n      size: 16,\n      weight: 600,\n      align: \"center\",\n    })\n  }\n  legend(g, data, state, box, active)\n  return g.commands\n}\n\n// Geometry shared by draw and tap: the pie on the left, the legend on the right.\nfunction layout(data, state, width, height) {\n  const legendWidth = Math.min(210, Math.max(110, width * 0.38))\n  const r = Math.max(20, Math.min(height / 2 - 14, (width - legendWidth) / 2 - 18))\n  const sum = total(data, state)\n  const slices = []\n  let from = START\n  data.slices.forEach((slice, index) => {\n    if (state.hidden.includes(index) || slice.value <= 0 || sum <= 0) return\n    const to = from + (slice.value / sum) * Math.PI * 2\n    slices.push({ index, from, to, share: slice.value / sum, color: color(slice, index) })\n    from = to\n  })\n  return {\n    cx: (width - legendWidth) / 2,\n    cy: height / 2,\n    r,\n    inner: data.donut ? r * 0.58 : 0,\n    total: sum,\n    slices,\n    legend: {\n      x: width - legendWidth + 6,\n      y: height / 2 - (data.slices.length * ROW) / 2,\n      w: legendWidth - 12,\n      rows: data.slices.length,\n    },\n  }\n}\n\nfunction locate(box, px, py) {\n  const legend = box.legend\n  if (px >= legend.x - 4 && py >= legend.y && py < legend.y + legend.rows * ROW)\n    return { kind: \"legend\", index: Math.floor((py - legend.y) / ROW) }\n  const distance = Math.hypot(px - box.cx, py - box.cy)\n  if (distance > box.r + 10 || distance < box.inner) return null\n  let angle = Math.atan2(py - box.cy, px - box.cx)\n  if (angle < START) angle += Math.PI * 2\n  const slice = box.slices.find((slice) => angle >= slice.from && angle < slice.to)\n  return slice ? { kind: \"slice\", index: slice.index } : null\n}\n\nfunction legend(g, data, state, box, active) {\n  data.slices.forEach((slice, index) => {\n    const y = box.legend.y + index * ROW + ROW / 2\n    const hidden = state.hidden.includes(index)\n    const fill = color(slice, index)\n    g.circle(box.legend.x + 5, y, 5, hidden ? { stroke: fill, width: 1.5 } : fill)\n    const share = box.slices.find((item) => item.index === index)\n    const right = share ? percent(share.share) : \"\"\n    g.text(box.legend.x + 16, y + 4, fit(slice.label, box.legend.w - 22 - 7 * right.length, 12), {\n      size: 12,\n      weight: index === active ? 600 : 400,\n      color: hidden ? \"muted\" : \"text\",\n    })\n    if (right) g.text(box.legend.x + box.legend.w, y + 4, right, { size: 12, align: \"right\", color: \"muted\" })\n  })\n}\n\n// A slice as a path: arcs are cubic Béziers of at most a quarter turn each.\nfunction wedge(cx, cy, r, inner, from, to) {\n  const segments = [[\"M\", cx + Math.cos(from) * r, cy + Math.sin(from) * r]]\n  arc(segments, cx, cy, r, from, to)\n  if (inner > 0) {\n    segments.push([\"L\", cx + Math.cos(to) * inner, cy + Math.sin(to) * inner])\n    arc(segments, cx, cy, inner, to, from)\n  } else segments.push([\"L\", cx, cy])\n  segments.push([\"Z\"])\n  return segments\n}\n\nfunction arc(segments, cx, cy, r, from, to) {\n  const steps = Math.max(1, Math.ceil(Math.abs(to - from) / (Math.PI / 2)))\n  const step = (to - from) / steps\n  const k = (4 / 3) * Math.tan(step / 4)\n  for (let i = 0; i < steps; i++) {\n    const a = from + i * step\n    const b = a + step\n    segments.push([\n      \"C\",\n      cx + r * (Math.cos(a) - k * Math.sin(a)),\n      cy + r * (Math.sin(a) + k * Math.cos(a)),\n      cx + r * (Math.cos(b) + k * Math.sin(b)),\n      cy + r * (Math.sin(b) - k * Math.cos(b)),\n      cx + r * Math.cos(b),\n      cy + r * Math.sin(b),\n    ])\n  }\n}\n\nfunction total(data, state) {\n  return data.slices.reduce((sum, slice, index) => (state.hidden.includes(index) ? sum : sum + slice.value), 0)\n}\n\nfunction summary(data) {\n  const sum = data.slices.reduce((total, slice) => total + slice.value, 0)\n  return (\n    (data.donut ? \"Donut\" : \"Pie\") +\n    \" chart. \" +\n    data.slices\n      .map((slice) => slice.label + \" \" + amount(slice.value, data.unit) + \" (\" + percent(slice.value / sum) + \")\")\n      .join(\", \")\n  )\n}\n\nfunction color(slice, index) {\n  return slice.color ?? PALETTE[index % PALETTE.length]\n}\n\nfunction percent(share) {\n  return (Number.isFinite(share) ? Math.round(share * 1000) / 10 : 0) + \"%\"\n}\n\nfunction amount(value, unit) {\n  const text = String(Math.round(value * 100) / 100)\n  if (!unit) return text\n  return unit.length > 1 && /^[a-z]/i.test(unit) ? text + \" \" + unit : text + unit\n}\n\nfunction compact(value) {\n  const size = Math.abs(value)\n  const round = (number) => String(Math.round(number * 10) / 10)\n  if (size >= 1e9) return round(value / 1e9) + \"B\"\n  if (size >= 1e6) return round(value / 1e6) + \"M\"\n  if (size >= 1e4) return round(value / 1e3) + \"k\"\n  return String(Math.round(value * 100) / 100)\n}\n\n// Truncates text to about `width` pixels at font `size`.\nfunction fit(text, width, size) {\n  const max = Math.max(1, Math.floor(width / (size * 0.58)))\n  return text.length <= max ? text : text.slice(0, Math.max(1, max - 1)) + \"…\"\n}\n\nfunction ease(p) {\n  const clamped = Math.max(0, Math.min(1, p))\n  return 1 - Math.pow(1 - clamped, 3)\n}\n",
+  "input": {
+    "phase": "init",
+    "data": {
+      "title": "Traffic by source",
+      "donut": true,
+      "unit": "k",
+      "choose": true,
+      "slices": [
+        {
+          "label": "Search",
+          "value": 48
+        },
+        {
+          "label": "Direct",
+          "value": 27
+        },
+        {
+          "label": "Social",
+          "value": 14
+        },
+        {
+          "label": "Referral",
+          "value": 8
+        },
+        {
+          "label": "Email",
+          "value": 3
+        }
+      ]
+    }
+  },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Traffic by source"
+      },
+      {
+        "onPointer": "$function",
+        "height": 240,
+        "fps": 60,
+        "duration": 0.7,
+        "alt": "Donut chart. Search 48k (48%), Direct 27k (27%), Social 14k (14%), Referral 8k (8%), Email 3k (3%)",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a slice to select it, or a legend entry to hide it"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Traffic by source"
+      },
+      {
+        "height": 240,
+        "fps": 60,
+        "duration": 0.7,
+        "alt": "Donut chart. Search 48k (48%), Direct 27k (27%), Social 14k (14%), Referral 8k (8%), Email 3k (3%)",
+        "type": "canvas",
+        "id": "0/1",
+        "pointer": true
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a slice to select it, or a legend entry to hide it"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose",
+            "id": "0/3/0"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/1": "pointer",
+    "0/3/0": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {
+      "selected": null,
+      "hidden": []
+    }
+  }
+}

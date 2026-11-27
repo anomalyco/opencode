@@ -1,0 +1,24 @@
+{
+  "name": "array-key",
+  "source": "function view(state, data) {\n  return ui.column([ui.button(\"b\", { key: [\"a\"] })])\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "type": "column",
+    "children": [
+      {
+        "key": [
+          "a"
+        ],
+        "type": "button",
+        "label": "b"
+      }
+    ]
+  },
+  "error": {
+    "view": true,
+    "message": "A node's key must be a string, a number or a boolean"
+  }
+}

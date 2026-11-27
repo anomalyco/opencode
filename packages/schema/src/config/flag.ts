@@ -13,6 +13,8 @@ export const registry = {
   artifacts: "Enable experimental artifacts backed by pluggable providers.",
   console_watches:
     "Watch Slack threads, GitHub pull requests, issues, commits and Actions runs, and the workspace's MCP servers' events through OpenCode Console, and wake sessions when they change.",
+  widgets:
+    "Let agents show interactive widgets in a session (option cards, forms, confirmations) with the widget and widget_template tools. Off by default in every build, including local and dev; opt in with OPENCODE_FLAGS=widgets or experimental.widgets: true.",
   recommended_api: "Use each model's recommended API from models.dev instead of the first API it lists.",
   full_codemode: "Enable the full Code Mode work in progress.",
   codemode_agents:
@@ -38,7 +40,7 @@ export type Key = keyof typeof registry
 /** Flags the server reports to clients at `GET /api/experimental/flag`, so they can adapt their UI. */
 export const ui: readonly Key[] = ["full_codemode"]
 
-export const optInOnly: ReadonlySet<Key> = new Set(["todo", "opencode_api"])
+export const optInOnly: ReadonlySet<Key> = new Set(["todo", "opencode_api", "widgets"])
 
 /** Flags that stay off outside local and dev builds, whatever `OPENCODE_FLAGS` or config say. */
 export const localOnly: ReadonlySet<Key> = new Set(["opencode_api"])

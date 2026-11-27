@@ -1,0 +1,17 @@
+{
+  "name": "raw-undefined-buffer-binding",
+  "source": "async function main() {\n  widget.render(ui.canvas({ key: \"scene\", gpu: true, height: 100 }))\n  __host.post({ type: \"gpu\", ops: [[\"bindGroupLayout\", 1, { entries: [{ binding: 0, visibility: 2, buffer: null, sampler: { type: \"filtering\" }, texture: null }] }], [\"sampler\", 2, { addressModeU: \"clamp-to-edge\", addressModeV: \"clamp-to-edge\", addressModeW: \"clamp-to-edge\", magFilter: \"nearest\", minFilter: \"nearest\", mipmapFilter: \"nearest\", lodMinClamp: 0, lodMaxClamp: 32, compare: null, maxAnisotropy: 1 }], [\"bindGroup\", 3, { layout: 1, entries: [{ binding: 0, resource: { buffer: undefined, sampler: 2 } }] }]], bytes: new ArrayBuffer(8) })\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 100,
+      "height": 100
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [],
+  "end": "return"
+}

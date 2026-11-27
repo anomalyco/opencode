@@ -1,0 +1,368 @@
+{
+  "name": "builtin-flowchart",
+  "builtin": "flowchart",
+  "source": "// A flowchart: nodes (process, decision, terminal, io) and directed edges, laid out top down in layers. `init` does\n// the layout once (Sugiyama style: reverse cycle edges, longest-path layers, dummy points on long edges, barycenter\n// ordering, then x positions pulled toward neighbors) in slot units, so draws only scale it. Layers fade in; tap a node\n// to highlight its edges. With `choose`, the Choose button submits the selected node.\n\nconst LAYER = 84\n\nfunction init(data) {\n  return { selected: null, ...arrange(data) }\n}\n\nfunction view(state, data) {\n  const picked = state.selected === null ? null : data.nodes[state.selected]\n  return ui.column({ gap: 1, align: \"stretch\" }, [\n    ui.text(data.title, { style: \"title\" }),\n    ui.canvas({\n      onPointer: (state, p) => tap(state, data, p),\n      height: state.layers * LAYER - 20,\n      fps: 60,\n      duration: intro(state),\n      alt: summary(data),\n    }),\n    ui.text(picked ? describe(data, state.selected) : \"Tap a step to follow its edges\", {\n      style: \"caption\",\n      tone: picked ? \"default\" : \"muted\",\n    }),\n    data.choose &&\n      ui.row({ gap: 1 }, [\n        ui.button(\"Choose step\", { onPress: (state) => choose(state, data), variant: \"primary\", disabled: !picked }),\n      ]),\n  ])\n}\n\nfunction choose(state, data) {\n  if (state.selected !== null) {\n    const node = data.nodes[state.selected]\n    return submit({ id: node.id, label: node.label ?? node.id })\n  }\n  return state\n}\n\nfunction tap(state, data, pointer) {\n  if (pointer.kind !== \"up\") return state\n  const boxes = place(state, data, pointer.width)\n  const hit = boxes.findIndex(\n    (box) => Math.abs(pointer.x - box.x) <= box.w / 2 + 4 && Math.abs(pointer.y - box.y) <= box.h / 2 + 4,\n  )\n  return { ...state, selected: hit < 0 || hit === state.selected ? null : hit }\n}\n\nfunction draw(state, data, frame) {\n  const g = ui.draw()\n  const boxes = place(state, data, frame.width)\n  const columns = grid(state, frame.width)\n  const hover =\n    frame.pointer && !frame.pointer.down\n      ? boxes.findIndex(\n          (box) => Math.abs(frame.pointer.x - box.x) <= box.w / 2 && Math.abs(frame.pointer.y - box.y) <= box.h / 2,\n        )\n      : -1\n  const active = hover >= 0 ? hover : state.selected\n  const step = intro(state) / Math.max(1, state.layers)\n  for (let layer = 0; layer < state.layers; layer++) {\n    const fade = ease((frame.t - layer * step * 0.8) / (step * 1.6))\n    if (fade <= 0) break\n    g.save().alpha(fade)\n    state.edges.forEach((edge, index) => {\n      const from = data.edges[index]\n      const ends = [state.ids[from.from], state.ids[from.to]]\n      if (Math.max(boxes[ends[0]].layer, boxes[ends[1]].layer) !== layer) return\n      const lit = active !== null && ends.includes(active)\n      connect(g, edge, ends, boxes, columns, from.label, lit, frame.t >= intro(state))\n    })\n    data.nodes.forEach((node, index) => {\n      if (boxes[index].layer === layer) shape(g, node, boxes[index], index === active, index === state.selected)\n    })\n    g.restore()\n  }\n  return g.commands\n}\n\n// Layered layout in slot units: every node and dummy point gets a layer and an x; edges keep their point chains.\nfunction arrange(data) {\n  const ids = Object.fromEntries(data.nodes.map((node, at) => [node.id, at]))\n  for (const edge of data.edges)\n    for (const id of [edge.from, edge.to])\n      if (ids[id] === undefined) throw new Error('Unknown node id \"' + id + '\" in edges')\n  const n = data.nodes.length\n  const pairs = data.edges.map((edge) => [ids[edge.from], ids[edge.to]])\n  // Depth-first from the sources; an edge back onto the stack closes a cycle and is reversed for layering.\n  const seen = new Array(n).fill(0)\n  const back = new Set()\n  const visit = (node) => {\n    seen[node] = 1\n    pairs.forEach(([a, b], edge) => {\n      if (a !== node || a === b) return\n      if (seen[b] === 1) back.add(edge)\n      else if (seen[b] === 0) visit(b)\n    })\n    seen[node] = 2\n  }\n  const sources = data.nodes.map((_, at) => at).filter((at) => !pairs.some(([a, b]) => b === at && a !== b))\n  for (const start of [...sources, ...data.nodes.map((_, at) => at)]) if (seen[start] === 0) visit(start)\n  const dag = pairs.map(([a, b], edge) => (back.has(edge) ? [b, a] : [a, b]))\n  const layer = new Array(n).fill(0)\n  for (let pass = 0; pass < n; pass++)\n    for (const [a, b] of dag) if (a !== b && layer[b] < layer[a] + 1) layer[b] = layer[a] + 1\n  // Items are nodes, then one dummy per layer an edge skips; each edge becomes a chain of items.\n  const items = data.nodes.map((_, at) => ({ layer: layer[at], x: 0 }))\n  const chains = dag.map(([a, b]) => {\n    const chain = [a]\n    for (let at = layer[a] + 1; at < layer[b]; at++) {\n      items.push({ layer: at, x: 0 })\n      chain.push(items.length - 1)\n    }\n    chain.push(b)\n    return chain\n  })\n  const up = items.map(() => [])\n  const down = items.map(() => [])\n  for (const chain of chains)\n    for (let at = 1; at < chain.length; at++) {\n      if (chain[at - 1] === chain[at]) continue\n      down[chain[at - 1]].push(chain[at])\n      up[chain[at]].push(chain[at - 1])\n    }\n  const layers = Math.max(...layer) + 1\n  const rows = []\n  for (let at = 0; at < layers; at++)\n    rows.push(items.map((_, index) => index).filter((index) => items[index].layer === at))\n  // Barycenter ordering, alternating downward and upward sweeps.\n  const position = items.map(() => 0)\n  const number = () => rows.forEach((row) => row.forEach((item, at) => (position[item] = at)))\n  number()\n  for (let sweep = 0; sweep < 8; sweep++) {\n    const downward = sweep % 2 === 0\n    for (const row of downward ? rows : [...rows].reverse()) {\n      const score = (item) => {\n        const near = downward ? up[item] : down[item]\n        return near.length ? near.reduce((sum, other) => sum + position[other], 0) / near.length : position[item]\n      }\n      const scores = new Map(row.map((item) => [item, score(item)]))\n      row.sort((a, b) => scores.get(a) - scores.get(b))\n      row.forEach((item, at) => (position[item] = at))\n    }\n  }\n  // x: start packed and centered, then pull toward neighbors while keeping the order and a minimum gap.\n  rows.forEach((row) => row.forEach((item, at) => (items[item].x = at - (row.length - 1) / 2)))\n  const gap = (a, b) => (a < n && b < n ? 1 : a < n || b < n ? 0.6 : 0.3)\n  for (let pass = 0; pass < 8; pass++) {\n    const downward = pass % 2 === 0\n    for (const row of downward ? rows : [...rows].reverse()) {\n      const desired = row.map((item) => {\n        const near = [...(downward ? up[item] : down[item])]\n        return near.length ? near.reduce((sum, other) => sum + items[other].x, 0) / near.length : items[item].x\n      })\n      const xs = [...desired]\n      for (let at = 1; at < row.length; at++) xs[at] = Math.max(xs[at], xs[at - 1] + gap(row[at - 1], row[at]))\n      const shift = desired.reduce((sum, value, at) => sum + value - xs[at], 0) / row.length\n      row.forEach((item, at) => (items[item].x = xs[at] + shift))\n    }\n  }\n  const min = Math.min(...items.map((item) => item.x))\n  const round = (value) => Math.round((value - min) * 1000) / 1000\n  return {\n    ids,\n    layers,\n    span: Math.max(...items.map((item) => item.x)) - min,\n    nodes: items.slice(0, n).map((item) => ({ x: round(item.x), layer: item.layer })),\n    edges: chains.map((chain, edge) => {\n      const points = chain.map((item) => [round(items[item].x), items[item].layer])\n      return { points: back.has(edge) ? points.reverse() : points, self: pairs[edge][0] === pairs[edge][1] }\n    }),\n  }\n}\n\n// Slot units to pixels: at most 190 px per slot, the whole span centered in the width.\nfunction grid(state, width) {\n  const unit = Math.min(190, (width - 16) / (state.span + 1))\n  const left = (width - unit * (state.span + 1)) / 2\n  return { unit, x: (slot) => left + (slot + 0.5) * unit, y: (layer) => 10 + layer * LAYER + 22 }\n}\n\nfunction place(state, data, width) {\n  const columns = grid(state, width)\n  const unit = columns.unit\n  return data.nodes.map((node, index) => {\n    const lines = wrap(node.label ?? node.id, Math.floor((Math.min(170, unit - 14) - 16) / 6.8))\n    const decision = node.shape === \"decision\"\n    const text = Math.max(...lines.map((line) => line.length)) * 6.8 + 24\n    const w = Math.min(unit - 8, decision ? text * 1.4 + 10 : text)\n    const h = decision ? 54 : lines.length > 1 ? 44 : 34\n    const at = state.nodes[index]\n    return { x: columns.x(at.x), y: columns.y(at.layer), w, h, lines, layer: at.layer }\n  })\n}\n\nfunction shape(g, node, box, active, selected) {\n  const paint = {\n    fill: \"surface\",\n    stroke: selected ? \"accent\" : active ? \"muted\" : (node.color ?? \"border\"),\n    width: selected ? 2 : 1.25,\n  }\n  const left = box.x - box.w / 2\n  const top = box.y - box.h / 2\n  if (node.shape === \"decision\")\n    g.path(\n      [[\"M\", box.x, top], [\"L\", box.x + box.w / 2, box.y], [\"L\", box.x, top + box.h], [\"L\", left, box.y], [\"Z\"]],\n      paint,\n    )\n  else if (node.shape === \"io\")\n    g.path(\n      [\n        [\"M\", left + 8, top],\n        [\"L\", left + box.w, top],\n        [\"L\", left + box.w - 8, top + box.h],\n        [\"L\", left, top + box.h],\n        [\"Z\"],\n      ],\n      paint,\n    )\n  else g.rrect(left, top, box.w, box.h, node.shape === \"terminal\" ? box.h / 2 : 6, paint)\n  box.lines.forEach((line, at) =>\n    g.text(box.x, box.y + 4 + (at - (box.lines.length - 1) / 2) * 15, line, {\n      size: 12,\n      align: \"center\",\n      weight: node.shape === \"terminal\" ? 600 : 400,\n    }),\n  )\n}\n\n// An edge through its points: leave a node from its bottom (or top, going up), curve through dummies, arrive with an arrow.\nfunction connect(g, edge, ends, boxes, columns, label, lit, labels) {\n  const stroke = lit ? \"accent\" : \"muted\"\n  const width = lit ? 2 : 1.25\n  const from = boxes[ends[0]]\n  if (edge.self) {\n    const x = from.x + from.w / 2\n    g.path(\n      [\n        [\"M\", x, from.y - 6],\n        [\"C\", x + 30, from.y - 22, x + 30, from.y + 22, x + 2, from.y + 6],\n      ],\n      { stroke, width },\n    )\n    return\n  }\n  const points = edge.points.map(([x, layer], at) => {\n    const real = at === 0 ? boxes[ends[0]] : at === edge.points.length - 1 ? boxes[ends[1]] : null\n    return real ? { x: real.x, y: real.y, h: real.h } : { x: columns.x(x), y: columns.y(layer), h: 0 }\n  })\n  const start = points[1].y > points[0].y ? 1 : -1\n  let x0 = points[0].x\n  let y0 = points[0].y + (start * points[0].h) / 2\n  const segments = [[\"M\", x0, y0]]\n  for (let at = 1; at < points.length; at++) {\n    const p = points[at]\n    const dir = p.y > points[at - 1].y ? 1 : -1\n    const y1 = p.y - (dir * p.h) / 2 - (at === points.length - 1 ? dir * 2 : 0)\n    const bend = (y1 - y0) / 2\n    segments.push([\"C\", x0, y0 + bend, p.x, y1 - bend, p.x, y1])\n    x0 = p.x\n    y0 = y1\n  }\n  g.path(segments, { stroke, width })\n  const tip = segments[segments.length - 1]\n  const dir = points[points.length - 1].y > points[points.length - 2].y ? 1 : -1\n  const tx = tip[5]\n  const ty = tip[6] + dir * 2\n  g.path([[\"M\", tx, ty], [\"L\", tx - 4.5, ty - dir * 8], [\"L\", tx + 4.5, ty - dir * 8], [\"Z\"]], stroke)\n  if (label && labels) {\n    const first = segments[1]\n    const mx = (segments[0][1] + first[5]) / 2\n    const my = (segments[0][2] + first[6]) / 2\n    const w = 6.4 * label.length + 10\n    g.rrect(mx - w / 2, my - 9, w, 16, 4, \"bg\")\n    g.text(mx, my + 3, label, { size: 11, align: \"center\", color: lit ? \"text\" : \"muted\" })\n  }\n}\n\nfunction intro(state) {\n  return Math.round(Math.min(1.6, 0.3 + 0.15 * state.layers) * 100) / 100\n}\n\n// Splits a label into at most two lines of about `max` characters.\nfunction wrap(label, max) {\n  if (label.length <= max) return [label]\n  const words = label.split(\" \")\n  let first = \"\"\n  while (words.length && (first + \" \" + words[0]).trim().length <= max) first = (first + \" \" + words.shift()).trim()\n  if (!first) first = words.shift()\n  const rest = words.join(\" \")\n  return [fit(first, max), rest ? fit(rest, max) : null].filter(Boolean)\n}\n\nfunction describe(data, index) {\n  const node = data.nodes[index]\n  const name = (id) => data.nodes.find((item) => item.id === id)?.label ?? id\n  const next = data.edges\n    .filter((edge) => edge.from === node.id)\n    .map((edge) => name(edge.to) + (edge.label ? \" (\" + edge.label + \")\" : \"\"))\n  const previous = data.edges.filter((edge) => edge.to === node.id).map((edge) => name(edge.from))\n  return [\n    node.label ?? node.id,\n    next.length ? \"next: \" + next.join(\", \") : \"\",\n    previous.length ? \"from: \" + previous.join(\", \") : \"\",\n  ]\n    .filter(Boolean)\n    .join(\" · \")\n}\n\nfunction summary(data) {\n  const name = (id) => data.nodes.find((item) => item.id === id)?.label ?? id\n  return (\n    \"Flowchart. \" +\n    data.edges\n      .map((edge) => name(edge.from) + \" → \" + (edge.label ? \"[\" + edge.label + \"] \" : \"\") + name(edge.to))\n      .join(\"; \")\n  )\n}\n\nfunction fit(text, max) {\n  return text.length <= max ? text : text.slice(0, Math.max(1, max - 1)) + \"…\"\n}\n\nfunction ease(p) {\n  const clamped = Math.max(0, Math.min(1, p))\n  return 1 - Math.pow(1 - clamped, 3)\n}\n",
+  "input": {
+    "phase": "init",
+    "data": {
+      "title": "Deploy pipeline",
+      "choose": true,
+      "nodes": [
+        {
+          "id": "push",
+          "label": "Push to main",
+          "shape": "terminal"
+        },
+        {
+          "id": "build",
+          "label": "Build and test"
+        },
+        {
+          "id": "ok",
+          "label": "Tests pass?",
+          "shape": "decision"
+        },
+        {
+          "id": "fix",
+          "label": "Notify author",
+          "shape": "io"
+        },
+        {
+          "id": "stage",
+          "label": "Deploy to staging"
+        },
+        {
+          "id": "smoke",
+          "label": "Smoke tests pass?",
+          "shape": "decision"
+        },
+        {
+          "id": "prod",
+          "label": "Deploy to production"
+        },
+        {
+          "id": "done",
+          "label": "Done",
+          "shape": "terminal"
+        }
+      ],
+      "edges": [
+        {
+          "from": "push",
+          "to": "build"
+        },
+        {
+          "from": "build",
+          "to": "ok"
+        },
+        {
+          "from": "ok",
+          "to": "stage",
+          "label": "yes"
+        },
+        {
+          "from": "ok",
+          "to": "fix",
+          "label": "no"
+        },
+        {
+          "from": "fix",
+          "to": "build",
+          "label": "retry"
+        },
+        {
+          "from": "stage",
+          "to": "smoke"
+        },
+        {
+          "from": "smoke",
+          "to": "prod",
+          "label": "yes"
+        },
+        {
+          "from": "smoke",
+          "to": "fix",
+          "label": "no"
+        },
+        {
+          "from": "prod",
+          "to": "done"
+        }
+      ]
+    }
+  },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Deploy pipeline"
+      },
+      {
+        "onPointer": "$function",
+        "height": 568,
+        "fps": 60,
+        "duration": 1.35,
+        "alt": "Flowchart. Push to main → Build and test; Build and test → Tests pass?; Tests pass? → [yes] Deploy to staging; Tests pass? → [no] Notify author; Notify author → [retry] Build and test; Deploy to staging → Smoke tests pass?; Smoke tests pass? → [yes] Deploy to production; Smoke tests pass? → [no] Notify author; Deploy to production → Done",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a step to follow its edges"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose step"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Deploy pipeline"
+      },
+      {
+        "height": 568,
+        "fps": 60,
+        "duration": 1.35,
+        "alt": "Flowchart. Push to main → Build and test; Build and test → Tests pass?; Tests pass? → [yes] Deploy to staging; Tests pass? → [no] Notify author; Notify author → [retry] Build and test; Deploy to staging → Smoke tests pass?; Smoke tests pass? → [yes] Deploy to production; Smoke tests pass? → [no] Notify author; Deploy to production → Done",
+        "type": "canvas",
+        "id": "0/1",
+        "pointer": true
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a step to follow its edges"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose step",
+            "id": "0/3/0"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/1": "pointer",
+    "0/3/0": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {
+      "selected": null,
+      "ids": {
+        "push": 0,
+        "build": 1,
+        "ok": 2,
+        "fix": 3,
+        "stage": 4,
+        "smoke": 5,
+        "prod": 6,
+        "done": 7
+      },
+      "layers": 7,
+      "span": 1.2333333333333334,
+      "nodes": [
+        {
+          "x": 0.933,
+          "layer": 0
+        },
+        {
+          "x": 0.933,
+          "layer": 1
+        },
+        {
+          "x": 0.633,
+          "layer": 2
+        },
+        {
+          "x": 1,
+          "layer": 5
+        },
+        {
+          "x": 0.333,
+          "layer": 3
+        },
+        {
+          "x": 0.333,
+          "layer": 4
+        },
+        {
+          "x": 0,
+          "layer": 5
+        },
+        {
+          "x": 0,
+          "layer": 6
+        }
+      ],
+      "edges": [
+        {
+          "points": [
+            [
+              0.933,
+              0
+            ],
+            [
+              0.933,
+              1
+            ]
+          ],
+          "self": false
+        },
+        {
+          "points": [
+            [
+              0.933,
+              1
+            ],
+            [
+              0.633,
+              2
+            ]
+          ],
+          "self": false
+        },
+        {
+          "points": [
+            [
+              0.633,
+              2
+            ],
+            [
+              0.333,
+              3
+            ]
+          ],
+          "self": false
+        },
+        {
+          "points": [
+            [
+              0.633,
+              2
+            ],
+            [
+              0.933,
+              3
+            ],
+            [
+              0.933,
+              4
+            ],
+            [
+              1,
+              5
+            ]
+          ],
+          "self": false
+        },
+        {
+          "points": [
+            [
+              1,
+              5
+            ],
+            [
+              1.233,
+              4
+            ],
+            [
+              1.233,
+              3
+            ],
+            [
+              1.233,
+              2
+            ],
+            [
+              0.933,
+              1
+            ]
+          ],
+          "self": false
+        },
+        {
+          "points": [
+            [
+              0.333,
+              3
+            ],
+            [
+              0.333,
+              4
+            ]
+          ],
+          "self": false
+        },
+        {
+          "points": [
+            [
+              0.333,
+              4
+            ],
+            [
+              0,
+              5
+            ]
+          ],
+          "self": false
+        },
+        {
+          "points": [
+            [
+              0.333,
+              4
+            ],
+            [
+              1,
+              5
+            ]
+          ],
+          "self": false
+        },
+        {
+          "points": [
+            [
+              0,
+              5
+            ],
+            [
+              0,
+              6
+            ]
+          ],
+          "self": false
+        }
+      ]
+    }
+  }
+}

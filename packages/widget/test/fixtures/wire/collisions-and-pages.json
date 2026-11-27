@@ -1,0 +1,153 @@
+{
+  "name": "collisions-and-pages",
+  "source": "function view(state, data) {\n  return ui.column([ui.button(\"first\", { key: \"k\", onPress: (s) => s }), ui.card({ key: \"k\", onPress: (s) => s }, [ui.button(\"only here\", { onPress: (s) => s })]), ui.card({ key: \"k~2\", onPress: (s) => s }, [ui.text(\"none\")]), ui.carousel({ onChange: (s) => s }, [[ui.text(\"a\"), ui.text(\"b\"), ui.text(\"c\"), ui.text(\"d\")]]), ui.carousel({ onChange: (s) => s }, [null, null, null, ui.text(\"e\")])])\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "type": "column",
+    "children": [
+      {
+        "key": "k",
+        "onPress": "$function",
+        "type": "button",
+        "label": "first"
+      },
+      {
+        "key": "k",
+        "onPress": "$function",
+        "type": "card",
+        "children": [
+          {
+            "onPress": "$function",
+            "type": "button",
+            "label": "only here"
+          }
+        ]
+      },
+      {
+        "key": "k~2",
+        "onPress": "$function",
+        "type": "card",
+        "children": [
+          {
+            "type": "text",
+            "text": "none"
+          }
+        ]
+      },
+      {
+        "onChange": "$function",
+        "type": "carousel",
+        "children": [
+          [
+            {
+              "type": "text",
+              "text": "a"
+            },
+            {
+              "type": "text",
+              "text": "b"
+            },
+            {
+              "type": "text",
+              "text": "c"
+            },
+            {
+              "type": "text",
+              "text": "d"
+            }
+          ]
+        ]
+      },
+      {
+        "onChange": "$function",
+        "type": "carousel",
+        "children": [
+          null,
+          null,
+          null,
+          {
+            "type": "text",
+            "text": "e"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "type": "column",
+    "children": [
+      {
+        "type": "button",
+        "label": "first",
+        "id": "0/:k"
+      },
+      {
+        "type": "card",
+        "id": "0/:k~2",
+        "children": [
+          {
+            "type": "button",
+            "label": "only here",
+            "id": "0/:k~2/0"
+          }
+        ]
+      },
+      {
+        "type": "card",
+        "id": "0/:k~2",
+        "children": [
+          {
+            "type": "text",
+            "text": "none"
+          }
+        ]
+      },
+      {
+        "type": "carousel",
+        "id": "0/3",
+        "children": [
+          {
+            "type": "text",
+            "text": "a"
+          },
+          {
+            "type": "text",
+            "text": "b"
+          },
+          {
+            "type": "text",
+            "text": "c"
+          },
+          {
+            "type": "text",
+            "text": "d"
+          }
+        ]
+      },
+      {
+        "type": "carousel",
+        "id": "0/4",
+        "children": [
+          {
+            "type": "text",
+            "text": "e"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/:k": "press",
+    "0/:k~2": "press",
+    "0/:k~2/0": "press",
+    "0/3": "change",
+    "0/4": "change"
+  },
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
+}

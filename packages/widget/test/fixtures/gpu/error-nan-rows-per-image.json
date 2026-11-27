@@ -1,0 +1,39 @@
+{
+  "name": "error-nan-rows-per-image",
+  "source": "async function main() {\n  widget.render(ui.column([ui.canvas({ key: \"scene\", gpu: true, height: 100 })]))\n  const device = await widget.gpu.requestDevice()\n  const format = widget.gpu.getPreferredCanvasFormat()\n  const contexts = {}\n  for (const key of [\"scene\"]) {\n    contexts[key] = widget.gpu.getContext(key)\n    contexts[key].configure({ device, format })\n  }\n  const view = (key) => contexts[key].getCurrentTexture().createView()\n  const clear = (key) => ({ colorAttachments: [{ view: view(key), loadOp: \"clear\", storeOp: \"store\" }] })\n\n  await widget.frame()\n  const texture = device.createTexture({ size: [4, 4], format: \"rgba8unorm\", usage: GPUTextureUsage.COPY_DST })\n  device.queue.writeTexture({ texture }, new Uint8Array(64), { bytesPerRow: 16, rowsPerImage: NaN }, [4, 4])\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 200,
+      "height": 200
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [
+    {
+      "message": "gpu op 1: \"writeTexture\" argument 7 must be a whole number",
+      "canvases": "all"
+    }
+  ],
+  "end": "return",
+  "batches": [
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["context",1,"scene","rgba8unorm","opaque"]
+      ]
+    },
+    {
+      "frame": true,
+      "bytes": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==",
+      "ops": [
+        ["texture",2,4,4,1,"rgba8unorm",2,1,1],
+        ["writeTexture",2,0,[0,0,0],0,64,16,{"$num":"NaN"},[4,4,1]]
+      ]
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "name": "error-resources-over-256-mb",
+  "source": "async function main() {\n  widget.render(ui.column([ui.canvas({ key: \"scene\", gpu: true, height: 100 })]))\n  const device = await widget.gpu.requestDevice()\n  const format = widget.gpu.getPreferredCanvasFormat()\n  const contexts = {}\n  for (const key of [\"scene\"]) {\n    contexts[key] = widget.gpu.getContext(key)\n    contexts[key].configure({ device, format })\n  }\n  const view = (key) => contexts[key].getCurrentTexture().createView()\n  const clear = (key) => ({ colorAttachments: [{ view: view(key), loadOp: \"clear\", storeOp: \"store\" }] })\n\n  for (let i = 0; i < 5; i++) device.createBuffer({ size: 64 * 1024 * 1024, usage: GPUBufferUsage.STORAGE })\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 200,
+      "height": 200
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [
+    {
+      "message": "gpu op 5: the size of buffers and textures is over the limit of 268435456",
+      "canvases": "all"
+    }
+  ],
+  "end": "return",
+  "batches": [
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["context",1,"scene","rgba8unorm","opaque"],
+        ["buffer",2,67108864,128],
+        ["buffer",3,67108864,128],
+        ["buffer",4,67108864,128],
+        ["buffer",5,67108864,128],
+        ["buffer",6,67108864,128]
+      ]
+    }
+  ]
+}

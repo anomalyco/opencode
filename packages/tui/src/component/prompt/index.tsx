@@ -78,6 +78,10 @@ export type PromptProps = {
   visible?: boolean
   disabled?: boolean
   muted?: boolean
+  /** Stays visible without holding keyboard focus, while something in the timeline owns the keys. */
+  inactive?: boolean
+  /** Called when the user clicks an inactive prompt, so its owner can hand the keyboard back. */
+  onActivate?: () => void
   onSubmit?: () => void
   onEmptySubmit?: () => boolean | Promise<boolean>
   ref?: (ref: PromptRef | undefined) => void
@@ -768,7 +772,7 @@ export function Prompt(props: PromptProps) {
 
   createEffect(() => {
     if (!input || input.isDestroyed) return
-    if (props.visible === false || disabled() || dialog.stack.length > 0) {
+    if (props.visible === false || props.inactive || disabled() || dialog.stack.length > 0) {
       if (input.focused) input.blur()
       input.focusable = false
       return
@@ -1716,7 +1720,15 @@ export function Prompt(props: PromptProps) {
 
   return (
     <>
-      <box ref={(r: BoxRenderable) => (anchor = r)} visible={props.visible !== false} width="100%">
+      <box
+        ref={(r: BoxRenderable) => (anchor = r)}
+        visible={props.visible !== false}
+        width="100%"
+        onMouseDown={(event: MouseEvent) => {
+          if (!props.inactive || event.button !== 0) return
+          props.onActivate?.()
+        }}
+      >
         <box
           width="100%"
           border={["left"]}

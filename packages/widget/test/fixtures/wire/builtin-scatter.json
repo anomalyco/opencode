@@ -1,0 +1,170 @@
+{
+  "name": "builtin-scatter",
+  "builtin": "scatter",
+  "source": "// A scatter or bubble chart: points (x, y, optional size) in one or more series, with optional least-squares trend\n// lines. Points pop in; press or drag to read the nearest point, tap a legend entry to hide its series. With `choose`,\n// the Choose button submits the selected point.\n\nconst HEIGHT = 260\nconst INTRO = 0.7\nconst PALETTE = [\"accent\", \"#f59e0b\", \"#10b981\", \"#ef4444\", \"#8b5cf6\", \"#06b6d4\"]\n\nfunction init(data) {\n  return { active: null, down: false, hidden: [] }\n}\n\nfunction view(state, data) {\n  const picked = state.active && data.series[state.active.series].points[state.active.index]\n  return ui.column({ gap: 1, align: \"stretch\" }, [\n    ui.text(data.title, { style: \"title\" }),\n    ui.canvas({\n      onPointer: (state, p) => tap(state, data, p),\n      height: HEIGHT,\n      fps: 60,\n      duration: state.down ? undefined : INTRO,\n      alt: summary(data),\n    }),\n    ui.text(picked ? describe(data, state.active) : \"Press a point to read it; tap a legend entry to hide a series\", {\n      style: \"caption\",\n      tone: picked ? \"default\" : \"muted\",\n    }),\n    data.choose &&\n      ui.row({ gap: 1 }, [\n        ui.button(\"Choose point\", { onPress: (state) => choose(state, data), variant: \"primary\", disabled: !picked }),\n      ]),\n  ])\n}\n\nfunction choose(state, data) {\n  if (state.active) {\n    const point = data.series[state.active.series].points[state.active.index]\n    return submit({ series: data.series[state.active.series].label, index: state.active.index, ...point })\n  }\n  return state\n}\n\nfunction tap(state, data, pointer) {\n  const box = layout(data, state, pointer.width, pointer.height)\n  const entry = legendAt(box, pointer.x, pointer.y)\n  if (entry !== null) {\n    if (pointer.kind !== \"up\") return state\n    const hidden = state.hidden.includes(entry)\n      ? state.hidden.filter((index) => index !== entry)\n      : [...state.hidden, entry]\n    return { active: state.active && state.active.series === entry ? null : state.active, down: false, hidden }\n  }\n  const hit = nearest(data, state, box, pointer.x, pointer.y)\n  if (pointer.kind !== \"up\") return { ...state, active: hit ?? state.active, down: true }\n  return { ...state, active: hit, down: false }\n}\n\nfunction draw(state, data, frame) {\n  const g = ui.draw()\n  const box = layout(data, state, frame.width, frame.height)\n  const hover =\n    frame.pointer && !frame.pointer.down ? nearest(data, state, box, frame.pointer.x, frame.pointer.y) : null\n  const active = state.down || !hover ? state.active : hover\n  axes(g, data, box)\n  const count = data.series.reduce((sum, series) => sum + series.points.length, 0)\n  let order = 0\n  data.series.forEach((series, at) => {\n    if (state.hidden.includes(at)) return void (order += series.points.length)\n    const fill = color(series, at)\n    if (data.trend && series.points.length > 1) trend(g, series, box, fill, frame.t)\n    g.save().alpha(box.bubbles ? 0.55 : 0.85)\n    series.points.forEach((point, index) => {\n      const grow = ease((frame.t - (0.4 * order++) / Math.max(1, count)) / (INTRO - 0.4))\n      if (grow > 0) g.circle(px(box, point.x), py(box, point.y), radius(box, point) * grow, fill)\n    })\n    g.restore()\n  })\n  if (data.series.length > 1) legend(g, data, state, box)\n  if (active && frame.t >= INTRO) tooltip(g, data, box, active, frame.width)\n  return g.commands\n}\n\n// Geometry shared by draw and tap: the plot area, both ranges and the bubble scale.\nfunction layout(data, state, width, height) {\n  const shown = data.series.filter((_, at) => !state.hidden.includes(at))\n  const points = (shown.length ? shown : data.series).flatMap((series) => series.points)\n  const xs = nice(Math.min(...points.map((point) => point.x)), Math.max(...points.map((point) => point.x)))\n  const ys = nice(Math.min(...points.map((point) => point.y)), Math.max(...points.map((point) => point.y)))\n  const sizes = data.series.flatMap((series) => series.points.map((point) => point.size ?? 0))\n  const left = 14 + 7 * Math.max(...ys.ticks.map((tick) => compact(tick).length))\n  const top = data.series.length > 1 || data.yLabel ? 34 : 14\n  const plot = { x: left, y: top, w: Math.max(1, width - left - 16), h: Math.max(1, height - top - 40) }\n  const legend = []\n  let at = data.yLabel ? left + 14 + 7 * data.yLabel.length : left\n  if (data.series.length > 1)\n    for (const series of data.series) {\n      legend.push({ x: at, to: at + 20 + 7 * series.label.length })\n      at += 30 + 7 * series.label.length\n    }\n  return { plot, xs, ys, bubbles: Math.max(...sizes) > 0, maxSize: Math.max(1, ...sizes), legend }\n}\n\nfunction px(box, value) {\n  return box.plot.x + (box.plot.w * (value - box.xs.low)) / (box.xs.high - box.xs.low)\n}\n\nfunction py(box, value) {\n  return box.plot.y + box.plot.h * (1 - (value - box.ys.low) / (box.ys.high - box.ys.low))\n}\n\nfunction radius(box, point) {\n  return box.bubbles ? 3 + 15 * Math.sqrt((point.size ?? 0) / box.maxSize) : 4\n}\n\n// The nearest visible point within 24 px of the pointer.\nfunction nearest(data, state, box, x, y) {\n  let best = null\n  let distance = 24\n  data.series.forEach((series, at) => {\n    if (state.hidden.includes(at)) return\n    series.points.forEach((point, index) => {\n      const d = Math.hypot(px(box, point.x) - x, py(box, point.y) - y) - (box.bubbles ? radius(box, point) : 0)\n      if (d < distance) {\n        distance = d\n        best = { series: at, index }\n      }\n    })\n  })\n  return best\n}\n\n// Rounds the range out to 1, 2, 2.5 or 5 times a power of ten, with 3 to 6 gridlines.\nfunction nice(min, max) {\n  const span = max - min || Math.abs(max) || 1\n  const raw = span / 4\n  const power = Math.pow(10, Math.floor(Math.log10(raw)))\n  const step = power * ([1, 2, 2.5, 5, 10].find((factor) => factor * power >= raw) ?? 10)\n  const low = Math.floor(min / step) * step\n  const high = Math.max(low + step, Math.ceil(max / step) * step)\n  const ticks = []\n  for (let tick = low; tick <= high + step / 2; tick += step) ticks.push(Math.round(tick / step) * step)\n  return { low, high, ticks }\n}\n\nfunction axes(g, data, box) {\n  const bottom = box.plot.y + box.plot.h\n  for (const tick of box.ys.ticks) {\n    const at = py(box, tick)\n    g.line(box.plot.x, at, box.plot.x + box.plot.w, at, { stroke: \"border\", width: 1 })\n    g.text(box.plot.x - 8, at + 4, compact(tick), { size: 11, align: \"right\", color: \"muted\" })\n  }\n  for (const tick of box.xs.ticks) {\n    const at = px(box, tick)\n    g.line(at, box.plot.y, at, bottom, { stroke: \"border\", width: 1 })\n    g.text(at, bottom + 16, compact(tick), { size: 11, align: \"center\", color: \"muted\" })\n  }\n  if (data.xLabel)\n    g.text(box.plot.x + box.plot.w, bottom + 32, data.xLabel, { size: 11, align: \"right\", color: \"muted\" })\n  if (data.yLabel) g.text(box.plot.x - 8, box.plot.y - 10, data.yLabel, { size: 11, color: \"muted\" })\n}\n\n// Least squares over the visible range of x, drawn left to right during the intro.\nfunction trend(g, series, box, stroke, t) {\n  const n = series.points.length\n  const mx = series.points.reduce((sum, point) => sum + point.x, 0) / n\n  const my = series.points.reduce((sum, point) => sum + point.y, 0) / n\n  const sxx = series.points.reduce((sum, point) => sum + (point.x - mx) * (point.x - mx), 0)\n  if (sxx === 0) return\n  const slope = series.points.reduce((sum, point) => sum + (point.x - mx) * (point.y - my), 0) / sxx\n  const xs = series.points.map((point) => point.x)\n  const from = Math.min(...xs)\n  const to = from + (Math.max(...xs) - from) * ease(t / INTRO)\n  const at = (x) => [px(box, x), py(box, my + slope * (x - mx))]\n  const [x1, y1] = at(from)\n  const [x2, y2] = at(to)\n  g.line(x1, y1, x2, y2, { stroke, width: 2, cap: \"round\" })\n}\n\nfunction legend(g, data, state, box) {\n  const top = box.plot.y - 22\n  data.series.forEach((series, at) => {\n    const hidden = state.hidden.includes(at)\n    const fill = color(series, at)\n    const left = box.legend[at].x\n    g.circle(left + 4, top, 4, hidden ? { stroke: fill, width: 1.5 } : fill)\n    g.text(left + 13, top + 4, series.label, { size: 12, color: hidden ? \"muted\" : \"text\" })\n  })\n}\n\nfunction legendAt(box, x, y) {\n  if (box.legend.length === 0 || y > box.plot.y - 8) return null\n  const index = box.legend.findIndex((entry) => x >= entry.x - 4 && x <= entry.to)\n  return index < 0 ? null : index\n}\n\nfunction tooltip(g, data, box, active, width) {\n  const series = data.series[active.series]\n  const point = series.points[active.index]\n  const title = point.label ?? series.label\n  const value =\n    compact(point.x) + \", \" + compact(point.y) + (point.size !== undefined ? \" · \" + compact(point.size) : \"\")\n  const w = 20 + 7 * Math.max(title.length, value.length)\n  const x = px(box, point.x)\n  const y = py(box, point.y)\n  g.circle(x, y, radius(box, point) + 2, { stroke: \"text\", width: 2 })\n  const left = Math.max(2, Math.min(width - w - 2, x - w / 2))\n  const top = y - radius(box, point) - 52 < 2 ? y + radius(box, point) + 8 : y - radius(box, point) - 52\n  g.rrect(left, top, w, 44, 8, { fill: \"surface\", stroke: \"border\", width: 1 })\n  g.text(left + 10, top + 17, title, { size: 11, color: \"muted\" })\n  g.text(left + 10, top + 35, value, { size: 13, weight: 600, color: color(series, active.series) })\n}\n\nfunction describe(data, active) {\n  const series = data.series[active.series]\n  const point = series.points[active.index]\n  const name = point.label ? point.label + \" (\" + series.label + \")\" : series.label\n  const axes = (data.xLabel ?? \"x\") + \" \" + compact(point.x) + \", \" + (data.yLabel ?? \"y\") + \" \" + compact(point.y)\n  return name + \" · \" + axes + (point.size !== undefined ? \", size \" + compact(point.size) : \"\")\n}\n\nfunction summary(data) {\n  return (\n    \"Scatter chart\" +\n    (data.xLabel || data.yLabel ? \" of \" + (data.yLabel ?? \"y\") + \" against \" + (data.xLabel ?? \"x\") : \"\") +\n    \". \" +\n    data.series\n      .map(\n        (series) =>\n          series.label +\n          \": \" +\n          series.points.length +\n          \" points, x \" +\n          compact(Math.min(...series.points.map((point) => point.x))) +\n          \" to \" +\n          compact(Math.max(...series.points.map((point) => point.x))) +\n          \", y \" +\n          compact(Math.min(...series.points.map((point) => point.y))) +\n          \" to \" +\n          compact(Math.max(...series.points.map((point) => point.y))),\n      )\n      .join(\"; \")\n  )\n}\n\nfunction color(series, index) {\n  return series.color ?? PALETTE[index % PALETTE.length]\n}\n\nfunction compact(value) {\n  const size = Math.abs(value)\n  const round = (number) => String(Math.round(number * 10) / 10)\n  if (size >= 1e9) return round(value / 1e9) + \"B\"\n  if (size >= 1e6) return round(value / 1e6) + \"M\"\n  if (size >= 1e4) return round(value / 1e3) + \"k\"\n  return String(Math.round(value * 100) / 100)\n}\n\nfunction ease(p) {\n  const clamped = Math.max(0, Math.min(1, p))\n  return 1 - Math.pow(1 - clamped, 3)\n}\n",
+  "input": {
+    "phase": "init",
+    "data": {
+      "title": "Bundle size vs. load time",
+      "xLabel": "KB",
+      "yLabel": "ms",
+      "trend": true,
+      "choose": true,
+      "series": [
+        {
+          "label": "Web",
+          "points": [
+            {
+              "x": 120,
+              "y": 340,
+              "label": "home"
+            },
+            {
+              "x": 210,
+              "y": 420
+            },
+            {
+              "x": 260,
+              "y": 510,
+              "label": "editor"
+            },
+            {
+              "x": 90,
+              "y": 280
+            },
+            {
+              "x": 330,
+              "y": 610
+            },
+            {
+              "x": 180,
+              "y": 380
+            },
+            {
+              "x": 400,
+              "y": 700,
+              "label": "admin"
+            }
+          ]
+        },
+        {
+          "label": "Mobile",
+          "points": [
+            {
+              "x": 80,
+              "y": 420
+            },
+            {
+              "x": 150,
+              "y": 560
+            },
+            {
+              "x": 220,
+              "y": 690
+            },
+            {
+              "x": 60,
+              "y": 380
+            },
+            {
+              "x": 300,
+              "y": 820,
+              "label": "checkout"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Bundle size vs. load time"
+      },
+      {
+        "onPointer": "$function",
+        "height": 260,
+        "fps": 60,
+        "duration": 0.7,
+        "alt": "Scatter chart of ms against KB. Web: 7 points, x 90 to 400, y 280 to 700; Mobile: 5 points, x 60 to 300, y 380 to 820",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Press a point to read it; tap a legend entry to hide a series"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose point"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Bundle size vs. load time"
+      },
+      {
+        "height": 260,
+        "fps": 60,
+        "duration": 0.7,
+        "alt": "Scatter chart of ms against KB. Web: 7 points, x 90 to 400, y 280 to 700; Mobile: 5 points, x 60 to 300, y 380 to 820",
+        "type": "canvas",
+        "id": "0/1",
+        "pointer": true
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Press a point to read it; tap a legend entry to hide a series"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose point",
+            "id": "0/3/0"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/1": "pointer",
+    "0/3/0": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {
+      "active": null,
+      "down": false,
+      "hidden": []
+    }
+  }
+}

@@ -1,0 +1,111 @@
+{
+  "name": "post-process",
+  "source": "// Render to a texture, then post-process it onto the canvas: a spinning triangle drawn offscreen, shown through a\n// vignette with a chromatic offset. `data.frames`: stop after that many frames (fixtures).\nconst SCENE = `\n@group(0) @binding(0) var<uniform> angle: vec4f;\n\nstruct Out { @builtin(position) position: vec4f, @location(0) color: vec3f }\n\n@vertex fn vs(@builtin(vertex_index) index: u32) -> Out {\n  let a = angle.x + f32(index) * 2.0943951;\n  var out: Out;\n  out.position = vec4f(cos(a) * 0.7, sin(a) * 0.7, 0.0, 1.0);\n  var colors = array<vec3f, 3>(vec3f(1, 0.3, 0.2), vec3f(0.2, 1, 0.4), vec3f(0.3, 0.4, 1));\n  out.color = colors[index];\n  return out;\n}\n\n@fragment fn fs(in: Out) -> @location(0) vec4f {\n  return vec4f(in.color, 1.0);\n}\n`\n\nconst POST = `\n@group(0) @binding(0) var linear: sampler;\n@group(0) @binding(1) var scene: texture_2d<f32>;\n\nstruct Out { @builtin(position) position: vec4f, @location(0) uv: vec2f }\n\n// One triangle that covers the screen.\n@vertex fn vs(@builtin(vertex_index) index: u32) -> Out {\n  let corner = vec2f(f32((index << 1u) & 2u), f32(index & 2u));\n  var out: Out;\n  out.position = vec4f(corner * 2.0 - 1.0, 0.0, 1.0);\n  out.uv = vec2f(corner.x, 1.0 - corner.y);\n  return out;\n}\n\n@fragment fn fs(in: Out) -> @location(0) vec4f {\n  let offset = (in.uv - 0.5) * 0.01;\n  let r = textureSample(scene, linear, in.uv + offset).r;\n  let g = textureSample(scene, linear, in.uv).g;\n  let b = textureSample(scene, linear, in.uv - offset).b;\n  let vignette = 1.0 - dot(in.uv - 0.5, in.uv - 0.5) * 1.5;\n  return vec4f(vec3f(r, g, b) * vignette, 1.0);\n}\n`\n\nasync function main(data) {\n  widget.render(ui.canvas({ key: \"post\", gpu: true, height: 220, alt: \"A post-processed triangle\" }))\n  const device = await widget.gpu.requestDevice()\n  const context = widget.gpu.getContext(\"post\")\n  const format = widget.gpu.getPreferredCanvasFormat()\n  context.configure({ device, format })\n\n  const sceneModule = device.createShaderModule({ code: SCENE })\n  const scenePipeline = device.createRenderPipeline({\n    layout: \"auto\",\n    vertex: { module: sceneModule, entryPoint: \"vs\" },\n    fragment: { module: sceneModule, entryPoint: \"fs\", targets: [{ format: \"rgba8unorm\" }] },\n  })\n  const angle = device.createBuffer({ size: 16, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST })\n  const sceneGroup = device.createBindGroup({\n    layout: scenePipeline.getBindGroupLayout(0),\n    entries: [{ binding: 0, resource: { buffer: angle } }],\n  })\n\n  const postModule = device.createShaderModule({ code: POST })\n  const postPipeline = device.createRenderPipeline({\n    layout: \"auto\",\n    vertex: { module: postModule, entryPoint: \"vs\" },\n    fragment: { module: postModule, entryPoint: \"fs\", targets: [{ format }] },\n  })\n  const sampler = device.createSampler({ magFilter: \"linear\", minFilter: \"linear\" })\n\n  // The offscreen texture and its bind group follow the canvas's size.\n  const target = { texture: null, group: null, width: 0, height: 0 }\n  for (let frame = 0; data?.frames === undefined || frame < data.frames; frame++) {\n    const { t, width, height, scale } = await widget.frame()\n    const w = context.width || Math.round(width * scale)\n    const h = context.height || Math.round(height * scale)\n    if (target.width !== w || target.height !== h) {\n      target.texture?.destroy()\n      target.texture = device.createTexture({\n        size: [w, h],\n        format: \"rgba8unorm\",\n        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING,\n      })\n      target.group = device.createBindGroup({\n        layout: postPipeline.getBindGroupLayout(0),\n        entries: [\n          { binding: 0, resource: sampler },\n          { binding: 1, resource: target.texture.createView() },\n        ],\n      })\n      Object.assign(target, { width: w, height: h })\n    }\n    device.queue.writeBuffer(angle, 0, new Float32Array([t, 0, 0, 0]))\n\n    const encoder = device.createCommandEncoder()\n    const scene = encoder.beginRenderPass({\n      colorAttachments: [\n        { view: target.texture.createView(), loadOp: \"clear\", storeOp: \"store\", clearValue: [0.1, 0.1, 0.12, 1] },\n      ],\n    })\n    scene.setPipeline(scenePipeline)\n    scene.setBindGroup(0, sceneGroup)\n    scene.draw(3)\n    scene.end()\n    const post = encoder.beginRenderPass({\n      colorAttachments: [{ view: context.getCurrentTexture().createView(), loadOp: \"clear\", storeOp: \"store\" }],\n    })\n    post.setPipeline(postPipeline)\n    post.setBindGroup(0, target.group)\n    post.draw(3)\n    post.end()\n    device.queue.submit([encoder.finish()])\n  }\n}\n",
+  "data": {
+    "frames": 3
+  },
+  "canvases": [
+    {
+      "key": "post",
+      "width": 320,
+      "height": 220
+    }
+  ],
+  "inputs": [
+    {
+      "frame": 1,
+      "input": {
+        "type": "canvas",
+        "key": "post",
+        "width": 640,
+        "height": 440
+      }
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [],
+  "end": "return",
+  "batches": [
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["context",1,"post","rgba8unorm","opaque"],
+        ["shader",2,"\n@group(0) @binding(0) var<uniform> angle: vec4f;\n\nstruct Out { @builtin(position) position: vec4f, @location(0) color: vec3f }\n\n@vertex fn vs(@builtin(vertex_index) index: u32) -> Out {\n  let a = angle.x + f32(index) * 2.0943951;\n  var out: Out;\n  out.position = vec4f(cos(a) * 0.7, sin(a) * 0.7, 0.0, 1.0);\n  var colors = array<vec3f, 3>(vec3f(1, 0.3, 0.2), vec3f(0.2, 1, 0.4), vec3f(0.3, 0.4, 1));\n  out.color = colors[index];\n  return out;\n}\n\n@fragment fn fs(in: Out) -> @location(0) vec4f {\n  return vec4f(in.color, 1.0);\n}\n"],
+        ["renderPipeline",3,{"layout":"auto","vertex":{"module":2,"entryPoint":"vs","buffers":[]},"fragment":{"module":2,"entryPoint":"fs","targets":[{"format":"rgba8unorm","blend":null,"writeMask":15}]},"primitive":{"topology":"triangle-list","stripIndexFormat":null,"frontFace":"ccw","cullMode":"none"},"depthStencil":null,"multisample":{"count":1,"mask":4294967295,"alphaToCoverageEnabled":false}}],
+        ["buffer",4,16,72],
+        ["autoLayout",5,3,0],
+        ["bindGroup",6,{"layout":5,"entries":[{"binding":0,"resource":{"buffer":4,"offset":0,"size":-1}}]}],
+        ["shader",7,"\n@group(0) @binding(0) var linear: sampler;\n@group(0) @binding(1) var scene: texture_2d<f32>;\n\nstruct Out { @builtin(position) position: vec4f, @location(0) uv: vec2f }\n\n// One triangle that covers the screen.\n@vertex fn vs(@builtin(vertex_index) index: u32) -> Out {\n  let corner = vec2f(f32((index << 1u) & 2u), f32(index & 2u));\n  var out: Out;\n  out.position = vec4f(corner * 2.0 - 1.0, 0.0, 1.0);\n  out.uv = vec2f(corner.x, 1.0 - corner.y);\n  return out;\n}\n\n@fragment fn fs(in: Out) -> @location(0) vec4f {\n  let offset = (in.uv - 0.5) * 0.01;\n  let r = textureSample(scene, linear, in.uv + offset).r;\n  let g = textureSample(scene, linear, in.uv).g;\n  let b = textureSample(scene, linear, in.uv - offset).b;\n  let vignette = 1.0 - dot(in.uv - 0.5, in.uv - 0.5) * 1.5;\n  return vec4f(vec3f(r, g, b) * vignette, 1.0);\n}\n"],
+        ["renderPipeline",8,{"layout":"auto","vertex":{"module":7,"entryPoint":"vs","buffers":[]},"fragment":{"module":7,"entryPoint":"fs","targets":[{"format":"rgba8unorm","blend":null,"writeMask":15}]},"primitive":{"topology":"triangle-list","stripIndexFormat":null,"frontFace":"ccw","cullMode":"none"},"depthStencil":null,"multisample":{"count":1,"mask":4294967295,"alphaToCoverageEnabled":false}}],
+        ["sampler",9,{"addressModeU":"clamp-to-edge","addressModeV":"clamp-to-edge","addressModeW":"clamp-to-edge","magFilter":"linear","minFilter":"linear","mipmapFilter":"nearest","lodMinClamp":0,"lodMaxClamp":32,"compare":null,"maxAnisotropy":1}]
+      ]
+    },
+    {
+      "frame": true,
+      "bytes": "AAAAAAAAAAAAAAAAAAAAAA==",
+      "ops": [
+        ["texture",10,320,220,1,"rgba8unorm",20,1,1],
+        ["autoLayout",11,8,0],
+        ["view",12,10,{"dimension":"2d","baseMipLevel":0,"mipLevelCount":1,"baseArrayLayer":0,"arrayLayerCount":1}],
+        ["bindGroup",13,{"layout":11,"entries":[{"binding":0,"resource":{"sampler":9}},{"binding":1,"resource":{"view":12}}]}],
+        ["writeBuffer",4,0,0,16],
+        ["view",14,1,{"dimension":"2d","baseMipLevel":0,"mipLevelCount":1,"baseArrayLayer":0,"arrayLayerCount":1}],
+        ["pass",{"colorAttachments":[{"view":12,"resolveTarget":null,"clearValue":[0.1,0.1,0.12,1],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["setPipeline",3],
+        ["setBindGroup",0,6,[]],
+        ["draw",3,1,0,0],
+        ["end"],
+        ["pass",{"colorAttachments":[{"view":14,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["setPipeline",8],
+        ["setBindGroup",0,13,[]],
+        ["draw",3,1,0,0],
+        ["end"],
+        ["submit"]
+      ]
+    },
+    {
+      "frame": true,
+      "bytes": "iYiIPAAAAAAAAAAAAAAAAA==",
+      "ops": [
+        ["destroy",10],
+        ["texture",15,640,440,1,"rgba8unorm",20,1,1],
+        ["view",16,15,{"dimension":"2d","baseMipLevel":0,"mipLevelCount":1,"baseArrayLayer":0,"arrayLayerCount":1}],
+        ["bindGroup",17,{"layout":11,"entries":[{"binding":0,"resource":{"sampler":9}},{"binding":1,"resource":{"view":16}}]}],
+        ["writeBuffer",4,0,0,16],
+        ["pass",{"colorAttachments":[{"view":16,"resolveTarget":null,"clearValue":[0.1,0.1,0.12,1],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["setPipeline",3],
+        ["setBindGroup",0,6,[]],
+        ["draw",3,1,0,0],
+        ["end"],
+        ["pass",{"colorAttachments":[{"view":14,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["setPipeline",8],
+        ["setBindGroup",0,17,[]],
+        ["draw",3,1,0,0],
+        ["end"],
+        ["submit"]
+      ]
+    },
+    {
+      "frame": false,
+      "bytes": "iYgIPQAAAAAAAAAAAAAAAA==",
+      "ops": [
+        ["writeBuffer",4,0,0,16],
+        ["pass",{"colorAttachments":[{"view":16,"resolveTarget":null,"clearValue":[0.1,0.1,0.12,1],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["setPipeline",3],
+        ["setBindGroup",0,6,[]],
+        ["draw",3,1,0,0],
+        ["end"],
+        ["pass",{"colorAttachments":[{"view":14,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["setPipeline",8],
+        ["setBindGroup",0,17,[]],
+        ["draw",3,1,0,0],
+        ["end"],
+        ["submit"]
+      ]
+    }
+  ]
+}

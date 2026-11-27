@@ -1,0 +1,42 @@
+{
+  "name": "handles-and-defaults",
+  "source": "async function main() {\n  widget.render(ui.column([ui.canvas({ key: \"scene\", gpu: true, height: 100 })]))\n  const device = await widget.gpu.requestDevice()\n  const format = widget.gpu.getPreferredCanvasFormat()\n  const contexts = {}\n  for (const key of [\"scene\"]) {\n    contexts[key] = widget.gpu.getContext(key)\n    contexts[key].configure({ device, format })\n  }\n  const view = (key) => contexts[key].getCurrentTexture().createView()\n  const clear = (key) => ({ colorAttachments: [{ view: view(key), loadOp: \"clear\", storeOp: \"store\" }] })\n\n  const again = await widget.gpu.requestDevice()\n  if (again !== device) throw new Error(\"one device per widget\")\n  const texture = device.createTexture({ size: { width: 8, height: 8, depthOrArrayLayers: 6 }, format: \"rgba8unorm\", usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST, mipLevelCount: 2 })\n  const cube = texture.createView({ dimension: \"cube\" })\n  const layers = texture.createView()\n  if (texture.createView({ dimension: \"cube\" }) !== cube) throw new Error(\"equal views are one handle\")\n  device.createSampler()\n  const layout = device.createBindGroupLayout({ entries: [\n    { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { viewDimension: \"cube\" } },\n    { binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: {} },\n    { binding: 2, visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT, buffer: { type: \"read-only-storage\", hasDynamicOffset: true } },\n  ] })\n  const storage = device.createBuffer({ size: 512, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC })\n  const copy = device.createBuffer({ size: 512, usage: GPUBufferUsage.COPY_DST })\n  device.createBindGroup({ layout, entries: [\n    { binding: 0, resource: cube },\n    { binding: 1, resource: device.createSampler({ magFilter: \"linear\", compare: undefined }) },\n    { binding: 2, resource: { buffer: storage, offset: 256, size: 64 } },\n  ] })\n  device.createPipelineLayout({ bindGroupLayouts: [layout] })\n  device.queue.writeBuffer(storage, 4, new Uint32Array([1, 2, 3, 4, 5]), 1, 3)\n  device.queue.writeBuffer(storage, 0, new Uint8Array([9, 8, 7, 6]).buffer)\n  device.queue.writeTexture({ texture, mipLevel: 1, origin: [0, 0, 2] }, new Uint8Array(4 * 4 * 4).fill(200), { bytesPerRow: 16 }, { width: 4, height: 4 })\n  const encoder = device.createCommandEncoder()\n  encoder.copyBufferToBuffer(storage, 0, copy, 0, 256)\n  device.queue.submit([encoder.finish()])\n  texture.destroy()\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 200,
+      "height": 200
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [],
+  "end": "return",
+  "batches": [
+    {
+      "frame": true,
+      "bytes": "AgAAAAMAAAAEAAAACQgHBsjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMjIyMg=",
+      "ops": [
+        ["context",1,"scene","rgba8unorm","opaque"],
+        ["texture",2,8,8,6,"rgba8unorm",6,2,1],
+        ["view",3,2,{"dimension":"cube","baseMipLevel":0,"mipLevelCount":2,"baseArrayLayer":0,"arrayLayerCount":6}],
+        ["view",4,2,{"dimension":"2d-array","baseMipLevel":0,"mipLevelCount":2,"baseArrayLayer":0,"arrayLayerCount":6}],
+        ["sampler",5,{"addressModeU":"clamp-to-edge","addressModeV":"clamp-to-edge","addressModeW":"clamp-to-edge","magFilter":"nearest","minFilter":"nearest","mipmapFilter":"nearest","lodMinClamp":0,"lodMaxClamp":32,"compare":null,"maxAnisotropy":1}],
+        ["bindGroupLayout",6,{"entries":[{"binding":0,"visibility":2,"buffer":null,"sampler":null,"texture":{"sampleType":"float","viewDimension":"cube","multisampled":false}},{"binding":1,"visibility":2,"buffer":null,"sampler":{"type":"filtering"},"texture":null},{"binding":2,"visibility":3,"buffer":{"type":"read-only-storage","hasDynamicOffset":true,"minBindingSize":0},"sampler":null,"texture":null}]}],
+        ["buffer",7,512,140],
+        ["buffer",8,512,8],
+        ["sampler",9,{"addressModeU":"clamp-to-edge","addressModeV":"clamp-to-edge","addressModeW":"clamp-to-edge","magFilter":"linear","minFilter":"nearest","mipmapFilter":"nearest","lodMinClamp":0,"lodMaxClamp":32,"compare":null,"maxAnisotropy":1}],
+        ["bindGroup",10,{"layout":6,"entries":[{"binding":0,"resource":{"view":3}},{"binding":1,"resource":{"sampler":9}},{"binding":2,"resource":{"buffer":7,"offset":256,"size":64}}]}],
+        ["pipelineLayout",11,[6]],
+        ["writeBuffer",7,4,0,12],
+        ["writeBuffer",7,0,12,4],
+        ["writeTexture",2,1,[0,0,2],16,64,16,null,[4,4,1]],
+        ["copyBufferToBuffer",7,0,8,0,256],
+        ["submit"],
+        ["destroy",2]
+      ]
+    }
+  ]
+}

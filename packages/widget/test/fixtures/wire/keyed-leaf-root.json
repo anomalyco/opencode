@@ -1,0 +1,22 @@
+{
+  "name": "keyed-leaf-root",
+  "source": "function view(state, data) {\n  return ui.text(\"keyed\", { key: \"k\" })\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "key": "k",
+    "type": "text",
+    "text": "keyed"
+  },
+  "view": {
+    "type": "text",
+    "text": "keyed"
+  },
+  "handlers": {},
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
+}

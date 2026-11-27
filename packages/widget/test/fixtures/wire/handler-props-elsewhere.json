@@ -1,0 +1,99 @@
+{
+  "name": "handler-props-elsewhere",
+  "source": "function view(state, data) {\n  return ui.column([ui.text(\"t\", { onPress: (s) => s }), ui.button(\"b\", { onChange: (s) => s }), ui.select([\"a\"], { onPress: (s) => s }), ui.canvas({ height: 1, onPress: (s) => s }), ui.card({ onChange: (s) => s }, [ui.text(\"c\")]), ui.column({ onPointer: (s) => s }, [])])\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "type": "column",
+    "children": [
+      {
+        "onPress": "$function",
+        "type": "text",
+        "text": "t"
+      },
+      {
+        "onChange": "$function",
+        "type": "button",
+        "label": "b"
+      },
+      {
+        "onPress": "$function",
+        "type": "select",
+        "options": [
+          {
+            "value": "a",
+            "label": "a"
+          }
+        ]
+      },
+      {
+        "height": 1,
+        "onPress": "$function",
+        "type": "canvas"
+      },
+      {
+        "onChange": "$function",
+        "type": "card",
+        "children": [
+          {
+            "type": "text",
+            "text": "c"
+          }
+        ]
+      },
+      {
+        "onPointer": "$function",
+        "type": "column",
+        "children": []
+      }
+    ]
+  },
+  "view": {
+    "type": "column",
+    "children": [
+      {
+        "type": "text",
+        "text": "t"
+      },
+      {
+        "type": "button",
+        "label": "b",
+        "id": "0/1"
+      },
+      {
+        "type": "select",
+        "options": [
+          {
+            "value": "a",
+            "label": "a"
+          }
+        ],
+        "id": "0/2"
+      },
+      {
+        "height": 1,
+        "type": "canvas"
+      },
+      {
+        "type": "card",
+        "children": [
+          {
+            "type": "text",
+            "text": "c"
+          }
+        ]
+      },
+      {
+        "type": "column",
+        "children": []
+      }
+    ]
+  },
+  "handlers": {},
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
+}

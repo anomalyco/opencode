@@ -1,0 +1,93 @@
+{
+  "name": "raw-nodes",
+  "source": "function view(state, data) {\n  return ({ type: \"column\", children: [{ type: \"button\", label: \"raw\", onPress: (s) => s, key: \"r\" }, { type: \"text\", text: \"t\", id: \"x\" }, { type: \"card\", children: [{ type: \"text\", text: \"in\" }] }, { type: \"card\", onPress: (s) => s, children: [{ type: \"text\", text: \"pressable\" }] }, { type: \"button\", label: \"plain\" }] })\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "type": "column",
+    "children": [
+      {
+        "type": "button",
+        "label": "raw",
+        "onPress": "$function",
+        "key": "r"
+      },
+      {
+        "type": "text",
+        "text": "t",
+        "id": "x"
+      },
+      {
+        "type": "card",
+        "children": [
+          {
+            "type": "text",
+            "text": "in"
+          }
+        ]
+      },
+      {
+        "type": "card",
+        "onPress": "$function",
+        "children": [
+          {
+            "type": "text",
+            "text": "pressable"
+          }
+        ]
+      },
+      {
+        "type": "button",
+        "label": "plain"
+      }
+    ]
+  },
+  "view": {
+    "type": "column",
+    "children": [
+      {
+        "type": "button",
+        "label": "raw",
+        "id": "0/:r"
+      },
+      {
+        "type": "text",
+        "text": "t"
+      },
+      {
+        "type": "card",
+        "children": [
+          {
+            "type": "text",
+            "text": "in"
+          }
+        ]
+      },
+      {
+        "type": "card",
+        "id": "0/3",
+        "children": [
+          {
+            "type": "text",
+            "text": "pressable"
+          }
+        ]
+      },
+      {
+        "type": "button",
+        "label": "plain",
+        "id": "0/4"
+      }
+    ]
+  },
+  "handlers": {
+    "0/:r": "press",
+    "0/3": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
+}

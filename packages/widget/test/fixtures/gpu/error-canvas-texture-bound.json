@@ -1,0 +1,40 @@
+{
+  "name": "error-canvas-texture-bound",
+  "source": "async function main() {\n  widget.render(ui.column([ui.canvas({ key: \"scene\", gpu: true, height: 100 })]))\n  const device = await widget.gpu.requestDevice()\n  const format = widget.gpu.getPreferredCanvasFormat()\n  const contexts = {}\n  for (const key of [\"scene\"]) {\n    contexts[key] = widget.gpu.getContext(key)\n    contexts[key].configure({ device, format })\n  }\n  const view = (key) => contexts[key].getCurrentTexture().createView()\n  const clear = (key) => ({ colorAttachments: [{ view: view(key), loadOp: \"clear\", storeOp: \"store\" }] })\n\n  await widget.frame()\n  const layout = device.createBindGroupLayout({ entries: [{ binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: {} }] })\n  device.createBindGroup({ layout, entries: [{ binding: 0, resource: view(\"scene\") }] })\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 200,
+      "height": 200
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [
+    {
+      "message": "gpu op 2: \"bindGroup\" argument 2.entries[0].resource.view uses canvas \"scene\"'s texture, which can only be rendered into",
+      "canvases": "all"
+    }
+  ],
+  "end": "return",
+  "batches": [
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["context",1,"scene","rgba8unorm","opaque"]
+      ]
+    },
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["bindGroupLayout",2,{"entries":[{"binding":0,"visibility":2,"buffer":null,"sampler":null,"texture":{"sampleType":"float","viewDimension":"2d","multisampled":false}}]}],
+        ["view",3,1,{"dimension":"2d","baseMipLevel":0,"mipLevelCount":1,"baseArrayLayer":0,"arrayLayerCount":1}],
+        ["bindGroup",4,{"layout":2,"entries":[{"binding":0,"resource":{"view":3}}]}]
+      ]
+    }
+  ]
+}

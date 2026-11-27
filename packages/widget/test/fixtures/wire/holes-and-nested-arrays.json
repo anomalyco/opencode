@@ -1,0 +1,80 @@
+{
+  "name": "holes-and-nested-arrays",
+  "source": "function view(state, data) {\n  return ui.column({ gap: 1 }, [ui.text(\"a\"), false, null, [ui.button(\"b\", { onPress: (s) => s }), [ui.text(\"c\"), ui.input(\"\", { onChange: (s) => s })]], undefined, ui.button(\"d\")])\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "gap": 1,
+    "type": "column",
+    "children": [
+      {
+        "type": "text",
+        "text": "a"
+      },
+      false,
+      null,
+      [
+        {
+          "onPress": "$function",
+          "type": "button",
+          "label": "b"
+        },
+        [
+          {
+            "type": "text",
+            "text": "c"
+          },
+          {
+            "onChange": "$function",
+            "type": "input",
+            "value": ""
+          }
+        ]
+      ],
+      null,
+      {
+        "type": "button",
+        "label": "d"
+      }
+    ]
+  },
+  "view": {
+    "gap": 1,
+    "type": "column",
+    "children": [
+      {
+        "type": "text",
+        "text": "a"
+      },
+      {
+        "type": "button",
+        "label": "b",
+        "id": "0/3.0"
+      },
+      {
+        "type": "text",
+        "text": "c"
+      },
+      {
+        "type": "input",
+        "value": "",
+        "id": "0/3.1.1"
+      },
+      {
+        "type": "button",
+        "label": "d",
+        "id": "0/5"
+      }
+    ]
+  },
+  "handlers": {
+    "0/3.0": "press",
+    "0/3.1.1": "change"
+  },
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
+}

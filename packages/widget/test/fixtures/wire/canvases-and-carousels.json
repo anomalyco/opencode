@@ -1,0 +1,139 @@
+{
+  "name": "canvases-and-carousels",
+  "source": "function view(state, data) {\n  return ui.stack([ui.canvas({ key: \"scene\", height: 10 }), ui.canvas({ height: 10, onPointer: (s) => s }), ui.canvas({ key: \"game\", height: 10, onPointer: (s) => s, place: \"fill\" }), ui.canvas({ key: \"gpu\", wgsl: \"fn shade(p: vec2f) -> vec4f { return vec4f(1.0); }\", height: 10, onPointer: (s) => s }), ui.canvas({ key: \"scene\", height: 5 }), ui.carousel({}, [ui.text(\"p\")]), ui.carousel({ index: 1, onChange: (s) => s }, [ui.text(\"q\"), ui.text(\"r\")])])\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "type": "stack",
+    "children": [
+      {
+        "key": "scene",
+        "height": 10,
+        "type": "canvas"
+      },
+      {
+        "height": 10,
+        "onPointer": "$function",
+        "type": "canvas"
+      },
+      {
+        "key": "game",
+        "height": 10,
+        "onPointer": "$function",
+        "place": "fill",
+        "type": "canvas"
+      },
+      {
+        "key": "gpu",
+        "wgsl": "fn shade(p: vec2f) -> vec4f { return vec4f(1.0); }",
+        "height": 10,
+        "onPointer": "$function",
+        "type": "canvas"
+      },
+      {
+        "key": "scene",
+        "height": 5,
+        "type": "canvas"
+      },
+      {
+        "type": "carousel",
+        "children": [
+          {
+            "type": "text",
+            "text": "p"
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "onChange": "$function",
+        "type": "carousel",
+        "children": [
+          {
+            "type": "text",
+            "text": "q"
+          },
+          {
+            "type": "text",
+            "text": "r"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "type": "stack",
+    "children": [
+      {
+        "height": 10,
+        "type": "canvas",
+        "id": "0/:scene"
+      },
+      {
+        "height": 10,
+        "type": "canvas",
+        "id": "0/1",
+        "pointer": true
+      },
+      {
+        "height": 10,
+        "place": "fill",
+        "type": "canvas",
+        "id": "0/:game",
+        "pointer": true
+      },
+      {
+        "wgsl": "fn shade(p: vec2f) -> vec4f { return vec4f(1.0); }",
+        "height": 10,
+        "type": "canvas",
+        "id": "0/:gpu",
+        "pointer": true
+      },
+      {
+        "height": 5,
+        "type": "canvas",
+        "id": "0/:scene~2"
+      },
+      {
+        "type": "carousel",
+        "children": [
+          {
+            "type": "text",
+            "text": "p"
+          }
+        ]
+      },
+      {
+        "index": 1,
+        "type": "carousel",
+        "id": "0/6",
+        "children": [
+          {
+            "type": "text",
+            "text": "q"
+          },
+          {
+            "type": "text",
+            "text": "r"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/1": "pointer",
+    "0/:game": "pointer",
+    "0/:gpu": "pointer",
+    "0/6": "change"
+  },
+  "canvases": {
+    "scene": "0/:scene",
+    "game": "0/:game",
+    "gpu": "0/:gpu"
+  },
+  "result": {
+    "state": {}
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "name": "typed-array-in-state",
+  "source": "function init() {\n  return { values: new Float32Array([1, 2]) }\n}\nfunction view(state, data) {\n  return ui.text(\"x\")\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "type": "text",
+    "text": "x"
+  },
+  "error": {
+    "view": false,
+    "message": "TypeError: A Float32Array cannot cross to the host as data; pass it to a host function, or its values, e.g. `Array.from(values)`."
+  }
+}

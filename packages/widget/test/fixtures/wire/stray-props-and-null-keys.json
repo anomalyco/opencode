@@ -1,0 +1,92 @@
+{
+  "name": "stray-props-and-null-keys",
+  "source": "function view(state, data) {\n  return ui.column({ id: \"c\", pointer: true }, [ui.text(\"s\", { id: \"mine\", pointer: true, onPress: (s) => s, onChange: undefined }), ui.button(\"b\", { id: \"mine\", pointer: true }), ui.text(\"n\", { key: null }), ui.text(\"u\", { key: undefined }), \"loose\", 7, ui.markdown(\"**m**\"), ui.divider(), ui.image(\"i.png\", { alt: \"i\" })])\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "id": "c",
+    "pointer": true,
+    "type": "column",
+    "children": [
+      {
+        "id": "mine",
+        "pointer": true,
+        "onPress": "$function",
+        "type": "text",
+        "text": "s"
+      },
+      {
+        "id": "mine",
+        "pointer": true,
+        "type": "button",
+        "label": "b"
+      },
+      {
+        "key": null,
+        "type": "text",
+        "text": "n"
+      },
+      {
+        "type": "text",
+        "text": "u"
+      },
+      "loose",
+      7,
+      {
+        "type": "markdown",
+        "text": "**m**"
+      },
+      {
+        "type": "divider"
+      },
+      {
+        "alt": "i",
+        "type": "image",
+        "src": "i.png"
+      }
+    ]
+  },
+  "view": {
+    "type": "column",
+    "children": [
+      {
+        "type": "text",
+        "text": "s"
+      },
+      {
+        "type": "button",
+        "label": "b",
+        "id": "0/1"
+      },
+      {
+        "type": "text",
+        "text": "n"
+      },
+      {
+        "type": "text",
+        "text": "u"
+      },
+      "loose",
+      7,
+      {
+        "type": "markdown",
+        "text": "**m**"
+      },
+      {
+        "type": "divider"
+      },
+      {
+        "alt": "i",
+        "type": "image",
+        "src": "i.png"
+      }
+    ]
+  },
+  "handlers": {},
+  "canvases": {},
+  "result": {
+    "state": {}
+  }
+}

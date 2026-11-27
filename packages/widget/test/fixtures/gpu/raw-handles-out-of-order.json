@@ -1,0 +1,22 @@
+{
+  "name": "raw-handles-out-of-order",
+  "source": "async function main() {\n  widget.render(ui.canvas({ key: \"scene\", gpu: true, height: 100 }))\n  __host.post({ type: \"gpu\", ops: [[\"buffer\", 2, 16, 32], [\"buffer\", 1, 16, 32]], bytes: new ArrayBuffer(8) })\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 100,
+      "height": 100
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [
+    {
+      "message": "gpu op 1: handle 1 was already used",
+      "canvases": "all"
+    }
+  ],
+  "end": "return"
+}

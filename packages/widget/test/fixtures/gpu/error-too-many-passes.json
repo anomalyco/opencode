@@ -1,0 +1,75 @@
+{
+  "name": "error-too-many-passes",
+  "source": "async function main() {\n  widget.render(ui.column([ui.canvas({ key: \"scene\", gpu: true, height: 100 })]))\n  const device = await widget.gpu.requestDevice()\n  const format = widget.gpu.getPreferredCanvasFormat()\n  const contexts = {}\n  for (const key of [\"scene\"]) {\n    contexts[key] = widget.gpu.getContext(key)\n    contexts[key].configure({ device, format })\n  }\n  const view = (key) => contexts[key].getCurrentTexture().createView()\n  const clear = (key) => ({ colorAttachments: [{ view: view(key), loadOp: \"clear\", storeOp: \"store\" }] })\n\n  await widget.frame()\n  const encoder = device.createCommandEncoder()\n  for (let i = 0; i < 17; i++) encoder.beginRenderPass(clear(\"scene\")).end()\n  device.queue.submit([encoder.finish()])\n  await widget.frame()\n}",
+  "canvases": [
+    {
+      "key": "scene",
+      "width": 200,
+      "height": 200
+    }
+  ],
+  "gpu": {
+    "available": true,
+    "format": "rgba8unorm"
+  },
+  "errors": [
+    {
+      "message": "gpu op 33: the number of render passes in a frame is over the limit of 16",
+      "canvases": [
+        "scene"
+      ]
+    }
+  ],
+  "end": "return",
+  "batches": [
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["context",1,"scene","rgba8unorm","opaque"]
+      ]
+    },
+    {
+      "frame": true,
+      "bytes": "",
+      "ops": [
+        ["view",2,1,{"dimension":"2d","baseMipLevel":0,"mipLevelCount":1,"baseArrayLayer":0,"arrayLayerCount":1}],
+        ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["pass",{"colorAttachments":[{"view":2,"resolveTarget":null,"clearValue":[0,0,0,0],"loadOp":"clear","storeOp":"store"}],"depthStencilAttachment":null}],
+        ["end"],
+        ["submit"]
+      ]
+    }
+  ]
+}

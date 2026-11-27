@@ -1,0 +1,170 @@
+{
+  "name": "builtin-treemap",
+  "builtin": "treemap",
+  "source": "// A squarified treemap of a hierarchy: each item's area is its value (a parent's value defaults to the sum of its\n// children). Two levels show at a time. Tap a block with children to drill into it, tap a leaf to select it, and use\n// Back to go up. With `choose`, the Choose button submits the selected node.\n\nconst HEIGHT = 280\nconst INTRO = 0.6\nconst HEADER = 18\n// Leaves room for the outlines under the spec's 2,000 commands per frame.\nconst BUDGET = 1900\nconst PALETTE = [\"accent\", \"#f59e0b\", \"#10b981\", \"#ef4444\", \"#8b5cf6\", \"#06b6d4\", \"#ec4899\", \"#84cc16\"]\n\nfunction init(data) {\n  return { path: [], selected: null }\n}\n\nfunction view(state, data) {\n  const node = focus(data, state.path)\n  const picked = state.selected === null ? null : node.children[state.selected]\n  return ui.column({ gap: 1, align: \"stretch\" }, [\n    ui.text(data.title, { style: \"title\" }),\n    state.path.length > 0 &&\n      ui.row({ gap: 1, align: \"center\" }, [\n        ui.button(\"Back\", {\n          variant: \"secondary\",\n          onPress: (state) => ({ path: state.path.slice(0, -1), selected: state.path[state.path.length - 1] }),\n        }),\n        ui.text(trail(data, state.path).join(\" › \"), { style: \"caption\", tone: \"muted\" }),\n      ]),\n    ui.canvas({\n      onPointer: (state, p) => tap(state, data, p),\n      height: HEIGHT,\n      fps: 60,\n      duration: INTRO,\n      alt: summary(data, node),\n    }),\n    ui.text(\n      picked\n        ? picked.label +\n            \": \" +\n            amount(total(picked), data.unit) +\n            \" (\" +\n            share(total(picked), total(node)) +\n            \" of \" +\n            node.label +\n            \")\"\n        : \"Tap a block with children to drill in, or a leaf to select it\",\n      { style: \"caption\", tone: picked ? \"default\" : \"muted\" },\n    ),\n    data.choose &&\n      ui.row({ gap: 1 }, [\n        ui.button(picked ? \"Choose \" + picked.label : \"Choose\", {\n          onPress: (state) => choose(state, data),\n          variant: \"primary\",\n          disabled: !picked,\n        }),\n      ]),\n  ])\n}\n\nfunction choose(state, data) {\n  if (state.selected !== null) {\n    const picked = focus(data, state.path).children[state.selected]\n    return submit({\n      label: picked.label,\n      value: total(picked),\n      path: [...trail(data, state.path).slice(1), picked.label],\n    })\n  }\n  return state\n}\n\nfunction tap(state, data, pointer) {\n  pointer = below(pointer)\n  if (pointer.kind !== \"up\") return state\n  const hit = locate(layout(data, state, pointer.width, pointer.height), pointer.x, pointer.y)\n  if (!hit) return { ...state, selected: null }\n  const child = focus(data, state.path).children[hit.index]\n  if (child.children) return { path: [...state.path, hit.index], selected: hit.inner }\n  return { ...state, selected: state.selected === hit.index ? null : hit.index }\n}\n\nfunction draw(state, data, frame) {\n  frame = below(frame)\n  const g = ui.draw()\n  if (frame.top) g.translate(0, frame.top)\n  const blocks = layout(data, state, frame.width, frame.height)\n  const hover = frame.pointer && !frame.pointer.down ? locate(blocks, frame.pointer.x, frame.pointer.y) : null\n  blocks.forEach((block, order) => {\n    const grow = ease((frame.t - (0.3 * order) / blocks.length) / (INTRO - 0.3))\n    if (grow <= 0) return\n    const r = scaled(block.rect, grow)\n    if (block.inner.length === 0) {\n      g.rect(r.x, r.y, r.w, r.h, { fill: block.color, stroke: \"bg\", width: 2 })\n      caption(g, r, block.node.label, amount(total(block.node), data.unit), \"#ffffff\")\n    } else {\n      g.save().alpha(0.22).rect(r.x, r.y, r.w, r.h, block.color).restore()\n      g.rect(r.x, r.y, r.w, r.h, { stroke: \"bg\", width: 2 })\n      if (r.w > 30)\n        g.text(r.x + 6, r.y + 13, fit(block.node.label + \"  \" + amount(total(block.node), data.unit), r.w - 10, 11), {\n          size: 11,\n          weight: 600,\n        })\n      for (const inner of block.inner) {\n        if (g.commands.length > BUDGET) break\n        const ir = scaled(inner.rect, grow)\n        g.rect(ir.x, ir.y, ir.w, ir.h, { fill: block.color, stroke: \"bg\", width: 1.5 })\n        caption(g, ir, inner.node.label, \"\", \"#ffffff\")\n      }\n    }\n  })\n  if (frame.t >= INTRO)\n    for (const [index, width] of [\n      [hover && hover.index, 1],\n      [state.selected, 2.5],\n    ]) {\n      const block = index === null ? null : blocks.find((item) => item.index === index)\n      if (block)\n        g.rect(block.rect.x + 1, block.rect.y + 1, block.rect.w - 2, block.rect.h - 2, { stroke: \"text\", width })\n    }\n  return g.commands\n}\n\n// The children of the focused node, squarified, each with its own children squarified inside below a header.\nfunction layout(data, state, width, height) {\n  const node = focus(data, state.path)\n  const items = node.children\n    .map((child, index) => ({ node: child, index, value: total(child) }))\n    .filter((item) => item.value > 0)\n  return squarify(items, { x: 0, y: 0, w: width, h: height }).map((placed, order) => {\n    const child = placed.item.node\n    const room = {\n      x: placed.rect.x + 3,\n      y: placed.rect.y + HEADER,\n      w: placed.rect.w - 6,\n      h: placed.rect.h - HEADER - 3,\n    }\n    const inner =\n      child.children && room.w > 40 && room.h > 24\n        ? squarify(\n            child.children\n              .map((grand, index) => ({ node: grand, index, value: total(grand) }))\n              .filter((item) => item.value > 0),\n            room,\n          ).map((cell) => ({ node: cell.item.node, index: cell.item.index, rect: cell.rect }))\n        : []\n    return {\n      node: child,\n      index: placed.item.index,\n      rect: placed.rect,\n      inner,\n      color: child.color ?? PALETTE[placed.item.index % PALETTE.length],\n    }\n  })\n}\n\n// Squarified treemap (Bruls et al.): fill rows along the short side while they make the cells squarer.\nfunction squarify(items, rect) {\n  const sorted = [...items].sort((a, b) => b.value - a.value)\n  const sum = sorted.reduce((total, item) => total + item.value, 0)\n  const out = []\n  if (sum <= 0) return out\n  const scale = (rect.w * rect.h) / sum\n  let { x, y, w, h } = rect\n  let start = 0\n  while (start < sorted.length) {\n    const short = Math.min(w, h)\n    let end = start + 1\n    let area = sorted[start].value * scale\n    let worst = ratio(sorted[start].value * scale, sorted[start].value * scale, area, short)\n    while (end < sorted.length) {\n      const next = area + sorted[end].value * scale\n      const score = ratio(sorted[start].value * scale, sorted[end].value * scale, next, short)\n      if (score > worst) break\n      area = next\n      worst = score\n      end++\n    }\n    const thick = area / short\n    let offset = 0\n    for (let index = start; index < end; index++) {\n      const length = (sorted[index].value * scale) / thick\n      out.push({\n        item: sorted[index],\n        rect: w >= h ? { x, y: y + offset, w: thick, h: length } : { x: x + offset, y, w: length, h: thick },\n      })\n      offset += length\n    }\n    if (w >= h) {\n      x += thick\n      w -= thick\n    } else {\n      y += thick\n      h -= thick\n    }\n    start = end\n  }\n  return out\n}\n\n// The worst aspect ratio of a row with the given largest and smallest cell areas and total area.\nfunction ratio(largest, smallest, area, short) {\n  return Math.max((short * short * largest) / (area * area), (area * area) / (short * short * smallest))\n}\n\nfunction locate(blocks, px, py) {\n  const inside = (r) => px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h\n  const block = blocks.find((item) => inside(item.rect))\n  if (!block) return null\n  const inner = block.inner.find((item) => inside(item.rect))\n  return { index: block.index, inner: inner ? inner.index : null }\n}\n\nfunction caption(g, r, label, value, color) {\n  if (r.w < 36 || r.h < 18) return\n  g.text(r.x + 6, r.y + 15, fit(label, r.w - 10, 12), { size: 12, weight: 600, color })\n  if (value && r.h > 36) g.text(r.x + 6, r.y + 31, fit(value, r.w - 10, 11), { size: 11, color })\n}\n\nfunction scaled(r, grow) {\n  return { x: r.x + (r.w * (1 - grow)) / 2, y: r.y + (r.h * (1 - grow)) / 2, w: r.w * grow, h: r.h * grow }\n}\n\nfunction focus(data, path) {\n  return path.reduce((node, index) => node.children[index], { label: data.rootLabel ?? \"All\", children: data.items })\n}\n\nfunction trail(data, path) {\n  const labels = [data.rootLabel ?? \"All\"]\n  path.reduce(\n    (node, index) => {\n      labels.push(node.children[index].label)\n      return node.children[index]\n    },\n    { children: data.items },\n  )\n  return labels\n}\n\nfunction total(node) {\n  return node.value ?? (node.children ? node.children.reduce((sum, child) => sum + total(child), 0) : 0)\n}\n\nfunction summary(data, node) {\n  const sum = total(node)\n  return (\n    \"Treemap of \" +\n    node.label +\n    \" (\" +\n    amount(sum, data.unit) +\n    \"): \" +\n    node.children\n      .map((child) => ({ label: child.label, value: total(child) }))\n      .sort((a, b) => b.value - a.value)\n      .map((child) => child.label + \" \" + amount(child.value, data.unit) + \" (\" + share(child.value, sum) + \")\")\n      .join(\", \")\n  )\n}\n\nfunction share(part, whole) {\n  return (whole > 0 ? Math.round((part / whole) * 1000) / 10 : 0) + \"%\"\n}\n\nfunction amount(value, unit) {\n  const size = Math.abs(value)\n  const text =\n    size >= 1e6\n      ? Math.round(value / 1e5) / 10 + \"M\"\n      : size >= 1e4\n        ? Math.round(value / 100) / 10 + \"k\"\n        : String(Math.round(value * 100) / 100)\n  if (!unit) return text\n  return unit.length > 1 && /^[a-z]/i.test(unit) ? text + \" \" + unit : text + unit\n}\n\nfunction fit(text, width, size) {\n  const max = Math.max(1, Math.floor(width / (size * 0.58)))\n  return text.length <= max ? text : text.slice(0, Math.max(1, max - 1)) + \"…\"\n}\n\nfunction ease(p) {\n  const clamped = Math.max(0, Math.min(1, p))\n  return 1 - Math.pow(1 - clamped, 3)\n}\n\n// In full screen, the layout starts below the close button when it overlaps this canvas (widgets-fullscreen.md):\n// `close` comes with the frame and the pointer, so drawing and hit testing agree.\nfunction below(area) {\n  const top = area.close ? Math.max(0, area.close.y + area.close.height) : 0\n  if (top === 0) return area\n  return {\n    ...area,\n    top,\n    height: area.height - top,\n    ...(typeof area.y === \"number\" ? { y: area.y - top } : {}),\n    ...(area.pointer ? { pointer: { ...area.pointer, y: area.pointer.y - top } } : {}),\n  }\n}\n",
+  "input": {
+    "phase": "init",
+    "data": {
+      "title": "Disk usage",
+      "rootLabel": "repo",
+      "unit": "MB",
+      "choose": true,
+      "items": [
+        {
+          "label": "packages",
+          "children": [
+            {
+              "label": "core",
+              "value": 42
+            },
+            {
+              "label": "tui",
+              "value": 31
+            },
+            {
+              "label": "app",
+              "value": 27
+            },
+            {
+              "label": "widget",
+              "value": 6
+            },
+            {
+              "label": "sdk",
+              "value": 12
+            }
+          ]
+        },
+        {
+          "label": "node_modules",
+          "children": [
+            {
+              "label": "effect",
+              "value": 38
+            },
+            {
+              "label": "typescript",
+              "value": 64
+            },
+            {
+              "label": "other",
+              "value": 120
+            }
+          ]
+        },
+        {
+          "label": "docs",
+          "value": 18
+        },
+        {
+          "label": "assets",
+          "children": [
+            {
+              "label": "images",
+              "value": 22
+            },
+            {
+              "label": "fonts",
+              "value": 9
+            }
+          ]
+        },
+        {
+          "label": "scripts",
+          "value": 3
+        }
+      ]
+    }
+  },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Disk usage"
+      },
+      false,
+      {
+        "onPointer": "$function",
+        "height": 280,
+        "fps": 60,
+        "duration": 0.6,
+        "alt": "Treemap of repo (392 MB): node_modules 222 MB (56.6%), packages 118 MB (30.1%), assets 31 MB (7.9%), docs 18 MB (4.6%), scripts 3 MB (0.8%)",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a block with children to drill in, or a leaf to select it"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Disk usage"
+      },
+      {
+        "height": 280,
+        "fps": 60,
+        "duration": 0.6,
+        "alt": "Treemap of repo (392 MB): node_modules 222 MB (56.6%), packages 118 MB (30.1%), assets 31 MB (7.9%), docs 18 MB (4.6%), scripts 3 MB (0.8%)",
+        "type": "canvas",
+        "id": "0/2",
+        "pointer": true
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a block with children to drill in, or a leaf to select it"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose",
+            "id": "0/4/0"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/2": "pointer",
+    "0/4/0": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {
+      "path": [],
+      "selected": null
+    }
+  }
+}

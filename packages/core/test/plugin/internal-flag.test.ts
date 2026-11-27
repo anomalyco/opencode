@@ -95,7 +95,27 @@ describe("PluginInternal flags", () => {
       expect(registered).toContain("opencode_artifact_create")
       expect(registered).toContain("shell")
       expect(registered).not.toContain(TodoTool.name)
+      expect(registered).not.toContain("widget")
       expect(direct).not.toContain("shell")
     }).pipe(Effect.provideService(Flag.Overrides, undefined)),
+  )
+
+  it.live("loads the opt-in widgets plugin only where the widgets flag is on", () =>
+    Effect.gen(function* () {
+      const directory = yield* tmpdirScoped()
+      const locations = yield* LocationServiceMap.Service
+      const registered = yield* Effect.gen(function* () {
+        const plugins = yield* Plugin.Service
+        yield* plugins.awaitActivation
+        const tools = yield* Tool.Service
+        return (yield* tools.list()).map((tool) => tool.id)
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(locations.get(Location.Ref.make({ directory: AbsolutePath.make(directory.path) }))),
+      )
+
+      expect(registered).toContain("widget")
+      expect(registered).toContain("widget_template")
+    }).pipe(Effect.provideService(Flag.Overrides, "widgets")),
   )
 })

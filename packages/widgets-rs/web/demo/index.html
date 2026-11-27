@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>widget-web widgets</title>
+    <link rel="stylesheet" href="./demo.css" />
+    <script type="module" src="./main.js"></script>
+  </head>
+  <body>
+    <header>
+      <strong>PsychoScript widgets on the web</strong>
+      <span id="backend" class="muted"></span>
+      <span class="spacer"></span>
+      <label>Widget template <select id="only"><option value="">all</option></select></label>
+      <button id="theme" type="button">Light theme</button>
+    </header>
+    <main>
+      <section id="widgets"></section>
+      <aside>
+        <h2>Log</h2>
+        <ol id="log"></ol>
+        <h2>Timings (ms)</h2>
+        <pre id="metrics"></pre>
+      </aside>
+    </main>
+  </body>
+</html>

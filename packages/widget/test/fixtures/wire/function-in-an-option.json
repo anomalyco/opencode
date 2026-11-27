@@ -1,0 +1,22 @@
+{
+  "name": "function-in-an-option",
+  "source": "function view(state, data) {\n  return ui.select([{ value: \"a\", label: \"A\", pick: (s) => s }])\n}",
+  "input": {
+    "phase": "init",
+    "data": null
+  },
+  "built": {
+    "type": "select",
+    "options": [
+      {
+        "value": "a",
+        "label": "A",
+        "pick": "$function"
+      }
+    ]
+  },
+  "error": {
+    "view": false,
+    "message": "TypeError: Argument 1 to __widget_emit contains a function, which cannot be passed to the host. (line 335, col 5)"
+  }
+}

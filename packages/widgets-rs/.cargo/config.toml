@@ -1,0 +1,4 @@
+# Dates in local time follow the host's time zone; the recordings are made in UTC (conformance/reference.ts), so
+# the tests run in UTC too.
+[env]
+TZ = "UTC"

@@ -1,0 +1,165 @@
+{
+  "name": "builtin-gauge",
+  "builtin": "gauge",
+  "source": "// KPI dials: one to four gauges side by side, each a 270° arc from min to max with optional threshold bands (each band\n// runs up to `to` in a tone) and a target tick. The value arc takes the tone of its band and sweeps in while the\n// number counts up. Tap a gauge to select it. With `choose`, the Choose button submits the selected gauge.\n\nconst HEIGHT = 190\nconst INTRO = 0.9\nconst START = (Math.PI * 3) / 4\nconst SWEEP = (Math.PI * 3) / 2\n\nfunction init(data) {\n  return { selected: null }\n}\n\nfunction view(state, data) {\n  return ui.column({ gap: 1, align: \"stretch\" }, [\n    ui.text(data.title, { style: \"title\" }),\n    ui.canvas({\n      onPointer: (state, p) => tap(state, data, p),\n      height: HEIGHT,\n      fps: 60,\n      duration: INTRO,\n      alt: summary(data),\n    }),\n    ui.text(state.selected === null ? \"Tap a gauge for its thresholds\" : describe(data.gauges[state.selected]), {\n      style: \"caption\",\n      tone: state.selected === null ? \"muted\" : \"default\",\n    }),\n    data.choose &&\n      ui.row({ gap: 1 }, [\n        ui.button(\"Choose gauge\", {\n          onPress: (state) => choose(state, data),\n          variant: \"primary\",\n          disabled: state.selected === null,\n        }),\n      ]),\n  ])\n}\n\nfunction choose(state, data) {\n  if (state.selected !== null) {\n    const gauge = data.gauges[state.selected]\n    return submit({ label: gauge.label, index: state.selected, value: gauge.value, tone: tone(gauge, gauge.value) })\n  }\n  return state\n}\n\nfunction tap(state, data, pointer) {\n  if (pointer.kind !== \"up\") return state\n  const index = Math.floor((pointer.x / pointer.width) * data.gauges.length)\n  const hit = index >= 0 && index < data.gauges.length ? index : null\n  return { ...state, selected: hit === state.selected ? null : hit }\n}\n\nfunction draw(state, data, frame) {\n  const g = ui.draw()\n  const cell = frame.width / data.gauges.length\n  const r = Math.max(24, Math.min(cell / 2 - 18, 74))\n  // The dial, its min/max and its label are 1.71 r + 54 px tall; center them vertically.\n  const top = Math.max(10, (frame.height - 1.71 * r - 54) / 2)\n  const grow = ease(frame.t / INTRO)\n  data.gauges.forEach((gauge, index) => {\n    const cx = cell * (index + 0.5)\n    const cy = top + r\n    const min = gauge.min ?? 0\n    const at = (value) => START + SWEEP * Math.max(0, Math.min(1, (value - min) / (gauge.max - min || 1)))\n    if (index === state.selected)\n      g.rrect(cx - cell / 2 + 4, 2, cell - 8, frame.height - 4, 10, { fill: \"surface\", stroke: \"border\", width: 1 })\n    g.path(arc(cx, cy, r, START, START + SWEEP), { stroke: \"border\", width: 10, cap: \"round\" })\n    let from = min\n    g.save().alpha(0.45)\n    for (const band of [...(gauge.bands ?? [])].sort((a, b) => a.to - b.to)) {\n      if (band.to > from)\n        g.path(arc(cx, cy, r + 9, at(from), at(Math.min(band.to, gauge.max))), { stroke: band.tone, width: 3 })\n      from = band.to\n    }\n    g.restore()\n    const shown = min + (gauge.value - min) * grow\n    if (shown > min)\n      g.path(arc(cx, cy, r, START, at(shown)), { stroke: tone(gauge, gauge.value), width: 10, cap: \"round\" })\n    if (gauge.target !== undefined) {\n      const angle = at(gauge.target)\n      g.line(\n        cx + Math.cos(angle) * (r - 9),\n        cy + Math.sin(angle) * (r - 9),\n        cx + Math.cos(angle) * (r + 9),\n        cy + Math.sin(angle) * (r + 9),\n        {\n          stroke: \"text\",\n          width: 2,\n          cap: \"round\",\n        },\n      )\n    }\n    g.text(cx, cy + 8, amount(shown, gauge.unit, gauge.value), {\n      size: Math.min(24, r / 2.6),\n      weight: 700,\n      align: \"center\",\n    })\n    g.text(cx - r * 0.71, cy + r * 0.71 + 16, compact(min), { size: 10, align: \"center\", color: \"muted\" })\n    g.text(cx + r * 0.71, cy + r * 0.71 + 16, compact(gauge.max), { size: 10, align: \"center\", color: \"muted\" })\n    g.text(cx, cy + r * 0.71 + 36, fit(gauge.label, cell - 16, 13), { size: 13, weight: 600, align: \"center\" })\n  })\n  return g.commands\n}\n\n// The band's tone for a value: the first band whose `to` is at or above it (default accent).\nfunction tone(gauge, value) {\n  const band = [...(gauge.bands ?? [])].sort((a, b) => a.to - b.to).find((band) => value <= band.to)\n  return band?.tone ?? \"accent\"\n}\n\nfunction arc(cx, cy, r, from, to) {\n  const segments = [[\"M\", cx + Math.cos(from) * r, cy + Math.sin(from) * r]]\n  const steps = Math.max(1, Math.ceil(Math.abs(to - from) / (Math.PI / 2)))\n  const step = (to - from) / steps\n  const k = (4 / 3) * Math.tan(step / 4)\n  for (let i = 0; i < steps; i++) {\n    const a = from + i * step\n    const b = a + step\n    segments.push([\n      \"C\",\n      cx + r * (Math.cos(a) - k * Math.sin(a)),\n      cy + r * (Math.sin(a) + k * Math.cos(a)),\n      cx + r * (Math.cos(b) + k * Math.sin(b)),\n      cy + r * (Math.sin(b) - k * Math.cos(b)),\n      cx + r * Math.cos(b),\n      cy + r * Math.sin(b),\n    ])\n  }\n  return segments\n}\n\nfunction describe(gauge) {\n  const bands = [...(gauge.bands ?? [])].sort((a, b) => a.to - b.to)\n  const band = bands.findIndex((band) => gauge.value <= band.to)\n  return (\n    gauge.label +\n    \": \" +\n    amount(gauge.value, gauge.unit) +\n    \" of \" +\n    compact(gauge.min ?? 0) +\n    \"–\" +\n    compact(gauge.max) +\n    (band >= 0\n      ? \" · \" +\n        bands[band].tone +\n        \" band (\" +\n        compact(band ? bands[band - 1].to : (gauge.min ?? 0)) +\n        \"–\" +\n        compact(bands[band].to) +\n        \")\"\n      : \"\") +\n    (gauge.target !== undefined ? \" · target \" + amount(gauge.target, gauge.unit) : \"\")\n  )\n}\n\nfunction summary(data) {\n  return \"Gauges. \" + data.gauges.map(describe).join(\"; \")\n}\n\n// While counting up, show as many decimals as the final value has (at most two).\nfunction amount(value, unit, final) {\n  const digits = Math.min(2, (String(final ?? value).split(\".\")[1] ?? \"\").length)\n  const text = (Math.round(value * Math.pow(10, digits)) / Math.pow(10, digits)).toFixed(digits)\n  if (!unit) return text\n  return unit.length > 1 && /^[a-z]/i.test(unit) ? text + \" \" + unit : text + unit\n}\n\nfunction compact(value) {\n  const size = Math.abs(value)\n  if (size >= 1e6) return Math.round(value / 1e5) / 10 + \"M\"\n  if (size >= 1e4) return Math.round(value / 100) / 10 + \"k\"\n  return String(Math.round(value * 100) / 100)\n}\n\nfunction fit(text, width, size) {\n  const max = Math.max(1, Math.floor(width / (size * 0.58)))\n  return text.length <= max ? text : text.slice(0, Math.max(1, max - 1)) + \"…\"\n}\n\nfunction ease(p) {\n  const clamped = Math.max(0, Math.min(1, p))\n  return 1 - Math.pow(1 - clamped, 3)\n}\n",
+  "input": {
+    "phase": "init",
+    "data": {
+      "title": "Service health",
+      "choose": true,
+      "gauges": [
+        {
+          "label": "CPU",
+          "value": 72,
+          "max": 100,
+          "unit": "%",
+          "bands": [
+            {
+              "to": 60,
+              "tone": "success"
+            },
+            {
+              "to": 85,
+              "tone": "warning"
+            },
+            {
+              "to": 100,
+              "tone": "error"
+            }
+          ]
+        },
+        {
+          "label": "p99 latency",
+          "value": 340,
+          "max": 1000,
+          "unit": "ms",
+          "target": 500,
+          "bands": [
+            {
+              "to": 500,
+              "tone": "success"
+            },
+            {
+              "to": 800,
+              "tone": "warning"
+            },
+            {
+              "to": 1000,
+              "tone": "error"
+            }
+          ]
+        },
+        {
+          "label": "Uptime",
+          "value": 99.95,
+          "min": 99,
+          "max": 100,
+          "unit": "%",
+          "bands": [
+            {
+              "to": 99.5,
+              "tone": "error"
+            },
+            {
+              "to": 99.9,
+              "tone": "warning"
+            },
+            {
+              "to": 100,
+              "tone": "success"
+            }
+          ]
+        }
+      ]
+    }
+  },
+  "built": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Service health"
+      },
+      {
+        "onPointer": "$function",
+        "height": 190,
+        "fps": 60,
+        "duration": 0.9,
+        "alt": "Gauges. CPU: 72% of 0–100 · warning band (60–85); p99 latency: 340 ms of 0–1000 · success band (0–500) · target 500 ms; Uptime: 99.95% of 99–100 · success band (99.9–100)",
+        "type": "canvas"
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a gauge for its thresholds"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "onPress": "$function",
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose gauge"
+          }
+        ]
+      }
+    ]
+  },
+  "view": {
+    "gap": 1,
+    "align": "stretch",
+    "type": "column",
+    "children": [
+      {
+        "style": "title",
+        "type": "text",
+        "text": "Service health"
+      },
+      {
+        "height": 190,
+        "fps": 60,
+        "duration": 0.9,
+        "alt": "Gauges. CPU: 72% of 0–100 · warning band (60–85); p99 latency: 340 ms of 0–1000 · success band (0–500) · target 500 ms; Uptime: 99.95% of 99–100 · success band (99.9–100)",
+        "type": "canvas",
+        "id": "0/1",
+        "pointer": true
+      },
+      {
+        "style": "caption",
+        "tone": "muted",
+        "type": "text",
+        "text": "Tap a gauge for its thresholds"
+      },
+      {
+        "gap": 1,
+        "type": "row",
+        "children": [
+          {
+            "variant": "primary",
+            "disabled": true,
+            "type": "button",
+            "label": "Choose gauge",
+            "id": "0/3/0"
+          }
+        ]
+      }
+    ]
+  },
+  "handlers": {
+    "0/1": "pointer",
+    "0/3/0": "press"
+  },
+  "canvases": {},
+  "result": {
+    "state": {
+      "selected": null
+    }
+  }
+}

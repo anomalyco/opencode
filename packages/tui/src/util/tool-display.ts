@@ -68,3 +68,14 @@ export function nonEmptyToolContent<T>(content: ReadonlyArray<T> | undefined): [
 }
 import type { SessionMessageAssistantTool } from "@opencode/client/promise"
 import { isRecord } from "./record"
+
+/** The one quiet line for a `widget_template` call, from its short result metadata (or its input while running). */
+export function widgetTemplateLine(input: Record<string, unknown>, metadata: Record<string, unknown>) {
+  const text = (value: unknown) => (typeof value === "string" ? value : undefined)
+  const action = text(metadata.action) ?? text(input.action)
+  if (action === "list")
+    return typeof metadata.count === "number" ? `Listed ${metadata.count} widget templates` : "Listed widget templates"
+  const verb = action === "get" ? "Read" : action === "edit" ? "Edited" : "Saved"
+  const revision = typeof metadata.revision === "number" ? ` v${metadata.revision}` : ""
+  return `${verb} widget template ${text(metadata.name) ?? text(input.name) ?? ""}${revision}`.trimEnd()
+}

@@ -1,0 +1,71 @@
+{
+  "step": [
+    {
+      "name": "suggestions",
+      "program": "suggestions",
+      "phase": "init"
+    },
+    {
+      "name": "form",
+      "program": "form",
+      "phase": "init"
+    },
+    {
+      "name": "table-50",
+      "program": "table",
+      "phase": "init"
+    },
+    {
+      "name": "table-200",
+      "program": "table",
+      "phase": "init"
+    },
+    {
+      "name": "shader-view",
+      "program": "shader",
+      "phase": "init"
+    },
+    {
+      "name": "grid-200-view",
+      "program": "grid-live",
+      "phase": "init"
+    },
+    {
+      "name": "draw-chart",
+      "program": "chart",
+      "phase": "draw"
+    },
+    {
+      "name": "draw-scatter",
+      "program": "scatter",
+      "phase": "draw"
+    },
+    {
+      "name": "draw-heatmap",
+      "program": "heatmap",
+      "phase": "draw"
+    }
+  ],
+  "live": [
+    {
+      "name": "live-shader",
+      "program": "shader"
+    },
+    {
+      "name": "live-table-50",
+      "program": "table-live"
+    },
+    {
+      "name": "live-grid-200",
+      "program": "grid-live"
+    },
+    {
+      "name": "live-minigame",
+      "program": "minigame-live"
+    },
+    {
+      "name": "live-canvas-heavy",
+      "program": "canvas-heavy"
+    }
+  ]
+}

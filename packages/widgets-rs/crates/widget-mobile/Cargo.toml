@@ -1,0 +1,56 @@
+[package]
+name = "widget-mobile"
+version = "0.1.0"
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish = false
+description = "OpenCode widgets on iOS (Swift) and Android (Kotlin): the one native library each app ships, psychoscript-mobile's UniFFI API plus the widget encoder and the wgsl shorthand's ShaderCanvas"
+
+# A plain `lib` for workspace builds; the build scripts ask for `staticlib` (iOS) and `cdylib` (Android).
+[lib]
+name = "widget_mobile"
+
+[features]
+default = ["gpu"]
+# GPU canvases (psychoscript-mobile's `gpu`): widget runs replay their GPU batches on wgpu (Metal on iOS and macOS,
+# Vulkan on Android and Linux) and present into the app's surfaces; `ShaderCanvas` for the `wgsl` shorthand. Off, a
+# run has no GPU (`gpu.available` false) and surfaces are refused.
+gpu = ["psychoscript-mobile/gpu"]
+# The bindings generators (`uniffi-bindgen`, `uniffi-bindgen-swift`), for the build scripts only.
+cli = ["uniffi/cli"]
+# Rust-only hooks for this crate's tests (psychoscript-mobile's, `gpu_record_batches`, `ShaderCanvas::presents`): never
+# in a release build. The tests turn it on (the dev-dependency below).
+test-hooks = ["psychoscript-mobile/test-hooks", "widget-wire/test-hooks"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["cli"]
+
+[[bin]]
+name = "uniffi-bindgen-swift"
+path = "src/bin/uniffi-bindgen-swift.rs"
+required-features = ["cli"]
+
+[dependencies]
+psychoscript = "0.1"
+psychoscript-gpu.workspace = true
+psychoscript-mobile.workspace = true
+uniffi = "0.32"
+widget-wire = { path = "../widget-wire" }
+
+[dev-dependencies]
+# This crate with its test hooks, for its tests.
+# (Its default features as the build asks: `--no-default-features` tests without them.)
+widget-mobile = { path = ".", default-features = false, features = ["test-hooks"] }
+serde = "1"
+# The fixtures' views nest up to 150 levels: read without the recursion limit (`unbounded_depth`).
+serde_json = { version = "1", features = ["preserve_order", "unbounded_depth"] }
+
+# `tests/gpu_heavy.rs`'s own device, beside the app's.
+[target.'cfg(any(target_os = "ios", target_os = "macos"))'.dev-dependencies]
+wgpu = { version = "~30.0.1", default-features = false, features = ["std", "wgsl", "metal"] }
+
+[target.'cfg(any(target_os = "android", target_os = "linux"))'.dev-dependencies]
+wgpu = { version = "~30.0.1", default-features = false, features = ["std", "wgsl", "vulkan"] }
