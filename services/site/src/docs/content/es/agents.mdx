@@ -1,0 +1,348 @@
+---
+title: "Agentes"
+description: "Define agentes reutilizables en Markdown o configuración, cada uno con su propio prompt de sistema, modelo, permisos y modo."
+---
+
+Crea un archivo Markdown para agregar un agente reutilizable. Este ejemplo agrega un revisor de solo lectura que el agente principal puede lanzar para revisiones de código:
+
+```md title=".opencode/agents/reviewer.md"
+---
+description: Reviews changes for correctness and regressions
+mode: subagent
+model: anthropic/claude-sonnet-5-5#high
+permissions:
+  - action: edit
+    resource: "*"
+    effect: deny
+  - action: shell
+    resource: "*"
+    effect: deny
+---
+
+Review the current changes. List findings in severity order with file and line references.
+```
+
+Pide a tu agente principal que lo use:
+
+```text
+Use the reviewer subagent to review my current changes.
+```
+
+Un agente combina un prompt de sistema, una preferencia de modelo, permisos y detalles de visualización en un perfil de asistente con nombre.
+
+## Ubicaciones
+
+Guarda los agentes Markdown de forma global para todos los proyectos o dentro de un proyecto:
+
+```text
+~/.config/opencode/agents/<name>.md
+.opencode/agents/<name>.md
+```
+
+OpenCode descubre los directorios `.opencode` del proyecto desde el directorio actual hasta la raíz del proyecto. Una ruta anidada pasa a formar parte del ID del agente:
+
+```text
+.opencode/agents/team/reviewer.md  →  team/reviewer
+```
+
+## Formatos
+
+### Markdown
+
+El frontmatter acepta los mismos campos que una entrada de configuración `agents`. El cuerpo de Markdown se convierte en el prompt `system` del agente:
+
+```md title=".opencode/agents/explainer.md"
+---
+description: Explains code without changing it
+mode: subagent
+---
+
+Explain the relevant code with short examples. Do not edit files.
+```
+
+Los campos de frontmatter de V1 están obsoletos. Consulta [Archivos de agentes](/migrate-v1#agent-files) para ver cómo se leen los archivos que todavía los usan.
+
+### JSONC
+
+Define agentes en `agents` en cualquier [archivo de configuración de OpenCode](/config):
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "agents": {
+    "reviewer": {
+      "description": "Reviews current changes",
+      "mode": "subagent",
+      "system": "Report findings in severity order.",
+      "permissions": [
+        { "action": "edit", "resource": "*", "effect": "deny" },
+      ],
+    },
+  },
+}
+```
+
+## Selección
+
+Define qué agente principal se usa cuando la sesión no tiene uno seleccionado:
+
+```jsonc title="opencode.jsonc"
+{
+  "$schema": "https://opencode.ai/config.json",
+  "default_agent": "writer",
+  "agents": {
+    "writer": { "mode": "primary" },
+  },
+}
+```
+
+El agente predeterminado debe existir, ser visible y poder actuar como agente principal. Si no cumple estos requisitos, OpenCode prueba con `build` y, si tampoco sirve, usa el primer agente principal visible. Cambiar este ajuste no sustituye el agente guardado en una sesión existente.
+
+## Modos
+
+Define `mode` según dónde deba ejecutarse el agente:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "mode": "subagent" },
+  },
+}
+```
+
+| Modo | Comportamiento |
+| --- | --- |
+| `primary` | Se ejecuta como agente principal de una sesión. Es el valor predeterminado de un agente personalizado nuevo. |
+| `subagent` | Se ejecuta solo en una sesión hija a través de la herramienta `subagent`. |
+| `all` | Se ejecuta como agente principal o como subagente. |
+
+Los subagentes se ejecutan con contexto nuevo en sus propias sesiones hijas. Siempre se ejecutan en
+segundo plano: el padre recibe un informe cuando un hijo queda inactivo, y de nuevo
+después de cada ronda posterior de trabajo. Los permisos `subagent` del agente padre controlan
+qué agentes puede lanzar; el hijo usa sus propios permisos configurados.
+
+```jsonc
+{
+  "agents": {
+    "orchestrator": {
+      "permissions": [
+        { "action": "subagent", "resource": "*", "effect": "deny" },
+        { "action": "subagent", "resource": "reviewer", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+## Integrados
+
+OpenCode incluye estos agentes visibles:
+
+| Agente | Modo | Propósito |
+| --- | --- | --- |
+| **Build** (`build`) | `primary` | Agente de programación predeterminado. Las herramientas y el acceso fuera del espacio de trabajo están permitidos de forma predeterminada; las lecturas sensibles de archivos de entorno piden aprobación. |
+| **Plan** (`plan`) | `primary` | Explora y planifica sin editar los archivos normales del proyecto. Puede escribir archivos de plan de OpenCode cuando se le pide, y los comandos de shell siguen controlados por permisos. |
+| **General** (`general`) | `subagent` | Gestiona investigación y trabajo de varios pasos con amplio acceso a herramientas, pero no puede lanzar más subagentes. |
+| **Explore** (`explore`) | `subagent` | Busca y lee código o fuentes web sin editar archivos. |
+
+Sobrescribe un agente integrado usando el mismo ID:
+
+```jsonc
+{
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git push *", "effect": "ask" },
+      ],
+    },
+  },
+}
+```
+
+Los agentes ocultos `compaction`, `title` y `summary` realizan tareas de mantenimiento y no se pueden seleccionar directamente. V2 no tiene un agente `scout` integrado.
+
+## Fusión
+
+Las definiciones de agentes se fusionan en el orden de configuración. Los valores escalares posteriores sustituyen a los anteriores, los mapas de solicitud se fusionan por clave, y las reglas de permisos se agregan:
+
+```jsonc
+{
+  "permissions": [
+    { "action": "shell", "resource": "*", "effect": "ask" },
+  ],
+  "agents": {
+    "build": {
+      "permissions": [
+        { "action": "shell", "resource": "git status", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+Los `permissions` globales se aplican antes que las reglas específicas del agente, así que las reglas posteriores del agente pueden afinarlas.
+
+## Opciones
+
+### Descripción
+
+`description` explica el propósito del agente. Agrégala a los subagentes, porque OpenCode se la muestra al modelo que elige qué agente lanzar:
+
+```yaml
+description: Reviews database migrations for safety
+```
+
+### Modo
+
+`mode` acepta `primary`, `subagent` o `all`. Cuando se omite en un agente personalizado nuevo, usa `primary` de forma predeterminada:
+
+```yaml
+mode: all
+```
+
+### Modelo
+
+`model` usa `provider/model` con un `#variant` opcional:
+
+```yaml
+model: anthropic/claude-sonnet-5-5#high
+```
+
+La configuración JSON también acepta el formato completo:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "model": {
+        "providerID": "anthropic",
+        "model": "claude-sonnet-5-5",
+        "variant": "high",
+      },
+    },
+  },
+}
+```
+
+- Un subagente usa su modelo configurado, o hereda el modelo de la sesión padre cuando no hay ninguno configurado.
+- Una sesión guarda el modelo seleccionado por separado. Seleccionar un agente principal por ID no cambia ese modelo.
+
+### Sistema
+
+`system` define el prompt de sistema del agente. Un valor no vacío sustituye el prompt base del proveedor para ese agente:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": { "system": "Review only. Do not modify files." },
+  },
+}
+```
+
+Las instrucciones del proyecto, las skills, las referencias y otras fuentes de instrucciones se siguen agregando. En un agente Markdown, pon este texto en el cuerpo del documento en lugar de en un campo `system` del frontmatter.
+
+### Permisos
+
+`permissions` es una lista ordenada de reglas de coincidencia:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "permissions": [
+        { "action": "*", "resource": "*", "effect": "deny" },
+        { "action": "read", "resource": "src/**", "effect": "allow" },
+      ],
+    },
+  },
+}
+```
+
+| Campo | Significado |
+| --- | --- |
+| `action` | Acción de herramienta o de permiso. Se admiten comodines. |
+| `resource` | Ruta, comando, ID de agente u otro valor con el que coincide la acción. Se admiten comodines. |
+| `effect` | `allow`, `ask` o `deny`. |
+
+Gana la última regla que coincide, así que pon las reglas amplias antes que las excepciones. Las acciones habituales incluyen:
+
+| Acción | Cubre |
+| --- | --- |
+| `shell` | Comandos de shell |
+| `edit` | Herramientas de edición, escritura y parche |
+| `subagent` | Agentes hijos |
+| `read`, `glob`, `grep` | Herramientas de descubrimiento local |
+| `webfetch`, `websearch` | Herramientas web |
+| `skill` | Carga de skills |
+
+Para los recursos `read`, `edit` y `external_directory`, OpenCode expande `~` y `$HOME`:
+
+```jsonc
+{ "action": "read", "resource": "~/notes/**", "effect": "allow" }
+```
+
+Los recursos de shell siguen siendo texto de comando sin procesar y no expanden esos valores.
+
+### Pasos
+
+`steps` define un número máximo positivo de pasos del modelo:
+
+```yaml
+steps: 8
+```
+
+En el paso final, OpenCode elimina las herramientas y pide al modelo que resuma en texto. Una nueva entrada del usuario reinicia la cuota.
+
+### Oculto
+
+`hidden` quita un agente de los listados normales, del descubrimiento interactivo y del catálogo de subagentes:
+
+```yaml
+hidden: true
+```
+
+Esto controla la visibilidad, no la seguridad. Usa permisos para restringir el comportamiento.
+
+### Color
+
+`color` define el color del agente en la interfaz con un valor hexadecimal de seis dígitos:
+
+```yaml
+color: "#ff6b6b"
+```
+
+### Deshabilitado
+
+`disabled` quita un agente integrado o personalizado en ese punto de la carga de configuración:
+
+```jsonc
+{
+  "agents": {
+    "plan": { "disabled": true },
+  },
+}
+```
+
+### Solicitud
+
+`request` acepta superposiciones de encabezados y cuerpo JSON por agente:
+
+```jsonc
+{
+  "agents": {
+    "reviewer": {
+      "request": {
+        "headers": { "x-agent": "reviewer" },
+        "body": { "temperature": 0.1 },
+      },
+    },
+  },
+}
+```
+
+<Callout type="warning">
+  El ejecutor de sesiones de V2 conserva estos valores, pero todavía no los envía con las solicitudes al modelo. Configura los ajustes de solicitud
+  activos en el proveedor, el modelo o la variante del modelo.
+</Callout>
+
+No uses campos heredados de nivel superior como `temperature`, `top_p`, `prompt`, `permission`, `tools`, `disable` o `maxSteps` en la nueva configuración de agentes de V2.

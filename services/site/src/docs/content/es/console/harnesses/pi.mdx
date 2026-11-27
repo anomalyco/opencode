@@ -1,0 +1,70 @@
+---
+title: "Pi"
+description: "Usa los modelos de Console y Go desde el agente de programación Pi."
+---
+
+[Pi](https://pi.dev) incluye proveedores de OpenCode para el pago por uso y Go. Elige la API correcta para cada modelo
+de pago o de Go. Los modelos de chat del nivel gratuito requieren OpenCode; si los llamas desde Pi, recibes HTTP `403`.
+
+<Callout>
+  La [CLI de Console](/console/harnesses#console-cli) configura Pi con un solo comando, incluidas las políticas del espacio de trabajo, los
+  servidores MCP, las skills y las instrucciones. Ejecuta `npx @opencode/console setup pi`. Los pasos siguientes lo configuran a mano.
+</Callout>
+
+| Proveedor     | Plan          |
+| ------------- | ------------- |
+| `opencode`    | Pago por uso  |
+| `opencode-go` | Go            |
+
+## Configurar
+
+Ambos proveedores leen la clave de `OPENCODE_API_KEY`. Crea una [clave de API personal](/console/harnesses#get-an-api-key).
+
+```bash
+export OPENCODE_API_KEY="oc_sk_..."
+pi --model opencode/claude-sonnet-5-5
+```
+
+También puedes ejecutar `/login` en Pi y seleccionar el proveedor. Pi guarda la clave en `~/.pi/agent/auth.json`.
+
+```text
+/login opencode
+```
+
+## Go
+
+Usa el proveedor `opencode-go` con una clave de un espacio de trabajo con una suscripción de [Go](/console/go).
+
+```bash
+pi --model opencode-go/kimi-k3
+```
+
+## Modelos
+
+Selecciona un modelo como `<provider>/<model-id>`, usando los ID de la tabla de [Console](/console/models#endpoints) o
+[Go](/console/go#endpoints). Usa `--list-models` para ver los modelos que reconoce Pi.
+
+```bash
+pi --list-models opencode-go
+```
+
+Define un valor predeterminado en `~/.pi/agent/settings.json` o pulsa `Ctrl+S` en el selector de `/model`.
+
+```json title="~/.pi/agent/settings.json"
+{
+  "defaultProvider": "opencode-go",
+  "defaultModel": "kimi-k3"
+}
+```
+
+Ejecuta `pi update --models` cuando un modelo nuevo de Console todavía no aparezca.
+
+## MCP de Console
+
+Pi v0.99.0 y posteriores son compatibles con MCP. Agrega el servidor [MCP de Console](/console/harnesses#console-mcp) y luego inicia sesión desde
+el navegador.
+
+```bash
+pi mcp add opencode-console --url https://opencode.ai/console/mcp
+pi mcp login opencode-console
+```

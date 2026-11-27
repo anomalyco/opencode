@@ -1,0 +1,70 @@
+---
+title: "Miembros"
+description: "Invita a personas a un espacio de trabajo de OpenCode Console, gestiona sus roles o retírales el acceso."
+---
+
+Los propietarios y administradores gestionan los miembros desde **Settings › Members**. Abre la ficha de un miembro para ver su
+uso y sus políticas de presupuesto.
+
+## Invitar miembros
+
+1. Abre **Settings › Members** y haz clic en **Invite Members**.
+2. Agrega una o varias direcciones de correo electrónico. Sepáralas con espacios, comas o puntos y coma, o pega una lista.
+3. Haz clic en **Send invitations**.
+
+Cada persona recibe un correo titulado **Join Acme Inc. on OpenCode** con un botón **Join workspace**.
+
+Las invitaciones caducan a los 7 días. Todos se unen como **Member**; [cambia su rol](#change-a-role) después de que se unan.
+
+<Callout>
+  En [OpenCode Go](/console/go) y Go Plus, las personas que invitas usan los modelos gratis o el saldo del espacio de
+  trabajo. Para que cada persona tenga sus propios límites de Go, cambia a Go Teams ($20 por miembro al mes, mínimo de
+  2 miembros). A partir del tercer miembro, se cobran $20 al mes por cada persona desde que se incorpora.
+</Callout>
+
+Los miembros también pueden unirse automáticamente:
+
+- [SSO](/console/sso#automatic-membership) agrega personas de tus dominios de correo verificados cuando inician sesión por primera vez.
+- La [sincronización de directorios](/console/scim) agrega o elimina miembros según las asignaciones de tu proveedor de identidad.
+
+## Aceptar una invitación
+
+La persona invitada debe iniciar sesión con la dirección de correo a la que se envió la invitación. Hay dos formas de aceptarla:
+
+- Haz clic en **Join workspace** en el correo de invitación y luego inicia sesión o crea una cuenta.
+- Inicia sesión en Console, abre el menú del espacio de trabajo y haz clic en **Join** en **Pending invitations**.
+
+Si tienen la sesión iniciada con otra cuenta, Console les muestra **Sign out and continue** para continuar con la dirección a la que se envió la invitación.
+
+## Gestionar invitaciones pendientes
+
+Las invitaciones pendientes aparecen en la tabla de miembros como **Pending · Expires** seguido de la fecha, o como **Expired**.
+
+| Acción   | Cómo                                                                                       |
+| -------- | ------------------------------------------------------------------------------------------ |
+| Reenviar | **⋯ › Resend invitation**. Envía un enlace nuevo válido durante 7 días; el enlace anterior deja de funcionar. |
+| Revocar  | **⋯ › Remove...**. El enlace deja de funcionar de inmediato.                               |
+
+## Cambiar un rol
+
+Abre el menú de rol en la fila de un miembro y elige **Member**, **Admin** o **Owner**.
+
+Solo puedes asignar roles de nivel igual o inferior al tuyo. El espacio de trabajo siempre conserva al menos un propietario. Consulta
+[Roles](/console/workspaces#roles).
+
+## Eliminar un miembro
+
+1. Haz clic en **⋯ › Remove...** en la fila del miembro.
+2. Confirma con **Remove member**.
+
+El acceso se revoca de inmediato y puedes volver a invitarlos más adelante. Su uso anterior permanece en los informes del
+espacio de trabajo.
+
+Eliminar un miembro también revoca las claves de API que creó en el espacio de trabajo, incluidas las claves de cuentas
+de servicio. Las cuentas de servicio se mantienen, y las claves que crearon otras personas siguen funcionando. Consulta
+[Revocación](/console/api#revocation).
+
+## Detalles del miembro
+
+Haz clic en un miembro para ver su presupuesto mensual, los modelos y clientes que usa, gráficos de uso y registros de
+solicitudes. Desde aquí puedes definir su [presupuesto](/console/budgets#member-budgets) y exportar su uso en CSV.
